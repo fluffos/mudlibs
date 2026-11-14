@@ -314,3 +314,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `u/d/daniel/room/wproom/obj/w3|w7` `inherit F_UNIQUE`，宏与 `/feature/unique.lpc` 均缺。从 es2 收养 unique 并补宏。证明：HEAD 0/3 → 3 PASS。
 
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40167。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
+- 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

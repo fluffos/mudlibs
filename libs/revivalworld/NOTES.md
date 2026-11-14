@@ -944,3 +944,7 @@ README 里记载的"开机预载持续 2-3 分钟"配套的既有设计。
 編程缺陷（已修，§7.358）：`system_d` 填完 `preload_list` 後 `log_file("system/preload")`，缺 `/log/system` 時 `write_file` 拋錯中斷 `create()`，`distributed_preload()` 永不啟動，連線永久停在「載入中，請稍後」。`simul_efun/log.lpc` 寫前 `assure_log_dir()`；同形修到 `zsdsj`；`wasm_keep_dirs` 補 log 子目錄。
 
 覆蓋：等分散式預載完畢並被踢 → 重連 `fluffos`/`Mud@2026` → 巫師神殿 `look`/`inventory`/`quit`。驅動無 Wrong permissions。
+
+## 深度功能测试（§10.7，2026-11-14，分布式预载复测）
+
+pristine + build-debug，port 40238。启动并跟踪分布式预载进度，驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`（需等待完整预载完成后登录，见 2026-11-10 记录）。本轮无新编程缺陷。

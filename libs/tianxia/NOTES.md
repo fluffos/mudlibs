@@ -1163,3 +1163,7 @@ functionally re-tested live on this lib.
 
 `d/houjizhen/npc/obj/mask` 继承未定义的 `FACE`。以本库 `std/armor/head.lpc` 为模板写出 `std/armor/face.lpc`（`TYPE_FACE`），并在 `armor.h` 补 `#define FACE` / `TYPE_FACE`。证明：HEAD 0/2 → 2 PASS。
 
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40044。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
+- 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

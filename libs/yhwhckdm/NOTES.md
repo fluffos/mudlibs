@@ -289,3 +289,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## §7.61 `message()` exclude 默认 0（2026-11-10）
 
 根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40270。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
+- 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

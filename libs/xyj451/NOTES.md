@@ -477,3 +477,7 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 
 `d/suburb/es/snow/npc/mercenary` 继承未定义的 `F_MERCENARY`。从手足 es2 收养 `/std/char/mercenary.lpc`（`accept_order`/`accept_info`），并补 `#define F_MERCENARY`。证明：HEAD 0/2 → 2 PASS。
 
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40112。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
+- 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

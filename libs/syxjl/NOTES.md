@@ -1214,3 +1214,10 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
 
 create 已有；补 mkdir("/topten")+assure_file(f_name)+keep。
+
+## 深度功能测试（§10.7，2026-11-14，客店）
+
+pristine + build-debug，port 40088。`scripts/play_login.py` 注册。
+
+- **已修（KB 05 §7.11）**：`adm/daemons/toptend.lpc` 在 `TOPTEN_FILE` 不存在时直接 `cp(TOPTEN_SOURCE, TOPTEN_FILE)`，归档缺 `/topten/source` 导致注册选择性别时抛 `*/topten/source: lstat failed`。补 `file_size(TOPTEN_SOURCE) < 0 ||` 守卫（同 `shiji`/`sj`）。
+- **复测**：改后注册→客店，`look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误。

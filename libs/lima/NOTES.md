@@ -924,3 +924,8 @@ user: virtual rooms, menus, mailers, `contrib/bboard/news_d`).
 ## `data/secure/` 没有人建：master 的 `valid_write()` / `valid_read()` 拒绝分支往 `ACCESS_LOG` 写日志（2026-10-22，KB 06 §7.358）
 
 `lib/secure/master.c` 每次拒绝一个路径（`valid_write()` / `valid_read()`）都往 `ACCESS_LOG`（`/data/secure/LOG`）写一行；干净的 `git clone` 里没有 `data/secure/`，拒绝分支里的 `write_file()` 就抛错。`data/secure` 已记进 `scripts/wasm_keep_dirs.txt`（`lpc_keep_log_dirs.py --root=data`；该扫描列出的另外 29 个 `data/` 目录都读过了：留言板和彩票精灵在 `save()` / `assure_file()` 里自己建目录，`passwordd` 用 `assure_file()`，`votebox` 在巫师大厅，`rwho_a` 只在联网时写）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40212。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
+- 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

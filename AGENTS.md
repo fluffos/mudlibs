@@ -179,6 +179,11 @@ mandates with no completion target:
 - **Never force-push, `reset --hard`, rewrite history, or `git stash`
   in this shared tree.** Fix forward with additive commits. A leaked
   secret gets redacted in a new commit.
+- **NTFS / Windows checkout hygiene (`fluffos/mudlibs#30`, 2026-11-14).**
+  Never introduce new NTFS-incompatible paths in `libs/<slug>/work/`
+  (`<>:"/\|?*`, control bytes, trailing `.`/space, reserved Windows names
+  `CON`/`NUL`/`PRN`/`AUX`/`COM1..9`/`LPT1..9`, case-only duplicates,
+  file-vs-directory collisions, or non-UTF-8/raw-GBK filenames).
 - No `$(...)` in Agent/SendMessage params. Inline the text yourself.
 - Don't invent URLs.
 - Never boot a lib with a big `data/closed.o` without a memory cap
@@ -223,6 +228,10 @@ mandates with no completion target:
   fork. `git fetch` and check ancestry; never force.
 
 ### 13.6 Sweeps and picking what's next
+- **Test all target libs before committing, not one lib at a time (user,
+  2026-11-14).** Run the full batch of planned `§10.7` re-tests or sweep
+  targets, verify every pass/fix, and commit the batch together rather
+  than committing lib-by-lib.
 - **One programming class per wake (user, 2026-10-23).** Each librarian timer wake finishes one mechanical **programming** bug class across the corpus, commits, `git push origin main`, then watches Pages CI until it is green. Do not end the turn mid-class. **Content is out of scope (§10.7):** missing areas, dead `/u/` (or other) exits with no relocated tree under `/d/` or `/open/`, quest text, dialogue, balance. Remap an exit only when the destination file exists in-tree under a vendored path; never drop an exit solely because its destination is absent.
 - A bug confirmed independently in **3+ unrelated lineages** gets a
   mechanical corpus sweep:
@@ -289,6 +298,10 @@ mandates with no completion target:
   thoroughly.
 - Don't post public GitHub issues or comments without the user's OK.
   Edit your own comment in place (`gh issue comment <n> --edit-last`).
+- **Check open GitHub issues** (`/home/sunyc/.local/bin/gh issue list --state open`)
+  when reviewing librarian priorities (`fluffos/mudlibs#30` tracks 161
+  existing NTFS-invalid paths; `#1`–`#29` are mudlib suggestions, subject
+  to the discovery pause above).
 
 ### 13.10 Environment gotchas
 - `node`/`emcc` missing in a subagent: PATH lives in `~/.zshenv`. A

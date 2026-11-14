@@ -855,3 +855,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## DAEMON 宏补全（2026-11-09，KB 04 §6.16）
 
 语料扫残余：`pingd`/`pingtcp` 继承未定义的 `DAEMON`。本库已有 `/std/cmd_m.lpc`，补 `#define DAEMON "/std/cmd_m"`。证明：HEAD 1 PASS / 3 FAIL → 3 PASS / 1 FAIL（`userid` 仍缺 `priv.h`/`config.h`）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40001。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
+- 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

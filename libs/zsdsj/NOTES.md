@@ -1170,3 +1170,8 @@ eval/lpcc 觸發之異常一貫的存疑處理原則，未在本輪確認為真�
 重連再進廳/`score`/`quit`。
 
 驅動 stdout：無 compile warning、無 Wrong permissions。同日 §7.358 `assure_log_dir` 後預載不再卡死。無新編程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40081。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
+- 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

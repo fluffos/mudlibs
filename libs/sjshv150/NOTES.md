@@ -549,3 +549,7 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 
 `www/cgi-bin/passwd` 继承未定义的 `F_REMOVEANSI`。从手足 mhxy（同 yueyingqiyuan）收养 `feature/removeansi.lpc`，并补 `#define F_REMOVEANSI`。证明：HEAD 0/2 → 2 PASS。
 
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40171。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
+- 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

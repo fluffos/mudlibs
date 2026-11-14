@@ -1326,3 +1326,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
 
 `adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。
+
+## 深度功能测试（§10.7，2026-11-14，生命之谷）
+
+pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`。
+
+- **已修**：`include/winconf.h` 原先开启 `#define DB_SAVE 1`（而同族 `nitan6`/`nt6`/`nt6nitan6win` 均为 `#undef DB_SAVE`），导致无 MySQL 时所有新玩家在登录入口被 `DATABASE_D->query_db_status()` 拒绝断线；改为 `#undef DB_SAVE`，并将仅在 `#ifdef DB_SAVE` 分支使用的 9 个局部变量（`adm/daemons/logind.lpc` 6 个、`adm/daemons/dbased.lpc` 1 个、`cmds/usr/msg.lpc` 2 个）加 `#ifdef DB_SAVE` 守卫消除编译警告。
+- **复测**：改后完整注册（`reg`）进入生命之谷，`look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 零警告零错误。

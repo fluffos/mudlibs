@@ -6,9 +6,7 @@
 #define UNLOG_IDLE      90
 
 //是否使用MYSQL数据库及是否存储用户数据到MYSQL库里，不使用数据库则#undef DB_SAVE！
-#ifdef  __PACKAGE_DB__
-#define DB_SAVE         1
-#endif
+#undef DB_SAVE
 
 //是否存储用户数据到文本文件里，定义了 1 就表示是，如果定义了 0 就表示否！
 #define TX_SAVE         1
