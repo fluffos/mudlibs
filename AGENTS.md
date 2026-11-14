@@ -183,7 +183,8 @@ mandates with no completion target:
   Never introduce new NTFS-incompatible paths in `libs/<slug>/work/`
   (`<>:"/\|?*`, control bytes, trailing `.`/space, reserved Windows names
   `CON`/`NUL`/`PRN`/`AUX`/`COM1..9`/`LPT1..9`, case-only duplicates,
-  file-vs-directory collisions, or non-UTF-8/raw-GBK filenames).
+  file-vs-directory collisions, or non-UTF-8/raw-GBK filenames); verify
+  with `python3 scripts/check_ntfs_paths.py [libs/<slug>]` (KB 03 §4.8).
 - No `$(...)` in Agent/SendMessage params. Inline the text yourself.
 - Don't invent URLs.
 - Never boot a lib with a big `data/closed.o` without a memory cap

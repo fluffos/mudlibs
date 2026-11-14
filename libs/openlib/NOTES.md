@@ -674,3 +674,6 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 新号 `opentester` 注册（密码、显示名、email、real name、性别）→ 东西两间起始房 → `save`/`quit`。
 
 驱动 stdout：无 compile warning、无 runtime Error（仅终端类型回退到 default 的提示）。无新编程缺陷。内容天花板仍为两间起始房（档案本色）。
+## NTFS 路径规范化（2026-11-14，#30）
+
+`adm/cmd/wiz/?.lpc`、`cmd/player/:.lpc` 改名 `_qmark.lpc`/`_colon.lpc`，同步更新 `cmd_d.lpc` 映射与 `adm/data/cmd_d.o`。`lpcc_eval` 与重启动 PASS。

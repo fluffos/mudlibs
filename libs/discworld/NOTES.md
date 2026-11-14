@@ -1058,3 +1058,6 @@ Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplay
 ## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
 
 同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。
+## NTFS 路径规范化（2026-11-14，#30）
+
+`cmds/living/:_.lpc` 改名 `colon_.lpc`，并在 `secure/command.lpc` 的 `HandleStars()` 保留前导 `:` 转发；清理 RCS 遗留 `.in.*.c.` 文件。重启动与 `lpcc` 编过。

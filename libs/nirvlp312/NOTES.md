@@ -395,3 +395,6 @@ pristine + build-debug，port 40277。
 - **发现**：新角色 `quit` 答 `What?`，`log/catch`：`*Could not open /pfiles/n/NAME.o.tmp for a save.`（`player.lpc` `save_me`）。档案/`gen_keep_dirs` 只留下玩过的字母（仅 `pfiles/f`），其它字母桶缺失；本库无 on-demand `mkdir`。
 - **修复**：`scripts/lpc_keep_letters.py --apply nirvlp312 pfiles`（补 a–z，缺 25 个）。语料内仅本库用 `pfiles/<letter>/`。
 - **复测**：chargen（hint/male/human/5/10/150/y/none）→ Adventurers' guild → `north` 村路 Harry → `south` 回会所 → `quit`「Saving …」写 `pfiles/n/<name>.o`；重登 Village Green，`score`/`quit` 正常。catch 静音。
+## NTFS 路径规范化（2026-11-14，#30）
+
+`open/EXAMPLES/` 改名 `EXAMPLES_old/` 并同步 4 处自引用；`save/logs/` 时间戳冒号改 `-`；保留 `HUD`/`level_list` 实读的大写 `SORT_*`，将未用的小写 `sort_*` 改 `.old`；清理同内容 `ALTS`。重启动 PASS。

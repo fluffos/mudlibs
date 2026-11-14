@@ -485,3 +485,6 @@ pristine + build-debug，port 40272（`heartbeat interval msec : 2000`）。
 ## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
 
 同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。
+## NTFS 路径规范化（2026-11-14，#30）
+
+`cmds/living/:_.lpc` 改名 `colon_.lpc` 并在 `secure/command.lpc` 保留前导 `:` 分发；清理 RCS `.in.*.c.`。重启动 PASS。

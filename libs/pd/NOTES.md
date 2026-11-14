@@ -613,3 +613,6 @@ fresh driver boot plus the full long-sit idle window below.
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，port 40254。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。
+## NTFS 路径规范化（2026-11-14，#30）
+
+两处 `inherit "std/Object"`（`largeruby.lpc`、`philosop/_cmd.lpc`）改为 `/std/object` 并移除 `std/Object.lpc`；`doc/efun/objects` 改 `objects_efun`（避 `OBJECTS/` 目录冲突）；`users/{A,P}` 并入小写字母目录；`nul` 保留文件名与尾空格/尾点旧档统一改名，公会重名旧档加 `_legacy`。重启动 PASS。

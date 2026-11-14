@@ -809,3 +809,6 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 编程缺陷（已修）：进 `/d/Standard/start/mailroom` 时 `clone_object("/secure/mail_reader")` 失败——`mail_reader.lpc` 编不过。`#define STRING(arr) (map(arr, &operator(+)("")))` 仍是 CD 偏应用，展开进 `WRITE(...)` 后 `syntax error, unexpected '+'`（KB 06 §7.223 Also）。改成 genesis 同形 `(: ("") + ($1) :)`。同文件 `from()` 用 `string *tmp` 装主题再 `tmp[0..32] + "..."`（`string * vs string`），改 `string subject`；`int *double` 改名 `dupes`；`nosave` 函数改 `protected`；清未用局部。
 
 覆盖：`fluffos`/`Mud@2026x` → 教堂 `spojrz`/`stan`/`inwentarz`/`kto`/`nagraj` → `poludnie` 邮局（提示 `?poczta`、空信箱文案）→ `?poczta` 帮助 → `polnoc` 回教堂 → `zakoncz`；重连再进教堂。驱动无 compile error / Wrong permissions。无新编程缺陷。
+## NTFS 路径规范化（2026-11-14，#30）
+
+`doc/help/general/?` 改名 `_qmark` 并更新 `/cmd/live/info.lpc` 映射；`doc/help/wizard/` 大小写重名旧版改名 `*_orig`。`lpcc_eval` 实测 `_qmark` 286B 可读，全库重启动 PASS。

@@ -853,3 +853,6 @@ pristine + build-debug，port 40026。`scripts/play_login.py` 注册。
 
 - **流程**：字母 id → 中文名 → 密码×2 → 天赋 `y` → email → 性别 `m` → 天狼中心；`look`/`score`/`i`/`quit`。
 - 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+## NTFS 路径规范化（2026-11-14，#30）
+
+`logind.lpc` 的 `VISITORS` 宏改指 `/adm/single/mudvisitor` 并移除同内容 `MUDVISITOR`。`lpcc_eval` 与重启动 PASS。

@@ -801,3 +801,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 深度功能测试（2026-11-09，hiccups/bboard 薄别名 §6.15）
 
 `contrib/bboard/exampleboard` 继承缺失的 `/open/hiccups/bboard`；本体在同目录 `contrib/bboard/bboard`（Hiccups@RoE）。薄别名 `open/hiccups/bboard.lpc` → `inherit "/contrib/bboard/bboard"`。证明（LIMA 系专用 lpcc）：HEAD 1 PASS / 2 FAIL → 树 3 PASS（bboard / exampleboard / 别名）。
+## NTFS 路径规范化（2026-11-14，#30）
+
+合并旧 `www/cgi/autodoc.lpc` 的 `.lpc` 后缀切片修复至 `WWW/cgi/autodoc.lpc` 后移除重复小写目录 `www/`（`HTTP_ROOT` 为 `/WWW`）。`fluffos-lima` 重启动 PASS。

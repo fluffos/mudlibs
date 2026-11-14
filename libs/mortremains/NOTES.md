@@ -1016,3 +1016,6 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/adm/haras
 ## 深度功能测试（2026-11-10，chronos_doll / factionhall 薄别名 §6.15）
 
 `/d/attic/Outer/Sigil/toys/chronos_doll` 继承缺失的 `/u/c/chronos/toys/chronos_doll`，本体是同目录 `doll`；`foundry1` 继承 `/u/i/ilzarion/factionhall`，本体在 attic `factionhall`。薄别名。`factionhall2` / `clapper` / `watch` 仍无同库本体，暂留。证明：listcheck 6 对象 HEAD 2 PASS / 4 FAIL → 树 6 PASS。
+## NTFS 路径规范化（2026-11-14，#30）
+
+新闻文件改用 `_` 分隔（同步改 `adm/daemons/news.lpc` 与 `cmds/adm/_setnews.lpc`）；`obj/tools/con.lpc`、`u/z/zur/std/con.lpc`、`u/b/blood/newbie/maze\` 及大小写重名文件/目录（`USER_old.lpc`/`_More_old.lpc`/`Area_old`）统一规范化。`lpcc_eval` 实测 4 条历史新闻全数解析，重启动 PASS。

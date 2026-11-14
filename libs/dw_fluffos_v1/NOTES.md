@@ -545,3 +545,6 @@ pristine + build-debug，port 40271（`heartbeat interval msec : 2000`，`NO_TIM
 ## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
 
 同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。
+## NTFS 路径规范化（2026-11-14，#30）
+
+`cmds/living/{:_,"_}.lpc` 改名 `colon_.lpc`/`quote_.lpc` 并在 `secure/command.lpc` 保留前导 `:`/`"` 分发；`doc/lpc/->` 改名 `call_other`；大小写重名文档改名 `*_uc`/`*_old`；清理 RCS `.in.*.c.`。重启动与 `lpcc_eval` 实测 `colon_` / `quote_` PASS。

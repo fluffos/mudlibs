@@ -366,3 +366,10 @@ emulation, then run the same mapping conversion on the correct decoding.
 
 **Also (2026-11-03, dreamofseven EOF/@ glue):** mass damage left `@TAG` terminators on the same line as `);` (or indented), `@LONGpromote用` with the body glued to the tag, unclosed `@Help`, `HIC"…\"NOR`, and mid-string EOF. Closing tag must sit alone at column 0; unglue `@LONG` from its first line of body; restore truncated rooms from the in-tree twin when one exists. 15 hosts PASS. **Also (same day, moon_force residue):** three more copies still had `SKILL_HELP\t);` (`daemon/skill/moon_force`, hack/cominging variants); split to column-0 `SKILL_HELP` + `);`. In-lib `SKILL_HELP\t` residue 0. PASS.
 
+### 4.8 Non-UTF-8 and NTFS-illegal paths (`fluffos/mudlibs#30`, 2026-11-14)
+
+**Symptom:** Cloning on Windows fails during checkout (`error: invalid path ...`, `unable to checkout working tree`) on raw GBK filenames, NTFS-forbidden characters (`<>:"\|?*`, `0x00..0x1f`, trailing `.`/space), Windows reserved stems (`CON`, `PRN`, `AUX`, `NUL`, `COM1..9`, `LPT1..9`), case-only file/directory duplicates, or file-vs-directory case collisions.
+**Fix:** Re-encode GBK filenames to UTF-8 (or clean ASCII names when unrecoverable mojibake), strip/remap NTFS-illegal characters and update matching runtime lookups (`arkadia` `?` -> `_qmark`, `openlib` `?`/`:"` via `cmd_d.lpc` + `cmd_d.o`, `discworld`/`dw_fluffos_v1`/`dw_fluffos_v2` `:`/`"` via `secure/command.lpc`, `simud` `help.lpc`/`nohelp.lpc`, `mortremains` `news.lpc`/`_setnews.lpc`), deduplicate or archive case/file-vs-directory collisions (`finalrealms` `H5.lpc` -> `F3_alt.lpc`, `shiji` `logind.lpc` -> `mudvisitor`, `pd` `/std/object` + guild/user cleanup, `swmud` merge into `WWW/`), and verify modified libs boot.
+**Detection:** `python3 scripts/check_ntfs_paths.py` (scans `git ls-files -z` for all five classes).
+
+

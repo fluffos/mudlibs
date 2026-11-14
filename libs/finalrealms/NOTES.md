@@ -912,3 +912,6 @@ pristine + build-debug，port 40216。
 ## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
 
 同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。
+## NTFS 路径规范化（2026-11-14，#30）
+
+`F3.lpc`/`F5.lpc` 改名 `F3_alt.lpc`/`F5_alt.lpc` 并同步修正 `H5.lpc` 出口；`doc/driver/Platforms` 改名 `Platforms.txt`（避免与 `platforms/` 冲突），其余含非法字符与大小写重名文档/备份统一规范化。重启动 PASS。

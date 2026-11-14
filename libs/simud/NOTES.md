@@ -253,3 +253,6 @@ pristine + build-debug，port 40287。
 
 - **流程**：新角名/密码×2 → Temple of All Gods；`look`/`score`/`inventory`；`north` Temple hall → `north` Oldtown street（Further streets closed）→ `south`×2 回 shrine；`quit`「Saving …」。重连同角回 shrine，`look`/`quit` 正常。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
+## NTFS 路径规范化（2026-11-14，#30）
+
+`bin/help.lpc` 与 `bin/nohelp.lpc` 将 `"con"`/`":"` 映射为 `"constitution"`/`"emote"` 后移除 `help/{con,:}.hlp`；清理同内容 `OK.lpc`；`doc/README` 改 `README_uc`。重启动 PASS。

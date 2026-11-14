@@ -94,12 +94,15 @@ def sync_changes(slug, lib):
     names = set()
     manifest = os.path.join(lib, ".synced")
     if os.path.isfile(manifest):
-        names.update(n for n in open(manifest, encoding="utf-8").read().split("\n") if n)
+        names.update(n for n in open(manifest, encoding="utf-8", errors="surrogateescape").read().split("\n") if n)
     # core.quotepath=false: without it git prints a non-ASCII file name as "\346\240..." in quotes, the copy is skipped and
     # the scan keeps compiling the old text of every file with a Chinese name (its line numbers then drift from the edits)
     for args in (["-c", "core.quotepath=false", "diff", "--name-only", "--no-renames", "HEAD", "--", work],
                  ["-c", "core.quotepath=false", "ls-files", "-o", "--exclude-standard", "--", work]):
-        out = subprocess.run(["git", "-C", REPO] + args, capture_output=True, text=True).stdout
+        out = subprocess.run(
+            ["git", "-C", REPO] + args,
+            capture_output=True, encoding="utf-8", errors="surrogateescape",
+        ).stdout
         names.update(n for n in out.split("\n") if n)
     for n in names:
         src = os.path.join(REPO, n)
@@ -111,7 +114,7 @@ def sync_changes(slug, lib):
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         with open(src, "rb") as a, open(dst, "wb") as b:
             b.write(a.read())
-    with open(manifest, "w", encoding="utf-8") as fh:
+    with open(manifest, "w", encoding="utf-8", errors="surrogateescape") as fh:
         fh.write("\n".join(sorted(names)))
     return len(names)
 
