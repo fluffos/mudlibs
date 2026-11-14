@@ -16,6 +16,4 @@
        WWWWWWWWWWWWW           WW W  WW  WW            WWW  WW     W 
        WW         WW           WW W WWW WWW             W   WWWWWWWWW
        W          W            W W   W   W                   WWWWWWW 
-
-
-
+                Preserved at https://mudlibs.fluffos.info
