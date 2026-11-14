@@ -929,3 +929,9 @@ user: virtual rooms, menus, mailers, `contrib/bboard/news_d`).
 
 pristine + build-debug，port 40212。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
 - 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 上游变基（2026-11-14，`limalib/lima` `develop` `f1d782dd`）
+
+- `limalib/lima` 改用 git-flow（删去 `master`，`main` 为 `1.1a4` 稳定线，`develop` 为默认开发线，当前至 `1.1a5`）；`meta.json` `upstream.branch` 由 `master` 改为 `develop`，pin 由 `98431aa0` 升至 `f1d782dd`（+7 提交）。
+- 补丁更新：上游 `af92109c` 已修 `lib/std/race/troll.c` 的 `@LONG` heredoc，删去 `patches/0002-troll-split-heredoc-start-marker.patch`；上游 `2269b7fe` 删去 `lib/WWW/cgi/mudinfo.c`，从 `patches/0005-daemons-secure-obj-fix-compile-warnings.patch` 移出该文件的 hunk；其余 7 份补丁对 `f1d782dd` 全部干净应用。
+- 复测：`~/src/fluffos-lima/build-debug/src/lpcc` 编译改动的 `std/race/troll`、`domains/std/monster/greeter`、`secure/simul_efun/misc` 全通过；`play_boot.sh` + `play_login.py`（port 49212）及 `wasm_client.js`（`~/src/fluffos-lima/build-wasm/src`）均正常进入游戏并运行 `look`/`version`。
