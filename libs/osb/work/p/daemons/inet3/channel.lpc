@@ -1,0 +1,364 @@
+/*--------------------------------------------------------------------------
+ * DAEMONPATH inet3/auth -- intermud channel processing
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *
+ * Credits: Lima Mudlib (Creation)
+ *--------------------------------------------------------------------------
+ */
+
+#include <daemons.h>
+#include <properties.h>
+#include <msgclass.h>
+#include <inet3.h>
+#include <channel.h>
+#include <macros.h>
+
+#undef DEBUG_CHANNEL
+
+nosave private int	filter_msg;
+nosave private int      no_notify_flag;
+
+private int		chanlist_id;
+private mapping		chanlist = ([ ]);
+
+void send_to_all(string type, mixed * message);
+void send_to_user(string type, string mudname, string username,
+		  mixed * message);
+void send_to_router(string type, mixed * message);
+void send_to_mud(string type, string mudname, mixed * message);
+void return_error(string mudname, string username,
+		  string errcode, string errmsg);
+void add_cache_entry(string mudname, string username,
+		     string visname, int gender);
+
+nosave nomask int query_chanlist_id() {
+    return chanlist_id;
+}
+
+nomask void channel_rcv_data(string channel_name,
+			     string sender_name,
+			     string type,
+			     mixed data) {
+  if ( filter_msg ) {
+    filter_msg = 0;
+    return;
+  }
+  
+  switch ( type ) {
+  case "tell":
+    send_to_all("channel-m", ({ channel_name, sender_name, data }));
+    break;
+    
+  case "emote":
+    data = sprintf("$N %s", data);
+    send_to_all("channel-e", ({ channel_name, sender_name, data }));
+    break;
+    
+  case "soul":
+    /* TODO: need to work on using channel-t appropriately */
+    data = data[1][<1];
+    if ( data[<1] == '\n' )
+      data = data[0..<2];
+    send_to_all("channel-e",
+		({ channel_name, sender_name, data }));
+    break;
+  }
+}
+
+nosave nomask void rcv_chanlist_reply(string orig_mud, string orig_user,
+				      string targ_user, mixed * message) {
+  string channel_name;
+  mixed channel_data;
+  string * channels;
+  int i, num_l;
+    
+  chanlist_id = message[0];
+  no_notify_flag = 1; /* prevent masses of messages to the router */
+
+  channels = m_indices( message[1] );
+  for( i = 0; i < sizeof( channels ); i ++) {
+    if ( ! message[1][channels[i]] ) {
+      m_delete(chanlist, channel_name);
+      CHANNEL_D->RemoveChannel( channels[i], this_object() );
+    }
+    else {
+      chanlist[channels[i]] = message[1][channels[i]];
+      if ( ! message[1][channels[i]][1] ) {
+	num_l = CHANNEL_D->AddChannel( channels[i], 
+				       ({ this_object(), 
+					    ( message[1][channels[i]][1] ?
+					      CHANNEL_FLAG_READONLY : 0 ) }),
+				       this_object() );
+	
+	if ( ( num_l <= 1 ) &&
+	     ( ! message[1][channels[i]][1] ) ) {
+	  /* no listeners except ourself or channel is selectivly admitted,
+	   * tune it out 
+	   */
+	  send_to_router( "channel-listen", ({ channels[i], 0 }) );
+#ifdef DEBUG_CHANNEL
+	  log_file( INET3D_LOG, 
+		    ctime()+sprintf(" (channel) %s disabled (%d).\n", channels[i], num_l )); 
+#endif 
+	}
+	else if ( ! message[1][channels[i]][1] ) {
+	  /* we want to listen to the channel, tell it to the router */
+	  send_to_router( "channel-listen", ({ channels[i], 1 }) );
+#ifdef DEBUG_CHANNEL
+	  log_file( INET3D_LOG, 
+		    ctime()+sprintf(" (channel) %s enabled (%d).\n", channels[i], num_l )); 
+#endif 
+	}
+      }
+#ifdef DEBUG_CHANNEL
+      else {
+	log_file( INET3D_LOG,
+		  ctime()+sprintf(" (channel) %s ignored - not selectivly banned.\n", channels[i] ) );
+      }
+#endif
+
+      /* register is done by AddChannel already
+       * CHANNEL_D->RegisterChannel( channels[i], this_object() );
+       */
+    }
+  }
+  no_notify_flag = 0; /* now we process the messages again */
+}
+
+nosave nomask void rcv_chan_who_req(string orig_mud, string orig_user,
+				    string targ_user, mixed * message) {
+  object * listeners;
+  string * lnames;
+
+  if ( chanlist && chanlist[message[0]] )
+    listeners = CHANNEL_D->ChannelListeners(message[0]);
+  else
+    listeners = 0;
+
+  if ( !listeners ) {
+    return_error(orig_mud, orig_user, "unk-channel",
+		 sprintf("Never heard of '%s'", message[0]));
+  }
+  else {
+    listeners -= ({ 0, this_object() });
+    listeners = filter( listeners,
+			      lambda( ({ SYM(a) }),
+				      ({ SF_NEGATE,
+					   ({ SF( call_other ),
+						SYM(a), "Query", P_INVIS })
+					   }) ) );
+
+    lnames = map_objects( listeners, "Query", P_NAME );
+    send_to_user("chan-who-reply", orig_mud, orig_user,
+		 ({ message[0], lnames }));
+  }
+}
+
+nosave nomask void rcv_chan_who_reply(string orig_mud, string orig_user,
+				      string targ_user, mixed * message) {
+  object p;
+
+  p = find_player(targ_user);
+  if ( !p ) {
+    return_error(orig_mud, orig_user, "unk-user",
+		 sprintf("'%s' is unknown", targ_user));
+  }
+  else {
+    msg_object(p, CMSG_GENERIC, sprintf("%s@%s listeners: ",
+					message[0], orig_mud) +
+	       implode(message[1], ", ") + ".\n");
+  }
+}
+
+
+nosave nomask void rcv_channel_m(string orig_mud, string orig_user,
+				 string targ_user, mixed * message) {
+  if ( orig_mud == LOCAL_NAME )
+    return;
+  
+  CHANNEL_D->SendTell( message[0],
+		       sprintf("%s@%s", message[1], orig_mud),
+		       message[2] );
+}
+
+nosave nomask void rcv_channel_e(string orig_mud, string orig_user,
+				 string targ_user, mixed * message) {
+  object p;
+
+  if ( orig_mud == LOCAL_NAME )
+    return;
+
+  if ( sizeof(message) != 3 ) {
+    return_error(orig_mud, orig_user, "bad-pkt",
+		 "Bad channel-e format. Report to your admin.");
+    return;
+  }
+
+  /*
+  ** NOTE: we don't need to set filter_msg here.  The deliver_channel()
+  ** message will not pass these back to us.  Only the tell/emote/soul
+  ** will pass the data through to us.
+  */
+
+  CHANNEL_D->SendEmote( message[0], "",
+			implode( explode( message[2], "$N" ), 
+				 sprintf("%s@%s",
+					 message[1],
+					 orig_mud ) ) );
+}
+
+nosave nomask void rcv_channel_t(string orig_mud, string orig_user,
+				 string targ_user, mixed * message)
+{
+#ifdef OLD_BOGUS_CODE
+    object p;
+
+    if ( orig_mud == mud_name() )
+	return;
+
+    filter_msg = 1;
+    if ( message[1] == mud_name() &&
+	p = find_body(message[2]) )
+    {
+	mixed * soul;
+
+	soul = ({ ({ 0, p }), ({ 0, message[4], message[3] }) });
+	CHANNEL_D->deliver_soul( message[0], soul);
+    }
+    else
+    {
+	CHANNEL_D->deliver_channel( message[0], message[3]);
+    }
+#endif
+}
+
+nosave nomask void rcv_chan_user_req(string orig_mud, string orig_user,
+				     string target_user, mixed * message) {
+  object p;
+  
+  p = find_player(message[0]);
+  if ( !p ) {
+    return_error(orig_mud, orig_user, "unk-user",
+		 sprintf("'%s' is unknown", message[0]));
+  }
+  else {
+    int gender;
+    gender = p->Query( P_GENDER );
+
+    /* map to I3's concept of gender: male(0), female(1), neuter(2)
+       ours is: neuter(0), male(1), female(2) */
+    gender = (gender + 1) % 3;	/* OSB -> I3 */
+	
+    send_to_mud("chan-user-reply", orig_mud,
+		({ message[0], capitalize(p->Query( P_REALNAME )), gender }));
+  }
+}
+
+nosave nomask void rcv_chan_user_reply(string orig_mud, string orig_user,
+				       string target_user, mixed * message) {
+  int gender;
+
+  gender = (message[2] + 2) % 3;	/* I3 -> OSB */
+
+  add_cache_entry(orig_mud, message[0], message[1], gender);
+  
+  /* TODO: do rest of emote now... */
+}
+
+/* called by channel_d to notify us about changes in channel users */
+
+nomask void NotifyChannelChange( string name, mixed * users ) {
+  if ( no_notify_flag )
+    return;
+
+  if ( ( ! chanlist ) || ( ! chanlist[name] ) )
+    return;
+
+  if ( ! pointerp( users ) ) {
+    log_file( INET3D_LOG,
+	      ctime()+sprintf( " (channel) Invalid i3-channel '%s' from CHANNEL_D - daemon not listening.\n", name ) );
+    return;
+  }
+
+  if ( ! sizeof( users - ({ 0, this_object() }) ) ) {
+    send_to_router( "channel-listen", ({ name, 0 }) );
+#ifdef DEBUG_CHANNEL
+	log_file( INET3D_LOG, 
+		  ctime()+sprintf(" (channel) %s disabled.\n", name )); 
+#endif 
+  }
+  else {
+    send_to_router( "channel-listen", ({ name, 1 }) );
+#ifdef DEBUG_CHANNEL
+	log_file( INET3D_LOG, 
+		  ctime()+sprintf(" (channel) %s enabled.\n", name )); 
+#endif 
+  }
+}
+
+nomask void chan_startup() {
+  string * channels;
+  int i, num_l;
+
+  channels = m_indices(chanlist);
+
+  no_notify_flag = 1;
+  for( i = 0; i < sizeof( channels ); i ++) {
+    if ( ! chanlist[channels[i]][1] ) {
+      num_l = CHANNEL_D->AddChannel( channels[i], 
+				     ({ this_object(), 
+					  ( chanlist[channels[i]][1] ?
+					    CHANNEL_FLAG_READONLY : 0 ) }),
+				     this_object() );
+      if ( ( num_l <= 1 ) &&
+	   ( ! chanlist[channels[i]][1] ) ) {
+	/* no listeners except ourself or channel is selectivly admitted,
+	 * tune it out 
+	 */
+	send_to_router( "channel-listen", ({ channels[i], 0 }) );
+#ifdef DEBUG_CHANNEL
+	log_file( INET3D_LOG, 
+		  ctime()+sprintf(" (channel) %s disabled (%d).\n", channels[i], num_l )); 
+#endif 
+      }
+      else if ( ! chanlist[channels[i]][1] ) {
+	/* we want to listen to the channel, tell it to the router */
+	send_to_router( "channel-listen", ({ channels[i], 1 }) );
+#ifdef DEBUG_CHANNEL
+	log_file( INET3D_LOG, 
+		  ctime()+sprintf(" (channel) %s enabled (%d).\n", channels[i], num_l )); 
+#endif 
+      }
+    }
+#ifdef DEBUG_CHANNEL
+    else {
+      log_file( INET3D_LOG,
+		ctime()+sprintf(" (channel) %s ignored - not selectivly banned.\n", channels[i] ) );
+    }
+#endif
+  }
+  no_notify_flag = 0;
+}
+
+nomask void chan_shutdown() {
+  CHANNEL_D->RemoveChannels( m_indices(chanlist), this_object() );
+}
+
+nomask mapping query_chanlist() {
+  return copy(chanlist);
+}
+
+nomask void add_channel(string channel_name, int channel_type) {
+  send_to_router("channel-add", ({ channel_name, channel_type }));
+}
+
+nomask void remove_channel(string channel_name) {
+  send_to_router("channel-remove", ({ channel_name }));
+}
+
+nomask void remote_listeners(string mudname, string channel_name) {
+    send_to_mud("chan-who-req", mudname, ({ channel_name }));
+}

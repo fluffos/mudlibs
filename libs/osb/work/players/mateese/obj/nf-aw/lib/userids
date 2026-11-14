@@ -1,0 +1,276 @@
+  Userids and a bit about security -- by Mateese
+-------------------------------------------------------------------------------
+Please refer also to /doc/concepts/uids for the original documentation.
+
+Unfortunately, there are several docs available who each states own
+features of the uid system (need I say that these statementsare
+contradicting ?). The uid system as presented here is based on several
+experiments with the NF-Gamedriver. Most propably not all quirks and
+bells are covered, so this article will still grow in detail.
+
+The userid system was introduced to make security checks easier.
+Instead of painfully determining the name of the player trying to do a
+sensitive operation, now just the approbiate userid is checked.
+Of course this is not perfectly secure, but a good step into the right
+direction.
+
+
+-----
+Part 1 : What are userids? How to handle them?
+------
+
+Userids are lowercase strings, or just 0. Normally, the userid ist
+just the name of a wizard, but two uids are special.
+Userids are always bound to a specific object (some kind of property
+one might say).
+
+First the userid of all backbone objects: this is used for all objects
+offered by the basic mudlib. These are mostly /std objects, so the userid
+is "std" (#defined in config.h as BACKBONEID).
+
+The second special userid is that of the 'Gamedriver': the root id. This
+is needed for all 'very sensitive' operations, like booting the game
+or creating new wizards. You won't need it, and of course aren't able
+to use it at all. (It is #defined in config.h as ROOTID with "zeus").
+
+Now, there are two types of userids: the simple userid 'uid', and the
+effective userid 'euid'.
+
+The 'uid' of an object nearly always denotes the objects creator:
+the wizard who created the source.
+It may be changed under special circumstances, thus giving an object
+two creator userids: the 'real' one (which is also called the 'cuid'),
+and the one 'uid' prepends to be.
+
+The 'euid' of an objects depicts the actual user of the object, which
+of course can be someone different than the creator.
+
+Every security check (like determining the right to write a file) now
+checks the euid of the object from which the operation was called.
+An euid of 0 logically denies most rights on anything.
+Later more on that.
+
+The setting of the userids follows some simple rules.
+
+When loaded/cloned, every object gets the name of the creating wizard
+or domain as uid.
+The euid depends on the player which caused the load/clone. If the
+player is also the creator, the euid is set to the uid, else it is set
+to 0.
+
+  Imagine an object /players/mateese/obj/foo .
+  If I load it myself, it's userids will be:
+    uid = "mateese", euid = "mateese".
+
+  If it's loaded by some player 'JRandom', the userids will be:
+    uid = "mateese", euid = 0 .
+
+The behaviour is different for backbone objects (those whose creator-id would
+be the BACKBONEID). These objects are free to use for everyone.
+
+  Imagine an object /std/bar.
+  If it's loaded by some player 'JRandom', the userids will be:
+    uid = "jrandom", euid = "jrandom".
+
+The euid may be changed with the efun 'seteuid(string)', which sets the
+calling object's euid to <string>. Of course, there are limitations. 
+By now, it is possible to set: 
+
+ - euid = 0   
+ - euid = uid 
+ - euid = cuid (normally identically with uid)
+
+seteuid() returns 1 for success and 0 for failure.
+
+  In our above example, following seteuid()s would be valid:
+
+    seteuid(0);
+    seteuid("mateese"); /* uid == cuid in this case */
+
+Changing the uid is a bit more restricted: an object 'foo' can export
+it's uid to target object 'bar' with the efun 'export_uid (targetobject)' - 
+but only if bar's euid is 0. 
+
+  Imagine our example: jrandom loaded ~mateese/obj/foo which now has
+  the userids:
+    uid = "mateese", euid = 0 .
+
+  jrandom could use now one of its tools with the uid "jrandom", and
+  lets it perform:
+
+    foo = find_object("/players/mateese/obj/foo");
+    export_uid (foo);
+
+  Now, the userid's of ~mateese/obj/foo would be:
+    uid = "jrandom", euid = 0 .
+
+  Of course, now foo could set it's euid to the following:
+    euid = 0
+    euid = "jrandom" (its current uid)
+    euid = "mateese" (its creators userid)
+
+export_uid() returns the target object in all cases.
+
+The uid and euid may be queried with the efuns:
+
+  getuid  (object) : returns the uid of object
+  geteuid (object) : returns the euid of object
+
+
+The default setting of the euid (0 or the uid) is done to achieve the
+most possible security: The creator may do anything dangerous with the
+object while the alien loader/cloner may do only safe actions. Thus a
+tool of you can't be misused to do damage your files.
+On the other hand, you can clone a foreign tool, and be sure that it
+won't play dirty tricks with your files on its own.
+
+Since this could be an unwanted restriction, it is possible the set
+the euid of the tool to your euid, thus giving the tool your rights.
+But this is an action triggered by yourself, so it's you to take the
+blame if the tool wracks you afterwards.
+
+
+------
+Part 2 : What are the sideeffects ?
+------
+
+As mentioned above, the euid is used for security checkings.
+In special, the euid is used for computation the file access rights,
+checked on every file access.
+Additionally, an euid != 0 is needed for loading or cloning objects.
+
+This means: when you create an object for players, which does one of
+the stated operations, you need to set it's euid.
+
+But beware: if you set the euid of the object, this means that this
+object can do everything you can do, even reading/writing your files. 
+
+In normal game play, this is just what you want it to do, since you
+created the object and thus restricted its powers.
+
+But what if an object offers commands for e.g. free file access (like 
+the Nightfile) ?
+You can imagine what happens, if an object with such powers and with
+your euid gets into the hands of some sinister creature...
+
+
+The first thing to do is a check of the euids:
+
+  if (geteuid(this_object()) != geteuid(this_player())) return failure;
+
+
+Then, set the euid not during the creation of the object, as it's done with
+normal game objects, but merely on the first execution of a command:
+
+  if (!geteuid(this_object())) seteuid(geteuid(this_player()));
+
+This gives the player the opportunity to export its uid to this
+object BEFORE using it, thus making above seteuid() winning.
+
+
+Another method is to create inheritance-stubs. 
+
+Imaging jrandom wishing to use /players/mateese/obj/nightfile even for
+writing. Now, instead of cloning + export_uid()ing, she just creates a
+file '/players/jrandom/obj/nightfile.c', containing the single line:
+
+  inherit "/players/mateese/obj/nightfile";
+
+and further on just cloning _this_ nightfile.
+This will work, since the uid of /players/jrandom/obj/nightfile is
+just "jrandom", thus automatically initializing the euid also to this value
+on creation.
+
+
+It's possible (and recommended) to use all three methods together
+where necessary.
+
+The idea behind should be clear: if an object wants to play dirty
+things with your properties, it's your decision to let it do that, or
+to live in peace.
+
+
+------
+Bonus Part: File access rights (07-Aug-92)
+------
+
+The creator-uid of <file> is:
+
+  /d/<domain>/...     : cuid = <domain>
+  /d/...              : cuid = 0
+  /players/<wiz>/...  : cuid = <wiz>
+  /secure/...         : cuid = ROOTID
+  /std/...            : cuid = BACKBONEID
+  /bin/...            : cuid = BACKBONEID
+  /obj/...            : cuid = BACKBONEID
+  /adm/...            : cuid = BACKBONEID
+  /room/...           : cuid = BACKBONEID
+  /mail/...           : cuid = "mail"
+  /news/...           : cuid = "news"
+  /<anything_else>    : cuid = 0
+
+
+
+Read file <file> with euid <name>:
+
+  euid==0 is treated as euid=="-".
+
+  Archwiz (query_wiz_level(<name>) >= 40): allowed to read every file.
+  
+  <file> == "/d/<domain>/...":
+    /d/<domain>/<anywiz>/secure/... : NOT allowed if <anywiz> != <name>.
+    /d/<domain>/common/secure/...   : allowed if <name> is member of <domain>.
+    /d/<domain>/secure/...          : allowed if <name> is master of <domain>.
+    /d/<anything_else>              : allowed.
+
+  <file> == "/players/..."
+    /players/<anywiz>/secure/...    : NOT allowed if <anywiz> != <name>.
+    /players/<name>/...             : allowed.
+  
+  <file> == "/mail/<anything>/..."  : allowed if <name> is "mail".
+  <file> == "/mail/..."             : allowed
+
+  <file> == <anything_else>         : allowed.
+
+
+
+Write file <file> with euid <name>:
+
+  euid == 0 : NOT allowed at all.
+  euid == ROOTID: allowed to write every file.
+
+  <file> == "/secure/..." : not allowed
+
+  Sourcerors (query_wiz_level(<name>) >= 50: allowed to write every other
+                                             file.
+
+  <file> == "/std/..."             : not allowed
+  <file> == "/sys/..."             : not allowed
+  <file> == "/lib/..."             : not allowed
+
+  <file> == "/ftp/..."             : allowed
+  <file> == "/open/..."            : allowed
+  <file> == "/log/..."             : allowed
+  <file> == "/tmp/..."             : allowed
+
+  <file> == "/news/..."            : allowed if <name> == "news"
+  <file> == "/mail/..."            : allowed if <name> == "mail"
+
+  <file> == "/d/<domain>/...":
+    /d/<domain>/common/...         : allowed if <name> == "<domain>" or
+                                     if <name> is member of <domain>
+    /d/<domain>/<name>/secure/...  : allowed if <name> is member of <domain>
+    /d/<domain>/<name>/...         : allowed if <name> is member of <domain>
+    /d/<domain>/<wiz>/secure/...   : NOT allowed if <name> != <wiz>
+    /d/<domain>/...                : allowed if <name> is master of <domain>
+                                     or <name> is Archwiz.
+
+  <file> == "/players/<name>/..."  : allowed.
+
+  <file> == "/players/..."         : allowed if <name> is Archwiz.
+ 
+  <file> == "/save/<n>/<name>/..." : allowed if done with save_object().
+
+  <file> == <anything_else>        : NOT allowed.
+
+------------------------------------------------------------------------------

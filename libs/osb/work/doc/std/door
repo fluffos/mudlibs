@@ -1,0 +1,305 @@
+OBJECT
+	/std/door
+
+
+LAST UPDATE
+	Mateese, 24-Apr-96 01:30 MET
+
+
+SYNOPSIS
+	#include <doors.h>
+
+	inherit "std/door";
+
+
+DESCRIPTION
+	This module contains the basic mechanics of a door, along with
+	some auxiliary functions and the interface to /std/room.
+	It can't be used on its one (e.g. by cloning it), but must be
+	inherited into the object which shall act as door object.
+	For a preconfigured door object use '/obj/door', which
+	combines /std/door with /std/thing.
+	Doors are added to a room by using the AddDoor() function
+	in /std/room. It is possible to make a door one-sided (visible
+	in one room only).
+	To perform the open/close/lock magic, /std/door inherits
+	/std/lock.
+
+	The basic function of a door is to stand before a room's exit
+	and to prevent any living from using this exit (at least if
+	the door is closed). This is done by defining the movement
+	command for that exit and acknowledging it if the door is
+	closed. If the door is open, the command is not acknowledged
+	('return 0') thus the room gets the command and moves the
+	living through the exit.
+	Note: The 'door' itself needn't be a dead thing, but could
+	      also be a monster. /std/door just implements the
+	      protocol between the door objects and the rooms.
+	Note: Ghosts aren't able to open, close, lock, unlock or knock
+	      at doors, but are able to pass them even when they
+	      are closed. /std/door can't take care of this, it is
+	      your responsibility.
+
+	Normally, a door is visible to both sides. This is implemented
+	by using two door objects - one for each of the connected
+	rooms ('this door' and 'remote door'). To sync their actions,
+	the both doors communicate with each other, using a predefined
+	protocol (which has space for user-extensions). The two door
+	objects recognize each other by a special 'doorcode'.
+	However, having two door objects is not mandatory. One can
+	easily initialize the door to be visible in one room only.
+
+	The special function a door serves for a room distinguished it
+	from other things. Therefore, a door is not 'door' from the
+	time of its creation, but must be explicitely activated.
+	The first move of the door object terminates the activation
+	and the door returns to be an ordinary thing.
+
+	The door implements the following properties (defined in
+	/sys/doors.h):
+
+	  string P_DIRECTION   "Direction"
+	    This is the movement command the door shall block.
+	    When set, it is also set as adjective for the door object.
+
+	  string P_DOORCODE    "DoorCode"
+	    This string is added as id for the door object.
+	    It should be unique for this door object pair.
+
+	  string P_OTHERROOM   "OtherRoom"
+	    The filename of the room the remote door is placed in.
+	    It is to be omitted if the door is one-sided only.
+
+	  object P_DOORROOM    "DoorRoom"
+	    This read-only property returns the room in which
+	    the door actively blocks an exit.
+	    If it returns 0, the door ceased to function as door and
+	    is just a thing among others.
+
+	  int    P_HIDEDOOR    "HideDoor"
+	    This property determines whether a door should be listed
+	    in the 'Obvious Doors' description of rooms or not.
+	    Possible settings are:
+	      HIDE_NOT    : the door is listed.
+	      HIDE_CLOSED : the door is listed only when open.
+	      HIDE_OPEN   : the door is listed only when closed.
+	      HIDE_ALWAYS : the door is not listed (this is in fact
+	                    just HIDE_OPEN|HIDE_CLOSED).
+	    If HIDE_BOTH is ored (|) to the value set, the remote
+	    doors property is updated as well.
+	    Use this property if the door is not visible in one of its
+	    states, or listed in the rooms long description.
+
+	  int    P_HIDEEXIT    "HideExit"
+	    This property determines whether the exit this door
+	    controls should be listed in the 'Obvious Exits'
+	    description of rooms or not.
+	    Possible settings are:
+	      HIDE_NOT    : the exit is listed.
+	      HIDE_CLOSED : the exit is listed only when door is open.
+	      HIDE_OPEN   : the exit is listed only when door is closed.
+	      HIDE_ALWAYS : the exit is not listed (this is in fact
+	                    just HIDE_OPEN|HIDE_CLOSED).
+	    If HIDE_BOTH is ored (|) to the value set, the remote
+	    doors property is updated as well.
+	    Use this property if the exit is not visible in one of its
+	    states, or listed in the rooms long description.
+
+	  int    P_CHECKDOOR   "CheckDoor"
+	    This property determines whether the door should apply
+	    further checks upon the action intended (opening, closing
+	    or blocking the way) or not.
+	      DACT_NOT    : no check necessary.
+	      DACT_HIDE   : check if the door is hidden.
+	      DACT_CHECK  : check always.
+	      DACT_UNHIDE : check if the door is not hidden.
+	    If DACT_BOTH is ored (|) to the value set, the remote
+	    doors property is updated as well.
+	    Setting this property has an effect only if some code
+	    actually evaluates it.
+
+	The door needs to be initialised by a call to
+
+	  void create()
+
+	which among other things gives the door the class id C_DOOR.
+
+	The state of the door (open, closed and locked) is set
+	using the P_LOCKSTATE property inherited by /std/lock.
+	Changing the P_LOCKSTATE automatically also updates a remote
+	door IF P_DOORCODE has been initialized.
+	Of course: if no keyids were specified for the lock, the door
+	can't be locked - just closed.
+
+	To check if a door hides itself or it's exit from being
+	obvious, this function is to be used:
+
+	  int CheckHidden (int check_exit)
+	    This function has to return non-zero if the door (or if
+	    <check_exit> is non-zero, the exit controlled by this
+	    door) is hidden from being 'obvious', else 0.
+
+	To check if an action needs to be checked further in the
+	current doorstate, use this function:
+
+	  int CheckActivity ()
+	    This function has to return non-zero if the door requires
+	    an action being checked according to P_CHECKDOOR, else 0.
+
+
+	The communication between this door and the remote door
+	('InterDoorProtocol') is implemented with this two functions:
+
+	  object OtherDoor()
+	    Returns the door object of the remote door, if it exists,
+	    or 0.
+
+	  mixed SendIDP (int msg, void | mixed data)
+	    This sends a <msg> with the optional <data> to the remote
+	    door by calling their HandleIDP() lfun, and returns the
+	    value returned by the remote door.
+	    If no remote door is specified (via P_OTHERROOM), if the
+	    remote room is not loaded yet, or if the sending door has
+	    no P_DOORCODE set, 0 is returned and nothing is sent.
+
+	  mixed HandleIDP (int msg, void | mixed data)
+	    This is the receiver function for the door communication,
+	    executing the given <msg> if the door object is still
+	    active.
+	    By default, the function returns 0.
+
+	  int UpMutex()
+	  int DownMutex()
+	  int ZeroMutex()
+	  int QueryMutex()
+	    If the mutex is non-zero, SendIDP() will not send data.
+	    This is mainly used to avoid recursions, but is also
+	    useful with clean_up() vs. remove().
+	    Use these functions to modify the mutex - but only if you
+	    know what you are doing!
+
+
+	Currently, the following messages with their data are defined
+	in /sys/doors.h:
+
+	  IDP_NEWSTATE <newstate>
+	    The sending door has changed its state to <newstate>.
+	    The receiving door sets its state accordingly and informs
+	    its room about it.
+	  IDP_DESTRUCT
+	    The sending door is destructed by a call to remove().
+	    The receiving door destructs itself as well.
+	  IDP_VANISH
+	    The sending door destructs itself for purpose.
+	    The receiving door destructs itself as well.
+	  IDP_SAY <text>
+	    The receiving door say()s the <text>.
+	  IDP_SHOW <text>
+	  IDP_SHOW ({ <text1>, <text2> [, <excl>] })
+	    The receiving door show()s the <text> (or <text1>, <text2>
+	    and optionally <excl>).
+
+	Note: IDP_DESTRUCT and IDP_VANISH have the same effect as far
+	      as /std/door is concerned. The difference is made for
+	      the wizard e.g. to allow different messages to be
+	      issued.
+
+	Own messages can be added, using codes from IDP_EXTRA and up.
+	These are ignored by the standard HandleIDP().
+
+	For more complicated user-communication, use this function:
+
+	  static mixed CallOtherDoor (string fun, mixed data)
+	    This basically does a remote_door->fun(data) and returns
+	    the result.
+	    If no remote door is specified (via P_OTHERROOM), if the
+	    remote room is not loaded yet, or if the sending door has
+	    no P_DOORCODE set, 0 is returned and nothing is sent.
+
+
+	The (dis)activation are handled by the following three
+	functions:
+
+	  void void Aloha (int refresh)
+	    This activates the door, using their current environment
+	    as the DoorRoom. This also updates the P_HIDEEXIT from the
+	    environments HideExit() setting. If a remote door is
+	    specified, this door's state is set according to that of
+	    the remote door.
+	    If there is no remote door, one of two actions occur:
+	      - if the door is created the first time ('refresh' is 0),
+	        then the remote door got destructed earlier and this
+	        door adapts: it self destructs.
+	      - if the door is recreated due to an refresh ('refresh'
+		is non-zero), the remote room is refreshed as well in
+		order to recreate the remote door. If this fails, it
+		fails.
+
+	  void notify_move (void|mixed dest, void|int method, void|mixed extra)
+	    To be called after a successful move, this sends an
+	    IDP_VANISH message to its remote door and then deactivates
+	    itself.
+
+	  int remove (void)
+	    If the door is active, it sends an IDP_DESTRUCT message to
+	    its remote door and then deactivates itself.
+	    Result is 1.
+	    There is a pitfall here: if the door is cleant up,
+	    remove() is called as well. But since the clean_up is no
+	    'true' remove, the other door must not be informed (use
+	    the mutex).
+	    You have to write a decent wrapper for clean_up() in your
+	    inheriting object.
+
+
+	Aloha() is normally called by a room during the AddItem()
+	processing/refreshing; move() and remove() may be called
+	anytime.
+
+	Note: The true move() and remove() functions are implemented
+	      in other parts of the object which are not visible to
+	      /std/door.
+	      It is task of the implementor that /std/door's move()
+	      and remove() are called at the approbiate places, and
+	      also to handle clean_up() properly. See /obj/door.c for
+	      an example.
+	      clean_up() should be implemented in the inheriting
+	      object as following:
+
+		public int clean_up (int ref) {
+		  int rc;
+		  // This is not a normal remove(), so don't inform
+		  // the other door. 
+		  UpMutex();
+		  rc = ::clean_up(ref);
+		  DownMutex();
+		  return rc;
+		}
+
+	Note: Normally, doors are not to be listed in a room's
+	      inventory, To achieve this, the implementor has to modify
+	      QueryCapShort() in a way that it returns "" if the door
+	      is active.
+	      See /obj/door.c for an example.
+
+
+	For the separate display of all doors in one room, the room calls
+	QueryStatusString(). This has to return a descriptive thing if
+	the door is visible (which is printed 'as is'), else 0 or the
+	empty string "". It _has_ to return 0 if the door is no longer
+	active.
+
+	The /std/door offers a default for this:
+
+	  string QueryStatusString ()
+	    Return a descriptive string about the door, build from the
+	    P_SHORT, if the door is visible (P_SHORT != 0).
+
+
+INHERITANCE TREE
+	door
+	  `- lock
+
+
+SEE ALSO
+	room(S), door(O)

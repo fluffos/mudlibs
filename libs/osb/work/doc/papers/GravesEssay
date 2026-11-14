@@ -1,0 +1,835 @@
+                      Second Generation Adventure Games
+                               Reprinted from
+                     The Journal of Computer Game Design
+                Volume 1, number 2, (August 1987): pages 4-7
+                       Copyright 1987 by David Graves
+                            dag@hpsemc.cup.hp.com
+
+Expanding the horizons of the traditional adventure game format has created a
+new genre in literary entertainment:  the participant novel.  In a
+participant novel, the player is more a character in a plot than a solver of
+puzzles.  Implementing a participant novel demands special computer modeling
+techniques.  As the program increases in complexity, use of the proper
+representation of the novel's simulated environment becomes critical.
+Without a strong model of the world and its physical laws, and without a
+dynamic interface to this world, the developer is doomed to producing a
+limited and unstimulating game.  The field of Artificial Intelligence
+provides programming constructs useful for creating these games of greater
+complexity and sophistication.  This paper will present a few ideas borrowed
+from the field of AI:  use of lists and trees, attributes, natural language
+parsing, English generation, semantic frames, and goal-oriented routines, and
+show how they support the complex model that a participant novel requires.
+All of the ideas presented have been successfully applied to a working game
+system.
+
+LISTS AND TREES
+
+Given that a participant novel will be proliferated with a great many people,
+places, and things (hereafter called "objects"), there must be a dynamic
+method for tracking and altering the position and relationships of each
+physical object.  One can create a model of the world as lists of containers:
+cities contain houses, houses contain rooms, rooms contain things, and things
+contain other things.  The traditional method for representing complex
+relationships of objects is through lists of lists, also called trees.  Under
+this arrangement, every object has pointers to its parent (the thing that
+contains it), its children (the things it contains), and its siblings (the
+things in the same place with it).  This can be coded as three arrays:
+parent, child, and sibling.  Each slot in the array contains either an
+object's identifying number or "nil" (a null pointer).  An object that is
+empty would have nil in its child slot, and an object that is alone in a
+container would have nil in its sibling slot.  (Object numbers would not be
+declared explicitly, of course; they would be assigned to each object's
+symbol name by a compiler).
+
+Objects containing several other objects are represented using the child and
+sibling arrays together.  The container points to the first child and the
+first child points to his sibling, who points to the next sibling.  The end
+of the list is indicated with a nil sibling pointer.  For example, a chest
+containing a lamp and a rope would have the object number of the lamp in its
+child slot, and the object number of the rope would be in the lamp's sibling
+slot.  The lamp's sibling slot would be nil.  Both the lamp and rope would
+have the object number of the chest in their parent slots, and nil in their
+child slots.
+
+The sibling and child links define a formal tree.  The links from a child
+back up to its parent result in a directed graph rather than a tree proper.
+The inclusion of the parent links allow easier traversal of the tree in
+either direction.
+
+Representing the world in this way makes it very easy to manipulate groups of
+objects.  Moving a chest to new location involves changing only the pointers
+of the old and new locations and the chest.  The contents of the chest never
+need be considered.  No matter how large the object tree becomes, moving any
+object and all of its contents can be done by changing only a few pointers.
+Since people, places and things are all represented in the same type of data
+structure, only one routine is required for all types of object movement.
+
+It is important that the constructs used in the model be simple and
+consistent.  The model should be general enough that special constructs will
+not be required each time the programmer thinks of a new type of object to
+implement.  For example, supporting surfaces (such as tables and chairs) can
+be implemented using the same parent, child, sibling scheme.  The objects
+resting on the table are its children.  The internal representation of the
+table and its children is identical to the container representation, so
+supporting surfaces are easily added to the model.
+
+ATTRIBUTES OF OBJECTS
+
+All objects have characteristics or "attributes" that define that object's
+limitations.  Some attributes are boolean (stating whether this object is
+flammable or immovable for example) and some may have a numeric value
+associated with them, such as the weight and volume of an object.  Some
+attributes are unchangeable (such as flammability and mass) and some are
+variable, describing only the current state of an object (i.e.  closed,
+locked, and burning).
+
+Using attributes to define how an object may be manipulated within the model
+world allows the programmer to define a much more consistent and dynamic
+world.  Consider the case where the programmer creates a fireplace and some
+logs.  He adds some special case logic to his program that will support
+burning the logs with the expectation that the player will attempt to burn
+the logs in the fireplace.  However, if the player tries burning a chair in
+the fireplace, nothing happens because the luckless programmer didn't think
+of the player trying that.
+
+This mess can be avoided by building the game's verb routines around a system
+of attributes.  By defining the attribute "flammable" and making the Burn
+verb check for the presence of this attribute, the programmer allows the
+player to burn down anything flammable, such as furniture, papers, doors, and
+fireplace logs.  Thus, he defines the generalized phenomenon of "burning"
+rather than coding individual cases.
+
+Once the programmer has decided on the set of attributes he wishes to
+support, he need only write individual action routines that manipulate those
+attributes, then decide which attributes apply to each of his objects.  Thus,
+some whiskey could be defined as having the attributes liquid, edible, and
+flammable.  Groups of attributes can work together in subtle and wonderful
+ways, allowing the player to perform activities in ways not even considered
+by the programmer.  Would you think of putting moonshine whiskey in a lantern
+if you had no kerosene?
+
+RECOGNIZING NATURAL LANGUAGE
+
+Understanding natural language has proven to be a difficult problem in AI,
+but much can be accomplished in a participant novel by recognizing relatively
+simple statements in the following syntactic form:
+
+      [Subject] VerbClause [DirectObject] [Preposition IndirectObject]
+
+Optional sections of the syntax are enclosed in brackets.  Each word in a
+command typed by the player is looked up by a dictionary routine and is
+identified as a verb, noun, adjective, or whatever.  The most simple command
+or "statement of intent" is simply a verb.  Instructions to another person
+are indicated by using that person's name as the subject of the sentence, as
+in "Sam, run!".  Omitting the subject of the sentence implies that the player
+himself is the actor.  Direct and indirect objects are noun clauses, which
+consist of some optional adjectives followed by a noun.  Prepositions like
+"at," "in," and "on" separate a direct object from an indirect object.
+Conjunctions (such as "and"), punctuation, and articles (such as "a" and
+"the") can be tossed out by the parser as "noise", or verified to appear in
+the expected positions.
+
+This syntax will accept input strings such as "Put the gray stone into the
+large oak chest".  By further extending the parser to allow a list of objects
+as a direct object and allowing sentences to be strung together, the program
+can recognize statements like "Open the chest, take the lamp, the knife, and
+the long rope, then climb the stairs".  Since everyone has a slightly
+different way of saying what they mean, the program must have a very large
+dictionary with links between synonyms.  Thus, "Set the lamp on the table"
+and "Place the lantern onto the table" could be recognized as having the same
+meaning.
+
+Travel is something that happens frequently in this type of game, so it
+should be very easy for the player to express what is desired.  The parsing
+scheme above will recognize travel syntax such as "Climb the tree" or "Enter
+the cottage," but not "Go east" or its abbreviated forms, "East" and "e".
+Recognition of these few irregular forms can be added to the parser as a
+special case.
+
+The parser should be able to recognize modifiers for verbs.  The simple case
+is the use of an adverb, as in "Carefully open the door".  A more complex
+case is where the player uses a verb and a preposition together in a way that
+changes the meaning of the verb.  For example "put down" means drop, "put
+out" means extinguish, and "put on" means wear.  This can be implemented by
+creating a table with verb/preposition pairs followed by the resulting verb.
+When a verb/preposition pair in the command string matches an entry in the
+table, it can be replaced with the resulting verb.  Parsing then continues as
+if no preposition has been seen yet.  This technique also allows recognizing
+a command with a dangling preposition such as "Take the cloak off" which
+would otherwise be rejected by the parser as an incomplete sentence.
+
+We are all accustomed to using pronouns (such as "it") and expecting our
+listener to resolve what we mean by reviewing the preceding context.  A
+natural language parser might be expected to do the same.  A simple rule for
+implementing parsing of "it" could be "Replace the 'it' with the last direct
+object named".  This allows proper parsing of "Put the lamp on the table and
+light it," but not "Put the lamp into the chest, then close it".  In the
+second statement, the player probably meant to close the chest, not the lamp.
+Changing the rule to use the last direct or indirect object in place of "it"
+won't work in all cases either.  The effect of this rule on the command "Put
+the lamp on the table and light it" would be to set the table on fire.  While
+it is possible to define the semantics of "it" for each of these cases
+through complex programming, it might make more sense to choose a simple
+rule, such as "use the last direct object in place of 'it' in all cases,"
+then inform the user of the limitations of the parser through the game
+documentation.
+
+The parser could be expanded to allow words such as "everything" or "all" in
+place of a direct object.  This lets the player make statements like "Drop
+everything into the chest".  Note that the semantics of "everything" change
+with the verb used.  In "Drop everything," "everything" really means
+"everything that I'm holding," while in "Get everything," it means
+"everything that I'm not holding".  For some verbs, such as "Examine," the
+scope of the word "everything" is "all visible objects, whether held or not".
+The player may also wish to set the scope of "everything" to a limited
+domain, as in "Look at everything on the table".  Regardless of how
+"everything" is used in a sentence, it can be implemented by simply calling
+the verb action routine once for every object within the the command's scope.
+
+GENERATING ENGLISH
+
+While interacting with a participant novel, the player is going to read vast
+quantities of text.  Some of this may be "canned text" and some will need to
+be generated.  The constant attributes of a location could be described with
+fixed text, but certainly not the descriptions of the objects there.  Since
+most objects can be moved around, placed in and on each other, and change
+state, the program must be capable of dynamically producing the text to
+describe them.  The key to generating interesting text is to vary the length
+of the sentences generated, vary the sentence structure, and use different
+synonyms whenever possible.  For example, to describe the "children" of a
+table the program might generate:  "There is a knife, some bread, and a key
+on the table," or "A knife, some bread, and a key are on the table," or
+"Resting on the table are a knife, some bread, and a key".  The description
+generator would have a list of synonymous phrases such as "resting on,"
+"lying on," and "sitting on".
+
+A text generator must pay careful attention to the issue of grammar.  When a
+sentence contains a list of objects, the objects must be counted so that the
+conjunction "and" can be inserted before the last object.  Lists containing
+more than one object will use "is" instead of "are" (except when using the
+form "There is a <list>....").  Each object in a list should be followed by a
+comma (except the last two) and preceded by a the appropriate article ("a,"
+"the" or "some").  Selecting the article for an object depends on the
+attributes of the object and the type of sentence.  When introducing an
+ordinary object, the article is "a" or "an".  An object that has the
+attribute of being "a quantity" (bread, wine, cheese) the article would be
+"some".  Familiar people would be mentioned by name, without any preceding
+article.  Objects that were mentioned recently would have the article "the".
+The attributes of an object will also dictate the type of preposition used in
+the generated text.  For instance, describing the children of a surface (such
+as a table) would dictate the use of "on," while containers would have things
+"in" them.
+
+The result of the player's actions can be reported via a text generation
+facility as well.  When the player enters a vague command such as "Drink,"
+the program would give all the details of what happened, like "You drink some
+cool water from the stream," thus informing the player that his canteen has
+not been taxed.  This reporting mechanism should make use of pronouns (like
+"he," "she," or "it") when an object is mentioned more than once in a
+sentence, to avoid generating text that sounds too mechanical.  An example of
+this would be "You give the bowling ball to Sam, but he drops it".  As
+before, the attributes of an object will aid in selecting the appropriate
+pronoun.
+
+FRAME-BASED EXCEPTIONS
+
+Any non-trivial model of reality will contain a large number of objects whose
+characteristics and behaviors differ from normal expectations.  These
+exceptions might range from personality quirks to magical or "high-
+technology" physical properties that deviate from the norm.  A computer model
+of such a world needs a simple method to define, organize, and deal with all
+these exceptions.  One method is to attach to each exceptional object some
+information about the context in which an exception applies, and the effect
+of invoking that exceptional behavior.  The effect is defined as a fragment
+of executable code.  The context is defined in a semantic frame.  In AI, a
+frame may be defined as "an instantiation of a context".  In this scheme, a
+frame is a simple template for a single semantic action using a specific verb
+type and specific objects.  Any object can point to a unique frame, which
+points to a code fragment.  This way, a frame defines the semantic context in
+which an exception handling code fragment applies.
+
+[Addendum, August, 1991:  Note that in object-oriented languages, frames are
+a built-in construct (usually called "selectors").  Thus an object-oriented
+language makes it very easy to implement a base of general rules with
+hierarchies of exceptional rules (methods)].
+
+Assume we had modeled the mouth of a volcano as a large container.  Normal
+semantics for an object tossed into container dictate that the object will
+come to rest inside the container.  In this case, however, we want to have
+the object be completely destroyed, thus eliminating any possibility of
+getting it back.  The volcano could then be defined with a frame that reads
+"Throw anything into the volcano", to provide the context in which the
+exception will be invoked.  Whenever an actor throws any object into the
+volcano, this frame is selected as matching the actor's action.  After the
+default processing for this action, the code fragment attached to the frame
+is executed.  The code fragment would cause the object to be destroyed, and
+perhaps display a colorful description of the event.
+
+Frames may specify a specific context (by requiring a specific verb, direct
+object, and indirect object) or a more general context (with a range of
+verbs, and "wild card" matching of direct or indirect objects).  Moreover,
+some frames must take precedence over others.  Any action might match the
+frames attached to the direct object, the indirect object, the location, or
+the character performing the action.  Since an action might invoke several
+conflicting exceptions, the game program must select the one frame that is
+the best match to this action.  In most cases, "best match" means selecting
+the matching frame with the most specific statement of action.  (Other
+criteria for precedence may be used as well, such as selecting the frame
+attached to the direct object rather than the indirect object).  Consider the
+case of an explosive with a context frame stating "Throw the explosive into
+the volcano".  This frame is more specific than the volcano's "Throw anything
+into the volcano", so the explosive's frame is selected.  The code fragment
+can then define some effect that is an exception to the "normal" exception.
+
+An object may have any number of frames attached to it, and multiple frames
+may point to the same code fragment.  A code fragment may override the
+default semantics for an action completely, or simply append additional
+semantics.  Finally, objects may be defined which inherit frames from other
+objects, which speeds development and lowers the chance of coding error when
+defining objects with similar exceptional properties.  It is important to
+note that the use of semantic frames is intended only for those actions or
+properties that are exceptional, and should therefore be used as sparingly as
+possible.  Attaching the same exception frame to many objects can be an
+indication that it is not so exceptional after all.  In this case, one may
+want to define a new object attribute for this "non-exceptional" exception,
+and handle those objects via the normal semantics routines.
+
+Incidentally, one can use a scheme of frames and code fragments to control
+behavior for simulated actors in the story, but the results are very limited.
+The actor becomes only a "stimulis-response" being; he responds only to
+actions or commands from the player, and speaks only when spoken to.  For
+example, an actor named Sam might have a frame attached to him, stating
+"Throw anything at Sam".  If the player (or another actor) throws any object
+at Sam, the attached code fragment is executed, which might put out a message
+like: "Sam is outraged by the insult, and draws his weapon".  Clearly, the
+actor can only demonstrate those behaviors that were pre-programmed.  Things
+become much more interesting when actors are capable of original behavior.
+Each computer-controlled actor should be able to recognize a need, then
+create a plan to fulfill it.  Different personality types (based on
+attributes, once again) would give rise to different types of behavior.
+
+GOALS AND SUB-GOALS
+
+A standard feature in many adventure games is the requirement that the player
+remember long sequences of actions in minute detail and type these sequences
+when needed.  Forgetting to perform one of the steps in a sequence results in
+an error message.  For example, if the player sees a bottle of beer on the
+table and says "Drink the beer," he is likely to get an error message like
+"You aren't holding the beer" or "The beer isn't open".  Memorizing detailed
+sequences of instructions is not what most people would call fun.  Wouldn't
+it be much nicer if the computer could just "understand" the player's intent?
+
+It turns out that it is relatively easy to create a system where the
+programmer defines a corrective action for such an error, instead of giving
+an error message.  By defining the prerequisite state attributes for any
+action, the system can automatically break a goal into sub-goals.  Thus, when
+the Drink routine finds that the player is not holding the beer, a new sub-
+goal is set:  get the beer.  Upon resolving that sub-goal, the Drink routine
+is re-entered.  It then checks to see if this container is open and if not,
+it sets a new goal:  open the container.  In the end the player is told of
+how all these events proceeded with a message like:  "You take the beer from
+the table, open it, and drink from it".
+
+Filling in the implied prerequisite actions is a simple form of planning,
+called backwards chaining.  Any new goals must be stored on a stack rather
+than in a static structure, since any goal can create new sub-goals, which
+may create others.  Each goal must be resolved in order, the latest goal
+first.  The game program simply attempts the action on the top of the stack,
+pops it off if successful, or pushes new sub-goals if needed.  It is
+important to note that only errors concerning variable attributes are
+correctable.  Errors caused by conflicts in fixed attributes (such as
+attempting to set fire to a stone) are not correctable by creating a new
+sub-goal.  If a non-correctable error occurs, the player is informed and his
+goal stack is cleared.
+
+Note that once all of the verb routine have all their prerequisite states
+defined as sub-goals, it becomes very easy to simulate intelligent behavior
+by other actors in the story.  For example, if the player asks another
+character to "Go out, get the rope and return," the character appears to make
+intelligent decisions like opening the door before attempting to exit, and
+untying the rope from a tree before attempting to walk away with it.  The
+pace of the game remains brisk since the player need not specify each
+detailed step in a process.  The software "understands" what is implied by
+the player.
+
+SUMMARY
+
+By selecting a simple, yet powerful representation for the system, the
+designer can create a much more dynamic, consistent model of the novel's
+fantasy world.  Building each verb routine around a set of attributes instead
+of coding special cases allows the player to perform actions that were not
+thought of by the designer.  A well defined parsing scheme, aided by a large
+dictionary, allows a player to form his commands many different ways, instead
+of just the one "right way".  Dynamic generation of text in a variety of
+formats can make the computer generated text much more interesting for the
+player to read.  Defining exceptions to normal semantics via frame-activated
+code fragments aids in managing the complexity of such exceptions.  Routines
+that can detect simple state errors and create correcting sub-goals can fill
+in the implied actions, and thereby help the game keep pace.  Of course, even
+the best software needs a well written story to make an interesting
+participant novel, but that a topic for another paper altogether.
+
+                         Bringing Characters to Life
+                               Reprinted from
+                     The Journal of Computer Game Design
+              Volume 2, Number 2, (December 1988): pages 10-11
+                       Copyright 1988 by David Graves
+                            dag@hpsemc.cup.hp.com
+
+A common failing of interactive fiction today is that the player is totally
+responsible for the progress of the plot.  Whenever the player cannot solve a
+given puzzle, progress grinds to a halt.  Most interactive fiction works are
+entrenched in this obstructionist model.  There is no plot continuity, and
+too little dramatic interaction.  Our characters are not "pulling their own
+weight".
+
+The first step is to take the player out of the role of being responsible for
+the flow of the plot.  In her PhD dissertation, Brenda Laurel explains:  "The
+user of an interactive system may indeed make contributions on the level of
+plot; however, the responsibility for integrating such contributions into the
+whole and creating other plot elements that maintain the necessary dramatic
+qualities in the whole belongs to the system.  When that responsibility
+devolves to the user, first-personness is destroyed, as in the classroom
+improvisation where the actor must divide his attention between acting and
+playwriting tasks.  By assuming formal control of the action, the system
+frees the user from playwriting concerns and allows him to immerse himself in
+the experience of his character."
+
+Furthermore, the characters found in most computer games are cardboard cut-
+outs, without any personality.  In her PhD dissertation, Mary Ann Buckles
+points out this failing in the original Adventure game, which still applies
+to most games today:  "The characters the reader encounters in the fictional
+underworld have no significance other than to pose a puzzle for the reader.
+The reader has little emotional involvement with the characters because they,
+in turn, do not represent any emotional or spiritual facets of human
+existence."  Artificial Personality (a term coined during the design of Chris
+Crawford's Siboot project) addresses this need for simulating personality in
+our characters.
+
+Almost all attempts to generate behavior in computer-controlled characters
+have followed a simple stimulus/response model.  For each statement you may
+make to character, there is one response it may display.  Giving the same
+stimulus several times in a row, the character will mindlessly repeat the
+same response.
+
+Clearly, there is room for improvement in creating lifelike characters, but
+how can we attack such a difficult task?  To start, we can extract a number
+of ideas and methods from the field of Artificial Intelligence.  In his
+unpublished book on simulated worlds, Warren Robinett puts it this way:  "The
+field of Artificial Intelligence has fragmented itself, seeking to closely
+emulate various human abilities such as vision, use of language, and problem
+solving.  Researchers are still immersed, after 30 years of effort, in
+discovering the mechanisms by which vision, language, and choice work.
+Perhaps it is too ambitious to have tried to simulate the behavior of man, a
+creature of 50 trillion cells.  Certainly, simple models of plans, emotions,
+or knowledge could be defined.  A creature's plans, emotions, or knowledge
+would affect its behavior.  A plan is a sequence of actions to be carried
+out, with the intent of achieving some goal.  An emotion is a state which
+affects what goals are chosen, with for example, fear eliciting flight, and
+desire eliciting pursuit.  Knowledge is a list of objects external to the
+creature, and their attributes and relations."  I'll address each of these
+prerequisites to behavior generation, plus a few others, in the sections to
+follow.  We can borrow from the field of AI, avoiding the difficult problems
+that haven't yet been solved, to produce the illusion of intelligent,
+emotional, motivated characters.
+
+INTELLIGENCE AND GOALS
+
+In order for characters to act intelligently they must be able to interpret
+the state of their environment and apply appropriate behaviors.  James
+Meehan, who developed the story generating system "TALESPIN" as part of his
+PhD work, states "A problem domain contains:  (1) a set of representational
+primitives, (2) as set of problems which are expressed in terms of those
+primitives, and (3) as set of problem solving procedures."  Meehan's
+characters applied their knowledge to solve problems, creating a story by
+their actions.
+
+While applying a problem solving procedure to achieve some goal, however,
+complications may arise.  In traditional interactive fiction, we pass all
+these problems to the player.  Instead of troubling the player character
+minor complications, the game software could automatically resolve them.  For
+example, given the command "Drink the beer", rather than having a character
+complain "The beer isn't open", it could recognize "Open the beer" as an
+implied subgoal.  Any given goal could give rise to a number of subgoals,
+which may create subgoals of their own.  When a character is able to handle
+low level logistics without being given explicit instructions, he appears
+much more intelligent.  This technique also provides a mechanism for handling
+tedious logistical details on behalf of the player, who is then free to think
+at higher levels.  The topics of handling subgoals and representing the
+physical environment are covered in detail in "Second Generation Adventure
+Games" by Graves.
+
+Meehan points out that "This isn't the stuff that stories are made of.  It
+may be coherent, but it isn't normally interesting".  However, a certain
+level of intelligent behavior is required in any simulated character, else
+the illusion of lifelikeness is too easily shattered.  Further, this software
+layer makes a platform for simulating motivated behavior:  an important "fuel
+for plot".
+
+MOTIVATION AND DRAMA
+
+No organism's behavior is ever unmotivated.  Thus, in order for characters to
+display behaviors that appear reasonable and believable, they must have their
+own motivations.  These motivations help stimulate the generation of plot.
+However, without guidance for the plot, chaos is a likely result.
+
+To ensure that the generated plot is interesting, the system could have some
+concept of drama and apply it to the currently unfolding story.  Laurel's
+dissertation gives an outline of an expert system to do just that.
+"Understanding a story in its totality is a task that integrates natural
+language understanding and the understanding of characters' goals, plans,
+traits, and emotions, and utilizes still other techniques for identifying
+larger patterns of action."  This computerized playwright would recognize
+opportunities for new plot twists and act on them.  Clearly, this is a lofty
+vision, requiring vast resources to implement.
+
+Several projects have been successful in creating small expert systems that
+focus on character behavior and interaction, rather than attempting to
+recognize and generate plot units.  Crawford employed a set of over 70 rules
+which defined the specific behaviors for character interaction, plus rules
+dictating the unseen internal reactions of the characters.  Instead of
+focusing on generating a storyline, the game focused on interesting
+associations between characters, via dialog and deal-making.
+
+Meehan demonstrated a simple (although powerful) technique for driving the
+plot in TALESPIN.  The plot unfolds simply from the goals of the characters,
+their relationships to each other, and their individual traits.  Thus, using
+Meehan's model the author exerts indirect influence on the plot, through the
+definition of the characters.  Changing the initial state of the characters
+would result in the generation of a different story.
+
+Of course, an author could also "cheat" by defining additional goals or
+feelings that may be inserted in a character's head at certain times critical
+to plot development, or in response to some external stimulus.  This forms
+the basis of the Artificial Personality research currently in progress by Tim
+Brengle and myself.  We use code fragments called "affectors" (which may be
+attached to various locations, objects, or actors) to influence an actor's
+behavior by giving him additional goals or by modifying his emotional state.
+
+Using this model, each character's emotional state and current goals drive
+the selection of a specific behavior from a large set of possible behaviors.
+The intensity of the appropriate emotion values is then used to determine the
+intensity of the expression of the behavior.  The description of the behavior
+may be embellished with adverbs or modifying phrases based on additional
+emotional state, providing "color" to the text.  Even when performing simple
+actions, a character's hidden emotional state may "leak out".  The internal
+emotional states and displayed behaviors form a feedback loop:  one
+character's display may poke the affectors of another character.
+
+Thus, the way in which a character attempts to accomplish his goals may be
+influenced by his emotions and those of the other characters.  Due to the
+complexity of the emotional state of the characters, the sub-plot twists are
+unpredictable, and due to the the goals inserted at plot-critical times, the
+author can control the overall plot coherence and pace.
+
+EMOTIONS AND RELATIONSHIPS
+
+In creating a model of personality and relationships, one must select a
+manageable set of emotion variables.  The magnitude of these variables will
+define how each character relates to the others.  Selecting the appropriate
+set of emotions is a surprisingly difficult task.  Further, different sets of
+emotions are needed for different types of stories.  Laurel wrote that
+"Aristotle identified sets of emotions that are most appropriate to each
+dramatic genre:  fear and pity for the tragic form, laughter and ridicule for
+comedy, and fear and hate for melodrama."
+
+Crawford's first set of emotions for Siboot was trust, fear, and affinity.
+His psycho-linguist consultant, Christa Hansen, proposed good/bad,
+strong/weak, active/passive, arguing that this set was more orthogonal.
+However, determining a set of truly orthogonal emotional variables is
+difficult because real emotions overlap and bleed into each other so much.
+Meehan decided to forgo orthogonality for completeness:  his emotional
+palette consisted of trust, affection, dominance, deceptiveness, competition,
+familiarity, and indebtedness.
+
+Each of these emotion values tells how one character feels about another.
+Meehan points out that `It's also very important to us to be able to
+distinguish "John loves Mary" from "Mary loves John", so that "John loves
+Mary" does not contradict "Mary does not love John".  The asymmetry of
+interpersonal relationships is a great source of social dynamics.  From the
+storyteller's point of view, such things tend to keep the story lively,
+giving rise to new goals all the time.'
+
+In addition to these two dimensional emotions (directed towards other
+characters), some one dimensional emotion variables may be created, which
+indicate a character's internal emotional state or mood, or personality
+attributes that remain constant.  Michael Lebowitz, creator of a program that
+writes soap opera stories, uses one-dimensional attributes such as niceness,
+guile, physical-appearance, and promiscuity.
+
+A WIDER DOMAIN FOR DISCOURSE
+
+In most interactive fiction products, characters are treated as objects.
+Most interactions with other characters are limited to making imperative
+statements to them (giving commands).  True interaction with characters is
+impossible in these worlds because the representation of the world is void of
+any "interactive media".  You cannot talk with them because there is nothing
+to talk about.  In worlds containing only objects, the only topic of
+discourse is the "object economy" (physical objects that may be manipulated).
+
+In order to produce interaction on more human terms, a system must have (1) a
+rich representation for emotions, knowledge, and beliefs (an "emotion
+economy" and an "information economy", terms coined by Crawford); (2) a rich
+set of behaviors that are driven by these new economies; and (3) a rich
+grammar for communication of knowledge, events, beliefs, and emotions.  These
+subsystems must be fully integrated with each other.  One would not want to
+design-in emotions that cannot influence behavior, or that cannot be talked
+about using the input grammar.
+
+To support the economy of knowledge and beliefs, a rich knowledge database
+must be constructed.  It would contain both static initial data (the state of
+the world's knowledge before the start of the game), and dynamic data of
+events or information flow as the game proceeds.  Each character would have
+pointers into this database to indicate the set of his own knowledge and
+beliefs.  This database may be inconsistent, as some characters may hold
+beliefs that contradict the knowledge or beliefs of other characters.
+
+At the center of any Artificial Personality system is an emulation of human
+emotions.  Besides providing new motivation for believable behavior, emotions
+give the characters a new domain for discourse.  They may interact on the
+levels of physical state, information state, and emotional state.
+
+In designing an interactive story, the designer must keep in mind the
+interlocking dimensions of physical state, emotions, character beliefs,
+behavior, and communication.  One must also keep sight of the vision:
+characters displaying believable original behavior and engaging in
+interesting, dramatic interaction.
+
+                        ----- ooooo OOOOO ooooo -----
+
+REFERENCES
+
+All three PhD dissertations may be obtained from University Microfilms, (800)
+521-0600, at about $50 each.  Look up "Poetics" in your library.
+
+
+Mary Ann Buckles, "Interactive Fiction: The Computer Storygame 'Adventure'",
+Ph.D. diss., University of California, San Diego, 1985.  Has its moments,
+even though the game is over a decade old.
+
+David Graves, "Second Generation Adventure Games", The Journal of Computer
+Game Design, vol. 1, no. 2, (August 1987): 4-7.
+
+Brenda Laurel, "Towards the Design of a Computer-based Interative Fantasy
+System", Ph.D. diss., Ohio State University, 1986.  Defines the vision and
+the technologies required to implement it.  Read one this first.
+
+Michael Lebowitz, "Creating Characters in a Story-Telling Universe", Poetics,
+13, (1984): 171-194.
+
+James Meehan, "The Metanovel: Writing Stories by Computer", Ph.D. diss., Yale
+University, 1976.  An AI classic, with implementation details.
+
+                               Plot Automation
+                               Reprinted from
+                     The Journal of Computer Game Design
+               Volume 5, Number 1, (October 1991): pages 10-12
+                       Copyright 1991 by David Graves
+                            dag@hpsemc.cup.hp.com
+
+An automated playwright would allow interactive fiction plots to be developed
+on the fly in the player's computer.  At first look, it seems impossible to
+develop software that could generate plot on the fly -- it seems the stuff of
+science fiction.  The holodeck on Star Trek, for example, is a computer-
+controlled interactive fantasy that boasts of automated plot generation.  One
+might think that the hardware and software technology required to achieve
+this goal are decades away.
+
+However, after having worked on plot automation for several years, I am
+convinced that the hardware and software technology required to develop an
+automated playwright exists today.  Why then, don't we all have them in our
+games?  One major limitation is our approach in writing interactive fiction.
+I'm not saying that the existing form of IF is wrong, but I do feel that
+there is room to extend the model for IF.  After all, the IF genre has hardly
+changed since it first appeared in the mid-1970s.  Traditional interactive
+fiction, for example, has been plagued by the "plot branch tree" concept --
+few IF works have risen above this old paradigm.
+
+In addition to changing the model we use for IF, I propose that we need to
+extend our concept of story to make room for new modes of writing.  I believe
+that even if we (the development community) had a working software playwright
+right now, we would be at a loss to develop story materials to feed into it.
+This article addresses the paradigm shift required to develop and use an
+automated playwright.  Perhaps we can overcome some of the mental limitations
+which keep us from realizing an automated playwright in our published works.
+
+Why even bother developing an automated playwright?  Interactive fiction
+attempts to draw the reader/participant closer, by allowing him some choices
+within the story.  We have seen, though, how difficult it is for the IF
+author to relinquish control to the reader/player and still end up with an
+experience that tells a story.  An automated playwright would bring new depth
+to our IF creations by fulfilling the will of the author in a place where he
+cannot be: within the home of reader as he experiences the story.
+
+This brings us to virtual reality, a newborn technology with much potential.
+I see some parallels with the beginnings of the computer game industry.
+Today, you can stand in a virtual environment and play catch with another
+person using a virtual ball.  Doesn't that sound familiar?  Will virtual
+reality be a bigger, better environment for PONG?  We need to be pushing on
+plot automation right now, otherwise much of VR's potential will go untapped.
+
+What about using an automated playwright in our current product, right now in
+1991?  Clearly, works of interactive fiction that utilized plot automation
+would have a great increase in replayability.  This would be tremendous
+"value added" for each dollar the buyer puts down.  Modern IF works may have
+a rich interactive story, but they are typically a one-time experience.
+
+One more reason to work towards plot automation:  because it's the natural
+next step in computer game evolution.  Remember Aristotle's elements of
+drama?  Starting at the bottom of the hierarchy, you have spectacle
+(everything that is seen), then music (everything that is heard), diction
+(the selection and arrangement of words), thought (the processes leading to
+choices and actions), character (patterns of choice; actionable attributes),
+and plot (combinations of incidents making the whole action).  Early computer
+games allowed the player to manipulate objects in a physical world.  The
+focus was on the lowest elements of drama.  Later we could simulate thought:
+the computer opponent would make choices leading to action.  In recent years
+we have seen the emergence of character in games.  Artificial Personality
+supports the illusion that there is a character who shows recognizable
+patterns to his choices; that he has attributes of his personality that are
+revealed to us by his actions.  This illusion is so intoxicating that we
+willingly suspend all disbelief that the character and situation is
+fictitious, and thus we are drawn in.  The only step left in game evolution
+is to allow the participant to have an influence in the plot, while an
+automated playwright ensures that the combinations of incidents create a
+whole, well-formed action.  When you look at it this way, the creation of the
+software playwright seems inevitable, doesn't it?
+
+To re-iterate, the accepted model for interactive fiction is preventing us
+from making progress towards plot automation.  What, then, are the limiting
+concepts that we seem to be locked into?
+
+One:  graphics depicting only physical world spectacle.  This means that
+graphics are used to show you what the fantasy world looks like.
+Unfortunately, using graphics this way causes the plot to focus on the
+physical world.  It becomes too easy for the story developer to focus on
+geography, because a fork in the road is the predominant example we see for
+decision trees in real life.  This typically leads to a "travel resistance"
+plot.
+
+Two:  plot as a decision tree.  In a plot tree for most games today, there
+are failures at each of the "dead ends" of the tree.  In early interactive
+fiction, the protagonist would die at one of these nodes.  In our more
+enlightened times, the player does not necessarily die when he digresses from
+the "true path", but the plot dies.
+
+Three:  viewing plot as a static construct.  In traditional stories, the plot
+is static.  It has to be:  the media is static.  Words on a printed page
+cannot change.  Pick-a-path books allow us to make decisions, but the work
+itself is still static, so the experience very soon becomes insipid and
+uninteresting.  Computer technology allows us to create works which are not
+static, but our concept of "story as a static construct" leads us to create
+interactive fiction in the form with which we are familiar.  This leads to
+over-scripting in our interactive stories.  Then we are stuck with writing a
+separate sub-story for each branch.  Clearly, the IF author would have to
+write much more story than the traditional author, if a work of IF is to have
+significant variance in plot.
+
+Let's look at each of these concepts in the traditional paradigm and ask how
+we might make a shift in our thinking.  First:  graphics depicting thought
+and character.  This would allow works of IF that focus on characterization
+and personality rather than focusing only on the physical world.  Recall
+Aristotle's dramatic elements, with thought and character on the higher
+levels.  While you cannot see "thought" in another person, their thoughts can
+be partially revealed to you by their face.  Their expression, nuance of eye,
+lid, brow, jaw, and lip; each of these can provide a wealth of information,
+some of which may be conflicting or ambiguous.  Similarly, you can gain
+insight into the "character" of a person by observing their expressions as
+they react to a situation.  This is critical to the artistic advancement of
+our works.  We cannot have a rich interpersonal fantasy experience in a world
+which depicts only objects in a physical world, or a world which treats the
+actors as objects to be manipulated.
+
+Next:  releasing more control of the plot.  At the heart of interactive
+fiction is interactivity.  We present the player with choices, as a means to
+draw him into the story.  The player gets great pleasure from these making
+choices.  A skillful IF designer will give the player the illusion that he
+has tremendous freedom.  However, it seems that we give the illusion of
+freedom to the player, then take it back again by using heavy scripting.  In
+order to ensure that the player experiences the full emotional impact of the
+story, the author ensures that event A must precede event B.  If we wish to
+give some freedom to the player, and not take that freedom back again via
+scripting, then we must release some of the control over the plot of the
+story.  Plot trees are the perfect model for organizing a heavily scripted
+work of IF, so this suggests that if you wanted to create a work of IF that
+was not heavily scripted, then a plot tree would not be the best structure
+for organizing your story.  I suggest that plot trees are useful as an
+intermediate step in the development of a work of interactive fiction, just
+as you would write an outline as a step in composing a paper.  @From this
+tree, you would then develop a plot network.  Now the player may have a
+number of plot experiences, rather than a single plot path.  There will still
+be some plot events that must precede others, but there will be more freedom
+than before.
+
+However, a plot network is still a static construct.  You can draw a diagram
+of it on a single piece of paper.  It presents plot paths that the player may
+traverse, but the structure of the paths is itself static.  When we look at a
+story this way, we are still seeing plot as data, and static data at that.
+If we could view plot as a process, rather than as data, then we could begin
+to rise above static plots.  This is where the author begins to regain some
+control.  Assuming that the author has released control over the strict
+sequence of events in a story, he can still influence the plot through the
+rules he defines for a given story's plot process.  The author crafts the
+story by controlling it's content, not it's plot.  She selects the scope of
+the theme and the overall "message" of the work, which are exposed through
+individual plot events.  The process by which these "plot units" are
+assembled is defined by the author's rules.  The rules are applied at run-
+time, in the player's computer, taking into account all that has taken place
+in the story's progress so far, which includes the choices made by the
+player.  In effect, the player and the author write the work of IF together.
+
+So, if we are able to view plot as a process, rather than as a static
+construct, then we are freed from seeing plot as a sequence.  Plot emerges
+from a broad set of plot potentials.  These potentials are loosely defined in
+terms of plot units (which are static data), and plot rules (which can
+interact dynamically).  To exploit the potential of interactive fiction, it
+is important to not nail things down.  The nature of a specific plot is
+unknown to the player, just as it is unknown to the author.  The ambiguity
+(in terms of the many variables and many rules) is what creates the
+opportunity for different experiences in the same "story" definition.  The
+player gets to have a significant impact on the plot.  The great increase in
+replayability is the icing on the cake.
+
+At this point it sounds like the automated playwright must be a huge program
+taking up vast resources.  How can we program that, let alone fit it into a
+microcomputer?  It turns out that the playwright does not need to make
+decisions about each detail that happens in the story.  In fact, the
+playwright can sit back and watch the story go by tossing in a plot change
+once in each five to ten minutes.  You can get a tremendous amount of plot
+springing forth from personality state.  That's what Artificial Personality
+is designed to do.  It is pretty much accepted that Artificial Personality is
+achievable today.  Many story-games on the market show characters who can
+make simple plans and display simulated emotions.  Thus, the playwright can
+focus entirely on high plot, since the Artificial Personality logic focuses
+on Aristotle's thought and character.  You can even allow conflict between
+the playwright and the artificial personality logic, which will allow for the
+generation of interesting plot conflicts.  This represents the philosophical
+argument of free will versus determinism.  The playwright represents
+determinism; it wants to see the plot go in a limited number of directions.
+The Artificial Personality module represents the thought and character of
+each of the agents in the story; thoughts and patterns of choice which might
+be in conflict with each other, and in conflict with the playwright.  This is
+alright, though.  Conflict is at the center of drama.
+
+Okay, so if an artificial playwright existed now, how would people develop
+material for it?  Here is my proposed process:  Write a story.  Turn it into
+a plot tree.  (In traditional IF, you would be done with the design at this
+step).  Cut up the tree, such that pieces can be reassembled in a variety of
+ways.  You might develop a plot network as an intermediate step.  Eventually,
+though, you remove most of the static paths connecting plot units, replacing
+them with rules that suggest how plot units might fit together.  In a heavily
+scripted story, the plot units would fit together only one way.  Speaking
+metaphorically, this is the equivalent of a jigsaw puzzle.  In a loosely
+scripted story, the plot units would fit together in a variety of ways.  This
+is the metaphorical equivalent of building blocks.  Next, examine your set of
+plot units and plot rules, looking for "dead ends", and fill these in with
+additional plot pieces.  It's important to do "path folding" so that a dead
+end leads you back into the productive mainstream of the story's theme.
+
+It is not technology that is keeping us from integrating the player's actions
+into a computer assembled plot.  We are limited by the mindset we apply to
+this new area of opportunity.  We cannot expect to move rapidly forward
+carrying the baggage of the traditional interactive fiction genre.  By
+challenging our basic assumptions about the interactive fiction model, we can
+exploit new technologies such as plot automation.
+

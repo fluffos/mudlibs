@@ -1,0 +1,167 @@
+CONCEPT
+	weather and night/day model
+
+UPDATE
+       Tune, 22-Jun-1997, 16:00 MET
+
+SYNOPSIS
+       #include <config.h>
+       #include <weather.h>
+       #include <nightday.h>
+
+DESCRIPTION
+       It showed up that it was easy to model night and day since sunlight
+       is a rather global effect. On the other hand, weather is a highly
+       localized thing which couldn't be simulated well generically.
+       Thus it was decided to install a global 'sun' and to introduce a
+       data format for weather information so the /std/room is able to
+       talk with a wizard's local weather server.
+
+       One OSB day is defined in length in /sys/config.h by DAY_LENGTH,
+       at the moment being 28800 seconds = 8 hours.
+
+       One day is divided into several 'states' of different length, each
+       of an own length, and each describing one light/weather state.
+       The data for one state may be collected in an array for which the first
+       entries have a fixed meaning (defined in /sys/weather.h):
+	 int	WD_LENGTH   : total length of the state in seconds
+	 int	WD_SUNLIGHT : sunlight of the state
+	 string WD_DESC     : description of the current state
+	 string WD_CDESC    : description of the change from the previous
+			      state to this one.
+       WD_USER denotes the first free entry in that array: all data starting
+       from there have no predefined meaning and is up to the use by a
+       wizard's weather server.
+       Normally, a server collects the several state-arrays into one big
+       array, but this is not mandatory.
+
+       Note that there are no rules on how the states are defined, nor
+       on their number. It is possible to program a server with
+       continuous state transitions.
+       This means that only the following calls and builtin properties
+       are guaranteed to exist:
+
+	 mixed * P_STATEDATA   "StateData"
+	   The data-array for the _current_ state.
+	   If set, the new data will erased with the next state
+	   transition.
+	   When querying the 'true' statedata (by performing a call
+	   'QueryStateData(1)') the result will be the statedata as if
+	   it wasn't changed at all since transition.
+
+	 string P_STATEDESC    "StateDesc"
+	   The description WD_DESC of the current state.
+	   If set, the new data will erased with the next state
+	   transition.
+
+	 string P_CHANGEDESC   "ChangeDesc"
+	   The change description WD_CDESC of the current state.
+	   If set, the new data will erased with the next state
+	   transition.
+
+	 int	P_SUNLIGHT     "SunLight"
+	   The sunlight WD_SUNLIGHT of the current state.
+	   If set, the new data will erased with the next state
+	   transition.
+
+	 int	P_LENGTH       "Length"
+	   The duration WD_DURATION of the current state in seconds.
+	   If set, the new data will erased with the next state
+	   transition.
+
+	 void InitStates ()
+	   Initializes the servers state data, called prior to
+	   StartServer(). Default action is to get the P_STATES from
+	   NIGHTDAY.
+
+	 void StartServer ()
+	   Initializes the server on startup and starts the servicing.
+
+	 int TimeLeft()
+	   Returns the seconds left till the next state transition.
+
+	 void NextState ()
+	   Forces a state transition with notification of all clients
+	   and affected players.
+
+
+       Since weather is sensable only in 'outdoor' rooms, each outdoor
+       room has as value of its P_OUTDOOR the name or object of it's
+       responsible weather server. But since it's not the room but the
+       player within that room which gets affected by a weather change, the
+       weather server announces any change directly to all players which
+       happen to be in outdoor rooms using it as weather server.
+       Since this is done on occasion only, there is no need for the server
+       to keep a list of all depending rooms.
+       Additionally, non-player clients can subscribe to the server to
+       be announced as well.
+
+       On the other side, outdoor rooms directly ask their server for
+       the actual sunlight, or for descriptions of the actual state if a
+       player requests it.
+
+	 void NotifyClients (void|mixed *statedata)
+	   Notifies all clients and affected players of the state
+	   given as <statedata> (default is the current state).
+	   This is possibly done using call_out()s.
+
+       Note that only this function and NextState() notify someone at
+       all.
+	The notification is done by setting in the notified client the
+	property P_STATEDATA with the new data. For interactive
+	players this will of course tell WD_CDESC to the player.
+	However, the data is not given directly to the player, but first
+	filtered through 
+	  FilterWeatherData(object client, mixed *data, int newstate)
+	of all surroundings.
+
+
+       Where true weather is the task of local weather servers, the modelling
+       of night and day is done on a global level.
+       The maximal sunlight is defined in /sys/config.h as MAX_SUNBRIGHT (do
+       not take this as the maximal possible light value to happen - this
+       ain't the case!).
+       The modelling is done by the server NIGHTDAY (defined in
+       /sys/nightday.h) which provides the actual sun light and is to
+       be used as a reference by local servers ("/std/weather"
+       automatically queries NIGHTDAY in its InitStates()).
+
+       The NIGHTDAY divides the day into these states (actual RL
+       time span in minutes/hours):
+
+	   night	   (2:23 hours)     0% light
+	   near dawn	   (15 minutes)    10% light
+	   dawn 	   (10 minutes)    20% light
+	   sunrise	   (10 minutes)    40% light
+           early morning   (44 minutes)    80% light
+	   late morning    (1:06 hours)   100% light
+	   noon		   (44 minutes)   100% light
+           early afternoon (1:06 hours)   100% light
+	   late afternooon (44 minutes)    80% light
+	   sunset	   (10 minutes)	   40% light
+	   twilight	   (10 minutes)	   20% light
+	   evening         (15 minutes)	   10% light
+
+	These ND_NO_STATES divisions are defined in /sys/nightday.h as:
+
+	   ND_NIGHT	        Night, dark,dark,dark
+	   ND_PREDAWN	        First glow on horizon
+	   ND_DAWN	        Morning dawns, sun coming up
+	   ND_SUNRISE	        Sun is above horizon now
+	   ND_EARLY_MORNING     circa 6am-8am, almost full light
+           ND_LATE_MORNINING    Full light, ca. 8am-11am
+	   ND_NOON	        Midday, ca. 11am-1pm
+	   ND_EARLY_AFTERNOON	Circa 1pm-4pm
+	   ND_LATE_AFTERNOON	ca. 4pm-6pm, shadows get long
+	   ND_SUNSET            Sun starts going down
+	   ND_TWILIGHT          Sun is down, getting dark
+           ND_EVENING           Last light fades
+
+	The relative bright of a given day state in respect to a given
+	maximum may be computed using the macro ND_REL_STATE(state, max).
+	E.g. ND_REL_STATE(ND_DAWN, 1000) returns 200.
+
+
+SEE ALSO
+	light(C), room(S), weather(S), nightday(O)
+

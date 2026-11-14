@@ -1,0 +1,195 @@
+<html>
+<head>
+<title>Complex Give</title>
+</head>
+<body>
+<h1>A more complex give 'command'</h1>
+
+Now we want to code a npc which can do more than saying 'thanx' for this and that.<br>
+We can just react to the item (give it back or do something with the item), if the
+notify_enter() function has ended.
+
+There are two main solutions to achieve (?? erreichen) this:
+<ul>
+<li>use a <code>call_out()</code> (simple, but some possible 'traps' there)
+<li>use <code>RegisterCmdFun()</code> (more complicated and nearly 
+unknown by most wizards. And nearly no documentation available.
+</ul>
+<p>
+
+I will show both methods - you can choose your beloved. Okay lets start with the examples:
+
+<p>
+
+<h3>Example 1:</h3>
+Using of <code>call_out()</code>.<br>
+The npc should now react only to a special item, but should give back all others:
+<code>
+<ol>
+<li>notify_enter(object from,int method, mixed extra) {<br>
+<li>&nbsp; ::notify_enter(from,method,extra);
+<li>&nbsp; if (mode!=M_GIVE) return;<br>
+<li>&nbsp; if (!previous_object()->QueryShort()) return;
+<li>&nbsp; show(
+<li>&nbsp; &nbsp; "Hey "+(from->QueryName()||"Someone")+" - thank you for "+
+<li>&nbsp; &nbsp; add_a(
+<li>&nbsp; &nbsp; previous_object()->QueryShort() )+"!\n");
+<li>&nbsp; if (!previous_object()->id("__cutted_wooden_stick_quest_id__")) {
+<li>&nbsp; &nbsp; call_out("give_back",1,previous_object(),this_player());
+<li>&nbsp; &nbsp; return; }
+<li>&nbsp; call_out("give_right_item",1,previous_object(),this_player());
+<li>}
+</ol>
+</code><p>
+
+<ol>
+<li>overloading of the pre-defined function<br>
+<li>calling of the parent master function<br>
+<li>check if the mode was a give, if not, do nothing<br>
+<li>check if the given item isn't invisible
+<li>show - tells only to the person if he can see in the room
+<li>output who gives the item (a check for invisble players is there too)
+<li>adds an 'a' or 'an' to the Short() of given item, if needed
+<li>output what item is given
+<li>let the given item identify itself, if it isn't the correct one
+<li>call give_back() after 1 second, with parameters: a) the item itself, 
+b) the object which started the command 'give'
+<br>Note: this_player() must not be equal to the object where the item comes from
+<li>then leave the notify-enter()function - the call_out will be follow to execute then
+<li>call give_right_item() after 1 second, parameter a) the given item 
+b) the object which started the command to give it
+</ol>
+<p>
+
+Okay - now we have to define two functions for the call_outs:<br>
+<pre>
+void give_back(object o,object pl) {
+  if (!pl) return;
+  tell_object(pl,"Hey I don't need this, take it back please.\n");
+  if (o->move(pl,M_GIVE) != ME_OK) {
+    tell_object(pl,"Oh you can't hold it? Okay I will drop it to the room.\n");
+    o->move(environment()),M_DROP);
+  }
+}
+</pre>
+
+The function checks if the player is still alive (if he is netdead, the function 
+will return immediately). Then it sends a message to the player that we don't need 
+this item and we want to give it back.
+And then we try to give it back. Note: this move may fail, for example if the 
+player gave it from another location than his own inventory (like from panda or bags)
+to us. If the move failed we drop the item to the room.
+
+<p>
+Now the other function (normally we don't need to check the given item 
+(because we know that it is the correct one, else the function would not be called):
+<pre>
+void give_right_item(object o,object pl) {
+  if (!pl) return;
+  tell_object(pl,"Hey - this is my wooden stick? Cool - Thanx again!\n");
+  // maybe set a marker or give him another object or ...
+  // be creative *smile*
+  o->remove();      // destroy the object or do anything with it
+}
+</pre>
+
+<p>
+
+First the same check if the player is alive, then tell him something and then
+destruct the given item (or do anything with it).
+
+<p>
+
+<b>Notes to call_out():</b>
+<ul>
+<li>call_out functions are always of type void (no return value), so never use a=call_out(...);
+It will ever fails.
+<li>Don't use this_player() inside of call_out() ! use an additional parameter
+(like above the 'pl') instead
+<li>check at first if the given object is still alive (the player left 
+the game immediately?)
+<li>Don't use write() inside call_out, use tell_object(pl,...) instead 
+(write() tells to this_player() which can be 0, if he left the game!)
+</ul>
+
+The notes above are not that strict, but you know a player will find more bugs 
+than we (the wizards). And believe me or not, if you not follow these notes, your
+code will create bugs in future (some of them will occure month/years later, 
+but they will).
+
+<hr>
+
+Okay now the second version with <code>RegisterCmdFun()</code>.
+We use the same problem with the same objects given:
+<code>
+<ol>
+<li>notify_enter(object from,int method, mixed extra) {<br>
+<li>&nbsp; ::notify_enter(from,method,extra);
+<li>&nbsp; if (mode!=M_GIVE) return;<br>
+<li>&nbsp; if (!previous_object()->QueryShort()) return;
+<li>&nbsp; show(
+<li>&nbsp; &nbsp; "Hey "+(from->QueryName()||"Someone")+" - thank you for "+
+<li>&nbsp; &nbsp; add_a(
+<li>&nbsp; &nbsp; previous_object()->QueryShort() )+"!\n");
+<li>&nbsp; if (!previous_object()->id("__cutted_wooden_stick_quest_id__")) {
+<li>&nbsp; &nbsp; this_player()->RegisterCmdFun("give_back",previous_object());
+<li>&nbsp; &nbsp; return; }
+<li>&nbsp; this_player()->RegisterCmdFun("give_right_item",previous_object());
+<li>}
+</ol>
+</code><p>
+
+<ol>
+<li>overloading of the pre-defined function<br>
+<li>calling of the parent master function<br>
+<li>check if the mode was a give, if not, do nothing<br>
+<li>check if the given item isn't invisible
+<li>show - tells only to the person if he can see in the room
+<li>output who gives the item (a check for invisble players is there too)
+<li>adds an 'a' or 'an' to the Short() of given item, if needed
+<li>output what item is given
+<li>let the given item identify itself, if it isn't the correct one
+<li>call give_back() after this function has ended, parameter is still the given item
+<li>then leave the notify-enter()function, now the function call_back is executed
+<li>call give_right_item() after this function has ended, parameter is still the right item
+</ol>
+<p>
+
+void give_back(object o) {
+  if (!this_player()) return;
+  write("Hey I don't need this, take it back please.\n");
+  if (o->move(this_player(),M_GIVE) != ME_OK) {
+    write("Oh you can't hold it? Okay I will drop it to the room.\n");
+    o->move(environment()),M_DROP);
+  }
+}
+</pre>
+
+The function looks a little bit easier, because we can use this_player(), but it 
+performs the same checks as before in the call_out-version.
+<p>
+
+<pre>
+void give_right_item(object o) {
+  if (!this_player()) return;
+  write("Hey - this is my wooden stick? Cool - Thanx again!\n");
+  // maybe set a marker or give him another object or ...
+  // be creative *smile*
+  o->remove();      // destroy the object or do anything with it
+}
+</pre>
+<hr>
+Okay - that's all - happy coding!
+<p>
+
+<hr>
+
+<a href="give3.htm">How to reject items?</a><br>
+<a href="give_i.htm">Back to overview</a>
+
+<p>
+
+(C) Magictcs - Jan 1998
+</body>
+</html>
+

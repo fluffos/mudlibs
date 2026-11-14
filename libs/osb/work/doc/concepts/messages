@@ -1,0 +1,235 @@
+CONCEPT
+        messages
+
+LAST UPDATE
+        Mica@OSB, 98/07/05
+
+SYNOPSIS
+        #include <msgclass.h>
+
+DESCRIPTION
+        Objects communicate with livings by sending messages. These are
+        processed by the message handler within livings. This is mostly
+        used for output written to interactive users and output that
+        shall be processed by livings, but there is room for expansion.
+        You can even use this to establish a communication protocol 
+        between npcs.
+
+        Each message consists of a class and the data. There is even a
+        class for normal output. 
+
+        You might ask why it's necessary to have message classe when there 
+        are already easy-to-use efuns such as write() or tell_object(). The     
+        reason is that those (old) efuns do not take the environment of the
+        living into consideration; for example, if this living is able to 
+        see or hear. They do not use any custom coloring the user has
+        defined for different types of output. And it is impossible to 
+        handle the old generic output with any type of intelligent client,
+        which might show different type of output in different 
+        windows, etc.
+
+        All existing message classes are defines at /sys/msgclass.h
+        and start with CMSG_.
+        
+        If you want to setup your own communication protocol between npcs,
+        you need to use the CMSG_USER message class (see below).
+
+        The data that you use within message functions is of type mixed, 
+        but the actual contents depend on the message class. For example,
+        you need to use a string with CMSG_ROOM, and an array of four 
+        values with CMSG_CHANNEL.
+
+        The following message classes have been defined to date:
+ 
+        CMSG_GENERIC : data is string type 
+           Any output that does not (or should not) match any other 
+           message class.
+
+        CMSG_TELL : data is string type
+           Tell output (for example players' tell command). The message 
+           handler in the player returns apropriate messages for users beeing
+           away or editing.
+
+        CMSG_SAY : data is string type
+           Say output (for example users say command). In general all
+           output that is sent to all livings in a room by another living
+           that says something.
+
+        CMSG_EMOTE : data is string type
+           Emote output (any user emotes), for any livings.
+
+        CMSG_SHOUT : data is string type
+           Covers all output that is sent to all users by another
+           interactive user shouting anything. Shout in this sense means
+           mud-wide messages that go to every user, not a room emote.
+
+        CMSG_CHANNEL : data is an array
+           This is used by the channel-daemon to broadcast channel
+           messages. This message type is only sent to interactive users
+           by default (although there might be a way to 'plug in' npcs
+           into the channel-daemon in future) and must not be used by
+           other objects than the channel-daemon.
+
+           Format of the array type data:
+            data[0] : (string) channel
+            data[1] : (string) name of the originator
+            data[2] : (string) message for the channel
+            data[3] : (int) is_emote flag, 1 for emote, 0 for anything else
+
+        CMSG_BROADCAST : data is string type
+           All output that is sent to all users from the library to
+           notify them about important happenings, for example shutdown.
+           It is not possible to ignore messages of this class.
+
+        CMSG_COMBAT_SELF   : string type message
+        CMSG_COMBAT_OTHERS : string type message
+        CMSG_COMBAT        : string type message
+           These message types have to be used for any type of combat
+           messages and is used by the library for that.
+           CMSG_COMBAT_SELF must be used for all messages that express
+           the users action, like "You slash on ...", CMSG_COMBAT
+           for the enemies actions, like "Monster hits your hard." and
+           CMSG_COMBAT_OTHERS for anything else that is shown to people 
+           not involved in the fight, for example standing at the room.
+
+        CMSG_ROOM          : string type message
+           This message type has to be used for anything that happens
+           in a room, like the closing of a door or an npc walking in.
+           Any output that uses this msgclass is passed through the
+           function 'filter_message' of the receiving players environment.
+           This function can change the msgclass (common use might be to
+           turn on MMSG_SEE for a specific group of players) and/or the
+           message itself. See the manpage of std/room for further details.
+
+        CMSG_ROOM_SHORT    : string type message
+           This message is used internally to output the room's short
+           description. It may not be used for anything else.
+
+        CMSG_ROOM_LONG     : string type message
+           This message is used internally to output the room's long
+           description, including all objects which are inside. This is
+           the output you get if you 'look' at a room. It may not be
+           used for anything else.
+
+        CMSG_STATUS        : string type message
+           This message is used for all kinds of status output, like the
+           'score' command and the "You are wounded" messages during
+           combat. You can use it for your own items, too.
+
+        CMSG_FUN           : string type message
+           This message should be used for any kind of 'fun item' output
+           like the voodoo dolls or the washing machine. It can be turned
+           of by the users if they don't want to get these messages.
+
+        CMSG_ASK           : string type message
+           This message is used by the ask-command and the npc-question-
+           handler. You should not use it in your own objects.
+
+        CMSG_ERROR         : string type message
+           This message should be used for generic error output.
+
+        CMSG_USER          : custom message type
+           This is not really a message type, it is just a define for 
+           the first message class that can be used for setting up a
+           custom message protocol. If you need more than one message-
+           type, you must use (CMSG_USER+1) etc., _never_ use simple
+           numbers for your own message protokoll. And be aware that
+           other might have used your message class too and check if
+           the target is one of yours. If you have done something that
+           should work with everything, please ask a janitor about 
+           adding a CMSG_USER_XXX define to msgclass.h
+
+        All messages can be combined with so-called message modifiers.
+        Those modifiers are declared at /sys/msgclass.h too and start
+        with MMSG_. To use them, just | them with the message class you
+        want to use, for example CMSG_ROOM|MMSG_SEE. 
+
+        The following message modifiers have been defined:
+
+        Living ability dependant modifiers:
+
+        MMSG_SEE : modifier for string type messages _only_
+           If MMSG_SEE is used, you can give either a string or an
+           array consisting of two strings as message-data. 
+           If the living is able to see, it gets the string or the
+           first string of the array, if it is not able to see it
+           gets no message if you give string-type data or the second
+           string inside an array-type data.
+           You should use MMSG_SEE for all output that depends on the
+           light level.
+
+           Example:
+               msg_write( CMSG_ROOM|MMSG_SEE, 
+                          ({ "You can see!\n", "You see nothing!\n" }) );
+
+        MMSG_HEAR : modifier fo string type messages _only_
+             Same behaviour as MMSG_SEE for output that depends on the
+             living beeing able to hear (currently all livings are able
+             to hear anything everywhere).
+             You should use MMSG_HEAR for all output that is heared by the
+             user, for example "You hear a faint noise."
+
+        MMSG_SMELL : modifier for string type messages _only_
+           Same behaviour as MMSG_SEE for output that depends on the
+           livings ability to smell (currently all livings are able to
+           smell anything everywhere).
+           You should use MMSG_SMELL for all output that is triggered by
+           a living smelling something, for example "You suddenly smell
+           an awful stench."
+
+        General message behaviour modifiers:
+
+        MMSG_DIRECT : all kinds of messages
+           If this modifier is given, the message is directly sent to the
+           user and not buffered if he/she is currenly editing or has any
+           kind of input pending (like input_to).
+           It is IMPORTANT to use this modifier is you want to send output
+           to a user from inside an input_to called function!
+
+        MMSG_NOWRAP : all kinds of messages
+           Use this modifier if you do not want the final printed data
+           to be wrapped by the message handler of the user.
+
+        MMSG_MORE : all kinds of messages
+           If the finally printed data does not fit on the users screen,
+           it is automatically mored by the message handler of the user.
+           This should not be used by own objects, the standard objects
+           use it, use the standard objects.
+
+        MMSG_NOREPLY : do not reply on this message with another
+           This is used by the 'away' and 'editing' replies for CMSG_TELL
+           currently.
+
+        MMSG_IDENT_TRANS : with this modifier added, no %%^^-macros will
+           be expanded at all and no class coloring will be done. This can
+           be used to display the 'real' strings with macros for example
+           for xcall.
+
+        For custom processing of messages , msgclass.h defines 
+        MMSG_MASKOUT, to 'strip off' the message modifiers you first
+        do 'class &= MMSG_MASKOUT' and then you can do a switch on the
+        class with cases for CMSG_XXX.
+       
+        Example for a custom message handler:
+
+         receive_msg( int class, object from, mixed data ) {
+           /* first process the message modifiers */
+           if ( class & MMSG_SEE )
+             msg_object( from, CMSG_GENERIC,
+                         "Message Modifier MMSG_SEE used.\n" );
+
+           /* now strip off the modifiers */
+           class &= MMSG_MASKOUT;
+
+           /* and finally handle the classes itself */
+           switch( class ) {
+           case CMSG_ROOM:
+             msg_object( from, CMSG_GENERIC,
+                         "Message class CMSG_ROOM used.\n" );
+             break;
+           }
+         }              
+
+SEE ALSO
+        msg_write(K), msg_say(K), msg_object(K), msg_room(K),
+        msg_shout(K), msg_pshout(K), msg_wshout(K)

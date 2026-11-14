@@ -1,0 +1,284 @@
+CONCEPT
+	attributes, abilities and spells
+
+
+LAST UPDATE
+	Mateese, 20-Dec-92 01:30 MET
+
+
+DESCRIPTION
+	Attributes describe the physical and mental abilites of a
+	living. In the broader meaning which is used here, they also
+	include non-magical profiencies and magical skills.
+
+	The magical skills are included since they from a basic aspect
+	of life in such an non-technological environment as Nightfall.
+
+
+	Attributes are defined by name and associated data.
+	This data is mostly a simple integer, but may take any complex
+	form needed.
+
+	The standard names and structures are defined in
+	/sys/attributes.h 
+
+
+	Every attribute can be set or queried using:
+
+	mixed QueryAttribute (string name)
+	mixed SetAttribute (string name, mixed data)
+
+
+	The simplest attributes have an instant effect on the livings
+	behaviour - they are called 'hardcoded attributes' or simply
+	'stats'. They can be accessed like normal properties, e.g.
+	querying the stat 'Str' is done by 'QueryStr()', though
+	'QueryAttribute (AT_STR)' has the same result.
+
+	The set of all 'stats' at once can be handled as an alist via
+
+	mixed *QueryStats ()
+	mixed *SetStats ()
+
+	
+	All other attributes have only indirect effects on the living,
+	since they are in general not evaluated by the living on its
+	own. They are called 'softcoded attributes' or just
+	'attributes'.
+	They can be handled all at once as an alist via
+
+	mixed *QueryAttributes ()
+	mixed *SetAttributes ()
+
+
+	Players have an extra list for boni/mali on stats and
+	attributes. These are taken into account when the stats are
+	changed to balance intrinsic race aspects with guild
+	membership aspects.
+
+	mixed *QueryBoni ()
+	mixed *SetBoni (mixed *boni)
+	  Sets or queries the list of boni.
+
+	mixed QueryBonus (string name)
+	void SetBonus (string name, mixed data)
+	  Sets or queries a single bonus.
+
+	void AddBonus (string name, int diff)
+	  Add <diff> to the current value of bonus <name> (it must be
+	  of integer type).
+
+	Note that changing any bonus does not change the associated
+	attribute.
+	
+	
+	Abilities are a special sort of attributes, which describe a
+	level of knowledge in a specific matter. The special thing is
+	that the knowledge may be increased, either by training or by
+	using the ability. On the other hand, not using the ability
+	over a long time leads to a lossage in knowledge.
+
+	Abilities are described using an array of:
+        ({
+	  int AD_TYPE;      a marker
+	  int AD_LEVEL;     the knowledge level
+	  int AD_MIN;       the minimal knowledge
+	  int AD_MAX;       the maximal knowledge
+	  int AD_LEARN;     the learning factor
+	  int AD_UNLEARN;   the unlearning factor
+	  string AD_DESC;   a descriptional string
+	  mixed AD_OBJECT;  an optional ability object
+	  mixed AD_DATA;    optional additional data
+        })
+
+	AD_TYPE is one of the values ADT_xxx and serves as a flag that
+	the array describes an ability. Normal abilites are of type
+	ADT_ABIL.
+	AD_DESC is a string containing a description of the ability.
+	It can be empty.
+	All other numeric values are given in permille (0..1000).
+	The learn factors give the shrinking of the distance between
+	the LEVEL and the MAX (MIN) with every use (unuse) of the
+	ability. Example:
+	
+	  LEVEL   = 200
+	  MIN     = 100
+	  MAX     = 750
+	  LEARN   = 200
+	  UNLEARN = 500
+
+	  The living knows the ability with 20%. If it now uses it,
+	  the level grows by 20% of the remaining difference to the
+	  MAX, giving a new level of:
+            new LEVEL = 20% + (75% - 20%) * 20% = 20% + 55% * 20%
+                      = 31%
+
+	  Similar for the unlearning, if the ability is not used for
+	  long time:
+            new LEVEL = 20% - (20% - 10%) * 50% = 20% - 10% * 50%
+                      = 15%
+
+	This way the nonlineary learning of 'real' livings can be
+	modeled. Currently, every reset() (approx. once an hour) every
+	ability is unlearned once.
+
+	In AD_OBJECT an optional object can be specified as string or
+	as object. It has to implement at least the functions:
+	
+	int check (string name, mixed *data, int chance)
+	  The ability <name> with the given <data>set is queried and
+	  its AD_LEVEL has to be returned.
+	  If <chance> is defined and not zero, the AD_LEVEL is to be
+	  compared against <chance>-1, and zero has to be returned if
+	  AD_LEVEL is lower.
+
+	int use (string name, mixed *data, int chance)	
+	  The ability <name> with the given <data> set is queried and
+	  learned, and its AD_LEVEL has to be returned.
+	  If <chance> is defined and not zero, the AD_LEVEL is to be
+	  compared against <chance>-1, and zero has to bereturned if
+	  AD_LEVEL is lower.
+	  Note that this call also has to do the learning (and
+	  updating of <data> in the living) - it should use the
+	  living's function DoLearn() to perform it.
+
+	string *info (string name, mixed *data)
+	  Return a short string with additional information from
+	  data[AD_DATA]. The string mustn't end in "." or "\n".
+	  This function is optional.
+
+	string *desc (string name, mixed *data)
+	  Return a string describing the ability. This function is
+	  optional, any non-zero result supercedes data[AD_DESC].
+
+	The living offers six functions to deal with abilities:
+
+	mixed *DoLearn (mixed *data, void|string name)
+	  The given <data>set for an ability is modified for one
+	  learning as defined by AD_LEARN.
+	  If <name> is defined and not zero, the new <data>set is
+	  also updated into the living's attribute-list.
+
+	mixed *UndoLearn (mixed *data)
+	  The given <data>set for an ability is modified to neutralize
+	  one learning as defined by AD_LEARN.
+	  If <name> is defined and not zero, the new <data>set is
+	  also updated into the living's attribute-list.
+
+	mixed *UndoUnlearn (mixed *data)
+	  The given <data>set for an ability is modified to neutralize
+	  one unlearning as defined by AD_UNLEARN.
+	  If <name> is defined and not zero, the new <data>set is
+	  also updated into the living's attribute-list.
+
+	int CheckAbility (string name, void | int chance)
+	  The ability <name> is queried and its AD_LEVEL returned.
+	  If defined, AD_OBJECT is called (see check()).
+	  If <chance> is defined and not zero, the AD_LEVEL is
+	  compared against <chance>-1, and zero is returned if
+	  AD_LEVEL is lower.
+
+	int UseAbility (string name, void | int chance)
+	  The ability <name> is queried and learned, and its AD_LEVEL
+	  returned. If defined, AD_OBJECT is called (see use()).
+	  If <chance> is defined and not zero, the AD_LEVEL is
+	  compared against <chance>-1, and zero is returned if
+	  AD_LEVEL is lower.
+
+
+	Players can do a bit more with abilities: they can 'use' and
+	'train' them additionally. This allows the easy implemention
+	of abilites which combine a knowledge with an action.
+
+	For this, the ability must define an AD_OBJECT with two
+	additional functions, which are called if the player issues
+	the commands 'use <ability> [<args>]'
+        or 'train <ability> [<args>]': 
+
+	int Use (string name, string arg, mixed *data)
+	  Use the ability <name>.
+
+	int Train (string name, string arg, mixed *data)
+	  Train the ability <name>.
+
+	  <arg> are any additional arguments from the commandline (may
+	  be 0 or empty), <data> the abilitie's <data>set.
+	  It's the object's task to output any messages.
+	  The functions have to return zero if the call fails.
+
+
+	Spells are a special form of abilites with a defined
+	spell-object AD_OBJECT	(AD_TYPE has value ADT_SPELL), and
+	defined only for players.
+
+	Spells normally can't be 'used' or 'trained', but instead are
+	'casted', 'studied' and 'practised'.
+
+	Therefore the spell-object has to implement the
+	additional functions:
+
+	int Cast (string name, string arg, mixed *data)
+	  Start casting the spell <name>.
+
+	int Study (string name, string arg, mixed *data)
+	int Practise (string name, string arg, mixed *data)
+	  Study or practise the spell <name>.
+
+	  <arg> are any additional arguments from the commandline (may
+	  be 0 or empty), <data> the abilitie's <data>set.
+	  It's the object's task to output any messages.
+	  The functions have to return zero if the call fails.
+
+	The difference between 'normal' abilities and spells is that
+	most spells need time to be casted. Within this time the
+	player can't fight with normal weapons.
+
+	The casting of a spell can be aborted if the spell allows to.
+	Abortion is done either by casting another spell while the
+	previous hasn't been completed, or by the 'stop' command.
+	Note that abortion need not be possible. 
+
+	The casting itself is done by a casting-object (which needn't
+	be identical with the spell-object AD_OBJECT).
+	The object is set in the player as the property P_CAST_OBJ
+	("CastObj"). 
+	This casting object has to implement three functions:
+
+	int CastOn ()
+	  This is the function called every heart_beat. It has to
+	  count down the casting time and at last trigger the action.
+          If it returns zero (as it should in most cases), no physical
+          attack can take place in the same heart_beat.
+
+	int StopCast ()
+	int AbortCast ()
+	  The player wants to stop the cast in progress, either by the
+	  command 'stop' (StopCast()) or by casting another spell
+	  (AbortCast()).
+	  If the stop is possible, remove the cast-object from the player
+	  and return non-zero, else just zero.
+	  It's the object's task to output approbiate messages.
+
+
+
+	The concept of abilities and spells involves that there are
+	possibilities to learn these things.
+	To easen learning from carryable things (like spells from
+	books), the player contains a function implementing the
+	command 'learn <what> from <which>'. It searches the <which>
+	(which can be a complex description as 'book in knapsack')
+	in its inventory and then in its environment, and if the
+	object is found, the player calls in the object:
+
+	int Learn (string what)
+
+	The function has to return non-zero for success and output all
+	approbiate messages.
+	
+	This feature needn't be used, but should make life easier.
+
+
+SEE ALSO
+	living(S), races(C), racemaster(O)
+
+

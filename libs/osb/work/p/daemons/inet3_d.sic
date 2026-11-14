@@ -1,0 +1,479 @@
+/*--------------------------------------------------------------------------
+ * DAEMONPATH inet3_d.c -- The intermud-3 daemon
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *
+ * Parts taken from the Lima-Mudlib.
+ *--------------------------------------------------------------------------
+ */
+
+#include <secure/errno.h>
+#include <socket.h>
+#include <daemons.h>
+#include <macros.h>
+#include <properties.h>
+#include <msgclass.h>
+#include <inet3.h>
+
+#ifndef ADMIN_EMAIL
+/* be a dummy daemon for those who do not want to use it */
+main() {}
+#else
+
+/* inherit some useful libraries
+ */
+
+inherit "/obj/lib/reconnect";                         /* reconnect module */
+inherit "/obj/lib/daemon_data";                /* daemon data save module */
+
+/* Inherit our own modules 
+ */
+
+inherit DAEMONPATH "inet3/auth";             /* authentification handling */
+inherit DAEMONPATH "inet3/channel";          /* intermud channel handling */
+inherit DAEMONPATH "inet3/emoteto";            /* intermud emote handling */
+inherit DAEMONPATH "inet3/finger";            /* intermud finger handling */
+inherit DAEMONPATH "inet3/locate";                     /* intermud locate */
+inherit DAEMONPATH "inet3/mudlist";                   /* mudlist handling */
+inherit DAEMONPATH "inet3/tell";                         /* intermud tell */
+inherit DAEMONPATH "inet3/ucache";                        /* user caching */
+inherit DAEMONPATH "inet3/who";                           /* intermud who */
+
+/* Define some debug settings, if you undef DEBUG they'll not be used
+ */
+
+#undef DEBUG
+
+#define DBBUG(x) dtell( "mica", sprintf( "I3-message: %O\n", x ) );
+#define DTELL(x) dtell( "mica", sprintf( "I3-debug: %O\n", x ) );
+
+/*---------------------------------------------------------------------------
+ * Global variables
+ *---------------------------------------------------------------------------
+ */
+
+static object          router_socket;
+static int             router_ready;
+static mapping         dispatch;
+
+       mixed *         router_list = ({({"*gjs", "199.199.122.10 9000"})});
+       int             password;
+
+
+/* **************************************************************************
+ * logging functions
+ * **************************************************************************
+ */
+
+void log_error_rcv(string mudname, mixed * message) {
+    log_file(INET3D_LOG, ctime() + sprintf(" (<- %s) %s: %s\n%O\n", mudname,
+					   message[0], message[1], 
+					   message[2]));
+
+    catch(load_object(CHANNEL_D)->SendStr( "info",
+                                           sprintf("I3 (<- %s): %s",
+                                                   message[0],
+                                                   message[1]), 1 ) );
+}
+
+void log_error_snd(string mudname, mixed * message) {
+    log_file(INET3D_LOG, ctime() + sprintf(" (-> %s) %s: %s\n%O\n", mudname,
+					   message[0], message[1], 
+					   message[2]));
+
+    catch(load_object(CHANNEL_D)->SendStr("info",
+					  sprintf("I3 (-> %s): %s",
+						  message[0],
+						  message[1]), 1) );
+}
+
+void log_error_generic( string where, string error ) {
+  log_file(INET3D_LOG, ctime() + sprintf( " (%s): %s\n", where, error ) );
+
+  catch(load_object(CHANNEL_D)->SendStr("info",
+					sprintf("I3 (%s): %s", where, 
+						error ), 1 ) );
+}
+
+/* --------------------------------------------------------------------------
+ * queries
+ * --------------------------------------------------------------------------
+ */
+
+int QueryRouterReady() { return (router_socket && router_ready); }
+
+/* --------------------------------------------------------------------------
+ * 'in band' transmission handling (router socket)
+ * --------------------------------------------------------------------------
+ */
+
+void send_message( string type, string target_mud,
+		   string target_user, mixed * message) {
+  string orig_user;
+  string err;
+
+  if ( !router_socket )
+    return;
+
+  if ( this_player() )
+    orig_user = this_player()->Query(P_REALNAME);
+
+  if ( err = catch( router_socket->send(({ type, 5, LOCAL_NAME, orig_user,
+					     target_mud,
+					     target_user }) + message) ) ) {
+    log_error_generic( "send_message", err );
+  }
+}
+
+void send_to_router(string type, mixed * message) {
+  send_message(type, (router_list[0][0]), 0, message);
+}
+
+void send_to_mud(string type, string mudname, mixed * message) {
+  send_message(type, mudname, 0, message);
+}
+
+void send_to_user(string type, string mudname, string username,
+		  mixed * message) {
+  send_message(type, mudname, username, message);
+}
+
+void send_to_all(string type, mixed * message) {
+  send_message(type, 0, 0, message);
+}
+
+void return_error(string mudname, string username,
+		  string errcode, string errmsg) {
+  send_message("error", mudname, username, ({ errcode, errmsg, 0 }));
+}
+
+/*--------------------------------------------------------------------------
+ * handle reads from the router
+ *--------------------------------------------------------------------------
+ */
+
+void handle_router_read(object socket, mixed * message) {
+#ifdef DEBUG
+  DBBUG(message[0]);
+#if 0
+  if (message[0]!= "mudlist") {
+  }
+  else
+    DTELL( "mudlist received" );
+#endif
+#endif
+
+  if ( !dispatch[message[0]] )
+    {
+      /* return an error packet */
+      send_message("error", message[2], message[3],
+		   ({ "unk-type",
+			sprintf("type '%s' is unrecognized", message[0]),
+			message }));
+      return;
+    }
+  
+  funcall( dispatch[message[0]],
+	   message[2], message[3], message[5], message[6..] );
+}
+
+/*--------------------------------------------------------------------------
+ * handle closing of the router socket 
+ *--------------------------------------------------------------------------
+ */
+
+void handle_router_close(object socket, string error ) {
+#ifdef DEBUG
+  DTELL("router closed");
+#endif
+  
+  log_error_generic( "router", "Router socket down." );
+
+  if ( error )
+    log_error_generic( "router", error );
+
+  router_socket = 0;
+  router_ready = 0;
+
+  /* mark all the muds as down. when we reconnect we'll get new data */
+  mudlist_reset_entries();
+  
+  /* update the channel_d */
+  chan_shutdown();
+  
+  /* TODO:  for now, we need to set the password to 0. the router doesn't
+   * TODO:: send "up" status changes when we reconnect (general problem 
+   * TODO:: with the the router
+   */
+   
+   password = 0;
+   
+   trigger_reconnect("router");
+}
+
+/*--------------------------------------------------------------------------
+ * startup the in band communication with server by sending startup-packet
+ *--------------------------------------------------------------------------
+ */
+
+void handle_router_ready( object skt ) {
+#ifdef DEBUG
+  DTELL( "startup-req-3" );
+#endif
+
+  log_error_generic( "router", "Router socket up." );
+
+  send_to_router("startup-req-3",
+		 ({ 0,                                        /* Password */
+		      0,                                    /* Mudlist ID */
+		      0,                               /* Channel-List ID */
+		      query_mud_port(),                    /* Player Port */
+		      PORT_I3_TCP_OOB,                        /* OOB Port */
+		      0,                                   /* I3 UDP PORT */
+		      MUDSHORT+" "+(LIBVERSION_D->MudlibVersion()),
+		      MUDSHORT,
+		      "Amylaar "+__VERSION__,
+		      "LP",
+		      LOCAL_STATUS,
+		      ADMIN_EMAIL,
+		      ([
+			"tell" : 1,
+			"emoteto" : 1,
+			"who" : 1,
+			"finger" : 1,
+			"locate" : 1,
+			"channel" : 1,
+			"auth" : 1,
+			"ucache" : 1,
+			/*
+			"file" : 1,
+			"http" : 80,
+			"ftp" : 21,
+			"mail" : 1
+			*/
+		       ]),
+		      0,        /* other_data */
+		      }));
+}
+
+/* (re)connect to the router */
+private nomask void reconnect() {
+  string err;
+
+  router_ready = 0;
+  if ( ( err = catch( router_socket = clone_object( SOCKET ) ) ) ||
+       ( err = catch( router_socket->open( SKT_STYLE_CONNECT_MUD, 
+					   router_list[0][1],
+					   SF( handle_router_read ),
+					   SF( handle_router_ready ),
+					   SF( handle_router_close ) ) ) ) ) {
+#ifdef DEBUG
+    DTELL(err);
+#endif
+
+    log_error_generic( "router", err );
+
+    if ( router_socket ) {
+      router_socket->remove();
+      router_socket = 0;
+      router_ready = 0;
+    }
+    
+    trigger_reconnect("router");
+  }
+}
+
+void rcv_startup_reply(string orig_mud, string orig_user,
+		       string targ_user, mixed * message) {
+  /*
+  ** If the first router listed in the router list is not the one that
+  ** we just connected to, then close the connection and connect to
+  ** the specified router.
+  */
+
+  if ( message[0][0][0] != router_list[0][0] ||
+       message[0][0][1] != router_list[0][1] ) {
+    /* tell it we'll be gone indefinitely */
+    send_to_router("shutdown", ({ 0 }));
+    router_socket->remove();
+    router_ready = 0;
+  }   
+
+  log_error_generic( "router", "Router started." );
+
+  router_ready = 1;
+  router_list = message[0];
+  password = message[1];
+  
+  /* make sure the new router_list is saved */
+  save_me();
+  
+  /* reset the reconnection timers so the next reconnect is 1 minute */
+  cancel_reconnection("router");
+  
+  /* if we don't have a socket any more (closed above), then reopen */
+  if ( !router_socket ) {
+    trigger_reconnect("router");
+  }
+}
+
+void rcv_error(string orig_mud, string orig_user,
+	       string targ_user, mixed * message) {
+  object ob;
+  
+  if ( targ_user && (ob = find_player(targ_user)) ) {
+    msg_object(ob, CMSG_GENERIC,
+	       sprintf("Intermud tells you: %s: %s\n",
+		       message[0], message[1]));
+  }
+  else {
+    log_error_rcv(orig_mud, message);
+  }
+  
+}
+
+private nomask void rcv_oob_req(string orig_mud, string orig_user,
+                                string targ_user, mixed * message) {
+  /*
+  ** We always keep the port open and people should be using the
+  ** auth service.  There isn't anything to do here right now.
+  */
+}
+
+
+/*---------------------------------------------------------------------------
+ * Initialize us
+ *---------------------------------------------------------------------------
+ */
+
+create() {
+  if ( is_clone() ) {
+    destruct( this_object() );
+    return;
+  }
+
+  seteuid(getuid());
+
+  dispatch = 
+    ([
+      "tell" : SF( rcv_tell ),
+      "emoteto" : SF( rcv_emoteto ),
+
+      "who-req" : SF( rcv_who_req ),
+      "who-reply" : SF( rcv_who_reply ),
+
+      "finger-req" : SF( rcv_finger_req ),
+      "finger-reply" : SF( rcv_finger_reply ),
+
+      "locate-req" : SF( rcv_locate_req ),
+      "locate-reply" : SF( rcv_locate_reply ),
+
+      "chanlist-reply" : SF( rcv_chanlist_reply ),
+      "chan-who-req" : SF( rcv_chan_who_req ),
+      "chan-who-reply" : SF( rcv_chan_who_reply ),
+      "channel-m" : SF( rcv_channel_m ),
+      "channel-e" : SF( rcv_channel_e ),
+      "channel-t" : SF( rcv_channel_t ),
+      "chan-user-req" : SF( rcv_chan_user_req ),
+      "chan-user-reply" : SF( rcv_chan_user_reply ),
+
+      "auth-mud-req" : SF( rcv_auth_mud_req ),
+      "auth-mud-reply" : SF( rcv_auth_mud_reply ),
+
+      "ucache-update" : SF( rcv_ucache_update ),
+
+      "mudlist" :       SF(rcv_mudlist),
+      "startup-reply" : SF(rcv_startup_reply),
+      "error" :         SF(rcv_error),
+
+      ]);
+
+
+  daemon_data::create();
+  
+  mudlist_reset_entries();
+  
+  reconn_func = SF( reconnect );
+
+  /* TODO: add these
+     oob_startup();
+     file_startup();
+     mail_startup();
+     */
+  
+  trigger_reconnect("router");
+}
+
+/*---------------------------------------------------------------------------
+ * Status
+ *---------------------------------------------------------------------------
+ */
+
+string Status() {
+  string result;
+
+  result = "\nROUTER SOCKET: ";
+
+  if ( router_socket )
+    result += ( "\n"+router_socket->Status() );
+  else
+    result += "<none>\n";
+
+  result +=
+    reconnect::Status();
+
+  /* TODO: + oob::Status(); */
+
+  return result;
+}
+
+/*---------------------------------------------------------------------------
+ * remove, clean_up
+ *---------------------------------------------------------------------------
+ */
+
+varargs int remove(int coming_back_soon) {
+  reconnect::remove(); /* this removed pending reconnect callouts */
+
+  /*
+  ** coming_back_soon is 0 in most cases, 1 for an update.  This is just
+  ** the right value to tell the router when we might be back online.
+  */
+
+  log_error_generic( "router", "router socket down." );
+
+  if ( ( router_socket ) &&
+       ( router_socket->QueryState() == SKT_STATE_CONNECTED ) )
+    send_to_router("shutdown", ({ coming_back_soon }));
+
+  /* save all current state */
+  save_me();
+
+  if ( router_socket )
+    router_socket->remove();
+
+  chan_shutdown();
+
+  /* TODO: add these
+     oob_shutdown();
+     */
+
+  /* remove_call_out(); 
+   * As Amylaar does not provide this *sigh*
+  */
+
+  destruct( this_object() );
+}
+
+int clean_up( int refcount ) {
+  if ( ! router_socket )
+    remove();
+
+  return this_object() && 1;
+}
+
+#endif
+
+/* ********************************************************************** */

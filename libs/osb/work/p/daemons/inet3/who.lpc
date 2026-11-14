@@ -1,0 +1,75 @@
+/*--------------------------------------------------------------------------
+ * DAEMONPATH inet3/who -- intermud who
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *
+ * Credits: Lima Mudlib (Creation)
+ *--------------------------------------------------------------------------
+ */
+
+#include <properties.h>
+#include <msgclass.h>
+
+void send_to_mud(string type, string mudname, mixed * message);
+void send_to_user(string type, string mudname, string username,
+		  mixed * message);
+void return_error(string mudname, string username,
+		  string errcode, string errmsg);
+string canon_mudname(string mudname);
+
+nomask void do_who(string mudname) {
+    send_to_mud("who-req", canon_mudname(mudname), ({ }));
+}
+
+private mixed * make_who_data( object user ) {
+  string visname;
+  string title;
+
+  if ( ( user->QueryIsPlayer() ) && ( ! user->Query( P_INVIS ) ) ) {
+    title = user->Short();
+    visname = capitalize( user->Query(P_REALNAME) );
+    
+    return ({ visname,
+		query_idle(user),
+		title });
+  }
+  else
+    return 0;
+}
+
+nosave nomask void rcv_who_req(string orig_mud, string orig_user,
+			       string targ_user, mixed * message) {
+  mixed * who_data;
+
+  who_data = map(users(), #'make_who_data /*'*/ ) - ({ 0 });
+
+  send_to_user("who-reply", orig_mud, orig_user, ({ who_data }));
+}
+
+private string make_line( mixed * data ) {
+  return sprintf("%-15s%-10d %s", data[0]||"", data[1], data[2]||"" );
+}
+
+nosave nomask void rcv_who_reply(string orig_mud, string orig_user,
+				 string targ_user, mixed * message) {
+  object p;
+
+  p = find_player(targ_user);
+  if ( !p ) {
+    return_error(orig_mud, orig_user, "unk-user",
+		 sprintf("Returned who-reply to unknown user '%s'",
+			 targ_user));
+  }
+  else {
+    string s;
+    
+    s = sprintf("[%s] %d users connected\n%-78'-'s\n", orig_mud, sizeof(message[0]), "");
+    s += implode(map(message[0], #'make_line /*'*/ ), "\n" );
+    s += sprintf( "\n%-78'-'s\n", "" );
+
+    msg_object( p, CMSG_GENERIC|MMSG_MORE, s );
+  }
+}
+

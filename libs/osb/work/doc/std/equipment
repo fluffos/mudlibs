@@ -1,0 +1,352 @@
+OBJECT
+	/std/equipment
+
+
+LAST UPDATE
+	Mateese, 05-Jun-96 21:00 MET
+
+
+SYNOPSIS
+	#include <properties.h>
+	#include <equipment.h>
+
+	inherit "/std/equipment";
+
+
+DESCRIPTION
+	This is the standard module implementing the basic mechanics
+	and commands of equipment items.
+	It is not meant for stand-alone use, but instead for
+	inheritance to make a thing an equipment thing.
+	To use /std/equipment, inherit it into your object and overload
+	move() and remove() so that the thing is properly
+	unworn/unwielded before a move.
+
+	Equipment are things which may(!) perform special functions
+	for the carrying player but only if specially primed: active
+	equipment needs to be wielded, passive equipment needs to be
+	worn. Weapons and armours are prominent examples for the two
+	types of equipment, but the dreaded 'rings of engagement'
+	would also count as 'passive equipment'.
+	Since equipment things mostly have to perform functions, they
+	also have a percentage 'quality', which may be
+	increased/degraded depending on the actions done.
+
+	Note that on program level equipment things are always 'worn'
+	and/or 'wielded'. To the outside, the commandverbs and the
+	adjective describing the 'primed' thing may be chosen freely.
+
+	An equipment thing may be both worn and wielded, but can be
+	configured such that only one of the two usages is allowed.
+
+
+	The equipment thing is described by the following properties:
+
+	  int	  P_NUMBER_HANDS  "NumberHands"
+	    The number of hands this objects needs to be wielded or
+	    worn.
+
+	  object  P_WIELDED	  "Wielded"
+	    The object by which this object is wielded, or 0 if it
+	    isn't.
+	    When set, the objects adjectives are updated appropriately.
+
+	  object  P_WORN	  "Worn"
+	    The object by which this object is worn, or 0 if it isn't.
+	    When set, the objects adjectives are updated appropriately.
+
+	  int	  P_QUALITY	  "Quality"
+	    The quality of the weapon/armour, an integer ranging
+	    in 0..100. 100 is the start value.
+	    The quality may also be changed using the function
+
+	      int AddQuality (int diff)
+
+	    which adds 'diff' to the actual P_QUALITY and returns the
+	    new value.
+
+	  int     P_RESET_QUALITY   "ResetQuality"
+	    Equipment things used to equip NPC have to 'refresh' their
+	    P_QUALITY with every NPCs reset. This property determines
+	    the value to which P_QUALITY is reset in such a case.
+	    This will happen only if the item is still in its creating
+	    object, or if it was explicitely demanded for 'refresh
+	    even if away' (see Aloha() below).
+	    Setting this property also sets P_QUALITY; it's initial
+	    value is 100.
+
+	  string  P_QUALITY_MSG   "QualityMsg"
+	    Returns a short string describing the quality of the item.
+	    Normally it is in fact produced by QualityMsg() (see
+	    below), but it can be set to a different, though static
+	    text.
+
+	    string QueryQualityMsg(int trueq)
+	      If <trueq> is non-zero, always the quality message
+	      according to P_QUALITY is returned.
+
+	  int     P_USAGE         "Usage"
+	    This integer describes how the thing may be used:
+	      EQM_WEAR : it may just be worn.
+	      EQM_WIELD: it may just be wielded.
+	      EQM_BOTH : it may be worn and wielded.
+	      EQM_BOTH | EQM_MUTUAL : it may be worn and wielded, but
+	        only both at the same time.
+	    Default setting is EQM_WEAR.
+
+	  mixed * P_WEAR_DATA    "WearData"
+	  mixed * P_WIELD_DATA   "WieldData"
+	    These arrays describe which verbs command the
+	    (un)wear/(un)wield of the thing, and what the associated
+	    adjective is.
+	    First element (index 'EQD_DO') is the 'do it' verb, second
+	    element (index 'EQD_UNDO') the 'undo it' verb. The third
+	    element (index 'EQD_ADJ') is the adjective describing the
+	    worn/wielded status.
+	    The verbs may be simple strings, or arrays of strings.
+	    Default settings are:
+	      P_WIELD_DATA: ({ "wield", "unwield", "wielded" })
+	      P_WEAR_DATA : ({ "wear", ({ "unwear", "remove" }), "worn" })
+
+
+	The 'refresh' of P_QUALITY is done in
+	
+	  void Aloha (int flag)
+	    Set P_QUALITY to the actual setting of P_RESET_QUALITY if
+	    <flag> is negative.
+	    This will happen only if the item is still in its creating
+	    object, or if it was explicitely demanded for 'refresh
+	    even if away'.
+
+
+	To modify the description of the object depending on its
+	status or quality, use this functions:
+
+	  string QualityMsg (int quality)
+	    Returns a short string describing the given <quality>.
+
+	  int modifyValue (int value)
+	    Modify the objects total <value> according to its P_QUALITY.
+	    The value of an armour/weapon is 30% fixed and 70% proportional
+	    to P_QUALITY.
+	    The P_VALUE set on creation is the total value for top P_QUALITY.
+	    An actual implementation has to overload QueryValue() to filter
+	    that max value through this function.
+	    This overloading function must be done like this:
+	      public /* int */ QueryValue(int sc) {
+	        return sc ? ::QueryValue() : modifyValue(::QueryValue()); 
+	      }
+	    so the original value is still retrievable by passing
+	    QueryValue() a non-zero argument.
+
+	  string modifyLong (string long)
+	    Add the quality description of the item, and if useful the
+	    size description, to the given <long> string and return
+	    the result:
+               <long>+"<quality_description>.\n"
+	    resp:
+	       <long>+"<quality_descr> and <size_descr>.\n"
+
+	  string modifyInvShort (string ishort)
+	    Add the quality description of the item and its status
+	    (worn, wielded) to the given <ishort> and return the
+	    result: <ishort>+" (quality_desc, worn, wielded)".
+	    Of course, only those descriptions are added which are
+	    really needed.
+
+	  string modifyShort (string ishort)
+	    Add the quality description of the item to the given
+	    <ishort> and return the result: "quality_desc "+<ishort>.
+	    Of course, only those descriptions are added which are
+	    really needed.
+
+
+	The /std/equipment of course contains the functions necessary to
+	wield/wear the object.
+
+	  int|string Wield (object living, void|int flags)
+	    Wield this object as by <living>.
+	    If the result is a string, then the thing has the
+	    P_NOWIELD property set, and the string is the failure
+	    message.
+	    Else the result is one of these values:
+	      EQ_ALREADY: the thing is already wielded by this living.
+	      EQ_MUTAL  : the thing is already worn(!) by this living.
+	      EQ_FORBID : the thing can't be wielded (P_NOWIELD
+			      in effect).
+	      EQ_NOHANDS: the living hasn't enough free hands.
+	      EQ_SMALL  : the thing is too small to be used.
+	      EQ_LARGE  : the thing is too large to be used.
+	      EQ_ERROR  : during the wield an error occured.
+	      EQ_OK     : success.
+	    <flags> is constructed by binary-or'ing one or more of
+	    these flags:
+	      EWF_WEAPON: the thing is added as weapon to <living> if
+	                  successfully wielded.
+	      EWF_SILENT: if the thing is wielded, no message is given
+	                  to the environment.
+	    The default value is 0 (== EWF_NONE).
+
+	  int|string Wear (object living, void|int flags)
+	    Wield this object by <living>.
+	    If the result is a string, then the thing has the
+	    P_NOWEAR property set, and the string is the failure
+	    message.
+	    Else the result is one of these values:
+	      EQ_ALREADY: the thing is already worn by this living.
+	      EQ_MUTAL  : the thing is already wielded(!) by this living.
+	      EQ_FORBID : the thing can't be worn (P_NOWEAR
+			      in effect).
+	      EQ_NOHANDS: the living hasn't enough free hands.
+	      EQ_SMALL  : the thing is too small to be used.
+	      EQ_LARGE  : the thing is too large to be used.
+	      EQ_ERROR  : during the wear an error occured.
+	      EQ_OK     : success.
+	    <flags> is constructed by binary-or'ing one or more of
+	    these flags:
+	      EWF_WEAPON: the thing is added as armour to <living> if
+	                  successfully worn.
+	      EWF_SILENT: if the thing is worn, no message is given
+	                  to the environment.
+	    The default value is 0 (== EWF_NONE).
+
+
+	  int|string Unwield (void|int flags)
+	    Unwield this object, if wielded at all.
+	    If the result is a string, then the thing has the
+	    P_NOUNWIELD property set, and the string is the failure
+	    message.
+	    Result is one of these values:
+	      EQ_ALREADY: the thing is not wielded at all.
+	      EQ_FORBID : the thing can't be unwielded (P_NOUNWIELD
+			      in effect).
+	      EQ_OK     : success.
+	    <flags> is constructed by binary-or'ing one or more of
+	    these flags:
+	      EWF_SILENT: if the thing is unwielded, no message is given
+	                  to the environment.
+	    The default value is 0 (== EWF_NONE).
+
+
+	  int|string Unwear (void|int flags)
+	    Unwear this object, if worn at all.
+	    If the result is a string, then the thing has the
+	    P_NOUNWEAR property set, and the string is the failure
+	    message.
+	    Result is one of these values:
+	      EQ_ALREADY: the thing is not worn at all.
+	      EQ_FORBID : the thing can't be removed (P_NOUNWEAR
+			      in effect).
+	      EQ_OK     : success.
+	    <flags> is constructed by binary-or'ing one or more of
+	    these flags:
+	      EWF_SILENT: if the thing is removed, no message is given
+	                  to the environment.
+	    The default value is 0 (== EWF_NONE).
+
+	The _SMALL and _LARGE decisions are based on a comparison of
+	the P_SIZE of the wielder/wearer and the object in question.
+
+
+	To apply further restrictions upon wielding et al., objects
+	may register with livings to be informed upon one of these
+	actions, e.g. to block it.
+	The objects are stored as P_EQUIP_OBJ in the living, which is
+	queried as part of the Wield()/UnWield()/... call.
+	The equipment object itself as the living and its race object
+	are always queried first, even if no other P_EQUIP_OBJ are defined.
+
+	If the queried value is an array of objects, one of these four
+	functions is called in each of the objects:
+
+	  int|string ChkWield   (object living, object thing, int flags)
+	  int|string ChkWear    (object living, object thing, int flags)
+	  int|string ChkUnwield (object living, object thing, int flags)
+	  int|string ChkUnwear  (object living, object thing, int flags)
+
+	Each of the functions has to return EQ_OK if the action is
+	accepted, or an appropriate error code.
+
+	If the wield/wear/... succeeds, the objects are called again,
+	this time at the function
+
+	  void NotifyWield   (object living, object thing, int flags)
+	  void NotifyWear    (object living, object thing, int flags)
+	  void NotifyUnwield (object living, object thing, int flags)
+	  void NotifyUnwear  (object living, object thing, int flags)
+
+	These check/notification functions are always called in the
+	object itself as well.
+
+
+DESCRIPTION -- Object auxiliary functions
+	The functions described here implement most of the mechanics
+	for actual objects, e.g. the functions for the commands
+	'wear', 'unwear' et al.
+
+	  void init()
+	    Depending on the P_USAGE setting, the commands from
+	    P_WEAR_DATA and/or P_WIELD_DATA are added.
+
+	  void notify_move (mixed dest, int methode, mixed extra)
+	    If the object is move()ed or remove()d, this function
+	    should be called to allow for cleanup operations (like
+	    unwielding a still wielded weapon).
+
+	The commands implemented are (using the default verbs):
+
+	  wear <armour>
+	  unwear <armour>
+	  wield <weapon>
+	  unwield <weapon>
+
+	The commands are executed using
+
+	  int fwear (string arg, void|int inh)
+	    for the 'wear' command
+	  int funwear (string arg, void|int inh)
+	    for the 'unwear' command.
+	  int fwield (string arg, void|int inh)
+	    for the 'wield' command
+	  int funwield (string arg, void|int inh)
+	    for the 'unwield' command.
+
+	The functions have been written such that a 'wear all armours'
+	and similar is possible. This causes each function to return 0
+	while setting the 'success'-message as notify_fail() message
+	on NOTIFY_DO_ALL priority.
+
+	However, if the optional argument <inh> is set to non-zero,
+	the function will return a mapping which is also stored in
+	this_player() to hold the intermediate parsing results. The
+	mapping contains:
+
+	  int      [0] 
+	    The time() of this command execution.
+	  object * ["what"]
+	    The list of objects matching the argument <arg>.
+	  string   ["msg"]
+	    The static part of the 'success' message.
+	  object * ["handled"]
+	    Those objects which have been handled successfully.
+	  object * ["nothandled"]
+	    Those objects which resisted the command (like if
+	    attempting to wield an armour).
+	  object * ["already"]
+	    Those objects which need not to be handled (rewielding a
+	    sword for example).
+	  object * ["fewhands"]
+	    Those objects which need more hands than the living has
+	    left.
+	  object * ["small"]
+	    Those objects which are too small to be used.
+	  object * ["large"]
+	    Those objects which are too large to be used.
+
+
+INHERITANCE TREE
+	equipment
+
+
+SEE ALSO
+	thing(S), equipment(O)

@@ -1,0 +1,75 @@
+------------------------------------------------------------------------------
+From: chaos@crystal.palace.net (Matthew R. Sheahan)
+Subject: Lost Souls notes
+Date: 13 Jan 1996 03:38:15 GMT
+Organization: Crystal Palace Networking
+Message-ID: <4d79f7$f3s@puzzle.palace.net>
+
+following are some notes on a set of development trends at Lost Souls
+LPmud (lostsouls.org 3000).  i'm posting them for questions and comments,
+and perhaps someone will find them useful.
+
+long ago, we began discouraging the old clone-and-configure approach to
+item and monster setup in favor of making a separate file in the area's
+directory hierarchy for each.  we found this improved maintainability of
+areas, wizard accountability, and world cohesion, even if it cost us
+some memory.
+
+later, the elementary modules for game objects were revamped so that,
+rather than each using a set of global variables for any data it needed,
+each used a single mapping in which all its data was stored.  this had
+the benefits of zero overhead for unused variables, the ability to
+distinguish between a "set zero" and an "unset zero" for defaults, and
+so on.  this required the establishment of a function which would be
+used to assure that mappings were initialized, since we couldn't rely
+on old code to call ::create() appropriately.
+
+when we implemented our item saving mechanics, we took advantage of the
+mapping-based structures in place to create a system that can do limited
+saving of object pointers and closures.  the initialization function was
+expanded to register the mappings with a save module that could examine
+and convert their contents at save-time.
+
+most recently, taking advantage of this centralization of data tracking,
+i have implemented a system which attempts to distribute the data of
+clone classes across the entire class, meaning that if a piece of armour
+in someone's area and its twenty clones had identical armour setup data,
+there would only be _one_ mapping distributed across all instantiations
+of the object.  it works like this.  when an object is first created and
+mappings are registered with the save module, the save module does a
+short call_out to an analysis function (so that the object will have
+plenty of time to finish configuring itself).  if the object is the base
+for its class, it registers its mappings with a daemon, indexed by the
+filename.  if it is a clone, it queries this daemon for any mappings it
+should replace with distributed versions.  the daemon compares the clone's
+mappings with those of the base for its class (using an array/mapping
+content analysis function, plain equivalency testing obviously won't do
+it) and tells the object to replace any that are functionally identical.
+
+one thing that was required was that all functions that modify the
+modules' mappings must notify the save module that the mapping is
+about to be changed, so that the save module can localize it with a
+copy().  this isn't that bad.  indeed, one notes that the
+level of resolution involved, module-level rather than variable-level
+or object-level, seems to be about optimal; variable-level would have
+prohibitive overhead and object-level would be all-or-nothing, so
+that any benefit would be lost as soon as any change were made to the
+object after configuration, or if anything in its configuration were
+not constant.
+
+obviously, this type of thing requires excellent garbage collection, as
+many pointers are being initialized, compared, and then discarded.  the
+garbage collection of the Amylaar driver appears to be adequate to this.
+
+as might be expected, the implementation of this code has drastically
+reduced our memory consumption, which was beginning to suffer from our
+penchant for a feature-laden mudlib.  daemon statistics gathering shows
+that about 75% of the data mappings of cloned objects on the MUD are
+being replaced with distributed versions just after create-time.  this
+is an enormous savings.  admins may wish to consider implementing some
+system resembling this at their locations.
+
+								Chaos@LostSouls
+								chiaroscuro
+
+------------------------------------------------------------------------------

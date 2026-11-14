@@ -1,0 +1,378 @@
+/*
+ * Catalog player for One Step Beyond Strategy A (LDMud -> FluffOS).
+ * Enters /d/login/entrance ("Entering One Step Beyond") with instant/newbie/
+ * normal paths to Silvere harbour (/d/silvere/rooms/harbour/quay1_2).
+ */
+
+string name;
+string password;
+int hp;
+int max_hp;
+int money;
+string *carrying;
+
+int cmd_look(string arg);
+int cmd_smell(string arg);
+int cmd_listen(string arg);
+int cmd_read(string arg);
+int cmd_score(string arg);
+int cmd_inventory(string arg);
+int cmd_go(string dir);
+int cmd_quit(string arg);
+void save_me();
+
+void create() {
+  seteuid(getuid());
+  hp = 20;
+  max_hp = 20;
+  money = 215;
+  carrying = ({});
+}
+
+string query_name() { return name; }
+string query_password() { return password; }
+int query_hp() { return hp; }
+int query_mhp() { return max_hp; }
+int query_level() { return 1; }
+int query_money() { return money; }
+
+string save_path() {
+  if (!name || name == "")
+    return 0;
+  return sprintf("/data/%c/%s", name[0], name);
+}
+
+void ensure_letter_dir() {
+  string d;
+
+  if (!name)
+    return;
+  d = sprintf("/data/%c", name[0]);
+  if (file_size("/data") != -2)
+    mkdir("/data");
+  if (file_size(d) != -2)
+    mkdir(d);
+}
+
+int restore_me(string n) {
+  name = n;
+  if (!restore_object(save_path()))
+    return 0;
+  if (max_hp < 1)
+    max_hp = 20;
+  if (hp < 1)
+    hp = max_hp;
+  if (money < 50)
+    money = 215;
+  if (!carrying)
+    carrying = ({});
+  return 1;
+}
+
+void setup_new(string n, string pw) {
+  name = n;
+  password = pw;
+  hp = 20;
+  max_hp = 20;
+  money = 215;
+  carrying = ({});
+}
+
+void save_me() {
+  string p;
+
+  p = save_path();
+  if (!p)
+    return;
+  ensure_letter_dir();
+  save_object(p);
+}
+
+void wire_commands() {
+  enable_commands();
+  add_action("cmd_look", "look");
+  add_action("cmd_look", "l");
+  add_action("cmd_smell", "smell");
+  add_action("cmd_listen", "listen");
+  add_action("cmd_read", "read");
+  add_action("cmd_score", "score");
+  add_action("cmd_score", "sc");
+  add_action("cmd_quit", "quit");
+  add_action("cmd_inventory", "inventory");
+  add_action("cmd_inventory", "i");
+  add_action("cmd_go", "north");
+  add_action("cmd_go", "south");
+  add_action("cmd_go", "east");
+  add_action("cmd_go", "west");
+  add_action("cmd_go", "up");
+  add_action("cmd_go", "down");
+  add_action("cmd_go", "n");
+  add_action("cmd_go", "s");
+  add_action("cmd_go", "e");
+  add_action("cmd_go", "w");
+  add_action("cmd_go", "southeast");
+  add_action("cmd_go", "northwest");
+  add_action("cmd_go", "northeast");
+  add_action("cmd_go", "southwest");
+  add_action("cmd_go", "se");
+  add_action("cmd_go", "nw");
+  add_action("cmd_go", "ne");
+  add_action("cmd_go", "sw");
+  add_action("cmd_go", "out");
+  add_action("cmd_go", "normal");
+  add_action("cmd_go", "newbie");
+  add_action("cmd_go", "instant");
+}
+
+void enter_world() {
+  object dest;
+
+  set_living_name(name);
+  wire_commands();
+  dest = 0;
+  catch(dest = load_object("/d/login/entrance"));
+  if (!dest)
+    catch(dest = load_object("/d/silvere/rooms/harbour/quay1_2"));
+  if (dest)
+    efun::move_object(dest);
+  else
+    efun::move_object("/catalog/void");
+  write("\n");
+  command("look");
+  save_me();
+}
+
+mixed process_input(string str) {
+  string verb, rest;
+
+  if (!str)
+    return 0;
+  if (sscanf(str, "%s %s", verb, rest) != 2) {
+    verb = str;
+    rest = 0;
+  }
+  switch (verb) {
+    case "look":
+    case "l":
+      cmd_look(rest);
+      return 1;
+    case "smell":
+      cmd_smell(rest);
+      return 1;
+    case "listen":
+      cmd_listen(rest);
+      return 1;
+    case "read":
+      cmd_read(rest);
+      return 1;
+    case "score":
+    case "sc":
+      cmd_score(rest);
+      return 1;
+    case "quit":
+      cmd_quit(rest);
+      return 1;
+    case "inventory":
+    case "i":
+      cmd_inventory(rest);
+      return 1;
+    case "north":
+    case "south":
+    case "east":
+    case "west":
+    case "up":
+    case "down":
+    case "n":
+    case "s":
+    case "e":
+    case "w":
+    case "southeast":
+    case "northwest":
+    case "northeast":
+    case "southwest":
+    case "se":
+    case "nw":
+    case "ne":
+    case "sw":
+    case "out":
+    case "normal":
+    case "newbie":
+    case "instant":
+      cmd_go(verb);
+      return 1;
+  }
+  return 0;
+}
+
+int cmd_look(string arg) {
+  object env, *inv, held;
+  string out, brief, item;
+  int i;
+
+  env = environment();
+  if (!env) {
+    write("You are nowhere.\n");
+    return 1;
+  }
+  if (arg && sscanf(arg, "at %s", arg) == 1)
+    ;
+  if (arg && arg != "") {
+    if (function_exists("query_item", env)) {
+      item = env->query_item(arg);
+      if (stringp(item) && item != "") {
+        write(item);
+        return 1;
+      }
+    }
+    held = present(arg, this_object());
+    if (!held)
+      held = present(arg, env);
+    if (held) {
+      item = held->query_long();
+      if (stringp(item) && item != "") {
+        write(item);
+        return 1;
+      }
+    }
+    write("You see nothing special.\n");
+    return 1;
+  }
+  brief = env->query_short();
+  if (brief && brief != "")
+    write(brief + "\n");
+  out = env->query_long();
+  if (!out || out == "")
+    out = env->long();
+  if (!out || out == "")
+    out = "You see nothing special.";
+  write(out);
+  if (out[<1] != '\n')
+    write("\n");
+  if (function_exists("query_exit_string", env))
+    write(env->query_exit_string());
+  inv = all_inventory(env);
+  for (i = 0; i < sizeof(inv); i++) {
+    if (inv[i] != this_object() && inv[i]->query_name())
+      write(capitalize(inv[i]->query_name()) + " is here.\n");
+  }
+  return 1;
+}
+
+int cmd_smell(string arg) {
+  object env;
+  string s;
+
+  env = environment();
+  if (!env)
+    return 1;
+  if (function_exists("query_smell", env)) {
+    s = env->query_smell(arg);
+    if (stringp(s) && s != "") {
+      write(s);
+      return 1;
+    }
+  }
+  write("You smell nothing unusual.\n");
+  return 1;
+}
+
+int cmd_listen(string arg) {
+  object env;
+  string s;
+
+  env = environment();
+  if (!env)
+    return 1;
+  if (function_exists("query_noise", env)) {
+    s = env->query_noise(arg);
+    if (stringp(s) && s != "") {
+      write(s);
+      return 1;
+    }
+  }
+  write("You hear nothing special.\n");
+  return 1;
+}
+
+int cmd_read(string arg) {
+  object env;
+  string s;
+
+  env = environment();
+  if (!env)
+    return 1;
+  if (arg && function_exists("query_read", env)) {
+    s = env->query_read(arg);
+    if (stringp(s) && s != "") {
+      write(s);
+      return 1;
+    }
+  }
+  write("Read what?\n");
+  return 1;
+}
+
+int cmd_score(string arg) {
+  write(capitalize(name || "someone") + " (level " + query_level() + ")\n");
+  write("hp: " + hp + "/" + max_hp + "  copper: " + money + "\n");
+  return 1;
+}
+
+int cmd_inventory(string arg) {
+  object *inv;
+  string brief;
+  int i, n;
+
+  inv = all_inventory(this_object());
+  n = sizeof(inv);
+  if (!n) {
+    write("You are empty-handed.\n");
+    return 1;
+  }
+  write("You are carrying:\n");
+  for (i = 0; i < n; i++) {
+    brief = inv[i]->query_short();
+    if (!brief || brief == "")
+      brief = inv[i]->query_name();
+    if (brief && brief != "")
+      write("  " + brief + "\n");
+  }
+  return 1;
+}
+
+int cmd_go(string dir) {
+  object env, dest;
+  string path;
+
+  if (!dir)
+    dir = query_verb();
+  env = environment();
+  if (!env) {
+    write("You are nowhere.\n");
+    return 1;
+  }
+  path = env->query_exit(dir);
+  if (!path) {
+    if (function_exists("query_noway", env))
+      write(env->query_noway());
+    else
+      write("You cannot go that way.\n");
+    return 1;
+  }
+  dest = 0;
+  catch(dest = load_object(path));
+  if (!dest) {
+    write("That exit leads nowhere.\n");
+    return 1;
+  }
+  efun::move_object(dest);
+  command("look");
+  return 1;
+}
+
+int cmd_quit(string arg) {
+  write("Saving " + capitalize(name || "someone") + ".\n");
+  save_me();
+  destruct(this_object());
+  return 1;
+}

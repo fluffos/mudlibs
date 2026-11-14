@@ -1,0 +1,374 @@
+CONCEPT
+	search
+
+UPDATE
+	Mateese, 14-Nov-94 - 02:00 MET
+
+SYNOPSIS
+	#include <search.h>
+
+	living->Search(what, mode)
+	living->SearchM(what, mode, pred)
+	container->Locate(what, mode, also)
+
+DESCRIPTION
+	One of the bigger problems in LPMud is the proper retrieval of
+	objects of which only their id-string is given.
+	The traditional solution uses the efun present() in
+	combination with the lfun id() for this purposes, but it has
+	its severe limitations.
+
+	This mud implements a more powerful scheme of object
+	identification, using the lfuns id(), Search(), SearchM() and
+	Locate():
+
+	  id() 
+	    is as usual called with a string as argument and has to
+	    return non-zero if the string identifies the object.
+	  Search() resp. the simul_efun search()
+	    is available in livings only and performs a search for the
+	    specified object(s) from the viewpoint of the living.
+	  SearchM() resp. the simul_efun searchm()
+            is available in livings only and applies Search() on
+            several arguments, folding the results into a neat data
+            field.
+	  Locate() resp. the simul_efun locate()
+            is available in all container-like objects and returns
+            those contained object(s) which match the given identification.
+	    For non-wizards, invisible objects are not found.
+
+	Additional simulated efuns offer additional help:
+
+	  - sort_findings() implements the most common treatment of
+	      the results of SearchM().
+	  - foundp() checks if a given object was found by SearchM().
+	  - strip_a(), strip_article(), add_a() strip or add articles
+	      from a string.
+	  - norm_id() removes surplus spaces from id-strings.
+
+	This combo of functions is powerful enough to parse constructs
+	like 'all bags in chest', 'every torch outside' or 'my gem'.
+
+	id() matches just a simple adjective/id compound, called 'id',
+	like 'tool' or 'yellow flower'. Not all possible adjectives of
+	an object need to be specified, but all specified adjectives
+	must be valid.
+
+	Locate() matches 'simple things', which may be one of these
+	constructs:
+
+	  '[the] ground'
+	  '[the] floor'
+	  '[the] here'
+	    This refers to the object itself, unless its a living.
+	    'floor' is only recognized by inside rooms.
+
+	  '[a|an|the] <id>'
+	    One or all objects matching this <id>, the article is
+	    optional.
+
+	  '[the] <number>. <id>'
+	  '[the] <number>th <id>'
+	  '[the] <verbose ordinal> <id>'
+	  '[the] <id> <number>'
+	    The <number>th object matching this <id>.
+	    <verbose ordinal> are the ordinals 'first', 'second' up to
+	    'twelveth'. The article is optional.
+
+	  'all', 'everything'
+	    All contained objects.
+
+	  '[the] <plural-id>', 'all <plural-id>', 'every <id>'
+	    All objects matching <id>, but each group considered an
+	    entity (SEARCH_MULTI only).
+
+	  '<count> <plural-id>'
+	    As before, but additionally <count> is parsed and returned
+	    (SEARCH_MULTI|SEARCH_COUNT only).
+
+	  '<matched plural> except <matched id>'
+	  '<matched plural> but <matched id>'
+	    Using the constructs so far, this can select a whole group
+	    with exceptions, like 'every yellow torch except the
+	    second'.
+
+	  'really <any of the above constructs>'
+	    As above, but this time also wielded, worn and equipped
+	    objects may be matched as well.
+
+
+	Search() works on those <thing>s (both singular and plural)
+	and handles the cooperation of the living with its
+	environment. It recognizes these constructs:
+
+	  'outside'
+	    Matches the current environment.
+
+	  '<thing>'
+	    The <thing> is searched according the search 'mode'.
+
+	  '<thing> in <bag-thing>'
+	  '<thing> from <bag-thing>'
+	  '<thing> on <bag-thing>'
+	    First <bag-thing> is/are searched, then <thing> is
+	    searched in the found <bag-thing>s.
+
+	  'my <thing>'
+	  'my <thing> in <bag-thing>'
+	  '<thing> in my <bag-thing>'
+	    Searches <thing>/<bag-thing> just in the living itself
+	    (not in SM_LOCATE mode).
+
+	  '<thing> here'
+	  '<thing> here in <bag-thing>'
+	  '<thing> in <bag-thing> here'
+	    Searches <thing>/<bag-thing> just in the livings surrounding
+	    (not in SM_LOCATE mode).
+
+	  '<any of the above constructs> outside'
+	    Redefines the 'livings surrounding' as being one
+	    environment farther outwards, and searches just there.
+
+	All in all, Search() is a complete replacement for present(),
+	the latter should thus not be used for real objects.
+
+
+	SearchM() extends Search() to handle lists of identifications.
+	Especially it recognises the constructs:
+
+	  '<thing>'
+	  '<thing> and <thing>'
+	  '<thing, thing, ... , <thing>'
+	  '<thing, thing, ... , <thing> and <thing>'
+
+	and calls Search() for each of the listed <thing>s.
+
+
+DESCRIPTION -- Search
+	Search() is implemented in /std/living/description and just
+	calls the simulated efun search().
+
+	  lfun:  mixed Search (mixed what, int mode)
+	  efun:  mixed search (object this, mixed what, int mode)
+
+	<this> is the living, from which viewpoint the search happens,
+	  or if SM_LOCATE is specified, the container within the
+	  search shall happen.
+	<what> may be an object, an id-string, or an id-string
+	  exploded by its spaces. If it is an object, the result is
+	  either the object itself (if it is contained), or 0. 
+	<mode> specifies where the living should search. Outside of
+	  its inventory it must be able to see, unless SM_IGNLIGHT
+	  is set.
+
+	Search() parses <what> to search the thing it specifies.
+	Sequences of spaces in <what> are considered as being just one
+	space.
+
+	If <what> contains the sequence 'my ' anywhere, the search
+	is narrowed to SEARCH_INV only (and 'my ' is removed from
+	<what).
+	Similar, if <what> contains the sequence ' here', the search
+	is narrowed to SEARCH_ENV only.
+
+	Is <what> is just 'outside', the immediate surrounding is
+	returned as result.
+
+	After this, <what> is checked against the constructs 
+	'<what>	in <subwhat>' resp. '<what> from <subwhat>'. If one of
+	both matches, <what> and <subwhat> are appropriately set.
+
+	Normally, SEARCH_ENV & co consider the immediate surrounding
+	of the livings as 'the' environment. But if <what> ends with 
+	' outside' and the immediate environment is transparent
+	enough, 'the' environment is pushed one env outwards and the
+	search is narrowed to SEARCH_ENV only.
+
+	At this point, the real search starts, in the order as the
+	search <mode> determines.
+	In each searched container ('the' environment or the living
+	itself), Locate() is called to locate <what>. If something was
+	found and <subwhat> was specified, the located <what> are
+	considered itself containers and are called to Locate()	<subwhat>.
+	The result (either Locate(<what>) or <what>->Locate(<subwhat>))
+	returned (more or less complete) as result.
+
+	Results:
+	  0
+            no matching object was found.
+
+	  <obj>       (SM_OBJECT only)
+	  ({ <obj> }) (other modes)
+            a single object was specified and found.
+
+	  ({ <obj>, <obj>, ... <obj> })
+	    The specified singular id matched a whole class of objects.
+
+	  ([ FOUND_SINGLE: ({ <obj> ... <obj> })  (SM_MULTI only)
+           , FOUND_CLASS : ({ <obj> ... <obj> })
+           , FOUND_MULTI : ({ <obj> ... <obj> })
+           , FOUND_NUMBER: <integer> ])
+	    A plural id was specified and matched those objects of
+	    FOUND_MULTI. If a count was specified (SM_COUNT only), it
+	    is stored as FOUND_NUMBER.
+	    FOUND_SINGLE and FOUND_CLASS contain non-plural matches,
+	    which may happen, if one search has to find objects from
+	    several containers ('get gems from all bags').
+
+
+DESCRIPTION -- Locate()
+	Locate() is implemented in /std/room/restrictions and just
+	calls the simulated efun locate().
+
+	  lfun:  mixed Locate (mixed what, int mode, object * also)
+	  efun:  mixed locate (object this, mixed what, int mode, object * also)
+
+	<what> may be an object, an id-string or the id-string
+	  exploded by spaces. If it is an object, the result is either
+	  the object itself (if it is contained), or 0. If the player
+	  can't see in the container and SM_IGNLIGHT is not set in
+	  <mode>, the result is 0 as well.
+          For non-wizards, invisible objects are not found.
+	<also> (if specified) is a list of objects to be considered
+	  part of <this> own inventory.
+
+	The results follow the same convention as those of Search().
+	
+	Locate() searchs the thing <what> in the container. Sequences
+	of spaces in <what> are considered as being just one space.
+	Unless <what> starts with the keyword 'really', only those
+	objects may be found which are neither worn nor wielded.
+
+	If <what> is empty, 'all' or 'everything', the whole content
+	(modulo 'really') is returned, even if <mode> contains
+	SM_OBJECT.
+
+	If the container contains an object, which matches on
+	present(<what>, ...), this object is always included in the
+	result. For SM_OBJECT, it becomes _the_ result.
+
+	For the normal search mode, all contained objects are matched 
+	against <what> and the list of matching objects is returned.
+
+	For SM_MULTI, Locate() tries to depluralize <what> into
+	one of these constructs: 'all <things>', 'every <thing>' or
+	'<things>'. The depluralizing of '<things>' is a simple
+	removal of a trailing '-s' resp. '-es'.
+	If SM_COUNT is specified as well, Locate() also tries to parse
+	a count '<number> <things>'.
+	The depluralized id is matched again against all contained
+	objects, and the thus created list is compared with the list
+	of the singular match. Objects contained in both lists are
+	considered 'ambiguous' and are collected in a separate list.
+	The compound of all three lists is then the result.
+
+	Note that the depluralizing done for SM_MULTI is quite
+	primitive.
+
+	Locked containers, or containers with a transparency below
+	SEARCH_MIN_TRANSP may refuse the location of things from
+	searchers outside.
+
+
+DESCRIPTION -- Search Mode
+	An important value (besides the object identification itself)
+	is the search 'mode'. This is an integer consisting of several
+	bitflags and a small number, all ored (operator |) together.
+	The field 'SEARCH_WHERE' holds a small number determining
+	where the living should search for items:
+
+	  - SEARCH_ENV_INV (0): first in its environment, then in its
+	      inventory.
+	  - SEARCH_ENV     (1): just in its environment.
+	      inventory.
+	  - SEARCH_INV     (2): just in its inventory.
+	      inventory.
+	  - SEARCH_INV_ENV (3): first in its inventory, then in its
+	      environment.
+
+	Normally the functions get the singular id-string of an object
+	and search all objects matching this id-string. Result is then
+	the (possibly empty) array of the objects found. This
+	behaviour may be modified using bitflags:
+	  - SM_OBJECT: result is the first object found matching
+	      the id, or 0 if none was found.
+	  - SM_MULTI: the given id may also describe multiple
+	      objects ('all torches') or plurals at all ('bags').
+	  - SM_COUNT: an additional flag to _MULTI, which enables
+	      the parsing of the '<count> <plural_id>' construct in
+	      Locate().
+	      (SM_CMULTI is an alias for SM_MULTI|SM_COUNT)
+	  - SM_REALLY: when set, Locate() needs the keyword 'really'
+	      to locate worn or wielded objects.
+	  - SM_IGNLIGHT: when set it determines that the
+	      searching living need not to be able to see the objects
+	      being searched (handles both light and blindness).
+	      Searches in the inventory are always possible 'blind'.
+	  - SM_LOCATE: when set it forces search()/searchm() to search
+	      just in the given object <this>, effectively
+	      implementing a hotted up <this>->Locate().
+
+
+DESCRIPTION -- SearchM
+	SearchM() is implemented in /std/living/description and just
+	calls the simulated efun searchm().
+
+	  lfun:  mixed SearchM (mixed what, int mode, closure pred)
+	  efun:  mixed searchm ( object this, mixed what, int mode
+                               , void|closure pred)
+
+	<this> is the living, from which viewpoint the search happens,
+	  or if SM_LOCATE is specified, the container within the
+	  search shall happen.
+	<what> may be an object, an id-string or an id-strings. If it
+	  is an object, the result is either the object itself (if it is
+	  contained), or 0.
+	<mode> specifies where the living should search. Outside of
+	  its inventory it must be able to see, unless SM_IGNLIGHT
+	  is set.
+	<pred> is a filter function which has to take an object as
+	  first argument and which has to return non-zero if the object
+	  should be considered for finding at all.
+
+	SearchM() parses <what> (resp. each entry of <what> if it is
+	an string array) for "," and " and " and generates thus a flat
+	array of id-strings to search. search() is then called for
+	each of these id-strings. The objects found are filtered
+	through the <pred>icate (default is 'accept all') and
+	collected. If an id-string could not be matched to an object,
+	the id-string is remembered and will be returned later.
+
+	If the <mode> is SM_OBJECT, the result is an array of objects
+	(and id-strings for those not found).
+
+	Else, the found objects are folded into an result array of
+	four result-arrays:
+
+	  string *result[FOUND_IDS]
+	    The id-strings which could not be located.
+
+	  object *result[FOUND_SINGLE]
+	    Those objects which could be unambiguously identified.
+
+	  object *result[FOUND_CLASS]
+	    Objects which matched a class id-string.
+	    These are sub-organized into arrays for each class-match.
+
+	  object *result[FOUND_MULTI]
+	    Objects which matched a plural id-string.
+	    These are sub-organized into arrays for each plural-match,
+	    with each sub-array starting with parsed integer count (or
+	    0 if there was none).
+
+	  int     result[FOUND_SPECS]
+	    How much distinct object specifications have been processed
+	    successfully.
+
+	It is guaranteed that the FOUND_SINGLE objects to not appear
+	in the other result-arrays.
+	If there is no data for one of the result types, the
+	associated entry is set to 0.
+
+
+SEE ALSO
+	perception(C), foundp(SEFUN), sort_findings(SEFUN)

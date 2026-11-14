@@ -1,0 +1,166 @@
+     PROPERTIES
+
+  1. Das grundliegende Prinzip
+
+     Das grundlegende Konzept der MUDlib ist, dass wichtige, objektbezogene
+     Informationen in den sogenannnten Properties gespeichert werden.
+
+       engl. property -- Eigenschaft, Eigentum
+
+     Diese Informationen koennen einfache Werte, wie z.B. Zahlen, Zeichen oder
+     Objekte, aber auch kompliziertere Strukturen, wie closures oder Felder
+     sein.
+       Jedes Objekt kann beliebig viele solcher Properties besitzen und deren 
+     Namensgebung ist nicht nur auf die von der MUDlib bereitgestellten 
+     Standardproperties begrenzt. Das heisst, das fuer eigene Anwendungen die 
+     Menge der Properties fuer ein Objekt beliebig erweitert werden kann.
+       Damit sind auch schon die beiden Hauptmerkmale einer Property ange-
+     sprochen:
+
+	a) ein Name oder Kennung und
+	b) ein Wert, der durch den Namen repraesentiert wird.
+
+     Das reine Verwalten einer Property mit Namen und Wert ist aber nicht sehr
+     sinnvoll und so gehoeren zu jeder Property noch zwei weitere wichtige 
+     Dinge. Zu jeder Property wurden jeweils zwei Operationen eingefuehrt, 
+     welche den uebergebenen Wert vor der Speicherung oder Abfrage bearbeiten.
+       Zusammenfassend laesst sich das Konzept der Property in folgendem Schema
+     darstellen:
+
+               +-------------------------------------------+
+               | Property                                  |
+               +-------------------------------------------+
+               | privater Datenbereich (Property Werte)    |
+               +-------------------------------------------+
+               | Direktzugriff auf den Datenbereich        |
+               +-------------------------------------+     |
+               |     ^       Methoden       v        | ^ v |
+               |   Setzen       |        Abfragen    |     |
+               +-------------------------------------+-----+
+                     ^                      |
+	             |                      V
+
+     Aus dem Schema laesst sich erkennen, dass im Normalfall beim Setzen und
+     Abfragen einer Property der Wert einer Methode uebergeben wird, welche dann
+     Bearbeitungen vornehmen kann um dann, einen moeglicherweise veraenderten,
+     Wert in den privaten Datenbereich einzutragen. Der gleiche Vorgang wieder-
+     holt sich bei der Abfrage, wobei der Originalwert dem Datenbereich ent-
+     nommen und verarbeitet weitergereicht wird.
+       Weiterhin laesst sich dem Schema entnehmen, dass auch ein direkter Zu-
+     griff auf den Wert einer Property moeglich ist. Hierbei wurde das Konzept
+     gezielt liberal gestaltet um sich nicht von vornherein zu sehr durch 
+     Sicherheitskonzepte einzuengen. Ausserdem sollten im Normalfall immer die
+     Methoden benutzt werden, da sich nur dadurch Konsistenz in der Benutzung 
+     der Properties einstellt, falls bestimmte Properties beim Setzen oder
+     Abfragen Nebeneffekte erzeugen, die sonst umgangen wuerden (Bsp. Licht, wo
+     das Setzen des Lichtwertes eines Objektes Einfluss auf seine Umwelt hat).
+       In Faellen, bei denen es absolut notwendig ist, dass ein direkter Zugriff
+     unterbunden wird, besteht die Moeglichkeit diesen Zugang fuer andere
+     Objekte zu sperren. Danach hat nur noch das Objekt, welchem diese Property
+     'gehoert' die Moeglichkeit dies zu umgehen.
+ 
+ 
+  2. Implementation
+
+     Das Modul properties.c in /std/thing stellt folgende Funktionen fuer die
+     behandlung von Properties bereit:
+
+      a) Normale Behandlung von Properties
+	 SetProp(<name>, <wert>)
+	 QueryProp(<name>)
+	 ExistsProp(<name>)
+
+      b) Direkter Zugriff auf die Daten
+	 Set(<name>, <wert>, <interpretation>)
+	 Query(<name>, <interpretation>)
+
+      c) Globale Verwaltung
+	 SetProperties(<mapping>)
+	 QueryProperties()
+
+     a) Normale Behandlung von Properties
+
+	mixed SetProp(<name>, <wert>)
+
+	- diese Funktion setzt in einem Objekt die Property <name> auf den
+	  Wert <wert> wobei der <wert> durch die Methode zum Setzen der
+	  Property bearbeitet wird. 
+	  Der Rueckgabewert der Funktion ist der neu gesetzte Wert der Property.
+
+        mixed QueryProp(<name>)
+
+	- diese Funktion liesst den aktuellen Wert der Property <name> aus
+	  und liefert ihn nach Bearbeitung durch die Methode zur Abfrage der
+	  Property zurueck.
+
+        string ExistsProp(<name>)
+
+	- diese Funktion testet, ob eine bestimmte Property existiert und 
+	  liefert den Namen der Property oder 0 falls sie nicht existiert.
+
+     b) Direkter Zugriff auf die Daten
+
+	mixed Set(<name>, <wert>, <interpretation>)
+
+	- diese Funktion setzt einen bestimmten <wert> der Property <name>,
+	  wobei die a) ein Normaler Wert,
+		    b) eine Methode (zum Setzen oder Abfragen) oder
+		    c) ein Flag 
+          sein kann. Diese drei Moeglichen Interpretationen von <wert> werden
+	  durch das letzte Argument <interpretation> gekennzeichnet.
+	  Ist bei der Property das Flag PROTECTED gesetzt, kann nur das Objekt,
+	  welchem die Property 'gehoert' diese Funktion Nutzen!
+
+	  <interpretation> kann folgendes sein:
+	    0 (kein Argument)   - Wert ist einfach einzutragen
+	    F_SET_METHOD        - die Methode die beim Setzen aufgerufen wird
+	    F_QUERY_METHOD      - die Methode die beim Abfragen aufgerufen wird
+	    F_MODE              - Wert ist als Flag zu interpretieren
+
+	  Die Methoden sollten in der Regel lambda, lfun oder efun closures
+	  sein:
+	    lambda closure: lambda(({'w}), ({#'+, 'w, 1})
+	    lfun closure  : #'MeineFunktion (Funktion ist lokal definiert)
+	    efun closure  : #'living        (Funktion ist extern)
+
+          Im Moment stehen zwei Flags zur Verfuegung:
+	    PROTECTED - um eine Property vor direktem Zugriff zu schuetzen
+	    SAVE      - um diese Property bei save_object() mit abzuspeichern
+
+        mixed Query(<name>, <interpretation>)
+
+	- diese Funktion kann direkt einen bestimmten Wert der Property <name>
+	  auslesen. <interpretation> gibt dabei an welcher Wert das ist.
+	  Siehe Set().
+
+     c) Globale Verwaltung
+	
+	mixed SetProperties(<mapping>)
+
+	- diese Funktion setzt ein komplettes Set von Properties. Das <mapping>
+	  ist die Grundlegende Methode mit der Properties gespeichert sind.
+	  Properties die PROTECTED sind koennen nicht mit dieser Funktion 
+	  gesetzt werden.
+
+        mixed QueryProperties()
+
+	- diese Funktion liefert ein mapping mit allen im Objekt gespeicherten
+	  Properties.
+
+  BEMERKUNGEN:
+
+    Zur Zeit befindet sich noch eine Mischung aus der alten Property
+    Implementation und dieser neuen in Aktion, wobei das alte built-in Property
+    System von diesem neuen Modul emuliert wird. Das hat zur folge, dass die
+    Sicherheitstechniken des neuen Moduls nicht voll zur Geltung kommen, d.h.
+    es reicht nicht aus eine noch nach dem alten System implementierte Property
+    mit Set(P_X, PROTECTED, F_MODE) zu sichern, da beim Setzen eine starre ]
+    Methode _set_x() aufgerufen wird. Um das zu verhindern muss auch die der
+    Property zugeordnete closure (F_SET_METHOD) ersetzt werden! Dies kann durch
+    folgenden Aufruf gemacht werden: Set(P_X, 0, F_SET_METHOD);
+
+    Weiterhin ist zu Bemerken dass momentan eine solche Sicherung nicht dauer-
+    haft ist, sollte sie nicht im create() des Objektes gemacht werden, da die
+    Abspeicherung der Properties noch nicht vollstaendig implementiert ist.
+
+  SIEHE AUCH: closures

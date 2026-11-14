@@ -1,0 +1,120 @@
+/*--------------------------------------------------------------------------
+ * DAEMONPATH inet3/mudlist -- Mudlist handling for the intermud-3 daemon
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *
+ * Credits: Lima Mudlib (Creation)
+ *--------------------------------------------------------------------------
+ */
+
+int	mudlist_id;
+mapping	mud_info = ([ ]);
+
+nosave private mapping	mud_names = ([ ]);
+
+string remap_name( string name ) {
+  if ( ! stringp( name ) )
+    return name;
+
+  return implode( explode( name, " " ), "." );
+}
+
+nosave nomask int query_mudlist_id()
+{
+    return mudlist_id;
+}
+
+/* this is called at restore/disconnect time to mark muds as Down */
+nosave nomask void mudlist_reset_entries()
+{
+  walk_mapping( mud_info, lambda( ({ 'x, 'y }),
+				  ({ #'=, /*'*/
+					({ #'[, 'y, 0 }), 0  }) ) );
+}
+
+nomask string canon_mudname(string mudname)
+{
+    return mud_names[remap_name(mudname)];
+}
+
+nosave nomask void rcv_mudlist(string orig_mud, string orig_user,
+			       string targ_user, mixed * message)
+{
+  string * mudnames;
+  mixed * info;
+  int i;
+
+  mudlist_id = message[0];
+
+  mudnames = m_indices( message[1] );
+
+  for ( i = 0; i < sizeof( mudnames ); i ++ ) {
+    info = message[1][mudnames[i]];
+
+    if ( !info )
+      m_delete(mud_info, mudnames[i]);
+    else
+      mud_info[mudnames[i]] = info;
+  }
+
+  mud_names = ([ ]);
+  mudnames = m_indices(mud_info);
+  for( i = 0; i < sizeof( mudnames ); i ++ ) {
+    mud_names[remap_name(mudnames[i])] = mudnames[i];
+  }
+}
+
+nomask mapping query_mudlist()
+{
+  return mud_info;
+}
+
+nomask int has_service(string mud, string service)
+{
+  mixed * inf;
+
+  inf = mud_info[mud];
+
+  if(!inf)
+    {
+      return -1;
+    }
+  return inf[11][service] != 0;
+}
+
+nomask string * query_mudnames()
+{
+  return m_indices(mud_info);
+}
+
+int xfilter( string str ) {
+  return (mud_info[str][0] == -1 );
+}
+
+nomask string * query_up_muds()
+{
+  return filter(m_indices(mud_info), #'xfilter /*'*/);
+}
+
+nomask int mud_exists(string mudname)
+{
+    return canon_mudname(mudname) != 0;
+}
+
+nomask string mud_find( string mudname ) {
+  string * muds, * muds2;
+  int n;
+
+  if ( ! mudname )
+    return 0;  
+
+  mudname = lower_case( mudname );
+  muds = map(m_indices(mud_info), #'lower_case /*'*/ );
+  muds2 = m_indices( mud_info );
+  if ( ( n = member( muds, mudname ) ) != -1 )
+    return muds2[n];
+  else
+    return 0;
+}

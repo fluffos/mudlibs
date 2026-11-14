@@ -1,0 +1,15 @@
+inherit "std/room";
+
+create() {
+  ::create();
+  SetIntShort("Winding Passage");
+  SetIntLong(
+"This is a winding passage. It seems that there are only exits on\n\
+the east and south.\n");
+  SetIndoors(1);
+  SetBright(-10);
+  AddDetail(({"winding passage","passage"}),#'IntLong);
+  AddDetail(({"exit","exits"}),"You may leave east or south.\n");
+  AddExit("south","./mirror_room1");
+  AddExit("east","./cave1");
+}

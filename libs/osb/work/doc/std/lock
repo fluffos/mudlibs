@@ -1,0 +1,236 @@
+OBJECT
+	/std/lock
+
+
+LAST UPDATE
+	Mateese, 09-Aug-96 01:15 MET
+
+
+SYNOPSIS
+	#include <lock.h>
+	#include <search.h>
+
+	inherit "std/lock";
+
+
+DESCRIPTION
+	This is the standard lock. It implements the basic mechanics
+	of a locking mechanism, along with some auxiliary functions.
+	It is not meant for stand-alone use, but instead of
+	inheritance to make a thing lockable.
+
+	The lock implements the three states 'open' (LOCK_OPEN),
+	'closed' (LOCK_CLOSED) and 'locked', accessible as the builtin
+	property 
+
+	  int P_LOCKSTATE  "LockState"
+
+	Changes in the LockState are reflected in the inheriting
+	objects adjectives.
+
+ 	NOTE: Even when inherited, SetLockState() is the ONLY way to
+  	      change the state!
+	      This is to allow the inheriting object to get notified
+	      about any lock-state change by simple overloading of the
+	      SetLockState() function.
+
+	Besides this, a lock features also these builtin properties
+
+	  mixed P_KEYCODE  "KeyCode"
+	    Defines the (one!) keycode this lock accepts.
+	    Default is 0, which means 'no code'.
+
+	  string * P_KEYIDS   "KeyIds"
+	    This is an array of strings, determinating all key ids this
+	    lock accepts.
+
+	  string LockStateText ()
+	    Depending on P_LOCK_STATE, one of the texts "open", "closed"
+	    or "locked" is returned.
+	    Use only this function to get a string for the P_LOCK_STATE!
+
+	  int P_PICK_CHANCE  "PickChance"
+	    This value describes the percent chance a thieve (or similar
+	    being) has to pick the lock without having the right key.
+	    Default value is 100, a value of 0 disables any picking.
+	    Note that it's the task of the being (resp. its
+	    guildobject) to check the chance - the lock just stores
+	    it.
+
+	  string LockDescription(void|string id)
+	    This function returns a description of the lock, mainly based on
+	    it's P_PICKCHANCE.
+	    The lock's create() sets this function as the SubDetail "lock".
+	  
+
+	If no KeyIds are specified, the lock can't be locked, just
+	opened and closed. If KeyIds are specified, the class
+	attribute LOCKABLE is added to the object.
+
+	The lock has to be initialized by a call to
+
+	  void create ().
+
+	The create() calls the function AddSubDetail("lock") and stores
+	a reference to LockDescription() for the detail description.
+
+	The state of the lock can be changed anytime via SetLockState(),
+	but to perform the additional checks against the keys, this
+	functions has to be used:
+
+	mixed TurnLock (int unlock, object key, void | mixed keycode)
+	  Lock (<unlock> == 0) or unlock (<unlock> != 1) this lock with the
+	  given <key> using the given <keycode>.
+	  The keycode defaults to that of the key.
+	  If this function changes the state of the lock, it does this
+	  by calling SetLockState().
+
+	  Results:
+	    0 = LOCK_OK      : operation successful
+	        LOCK_NOCHANGE: lock was already (un)locked.
+	        LOCK_NOTLOCK : lock is not lockable (is either open
+	                       or has no KeyIds defined)
+	        LOCK_KEYWRONG: key doesn't fit
+	        LOCK_KEYDENY : key denies operation w/0 special message
+	        <string>     : Denial message from the key.
+
+
+	To ease programming, following functions are also implemented:
+
+	int ValidKey (object key)
+	  Return non-zero if the <key> has one of the defined KeyIds.
+	  You'll get a runtime-error if no KeyIds are defined.
+  
+
+	object *FindKey (mixed key)
+	  Search in the players inventory for objects which match
+	  <key> and are valid keys according to KeyIds.
+	  You'll get a runtime-error if no KeyIds are defined.
+
+	  Result:
+	    An array of the found valid key objects (could be empty if
+	    no key fit), or 0 if the player has no 'key'.
+
+
+	The interface to the player can hardly be standardized, since
+	the commands and messages are depending of the object
+	inheriting the lock, not the lock itself.
+	Thus, only under-the-hood work can be supported.
+
+	int | object* ParseArgs (string arg, int mandatory, int where)
+	  Parse a commandline for a '<thing>' or '<thing> with <key>'
+	  pattern and validize that '<thing>' is this object (searched
+	  according to <where>, default is SEARCH_ENV_INV: in the
+	  environment of the player, then in its inventory).
+  	  If '<key>' is specified, all matching keys in the players
+  	  are selected, else all keys.
+  	  In <mandatory> mode, the player _must_ have a (matching) key
+  	  else the function will notify an error.
+
+	  Results:
+	          0: An error occured. An approbiate notify_fail() has
+		     also been issued. 
+	    <array>: Valid keys found (may be empty).
+
+
+	int TryLocking (object *keys, void|int unlock)
+	  Try to lock (<unlock> == 0) or to unlock (<unlock> != 0) the
+	  lock with one of the given <keys>.
+	  Except for key-denial-messages, no own messages are issued.
+
+	  Results:
+	    <int>: The index of the successfully used key.
+	       -1: Failure.
+
+
+	The modification of the appearance of the lock using object
+	may be programmed using these:
+
+	string ModifyInvShort (string text)
+	  To be called with the InvShort() of the lock using object as
+	  <text>, this function returns <text> modified according to
+	  the P_LOCK_STATE. If the lock is closed or locked, <text> is
+	  not modified; if the lock is open, either "an open <text>"
+	  or "<text> (open)" is returned.
+
+	string ModifyLong (string text)
+	  To be called with the (Int)Long() of the lock using object
+	  as <text>. 
+	  The function returns "<text>It is `LockStateText()`.\n"
+
+	The /std/lock implements basic functions for the lock commands
+	'open', 'close', 'lock' and 'unlock'. The commands may be used
+	as following:
+
+	  "open <object>"
+	    Opens the lock. If it is locked, and the player has the
+	    right key, it is unlocked first.
+	  "open <object> with <key>": 
+	    Opens the lock. If it is locked, and the player specified the
+	    right key, it is unlocked first.
+	  "close <object>"
+	  "close <object> with <key>"
+	    Closes the lock.
+	  "lock <object>"
+	     Locks the lock if the player has the right key.
+	     If it is open, it is closed first.
+	  "lock <object> with <key>"
+	     Locks the lock if the player has specified the right key.
+	     If it is open, it is closed first.
+	  "unlock <object>"
+	     Unlocks the lock if the player has the right key.
+	  "unlock <object> with <key>"
+	     Unlocks the lock if the player has specified the right key.
+
+	The commands are bound in
+
+	  void init ()
+
+	to the functions
+
+	  int fopen (string str, void|int where)
+	    Implements "open" and "close", returns 1 on success.
+	    <where> is passed to ParseArgs().
+
+	  int flock (string str, void|int where)
+	    Implements "lock" and "unlock", returns 1 on success.
+	    <where> is passed to ParseArgs().
+
+
+	To notify the players about the actions done, both fopen() and
+	flock() call DoActionFor().
+
+	  int DoActionFor ( int action, int type, void|object *keys
+                          , void|int kix)
+            Notify the players about the action, determined by
+            <action> and <type>, using write(), show() and notify_fail().
+	    If the result is 1 or 0, the command is terminated with
+	    that result, if the result is <= 0, the command execution
+	    may continue (if possible).
+	    The given function returns messages suitable for most
+	    objects.
+
+	<action>s are according to the possible commands:
+	LOCK_DO_OPEN, LOCK_DO_CLOSE, LOCK_DO_LOCK, LOCK_DO_UNLOCK.
+	<type> determines what happened:
+	  LOCK_ACT_ALREADY: the action commanded need not be
+	    performed, e.g. closeing an already closed chest.
+	  LOCK_ACT_LOCK: the lock is locked/unlocked using 
+	    the key <keys>[<kix>].
+	  LOCK_ACT_OPEN: the lock is opened/closed.
+	  LOCK_ACT_NOKEY: the lock needs to be locked or unlocked, but
+	    the player has no keys.
+	  LOCK_ACT_WRONGKEY: the lock needs to be locked or unlocked, but
+	    the player has not the right key.
+
+	Note that some <types> may happen en passant: locking an open
+	chest results in action LOCK_DO_LOCK with both types
+	LOCK_ACT_OPEN and LOCK_ACT_LOCK in consecutive calls.
+
+
+INHERITANCE TREE
+	lock
+
+
+SEE ALSO
+	locks(C), thing(S), door(O), chest(O), key(O)

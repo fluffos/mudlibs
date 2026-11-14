@@ -1,0 +1,382 @@
+CONCEPT
+	combat
+
+UPDATE
+	Mateese, 18-Oct-1994 23:30 MET
+
+SYNOPSIS
+	#include <combat.h>
+	#include <messages.h>
+
+CONTENT
+	This document describes the basic ideas of combat in
+	Nightfall.
+	It consists of three parts:
+
+	  DESCRIPTION - basics
+	    The basics of weapons, armours, damage and defense.
+
+	  DESCRIPTION - combat round
+	    What happens when in one combat round.
+
+	  DESCRIPTION - messages
+	    Which messages are issued during combat.
+
+	Though the basic computations are fixed in the /std-objects,
+	the most important formulaes are included from /sys/combattune.h,
+	allowing easier balancing [this idea was borrowed from gcc].
+
+
+DESCRIPTION - basics
+	Combat is the physical interaction of two livings, using tools
+	for attack and defense.
+	On other words: two strong muscled barbarians are standing
+	face to face, and beat each other up.
+	This document describes the basic ideas of weapons, armours,
+	and a combat round itself.
+
+	Damage may be done in several ways, so there are several types
+	of damage available. The types to use are defined in
+	/sys/combat.h with numeric values as:
+
+	  DT_SLASH     0  :  a sword does slash
+	  DT_BLUDGEON  1  :  damage done by concentrated impact (clubs)
+	  DT_PIERCE    2  :  spears are piercing weapons
+	  DT_HEAT      3  :  physical heat (fire)
+	  DT_COLD      4  :  physical cold (ice)
+	  DT_MHEAT     5  :  magic heat (elven fire)
+	  DT_MCOLD     6  :  magic cold (cone of cold)
+	  DT_MELECTR   7  :  magic electricity (lightning bolt)
+	  DT_MELEMENT  8  :  magic elemental (wall of earth)
+
+	  DT_POISON   -1  :  all sorts of poison
+	  DT_PSYCHO   -2  :  mental attack
+
+	Damages with negative typenumbers damage the whole body, the others
+	just at the point of impact.
+	The first DT_CONV (currently 3) damages are done by
+	'conventional' weapons.
+
+	Do not rely on the exact typenumbers! The symbolic names,
+	the values' sign and the relation to DT_CONV is all you may
+	use!
+	Note also, that there is no damagetype for magic in general.
+	The success of a spellcasting is not ruled by the combat
+	system.
+
+	A weapon can of course do more than just type of damage, so
+	their ability to harm is gathered in a mapping:
+
+	  mapping P_DAMAGE  "Damage"
+	    This property is a mapping, containing for each damagetype
+	    the max number of damage points to do.
+	    The sum of all damage points should be the overall 'class'
+	    of the weapon.
+
+
+	Damage can be defended using armours, and different armours
+	can defend damages differently. So the ability to defense is
+	also gathered in a mapping:
+
+	  mapping P_DEFENSE  "Defense"
+	    This property is a mapping, containing for each damagetype
+	    the max number of damage points soaked.
+	    The sum of all soak points should be the overall 'class'
+	    of the armour.
+
+	Note that the _actual_ values used in combat are derived from
+	these settings and the weapons/amours P_QUALITY, thus implementing
+	an degradation effect.
+
+
+	Both P_DEFENSE and P_DAMAGE (and also the P_xx_PER_QP
+	settings) are combined into one leading value:
+
+	  int P_CLASS  "Class"
+	    This property determines the capability of the
+	    weapon/armour. Ideally it is a value in the range (0..20)
+	    and determines the total amount of damage/defense the item
+	    is able of.
+	    Changing this property may cause changes in other
+	    properties, namely P_DEFENSE, P_DAMAGE, P_AP_PER_QP,
+	    P_WP_PER_QP, but also in P_VALUE.
+	    Generic items may restrict the class setting to specific
+	    values.
+
+	Weapons and armours are of different types and must therefore
+	be differentiable:
+
+	  string P_WEAPON_TYPE	"WeaponType"
+	    A string describing the type of the weapon.
+	    It is in most cases also the name of the skill needed to
+	    handle the weapon.
+
+	  int	 P_ARMOUR_TYPE	"ArmourType"
+	    A number describing the type of the armour.
+	    Positive numbers are also the target zone where the armour
+	    protects, negative numbers protect the whole body.
+	    '0' is illegal.
+
+	Valid armour types, defined in /sys/combat.h, are:
+
+	  AT_BOOTS	1  :  Feet
+	  AT_CLOAK	2  :  Remaining open skin
+	  AT_MAIL	3  :  Body
+	  AT_GLOVES	4  :  Hands
+	  AT_HELMET	5  :  Head
+	  AT_SHIELD	6  :  Arms
+	  AT_TROUSERS	7  :  Legs
+	    These positive types are also used as target zones on the
+	    player. The armour would protect just there.
+
+	  AT_SKIN      -1  :  Skin (internally used!!)
+	  AT_RING      -2  :  a ring
+	  AT_AMULET    -3  :  an amulet
+	    These negative types protect the whole body.
+	    AT_SKIN may not be used, though!
+
+
+	Valid weapon types are mostly defined in /sys/combat.h, but
+	can be introduced on the fly as well.
+	Most of these weapon types are also combat skills.
+
+	  CS_HAND      "CsHand"     :  Martial arts, also defensive
+	  CS_KNIFE     "CsKnife"    :  Knifes
+	  CS_SWORD     "CsSword"    :  Swords
+	  CS_AXE       "CsAxe"      :  Axes
+	  CS_SPEAR     "CsSpear"    :  Spears
+	  CS_CLUB      "CsClub"     :  Clubs
+	  CS_STAFF     "CsStaff"    :  Staffs
+	  CS_WHIP      "CsWhip"     :  Whips
+	  CS_INFANTRY  "CsInfantry" :  Halberds and other infantry weapons
+	  CS_CHAIN     "CsChain"    :  Morningstars and other chained weapons
+	  CS_DISTANT   "CsDistant"  :  just a skill: Bows etc
+	  CS_BULLET    "CsBullet"   :  just a type: Bullets, Arrows, etc
+
+	(note that Staffs are both offensive and defensive weapons).
+
+	However, there is just one defensive combat skill predefined:
+
+	  CS_DODGE     "CsDodge"  :  dodge an attack
+
+	This set of predefined combat skills may be extended by guild
+	or race specific skills (after negotiation with the
+	Archwizards). Each skill is a string starting with "Cs".
+	Skills bound to a weapon are automatically the weapon type as
+	well.
+
+	During combat, the living may decide to put more weight on
+	attack, reducing its dodging abilities, and vice versa. This
+	A_COMBAT_STYLE is directly added/subtracted from the respective
+	attack/dodge skill difficulty.
+
+	For each successful hit the attacker gets the total number of
+	damage points done added to its XP score. If it succeeds to
+	kill a victim, the attacker gets an additional bonus of
+	XP_GAIN(victims_xp/<number of current enemies>) (currently xp/35),
+	but not more than MAX_XP_ADD (50000).
+	The victim's XP are reduced to XP_DEATH(victims_xp) (currently
+	victims_XP*2/3) -- if it has a second life, that is.
+
+
+	Weapons and armours degrade (but do not break!) with number of
+	hit points soaked by an armour. The number of points is scaled
+	by P_WP_PER_QP/P_AP_PER_QP into Quality points, which are
+	subtracted from the weapons/armours P_QUALITY. However, a soak
+	of less than 2*P_xP_PER_QP points does no degradation.
+	The calls are for an armour done to ->DegradeArmour(), and for
+	a weapon to ->DegradeWeapon().
+	If a living fights with it bare hands, the degradation of its
+	'weapon' will result in a loss of HP (it won't die from it,
+	though) and a handicap for the next dodge.
+
+
+DESCRIPTION - combat round
+	A normal combat round consists of selecting an enemy,
+	selecting a weapon and charging at the enemy. The enemy now
+	tries to dodge the attack. If it succeeds (or the attacker
+	aimed badly), the attack is over.
+	Else the weapon hit, more or less good, and did damage. A part
+	of this damage may be soaked by the enemies armour, depending
+	on where the weapon hit. The remaining damage goes through and
+	decreases the enemies overall health (HP). The amount of
+	damage really done is depending on where the weapon hit: a
+	smashy hit on the hand reduces the overall health less than
+	the same hit into the stomach.
+
+
+	One important value in these rather complex computation is the
+	'success' value. It is a value in the range from -100 to +100;
+	everything below 0 is a miss, everything else a hit. The
+	higher the value, the better the hit.
+
+
+	Weapon and enemy selection is not really part of a combat
+	round, the round itself starts with an real attack.
+	This is done by calling the attackers Hit() function:
+
+	  void Hit (object victim, mixed|object weapon, int gentle)
+	    The living attacks <victim> using <weapon>, which is
+	    either a weapon object, or a string describing which
+	    'hand' attacks.
+	    <gentle>, if specified, is used for non-lethal combat and
+	    denothes the number of HPs the victim should have after
+	    the attack.
+	    Result is the negative successvalue if the hit missed,
+	    else the damage done to the victim.
+
+	The function presets the success value with '100-QueryLoad()'
+	(also called 'Unload'), so if the living doesn't carry much,
+	it fights better.
+	This success value is computed as the skill the living
+	can handle the given weapon (hands or else). The weapon may
+	increase this success then even further (imagine the good old
+	OrcSlayer) using ModifyAttack().
+	This value is then possibly reduced (if positive) if the
+	living carries too much load: if the load is > LOAD_THRESH/2,
+	the success is reduced down to 1/10 for 100% Load.
+
+	If the success is then still positive, it denotes a successful
+	attack. The victim may now use its ability to dodge this
+	attack by decreasing the success value. This is done by a call
+	to the victims Dodge() function, the result will be subtracted
+	from the success value.
+
+	  int Dodge(mixed weapon, int success)
+	    The living has to dodge an attack done by the
+	    previous_object() with <weapon>. The attacker <success> so
+	    far.
+	    The function has to return the value by which the
+	    attackers succes has to be decreased.
+
+	The dodge uses the victim's dodge skill against a difficulty
+	of its own 'damage malus' (if you are hurt the previous round,
+	you'll be more or less stunned) plus the carried load (the
+	less you carry, the better you dodge). A positive result is
+	returned as-is, a negative result is returned as 0.
+
+	The success so far is checked by the attacker. If its value is
+	less or equal zero, the attack failed (the hit missed).
+
+	If it is a miss, the victim is informed (using
+	victim->NotifyMiss()), approbiate messages are output, the
+	weapon is notified about the miss (using weapon->NotifyHit()),
+	and the Hit() function returns with the negative success value
+	as result.
+	The miss itself hurts the attacker (simulating exhaustion) by
+	up to 5 HP, depending on the measure of the failure.
+
+	Else the attack was a success, and the weapon is queried how
+	much damage it will give the victim. For weapon objects, this
+	is done by calling weapon->Damage(), for a 'hand' weapon its
+	damage is queried.
+	The victim is now called to Defend() this damage.
+	The call to Defend() returns the damage done, which is then
+	also the result of Hit().
+	After the Defend(), the accumulated 'degradation damage' for
+	hand attacks is evaluated as last thing.
+
+
+	A successful attack is defended by the victim in the Defend()
+	function:
+
+	  int Defend (mapping damage, object weapon, int success, int gentle)
+	    Defend a <success>ful hit by <weapon> which tries to cause
+	    <damage>.
+	    <gentle>, if specified, is used for non-lethal combat and
+	    denotes the number of HPs the living shall have after the
+	    attack.
+	    Return the overall damage done (HPs).
+
+	The given damage is reduced according to the success: a fully
+	successful hit (success = 100) would do 1.25 damage, a
+	near-zero success would do 0.25 damage.
+
+	The target zone of the hit is determined at random, then all
+	worn armours (including the livings skin) are called to defend
+	the damage in that target zone, calling armour->Defense().
+	Normal armours will not defend if they are not worn in the
+	target zone.
+	"Defend" means that the intended damage is increased by the
+	amount of points the armour can soak. This is of course done
+	for each type of damage separately.
+
+	The remaining damage is then further reduced according to the
+	hit target zone (this affects 'local' damage types only, like
+	DT_SLASH).
+
+	The result is then summed together to give the overall amount
+	of health damage actually done.
+	Each successful hit does at least one point of overall damage.
+
+	If <gentle> was given, the amount of damage to do is reduced
+	appropriately. However, for non-interactive victims, the
+	attackers weapon skill is checked - if this fails, the
+	attacker accidentally kills the victim in spite of its gentle
+	attack.
+
+	Now, the weapon is notified about the hit, and the done damage
+	in relation the victims current amount of health points.
+	The weapon will return approbiate messages which are then
+	output.
+
+	The worn armours of the victim are then also notified using
+	NotifyDefense(), so they may also return messages to be
+	printed.
+
+	The 'damage malus' is computed, so the next dodge will be less
+	successfull due to stun or shock effects. The malus will never
+	be greater than 50, though.
+
+	The damage is then applied using DoDamage() of the victim,
+	and the overall amount of damage done is returned.
+
+
+DESCRIPTION - messages
+
+	The following combat messages are issued:
+
+	  MSG_DAMAGE  "Damage":
+	    object  DAMAGE_CAUSE;
+	    mapping DAMAGE_AMOUNT;
+	  The sender received _AMOUNT damage from the attacker _CAUSE.
+
+
+	  MSG_DIE     "Die":
+	    object  DIE_CORPSE;
+	  The sender died, leaving a corpse _CORPSE behind.
+
+
+	  MSG_ENEMY   "Enemy":
+	    object ENEMY_ENEMY;
+	    int    ENEMY_ACTION;
+	  The sender modified it's entry for enemey _ENEMY.
+	  _ACTION can be ENEMY_HERE, ENEMY_HUNT, or 0 if the enemy is
+	  removed from the enemy list.
+
+
+	  MSG_HIT     "Hit":
+	    object	   HIT_ATTACKER;
+	    object	   HIT_VICTIM;
+	    string|object  HIT_WEAPON;
+	    object	   HIT_SUCCESS;
+	    mapping	   HIT_DAMAGE;
+	    int 	   HIT_RELDAM
+	  The _ATTACKER attacked _VICTIM with _WEAPON and was
+	  successful at a level of _SUCCESS. The victim received
+	  _DAMAGE damage, which is a relative damage of _RELDAM.
+
+
+	  MSG_MISS    "Miss":
+	    object	  MISS_VICTIM;
+	    object|string MISS_WEAPON;
+	  The sender attacked _VICTIM with _WEAPON, but missed.
+
+
+SEE ALSO
+	messages(C), see(E), show(E), show_object(E), show_room(E).
+
+
+SEE ALSO
+	actions(C), messages(C), combat(S), living(S), npc(S),
+	player(S), skills(C)

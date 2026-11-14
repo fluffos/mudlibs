@@ -1,0 +1,176 @@
+----------------------------------------------------------------------------
+This file contains some notes which are too small for own files:
+
+ - The flag of add_action()
+ - About add_worth()
+ - Corrected doc of efun read_file()
+ - Indices on strings and arrays
+ - Some notes on arrays
+ - Function-Libraries
+ - Night-Day-Weather server
+ - Private wizard races
+
+----------------------------------------------------------------------------
+add_action (verb, function, flag) -- by Macbeth
+
+The flag DOES work, but different from how you think. 
+If you are for example doing an add_action("unten","unten",1); in init(), 
+every line starting with 'unten' regardless of what follows will be accepted. 
+Then, both 'unten' and 'untenraus' will be valid commands, but neither
+'u' nor 'unt'. 
+The full verb (i.e. up to the first space) can be found out by 
+the efun query_verb().
+
+----------------------------------------------------------------------------
+About add_worth() -- by Macbeth
+
+add_worth(value,ob) adds value to the entry in the last column of
+the wizlist belonging to the creator of object ob. 
+However, this function can only be called from mudlib backbone objects
+(i.e. objects from /room, /obj & /std). Calls from other objects (especially
+from /player objects) result in an error to prevent manipulation of
+the wizlist.
+If you create a shop in your /players directory all the money given to players
+for selling items will of course show up in the wizlist after your name.
+
+----------------------------------------------------------------------------
+read_file() -- by Mateese
+
+SYNOPSIS
+        string read_file(string file, int start, int count)
+
+DESCRIPTION
+        Reads lines from <file>. If <start> and <count> are not given, the
+        whole file is read, otherwise <count> lines from <start> on are read.
+
+SEE ALSO
+        read_bytes(E), write_file(E)
+
+The original (and still used) /doc/efun/read_file misdescribes <count>
+as <end>.
+
+----------------------------------------------------------------------------
+Indices on strings and arrays -- by Mateese
+
+Slicing of arrays is clipped to the array's bounds by the GD.
+Imagine you want to remove the ix.th element of an array. This can be 
+done with:
+  last = sizeof(array)-1;
+  array = array[0..ix-1] + array[ix+1..last];
+as long as ix is valid.
+BUT note that array[-1] or array[last+n] is illegal. 
+Clipping ist just performed on array-slices.
+
+Strings are treated similar: single indices must be valid, string slices
+(string[foo..bar]) are clipped to the string's bounds. 
+Examples:
+  string foo is "abcdef", yielding an index range of 0..4.
+  foo[-1    ]         : Illegal Index
+  foo[ 5    ]         : Illegal Index
+  foo[ 1    ] -> 98   : the character code of 'b'.
+  foo[ 1.. 1] -> "b"  : the one-letter-string "b"
+  foo[ 3.. 7] -> "de" : the stringslice [3..4]
+  foo[-2..<1] -> "de" : the same slice, counted from the end !!!
+  foo[-5..<2] -> "abcde"   : the nearly complete string
+  foo[-6..<2] -> "^Dabcde" : BUG: should be the empty string
+  foo[-7..<1] -> ""   : the empty string
+  foo[-1.. 1] -> ""   : same
+  foo[-1..<3] -> ""   : same
+
+----------------------------------------------------------------------------
+Some notes about arrays -- by Hyp, Mateese, Schnuckel
+
+- It is possible to intersect two arrays with the & operator.
+  E.g. ({ 1, 2, 3 }) & ({ 2, 4 }) evaluates to ({ 2 }).
+  This also works with arrays of strings and objects. 
+  But unfortunately the typechecker of the compiler still knows & as 
+  an int-only-operator - so to use this you might turn off strict_types.
+
+- If you have an array 'foo', and you declare 'mixed *evil;' and then do
+  'evil = foo', then evil doesn't get a COPY of foo, but just a POINTER to
+  it. This means: a following statement 'evil[4] = <sth>' would change foo !!!
+  To make 'evil' an independant copy of foo, you have to do 
+  'evil = ({})+foo;' instead of the plain assignment before.
+  This is also valid for plain arrays given as parameter to lfuns, and their
+  results (possible security leakages!).
+  In a lfun the parameter/result is again just a pointer if the call/return 
+  specified the array just by a single (possibly indexed) variable.
+
+- The "&"-operator also does a fast intersection of alists (also know as the 
+  efun 'intersect_alist()').
+  Now there is also the "-" operator for arrays:
+  ({1,2,3,4,5}) - ({3,4,5,6,7}) results in ({1,2}), NOT IN ({1,2,6,7}).
+
+- LPC differentiates between arrays and strings. Which means that efuns that 
+  work on arrays do not work on strings unless stated explicitly otherwise.
+  Strings are NOT pointers in LPC, and for good reason that is: imagine what 
+  would happen if a wizard would change the binary zero at the end of a 
+  shared string ...
+
+- Another nasty effect with arrays is that 
+    ({ ({ 1 }) }) - ({ ({ 1 }) }) 
+  evaluates to
+    ({ ({ 1 }) }). 
+  The reason for this lies in that the test for equality with arrays
+  compares their addresses, not the elements. A nice example is:
+  ({ BLA }) == ({ BLA }) is always wrong (!) unless BLA is void (meaning
+  that ({}) == ({}) is true as expected).
+
+----------------------------------------------------------------------------
+Libraries -- by Mateese
+
+  In the /obj directory you'll find a directory 'lib'.
+  Here we place collections of functions bundled together in distinct
+  files, to form a resource for everyone.
+
+  The filestructure is:
+    /obj/lib/<name>.c   : the code for inheritance (!)
+    /obj/lib/<name>.h   : the needed constants (may be an empty file)
+    /obj/lib/<name>_p.h : the prototypes for the funs
+    /doc/lib/<name>     : the documentation
+
+  The libs are meant for inheritance, not for '->'calls.
+
+  We try to put related funs only together into one lib-file, especially
+  if they do much internal cross-calls, or form a specific sub-object (like
+  the /obj/lib/qtyper). But ok, one-fun-libs have their own advantages...
+
+  We take ready-made code for inclusion if it's documented!
+
+----------------------------------------------------------------------------
+A Night-Day-Weather-Server -- by Taube
+
+I am just implementing a second server, called CALENDAR server.
+It inherits the standard NIGHTDAY server and provides also
+NF-time, NF-date and weather. It is not fully tested yet. I am
+also interested in comments and/or ideas. Go to
+	/players/taube/room/weather
+and have a look! Type 'info' to get some information.
+
+You may use this server in your own room.
+
+HOW TO USE IT:
+It may only be used in outdoor rooms, i. e. you have to call
+	SetIndoors(0);
+in your create(). The CALENDAR server is the activated by
+	#include "/players/taube/sys/calendar.h";
+at the beginning and by
+	SetServer(CALENDAR);
+in create(). That's all, the you'll have weather in your room!
+
+There are additional commands you may use in your room, e. g.
+CALENDAR->QueryDateString(), CALENDAR->QueryTimeString(),
+CALENDAR->QueryWeather() etc. Have a look at
+	/players/taube/doc/calendar
+for further information.
+
+----------------------------------------------------------------------------
+Private Wizard Races -- by Mateese
+
+Wizard can have an own race - they have just to put a raceobject
+into /players/<wizname>/race/<racename>.c 
+  This is meant for your amusement, and for testing new race settings prior
+to 'official introduction'. They are not meant and not accessible for
+other wiz or for players.
+
+----------------------------------------------------------------------------

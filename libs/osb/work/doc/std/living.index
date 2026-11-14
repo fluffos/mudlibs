@@ -1,0 +1,2575 @@
+PRELIMINARY
+OBJECT
+	/std/living
+
+
+LAST UPDATE
+        Mateese, 14-Mar-1998
+
+
+SYNOPSIS
+	#include <attributes.h>
+	#include <living.h>
+	#include <combat.h>
+	#include <search.h>
+	inherit "/std/living";
+
+	    OR
+
+	clone_object("/std/living");
+
+<!- begin living ->
+DESCRIPTION
+	This is the generic simple living.
+	It contains all the basic mechanics needed by monsters, npcs
+	and players, for combat, health, talk and movement.
+	It's purpose in life is 'cloned to die', so it does not
+	feature the fancy skill and stat system of npcs or players,
+	nor does it need to eat or drink.
+
+	/std/living itself is in fact mostly a wrapper for a collection
+	of modules which provide the real functionalities. /std/living
+	just merges them together and provides functions to setup
+	reasonable default values.
+	Therefore you can use the modules where you need them, but be
+	aware that they are quite interpedendant (they just assume
+	functions from other modules to be existing).
+	You can also equip a normal /std/living with modules from
+	/std/npc or else, of course.
+<!- end ->
+
+	The several modules are:
+	  /std/living              : The wrapper.
+	  /std/living/actions      : Automatic actions.
+	  /std/living/attributes   : Attribute implementation.
+	  /std/living/body         : Health and death.
+	  /std/living/chat         : Chatting and listening.
+	  /std/living/combat       : Physical combat.
+	  /std/living/commands     : Command- and notify_fail-handling.
+	  /std/living/description  : Visual appearance.
+	  /std/living/heart        : Heartbeat control.
+	  /std/living/restrictions : Weight and contents.
+	  /std/living/hands        : Hand (and tail) management.
+	  /std/living/moving       : (Automatic) movement.
+	  /std/living/stats        : Stats and Skills.
+
+	Also inherited are:
+	  /std/base                : for the property handling.
+	  /std/room/items          : for easier equipping.
+
+
+DESCRIPTION - /std/living
+	As mentioned above, this top module is a wrapper for all the
+	modules constituting a living.
+	It also features some functions to setup the living to
+	reasonable values:
+
+<!- begin SetInitLevel ->
+	  void SetInitLevel (int level, void|int randHealth)
+	    Sets the living up to the stats a <level> (0..20) living
+	    of this race has, including an appropriate amount of XPs.
+	    Also, the living's skills will be set to 5*level.
+	    If <randHealth> is non-zero, its HP and SP will be at some
+	    random level, else at maximum.
+<!- end ->    
+
+<!- begin SetDefault ->
+	  void SetDefault (int level, string race)
+	    Set the living up to be a <race> living of <level>.
+	    The stats will be set using InitLevel(), this function
+	    also sets description, weight, hands and intrinsical
+	    defenses.
+<!- end ->    
+
+	Both functions also accept their arguments collected as array
+	as passed as only argument.
+
+	The following functions are redefined:
+
+	  int create ()
+	    Initialises the submodules, sets P_NOGET to 1, and if the
+	    object is a clone, enables commands and sets it up to be a
+	    level-1 human.
+	    If heart_beat() is overloaded, GetHeart(HEART_USER) is
+	    done via a call to CheckHBfun().
+	    It returns non-zero for the blueprint, and 0 for the clone.
+
+	  void reset ()
+	    This calls ForgetEnemies(), to enable memory cleanup in
+	    times of idleness, and refreshes the items by a call to
+	    /std/room/items.
+
+<!- begin heart_beat ->
+	  void heart_beat ()
+	    Calls the heart_beat() of /std/living/body,
+	    /std/living/actions and /std/living/heart.
+	    Additionally, the notify_fail stack is cleared (just in
+	    case).
+<!- end ->
+
+	  void init ()
+	    Calls the init() of /std/living/actions and
+	    /std/living/chats.
+
+
+<!- begin living_attributes ->
+DESCRIPTION - /std/living/attributes
+	Attributes are not much different from normal properties,
+	except that they are saveable using save_object(), and thus
+	also restoreable.
+	To achieve this, an extra set of functions is needed.
+	Its implementation makes attributes a subset of properties,
+	however.
+	This means: the attribute A_SHORT and the property P_SHORT
+	both mean the same thing: the short description of an object.
+	But whereas a call to SetProp(P_SHORT) succeeds for every
+	object, a call to SetAttr(A_SHORT) succeeds just for livings.
+	A call to SetShort(), however, will automatically reach the
+	right recipient (A_SHORT and P_SHORT are in fact the same
+	name).
+
+	As with properties, there are hardcoded attributes "Attrs",
+	and 'soft' ones "Attributes", which are internally stored as a
+	mapping. The latter are those which can be freely set and
+	modified by e.g. guild objects.
+<!- end -> 
+
+<!- begin SetAttr ->
+	  mixed SetAttr (string attribute_name, mixed arg, void|int sc)
+	    Sets or changes the attribute <attribute_name> to
+	    <value> and returns the value actually set.
+	    If <sc> is true, always the 'soft property' of the given
+	    name is set.
+	    If the attribute doesn't exist, it is created.
+<!- end -> 
+
+<!- begin QueryAttr ->
+	  mixed QueryAttr (string attribute_name, void|int sc)
+	    Retrieves the value of attribute <attribute_name>.
+	    If <sc> is non-zero, always the 'soft attribute' of the
+	    given name is queried.
+<!- end -> 
+
+<!- begin RemoveAttr ->
+	  void  RemoveAttr (string name)
+	    The entry for the 'soft' attribute <name> is deleted.
+<!- end -> 
+
+<!- begin QueryAttrs ->
+	  mapping QueryAttrs (void|int sc)
+	    Returns a mapping containing all attributes of the object,
+	    "built in" as well as soft ones.
+	    If <sc> is non-zero, only the soft attributes are returned
+	    (and the function is less costly).
+	    This function is very costly.
+<!- end -> 
+
+<!- begin SetAttrs ->
+	  mapping SetAttrs (mapping attributes, void|int sc)
+	    The function sets the attributes of the object to the
+	    values in the given <attributes> mapping. Builtin and soft
+	    attributes are properly handled, resp. if <sc> is
+	    non-zero, only the soft attributes are set.
+	    Result is a mapping with the values actually set.
+<!- end -> 
+
+
+<!- begin QueryStats ->
+	  mapping QueryStats()
+	    Returns a mapping containing just the STAT attributes of
+	    the object.
+<!- end -> 
+
+<!- begin SetStats ->
+	  mapping SetStats (mapping stats)
+	    Set just the STAT attributes to the values in the given
+	    <stats> mapping. Stats not listed there aren't changed.
+	    Result is the updated QueryStats() result.
+<!- end -> 
+
+	  int LearnAttr (string name, int goal, int decc, int sc)
+	    This function applies one learning step on one attribute
+	    with numeric value .
+	    The attribute <name> will be changed so that it will
+	    approximate the value <goal> a bit nearer than before.
+	    <decc> determines how fast the <goal> will be met: the
+	    higher <decc>, the slower it will approximate.
+	    <sc> determines if the builtin or the soft attribute will
+	    be changed.
+
+	  int ApproxValue (int steps, int current, int goal, int decc)
+	    Compute the value of an attribute as it would be after
+	    executing LearnAttr() <steps> times, assuming the
+	    attributes value is now <current> and has to approach
+	    <goal> with a speed of <decc>.
+
+
+	For permanent and temporary changes to the values of integer
+	attributes, these functions exist:
+
+<!- begin ChangeAttr ->
+	  int ChangeAttr(string aname, int delta)
+	  int ChangeAttr(string aname, int delta, int min, int max)
+	    The value of attribute <aname> is changed by amount
+	    <delta>. If <min> and <max> are given and valid, the new
+	    value of the attribute is confirmed to this range.
+	    Result is the new attribute value.
+<!- end -> 
+
+<!- begin ModifyAttr ->
+	  int ModifyAttr(string aname, int delta)
+	  int ModifyAttr(string aname, int delta, int min, int max)
+	    As ChangeAttr(), but this change is recorded in the
+	    P_BONI property as well, so a call to RestoreAttr() will
+	    undo any of these modifications.
+<!- end -> 
+
+<!- begin RestoreAttr ->
+	  void RestoreAttr()
+	    Undo any ModifyAttr() as remembered in P_BONI.
+	    This function should not be called manually, as it is
+	    called at every login.
+<!- end -> 
+
+
+	The changes done by ModifyAttr() are recorded in
+
+	  mapping P_BONI  "Boni"
+	    Key are the attribute names, value the summed up change
+	    ("bonus") so far.
+	    This property must not be set manually!
+
+<!- begin SetBonus ->
+<!- begin QueryBonus ->
+<!- begin AddBonus ->
+	In rare(!) special cases, direct access to the boni are
+	available via
+
+	  int SetBonus (string aname, int val)
+	    Sets the bonus for attribute <aname> to <val>.
+
+	  int QueryBonus (string aname)
+	    Returns the current bonus for attribute <aname>.
+
+	  int AddBonus(string aname, int delta)
+	    The bonus for <aname> is changed by <delta>, the new value
+	    is returned.
+<!- end -> 
+<!- end ->
+<!- end -> 
+
+
+<!- begin SetAttribute ->
+<!- begin QueryAttribute ->
+<!- begin RemoveAttribute ->
+<!- begin ChangeAttribute ->
+<!- begin ModifyAttribute ->
+	The special functions to handle just the soft attributes are:
+
+	  mixed SetAttribute(string name, mixed arg)
+	    == SetAttr(name, arg, 1).
+
+	  mixed QueryAttribute(string name)
+	    == SetAttr(name, 1).
+
+	  void  RemoveAttribute(string name)
+	    == RemoveAttr(name).
+
+	  int ChangeAttribute(...)
+	  int ModifyAttribute(...)
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+
+<!- begin SetAttributes ->
+	  mapping SetAttributes(mapping arg)
+	    == SetAttrs(arg, 1).
+<!- end ->
+
+<!- begin QueryAttributes ->
+	  mapping QueryAttributes()
+	    == QueryAttrs(1).
+<!- end -> 
+
+
+<!- begin living_body ->
+DESCRIPTION - /std/living/body
+	This module implements the basic health functions and
+	attributes of a living.
+
+	The healing is bound to the HEART_HEAL heartbeat.
+<!- end -> 
+
+	Following attributes and properties are builtin:
+
+<!- begin MaxHP ->
+<!- begin MaxSP ->
+<!- begin MaxPEP ->
+<!- begin MaxMEP ->
+	  int A_MAX_HP  "MaxHP"
+	  int A_MAX_SP  "MaxSP"
+	  int A_MAX_PEP "MaxPEP"
+	  int A_MAX_MEP "MaxMEP"
+	    If not set or set to 0, the default value according to the
+	    livings stats is returned.
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+
+<!- begin HP ->
+<!- begin SP ->
+<!- begin PEP ->
+<!- begin MEP ->
+	  int A_HP  "HP"
+	  int A_SP  "SP"
+	  int A_PEP "PEP"
+	  int A_MEP "MEP"
+	    The amount of health/spell/pysical endurance/mental endurance
+        points the living currently has.
+	    It is not possible to set this value for netdead players
+	    or ghosts.
+	    Setting it starts the HEART_HEAL heartbeat.
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+
+<!- begin AddHP ->
+<!- begin AddSP ->
+<!- begin AddPEP ->
+<!- begin AddMEP ->
+	  int AddHP (int points)
+	  int AddSP (int points)
+	  int AddPEP (int points)
+	  int AddMEP (int points)
+	    Add <points> to the current amount of A_HP/A_SP/A_PEP/A_MEP
+        and returns the amount.
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+
+<!- begin ReduceHP ->
+<!- begin ChangeSP ->
+<!- begin Tire ->
+<!- begin Drain ->
+	  varargs int ReduceHP (int points, int minimum, void|int check_ko)
+	  varargs int ChangeSP (int points, int minimum)
+      varargs public int Drain(int points, int min) 
+      varargs public int Tire(int points, int min) 
+
+	    Subtract <points> from the current amount of A_HP/A_SP/
+        A_MEP/A_PEP and return the new amount. However, the new amount
+        can't be less than <minimum> (default is 0). If <points> is given
+	    as reference (&variable), it contains after the call the
+	    actual number of points subtracted.
+        For Drain and Tire not giving of poitns will reduce a reasonalbe
+        default amount.
+	    The HEART_HEAL heartbeat will be started, but the
+	    Con/Int-Stat is _not_ 'used'.
+	    ReduceHP() also informs the living about its woundlevel if
+	    the commanded change is grave enought. It is used for both
+	    damaging and healing the living. If <check_ko> is
+	    non-zero, the damage done may knock the living out.
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+
+<!- begin ReduceSP ->
+	  int ReduceSP (int points, int minimum)
+	    Subtract <points> from the current amount of A_SP if this
+	    won't lower the value below <minimum>.
+	    Return the amount subtracted (always equal to <points>) on
+	    success, and 0 if A_SP was too low.
+	    On success, the HEART_HEAL heartbeat will be started, but
+	    the Int-Stat is _not_ 'used'.
+	    Note: For compatibility reasons this function is named
+	      analogue to ReduceHP(), but differs in function.
+<!- end -> 
+
+<!- begin RateHP ->
+<!- begin RateSP ->
+<!- begin RatePEP ->
+<!- begin RateMEP ->
+	  int A_RATE_HP  "RateHP"
+	  int A_RATE_SP  "RateSP"
+	  int A_RATE_PEP "RatePEP"
+	  int A_RATE_MEP "RateMEP"
+	    The basic A_HP/A_SP/A_PEP/A_MEP regeneration rate in
+        1/10-points per heartbeat.  It can't be a value less than 1.
+	    Setting it also sets the P_REG_HP/P_REG_SP/P_REG_PEP/P_REG_MEP.
+	    Do NOT temper with these values. Use P_REG_HP/P_REG_SP for
+	    things like healing potions, illnesses and else.
+	    These attributes are initialised to HP_RATE resp. to
+	    SP_RATE from /sys/health.h .
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+
+<!- begin RegHP ->
+<!- begin RegSP ->
+<!- begin RegPEP ->
+<!- begin RegMEP ->
+	  int P_REG_HP  "RegHP"
+	  int P_REG_SP  "RegSP"
+	  int P_REG_PEP "RegPEP"
+	  int P_REG_MEP "RegMEP"
+	    The current effective A_HP/A_SP/A_PEP/A_MEP regeneration
+        rate in 1/10-points per heartbeat.
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+
+<!- begin AddRegHP ->
+<!- begin AddRegSP ->
+<!- begin AddRegPEP ->
+<!- begin AddRegMEP ->
+	  int AddRegHP (int diff)
+	  int AddRegSP (int diff)
+	  int AddRegPEP (int diff)
+	  int AddRegMEP (int diff)
+	    Add <diff> to the current P_REG_HP/P_REG_HP/P_REG_PEP/P_REG_MEP
+        and return the result.
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+
+<!- begin MaxPoison ->
+	  int A_MAX_POISON  "MaxPoison"
+	    The threshold value of how much poison points a living can
+	    stand w/o direct damage.
+	    It is hardcoded to a value depending on the livings A_CON.
+<!- end -> 
+
+<!- begin Poison ->
+	  int A_POISON  "Poison"
+	    The amount of poison points the living has currently
+	    soaked.
+	    The value can't be set for netdead players, and must be at
+	    least 0.
+	    If its set, it starts the HEART_HEAL heartbeat.
+	    Also, if the set value is greater than A_MAX_POISON, A_HP
+	    will be reduced by the difference.
+<!- end -> 
+
+<!- begin AddPoison ->
+	  int AddPoison (int points)
+	    Add <points> to the current amount of A_POISON and returns
+	    the result.
+<!- end -> 
+
+<!- begin RatePosion ->
+	  int P_RATE_POISON  "RatePoison"
+	    The basic A_POISON degeneration rate in 1/10-points per heartbeat.
+	    It can't be a value less than 1.
+	    Setting it also sets the P_DEG_POISON.
+	    Do not temper with this value. Use P_DEG_POISON for
+	    things like poison potions.
+	    This attribute is initialised to POISON_RATE from
+	    /sys/health.h .
+<!- end -> 
+
+<!- begin DegPosion ->
+	  int P_DEG_HP  "DegPoison"
+	    The current effective A_POISON degeneration rate in 1/10-points
+	    per heartbeat.
+<!- end -> 
+
+<!- begin AddDegPosion ->
+	  int AddDegPoison (int diff)
+	  int AddRegSP (int diff)
+	    Add <diff> to the current P_DEG_POISON and return the
+	    result.
+<!- end -> 
+
+	It is advisable only to use the Addxxx() functions to change
+	the settings.
+
+	Due to its special effects, an overload of the living is not
+	reflected in A_RATE_HP/A_REG_HP, but instead computed on the
+	fly in the HEAL heartbeat.
+	If the P_LOAD gets greater than LOAD_THRESH%, the effective
+	RATE_HP is proportionally reduced until it reaches 0 for a
+	100% P_LOAD. If the load is even larger (up to 200% is
+	possible), the effective RATE_HP goes negative down to a
+	minimum of the set RATE_HP negative. The damage caused by this
+	negative rate is immediately computed, and if the A_HP fall
+	below LOAD_MINHP(A_MAX_HP) due to this, the livings drops
+	enough things to reach a load of 50%.
+	However, the overload can reduce the effective RATE_HP just down
+	to 0 as far as the other computations in the HEAL heartbeat are
+	concerned.
+
+<!- begin Health ->
+	  int     P_HEALTH       "Health"
+	    The health of the living as denoted by its P_HP/P_MAX_HP
+	    relation, returned as an integer in the range (0..100).
+	    This property can't be set.
+<!- end -> 
+
+<!- begin HealthMsg ->
+	  string  P_HEALTH_MSG   "HealthMsg"
+	    Returns a short string describing the health of the living.
+	    It is in fact produced by HealthMsg() (see below).
+	    This property can't be set.
+
+	  string HealthMsg (int health, void|int stunned)
+	    Returns a short string describing the given <health> and
+	    the <stunned>.
+<!- end -> 
+
+
+<!- alias wimpy whimpy ->
+<!- begin Whimpy ->
+	  mixed A_WHIMPY  "Whimpy"
+	    The threshold of A_HP below which the living would run
+	    away.
+	    The attribute can be an integer, giving the absolute
+	    number of A_HP, or a string containing the percentual
+	    amount of A_HP.
+<!- end -> 
+
+
+<!- begin XP ->
+	  int A_XP  "XP"
+	    The amount of experience points the living has.
+<!- end -> 
+
+<!- begin AddXP ->
+	  int AddXP (int diff)
+	    Adds <diff> points to A_XP and returns the result.
+<!- end -> 
+
+
+<!- begin KillXP ->
+<!- begin QueryKillXP ->
+	  int P_KILL_XP   "KillXP"
+	    This is the amount of experience points an attacker gets
+	    for killing this living. If not set, or set to 0, a
+	    default value computed from A_XP is returned upon query.
+	    The function
+
+	      int QueryKillXP (void|int count)
+
+	    optionally gets passed the number of attackers as
+	    argument, and should take this into account.
+	    A <count> of 0 is equal to 'one attacker'.
+<!- end -> 
+<!- end -> 
+
+
+<!- begin HealHP ->
+<!- begin HealSP ->
+<!- begin HealPEP ->
+<!- begin HealMEP ->
+	To apply damage or healing to a living, use these functions:
+
+	  int HealHP (int amount)
+	  int HealSP (int amount)
+	  int HealPEP (int amount)
+	  int HealMEP (int amount)
+	    Apply <amount> points of healing to the livings HPs/SPs,
+	    result is the amount of points actually healed.
+	    The HP/SP can not be healed to a value greater than
+	    A_MAX_HP/A_MAX_SP though.
+	    The CON/INT stat is used once.
+<!- end -> 
+<!- end -> 
+<!- end -> 
+<!- end -> 
+
+<!- begin Heal ->
+	  void Heal (int amount)
+	    Does HealHP(amount) and HealSP(amount) in one call.
+<!- end -> 
+
+<!- begin DoDamage ->
+	  int DoDamage (int damage, void|int gentle)
+	    Apply <damage> points of damage to the living.
+	    It is not possible to damage netdead players or ghosts.
+	    If <gentle> is specified, it is the number of HPs the
+	    victim should have after the attack. Positive, it is the
+	    number itself, negative, it is the number given in percent
+	    of A_MAX_HP.
+	    The amount will be subtracted from the current amount of
+	    A_HP, and the HEART_HEAL heartbeat is started.
+	    Also, a MSG_DAMAGE will be issued, and the living will be
+	    notified about grave changes in its health.
+	    The amount of damage done is returned.
+	    If there are no HP left, the living will die immediately.
+	    If the living survives, and the A_HP are below the A_WHIMPY
+	    threshhold, it will try to go away.
+	    Note that this function does _not_ counterattack by
+	    itself.
+
+	The MSG_DAMAGE contains this elements
+
+	  object DAMAGE_CAUSE : the object causing the damage.
+	  int    DAMAGE_AMOUNT: the amount of damage done.
+
+	Whenever DoDamage() is called, the stat 'Con' is used.
+<!- end -> 
+
+<!- begin heart_beat ->
+	The healing is done in the heartbeat:
+
+	  void heart_beat()
+	    If the living is knocked-out, a check against its constitution
+	    and health is done, which on success causes an immediate
+	    awakening of the living.
+	    The A_RATE_HP/damage handling possibly caused by
+	    overload is handled.
+	    Apply the A_DEG_POISON, A_REG_SP and A_REG_HP to the
+	    living to heal it, refresh it and to decrease the amount
+	    of poison soaked. HP/SP healing does not take place during
+	    combat.
+	    It is possible these will have the contrary effect and the
+	    living will die, e.g. if the poison can't be degraded fast
+	    enough.
+	    If A_POISON is greater than A_MAX_POISON, it will cause
+	    the difference in points to damage to A_HP. Also, the
+	    difference will be reduced by the half.
+	    If A_POISON is not zero, but below A_MAX_POISON, the
+	    effective HP regeneration will be reduced proportionally.
+	    If during one call neither of the values changed, the
+	    HEART_HEAL heartbeat will be stopped.
+
+	Note that the handling with 1/10-points for the regeneration
+	rates will automatically cause a delay of a few heart beats
+	between actual changes of HP/SP/POISON.
+<!- end -> 
+
+<!- begin Die ->
+	The death of a living is done with this functions:
+
+	  void Die (void|int silent)
+	    The living died.
+	    It is set to be a ghost, all combat (and the heart) is
+	    stopped, the A_XP is reduced.
+	    If the living was killed, the alignment of the killer is
+	    updated, and all current enemies will get XP_GAIN(livings A_XP
+	    divided by the number of enemies) experience points, but not
+	    more than MAX_XP_ADD. The killer will get twice the amount
+	    of the other combattants.
+	    Then, a corpse is created for the living (default is
+	    /std/corpse), all carried objects are transferred into the
+	    corpse and the corpse is triggered to decay.
+	    The living finally issues a MSG_DIE (with the only element
+	    'object DIE_CORPSE' denoting the corpse object left
+	    behind) and calls Death().
+	    If silent is zero, the killer and attackers will get a
+	    message about their victory.
+<!- end -> 
+
+<!- begin LeaveCorpse ->
+	  object LeaveCorpse()
+	    This function is called from Die() and has to create the
+	    corpse (according to A_CORPSE) and move all possessions
+	    into it. Result is the corpse object, or 0 on error.
+<!- end -> 
+
+<!- begin Death ->
+	  void Death (void|object * killers)
+	    This function is called at the end of the death process of
+	    a living. It may do now something fancy with the ghost of
+	    the living.
+	    Argument is the (possibly empty) list of active enemies at
+	    the time of death. If this_player() exists, it is _the_
+	    killer.
+	    Default is just a selfdestruct by remove(), but player
+	    objects for example will have a second life here.
+<!- end -> 
+
+<!- begin Corpse ->
+	The corpse to use is determined by a non-builtin attribute:
+
+	  string A_CORPSE  "Corpse"
+	    Filename of the corpse to clone if the living dies,
+	    default is "/std/corpse".
+	    If set to a non-string, no corpse at all is created.
+<!- end -> 
+
+
+<!- begin Resistance ->
+	To ease the handling of resistance, the module also implements
+	a soft(!) property and two access functions:
+
+	  mapping P_RESISTANCE  "Resistance"
+	    When set, this is a mapping of resistances. Each
+	    resistance type (an integer or string) is used as key for
+	    the resistance value (always integer).
+	    A living with no resistance may have 0 or ([]) here.
+
+	  int Resistance (mixed type)
+	    Return the resistance for <type>, as stored in
+	    P_RESISTANCE.
+
+<!- begin AddResistance ->
+	  int AddResistance (mixed type, int delta)
+	    Change the resistance <type> by <delta> and store it in
+	    P_RESISTANCE.
+<!- end -> 
+
+	Note that the interpretation of the resistance entries is
+	solely up to the caller.
+<!- end -> 
+
+	The module is initialised in
+
+	  void create ()
+
+	These functions are assumed as being available in other
+	modules:
+	  std/base               : Set(), Query()
+	  std/living/actions     : QueryStunned(), SetStunned()
+	  std/living/attributes  : QueryAttr(), SetAttr()
+	  std/living/description : QueryAlign(), QueryLState(), SetLState()
+				 : QueryName(), QueryRace()
+	  std/living/enemies     : QueryEnemies(), StopAllCombat()
+	  std/living/moving      : remove(), Whimpy()
+	  std/living/heart       : DropHeart(), GetHeart(), CheckHeart()
+	  std/living/stats       : QueryCon(), QueryInt(), UseStat()
+	  std/living/restrictions: QueryWeight(), QueryWeightContent(),
+				   QueryLoad()
+
+
+<!- begin living_chat ->
+DESCRIPTION - /std/living/chat
+	One important thing about livings is the ability to chat and
+	to answer question.
+<!- end -> 
+
+<!- begin ChatChance ->
+	  int P_CHAT_CHANCE  "ChatChance"
+	    A value in 0..100 giving the chance per heartbeat that
+	    the living will say something.
+	    Setting the value to something non-zero will (re)start the
+	    call_outs to OneChat().
+<!- end -> 
+
+<!- begin AChatChance ->
+	  int P_ACHAT_CHANCE  "AChatChance"
+	    A value in 0..100 giving the chance per combat round that
+	    the living will say something.
+<!- end -> 
+
+<!- begin Chats ->
+	  mixed * P_CHATS  "Chats"
+	    The collections of chats to be said over the time.
+	    Each chat can be a string, which is just said, or a
+	    closure, which is called to return the string to say (or 0
+	    to be silent).
+<!- end -> 
+
+<!- begin AChats ->
+	  mixed * P_ACHATS  "AChats"
+	    The collections of chats to be said during combat.
+	    Each chat can be a string, which is just said, or a
+	    closure, which is called with the current enemy as
+	    argument to return the string to say (or 0 to be silent).
+<!- end -> 
+
+	The chatting is done using self-initiated call_outs to this
+	function:
+
+<!- begin DoChat ->
+	  void DoChat ()
+	    This function does one chat by selecting randomingly one
+	    from P_CHATS and saying it.
+<!- end -> 
+
+<!- begin OneChat ->
+	  void OneChat (int justSched)
+	    If <justSched> is zero, one call to DoChat() is made and a
+	    news call to OneChat() is scheduled.
+	    If <justSched> is negative, a new call to OneChat() is
+	    scheduled only if there is none pending yet.
+	    Else, just a new call is scheduled.
+	    The call_out is scheduled with an delay approbiate to
+	    P_CHAT_CHANCE to OneChat() to continue chatting IF there
+	    is a living around to hear it.
+	    If P_CHAT_CHANCE is zero, nothing is scheduled.
+<!- end -> 
+
+
+<!- begin DoAttackChat ->
+	  void DoAttackChat (object enemy)
+	    This function issues an randomingly selected attack chat
+	    from P_ACHATS to the room, if the P_ACHAT_CHANCE permits.
+	    It is called directly by the combat heartbeat.
+<!- end -> 
+
+	These functions ease the initialization of the chats:
+
+<!- begin InitChats ->
+	  void InitChats (int chance, mixed *strs)
+	    Sets P_CHAT_CHANCE to <chance> and P_CHATS to <strs>.
+<!- end -> 
+
+<!- begin InitAChats ->
+	  void InitAChats (int chance, mixed *strs)
+	    Sets P_ACHAT_CHANCE to <chance> and P_ACHATS to <strs>.
+<!- end -> 
+
+<!- alias talks talk ->
+<!- begin talk ->
+	The living is also able to react on things it hears using 'talks'.
+	Everything it hears is parsed to be one of this forms:
+
+	  '<who> <type><match> <what>'
+	  '<who> <type><match><what>'
+	  '<who> <type><match>'
+	  '<who> <type> <match> <what>'
+	  '<who> <type> <match><what>'
+	  '<who> <type> <match>'
+
+	<type> and <match> are predefined (default is the empty string ""),
+	<who> and <what> are parsed from the message heard.
+
+	So every talk is described by <type> and <match>, and if a
+	parse was successful, the <who> (and possible <what>) are
+	given to an 'talkfun'ction in a 'talkobject' to process.
+
+	  string P_TALK_MATCH  "TalkMatch"
+	    An array of <match> strings.
+
+	  string P_TALK_TYPE   "TalkType"
+	    An array of <type> strings.
+
+	  mixed  P_TALK_FUN    "TalkFun"
+	    An array of function designations.
+	    Each can be the string with a function name, or a closure.
+
+	  int    P_TALK_DELAY  "TalkDelay"
+	    An array of integers defining the delay between the match
+	    of a talk and the call to its function. 0 means no delay.
+
+	  mixed  P_TALK_OBJ    "TalkObject"
+	    The talk object to call the talk function in.
+	    It can be given as string with the object name, or as
+	    actual object.
+	    Talks for which a closure is set as function, ignore the
+	    talkobject.
+
+<!- begin InitMatch ->
+	  void InitMatch ( mixed  *fun  , string *type
+			 , string *match, int    *delay
+			 , object ob   )
+	    Sets P_TALK_FUN from <fun>, P_TALK_TYPE from <type>,
+	    P_TALK_MATCH from <match>, P_TALK_DELAY from <delay> and
+	    P_TALK_OBJ from <obj>.
+<!- end -> 
+
+<!- begin AddMatch ->
+	  void AddMatch ( mixed  fun  , string type
+			, string match, int    delay )
+	    Adds <fun> to P_TALK_FUN, <type> to P_TALK_TYPE, <match>
+	    to P_TALK_MATCH and <delay> to P_TALK_DELAY.
+	    Multiple calls to this function can emulate the all-in-one
+	    behaviour of InitMatch().
+<!- end -> 
+
+<!- begin TestMatch ->
+	  mixed TestMatch (string str)
+	    Match the given <str> against all set talks and return the
+	    result of the talkfunction call (or 0).
+<!- end -> 
+<!- end -> 
+
+<!- begin menu ->
+<!- begin talk ->
+    Moreover a living is able to perform menu driven talks.
+    Using this the player is presented a menu where he/she can
+    choose a predefine answer. This leads to a talk tree like this
+
+                                           talk with orc
+                                               |
+                           A-------------------B-----------C
+                           |                   |           !
+             AA------------AB------AC       BA----BB      kill
+             |             |       !        !     !
+       AAA--AAB------AAC   *2)    kill      *1)  kill
+        |    |        |
+      AAAA  *3)   AACA-------AACB--AACC
+        !          |          |     !
+               AACAA--AACAB   *4)
+                 !      !
+
+<!- end -> 
+<!- end -> 
+
+<!- begin AddTalk ->
+    varargs int AddTalk(mixed key,mixed talk,mixed answer,string result)
+      Add a talk menu entry to the NPC
+      string|string *key: The talk sequence idendifier (e.g. "acab")
+      string|closure talk: The string or the function returning a
+                   string which will be shown in the menu corresponding
+                   to "acab". The closure gets the arguments object who,
+                   string talk_sequence, i.e. the player which is talking
+                   and the talk sequence "acab" to reuse one function
+      string|closure answer: The text which the NPC will answer to
+                   the player when "acab" is said. In case of a closure
+                   nothing is said but the closure executed with the
+                   same arguments as described above in 'talk'.
+     string result: 'goto' modifier - let the talk proceed as if
+                   the sequence given with 'result' (e.g. "abbb") had
+                   been entered. In this way you can jump to another
+                   part of the talk tree avoiding double writing
+     return: 1: ok, 0:fault
+<!- end -> 
+
+<!- alias questions question ->
+<!- begin question ->
+	Finally, the living can react on questions.
+	This is implemented as a command 'ask' bound to the function
+	fask().
+	The answers (and the default 'shrug message') can be set as
+	strings or as closures. In the latter case, the closure is
+	evaluated when needed with the questioned keyword as argument
+	and has to return the actual answer.
+	A third possibility is to set the answer/shrugmessage to an
+	array of two strings - the first is sent to the player asking,
+	the second the the environment. As 0 or "" entries are
+	ignored, 'silent' asking is possible (only the asking player
+	hears the answer).
+<!- end -> 
+
+<!- begin questions ->
+	  mapping P_QUESTIONS  "Questions"
+	    A mapping containing the answers, indexed by the key
+	    strings in a question.
+	    To ease initialisation, the property may be _set_ using a
+	    flat array of: ({ <question>, <answer>, <question>,
+	    <answer>... }), whereas each <question> may be a single
+	    string, or an array of strings which then all get the same
+	    answer.
+<!- end -> 
+
+<!- begin AddQuestion ->
+	  void AddQuestion (string|string* q, mixed a, void|int silent)
+	    Add an answer <a> for the question <q>.
+	    Setting <silent> to non-zero is an easy way to specify
+	    'silent' answers:
+	       AddQuestion("foo", "bar", 1)
+	    is equivalent to
+	       AddQuestion("foo", ({ "bar", 0 }))
+	    <q> may be an array of questions.
+<!- end -> 
+
+<!- begin ShrugMsg ->
+	  mixed P_SHRUG_MSG   "ShrugMsg"
+	    The default answer given if a living does not know the
+	    answer to a question. As the answers, this may be a string
+	    or a closure. If not set, "<name> shrugs helplessly." is
+	    used as default.
+<!- end -> 
+
+	Each question must be unique!
+	The function called for a question 'asked', is
+
+<!- begin fask ->
+      int fask (string str, void|int inh)
+	    Accept a question of type 'ask <living name> about <q>'
+	    ('for' may be replaced for 'about' as well) and write the
+	    answer if <q> is one of the set questions in P_QUESTIONS.
+	    <living name> must be of course the asked living.
+	    If the command fails, a decent failure message is set
+	    using notify_fail().
+	    If <inh> is non-zero, the function returns a special
+	    code on failures instead of the normal 0:
+	      ASK_OK        : question understood and answered
+	      ASK_NO_ARG    : <str> is missing
+	      ASK_CANT_PARSE: <str> is not of the required format,
+			      or <living name> does not denote this
+			      living
+	      ASK_SHRUG     : question understood, but no answer was
+			      provided.
+	    By overloading fask() and using these codes more complicated
+	    questions can be added.
+<!- end -> 
+
+	The following standard functions are used to implement talks
+	and questions:
+
+<!- begin catch_tell ->
+      void catch_tell (string str)
+	    This will get all the messages from outside.
+	    If no talk object is set, or the living hears itself,
+	    nothing is done.
+	    Else the <str> heard is passed to TestMatch().
+	    Recursion is prevented using a semaphore scheme and a
+	    buffer.
+<!- end -> 
+
+	  void ResetSema ()
+	    Reset semaphore and buffer of catch_tell().
+	    Use this in emergencies only!
+
+	  void SetByCmsg(int status)
+	    (Re)Sets an internal flag allowing the next (and only the
+	    next) use of catch_tell() coming from the living itself.
+	    This is necessary to 'see' the messages received by catch_msg().
+
+	  void init ()
+	    If questions are set, the command 'ask' is bound to
+	    fask().
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/description: QueryName()
+
+
+<!- begin living_combat ->
+DESCRIPTION - /std/living/combat
+	This module implements the combat-related functions of the
+	living.
+<!- end -> 
+
+	The functions handling the attacking:
+
+<!- begin Kill ->
+	  void Kill (object living)
+	    Starts an attack on living by putting it into the list of
+	    current enemies and turning on the combat heartbeat.
+<!- end -> 
+
+<!- begin Attack ->
+	  void Attack ()
+	    Called by the heartbeat, this handles the attack chatting
+	    and makes the living actually attack by calling do_hit for
+	    every wielded weapon and free hand.
+<!- end -> 
+	    
+<!- begin CalcIsHit ->
+	  status CalcIsHit(object attacker)
+	    Decides whether the attack on this living by living object
+	    attacker succeeds or misses. This is done by some calculation
+	    using both living's dexterity and a random factor.
+<!- end -> 
+
+<!- begin do_hit ->
+	  mixed do_hit (mixed x)
+	    Execute one hit to an enemy with weapon x.
+	    The enemy will be selected at random from the list of
+	    current enemies.
+	    Weapon may either be an object variable, the actual weapon
+	    with which this attack takes place, or an integer number,
+	    in which case it represents an element in the hand-array of
+	    this living.
+	    Apropriate messages will be displayed to all living involved
+	    and the damage will be calculated and applied to the enemy
+	    by a call to the enemy's Defend.
+	    Return value is the enemy attacked.
+<!- end -> 
+
+<!- begin Defend ->
+	  int Defend (int dam, int dam_type, mixed weapon)
+	    Calculate the defence of this living against an attack doing
+	    dam points of damage of damage-type dam_type. weapon can be
+	    either an object (the weapon with which the attack was done),
+	    0 (if the attacker attacked barehanded) or a logical
+	    combination of different flags.
+	    If both this living and the attacker are interactive players
+	    (and not both of them are wizards), the attack is logged.
+	    If weapon is an integer containing the flag DEFEND_F_NOLIV,
+	    the attack will succeed 100%, else the success will depend
+	    on a chance calculated from the dexterity of both this
+	    living and the attacking living.
+	    The protection this living has against dam_type is calculated
+	    from its intrinsic defences and the defences of all armours
+	    worn. It is subtracted from the damage dam done by the
+	    attack. If the resulting damage is < 1, it is set to 1.
+	    Finally, DoDamage is called in this living with this resulting
+	    damage as parameter, and the appropriate combat messages are
+	    displayed.
+	    The return value is the damage actually done to the living.
+<!- end -> 
+
+	To check if this living will automatically attack another
+	living, the following functions and properties are checked:
+
+<!- begin CheckAutoAttack ->
+	  int CheckAutoAttack (object victim)
+	    Called by init(), this function returns 1 if victim will
+	    be attacked automatically, 0 else.
+	    Checks if this living is aggressive at all, if victim is
+	    a ghost or a friend of this living, and if this living
+	    can actually see victim.
+	    If victim is a wizard with wizmode turned on, 0 is returned
+	    in any case.
+<!- end -> 
+
+<!- begin Aggressive ->
+	  int P_AGGRESSIVE              "Aggressive"
+	    Aggressive livings may automatically attack other livings
+	    they encounter.
+	    This property is used by CheckAutoAttack() to decide if
+	    this living will automatically attack another one.
+<!- end -> 
+
+<!- begin AttackChance ->
+	  int P_ATTACK_CHANCE           "AttackChance"
+	    The chance that an aggressive living will actually attack.
+	    It ranges from 0 to 1000 (default).
+	    This is checked by CheckAutoAttack().
+<!- end -> 
+
+<!- begin FriendObj ->
+	  object P_FRIEND_OBJ           "FriendObj"
+	    The object in which CheckAutoAttack() calls IsFriend() to
+	    find out if a living is a friend of this living (and
+	    therefore won't be attacked automatically).
+	    If P_FRIEND_OBJ is not set, IsFriend is called in this
+	    object.
+<!- end -> 
+
+<!- begin IsFriend ->
+	  int IsFriend (object victim)
+	    Returns 1 if victim is a friend of this living, 0 else.
+	    The result is used in CheckAutoAttack() to choose
+	    whether to attack victim or not (friends are never
+	    attacked automatically).
+	    Per default, IsFriend returns 1 if victim and this living
+	    both are NPC or both are Player.
+<!- end -> 
+
+<!- begin SeeInvis ->
+<!- begin SeeInvisChance ->
+	  int P_SEE_INVIS               "SeeInvis"
+	  int P_SEE_INVIS_CHANCE        "SeeInvisChance"
+	    These non-builtin properties show whether or not the living
+	    can see invisible livings. Invisible livings can only be
+	    attacked if this living can see them.
+	    P_SEE_INVIS_CHANCE ranges from 1 to 1000, giving the chance
+	    that this living will actually see the invis living (default
+	    is 1000).
+	    If P_SEE_INVIS is 0, P_SEE_INVIS_CHANCE will have no effect.
+	    These properties are checked by CanSeeLiving() in
+	    /std/living/description which in turn is checked by
+	    CheckAutoAttack().
+<!- end -> 
+<!- end -> 
+
+	A living may be delayed in its actions for a number of
+	heartbeats by a combat delay, which is handled by the
+	following functions:
+
+<!- begin SetCombatDelay ->
+	  mixed SetCombatDelay (int time, string s)
+	    Set a combat delay of time heartbeats for this living with
+	    a combat delay message s.
+	    While the living has a combat delay set, it cannot fight,
+	    move (on its own), cast a spell etc.
+	    If no delay message has been set, it is automatically set
+	    to 'You are unconscious.'.
+	    The combat delay is decreased by one every heartbeat, the
+	    delay message written to the living every second heartbeat.
+	    The delay set will be returned.
+<!- end -> 
+
+<!- begin QueryCombatDelay ->
+	  mixed QueryCombatDelay ()
+	    Returns the current combat delay, that is the number of
+	    heartbeats that this living is still delayed.
+<!- end -> 
+
+<!- begin SetCombatDelayMsg ->
+	  string SetCombatDelayMsg (string s)
+	    Set the delay message that will be displayed to this living
+	    as long as it stayes delayed. Default is 'You are unconscious.'
+<!- end -> 
+
+<!- begin QueryCombatDelayMsg ->
+	  string QueryCombatDelayMsg ()
+	    Return the delay message currently set.
+<!- end -> 
+
+	The properties showing the list of current enemies and livings
+	this living is currently hunting together with the functions for
+	their handling:
+
+<!- alias QueryEnemies Enemies ->
+<!- begin Enemies ->
+	  object *P_ENEMIES             "Enemies"
+	    The array of current enemies.
+	    This Property is read-only, use AddEnemy() and RemoveEnemy()
+	    to add/remove enemies from the array.
+<!- end -> 
+
+<!- alias QueryHunters Hunters ->
+<!- begin Hunters ->
+	  object *P_HUNTERS             "Hunters"
+	    The array of livings this living is currently hunting.
+	    This Property is read-only, use AddHunter() and RemoveHunter()
+	    to add/remove livings from the array.
+<!- end -> 
+
+<!- begin AddEnemy ->
+	  status AddEnemy (object e)
+	    Add enemy e to the array of current enemies.
+	    If the function succeeds, the function NotifyAddEnemy()
+	    is called in all objects following this living with
+	    enemy e as parameter.
+	    Return value is 1 on success, 0 on failure.
+<!- end -> 
+
+<!- begin RemoveEnemy ->
+	  status RemoveEnemy (object e)
+	    Remove enemy e from the array of current enemies.
+	    If the remove is successful, the function 
+	    NotifyRemoveEnemy() is called in all objects
+	    following this living with enemy e as parameter.
+	    Return value is 1 on success, 0 on failure.
+<!- end -> 
+
+<!- begin AddHunter ->
+	  status AddHunter (object h)
+	    Add living h to the array of livings currently hunted by
+	    this living.
+	    If the function succeeds, the function NotifyAddHunter()
+	    is called in all objects following this living with
+	    living h as parameter.
+	    Return value is 1 on success, 0 on failure.
+<!- end -> 
+
+<!- begin RemoveHunter ->
+	  status RemoveHunter (object h)
+	    Remove living h from the array of livings currently
+	    hunted by this living.
+	    If the remove is successful, the function 
+	    NotifyRemoveHunter() is called in all objects
+	    following this living with living h as parameter.
+	    Return value is 1 on success, 0 on failure.
+<!- end -> 
+
+<!- begin StartHunting ->
+	  void StartHunting (object e)
+	    Remove enemy e from the list of current enemies and put it
+	    into hunters. e will receive a message that it is now
+	    hunted by this living.
+<!- end -> 
+
+<!- begin StopHunting ->
+	  void StopHunting (object e)
+	    Remove enemy e from both the list of current enemies and
+	    hunters.
+<!- end -> 
+
+<!- begin StopAllHunting ->
+	  void StopAllHunting ()
+	    Clean the lists of current enemies and hunters and make all
+	    enemies/hunters found stop hunting this living.
+<!- end -> 
+
+<!- begin StopAttack ->
+	  int StopAttack ()
+	    Set the enemies- and hunters-arrays to the empty arrays
+	    without notifying any enemies/hunters.
+	    Return value is 1.
+<!- end -> 
+
+	  int stop_hunting_mode ()
+	    Call StopAttack() and write an acknowledgement to the
+	    current player.
+	    Return value is 1.
+
+	The functions dealing with the weapons this living is wielding
+	are:
+
+<!- begin wieldme ->
+	  int wieldme (object ob)
+	    Wield weapon ob if possible.
+	    Returns 1 on success, 0 if ob couldn't be wielded.
+	    Call this function if you want this living to wield weapon
+	    ob. All appropriate checks and notifications are made.
+<!- end -> 
+
+<!- begin unwieldme ->
+	  void unwieldme (object ob)
+	    Unwield weapon ob.
+	    Call this function if you want this living to unwield weapon
+	    ob. All appropriate checks and notifications are made.
+<!- end -> 
+
+<!- alias QueryWeapons Weapons ->
+<!- begin Weapons ->
+	  object *P_WEAPONS             "Weapons"
+	    The weapons currently wielded by this living.
+	    This property is read-only.
+<!- end -> 
+
+<!- begin Grip ->
+	  int Grip (object ob)
+	    Grip equipment object ob.
+	    The appropriate number of free hands given by 
+	    ob->QueryNumberHands() is covered with ob if it isn't
+	    already wielded.
+	    Return value is 1 if the action succeeded (that is enough
+	    free hands could be found or ob is already held in hand),
+	    else 0.
+	    This function is called by the weapon itself after all
+	    appropriate checks have been done and shouldn't be called
+	    manually.
+<!- end -> 
+
+<!- begin Ungrip ->
+	  void Ungrip (object ob)
+	    The hands covered by ob are freed.
+	    This function is called by the weapon itself after all
+	    appropriate checks have been done and shouldn't be called
+	    manually.
+<!- end -> 
+	    
+<!- begin AddWeapon ->
+	  int AddWeapon (object ob)
+	    Add the weapon ob to P_WEAPONS and set its P_WIELDED to
+	    this object.
+	    Return value is 1 on success, else 0.
+	    This function is called by the weapon itself after all
+	    appropriate checks have been done and shouldn't be called
+	    manually.
+<!- end -> 
+
+<!- begin RemoveWeapon ->
+	  void RemoveWeapon (object ob, int flags)
+	    Remove the weapon ob from P_WEAPONS and set its P_WIELDED
+	    to 0.
+	    This function is called by the weapon itself after all
+	    appropriate checks have been done and shouldn't be called
+	    manually.
+<!- end -> 
+
+	The functions dealing with the armours this living is wearing
+	are:
+
+<!- begin wearme ->
+	  int wearme (object ob)
+	    Wear armour ob if possible.
+	    Returns 1 on success, 0 if ob couldn't be worn.
+	    Call this function if you want this living to wear armour
+	    ob. All appropriate checks and notifications are made.
+<!- end -> 
+
+<!- begin removeme ->
+	  void removeme (object ob)
+	    Remove armour ob.
+	    Call this function if you want this living to unwear
+	    armour ob. All appropriate checks and notifications are made.
+<!- end -> 
+
+<!- alias QueryArmours Armours ->
+<!- alias QueryArmour Armours ->
+<!- begin Armours ->
+	  object *P_ARMOURS             "Armours"
+	    The armours currently worn by this living.
+	    This property is read-only.
+<!- end -> 
+
+<!- begin AddArmour ->
+	  int AddArmour (object ob)
+	    Add the armour ob to P_ARMOURS and set its P_WORN to this
+	    object.
+	    Return value is 1 on success, else 0.
+	    This function is called by the armour itself after all
+	    appropriate checks have been done and shouldn't be called
+	    manually.
+<!- end -> 
+
+<!- begin RemoveArmour ->
+	  void RemoveArmour (object ob, int flags)
+	    Remove the armour ob from P_ARMOURS and set its P_WORN
+	    to 0.
+	    This function is called by the armour itself after all
+	    appropriate checks have been done and shouldn't be called
+	    manually.
+<!- end -> 
+
+	Some more properties describing the living are built into
+	this module:
+
+<!- alias QueryAC AC ->
+<!- begin AC ->
+	  int P_AC                      "AC"
+	    The 'built-in' AC of this living
+<!- end -> 
+
+<!- alias QueryDefences Defences ->
+<!- begin Defences ->
+	  int *P_DEFENCES               "Defences"
+	    The defences-array of this living, holding the AC in
+	    element 0. Offsets to the AC for individual damage-types
+	    are held in this array indexed by the damage-type.
+<!- end -> 
+
+<!- begin AddDefence ->
+	  void AddDefence (int type, int val)
+	    This function sets the AC-offset for the damage-type 'type'
+	    to 'val'.
+<!- end -> 
+
+<!- begin GetDefence ->
+	  int GetDefence (int type)
+	    Returns the protection offset for damage-type 'type'.
+<!- end -> 
+
+<!- alias QueryHands Hands ->
+<!- begin Hands ->
+	  mixed *P_HANDS                "Hands"
+	    The hands of the living.
+<!- end -> 
+
+<!- alias QueryCastObj CastObj ->
+<!- begin CastObj ->
+	  object P_CAST_OBJ             "CastObj"
+	    The magicobject controlling the spell currently cast by this
+	    living.
+<!- end -> 
+
+<!- alias QueryEquipObj EquipObj ->
+<!- begin EquipObj ->
+	  object *P_EQUIP_OBJ           "EquipObj"
+	    The  array of objects checked on wielding/wearing/
+	    unwielding/unwearing any pieces of equipment.
+	    This living itself as well as its race object are
+	    automatically included in P_EQUIP_OBJ.
+	    If you call QueryEquipObj(int flag) with a flag other
+	    than 0, the array will be returned without the living
+	    and its race object.
+<!- end -> 
+
+<!- begin AddEquipObj ->
+<!- begin RemoveEquipObj ->
+	  object *AddEquipObject (mixed obj)
+	  object *RemoveEquipObject (mixed obj)
+	    These functions allow to add to or remove from P_EQUIP_OBJ
+	    the object or array of objects obj.
+	    Return value is the resulting P_EQUIP_OBJ.
+	    This living itself as well as its race object can't
+	    be removed.
+<!- end -> 
+<!- end -> 
+
+
+	The following functions are redefined:
+
+	  void create ()
+	    Some basic properties are initialized.
+
+	  void init ()
+	    Via a call to CheckAutoAttack(this_player()), the living
+	    checks if it is aggressive against the current user and
+	    schedules an attack if necessary.
+
+<!- begin heart_beat ->
+	  int heart_beat ()
+	    If this living has enemies and no combat delay is set,
+	    an attack is scheduled by a call to Attack().
+	    In case of combat delay, the delay is reduced by 1 and
+	    an appropriate message displayed to this living.
+	    The enemy-array is cleaned, those enemies that disappeared
+	    will be put into the hunters array.
+	    Finally, if there are no more enemies and no combat delay,
+	    the combat heartbeat is dropped.
+<!- end -> 
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/description: QueryRaceObj(), CanSeeLiving(),
+				   QueryIsNPC(), QueryIsPlayer()
+	  /std/living/heart      : GetHeart(), DropHeart()
+	  /std/living/stats      : QueryCon(), QueryDex(), QueryInt(),
+				   QueryStr(), UseStat()
+	  /std/living/body       : DoDamage(), AddXP()
+
+
+<!- begin living_commands ->
+DESCRIPTION - /std/living/commands
+	This module implements a stack which grows and shrinks
+	according to the command level nesting.
+	Its primary use is to keep track of the notify_fail() data.
+	but can be used to store other data which needs to live just
+	for this very command.
+	Another important use is to delay the execution of functions
+	until that moment this very command has been finished (thus
+	replacing call_out("fun", 0)s).
+
+	For external users, only the functions command_me(),
+	SetCmdData(), QueryCmdData() and RegisterCmdFun() are of
+	interest, all other functions are managed by the mudlib alone.
+<!- end -> 
+
+<!- begin command_me ->
+	  int command_me (string cmd)
+	    Command the living to perform <cmd>.
+	    Result is 0 for failure, or the evaluation costs of the
+	    command.
+<!- end -> 
+
+	  mixed * QueryLastNotifyFail()
+	    Returns an array ({ <data>, <priority> }) with the
+	    notify_fail()-data of the last executed command.
+	    This information is valid until the next command given by
+	    the player resp. the next call to command_me().
+
+	  mixed SetCmdData (string name, mixed data)
+	    Stores the <data> under the <name> on the current frame of
+	    the stack.
+
+	  mixed QueryCmdData (string name)
+	    Retrieves the <data> stored under the <name> from the
+	    current frame of the stack. Data from other commands
+	    frames is inaccessible.
+	    The actual notify_fail-data is accessible under the name
+	    "NotifyFail" (the data might be 0).
+
+	  void RegisterCmdFun (string  fun, void|mixed arg)
+	  void RegisterCmdFun (closure fun, void|mixed arg)
+	  void RegisterCmdFun (mixed  *fun, void|mixed arg)
+	    Register function <fun> for execution with argument <arg>
+	    at the end of this very command. If <fun> has been
+	    registered before, overwrite that registration with this
+	    one.
+	    <fun> will be called with <arg> as first argument and an
+	    integer as second. If the latter is 0, it has been a normal
+	    command termination, if nonzero, the command ran into a
+	    runtime error and the mudlib just tries to clean it up.
+
+	    <fun> may take following forms:
+	     - a closure defining the function to call.
+	     - a string of the form "name" with <name> denoting the
+	       lfun to call in the registering object.
+	     - a string of the form "obj->name", denoting lfun <name>
+	       to call in object <obj>. <obj> is resolved according to
+	       resolve_file().
+	     - an array ({ obj, name }).
+
+
+	The following CmdData names are reserved for internal use:
+
+	  object  "PreviousPlayer" : The previous this_player()
+	  object  "ThisPlayer"     : don't use
+	  mixed  *"RegisteredFuns" : don't use
+	  mixed  *"NotifyFail"     : don't use
+
+
+	The stack is handled with the following functions - don't call
+	them manually!
+
+	  int QueryCmdDataSize ()
+	    Returns the current size of the stack.
+
+	  void ResetCmdData ()
+	    Empties the stack. It should be called every
+	    now and then from outside of commands (heart_beat(),
+	    reset()) to prevent memory leakages.
+
+	  void EmptyCmdData (int unwind)
+	    Empties the stack, executing the functions registered in
+	    each entry. <unwind> is passed as second parameter to
+	    those functions.
+	    This function is called during error clean ups.
+
+	  void PushCmdData ()
+	    Pushes a new 'default' entry onto the stack.
+	
+	  mapping PopCmdData(int unwind)
+	    Pops the topmost entry from the stack, generating a
+	    default entry if the stack is empty.
+	    Functions registered in the popped entry are executed,
+	    passing <unwind> as second parameter.
+	    Result is the popped entry, an mapping.
+
+	  void ExecuteRegistered (mapping entry, int unwind)
+	    Execute the functions registered in the given stack
+	    <entry>. <unwind> is passed as second parameter to the
+	    functions.
+
+<!- begin NotifyFail ->
+	  varargs void NotifyFail (string|closure msg, void|int pri)
+	    Sets a notify_fail message <msg> on the top of the stack if
+	    its <pri>ority is at least as high as the priority of the
+	    fail message already on the stack.
+	    The <msg> may be a string or a closure yielding the
+	    string.
+<!- end -> 
+
+
+<!- begin living_description ->
+DESCRIPTION - /std/living/description
+	This module implements the outer appearance and senses of the
+	living. For this it overloads some functions of
+	/std/thing/description and /std/room/description.
+
+	All livings are in one of three states: normal, ghosted or
+	frogged. The non-normal states lead to certain restrictions,
+	and also alter the appearance.
+	Additionally, ghosts have several advantages: they can see at
+	any lighting, don't suffer from hunger or thirst, can see
+	invisible beings and hidden exits and walk through closed
+	doors.
+	The gender of livings can be male, female or other. Ghosted
+	livings are always 'other'.
+<!- end -> 
+
+	These inherited properties are redefined as attributes:
+	  A_ADS        for  P_ADS
+	  A_IDS        for  P_IDS
+	  A_INT_LONG   for  P_INT_LONG
+	  A_INT_NOISE  for  P_INT_NOISE
+	  A_INT_SMELL  for  P_INT_SMELL
+	  A_INT_SHORT  for  P_INT_SHORT
+	  A_LONG       for  P_LONG
+	  A_NOISE      for  P_NOISE
+	  A_SHORT      for  P_SHORT
+	  A_SMELL      for  P_SMELL
+	  A_SIZE       for  P_SIZE
+
+	The short descriptions (A_SHORT, A_INT_SHORT, A_LONG,
+	A_INT_LONG) are redefined as this:
+
+	  string|string* A_SHORT      "Short"
+	  string|string* A_INT_SHORT  "IntShort"
+	  string|string* A_LONG       "Long"
+	  string|string* A_INT_LONG   "IntLong"
+	    The (internal) short/long description of the living.
+	    The value can be a single string, or an array of up to two
+	    strings for the possibles states of the living:
+	      [LSTATE_NORMAL] : normal
+	      [LSTATE_GHOST ] : ghosted
+	    If a string is not given, a default is used.
+
+	Following attributes and properties are builtin:
+
+<!- begin Actions ->
+	  int A_ACTIONS  "Actions"
+	    The number of actions the living has per combat round.
+<!- end -> 
+
+<!- begin Invis ->
+	  int A_INVIS  "Invis"
+	    Non-zero if the living is invisible.
+<!- end -> 
+
+<!- alias IVision Vision ->
+<!- alias UVision Vision ->
+<!- begin Vision ->
+	  int A_IVISION   "IVision"
+	    The lower light level the living needs to see.
+
+	  int A_UVISION  "UVision"
+	    The upper light level the living can use to see.
+<!- end -> 
+
+<!- alias MagicDefense MagicDefence ->
+<!- begin MagicDefence ->
+	  int A_MAGIC_DEFENCE  "MagicDefence"
+	    The ability of the living (0..100) to resist a spell
+	    casted on it.
+<!- end -> 
+
+<!- begin Level ->
+	  int A_LEVEL  "Level"
+	    The current 'level' of the living, whatever it means.
+<!- end -> 
+
+<!- begin LState ->
+	  int A_LSTATE  "LState"
+	    The state of the living:
+	      0 = LSTATE_NORMAL
+	      1 = LSTATE_GHOST
+	      3 = LSTATE_FROG
+	    Setting a living to non-NORMAL may force it to drop some
+	    of its belongings.
+	    It is not possible to unfrog frog-npcs. Frogged livings
+	    have an enforced P_SIZE of PSIZE_SMALL.
+<!- end -> 
+
+<!- begin Frog ->
+<!- begin Ghost ->
+	  int P_FROG   "Frog"
+	  int P_GHOST  "Ghost"
+	    These are just frontends to A_LSTATE.
+<!- end -> 
+<!- end -> 
+
+<!- begin Gender ->
+	  int A_GENDER  "Gender"
+	    The gender of the living:
+	      0 = GENDER_UNSET.
+	      1 = GENDER_MALE,
+	      2 = GENDER_FEMALE,
+	      3 = GENDER_OTHER (aka GENDER_NEUTER)
+<!- end -> 
+
+<!- begin Race ->
+	  string A_RACE  "Race"
+	    The race of the living.
+	    If this attribute is set in an uninitialized living (i.e.
+	    no race and no long description set yet), the living is
+	    initialized with the default values from the RACEMASTER.
+<!- end -> 
+
+<!- begin RaceObj ->
+	  object P_RACE_OBJ  "RaceObj"
+	    If the A_RACE of the living is something official,
+	    querying this property returns its race object (mostly
+	    "/obj/race/<A_RACE>").
+	    If the raceobject could not be loaded for a while, query
+	    this property as 'QueryRaceObj(1)' to update the livings
+	    notion of its race object.
+<!- end -> 
+
+<!- alias SetName Name ->
+<!- alias QueryName Name ->
+<!- begin Name ->
+	  string A_NAME  "Name"
+	  string SetName(string name, void|int no_sln)
+	  string QueryName(void | mixed true_name)
+	    The name of the living in proper capitalization.
+	    Setting the name also sets A_SHORT and the gamedriver's
+	    living_name to this name (the latter only if no_sln is
+	    given as 0 or not given at all).
+	    When queried from an A_INVIS living, "Someone" is returned
+	    instead of the real name, unless a nonzero argument is
+	    passed as <true_name>.
+<!- end -> 
+
+<!- begin RealName ->
+	  string P_REALNAME  "RealName"
+	    The 'real' name of the living, in all lowercase.
+	    This attribute can't be set, instead it is hardcoded.
+	    For livings it just returns A_NAME.
+<!- end -> 
+
+<!- begin Align ->
+	  int A_ALIGN  "Align"
+	    The alignment of the living, a value from -1000..1000.
+<!- end -> 
+
+<!- alias MsgIn Msg ->
+<!- alias MsgOut Msg ->
+<!- alias MMsgIn Msg ->
+<!- alias MMsgOut Msg ->
+<!- begin Msg ->
+	  string A_MSGIN  "MsgIn"
+	    The message to give on normal entrance into a room.
+	    The livings name will be prepended.
+	    If the living is a ghost or a frog, a suiting message
+	    is returned instead of the set A_MSGIN.
+	    To unconditionally retrieve the real A_MSGIN, query for
+	    the 'soft' property.
+
+	  string A_MSGOUT  "MsgOut"
+	    The message to give on normal leave from a room.
+	    The livings name will be prepended.
+	    If the living is a ghost or a frog, a suiting message
+	    is returned instead of the set A_MSGIN.
+	    To unconditionally retrieve the real A_MSGIN, query for
+	    the 'soft' property.
+
+	  string A_MMSGIN   "MMsgIn"
+	  string A_MMSGOUT  "MMsgOut"
+	    As A_MSGIN/A_MSGOUT, only that these are used for
+	    teleportations.
+<!- end -> 
+
+	Though mainly for players, this soft attribute exists as well:
+
+	  mixed A_DESCRIPTION   "Description"
+	    Either a string or an array of strings for the several states,
+	    this is added after the long description.
+
+
+	Some supporting functions:
+
+<!- begin QueryAlignString ->
+	  string QueryAlignString (int align)
+	    Return a word describing the given <align>ment (like
+	    'evil').
+<!- end -> 
+
+	  int UpdateAlign (int up)
+	    Update the livings alignment by an other livings alignment
+	    <up>. This will normally called by Die() in the victor.
+
+<!- begin QueryGenderString ->
+	  string QueryGenderString ()
+	    Return a string describing the livings gender.
+<!- end -> 
+
+<!- alias he QueryPronoun ->
+<!- alias she QueryPronoun ->
+<!- alias it QueryPronoun ->
+<!- begin QueryPronoun ->
+	  string QueryPronoun ()
+	    Return the livings personal pronoun: 'he', 'she' or 'it'.
+<!- end -> 
+
+<!- alias his QueryPossessive ->
+<!- alias her QueryPossessive ->
+<!- alias its QueryPossessive ->
+<!- begin QueryPossessive ->
+	  string QueryPossessive ()
+	    Return the livings possessive pronoun: 'his', 'her', or 'its'.
+<!- end -> 
+
+<!- alias him QueryObjective ->
+<!- alias her QueryObjective ->
+<!- alias it QueryObjective ->
+<!- begin QueryObjective ->
+	  string QueryObjective ()
+	    Return the livings objective pronoun: 'him', 'her', or 'it'.
+<!- end -> 
+
+
+	The long and short descriptions modified on query according to
+	the state of the living. This is done by redefinition of the
+	resp. inherited functions.
+	If the optional parameter <what> of the functions is given,
+	the call will be passed to the inherited function and that
+	result returned. This will not be mentioned separately, so
+	keep it in mind :-).
+
+	  string P_PRECONTENT  "PreContent"
+	    This is hardcoded to be "He/She/It carries:\n".
+
+	  static string *_weapons (string possessive)
+	    This is an auxiliary function.
+	    It has to return an (possibly empty) array of which
+	    weapons are wielded where, e.g.
+	      ({ "a twohander with <possessive> right hand" })
+
+	  static string *_armours ()
+	    This is an auxiliary function.
+	    It has to return an (possibly empty) array of which
+	    armours (or other things) are worn, e.g.
+	      ({ "a helmet", "a pair of boots", "a pair of sunglasses" })
+
+	  static string *_equipment ()
+	    This is an auxiliary function.
+	    It has to return an (possibly empty) array of which
+	    equipment the living uses, e.g.
+	      ({ "a torch", "a screwdriver(2)" })
+
+	  static string *_hands ()
+	    This is an auxiliary function.
+	    It has to return an (possibly empty) array of which
+	    things the living holds in his hands, e.g.
+	      ({ "a torch", "a flag" })
+	    Excluded are armours, weapons and equipment.
+
+	  static string *_long (void|string headstr)
+	    This is an auxiliary function, used to build the
+	    (Int)Long() description.
+	    It has to return an array of \n-terminated strings, which
+	    has to contain at least:
+	      ({ the given <headstr> (or "")
+	       , the combined P_EXTRALOOKs of the carried objects
+	       , a string describing the health and load of the living
+	       , a string describing the armours/equipment worn
+	       , a string describing the weapons wielded by which hand
+	       , a string describing the equipment set
+	       , a string describing the things held
+	      })
+	    This order is not mandatory, but recommended.
+
+	  string Content ( void|string what
+			 , mixed       exclude
+			 , void|object player
+			 )
+	    <exclude> got an additional meaning: if specified as
+	    non-zero integer, weapons and armours are not contained in
+	    the returned list.
+
+<!- begin Short ->
+<!- begin IntShort ->
+	  string Short    (void|string what)
+	  string IntShort (void|string what)
+	    Return the (internal) short description of the living.
+	    If the living is invisible and this_player() is neither
+	    not at least learner nor able to see invisibles
+	    (P_SEE_INVIS != 0), 0 is returned.
+	    If ::(Int)Short() returns an array containing a description
+	    for the livings current state, that will be used.
+	    Else a decent default message will be constructed, using
+	    A_NAME and/or the existing ::(Int)Short().
+<!- end -> 
+<!- end -> 
+
+<!- begin Long ->
+<!- begin IntLong ->
+	  string Long    (void|string what)
+	  string IntLong (void|string what)
+	    Return the (internal) long description of the living.
+	    If this_player() is not at least learner and the living is
+	    invisible, 0 is returned.
+	    If ::(Int)Long() returns an array containing a description
+	    for the livings current state, that will be used as
+	    <headstr>, else a decent default <headstr> will be
+	    constructed, using A_NAME and/or the existing ::(Int)Long().
+	    Result will be the imploded result of _long(<headstr>).
+<!- end -> 
+<!- end -> 
+
+<!- begin ExaLong ->
+<!- begin ExaIntLong ->
+	  string ExaLong    (void|string what)
+	  string ExaIntLong (void|string what)
+	    Return the (internal) long description of the living under
+	    close examination.
+	    This just returns (Int)Long(what).
+<!- end -> 
+<!- end -> 
+
+
+	The identification is done by a redefinition of id():
+
+<!- begin id ->
+	  int id (string s)
+	    Return non-zero if <s> identifies this object.
+	    If the living is invisible, not called by itself and not
+	    at least learner, 0 is returned.
+	    Else, if <s> is accepted by the inherited id(), or matches
+	    the A_NAME, the P_REAL_NAME or the A_RACE, non-zero is
+	    returned to signal the success.
+	    For ghosts or frogs, "ghost" resp. "frog" are accepted as
+	    id as well.
+	    If the current player is the queried living, the ids "me"
+	    and "myself" are accepted.
+<!- end -> 
+
+
+	A living can be classified using these functions:
+
+<!- begin QueryIsLiving ->
+	  int QueryIsLiving ()
+	    Result is non-zero if the object is living by the means of
+	    gameplay. This is to distinguish true livings from merely
+	    technically living objects (like microphones).
+<!- end -> 
+
+<!- begin QueryIsNPC ->
+	  int QueryIsNPC ()
+	    Result is non-zero if the object is living and was never
+	    interactive.
+	    If P_IS_PET is set, QueryIsNPC returns 0.
+<!- end -> 
+
+<!- begin QueryIsPlayer ->
+	  int QueryIsPlayer ()
+	    Result is non-zero if the object was or is an interactive
+	    player.
+<!- end -> 
+
+<!- alias Wizard QueryIsWizard ->
+<!- begin QueryIsWizard ->
+	  nomask int QueryIsWizard ()
+	    Result is non-zero if the object was or is a wizard
+<!- end -> 
+
+<!- alias QueryIsPet IsPet ->
+<!- begin IsPet ->
+	  int P_IS_PET  "IsPet"
+	    Usually 0, this property has to be set to non-zero if the
+	    living is a familiar (a fighting pet).
+	    As sideeffect this causes QueryIsNPC to return 0, making
+	    the pet attackable even for those NPCs which don't fight
+	    other NPCs.
+<!- end -> 
+
+	The module also implements the perceptional functions here
+	(since they have to go somewhere).
+
+<!- begin Blind ->
+	  int P_BLIND   "Blind"
+	    When set to non-zero, the living is not able to see
+	    anything, independant of the current lighting.
+	    This is not a builtin property!
+<!- end -> 
+
+<!- begin SeeInvis ->
+	  int P_SEE_INVIS   "SeeInvis"
+	    When set to non-zero, the living is able to see other
+	    livings even when they are invisible.
+	    If a player with this property set actually sees an invisible
+	    buing is further governed by the P_SEE_INVIS_CHANCE property
+	    (see below).
+	    This is not a builtin property!
+<!- end -> 
+
+<!- begin SeeInvisChance ->
+	  int P_SEE_INVIS_CHANCE   "SeeInvisChance"
+	    A value in the range 1..1000 giving the chance that a player
+	    with P_SEE_INVIS set actually spots an invisible being.
+	    A value of 1000 (as well as the default value of 0) allow
+	    the player to see invisible beings on every look.
+	    This is not a builtin property!
+<!- end -> 
+
+<!- begin CanSee ->
+	  int CanSee (void|object env)
+	    Check if the living can see in the <env>ironment (default
+	    is the current environment), ignoring any P_BLIND setting.
+	    The function checks the light levels and calls CanSeeHere()
+	    in the <env>ironment.
+	    Result is non-zero if it can see, else 0.
+<!- end -> 
+
+<!- begin CantSee ->
+	  int CantSee (void|object env)
+	    Check if the living can _not_ see in the <env>ironment (default
+	    is the current environment), ignoring any P_BLIND setting.
+	    The function checks the light levels and calls CanSeeHere()
+	    in the <env>ironment.
+	    Results:
+	      < 0: it is too dark, result is the difference to A_IVISION.
+	      = 0: the living can see.
+	      > 0: it is too bright, result is the difference to A_UVISION.
+<!- end -> 
+
+<!- begin CanSeeLiving ->
+	  vcarargs int CanSeeLiving (object|string liv, int distance)
+	    Check if the living can see the other living <liv> (which
+	    defaults to this_player()). Result is non-zero if it can,
+	    and zero if it can't.
+	    The function checks invisibility versus ghostness,
+	    wizardness, and the ability to see invisible beings.
+	    It does not care for the lighting, though.
+        distance= 0: Check in this room only
+                 -1: Check in the whole mud
+             number: Check in a radius of this distance
+<!- end -> 
+
+<!- alias SearchM Search ->
+<!- begin Search ->
+	  mixed Search (mixed what, int mode)
+	  mixed SearchM (mixed what, int mode, void|closure pred)
+	    See /doc/concepts/search for a detailed documentation.
+<!- end -> 
+
+	The function to catch the messages is also here:
+
+<!- begin cathc_msg ->
+	  void catch_msg (mixed *msg)
+	    Catch and evaluate a message.
+	    The data of MSG_SEE messages is told to the living
+	    according to the lighting of its environment.
+	    The text of MSG_HEAR messages is told to the living.
+	    Other messages are ignored.
+<!- end -> 
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/attributes  : QueryAttr()
+	  /std/living/body        : QueryHP(), QueryMaxHP(), QueryHealthMsg()
+	  /std/living/combat      : QueryArmours(), QueryWeapons()
+	  /std/living/hands       : QueryHands()
+	  /std/living/restrictions: DropOverload()
+
+
+<!- begin living_heart ->
+DESCRIPTION - /std/living/heart
+	Livings have an ongoing heartbeat, to trigger automatic
+	actions, both inside the livings and (via the 'heartbeat
+	hook') outside.
+	While this is a good thing because its easy to use and avoids
+	lots of call_outs, it results in a waste of cycles if the
+	heartbeats run w/o actually doing something and disabling the
+	swap out of the object.
+
+	This small scheduler solves the problem by tracking the uses
+	of the heart and stopping it if it's not needed.
+	As a side effect, one can determine what parts of the livings
+	body need the heart.
+
+	The heart may server up to 32 different 'users', each
+	representing a functional part of the living.
+	Each user has to claim its demand in the beginning by
+	allocating a 'slot' in the userlist.
+<!- end -> 
+
+<!- begin HeartUser ->
+	  int P_HEART_USER   "HeartUser"
+	    An integer with 1-bits for each acknowledged user.
+<!- end -> 
+
+<!- begin GetUser ->
+	  int GetUser ()
+	    Allocate a new userslot and return its number (0..31).
+	    On failure (all slots used), -1 is returned.
+<!- end -> 
+
+<!- begin DropUser ->
+	  void DropUser (int user)
+	    Deallocate the userslot #<user>.
+<!- end -> 
+
+<!- begin CheckUser ->
+	  int CheckUser (int user)
+	    Returns non-zero if userslot #<user> has been allocated.
+<!- end -> 
+
+	The following slots are already reserved and have special
+	meanings:
+
+	  HEART_HEAL:    is used to heal the living.
+	  HEART_COMBAT:  controls the combat moves.
+	  HEART_FORCE:   once GetHeart(HEART_FORCE) is executed, the
+			 heart can't be stopped anymore.
+	  HEART_USER:    the generic 'this-object-needs-a-heartbeat'
+			 slot.
+
+	HEART_USER may be used in own objects (/std/npc.c and
+	/std/living.c perform an automatic GetHeart(HEART_USER) if
+	heart_beat() is overloaded), all other reserved slots are for
+	internal use only.
+
+	The individual heartbeat can now be activated or stopped on an
+	individual base:
+
+	  int P_HEART  "Heart"
+	    An interger with 1-bits for each user which requested the
+	    heart to beat.
+	    Abstain from setting this property unless you REALLY have
+	    no other possibility.
+
+<!- begin set_heart ->
+	  int set_heart (int i)
+	    Unconditionally performs a set_heart_beat(i) for the
+	    living and returns the result.
+	    You'l hardly need to call this.
+<!- end -> 
+
+<!- begin GetHeart ->
+	  void GetHeart (int user)
+	    Grant the <user> (which must have allocated a slot) that
+	    it will get the heartbeat.
+<!- end -> 
+
+<!- begin DropHeart ->
+	  void DropHeart (int user)
+	    Acknowledge that <user> doesn't need the heart anymore.
+<!- end -> 
+
+<!- begin CheckHeart ->
+	  int CheckHeart (int user)
+	    Returns non-zero if <user> currently needs the heart.
+<!- end -> 
+
+	('DropHeart' and 'GetHeart' are short versions of 'drop
+	 heartbeat' and 'get heartbeat').
+	The heart will beat as long as at least one user needs it, so
+	the above calls just ensure the minimal beating.
+	So, if HEART_COMBAT needs the heart, it will beat; but _all_
+	users of heart_beat() will get calls as well!
+
+	  void ValidizeHeart ()
+	    This function will restart the heart properly if it
+	    stopped due to an accident.
+
+	The heart won't beat in netdead players.
+
+
+	  int CheckHBfun (void | string file | string * files )
+	    Checks if the top instance of the lfun heart_beat() is
+	    in /std/living or (if given) one of the <files> resp. the
+	    one <file>.
+	    If it's not, the HEART_USER heartbeat will be started as
+	    the lfun is overloaded by user code, and non-zero is
+	    returned.
+	    If it is, the HEART_USER heartbeat is stopped and zero is
+	    returned.
+
+
+	CheckHBfun() serves for an easier implementation of user
+	heart_beat()-lfuns. If the user decides to use the full heart
+	protocol, he can stop the HEART_USER heart beat by a second
+	call to CheckHBfun() with the objects filename as argument.
+
+
+	Environmental effects are predestined to be coupled to the
+	livings heartbeat, to save wear in the environmental code
+	itself. For this purpose, the heartbeat hook exists. If the
+	hook points to valid code, the code is executed with every
+	livings heartbeat. The hook is automatically deleted when the
+	living moves.
+
+	The hook consists of three values:
+
+	  object P_HB_OBJ   "HbObj"
+	    The object holding the code to execute. If this property
+	    is 0, the hook is considered deleted.
+
+	  string  P_HB_FUN   "HbFun"
+	  closure P_HB_FUN   "HbFun"
+	    The name of the function to execute in P_HB_OBJ, or as
+	    closure the function itself.
+	    When set to a closure, this automatically sets P_HB_OBJ
+	    to the object holding the closure.
+	    When set to 0, P_HB_OBJ is zeroed as well, deleting the
+	    hook.
+
+	  int     P_HB_INTERVAL   "HbInterval"
+	    The number of heartbeats to elapse between to calls to the
+	    hook, at minimum 1.
+
+	For easier handling, the three values may be considered as one
+	via
+
+	  mixed * P_HBHOOK   "HBHook"
+	    This is either an array ({ P_HB_INTERVAL, P_HB_FUN,
+	    P_HB_OBJ }) if the hook is active, or 0.
+
+	  void InitHBHook ( void|int            interval
+			  , void|string|closure fun
+			  , void|object         obj
+			  )
+	    Similar to P_HBHook, this lfun allows to set all three
+	    HB_-values at once. It is possible to omit some of the
+	    value specifications (or specify them as 0), then
+	    following defaults take effect:
+	      interval: 150 heartbeats.
+	      fun     : "player_hb_hook"
+	      obj     : previous_object()
+
+
+	The controlling standard lfun is
+
+	  void heart_beat()
+	    Takes care of the proper callout simulation.
+
+
+<!- begin living_moving ->
+DESCRIPTION - /std/living/moving
+	This module contains the functions used to move a living
+	around, or let it move by itself.
+<!- end -> 
+
+	The function to go one step is:
+
+<!- begin GoAway ->
+	  int GoAway (void|int stunned)
+	    Go away one room. Return non-zero on success, else 0 if no
+	    exit were available.
+	    This functions tries to go with the living through one of
+	    the available exits. If possible, it tries to maintain the
+	    direction which the last GoAway() used.
+	    If <stunned> is non-zero, the GoAway() will succeed even
+	    if the living is knocked-out.
+<!- end -> 
+
+	It is used e.g. for emergencies:
+
+<!- begin Whimpy ->
+	  void Whimpy ()
+	    The living tries to run away, using GoAway(1).
+	    If the living is knocked-out, it has a chance of 30% to run
+	    away nevertheless.
+	    The living is told approbiate messages.
+<!- end -> 
+
+
+	Livings can be configured to walk around on their own. They do
+	this with a specific chance per heartbeat.
+
+<!- begin GoChance ->
+	  int A_GO_CHANCE  "GoChance"
+	    The chance (0..1000) that the living will go in one
+	    heartbeat.
+	    Setting the value to non-zero will restart the call_outs.
+<!- end -> 
+
+	The walking is done by using self-starting call_outs:
+
+	  void OneStep (int justSched)
+	    If <justSched> is non-zero, just schedule the next attempt
+	    to walk away, else go one step (using GoAway()) and then
+	    schedule the next attempt.
+	    If A_GO_CHANCE is zero, no next attempt is scheduled, of course.
+
+	To output approbiate messages both to the environment as to the
+	living itself, two functions from /std/thing/moving are
+	redefined:
+
+<!- begin move ->
+	  int move (mixed dest, void|int method, void|mixed extra) {
+	    Output approbiate messages if the living doesn't fit into
+	    the <dest> room, or if the living used M_SPECIAL.
+	    If the living is knocked-out, a M_GO or M_TELEPORT move
+	    will fail (unless done from Whimpy()).
+	    Also, for M_SPECIAL, M_GO and M_TELEPORT, interactive user
+	    will be told the long room description by a call to
+	    LookAfterMove() in the living object.
+	    <extra> will be interpreted depending on the move-method:
+	      M_SILENT and M_NOCHECK:
+		<extra> is ignored.
+	      M_GO:
+		* <extra> is empty:
+		  The room the living leaves will get:
+		    "Name leaves.\n"
+		  and the room where the living arrives:
+		    "Name arrives.\n"
+		* simple string or array with one string:
+		  The room the living leaves will get:
+		    "Name leaves "+<extra>+".\n"
+		  and the room where the living arrives:
+		    "Name arrives.\n"
+		  Only if it can be evaluated where someone came from
+		  depending on <extra> the message will
+		  different. Lets say <extra> is "north" then the
+		  message will be:
+		    "Name arrives from south.\n"
+		* array with two strings:
+		  The room the living leaves will get:
+		    "Name leaves "+<extra>[0]+".\n"
+		  and the arrival-room will get:
+		    "Name arrives "+<extra>[1]+".\n"
+	      M_SPECIAL and M_TELEPORT:
+		* <extra> is empty:
+		    M_TELEPORT:
+		      "Name leaves in a puff of smoke.\n"
+		      "Name arrives in a puff of smoke.\n"
+		    M_SPECIAL:
+		      "Name .\n"
+		      "Name .\n"
+		* simple string:
+		  The room the living leaves will get:
+		    "Name "+<extra>+".\n"
+		  and the room where the living arrives:
+		    "Name "+<extra>+".\n"
+		* array with one string:
+		  Here's a difference between M_SPECIAL and
+		  M_TELEPORT. The leave-message is the same as if a
+		  simple string is given. But the room, where the
+		  living arrives will get a different message:
+		    M_TELEPORT:
+		      "Name arrives in a puff of smoke.\n"
+		    M_SPECIAL:
+		      "Name .\n"
+		* array with two strings:
+		  The room the living leaves will get:
+		    "Name leaves "+<extra>[0]+".\n"
+		  and the arrival-room will get:
+		    "Name arrives "+<extra>[1]+".\n"
+		* array with three strings:
+		  Third entry will be told to the player:
+		    "You "+<entry>[2]+".\n"
+	    Of course the examples are only created for players with
+	    the standard MsgIn/Out and MMsgIn/Out.
+<!- end -> 
+
+<!- begin remove ->
+	  int remove ()
+	    If the living is an interactive user, it is notified about
+	    the destruct.
+	    Then the living is just destructed.
+<!- end -> 
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/actions    : QueryStunned()
+
+
+<!- begin living_restrictions ->
+DESCRIPTION - /std/living/restrictions
+	Here the restrictions of the 'container' like nature of
+	livings are implemented.
+	It is mostly just a tweaking of the functions and builtin
+	properties inherited from /std/container/restrictions.
+
+	Additionally, the state of the living (normal, ghost or
+	frogged) has effects on the weights:
+	 - normal livings can carry 10..70 (10..130) kg.
+	 - ghosts have no own weight and can carry 1..13 g.
+	 - frogs  have half the normal weight and can carry 3..23 (3..39) kg.
+<!- end -> 
+
+<!- alias QueryWeight Weight ->
+<!- begin Weight ->
+	  int P_WEIGHT  "Weight"
+	    The body weight of the living is adapted according to
+	    the livings state.
+	    Note that the adaption works in both directions: the value
+	    actually stored is always the full weight.
+	    If setting the weight results in an overload, the HEART_HEAL
+	    heartbeat is started.
+<!- end -> 
+
+<!- alias QueryMaxWeight MaxWeight ->
+<!- begin MaxWeight ->
+	  int P_MAX_WEIGHT  "MaxWeight"
+	    This can only be read, and returns a value depending on
+	    the A_STR stat and the state of the living.
+<!- end -> 
+
+<!- begin Load ->
+	  int P_LOAD  "Load"
+	    This read-only property returns in % the actual load of
+	    the living in relation to the possible maximum, yielding a
+	    value 0..200.
+	    The 100%-point is determined by LOAD_LIMIT(P_MAX_CONTENT).
+<!- end -> 
+
+<!- begin MaxContent ->
+	  int P_MAX_CONTENT  "MaxContent"
+	    This read-only property returns in maximal load the
+	    living can carry in its current state for a short time.
+	    This is twice the load it can carry w/o penalties.
+<!- end -> 
+
+
+	A function helps in dealing with too heavy loads.
+
+<!- begin DropOverload ->
+	  void DropOverload (void|int howmuch)
+	    If the livings carries more that it could do (e.g. after
+	    being frogged), the function drops randomingly some
+	    objects until the load is light enough again.
+	    If <howmuch> >= 0, the living drops enough to reach the
+	    normal load, or in case of > 0: half the normal load.
+	    If <howmuch> is less than zero, everything is dropped.
+	    Autoloaders and non-droppable objects are not dropped.
+<!- end -> 
+
+
+	Two functions of container/restrictions need some fudging and
+	are thus redefined:
+
+<!- begin notify_leave ->
+	  void notify_leave(mixed dest, void|mixed method, void|mixed extra)
+	    The function outputs approbiate messages to a moved living if
+	    it is taken, dropped or given away.
+	    Everything else is done in the inherited function.
+<!- end ->
+
+<!- begin notify_enter ->
+	  void notify_enter(object source, void|mixed method, void|mixed extra)
+	    The function outputs approbiate messages to a moved living if
+	    it is taken.
+	    Everything else is done in the inherited function, or by
+	    the 'giver'.
+<!- end -> 
+
+<!- begin prevent_leave ->
+	  int prevent_leave(mixed dest, int method, void|mixed extra)
+	    If the method is 'M_GET', ME_NO_LEAVE is returned, else
+	    the inherited function is execute.
+<!- end -> 
+
+<!- begin allow_enter ->
+	  void allow_enter (int method, void|mixed extra)
+	    If the method is 'M_PUT', ME_NO_ENTER is returned, else
+	    the inherited function is execute.
+<!- end -> 
+
+	Both functions also make additional messages if the weight of
+	the thing moved in or out would change the carried load by
+	more than LOAD_DTHRESH%.
+	If the living carries more than 100% load, every additional
+	weight causes a usage of the 'Str' stat (with automatic success).
+
+	To initialize the module, the lfun
+
+	  void create()
+
+	must be called.
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/attributes : QueryAttr()
+	  /std/living/description: QueryName(), QueryLState(), QueryInvis()
+				   QueryPossessive()
+	  /std/living/heart      : QueryHeart()
+	  /std/living/stats      : QueryStr(), UseStat()
+
+
+<!- begin living_stats ->
+DESCRIPTION - /std/living/stats
+	The plain standard living implements a very simple version of
+	the stat/skill system: everything must be explicitely set, the
+	living is not able to learn by itself.
+	Therefore, just the absolute minimum is found here.
+<!- end -> 
+
+<!- begin stats ->
+	The following stat properties are builtin here:
+
+	  int A_STR  "Str"
+	    The strength of the living.
+
+	  int A_INT  "Int"
+	    The intelligence of the living.
+
+	  int A_CON  "Con"
+	    The constitution of the living.
+
+	  int A_QUI  "Qui"
+	    The quickness of the living.
+
+	  int A_AGI  "Agi"
+	    The Agility of the living.
+
+	  int A_CHA  "Cha"
+	    The charisma of the living.
+
+	  int A_WIS  "Wis"
+	    The wisdom (magical knowledge) of the living.
+
+	The number of stats is available as NUMBER_STATS.
+	Every change of a stat starts the HEART_HEAL heartbeat.
+<!- end -> 
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/attributes: QueryAttr(), SetAttr()
+	  /std/living/heart     : GetHeart()
+
+
+BUGS/TODO
+	/std/living:
+	  InitLevel() should consider a P_RACE setting.
+	    Also, the default values need to be checked, e.g. the
+	    health rates should increase with the level.
+	  InitDefault() doesn't care for races.
+
+	/std/living/actions:
+	  A simple Actions-Delayhandling is needed.
+
+	/std/living/combat:
+	  Defend(): the relation of target zones should be
+	    checked. Maybe make them race-specific?
+
+INHERITANCE TREE
+	std/living
+	  |- std/living/moving
+	  |    `- std/thing/moving
+	  |- std/living/attributes
+	  |- std/living/body
+	  |- std/living/chat
+	  |- std/living/commands
+	  |- std/living/description
+	  |    |- std/thing/description
+	  |    `- std/room/description
+	  |- std/living/combat
+	  |- std/living/heart
+	  |- std/living/restrictions
+	  |    `- std/container/restrictions
+	  |         |- std/thing/restrictions
+	  |         `- std/room/restrictions
+	  |- std/living/stats
+	  |- std/room/items
+	  `- std/base
+
+SEE ALSO
+	attributes(C), combat(C), health(C), perception(C), search(C),
+	skills(C), base(S), combat(S), thing(S), equipment(S)

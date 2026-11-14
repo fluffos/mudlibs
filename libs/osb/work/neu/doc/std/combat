@@ -1,0 +1,190 @@
+OBJECT
+	/std/combat
+
+
+LAST UPDATE
+	Mateese, 06-Dec-94 18:00 MET
+
+
+SYNOPSIS
+	#include <properties.h>
+	#include <combat.h>
+
+	inherit "/std/combat";
+
+
+DESCRIPTION
+	This is the standard module implementing the basic mechanics
+	and commands of weapons and armours. See /obj/weapon and
+	/obj/armour for directly usable objects, and /obj/torch for a
+	combined utility/weapon. It is derived from /std/equipment as
+	weapons and armours are a special kind of equipment.
+
+	It is not meant for stand-alone use, but instead for
+	inheritance to make a thing combatworthy.
+	To use /std/combat, inherit it into your object and overload
+	move() and remove() so that the armour/weapon is properly
+	unworn/unwielded before a move.
+
+	One thing can be weapon and armour in once, therefore just one
+	/std/combat.
+	The weapon/armour is described by the following properties:
+
+	  int     P_CLASS         "Class"
+	    The 'class' of the weapon/armour. It is a measure of the
+	    damage the item can cause or defend (ideally the number of
+	    HP). Actual items should overload this to infer their
+	    capabilities from it.
+	    The exact meaning of this number depends on the actual item.
+
+	  int	  P_ARMOUR_TYPE   "ArmourType"
+	    The type of the armour the object represents, or 0 for no
+	    armour abilities.
+
+	  string  P_WEAPON_TYPE   "WeaponType"
+	    A string naming the type of weapon the object represents,
+	    or 0 for no weapon abilities.
+	    The weapon type is mostly co-used as the name of the skill
+	    needed to use the weapon.
+
+	  mapping P_DEFENSE	  "Defense"
+	    A mapping describing the defensive abilities of the
+	    object.
+	    For non-armours it is 0.
+
+	  mapping P_DAMAGE	  "Damage"
+	    A mapping describing the offensive abilities of the
+	    object.
+	    For non-weapons it is 0.
+
+	  string* P_ATTACK_VERBS  "AttackVerbs"
+	    The verbs to use if this object is used to attack
+	    something.
+	    The array must contain two strings: the first being the
+	    verb in first/second person singular, the second being the
+	    verb in third person singular.
+	    Default is ({ "attack", "attacks" }).
+
+	  int	  P_AP_PER_QP	  "APperQP"
+	    The amount of HP the armour has to soak (defend) to lose
+	    one Quality point.
+
+	  int	  P_WP_PER_QP	  "WPperQP"
+	    The amount of HP of the weapons attack has to get soaked
+	    (defended) by an armour to lose one Quality point.
+
+
+	There are two auxiliary functions to configure the object:
+
+	  void AddDefense (int dtype, int value)
+	    Adds a defense for damage type <dtype> of <value> points
+	    to the P_DEFENSE mapping.
+
+	  void AddDamage (int dtype, int value)
+	    Adds a damage of damage type <dtype> and <value> points
+	    to the P_DAMAGE mapping.
+
+
+	The actual mechanics are hidden behind these functions:
+
+	  mapping Damage (object victim, int success)
+	    Called ina weapon when an attack on <victim> succeeded
+	    (with rating <success>), this function has to return a
+	    mapping of the max damage to do on the <victim>.
+	    Default is to return P_DAMAGE modified according to P_QUALITY.
+
+
+	  mapping Defense ( mapping damage , object weapon
+			  , int     success, int    target)
+	    Called in an armour when an attack on the wearing victim
+	    was successful.
+	    The function is given the intended <damage> done by the
+	    <weapon>, the <success> of the attack, and where the
+	    weapon hit (<target>).
+	    The damage soaked is collected and then given to calls
+	    to both the armours and the weapons degrade functions,
+	    DegradeWeapon(), DegradeArmour().
+	    It has to return a mapping with the amount of damage going
+	    through the armour. Physical damage may be reduced only if
+	    the armour is of the approbiate type (== <target> zone).
+	    Default is a simple subtraction of P_DEFENSE (modified
+	    according to P_QUALITY) from <damage>.
+
+
+	  string * HitMsgs (int rel_dam)
+	    The weapon hit and did <rel_dam> relative damage:
+	    a value <= 0 indicates a miss, a value from 1..100 the
+	    relative damage done.
+	    The function has to return an array of three strings
+	    describing the damage done:
+	    the first will be told to the attacker, the second to the
+	    victim, the third to the spectators in the same room.
+	    The function is called by NotifyHit().
+
+
+	  string * NotifyHit ( object  attacker, object victim
+			     , mapping damage  , int	success
+			     , int rel_dam)
+	    After an attack succeeded, the weapon is informed using
+	    this call. Given are the <attacker>, the <victim>, the
+	    done <damage>, the <success> and the damage relative to
+	    the victims health (<rel_dam>).
+	    A value of <rel_dam> <= 0 indicates a miss, a value in
+	    1..100 the relative damage done.
+	    The function has to return an array of three strings:
+	    the first will be told to the attacker, the second to the
+	    victim, the third to the spectators in the same room.
+	    These messages are normally constructed using HitMsgs().
+
+
+	Two optional functions allow greater control during the
+	combat, if defined:
+
+	  int ModifyAttack (object victim, int success)
+	    This function is called if a living wants to attack
+	    <victim> with the weapon.
+	    The weapon has now the opportunity to modify the given
+	    <success> to something better or worse.
+	    Result is the modified success.
+
+	  string * NotifyDefense ( object weapon, mapping damage
+				 , int success	, int rel_dam)
+	    An attack with <weapon> on the wearing living has
+	    succeeded at level <success> and caused <damage>, which is
+	    <rel_dam> in relative to the livings HP.
+	    The armour can return an array three strings to be output
+	    now: the first will be told to the attacker, the second to
+	    the victim, the third to the spectators in the same room.
+	    For better readability, all messages are indented.
+
+	Weapon/armour degrading is handled using the P_QUALITY property.
+	Every attack deflected does damage to both weapon and armour.
+	The hit points soaked by the armour are scaled by P_WP_PER_QP
+	resp. P_AP_PER_QP and then subtracted from the weapons/armours
+	P_QUALITY. However, there is a threshold of 2*P_xP_PER_QP total
+	below that no degrading happens.
+	The hit points soaked are given to the Degrade functions as
+	a mapping, indexed by damage type, denoting the exact amount
+	of points soaked per damage type. It has an additional entry
+	"TOTAL" denoting the total amount of points soaked.
+
+	  void DegradeArmour ( mapping soaked, mapping damage
+			     , object weapon, int success, int target)
+	    Degrade the armour according to <soaked>["TOTAL"].
+	    If this value is > 2*P_AP_PER_QP, the P_QUALITY is reduced
+	    by <soaked>["TOTAL"]/P_AP_PER_QP.
+
+
+	  void DegradeWeapon ( mapping soaked, mapping damage
+			     , int success, int target)
+	    Degrade the weapon according to <soaked>["TOTAL"].
+	    If this value is > 2*P_WP_PER_QP, the P_QUALITY is reduced
+	    by <soaked>["TOTAL"]/P_WP_PER_QP.
+
+
+INHERITANCE TREE
+	combat
+	  `-equipment
+
+SEE ALSO
+	combat(C), equipment(S), living(S), armour(O), weapon(O)

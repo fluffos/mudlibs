@@ -1,0 +1,1197 @@
+/*--------------------------------------------------------------------------
+ * OBJ socket.c -- socket object using the erq socket facilities
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *--------------------------------------------------------------------------
+ * 26Jun97 [Mica] fixed too deep recursion bug at clean_up()
+ * 24Jul97 [Mica] changed timout and close handling
+ * 30Jul97 [Mica] changed timeout handling again
+ * TODO:  trying to send an array with send() results in an error, problem
+ * TODO:: with the array beeing interpreted as closure at lambda
+ */
+
+#include <socket.h>
+#include <daemons.h>
+#include <macros.h>
+
+#include <secure/errno.h>
+#include <driver/erq.h>
+
+inherit "/std/base";
+inherit "/obj/lib/datastring";              /* for the Mud-Mode conversion */
+
+/* --------------------------------------------------------------------------
+ * Defines
+ * --------------------------------------------------------------------------
+ */
+
+#ifndef __ERQ_MAX_SEND__
+#define __ERQ_MAX_SEND__  256        /* max number that can be send to erq */
+#endif
+
+#define CLOSE_RETRIES       3                      /* retries for ERQ_KILL */
+
+/*---------------------------------------------------------------------------
+ * Global variables
+ *---------------------------------------------------------------------------
+ */
+
+int mode;                /* socket mode, see SKT_ defines (not SKT_STYLE_) */
+int state;                                  /* current state of the socket */
+string error;               /* if an error occured, it will be stored here */
+string s_addr;                           /* status-data, host,port or port */
+
+/* for SKT_MODE_MUD we need these vars */
+int count;                                        /* No. of expected bytes */
+mixed * buffer;                                /* buffer for received data */
+int lastbuf;
+
+/* the callbacks */
+closure read_callback;                          /* called on received data */
+closure ready_callback;                 /* called once the socket is ready */
+closure close_callback;                   /* called when the socket closed */
+
+/* for the erq handling */
+int * ticket;                                     /* ticket for erq writes */
+
+int close_retries;                                  /* close retry counter */
+
+#ifdef DEBUG_READWRITE
+int last_read;                                /* last time socket got data */
+int last_write;                          /* last time the socket sent data */
+int amount_read;                                         /* bytes received */
+int amount_write;                                            /* bytes sent */
+#endif
+
+/*---------------------------------------------------------------------------
+ * Prototypes
+ *---------------------------------------------------------------------------
+ */
+
+internal_callback( int fd, int act, mixed a, mixed b );
+varargs void internal_rcb( mixed msg, string name, int port );
+nosave void socket_cb( int * a );
+int remove();
+void connect_timeout();
+
+/* --------------------------------------------------------------------------
+ * Builtin properties, read-only
+ * --------------------------------------------------------------------------
+ */
+
+int QueryMode() { return mode; }
+int QueryState() { return state; }
+string QueryAddr() { return s_addr; }
+closure QueryReadCallback() { return read_callback; }
+closure QueryReadyCallback() { return ready_callback; }
+closure QueryCloseCallback() { return close_callback; }
+int * QueryTicket() { return ticket?ticket+({}):0; }
+#ifdef DEBUG_READWRITE
+int QueryLastRead() { return last_read; }
+int QueryLastWrite() { return last_write; }
+int QueryAmountRead() { return amount_read; }
+int QueryAmountWrite() { return amount_write; }
+#endif
+
+/* --------------------------------------------------------------------------
+ * logit
+ *  this logs the string to the socket-logfile and adds the time and object
+ * --------------------------------------------------------------------------
+ */
+
+private void logit( string msg ) {
+  log_file( SOCKET_LOG, sprintf( "%s [%O]\n"
+                                 "----------------------------------------\n"
+                                 "%s\n\n", ctime(), this_object(), msg ) );
+}
+
+/* --------------------------------------------------------------------------
+ * bytes_to_string - formats a number of bytes
+ * --------------------------------------------------------------------------
+ */
+
+private string bytes_to_string( int num ) {
+  string res;
+  int tx;
+
+  res = "";
+  if ( tx = ( num / 1048576 ) ) {
+    num = num % 1048576;
+    res += ""+tx+" MB ";
+  }
+  if ( tx = ( num / 1024 ) ) {
+    num = num % 1024;
+    res += ""+tx+" KB ";
+  }
+  if ( num || ( res == "" ) )
+    res += ""+num+" Bytes";
+
+  return res;
+}
+
+/* --------------------------------------------------------------------------
+ * dtime - formats a time difference
+ * --------------------------------------------------------------------------
+ */
+
+private nosave string dtime(int time) {
+  string ret;
+
+  ret = "";
+  if( time >= 86400) {
+    ret += time/86400+"d ";
+    time %= 86400;
+  }
+  if (time < 36000) ret += "0";
+  ret += time/3600+":";
+  time %= 3600;
+  if (time < 600) ret += "0";
+  ret += time/60+":";
+  time %= 60;
+  if (time < 10) ret += "0";
+  ret += time+"";
+  return ret;
+}
+
+
+/* --------------------------------------------------------------------------
+ * lookup
+ *  lookup ip for given name using ERQ_LOOKUP
+ * --------------------------------------------------------------------------
+ */
+
+void lookup( string host, closure cb ) {
+  int *a;
+
+  a=allocate(4);
+  if (sscanf(host, "%d.%d.%d.%d", a[0], a[1], a[2], a[3])==4) {
+    if ( closurep( cb ) && to_object( cb ) ) 
+      funcall(cb, a);
+    return;
+  }
+
+  /* Send ERQ_LOOKUP and catch the result with the lambda closure.
+   * The closure calls the given callback cb with either 0 on failure
+   * or (fixed) reply. Reply is an array of size 4 which contains the 
+   * ip number information
+   */
+
+  send_erq( ERQ_LOOKUP, host, 
+            lambda( ({ SYM(a) }),
+                    ({ SF_IF,
+                         ({ SF_EQUAL, ({ SF_INDEX, SYM(a), 0 }), ERQ_OK }),
+                         ({ SF(funcall), cb,
+#ifdef FIX_REPLY
+                              ({ SF(map), 
+                                   ({ SF_RANGE, SYM(a), 1, 4 }),
+                                   SF_BITWISE_AND, 255 })
+#else
+                              ({ SF_RANGE, SYM(a), 1, 4 })
+#endif
+                                }),
+                           ({ SF(funcall), cb, 0 })
+                             }) ));
+}
+
+/* --------------------------------------------------------------------------
+ * close_erq
+ *  close the current socket, take care of possible error
+ * --------------------------------------------------------------------------
+ */
+
+void close_timeout() {
+  if ( ! this_object() )
+    return;
+
+  close_retries++;
+  if ( close_retries >= CLOSE_RETRIES ) {
+    destruct( this_object() );
+    return;
+  }
+
+  send_erq( ERQ_KILL, ticket, SF( socket_cb ) );
+  while( remove_call_out( SF( close_timeout ) ) != -1 ) ;
+  call_out( SF( close_timeout ), TIME_OUT );
+}
+
+void close_erq( string err ) {
+  /* if we do not have a ticket, manually do callback and destruct */
+  if ( ! ticket ) {
+#ifdef DEBUG_CLOSE
+    /* if there was an error, we log it */
+    if ( err )
+      logit( "Error: "+err+".\n" );
+#endif
+
+    while( remove_call_out( SF( connect_timeout ) ) != -1 ) ;
+
+    /* if there is a close_callback, call it with error set to 0 */
+    if ( closurep( close_callback ) && to_object( close_callback) )
+      funcall( close_callback, this_object(), err );
+
+    destruct( this_object() );
+
+    return;
+  } 
+  
+  /* set the error to the given one */
+  error = err;
+
+  /* and kill the socket, we destruct ourselves as soon as we receive
+   * ERQ_EXITED inside the socket_callback
+   */
+
+  close_retries = 0;
+
+  while( remove_call_out( SF( close_timeout ) ) != -1 ) ;
+  close_timeout();
+}
+
+/* --------------------------------------------------------------------------
+ * write_erq - stream sockets
+ *  sends the msg to the erq daemon, handles ticket and max-send
+ * --------------------------------------------------------------------------
+ */
+
+void write_erq( mixed msg ) {
+  int size, chunk, *out, pos;
+
+  size = stringp(msg) ? strlen(msg) : sizeof(msg);
+
+  chunk = __ERQ_MAX_SEND__ - 9 - sizeof( ticket );
+
+  for (; pos < size; pos += chunk ) {
+    out = ticket + to_array( msg[pos..(pos+chunk-1)] );
+
+    if ( stringp( msg ) &&             /* strip terminating 0 for strings */
+         ( ( ! mode & SKT_MODE_BINARY ) ||           /* for non-binary sockets */
+           ( pos + chunk < size ) ) )   /* or all but last chunk for bin. */ 
+      out = out[0..<2];
+
+#ifdef DEBUG_READWRITE
+    last_write = time();
+    amount_write += sizeof( out );
+#endif
+    send_erq( ERQ_SEND, out, SF(socket_cb) );
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * write_erq_datagram - datagram sockets
+ *  utilizes write_erq_datagram2, see comments
+ * --------------------------------------------------------------------------
+ */
+
+void write_erq_datagram2( int * host, int port, mixed msg ) {
+  int size, chunk, *out, pos, * ticket2;
+
+  /* if we did not manage to lookup the host, manually trigger the
+   * handling of the failure at the socket callback.
+   */
+
+  if (!host) {
+    socket_cb( ({ ERQ_E_NOTFOUND, 0 }) );
+    return;
+  }
+
+  size=(stringp(msg)) ? strlen(msg) : sizeof(msg);
+  ticket2 = ticket+host+({ port/256, port&255 });
+
+  chunk = __ERQ_MAX_SEND__ - 9 - sizeof( ticket2 );
+
+  for (; pos < size; pos += chunk ) {
+    out = ticket2 + to_array( msg[pos..(pos+chunk-1)] );
+
+    if ( stringp( msg ) &&             /* strip terminating 0 for strings */
+         ( ( ! mode & SKT_MODE_BINARY ) ||           /* for non-binary sockets */
+           ( pos + chunk < size ) ) )   /* or all but last chunk for bin. */ 
+      out = out[0..<2];
+
+#ifdef DEBUG_READWRITE
+    last_write = time();
+    amount_write += sizeof( out );
+#endif
+    send_erq( ERQ_SEND, out, SF(socket_cb) );
+  }
+}
+
+string write_erq_datagram( mixed msg, string host, int port ) {
+  if (!stringp(host)) 
+    return "Bad hostname.";
+
+  if (!intp(port))
+    return "Bad port.";
+
+  /* we need to lookup the hostname first, so we create a lambda closure
+   * and use it as callback for lookup. write_erq_datagram2 does the
+   * actual sending.
+   */
+
+  lookup( host, lambda( ({ SYM(a) }),
+                        ({ SF(write_erq_datagram2), SYM(a), port, msg }) ));
+
+  return 0;
+}
+
+/* --------------------------------------------------------------------------
+ * connect_erq - stream sockets
+ *  connects the socket to the given host and port
+ * --------------------------------------------------------------------------
+ */
+
+string connect_erq( string host, int port ) {
+  if ( ! stringp( host ) ) 
+    return "Bad hostname";
+
+  if ( ! intp( port ) )
+     return "Bad port";
+
+  /* set the socket to unconnected */
+  state = SKT_STATE_UNCONNECTED;
+
+  /* the following triggers a lookup of the given name and passes it through
+   * the lambda closure. Once the lookup is finished, the closure opens the
+   * connection with the socket callback or manually triggers a call of
+   * the socket callback with ERQ_E_NOTFOUND 
+   */
+
+  lookup( host, 
+          lambda( ({ SYM( a ) }),
+                  ({ SF_IF, SYM(a),
+                     ({ SF(send_erq), ERQ_OPEN_TCP,
+                        ({ SF_ADD, 
+                           SYM(a), 
+                           SYM(({ port/256, port&255 })) }),
+                        SF(socket_cb) }),
+                     ({ SF(socket_cb), SYM(({ ERQ_E_NOTFOUND, 0 })) })
+                   })
+                )
+          );
+          
+
+  return 0;
+}  
+
+/* --------------------------------------------------------------------------
+ * listen_erq_datagram - datagram sockets
+ *  connects the socket to the local port 'port'
+ * --------------------------------------------------------------------------
+ */
+
+string listen_erq_datagram( int port ) {
+  if (!intp(port))
+    return "Bad port.";
+
+  /* set the socket to unconnected */
+  state = SKT_STATE_UNCONNECTED;
+
+  send_erq( ERQ_OPEN_UDP, ({ port/256, port&255 }), SF( socket_cb ) );
+  return 0;
+}
+
+/* --------------------------------------------------------------------------
+ * listen_erq - stream sockets
+ *  connects the socket to the local port 'port'
+ * --------------------------------------------------------------------------
+ */
+
+string listen_erq( int port ) {
+  if (!intp(port))
+    return "Bad port.";
+
+  /* set the socket to unconnected */
+  state = SKT_STATE_LISTEN;
+  
+  send_erq( ERQ_LISTEN, ({ port/256, port&255 }), SF( socket_cb ) );
+  return 0;
+}
+
+/* --------------------------------------------------------------------------
+ * socket_cb
+ *  the main erq callback
+ * --------------------------------------------------------------------------
+ */
+
+nosave void socket_cb( int * a ) {
+  int port;
+  string host;
+
+#ifdef FIX_REPLY
+  a = map( a, SF_BITWISE_AND, 255 );
+#endif
+  
+  switch(a[0]) {
+  case ERQ_OK:
+    /* if we already have a ticket, ignore ERQ_OK messages  
+     */
+
+    if ( ticket ) return;
+
+    /* handle the message based on our state */
+    switch( state ) {
+
+    case SKT_STATE_ACCEPT:
+      /* connection has been accepted, get ticket and remote peer info 
+       */
+
+      ticket = a[7..];
+
+      host=sprintf("%d.%d.%d.%d", a[1], a[2], a[3], a[4]);
+      port=a[5]*256+a[6];
+      s_addr = host+" "+port;
+
+#ifdef DEBUG_TICKET
+      logit( sprintf( "Ticket: %O\n", ticket ) );
+#endif
+
+      /* set our state to connected */
+      state = SKT_STATE_CONNECTED;
+
+      /* initialize data for SKT_MODE_MUD mode sockets */
+      if ( ( mode & ~SKT_MODE_BINARY ) == SKT_MODE_MUD ) {
+        count = 0;
+        buffer = 0;
+      }
+      
+      /* if there is a ready_callback, call it */
+      if ( closurep( ready_callback ) && to_object( ready_callback ) )
+        funcall( ready_callback, this_object(), ({ host, port }) );
+
+      break;
+
+    default:
+      /* we got our ticket, store it ticket and set the
+       * socket to state SKT_STATE_CONNECTED if it is not a SKT_STATE_LISTEN socket
+       */
+      
+      ticket = a[1..];
+      
+#ifdef DEBUG_TICKET
+      logit( sprintf( "Ticket: %O\n", ticket ) );
+#endif
+      
+      /* listen stays SKT_STATE_LISTEN */
+      if ( state == SKT_STATE_UNCONNECTED )
+        state = SKT_STATE_CONNECTED;
+      
+      while( remove_call_out( SF( connect_timeout ) ) != -1 ) ;
+
+      /* initialize data for SKT_MODE_MUD mode sockets */
+      if ( ( mode & ~SKT_MODE_BINARY ) == SKT_MODE_MUD ) {
+        count = 0;
+        buffer = 0;
+      }
+      
+      /* if there is a ready_callback, call it */
+      if ( closurep( ready_callback ) && to_object( ready_callback ) )
+        funcall( ready_callback, this_object() );
+
+      break;
+    }
+    break;
+
+  case ERQ_STDOUT:
+    switch(state) {
+    case SKT_STATE_LISTEN: 
+      {
+        object new_s;
+
+        /* someone connected to our socket, spawn a socket 
+         */
+
+        /* if we cannot clone a new socket, terminate us */
+        if( ! new_s = clone_object( SOCKET ) ) {
+          close_erq( "Failed to clone new socket." );
+          return;
+        }
+
+        /* aquire new socket, the new socket itself accepts the connection
+         * and we can forget about it.
+         */
+
+        new_s->open( SKT_STYLE_INT_ACQUIRE, mode, ticket+({}),
+                     read_callback,
+                     ready_callback, 
+                     close_callback );
+
+        
+        break;
+      }
+    case SKT_STATE_CONNECTED:
+      if ( ( mode & ~SKT_MODE_BINARY ) == SKT_MODE_DATAGRAM ) {
+        /* we received data on a datagram socket, get ip and port from the
+         * data and pass it all to the handler
+         */
+        
+        host=sprintf("%d.%d.%d.%d", a[1], a[2], a[3], a[4]);
+        port=a[5]*256+a[6];
+        a=a[7..];
+#ifdef DEBUG_READWRITE
+        last_read = time();
+        amount_read += sizeof( a );
+#endif
+        internal_rcb( a, host, port );
+      }
+      else {
+        /* we received data on a stream socket, pass it to the handler 
+         */
+
+        a=a[1..];
+#ifdef DEBUG_READWRITE
+        amount_read += sizeof( a );
+        last_read = time();
+#endif
+        internal_rcb( a );
+      }
+      break;
+    }
+    break;
+
+  case ERQ_EXITED:
+    /* for SKT_MODE_MUD mode sockets, free the internal buffer */
+    if ( ( mode & ~SKT_MODE_BINARY ) == SKT_MODE_MUD ) {
+      count = 0;
+      buffer = 0;
+    }
+
+#ifdef DEBUG_CLOSE
+    /* if there was an error, we log it */
+    if ( error )
+      logit( "Error: "+error+".\n" );
+#endif
+
+    /* if there is a close_callback */
+    if ( closurep( close_callback ) && to_object(close_callback) )
+      funcall( close_callback, this_object(), error );
+
+    while( remove_call_out( SF( close_timeout ) ) != -1 ) ;
+    destruct( this_object() );
+    break;
+
+  case ERQ_E_WOULDBLOCK:
+    /* for last action == ERQ_SEND, socket is blocked, the message is 
+     * buffered by the erq itself. But as we do not receive ERQ_OK once
+     * the buffer got flushed, we ignore it. The sockets does not close
+     * on this error itself.
+     */
+    break;
+
+  case ERQ_E_PIPE:
+  case ERQ_E_UNKNOWN:
+    /* if we get these two errors the socket does not exist or is closing
+     * immediatly after we got them. Unix errno is at a[1].
+     */
+
+    switch( a[1] ) {
+    case ECONNREFUSED:
+      error="Connection Refused";
+      break;
+    case EHOSTUNREACH:
+      error="Host Unreachable";
+      break;
+    case ENETUNREACH:
+      error="Net Unreachable";
+      break;
+    default:
+      error=sprintf("Errno was %d", a[1] );
+      break;
+    }
+    
+    break;
+
+  case ERQ_E_NOTFOUND:
+    /* DNS lookup failure, handle it based on the sockets state.
+     */
+
+    if ( state == SKT_STATE_UNCONNECTED )
+      close_erq( "Hostname lookup failure." );
+    else
+      logit( "Error: received ERQ_E_NOTFOUND inside socket_cb.\n" );
+    break;
+
+  case ERQ_E_TICKET:
+    /* Invalid ticket, that should never happen, so we close the socket
+     */
+
+    close_erq( "Invalid ticket." );
+    break;
+
+  case ERQ_E_ARGLENGTH:
+    /* Invalid argument length, that should never happen, so we close the
+     * socket.
+     */
+
+    close_erq( "Invalid argument length.\n" );
+    break;
+
+  default:
+    /* we received an erq-state we did not except, so we close the socket.
+     */
+
+    close_erq( sprintf( "Unkown erq-state %d.", a[0] ) );
+    break;
+  }
+}
+
+/* **************************************************************************
+ * Private functions
+ * **************************************************************************
+ */
+
+/*
+ *---------------------------------------------------------------------------
+ * internal_rcb - handles received data, calls read_callback
+ *---------------------------------------------------------------------------
+ */
+
+private int get_len_and_cut() {
+  int len;
+
+  if ( ( ! buffer ) || ( ! buffer[0] ) )
+    return 0;
+
+  len = 
+    buffer[0][3] + buffer[0][2]*256 + 
+    buffer[0][1]*65536 + buffer[0][0]*16777216;
+
+  buffer[0] = buffer[0][4..];
+
+  return len;
+}
+
+private void add_to_buffer( int * n ) {
+  int l1, l2;
+
+  if ( ! buffer ) {
+    buffer = ({ ({}) });
+    lastbuf = 0;
+  }
+
+  l1 = sizeof( n );
+
+  if( l1 >= 3000 ) {
+    raise_error( "FATAL! received array size >= 3000.\n" );
+    destruct( this_object() );
+  }
+
+  l2 = sizeof( buffer );
+
+  if ( sizeof( buffer[lastbuf] ) + l1 > 3000 )
+    lastbuf ++;
+
+  if ( lastbuf == l2 ) {
+    buffer += ({ n });
+  }
+  else {
+    buffer[lastbuf] += n;
+  }
+}
+
+private int size_of_buffer() {
+  int l, i;
+  
+  if ( ! buffer )
+    return 0;
+  
+  l = 0;
+
+  for( i = 0; i < sizeof( buffer ); i++ ) {
+    l += sizeof( buffer[i] );
+  }
+
+  return l;
+}
+
+/* like buffer[0..(len-1)] for the multi-array buffer */
+private string get_buffer_chunk( int len ) {
+  string ret, tx;
+  int p, l1, l2;
+
+  if ( ! buffer )
+    return "";
+
+  l1 = sizeof( buffer );
+  p = 0;
+  ret = "";
+
+  while( ( p < l1 ) && len ) {
+    l2 = sizeof( buffer[p] );
+
+    if ( len > l2 ) {
+      len -= l2;
+      ret += to_string( buffer[p] );
+      buffer[p] = 0;
+    }
+    else {
+      ret += to_string( buffer[p][0..(len-1)] );
+      buffer[p] = buffer[p][len..];
+      if ( ! sizeof( buffer[p] ) )
+        buffer[p] = 0;
+      len = 0;
+    }
+    
+    p ++;
+  }
+
+  buffer -= ({ 0 });
+  if ( ! sizeof( buffer ) )
+    buffer = 0;
+  else
+    lastbuf = sizeof( buffer ) - 1;
+  
+  if ( len ) {
+    return "";
+  }
+  else
+    return ret;
+}
+
+varargs void internal_rcb( int * msg, string name, int port ) {
+  mixed data;
+  string s_data;
+#ifdef DEBUG_MUDMODE
+  string s_temp;
+#endif
+
+  /* if nobody wants to have the data, do nothing */
+  if ( ! closurep( read_callback ) )
+    return; 
+
+  switch( mode & ~SKT_MODE_BINARY ) {
+  case SKT_MODE_STREAM:
+    /* for non-binary sockets we make a string from integer array */
+    if ( closurep( read_callback ) && to_object( read_callback ) ) {
+      if ( mode & SKT_MODE_BINARY )
+        funcall( read_callback, this_object(), msg );
+      else
+        funcall( read_callback, this_object(), to_string( msg ) );
+    }
+    break;
+  case SKT_MODE_DATAGRAM:
+    if ( closurep( read_callback ) && to_object( read_callback ) ) {
+      if ( mode & SKT_MODE_BINARY )
+        funcall( read_callback, this_object(), msg, name, port );
+      else
+        funcall( read_callback, this_object(), to_string(msg), name, port );
+    }
+    break;
+  case SKT_MODE_MUD: 
+    { /* bracket for the local vars */
+      int z;
+
+      /* buffer the received data */
+      add_to_buffer( msg );
+      z = size_of_buffer();
+      
+      /* if we don't have a count, try to get one */
+      if ( ( ! count ) &&
+           ( z >= 4 ) ) {
+        count = get_len_and_cut();
+        z -= 4;
+      }
+
+      /* there can be more then one complete datatype inside the buffer */
+      while( count && ( count <= z ) ) {
+        /* we received a complete datatype, convert it */
+        s_data = get_buffer_chunk( count );
+
+        /* Important! we must not use raise_error inside or the buffer gets
+         * garbled complety and we constantly receive invalid stuff, so we
+         * log a generic message and may add more logging stuff later.
+         * s_data cannot be logged directly, because its value is destroyed.
+         */
+
+#ifdef DEBUG_MUDMODE
+        s_temp = s_data;
+#endif
+
+        if ( restore_value( & s_data, & data ) ) {
+          /* call the read_callback with our datatype */
+          if ( closurep( read_callback ) && to_object( read_callback ) ) {
+            funcall( read_callback, this_object(), data );
+          }
+        }
+#ifdef DEBUG_MUDMODE
+        else {
+          logit( "M-REC: Invalid data - closing.\n<"+s_temp+">\n" );
+          remove();
+          return;
+        }
+#endif
+        /* adjust the our bufferlen */
+        z = size_of_buffer();
+        
+        /* check for another complete datatype inside the buffer */
+        if ( z >= 4 ) {
+          count = get_len_and_cut();
+          z -= 4;
+        }
+        else
+          count = 0;
+
+      } /* while */
+      break;
+    } /* end of bracket for the local vars */
+  } /* switch */
+}
+
+/* --------------------------------------------------------------------------
+ * Timeout handler
+ * --------------------------------------------------------------------------
+ */
+
+void connect_timeout() {
+  if ( state != SKT_STATE_CONNECTED )
+    close_erq( "Connection timed out ("+TIME_OUT+"s)" );
+}
+
+/* **************************************************************************
+ * Public functions
+ * **************************************************************************
+ */
+
+/* --------------------------------------------------------------------------
+ * send( mixed msg )
+ *  send the msg over the socket
+ * --------------------------------------------------------------------------
+ */
+
+varargs void send( mixed msg, string tgt, int port ) {
+  mixed data;
+  int len;
+
+  /* check if the socket is ready to accept data */
+  if ( ! ticket ) {
+    /* fatal error - abort */
+    raise_error( object_name(this_object())+": attempt to send data over a not connected socket.\n" );
+    return;
+  }
+
+  switch( mode & ~SKT_MODE_BINARY ) {
+  case SKT_MODE_MUD:
+    /* convert lpc-datatype to string using the datastring library */
+    data = "";
+    if ( ! save_value( msg, & data ) ) {
+      /* fatal error - abort */
+      raise_error( object_name(this_object())+": invalid datatype for send().\n");
+      return;
+    }
+
+    /* The erq can handle string and int data, even for binary sockets
+     * Use this here to prevent problems with too long array 
+     */
+
+#if __VERSION_MINOR__ > 2
+    data += "\0"; /* Receiver expects terminating 0 */
+    len = strlen(data);
+#else
+    len = strlen( data ) + 1; /* the terminating 0 is sent too */
+#endif
+    
+    /* first send the len as integer array in network order */
+    write_erq( ({ 0, (len&16711680)/65536, (len&65280)/256, (len&255) }) );
+
+    /* then send our data as string */
+    write_erq( data );
+
+    break;
+  case SKT_MODE_STREAM:
+    write_erq( msg );
+    break;
+  case SKT_MODE_DATAGRAM:
+    write_erq_datagram( msg, tgt, port );
+    break;
+  default:
+    /* should never happen */
+    raise_error( object_name(this_object())+": invalid socket mode ("+mode+").\n" );
+    return;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * varargs open( mode, tgt, port, rcb, wcb, ccb )
+ *  opens socket according to mode, tgt
+ * --------------------------------------------------------------------------
+ */
+
+varargs mixed open( int style, 
+                    mixed p1, mixed p2, mixed p3, mixed p4, mixed p5 ) {
+  string name,err;
+  int port;
+  
+  switch( style & ~SKT_STYLE_BINARY ) {
+  case SKT_STYLE_CONNECT_STREAM:
+    mode = SKT_MODE_STREAM;
+    if ( style & SKT_STYLE_BINARY)
+      mode |= SKT_MODE_BINARY;
+
+    if ( closurep( p2 ) ) {
+      if ( sscanf( p1, "%s %d", name, port ) != 2 ) {
+        raise_error( object_name(this_object())+": invalid hostname/port given.\n" );
+        return;
+      }
+      read_callback = p2;
+      ready_callback = p3;
+      close_callback = p4;
+      s_addr = p1;
+    }
+    else {
+      name = p1;
+      port = p2;
+      read_callback = p3;
+      ready_callback = p4;
+      close_callback = p5;
+      s_addr = p1+" "+p2;
+    }
+
+    if ( err = connect_erq( name, port ) )
+      return err;
+
+    call_out( SF(connect_timeout), TIME_OUT );
+    
+    return 0;
+
+  case SKT_STYLE_CONNECT_MUD:
+    mode = SKT_MODE_MUD|SKT_MODE_BINARY;
+
+    if ( closurep( p2 ) ) {
+      if ( sscanf( p1, "%s %d", name, port ) != 2 ) {
+        raise_error( object_name(this_object())+": invalid hostname/port given.\n" );
+        return;
+      }
+      read_callback = p2;
+      ready_callback = p3;
+      close_callback = p4;
+      s_addr = p1;
+    }
+    else {
+      name = p1;
+      port = p2;
+      read_callback = p3;
+      ready_callback = p4;
+      close_callback = p5;
+      s_addr = p1+" "+p2;
+    }
+
+    if ( err = connect_erq( name, port ) )
+      return err;
+
+    call_out( SF(connect_timeout), TIME_OUT );
+
+    return 0;
+
+  case SKT_STYLE_DATAGRAM:
+    mode = SKT_MODE_DATAGRAM;
+    if ( style & SKT_STYLE_BINARY)
+      mode |= SKT_MODE_BINARY;
+
+    read_callback = p2;
+    ready_callback = p3;
+    close_callback = p4;
+    s_addr = p1;
+
+    if ( err = listen_erq_datagram( p1 ) )
+      return err;
+
+    return 0;
+
+  case SKT_STYLE_LISTEN_STREAM:
+    mode = SKT_MODE_STREAM;
+    if ( style & SKT_STYLE_BINARY)
+      mode |= SKT_MODE_BINARY;
+
+    read_callback = p2;
+    ready_callback = p3;
+    close_callback = p4;
+    s_addr = p1;
+
+    if ( err = listen_erq( p1 ) )
+      return err;
+
+    return 0;
+
+  case SKT_STYLE_LISTEN_MUD:
+    mode = SKT_MODE_MUD|SKT_MODE_BINARY;
+    read_callback = p2;
+    ready_callback = p3;
+    close_callback = p4;
+    s_addr = p1;
+
+    if ( err = listen_erq( p1 ) )
+      return err;
+
+    return 0;
+
+  case SKT_STYLE_INT_ACQUIRE:
+    mode = p1;
+    ticket = 0; /* our own ticket has to be 0, the p2 is only used below */
+    read_callback = p3;
+    ready_callback = p4;
+    close_callback = p5;
+
+    /* set our state to accept */
+    state = SKT_STATE_ACCEPT;
+
+    /* Accept the connection with the ticket we got */
+    send_erq( ERQ_ACCEPT, p2, SF( socket_cb ) );
+
+    return 0;
+
+  default:
+    return "Unsupported style.";
+  }
+}
+
+void close() {
+  /* just call close_erq, it handles everything else */
+  close_erq( 0 );
+}
+
+/* **************************************************************************
+ * Status
+ * **************************************************************************
+ */
+
+string Status() {
+  string res;
+  int l;
+
+  if ( ! is_clone() )
+    return "Status() calls are invalid for the blueprint.\n";
+
+  if ( mode < 0 )
+    res = sprintf( "[%O] not initialized socket ", this_object() );
+  else {
+    switch( mode & ~SKT_MODE_BINARY ) {
+    case SKT_MODE_MUD:
+      res = sprintf( "[%O] TCP(mud) socket ", this_object() );
+      break;
+    case SKT_MODE_STREAM:
+      res = sprintf( "[%O] TCP socket ", this_object() );
+      break;
+    case SKT_MODE_DATAGRAM:
+      res = sprintf( "[%O] UDP socket ", this_object() );
+      break;
+    default:
+      res = sprintf( "[%O] UNKOWN socket ", this_object() );
+      break;
+    }
+    if ( mode & SKT_MODE_BINARY )
+      res += "(binary) ";
+  }
+
+  switch( state ) {
+  case SKT_STATE_UNCONNECTED:
+    if ( s_addr )
+      res += "awaiting connect to "+s_addr+".\n";
+    else
+      res += "not opened yet.\n";
+    break;
+  case SKT_STATE_CONNECTED:
+    res += "connected to "+s_addr+".\n";
+    break;
+  case SKT_STATE_LISTEN:
+    res += "listening to port "+s_addr+".\n";
+    break;
+  case SKT_STATE_ACCEPT:
+    res += "accepted connection and waiting for reply.\n";
+    break;
+  default:
+    res += "at unkown state.\n";
+    break;
+  }
+
+  if ( closurep( read_callback ) ) 
+    res += sprintf( "read_callback : %O\n",read_callback );
+  else
+    res += "read_callback not defined.\n";
+
+  if ( closurep( ready_callback ) ) 
+    res += sprintf( "ready_callback : %O\n",ready_callback );
+  else
+    res += "ready_callback not defined.\n";
+
+  if ( closurep( close_callback ) ) 
+    res += sprintf( "close_callback : %O\n",close_callback );
+  else
+    res += "close_callback not defined.\n";
+
+#ifdef DEBUG_READWRITE
+  if ( last_read == -1 ) 
+    res += "last_receive: no data received yet.\n";
+  else
+    res += "last_receive: "+ctime(last_read)+" ("+dtime(time()-last_read)+").\n";
+
+  if ( last_write == -1 ) 
+    res += "last_send: no data sent yet.\n";
+  else
+    res += "last_send: "+ctime(last_write)+" ("+dtime(time()-last_write)+").\n";
+
+  if ( amount_read == 0 ) 
+    res += "amount_received: no data received yet.\n";
+  else
+    res += "amount_received: "+bytes_to_string(amount_read)+".\n";
+
+  if ( amount_write == 0 ) 
+    res += "amount_send: no data sent yet.\n";
+  else
+    res += "amount_send: "+bytes_to_string(amount_write)+".\n";
+#endif
+
+  if ( sizeof(ticket) )
+    res += "ERQ-Ticket : " + implode( map( ticket, SF(to_string) ), ", " )+"\n";
+  else
+    res += "ERQ-Ticket not received yet.\n";
+
+  if ( ( mode & SKT_MODE_MUD ) && 
+       ( ( count ) ||
+         ( l = size_of_buffer() ) ) )
+    res += "MUD-mode handler has "+l+" from "+count+" bytes in buffer.\n"; 
+  
+  return res;
+}
+
+/* **************************************************************************
+ * create, remove and clean_up
+ * **************************************************************************
+ */
+
+void create() {
+  ::create();
+
+  seteuid(getuid());
+
+  state = SKT_STATE_UNCONNECTED;
+
+  mode = -1;
+  count = 0;
+  buffer = 0;
+  error = 0;
+#ifdef DEBUG_READWRITE
+  last_read = -1;
+  last_write = -1;
+  amount_read = 0;
+  amount_write = 0;
+#endif
+}
+
+int remove() {
+  if (is_clone() && ticket )
+    close();
+  else
+    destruct( this_object() );
+
+  return 1;
+}
+
+int clean_up( int refcount ) {
+  if ( is_clone() && ticket )
+    return 1;
+
+  remove();
+  return this_object() && 1;
+}
+
+/* *********************************************************************** */

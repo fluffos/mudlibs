@@ -1,0 +1,662 @@
+OBJECT
+	/std/living
+
+
+LAST UPDATE
+	Mateese, 13-Jun-95 01:40 MET
+
+
+SYNOPSIS
+	#include <attributes.h>
+	#include <living.h>
+	#include <combat.h>
+	#include <search.h>
+	inherit "/std/living";
+
+	    OR
+
+	clone_object("/std/living");
+
+DESCRIPTION
+	This is the generic simple living.
+	It contains all the basic mechanics needed by monsters, npcs
+	and players, for combat, health, talk and movement.
+	It's purpose in life is 'cloned to die', so it does not
+	feature the fancy skill and stat system of npcs or players,
+	nor does it need to eat or drink.
+
+	/std/living itself is in fact mostly a wrapper for a collection
+	of modules which provide the real functionalities. /std/living
+	just merges them together and provides functions to setup
+	reasonable default values.
+	Therefore you can use the modules where you need them, but be
+	aware that they are quite interpedendant (they just assume
+	functions from other modules to be existing).
+	You can also equip a normal /std/living with modules from
+	/std/npc or else, of course.
+
+	The several modules are:
+	  /std/living		   : The wrapper.
+	  /std/living/actions	   : Automatic actions.
+	  /std/living/attributes   : Attribute implementation.
+	  /std/living/body	   : Health and death.
+	  /std/living/chat	   : Chatting and listening.
+	  /std/living/combat	   : Physical combat.
+	  /std/living/commands	   : Command- and notify_fail-handling.
+	  /std/living/description  : Visual appearance.
+	  /std/living/enemies	   : Enemy management.
+	  /std/living/heart	   : Heartbeat control.
+	  /std/living/restrictions : Weight and contents.
+	  /std/living/hands	   : Hand (and tail) management.
+	  /std/living/moving	   : (Automatic) movement.
+	  /std/living/stats	   : Stats and Skills.
+	  /std/living/compat       : Compatibility code.
+
+	Also inherited are:
+	  /std/base		   : for the property handling.
+	  /std/room/items	   : for easier equipping.
+
+
+DESCRIPTION - /std/living
+
+
+DESCRIPTION - /std/living/attributes
+
+
+DESCRIPTION - /std/living/actions
+	This module implements the basic routines for action
+	management, and automatic actions of a living.
+	Knock-Out-handling is here as well for technical reasons.
+
+	The automatic actions are bound to the HEART_COMBAT heartbeat.
+
+	Note that it's not possible for a /std/living to get tasks
+	added on the fly - it is bound to the tasks hardcoded in the
+	object, which is mostly just physical combat.
+
+	It has two builtin properties:
+
+	  int P_ACTION_ROUND  "ActionRound"
+	    The number of the current action round of the living.
+	    This number is guaranteed to be positive and increasing
+	    with every round (the increase may be _any_ value).
+
+	  int P_STUNNED       "Stunned"
+	    When set, the living is 'knocked-out' for the set number
+	    of heartbeats. When queried, it returns the remaining
+	    number of heartbeats it stays knocked-out.
+	    It is not possible to decrease the value, just to increase
+	    it or to set to zero. In both cases, proper texts are
+	    shown to the players and the room, and a MSG_STUN is
+	    issued. This message containes two fields:
+	      STUN_CAUSE : the object changing the P_STUNNED, 0 if the
+			   effect wears off on its own.
+	      STUN_ROUNDS: new setting of P_STUNNED.
+
+	The module implements the basic automatic actions by
+	definition of following standard functions.
+
+	  void init()
+	    If the calling this_player() may be attacked, a kill is
+	    tried. The functions CheckAutoAttack() and Kill() are
+	    called for this.
+	    However, ForgetEnemies() is called beforehand.
+
+	  void heart_beat()
+	    With each call, the P_ACTION_ROUND is increased.
+	    If the living is knocked-out, P_STUNNED is decreased, else
+	    DoAction() is called with the amount of actions A_ACTIONS.
+	    If DoAction() does not use any action, the HEART_COMBAT
+	    heartbeat is released.
+
+	To prevent that the living moves away during combat, the
+	function
+
+	  void OneStep (int justSched)
+
+	is redefined so that the living doesn't move as long as it has
+	a HEART_COMBAT heartbeat.
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/description: QueryActions(), QueryName(),
+				   QueryPossessive()
+	  /std/living/enemies	 : CheckAutoAttack(), Kill(),
+				   DoAction(), ForgetEnemies()
+	  /std/living/heart	 : DropHeart(), QueryHeart()
+
+
+DESCRIPTION - /std/living/body
+
+
+DESCRIPTION - /std/living/chat
+
+
+DESCRIPTION - /std/living/commands
+
+
+DESCRIPTION - /std/living/combat
+	Here the basic combat mechanics are implemented, including
+	some of the standards of /std/combat (since every living is
+	weapon and armour in itself).
+	For a detailed explanation of combat see /doc/concepts/combat.
+
+	The livings intrinsic defenses are implemented here:
+
+	  int	  A_COMBAT_STYLE  "CombatStyle"
+	    An integer denoting the overall combat style of the living: the
+	    higher, the more attention is paid to attack instead of defense
+	    (dodge). Basically, the value reduces the attack difficulty
+	    and increases the dodge difficulty.
+
+	  mapping A_DEFENSE	 "Defense"
+	    The mapping with the livings intrinsic defense, as
+	    provided by its skin.
+
+	  int	  P_ARMOUR_TYPE  "ArmourType"
+	    Hardcoded to AT_SKIN.
+
+	  void AddDefense (int dtype, int value)
+	    Add a defense for damage <dtype> of <value> points.
+
+	  mapping Defense ( mapping damage, object weapon
+			  , int success, int target)
+	    Defends (with the skin aka A_DEFENSE) an attack with
+	    <weapon> intending to do <damage>. Success level is
+	    <success>, and the hit went to <target> zone.
+	    Proper weapon degradation is done, degrading the
+	    armour is quite unnecessary.
+	    Result is the damage not soaked by the skin.
+
+	  void DegradeWeapon ( mapping soaked, mapping damage
+			     , int success, int target)
+	    To degrade the weapon (hands), <soaked>["TOTAL"]/10 HP
+	    damage is collected in the local variable 'degradeHand'
+	    which is later evaluated by Hit().
+
+
+	The living can of course use weapons and armours:
+
+	  mapping P_ARMOURS  "Armours"
+	    A mapping of the armours worn, indexed by their types.
+	    Each entry contains two values:
+	      object ARMOUR_OBJ: the armour object itself.
+	      int    ARMOUR_MSG: a flag if the armour has the function
+				 "NotifyDefense"
+
+	  mapping P_WEAPONS  "Weapons"
+	    A mapping of the wielded weapons, indexed by the weapon
+	    objects.
+	    Each entry contains two values:
+	      string WEAPON_TYPE: the type of the weapon.
+	      int    WEAPON_MOD : a flag if the weapon has the
+				  function "ModifyAttack".
+
+	  int AddArmour (object armour, int flags)
+	    Add ('wear') the <armour>. If another armour of the same
+	    type is worn, it is removed first.
+	    The P_WORN of the armour is set properly.
+	    Result is non-zero on success, else 0 if the armour has
+	    P_NOWEAR set.
+	    As the <armour> might cause the removal of an already worn
+	    armour of the same type, the <flags> parameter may be set
+	    to a combination of EWF_* flags to be passed to the
+	    removed armour's Unwear() lfun.
+
+	  void RemoveArmour (object armour, void|int flags)
+	    Remove ('unwear') the <armour> if its worn at all.
+	    The P_WORN of the armour is set to zero.
+	    As the <armour> is an equipment object, the <flags>
+	    parameter may be set to a combination of EWF_* flags to be
+	    passed to the <armour>s Unwear() lfun.
+
+	  int AddWeapon (object weapon)
+	    Add ('wield') the <weapon>.
+	    The P_WIELDED of the weapon is set properly.
+	    Result is non-zero on success, else 0 if the weapon has
+	    P_NOWIELD set.
+
+	  void RemoveWeapon (object weapon, void|int flags)
+	    Remove ('unwield') the <weapon> if its worn at all.
+	    The P_WIELDED of the armour is set to zero.
+	    As the <weapon> is an equipment object, the <flags>
+	    parameter may be set to a combination of EWF_* flags to be
+	    passed to the <weapon>s Unwield() lfun.
+
+	Note that the preceding functions are _not_ the command
+	functions to actually wield/wear something. For this, the
+	calls in /std/combat has to be used.
+
+
+	The actual combat functions are these:
+
+	  int Hit (object victim, mixed weapon, void|int gentle)
+	    The living has to hit <victim> with <weapon>.
+	    <weapon> may be an object, or a string naming the hand to
+	    use for attack.
+	    If <gentle> is specified, it is the number of HPs the
+	    victim should have after the attack. Positive, it is the
+	    number itself, negative, it is the number given in percent
+	    of A_MAX_HP.
+	    Result is a value <= 0 if the hit missed, else the damage
+	    finally done to the victim.
+	    This function has to evaluate the degradation damage
+	    collected in the variable degradeHand.
+
+	  int Dodge (mixed weapon, int success)
+	    The living is attacked with <weapon> (which may be 0) at
+	    an success level of <success> and can dodge it now (unless
+	    it's knocked out).
+	    Return the number to subtract from <success> before
+	    deciding if the hit misses or not.
+	    This implementation uses the skill CS_DODGE in combination
+	    with any received damage in the previous round and the
+	    current load of the living.
+
+	  mapping CalcDefense ( mapping damage, mixed weapon
+			      , int success, int target)
+	    The living received a hit with <weapon> in zone <target>
+	    at an level of <success>. The weapon will do <damage>
+	    points damage.
+	    This function has to decrease the given <damage> according
+	    to its intrinsic defenses and the armours worn by calling
+	    Defense() in each of the armours.
+	    Result is a mapping of the remaining damage.
+
+	  int Defend(mapping damage, object weapon, int success, int gentle)
+	    The living is hit with <weapon> at an level of <success>
+	    (1..100) and shall receive <damage> points damage.
+	    It has now the chance to defend the damage due to the use
+	    of armours.
+	    If <gentle> is specified, it is the number of HPs the
+	    livings should have after the attack. Positive, it is the
+	    number itself, negative, it is the number given in percent
+	    of A_MAX_HP. For non-interactive livings, a check against
+	    the attackers weapon skill is done. If it fails, a
+	    <gentle> setting is ignored.
+	    For defense, it selects randomly the target zone where the
+	    weapon hit and reduces the intended damage approbiately.
+	    Result is the number of HP damage actually done.
+	    Note: <weapon> may be 0 if the functions elaborate damage
+	    computation is needed for non-combat purposes. In this
+	    case, <success> is ignored, no target zones are computed,
+	    and no messages is output.
+
+
+	To initialise the internal formulaes, this function must
+	be called:
+
+	  void create ()
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/body	  : QueryHP(), QueryMaxHP(),
+				    DoDamage(), AddXP()
+	  /std/living/actions	  : QueryStunned()
+	  /std/living/restrictions: QueryLoad()
+	  /std/living/stats	  : UseSkill()
+
+
+DESCRIPTION - /std/living/description
+
+DESCRIPTION - /std/living/enemies
+	This module manages the enemies of a living and contains the
+	functions to decide on automatic attack, and to select weapon
+	and enemy in a combat round.
+
+	The combat is done using the HEART_COMBAT heartbeat.
+
+	All enemies are used as indices into a mapping, with the value
+	indicating if the enemy is in the same room (a value > 0) or
+	not (a value < 0). A value of 0 is forbidden.
+	The value is in fact the time() when the living encountered
+	the enemy last (in case of absent enemies: when it detected it
+	as absent). More advanced managers may take advantage of this,
+	e.g. by implementing
+
+	The current manager attacks present enemies, and remembers
+	enemies once attacked but now absent.
+
+	  mapping P_ENEMIES  "Enemies"
+	    The mapping of the enemies and their data.
+	    Be aware that more advanced livings may store more than
+	    just one value for each enemy!
+
+	  int P_AGGRESSIVE  "Aggressive"
+	    Non-zero if the living is aggressive (read: would attack
+	    first). Default is 0 (unaggressive).
+
+	  int P_ATTACK_CHANCE  "AttackChance"
+	    The chance that an aggressive living would really attack
+	    on sight. It is a value in 0..1000, default is 1000.
+
+	  mixed P_FRIEND_OBJ  "FriendObj"
+	    To implement a different 'IsFriend()' functionality, this
+	    property can be set to either the object holding the
+	    'IsFriend()' lfun to use, or to a closure performing the
+	    friendship check.
+
+	Standardfunktions to deal with the enemies:
+
+	  void AddEnemy (object enemy)
+	    Add <enemy> to the P_ENEMIES mapping.
+	    If the <enemy> can't be seen, it is stored as absent, else
+	    as being here.
+	    This issues a MSG_ENEMY message.
+
+	  void RemoveEnemy (object enemy)
+	    Remove <enemy> from the P_ENEMIES mapping.
+	    This issues a MSG_ENEMY message.
+
+	  void StartHunt (object enemy)
+	    Mark the <enemy> as absent, but remember it for later
+	    killing.
+	    This issues a MSG_ENEMY message.
+
+	  void StopAllCombat()
+	    Remove all enemies from P_ENEMIES, but also remove this
+	    living from _their_ P_ENEMIES.
+	    The actual remove is done using RemoveEnemy().
+
+
+	It is of course possible to forget enemies. This is checked
+	every ENEMY_FORGET seconds for each absent enemy against the
+	intelligence of the living, with a basic chance of 5% that
+	even the smartest living will forget an enemy.
+
+	  int CheckForgetEnemy (object enemy, int diff)
+	    This is more an auxiliary function, returning non-zero if
+	    the <enemy> is to be forgotten.
+	    <diff> is the difficulty to check the A_INT against.
+
+	  void ForgetEnemies ()
+	    If enough time elapsed, check if some enemies have been
+	    forgotten (using CheckForgetEnemy()) and remove them from
+	    the P_ENEMIES.
+	    This function automatically takes care of the time elapsed
+	    since the last call, so it is sufficient to call this
+	    function just when encountering other livings.
+
+
+	To decide on automatic attack, and to actually start a combat,
+	these functions exist:
+
+	  int IsFriend (object victim, void|int internal)
+	    Return non-zero if <victim> is a friend of the living, and
+	    thus shall not be attacked automatically.
+	    Default is that NPCs won't attack NPCs (decided by
+	    QueryIsNPC()), and players won't attack players (decided
+	    by QueryIsPlayer()).
+	    If P_FRIEND_OBJ is set and <internal> is zero, the set
+	    friendship-check function is called: if its a closure, its
+	    called as `closure`(victim), or if its an object, as
+	    `object`->IsFriend(victim). In either case, the call
+	    result is the result returned from this function.
+
+	  int CheckAutoAttack (object victim)
+	    Return non-zero if the <victim> shall be attacked without
+	    provocation.
+	    This function does a series of checks:
+	     - the victim mustn't be the living itself
+	     - it must be in the same room
+	     - the living must be able to see the victim
+	     - it mustn't be a ghost, invisible or a Learner
+	     - the living must be able to see it in its environment
+	     - the victim must not be a friend according to IsFrient()
+	     - the living must want to attack it: either because it is
+	       stored in the P_ENEMIES as either present or hunted, or
+	       because the combination of A_AGGRESSIVE and
+	       A_ATTACK_CHANCE allow an unprovoked attack.
+
+	  void NotifyMiss (object weapon, int success)
+	    This function is called by the attacker if an attack with
+	    <weapon> failed due to the <success>.
+	    The default handling is that the attacker (this_player())
+	    is checked with CheckAutoAttack() (with a doubled
+	    P_ATTACK_CHANCE), and on non-zero result the attacker is
+	    counter-attacked.
+
+	  void Kill (object victim)
+	    This function starts combat with <victim>.
+	    It is added as prey to P_ENEMIES, and the HEART_COMBAT
+	    heartbeat is started.
+
+
+	Following functions are used in combat:
+
+	  mixed SelectWeapon (object victim)
+	    Select a weapon to attack <victim>.
+	    Result may be the object of a true weapon, or a string
+	    naming the hand to use for attack.
+	    The function may be called several times in one round and
+	    may return different weapons in each call.
+	    Return 0 if no more weapons are to select - each weapon
+	    should normally used just once in one round.
+
+	  object SelectEnemy ()
+	    Select an enemy to attack and return the object of it.
+	    Return 0 if no more enemies are left to attack.
+	    This function should also mark now-absent enemies as such.
+
+	  int DoAction (int actions, int round)
+	    Attack as many enemies as <actions> are provided for this
+	    <round>. The function can be called several times in one
+	    round.
+	    If a new round is detected, the lists of used weapons and
+	    attacked enemies are reset.
+	    If attack chats are set, one call to DoAttackChat() is
+	    done.
+	    For each attack, weapon and enemy are selected using
+	    SelectEnemy() and SelectWeapon(), then the attack is done
+	    by a call to Hit().
+	    Upon return, the number of actions remaining after all
+	    attacks are done has been assigned to <actions>. So if no
+	    enemies are there to attack, return <actions> unchanged.
+	    Direct result is always non-zero.
+
+
+	To properly react on attacks by others, these functions of
+	std/living/combat are redefined:
+
+	  int Dodge (mixed weapon, int success)
+	  int Defend (mapping damage, object weapon, int success)
+	    If the attacking living is perceptable in the environment
+	    and not already present in the P_ENEMIES mapping, it is
+	    added to it.
+	    The HEART_COMBAT heartbeat is started, and the call passed
+	    to the inherited function.
+	    In both cases this happens of course only if <weapon> is
+	    not 0.
+
+
+	The enemy management must be initialised by a call to
+
+	  void create ()
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/base		 : QueryProp()
+	  /std/living/chat	 : DoAttackChat()
+	  /std/living/description: CanSeeLiving(), Search(), 
+	                           QueryIsPlayer(), QueryIsNPC()
+	  /std/living/heart	 : GetHeart()
+	  /std/living/stats	 : UseStat(), QueryInt(*)
+
+
+DESCRIPTION - /std/living/heart
+
+
+DESCRIPTION - /std/living/hands
+	Hands are important for livings as they are used to fight, to
+	hold, or just to look nice. 'Hand' in this context is each
+	extremity which can be used for at least one of the first two
+	purposes.
+
+	  mapping A_HANDS  "Hands"
+	    This mapping holds the data of the hands, and is indexed
+	    by the hands short description (e.g. "right hand", "left
+	    claw"). Setting this value leads to a recomputation of
+	    A_FREE_HANDS.
+
+	  int A_FREE_HANDS  "FreeHands"
+	    The number of free hands left.
+	    You can't set this value on your own!
+
+	For each hand, two values are stored: HAND_DAM and HAND_OBJ.
+	HAND_DAM describes the damage the hand would do in combat: it
+	is either a simple number for which the damage type
+	DT_BLUDGEON is assumed, or the complete damage mapping as for
+	normal weapon.
+	HAND_OBJ denotes the occupation of the hand. Possible values are:
+	      0 : the hand is free.
+	      1 : the hand cannot be used to hold something.
+	  <obj> : the hand holds the given <obj>ect.
+
+
+	  void AddHand (string sh, mixed dam, mixed obj)
+	    Adds a hand with description <sh>, the intrinsic damage
+	    <dam> and the (pre)occupation <obj> to the P_HANDS
+	    mapping. This may also overwrite an existing entry.
+	    A_FREE_HANDS is updated accordingly.
+
+	  int CountHands ()
+	    Count the free hands and update their number in
+	    A_FREE_HANDS. Result is this very number.
+
+	To use the hands to actually get hold of something, these
+	functions are used:
+
+	  int Grip (object obj)
+	    Try to grip the given <obj>, which needs P_NUMBER_HANDS to
+	    be held.
+	    On success, P_NUMBER_HANDS are set with <obj> als HAND_OBJ
+	    and non-zero is returned.
+	    Else, not enough free hands were available, and 0 is
+	    returned.
+
+	  void Ungrip (object obj)
+	    Release the grip on <obj> if it is gripped at all.
+
+
+	Since hands may be also used in combat as natural weapon, they
+	have to define NotifyHit().
+
+	  string * NotifyHit ( object  attacker, object victim
+			     , mapping damage  , int	success
+			     , int rel_dam)
+	    After an attack succeeded, the weapon is informed using
+	    this call. Given are the <attacker>, the <victim>, the
+	    done <damage>, the <success> and the damage relative to
+	    the victims health (<rel_dam>).
+	    A value of <rel_dam> <= 0 indicates a miss, a value in
+	    1..100 the relative damage done.
+	    The function returns an array of three strings:
+	    the first will be told to the attacker, the second to the
+	    victim, the third to the spectators in the same room.
+	    These messages are constructed by calling
+	    "/std/combat"->HitMsgs() and combining the result with
+	    the attack verbs "attack"/"attacks".
+
+	
+	The living supports the notion of 'equipment objects', these
+	are objects which are informed if the living (un)grips,
+	(un)wields or (un)wears an object.
+	The living itself implements just the notification for
+	(un)gripping, the other notification are implemented by the
+	objects themselves.
+
+	  string|object * P_EQUIP_OBJ   "EquipObj"
+	    An array of objects (given as objects themselves or by
+	    their filenames) which are the 'equipment objects'.
+	    The living itself and its race object (if existing) are
+	    automatically included as first objects.
+
+	  void AddEquipObj (string|object obj);
+	  void RemoveEquipObj (string|object obj);
+	    Adds or removes <obj> to resp. from P_EQUIP_OBJ.
+
+	If the queried value is an array of objects, one of these two
+	functions is called in each of the equipments objects:
+
+	  int|string ChkGrip   (object living, object thing)
+	  int|string ChkUngrip (object living, object thing)
+
+	Each of the functions has to return EQ_OK if the action is
+	accepted, or an appropriate error code.
+
+	If the grip/ungrip succeeds, the objects are called again,
+	this time at the function
+
+	  int|string NotifyGrip   (object living, object thing)
+	  int|string NotifyUngrip (object living, object thing)
+
+
+	The wearing/wielding is normally done by the objects themselves.
+	However, for easier programming these hooks exist in the living.
+	See std/combat for documentation.
+
+	  mixed Wield (object weapon, void|int flags)
+	    Wield a weapon by calling weapon->Wield(this_object(), flags)
+
+	  mixed Unwield (object weapon, void|int flags)
+	    Unwield a weapon by calling weapon->Unwield(this_object(), flags)
+
+	  mixed Wear (object armour, void|int flags)
+	    Wear an armour by calling armour->Wear(this_object(), flags)
+
+	  mixed Unwear (object armour, void|int flags)
+	    Remove an armour by calling armour->Unwear(this_object(), flags)
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/description : QueryPossessive(), QueryObjective()
+
+
+DESCRIPTION - /std/living/moving
+
+DESCRIPTION - /std/living/restrictions
+
+BUGS/TODO
+	/std/living:
+	  InitLevel() should consider a P_RACE setting.
+	    Also, the default values need to be checked.
+	  InitDefault() doesn't care for races.
+
+	/std/living/actions:
+	  A simple Actions-Delayhandling is needed.
+
+	/std/living/combat:
+	  Defend(): the relation of target zones should be
+	    checked. Maybe make them race-specific?
+
+INHERITANCE TREE
+	std/living
+	  |- std/living/compat
+	  |- std/living/actions
+	  |    `- std/living/moving
+	  |	    `- std/thing/moving
+	  |- std/living/attributes
+	  |- std/living/body
+	  |- std/living/chat
+	  |- std/living/description
+	  |    |- std/thing/description
+	  |    `- std/room/description
+	  |- std/living/enemies
+	  |    `- std/living/combat
+	  |	    `- std/living/hands
+	  |- std/living/heart
+	  |- std/living/restrictions
+	  |    `- std/container/restrictions
+	  |	    |- std/thing/restrictions
+	  |	    `- std/room/restrictions
+	  |- std/living/stats
+	  |- std/room/items
+	  `- std/base
+
+SEE ALSO
+	attributes(C), combat(C), health(C), perception(C), search(C),
+	skills(C), base(S), combat(S), thing(S), equipment(S)

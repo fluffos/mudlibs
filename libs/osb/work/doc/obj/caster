@@ -1,0 +1,481 @@
+CONCEPT
+	Caster, Cast Object 
+
+LAST UPDATE
+	Softbyte 19.08.1995
+
+USAGE
+	inherit "obj/caster";
+
+	#include <magic.h>
+	#include <combat.h>
+
+
+DESCRIPTION
+	This is a generic castobject for all magic use It can
+	be used for casting a spell or scroll as well as for singing
+	a bards song or invoking magic in any other way.
+
+	This object provides all necessary functions for invoking
+	magic as well as checking whther it is allowed to cast
+	magic. Repulse handling is also included.
+	The usual command for invoking magic is "cast", but it can
+	be changed if necessary.
+
+	The basic function of this object is to add one ore more
+	spells with individual cast and fail functions as well
+	as SP cost, failchance, failchecks, backfire chance and
+	spelltypes. 
+	A spell has usually a short name used for casting (e.g. "fire")
+	and a long name for description ("e.g. arcanic fire"). Also
+	one can define a long description and a spell usage which
+	can be diplayed via the "describe" command or  via the
+	QuerySpellMsg().
+
+	Whereever sensible the argument string spname is optional. If not
+	given it is replace by this_spell(), which is the last spell
+	accessed via, cast, describe or AddSpell.
+	Functions marked with a '*' are more important.
+
+	Remark:  - Most functions have a name which says what they actually do.
+                 - Use caster::init() and caster::create() if you inherit
+                   the caster as second inheritance, e.g in an armour.
+
+
+ ------------------------ Main Functions ---------------------------------
+
+ int IsSpell(string spname):
+    return int: 0: spname is  NO known spell
+                1: spname is a valid spell 
+
+    Test whether spname is a spell in the spelllist or not.
+
+
+*int ModifyMagic(int effect)
+    return int: new strength of a spell
+
+    This function allows to increase or decrease the effect of magic.
+    When overwritten it should first call the original function to
+    calculate a possible modification via the room or player property
+    P_MODIFYMAGIC="ModifyMagic" (gives % of change, i.e. 100 is no change.
+    0 means no change, too.)
+    Setting this property in a player or a room will cause all
+    magic effects to be modified by this (percentage) value.
+
+
+ closure QuerySuccessFunction(string spname)
+    return closure successfunction
+ int SetSuccessFunction(closure fun,string spname)
+    return int 0: set function did not work
+               1: ok
+
+    Sets the function which will be called after the cast had been
+    performed. This function is only necessary if one has to perform
+    some kind of cleanup, like removing the cast object or setting a
+    scroll as used.  The successfunction returns nothing and gets as
+    arguments an integer 0: spell not casted, 1: spell casted and
+    the spellname (string).
+    E.g.
+    void spelldone(int flag,string spname) {
+      if (flag) casted=1;
+    }
+
+
+*a return of the type MESSAGE can be one of the following:
+  0                  : Default message is used
+  string             : The string is written to this_player()
+  ({string})         : Is the same as string
+  ({stringA,stringB}): The stringA is written to this_player() and
+                       the stringB is said to its environment 
+  ({stringA,stringB, : Additionally string1,2.. are told to object 1,2,..
+    ({object1,object2,..}),       the objects1,2,.. are exclude from the
+    ({string1,strings2,...)}      say, though. If more objects then strings
+  })                              the last string is told to all following
+                                  objects.
+
+*void Message(mixed mesg)
+
+   This function gives out a MESSAGE as decribed above.
+
+
+*int AddFailCheck(closure failfun,string spname)
+*int SetFailChecks(closure *failfuns,string spname)
+    return int 0: set function did not work
+           int 1: ok
+ closure *QueryFailChecks(string spname)
+   return closure* functions: Array of all failcheck functions
+
+   Set, add or query the failcheck functions of a spell. These failchecks
+   will be performed to check whether a spell can be casted. One could
+   check e.g. the guild or the race or the presence of some magic items.
+   All default checks are already performed.  A fail here will cost the
+   caster the full ampount of spellpoints. If this is not wanted use a
+   RestoreSP() or RestoreSP(amount) in these functions.
+   A failfunctions has to return a MESSAGE (see above) if the spell should
+   fail or 0 if the spell works. The MESSAGE is then printed to the player
+   (and its environment).  The failcheck function gets as arguments the
+   spellname of the spell.
+   Using SetFailChecks will reset all former Added or Set Failchecks!
+
+
+ string QuerySpellDescription(string spname)
+ string QuerySpellDesc(string spname)
+    return string: Long description for the spell
+ int SetSpellDescription(string desc,string spname)
+*int SetSpellDesc(string desc,string spname)
+    return int 0: set function did not work
+           int 1: ok
+
+    Queries or sets a description of a spell. This is optional. If set
+    a player can read it by typing "describe <spname>". One can also set
+    the ReadMsg of the object very easily to this (see QuerySpellDescMsg)
+    If no description is set or the description is 0 then nothing will
+    be printed out.
+
+
+ string QuerySpellUsage(string spname) 
+    return string: Usage of the spell
+*int SetSpellUsage(mixed usage,string spname)
+    return int 0: set function did not work
+           int 1: ok
+
+    Queries or sets the usage string of the spell. This is optional and
+    comes together with the Spelldescription.  The description is printed
+    first followed by a
+    "Usage: usagesgtring
+     It will cost XXX spellpoints to cast this spell."
+    So the usagestring is usually one line, like "cast rcold <target>".
+    If no usage is set or the usage is 0 nothing of the above mentioned
+    text will be printed.
+    Another possibilty is to set the usage to a closure, which has to
+    return all (!) the above mentioned usage text.
+    The function gets as argument the spellname.
+
+
+*int AddSpell(string spname,mixed spelltype,int|closure SPcost,closure castfun,
+             string longname,int|closure failchance,int|closure backfirechance)
+    return int 0: set function did not work
+           int 1: ok
+    This is the main function for creating a spell. It sets the minimum
+    arguments that are necessary for a spell.
+    spname is the castname and idendification for a spell. spelltype
+    is the class a spell belongs to (see magic.h, ST_XXX). The SPcost
+    is the cost in SP the caster needs to cast the spell. It can be
+    a function the calculates the cost (see SetCastCost).
+    The castfunction is the function which does the actual cast. It
+    has to perform no additional validy checks, except for a Repulse()
+    check (see Repulse) if it influences another living! See
+    SetCastFunction() for details. failchance determines the chance for
+    failing the spell (0..100) i.e. its difficulty. A caster needs
+    Wisdom to overcome the difficulty. Failchance can be a function, too.
+    See SetFailChance(). If failchance is ommited it is set to 0 (never fail).
+    Same as for failchance holds for backfirechance. This simply sets
+    the chance in percent that a repulsed spell will backfire!
+    longname is the real name of a spell. It is the a longer version of
+    spname (e.g. rcold and resist cold). If ommited it is set to spname.
+
+
+ string QuerySpellMsg(string spname)
+    return string: Description and usage of a spell
+
+    This function reads out the description and usage of a spell
+    and returns it. It is called by the describe command and can
+    be directly implemented into a ReadMsg of an object (scroll).
+
+
+*mixed QueryCastDamage(int damage,object enemy,mixed damtype,string spname,object me)
+    return MESSAGE: Damage message for combat
+
+    This returns a MESSAGE object that can be output by
+    Message(). It contains the combat strings which depend on
+    the actual damage done by a spell (return value of Defend!).
+    The output is similar to:
+    "The orc is slightly hurt by your spell."
+    For the usage see the example in SetCastFunction.
+    The arguments damtype, spname and me are only needed when they
+    differ from the default values, i.e. damtype=QuerySpellType() and
+    spname=this_spell(). 'me' is this_object() unless you call this
+    function via another object, i.e. "/obj/caster"->QueryCastDamage(..),
+    where you have to set 'me' to this_object().
+   
+
+
+*int Repulse(object enemy,object caster,mixed sp_type,string spname,object me)
+    return 0: Spell is not repulsed
+           1: Spell is repulsed
+
+    Checks the magic resitances of the enemy versus the casters
+    abilities to cast the spell (spname) from the magic type sptype.
+    When a spell got repulsed a me->NotifySpellFail(enemy,caster,spname)
+    is called to allow some optional repulse action other than default.
+    The NotifySpellFails should return a message that can be printed
+    via Message(): Otherwise a default text is printed and no action
+    taken.
+    It can be called by an external object if me is set to it.
+    Defaults are me=this_obejct(), caster and enemy=this_player() and
+    spname=me->this_spell() and sptype=me->QuerySpellType(spname)||ST_ALL.
+    Attributs checked for the magic defence are ATT "MagicDefence"
+    and PROP "Resistance"
+    
+
+ string DifficultyToString(int difficulty)
+    return string: descrition of difficulty
+  
+    Converts the difficulty of a spell (QueryDifficulty) into
+    a string like "very easy" or "difficult".
+
+
+ mixed NotifySpellFail(object enemy,object caster,string spname)
+   return MESSAGE: text saying that caster failed this spell or 0
+
+   This function is called when a spell failed due to lack of ability
+   of the caster (fail) or if an enemy repulsed a spell (backfire).
+   One can overwrite this function to perform any own action there.
+   caster (object) will be the caster, i.e. this_player() and 
+   enemy (object) will be the enemy who repulsed the spell or 0 if the
+   spell did fail. 
+   Per default this function does write a default string when the spell
+   indicating that the caster faild to cast that spell. When the
+   spell got repulsed it will check the BackfireChance and when
+   appropriate the spell will be casted with its halfstrength at
+   the caster itself!
+   Easiest way to avoid it is to overwrite this function and 
+   return 0;
+
+ int DisableCast() 
+ int IndirectCast()
+ int DirectCast() 
+   return 1
+
+   These Functions allow to change the use of the cast command.
+   In the cast of DisableCast() no casting at all is possible.
+   If the case of DirectCast() one can directly type the name
+   of the spell to activate it. In the case of IndirectCast()
+   one has to type "cast" before the spellname to activate it.
+   Default is IndirectCast().
+
+
+ ------------------- Auxiliary Functions ---------------------------------
+
+*void LogCast(object caster,object target)
+    Will write caster as aggressor in the logfile AGGRESSORS.
+    Time and date, name of the spell and the target are recorded as well.
+    Use this if an attack spell is casted against a player.
+
+
+*int AllowDescribe()
+*int ForbidDescribe()
+    Enable or disable the describe function of the spell.
+    Default is enabled, i.e. the user can read the long description
+    and usage about this spell via "describe <spname>".
+
+ 
+ string QueryCastVerb() 
+ int SetCastVerb(string str)
+ string QuerySpellNoun()
+ int SetSpellNoun(string str)
+    Allow to change the standard cast action "cast" and all
+    occurences of the verb cast by some other verb. The second
+    function allow to replace all occurences of the noun spell
+    by another noun. 
+    This is handy if you want to invoke magic by singing a song
+    or playing an instrument.
+
+
+ MESSAGE QueryCastActionMessage(string spname,string longname,object who)
+    The message returned here will be written when a spell is
+    casted. Per default it is e.g. "You cast a holy water spell" and
+    something similar to the environment.
+    This can be changed again if you want to sing a song. It might be
+    also used if you want to write something special to the environment,
+    e.g. non-magic user would not understand a spell, while mages would
+
+
+ int QueryNumberOfSpells()
+    return int: number of spells stored in the cast object.
+
+ -------------- Internal or not so important functions -------------------
+
+ string SetThisSpell(string str)
+    Sets str to be the actual spell returned by this_spell().
+    str should be a spell added to this object. str should be
+    its shortname.
+
+ string QueryLongName(string spname)
+    return string: longname of the spell 
+ string SetLongName(string long,string spname)
+    return string: longname of the spell 
+
+    Queries or sets the longname of a spell. The long name is the real
+    name of a spell that is used in any messages. The spname or shortname
+    is the name one types for casting.
+    e.g. longname=resist cold, spname=rcold 
+    Setting the long name can be done better with AddSpell function.
+
+
+ int QueryCastCost(string spname)
+    return int: cast cost for this_player()
+ int SetCastCost(mixed cost,string spname)
+    return int 0: set cost did not work
+               1: ok
+
+    Queries or sets the cost for casting a spell. Cost can either be an
+    integer, which then will be the fixed cost for casting or a closure
+    (#'function) which calculates the cost for this_player() to cast the
+    current spell. This function has to return the cast cost as an integer 
+    and it will get as argument the name of the spell.
+    E.g.:
+    int spellcostfunction(string spname) {
+      return 42;
+    }
+    Setting the cost(function) can be done better with the AddSpell function.
+
+
+ mixed QuerySpellType(string spname)
+    return mixed: ST_TYPE
+ mixed SetSpellType(mixed type,string spname)
+    return mixed: ST_TYPE
+
+    Queries or sets the type of a spell as defined in <magic.h> in ST_XXXX,
+    e.g. ST_FIRE.
+    Setting the spelltype can be done better with the AddSpell function.
+
+
+ closure QueryCastFunction(string spname)
+    return closure: castfunction
+ int SetCastFunction(closure fun,string spname)
+    return int 0: set function did not work
+               1: ok
+
+    Queries or sets the function which does the actual magic action.
+    When this is called all checks have been performed, so that this
+    function just has to do the basic magic, like for example
+    cloning an item, adjusting stats or damaging an opponent.
+    If the magic is applied to an enemy one has to
+    check the result of Repulse(..,..,..) whether
+    the enemy does resist that spell !!!
+    If a spell does any damage or depends on any quantity, it should
+    process this quantity or damage via
+    damage=ModifyMagic(damage) to allow for dynamical adjustment of
+    the strenght of magic.
+    The cast function gets as arguments the target (string) and the
+    name of the spell (string).
+    It has to return 1 if the spell had been performed or 0 if the spell
+    had not been performed, e.g. because the parameter target was illegal.
+    In the latter case the spellpoints for the caster will be restored!
+    E.g.:
+    int arcfire(string target, string spname)
+    {
+      object ob;
+      int dam;
+      if (!target) return 0; /* illegal use */
+      ob=present(target,environment(TP));
+      if (!ob) return 0; 
+      if (Repulse(ob,TP)) return 1; /* cast was performed ! */
+      dam=ob->Defend(ModifyMagic(70HP),QuerySpellType(),1);  /* do damage */
+      Message(QueryCastDamage(dam,ob));  /* write damage string */
+      return 1;
+    }
+    Setting the castfunction can be done better with the AddSPell function.
+
+
+
+ int QueryDifficulty(string spname)
+ int QueryFailChance(string spname)
+    return int failchance [0..100]
+ int SetFailChance(mixed fch,string spname)
+ int SetDifficulty(mixed fch,string spname)
+    return int 0: set function did not work
+               1: ok
+
+    Queries or sets the failchance, i.e. the difficulty of a spell in
+    percent, i.e. a range from
+      0: no fail at all (means really no fail, no very easy)
+      1:  very easy spell
+      100: very hard spell 
+    Difficulty and Failchance are the same!
+    The failchance can either be an integer in the above mentioned range
+    or a closure which calculates the failchance for this_player(). This
+    function has to return an integer 0..100 and will get as argument the
+    name of the spell.
+    E.g.:
+    int failchance(string spname) {
+      return 42;
+    }
+    Setting the failchance can be done better with the AddSPell function.
+
+
+ int QueryBackfireChance(string spname)
+    return int backfirechance [0..100]
+ int SetBackfireChance(mixed bch,string spname)
+    return int 0: set function did not work
+               1: ok
+
+    Queries or sets the backfirechance, i.e. the chance of a spell in
+    percent to backfire on the caster if it got repulsed.
+      0: no backfiring at all
+      100: Every repulse will lead to a backfiring of the spell
+    Backfiring of a spell is that the castfunction of the spell
+    is called with the caster(!) as argument and the thrid argument
+    set to 1 to indicate backfireing. ModifyMagic is set
+    so that the effect will only half as much as before. So if
+    not protected a player will be hurt by his/her own spell!
+    This is all done in NotifySpellFail.
+    Setting the backfirechance can be done better with the AddSPell function.
+
+
+ mixed CheckWisdom(string spname)
+    return MESSAGE: text saying that caster faild this spell
+
+    This function is an example for a FailCheckFunction. It is per default
+    added to any new spell and will check the Wisdom of a player verus the
+    difficulty of the spell. Depending on the outcome the spell can fail
+    and an appropriate message is written.
+    If you really don't want that (why) you can use SetFailCheck with an
+    empty array as argument.
+    spname is the name of the spell and will be passed to every failfunction.
+    Further properties of the spell can be queried with the appropriate
+    Query functions.
+
+
+ int QueryCastResult()
+ int SetCastResult(int result)
+    return int CAST_XXXXX (from magic.h)
+
+    Returns the last value of a cast function. Needed for the spellbook
+    to check whether the cast had been successful or not.
+
+*int RestoreSP(int amount)
+
+    Restores the spepppoints of the caster to the value before the cast
+    or if amount is given adds amount to the current spellpoints.
+    This should be used in a failcheck function if it is not meant to
+    reduce the spellpoints or restore a part of the spellpoints.
+
+
+ int ReduceSP()
+
+    Compatibility only
+
+
+ -------------------------------------------------------------------------
+
+EXAMPLE
+	Examples are mentioned in some function descriptions above.
+	/obj/scroll uses the caster and so do all scrolls in
+	MAGIC_SCROLL_DIR.
+
+
+KNOWN BUGS
+
+
+
+INHERITANCE TREE
+std/thing
+
+
+SEE ALSO
+	scroll, magic, spells, combat, [magic] resistance
+
+
+
