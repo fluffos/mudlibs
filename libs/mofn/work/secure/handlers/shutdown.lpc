@@ -1,0 +1,136 @@
+inherit HANDLER_BASE;
+
+/*
+  We want to let this handler do the automatic shutdowns of the mud
+  We also want it to handle all shutdowns otherwise -- the shutdown
+     command will need to go through this handler to do the shutdown
+*/
+
+class shut_event {
+  string actor;
+  int    shut_time;
+  string reason;
+}
+
+class shut_event *shut_events;
+
+void reset_queue() {
+  class shut_event inite;
+
+  if(!adminp(TP) && PO && PO != master()) return;
+
+  inite = new(class shut_event);
+
+  inite -> actor = "MASTER";
+// shutdown every 10,000 minutes (almost every week)
+  inite -> shut_time = (time() - (time() % 600000) + 600000);
+  inite -> reason = "regularly scheduled reboot";
+  shut_events = ({ inite });
+}
+
+void create() {
+  reset_queue();
+  ::create();
+  call_out("check_time", 60);
+}
+
+void event_shutdown(int secs) {
+  object *obs;
+
+  if(PO && PO != master() && !adminp(TP))
+    return;
+
+  if(sizeof(obs = users()))
+    obs -> event_shutdown(secs);
+
+  SERVICES_H -> event_shutdown(secs);
+}
+
+private void do_shutdown() {
+  if(PO && PO != master() && !adminp(TP))
+    return;
+
+  TO -> event_shutdown(0);
+
+  shutdown(0);
+}
+
+int schedule_shutdown(int stime, string reason) {
+  class shut_event tevent;
+  int i;
+
+  if(!creatorp(TP) && PO && PO != master())
+    return 0;
+
+  if(stime < time()) return 0;
+
+  if(!reason || reason == "") return 0;
+
+  tevent = new(class shut_event);
+
+  tevent -> actor = (PO == master() ? "MASTER" : TP -> NAME);
+  tevent -> shut_time = stime;
+  tevent -> reason = reason;
+
+  i = 0;
+  while(i < sizeof(shut_events)) {
+    if(stime < shut_events[i] -> shut_time) {
+      shut_events = shut_events[0..i-1] + ({ tevent }) + shut_events[i..];
+      shut_events -= ({ 0 });
+      return 1;
+    }
+  }
+
+  shut_events += ({ tevent });
+}
+
+void check_time() {
+  int dt = shut_events[0]->shut_time - time();
+
+  if(dt <= 0) 
+    do_shutdown();
+
+  dt = (dt + 59) / 60;
+
+  switch(dt) {
+    case 1..5 :
+    case 10  :
+    case 15  :
+    case 30  :
+    case 45  :
+    case 60  :
+      TO -> event_shutdown(dt * 60);
+  }
+
+  call_out("check_time", 60);
+}
+
+mixed *query_next_shutdown() {
+  return ({ shut_events[0] -> actor, shut_events[0] -> shut_time - time(), shut_events[0] -> reason });
+}
+
+mixed *query_shutdown_events() {
+  mixed *ret;
+  class shut_event e;
+  int   t = time();
+
+  ret = ({ });
+
+  foreach(e in shut_events) {
+    ret += ({ ({ e -> actor, e -> shut_time - t, e -> reason }) });
+  }
+
+  return ret;
+}
+
+int cancel_shutdown() {
+  if(PO && PO != master() && !adminp(TP) && TP -> NAME != shut_events[0]->actor)
+    return 0;
+
+  shut_events = shut_events[1..];
+
+  if(!sizeof(shut_events))
+    reset_queue();
+
+  return 1;
+}

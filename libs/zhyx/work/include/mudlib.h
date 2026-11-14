@@ -26,5 +26,6 @@
 #define MUDLIST_DNS3            ((string) CONFIG_D->query_string("mudlist3"))
 #define MUDLIST_DNS4            ((string) CONFIG_D->query_string("mudlist4"))
 #define MUDLIST_DNS5            ((string) CONFIG_D->query_string("mudlist5"))
+#define DAEMON                  "/std/cmd_m"
 
 #endif

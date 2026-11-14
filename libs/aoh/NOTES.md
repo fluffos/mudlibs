@@ -4988,3 +4988,10 @@ AddDetail/AddSpell/AddRoomCmd 等处的裸 `#'IntLong`/`#'MyCast`/`#'cmd_join` �
 ## 深度功能测试（2026-11-03，money/#' map）
 
 `money`/`cbteller`/`designer`/`shopwizfuns`/`mastermind` 的 `#'[`/`#'=` 映射闭包改为 `(: … :)`。证明：`p/money` 与 mastermind 无 `#'` 调用点。
+
+## 深度功能测试（§10.7，2026-11-10，Silvere 码头↔码头堤）
+
+pristine + build-debug，port 40285。
+
+- **流程**：新号 `aohplay` / `Mud@2026`×2 → The docks（西/东出口）；`score` level 1 hp 20/20 copper 200；`west` quay / `east` 回码头；`quit`「Saving …」写 `data/a/<name>.o`；同密重登码头。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。

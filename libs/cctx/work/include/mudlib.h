@@ -10,5 +10,6 @@
 #define INTERMUD_MUD_NAME	"cctx.gy"
 #define CHINESE_MUD_NAME	"驰骋天下贵阳站"
 #define MUDLIB_ENCODING "GB"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

@@ -1,0 +1,132 @@
+// mudlib: Fading Summer
+// file:   logon_d.c
+// author: Lontau
+// date:   20-6-2001
+// Museum fixes 2026-11-10: braces on empty-name branch; SHELL_D query args;
+// BANISH_D/SHELL_D stubs; user_exists via SHELL_D.
+
+inherit DAEMON_OB;
+
+#include <daemons/logon.h>
+
+void           logon(object user_ob);
+protected void logon_handler(string user_entry, int operation, object user_ob);
+
+void create()
+{
+   seteuid(ROOT_UID);
+}
+
+void logon(object user_ob)
+{
+   string banner;
+
+   if (base_name(previous_object()) != LOGIN_OB)
+      return;
+
+   banner = read_file(LOGON_BANNER);
+   if (banner)
+      write(banner);
+
+   switch (MUD_PHASE) {
+      case "development":
+         if (file_exists(LOGON_DEVELOPMENT_BANNER))
+            write(read_file(LOGON_DEVELOPMENT_BANNER));
+         break;
+      case "building":
+         if (file_exists(LOGON_BUILDING_BANNER))
+            write(read_file(LOGON_BUILDING_BANNER));
+         break;
+      case "testing":
+         if (file_exists(LOGON_TESTING_BANNER))
+            write(read_file(LOGON_TESTING_BANNER));
+         break;
+   }
+
+   write(LOGON_NAME_PROMPT);
+   input_to("logon_handler", 2, LOGON_GET_NAME, user_ob);
+}
+
+protected void logon_handler(string user_entry, int operation, object user_ob)
+{
+   string *passkey;
+   string name;
+
+   switch (operation) {
+      case LOGON_GET_NAME:
+         user_ob->set("name_attempts", (int) user_ob->query("name_attempts") + 1);
+
+         if (!user_entry || user_entry == "") {
+            write(LOGON_NAME_EMPTY);
+            if ((int) user_ob->query("name_attempts") < LOGON_MAX_NAME_ATTEMPTS) {
+               write(LOGON_NAME_PROMPT);
+               input_to("logon_handler", 2, LOGON_GET_NAME, user_ob);
+            } else {
+               write(LOGON_FAIL_TOO_MANY);
+               user_ob->remove();
+            }
+            return;
+         }
+
+         name = lower_case(user_entry);
+         if ((int) BANISH_D->query_banished(name)) {
+            write(LOGON_NAME_INVALID);
+            if ((int) user_ob->query("name_attempts") < LOGON_MAX_NAME_ATTEMPTS) {
+               write(LOGON_NAME_PROMPT);
+               input_to("logon_handler", 2, LOGON_GET_NAME, user_ob);
+            } else {
+               write(LOGON_FAIL_TOO_MANY);
+               user_ob->remove();
+            }
+            return;
+         }
+
+         if ((int) SHELL_D->user_exists(name)) {
+            user_ob->set("name", name);
+            write(LOGON_PASS_PROMPT);
+            input_to("logon_handler", 3, LOGON_GET_PASS, user_ob);
+         } else {
+            write(LOGON_NONEXISTANT);
+            user_ob->set("name", name);
+            input_to("logon_handler", 2, LOGON_CONFIRM_NEW, user_ob);
+         }
+         break;
+
+      case LOGON_CONFIRM_NEW:
+         if (member_array(lower_case(user_entry), ({ "y", "yes", "yea", "yep", "sure" })) != -1) {
+            NEWUSER_D->get_user_input(user_ob);
+            return;
+         }
+         if (member_array(lower_case(user_entry), ({ "n", "no", "nope" })) == -1) {
+            write("Please enter yes or no.\n");
+            write(LOGON_NONEXISTANT);
+            input_to("logon_handler", 2, LOGON_CONFIRM_NEW, user_ob);
+         } else {
+            user_ob->delete("name");
+            user_ob->delete("name_attempts");
+            write(LOGON_REFUSE_NAME);
+            input_to("logon_handler", 2, LOGON_GET_NAME, user_ob);
+         }
+         break;
+
+      case LOGON_GET_PASS:
+         user_ob->set("pass_attempts", (int) user_ob->query("pass_attempts") + 1);
+         passkey = (string *) SHELL_D->query((string) user_ob->query("name"), ({ "passkey" }));
+         if (!passkey || !sizeof(passkey) || !stringp(passkey[0]) ||
+             crypt(user_entry, passkey[0]) != passkey[0]) {
+            write(LOGON_PASS_INVALID);
+            if ((int) user_ob->query("pass_attempts") < LOGON_MAX_PASS_ATTEMPTS) {
+               write(LOGON_PASS_PROMPT);
+               input_to("logon_handler", 3, LOGON_GET_PASS, user_ob);
+            } else {
+               write(LOGON_FAIL_TOO_MANY);
+               user_ob->remove();
+            }
+            return;
+         }
+         user_ob->delete("name_attempts");
+         user_ob->delete("pass_attempts");
+         user_ob->startup();
+         break;
+   }
+}

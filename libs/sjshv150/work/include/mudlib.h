@@ -19,5 +19,6 @@
 #define MAX_VOTES_PER_SITE   100
 #define VOTER_SITE   0
 #define GB_AND_BIG5
+#define DAEMON                  "/std/cmd_m"
 #undef INTERMUD_ALL_MUD
 

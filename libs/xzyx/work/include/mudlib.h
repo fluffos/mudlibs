@@ -10,5 +10,6 @@
 #define INTERMUD_MUD_NAME       "the hero of starwar"
 #define CHINESE_MUD_NAME     "乱世风沙之星战英雄"
 #define MUDLIB_ENCODING "GB"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

@@ -1,0 +1,33 @@
+#define FISHING_TRUE 1
+#define FISHING_FALSE 0
+/*
+ *
+ */
+#define STATE_LINE_BAITED 	0
+#define STATE_LINE_CAST 	1
+#define STATE_LINE_NIBBLE 	2
+#define STATE_LINE_UNDER 	3
+#define STATE_LINE_HOOKED 	4
+#define STATE_LINE_BROKEN	5
+#define STATE_LINE_LANDED	6
+#define STATE_LINE_EMPTY	7
+#define STATE_LINE_STOLEN	8
+
+/*
+ *
+ */
+#define BAIT_EARTHWORM	0
+#define BAIT_SHRIMP	1
+#define BAIT_CLAM	2
+#define	BAIT_MINNOW	3
+#define BAIT_LURE	4
+/*
+ *
+ */
+#define FISH_TYPE_TROUT 	0
+#define FISH_TYPE_SALMON 	1
+#define FISH_TYPE_SNAPPER	2
+#define FISH_TYPE_PIKE		3
+#define FISH_TYPE_BASS		4
+#define FISH_TYPE_CARP		5
+

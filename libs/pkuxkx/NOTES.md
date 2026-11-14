@@ -549,6 +549,14 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 `adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。
 
-## 深度功能测试（2026-11-14，BOW/HOOK/PIKE/STICK §6.15/§6.16）
+## 深度功能测试（2026-11-09，BOW/HOOK/PIKE/STICK §6.15/§6.16）
 
-`d/bwdh/sjsz/obj/obj/{weapon,unique}/` 下 14 个 `//Cracked by Roath` 试剑山庄兵器继承未定义的 `BOW`/`HOOK`/`PIKE`/`STICK`。自同源姊妹库 `bmxkx2001` 收养 `inherit/weapon/{bow,hook,pike,stick,_bow,_hook,_pike,_stick}.lpc`，并在 `include/weapon.h` 补齐 `BOW`/`HOOK`/`PIKE`/`STICK` 及对应 `F_*` 宏。证明：`scripts/lpc_listcheck.sh pkuxkx` 对 17 个继承者及 8 个基类由 HEAD 3/25 PASS 提升至 work 23/25 PASS（新增 8 个基类与 12 个此前报错兵器全部无新增错误/警告通过；其余 2 个 `unique/` 兵器因调用 `bmxkx2001` 版 `F_UNIQUE::create()` 而 `pkuxkx` 版 `/feature/unique.lpc` 无 `create()`，属 `sjsz/obj/obj/unique/` 原有跨库移植问题；另 `obj/m_weapon/weapon/` 10 个未实例化模板属废稿未纳入）。
+`d/bwdh/sjsz` 武器继承未定义的 `BOW`/`HOOK`/`PIKE`/`STICK`，`weapon.h` 也缺宏与基类文件。从 `bmxkx2001` 收养 `inherit/weapon/{bow,hook,pike,stick}.lpc` 及 `_*.lpc`，并在两份 `weapon.h` 补宏（含 `F_*`）。证明：18 路径 HEAD 0 PASS → 树 16 PASS（新加载 16）；`kusang-bang`/`yuzhu-zhang` 在 STICK 解决后暴露 `::create()` 无父（与 `F_UNIQUE` 秩序）—剩余。`M_WEAPON` 延迟（`set_desc()` 无参与基类三参不匹）。
+
+## 深度功能测试（2026-11-09，/std/jboard 薄别名 §6.15）
+
+`obj/board/wizard_j` 继承缺失的 `/std/jboard`，本体在 `/inherit/misc/jboard`（`PLAN_BOARD` 已指向此处）。薄别名 `std/jboard.lpc`；档案亦无 `/d/wiz/jobroom`，`setup()` 里 `move()` 会令留言板加载失败——补最小 jobroom（无外连出口）。证明：jboard/jobroom/wizard_j HEAD 未载 → 树 PASS（plan_b 本已 PASS）。
+
+## §7.282 阴阳倒乱刃武器检查（2026-11-10）
+
+`kungfu/skill/yinyang-luanren.lpc`：`skill_type != "sword" || != "blade"` 恒真，`valid_learn` 永远拒。改 `&&`。对象可载入；剑/鞭表达式验证。

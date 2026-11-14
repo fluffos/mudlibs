@@ -258,3 +258,21 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## F_UNIQUE 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`d/canyon/bamboo/obj/parry_book`、`d/green/obj/jade`、`d/snow/npc/obj/old_book` 等 `inherit F_UNIQUE`，但 `globals.h` 无宏、`/feature/unique.lpc` 缺失。从手足 es2 收养 `unique.lpc`，并补 `#define F_UNIQUE "/feature/unique.lpc"`。证明：HEAD 0 PASS / 4 FAIL → tree 4 PASS（newly loading 4）。
+
+
+## F_MERCENARY 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`d/snow/npc/mercenary` 继承未定义的 `F_MERCENARY`。从手足 es2 收养 `/std/char/mercenary.lpc`（`accept_order`/`accept_info`），并补 `#define F_MERCENARY`。证明：HEAD 0/2 → 2 PASS。
+
+## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
+
+create 已有；补 mkdir(DATA_DIR + "site")+keep data/site。

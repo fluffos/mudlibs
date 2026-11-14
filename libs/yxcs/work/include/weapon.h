@@ -11,6 +11,7 @@
 #define BLADE       "/inherit/weapon/blade"     // 刀
 #define BOW             "/inherit/weapon/bow"           // 弓
 #define DAGGER      "/inherit/weapon/dagger"    // 矛
+#define PEN         "/inherit/weapon/pen"       // pen
 #define FORK        "/inherit/weapon/fork"      // 叉
 #define HAMMER      "/inherit/weapon/hammer"    // 锤
 #define MACE             "/inherit/weapon/mace"     //锏

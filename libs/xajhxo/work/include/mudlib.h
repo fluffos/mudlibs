@@ -16,4 +16,5 @@
 #define ADMIN_EMAIL "zhc@funny"
 #define MUD_STATUS "Release"
 #define SERVICES_D "/system/daemon/channeld"
+#define DAEMON                  "/std/cmd_m"
 #endif

@@ -170,3 +170,12 @@ real clean run, not a dead log. Cosmetic only: config
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮：`command/look.lpc` 没用的局部变量 `ob` 删去。能编译的文件警告清零，regress 0。
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+原生树手启（无 systemd user bus），端口 40279。账号 `秦风` / `Mud@2026`。
+
+覆盖：登录广场 → `xiulian` → 武器坊/`go down` → 灵药园 `gather 灵芝` → 后山 `gather 铁矿` + `kill 野狼`（修为+20）→
+回坊 `craft 木剑`（攻击 10→15）→ 藏经阁 `talk`/`learn 基础剑诀`（攻击 15→18）→ `quest accept 1`/`status` → `quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。`go up` 在武器坊不可用（出口为 `north`）属房间设计，非 bug。

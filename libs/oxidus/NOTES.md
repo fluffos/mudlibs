@@ -31,6 +31,8 @@ Catalog FluffOS-compat lives in `patches/` (applied by
 - `0003-WASM-hash-stub-without-PACKAGE_CRYPTO.patch` — `hash()` sefun stub
   so WASM rooms compile without `PACKAGE_CRYPTO`.
 - `0004-fix-compile-warnings.patch` — every compile warning fixed (2026-10-13, see the dated section at the end).
+- `0005-float-truncation.patch` — `to_int()` at float→int sites (2026-10-14).
+- `0006-first-admin-home-path-shadow.patch` — first-admin `home_path` local shadow + `objectp(room)` before `move_living` (2026-11-10, KB 06 §7.380).
 
 Driver headers (`include/driver/*.h`, including `promise.h`) and the
 `adm/custom/` first-user seed live in `overlay/` (rsync'd onto zip staging).
@@ -646,3 +648,14 @@ Bugs behind the warnings:
   deliberately mixed `?:` results, `/*` inside doc comments.
 
 - 2026-10-14 (FluffOS 970d9f09 rescan): new catalog patch `patches/0005-float-truncation.patch`, 13 `Float value truncated to int` sites (unicode bar widths, food/drink percentages, XP adjustment, heart rate clamp, master read-size limit) spell their truncation `to_int()`; same values. Each of the five patches applies alone on the pin and in sequence; the 6 changed objects load before and after.
+
+## 深度功能测试（§10.7，2026-11-10）— first_admin `home_path` 阴影 + 重测
+
+目录补丁 `0006-first-admin-home-path-shadow.patch`：
+
+1. `adm/obj/login.lpc` `first_admin_login()` 把局部变量写成 `string home_path = home_path(...)`，整函数阴影掉 sefun；`cp(..., home_path(privs))` 变成对字符串的调用，被 `catch` 吞掉，workroom 从未拷进 `/home/<l>/<name>/`。首次管理员进世界时 `load_object(.../workroom)` 得 0，再 `move_living(0)` → `call_if` Bad argument 1，最后落到 `ROOM_START`（KB 06 §7.380）。局部改名 `home`，`cp` 用目录路径。
+2. `enter_world` 两处仅在 `objectp(room)` 时 `move_living`，避免缺文件的 0 再进 `move()`。
+
+手启：`reset --hard` + `apply_lib_patches`（0001–0006）+ overlay（含 `include/driver/*.h`）；删 `adm/custom/first_user` 与 `data/obj/adm/daemons/account.o` 做干净首管；端口 40256。
+
+覆盖：注册账号 `deepox`/`Mud@2026` → `n` → 角色 `elmswood` → 「You are now an admin.」落在 Developer Workroom（`home/e/elmswood/workroom.lpc` 已在）→ `look`/`score`/`who` → `square`/`east`/`west`/`home`/`save`/`quit` → `elmswood@deepox` 重连仍进 Workroom。`/log/catch` 空。无新编程缺陷。

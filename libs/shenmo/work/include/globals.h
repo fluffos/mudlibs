@@ -81,6 +81,7 @@
 #define MAILBOX_OB              "/obj/mailbox"
 #define SILVER_OB               "/obj/money/silver"
 #define SIMUL_EFUN_OB           "/adm/obj/simul_efun"
+#define SSSERVER			"/std/ssserver"
 #define USER_OB                 "/obj/user"
 #define VOID_OB                 "/obj/void"
 
@@ -90,6 +91,7 @@
 #define BULLETIN_BOARD          "/std/bboard"
 #define BBS_BOARD               "/std/bbsboard"
 #define CHARACTER               "/std/char"
+#define SUPER_NPC		"/std/char/super_npc"
 #define CLASS_GUILD             "/std/room/class_guild"
 #define COMBINED_ITEM           "/std/item/combined"
 #define EQUIP                   "/std/equip"
@@ -136,6 +138,7 @@
 #define F_EQUIP                 "/feature/equip.lpc"
 #define F_FINANCE               "/feature/finance.lpc"
 #define F_FOOD                  "/feature/food.lpc"
+#define F_FUNCTION		"/feature/function.lpc"
 #define F_LIQUID                "/feature/liquid.lpc"
 #define F_MASTER                "/std/char/master.lpc"
 #define F_MESSAGE               "/feature/message.lpc"

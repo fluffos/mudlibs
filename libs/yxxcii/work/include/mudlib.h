@@ -9,4 +9,5 @@
 #define MUDLIB_ENCODING         "GB"
 #define MUD_ADMIN               "mud_admin@21cn.com"
 #define MUD_WEB                 "www.yxxz.com"
+#define DAEMON                  "/std/cmd_m"
 #endif

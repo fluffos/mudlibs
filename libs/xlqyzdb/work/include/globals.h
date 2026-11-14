@@ -84,6 +84,9 @@
 #define POWDER			"/std/medicine/powder"
 #define QUEST			"/std/quest"
 #define ROOM			"/std/room"
+#define REGROOM			"/std/room/regroom"
+#define IDUSER			"/adm/etc/iduser"
+#define EMAIL_D			"/adm/daemons/emaild"
 #define SKILL			"/std/skill"
 #define SSERVER			"/std/sserver"
 #define F_SSERVER SSERVER

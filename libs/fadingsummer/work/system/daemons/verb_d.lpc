@@ -1,0 +1,92 @@
+// mudlib: Fading Summer
+// file:   verb_d.c
+// author: Lontau
+// date:   28-6-2001
+
+/* Synopsis: This daemon will be responsible for initializing the list of
+   verb objects, calling each one, and maintaining the list, allowing
+   the addition of and subtraction from the list of verb objects.
+*/
+
+inherit DAEMON_OB;
+
+#include <daemons/verb.h>
+
+// global declarations
+
+// The following array holds a list of files that the verb daemon should
+// initialize in order to provide commands to the user.  It is initialized
+// to contain the verb maintenance command so that the array can be modified
+// at runtime.
+
+string *verb_files = ({ COMMAND_DIR + "/verbadm" });
+
+// prototypes
+int     add_entry(string filename);
+int     remove_entry(string filename);
+string *list_entries();
+void    load_verbs();
+
+// function definitions
+void create()
+{
+   seteuid(ROOT_UID);
+   if(file_exists(VERB_SAVE+__SAVE_EXTENSION__))
+      restore_object(VERB_SAVE);
+   load_verbs();
+}
+
+int add_entry(string filename)
+{
+   if(geteuid(previous_object()) != ROOT_UID)
+      return VERB_NO_ACCESS;
+
+   if(member_array(filename, verb_files) != -1)
+      return VERB_ENTRY_EXISTS;
+
+   verb_files += ({ filename });
+   save_object(VERB_SAVE);
+   return VERB_SUCCESS;
+}
+
+int remove_entry(string filename)
+{
+   if(geteuid(previous_object()) != ROOT_UID)
+      return VERB_NO_ACCESS;
+
+   if(member_array(filename, verb_files) == -1)
+      return VERB_ENTRY_NONEXISTANT;
+
+   verb_files -= ({ filename });
+   save_object(VERB_SAVE);
+   return VERB_SUCCESS;
+}
+
+string *list_entries()
+{
+   if(geteuid(previous_object()) != ROOT_UID)
+      return ({ });
+
+   return verb_files;
+}
+
+void load_verbs()
+{
+   string log_message;
+   mixed load_status;
+
+   if(geteuid(previous_object()) != ROOT_UID)
+      return;
+
+   foreach(string filename in verb_files)
+   {
+      load_status = catch((void) filename->create());
+
+      log_message = log_formatted_time() + filename + ": ";
+
+      if(intp(load_status) && load_status == 0)
+         (void) LOG_D->log_daemon_output("verb", log_message + "Success.\n");
+      else
+         (void) LOG_D->log_daemon_output("verb", log_message + load_status + "\n");
+   }
+}

@@ -649,3 +649,12 @@ functionally re-tested live on this lib.
 - `d/fixedtest/taohua/shijian.lpc`：`for(times; …)` 的初始化部分无作用，改为 `for(; …)`。
 - 其余是未用的局部变量（toolkit 自动删）。
 - 2026-10-14：新目录补丁 `patches/0005-float-truncation.patch`。`cmds/std/look.lpc` 的 `tough_level()` 中 `lvl = pow(power, 0.25)` 写明 `to_int()`，值不变；这是 FluffOS 970d9f09 重扫的唯一一处。五个补丁各自都能在 pin 上 `git apply --check` 通过，按顺序也能叠加。
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：子模块去 `.git` + `apply_lib_patches` 五补丁 + `overlay` 管理员种子；端口 40013。
+
+覆盖：内码选 `1`(utf-8) → `fluffos`/`Mud@2026` → 巫师休息室 `look`/`inventory`/`score`/`help` →
+`north` 会客厅/`south` 回休息室 → `who`/`save`/`quit` → 重连再进厅。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。

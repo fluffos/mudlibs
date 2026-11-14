@@ -10,5 +10,6 @@
 #define INTERMUD_MUD_NAME       "birdworld"
 #define CHINESE_MUD_NAME        "鳥人世界"
 #define MUDLIB_ENCODING "BIG5"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

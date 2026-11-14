@@ -82,6 +82,19 @@ def if_header(b, mask, ls):
     return hs
 
 
+def else_follows(b, mask, le):
+    """True when the next code line after the newline at `le` starts with `else` (would dangle if the `if` branch is cut)"""
+    p = le + 1 if le < len(b) and b[le:le + 1] in b"\n\r" else le
+    while p < len(b):
+        pe = b.find(b"\n", p)
+        pe = len(b) if pe < 0 else pe
+        sg = b"".join(bytes([c]) if mask[p + k] else b" " for k, c in enumerate(b[p:pe])).strip()
+        if sg:
+            return sg == b"else" or sg.startswith(b"else ") or sg.startswith(b"else\t")
+        p = pe + 1
+    return False
+
+
 def plan(b, handlers):
     """edits [(start, end, kind, handler)] for one file: kind REMOVE (whole line), CUT (statement out of a line), IFREMOVE (a braceless `if` header and its dead statement) or MANUAL"""
     out = []
@@ -140,7 +153,8 @@ def plan(b, handlers):
             # braceless header or the middle of an expression
             if prev and not prev.startswith(b"#") and prev[-1:] not in b";{}:":
                 hs = if_header(b, mask, ls)
-                if hs is not None:
+                # an `else` after the dead branch would dangle if we cut the `if` (arkadia exits: if (add==1) add_action(unq_move); else add_action(unq_no_move);)
+                if hs is not None and not else_follows(b, mask, le):
                     out.append((hs, min(le + 1, len(b)), "IFREMOVE", h))
                 else:
                     out.append((s, e, "MANUAL", h))

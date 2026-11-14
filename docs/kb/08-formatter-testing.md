@@ -204,6 +204,13 @@ Checklist:
    Afterwards: `log/errors/*` and the console must hold no warning (§6.10),
    and `grep "insufficient permission"` on the console must be empty (a
    `protected` function reached from another object, §6.10).
+   **CRLF `config.fluffos` (2026-11-10):** if the mudlib-directory line ends
+   in `\r`, the `/work` strip left SUFFIX=`$'\r'` and `mkdir` created
+   `work$'\r'/log` while the driver (trimmed path) used `work/` — every
+   preload `log_file()` raised `*Wrong permissions ... /log/... No such
+   file` (`es1_win`, `esI`). `pristine_tree.sh` now strips trailing `\r`
+   from the config before computing SUFFIX. Symptom: `work\r/` next to
+   `work/` under the play tree; fix is the script, not a keep-dir row.
 8. Fix in place, then write a dated
    `## 深度功能测试（§10.7，YYYY-MM-DD）` section in `NOTES.md`, plus a
    compact KB entry if the pattern recurs. Check §11 siblings for the

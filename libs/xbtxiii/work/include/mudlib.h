@@ -9,5 +9,6 @@
 
 #define INTERMUD_MUD_NAME       "XBTX"
 #define MUDLIB_ENCODING       "GB"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

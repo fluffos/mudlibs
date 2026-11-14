@@ -1,0 +1,358 @@
+#include <config.h>
+#include <news.h>
+#include <access.h>
+
+void main_menu();
+void continue_login();
+void do_new_player();
+void do_guest_player();
+void get_new_player_name(string);
+void get_new_player_password(string);
+void do_returning_player();
+
+object player;
+string name;
+int    gender;
+object smart_client;
+
+void create() {
+  player = 0;
+  name = 0;
+}
+
+void logon() {
+  call_out("idle", LOGIN_TIMEOUT);
+  LIVING_H -> enable_commands(TO);
+  receive("\nDriver: "+version()+"    Mudlib: "+mudlib()+" "+mudlib_version()+"    AMCP 1.1 compliant\n");
+  if(file_size(WELCOME) > 0)
+    receive(read_file(WELCOME));
+  ACCESS_H -> has_permission("/secure/adm/master", "file", "/driver.core", PERM_DELETE);
+  smart_client = new("/secure/std/protocols/none");
+  main_menu();
+}
+
+void main_menu() {
+  TO -> receive_message("prompt", "\n"
+"Enter your name or choose one of the following -\n\n"
+"N - New Character               U - See who is online\n"
+"G - Guest Character             Q - Quit\n\n"
+"Enter your choise [N,G,U,Q] : ");
+  
+  input_to("do_menu");
+}
+
+void do_menu(string str) {
+  string *bits;
+
+  if(!str || str == "") {
+    main_menu();
+    return;
+  }
+
+  switch(str) {
+    case "Q" :
+    case "q" :
+      TO -> receive_message("tell", "\nCome again soon!\n");
+      destruct(TO);
+      return;
+    case "U" :
+    case "u" :
+      TO -> receive_message("error", 
+                            "\nThis is not yet implemented.  Sorry.\n");
+      destruct(TO);
+      return;
+    case "N" :
+    case "n" :
+      do_new_player();
+      return;
+    case "G" :
+    case "g" :
+      do_guest_player();
+      return;
+    default :
+      // see if this is a player...
+      bits = explode(str, ":");
+      if(sizeof(bits) > 1) { // possible protocol thingy
+        receive("\n");
+        str = bits[0];
+        if(bits[1][0..4] == "amcp") { // continue login process
+          smart_client = new("/secure/std/protocols/amcp");
+        } else if(bits[1][0..4] == "none") {
+          smart_client = new("/secure/std/protocols/none");
+        } else {
+          receive("<protocol>amcp,none\n");
+          input_to("do_protocol_nogotiotion", 0, bits[0]);
+          return;
+        } 
+      }
+      if(!ACCESS_H -> query_is_user(str)) {
+        main_menu();
+        return; 
+      }
+      name = lower_case(str);
+      do_returning_player();
+      return;
+  }
+
+  receive("\nThanks for trying!\n");
+  destruct(TO);
+}
+
+void do_protocol_negotiation(string str, string nom) {
+  string *bits;
+
+  if(str[0..10] != "<protocol>") {
+    receive("<protocol>amcp,none\n");
+    input_to("do_protocol_nogotiotion", 0, nom);
+    return;
+  }
+  bits = explode(str[11..], "/");
+  if(bits[0] == "amcp")
+    smart_client = new("/secure/std/protocols/amcp");
+  else if(bits[0] == "none")
+    smart_client = new("/secure/std/protocols/none");
+  else {
+    receive("<protocol>amcp,none\n");
+    input_to("do_protocol_nogotiotion", 0, nom);
+    return;
+  }
+  if(!ACCESS_H -> query_is_user(nom)) {
+    main_menu();
+    return;
+  }
+  name = lower_case(nom);
+  do_returning_player();
+  return;
+}
+
+void do_new_player() {
+  if(file_size(NEW_PLAYER_NEWS) > 0)
+    TO -> receive_message("news", read_file(NEW_PLAYER_NEWS));
+
+  TO -> receive_message("prompt", "\nWhat name would you like to use? ");
+
+  input_to("get_new_player_name");
+}
+
+void get_new_player_name(string str) {
+  if(!str || str == "") {
+    main_menu();
+    return;
+  }
+
+  if(sizeof(str) < 3 || sizeof(str) > 10) {
+    TO -> receive_message("error", "\nPlease choose a name between 3 and 10 characters.");
+    TO -> receive_message("prompt", "\nWhat name would you like to use? ");
+    input_to("get_new_player_name");
+    return;
+  }
+
+  // check and see if the name is already taken
+  if(ACCESS_H -> query_is_user(str) || find_player(str)) {
+    TO -> receive_message("error", "\nSorry.  That name is already taken.\n");
+    TO -> receive_message("prompt", "\nWhat name would you like to use? ");
+    input_to("get_new_player_name");
+    return;
+  }
+
+  name = lower_case(str);
+
+  TO -> receive_message("prompt", "\nWhat gender would you like (male, female)? ");
+
+  input_to("get_new_player_gender");
+}
+
+void get_new_player_gender(string str) {
+  str = lower_case(str);
+  if(str == "m" || str == "male" || str == "f" || str == "female") {
+    if(str[0] == 'm')
+      gender = 1;
+    else
+      gender = 2;
+  } else {
+    TO -> receive_message("error", "\nPlease choose on of male or female.\n");
+    TO -> receive_message("prompt", "\nWhat gender would you like (male, female)? ");
+    input_to("get_new_player_gender");
+    return;
+  }
+
+  TO -> receive_message("password", "\nEnter your password: ");
+
+  input_to("get_new_player_password", 1);
+}
+
+void get_new_player_password(string str) {
+  if(!str || str == "") {
+    main_menu();
+    return;
+  }
+
+  if(sizeof(str) < 4) {
+    TO -> receive_message("error", 
+                      "\nPlease use a password longer than 3 characters.\n");
+    TO -> receive_message("password", "Enter your password: ");
+    input_to("get_new_player_password", 1);
+    return;
+  }
+
+  receive("\nEnter your password again: ");
+
+  input_to("finish_new_player", 1, str);
+}
+
+void finish_new_player(string str, string pass) {
+  if(!str || str == "") {
+    main_menu();
+    return;
+  }
+
+  if(str != pass) {
+    TO -> receive_message("error",
+                 "\nPasswords do not match.  Please try again.\n");
+    TO -> receive_message("password", "\nEnter your password: ");
+    input_to("get_new_player_password", 1);
+    return;
+  }
+
+  if(!ACCESS_H -> set_password(name, pass)) {
+    TO -> receive_message("error",
+             "\nUnable to set your password.  Please try again later.\n");
+    destruct(TO);
+    return;
+  }
+  // need to create a new player object here, set some stuff, and start it up.
+  player = new(PLAYER_OBJ);
+  player -> set_name(name);
+  player -> set_gender(gender);
+  player -> set_race_ob("/std/races/newbie");
+  // want new player news here
+  TO -> receive_message("news", "\n");
+  if(!exec(player, TO)) {
+    TO -> receive_message("error",
+       "\nUnable to transfer you to the game.  Please try again later.\n");
+    ACCESS_H -> remove_user(player);
+    destruct(player);
+  } else {
+    player -> set_password(pass); // for use when reading email, etc.
+    player -> set_smart_client(smart_client);
+    smart_client = 0;
+    player -> move_player_to_start( name, 1, CAP(name), name);
+  }
+  destruct(TO);
+}
+
+void do_guest_player() {
+  // guests are like new characters, but no password, no saving, no mail
+  // need a name and a gender
+  if(file_size(GUEST_PLAYER_NEWS) > 0)
+    TO -> receive_message("news", read_file(GUEST_PLAYER_NEWS));
+
+  TO -> receive_message("prompt", "\nWhat name would you like to use? ");
+  
+  input_to("get_guest_player_name");
+}
+
+void get_guest_player_name(string str) {
+  if(!str || str == "") {
+    main_menu();
+    return;
+  }
+    
+  if(sizeof(str) < 3 || sizeof(str) > 10) {
+    TO -> receive_message("error",
+             "Please choose a name between 3 and 10 characters.\n");
+    TO -> receive_message("prompt", "\nWhat name would you like to use? ");
+    input_to("get_guest_player_name");
+  }
+
+  if(ACCESS_H -> query_is_user(str) || find_player(str)) {
+    TO -> receive_message("error", "\nSorry.  That name is already taken.\n");
+    TO -> receive_message("prompt", "\nWhat name would you like to use? ");
+    input_to("get_guest_player_name");
+    return;
+  }
+
+  name = lower_case(str);
+
+  TO -> receive_message("prompt", 
+      "\nWhat gender would you like (male, female)? ");
+    
+  input_to("get_guest_player_gender");
+}
+  
+void get_guest_player_gender(string str) {
+  str = lower_case(str);
+  if(str == "m" || str == "male" || str == "f" || str == "female") {
+    if(str[0] == 'm')
+      gender = 1;
+    else
+      gender = 2;
+  } else {
+    TO -> receive_message("error", "\nPlease choose on of male or female.\n");
+    TO -> receive_message("prompt", 
+                          "\nWhat gender would you like (male, female)? ");
+    input_to("get_guest_player_gender");
+    return;
+  }
+
+  player = new(PLAYER_OBJ);
+  player -> set_guest();
+  player -> set_name(name);
+  player -> set_gender(gender);
+  
+  if(!exec(player, TO)) {
+    TO -> receive_message("error",
+          "\nUnable to transfer you to the game.  Please try again later.\n");
+    destruct(player);
+  } else {
+    player -> set_smart_client(smart_client);
+    smart_client = 0;
+    player -> move_player_to_start( name, 0, CAP(name), name);
+  }
+  destruct(TO);
+}
+
+void do_returning_player() {
+  TO -> receive_message("password", "Please enter your password: ");
+  input_to("get_returning_player_password", 1);
+}
+
+void get_returning_player_password(string pass) {
+  int move_to_start = 0;
+
+  if(!ACCESS_H -> check_password(name, pass)) {
+    TO -> receive_message("error", 
+            "\nSorry!  That player and password don't seem to go together.\n");
+    destruct(TO);
+    return;
+  }
+
+  if(!objectp(player = find_living(name))) {
+    // load player, check for banishments, etc.
+    player = new(PLAYER_OBJ);
+    player -> set_name(name); // this should load file
+    move_to_start = 1;
+  }
+  receive("\n");
+  if(!exec(player, TO)) {
+    TO -> receive_message("error",
+             "Unable to transfer you to the game.  Please try again later.\n");
+    destruct(player);
+  } else {
+    if(move_to_start)
+      player -> move_player_to_start( name, 0, CAP(name), name);
+  }
+  destruct(TO);
+}
+
+void idle() {
+  TO -> receive_message("error", "\nLogin timed out.\n");
+  destruct(TO);
+}
+
+void receive_message(string msg_class, string msg) {
+  if(smart_client) 
+    receive(smart_client -> process_output(explode(msg_class, "."), msg));
+  else
+    receive(msg);
+}

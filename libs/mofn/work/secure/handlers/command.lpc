@@ -1,0 +1,137 @@
+// command parser - handles global commands
+inherit HANDLER_BASE;
+
+#include <parser.h>
+
+// mapping of path -> mapping of cmds -> array of (
+//    mapping of priority -> pattern
+//    object definition file
+//  ) OR (if not an array) a string of the cmd name for which this is a synonym
+nosave mixed cmd_cache;
+
+// idea: make aliases allow for patterns:
+// alias cm ("at <indirect:object>") cast magic missile at $I
+
+void rehash();
+void hash(string *paths);
+
+void create() {
+  cmd_cache = ([ 
+    "/cmds/creator/" : ([ ]),
+    "/cmds/player/" : ([ ]),
+    "/cmds/living/" : ([ ]),
+    "/secure/cmds/player/" : ([ ]),
+    "/secure/cmds/creator/" : ([ ]), 
+  ]);
+  ::create();
+  rehash();
+}
+
+int parse(object user, string *bits, string *paths) {
+  string path;
+  mixed cmd_info, *cmds, *pat;
+  int *priorities, p, *pos;
+  mixed *patterns, pattern; 
+
+  //bits = explode(str, " ");
+
+  cmds = ({ });
+
+  foreach(path in paths) {
+    if(path[<1] != '/')
+      path += "/";
+    if(undefinedp(cmd_cache[path]) || !sizeof(cmd_cache[path]))
+      hash(({ path }));
+    if(undefinedp(cmd_cache[path]) || !sizeof(cmd_cache[path]))
+      continue;
+    if(undefinedp(cmd_cache[path][bits[0]]))
+      continue;
+    cmd_info = bits[0];
+    while(stringp(cmd_info))
+      cmd_info = cmd_cache[path][cmd_info];
+    if(undefinedp(cmd_info))
+      continue;
+
+    cmds += ({ cmd_info });
+  }
+  
+  if(!sizeof(cmds))
+    return 0;  // no commands found
+
+  // now we need to walk through them in order -- by path and priority
+  foreach(cmd_info in cmds) {
+    if(!mapp(cmd_info[0]))
+      continue;
+    priorities = keys(cmd_info[0]);
+    priorities = sort_array(priorities, -1);
+    // need to sort these by priority
+
+    foreach(p in priorities) {
+      patterns = cmd_info[0][p];
+      if(!patterns || sizeof(patterns) == 0)
+        continue;
+      foreach(pattern in patterns) {
+        // see if this pattern matches the string
+        // if so, try it out - if successful, return true
+        // otherwise, return false
+        if(stringp(pattern))
+          pat = PARSER_H -> query_pattern(pattern);
+        else
+          pat = pattern;
+        pos = PARSER_H -> pattern_match(bits, pat);
+        if(arrayp(pos)) {
+          if(PARSER_H -> handle_command(user, bits, pos, pat, ({ p, pattern, cmd_info[1], "_cmd" }) ) )
+            return 1;
+
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
+void hash(string *paths) {
+  mixed *files, file;
+  string path;
+  string ob_file, *synonyms, s;
+
+  path = paths[0];
+
+  if(sizeof(paths) > 1)
+    call_out("hash", 0, paths[1..]);
+
+  if(path[<1] != '/')
+    path += "/";
+
+  //files = unguarded( (: get_dir, path, -1 :) );
+  files = get_dir(path, -1);
+  if(sizeof(files) == 0)
+    return;
+
+  cmd_cache[path] = ([ ]);
+
+  foreach(file in files) {
+    if(file[2] < 0) continue;
+    file = file[0][0..<3];
+    ob_file = path + file;
+
+    if(stringp(s = catch(load_object(ob_file)))) {
+       continue;
+    }
+    
+    cmd_cache[path][file] = ({ call_other(ob_file, "query_patterns"), 
+                               ob_file });
+    synonyms = call_other(ob_file, "query_synonyms");
+    if(sizeof(synonyms)) {
+      foreach(s in synonyms) {
+        cmd_cache[path][s] = file;
+      }
+    }
+  }
+}
+
+void rehash() {
+  call_out("hash", 0, keys(cmd_cache));
+  cmd_cache = ([ ]);
+}

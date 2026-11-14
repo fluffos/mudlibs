@@ -243,3 +243,12 @@ hylib/dtxy) stay confirmed duplicates.
 ## switch 只有 `default:` 一个标号，不编译：case 分支被注释掉了，2 处（2 个文件）（2026-11-02，KB 04 §6.30）
 
 `switch (EXPR) { default: BODY break; }` 只有 `default` 一个标号：这个驱动要 `case` 语句（`need case statements in switch/case, not just default:`），整个文件不编译，对象永远加载不了——归档时有人把 case 分支注释掉了、`default` 就是全部。本库 2 处（2 个文件）：。`scripts/lpc_fix_default_switch.py` 把它改成裸块 `{ BODY }`（尾部的 `break;` 去掉；`EXPR` 只有有副作用时留作一条语句；注释保持原位）。证明：改前文件编译失败；改后 `patrol.lpc` 加载 PASS，`stuff_d.lpc` 仍泛型加载失败（另一缺陷，另列）；HEAD / 工作树加载对比 0 退步。
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40196。
+
+覆盖：`fluffos`/`Play2026x` → 华阴草庐 `look`/`inventory`/`score`/`who` →
+`west` 小村中心 / `east` 回草庐 → `save`（系统自动存）/`quit` → 重连再进草庐/`score`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error（仅有既有 old crypt 提示）。无新编程缺陷。

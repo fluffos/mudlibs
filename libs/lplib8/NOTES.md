@@ -633,3 +633,12 @@ mudlib bug.
 ## `add_action()` registrations of functions nobody defines (2026-10-21, KB 06 §7.349)
 
 An `add_action("fn", "verb")` whose function is defined neither by the object, nor by its headers, nor by its parents, nor by any object derived from it (`scripts/lpc_scan_callout_targets.py`, descendants checked transitively, then `function_exists()` in a running driver, `scripts/lpc_verify_handlers.py`). The driver walks the actor's sentences from the newest one: when that sentence's function does not exist it raises `*Function for verb 'drop' not found.` and tries no other handler of the verb (an older dead sentence is passed over silently). Removed 12 registrations in 1 files (`scripts/lpc_fix_dead_add_action.py`), the verbs are left to their other handlers: `/basic/player/wiz.lpc` (`Call`, `Clean`, `Destruct`, `Dump`, ...). Most frequent: `Call` x1, `Clean` x1, `Destruct` x1, `Dump` x1, `Goto` x1. 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+原生树手启，端口 40263。Lars Pensjö 实验库。
+
+覆盖：注册（名/密无确认）→ 草坪 `look`/`n`/`s`/`w` → `get knife`/`wield knife` → `score`（knife fighting）→
+`say`/`save`（letter bucket `Make dir /players/t` 为既有提示）→ `quit` → 重连密码接受。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。

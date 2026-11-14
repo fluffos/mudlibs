@@ -1505,3 +1505,50 @@ tianzun → `ob`；shenxiang → `me`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## 深度功能测试（2026-11-09，NEEDLE §6.16/§6.15）
+
+`clone/weapon/needle` 继承未定义的 `NEEDLE`。从 mhxy 收养 `/std/weapon/needle`（`init_needle`），`weapon.h` 补宏。证明：needle + clone HEAD FAIL → 树 PASS。
+
+## 深度功能测试（2026-11-09，SUPER_NPC 薄别名 §6.16/§6.15）
+
+百花谷等 NPC 继承未定义的 `SUPER_NPC`。`globals.h` 定义 `/std/char/super_npc`，薄别名至本库 `/d/snowtu/npc/super_npc`。证明：别名 PASS；接引 NPC 续缺 `set_level`/`FAMILY_D` 另案。JOBNPC 需 `NPC_D`，未收。
+
+## SSSERVER 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`daemon/class/jwm/.../jianhun` 与 `daemon/skill/godsword` 继承未定义的 `SSSERVER`（仅 `u/xdao/globals.h` 有宏，全局头没有，文件也缺）。从手足 dtxyzjb 收养 `/std/ssserver.lpc`，并在 `globals.h` 补 `#define SSSERVER`。证明：`/std/ssserver` HEAD FAIL → PASS（newly loading）；consumers 仍缺 `F_FUNCTION` / `sp_attack*`（另案）。BI/DHAMMER 本轮未做（无干净 `init_bi` 供体；DHAMMER→HAMMER 别名后 dhammer 仍因 `%n`/self.h 语法失败）。
+
+
+## F_FUNCTION 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`jianhun` / `ai-sword` 等继承未定义的 `F_FUNCTION`（`query_function` / `function_improved`）。从手足 kxkj 收养 `feature/function.lpc`，并补 `#define F_FUNCTION`。证明：HEAD 2 PASS / 2 FAIL → tree 4 PASS（newly loading 2）。
+
+
+
+## 深度功能测试（2026-11-09，d/game/pai 薄别名 §6.15）
+
+`榄旀硶鐗_pai[1-6]` 继承同目录缺失的 `pai`；本体因编码损坏落在 `榄旀硶鐗_pai.lpc`。薄别名 `pai.lpc` → 该档。证明：HEAD 1 PASS / 7 FAIL → 树 8 PASS。
+
+
+## 深度功能测试（2026-11-09，baohu killer1 收养 §6.15）
+
+`d/quest/baohu/yaoguai{2,3}/yg-*` 继承同目录缺失的 `killer1`；本体在 `/d/wizz/stey/kill2/killer1`。同库收养到两目录。证明：killer1+yg sample listcheck HEAD 1 PASS / 6 FAIL → 树 7 PASS。
+
+## §6.15 adopt `equip_bd`（2026-11-10）
+
+- 症状：`d/maze/dayan-ta/obj/bangding.lpc` `inherit "/d/obj/equip/equip_bd.lpc"`，本馆缺文件 → `*No program`
+- 供体：`xiaoyuxiyou` / `xyxyutf8` 同名基类（111 行；`xyxy2` 版依赖 `MyArmorFile`/`MyWeaponFile`，神魔无）
+- 修复：采纳 `d/obj/equip/equip_bd.lpc`；`adm/simul_efun/message.lpc` 补手足同有的 `err_msg()` sefun
+- 验证：`lpcc_eval` `load_object("/d/maze/dayan-ta/obj/bangding")` → 须弥石
+
+## 深度功能测试（2026-11-10，zizhulin2/room 采纳 §6.15）
+
+`d/maze/bhg-baihua/{enter,out}` 继承缺失的 `/d/maze/zizhulin2/room`；从同系 `xyxy2` 采纳。宿主无 `REMOVE_D`/`removed` 守护进程，两处 `REMOVE_D->add_obj` 改为 `call_out((: destruct, … :), 1)`。证明：listcheck 3 对象 HEAD 0 PASS / 3 FAIL → 树 3 PASS。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

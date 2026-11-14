@@ -159,6 +159,16 @@ void log_file(string file, string text) {
   code. `.gitignore`d log trees never survive a fresh clone, so assure
   them in code.
 
+**Also:** JackyBoy `toptend` (2026-11-10): no `create()` / no
+`assure_file` before overwrite `write_file` into `/data/topten` or
+`/topten`; every `enter_world` threw and the master printed the 臭虫
+WARNING. `scripts/lpc_fix_topten_dir.py` adds `seteuid(ROOT_UID);
+mkdir(<dir>)` + `assure_file(f_name)` and `wasm_keep_dirs` (82 libs;
+`hhsj`/`nitan_ceshi` already fixed). Spot-boot `xfbhh` without the keep
+dir: login wrote `rich.txt` et al., no `debug.log`. Follow-up leftovers (2026-11-10): decompiled `topten_save(mixed)` / `top_save` (longyunmeng_binary, wllz3), existing-create `DATA_DIR "topten/"` save_object (aoxiangtianji, xiyouji2003), shiji/sj/syxjl `/topten/`, tianlongbabu `data/site`. Still skips `/open/topten` single-file lists and `DATA_DIR "toptend"` single-file saves (mhxy/pkuxkx).
+
+**Also (2026-11-10, xfbhh):** `emote_d.create()` does `restore_object(/data/emotion/emotion.o)` and `destruct(this_object())` on failure. The archive had only an empty `data/emotion/` (`.gitkeep`), so the daemon never stayed loaded; `commandd` then raised `*call_other() couldn't find object '/adm/daemons/emote_d'` and `score` printed `WARNING 这里发现了臭虫`. Adopted `emotion.o` from sibling `hhsj` (+ keep `data/emotion`). Proof: ZJ register→zz/xuan/choose/washto→世界之树; score clean; debug.log quiet.
+
 **Detection:** grep `log_file(` and `write_file(` in each lib's
 simul_efun and in the daemons that run on common player actions. The
 pairing "`log_file()` sits two functions above its own unused
@@ -326,6 +336,8 @@ legitimate sleep/revive/disable flows re-enable while already living
 **Status:** corpus sweep done (73 libs). Five stragglers found 2026-10-19 (dtxyzjb `d/tianmo/door` in the reach census: the sect elder `zhangmen.lpc` ends `init()` with `me->setup();`, and the first living that walks in re-enters it; tianxiawuxue, xiaoyuxiyou, xyxy2, xyxyutf8 the same): `scripts/lpc_fix_enable_player_guard.py [SLUG...] --apply` adds the flag (after the leading local declarations; a `living()` guard like wuhanzhan's, or a `return` in the middle, is listed and left). Test before trusting it: load each `create_identity(..., ROOM)` room, then `new()` another living and `move()` it in (`Too deep recursion` at HEAD in 6 dtxyzjb rooms and tianxiawuxue's `d/shushan/tianshi`, none after).
 
 **Also (2026-11-03):** another 117 libs still lacked the flag (es2/fy*/jqxz*/hy*/… Journey and Fengyun families). Same fixer `--apply`. Proof: HEAD `feature/command.lpc` has no `in_enable_player_now`; tree has the nosave flag + early return; post-apply plan is 0 FIX.
+
+**Also (2026-11-10, yhlib):** yhlib `feature/command.lpc` still lacked the flag. `lpc_fix_enable_player_guard.py --apply`. Proof: object loads; post-apply plan 0 FIX for yhlib.
 
 ### 7.20 Net-dead void-parking without location restore
 **Symptom:** no log signal at all. After an unclean disconnect, the

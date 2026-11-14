@@ -10,5 +10,6 @@
 #define INTERMUD_NAME           "$HIR$郑州风云$NOR$"
 #define CHINESE_MUD_NAME        "天下无敌"
 #define INTERMUD_MUD_NAME               "Zz_TxwD"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

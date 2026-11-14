@@ -1,0 +1,1946 @@
+// provides a lot of useful code for parsing
+// also provides the command handler
+
+// from dw-wibble-r8.88
+
+#include <parser.h>
+
+inherit PARSER_MOD;
+
+#define PATTERN_CACHE_SIZE 200
+
+nosave mapping patterns;
+nosave mapping pattern_short;
+nosave string *pattern_order;
+nosave int hits, reqs, cache_callout;
+
+nomask mixed *compile_pattern(string str);
+varargs class obj_match my_find_match(string pattern, object *where, object user);
+int check_if_allowed(object ob);
+
+void create() {
+   patterns = ([ "" : ({ 100 }) ]);
+   pattern_short = ([ "" : "" ]);
+   pattern_order = ({ });
+
+   parser::create();
+} /* create() */
+
+void clean_cache() {
+  int i;
+
+  for(i=0; i<(sizeof(pattern_order)-PATTERN_CACHE_SIZE); i++) {
+    map_delete(patterns, pattern_order[i]);
+    map_delete(pattern_short, pattern_order[i]);
+  }
+  pattern_order = pattern_order[i..];
+  cache_callout = 0;
+}
+
+
+varargs class obj_match match_objects(int type, string pattern, object *env, object user) {
+  class obj_match omatch;
+  class obj_match new_omatch;
+  object* tmp;
+  object ret;
+
+  if(!user)
+    user = PO;
+                
+  switch (type) {       
+  case WIZ_PRESENT_TARGET :
+    omatch = new(class obj_match);
+    omatch->text = pattern;
+    omatch->objects = TO->wiz_present(pattern, env[0]);
+    if (sizeof(omatch->objects)) {
+       omatch->result = PARSER_SUCCESS;
+    } else {
+       omatch->result = PARSER_NO_MATCH;
+    }                   
+    break;        
+  case ANY_OBJECT :
+    user -> receive_message("debug", sprintf("Calling my_find_match(%s, %O, ...)\n", pattern, env));
+    omatch = my_find_match(pattern, env, user);
+    break;
+  case DISTANT_LIVING :
+    omatch = new(class obj_match);
+    omatch->text = pattern;
+    if ( environment() && !user->query_creator() ) {
+      if ( environment()->query_property( "no remote" ) ) {
+        omatch->objects = ({ });
+        omatch->result = PARSER_BAD_ENVIRONMENT;
+        break;
+      }
+    }
+    omatch->objects = filter(map(explode(lower_case(pattern), ","),
+            (: find_living( (string)$(user)->
+        expand_nickname( $1 )) :) ), (: $1 && check_if_allowed($1) :) );
+    omatch->objects = uniq_array(omatch->objects);
+    if (sizeof(omatch->objects)) {
+       omatch->result = PARSER_SUCCESS;
+    } else {
+       omatch->result = PARSER_NO_MATCH;
+    }
+    break;
+  case LIVING :
+    omatch = my_find_match(pattern, env, user), "check_living", user;
+    tmp = filter(omatch->objects, "check_living", user);
+    // See of any of them were not living...
+    if (sizeof(omatch->objects) != sizeof(tmp)) {
+       if (pattern != "all") {
+          omatch->result = PARSER_NOT_LIVING;
+          omatch->objects -= tmp;
+       } else {
+          omatch->objects = tmp;
+       }
+    }
+    break;
+  case TARGET_PLAYER :
+    omatch = new(class obj_match);
+    omatch->text = pattern;
+    if (environment() && !user->query_creator()) {
+      if (environment()->query_property("no remote")) {
+        omatch->objects = ({ });
+        omatch->result = PARSER_BAD_ENVIRONMENT;
+        break;
+      }
+    }
+
+    omatch->objects = 
+      filter(
+        map(
+          explode(
+            lower_case(pattern), 
+            ","),
+          (: find_player( 
+               (string)$(user)-> expand_nickname( $1 )
+          ) :) 
+        ), 
+        (: $1 && check_if_allowed($1) :) 
+      );
+    omatch->objects = uniq_array(omatch->objects);
+
+    if (!sizeof(omatch->objects)) {
+      if (pattern == "creators" && user->query_creator()) {
+        //omatch->objects = filter(users(), (: check_if_creator($1) :));
+      }
+      if (pattern == "someone") {
+        omatch->objects = filter(users(), (: check_if_allowed($1) :));
+        if (sizeof(omatch->objects) > 1) {
+          omatch->objects = ({ omatch->objects[random(sizeof(omatch->objects))] });
+        }
+      }
+    }
+    if (sizeof(omatch->objects)) {
+       omatch->result = PARSER_SUCCESS;
+    } else {
+       omatch->result = PARSER_NO_MATCH;
+    }
+    break;
+  case ANY_LIVING :
+    omatch = my_find_match(pattern, env, user),
+                              "check_living", user;
+    if (omatch->result == PARSER_SUCCESS) {
+       tmp = filter(omatch->objects, "check_living", user);
+       // See of any of them were not living...
+       if (sizeof(omatch->objects) != sizeof(tmp)) {
+          if (pattern != "all") {
+             omatch->result = PARSER_NOT_LIVING;
+             omatch->objects -= tmp;
+          } else {
+             omatch->objects = tmp;
+          }
+       }
+    } else {
+      new_omatch = new(class obj_match);
+      new_omatch->text = pattern;
+      if ( environment() && !user->query_creator() ) {
+        if ( environment()->query_property( "no remote" ) ) {
+          new_omatch->objects = ({ });
+          new_omatch->result = PARSER_BAD_ENVIRONMENT;
+          omatch = new_omatch;
+          break;
+        }
+      }
+      ret = find_living( user->expand_nickname( lower_case( pattern ) )
+ );
+      if ( objectp( ret ) && check_if_allowed( ret ) ) {
+        new_omatch->objects = ({ ret });
+        new_omatch->result = PARSER_SUCCESS;
+        omatch = new_omatch;
+      }
+    }
+    if (omatch->result != PARSER_SUCCESS) {
+      new_omatch = new(class obj_match);
+      new_omatch->text = pattern;
+      if (pattern == "creators" && user->query_creator()) {
+        //new_omatch->objects = filter(users(), (: check_if_creator($1) :));
+      }
+      if (pattern == "someone") {
+        new_omatch->objects = filter(users(), (: check_if_allowed($1) :));
+        if (sizeof(new_omatch->objects) > 1) {
+          new_omatch->objects = ({ new_omatch->objects[random(sizeof(new_omatch->objects))]});
+        }     
+      }
+      if (sizeof(new_omatch->objects)) {
+        new_omatch->result = PARSER_SUCCESS;
+        omatch = new_omatch;
+      }
+    }
+    break;  }
+  if (!omatch) {
+    omatch = new(class obj_match);
+    omatch->text = pattern;
+    omatch->objects = ({ });
+    omatch->result = PARSER_NO_MATCH;
+    return omatch;
+  }
+  return omatch;
+}
+
+varargs class obj_match my_find_match(string pattern, object *where, object user) {
+   object ob;
+   class obj_match omatch;
+
+   if(!user)
+     user = PO;
+
+   where = copy(where);
+   foreach (ob in where) {   
+      if (ob && (!ob->query_closed() ||
+                (ob->query_closed() && !ob->query_property("opaque")))) {
+         if (ob->query_mirror_room()) {
+            where += ({ ob->query_mirror_room() });
+         }
+      } else {
+         where -= ({ ob });
+      }
+   }
+/*
+   where = filter(copy(where), (: $1 && (!$1->query_closed() ||
+                                  ($1->query_closed() &&
+                                   !$1->query_property("opaque"))) :));
+ */
+   if (!sizeof(where)) {
+      omatch = new(class obj_match);
+      omatch->text = lower_case(pattern);
+      omatch->objects = ({  });
+      omatch->result = PARSER_BAD_ENVIRONMENT;
+      return omatch;
+   }
+   omatch = (class obj_match)match_objects_in_environments(pattern, where, 0, user);
+   if (omatch->result != PARSER_SUCCESS) {
+      ob = find_object(pattern);
+      if (ob && member_array(environment(ob), where) != -1) {
+         omatch->text = lower_case(pattern);
+         omatch->objects = ({ ob });
+         omatch->result = PARSER_SUCCESS;
+      }
+   }
+   return omatch;
+}
+
+int check_living(object ob) {
+  return living(ob);
+}
+
+int check_if_creator(object ob) {
+  return (int)ob->query_creator() &&
+    !(ob == this_player() || ob->query_invis());    
+}
+
+int check_if_allowed(object ob) {   
+  return ob != this_player() && reference_allowed(ob);
+}
+
+// returns the end of each set of words that fits the pattern:
+//  pattern: <direct:object> at <indirect:object>
+//  bits:   throw the pot at the troll
+//  returns: ({ 0       2  3         5 })  (i think)
+//  returns 0 on failure
+int *pattern_match(string *bits, mixed *pattern) {
+  string *elms;
+  int pos, *delayed, last, failed, j, opt, i, word_offset, spaces, wcount,
+    *matches, old_pos;
+  mixed tmp;
+
+  /*
+   * Ok, we need to check to see if the nice pattern we have in
+   * comm exists somewhere in bits.
+   */
+  pos = wcount = 1;
+  _curpat = "";
+  matches = ({ 0 });
+  delayed = ({ });
+  for (i = 1; i < sizeof(pattern) && !failed; i++) {
+    /* Ok, check matching rules. */   
+    if (pos >= sizeof(bits))    
+      failed = 1;
+    /* else */
+    _curpat += PATTERN[pattern[i]];
+    switch (pattern[i]) {    
+      case DIRECT_OBJECT :
+      case INDIRECT_OBJECT :
+        i++; /* Move to the type marker. */
+        if (pattern[i] == TARGET_PLAYER) {
+          if (last) {
+            delayed += ({ SINGLE_WORD });
+            word_offset++;
+            pos++; /* Push the search position forward one.
+                      It needs to be there at least */
+          } else {
+            pos++;
+            matches += ({ pos - 1 });
+          }
+          failed |= pos > sizeof(bits);
+        } else {
+          /*
+           * We don't know where this one ends, so we don't put a match onto the
+           * thingy.
+           */
+          if (last) {
+            delayed += ({ SINGLE_WORD });
+          } else {
+            delayed = ({ STRING });
+            last = FIND_FIRST;
+          }
+          word_offset++;
+          pos++; /* All strings must be at least 1 word long */
+        }
+        i++; /* Skip the environment marker */
+        break;
+      case COIN:
+        // coin := coin | number word
+        // this is greedy :)
+        i++;
+        old_pos = pos;
+        while(pos < sizeof(bits)-1 && bits[pos][0] <= '9' 
+               && bits[pos][0] >= '0') {
+          if(!MONEY_H -> query_coins_from_string(bits[pos] + " " + bits[pos+1]))
+            break;
+          pos += 2;
+        }
+        if(old_pos == pos) {
+          failed = 1;
+          break;
+        }
+        matches += ({ pos-1 });
+        break;
+      case STRING :
+        /* This here delayed should not exist! */
+        if (last) {
+          pos -= word_offset-1;
+          for (j=0;j<sizeof(delayed);j++) {
+            switch (delayed[j]) {
+              case STRING :
+                matches += ({ pos - 1 });
+                pos++;
+                break;
+              case OPTIONAL :
+                matches += ({ matches[sizeof(matches) - 1] });
+                break;
+              case SINGLE_WORD :
+                matches += ({ pos - 1 });
+                pos++;
+                break;
+            }
+          }
+        }
+        delayed = ({ STRING });
+        word_offset = 1;
+        pos++; /* Strings should be at least one word long */
+        last = FIND_LAST;
+        break;
+      case QUOTED_STRING :
+        if (last) {
+           while (pos < sizeof(bits) &&
+                  bits[pos][0] != '"' &&
+                  bits[pos][0] != '\'' &&
+                  bits[pos][0] != '`') {
+              pos++;
+           }
+           if (pos < sizeof(bits)) {
+              pos -= word_offset;
+              for (j = 0; j < sizeof(delayed); j++) {
+                 switch (delayed[j]) {
+                    case STRING :
+                       matches += ({ pos });
+                       pos++;
+                       break;
+                    case OPTIONAL :
+                       matches += ({ matches[sizeof(matches) - 1] });
+                       break;
+                    case SINGLE_WORD :
+                       matches += ({ pos });
+                       pos++;
+                       break;
+                 }
+              }
+              last = FIND_NONE;
+           } else {
+              failed = 1;
+           }
+        }
+        if (pos > sizeof(bits)) {
+           failed = 1;
+        }
+        if (!failed) {
+           switch (bits[pos][0]) {
+              case '"' :
+              case '\'' :
+              case '`' :
+                 /* Ok.  See if we can find the end... */
+                 j = pos;
+                 while (j < sizeof(bits) &&
+                        bits[j][strlen(bits[j]) - 1] != bits[pos][0]) {
+                    j++;
+                 }
+                 if (j < sizeof(bits)) {
+                    matches += ({ j });
+                    pos = j + 1;
+                 } else {
+                    failed = 1;
+                 }
+                 break;
+              default :
+                 failed = 1;
+                 break;
+           }
+        }
+        break;
+      case SHORT_STRING :
+        if (last) {
+          delayed += ({ SINGLE_WORD });
+        } else {
+          delayed = ({ STRING });
+        }
+        word_offset++;
+        pos++; /* Strings have to be at least one word */
+        last = FIND_FIRST;
+        break;
+      case SINGLE_WORD :
+        /* The last bit carrys through here too */
+        if (last) {
+          /* Some sort of delay */
+          /*
+           * Hmm, need to keep track of the delayed and single_word status of
+           * each bit we push
+           */
+          delayed += ({ SINGLE_WORD });
+          word_offset++;
+          pos++; /* Push the search position forward one.  It needs to be there
+                    at least */
+        } else {
+          /*
+           * Means the word we are pointing at must be the one we want.
+           * Womble!
+           */
+          matches += ({ pos });
+          pos++;
+        }
+        failed |= pos > sizeof(bits);
+        break;
+      case NUMBER :
+      case FRACTION :
+        failed = 1;
+        if (last == FIND_LAST) {
+          for (j = sizeof(bits) - 1; j >= pos; j--)
+            if ((bits[j][0] >= '0' && bits[j][0] <= '9') ||
+                (pattern[i] != FRACTION && bits[j][0] == '-' &&
+                 bits[j][1] >= '0' && bits[j][1] <= '9')) {
+              /* Found number! */
+              if (pattern[i] != FRACTION || sizeof(explode(bits[j], "/")) > 1) {
+                failed = 0;
+                /* We always point to the next match. */
+                pos = j + 1;
+                break;
+              }
+            }
+        } else if (last == FIND_FIRST) {
+          for (j = pos; j < sizeof(bits); j++)
+            if ((bits[j][0] >= '0' && bits[j][0] <= '9') ||
+                (pattern[i] != FRACTION && bits[j][0] == '-' &&
+                 bits[j][1] >= '0' && bits[j][1] <= '9')) {
+              /* Found number! */
+              if (pattern[i] != FRACTION || sizeof(explode(bits[j], "/")) > 1) {
+                failed = 0;
+                /* We always point to the next match. */
+                pos = j + 1;
+                break;
+              }
+            }
+        } else {
+          if (pos < sizeof(bits) &&
+              ((bits[pos][0] >= '0' && bits[pos][0] <= '9') ||
+                (pattern[i] != FRACTION && bits[pos][0] == '-' &&
+                 bits[pos][1] >= '0' && bits[pos][1] <= '9'))) {
+            failed = 0;
+            pos++;
+          } else {
+            failed = 1;
+          }
+        }
+        if (!failed) {
+          if (sizeof(delayed)) {
+            pos -= word_offset; /* Amount which is needed at least to handle the
+                                   pattern */
+            for (j=0;j<sizeof(delayed);j++) {
+              switch (delayed[j]) {
+                case STRING :
+                  matches += ({ pos - 1 });
+                  pos++;
+                  break;
+                case OPTIONAL :
+                  matches += ({ matches[sizeof(matches) - 1] });
+                  break;
+                case SINGLE_WORD :
+                  matches += ({ pos - 1 });
+                  pos++;
+                  break;
+              }
+            }
+            delayed = ({ });
+            word_offset = 0;
+          }
+          last = FIND_NONE;
+          matches += ({ pos - 1 });
+        }
+        break;
+      case OPTIONAL_SPACES :
+      case OPTIONAL :
+      case WORD_LIST_SPACES :
+        switch (pattern[i]) {
+          case OPTIONAL_SPACES :
+            spaces = opt = 1;
+            break;
+          case OPTIONAL:
+            opt = 1;
+            break;
+          case WORD_LIST_SPACES :
+            spaces = 1;
+            break;
+        }
+      case WORD_LIST :
+        /* Find word list. The next element is the list name */
+        /*
+         * How do we find a list?  Big question?
+         *
+         * Currently thought of method.  Use the array subtraction
+         * operation to find if there is any intersection.
+         */
+        /*
+         * Method 2:
+         * Use member_array a lot.
+         */
+        if (pointerp(pattern[++i])) {
+          string *words;
+ 
+          if (spaces) {
+            tmp = "";
+ 
+            foreach (words in pattern[i])
+              tmp += implode(words, " ") + "|";
+            tmp = tmp[0..<2];
+          }
+          _curpat += (sizeof(pattern[i]) > 1?"{":"");
+          _curpat += (spaces ? tmp : implode(pattern[i], "|")) +
+            (opt?"] ":(sizeof(pattern[i]) > 1?"} ":" "));
+          elms = pattern[i];
+        } else {
+          _curpat += pattern[i] + (opt?"] ":"} ");
+          elms = (string *)master()->query_word_list(pattern[i]);
+          if (!elms) {
+            /* Could be a local word list then? */
+            elms = PO -> query_word_list(pattern[i]);
+          }
+        }
+        if (!pointerp(elms) || !sizeof(elms))
+          failed = 1;
+        else {
+          if (!(last || failed || spaces)) {
+            /* Means that the word we are pointing at must be one of em! */
+            tmp = member_array(bits[pos], elms);
+            if (tmp == -1) {
+              failed = 1;
+            }
+          } else if (sizeof(elms) == 1 && last == FIND_FIRST && !spaces) {
+            /* Only one word.  Definately quicker to do a member_array */
+            tmp = member_array(elms[0], bits[pos..]);
+            if (tmp != -1) {
+              pos += tmp;
+            } else {
+              failed = 1;
+            }
+          } else if (!spaces) {
+            tmp = bits[pos..] - elms;
+            if (sizeof(tmp) < sizeof(bits)-pos) {
+              /* Ok, one exists... */
+              if (last == FIND_FIRST) {
+                for (j = 0; (j+pos) < sizeof(bits) && j < sizeof(tmp) &&
+                       bits[j+pos] == tmp[j]; j++);
+                pos += j;
+              } else {
+                int k;
+ 
+                for (j = sizeof(tmp)-1, k = sizeof(bits)-1;
+                     j >= 0 && bits[k] == tmp[j]; j--, k--);
+                pos = k;
+              }
+            } else {
+              failed = 1;
+            }
+          } else {
+            string *elem;
+            int success;
+ 
+            foreach(elem in elms) {
+              if (!last) {
+                /* Means that the words we are pointing at must be one of em! */
+                if (implode(bits[pos..pos+sizeof(elem)-1], " ") ==
+                    implode(elem, " ")) {
+                  success = 1;
+                  wcount = sizeof(elem);
+                  break;
+                }
+                failed = 1;
+              } else {
+                tmp = bits[pos..] - elem;
+                if (sizeof(tmp) <= (sizeof(bits) - pos - sizeof(elem))) {
+                  /* Okay, one exists... */
+                  success = 1;
+                  wcount = sizeof(elem);
+                  if (last == FIND_FIRST) {
+                    for (j = 0; (j+pos) < sizeof(bits) && j < sizeof(tmp) &&
+                           bits[j+pos] == tmp[j]; j++);
+                    pos += j;
+                    break;
+                  } else {
+                    int k;
+ 
+                    for (j = sizeof(tmp)-1, k = sizeof(bits)-1;
+                         j >= 0 && bits[k] == tmp[j]; j--, k--);
+                    pos = k - wcount + 1;
+                    break;
+                  }
+                } else {
+                  failed = 1;
+                }
+              }
+            }
+            if (success) {
+              failed = 0;
+            }
+          }
+        }
+        if (opt && failed) {
+          failed = 0;
+          if (!last)
+            matches += ({ pos - 1 }); // Keep the -1 for the optional stuff..?
+          else {
+            delayed += ({ OPTIONAL });
+            opt = 0;
+            spaces = 0;
+            break;
+          }
+        } else {
+          if (!failed) {
+             pos += wcount;
+          }
+          if (sizeof(delayed) && !failed) {
+            pos -= word_offset; /* Amount which is needed at least to handle the
+                                   pattern */
+            for (j=0;j<sizeof(delayed);j++) {
+              switch (delayed[j]) {
+                case STRING :
+                  matches += ({ pos - 1 });
+                  pos++;
+                  break;
+                case OPTIONAL :
+                  matches += ({ matches[sizeof(matches) - 1] });
+                  break;
+                case SINGLE_WORD :
+                  matches += ({ pos - 1 });
+                  pos++;
+                  break;
+              }
+            }
+            delayed = ({ });
+            word_offset = 0;
+          }
+          /* Only matching one word... So the next item must be ours. */
+          if (!failed) {
+            last = FIND_NONE;
+            //matches[0] = 1;
+            matches += ({ pos - 1 });
+            //pos += wcount;
+          }
+          wcount = 1;
+          delayed = ({ });
+        }
+        opt = 0;
+        spaces = 0;
+        last = FIND_NONE;
+        break;
+    }
+  }
+  if (sizeof(delayed)) {
+    /* Force to the end of the line... */
+    if (/*sizeof(bits)-word_offset >= pos*/ 1) {
+      pos = sizeof(bits) + 1;
+      pos -= word_offset; /* Amount which is needed at least to handle the
+                             pattern.  Last pos should be the end thingy.  */
+      for (j=0;j<sizeof(delayed);j++) {
+        switch (delayed[j]) {
+          case OPTIONAL :
+            matches += ({ matches[sizeof(matches) - 1] });
+            break;
+          case SINGLE_WORD :
+          case STRING :
+            matches += ({ pos - 1 });
+            pos++;
+            break;
+        }
+      }
+      delayed = ({ });
+      word_offset = 0;
+      pos = sizeof(bits);
+    } else
+      pos = -1;
+  }
+  matches += ({ sizeof(bits) });
+  if (failed || pos != sizeof(bits)) {
+//    if (matches[0] == 1)
+//      return ({});
+    return 0;
+  }
+  return matches + ({ sizeof(bits)+1 });
+}
+
+/**
+ * Returns the compiled pattern to the caller.   This checks to see if they
+ * pattern is in its internal cache and if it is, it uses that.
+ * @param pattern the pattern to compiler
+ * @return the compiler pattern
+ * @see /secure/include/parser.h
+ */
+nomask mixed *query_pattern(string pattern) {
+  if (!patterns[pattern]) {
+    patterns[pattern] = compile_pattern(pattern);
+  } else
+    hits++;
+
+  pattern_order -= ({ pattern });
+  pattern_order += ({ pattern });
+  if(!cache_callout && (sizeof(pattern_order) > PATTERN_CACHE_SIZE))
+    cache_callout = call_out("clean_cache", 300);
+  reqs++;
+  
+  return patterns[pattern];
+}
+
+/**
+ * Compiles the pattern.   Does no cache checking.  This returns
+ * only the compiled pattern, it also creates the short pattern as a
+ * side effect.  The short pattern can be queried by using
+ * query_short_pattern()
+ * @param str the pattern to compile
+ * @return the compiled pattern
+ * @see /include/user_parser.h
+ * @see query_short_pattern()
+ * @see /global/new_parse.c
+ */
+nomask mixed *compile_pattern(string str) {
+   mixed *pattern;
+   mixed *bits;
+   int i;
+   int failed;
+   int type;
+   int weight;
+   mixed env;
+   string short;
+   string short_bit;
+   int pos;
+   int pos2;
+   int j;
+   int k;
+
+   bits = explode(str, " ") - ({ 0, "" });
+   pattern = ({ });
+   short = "";
+   for (i = 0; i < sizeof(bits) && !failed; i++) {
+      switch (bits[i][0]) {
+      case '<' :
+         pos = strsrch(bits[i], "'");
+         if (pos != -1) {
+             // Try to find the next one...
+             pos2 = strsrch(bits[i][pos + 1..], "'", pos + 1);
+             if (pos2 == -1) {
+                /* Oh dear...  Look for it man! */
+                for (j = i + 1; j < sizeof(bits); j++) {
+                   pos2 = strsrch(bits[j], "'");
+                   if (pos2 != -1) {
+                      break;
+                   }
+                }
+                if (j < sizeof(bits)) {
+                   // Ok, found the dreadful thing.
+                   for (k = i + 1; k <= j; k++) {
+                      bits[i] += " " + bits[k];
+                   }
+                   // Nip up to the new one.
+                   bits[j] = bits[i];
+                   i = j;
+                   pos2 = strsrch(bits[i], "'", -1);
+                }
+             } else {
+                pos2 += pos + 1;
+             }
+             // We have it!  Cut out chunks.
+             if (pos2 != -1) {
+                short_bit = bits[i][pos+1..pos2-1];
+                bits[i] = bits[i][0..pos-1] + bits[i][pos2+1..];
+             } else {
+                short_bit = 0;
+             }
+         } else {
+             short_bit = 0;
+         }
+         bits[i] = bits[i][1..<2];
+         bits[i] = explode(bits[i], ":");
+         if (!bits[i]) {
+            bits[i] = ({ "" });
+         }
+         switch (bits[i][0]) {
+         case "direct" :
+            weight += 7;
+            if (sizeof(bits[i]) > 1) {
+               switch (bits[i][1]) {
+               case "living" :
+                  type = LIVING;
+                  break;
+               case "distant-living" :
+                  type = DISTANT_LIVING;
+                  break;
+               case "any-living" :
+                  type = ANY_LIVING;
+                  break;
+               case "object" :
+                  type = ANY_OBJECT;
+                  break;
+               case "player" :
+                  type = TARGET_PLAYER;
+                  break;
+               default :
+                  failed = 1;
+                  printf("Unknown type of direct (%s).\n", bits[i][1]);
+                  break;
+               }
+               if (!short_bit) {
+                   short += "<"+bits[i][1]+"> ";
+               } else {
+                   short += "<" + short_bit + "> ";
+               }
+            } else {
+               type = ANY_OBJECT;
+               bits[i] += ({ "object" });
+               if (!short_bit) {
+                  short += "<object> ";
+               } else {
+                   short += "<" + short_bit + "> ";
+               }
+            }
+            //env = ENV_HERE_ME;
+            env = ENV_ME_HERE;
+            if (sizeof(bits[i]) > 2)
+               switch (bits[i][2]) {
+               case "here" :
+                  env = ENV_HERE;
+                  break;
+               case "me" :
+                  env = ENV_ME;
+                  break;
+               case "direct-obs" :
+                  env = ENV_DIRECT_OBS;
+                  break;
+               case "me-here" :
+                  env = ENV_ME_HERE;
+                  break;
+               case "here-me" :
+                  env = ENV_HERE_ME;
+                  break;
+               default :
+                  env = bits[i][2];
+                  break;
+               }
+            pattern += ({ DIRECT_OBJECT, type, env });
+            break;
+         case "indirect" :
+            weight += 7;
+            if (sizeof(bits[i]) > 1) {
+               switch (bits[i][1]) {
+               case "living" :
+                  type = LIVING;
+                  break;
+               case "distant-living" :
+                  type = DISTANT_LIVING;
+                  break;
+               case "any-living" :
+                  type = ANY_LIVING;
+                  break;
+               case "object" :
+                  type = ANY_OBJECT;
+                  break;
+               case "player" :
+                  type = TARGET_PLAYER;
+                  break;
+               case "wiz-present" :
+                  type = WIZ_PRESENT_TARGET;
+                  break;
+               default :
+                  failed = 1;
+                  printf("Unknown type of indirect (%s).\n", bits[i][1]);
+                  break;
+               }
+               if (!short_bit) {
+                  short += "<"+bits[i][1]+"> ";
+               } else {
+                   short += "<" + short_bit + "> ";
+               }
+            } else {
+               type = ANY_OBJECT;
+               bits[i] += ({ "object" });
+               if (!short_bit) {
+                  short += "<object> ";
+               } else {
+                   short += "<" + short_bit + "> ";
+               }
+            }
+            //env = ENV_HERE_ME;
+            env = ENV_ME_HERE;
+            if (sizeof(bits[i]) > 2)
+               switch (bits[i][2]) {
+               case "here" :
+                  env = ENV_HERE;
+                  break;
+               case "me" :
+                  env = ENV_ME;
+                  break;
+               case "direct-obs" :
+                  env = ENV_DIRECT_OBS;
+                  break;
+               case "me-here" :
+                  env = ENV_ME_HERE;
+                  break;
+               case "here-me" :
+                  env = ENV_HERE_ME;
+                  break;
+               default :
+                  env = bits[i][2];
+                  break;
+               }
+            pattern += ({ INDIRECT_OBJECT, type, env });
+            break;
+         case "coin" :
+         case "money":
+            weight += 7;
+/*
+            if (sizeof(bits[i]) > 1) {
+               switch (bits[i][1]) {
+               case "living" :
+                  type = LIVING;
+                  break;
+               case "distant-living" :
+                  type = DISTANT_LIVING;
+                  break;
+               case "any-living" :
+                  type = ANY_LIVING;
+                  break;
+               case "object" :
+                  type = ANY_OBJECT;
+                  break;
+               case "player" :
+                  type = TARGET_PLAYER;
+                  break;
+               case "wiz-present" :
+                  type = WIZ_PRESENT_TARGET;
+                  break;
+               default :
+                  failed = 1;
+                  printf("Unknown type of %s (%s).\n", bits[i][0], bits[i][1]);
+                  break;
+               }
+               if (!short_bit) {
+                  short += "<"+bits[i][1]+"> ";
+               } else {
+                   short += "<" + short_bit + "> ";
+               }
+            } else {
+               type = ANY_OBJECT;
+               bits[i] += ({ "object" });
+               if (!short_bit) {
+                  short += "<object> ";
+               } else {
+                   short += "<" + short_bit + "> ";
+               }
+            }
+            //env = ENV_HERE_ME;
+            env = ENV_ME_HERE;
+            if (sizeof(bits[i]) > 2)
+               switch (bits[i][2]) {
+               case "here" :
+                  env = ENV_HERE;
+                  break;
+               case "me" :
+                  env = ENV_ME;
+                  break;
+               case "direct-obs" :
+                  env = ENV_DIRECT_OBS;
+                  break;
+               case "me-here" :
+                  env = ENV_ME_HERE;
+                  break;
+               case "here-me" :
+                  env = ENV_HERE_ME;
+                  break;
+               default :
+                  env = bits[i][2];
+                  break;
+               }
+*/
+            pattern += ({ COIN });
+            break;
+         case "string" :
+            if (sizeof(bits[i]) > 1) {
+               switch (bits[i][1]) {
+               case "small" :
+                  if (!short_bit) {
+                     short += "<string> ";
+                  } else {
+                     short += "<" + short_bit + "> ";
+                  }
+                  weight += 6;
+                  pattern += ({ SHORT_STRING });
+                  break;
+               case "long" :
+                  if (!short_bit) {
+                     short += "<string> ";
+                  } else {
+                     short += "<" + short_bit + "> ";
+                  }
+                  weight += 5;
+                  pattern += ({ STRING });
+                  break;
+               case "quoted" :
+                  if (!short_bit) {
+                     short += "\"<string>\" ";
+                  } else {
+                     short += "\"<" + short_bit + ">\" ";
+                  }
+                  weight += 8;
+                  pattern += ({ QUOTED_STRING });
+                  break;
+               default :
+                  printf("Invalid type of string (%s).\n", bits[i][1]);
+                  failed = 1;
+                  break;
+               }
+            } else {
+               if (!short_bit) {
+                  short += "<string> ";
+               } else {
+                  short += "<" + short_bit + "> ";
+               }
+               weight += 5;
+               pattern += ({ STRING });
+            }
+            break;
+         case   "number" :
+            if (!short_bit) {
+               short += "<number> ";
+            } else {
+               short += "<" + short_bit + "> ";
+            }
+            weight += 10;
+            pattern += ({ NUMBER });
+            break;
+         case "word" :
+            if (!short_bit) {
+               short += "<word> ";
+            } else {
+               short += "<" + short_bit + "> ";
+            }
+            weight += 7;
+            pattern += ({ SINGLE_WORD });
+            break;
+         case "fraction" :
+            if (!short_bit) {
+               short += "<fraction> ";
+            } else {
+               short += "<" + short_bit + "> ";
+            }
+            weight += 10;
+            pattern += ({ FRACTION });
+            break;
+         default :
+            /* Only allows for made up word lists. */
+            weight += 10;
+            bits[i] = implode(bits[i], ":");
+            if (master()->query_word_list(bits[i]) 
+                  || this_player()->query_word_list(bits[i])) {
+               if (!short_bit) {
+                  short += "<"+bits[i]+"> ";
+               } else {
+                  short += "<" + short_bit + "> ";
+               }
+               pattern += ({ WORD_LIST, bits[i] });
+            } else {
+               printf("Unknown word list name (%s)\n", bits[i]);
+               failed = 1;
+            }
+            /*
+               else
+               pattern += ({ WORD_LIST, explode(bits[i], "|") });
+               */
+            break;
+         }
+         break;
+            /* Only allows for made up word lists. */
+            weight += 10;
+            bits[i] = implode(bits[i], ":");
+            if (master()->query_word_list(bits[i]) 
+                  || this_player()->query_word_list(bits[i])) {
+               if (!short_bit) {
+                  short += "<"+bits[i]+"> ";
+               } else {
+                  short += "<" + short_bit + "> ";
+               }
+               pattern += ({ WORD_LIST, bits[i] });
+            } else {
+               printf("Unknown word list name (%s)\n", bits[i]);
+               failed = 1;
+            }
+            /*
+               else
+               pattern += ({ WORD_LIST, explode(bits[i], "|") });
+               */
+            break;
+         //xxx
+         break;
+      case '{' :
+         weight += 10;
+         if (bits[i][<1] == '}') {
+            pattern += ({ WORD_LIST, explode(bits[i][1..<2], "|") });
+            short += bits[i]+" ";
+         } else {
+            int old = i;
+            string elm, *res;
+
+            for (++i; bits[i][<1] != '{'; i++);
+            res = ({});
+            foreach (elm in explode(implode(bits[old..i], " ")[1..<2], "|"))
+               res += ({ explode(elm, " ") });
+            pattern += ({ WORD_LIST_SPACES, res });
+            short += implode(bits[old..i], " ")+" ";
+         }
+         break;
+      case '[' :
+         weight += 4;
+         if (bits[i][1] == '<') {
+            /* This is a possible wombat.   Hmm, what do we allow inside here? */
+            /* For now don't allow things which have a return value */
+            if (MASTER->query_word_list(bits[i][2..<3])
+                  || this_player()->query_word_list(bits[i][2..<3]))
+               pattern += ({ OPTIONAL, bits[i][2..<3] });
+            else {                
+               printf("Unknown word list name (%s)\n", bits[i]);
+               failed = 1;
+               pattern += ({ OPTIONAL, bits[i][2..<3] });
+            }
+            short += bits[i]+" ";
+         } else if (bits[i][1] == '}') {
+            if (bits[i][<1] == ']') {
+               pattern += ({ OPTIONAL, explode(bits[i][2..<3], "|") });
+               short += bits[i]+" ";
+            } else {
+               int old = i;
+               string elm, *res;
+
+               for (++i; bits[i][<1] != ']'; i++);
+               res = ({});
+               foreach (elm in explode(implode(bits[old..i], " ")[2..<3], "|"))
+                  res += ({ explode(elm, " ") });
+               pattern += ({ OPTIONAL_SPACES, res });
+               short += implode(bits[old..i], " ")+" ";
+            }
+         } else if (bits[i][<1] == ']') {
+            pattern += ({ OPTIONAL, explode(bits[i][1..<2], "|") });
+            short += bits[i]+" ";
+         } else {
+            int old = i;
+            string elm, *res;
+
+            for (++i; bits[i][<1] != ']'; i++);
+            res = ({});
+            foreach (elm in explode(implode(bits[old..i], " ")[1..<2], "|"))
+               res += ({ explode(elm, " ") });
+            pattern += ({ OPTIONAL_SPACES, res });
+            short += implode(bits[old..i], " ")+" ";
+         }
+         break;
+      default :
+         /* This is one of the few allowable things to stop a variable size
+
+             argument if they do not put {}'s around it.   It is as-is */
+         weight += 10;
+         short += bits[i]+" ";
+         pattern += ({ WORD_LIST, ({ bits[i] }) });
+         break;
+      } /* switch() */
+   } /* for() */
+   if (failed) {
+      return 0;
+   }
+   pattern_short[str] = short;
+   return ({ weight }) + pattern;
+}
+
+string desc_object(mixed o){
+  string str;
+
+  if (!o) return "** Null-space **";
+  if (!catch(str = (string)o->short()) && str) return str;
+  if (!catch(str = (string)o->query_name()) && str) return str;
+  return file_name(o);
+}
+
+string desc_f_object(object o){
+  string str, tmp;
+
+  str = desc_object(o);
+  if (o && str != file_name(o)) {
+    if (tmp)
+      str += " (" + tmp + ")";
+    else
+      str += " (" + file_name(o) + ")";
+  }
+  return str;
+}
+
+object *wzpresent2(string str, mixed onobj) {
+  object *obs, ob, *obs2, obj;
+  string s1;
+  class obj_match result;
+ 
+  if (pointerp(onobj)) {
+    obs = ({ });
+    foreach(ob in onobj)
+      obs += wzpresent2(str,ob);
+    return obs;
+  }
+   
+  if (str == "all")
+    return all_inventory(onobj);
+ 
+  if (sscanf(str,"every %s",s1) == 1) {
+    obs2 = all_inventory(onobj); 
+    obs = ({ });
+    foreach (ob in obs2)
+      if (ob->id(s1)) obs += ({ ob });
+    return obs;
+  }
+
+  result = match_objects_in_environments(str,onobj);
+  if (result->result == PARSER_SUCCESS ||
+      result->result == PARSER_AMBIGUOUS) {
+    return result->objects;
+  }
+
+  if (obj = present(str,onobj)) return ({ obj });
+  for (obj = first_inventory(onobj); obj; obj = next_inventory(obj)) {
+    s1 = file_name(obj);
+    if (sscanf(s1, "%*s"+str+"#%*d") || sscanf(s1, "%*s#"+str))
+      return ({ obj });
+  }
+  return ({ });
+}
+
+varargs object *wiz_present(string str, object onobj, int nogoout) {
+/* nogoout is so that it WON'T check the environment of onobj */
+  int j;
+  object ob, *obs, *obs2;
+  string s1, s2, *sts;
+  mixed thing;
+  class obj_match result;
+ 
+  if (!str || !onobj)
+    return ({ });
+ 
+/* all the simple ones first */
+ 
+  if(str[0] == '@') {
+    if (ob = find_living(
+        (string)this_player()->expand_nickname(str[1..])))
+      return ({ ob });
+    //notify_fail("Unable to find living object: "+str[1..]+".\n");
+    return ({ });
+  }
+ 
+  if (str == "me") return ({ this_player() });
+
+  if (str == "here") return ({ environment(this_player()) });
+
+  if (str == "everyone") return users();
+
+  if (str == "creators") {
+    return filter( users(), (: (int)$1->query_creator() :) );
+  }
+
+  if(str[0] == '/') {
+    if (ob = find_object(str)) return ({ ob });
+    if (sizeof((sts = (string *)this_player()->get_cfiles(str))))  {
+      obs = ({ });
+      obs = map(sts, (: find_object($1) :)) - ({0});
+      return obs;
+    }
+    //notify_fail("No loaded object: "+str+".\n");
+    return ({ });
+  }
+
+/* (fish) == environment of fish */
+ 
+  if (str[0] == '(' && str[strlen(str) - 1] == ')') {
+    obs = wiz_present(str[1..strlen(str) - 2],onobj);
+    if (!sizeof(obs)) return obs;
+    obs = map(obs, (: environment($1) :)) - ({0});
+    return obs;
+  }
+ 
+/* handle "fish on fish2" */
+ 
+  if (sscanf(str,"%s on %s",s1,s2) == 2 ||
+      sscanf(str,"%s in %s",s1,s2) == 2) {
+    obs = wiz_present(s2, onobj);
+    if (!sizeof(obs)) return obs;
+    obs2 = ({ });
+    foreach (ob in obs)
+      obs2 += wiz_present(s1, ob, 1);
+    return obs2;
+  }
+ 
+/* fish and fish2 */
+ 
+  if (sscanf(str,"%s and %s",s1,s2) == 2) {
+    obs = wiz_present(s1, onobj);
+    obs2= wiz_present(s2, onobj);
+    obs2 += filter(obs, (: member_array($1, $(obs2)) < 0 :));
+    return obs2;
+  }
+ 
+/* fish except fish2 */
+ 
+  if (sscanf(str,"%s except %s",s1,s2) == 2 ||
+      sscanf(str,"%s but %s",s1,s2) == 2) {
+    obs = wiz_present(s1, onobj);
+    obs2= wiz_present(s2, onobj);
+    foreach (ob in obs2)
+      while ((j=member_array(ob, obs)) > -1)
+        obs = delete(obs,j--,1);
+    return obs;
+  }
+ 
+/* env of fish */
+ 
+  if (sscanf(str, "env of %s", s1) == 1) {
+    obs = wiz_present(s1, onobj);
+    if (!sizeof(obs)) {
+       return obs;
+    }
+    return map(obs, (: environment($1) :)) - ({0});
+  }
+
+/* children of fish */
+
+  if (sscanf(str, "children of %s", s1) == 1) {
+    obs = wiz_present(s1, onobj);
+    obs2 = ({ });
+    foreach (ob in obs) {
+      s1 = file_name(ob);
+      sscanf(s1, "%s#%*d", s1);
+      obs2 += children(s1);
+    }
+    return obs2;
+  }
+
+  if (sscanf(str,"player %s",s1)) {
+    return ({ find_player(s1) });
+  }
+
+  if (!sizeof(obs2 = wzpresent2(str,onobj)) && !nogoout) {
+    obs2 = wzpresent2(str, environment(onobj));
+  }
+
+  if (sizeof(obs2)) {
+    return obs2;
+  }
+ 
+/* check for a find_match locally */
+ 
+  result = match_objects_in_environments(str,onobj);
+  if (result->result == PARSER_SUCCESS ||
+      result->result == PARSER_AMBIGUOUS) {
+    return result->objects;
+  }
+ 
+/* default to return find_living ...  */
+ 
+  ob = find_living((string)this_player()->expand_nickname(str));
+  if (ob) {
+    return ({ ob });
+  }
+
+/* quick hack by ember 12/4/93 to stick in temporary object variables */
+  if (thing = this_player()->get_obvar(str)) {
+    if (objectp(thing)) return ({ thing });
+    if (pointerp(thing)) {
+/* Make sure they are all objects... */
+      return filter( thing, (: objectp( $1 ) :) );
+    }
+  }
+
+  if (sizeof((sts = (string *)this_player()->get_cfiles(str))))  {
+    obs = ({ });
+    obs = map(sts, (: find_object($1) :)) - ({0});
+    return obs;
+  }
+  return ({ });
+}
+
+// returns ({ dir_match, dir_objs, indir_match, indir_obs, add_com })
+// or  0 or -1 on error
+varargs mixed *objects_from_pattern(mixed *pattern, string *bits, int *matches,
+                             object user) {
+  int p;
+  int i;
+  int j;
+  int k;
+  string dir_match;
+  string pattern_str;
+  string *add_comm_bit;
+  class obj_match direct_obs;
+  object *env;
+  class obj_match failed_match;
+  mixed start;
+  mixed indirect_obs;
+  mixed ret;
+  mixed indir_match;   
+  mixed bity;
+  class obj_match omatch;
+    /*
+   * Ok, we have a match of some sort.  First, do we have any objects
+   * to match?  If we do.  Look for them to make sure they
+   * really do exist.
+   */
+  start = 1;
+  add_comm_bit = ({ });
+  indirect_obs = ({ });
+  direct_obs = new(class obj_match);
+  direct_obs->objects = ({ });
+  if (!sizeof(matches)) {
+    return 0;
+  }
+
+  for (i=1, p=1;i<sizeof(pattern) && !failed_match;i++,p++) {
+    switch (pattern[i]) {
+    case DIRECT_OBJECT :
+      dir_match = implode(bits[start..matches[p]], " ");
+      if (intp(pattern[i+2])) {
+         switch (pattern[i+2]) {
+            case ENV_ME :
+              env = ({ user });
+              break;
+            case ENV_HERE :
+              env = ({ ENV(user) });
+              break;
+            case ENV_HERE_ME :
+              env = ({ ENV(user), user });
+              break;
+            case ENV_ME_HERE :
+              env = ({ user, ENV(user) });
+              break;
+         }
+      } else if (stringp(pattern[i+2])) {
+         ret = find_object(pattern[i+2]);
+         if (!ret) {
+            pattern[i+2]->frog_me_a_lot();
+            ret = find_object(pattern[i+2]);
+         }
+         if (ret) {
+            env = ({ ret });
+         }
+      }
+
+      direct_obs = match_objects(pattern[++i], dir_match, env);
+
+      i++; /* Skip environment */
+      add_comm_bit += ({ dir_match });
+      start = matches[p];
+      if (direct_obs->result != PARSER_SUCCESS)
+        failed_match = direct_obs;
+      break;
+    case INDIRECT_OBJECT:
+      pattern_str = implode(bits[start..matches[p]], " ");
+      if (intp(pattern[i+2])) {
+         switch (pattern[i+2]) {
+         case ENV_ME :
+           env = ({ user });
+           break;
+         case ENV_HERE :
+           env = ({ ENV(user) });
+           break;
+         case ENV_HERE_ME :
+           env = ({ ENV(user), user });
+           break;
+         case ENV_ME_HERE :
+           env = ({ user, ENV(user) });
+           break;
+         }
+      } else if (stringp(pattern[i+2])) {
+         ret = find_object(pattern[i+2]);
+         if (!ret) {
+            pattern[i+2]->frog_me_a_lot();
+            ret = find_object(pattern[i+2]);
+         }
+         if (ret) {
+            env = ({ ret });
+         }
+      }
+
+      if (pattern[i+2] == ENV_DIRECT_OBS) {
+        bity = pattern[i+2];
+        i++;
+        if (!sizeof(bity) && !intp(bity)) {
+           omatch = new(class obj_match);
+           omatch->text = pattern_str;
+           omatch->objects = ({ });
+           omatch->result = PARSER_NO_MATCH;
+        } else {
+           omatch = new(class obj_match);
+           omatch->text = pattern_str;
+           omatch->objects = bity;
+           omatch->result = PARSER_SUCCESS;
+        }
+      } else {
+        omatch = match_objects(pattern[++i], pattern_str, env);
+      }
+      i++; /* Skip environment specifier */
+      add_comm_bit += ({ pattern_str });
+      if (omatch->result != PARSER_SUCCESS)
+        failed_match = omatch;
+      else {
+        if (stringp(indir_match)) {
+           if (pointerp(indir_match)) {
+              /* Already an array */
+              indirect_obs += ({ omatch->objects });
+              indir_match += ({ pattern_str });
+           } else {
+              // Make an array.
+              indirect_obs = ({ indirect_obs, omatch->objects });
+              indir_match = ({ indir_match, pattern_str });
+           }
+        } else {
+           indirect_obs = omatch->objects;
+           indir_match = pattern_str;
+        }
+      }
+      start = matches[p];
+      break;
+    case SINGLE_WORD :
+    case STRING :
+    case SHORT_STRING :
+      add_comm_bit += ({ implode(bits[start..matches[p]], " ") });
+      break;
+    case QUOTED_STRING :
+      pattern_str = implode(bits[start..matches[p]], " ");
+      add_comm_bit += ({ pattern_str[1..<2] });
+      break;
+    case NUMBER :
+      sscanf(implode(bits[start..matches[p]], " "), "%d", j);
+      add_comm_bit += ({ j });
+      break;
+    case FRACTION :
+      sscanf(implode(bits[start..matches[p]], " "), "%d/%s", j, k);
+      add_comm_bit += ({ j, k });
+      break;
+    case COIN:
+      add_comm_bit += ({
+        MONEY_H -> query_coins_from_string(implode(bits[start..matches[p]], " "))
+        });
+      break;
+    case OPTIONAL_SPACES :
+    case OPTIONAL :
+      i++; /* skip optional bits */
+      break;
+    case WORD_LIST_SPACES :
+    case WORD_LIST :
+      /* These are variable and therefor there must be something associated
+         with them */
+      if (pointerp(pattern[++i]))
+        if (sizeof(pattern[i]) > 1)
+          add_comm_bit += ({ implode(bits[start..matches[p]], " ") });
+      break;
+    }
+    start = matches[p]+1;
+  }
+  if(failed_match) {
+    setup_failed_mess(failed_match);
+    return (matches[0]?-1:0);
+  }
+  return ({ dir_match, direct_obs, indir_match, indirect_obs, add_comm_bit });
+}
+
+varargs int handle_command(object user, string *bits, int *matches, 
+                           mixed *pattern, mixed *command, int f) {
+  int failed;
+  int i;    
+  int j;
+  int k;          
+  string dir_match;
+  string pattern_str;
+  string fail_mess_check;
+  string *add_comm_bit; 
+  string fail_mesg;   
+  string succ_mesg;         
+  class obj_match direct_obs;
+  object *fail_ob;            
+  class obj_match failed_match;
+  mixed start;      
+  mixed indirect_obs;
+  mixed ret;
+  mixed *stuff;
+  mixed indir_match;
+  mixed bity;
+  string arg;
+  mixed ob_matches;
+
+  if(sizeof(bits) > 1)
+    arg = implode(bits[1..], " ");
+  else
+    arg = "";
+
+  ob_matches = objects_from_pattern(pattern, bits, matches, user);
+  if(intp(ob_matches)) return ob_matches;
+  dir_match   = ob_matches[0];
+  direct_obs  = ob_matches[1];
+  indir_match = ob_matches[2];
+  indirect_obs= ob_matches[3];
+  add_comm_bit= ob_matches[4];
+  pattern_str = command[PATTERN_STRING];
+  _fail_mess = ([ ]);
+  _succ_mess = ([ ]);
+  _succ_mess_dir = ({ });
+  _succ_mess_indir = ({ });
+  ret = 0;
+
+  //
+  // If this only has a direct-obs method in it, then assume the
+  // direct object is the one that defined the method.
+  //
+  // N.B.: f is true if we are dealing with commands and not objects
+  if (!f && !sizeof(direct_obs->objects) &&
+      (indirect_obs == ENV_DIRECT_OBS ||
+       sizeof(indirect_obs & ({ ENV_DIRECT_OBS }) ) ) ) {
+    //
+    // Grab all the direct ones.
+    //
+    direct_obs->objects = ({ });
+    for (i = OBJS; i < sizeof(command); i += 2) {
+       direct_obs->objects += ({ command[i] });
+    }
+  }
+
+    if (!sizeof(direct_obs->objects)) {
+    /* Cycle through each object.  Finish when one handles the command */
+    for (i = OBJS; i < sizeof(command) && !ret;i += 2) {
+      /* Straight command thingy.  No direct objects to handle at all. */
+      /* Ok, what we do in this case is call the function on the set object */
+      if (!add_comm_bit) {
+        add_comm_bit = ({ });
+        start = 1;
+        for (j = 0; j < sizeof(matches); j++) {
+          add_comm_bit += implode(bits[start..matches[j]], " ");
+          start = matches[j]+1;
+        }
+      }
+
+      if (functionp(command[i+1])) {
+        ret = evaluate(command[i+1], arg, user, direct_obs->objects,
+indirect_obs, dir_match, indir_match, add_comm_bit, pattern_str, bits[0]);
+      } else if(stringp(command[i+1])) {
+        ret = call_other(command[i], command[i+1], arg, user, direct_obs->objects, indirect_obs, dir_match, indir_match, add_comm_bit, pattern_str, bits[0]);
+      } else {
+        start = command[i];
+        if(stringp(start))
+          start = find_object(start);
+        if (!start) {
+           PO -> remove_object_force(start);
+           if (start == command[i]) {
+             PO -> remove_from_command(bits[0], start);
+           }
+           ret = 0;
+           continue;
+        }
+        do {
+           if (function_exists("do_"+bits[0], start)) {
+              ret = call_other(start, "do_"+bits[0], arg, user, 
+                               direct_obs->objects, indirect_obs,
+                               dir_match, indir_match, add_comm_bit,
+                               pattern_str, bits[0]);
+              break;
+           } else {
+              start = shadow(start, 0);
+           }
+        } while (start);
+        if (!start) {
+           ret = call_other(command[i], "command_control", bits[0],
+                            arg, user, direct_obs->objects, indirect_obs,
+                            dir_match, indir_match, add_comm_bit,
+                            pattern_str, bits[0]);
+        }
+      }
+    }
+    /*
+     * Since there are no direct objects.  We don't actually auto generate
+     * a message.  That is left up to the object in question.
+     */
+    if(_succ_mess_dir)
+      print_special_messages( bits[ 0 ] );
+    
+    _fail_mess = ([ ]);
+    return ret;
+  }
+
+    /*
+   * Ok, now we have some direct objects.
+   * This means we are now working very close to the
+   * way that the old add_command did.  Exactly the same actually.
+   */
+  /*      
+   * We go over each direct object and call a function on it.
+   * This return value we use to auto generate a success message.
+   * However, you can also set your own sucess message.
+   */
+  fail_ob = ({ });
+  bity = ({ });
+  failed = 0;
+  for (i=0;i<sizeof(direct_obs->objects);i++) {
+    /* Check to make sure this object has the command added to it. */
+    j = member_array(direct_obs->objects[i], command, OBJS);
+    if (j == -1) {   
+      fail_ob += ({ direct_obs->objects[i] });
+      continue;
+    }
+    /* Only allow objects with a short. */
+    if (!direct_obs->objects[i]->short()) {
+      continue;
+    }
+
+
+    if (intp(indirect_obs)) {
+      failed_match = my_find_match(indir_match, ({ direct_obs->objects[i] }));
+      if (failed_match->result == PARSER_SUCCESS) {
+         stuff = failed_match->objects;
+      }
+    } else if (pointerp(indir_match)) {
+      failed_match = 0;
+      stuff = copy(indirect_obs);
+      for (k = 0; k < sizeof(indirect_obs); k++) {
+        if (intp(stuff[k])) {
+          failed_match = my_find_match(indir_match[k], ({ direct_obs->objects[i] }) );
+          if (failed_match->result == PARSER_SUCCESS) {
+            stuff[k] = failed_match->objects;
+          } else {
+            break;
+          }
+        }
+      }
+    } else {
+      stuff = indirect_obs;
+      failed_match = 0;
+    }
+
+    if (failed_match && failed_match->result != PARSER_SUCCESS) {
+      setup_failed_mess(failed_match);
+      failed = 1;
+      continue;
+    }
+
+    if (functionp(command[j+1])) {
+      ret = evaluate(command[j+1], arg, user, direct_obs->objects, 
+                     stuff, dir_match, indir_match,
+                     add_comm_bit, pattern_str, bits[0]);
+    } else {
+      //
+      // See if our command object was dested.
+      //
+      start = direct_obs->objects[i];
+      if (!start) {
+         PO -> remove_object_force(start);
+         if (start == command[i]) {
+           PO -> remove_from_command(bits[0], start);
+         }
+         ret = 0;
+         continue;
+      }
+
+      /* Check to see if the object has the "do_"+verb function. */
+      do {
+        if (function_exists("do_"+bits[0], start)) {
+           ret = call_other(start, "do_"+bits[0], arg, user, 
+                            direct_obs->objects, stuff, dir_match, indir_match,
+                            add_comm_bit, pattern_str, bits[0]);
+           break;
+        } else {
+           start = shadow(start, 0);
+        }
+      } while (start);
+      if (!start) {
+         ret = call_other(direct_obs->objects[i], "command_control", bits[0], 
+                          arg, user, direct_obs->objects, stuff,
+                          dir_match, indir_match, add_comm_bit,
+                          pattern_str, bits[0]);
+      }
+    }
+
+    //
+    // Figure out what to do with the return value.
+    //
+    if (stringp(ret) || pointerp(ret)) {
+      bity += ({ ret });
+    } else if (ret && ret != -1) {
+      bity += ({ direct_obs->objects[i]});
+    } else {
+      fail_ob += ({ direct_obs->objects[i] });
+      if (ret == -1) {
+        failed = 1;
+      }
+    }
+  }
+  /*
+   * Ok, with this type, we auto generate success and fail messages.
+   */
+  if (!sizeof(bity)) {
+    /* Failure!  We never got any non zero return values */
+    fail_mess_check = get_fail_messages( bits[0], fail_ob );
+    if(sizeof(_failed_mess) < 2)
+      _failed_mess += ({ "", "" });
+    if(_failed_mess[1] == "") {
+      /*                               
+       * Only generate a fail message if we do not already have one.
+       */
+      _failed_mess[1] += fail_mess_check;
+      if(fail_mess_check == "" && sizeof(fail_ob)) {
+        fail_mesg = create_message(bits, matches, pattern, fail_ob, 1);
+        if (!pointerp(indirect_obs)) {
+          _failed_mess[1] += "You cannot " + bits[ 0 ] +        
+             replace_string( fail_mesg, "$succ_indir$",
+                            ( pointerp( indir_match ) ?
+                              query_multiple_short( indir_match ) :
+                              indir_match) );
+        } else {
+          if (pointerp(indir_match)) {
+             bity = explode("F" + fail_mesg, "$succ_indir$");
+             _failed_mess[1] += "You cannot "+ bits[ 0 ];
+             bity[0] = bity[0][1..];
+             for (i = 0; i < sizeof(bity) - 1; i++) {
+                if (i >= sizeof(indir_match)) {
+                   if (stuff && pointerp(stuff[<1])) {
+                      _failed_mess[1] += bity[i] +
+                                         query_multiple_short( stuff[<1] );
+                   } else {
+                      _failed_mess[1] += bity[i] +
+                                       query_multiple_short( indir_match[<1] ); 
+                   }
+                } else {
+                   if (stuff && pointerp(stuff[i])) {
+                      _failed_mess[1] += bity[i] +
+                                         query_multiple_short( stuff[i] );
+                   } else {
+                      _failed_mess[1] += bity[i] + indir_match[i];
+                   }
+                }
+             }
+             _failed_mess[1] += bity[<1];
+          } else {
+            if ( member_array( this_player(), indirect_obs ) == -1 ) {
+              _failed_mess[1] += "You cannot "+ bits[ 0 ] +
+                replace_string( fail_mesg, "$succ_indir$",
+                                query_multiple_short( indirect_obs, "a" ));
+            } else {
+              _failed_mess[1] += "You cannot "+ bits[ 0 ] +
+                replace_string( fail_mesg, "$succ_indir$",
+                                query_multiple_short( indirect_obs -
+                                                      ({this_player()}) +
+                                                      ({ "yourself" }),
+                                                      "a" ) );
+            }
+          }
+        }
+      }
+    }
+    _fail_mess = ([ ]);
+    if (!failed) {
+       return 0;
+    }
+    return -1;
+  }
+  /* We succeeded somewhere.  So print our success stuff. */
+
+  if (sizeof(bity) != sizeof(_succ_mess_dir)) {
+    /* Auto generated success messages. */
+    succ_mesg = create_message( bits, matches, pattern, bity - _succ_mess_dir);
+    if ( member_array( this_player(), _succ_indir ) == -1 ) {
+      TP -> receive_message("notice", 
+             "You "+ bits[ 0 ] + replace( succ_mesg, "$succ_indir$",
+                                          query_multiple_short( _succ_indir,
+                                                                "one" ) ) );
+      stuff = _succ_indir;
+    } else {
+      TP -> receive_message("notice",  
+        "You "+ bits[0] + replace(succ_mesg, "$succ_indir$",
+                                      query_multiple_short(_succ_indir -
+                                                           ({ this_player() })
+                                                           + ({ "yourself" }),
+                                                           "one") ) );
+      stuff = _succ_indir - ({ this_player() });
+      stuff = ({ (string)this_player()->query_objective() +"self" }) + stuff;
+
+    }
+    tell_room(ENV(TP), TP -> CNAME +" "+
+       pluralize(bits[0]) + replace(succ_mesg, "$succ_indir$",
+                                      query_multiple_short(stuff, "one")),
+         ({ }) + _succ_indir + ({ TP }) );
+    for ( i = 0; i < sizeof( _succ_indir ); i++ ) {
+      if ( _succ_indir[ i ] != this_player() ) {
+        _succ_indir[i] -> receive_message("notice",
+             TP -> CNAME + " " + pluralize(bits[0]) + replace(succ_mesg, "$succ_indir$",
+                                              query_multiple_short(stuff -
+                                                    ({ _succ_indir[i] }) +
+                                                    ({ "you" }), "one" ) ));
+      }
+    }
+    //
+    // And print any special messages too.
+    //
+    if (sizeof(_succ_mess_dir)) {
+       print_special_messages( bits[ 0 ] );
+    }
+  } else {
+    /* Creator generated success messages */
+    print_special_messages( bits[ 0 ] );
+  }
+  _succ_indir = ({ });
+  _succ_mess = ([ ]);
+  _succ_mess_dir = ({ });
+  _succ_mess_dir = ({ });
+  return 1;
+}

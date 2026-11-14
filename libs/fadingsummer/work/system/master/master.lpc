@@ -1,0 +1,300 @@
+// mudlib: Fading Summer
+// file:   master.c
+// author: Lontau
+// date:   17-6-2001
+
+/* Synopsis: This is the MASTER OBJECT for the mudlib.  It is responsible
+   for setting up user connections, validating various activites in the
+   mud, and providing an error handler for the mud.  It also provides
+   'virtual' objects through calls to the virtual daemon.
+*/
+
+#include <globals.h>
+
+// The following line includes the file that contains the 'valid_*'
+// applies.  These applies are used to determine whether or not specific
+// actions should be allowed by the driver.  Security is important here!
+
+#include "valid.lpc"
+
+// The following line includes the file that contains the parsing
+// applies.  These applies determine whether or not user input is parsed
+// and as such are considerably vital to the mud as a whole.
+
+// #include "parsing.lpc"
+
+// function: connect()
+// purpose: When a user tries to connect to the mud, the driver expects
+//          this function to return an object that the user can inhabit.
+//          In our case, this will be the LOGIN object so that we can
+//          take care of login necessities, such as getting a name and
+//          password.  From there, the user gets placed into their body.
+
+object connect()
+{
+	object login_ob;
+	mixed err;
+   
+	err = catch(login_ob = clone_object(LOGIN_OB));
+
+	if (err) {
+		write("It looks like someone is working on the player object.\n");
+		write(err);
+		destruct(this_object());
+	}
+	return login_ob;
+}
+
+// function: compile_object(string)
+// purpose: This function is called when the driver is asked to load an
+//          object that doesn't exist (invalid filename perhaps).  From
+//          here, the virtual daemon is called and passed the filename.
+//          Then it is up to the virtual daemon whether or not to return
+//          an object, which ultimately gets returned back to this function
+//          and from here, back to the driver.  It returns 0 if it does not
+//          wish to associate an object with the filename.
+
+mixed compile_object(string file)
+{
+	return 0;
+}
+
+// function: crash(string, object, object)
+// purpose: This function is called if something bad happens to the driver
+//          and it has to crash suddenly.  It is the last chance the mudlib
+//          has to save all data before being shutdown.  It is also possible
+//          to log which object and which player the driver was processing
+//          at the time of the crash.
+
+protected void crash(string error, object command_giver, object current_object)
+{
+	foreach (object ob in users())
+	    tell_object(ob, "Master object shouts: Damn!\nMaster object tells you: The game is crashing.\n");
+
+#if 0
+	log_file("crashes", FS_MUD_NAME + " crashed on: " + ctime(time()) +
+		", error: " + error + "\n");
+	if (command_giver) {
+		log_file("crashes", "this_player: " + file_name(command_giver) + "\n");
+	}
+	if (current_object) {
+		log_file("crashes", "this_object: " + file_name(current_object) + "\n");
+	}
+#endif
+}
+
+// function: update_file(string)
+// purpose: This function is used to read a file into a string and leave
+//          out lines that begin with a #.  The purpose of this function
+//          is to load a list of objects for the driver to preload, such
+//          as various daemons responsible for group and file control and
+//          access.
+
+protected string * update_file(string file)
+{
+	string *arr;
+	string str;
+	int i;
+
+	str = read_file(file);
+	if (!str) {
+		return ({});
+	}
+	arr = explode(str, "\n");
+	for (i = 0; i < sizeof(arr); i++) {
+		if (arr[i][0] == '#') {
+			arr[i] = 0;
+		}
+	}
+	return arr;
+}
+
+// function: epilog(int)
+// purpose: This function returns an array of filenames for the driver
+//          to preload.  The purpose of this function is to initialize
+//          the mudlib's various systems, such as file access control,
+//          etc.  It is the only function that uses the update_file()
+//          function.
+
+string * epilog(int load_empty)
+{
+	string *items;
+
+        if (!load_empty)
+	        items = update_file(CONFIG_DIR + "/preload");
+        else
+                items = ({});
+	return items;
+}
+
+// function: preload(string)
+// purpose: This function actually loads the file passed to it as an
+//          argument.  If the file will not load due to an error, this
+//          function also reports it.  This is only called by the driver,
+//          in conjunction with the epilog() function.
+
+void preload(string file)
+{
+	int t1;
+	string err;
+
+	if (file_size(file + ".lpc") == -1)
+		return;
+
+	t1 = time();
+	write("Preloading : " + file + "...");
+	err = catch(call_other(file, "??"));
+	if (err != 0) {
+		write("\nError " + err + " when loading " + file + "\n");
+	} else {
+		t1 = time() - t1;
+		write("(" + t1/60 + "." + t1 % 60 + ")\n");
+	}
+}
+
+// function: log_error(string, string)
+// purpose: This function allows the driver to decide where errors should
+//          be logged, based on the filename.
+
+void log_error(string filename, string message)
+{
+    write_file(LOG_DIR + "/compile", message);
+}
+
+// function: save_ed_setupd(object, int)
+// purpose: This function saves the options that a user selects in the
+//          mud's line editor.  The implementation saves this data in
+//          the user object, but the data can just as easily be saved
+//          in a file.
+
+int save_ed_setup(object who, int code)
+{
+   string file;
+  
+    if (!intp(code)) {
+        return 0;
+    }
+
+    file = user_path(getuid(who)) + ".edrc";
+
+    rm(file);
+    return write_file(file, code + "");
+}
+
+// function: retrieve_ed_setup(object)
+// purpose: This function retrieves the user-specific options for
+//          the mud's line editor.
+
+int retrieve_ed_setup(object who)
+{
+   string file;
+   int code;
+
+    file = user_path(getuid(who)) + ".edrc";
+
+    if (file_size(file) <= 0) {
+        return 0;
+    }
+    sscanf(read_file(file), "%d", code);
+    return code;
+}
+
+// function: destruct_environment_of(object)
+// purpose: This function is here to prevent the destruction of a
+//          player or other object whose environment is to be destructed.
+//          Unless this object is relocated, it will be destructed with
+//          its environment.
+
+void destruct_environment_of(object ob)
+{
+	if (!interactive(ob)) {
+		return;
+	}
+	tell_object(ob, "The object containing you was dested.\n");
+	ob->move(VOID_OB);
+}
+
+// function: make_path_absolute(string)
+// purpose: This function is called by ed to find out the true name of
+//          a file in relation to the root directory.
+
+string make_path_absolute(string file)
+{
+	file = resolve_path((string)this_player()->query_cwd(), file);
+	return file;
+}
+
+// function: get_root_uid()
+// purpose: This function should only return the value that represents the
+//          ROOT UID on this mud.
+
+string get_root_uid()
+{
+   return ROOT_UID;
+}
+
+// function: get_bb_uid()
+// purpose: This function should only return the value that represents the
+//          BACKBONE UID on this mud.  In some muds, this uid is automatically
+//          'trusted' and granted special priveleges, but in this mudlib
+//          by default, the backbone uid is not priveleged and is not used.
+
+string get_bb_uid()
+{
+   return BACKBONE_UID;
+}
+
+// function: creator_file(string)
+// purpose: This function determines the uid of a created object.  Upon loading
+//          of an object, its filename is passed to this function.  The value
+//          returned by this function determines its uid.  This is not to be
+//          confused with the object's euid, which is determined by its uid.
+
+string creator_file(string str)
+{
+	return (string)call_other(SIMUL_DIR + "/simul_efun", "creator_file", str);
+}
+
+// domain_file() and author_file() are for statistical purposes only!
+
+// function: domain_file(string)
+// purpose: This function determines which domain a newly loaded object should
+//          be considered a part of.
+
+string domain_file(string str)
+{
+	return (string)call_other(SIMUL_DIR + "/simul_efun", "domain_file", str);
+}
+
+// function: author_file(string)
+// purpose: This function determines who is the author of a newly loaded object.
+
+string author_file(string str)
+{
+	return (string)call_other(SIMUL_DIR + "/simul_efun", "author_file", str);
+}
+
+// function: error_handler(mapping, int)
+// purpose: This function is called every time an error occurs in the mud.
+//          It is passed all sorts of information, such as what caused the
+//          error, where it occured, what line it occured on, etc.  This
+//          function is also responsible for logging such errors.  If the
+//          error was caught by 'catch()', the value of flag is 1.
+
+protected void error_handler(mapping map, int flag) {
+  object ob;
+  string str;
+
+  ob = this_interactive() || this_player();
+  if (flag) str = "*Error caught\n";
+  else str = "";
+  str += sprintf("Error: %s\nCurrent object: %O\nCurrent program: %s\nFile: %O Line: %d\n%O\n",
+		 map["error"], (map["object"] || "No current object"),
+		 (map["program"] || "No current program"),
+		 map["file"], map["line"],
+		 implode(map_array(map["trace"],
+				   (: sprintf("Line: %O  File: %O Object: %O Program: %O", $1["line"], $1["file"], $1["object"] || "No object", $1["program"] ||
+					      "No program") :)), "\n"));
+  write_file("/log/log", str);
+  if (!flag && ob) tell_object(ob, str);
+}

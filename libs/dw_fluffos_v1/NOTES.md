@@ -525,3 +525,23 @@ Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplay
 ## 深度功能测试（2026-11-04，stay_alive→basic + BASE_GOAL §6.15/§6.16）
 
 旧版 `stay_alive.lpc` 仍 `#include <goals.h>` / `inherit BASE_GOAL`；现行正文是 `stay_alive_basic`（`<npc/goals.h>` + `GOAL_BASE_INHERIT`）。薄别名。`goals.h` 补 `BASE_GOAL`/`GOAL_PLAN_DIR` 历史别名。证明：HEAD 2 PASS / 1 FAIL；树 3 PASS。
+
+## §6.10 误删字符串拼接尾 `"\n";`（2026-11-10）
+
+- 前一轮 orphan-NOR 扫把整行 `"\n";` 删掉时，未排除上一行以 `+` 结尾的拼接终止操作数。
+- `global/virtual/compiler.lpc` 的 `#include` 拼接缺了 `"\n";`，boot 报 `unexpected '}'`（及一串连锁错误）。
+- 语料恢复 a632 中所有「上一行以 `+` 结尾」的 `"\n";`（约 495 处 / 461 文件；含 discworld / dw_fluffos_v1 / v2）。
+- `scripts/lpc_fix_no_effect.py` 加显式 `prev.endswith("+")` 跳过。
+- 证明：discworld `lpcc --batch` compile diagnostics 6→0。
+
+## 深度功能测试（§10.7，2026-11-10，newbie 大厅再测）
+
+pristine + build-debug，port 40271（`heartbeat interval msec : 2000`，`NO_TIMED_REBOOT`）。
+
+- **注册**：`N` → letters-only → TOS 提示后再 `yes`；入场首条 `look` 仍可能 `Queued` 一次（编译），`stop`/`restart` 后按 ≥2.2s 间隔无再排队。
+- **玩法**：`look`/`i`/`score`/`who`；`helpme`↔`foyer`；`quit` 经 Departure Gecko。控制台安静。
+- 本轮无新编程缺陷（与 discworld 2026-11-10 同形态）。
+
+## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
+
+同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。

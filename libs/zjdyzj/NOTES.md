@@ -1024,3 +1024,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（§10.7，2026-11-10，悦来客栈）
+
+pristine + build-debug，port 40074。指间 ZJ 握手（`crypt(ZJKEY,"zj")` 挑战 → `crypt(ZJKEY,chal[2:4])` → `id║pw║crypt…║email` → `m║1║沈牧`）。
+
+- **流程**：落地世外桃源 → `register`/`decide` → `west`/`out` 阎罗殿 → `pianshu msx` → `wash` → `born 中原人氏` → 悦来客栈；`look`/`score`；`quit`「欢迎下次再来！」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

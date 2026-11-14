@@ -1019,3 +1019,15 @@ After the permission gate, the command still handed 0 to `sscanf` / `read_file` 
 ## 无参数时命令对 0 的调用（玩家/--all-dirs 残留，2026-10-27，KB 06 §7.336 Also）
 
 无参数命令把 0 交给 `present` / `sscanf` / `file_exists` 等会运行时报错。`lpc_fix_bare_arg.py --all-dirs` 在首次使用参数前加守卫。多行 `if (arg && !sscanf)`（吐纳默认消耗）与已有 `can_learn`/`get_object` 守卫的误报已回退；本库本批改动见该提交。
+
+## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
+
+IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
+
+## 深度功能测试（§10.7，2026-11-10）— log/players 再发 + 注册重测
+
+原生树手启（`log/` 空目录），端口 40249。
+
+编程缺陷（已修，§7.358）：`ConfirmName()` 的 `log_file("players/newbies")` 在缺 `/log/players` 时抛错，注册停在 `An error occurred`（NOTES 早期虽写了占位，但 `log/` 被 gitignore，仓库与 clone 仍无此目录，且未进 `wasm_keep_dirs`）。`master_log_file()` 写前 mkdir 父目录；keep dirs 补 `log/players` 等。
+
+覆盖：注册（email/密码/性别/race `pick human`/town `pick haven`）→ 天空新手区 `look`/`inventory`/`score` → `quit` → 重连密码进入。驱动无 Wrong permissions。

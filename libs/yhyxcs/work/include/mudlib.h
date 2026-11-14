@@ -8,5 +8,6 @@
 #define MUDLIB_VERSION			(MUDLIB_NAME + " " + MUDLIB_VERSION_NUMBER)
 
 #define INTERMUD_MUD_NAME		"GAX Test"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

@@ -7,6 +7,8 @@
 #define CLOTH		"/inherit/armor/cloth"      //衣服
 #define ARMOR		"/inherit/armor/armor"      //装甲
 #define SURCOAT		"/inherit/armor/surcoat"     //外套
+#define CHIBANG		"/inherit/armor/chibang"	//翅膀
+#define FABAO		"/inherit/armor/fabao"	//法宝
 #define WAIST		"/inherit/armor/waist"      //腰部
 #define WRISTS		"/inherit/armor/wrists"     //手腕
 #define SHIELD		"/inherit/armor/shield"     //盾牌
@@ -22,6 +24,8 @@
 #define TYPE_CLOTH	"cloth"
 #define TYPE_ARMOR	"armor"
 #define TYPE_SURCOAT	"surcoat"
+#define TYPE_CHIBANG	"chibang"
+#define TYPE_FABAO	"fabao"
 #define TYPE_WAIST	"waist"
 #define TYPE_WRISTS	"wrists"
 #define TYPE_SHIELD	"shield"

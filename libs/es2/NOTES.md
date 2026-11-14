@@ -675,3 +675,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。
+
+## 深度功能测试（§10.7，2026-11-10，饮风客栈再测）+ §7.361 Also
+
+pristine + build-debug，port 40214。
+
+- **缺陷**：`adm/daemons/logind.lpc` 的 `get_name()` 在设中文名之前有残留 `printf("%O\n", ob);`，注册时打出 `/obj/login#N`。已注释（同 dtsl 族改法）。语料扫 live `logind.lpc`：32 库 39 处一并注释（`where` 巫师指令与 `/u/` 副本不动）。
+- **证明**：修前中文名后可见 `/obj/login#1`；修后同流程（英文名→确认→中文名→密码×2→email→性别）入雪亭饮风客栈，`look`/`score`/`i`/`east` 广场/`west` 回客栈/`quit`；回显无 object dump；控制台无 `*Error` / Wrong permissions。

@@ -25,6 +25,10 @@
 #define THROWING	"/inherit/weapon/throwing"	// 暗器
 #define WHIP		"/inherit/weapon/whip"		// 鞭
 #define XIE		"/inherit/weapon/xie"		// 布鞋
+#define HOOK		"/inherit/weapon/hook"		// 钩
+#define STICK		"/inherit/weapon/stick"		// 棒
+#define PIKE		"/inherit/weapon/pike"		// 枪
+#define BOW		"/inherit/weapon/bow"		// 弓
 
 #define F_AXE		"/inherit/weapon/_axe"
 #define F_PESTLE        "/inherit/weapon/_pestle"
@@ -40,5 +44,9 @@
 #define F_THROWING	"/inherit/weapon/_throwing"
 #define F_WHIP		"/inherit/weapon/_whip"
 #define F_XIE		"/inherit/weapon/_xie"
+#define F_HOOK		"/inherit/weapon/_hook"
+#define F_STICK		"/inherit/weapon/_stick"
+#define F_PIKE		"/inherit/weapon/_pike"
+#define F_BOW		"/inherit/weapon/_bow"
 
 #endif

@@ -16,8 +16,9 @@ An author who wanted "neither of these" wrote `!= a || != b` (the negation of `=
   `==` joined by `&&` -> `||`, whatever the body: a value that equals two different literals at once cannot be what anyone meant.
 
 The chain is wrapped in parentheses (`(a != x && a != y)`) unless it already is the whole of a parenthesized group, so the operators around it keep their grouping.  The
-compared value is one left side repeated: a name, an index or a `->query("x")` chain (as in scripts/lpc_fix_literal_or.py).  Only code is touched; wizard, backup and test directories
-are skipped; submodule work trees and the generated trees are not read.  Binary-safe, idempotent.
+compared value is one left side repeated: a name, an index or a `->query("x")` chain (as in scripts/lpc_fix_literal_or.py), optionally preceded by a `(string)` / `(int)` /
+`(object)` / `(float)` / `(mixed)` cast on each side.  Only code is touched; wizard, backup and test directories are skipped; submodule work trees and the generated trees are
+not read.  Binary-safe, idempotent.
 
 Without --apply the plan is printed (`FIX<TAB>slug<TAB>/path<TAB>n`, `LIST<TAB>slug<TAB>/path:line<TAB>text`) with the totals on stderr."""
 import os
@@ -30,8 +31,11 @@ import lpc_fix_literal_or as L  # noqa: E402
 
 REPO = L.REPO
 STR = L.STR
-NE_OR = re.compile(rb'(?P<lhs>' + L.LHS + rb')\s*!=\s*' + STR + rb'(?:\s*\|\|\s*(?P=lhs)\s*!=\s*' + STR + rb')+')
-EQ_AND = re.compile(rb'(?P<lhs>' + L.LHS + rb')\s*==\s*' + STR + rb'(?:\s*&&\s*(?P=lhs)\s*==\s*' + STR + rb')+')
+# Optional FluffOS/MudOS type cast before each LHS: `(string)me->query("x") != "a" || (string)me->query("x") != "b"`.
+# The cast is outside the named group so `(?P=lhs)` still matches the same core; the fixer only flips `||`/`&&`.
+CAST = rb'(?:\(\s*(?:string|int|object|float|mixed)\s*\)\s*)?'
+NE_OR = re.compile(CAST + rb'(?P<lhs>' + L.LHS + rb')\s*!=\s*' + STR + rb'(?:\s*\|\|\s*' + CAST + rb'(?P=lhs)\s*!=\s*' + STR + rb')+')
+EQ_AND = re.compile(CAST + rb'(?P<lhs>' + L.LHS + rb')\s*==\s*' + STR + rb'(?:\s*&&\s*' + CAST + rb'(?P=lhs)\s*==\s*' + STR + rb')+')
 
 
 def next_code(b, mask, i, step):

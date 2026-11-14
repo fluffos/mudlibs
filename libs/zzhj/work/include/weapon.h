@@ -15,9 +15,11 @@
 #define AXE			"/std/weapon/axe"
 #define BLADE			"/std/weapon/blade"
 #define DAGGER			"/std/weapon/dagger"
+#define FORK			"/std/weapon/fork"
 #define GUN			"/std/weapon/gun"
 #define SWORD			"/std/weapon/sword"
 #define STAFF			"/std/weapon/staff"
+#define WHIP			"/std/weapon/whip"
 #define THROWING		"/std/weapon/throwing"
 
 #endif

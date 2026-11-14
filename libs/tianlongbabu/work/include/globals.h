@@ -96,6 +96,7 @@
 #define F_LIQUID		"/feature/liquid.lpc"
 #define F_MASTER		"/std/char/master.lpc"
 #define F_MESSAGE		"/feature/message.lpc"
+#define F_MERCENARY		"/std/char/mercenary.lpc"
 #define F_MORE			"/feature/more.lpc"
 #define F_MOVE			"/feature/move.lpc"
 #define F_NAME			"/feature/name.lpc"
@@ -103,6 +104,7 @@
 #define F_SKILL			"/feature/skill.lpc"
 #define F_TEAM			"/feature/team.lpc"
 #define F_TREEMAP		"/feature/treemap.lpc"
+#define F_UNIQUE		"/feature/unique.lpc"
 #define F_VENDOR		"/feature/vendor.lpc"
 
 // Profiling switches

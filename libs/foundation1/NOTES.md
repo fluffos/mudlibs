@@ -626,3 +626,9 @@ A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whos
 ## `log/` subdirectories nobody created: the logging `write_file()` / `log_file()` raises (2026-10-22, KB 06 §7.358)
 
 The code of this lib writes logs into 1 subdirectory of `log/`: `log/chan` (`secure/daemon/chat.lpc`). Neither the archive, a `git clone` nor the site pack has them (no local boot wrote into them, so `gen_keep_dirs.py` never recorded them), and `write_file()` raises `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"` for a missing directory: the function that logs stops on that line and what came after it (the reward, the flag, the next step) never runs. This lib's `log_file()` makes the directory itself (measured, or read from the source: the nitan family's `assure_file()`), so only the directories written by a direct `write_file()` / `save_object()` are listed. `log/chan` are now in `scripts/wasm_keep_dirs.txt` (`scripts/lpc_keep_log_dirs.py`; the site and the pristine tree create the empty directories from it). Proof (`scripts/lpcc_eval.py`, an eval object under `/adm/daemons` or similar writes `/log/zzdirprobe/...`, fresh processes): the measured table in KB 06 §7.358.
+
+## 深度功能测试（§10.7，2026-11-10）— 重测 + 空信箱 save
+
+原生树手启（无 systemd user bus），端口 40248。注册 `fntestaa` → 洞穴 `look`/`status`/`inventory`/`who`/`say` → `help colour` → `mail` 空信箱。
+
+**编程缺陷（KB 06 §7.379）：** 空信箱下 IIPS 的 `s`/`S` 走 `save_letter`，`__Current == -1`，索引 `__BoxInfo[-1]` 触发 `*Array index must be positive or zero`（`/log/runtime`）。加 `letter < 0 || letter >= sizeof(__BoxInfo)` 守卫后改为 `No letter to save.`；同形 11 个 Descartes/DS `post.lpc` 一并修。玩家侧 `save`/`quit` 正常。Intermud `Denied write permission in save_object()` 仍为已知外连噪音（§10.7 范围外）。

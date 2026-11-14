@@ -166,6 +166,8 @@ detection.
 **Also (2026-11-03, sticklib npc_ldmud living stubs):** `kill_ob`/`set_master`/`query_master`/`query_defend_master`/`test_if_any_here` on Strategy A living. Proof: HEAD npc_ldmud FAIL; tree PASS.
 **Also (2026-11-03, sticklib prototype void vs int):** (1) priests `void end_smash` / `gen_begin_spell` / `bless_it` protos vs `status` definitions - protos become `status`. (2) `lord_handling` `varargs int tell_me` after `command_driver`'s include chain of `void tell_me` stubs - make the lord_handling stub `void` to match siblings (real def stays `int` in `tell_me.lpc`). Proof: priests + command_driver/player PASS; prototype diags gone.
 
+**Also (2026-11-10, cistoms unused locals + prototype return types):** live §10.7 load of Void/workroom surfaced `Unused local variable` (`exits.lpc` `str_exit`, `look.lpc`/`l.lpc` `junk`) and two return-type prototype mismatches (`goto.lpc` `load_room` int-vs-object definition; `base.lpc` `listids` void-vs-string prototype). Drop unused declarators; make the prototype match the definition (callers use the definition). Proof: fresh driver boot + goto/walk session, 0 warning.
+
 **Also (2026-11-03, sticklib unused locals / OLD_GOVERNMENT):** locals used only inside an inactive `#ifdef` still warn `Unused local variable` (thief_mark `current_gm` / `current_co_gm` / `killer_mark`). Move the declaration into the `#ifdef`. Also drop `query_short`'s unused `object ob` on `/lib/player`. Proof: thief_mark/player PASS; unused-local diags gone.
 
 **Also (2026-11-03, sticklib empty-if / TELL_UPDATE):** (1) `bboard` comment-only `if (!F_BBOARD_NO_NOTIFY) { /*...*/ }` warns `Expression has no side effects` on the next `return 1`; drop the empty shell, and rewrite `if (temp = _topfive[num]); else if` as assign then test. (2) `tell_me` `if (tell_flags == TELL_UPDATE); tell_flags = 0;` stray semicolon made the clear unconditional; remove the `;`. Proof: bboard/tell_me/player PASS; those diags gone.
@@ -499,6 +501,11 @@ Three fix *errors* (files that do not load at all; plan without `--apply`): `scr
 
 **Two sibling headers that `#include` into one daemon and declare the same global with different data** (nitan family `include/npc/indian.lpc` and `masia.lpc`, both `mapping ma_sname`/`ma_pname`, both included by `adm/daemons/npcd.lpc` and `group_questd.lpc`; `Redeclaration of global variable 'ma_sname'` at the second header). Unlike the identical-table case above, the second initializer overwrites the first, so `generate_ma_name()` handed Malay NPCs Indian names. Rename the second header's tables (`in_sname`/`in_pname`; `yanhuangwuhun` and `yhwhckdm` had already done it as `_m`/`_i`). Swept 2026-10-06: 37 libs. Same shape in the xkx-family `quest/guojob/guo.lpc`, which includes `zzzjob.lpc` and `teamjob.lpc`, both `mixed names` with different lists (teamjob renamed `team_names`, 17 libs, 2026-10-07). Detection: a redeclaration whose two declarations sit in different headers with different initializers.
 
+**Also (2026-11-10, indian/masia mirror leftovers):** five off-path copies still declared `ma_sname`/`ma_pname` (`nitan_san`/`nitan3`/`nitan_ceshi` `inherit/include/npc/indian.lpc`; `tianxiawuxue`/`yxcs` `u/lonely/include/npc/indian.lpc`). Live `/include` paths were already renamed; synced mirrors to each lib's live names (`mai_*` or `in_*`). Live collision count remains 0.
+
+**Also (2026-11-10, dns_master PREF_TELL empty if):** yhlib `query_services` left `if (...) { }` when `PREF_TELL` is `SVC_UDP` and only a `#if PREF_TELL & SVC_TCP` body existed (`Expression has no side effects`). Wrap like `PREF_MAIL` (`#if TCP` / `#elif UDP`). Boot survey 1→0.
+
+
 **A mixin whose real pair must win over the base's real pair, in thousands of generated leaves** (nitan `F_ITEMMAKE`: every player-made item is `inherit SWORD; inherit F_ITEMMAKE;`, and both `/inherit/item/item.lpc` and `/feature/itemmake.lpc` define `query_autoload()`/`autoload()` — 11726 warnings in nitan170911). Neither is a stub: item's saves the dbase into the autoload string, itemmake's only records `worn`/`wielded` because F_OBSAVE keeps the item. Do not touch the leaves: rename the mixin's pair (`query_itemmake_autoload()`/`itemmake_autoload()`) and let the base(s) hand over first (`if (function_exists("query_itemmake_autoload", this_object())) return this_object()->query_itemmake_autoload();`), in every base the leaves use (`item.lpc` and `combined.lpc` here). The winner the driver picked stays the behaviour; probe a clone of each base shape before and after. A function both sides define with the same value for the leaves concerned (`is_weapon()` of XSWORD vs itemmake) is a one-line leaf definition instead.
 
 **A message cut by a stray `;`** (`x = "first half";` then `"second half";` alone; nitan `swear.lpc`, chidi/yxcs `yizhi.lpc`, pkuxkx `shechang.lpc`, shadowgate class prerequisites, xbtxiii `king.lpc`). The orphan is `Expression has no side effects` only in a file that compiles, and a blank line between the two halves hides it from a one-line regex. `scripts/lpc_join_cut_strings.py [--apply] [SLUG...]` finds every text-bearing string statement right after a statement ending in a string literal and joins it when that statement is an assignment; `return` cases and LDMud `([ k: v1; v2 ])` tables are only listed. Read the dry run before `--apply`: in LDMud-era room descriptions (holymission, questmud) many orphans are leftovers of an earlier wording (`"and south.\n";` after "...barring your way south.\n"), and joining them would print junk; delete those instead (no visible change). 2026-10-07: 20 joined, 26 deleted, in 9 libs.
@@ -506,6 +513,9 @@ Three fix *errors* (files that do not load at all; plan without `--apply`): `scr
 **More `no side effects` shapes with one meaning (2026-10-11 corpus pass).** (a) `(: random_move() :);` as a statement builds a function and drops it: the xkx-family `xunbu.lpc` constable never wandered (10 libs) -> `random_move();`. (b) `set("chat_chance_combat", N);` followed by a bare `(: command, "say ..." :),` line: the `set("chat_msg_combat", ({` wrapper was lost, the comma folds the functional into `setup()`, and the NPC never shouts (dreamofseven, 14 files) -> wrap it back. (c) `for (i = 0; i < sizeof(enemy); i)` has no increment, so the loop never ends when `enemy[0]` is elsewhere (fengyun `drinkmonk.lpc`, 4 libs) -> `i++`. (d) `x = (text, 1);` stores 1, not the text (chidi `bbsboard1.lpc`; a call name was lost upstream) -> `x = text;` as the sibling board does. (e) `me, him, ammo = 0;` clears only `ammo` (finalrealms ranged weapons) -> `me = him = ammo = 0;`. Detection: the warning in a file with no errors; read the line and the one above it.
 
 **`Float value truncated to int` (FluffOS `56964d9d`, #1426; new in the 2026-10-14 driver).** The driver coerces the right-hand side to the destination type *first* (#1303), so the four sites the warning names differ: `x op= <float>` converts the float before the operation -- `bouns *= rate` with `rate` 0.8 zeroes the bonus, `q *= sqrt(q)` loses the fraction of the factor, `p *= at` with `at < 1` zeroes `p` (bxsj `murong-fu.lpc`, `force/qi.lpc`, `taiji-quan/luanhuan.lpc`): a real bug since the FluffOS port, rewritten `x = to_int(x * (rate))`. `x = <float>`, `int x = <float>` and `return <float>` in an int function drop only the final fraction, which is what the code means (`level = ceil(pow(exp * 10.0, 0.333))`, `improve * 3.5`): `to_int(...)` keeps the value and says so. `(int)` is no conversion (KB 06), so `to_int()` is the only spelling that silences it. `scripts/lpc_fix_float_trunc.py SLUG [--apply] [--diag TSV]` does both from the diagnostics (the column is the statement's `;` or a point inside it; `else`/`if (...)` prefixes are skipped) and lists what it cannot parse; it runs in `toolkit_fix.sh` step 2. Detection: rescan with a driver at or after `56964d9d`.
+
+**Also (2026-11-10, deadsouls_fluffos):** `/lib/player.lpc` `eventDisplayStatus` assigns `GetMaxStaminaPoints()` (float) to `int max_sp`. Sibling Dead Souls copies already use `to_int(...)`; this fluffos-upstream fork did not. Overlay `overlay/lib/lib/player.lpc` adds `to_int`; first player load no longer warns.
+
 
 **A float hook made `float`, read back by an int caller.** `int power_point() { return 1.75; }` (skill files in fys, hhsj, nt6, xkx100 ... dozens per lib) returns 1 under this driver; `float power_point()` restores the value, but a caller that stores it in an `int` local still gets the float at runtime -- `call_other` results are not coerced -- and arithmetic on it stays float: fys `feature/skill.lpc` `s += skills[...] * point` made `query_skill()` return `180.0`, `fenpei` printed points with six decimals (`string + float` formats `%f`), xkx100 `combatd` `damage *= (int)SKILL_D(x)->power_point(me)` (the `(int)` converts nothing) made damage a float. Before turning a hook `float`, grep the callers (`->power_point(`, `->hard_point(`; the 70 "callers" a plain name grep finds are mostly a `"power_point"` property) and give each one a `float` receiver and a `to_int()` product; when there are none the change is invisible. Check with a runtime probe (an object that maps a skill on a fresh NPC and prints `query_skill()`), not a compile. Note that this truncation is new: before the 2026-10 driver an `int` function returning `0.33`, or an `int x = currency_rate(c)`, kept the float at runtime, so the code worked as designed and the new driver silently breaks it. Examples: pkuxkx's vein `benefit_effect()` returning 0.1-0.33 became 0, and nightmare3's fractional currency rates became 0. Prefer a `float` declaration when the value is a factor, a rate or a percentage that is read back as such. Keep `to_int()` for a final count, price or damage.
 
@@ -698,6 +708,17 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 **Also (2026-11-03, finalrealms/ninetears race dual-tree):** leaves under `baseobs/races/` inherit `/std/races/{bird,amphibian,fish,insect,animal}` while those files lived only under `baseobs/races/` (humanoids already mirrored both trees). Copy baseobs → `std/races/` (same-lib donor). ninetears' slim `standard.lpc` lacks `mixed *bits`, so bird/amphibian/fish also need the local `mixed *bits;` insect already carried. Proof: FR 15→0 FAIL / 20 PASS; ninetears 15→0 FAIL. Residue OOS: `testrace` → `/w/shaper/...`; traps → missing `/std/spells/trap`.
 **Also (2026-11-03, Discworld `/std/rooftop`):** house templates inherit `/std/rooftop` while the file lives at `/std/room/rooftop` (same shape as `/std/outside`). Thin alias `inherit "/std/room/rooftop"`. 3 hosts PASS: discworld, dw_fluffos_v1, dw_fluffos_v2.
 
+
+**Also (2026-11-10, equip_bd shenmo):** adopt `d/obj/equip/equip_bd` from xiaoyuxiyou (xyxy2 needs `MyArmorFile`); add `err_msg` sefun. Proof: bangding HEAD FAIL → load PASS.
+**Also (2026-11-10, mortremains armor_class + shadowgate/sunshadow hunt_mon):** (1) mortremains `adm/AFD/living` inherits missing `/std/living/armor_class` while the body is `/adm/AFD/living/armor_class` — thin alias (same AFD living series as experience/magic/kill_reward). Proof: 3 objects HEAD 1 PASS / 2 FAIL → tree 3 PASS. (2) shadowgate+sunshadow `orchevid` inherits gitignored `/realms/lujke/tecqumin/mons/hunt_mon` while the body is `/d/atoyatl/tecqumin/mons/hunt_mon` — rewrite inherit + `far_scanner3` `new()` path (same realms→atoyatl shape as treetop). Drop a stray bare `d` in `create()` and a local `present(string, object)` that shadows the efun (breaks `present(object, room)` on sunshadow without `old type behavior`). Proof: each lib 3 objects HEAD 1 PASS / 2 FAIL → tree 3 PASS.
+**Also (2026-11-10, mortremains chronos_doll/factionhall + sg/ss mine2):** (1) thin aliases `/u/c/chronos/toys/chronos_doll`→`doll`, `/u/i/ilzarion/factionhall`→attic Sigil body. Proof: 6 objects HEAD 2/4 → 6 PASS. (2) rewrite `mine3` inherit `/realms/zeek/mine`→`/d/mine2/mine` on shadowgate+sunshadow. Proof: each 2 objects HEAD 1/1 → 2 PASS.
+**Also (2026-11-10, shadowgate/sunshadow saide scribe):** rewrite `d/shadow/npc/scribe` inherit `/realms/saide/scribe`→`/std/scribe` (body PASSes). Proof: each HEAD 1/2 → tree 2 PASS (realms path still FAIL).
+**Also (2026-11-10, xajhxo biaoju/funiu):** thin alias `system/menpai/biaoju/funiu`→`/d/nanyang/npc/funiu` (same shape as nanyang `ke`). Proof: 4 objects HEAD 2/2 → 4 PASS.
+**Also (2026-11-10, shadowgate/sunshadow shar_symbol):** archive never shipped `/d/magic/symbols/shar_symbol`; `newsymbol` inherits it and newbie `p_shar` clones it. Same thin deity wrapper as every other `*_symbol.lpc` beside `holy_symbol` (eldath/lord_shadow pattern). Proof: shadowgate 4 objects HEAD 1/3 → 4 PASS; sunshadow 2 objects HEAD 1/1 → 2 PASS.
+
+**Also (2026-11-10, xajhxo amber command1):** `clone/user/amber` inherited missing `/system/feature/command1` while `CHARACTER` already brings `F_COMMAND` → `feature/command.lpc`. A thin alias to `command.lpc` would double-inherit `nomask enable_player`. Drop the redundant inherit. Proof: amber HEAD FAIL → PASS (user already PASS).
+
+**Also (2026-11-10, shenmo zizhulin2/room):** adopt from xyxy2; host lacks `REMOVE_D` so `add_obj`→delayed `destruct`. Proof: 3 objects HEAD 0/3 → 3 PASS.
 
 ### 6.16 A macro the lib's global header lost, restored from the siblings (2026-10-19)
 **Symptom:** `Undefined variable 'MAILDIR'`, `Undefined function ARMOR_D` / `BINGQI_D`, `Undefined variable 'NAME_D'`: an all-caps name the object uses and no header of the lib defines. The object never loads, and the compiler stops at the first undefined name, so the errors and warnings behind it stay hidden. 324 macros in 108 libs for 471 listed objects: `MAILDIR "/data/mail/"` (about 30 xkx-lineage libs), the `ARMOR_D(x)` / `BINGQI_D(x)` weapon and armor path macros (nitan6, fqyy2), `NAME_D`/`IP_D`/`TOPTEN_D` of the dtsl family, the `pic*` room macros of mohuanshiji (49), `TYPE_*` armor types, `EVENT_D`.
@@ -979,6 +1000,36 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-10-27, one-arg `tell_room("…")`):** message with no room: rooms/NPCs/spells used `tell_room("…")` alone. Inserted `this_object()` / `ETO` / `place` / `environment(this_object())` / `TO` / `ENV(TO)` from local style (altar/lunar_veil/lightobj/dongfang/wbedroom/unfettered/…). Also caught string+`+` one-arg forms in shadowgate/sunshadow spell cast strings. Live residue 0. Proof: stn7, wbedroom, dongfang load.
 
 **Also (2026-10-27, unknown `#pragma save_binary` / `optimize`):** FluffOS ignores these MudOS pragmas and warns. Deleted 3001 lines across 2984 files / 191 libs (nitan-family daemons/features heavy). Residue of those two forms: 0.
+
+**Also (2026-11-10, `#pragma save_binary` re-entry):** newly onboarded `yhlib` shipped 60 active lines; `esI` had one leftover `wild_card.lpc`. Deleted; active corpus residue of `#pragma save_binary` is 0 again. Commented `//#pragma save_binary` (es1 family) left alone. Proof: yhlib batch boot prints no Unknown #pragma.
+
+**Also (2026-11-10, yhlib §6.10 mechanical round):** `lpc_warnings.py yhlib --fix` cleared 32 nosave-function and 1369 unused-local warnings (plus 50 varargs / 1 bare return); diagnostics 1530→78. Boot preload now quiet except one no-side-effects site. Remaining errors are typed/syntax classes, not the mechanical passes.
+
+**Also (2026-11-10, `simul_efun/util.lpc` missing `<ansi.h>`):** `process_bar` does `"…" NOR` / `HIY` / `BBLU` with no local `#include <ansi.h>` and no pull from `globals.h`, so the driver reports `syntax error, unexpected L_IDENTIFIER` on `NOR`. Inserted `#include <ansi.h>` after the existing includes in 44 `*/simul_efun/util.lpc` files (38 under `adm/simul_efun/`, 6 under `adm/kernel/simul_efun/`). Residue of that shape: 0. Proof: yhyxs diagnostics 3→0; yhlib util errors gone.
+
+**Also (2026-11-10, `set_information` wrapper `string`→`mixed`):** quest base wrappers/`quest.h` typed the second argument `string` while `QUEST_D->set_information` takes `mixed` and callers pass `(: ask_npc :)`. Widened 39 sites across the corpus. Residue of `string key, string info` on that name: 0. Proof: yhlib set_information errors 36→0; files compiling 10942→10950.
+
+**Also (2026-11-10, `do_effect` `void`→`varargs int`):** feature `food.lpc`/`liquid.lpc` stubs were `void do_effect()` while `only_do_effect` leaves override as `varargs int do_effect(object me)` (drink/eat use the return). Widened the stub (and added `return 1`) in 23 feature food/liquid files; fixed wllz3 forward `void do_effect();` too. Proof: yhlib do_effect mismatch warnings gone.
+
+**Also (2026-11-10, line-break splits of `name()` / `me, who`):** archive wraps split `ob->name()` into `ob->na`+`me()` and `me, who` into `me, w`+`ho)`, and broke `message_vision("…太差，"` across lines. Fixed the exact shapes in yhlib/zhonghua2 `questd11.lpc`. Do not blindly join on odd quote counts — that bisects UTF-8. Also: `is_killing(who)` with a `string`-typed `is_killing` → `is_killing(who->query("id"))` (yhlib `guidao`). Proof: yhlib files compiling 10950→10952; guidao type error gone.
+
+**Also (2026-11-10, damo `intp(remain || stringp)` + missing quote):** `! intp(cnd["remain"] || ! stringp(cnd["id"]))` pulled the next clause inside `intp` (23 libs). Separately, an unclosed `"发作身亡了;` in yhlib `die_reason` desynced the lexer so later UTF-8 looked like `Illegal character` (yhyxs already documented both). Also joined ASCII identifier wraps in yhlib/zhonghua2 `questd11` (`dbase`, `family_name`, `["id"]`, …). Proof: yhlib damo errors gone; files compiling 10953→10957.
+
+**Also (2026-11-10, orphan `"\n";` after map `NOR` / die_reason varargs):** whole-line `"\n";` after a map/look string is either a dead statement (`NOR;` already ended it) or the only terminator when the line is bare `NOR` — delete the orphan or turn `NOR` into `NOR;`. Also: damo leaf `string die_reason()` → `varargs string die_reason()` to match the one-arg base (yhlib three leaves). Proof: yhlib side-effect warnings 11→1; die_reason arity warnings gone.
+
+**Also (2026-11-10, orphan `"\\n";` after string-concat `+`):** a corpus pass that deleted whole-line `"\\n";` (meant for dead map/`NOR` leftovers) also removed the final operand of multi-line string concats whose previous line ends in `+`. Symptom: discworld `/global/virtual/compiler.lpc` `file_data += "#include " + replace(...) +` then `}` → `syntax error, unexpected '}'` (and cascade). Oracle: same lib `obj/handlers/data.lpc` kept `+ "\\n";`. Restored every a632 deletion after a `+` continuation (~495 sites). `lpc_fix_no_effect.py` now skips when `prev.endswith("+")`. Detection: boot survey `: error:` on a line that used to compile; or `+\n\s*\}` in sources.
+
+**Also (2026-11-10, orphan `"\\n";` after adjacent-string concat):** LPC joins adjacent string literals without `+`. The orphan-NOR pass also deleted `"\\n";` after a line ending in `"` (no `;`), e.g. wdxtym `questd.lpc` `msg = "…" \n "" \n "\\n";` → `unexpected L_DEFINED_NAME`. Restored 74 a632 sites; `lpc_fix_no_effect.py` skips when `prev.endswith('"')` and not `'";'`. Detection: boot survey; or a string assign whose next token is another identifier.
+
+**Also (2026-11-10, shadowgate/sunshadow `cmds/mortal/room`):** orphan copy of `/std/room` inherited missing `/realms/saide/traps/container.lpc`. Retarget to `/std/container.lpc` (same as live `std/room.lpc`); `status id`→`int id`; `dependencies += ob`→`+= ({ ob })`. Proof: each listcheck 0→1 PASS.
+
+**Also (2026-11-10, `dependencies += ob`):** `object *` array `+=` a bare `object` is `Bad assignment ( object * vs object )`. sunshadow `std/room` already used `+= ({ ob })`; shadowgate `std/room` and both libs' `d/deku/hhouse/inherits/test/room` still had the scalar form. Fixed. Detection: `dependencies += ob;` (no `({`).
+
+
+
+
+
+**Also (2026-11-10, yhlib residual warnings):** renamed colliding globals (`indian` `ma_*`→`in_*` vs `masia`; `swmuding` `insects`→`sw_insects` assigned in `create`; `qianzhenglun` `count`→`my_count`); dropped duplicate `peis=` in `duka_3*`; `to_int(pow(...))` in `ultra_questd`. Diagnostics 8→1 (dns_master empty-statement noise after preprocessor remains).
 
 **Also (2026-10-27, unknown LDMud `#pragma` residue):** FluffOS knows only `strict_types` / `save_types` / `warnings` / `optimize` / `show_error_context` (and `no_*`). LDMud leftovers (`strong_types`, `rtt_checks`, `range_check`, `no_clone`, `pedantic`, `combine_strings`, `no_shadow`, `no_inherit`, `warn_*`, comma lists mixing those with known names, `#pragma strict_types;`) warn as unknown. Deleted or reduced to a single known pragma per line across aoh/holymission/morgengrauen/nirvlp312/realms/simud (plus closed `/*#pragma optimize…save_binary*/` comment blocks in xkxc98sj/xkxz2 `newsd`). Live residue of those forms: 0. Proof: nirvlp312 `/obj/simul_efun` + xkxc98sj `/adm/daemons/newsd` load.
 
@@ -1276,5 +1327,127 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, DAEMON corpus → /std/cmd_m):** twenty-three ES/xkx-lineage libs (`jhfy*`/`fys`/`hy5`/`dreamofseven`/`pkuxkx`/…): network `pingd`/`pingtcp` inherit undef `DAEMON`. `#define DAEMON "/std/cmd_m"` in `mudlib.h`, adopt a config.h-free `std/cmd_m.lpc` (TMI create/clean_up/prevent_shadow), and restore missing `include/uid.h` from tmi2. Proof: six-lib sample HEAD 0/3 → 3 PASS each.
 
-**Also (2026-11-14, pkuxkx BOW/HOOK/PIKE/STICK):** 14 `d/bwdh/sjsz/` weapons inherited undef `BOW`/`HOOK`/`PIKE`/`STICK` (`//Cracked by Roath` imports from `bmxkx2001`). Define `BOW`/`HOOK`/`PIKE`/`STICK` and `F_*` in `include/weapon.h`, and adopt `/inherit/weapon/{bow,hook,pike,stick,_bow,_hook,_pike,_stick}.lpc` from `bmxkx2001`. Proof: `lpc_listcheck.sh` 3/25 → 23/25 PASS (all 14 inherit syntax errors cleared and all 8 new bases compile cleanly; remaining 2 `unique/` failures call `::create()` against `pkuxkx`'s `create`-less `F_UNIQUE`). Triage notes from queue: `RESTOCK` (`ninetears`), `POCKETARMOUR` (`shadowgate`), `SAVE_D` (`darkelib`), `CONDITION_MOD` (`nitan6` et al.), `M_WEAPON` (`pkuxkx`) are damaged files or cross-lib pastes; `LIB_ISQL` (`dsI` et al.) is `#ifdef __PACKAGE_DATABASE_DB__`.
 
+**Also (2026-11-09, pkuxkx BOW/HOOK/PIKE/STICK + shadowgate POCKETARMOUR):** (1) pkuxkx sjsz weapons inherit undef `BOW`/`HOOK`/`PIKE`/`STICK` — adopt the four bases (+ `F_*`) from bmxkx2001 and define them in both `weapon.h` copies. Proof: HEAD 0/18 → 16 PASS (`kusang-bang`/`yuzhu-zhang` still `::create()` vs `F_UNIQUE` order; `M_WEAPON` deferred). (2) shadowgate avatar `pocket` inherits undef `POCKETARMOUR` while `PARMOUR` already names `/std/pocketarmour` — `#define POCKETARMOUR`; close the truncated `create()`. Proof: HEAD 1/3 → 3 PASS.
+
+
+**Also (2026-11-09, DAEMON residual corpus):** 116 further ES/xkx-lineage libs still had undef or file-missing `DAEMON` after the 23-lib pass — same recipe (`#define DAEMON "/std/cmd_m"`, stripped `std/cmd_m.lpc`, `uid.h` when `#include <uid.h>`). Spot proof: bxsj/haiyang2/xkx2001/dtsl/hymud/zzfy/dtxywzxzb HEAD 0/3 → 3 PASS each. Skipped nested-only `hy`, backup-only `shenzhou`, `xajhxo` system path, and LIB_DAEMON hosts. LIB_ISQL alone-scan hits are false positives (`#ifdef __PACKAGE_DATABASE_DB__`, FluffOS only defines `__PACKAGE_DB__`).
+
+
+**Also (2026-11-09, WEAPONTYPE/AMULET/ARMOR aliases):** (1) hymud twin of hy5: `#define WEAPONTYPE "/inherit/weapon/weapon"` — inherit syntax cleared; template `valuetext` residue remains. (2) xiaoyuxiyou/xyxyutf8: define `AMULET`/`TYPE_AMULET` and ship `std/armor/amulet.lpc` — 6/6 newly load each. (3) seven libs whose `globals.h` points `ARMOR` at missing `/std/armor` while `/inherit/armor/armor` exists — thin-alias `std/armor.lpc`; ruanwei-jia newly loads on sampled hosts.
+**Also (2026-11-09, yueying F_REMOVEANSI + yszz M_WEAPON + FR restock):** (1) yueyingqiyuan cgi-bin inherits undef `F_REMOVEANSI` — adopt mhxy `/feature/removeansi.lpc` and define the macro (mhxy twin). Proof: HEAD 0/14 → 14 PASS. (2) yszz `M_WEAPON` → missing `/std/weapon/weapon`; adopt xiyouji2003 body (init_* + set_desc). Proof: weapon + six m_* HEAD 0/7 → 7 PASS. (3) finalrealms elf gloom rooms inherit missing `/d/hoerk/.../shops/restock`; adopt same-lib goblin restock mixin. Proof: 9 consumers newly load (randomcre still has undeclared locals — separate).
+
+**Also (2026-11-09, pkuxkx /std/jboard):** `wizard_j` inherits missing `/std/jboard` while `/inherit/misc/jboard` exists (`PLAN_BOARD`). Thin alias; add stub `/d/wiz/jobroom` so `setup()->move()` does not abort load. Proof: HEAD 1/3 → 4 PASS (plan_b already). pkuxkx `M_WEAPON`/`M_CLOTH` still deferred (zero-arg `set_desc()`; no corpus donor).
+
+**Also (2026-11-09, PEN corpus + yxxcii CHAT_ROOM):** (1) sixteen libs (`xyzx*`/`zxty*`/`yxjh`/`wlhd`/…): `panguanbi` inherits undef `PEN` — adopt jhfy2 `/inherit/weapon/pen` and `#define PEN`. Proof: sample HEAD 0/2 → 2 PASS each. (2) yxxcii `CHAT_ROOM` → missing `/inherit/room/chat_room` while body is `/feature/chat_room` — thin alias. Proof: HEAD 1/5 → 6 PASS.
+
+**Also (2026-11-09, F_NOCLONE + NEEDLE + PANTS/BREAST):** (1) zzfy/zzfy3/wqfy ultra NPCs inherit undef `F_NOCLONE` — adopt hell `noclone.lpc` (one-arg `query`) and define the macro. Proof: noclone PASS; ultrap/NPC_D residual. (2) shenmo `NEEDLE` — adopt mhxy `/std/weapon/needle` and define. Proof: 0/2 → 2 PASS. (3) sjplgfjxb/sjplii/sjpl2 `PANTS`/`BREAST` — define + `std/armor/{pants,breast}`. Proof: cloth consumers PASS.
+
+**Also (2026-11-09, RAKE + UNARMED + NECKLACE + CLOTH/F_LIQUID):** (1) xxcq/xxcqii/xxcqii2 `RAKE` — adopt sjplii rake + define. Proof: 3/3 PASS each. (2) sjplgfjxb `UNARMED` — mhxy unarmed + define. Proof: 2/2 PASS. (3) wxddym `NECKLACE` — thin alias to `neck` + define. Proof: 6/6 PASS. (4) zzhj `CLOTH` + `F_LIQUID` — cloth.lpc + zzfy liquid. Proof: 5/5 PASS. MEDICAL_BOOK (tianxiawuxue) still deferred (sort_string/filter_color sefuns).
+
+**Also (2026-11-09, xlqyzdb REGROOM):** file `/std/room/regroom` present; restore `#define REGROOM` plus `IDUSER`/`EMAIL_D` (emaild already shipped). Proof: 2/2 PASS.
+
+**Also (2026-11-09, F_DEALER zzfy/zzfy3):** adopt xkyx3b `feature/dealer` + `moneyd` + defines F_DEALER/MONEY_D/THGOLD_OB (thousand-gold file already present). Proof: 3/3 PASS both libs.
+
+**Also (2026-11-09, wllz3 NEWS_BOARD):** undef NEWS_BOARD aliased to existing BULLETIN_BOARD path /inherit/misc/bboard; retarget location to existing wizard_room. Proof: news_b newly loads.
+
+**Also (2026-11-09, FINGER zhonghua2/zhyx):** TYPE_FINGER present, macro/file missing. Same-lib twin of `neck.lpc` as `/inherit/armor/finger` + `init_finger()` for jade-ring; `#define FINGER`. Proof: 5/5 and 6/6 PASS.
+
+**Also (2026-11-09, DAEMON residual hy/wllz3/xajhxo):** same recipe as prior corpus sweep: `#define DAEMON "/std/cmd_m"` + stripped `cmd_m.lpc`/`uid.h` where missing (wllz3 define-only). Proof: pingd/pingtcp newly load; telnetd/userid still need member_group/priv.h. wilderness deferred (Lima DAEMON -> /std/daemon).
+
+**Also (2026-11-09, F_CLOTHNAME xiyouji2006/xyj2006n/xyj2006zzzhx):** file `/feature/clothname.lpc` present; `#define F_CLOTHNAME` missing. Restore next to other `F_*` (dtxywzxzb). Proof: skirt1 newly loads in all three, 0 regress.
+
+**Also (2026-11-09, wxddym INLAID):** `clone/enchase/*` inherited undef `INLAID` (80). Adopt yhwhckdm `/inherit/item/inlaid` + `#define INLAID` next to existing `TESSERA` (distinct `is_inlaid` vs `is_tessera`). Proof: 81/81 PASS, 0 regress.
+
+**Also (2026-11-09, zzhj DAEMON/WHIP/FORK/WAIST + WAREHOUSE + SUPER_NPC):** (1) zzhj: `#define DAEMON "/std/cmd_m"` (cmd_m already present) + zzhj-style whip/fork + waist. Proof: 9/9 PASS. (2) wxddym: adopt nt6 warehouse+price.h. Proof: warehouse PASS (business needs businessd). (3) shenmo: define SUPER_NPC thin-alias to `/d/snowtu/npc/super_npc`. Proof: alias PASS. JOBNPC deferred (NPC_D).
+
+
+**Also (2026-11-09, F_UNIQUE tianlongbabu/yxsj/yxzsj):** three ES-lineage hosts inherit undef `F_UNIQUE` with no `/feature/unique`. Adopt es2 `unique.lpc` + `#define F_UNIQUE`. (xo*/xajh* already ship the file — alone-scan false positives when FEATURE_DIR expands.) Deferred: wilderness Lima `DAEMON` (debug lpcc lacks LIMA options); xo_final `F_FIRST` (nt6 first needs `full_self`/`competition_with`/`query_competitor`). Proof: tlbb 0/4→4 PASS; yxsj/yxzsj 0/3→3 PASS each.
+
+**Also (2026-11-09, FACE tianxia):** mask inherits undef `FACE`. Same-lib twin of `std/armor/head` as `face` + `#define FACE`/`TYPE_FACE`. CLAW still deferred (no ES-style `init_claw` donor; dreamofseven uses beast_weapon_prop). Proof: 0/2→2 PASS.
+
+**Also (2026-11-09, F_DEALER sjcs):** huoji inherits undef `F_DEALER`; moneyd already present. Adopt xkyx3b `feature/dealer` + define. BANKER/HOCKOWNER (tianlongbabu) deferred (needs do_check/do_load donors + TECASH macros; fy bankowner uses balance/withdraw). Proof: 0/2→2 PASS.
+
+**Also (2026-11-09, UNARMED sjpl2/sjplii):** dami inherits undef `UNARMED` + `init_unarmed(5)`. Adopt sjplgfjxb `std/weapon/unarmed` + `#define UNARMED` (same as prior sjplgfjxb). Proof: 0/2→2 PASS each.
+
+**Also (2026-11-09, F_REMOVEANSI sjshv150):** passwd inherits undef `F_REMOVEANSI`. Adopt mhxy `feature/removeansi` + define (yueying twin). Proof: 0/2→2 PASS.
+
+**Also (2026-11-09, F_MERCENARY tianlongbabu/xyj451):** snow mercenary inherits undef `F_MERCENARY`. Adopt es2 `/std/char/mercenary` + define. Proof: 0/2→2 PASS each.
+
+**Also (2026-11-09, SSSERVER shenmo):** skill/PFM inherits undef `SSSERVER` (define only in `u/xdao/globals.h`, no file). Adopt dtxyzjb `/std/ssserver` + globals define. Proof: ssserver newly loads; jianhun still needs `F_FUNCTION`; godsword still needs `sp_attack*`. BI deferred (no `init_bi` donor); DHAMMER→HAMMER alias does not newly load dhammer (self.h/`%n` bugs).
+
+**Also (2026-11-09, F_FUNCTION shenmo):** jianhun/ai-sword inherit undef `F_FUNCTION`. Adopt kxkj `feature/function` + define (follows SSSERVER). Proof: 2/4→4 PASS, newly loading 2.
+
+**Also (2026-11-09, YIZHAN wmkj):** tangmen station inherits undef `YIZHAN`. Adopt xxcq `mache` vehicle+ini; ship `yizhan.lpc` from `mache.h` with `inherit ROOM` (FluffOS will not inherit a `.h`); `#define YIZHAN`. Proof: 0/2→2 PASS. H_MAGIC_ITEM no donor; BOARD_OB needs LIMA lpcc; F_QUESTER blocked by `QUEST_D(x)` vs `QUEST_D->` on tianxiawuxue.
+
+**Also (2026-11-09, CHIBANG/FABAO wdxtym):** gems wrappers inherit undef `CHIBANG`/`FABAO`. Same-lib twin of `surcoat` as armor chibang/fabao + `TYPE_*` macros. Proof: 0/4→4 PASS.
+
+**Also (2026-11-09, F_GEMS zitengzhan):** gem inherits undef `F_GEMS`. Adopt dtxyzjb `feature/gems.lpc`+`gems.h` + define. Proof: 0/2→2 PASS.
+
+**Also (2026-11-09, SKI_ZHEN zitengzhan):** formation skills inherit undef `SKI_ZHEN`. Adopt dtxyzjb `/inherit/skill/array` + define. Proof: 0/5→5 PASS.
+
+**Also (2026-11-09, BHNPC yxcs/wmkj):** (1) yxcs: uncomment `#define BHNPC` to existing `/u/lonely/banghui/bhnpc`. Proof: 1/3→3 PASS. (2) wmkj: define points at missing `/u/xiha/banghui/bhnpc` — adopt yxcs body there. Proof: 0/3→3 PASS.
+
+**Also (2026-11-09, F_BVENDOR wmkj):** same `/u/xiha/banghui/` hole as BHNPC; adopt yxcs `/u/lonely/banghui/vendor.lpc` → `/u/xiha/banghui/vendor.lpc`. Proof: HEAD 0/6 → 6 PASS (base + 5 merchants).
+
+**Also (2026-11-09, MI_XIAO zxty08nxgbb):** missing `music.h` + `/inherit/misc/_xiao`; sibling zxty already ships both. Proof: HEAD 0/2 → 2 PASS.
+
+**Also (2026-11-09, BULETIN_BOARD wmkj):** typo-macro points at missing `/u/xiha/inherit/bboard`; adopt yxcs `/u/lonely/inherit/bboard.lpc` (byte-identical to local `/inherit/misc/bboard.lpc`). Proof: HEAD 0/2 → 2 PASS.
+
+**Also (2026-11-09, F_BH wmkj):** adopt yxcs `/u/lonely/banghui/banghui.lpc` → `/u/xiha/banghui/banghui.lpc` (near-twin of local `feature/banghui.lpc`). Proof: base FAIL→PASS; sole user still blocked on undef `KZZNPC`.
+
+**Also (2026-11-09, COMMAND hhsj/nitan170911/xfbhh/nt6nitan6win):** same nitan6/nt6 shape: `#define COMMAND F_COMMAND` + empty `include/feature.h` (§6.23). Proof: each fgrep HEAD 0/1 → 1 PASS.
+
+**Also (2026-11-09, F_NOCLONE shujian3):** undef `F_NOCLONE` — `#define F_NOCLONE "/feature/noclone.lpc"` + adopt sjshv150 body (`me->query` form). Proof: base FAIL→PASS; pet then blocked on undef `F_OBSAVE` (`DBASE_D`).
+
+**Also (2026-11-09, FORCE xo_final):** `#define FORCE STD_DIR "skill/force"` (file already present; matches xo/xajh2). Proof: HEAD 1/2 → 2 PASS.
+
+**Also (2026-11-09, PPLROOM xajhxo):** missing `#define PPLROOM STD_DIR "room/pplroom"` (siblings have it; template in pplroom writes `inherit PPLROOM`). Alone-scan undef cleared; base still PASS.
+
+**Also (2026-11-09, newitems zhonghua2/zhyx):** literal `/clone/newitem/newitems` missing; same-lib copy from `/u/yuchang/zhuangbei/obj/newitem/{newitems,newitemname}.lpc`. Proof: zhonghua2 0/4→4 PASS; zhyx 0/3→3 PASS.
+
+**Also (2026-11-09, DAEMON shzs/shenzhou):** (1) shzs: live `#define DAEMON "/std/cmd_m"` (file present). Proof: pingd/pingtcp FAIL→PASS. (2) shenzhou: DAEMON only inside `/* */` — add live define + adopt shzs `cmd_m.lpc`/`uid.h`. Proof: 0/5→3 PASS (pingd/pingtcp/cmd_m).
+
+**Also (2026-11-09, /inherit/object FR/ninetears):** retarget `inherit "/inherit/object"` → `"/std/object"` (same-lib). Alone-scan literal cleared; gopher still needs local `globals.h`.
+
+**Also (2026-11-09, baoshi/newitemname zitengzhan):** `__DIR__ "newitemname"` under `baoshi/`; copy parent `d/obj/newitem/newitemname.lpc`. Proof: HEAD 0/2 → 2 PASS.
+
+**Also (2026-11-09, ground3 dtxyzjb):** `npc/ground` inherited missing `__DIR__"ground3"`; retarget to existing `/d/kaifeng/ground3`. Alone-scan cleared; npc copy still incomplete vs working `/d/kaifeng/ground`.
+
+**Also (2026-11-09, EQUIP zsdsj/revivalworld):** `#define EQUIP EQUIPMENT` (file present). revivalworld also lacked `OBJECT_ACTION_MOD` define+file — adopt zsdsj `_object_action_mod.lpc`. Proof: each ring HEAD 1/2 → 2 PASS.
+
+**Also (2026-11-09, yaoguai/anqi-jian xiyouji2003/zzfy/zzfy3):** (1) xiyouji2003: adopt xixingzhanji `d/dntg/yunlou/npc/yaoguai(+_reward)` + `d/xueshan/obj/anqi-jian`. Proof: HEAD 0/4 → 4 PASS. (2) zzfy/zzfy3: same yaoguai adopt + `#define MISC_D`/`MONITOR_D` + adopt `miscd`/`monitord`/`find.map`. Proof: 0/5 → 5 PASS.
+
+**Also (2026-11-09, hiccups/bboard spacemud/swmud/wilderness):** thin alias `/open/hiccups/bboard` → `/contrib/bboard/bboard` (same-lib). Proof: each HEAD 1/3 → 3 PASS (LIMA/wilderness lpcc).
+
+**Also (2026-11-09, gb_budai xkxc98sj/xkxz2):** thin alias `d/job/obj/gb_budai` → `/d/gaibang/obj/gb_budai` (same-lib). Proof: each HEAD 1/3 → 3 PASS.
+
+**Also (2026-11-09, master_yue njhhdxdes2hx):** thin alias `/std/char/master_yue` → `/std/char/master~1` (FAT 8.3 twin; Yue-specific `huiyue` gate). Proof: HEAD 1/3 → 3 PASS.
+
+**Also (2026-11-09, new/bow wxddym):** thin alias `clone/weapon/new/bow` → `/clone/weapon/bow` (same-lib). Proof: HEAD 1/4 → 4 PASS.
+
+**Also (2026-11-09, capital ShennongNpc xajh2):** thin alias `d/city/capital/ShennongNpc` → `/d/menpai/shennong/npc/ShennongNpc` (same-lib). Proof: HEAD 1/4 → 4 PASS.
+
+**Also (2026-11-09, npcskill path aliases):** thin-alias missing `/u/fyue/npcskill`, `/u/system_1/npcskill`, `/kungfu/class/wudang/npcskill_n`, `/quest2/npcskill` to same-lib `quest/` or `quest2/` bodies (12 libs: xyzx3/yzxiiizylfy/xyzxiiylzymh/tianxiawuxue/tybxjh/xysylmhb/wmkj/zxty/zxty08nxgbb/wlhd/yxjh/wxddym). Proof: each alias HEAD FAIL → PASS; questguai may still need name.h.
+
+**Also (2026-11-09, d/game/pai shenmo):** thin alias `d/game/pai` → garbled-name base `榄旀硶鐗_pai` (encoding-lost original). Proof: HEAD 1/8 → 8 PASS.
+
+**Also (2026-11-09, suoha2 zxty):** thin alias `/d/suoha/suoha2` → `/u/zjb/suoha/suoha2` (same-lib). Proof: HEAD 1/5 → 5 PASS.
+
+**Also (2026-11-09, inherit/tests xkx100/xiakexing100):** thin alias `/inherit/tests` → `/mudlib/testsuite/inherit/tests` (same-lib). Leave `/inherit/master/valid` (body needs OVERRIDES_FILE/BASE). Proof: each HEAD 1/3 → 3 PASS.
+
+**Also (2026-11-09, AFD path aliases mortremains):** thin alias `/std/raise_stats` → `/adm/AFD/raise_stats`, `/std/living/{healing,alignment}` → `/adm/AFD/living/…`, `/d/Conf/conf_room` → `/d/attic/Conf/conf_room` (same-lib). Leave monolith (body type error). Proof: 4 aliases HEAD FAIL → PASS.
+
+**Also (2026-11-09, YIZHAN xxcq/xxcqii/xxcqii2):** `#define YIZHAN` `/clone/room/mache.h` → `/inherit/room/yizhan` (same-lib body). Proof: each HEAD 2/4 → 4 PASS.
+
+**Also (2026-11-09, COMBINED_ITEM_BANG wdxtym):** thin alias `/inherit/item/combined_bang` → `/inherit/item/combined` (same-lib). Proof: HEAD 1/5 → 5 PASS.
+
+**Also (2026-11-09, baohu killer1 shenmo):** adopt `/d/wizz/stey/kill2/killer1` into `d/quest/baohu/yaoguai{2,3}/killer1` (same-lib; `__DIR__` inherit). Proof: HEAD 1/7 → 7 PASS.
+
+**Also (2026-11-09, TASK xajh2/xo_final):** uncomment `#define TASK` as `STD_DIR "todo/task"` (body present). Proof: each HEAD 1/2 → 2 PASS.
+
+**Also (2026-11-09, npcskill+name.h xajhzcjh):** adopt wxddym `/quest/npcskill` + `/quest/name.h` (sibling). Proof: questguai HEAD FAIL → PASS.
+
+**Also (2026-11-09, AFD living shards mortremains):** thin alias `/std/living/{experience,magic,kill_reward}` → `/adm/AFD/living/…`. Proof: 3 aliases HEAD FAIL → PASS.
+
+**Also (2026-11-09, stey/guai xlqyzdb):** adopt `kill1/guai` → `d/wizz/stey/guai` (same-lib `__DIR__`). Proof: HEAD 1/3 → 3 PASS.

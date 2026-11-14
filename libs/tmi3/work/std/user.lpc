@@ -1,0 +1,178 @@
+//user.c
+
+//Tacitus @ Tmi-3
+//04-APR-05
+//User Object
+
+//Last updated: July 6th , 2005 by Tacitus
+
+#include <config.h>
+
+inherit OBJECT;
+
+private string password;
+string *path;
+
+int id(string arg);
+int commandHook(string arg);
+string process_input(string arg);
+string *query_path();
+void add_path(string str);
+void rem_path(string str);
+void receive_message(string type, string msg);
+void setup();
+void net_dead();
+void reconnect();
+void write_prompt();
+void start_ed(string file);
+int set_password(string str);
+mixed query_password();
+nomask void restore_user();
+nomask void save_user();
+
+
+void create()
+{
+     init_ob();
+     path = ({"/cmds/std/", "/cmds/wiz/", "/cmds/object/", "/cmds/file/"});
+}
+
+void setup()
+{
+         add_action("commandHook", "", 1);
+         set_living_name(query_name());
+         enable_commands();
+         say(capitalize(query_name()) + " has logged in from " + query_ip_number(this_player()) +
+"\n");
+         if(!query("cwd")) set("cwd", "/doc");   
+	       set_privs(this_player(), query_name());
+}
+
+void net_dead()
+{
+    save_user();
+    set_heart_beat(0);
+    tell_room(environment(), capitalize(query_name()) + " has gone link-dead.\n");
+    set_short(capitalize(query_name()) + " [link dead]");
+}
+
+
+void reconnect()
+{
+    restore_user();
+    set_heart_beat(1);
+    write("Reconnected.\n");
+    tell_room(environment(), capitalize(query_name()) + " has reconnected.\n");
+    set_short(capitalize(query_name()));
+}
+
+void write_prompt()
+{
+     write("> ");
+}
+
+string process_input(string arg)
+{
+     return arg;
+}
+
+void receive_message(string type, string msg)
+{
+	receive(msg);
+}
+
+int set_password(string str)
+{
+     if(master()->query_member(query_privs(previous_object()), "admin")) password = crypt(str, str); 
+     else return 0;
+     return 1;     
+}
+    
+mixed query_password()
+{
+     if(master()->query_member(query_privs(previous_object()), "admin")) return password;
+}
+
+nomask void restore_user()
+{
+     if(master()->query_member(query_privs(previous_object()), "admin") || query_privs(previous_object()) == this_player()->query_name()) restore_object(user_data_file(query_name()));
+}
+
+nomask void save_user()
+{
+     save_object(user_data_file(query_name()));
+}
+
+string *query_path()
+{
+     return path;
+}
+
+void add_path(string str)
+{
+     if(member_array(str, path) != -1)
+     {
+          write("Error [path]: That directory is already in your path.\n");
+          return;
+     }
+     
+     if(str[<1] != '/') str += "/";
+     
+     if(!directory_exists(str))
+     {
+          write("That directory does not exist.\n");
+          return;
+     }
+     
+     path += ({str});
+}
+
+void rem_path(string str)
+{
+     if(member_array(str, path) == -1)
+     {
+          write("Error [path]: That directory is not in your path.\n");
+          return;
+     }
+     
+     path -= ({str});
+}
+
+int commandHook(string arg)
+{    
+     string verb, pre_com;
+     int i;
+     object post_com;
+     
+     verb = query_verb();
+     
+     if(environment(this_player())->valid_exit(verb))
+     {
+          tell_room(environment(this_player()), capitalize(this_player()->query_name()) + " leaves through the " + verb + " exit.\n", this_player());
+          this_player()->move(environment(this_player())->query_exit(verb));
+          write("You move to " + environment(this_player())->query_short() + ".\n\n");
+          command("look");
+          return 1;               
+     }
+          
+     for(i = 0; i < sizeof(path); i++)
+     {
+          if(file_exists(path[i] + verb + ".lpc"))
+          {
+               pre_com = path[i] + verb;
+               break;
+          }
+     }
+     
+     if(pre_com)
+     {     
+          post_com = load_object(pre_com);
+
+          if(post_com)
+          {
+               return (int)post_com->main(arg);
+          }
+     }
+     
+     return 0;
+}

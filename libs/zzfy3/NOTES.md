@@ -544,3 +544,25 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## 深度功能测试（2026-11-09，F_NOCLONE §6.16）
+
+`include/npc/ultra/*` 继承未定义的 `F_NOCLONE`。从 hell 收养 `/feature/noclone.lpc`，`globals.h` 补宏。证明：noclone PASS；ultra 续暴露 `NPC_D`/`ultrap` 另案。
+
+## 深度功能测试（2026-11-09，F_DEALER 收养 §6.15/§6.16）
+
+`d/xiakedao/npc/xiaoer2` 等继承未定义的 `F_DEALER`。从同系 xkyx3b 收养 `feature/dealer.lpc` 与 `adm/daemons/moneyd.lpc`，并补 `#define F_DEALER`、`#define MONEY_D`、`#define THGOLD_OB`（千两黄金档本库已有）。证明：moneyd/dealer/xiaoer2 3/3 PASS，0 regress。
+
+
+## 深度功能测试（2026-11-09，yaoguai + MISC_D/MONITOR_D §6.15/§6.16）
+
+`city/npc/yg/yaoguai` 继承缺失的 `/d/dntg/yunlou/npc/yaoguai`（含 `yaoguai_reward`）。从同系 xixingzhanji 收养基类与奖励；本库缺 `MISC_D`/`MONITOR_D` 宏与 daemon——`globals.h` 补宏，并收养 `miscd.lpc`/`monitord.lpc`/`find.map`。证明：yaoguai 链 + miscd/monitord HEAD 0/5 → 5 PASS。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

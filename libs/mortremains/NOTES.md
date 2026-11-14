@@ -998,3 +998,21 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/adm/haras
 
 公会房继承 `/d/class/priest/std/learnspell`，本体在 `…/daemons/learnspell`。薄别名。证明：路径 HEAD FAIL → 树 PASS。
 
+
+
+## 深度功能测试（2026-11-09，AFD 路径薄别名 §6.15）
+
+若干对象继承 `/std/raise_stats`、`/std/living/{healing,alignment}`、`/d/Conf/conf_room`，本体在 `/adm/AFD/…` 与 `/d/attic/Conf/conf_room`。薄别名。`/d/Dark/Prime/obj/monolith` 本体仍有类型错误，暂不别名。证明：四别名 listcheck HEAD FAIL → 树 PASS。
+
+
+## 深度功能测试（2026-11-09，AFD living 碎片薄别名 §6.15）
+
+`adm/AFD/living` 继承缺失的 `/std/living/{experience,magic,kill_reward}`；本体在 `/adm/AFD/living/…`。薄别名。证明：三别名 HEAD FAIL → 树 PASS；`living.lpc` 仍有其他缺失基类。
+
+## 深度功能测试（2026-11-10，AFD armor_class 薄别名 §6.15）
+
+`adm/AFD/living` 继承缺失的 `/std/living/armor_class`；本体在 `/adm/AFD/living/armor_class`。薄别名。证明：listcheck 3 对象 HEAD 1 PASS / 2 FAIL → 树 3 PASS（别名与 `living.lpc` 新载入）。
+
+## 深度功能测试（2026-11-10，chronos_doll / factionhall 薄别名 §6.15）
+
+`/d/attic/Outer/Sigil/toys/chronos_doll` 继承缺失的 `/u/c/chronos/toys/chronos_doll`，本体是同目录 `doll`；`foundry1` 继承 `/u/i/ilzarion/factionhall`，本体在 attic `factionhall`。薄别名。`factionhall2` / `clapper` / `watch` 仍无同库本体，暂留。证明：listcheck 6 对象 HEAD 2 PASS / 4 FAIL → 树 6 PASS。

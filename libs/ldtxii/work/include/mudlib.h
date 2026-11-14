@@ -12,6 +12,7 @@
 #define MUDLIB_ENCODING         "GB"
 #define MUD_ADMIN               "ken@chinesemud.net"
 #define MUD_WEB                 "http://ldj.chinesemud.net"
+#define DAEMON                  "/std/cmd_m"
 
 #endif
 

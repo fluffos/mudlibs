@@ -1,0 +1,134 @@
+// mudlib: Fading Summer
+// file:   object_data.c
+// author: Lontau
+// date:   20-6-2001
+
+/* Synopsis: This file will contain the routines necessary within
+   the base object for using the set() and query() functions and
+   maintaining an object's data.  The concepts behind this were
+   inspired by the TMI-2 mudlib.
+*/
+
+// global definitions
+
+// variable: object_data
+// purpose: This variable will hold all data stored here via the
+//          set() function and will be used to retrieve that data
+//          with the query() function.
+
+mapping object_data = ([ ]);
+
+// variable: data_security_flag
+// purpose: This variable holds a mapping of data keys that corespond
+//          to the keys from the object_data mapping coupled with the
+//          flag used when setting the data.
+
+mapping data_security_flag = ([ ]);
+
+// prototypes
+
+nomask varargs int set(string, mixed, int);
+nomask mixed       query(string);
+nomask int         delete(string);
+
+// functions
+
+// function: set(string, mixed, int)
+// purpose: This function allows objects to 'set' data in this
+//          object.  The first option specifies the name used
+//          to reference that particular piece of data.  The
+//          second argument is the value intended to be set.
+//          As for security, only this_object() and objects with
+//          ROOT_UID will be able to set any data in this object.
+//          If the third argument is non-zero, only objects with
+//          ROOT_UID and this_object() will be able to query this
+//          data value.
+
+nomask int set(string data_key, mixed data_value, int flag)
+{
+   string eff_user;
+
+   // Is the calling object allowed to set data here?
+   if(previous_object())
+      eff_user = geteuid(previous_object());
+   else
+      eff_user = geteuid(this_object());
+
+   if(eff_user != ROOT_UID && eff_user != geteuid(this_object()))
+      return 0;
+
+   // Ok, now the calling object is either this one or ROOT... set
+   // the data.
+
+   if(member_array(data_key, keys(object_data)) == -1)
+   {
+      object_data += ([ data_key : data_value ]);
+      data_security_flag += ([ data_key : flag ]);
+   }
+   else
+   {
+      object_data[data_key] = data_value;
+      data_security_flag[data_key] = flag;
+   }
+
+   return 1;
+}
+
+// function: query(string)
+// purpose: This function retrieves the value stored in the data
+//          mapping under the key with the name specified by
+//          the argument passed to the function.  Any object can
+//          query data from any object inheriting this, unless
+//          the data was set with a non-zero flag.
+
+nomask mixed query(string data_key)
+{
+   string eff_user;
+
+   // Is the specified argument an existing key in our mapping?
+   if(member_array(data_key, keys(object_data)) == -1)
+      return "UNDEFINED";
+
+   // security
+   if(data_security_flag[data_key])
+   {
+      if(previous_object())
+         eff_user = geteuid(previous_object());
+      else
+         eff_user = geteuid(this_object());
+
+      if(eff_user != ROOT_UID && eff_user != geteuid(this_object()))
+         return "ACCESS DENIED";
+   }
+
+   // Now simply return the value.
+   return object_data[data_key];
+}
+
+// function: delete(string)
+// purpose: This function removes an entry from the object_data
+//          mapping.  Security is the same as for set().
+
+nomask int delete(string data_key)
+{
+   string eff_user;
+
+   // security
+   if(previous_object())
+      eff_user = geteuid(previous_object());
+   else
+      eff_user = geteuid(this_object());
+
+   if(eff_user != ROOT_UID && eff_user != geteuid(this_object()))
+      return 0;
+
+   // Does data_key exist in the mapping?
+   if(member_array(data_key, keys(object_data)) == -1)
+      return 0;
+
+   // Remove the specified key : value pair.
+   map_delete(object_data, data_key);
+   map_delete(data_security_flag, data_key);
+
+   return 1;
+}

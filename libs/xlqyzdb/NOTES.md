@@ -835,3 +835,21 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.10 pusa1 die varargs）
 
 `d/qujing/heifeng/npc/pusa1`：`void die(object me)` → `varargs void die(object me)`，与角色基类一致。
+
+
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## 深度功能测试（2026-11-09，REGROOM 宏补回 §6.16）
+
+`d/welcome/wel1` 继承未定义的 `REGROOM`，但 `/std/room/regroom.lpc` 本库已有。补 `#define REGROOM "/std/room/regroom"`，并补注册房所需的 `IDUSER`/`EMAIL_D`（`emaild` 本库已有；`iduser` 为运行时计数文件）。证明：regroom/wel1 2/2 PASS，0 regress。
+
+
+## 深度功能测试（2026-11-09，stey/guai 收养 §6.15）
+
+`d/wizz/stey/yg-*` 继承同目录缺失的 `guai`；本体在 `kill1/guai`。同库收养到 `stey/guai`。证明：guai+yg-ba listcheck HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

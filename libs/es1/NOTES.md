@@ -859,3 +859,20 @@ IRC vodka/water 继承 wizard `/u/e/elon/drink`，接口在 `/d/island/obj/drink
 ## 深度功能测试（2026-11-04，wild_card.x + SECURE_OBJECT §6.15）
 
 `/std/body/wild_card` 归档为 `wild_card.x`；`SECURE_OBJECT` 指向缺失的 `/std/object/sec_ob`。复制为 `.lpc`，并从 tmi2 收养 `sec_ob.lpc`。证明：wild_card+sec_ob HEAD FAIL → 树 PASS（`card.lpc` 另有返回类型问题；`adt/body` 仍缺 link/message/command）。
+
+## §7.61 message() exclude || ({})（2026-11-10）
+
+`adm/simul_efun/message.lpc` 把缺省的 `exclude`（int 0）原样传给 `efun::message`；`tell_room`/`write`/`say` 等三参调用会触发 `Bad argument 4`。改为 `exclude || ({})`。跳过 `u/m/moon` 副本（同 mudring 策略）。证明：本轮 boot + `fluffos` 登录 `look`/`who`/`say`/`quit`，驱动无 arg-4。
+
+
+## §7.282 矮人武器加成恒拒（2026-11-10）
+
+`std/races/dwarf.lpc`：`type != "axe" || != "blunt"` 恒真，WC/伤害加成永远 return 0。改 `&&`。`es1_win` / `esI` 同改。`lpcc_eval --at /open/zzeval.lpc` 表达式：斧不拒、剑拒。
+
+## 深度功能测试（§10.7，2026-11-10，冒险者公会再测）
+
+pristine + build-debug，port 40239。
+
+- **缺陷**：`std/user.lpc` 的 `setup()` 在「上次连线」提示前有一行残留调试 `write("aadsaaaaaaaaaaaaaaaaaaaa\n\n")`，每次登录都打到玩家屏幕。不在 `raw/`；`es1_win` / `esI` 早先已删。本库删掉该行。
+- **证明**：删前注册可见 `aadsa…`；删后同流程注册（英文名→中文名→密码→性别→种族→email→RETURN）入冒险者公会，`look`/`score`/`quit` 正常，回显无 `aadsa`，控制台无 `*Error`。
+- 本轮其余玩法无新编程缺陷。

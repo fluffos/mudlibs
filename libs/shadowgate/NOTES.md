@@ -846,3 +846,42 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-04，deku open/dforest2i 薄别名 §6.15）
 
 `keep/forest/dforest7` 与 `open/old/dforest*` 继承 `/d/deku/open/dforest2i`，本体与 `forest2i` 同迁 `/d/deku/forest/forest2i`。薄别名。证明：HEAD 3 FAIL；树 3 PASS。
+
+
+## 深度功能测试（2026-11-09，POCKETARMOUR §6.16）
+
+avatar `pocket` 继承未定义的 `POCKETARMOUR`，而 `std.h` 仅有 `PARMOUR`→`/std/pocketarmour`。补 `#define POCKETARMOUR "/std/pocketarmour"`；两份截断的 `pocket.lpc` 补上 `set_value(1);` 与收尾 `}`。证明：HEAD 1/3 PASS → 树 3 PASS（新加载 2）。
+
+## 深度功能测试（2026-11-10，tecqumin hunt_mon realms 路径 §6.15）
+
+`orchevid` 继承 gitignored 的 `/realms/lujke/tecqumin/mons/hunt_mon`；本体在 `/d/atoyatl/tecqumin/mons/hunt_mon`。改写 inherit，并把 `far_scanner3` 的 `new()` 路径一并改到 `/d/atoyatl/…`。顺带去掉 `hunt_mon` 里误入的裸 `d` 行，以及会遮蔽 efun `present()` 的本地 `present(string, object)`（否则子孙里 `present(object, room)` 在未开 `old type behavior` 的 twin 上类型失败）。证明：listcheck 3 对象 HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## 深度功能测试（2026-11-10，mine2 realms 路径 §6.15）
+
+`d/mine2/rooms/mine3` 继承 gitignored `/realms/zeek/mine`；本体在 `/d/mine2/mine`。改写 inherit。证明：listcheck 2 对象 HEAD 1 PASS / 1 FAIL → 树 2 PASS。
+
+## 深度功能测试（2026-11-10，saide scribe realms 路径 §6.15）
+
+`d/shadow/npc/scribe` 继承 gitignored `/realms/saide/scribe`；本体在 `/std/scribe`。改写 inherit。证明：listcheck HEAD 1 PASS / 2 FAIL → 树 2 PASS（`/realms/...` 仍 FAIL，预期）。
+
+## §6.15 shar_symbol（2026-11-10）
+
+档案未带 `/d/magic/symbols/shar_symbol`；`newsymbol` inherit 之，新手庙 `p_shar` `new()` 之。按同目录其它神祇 `*_symbol.lpc`（eldath / lord_shadow）补薄包装 → `holy_symbol`。
+
+验证：listcheck 消费者 HEAD FAIL → tree PASS。
+
+## §6.15 cmds/mortal/room 继承 saide traps（2026-11-10）
+
+- 游离的 `cmds/mortal/room.lpc`（`/std/room` 旧副本）继承缺失的 `/realms/saide/traps/container.lpc`。
+- 与现行 `std/room.lpc` 对齐：`inherit "/std/container.lpc"`；`status id`→`int id`；`dependencies += ob`→`+= ({ ob })`。
+- 同改 shadowgate / sunshadow。证明：listcheck 各 0→1 PASS。
+
+## §6.10 `dependencies += ob`（2026-11-10）
+
+- `object *dependencies` 上写 `dependencies += ob`（标量）→ `Bad assignment ( object * vs object )`（sunshadow 的 `std/room` 已是 `+= ({ ob })`）。
+- 同形修复：`shadowgate` `std/room` 与两边 `d/deku/hhouse/inherits/test/room`；`cmds/mortal/room` 上轮已改。
+- 证明：`/std/room.lpc` listcheck 仍 PASS（HEAD/树）。
+
+## §7.282 `_fixlevels` 职位链（2026-11-10）
+
+`cmds/adm/_fixlevels.lpc`：`position != "god" || != "arch"` 恒真，xmote 降级分支对谁都 return 0。同文件后一段已是 `&&`；前段改为 `&&`。`sunshadow` 同改。对象可载入；god neither→0 / mortal→1。

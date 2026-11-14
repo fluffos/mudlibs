@@ -1246,3 +1246,39 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## YIZHAN 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`d/tangmen/tmyizhan` 继承未定义的 `YIZHAN`。从手足 xxcq 收养驿站套件：`clone/room/mache.lpc`/`mache.ini`，并把 `mache.h` 落成可继承的 `yizhan.lpc`（补 `inherit ROOM`，因本驱动不能把 `.h` 当 inherit 基类），`#define YIZHAN "/clone/room/yizhan"`。证明：HEAD 0/2 → 2 PASS（newly loading 2）。H_MAGIC_ITEM / BOARD_OB（Lima lpcc）/ F_QUESTER（`QUEST_D(x)` 宏冲突）本轮未做。
+
+
+## BHNPC 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`BHNPC` 已指向 `/u/xiha/banghui/bhnpc`，文件缺失。从手足 yxcs 收养同名基类到该路径。证明：HEAD 0/3 → 3 PASS。
+
+
+
+## F_BVENDOR 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`F_BVENDOR` 已指向 `/u/xiha/banghui/vendor`，文件缺失。从手足 yxcs `/u/lonely/banghui/vendor.lpc` 收养到该路径（与 BHNPC 同一帮会目录）。证明：HEAD 0/6 → 6 PASS（`vendor` + 5 个 `inherit F_BVENDOR` 商人）。
+
+## BULETIN_BOARD 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`cmds/usr/news` 继承 `BULETIN_BOARD`（指向 `/u/xiha/inherit/bboard`），文件缺失。从手足 yxcs `/u/lonely/inherit/bboard.lpc` 收养到该路径（与本库 `/inherit/misc/bboard.lpc` 同文）。证明：HEAD 0/2 → 2 PASS。
+
+## F_BH 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`F_BH` 已指向 `/u/xiha/banghui/banghui`，文件缺失。从手足 yxcs `/u/lonely/banghui/banghui.lpc` 收养到该路径（与本库 `/feature/banghui.lpc` 仅作者注释不同）。证明：基类 HEAD FAIL → PASS；唯一用户 `npc/yeyangzai/dazaizhu` 仍因未定义 `KZZNPC`/`get_npc_data` 失败（同 yandang 跳过项）。
+
+
+## 深度功能测试（2026-11-09，npcskill 薄别名 §6.15）
+
+questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名：/u/fyue/npcskill → /quest/npcskill。证明：别名路径 HEAD FAIL → 树 PASS（questguai 本身仍可能缺 name.h，另案）。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

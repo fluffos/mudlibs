@@ -604,3 +604,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（§10.7，2026-11-10，注册→washto→客店）
+
+pristine + build-debug，port 40132。
+
+- **流程**：英文 ID → y → 姓/名 → 管理/普通密码（须不同）→ 类型 5 → `m` → 世外桃源；`register …`/`decide` → `east` 竹屋 → `out` 阎罗殿（地藏王天书）→ `washto 20 20 20 20` → `born 扬州人氏` → 客店；`look`/`score`；`quit`「欢迎下次再来！」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

@@ -1,0 +1,220 @@
+//login.c
+
+//Tacitus @ Tmi-3
+//04-APR-05
+//Login Object
+
+//Last updated July 7th, 2005 by Tacitus
+
+#include <config.h>
+#include <logs.h>
+
+object user;
+
+void get_name(string str);
+void get_password(string str, int i);
+void verify_password(string str);
+void new_user(string str, string name);
+void auto_destruct();
+void announce();
+
+
+void create()
+{
+     call_out("auto_destruct", 30);
+}
+
+void logon()
+{
+     cat(LOGIN_MSG);
+     write("\nPlease select a name: ");
+     input_to("get_name");
+}
+
+void get_name(string str)
+{
+     int i;
+     
+     write("\n");
+     
+     if(!str)
+     {
+          write("You must select a name: ");
+          input_to("get_name");
+          return;
+     }
+     
+     if(str == "quit")
+     {
+          write("Come back soon!\n");
+          destruct(this_object());
+          return;
+     }
+     
+     if (strlen(str) > 11)
+      { 
+          write("Sorry, your name can't have more than 11 characters.\n");
+          write("Please select a name: ");
+          input_to("get_name");
+          return;
+     }
+     
+     str = lower_case(str);
+     for (i = 0; i < strlen(str); i++)
+      { 
+          if (str[i] < 'a' || str[i] > 'z')
+	          { 
+	               write("Sorry, your name can only have letters. (a-z)\n" +
+		             "Please enter a new name: ");
+	               input_to("get_name");
+	               return; 
+	          } 
+	    }
+	    
+	    user = new(USER_OB);
+	    if(str == "guest")
+	    {
+	          user->set_name("guest");
+	          set_privs(user, "guest");
+	          exec(user, this_object());
+            user->setup();
+            user->move(VOID_OB);
+            announce();
+            write_file(LOG_DIR + "/" + LOG_LOGIN, capitalize(user->query_name()) + " logged in from " +
+            query_ip_number(user) + " on " + ctime(time()) + "\n");
+            destruct(this_object());
+            return;
+       }	          
+	           
+      if (!file_exists(user_data_file(str) + ".o"))
+	    {
+	          write("The user " + str + " does not exist. Would you like to create it? ");
+	          input_to("new_user", str);
+	          return;
+	    }
+	    set_privs(user, str);
+	    user->set_name(str);
+	    user->restore_user();
+	    write("Please enter your password: ");
+	    input_to("get_password", 1);
+	    return;  
+}
+
+void get_password(string str, int i)
+{
+     string temp;
+     
+     if(!i)
+     {
+          temp = crypt(str, str);
+          if(temp != user->query_password())
+          {
+               write("That password is incorrect.\n");
+               write("Please enter your password: ");
+               input_to("get_password", 1);
+               return;
+          }
+          else
+          {
+               exec(user, this_object());
+               user->setup();
+               user->move(VOID_OB);
+               announce();
+               write_file(LOG_DIR + "/" + LOG_LOGIN, capitalize(user->query_name()) + " logged in from " +
+               query_ip_number(user) + " on " + ctime(time()) + "\n");
+               destruct(this_object());
+               return;
+          }
+     }
+     else
+     {
+          if(!str)
+          {
+               write("Your user must have a password.\n");
+               write("Please enter a password: ");
+               input_to("get_password", 1);
+               return;
+          }
+          user->set_password(str);
+          write("\nPlease enter your password again to verify: ");
+          input_to("verify_password", 1);
+          return;
+     }
+}
+
+void verify_password(string str)
+{
+     string temp;
+     str = crypt(str, str);
+     if(str != user->query_password())
+     {
+          write("Your passwords do not match.\n");
+          write("Please enter a password: ");
+          input_to("get_password", 1, 1);
+          return;
+     }
+     else
+     {
+          exec(user, this_object());
+          user->setup();
+          user->move(VOID_OB);
+          announce();
+          write_file(LOG_DIR + "/" + LOG_NEWUSER, capitalize(user->query_name()) + " created a new account from "
+              + query_ip_number(user) + " on " + ctime(time()) + "\n");
+          write_file(LOG_DIR + "/" + LOG_LOGIN, capitalize(user->query_name()) + " logged in from " +
+               query_ip_number(user) + " on " + ctime(time()) + " for the first time.\n");
+          tell_object(user, "\nSetting up developer account...\n");
+          if(!directory_exists("/home/" + user->query_name()[0..0])) mkdir ("/home/" + user->query_name()[0..0]);
+          mkdir("/home/" + user->query_name()[0..0] + "/" + user->query_name());
+          mkdir("/home/" + user->query_name()[0..0] + "/" + user->query_name() + "/public");
+          mkdir("/home/" + user->query_name()[0..0] + "/" + user->query_name() + "/private");
+          tell_object(user, "\n... Success!\n\n"); 
+          temp = read_file(FLOGIN_NEWS);
+          user->save_user();
+          set_privs(user, user->query_name());
+          write(temp + "\n");
+          write("\n");
+          destruct(this_object());
+     }
+}
+
+void new_user(string str, string name)
+{
+     if(str == "y" || str == "yes" || str == "yup" || str == "sure" || str == "indeed")
+     {
+          write("Please enter a password for your account: ");
+          user->set_name(name);
+          input_to("get_password", 1, 1);
+          return;
+     }
+     write("Please select another name then: ");
+     input_to("get_name");     
+}
+          
+
+void announce()
+{
+     object *obs;
+     int i;
+     string temp;
+     obs = users();
+     
+     for(i = 0; i < sizeof(obs); i++)
+     {
+          if(obs[i] == user) continue;
+          tell_object(obs[i], 
+          capitalize(user->query_name()) + " has logged into " + mud_name() + " from " +
+          query_ip_name(user) + "\n");
+     }
+     
+     write("\n\nThank you! Logging into " + mud_name() + "\n");
+     temp = read_file(LOGIN_NEWS);
+     write(temp + "\n\n");
+}
+
+void auto_destruct()
+{
+     write("\n\nNotice: I'm sorry, but you are only allowed 30 seconds to attempt to login.\n");
+     destruct(this_object());
+}          
+

@@ -263,3 +263,10 @@ only reliable error channel).
 ## 深度功能测试（2026-11-03，master_skeleton 文档桩）
 
 文档用 `master_skeleton` 的无体函数签名（含双 `reset`/`epilog`、半注释的 `heart_beat_error`）会当代码编译；`parse_command_*` 与 efun 名冲突。已注释文档桩、`raise_error`→`error`，去掉 `parse_command_*` 实现。证明：`lpc_warnings.py amylaarmini` 15/0、0 diagnostics。
+
+## 深度功能测试（§10.7，2026-11-10，startroom + update 回归）
+
+pristine + build-debug，port 40264。
+
+- **流程**：任意名 → `/room/start`；`look`/`say`/`who`/`ls`/`rehash`；`update /cmds/who` 后 `who` 仍可用；`update /room/start` 断本连，**新连接**立刻进 startroom（§7.188）。
+- `quit`/`inventory` 等仍 `What?`（骨架未实现，既有记录）。驱动 stdout 无新编程错误。本轮无新编程缺陷。

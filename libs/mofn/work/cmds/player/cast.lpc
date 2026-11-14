@@ -1,0 +1,81 @@
+inherit COMMAND_BASE;
+
+#include <parser.h>
+
+void setup() {
+  set_patterns(([
+    2 : ({ "<string> at <string> with <indirect:object>",
+           "<string> with <indirect:object> at <string>" }),
+    1 : ({ "<string> at <string>", "<string> with <indirect:object>" }),
+    0 : ({ "<string>" }),
+  ]));
+}
+
+protected int cmd(string arg, object user, object *dir, object *indir, 
+                  string dir_match, string indir_match, mixed *add_com,
+                  string pattern)
+{
+  // we need to go through the player's inventory of spells and see
+  // which ones match up with the arguments -- PARSER_H to the rescue :)
+  string name, target, components, pat;
+  mixed *spells, *spell;
+  object *targets, *env;
+
+  name = implode(add_com[0], " ");
+  target = "";
+  switch(pattern) {
+    case "<string>" :
+      break;
+    case "<string> at <string>" :
+    case "<string> at <string> with <indirect:object>" :
+      target = add_com[2];
+      break;
+    case "<string> with <indirect:object> at <string>" :
+      target = add_com[4];
+      break;
+  }
+
+  spells = user -> query_spells(name);
+  foreach(spell in spells) {
+    // spell = ({ pattern, object, extra_info })
+    if((!spell[0] || spell[0] == "") && sizeof(target))
+      continue;
+    if(spell[0] && sizeof(spell[0]) && !sizeof(target))
+      continue;
+    // <direct:$(pattern)> implied if non-empty
+    pat = PARSER_H -> query_pattern("<direct:" + spell[0] + ">");
+    
+    if (intp(pat[2])) {
+      switch (pat[2]) {
+        case ENV_ME :
+          env = ({ user });
+          break;
+        case ENV_HERE :
+          env = ({ environment() });
+          break;
+        case ENV_HERE_ME :
+          env = ({ environment(), user });
+          break;
+        case ENV_ME_HERE :
+          env = ({ user, environment() });
+          break;
+      }
+    } else if (stringp(pat[2])) {
+      ret = find_object(pat[2]);
+      if (!ret) {
+        pat[2]->frog_me_a_lot();
+        ret = find_object(pat[2]);
+      }
+      if (ret) {
+        env = ({ ret });
+      }
+    }
+
+    targets = match_objects(pattern[++i], dir_match, env);
+
+    if(call_other(spell[1], "cast_spell", spell[2], name, spell[0], 
+                                          targets, components))
+      return 1;
+  }
+  return 0;
+}

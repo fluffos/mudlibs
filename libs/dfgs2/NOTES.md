@@ -1208,3 +1208,12 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40027。
+
+覆盖：`fluffos`/`Mud@2026` → 小客栈（掌柜欢迎）`look`/`inventory`/`score`/`who` →
+`east` 广场西 / `west` 回客栈 → `save`/`quit` → 重连再进客栈/`score`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。

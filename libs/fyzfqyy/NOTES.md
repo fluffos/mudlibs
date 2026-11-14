@@ -551,3 +551,15 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## 深度功能测试（§10.7，2026-11-10，世外桃源双密码注册）
+
+pristine + build-debug，port 40133。
+
+- **流程**：英文名 → 中文名 → 管理/普通密码×2 → 民族 1 → 性别 m → 世外桃源见神仙姐姐；`register`/`decide`；`look`/`score`/`i`/`quit`。重登有短冷却。
+- 控制台与 `debug.log` 无 `*Error` / Wrong permissions。本轮无新编程缺陷。
+- **观察**：`out` → `/d/fy/fysquare` 档案未出货，`go` 报「区域还没有连通」（既有内容缺口，README/NOTES 已记地图极薄；§10.7 不改内容出口）。会话有 `HH:MM:SS>` 心跳提示刷屏。

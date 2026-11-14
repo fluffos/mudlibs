@@ -212,3 +212,10 @@ The code of this lib writes logs into 5 subdirectories of `log/`: `log/board` (`
 ## 深度功能测试（2026-11-03，receive_damage neili/jingli → add）
 
 `feature/damage.lpc` 只接受 jing/qi。`fota2`/`muding`/`13jiasha` 的 pool 花费改为 `add(type,-N)`（KB 06 7.241）。上游分支 `cursor/receive-damage-pools-2548`（`7dec937`）；开 PR：https://github.com/fluffos/xkx100/pull/new/cursor/receive-damage-pools-2548 （代理 403 无法创建）。合并后钉 pin。
+
+## 深度功能测试（§10.7，2026-11-10，注册→南浔镇）
+
+pristine + build-debug，port 40275（`work/` 子模块需先 init）。
+
+- **流程**：新号 → `y` → 「秦风」→ 密码×2 → 出生地 `3` → 膂力/悟性/根骨 `20`×3 → 同意 `y` → 性格 `0` → email → `m` → 落在南浔镇（区组 3 内随机城）；`look`/`score`/`quit` 正常。
+- 夜幕下「天色太黑了，你看不清明显的出路」，`east`/`west` 为「什么？」——夜间无灯不显示出口（内容/时段，非新编程缺陷）。驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。

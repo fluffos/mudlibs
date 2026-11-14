@@ -1,0 +1,228 @@
+#include <network.h>
+
+// from dw-wibble-r8.88
+
+inherit NET_CLIENT;
+inherit HANDLER_BASE;
+
+#include <config.h>
+#include "imud.h"
+
+private int password;
+private class list mudlist, channellist;
+private mixed *nameservers;
+private nosave int connected, tries, fd;
+private mapping banned;
+
+void create() {
+  client::create();
+  connected = 0;
+  password = 0;
+  tries = 0;
+  fd = 0;
+  banned = ([]);
+  // ip address for us-1.i3.intermud.org
+  nameservers = ({ ({ "*gjs", "198.144.203.194 9000" }) });
+  mudlist = new(class list);
+  channellist = new(class list);
+  mudlist->id = -1;
+  mudlist->list = ([]);
+  channellist->id = -1;
+  channellist->list = ([]);
+  base::create();
+  set_socket_type(MUD);
+  set_destruct_on_close(1);
+  call_out( (: setup :), 2);
+}
+
+void dest_me() {
+  client::dest_me();
+  base::dest_me();
+}
+
+void load_me() {
+  if( file_size( SAVE_INTERMUD __SAVE_EXTENSION__ ) > 0 )
+    unguarded((: restore_object, SAVE_INTERMUD, 1 :));
+}
+
+void save_me() {
+  unguarded((: save_object, SAVE_INTERMUD :));
+}
+
+void event_write(mixed *packet) {
+  return client::event_write(fd, packet);
+}
+
+protected void setup() {
+  string ip;
+  int port; 
+
+  if( !nameservers || !sizeof(nameservers) ) return;
+  sscanf(nameservers[0][1], "%s %d", ip, port);
+  if( (fd = event_create_socket(ip, port)) < 0 ) {
+    return;
+  }
+  event_write( ({ "startup-req-3", 5, mud_name(), 0, nameservers[0][0], 0,
+                 password, mudlist->id, channellist->id, 3000,
+                 PORT_OOB, 0, "Middle of Nowhere 0.01a", 
+                 mud_name(), __VERSION__, "LP",
+                 MUD_STATUS, ADMIN_EMAIL,
+                 (mapping)SERVICES_H->get_services(), 0 }) );
+}
+
+protected void event_read(int fd, mixed *packet) {
+  mixed val;
+  string cle;
+
+  if( !packet || sizeof(packet) < 6 ) return; /* should send error */
+  if( banned[packet[1]] ) {
+    /* build error packet, let them know why they are banned */
+    return;
+  }
+  switch(packet[0]) {
+  case "startup-reply":
+    if( sizeof(packet) != 8 ) return; /* should send error */
+    if( !sizeof(packet[6]) ) return;
+    if( packet[6][0][0] == nameservers[0][0] ) {
+      nameservers = packet[6];
+      connected = nameservers[0][0];
+      password = packet[7];
+      save_me();
+    }
+    else {
+      nameservers = packet[6];
+      setup();
+    }
+    return;
+  case "mudlist":
+    if( sizeof(packet) != 8 ) return;
+    if( packet[6] == mudlist->id ) return; 
+    if( packet[2] != nameservers[0][0] ) return;
+    mudlist->id = packet[6];
+    foreach(cle, val in packet[7]) {
+      if( !val && mudlist->list[cle] != 0 ) 
+        map_delete(mudlist->list, cle);
+      else if( val ) mudlist->list[cle] = val;
+    }
+    save_me();
+    return;
+  case "auth-mud-req":
+    SERVICES_H->event_receive_auth_request(packet);
+    break;
+  case "auth-mud-reply":
+    SERVICES_H->event_receive_auth_reply(packet);
+    break;
+  case "channel-e":
+    SERVICES_H->event_receive_channel_emote(packet);
+    break;
+  case "channel-m":
+    SERVICES_H->event_receive_channel_message(packet);
+    break;
+  case "chan-who-reply":
+    SERVICES_H->event_receive_channel_who_reply(packet);
+    break;
+  case "chan-who-req":
+    SERVICES_H->event_receive_channel_who_request(packet);
+    break;
+  case "chan-user-req":
+    SERVICES_H->event_receive_channel_user_request(packet);
+    break;
+  case "chanlist-reply":
+    //    if( packet[6] == channellist->id ) return; 
+    if( packet[2] != nameservers[0][0] ) {
+       return;
+    }
+    channellist->id = packet[6];
+    foreach (cle, val in packet[7]) { 
+      if( !val && channellist->list != 0 )  {
+        map_delete(channellist->list, cle);
+      } else if( val ) {
+        channellist->list[cle] = val;
+      }
+    } 
+    save_me();
+    SERVICES_H->event_register_channels(packet[7]);
+    return;
+  case "emoteto":
+    SERVICES_H->event_receive_emote(packet);
+    break;
+  case "finger-req":
+    SERVICES_H->event_receive_finger_request(packet);
+    break;
+  case "finger-reply":
+    SERVICES_H->event_receive_finger_reply(packet);
+    break;
+  case "locate-req":
+    SERVICES_H->event_receive_locate_request(packet);
+    break;
+  case "locate-reply":
+    SERVICES_H->event_receive_locate_reply(packet);
+    break;
+  case "tell":
+    SERVICES_H->event_receive_tell(packet);
+    break;
+  case "who-req":
+    SERVICES_H->event_receive_who_request(packet);
+    break;
+  case "who-reply":
+    SERVICES_H->event_receive_who_reply(packet);
+    break;
+  case "error":
+    SERVICES_H->event_receive_error(packet);
+    break;
+  default:
+    break;
+  }
+}
+
+protected void event_socket_close(int fd) {
+  int extra_wait;
+
+  extra_wait = (tries++) * 20;
+  if( extra_wait > 600 ) extra_wait = 600;
+  connected = 0;
+  fd = 0;
+  call_out( (: setup :), 20 + extra_wait);
+}
+
+protected void event_connection_failure() {
+  if( connected ) return;
+  error("Failed to find a useful name server.\n");
+}
+
+int set_socket_type(int x) { return client::set_socket_type(MUD); }
+
+int set_destruct_on_close(int x) { return 0; }
+
+string get_mud_name(string mud) {
+  string *lc, *uc;
+  int x;
+  
+  if( mudlist->list[mud] ) return mud;
+  lc = map(uc = keys(mudlist->list), function(string str) {
+    if( !str ) return "";
+    else return lower_case(str);
+  });
+  x = member_array(lower_case(mud), lc);
+  if( x < 0 ) return 0;
+  else return uc[x];
+}
+
+mapping get_mud_list() { return copy(mudlist->list); }
+
+string *get_muds() { return keys(mudlist->list); }
+
+mapping get_channel_list() { return copy(channellist->list); }
+
+string *get_channels() { return keys(channellist->list); }
+
+string *get_match(string mud) {
+  string *uc, *lc;
+  
+  mud = lower_case(mud);
+  lc = map(uc = keys(mudlist->list), (: lower_case :));
+  return map(filter(regexp(lc, "^"+mud, 1), (: intp :)), (: $(uc)[$1] :));
+}
+
+string get_nameserver() { return nameservers[0][0]; }
+

@@ -54,6 +54,7 @@
 #define CLEAN_UP                                 "/std/inherit/feature/object/_clean_up.lpc"
 #define DATABASE                                 "/std/inherit/feature/object/_database.lpc"
 #define EQUIPMENT                                "/std/inherit/feature/object/_equipment.lpc"
+#define EQUIP                                    EQUIPMENT
 #define IDNAME                                   "/std/inherit/feature/object/_idname.lpc"
 #define KEEP                                     "/std/inherit/feature/object/_keep.lpc"
 #define MOVE                                     "/std/inherit/feature/object/_move.lpc"

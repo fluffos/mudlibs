@@ -12,4 +12,5 @@
 #define MUDLIB_ENCODING "GB"
 #define MUD_ADMIN               "root@xhcII"
 #define MUD_WEB                 "http://www.topkan.com"
+#define DAEMON                  "/std/cmd_m"
 #endif

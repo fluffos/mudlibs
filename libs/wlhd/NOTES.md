@@ -741,3 +741,16 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-09，PEN 判官笔基类 §6.16/§6.15）
+
+`clone/weapon/panguanbi` 继承未定义的 `PEN`，且无 `/inherit/weapon/pen`。从 jhfy2 收养 `pen.lpc`（`init_pen`），并在 `weapon.h` 补 `#define PEN "/inherit/weapon/pen"`。证明：pen + panguanbi HEAD FAIL → 树 PASS。
+
+
+## 深度功能测试（2026-11-09，npcskill 薄别名 §6.15）
+
+questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名：/u/system_1/npcskill → /quest/npcskill；/kungfu/class/wudang/npcskill_n → /quest2/npcskill_n。证明：别名路径 HEAD FAIL → 树 PASS（questguai 本身仍可能缺 name.h，另案）。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

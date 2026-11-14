@@ -323,3 +323,10 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-11-03，buffer 标识符）
 
 FluffOS 保留 `buffer` 为类型；`string buffer` 局部/参数改为 `buf`。证明：声明层语法错消除（与 sticklib `_indent` 同类）。
+
+## 深度功能测试（§10.7，2026-11-10，Abenteurergilde↔Hafenstrasse）
+
+pristine + build-debug，port 40283。
+
+- **流程**：新号 `mgplay` / `Mud@2026`×2 → Die beruehmte Abenteurergilde；`score` level 1 hp 20/20；`north` Hafenstrasse / `south` 回会所；`up` Foerderverein Buero / `down` 回会所；`quit`「Saving …」写 `data/m/<name>.o`；同密重登会所。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。

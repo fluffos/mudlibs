@@ -26,6 +26,7 @@
 #define VOTER_SITE   0
 
 //#define GB_AND_BIG5
+#define DAEMON                  "/std/cmd_m"
 //因convertd有错误，所以暂不支持big5
 #undef INTERMUD_ALL_MUD
 

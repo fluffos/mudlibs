@@ -22,6 +22,7 @@
 
 #define HEAD			"/std/armor/head"		//头盔
 #define NECK			"/std/armor/neck"		//项链
+#define AMULET			"/std/armor/amulet"		//护身符
 #define ARMOR			"/std/armor/armor"		//护甲
 #define SURCOAT			"/std/armor/surcoat"		//披风
 #define WAIST			"/std/armor/waist"		//护腰
@@ -36,6 +37,7 @@
 
 #define TYPE_HEAD		"head"
 #define TYPE_NECK		"neck"
+#define TYPE_AMULET		"amulet"
 #define TYPE_ARMOR		"armor"
 #define TYPE_SURCOAT	       	"surcoat"
 #define TYPE_WAIST		"waist"

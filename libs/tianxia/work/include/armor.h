@@ -11,6 +11,7 @@
 #define WRISTS		"/std/armor/wrists"	// 护腕
 #define SHIELD		"/std/armor/shield"	// 盾
 #define FINGER		"/std/armor/finger"	// 护指
+#define FACE		"/std/armor/face"	// 脸
 #define HANDS		"/std/armor/hands"	// 护手
 #define BOOTS		"/std/armor/boots"	// 鞋
 
@@ -24,6 +25,7 @@
 #define TYPE_WRISTS		"wrists"
 #define TYPE_SHIELD		"shield"
 #define TYPE_FINGER		"finger"
+#define TYPE_FACE		"face"
 #define TYPE_HANDS		"hands"
 #define TYPE_BOOTS		"boots"
 

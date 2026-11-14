@@ -93,6 +93,7 @@
 #define SYSTEM_D                "/adm/daemons/systemd"
 #define TASK                    "/inherit/item/task"
 #define TESSERA                 "/inherit/item/tessera"
+#define INLAID                  "/inherit/item/inlaid"
 #define THCASH_OB               "/clone/money/thousand-cash"
 #define THGOLD_OB               "/clone/money/thousand-gold"
 #define TIME_D                  "/adm/daemons/timed"

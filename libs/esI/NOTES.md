@@ -926,3 +926,22 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 深度功能测试（2026-11-04，wild_card.x + SECURE_OBJECT §6.15）
 
 同 es1：`wild_card.x`→`.lpc`，收养 tmi2 `sec_ob`。证明：wild_card+sec_ob PASS（card 返回类型另案）。
+
+## §6.10 未知 `#pragma save_binary`（2026-11-10）
+
+- 语料扫到 `std/body/wild_card.lpc` 残留一行活动 `#pragma save_binary`（2026-10-27 大扫后的漏网）。
+- 已删；活动 `save_binary` 语料残留现为 0。
+
+## §7.61 message() exclude || ({})（2026-11-10）
+
+根 `adm/simul_efun/message.lpc`：`exclude || ({})`（同 es1 家族）。
+
+
+## 深度功能测试（§10.7，2026-11-10，冒险者公会再测）
+
+pristine + build-debug，port 40010。
+
+- **注册**：英文名 → 中文名 → 密码 → 性别 → 种族 human → email → RETURN 入局；落点冒险者公会（亚默长老 / 训练营北）。AUTO_WIZ 提示出现（测试环境）。
+- **玩法**：`look` / `score` / `i` / `north`（东方学园）/`south` 回公会 / `east`/`west` 大街；控制台安静，无 `*Error` / Wrong permissions。
+- **观察**：部分应答相对指令慢一拍（mudplay 读窗与 ES 回显节奏），非本轮新缺陷。
+- 本轮无新编程缺陷。

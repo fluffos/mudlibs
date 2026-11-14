@@ -8,5 +8,6 @@
 #define MUDLIB_VERSION			(MUDLIB_NAME + " " + MUDLIB_VERSION_NUMBER)
 
 #define INTERMUD_MUD_NAME		"狂想空间－熊熊站"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

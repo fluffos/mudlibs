@@ -764,3 +764,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。
+
+## 深度功能测试（§10.7，2026-11-11，沉香镇中心）
+
+pristine + build-debug，port 40091。`scripts/play_login.py` 注册。
+
+- **流程**：字母 id → 中文名/密码×2/email/性别 → 民族 `1`（苗族）→ 沉香镇中心；`look`/`score`/`i`；`quit`「欢迎下次再来！」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

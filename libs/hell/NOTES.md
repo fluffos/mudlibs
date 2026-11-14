@@ -523,3 +523,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（§10.7，2026-11-10，桃源→阎罗→扬州客店）
+
+pristine + build-debug，port 40114。
+
+- **流程**：英文名 → 姓/名 → 管理密码×2 → 普通密码×2 → 类型 5 → 性别 m → 世外桃源；`register a@b.com`/`decide` → east 陆天抒/`out` 阎罗殿；`wash`/`born 扬州人氏`（规则 pager 后）入扬州客店；`look`/`score`/`i`/`quit`。
+- 控制台无 `*Error` / Wrong permissions / Too deep。本轮无新编程缺陷。
+- **观察**：会话中心跳式 `HH:MM:SS>` 时间戳刷屏（与 GLOBAL_MONITOR/提示相关），不挡指令；非本轮新缺陷。

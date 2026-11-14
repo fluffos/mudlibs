@@ -15,5 +15,6 @@
 #define INTERMUD_MUD_NAME  "Happy"
 #define INTERMUD_NAME      "欢乐园"
 #define CHINESE_MUD_NAME   "欢乐园"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

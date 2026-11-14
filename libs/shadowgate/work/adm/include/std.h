@@ -21,6 +21,7 @@
 #define FIREARM "/std/firearm"
 #define ARMOUR "/std/armour"
 #define PARMOUR "/std/pocketarmour"
+#define POCKETARMOUR "/std/pocketarmour"
 #define MATERIAL "/std/material"
 #define BAG "/std/bag_logic"
 #define BARKEEP "/std/barkeep"

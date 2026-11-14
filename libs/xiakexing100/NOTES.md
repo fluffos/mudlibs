@@ -752,3 +752,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+
+## 深度功能测试（2026-11-09，inherit/tests 薄别名 §6.15）
+
+`mudlib/testsuite/single/efuns/*` 继承缺失的 `/inherit/tests`；本体在 `/mudlib/testsuite/inherit/tests`。薄别名。`/inherit/master/valid` 同形但本体仍缺 OVERRIDES_FILE/BASE，暂不别名。证明：alias+capitalize listcheck HEAD 1 PASS / 2 FAIL → 树 3 PASS。

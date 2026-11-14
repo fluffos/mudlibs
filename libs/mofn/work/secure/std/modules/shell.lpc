@@ -1,0 +1,190 @@
+#include <driver.h>
+#include <config.h>
+
+private nosave object owner;
+mapping variables;
+string cwd, home_dir;
+
+void create() {
+  variables = ([ ]);
+  owner = 0;
+  cwd = "/";
+}
+
+protected string _process_input(string str);
+
+void add_search_path(mixed p) {
+  if(!p || (!stringp(p) && !arrayp(p)))
+    return;
+
+  if(!arrayp(variables["path"]))
+    variables["path"] = ({ });
+
+  if(stringp(p)) 
+    variables["path"] = ({ p }) + variables["path"];
+  else
+    variables["path"] = p + variables["path"];
+}
+
+string process_input(string str) {
+  object _sh;
+  string po;
+  mixed ret;
+
+  if(!str || str == "" || !owner || PO != owner)
+    return 0;
+  po = base_name(PO);
+  if(owner && (PO == owner || 
+               (sizeof(po) > 18 && po[0..18] == "/secure/std/shells/" 
+                                && PO -> query_owner() == owner))) {
+    _sh = this_shell();
+    set_this_shell(TO);
+    ret = TO -> _process_input(str);
+    set_this_shell(_sh);
+    return ret;
+  }
+  return 0;
+}
+
+string process_file(string file) {
+  if(file_size(file) > 0) {
+    return TO -> _process_input(read_file(file));
+  }
+}
+
+object query_owner() { return owner; }
+
+// the owner is the user, typically
+void set_owner() {
+  if(!owner) {
+    owner = PO;
+    while(owner && sizeof(base_name(owner)) > 18 && 
+           (base_name(owner))[0..18] == "/secure/std/shells/")
+      owner = owner -> query_owner();
+
+    if(!owner)
+      owner = PO;
+  }
+}
+
+void copy_environment(mapping ref env) {
+  variables = copy(env);
+}
+
+// this allows us to issue custom prompts for
+// shell continuations, etc., and always find
+// the interactive person to send it to
+varargs void write_prompt(string p) {
+  string prompt;
+  object *tp;
+
+  tp = filter(previous_object(-1), (: interactive($1) && !in_edit($1) && !$1 -> query_in_editor() && !in_input($1) :));
+
+  if(sizeof(tp) < 1)
+    return;
+
+  if(!p || p == "")
+    prompt = variables[prompt];
+  else
+    prompt = p;
+
+  if(!prompt) 
+    prompt = DEFAULT_PROMPT;
+
+  tp -> receive_message("prompt", prompt);
+}
+
+string remove_dotdot(string p);
+
+object create_subshell(string s) {
+  object ob;
+
+  if(!s || s == "")
+    ob = clone_object(TO);
+  else {
+    s = remove_dotdot(s);
+    if(!load_object("/secure/std/shells/" + s))
+      return 0;
+    ob = new("/secure/std/shells/" + s);
+  }
+  ob -> copy_environment(ref variables);
+  ob -> set_owner();
+  return ob;
+}
+
+
+// the following only checks for commands in the interface object (usually TP)
+int parse(object user, string *bits) {
+  return 0;
+}
+
+string query_path() { return cwd; }
+
+void set_path(string p) {
+  if(origin() == ORIGIN_LOCAL)
+    cwd = p;
+}
+
+string get_path(string str) {
+  string *arr;
+  string *arr1;
+  string temp;   
+  int i;
+  
+  if(!home_dir) {  
+    temp = TP -> query_name();
+    home_dir = WIZ_DIR "/" + temp[0..0] + "/" + temp;
+  }
+  if (!str || str == "~") {
+    str = home_dir;
+  } else {
+    if(str[0] == '~') {
+      if(str[1] == '/') {
+        sscanf(str, "~%s", temp);
+        str = home_dir + temp;
+      } else {
+        string name;
+        if (sscanf(str,"~%s/%s",name,str)!=2) {
+          name = str[1..];
+          str = WIZ_DIR + name[0..0] + "/" + name;
+        } else {
+          /*
+           * cheat at this point and just assume they are a
+           * creator. sigh i kno i know
+           */
+          str = WIZ_DIR "/"+name[0..0] + "/" + name +"/"+str;
+        }
+      }
+    } else {
+      if(str[0] != '/') {
+        str = cwd + "/" + str + "/";
+      }
+    }
+    if(str == "/") {
+      return "/";
+    } else {
+      arr = explode(str, "/") - ({ "" });
+      arr1 = ({ });
+    }
+    for (i = 0; i < sizeof(arr); i++) {
+      reset_eval_cost();
+      if(arr[i] == "..") {
+        if(sizeof(arr1)) {
+          arr1 = arr1[0..<2];
+        }
+      } else if(arr[i] != ".") {
+        arr1 += ({ arr[i] });
+      }
+    }
+    if(sizeof(arr1)) {
+      str = implode(arr1, "/");
+    } else {
+      str = "";
+    }
+  }
+  return "/" + str;
+}
+
+string remove_dotdot(string p) {
+  return get_path(p);
+}

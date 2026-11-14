@@ -987,3 +987,33 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## securityd 的存档 read 表丢了：`Domain` 身份读 `/d/` 下的文件回 0，1 处（2026-11-02，KB 06 §7.374）
 
 老驱动时代管理员把 `securityd.lpc` 的 read 规则存进了 `data/static/securityd.o`，档案里没有这个存档：凡不是 wizard / room / NPC / item 的对象（euid 是 `Domain`，来自 `/d`、`/obj`、`/clone` 的 `creator_file()`）现在什么都读不到——`read_file()` 直接回 0（读被拒绝不报错，只是回 0）。红楼梦 / 西游记的书章（`d/obj/books-nonskill/hmeng*.lpc` 的 `start_more(read_file(..))`）空白，诗社连加载都过不去，迷宫房间拿不到地图。本库 1 处（1 个文件）：`adm/daemons/securityd.lpc`。`scripts/lpc_fix_read_trust.py` 在 `valid_read()` 的 `if (!euid) return 0;` 之前加一条带标记的规则：`Domain` 对象可以读 `/d/` 下的文件，每个对象可以读自己旁边的文件（`__DIR__ "maze.map"`）；`/data`、`/adm`、`/log`、`/u` 照旧。证明：求值对象放在 `/d/` 下的目录（euid `Domain`），改前 `read_file` 回 0，改后回文件首行；HEAD / 工作树加载对比 0 退步。
+
+## 深度功能测试（2026-11-09，NECKLACE 薄别名 §6.15/§6.16）
+
+多项项链继承未定义的 `NECKLACE`；颈部本体在 `/inherit/armor/neck`。薄别名 `necklace.lpc` 并补宏。证明：6/6 PASS。
+
+## 深度功能测试（2026-11-09，WAREHOUSE 收养 §6.15）
+
+`d/kaifeng/business` 继承缺失的 `/inherit/room/warehouse`。从 nt6 收养 `warehouse.lpc` 与 `price.h`。证明：warehouse PASS；business 续缺 `businessd` 另案。
+
+## 深度功能测试（2026-11-09，INLAID 收养 §6.15/§6.16）
+
+`clone/enchase/*` 共 80 个镶嵌物 `inherit INLAID;`，宏与 `/inherit/item/inlaid` 均缺失（本库已有更完整的 `TESSERA`/`tessera.lpc`，但宝石/符文/骷髅仍走 `is_inlaid()` 路径）。从 yhwhckdm 收养 `inlaid.lpc`，并在 `globals.h`/`globals1.h` 补 `#define INLAID "/inherit/item/inlaid"`。证明：`lpc_listcheck` 81/81 PASS（含本体），HEAD 0 → 树 81 newly loading，0 regress。
+
+
+## 深度功能测试（2026-11-09，new/bow 薄别名 §6.15）
+
+`clone/weapon/new/{pangu,tianshen}-gong` 继承同目录缺失的 `bow`；本体在 `/clone/weapon/bow`。薄别名。证明：HEAD 1 PASS / 3 FAIL → 树 4 PASS。
+
+
+## 深度功能测试（2026-11-09，npcskill 薄别名 §6.15）
+
+questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名：/quest2/npcskill → /quest/npcskill。证明：别名路径 HEAD FAIL → 树 PASS（questguai 本身仍可能缺 name.h，另案）。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

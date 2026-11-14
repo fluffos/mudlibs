@@ -138,6 +138,7 @@
 #define F_TEAM                  "/feature/team.lpc"
 #define F_TREEMAP               "/feature/treemap.lpc"
 #define F_VENDOR                "/feature/vendor.lpc"
+#define F_NOCLONE		"/feature/noclone.lpc"
 // added by Tie Yu@fengyun 4/96
 #define F_QUEST			"/feature/quest.lpc"
 // added by Tie@fengyun 8/96

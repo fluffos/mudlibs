@@ -892,3 +892,23 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-04，drow scimitar rot 改指向 §6.15）
 
 `d/newbie/drow/weapons/scimitar` 继承缺失的 `/d/bf/banefall/weapons/rot`；文件内注释写明本应 `/obj/weapon`。改指向。证明：HEAD 1 FAIL；树 2 PASS。
+
+## 深度功能测试（2026-11-09，elf gloom shops/restock 收养 §6.15）
+
+十个 newbie elf gloom/fo 房间继承缺失的 `/d/hoerk/belaern/s_jung/city/shops/restock.lpc`（本库 `/d/hoerk` 树整区未随档）。同库 goblin `rooms/restock.lpc` 已是 Taniwha 的 restock() mixin，按路径收养一份。证明：8 gloom + fo3 共 9 个消费方 HEAD FAIL → PASS；mixin 单独 load 在孤儿 `/d/hoerk` 路径上仍 Fail to load（inherit 编译可用）；`randomcre` 另有未声明 `char`/`t`/`p`，不在本类。
+
+## /inherit/object 改指（2026-11-09，KB 04 §6.15）
+
+`net/obj/gopher` 继承缺失的 `/inherit/object`；本库标准基类在 `/std/object`。改为 `inherit "/std/object"`。alone-scan 的该 literal 消失。gopher 仍因同目录缺 `globals.h`（以及 `VOID_OB`）未能载入。
+
+## 深度功能测试（§10.7，2026-11-10，种族大厅→新手家）
+
+pristine + build-debug，port 40216。
+
+- **流程**：英文名→确认→密码×2→性别 → 种族雕像大厅 → `become human` 入新手家（torch/cloak/dagger；出口 leave/south/west）；`look`/`score`/`i`/`west` 储藏室/`east` 回/`quit`。
+- **存档**：`players/f/frtestb.o` 落盘（字母桶 a–z 已由 `.gitignore` 跟踪，本轮无需补 keep）。
+- 控制台无 `*Error` / Wrong permissions。本轮无新编程缺陷。
+
+## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
+
+同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。

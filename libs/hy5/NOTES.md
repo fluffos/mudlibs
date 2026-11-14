@@ -785,3 +785,14 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。
+
+## `log/mud` keep 行（2026-11-11，KB 06 §7.358 Also）
+
+与 fqyy2 同：`VISITORS`/`GIFTCARD` 写 `/log/mud/…`；补 keep `log/mud`（见 fqyy2 NOTES）。
+
+## 深度功能测试（§10.7，2026-11-11，古村）
+
+pristine + build-debug，port 40183。`scripts/play_login.py` 注册。
+
+- **流程**：GB/Big5 选 `gb` → 纯字母 id（不可含数字）→ 中文名 → 强密码（大小写+数字，`Mud@2026` 不符合本站规则）→ 天赋 → email → 性别 → 古村（老村长）；`look`/`score`/`i`；`quit` 存盘退出。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

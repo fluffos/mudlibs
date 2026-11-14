@@ -9,5 +9,6 @@
 
 #define INTERMUD_MUD_NAME	"飞雁无双"
 #define CHINESE_MUD_NAME	"金庸群侠传文字版"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

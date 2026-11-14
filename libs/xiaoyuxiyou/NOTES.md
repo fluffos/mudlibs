@@ -1366,3 +1366,12 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 钱档在 `/obj/money/`，代码写的是 `/clone/money/`：慈善钱箱 / 兑换 NPC / NPC 现金拿不到钱，1 处（1 个文件）（2026-11-02，KB 06 §7.375）
 
 xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库的代码沿用前者，文件（连同自己的 `SILVER_OB` 宏）却是后者，于是 `new()` 回 0：慈善钱箱发新手礼品的 `init()` 抛错、兑换 NPC 对任何钱币都回「你想兑换哪一种钱？」、带现金的 NPC 两手空空。本库 1 处（1 个文件）：`ob = new("/obj/money/silver");`（`/d/huanggong/npc/xuerengui.lpc:191`）。`scripts/lpc_fix_money_path.py` 以本库自己的 `obj/money/silver.lpc` 为准，把 `.lpc` / `.h` 里的 `/clone/money/` 改成 `/obj/money/`（wizard / 备份 / 测试树不动；带名字的字面量只有当 `obj/money/<名>.lpc` 存在时才改，其余列 KEEP）。证明：旧路径 `/clone/money/` 在本库没有钱档（目录不存在，静态可查），改后引用的 `/obj/money/silver.lpc` 单独加载并可 `set_amount()`；HEAD / 工作树加载对比 0 退步。
+
+
+## 深度功能测试（2026-11-09，AMULET §6.15/§6.16）
+
+`d/obj/amulet/*` 继承未定义的 `AMULET`。`armor.h` 补 `AMULET`/`TYPE_AMULET`，并新增 `std/armor/amulet.lpc`（同族 xlqy 形）。证明：6 路径 HEAD 0 → 6 PASS。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

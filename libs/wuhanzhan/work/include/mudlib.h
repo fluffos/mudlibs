@@ -13,6 +13,7 @@
 #define INTERMUD_MUD_NAME     "hb"
 
 #define INTERMUD_NAME                   "西游记湖北站"
+#define DAEMON                  "/std/cmd_m"
 
 
 #endif

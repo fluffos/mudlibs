@@ -175,6 +175,7 @@
 #define F_TEAM		"/feature/team.lpc"
 #define F_TREEMAP	"/feature/treemap.lpc"
 #define F_UNIQUE	"/feature/unique.lpc"
+#define F_NOCLONE	"/feature/noclone.lpc"
 #define F_VENDOR	"/feature/vendor.lpc"
 
 // Profiling switches

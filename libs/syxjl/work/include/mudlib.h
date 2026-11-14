@@ -11,6 +11,7 @@
 #define MUDLIB_ENCODING         "GB"
 #define MUD_ADMIN               "bsd@SYXJL.MUD"
 #define MUD_WEB                 "http://mud.jztele.com"
+#define DAEMON                  "/std/cmd_m"
 
 #endif
 

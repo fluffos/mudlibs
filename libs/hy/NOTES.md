@@ -634,3 +634,26 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp`（及 `海洋2002/hy3` 副本）继承未定义的 `DAEMON`。补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc` 与 `include/uid.h`（hy5 同源）。证明：pingd/pingtcp（主树+副本）与 cmd_m newly load；telnetd/te/userid 仍缺 `member_group`/`priv.h`/`config.h`，另案。
+
+## §7.357 嵌套 `海洋2002/hy3/` 缺板 `->foo()`（2026-11-10）
+
+`lpc_fix_missing_foo.py --apply hy`：内嵌副本四间房仍裸调缺失公告板（`jail_b` /
+`lingxiao_b` / `tangmen_b` / `wudujiao_b`），`create()` 里
+`*call_other() couldn't find object`。主树对应处此前已注释。本轮注释这四行。
+证明：`lpcc_eval` HEAD 加载 `/海洋2002/hy3/d/city2/jail` FAIL；工作树四房 PASS。嵌套树仍可按绝对路径加载。
+
+
+## `log/mud` keep 行（2026-11-11，KB 06 §7.358 Also）
+
+与 fqyy2 同：`VISITORS`/`GIFTCARD` 写 `/log/mud/…`；补 keep `log/mud`（见 fqyy2 NOTES）。
+
+## 深度功能测试（§10.7，2026-11-11，海洋之初）
+
+pristine + build-debug，port 40182。`scripts/play_login.py` 注册。
+
+- **流程**：BIG5 选单选 N（GB）→ 字母 id → 中文名 → 密码×2 → 天赋 → email → 性别 → 海洋之初（newbie/oldplayer）；`look`/`score`/`i`；`quit`「欢迎下次再来！」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。

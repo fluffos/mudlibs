@@ -1015,3 +1015,20 @@ xinfang/chatroom：`tell_object("ob", …)`→`tell_object(ob, …)`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`system/daemon/**/network/services/pingd|pingtcp` 继承未定义的 `DAEMON`。补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc` 与 `include/uid.h`。证明：两套 pingd/pingtcp 与 cmd_m newly load；userid 仍缺 `priv.h`/`config.h`，另案。
+
+## PPLROOM 宏（2026-11-09，KB 04 §6.16）
+
+`pplroom.lpc` 生成玩家住房源码时写入 `inherit PPLROOM`，但 `globals.h` 从未定义该宏（手足 xo/xajh2/xo_final 均有 `#define PPLROOM STD_DIR "room/pplroom"`）。按同形补上。alone-scan 的 undef PPLROOM 消失；`/system/std/room/pplroom` 本身仍 PASS。
+
+## 深度功能测试（2026-11-10，biaoju/funiu 薄别名 §6.15）
+
+`system/menpai/biaoju/ke` 继承缺失的 `__DIR__ "funiu"`；同库 `/d/nanyang/npc/funiu`（及 city 副本）可载入，且 `/d/nanyang/npc/ke` 用同一形状。薄别名。证明：listcheck 4 对象 HEAD 2 PASS / 2 FAIL → 树 4 PASS。
+
+## §6.15 amber command1（2026-11-10）
+
+`clone/user/amber` 继承缺失的 `/system/feature/command1`；`CHARACTER` 已有 `F_COMMAND`→`command.lpc`。薄别名会与 `nomask enable_player` 双继承冲突。删掉多余 inherit。
+
+验证：listcheck amber HEAD FAIL → PASS。

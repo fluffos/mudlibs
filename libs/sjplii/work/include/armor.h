@@ -14,6 +14,7 @@
 #define HANDS		"/std/armor/hands"
 #define BOOTS		"/std/armor/boots"
 #define PANTS		"/std/armor/pants"
+#define BREAST		"/std/armor/breast"
 
 // Standard armor types
 #define TYPE_HEAD		"head"
@@ -28,5 +29,6 @@
 #define TYPE_HANDS		"hands"
 #define TYPE_BOOTS		"boots"
 #define TYPE_PANTS		"pants"
+#define TYPE_BREAST		"breast"
 
 #endif

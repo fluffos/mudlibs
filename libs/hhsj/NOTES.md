@@ -1113,3 +1113,20 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## COMMAND + feature.h（2026-11-09，KB 04 §6.16/§6.23）
+
+`cmds/adm/fgrep` 继承未定义的 `COMMAND`；`F_COMMAND` 已指向 `/feature/command.lpc`。补 `#define COMMAND F_COMMAND`，并空壳 `include/feature.h`（档案丢失，§6.23）。证明：HEAD 0/1 → 1 PASS。与 nitan6/nt6 同修。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## 深度功能测试（§10.7，2026-11-10，泥潭注册室→生命之谷→世界之树）
+
+pristine + build-debug，port 40106。自连握手：`id,password,x,email` → `gender║img║中文名`。
+
+- **缺陷**：`enter_world` → `TOP_D->topten_checkplayer` → `topten_save("/data/topten/rich.txt")` 在缺目录时 `write_file(...,1)` 抛 *Wrong permissions … No such file or directory*，master 给每个新人刷「这里发现了臭虫」WARNING（KB 05 §7.11 / §7.44；同系 nitan_ceshi 已修）。
+- **修复**：`adm/daemons/toptend.lpc` 补 `create()`：`seteuid(ROOT_UID); mkdir("/data/topten");`，`topten_save` 写前 `assure_file(f_name)`；`scripts/wasm_keep_dirs.txt` 加 `hhsj data/topten`。
+- **证明**：改前 `debug.log` 有 rich.txt 权限错；改后登录写出 `rich/exp/neili/jingli/dushu.txt`，无 debug.log，无 WARNING。
+- **流程**：`register` → `zz 1`/`xuan 1`/`choose 1`/`washto 20 20 20 20` → 世界之树；`look`/`score`/`i`/`quit` 干净。

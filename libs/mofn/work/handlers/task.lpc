@@ -1,0 +1,358 @@
+// TASK_H - handles learning through experience(practice)
+
+// from dw-wibble-r8.88
+
+#include <task.h>
+
+varargs int perform_task( object person, string skill, int difficulty,
+                         int tm_type, int unused );
+varargs int attempt_task( int difficulty, int bonus, int upper, mixed extra);
+varargs int attempt_task_e(int difficulty, int bonus, int upper, int half);
+
+#define TIME_PER_USER 1800
+#define SAVE_FILES "/save/tasks/"
+
+mapping stats;
+nosave int last_save;
+
+nosave int last;
+nosave string skill;
+nosave mixed *control;
+
+mapping query_stats( string s_name ) {
+  if ( skill != s_name ) {
+    skill = s_name;
+    if ( file_size( SAVE_FILES + skill +".o" ) > 0 )
+      unguarded( (: restore_object, SAVE_FILES + skill :) );
+    else
+      stats = 0;
+  }
+  if ( !stats )
+    stats = ([ ]);
+  return copy( stats );
+}
+
+int query_last() { return last; }
+
+mixed *query_control() { return control; }
+
+/**
+ * This function should only be used in the very rare situations
+ * where the last skill checked with query_skill_bonus() wasn't the
+ * one relevant for the task attempt.
+ *
+ * @param args an array consisting of ({ object player, string skill })
+ */
+void set_control( mixed *args ) { control = args; }
+
+void reset_control() { control = 0; }
+
+void award_made( string p_name, string o_name, string s_name, int level ) {
+  TP -> receive_message("inform", "You gain a level in " + s_name + " from " 
+                                  + o_name + " at level " + level + ".\n");
+}
+
+/**
+ * This function will compare the skills of two objects and return which one
+ * won and if the winner got a TM.
+ * With equal skills the chances are 50/50 as to who will win. As the balance
+ * shifts so do the chances. Additionally a modifier can be applied to
+ * account for conditions favouring one or the other. This should be
+ * considered a percentage eg. -50 will add 50% to the defenders chances of
+ * winning.
+ *
+ * @param offob The attacking object
+ * @param offskill The name of the skill the attacker is using
+ * @param deffob The defending object
+ * @param deffskill The name fo the skill the defender is using
+ * @param modifier The percentage modifier
+ * @param off_tm_type This should be one of the standard definitions in
+ * /include/tasks.h and is for the attacker
+ * @param def_tm_type This should be one of the standard definitions in
+ * /include/tasks.h and is for the defender
+ *
+ * @example
+ * 
+ * switch(TASKER->compare_skills(attacker, "fighting.combat.melee.sharp",
+ *                               defender, "fighting.combat.parry.unarmed",
+ *                               25, TM_COMMAND, TM_FREE) {
+ * case OFFAWARD:
+ *   tell_object(attacker, "%^YELLOW%^You manage to grasp one of the "
+ *                         "principles of slicing people up more firmly."
+ *                         "%^RESET%^\n");
+ * case OFFWIN:
+ *   say(defender->one_short() + " loses an arm!\n");
+ *   break;
+ * case DEFAWARD:
+ *   tell_object(defender, "%^YELLOW%^You feel better able to keep your arms "
+ *                         "attached when parrying unarmed.%^RESET%^\n");
+ * case DEFWIN:
+ *   say(defender->one_short() + " keeps " + defender->query_possesive() +
+ *       " arm attached.\n");
+ *   break;
+ * }
+ * 
+ * @see perform_task
+ *
+ */
+int compare_skills(object offob, string offskill, object defob,
+                   string defskill, int modifier, int off_tm_type,
+                   int def_tm_type) {
+  int offbonus, defbonus;
+  int perc, chance;
+  
+  offbonus = offob->query_skill_bonus(offskill);
+  defbonus = defob->query_skill_bonus(defskill);
+  
+  perc = (offbonus * 100) / (offbonus + defbonus);
+  perc += modifier; // the difficulty may be weighted.
+  
+  chance = random(100);
+  if(chance < perc) {
+    // winner is 1 now do a TM check.
+    switch(perform_task(offob, offskill, defbonus-modifier, off_tm_type)) {
+    case AWARD:
+      return OFFAWARD;
+    default:
+      return OFFWIN;
+    }
+  } else {
+    // winner is 2
+    switch(perform_task(defob, defskill, offbonus-modifier, def_tm_type)) {
+    case AWARD:
+      return DEFAWARD;
+    default:
+      return DEFWIN;
+    }
+  }
+}
+
+/**
+ * This function will attempt a task.  It handles all the stuff about
+ * looking up the skill, and giving the tm advance, but doesn't give
+ * any messages to the player, you'll have to do that.
+ * 
+ * @param person the one attempting the task (could be any living thing)
+ * @param skill the skill tested against
+ * @param difficulty the lowest bonus where the attempt can succeed
+ * @param tm_type This should use one of the standard definitions in
+ *        /include/tasks.h
+ *        They are:
+ *        TM_FIXED - for use where the difficulty is a fixed value
+ *        TM_FREE  - for use when the tm attempt doesn't cost anything.
+ *        TM_CONTINUOUS - for use in continuous actions eg. combat or sneak
+ *        TM_COMMAND - for use with guild commands
+ *        TM_RITUAL - when the action is a ritual
+ *        TM_SPELL - when the action is a spell
+ * 
+ * @return BARF if something screwed up, AWARD if the task succeeded, and 
+ * should give an advance, SUCCEED if it succeeded, FAIL if it failed.
+ * 
+ * @example
+ *  
+ * switch(TASKER->perform_task(person,"covert.manipulation.stealing", TM_COMMAND)) {
+ *  case AWARD :
+ *    tell_object( person, "%^YELLOW%^You manage to grasp the principles "
+ *                "of stealing more firmly.%^RESET%^\n");
+ *    // Note, no break;
+ *  case SUCCEED :
+ *    // Whatever happens when it succeeds
+ *    break;
+ *  default :
+ *    // Whatever happens when it fails
+ * }
+ */
+varargs int perform_task( object person, string skill, int difficulty,
+                         int tm_type, int unused ) {
+   int result, bonus;
+   int upper, extra;
+   
+   bonus = person->query_skill_bonus( skill );
+   
+   switch(tm_type) {
+   case TM_FIXED:
+     result = attempt_task(difficulty, bonus, 100);
+     break;
+   case TM_FREE:
+     result = attempt_task(difficulty, bonus, 25);
+     break;
+   case TM_CONTINUOUS:
+     result = attempt_task(difficulty, bonus, 50);
+     break;
+   case TM_COMMAND:
+     if(explode(skill, ".")[0] == "covert")
+       result = attempt_task_e(difficulty, bonus, 50, 30);
+     else
+       result = attempt_task(difficulty, bonus, 100);
+     break;
+   case TM_RITUAL:
+     result = attempt_task_e(difficulty, bonus, 60, 40);
+     break;
+   case TM_SPELL:
+     result = attempt_task_e(difficulty, bonus, 30, 40);
+     break;
+   case TM_NONE:
+     result = attempt_task_e(difficulty, bonus, 1);
+     if(result == AWARD)
+       result = SUCCEED;
+     break;
+   default:                     // this is for backward compatibility
+     upper = tm_type;
+     extra = unused;
+     if ( !upper )
+       upper = 100;
+     result = attempt_task( difficulty, bonus, upper, extra );
+   }
+
+   if(result == AWARD) 
+     if(!person->add_skill_level( skill, 1, previous_object()))
+       result = SUCCEED; // No advance anyway
+
+   return result;
+}
+
+/*
+ * This function will attempt a task and return whether it succeedd.<br>
+ * <br>
+ * Chance of      /|\<br>
+ * success  100% __|            ______..<br>
+ *                 |           /<br>
+ *                 |          /<br>
+ *                 |         /<br>
+ *            0% __| .._____/<br>
+ *                 |_____________________\   Player's bonus<br>
+ *                          |   |        /<br>
+ *                 difficulty   difficulty + margin<br>
+ * <br>
+ * Chance of       /|\<br>
+ * gaining  upper __|        .<br>
+ *                  |        |\<br>
+ *                  |        | \<br>
+ *                  |        |  \<br>
+ *             0% __| .._____|   \_____..<br>
+ *                  |_____________________\  Player's bonus<br>
+ *                           |   |        /   <br>
+ *                  difficulty   difficulty + margin<br>
+ * <br>
+ * @param difficulty the lowest bonus where the attempt can succeed
+ * @param bonus the bonus the player has in the relevant skill
+ * @param upper the maximum chance of getting an advance
+ * @param extra the margin control. If it is an int, the margin is set
+ * to extra. It it's 0 the margin will be calculated automatically from
+ * the difficulty as 3*sqrt(difficulty), if it's an array, it'll be
+ * calculated as extra[0]+extra[1]*sqrt(difficulty)
+ * @return BARF if something screwed up, AWARD if the task succeeded, and
+ * should give an advance, SUCCEED if it succeeded, FAIL if it failed.
+ */
+/**
+ * Do not use this function. Use perform_task instead.
+ * @see perform_task
+ */
+varargs int attempt_task( int difficulty, int bonus, int upper, mixed extra) {
+  int margin;
+  float tmp;
+
+  /* If the bonus is below the difficulty, they fail. */
+  if ( bonus < difficulty )
+    return FAIL;
+
+     /* Work out the margin between total failure and total success. */
+  if ( !extra )
+    margin = 3 * sqrt( difficulty );
+  else {
+    if ( intp( extra ) )
+      margin = extra;
+    if ( pointerp( extra ) )
+      margin = extra[ 0 ] + extra[ 1 ] * sqrt( difficulty );
+  }
+  if ( !margin )
+    return BARF;
+
+  /* If the bonus is above the margin, they succeed. */
+  if ( bonus > difficulty + margin )
+    return SUCCEED;
+
+     /* In the margin, they might fail. */
+  if(!margin)
+    margin = 1;
+   
+  if ( random( 100 ) >= ( 100 * ( bonus - difficulty ) ) / margin )
+    return FAIL;
+
+  /* If information is available, adjust the chance to award based on stats.*/
+  if ( pointerp( control ) ) {
+    // Reduce the upper dependaont on their stats.
+    upper = (int)control[ 0 ]->stat_modify(upper, control[ 1 ] );
+
+    // Reduce the upper dependant on their level.
+    tmp = exp((control[0]->query_skill(control[1])-BASE) / DECAY);
+    upper = to_int(upper / tmp) - MODIFIER;
+
+    // prevent upper going negative
+    if(upper < 0)
+      upper = 0;
+  }
+
+  /* If they succeed, they might be awarded a level. */
+  if(!margin)
+    margin = 1;
+
+  if ( random( 100 ) < ( upper * ( difficulty + margin - bonus ) ) / margin)
+    return AWARD;
+
+  return SUCCEED;
+}
+
+/*
+ * This one acts like the other one except that the failure chance
+ * starts at 100% at the difficulty and is halved every (half) bonus levels.
+ * 
+ * @param difficulty the lowest bunos where the attempt can succeed
+ * @param bonus the bonus the player has in the relevant skill
+ * @param upper the maximum chance of getting an advance
+ * @param half every time the bonus rise by half, the failure
+ * change is halved
+ *
+ * @return BARF is something screwed up, AWARD if the task succeeded, and
+ * should give an advance, SUCCEED if it succeeded, FAIL if it failed.
+ */
+/**
+ * Do not use this function. Use perform_task instead.
+ */
+varargs int attempt_task_e(int difficulty, int bonus, int upper, int half) {
+  float fail_chance;
+  float tmp;
+
+  /* If the bonus is below the difficulty, they fail. */
+  if ( bonus < difficulty )
+    return FAIL;
+
+  if ( !half ) /* Approximate old behaviour. */
+    half = 6 * sqrt( difficulty );
+
+  fail_chance = exp( ( -0.693 * ( bonus - difficulty ) ) / half ); 
+
+  if ( random( 1000 ) < ( 1000 * fail_chance ) )
+    return FAIL;
+
+  /* If information is available, adjust the chance to award based on stats.*/
+  if(pointerp(control)) {
+    // Reduce the upper dependant on their stats.
+    upper = (int)control[ 0 ]->stat_modify( upper, control[ 1 ] );
+
+    // Reduce the upper dependant on their level.
+    tmp = exp((control[0]->query_skill(control[1])-BASE) / DECAY);
+    upper = to_int(upper / tmp) - E_MODIFIER;
+
+    // prevent upper going negative and round down to zero from 10
+    if(upper < 0)
+      upper = 0;
+  }
+
+  /* If they succeed, they might be awarded a level. */
+  if ( random( 1000 ) < ( upper * fail_chance * 10 ) &&
+       bonus < difficulty + (half * 5))
+    return AWARD;
+
+  return SUCCEED;
+}

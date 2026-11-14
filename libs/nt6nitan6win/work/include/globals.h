@@ -264,6 +264,7 @@
 #define F_CLEAN_UP              "/feature/clean_up.lpc"
 #define F_COAGENT               "/feature/coagent.lpc"
 #define F_COMMAND               "/feature/command.lpc"
+#define COMMAND                 F_COMMAND
 #define F_CONDITION             "/feature/condition.lpc"
 #define F_CUTABLE               "/feature/cutable.lpc"
 #define F_DAMAGE                "/feature/damage.lpc"

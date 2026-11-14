@@ -9,5 +9,6 @@
 
 #define INTERMUD_MUD_NAME	"The story of Life"
 #define CHINESE_MUD_NAME	"生活的故事"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

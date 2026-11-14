@@ -1,0 +1,135 @@
+// command base - inherited by all LPC-based command objects
+//
+// the patterns are used to match the command with what the player
+// has entered
+#include <access.h>
+
+// patterns maps priority -> pattern (used in the shell object when
+//   parsing)
+private nosave mapping patterns;
+private nosave mapping pat_handlers;
+private nosave string *cmd_synonyms;
+private nosave object  parser;
+private nosave string  _verb;
+
+string query_verb() { return _verb; }
+
+varargs int _cmd(string arg, object user,
+                 object *dir, object *indir, string dir_match, 
+                 string indir_match, mixed *add_com,
+                 string pattern, string verb) {
+  object old_parser;
+  int    ret;
+  mixed  handler;
+
+  _verb = verb;
+
+  if(!ACCESS_H -> query_guarded_access("file", base_name(TO), PERM_EXECUTE))
+    return 0;
+
+  if(!objectp(user))
+    user = (filter(previous_object(-1), (: living($1) :)))[0];
+
+  old_parser = parser;
+  parser = PO;
+
+  if(!undefinedp(pat_handlers[pattern]))
+    handler = pat_handlers[pattern];
+  else
+    handler = "cmd";
+
+  if(stringp(handler))
+    ret = call_other(TO, handler, arg, user, dir, indir, dir_match, indir_match, add_com, pattern);
+  else if(functionp(handler))
+    ret = (*handler)(arg, user, dir, indir, dir_match, indir_match, add_com, pattern);
+  else if(objectp(handler))
+    ret = handler -> _cmd(arg, user, dir, indir, dir_match, indir_match, add_com, pattern, verb);
+  else
+    ret = 0;
+
+  parser = old_parser;
+  return ret;
+}
+
+void create() {
+  patterns = ([ 0 : ({ "<string>" }) ]);
+  cmd_synonyms = ({ });
+  pat_handlers = ([ ]);
+  call_other(TO, "setup");
+}
+
+void set_patterns(mapping p) {
+  patterns = copy(p);
+}
+
+varargs void add_pattern(string p, int n) {
+  if(undefinedp(n)) n = 0;
+  if(undefinedp(patterns)) {
+    patterns = ([ n : ({ p }) ]);
+    return;
+  }
+  if(undefinedp(patterns[n]))
+    patterns += ([ n : ({ p }) ]);
+  else if(member_array(p,  patterns[n]) == -1)
+    patterns[n] += ({ p });
+}
+
+mapping query_patterns() { return copy(patterns); }
+
+void remove_pattern(string p) {
+  int    *ns, n;
+
+  ns = keys(patterns);
+  foreach(n in ns) {
+    if(member_array(p, patterns[n]) != -1) {
+      patterns[n] -= ({ p });
+      if(!sizeof(patterns[n]))
+        map_delete(patterns, n);
+    }
+  }
+}
+
+void add_pattern_handler(string p, mixed func) {
+  pat_handlers[p] = func;
+}
+
+void set_pattern_handlers(mapping p) {
+  pat_handlers = copy(p);
+}
+
+void set_synonyms(string *s) {
+  cmd_synonyms = copy(s);
+}
+
+void add_synonym(string s) {
+  if(member_array(s, cmd_synonyms) == -1)
+    cmd_synonyms += ({ s });
+}
+
+void remove_synonym(string s) {
+  cmd_synonyms -= ({ s });
+}
+
+string *query_synonyms() {
+  return copy(cmd_synonyms);
+}
+
+varargs int add_succeeded_mess(mixed incoming_mess, object *in_dir) {
+  if(parser)
+    return parser -> add_succeeded_mess(0, incoming_mess, in_dir ? in_dir : ({ }));
+  return 0;
+}
+
+varargs int add_failed_mess( string mess, object *in_dir ) {
+  if(parser)
+    return parser -> add_failed_mess(0, mess, in_dir ? in_dir : ({ }));
+  return 0;
+}
+
+void dest_me() {
+  destruct(TO);
+}
+
+void reset() {
+  dest_me();
+}

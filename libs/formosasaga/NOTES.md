@@ -254,3 +254,17 @@ python3 scripts/mudclient.py 127.0.0.1 40276 --timeout 70 --idle 8 \
 
 `[0..-N]` / `[1..-1]` 等改为 `[0..<N]` / `[1..<1]`。
 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测 + data/state 父目录
+
+手启：`build-debug`；端口 40276；临时 config 改写 mudlib 绝对路径。
+
+覆盖：语系 `2` → `fluffos`/`Mud@2026`（秦風）→ 打貓社 `info`/`inventory`/`score` →
+`routes` / `travel 民雄車站` / `travel 打貓社` → `bank`/`guild`/`quest`/`time`/`save`/`quit` → 重连。
+
+启动时 `timeline_d`/`chronicle_d` 在空树上 `mkdir("/data/state/system/")` 因父目录不存在而失败
+（KB 06 §7.329），`save_object` 报 `Could not open …/*.o.tmp for a save`（master `catch`）。
+四处守护补上父目录 `mkdir("/data/state/")`；`scripts/wasm_keep_dirs.txt` 登记四个 state 空目录。
+
+驱动 stdout：无 compile warning、无 runtime Error。无其他新编程缺陷。
+`who` 仍为「什麼？」（指令表无 who，既有设计）。

@@ -9,6 +9,7 @@
 
 #define INTERMUD_MUD_NAME   "SJTX"
 #define CHINESE_MUD_NAME    "「书剑天下」"
+#define DAEMON                  "/std/cmd_m"
 
 #endif
 

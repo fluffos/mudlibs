@@ -1108,3 +1108,33 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-04，dforest2i + scroll_storage 薄别名 §6.15）
 
 同 ShadowGate：`/d/deku/open/dforest2i` → `/d/deku/forest/forest2i`。另 `noma_storage` 继承 `/d/common/inherit/scroll_storage`，正文已是 Chernobog 的 `magic_storage`（Scroll Shop Inherit）。薄别名。证明：HEAD 1 PASS / 5 FAIL；树 6 PASS。
+
+## 深度功能测试（2026-11-10，tecqumin hunt_mon realms 路径 §6.15）
+
+与 shadowgate 同改：`orchevid` inherit 与 `far_scanner3` 路径改到 `/d/atoyatl/…`；去掉裸 `d` 与遮蔽 efun 的本地 `present()`（本 lib 未开 `old type behavior`，遮蔽会直接让 `orchevid` 编译失败）。证明：listcheck 3 对象 HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## 深度功能测试（2026-11-10，mine2 realms 路径 §6.15）
+
+与 shadowgate 同改：`mine3` inherit → `/d/mine2/mine`。证明：listcheck 2 对象 HEAD 1 PASS / 1 FAIL → 树 2 PASS。
+
+## 深度功能测试（2026-11-10，saide scribe realms 路径 §6.15）
+
+与 shadowgate 同改：`npc/scribe` inherit → `/std/scribe`。证明：listcheck HEAD 1 PASS / 2 FAIL → 树 2 PASS。
+
+## §6.15 shar_symbol（2026-11-10）
+
+档案未带 `/d/magic/symbols/shar_symbol`；`newsymbol` inherit 之，新手庙 `p_shar` `new()` 之。按同目录其它神祇 `*_symbol.lpc`（eldath / lord_shadow）补薄包装 → `holy_symbol`。
+
+验证：listcheck 消费者 HEAD FAIL → tree PASS。
+
+## §6.15 cmds/mortal/room 继承 saide traps（2026-11-10）
+
+- 游离的 `cmds/mortal/room.lpc`（`/std/room` 旧副本）继承缺失的 `/realms/saide/traps/container.lpc`。
+- 与现行 `std/room.lpc` 对齐：`inherit "/std/container.lpc"`；`status id`→`int id`；`dependencies += ob`→`+= ({ ob })`。
+- 同改 shadowgate / sunshadow。证明：listcheck 各 0→1 PASS。
+
+## §6.10 `dependencies += ob`（2026-11-10）
+
+- `object *dependencies` 上写 `dependencies += ob`（标量）→ `Bad assignment ( object * vs object )`（sunshadow 的 `std/room` 已是 `+= ({ ob })`）。
+- 同形修复：`shadowgate` `std/room` 与两边 `d/deku/hhouse/inherits/test/room`；`cmds/mortal/room` 上轮已改。
+- 证明：`/std/room.lpc` listcheck 仍 PASS（HEAD/树）。

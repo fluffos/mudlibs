@@ -1013,3 +1013,18 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## 深度功能测试（§10.7，2026-11-10，世外桃源注册落地）
+
+pristine + build-debug，port 40236。
+
+- **流程**：英文 ID → y → 空姓 → 中文名 → 管理/普通密码（须不同）→ 资质 3 → `m` → 世外桃源（水笙/狄云）；`look`/`i`；未 `register` 时 `east`/`west` 被水笙拦住；`quit`「欢迎下次再来！」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 任务 generate NPC 基类（2026-11-10，KB 04 §6.15）
+
+同 zhongjidiyu：骨架档缺 `kungfu/class/generate/{chinese,questnpc,shennpc}`，自 zjdywzb 收入；`supply`/`explore` 对缺房 `get_object` 先 `objectp(env)`。

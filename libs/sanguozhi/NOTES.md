@@ -945,3 +945,12 @@ in about half of the first logins here (`copy_functions()` -> `lookup_ident()` w
 - 2026-10-14：FluffOS 970d9f09 的 `Float value truncated to int` 75 处在上游修掉（fluffos/sanguozhi PR #7，已合并，pin `7e2e33b`）。守方加成 `p_kill *= DEF_KILL_MORE`（1.4）在运算前被截成 1，`troop_attack.lpc`、`array_attack.lpc` 里守方从未得到加成；现改为 `x = to_int(x * 1.4)`。**玩家可见**：守城部队按原设计获得 1.4 倍加成。价格、利息、伤害、驿站行程按浮点算后存进整数的地方写明 `to_int()`。
 
 - 2026-10-14：上游 fluffos/sanguozhi#8 已合并：`secure/modules/m_file.lpc` 的 `file_pos()` 声明为 void 却返回位置，改为 `int`；一处 `array` 类型改 `mixed *`；删 4 个未用局部变量。pin 前移到 52fd778。
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：submodule + overlay 管理员种子；端口 40210。
+
+覆盖：`fluffos`/`Mud@2026` → 巫师大厅 `look`/`inventory`/`score`/`help`/`who` →
+`north` 草庐（水镜先生）→ `west` 小村中心 → `quit` → 重连再进厅。
+
+驱动：无 compile warning、无 Wrong permissions。`old crypt()` 为驱动对旧口令哈希提示，非本库新缺陷。`help` 重建时有一行 `Warning base has more than one location`（玩家可见），未中断会话；未升格为本轮编程缺陷。无新编程缺陷。

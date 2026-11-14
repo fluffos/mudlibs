@@ -905,3 +905,22 @@ After the permission gate, the command still handed 0 to `sscanf` / `read_file` 
 ## 深度功能测试（2026-11-03，memcheck / check_memory efun）
 
 `secure/cmds/creators/memcheck.lpc` 无条件 `check_memory(1)`；同 dsI / foundation2。`#if efun_defined(check_memory)`。证明：HEAD FAIL；树 PASS。
+
+## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
+
+IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
+
+## `log/` keep 行补回与 environment() 空指针守卫（2026-11-10，KB 06 §7.358）
+
+与 nightmare4 同族：`wasm_keep_dirs.txt` 里本库的 `log/*` 行曾全部丢失；已 `--apply`/`--merge` 补回。`lib/interactive.lpc` / `lib/talk.lpc` 对空 `environment()` 的 `call_other` 加了守卫（与 nightmare4 同一处）。
+
+## 深度功能测试（§10.7，2026-11-10，campus + handbook `/open/`）
+
+机械扫描对本库已空；本轮对 Dead Souls II 做 §10.7 再测（pristine + build-debug，port 40228）。
+
+- **注册 / 入局**：`testcc` 全流程入 `LPC University Reception`；`open door` → `n` 进走廊；控制台安静。
+- **编程缺陷**：`read handbook` / `read index in handbook` / `read chapter 1 in handbook` 屏幕连打 `A runtime error occurred.`；`log/runtime` 为 `*Wrong permissions for opening file /open/<time>.lpc`（`lib/events/read.lpc:147` ← `generate_tmp()`）。`scripts/wasm_keep_dirs.txt` 已有 `log/open`，但 tmp 写的是顶层 `/open/`，且 `lpc_keep_log_dirs` 把 `open` 当 wizard home TOPSKIP。补 keep 行 `open`（同补 `deadsouls_fluffos`）。证明：无 keep 的 pristine 复现；有 keep 后 index/chapter 可读（`SetSource("/doc/hbook")` 因目录缺失仍落回默认 `/obj/book_source`，内容正常，属档案缺章，非本轮改动）。
+
+## handbook / BOOKS_D `stat()`（2026-11-10，KB 06 §7.382）
+
+仅 handbook 顺序（无 BOOKS_D 标题问题较轻）：`sizeof(statinfo) < 3` 与 `SetSource`→`SetTitle` 顺序。详见 ds386 NOTES。

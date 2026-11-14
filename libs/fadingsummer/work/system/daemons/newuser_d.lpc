@@ -1,0 +1,107 @@
+// mudlib: Fading Summer
+// file:   newuser_d.c
+// author: Lontau
+// date:   28-6-2001
+
+/* Synopsis: This daemon will create a new user based on
+   the input they provide.  Individual muds are encouraged
+   to customize this file extensively.
+*/
+
+/* To extend on this daemon, e.g. to add races and such,
+   add cases to the user_input_handler() function following
+   the examples of the pre-existing cases, and edit
+   /include/daemons/newuser.h, adding the appropriate defines
+   for whatever new prompts you may need.
+*/
+
+inherit DAEMON_OB;
+
+#include <daemons/newuser.h>
+
+// prototypes
+void           get_user_input(object user_ob);
+protected void user_input_handler(string user_entry, int operation, object user_ob);
+
+void create()
+{
+   seteuid(ROOT_UID);
+}
+
+void get_user_input(object user_ob)
+{
+   if(base_name(previous_object()) != LOGON_D) return 0;
+
+   write(NEWUSER_GREETING);
+
+   write(NEWUSER_PASS_PROMPT);
+   input_to("user_input_handler", 3, NEWUSER_GET_PASS, user_ob);
+}
+
+protected void user_input_handler(string user_entry, int operation, object user_ob)
+{
+   switch(operation)
+   {
+      case NEWUSER_GET_PASS:
+         if(!user_entry)
+         {
+            write(NEWUSER_INVALID_PASS);
+            write(NEWUSER_PASS_PROMPT);
+            input_to("user_input_handler", 3, NEWUSER_GET_PASS, user_ob);
+            return;
+         }
+
+         if(strlen(user_entry) < NEWUSER_PASS_MINLENGTH)
+         {
+            write(NEWUSER_SHORT_PASS);
+            write(NEWUSER_PASS_PROMPT);
+            input_to("user_input_handler", 3, NEWUSER_GET_PASS, user_ob);
+         }
+         else
+         {
+            (void) user_ob->set("temp_pass", user_entry, 1);
+            write(NEWUSER_PASS_CONFIRM);
+            input_to("user_input_handler", 3, NEWUSER_CONFIRM_PASS, user_ob);
+         }
+         break;
+
+      case NEWUSER_CONFIRM_PASS:
+         if(user_entry != (string) user_ob->query("temp_pass"))
+         {
+            write(NEWUSER_PASS_NOMATCH);
+            write(NEWUSER_PASS_PROMPT);
+            input_to("user_input_handler", 3, NEWUSER_GET_PASS, user_ob);
+         }
+         else
+         {
+            (void) user_ob->set("passkey", crypt(user_entry, 0), 1);
+            (void) user_ob->delete("temp_pass");
+            write(NEWUSER_EMAIL_PROMPT);
+            input_to("user_input_handler", 2, NEWUSER_GET_EMAIL, user_ob);
+         }
+         break;
+
+      case NEWUSER_GET_EMAIL:
+         if(!user_entry)
+            user_entry = "Not Specified.";
+
+         (void) user_ob->set("email", user_entry, 1);
+
+         write(NEWUSER_NAME_PROMPT);
+         input_to("user_input_handler", 2, NEWUSER_GET_NAME, user_ob);
+         break;
+
+      case NEWUSER_GET_NAME:
+         if(!user_entry)
+            user_entry = "Not Specified.";
+
+         (void) user_ob->set("real name", user_entry, 1);
+
+         // After prompting for the last piece of data, the user's data is saved
+         // for the first time, and startup() is called in the user object.
+
+         (void) user_ob->save();
+         (void) user_ob->startup();
+         break;
+   }
+}

@@ -1,0 +1,185 @@
+// http://www.rpgmud.com/amcp_protocol.htm  for AMCP 1.1 spec
+
+inherit PROTOCOL_MOD;
+
+string *channels;
+
+void init_term(object ob) {
+  ob -> reset_has_colour();
+  ob -> reset_has_term();
+}
+
+
+string process_input(string str) {
+  int i;
+  string msg_class, arg;
+  string *bits;
+
+  if(str[0] != '<') return str;
+
+  TP -> no_prompt();
+
+  i = strsrch(str, '>');
+  if(i == -1) return "";
+  if(i == 1) return "";
+
+  msg_class = str[1..i-1];
+  arg = str[i..];
+
+  switch(msg_class) {
+    case "ALIAS" :
+      // return aliases: <ALIAS>[alias,value]...
+      break;
+    case "NICKNAME" :
+    case "USERS" :
+    case "ROOM" :
+    case "PRESENT" :
+      return "";
+      break;
+    default:
+      bits = explode(msg_class, "&");
+      if(sizeof(bits) != 2)
+        return "";
+      switch(bits[0]) {
+        case "channel" :
+          if(member_array(bits[1], channels) == -1)
+            return "";
+          // list users on the channel
+          break;
+        default :
+          return "";
+      }
+      break;
+  }
+  return "";
+}
+
+void event_connect(object tp) {
+  tp -> receive_message("protocol", "<connect>\n");
+}
+
+void event_login() {
+  TP -> receive_message("protocol", "<loggedin>\n");
+}
+
+void begin_edit() {
+  if(in_edit(TP))
+    return;
+  TP -> receive_message("protocol", "<editor>\n");
+}
+
+void end_edit() {
+  if(in_edit(TP))
+    return;
+  TP -> receive_message("protocol", "<~editor>\n");
+}
+
+void remove_channel(string msg_class) {
+  string *bits = explode(msg_class, ".");
+  string t  = implode(bits[1..], ".");
+
+  if(bits[0] == "chat" || bits[0] == "intermud") {
+    if(member_array(t, channels) == -1)
+      return;
+    channels -= ({ t });
+    TP -> receive_message("protocol", "<channel&" + t + ">\n");
+  } else {
+    if(member_array(bits[0], channels) == -1)
+      return;
+    channels -= ({ bits[0] });
+    TP -> receive_message("protocol", "<channel&" + bits[0] + ">\n");
+  }
+}
+
+string process_output(string *bits, string str) {
+  // we basically need to translate class from mud class to protocol class
+  string msg_class;
+  string t;
+  string ret;
+
+  switch(bits[0]) {
+    case "clan":
+    case "guild":
+    case "order":
+    case "org":
+      msg_class = "channel&" + bits[1];
+      if(member_array(bits[1], channels) == -1)
+        channels += ({ bits[1] });
+      break;
+    case "intermud":
+    case "chat" :
+      t = implode(bits[1..], ".");
+      msg_class = "channel&" + t;
+      if(member_array(t, channels) == -1)
+        channels += ({ t });
+      break;
+    case "emote" :
+      msg_class = "emotion";
+      break;
+    case "item" :
+      if(sizeof(bits) == 1)
+        msg_class = "inanimate_item";
+      else
+        switch(bits[1]) {
+          case "living" :
+            msg_class = "living_item";
+          default       :
+            msg_class = "inanimate_item";
+            break;
+        }
+      break;
+    case "combat" :
+    case "action" :
+      if(sizeof(bits) == 1)
+        msg_class = "other_action";
+      else
+        switch(bits[1]) {
+          case "self" :
+            msg_class = "my_action";
+            break;
+          default :
+            msg_class = "other_action";
+            break;
+        }
+      break;
+    case "room" :
+      if(sizeof(bits) == 1)
+        msg_class = "room_description";
+      else
+        switch(bits[1]) {
+          default:
+            msg_class = "room_description";
+            break;
+          case "exits":
+            msg_class = "room_exits";
+            break;
+        }
+      break;
+    case "user" :
+      if(sizeof(bits) == 1)
+        msg_class = "other_action";
+      switch(bits[1]) {
+        case "description" :
+          msg_class = "user_description";
+          break;
+        default:
+          msg_class = "other_action";
+          break;
+      }
+      break;
+    default :
+      msg_class = bits[0];
+      break;
+  }
+
+  ret = "";
+  str = replace_string(str, "\n", "\\\n");
+  if(str[<2..] == "\\\n")
+    str[<2..] = "\n";
+  while(sizeof(str) > 2048) {
+    ret += "<" + msg_class + ">" + str[0..2047] + "\n";
+    str = str[2048..];
+  }
+  ret += "<" + msg_class + ">" + str + (str[<1] == '\n' ? "" : "\n");
+  return ret;
+}

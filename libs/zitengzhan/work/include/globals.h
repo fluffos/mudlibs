@@ -153,6 +153,7 @@
 #define SSERVER			"/std/sserver"
 #define F_SSERVER SSERVER
 #define SSSERVER                   "/std/ssserver"
+#define SKI_ZHEN		"/inherit/skill/array"
 #define WARPLACE                "/d/zhanchang/warplace"
 #define CJNPC_EASY              "/std/char/cjnpc_easy"//huarong 2003/10
 #define ZYSKILL			"/std/zyskill"
@@ -183,6 +184,7 @@
 #define F_EQUIP			"/feature/equip.lpc"
 #define F_FINANCE		"/feature/finance.lpc"
 #define F_FOOD			"/feature/food.lpc"
+#define F_GEMS			"/feature/gems.lpc"
 #define F_LIQUID		"/feature/liquid.lpc"
 #define F_MASTER		"/std/char/master.lpc"
 #define F_MESSAGE		"/feature/message.lpc"
