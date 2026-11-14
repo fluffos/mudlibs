@@ -18,7 +18,7 @@ Decisions below are verified in-tree; human must close/comment on GitHub.
 | 25 | MofN | **Onboarded as noboot** `libs/mofn/` (191, port 40396) | CVS tree converted; empty `include/` + MySQL `db_connect` auth → `wasm_status=noboot`. |
 | 29 | SWLPC 0.9.1 | **Defer (LDMud)** | Archive verified (341 `.lpc`). Amylaar-style (`array`, `reset(arg)`). Needs LDMud→FluffOS campaign, not a quick MudOS bring-up. |
 | 22 | NannyMUD lib | **Defer (historic LDMud/Amylaar)** | `nannylib.tgz` from lysator verified. Classic; queue with other Amylaar ports. |
-| 28 | Heaven7 | **Defer (compat/Amylaar)** | Inner mudbytes archive fetched & verified (470 `.c`, readme: Amylaar 3.2 compat / 2.4.5 root). Prefer Amylaar/compat port campaign; not a same-day FluffOS native bring-up. |
+| 28 | Heaven7 | **Onboarded & closed** `libs/heaven7/` (192, port 40397) | Boot + register(`hero`) → Tempus square/Town Hall/gardens + WASM `wasm_client.js` + `lpcc --batch` 472/472 (0 warnings, 0 errors). `NOTES.md`. |
 | 23 | Silberland | **Defer (LDMud/German)** | URL reachable (codeberg); LDMud family. |
 | 24 | Tamedhon | **Defer (LDMud)** | codeberg td-mudlib; open-source part only. |
 | 26 | UNItopia | **Defer (LDMud)** | Wayback mudlib.tar.gz verified in issue comment (516 `.c`). |
@@ -40,10 +40,9 @@ Museum driver is FluffOS. These need DGD; do not onboard as playable FluffOS row
 
 ## Next onboard queue (when resuming)
 
-1. Heaven7 — Amylaar/compat port (archive on disk).
-3. NannyMUD — lysator tarball on disk.
-4. SWLPC — LDMud port.
-5. Optional: full OSB parent beside aoh; DS point-release provenance packing.
+1. NannyMUD (`#22`) — lysator tarball on disk.
+2. SWLPC (`#29`) — LDMud port.
+3. Optional: OSB (`#18`), Silberland (`#23`), Tamedhon (`#24`), UNItopia (`#26`), DS point releases (`#13`).
 
 ## Token note
 

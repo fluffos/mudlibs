@@ -1,0 +1,3566 @@
+#pragma strict_types
+#pragma save_types
+
+#include <mudlib.h>
+inherit LIVING;
+inherit ACTIONS;
+
+#include <player.cfg>
+#include <player.spc>
+#include <levels.h>
+#include <ansi.h>
+#include <restore.h>
+#include <bad_file.h>
+
+
+#define HELP_FN        "function/help"
+#define description    long_desc
+#define invis_name     alt_name
+#define plan           extra_info
+
+#ifdef PARTY_DAEMON
+string party;               /* the name of the party u are in */
+#endif /* PARTY_DAEMON */
+
+#ifdef PING_PONG
+object pinger;
+#endif
+
+#ifdef PURGE
+status purge;               /* for funny things to happen if we get open! */
+#endif /* PURGE */
+
+string spouse;              /* person we are married to */
+string realname;            /* persons real name */  
+string email;               /* Email address of player */  
+int last_login_time;        /* int time */
+string last_login;          /* ctime() */
+string called_from_ip;      /* IP number was used last time */  
+string enter_room;          /* optional room to log into - for guilds */  
+
+int security_level;         /* access privileges */ 
+
+string pretitle;            /* our rank - lady, lord, king etc. */
+string title;               /* Our official title. Wiz's can change it. */  
+string al_title;            /* alignment title 'good','bad' etc. */
+string password;            /* crypted password. */  
+
+int savings;                /* money in bank */
+int total_exp;              /* All the exp a player has ever earned */ 
+
+int intoxicated;            /* How many ticks to stay intoxicated. */  
+int stuffed;                /* How many ticks to stay stuffed */  
+int soaked;                 /* How many ticks to stay soaked */  
+int scar;                   /* Number of scars */
+int tot_value;              /* Saved values of this player. */  
+
+string guild_string;        /* guild string */  
+
+string *alias_commands;     /* list of alias commands a player can use */
+mixed *autoload;            /* list of autoloaded abjects */
+
+status ansi_on;             /* 1 == don't filter ansi characters */
+
+
+#ifdef QUEST_ROOM
+
+int quest_points;           /* points achieved doing quests */
+string *quests;             /* quests completed             */
+string current_quest;       /* quest that must be completed before next */
+
+#endif /* QUEST_ROOM */
+
+/* logon stuff */
+
+nosave int password_check;  /* Gives you 3 tried if you forget your password*/
+nosave object other_copy;   /* other me when logging in */
+
+
+/* describe & chfn & plan & suicide */
+
+nosave string new_text;  
+nosave int line;  
+
+
+nosave int time_to_save;    /* Time to autosave. */  
+nosave status do_cmd_on;    /* stops loops between aliases & 'do' cmds */
+
+nosave int headache;        /* should work something better */  
+nosave int max_headache;
+nosave status entering; /* Tests whether move into room was an enter to mud */
+
+
+#ifdef INTERMUD
+
+string *channels; /* udp channels - at the moment there is only "intermud" */
+
+#endif /* INTERMUD */
+
+/************************************************************************/
+/* these should be put in /include/fn_specs/player_fn.spc */
+
+status ansi_on();
+
+
+/************************************************************************/
+/* Normal commands for   players and wizards alike 8) */  
+
+void add_standard_commands() {  
+    add_action (  "chfn",                     "chfn"    );  
+    add_action(   "toggle_hp",                "hp"      );   /*tamsyn*/
+    add_action (  "finger",                   "finger", 6);
+    add_action (  "change_plan",              "plan"    );
+    add_action (  "fix_it",                   "fix"     );  
+    add_action (  "email",                    "email"   );  
+    add_action (  "give_object",              "give"    );  
+    add_action (  "emote",                    ":", 1    );  
+    add_action (  "emote",                    "emote"   );  
+    add_action (  "score",                    "score"   );  
+    add_action (  "skills",                   "skills"  ); 
+    add_action (  "save_character",           "save"    );  
+    add_action (  "quit",                     "quit"    );  
+    add_action (  "Quit",                     "Quit"    );
+    add_action (  "kill",                     "kill"    );  
+    add_action (  "communicate",              "say"     );  
+    add_action (  "communicate",              "'", 1    );  
+    add_action (  "change_language",          "speak"   );  
+    add_action (  "shout_to_all",             "shout"   );  
+    add_action (  "put",                      "put"     );  
+    add_action (  "pick_up",                  "get"     );  
+    add_action (  "pick_up",                  "take"    );  
+    add_action (  "drop_thing",               "drop"    );  
+    add_action (  "inventory",                "i"       );  
+    add_action (  "inventory",                "inventory");  
+    add_action (  "look",                     "look"    );  
+    add_action (  "look",                     "l"       );  
+    add_action (  "cls",                      "cls"     );
+#ifdef PARTY_DAEMON
+    add_action (  "start_party",              "party"   );
+#endif /* PARTY_DAEMON */
+    add_action (  "examine",                  "examine" );  
+    add_action (  "examine",                  "exa"     );  
+    add_action (  "help",                     "help"    );  
+    add_action (  "manual",                   "man"     );
+    add_action (  "tell",                     "tell"    );  
+    add_action (  "whisper",                  "whisper" );  
+    add_action (  "change_password",          "password");  
+    add_action (  "toggle_brief",             "brief"   );  
+    add_action (  "wimpy",                    "wimpy"   );  
+    add_action (  "who",                      "who", 3);
+    add_action (  "describe",                 "describe");  
+    add_action (  "hp",                       "ss"      );    
+    add_action (  "do_cmd",                   "do"      );
+    add_action (  "add_alias",                "alias"   );
+    add_action (  "toggle_ansi",              "ansi"    );
+    add_action (  "command_centre",           "",1);
+#ifdef PING_PONG
+    add_action (  "ping",                     "ping"    );
+    add_action (  "pong",                     "pong"    );
+#endif
+    if(level < 2) {
+     add_action ("church",                   "church");
+     add_action ("church",                   "square");
+    }
+    else {
+     add_action (  "suicide",                  "suicide" );
+    }
+}  
+
+/****************************************************************************/
+/* reset */
+
+#ifdef NATIVE_MODE
+
+/**********************************************************************/
+/* restrict command() usage                                           */
+
+status init_command(string str) {
+  if(this_object() != this_player() && this_player()) {
+    if((int)this_player()->query_security_level() 
+     < (int)this_object()->query_security_level()) {
+      return 0;
+    }
+  }
+  return command(str,this_object());
+}
+
+
+void create() {
+    string fname;
+    int i;
+    ::create();
+
+#else /* COMPAT_MODE */
+
+void reset(status arg) {  
+    string fname;
+    int i;
+    ::reset(arg);
+    if(arg) return;
+#endif /* NATIVE_MODE */  
+    if(name) return;
+    level = -1;  
+    name = "logon";  
+    title = "the Utter Newbie";  
+    description = "";  
+    plan = "";  
+    guild_string = "No";  
+    pretitle = "";  
+    al_title = "(Wandering)";  
+    right_wc = WEAPON_CLASS_OF_HANDS;
+    alias_commands = ({});
+#ifdef QUEST_ROOM
+    quests = ({});
+#endif /* QUEST_ROOM */
+
+#ifdef INTERMUD
+    channels = ({});
+#endif
+    if(!sscanf(file_name(this_object()),"%s#%d", fname,i)) return;
+
+    if(!(fname == PLAYER || fname == WIZARD)) {
+      illegal_patch("Inherited "+file_name(this_object()));  
+      destruct(this_object());
+      return;
+    }
+    if(previous_object()) {
+     if((previous_object() == this_player() || secure(SEC5))
+       && query_ip_number(this_player()) && query_ip_number(previous_object())){
+         if((other_copy = (object)previous_object()->query_other_copy())) {
+          name = (string)previous_object()->query_name(1);
+          exec(this_object(),previous_object());
+          logon9_throw_out_other_copy("y");
+          return;
+         }
+     }
+    }
+    if(creator(this_object())) {
+     illegal_patch("Cloned "+file_name(this_object()));  
+     destruct(this_object());  
+     return;
+    }
+}  
+
+/*************************************************************************/
+/* IDENTIFY the player */
+
+status id(string str) { 
+  if(str == "PLAYER") return 1;
+  if(this_player() != this_object())
+  if(query_invis()) {
+    if(this_player()) {
+      if((int)this_player()->query_security_level() < security_level) {
+        return 0;
+      }
+      else if(!this_player()->query_security_level()
+           && random((int)this_player()->query_intelligence())
+            < random(query_invis()+1)){
+        return 0;
+      }
+    }
+  }
+  return str == query_name(1)
+      || str == query_name()
+      || str == lower_case(query_name());
+}
+
+
+/**************************************************************************/
+/* short */
+
+string short(status wiz) { 
+  string str; 
+
+  str = "";
+  if(query_invis() && this_player() != this_object()) {
+    if((int)this_player()->query_security_level() < query_security_level()) {
+      return 0;
+    }
+    else if(sizeof(compare("intelligence","invis",({ this_object(),})))) {
+      return 0;
+    }
+    str += "#";
+  }
+  str += (pretitle != "") ? " "+ pretitle : "";
+  str += " "+ query_name();
+  if(query_disguise_on()
+  && !sizeof(compare("intelligence","disguise",({ this_object(),})))) {
+    str += "??";
+  }
+  str += (this_object()->query_edit())
+      ? " "+ (string)this_object()->query_edtitle()
+      : " "+ title + (query_security_level() ? " "+ al_title : "" );
+  if(!query_ip_number(this_object())) str = " A statue of"+ str; 
+  return str;
+} 
+
+/*************************************************************************/
+/* sets */
+
+string set_name(string n)  { return ""; /* disable */ }
+string set_id(string n)    { return ""; /* disable */ }
+string set_short(string n) { return ""; /* disable */ }
+string set_long(string n)  { return ""; /* disable */ }
+
+string set_title(string t)    { return title    = (t) ? t : ""; }
+string set_pretitle(string t) { return pretitle = (t) ? t : ""; }
+string set_al_title(string t) { return al_title = (t) ? t : ""; } 
+string set_spouse(string t)   { return spouse = (t) ? t : 0;    }
+
+#ifdef PARTY_DAEMON
+string set_party(string s)    { return party = (s) ? s : 0;     }
+#endif /* PARTY_DAEMON */
+
+
+string set_enter_room(string str) {   
+    return enter_room = (!str) ? 0 : ((FILE_SIZE(str+".lpc") > 0) ? str : 0);
+}  
+
+int set_intoxicated(int i)     { return intoxicated = i; } 
+int set_stuffed(int i)         { return stuffed = i;     }
+int set_soaked(int i)          { return soaked = i;      }
+int set_headache(int i)        { return headache = i;    }
+int set_scar(int i)            { return scar = i;        }  
+
+
+string set_guild_string(string s) { return guild_string = (s) ? s : "No"; }
+string set_email(string s)        { return email = (s) ? s : "none";     }
+string set_description(string s)  { return description = (s) ? s : "";   }
+string set_plan(string s)         { return plan = (s) ? s : ""; }
+int set_time_to_save(int i)       { return time_to_save = i;    }
+
+
+status set_start() {
+  if(set_enter_room(file_name(environment()))) {
+    write("You will now enter "+ MUD_NAME +" into this room.\n");
+  }
+  else {
+    write("Cannot set enter to this room.\n");
+  }
+  return 1;
+}
+
+/***************************************************************************/
+/* querys */
+
+string query_realname()   { return realname;  }  
+string query_last_login() { return ctime(last_login_time); }  
+string query_enter_room() { return enter_room; }  
+#ifdef PARTY_DAEMON
+string query_party()      { return party;      }
+#endif /* PARTY_DAEMON */
+
+#ifdef NO_SHADOWS
+nomask status query_prevent_shadow() { return 1; }  
+#endif
+
+string query_email()      { return email;  }  
+
+string query_al_title()   { return al_title;    }  
+string query_title()      { return title;       }  
+string query_desc()       { return description; }  
+string query_spouse()     { return spouse;      }
+
+int query_total_exp()    {  return total_exp;   } 
+int query_savings()      {  return savings;     }
+int query_intoxication() {  return intoxicated; }  
+int query_stuffed()      {  return stuffed;     }  
+int query_soaked()       {  return soaked;      }  
+
+string query_guild_string() { return guild_string; }  
+
+object query_other_copy()   { return other_copy; }
+
+
+/*************************************************************************/
+/* heart beat */
+
+protected void heart_beat() {   
+    int i;
+
+    age += 1;   
+    if(ghost) return;   
+    dead = ghost;   
+    if(age > time_to_save) {   
+     if(!secure(SEC1)) {   
+         if(!brief) write("Autosave.\n");   
+         save_me(1);   
+     }   
+     time_to_save = age + SAVE_TIME;   
+    }   
+    if(!query_ip_number(this_object())) {   
+     say(query_name()+" gives a sudden cry as "+ query_pronoun() +
+       " turns to stone!\n");
+     set_heart_beat(0);   
+     call_out("quit",3600,1);   
+     return;   
+    }   
+    if(!secure(SEC1)) {
+     if(query_idle(this_object())/60 >= 30) {   
+         tell_object(this_object(),"You have been idle too long.\n"+   
+           "You have left the world.\n");   
+         say(query_name()+ " is struck by a lightning bolt and vanishes!\n"); 
+ 
+         quit(1);   
+         return;   
+     }   
+    }
+    if(intoxicated && !random(40)) {   
+     int n;
+
+     n = random(7);   
+     if(n == 0) {   
+         say(query_name() + " hiccups.\n");   
+         write("You hiccup.\n");   
+     }   
+     else if(n == 1) {   
+         say(query_name() + " almost falls, but takes a step and recovers.\n"); 
+
+         write("You stumble.\n");   
+     }   
+     else if(n == 3) {   
+         write("You feel drunk.\n");   
+         say(query_name() + " looks drunk.\n");   
+     }   
+     else if(n == 5) {   
+         say(query_name() + " burps.\n");   
+         write("You burp.\n");   
+     }   
+    }   
+    if(!random(HEAL_HP_PERIOD)) {   
+     if(hp < max_hp) {   
+         hp += (1 + constitution/6);   
+         if (intoxicated) hp += 2;
+         if (soaked)      hp += 1;
+         if (stuffed)     hp += 1;
+         if(hp > max_hp) hp = max_hp;   
+     }
+     if(headache) {   
+         headache -= 1;   
+         if(!headache) 
+          tell_object(this_object(),"You no longer have a headache.\n");   
+     }   
+     if(intoxicated) {   
+         intoxicated -= 1;   
+         if(!intoxicated) {   
+          headache = max_headache;   
+          max_headache = 0;   
+          tell_object(this_object(),
+            "You suddenly without reason get a bad headache.\n");   
+          if((hp -= 3) < 0) hp = 0;   
+         }   
+     }   
+     if(stuffed) {   
+         stuffed -= 1;
+         if(!stuffed) tell_object(this_object(),"You start to feel hungry.\n"); 
+ 
+     } 
+     if(soaked) {   
+         soaked -= 1;   
+         if(!soaked) tell_object(this_object(),"You begin to feel thirsty.\n"); 
+     }
+    }
+    for(i = sizeof(classes); i--; ) {
+      call_other(this_object(),"heal_"+ classes[i]);
+    }
+    if(!(dead || ghost)) attack();
+    if(primary_attack && present(primary_attack,environment()) && hp < whimpy){
+      random_move();
+    }
+}   
+
+/**************************************************************************/
+/* used by help function to validate access to help data */
+
+#define VALID_HELP ({ "player", "general", "races", "weapons", "armour", })
+
+status valid_help(string *subtopics) {
+  int i;
+
+  if(security_level > SEC0) return 1;
+  for(i = 0; i < sizeof(classes); i++) {
+    if(member_array(classes[i], subtopics) != -1) return 1;
+  }
+  for(i = 0; i < sizeof(VALID_HELP); i++) {
+    if(member_array(VALID_HELP[i], subtopics) != -1) return 1;
+  }
+  return 0;
+}
+
+
+/**************************************************************************/
+/* access - calls valid_read(), or valid_write() in an external object 
+ * modes: "r" - valid_read(), "w" - valid_write()
+ */
+
+protected status access(string dir, string file, string mode) {
+    if(dir && dir != "" && dir[strlen(dir)-1] == '/') {
+      dir = extract(dir,0,strlen(dir)-2);
+    }
+    dir = dir+"/access";
+    sscanf(dir,"/%s",dir);
+    if(mode[0] == 'w')
+     return (status)call_other(dir, "valid_write", file, query_name(1));
+    else if(mode[0] == 'r')
+     return (status)call_other(dir, "valid_read", file, query_name(1));
+    return 0;
+}
+
+
+/****************************************************************************/
+/* valid_write is called by edit(), write_file(), write_bytes() */
+
+string valid_write(string str) { 
+    string who, file;  
+
+    if(!str || str[0] != '/') return 0;
+    str = make_path(str); 
+    if(sscanf(str, WIZARD_DIR +"%s/open/%s", who, file) == 2) { 
+     return extract(str,1);
+    } 
+    else if(sscanf(str, WIZARD_DIR +"%s/%s", who, file) == 2) {
+     if(file != "access.lpc") {
+       if(access(WIZARD_DIR+who, str, "w")) return extract(str,1);
+     }
+    } 
+    else if(sscanf(str, DOMAIN_DIR +"%s", file) == 1) {
+     if(file != "access.lpc") {
+       if(access(DOMAIN_DIR, str,"w")) return extract(str,1);
+     }
+    }
+    else if(sscanf(str, "/open/%s", file) == 1) { 
+     return "open/" + file;  
+    } 
+    else if(sscanf(str, "/ideas/%s", file) == 1) { 
+     return "ideas/" + file;  
+    } 
+    else if(sscanf(str, "/usr/%s", file) == 1) { /* needed for save_me() */
+     if(this_object() == this_player() && secure(SEC8)) return "usr/"+ file;
+    }
+    return 0;  
+} 
+
+
+
+/**************************************************************************/
+/* valid_read is called by file_size(), read_file(), read_bytes()
+ *                         cat(), tail()
+ */
+
+
+string valid_read(string str) { 
+    string who, file;  
+
+    if(!str) return 0;
+    str = make_path(str); 
+    if((file = valid_write(str))) return file;
+
+    if(sscanf(str, "/%s.dat", file) == 1) {
+     return file +".dat";
+    }
+    else if(sscanf(str, WIZARD_DIR +"%s/%s", who, file) == 2) { 
+     if(access(WIZARD_DIR+who,str,"r")) return extract(str,1);  
+    }
+    else if(sscanf(str, "/doc/%s", file) == 1) { 
+     return "doc/" + file;  
+    } 
+    else if(sscanf(str, "/help/%s", file) == 1) { 
+     return "help/" + file;  
+    } 
+    else if(sscanf(str, "/manuals/%s", file) == 1) { 
+     return "manuals/" + file;  
+    } 
+    else if(sscanf(str, "/skills/%s", file) == 1) { 
+     return "skills/" + file;  
+    } 
+    else if(sscanf(str, "/info/%s", file) == 1) { 
+     return "info/" + file;  
+    } 
+    else if(sscanf(str, DOMAIN_DIR +"%s", file) == 1) {
+     if(access(DOMAIN_DIR,str,"r")) return extract(str,1);
+    }
+    else if(sscanf(str,"/%s", file) == 1) {
+     switch(str) {
+       case WELCOME:
+       case NEWS:
+         return file;
+     }
+    }
+    return 0;
+} 
+
+
+/***************************************************************************/
+/*                   Player Actions                                        */
+/***************************************************************************/
+/* brief */
+
+protected status toggle_brief(status silently){  
+    if((brief = !brief)) {
+     if(!silently)
+         tell_object(this_object(),
+           "Brief mode. BEWARNED that there are many features\n"+
+           " and room warnings that you will miss in this mode.\n");
+    }
+    else {
+     if(!silently) tell_object(this_object(),"Verbose mode.\n");  
+    }
+    return 1;
+}  
+
+
+/* hp display */
+
+status toggle_hp(string str) {
+  if(str) return 0;
+  hp_displ = !hp_displ;
+  write("Hit point display " + ( hp_displ ? "on" : "off" ) +".\n");
+  return 1;
+}
+
+
+/***********************************************************************/
+/* ansi filters on communication stuff */
+
+status ansi_on() { return ansi_on; }
+
+
+/**************************************************************************/
+/* wimpy */
+
+status wimpy(string str) {   
+    int i;
+
+    if(no_wimpy) {  
+     write("You cannot use wimpy mode.\n");  
+     return 1;  
+    }  
+    if(!str || str == "0") {  
+     write("You begin to feel a little more brave.\n");  
+     whimpy = 0;  
+     return 1;  
+    }
+    if(str == "direction") {
+     write("You decide to flee in any direction when running from battle.\n");
+     custom = 0;
+     return 1;
+    }  
+    if(!sscanf(str,"%d",i)) {
+     if(sscanf(str,"direction %s",custom)) {
+         write("You will try to run "+custom+" when fleeing from battle.\n");
+         return 1;
+     }
+     write("Usage: wimpy <hit points>\n"+
+       "       wimpy direction <direction>\n");
+     return 1;
+    }
+    if (i < 0) {  
+     write("Now don't be silly.\n");  
+     return 1;  
+    }  
+    whimpy = i;
+    if(level < 6) {  
+     if(whimpy > max_hp/2) whimpy = max_hp/2;  
+    }  
+    else {
+     if(whimpy > wisdom * 5) whimpy = wisdom * 5;
+    }  
+    tell_object(this_object(),"Whimpy is set to "+whimpy+" hit points.\n");
+    return 1;
+}
+
+#ifdef PARTY_DAEMON
+
+/**************************************************************************/
+/* Party Stuff  -  Angel, April 1994 */
+
+status start_party(string str) {
+  object obj;
+
+  if(!str) {
+    write("Usage: party <party name>\n");
+    return 1;
+  }
+
+  if(party) {
+    write("You already belong to a party!\n");
+    return 1;
+  }
+  if(call_other(PARTY_DAEMON, "query_party", str)) {
+    write("There is already a party called '"+str+"'.\n");
+    return 1;
+  }
+  if(party) {
+    write("You already belong to the '"+party+"' party.\n");
+    return 1;
+  }
+  party = str;
+  obj = clone_object(PARTY_OBJECT);
+  obj -> set_party(str);
+  obj -> set_leader(query_name(1));
+#ifdef NATIVE_MODE
+  obj->move(this_object());
+#else
+  move_object(obj, this_object());
+#endif /* NATIVE_MODE */
+  write("You now lead the '"+str+"' party!\n");
+  return 1;
+}
+
+#endif /* PARTY_DAEMON */
+
+/***************************************************************************/
+/* change password */
+
+protected status change_password() {
+    if(password) {
+     write("Old Password > ");
+     input_to("change_password1",1);
+     return 1;
+    }
+    change_password1("");
+    return 1;
+}
+
+
+protected void change_password1(string str) {
+    if(password && password != crypt(str, password)) {  
+     write("\nWrong old password.\n");  
+     return;  
+    }  
+    password = 0;  
+    input_to("change_password2", 1);  
+    write("\nNew password > ");  
+    return;  
+}   
+
+protected void change_password2(string str){  
+    if(!str || str == "") {  
+     change_password1("");  
+     return;  
+    }  
+    if(!password) {  
+     password = str;  
+     input_to("change_password2", 1);  
+     write("\nAgain > ");  
+     return;  
+    }  
+    if(password != str) {  
+     write("\nStart Again!!\n");
+     password = 0;
+     change_password1("");  
+     return;  
+    }  
+    password = crypt(password, 0); /* Generate new seed */  
+    write("\nPassword change Successfull.\n");  
+    save_me(1);  
+}  
+
+
+/***************************************************************************/
+/* suicide */
+
+protected status suicide() {
+    if(level < 2) return 0;
+    tell_object(this_object(),"The suicide command removes your character\n"+
+      "and Banishes your name.\n");
+    write("Enter Password> ");
+    input_to("pass1",1);
+    return 1;
+}
+
+protected void pass1(string str) {
+    if(password != crypt(str, password)) {  
+     write("\nWrong password.\n");  
+     return;
+    }
+    line = 1;  
+    new_text = "";  
+    input_to ("suicide_note");  
+    write ("\nEnter your Suicide Note.  End with '**', abort with '~q'.\n");  
+    write ("1] ");  
+    return;  
+}  
+
+protected void suicide_note(string arg) {  
+    if(arg == "~q") {  
+     write ("Suicide aborted.\n");  
+     return;  
+    }  
+    if(arg == "**") {  
+     write("Suicide Note:\n"+ new_text+"\n"); 
+     do_suicide(new_text);  
+     return;  
+    }  
+    new_text = new_text+arg+"\n";  
+    write (++line+"] ");  
+    input_to ("suicide_note");  
+}  
+
+protected void do_suicide(string note) {
+
+    save_object("banish/"+query_name(1));
+    write("Suiciding......\n");
+    set_heart_beat(0);
+    MASTER->master_remove_file("/"+SAVE_PLAYER+query_name(1)+".o");
+    MASTER->master_remove_file("/"+SAVE_WIZARD+query_name(1)+".o");
+# ifdef LOG_SUICIDE
+    log(LOG_SUICIDE,note,0);
+# endif
+    shout(query_cap_name()+" has just Suicided.\nMay "+
+      query_possessive()+" Rest in Peace.\n");
+    write("You Die!\n");
+    destruct(this_object());
+}   
+
+
+/**********************************************************************/
+/* church */
+
+status church() {
+    move_player("X#"+ DEFAULT_ENTER);
+    return 1;
+}
+
+
+/***************************************************************************/
+/* describe */
+
+protected status describe() {  
+    object editor;
+
+    if(ghost) {  
+     write ("You are in an immaterial state with no description.\n");  
+     return 1;  
+    }  
+#ifdef EDITOR
+    editor = clone_object(EDITOR);
+#ifdef NATIVE_MODE
+    editor->move(this_object());
+#else
+    move_object(editor, this_object());
+#endif /* NATIVE_MODE */
+    editor->edit("set_description", description);
+    return 1;
+}
+
+#else
+    line = 1;  
+    new_text = "";  
+    input_to ("get_desc");  
+    write ("Enter your description.  End with '**', abort with '~q'.\n");  
+    write ("1] ");  
+    return 1;  
+}  
+
+nosave void get_desc(string arg) {  
+  if(arg == "~q") {  
+    write ("Description aborted.\n");  
+    return;  
+  }  
+  if(arg == "**") {  
+    description = new_text;  
+    write("New description:\n"+((description == "") ? "Cleared" : description)); 
+    return;  
+  }  
+  new_text = new_text+arg+"\n";  
+  write (++line+"] ");  
+  input_to ("get_desc");  
+}  
+
+#endif /* EDITOR */
+
+/***************************************************************************/
+/* skills */ 
+
+status skills(string str) {
+    if(!str) {
+     write("Usage: skills 'class'\n");
+     return 1;
+    }
+    str = lower_case(str);
+    if(query_class(str) || str == "general" || str == "primary") {
+     call_other(this_object(), "query_"+str+"_stats");
+     write("\nType 'help "+str+"' for further information.\n");
+     return 1;
+    }
+    write("You are not in the class of "+ capitalize(str) +".\n");
+    return 1;
+}
+
+
+/**************************************************************************/
+/* score */
+
+status score() {
+    string tmp; 
+    string money_str;
+
+    if(ghost) { 
+     write("You are in an immaterial state with no scores.\n"); 
+     return 1; 
+    } 
+    write("\nYou are: "+short(0)+"\n");
+    if(guild_string && lower_case(guild_string) != "no") 
+     write ("You belong to "+ capitalize(guild_string) +"\t\t");
+    else 
+     write("You don't belong to a guild.\t\t");
+
+    write ("Current experience points: "+ experience +"\n");
+    write ("Player Level: "+ level + "\t\t" +
+      "\tTotal experience points: "+ total_exp +"\n");
+     write("You are " + al_title + ".\n");
+
+    money_str = "no";
+    if(money) {
+      if(!(money_str = (string)call_other(MONEY, "convert", money))) {
+        money_str = money +"";
+      }
+    }
+    write("You are carrying "+ money_str +" coins, and have ");
+    money_str = "no";
+    if(savings) {
+      if(!(money_str = (string)call_other(MONEY, "convert", savings))) {
+        money_str = savings +"";
+      }
+    }
+    write("\n"+ money_str +" coins in the bank\n");
+
+    tmp = (intoxicated && stuffed && soaked)
+    ? "You are intoxicated, have a full stomach, "+  
+    "and are certainly not thirsty.\n"
+    : (intoxicated && stuffed)
+    ? "You are intoxicated, and have a full stomach.\n"
+    : (intoxicated && soaked)
+    ? "You are intoxicated, and are not thirsty.\n"
+    : (intoxicated)
+    ? "You are intoxicated.\n"
+    : (stuffed && soaked)
+    ? "You have a full stomach, and are certainly not thirsty.\n"
+    : (stuffed)
+    ? "You have a full stomach.\n"
+    : (soaked)
+    ? "You are certainly not thirsty.\n"
+    : "You have not eaten, or drank anything lately.\n";
+    write(tmp);    
+
+    if(!whimpy)
+      write("You are feeling very brave!\n");
+    else {
+      write("You are ready to run at "+ whimpy +" hit points - "); 
+      write(((whimpy*100)/query_max_hp()) +"%\n");
+    }
+
+    show_age(0); 
+    write("Hit points: "+ hp  +"("+ max_hp +")\n");
+    query_primary_stats();
+
+    write("You have skills in "+ implode(classes,", ")+".\n");
+    if(level_drained)  
+     write("\nYou have been level drained "+ level_drained +" times.\n"); 
+    if(!pointerp(languages_known)) languages_known = ({});
+    if(sizeof(languages_known)) { 
+     write("You know the following languages: "+implode(languages_known,", ")); 
+     write(".\n"); 
+    } 
+    if(sizeof(weapon_prof)) {
+     write("You are skilled in the following weapons: ");
+     write(implode(weapon_prof, ", ")+".\n");
+    }  
+    write("\nType 'ss' for short score.\t"  +
+      "Type 'skills <class>' for list of skills.\n");
+    return 1; 
+} 
+
+
+/********************************************************************/
+/* hp */
+
+status  hp() { 
+    write ("-*- HP: "+ hp +" ("+ max_hp +")  EXP: "+ experience +" -*-\n");
+    return 1; 
+} 
+
+
+/**************************************************************************/
+/* email */
+
+status email(string str) {
+    write("New Email Address: "+set_email(str)+"\n");
+    return 1;
+}
+
+
+/***************************************************************************/
+/* chfn */
+
+protected status chfn() {   
+    write("What is your real name? [Old: "+realname+"]\nNew Name: ");  
+    input_to("chfn2");  
+    return 1;  
+}  
+
+protected void chfn2(string str) {  
+    if(!str || str == "") {
+     write("Real name not changed.\n");
+     return;
+    }
+    write("Real Name changed: "+(realname = str)+"\n");
+    write("What is your email address? [Old: "+email+"]\nNew Address: ");  
+    input_to("chfn3");  
+}  
+
+protected void chfn3(string str, status plan_only) {
+    object editor;
+
+    if(!plan_only) {
+     if(!str || str == "") {
+         write("Email address not changed.\n");
+         return;
+     }
+     write("Email address changed: "+(email = str)+"\n");  
+    }
+#ifdef EDITOR
+    editor = clone_object(EDITOR);
+#ifdef NATIVE_MODE
+    editor->move(this_object());
+#else
+    move_object(editor, this_object());
+#endif /* NATIVE_MODE */
+    editor->edit("set_plan",plan);
+}
+
+
+/* editor quit */
+
+void editor_quit(string arg) {
+  switch(arg) {
+    case "set_plan":
+      write("Plan unchanged.\n");
+    break;
+  }
+}
+
+#else
+    write("Your Old Plan:\n"+plan);
+    line = 1;  
+    new_text = "";  
+    input_to ("chfn4");  
+    write ("Enter your plan.  End with '**', abort with '~q'.\n");  
+    write ("1] ");  
+}  
+
+nosave void chfn4(string arg) {  
+    if(arg == "~q") {  
+     write ("Plan aborted.\n");  
+     return;  
+    }  
+    if(arg == "**") {  
+     plan = new_text;  
+     write("New Plan:\n"+((plan == "") ? "Cleared" : plan)); 
+     return;  
+    }  
+    new_text = new_text+arg+"\n";  
+    write (++line+"] ");  
+    input_to("chfn4");  
+}  
+#endif /* EDITOR */
+
+
+
+/************************************************************************/
+/* change plan */
+
+protected status change_plan() {
+    chfn3(0,1);
+    return 1;
+}
+
+
+/************************************************************************/
+/* fix */
+
+protected status fix_it(string str) {
+    string reason;
+
+    if(!str || !sscanf(str,"%s %s",str,reason)) {
+     write("Usage: fix <carry|armour|weapon|heart> <reason>\n\n"+
+       "       Give reason so bugs can be traced.\n");
+     return 1;
+    }  
+    if(str=="carry" || str=="weight") {  
+     write("Fixing your carry problems.....\n");  
+     recalc_carry();  
+     write("Your carry has been fixed.....\n");  
+#ifdef LOG_FIX
+     log(LOG_FIX,"Carry: "+reason,0);
+#endif /* LOG_FIX */
+    }  
+    else if(str=="armor" || str=="armour" || str=="ac") {  
+     write("Fixing your armor class........\n");  
+     recalc_ac();  
+     write("Your armor class has been fixed.....\n");  
+#ifdef LOG_FIX
+     log(LOG_FIX,"Armour: "+reason,0);
+#endif /* LOG_FIX */
+    }  
+    else if(str=="wc" || str=="weapon") {  
+     write("Fixing your weapon class.....\n");  
+     recalc_wc();  
+     write("Your weapon class has been fixed.....\n");  
+#ifdef LOG_FIX
+     log(LOG_FIX,"Weapon: "+reason,0);
+#endif /* LOG_FIX */
+    }  
+    else if(str=="h" || str=="heart" || str=="heartbeat") {  
+     cpr();
+#ifdef LOG_FIX
+     log(LOG_FIX,"Heartbeat: "+reason,0);
+#endif /* LOG_FIX */
+    }  
+    else {
+     write("This is your character fixing function.\n");  
+     write("You may fix the following:\n");  
+     write("Armour, Weapon, Carry, Heart.\n");  
+     write("\nIf you are having other problems contact a creator.\n");  
+    }
+    return 1;  
+}  
+
+
+/*************************************************************************/
+/* inventory */
+
+status inventory() { 
+    if(set_light(0) < 1) {
+     write("It's too dark to see what you're carrying.\n");
+     return 1;
+    }
+    show_inventory();
+    return 1; 
+} 
+
+/***************************************************************************/
+/* cls */
+
+status cls(status arg) {
+    int i;
+    
+    for (i = 35; i--;) write ("\n");
+    return 1;
+}
+
+/***************************************************************************/
+/* exa */
+
+status examine(string str) { 
+    if(!str) {
+      write("Examine what?\n");
+      return 1;
+    }
+    look("at "+str,1); 
+    return 1;
+} 
+
+/**************************************************************************/
+/* look */
+
+status look(string str, status extra) {
+  object ob;
+  object special;
+  string item;
+  string extra_str;
+  status wiz;
+  int wt;
+
+  wiz = secure(SEC1);
+  if(query_real_light() < 1) {
+    write("It's too dark.\n");
+    return 1;
+  }
+  if(!str) {
+    ob = environment(this_player());
+  }
+  else {
+    sscanf(str, "at %s", str); 
+    sscanf(str, "in %s", str);
+    if(environment()->look_at(str)) return 1;  
+
+    sscanf(str, "%s on %s", item, str);
+    sscanf(str, "%s in %s", item, str);
+    str = lower_case(str);
+    if(!(ob = present(str, this_player()))) {
+      if(!(ob=present(str,environment()))) {
+        write("There is no " + str + " here.\n");
+        return 1;
+      }
+    }
+    if(item) {
+      if(!ob->look_at(item)) write("There is no "+ item +".\n");
+      return 1;
+    }
+  }
+  if(extra)
+    ob->extra_info(wiz);
+  else
+    ob->long(wiz);
+  if (living(ob)) {
+    special = first_inventory(ob);
+    while(special) {
+      extra_str = (string)special->extra_look();
+      if (extra_str) write(extra_str + ".\n");
+      special = next_inventory(special);
+    }
+  }
+  if(ob == environment() || living(ob) || ob->can_put_and_get()) {
+    if(!living(ob) && !extra) {
+      wt = (int)ob->query_weight();
+      if(wt >= 5)
+        write("It looks very heavy.\n");
+      else if (wt >= 3)
+        write("It looks heavy.\n");
+    }
+    show_inventory(ob);
+  }
+  else if(!living(ob)) {
+     wt = (int)ob->query_weight();
+     if(wt >= 5)
+       write("It looks very heavy.\n");
+     else if (wt >= 3)
+       write("It looks heavy.\n");
+  }
+  return 1;
+}
+
+/**************************************************************************/
+/* help/manual */
+
+status manual(string what) {  
+ 
+    string pre,rest;  
+
+    if(!what 
+    || sscanf(what,"%s/%s",pre,rest) 
+    || sscanf(what,"%s.%s",pre,rest)) {  
+      help("manuals");
+      return 1;
+    }
+    if(file_size("/manuals/"+ what +".man") > 0) {
+      more("/manuals/"+ what +".man");
+    }
+    else if(secure(SEC1) && file_size("/manuals/"+ what +".wiz") > 0) {
+      more("/manuals/"+ what +".wiz");
+    }
+    else {
+      write("No Manual Available.\n");
+    }
+    return 1;
+}
+
+
+status help(string str) {
+  return (status)call_other(HELP_FN,"help",str);
+}
+
+
+/***************************************************************************/
+/* kill */
+
+protected status kill(string str) { 
+  object ob; 
+
+  if(ghost) return 0; 
+  if(!str) { 
+    write("Kill what ?\n"); 
+    return 1; 
+  } 
+  if(!(ob = present(lower_case(str), environment()))) {
+    write("No " + str + " here !\n"); 
+    return 1; 
+  } 
+  if(!living(ob)) { 
+    write(ob->short() + " is not a living thing !\n"); 
+    say(query_name() + " tries foolishly to attack " + str + ".\n"); 
+    return 1; 
+  }
+  if(ob == this_object()) { 
+    write("What ? Attack yourself ?\n"); 
+    return 1; 
+  } 
+  if(environment(this_object())->query_no_fight()) {
+    write("Fighting is not allowed here.\n");
+    return 1;
+  }
+  if(primary_attack == ob) { 
+    write("Yes, yes !!\n"); 
+    return 1; 
+  } 
+  if(!add_secondary_attacker(ob)) {
+    write("The law prevents you from attacking "+ ob->query_name()  + ".\n");
+    say(query_name() +" attempts to kill "+ ob->query_name() +"!\n", ob);
+    tell_object(ob,query_name() +" tries to kill you!\n");
+    return 1;
+  }
+  if(primary_attack && present(primary_attack, environment())) {
+    write("You turn to attack "+(string)ob->query_name()+".\n");
+  }
+  primary_attack = ob;
+  return 1; 
+} 
+
+
+/*************************************************************************/
+/* change disguise */
+
+status change_disguise(string str) {
+
+  if(str) {
+    str = lower_case(str);
+    if(!bad_file(str, ({ "-", "_", ".", }))
+       && !(FILE_SIZE("/"+SAVE_FIRST+str+".o") > 0
+         || FILE_SIZE("/"+SAVE_PLAYER+str+".o") > 0
+         || FILE_SIZE("/"+SAVE_WIZARD+str+".o") > 0
+         || FILE_SIZE("/"+SAVE_NO_BANISH+str+".o") > 0
+         || FILE_SIZE("/banish/"+str+".o") > 0)) {
+         if(primary_attack && present(primary_attack,environment())) {
+           write("You cannot disguise yourself when you are fighting.\n");
+           return 1;
+         }
+         write("You disguise yourself as "+capitalize(str)+".\n");
+         set_alias_name(capitalize(str));
+         disguise_on = 1;
+    }
+    else {
+      write("You cannot disguise yourself as "+capitalize(str)+".\n");
+    }
+  }
+  else {
+    if(primary_attack && present(primary_attack,environment())) {
+      write("You cannot disguise yourself while attacking.\n");
+      disguise_on = 0;
+    }
+    else {
+      toggle_disguise(0);
+    }
+  }
+  return 1;
+}
+
+/**************************************************************************/
+/* command centre */
+
+status command_centre(string str) {
+#ifdef INTERMUD
+  string channel, emote, mud;
+#endif
+  string verb, tmp1, tmp2;
+  int i;
+
+  verb = query_verb();
+
+  if(sscanf(verb,"%s@%s", tmp1, tmp2) == 2) {
+    if(!bad_file(tmp1,({ ".", "/", })) && !bad_file(tmp2, ({ ".", "/", }))) {
+      if(member_array(tmp1, classes) != -1) {
+        if(FILE_SIZE("/skills/"+ tmp1 +"/"+ tmp2 +".lpc") > 0) {
+          if(call_other("skills/"+ tmp1 +"/"+ tmp2, tmp2, str)) return 1;
+        }
+      }
+    }
+  }
+  
+  if(!bad_file(verb, ({ ".", "/", }))) {
+    for(i = 0; i < sizeof(classes); i++) {
+      if(FILE_SIZE("/skills/"+ classes[i] +"/"+ verb +".lpc") > 0) { 
+        if(call_other("skills/"+ classes[i] +"/"+ verb, verb, str)) return 1;
+      }
+    }
+  }
+
+#ifdef INTERMUD
+    /* intermud hook */
+
+#if (INTERMUD)
+  if(secure(SEC1)) {
+#endif /* wizards only */
+
+    if(!sscanf(verb, "%s:%s", channel, emote)) channel = verb;
+    sscanf(channel, "%s@%s", channel, mud);
+    if(channel == "intermud" || member_array(channel, channels) != -1) {
+      call_other(this_object(),
+                 "intermud",
+                 channel,
+                 ((emote) ? "emote "+ emote +" "+ str : str),
+                 mud);
+      return 1;
+    }
+
+#if (INTERMUD)
+  }
+#endif /* wizards only */
+
+#endif /* INTERMUD */
+
+  switch(verb) {
+    case "typo": case "idea": case "soul": case "bug":
+    case "comment":
+      log_for_players(capitalize(verb),str);
+      return 1;
+      break;
+      
+    case "stealth":
+      if(!query_stealth()) return 0;
+      toggle_stealth(0);
+      return 1;
+      break;
+      
+    case "disguise":
+      if(!query_disguise()) return 0;
+      change_disguise(str);
+      return 1;
+      break;
+  }
+  if((i = get_alias_index(verb)) != -1) {
+    if(!do_cmd_on && i < sizeof(alias_commands)) {
+      str = alias_commands[i]+((str) ? " "+ str : "");
+      command(str, this_object());
+    }
+    else
+      write("Error: Do command cannot call aliases.\n");  
+    return 1;
+  }
+  return 0;
+}
+
+
+/*************************************************************************/
+/* do cmd */
+
+
+protected void wait(int time, string cmd) {
+    time += find_call_out("do_cmd");
+    remove_call_out("do_cmd");
+    call_out("do_cmd",time, cmd);
+}
+
+
+
+status do_cmd(string str) {
+    string cmd, rest;
+    int i, len, time;
+    if(!str || str == "") {
+     write("Usage: do command1, command2, etc, etc\n\n"+
+       "Notes: Do has a special wait status (0-30 seconds).\n"+
+       "       Eg. do north,east,wait 5,south\n");
+     return 1;
+    }
+    if((time = find_call_out("do_cmd")) != -1) {
+     write("Do command Wait status: "+ time +" seconds.\n");
+     return 1;
+    }
+    if(do_cmd_on) {
+     write("Do command cannot call 'do'.\n");
+     return 1;
+    }
+    do_cmd_on = 1; /* flag on == alias cannot be called-stops possible loops */
+    while(str != "") {
+     if(sscanf(str,"%s,%s",cmd,rest)) {
+         str = rest;
+     }
+     else {
+         cmd = str;
+         str = "";
+     }
+     if(!(len = strlen(cmd))) continue;
+     for(i = 0; i < len && cmd[i] == ' '; i++);
+     if(i == len) continue;
+     cmd = extract(cmd,i); 
+     if(sscanf(cmd,"wait %d",time)) {
+         if(time < 30 && time > 0) {
+          write("Wait "+time+" seconds to 'do "+ str +"'\n");
+          do_cmd_on = 0;
+          wait(time,str);
+          return 1;
+         }
+     }
+     write(cmd +"\n");
+     if(!command(cmd)) {
+         write("Do command \""+cmd+"\" Failed.\n");
+         do_cmd_on = 0;
+         return 1;
+     }
+    }
+    write("Do command line Done.\n");
+    do_cmd_on = 0;
+    return 1;
+}
+
+
+/*************************************************************************/
+/* alias commands */
+
+int get_alias_index(string str) {
+    int i;
+
+    if((i = member_array(str, alias_commands)) != -1) {
+     if(i%2) return -1;
+     return i+1;
+    }
+    return -1;
+}
+
+status add_alias(string str) {
+    string com, tmp1, tmp2;
+    int i;
+
+    if(!str) {
+     write("Aliases: ");
+     for(i = 0; i < sizeof(alias_commands); i += 2) {
+         if(i) write("         ");
+         write(alias_commands[i]+": "+alias_commands[i+1]+"\n");
+     }
+     if(!sizeof(alias_commands)) write("None.\n");
+     return 1;
+    }
+    if(!sscanf(str,"%s %s",str,com)) {
+     remove_alias(str);
+     write("Alias: "+str+" removed.\n");
+     return 1;
+    }
+    if(!sscanf(com,"%s %s",tmp1,tmp2)) {
+     tmp1 = com;
+    }
+    if(str == tmp1) {
+     write("Error: Tautological alias.\n");
+     return 1;
+    }
+    if(!(member_array(tmp1,alias_commands)%2)) {
+     write("Error: Cannot have an alias calling an alias.\n");
+     return 1;
+    }
+    if(!((i = member_array(str,alias_commands))%2)) {
+     alias_commands[i+1] = com;
+    }
+    else {
+     if(sizeof(alias_commands) >= MAX_ALIAS_COMMANDS * 2) {
+         write("You can only have "+MAX_ALIAS_COMMANDS+" aliases.\n");
+         return 1;
+     }
+     alias_commands += ({ str, com, });
+    }
+    write("New Alias: "+str+" -> "+com+"\n");
+    return 1;
+}
+
+void remove_alias(string str) {
+    int i;
+    if((i = member_array(str,alias_commands)) != -1) {
+     if(i%2) {
+         write("Error in Removing Alias.\nAttempting Fix....\n");
+         remove_alias(alias_commands[i-1]);
+           return;
+       }
+         alias_commands = alias_commands[0..i-1]
+         + alias_commands[i+2..sizeof(alias_commands)-1];
+     }
+    }
+
+   
+/***************************************************************************/
+/* player logs */
+
+status log_for_players(string file, string str){  
+  string room_file, creator_name;
+
+  if(!file) return 0;
+  if(!str) {  
+    write("Give an argument.\n");  
+    return 1;  
+  }  
+  room_file = file_name(environment());
+  log_file(file,"\n"+ query_name() +" ("+ room_file +"):\n");
+  log_file(file, str + "\n");
+  if(file == "Idea")
+     write("Please use the board in the council office for "+
+     "major game ideas.\n");
+  if((creator_name = creator(environment()))) {
+    write_file("/log/reports/"+ creator_name +".rep",
+      "Report Type: "+ file +"  Room: "+ room_file +"\nTime: "+ 
+       ctime(time()) +"\n"+ pad_str("REPORT: ",str,75) +"\n");
+  }  
+  write(file +" logged.\n");  
+  return 1;  
+}  
+
+   
+/***************************************************************************/
+/* who */
+
+status finger(string str) {
+#ifdef INTERMUD
+  string who, mud, verb;
+#endif
+
+#ifdef INTERMUD
+  verb = query_verb();
+  if(sscanf(verb,"%s@%s", verb, mud)) {
+    call_other(UDP_CMD_DIR+"ping","ping",mud);
+    return 1;
+  }
+#endif /* INTERMUD */
+
+  if(!str) {
+    write("Usage: finger <who>\n");
+    return 1;
+  }
+
+#ifdef INTERMUD
+#if (INTERMUD)
+  if(secure(SEC1))
+#endif /* wizards only */
+   if(sscanf(str,"%s@%s",who,mud)) {
+     call_other(UDP_CMD_DIR+"finger","finger",who,mud);
+     return 1;
+   }
+#endif /* INTERMUD */
+
+   call_other("/function/finger", "finger", str);
+   return 1;
+}
+
+
+string who() {
+  object  *who;
+  int i, num_wiz; 
+#ifdef INTERMUD
+  string verb, mud;
+#endif
+  string str, new_str; 
+  string sh;
+  status inetd_call;
+
+#ifdef INTERMUD
+  if(previous_object() &&
+    file_name(previous_object()) == UDP_CMD_DIR+"who") {
+    inetd_call = 1;
+  }
+  else {
+    verb = query_verb();
+#if (INTERMUD)
+    if(secure(SEC1))
+#endif /* wizards only */
+     if(sscanf(verb,"%s@%s",verb,mud)) {
+       call_other(UDP_CMD_DIR +"who", "who", mud);
+       return "";
+     }
+   }
+   if(inetd_call)
+     str = "---- "+ MUD_NAME +" -------------------------------------------";
+   else
+#endif /* INTERMUD */
+     str =  "---- Welcome "+query_name()+" to "+ MUD_NAME +" ";
+   str += "---------------------------------------------------------------";
+   str = extract(str,0,75);
+   new_str = str +"\n";
+
+   who = filter_array(users(),"filter_users",this_object());
+   who = sort_array(who, "by_sec_level", this_object());
+
+   /* who list */
+
+   for(i = 0; i < sizeof(who); i++) { 
+     if(!who[i]->query_security_level())
+       str = "[ "+ (string)who[i]->query_level() +" ]";
+#ifdef QC
+     else if(member_array((string)who[i] -> query_name(1),QC) != -1)
+       str = "[ QC ]";
+#endif /* QC */
+    else if((int)who[i] -> query_security_level() >= SEC9)
+       str = "[ADMIN]";
+     else if((int)who[i] -> query_security_level() >= SEC8)
+       str = "[ARCH]";
+     else if((int)who[i] -> query_security_level() >= SEC7)
+       str = "[ELDER]";
+     else if((int)who[i] -> query_security_level() >= SEC6)
+       str = "[SENIOR]";
+     else if((int)who[i] -> query_security_level() >= SEC5)
+       str = "[LORD]";
+     else if((int)who[i] -> query_security_level() >= SEC4)
+       str = "[SAGE]";
+     else if((int)who[i] -> query_security_level() >= SEC3)
+       str = "[CREATOR]";
+     else if((int)who[i] -> query_security_level() >= SEC2)
+       str = "[APPREN]";
+     else 
+       str = "[ASPIR]";
+     str += ".................";
+     str = extract(str,0,10);
+     if(who[i]->query_invis()) {
+       str = "#"+ str;
+     }
+     str += ((sh = (string)who[i]->short()))
+         ? sh
+         : (string)who[i]->query_name() +" "+
+           (string)who[i]->query_title()+" "+
+          (query_security_level() ?
+           (string)who[i]->query_al_title()   
+     : "" ) ;
+
+#ifdef PARTY_DAEMON
+     if(present("party_object", who[i])) {
+       if((string)present("party_object",who[i])->query_leader()
+          == (string)who[i]->query_name(1))
+         str += " (Leader: ";
+       else
+         str += " (Member: ";
+       str += ((string)who[i]->query_party())+")";
+     }
+#endif /* PARTY_DAEMON */
+
+     str = extract(str,0,75);
+     if(!ansi_on || inetd_call)
+       str = filter_ansi(str);
+     else
+       str = str+OFF;
+     new_str += str +"\n"; 
+   } 
+   /* Bottom line */
+
+   who = filter_array(who,"filter_wizards",this_object());
+   num_wiz = sizeof(who);
+   if(!i) {
+     str = "---- There are no players ";
+   }
+   if(i == 1) {
+     if(inetd_call)
+       str = "---- There is 1 player ";
+     else 
+       str = "---- You are all alone "; 
+   }
+   else { 
+     if(i - num_wiz == 1) {
+       str = "---- There is 1 player ";
+     } 
+     else { 
+       str = "---- There are "+ (i-num_wiz) +" players "; 
+     }
+     if(num_wiz == 1) 
+       str += "and 1 creator ";
+     else 
+       str += "and "+ num_wiz +" creators "; 
+   } 
+   str += "-------------------------------------------------------------";
+   str = extract(str,0,75);
+   new_str += str +"\n";
+   if(!inetd_call) {
+#ifdef PAGER
+     object pager;
+
+     pager = clone_object(PAGER);
+#ifdef NATIVE_MODE
+     pager->move(this_object());
+#else
+     move_object(pager, this_object());
+#endif /* NATIVE_MODE */
+     pager->page(new_str);
+#else
+     write(new_str);
+#endif  /* PAGER */
+  }
+   return new_str;
+} 
+
+
+/***********************************************************************/
+/* emote */
+
+status emote(string str) { 
+  string verb; 
+
+  verb = query_verb(); 
+  if(!str) str = "";
+  if(verb[0] == ":"[0]) str = extract(verb, 1) + " " + str; 
+  if(str == "" || str == " ") { 
+    write("Usage: emote <msg>\n"); 
+    return 1; 
+  } 
+  str = filter_ansi(str); /* always filtered */
+  write("You emote: " + query_name() +" "+ str +"\n"); 
+  if(security_level) 
+      say(query_name() +" "+ str +"\n");
+  else 
+      say("::"+query_name() +" "+ str +"\n");
+  return 1; 
+} 
+
+
+/************************************************************************/
+/* tell */
+
+protected status tell(string str){
+  object ob;  
+  string who, msg;
+#ifdef INTERMUD
+  string mud;  
+#endif
+
+  if(ghost) {  
+    write("Your ethereal vocal chords fail you...\n");  
+    return 1;  
+  }  
+  if(!str || sscanf(str, "%s %s", who, msg) != 2) {  
+    write("Usage: tell <who> <msg>\n");  
+    return 1;  
+  }
+
+#ifdef INTERMUD
+#if (INTERMUD)
+  if(secure(SEC1))
+#endif 
+    if(sscanf(who,"%s@%s", who, mud) == 2) {
+      call_other(UDP_CMD_DIR+"tell","tell",who,mud,msg);
+      return 1;
+    }
+#endif /* INTERMUD */
+
+    ob = find_living(lower_case(who));  
+    if(!ob || (ob->query_invis() &&
+       security_level < (int)ob->query_security_level())) {  
+      write("No player with that name.\n");  
+      return 1;  
+    }  
+    if(security_level < (int)ob->query_security_level() && ob->query_edit()) {
+      write("Sorry, that person is editing.  Please use mail if important.\n"); 
+      return 1;  
+    }  
+    if(!ob->ansi_on())
+      msg = filter_ansi(msg);
+    else
+      msg += OFF;
+    tell_object(ob, capitalize(query_name(1))+" tells you: "+msg+"\n");
+    write("You tell "+capitalize(who)+": "+msg+"\n");  
+    return 1;  
+}  
+
+
+     
+/****************************************************************************/
+/* whisper */
+
+protected status whisper(string str){  
+    object ob;  
+    string who, msg;  
+
+    if(ghost) {  
+      write("Your ethereal voice fails you..\n");  
+      return 1;  
+    }  
+    if(!str || !sscanf(str, "%s %s", who, msg)) {  
+      write("Usage: whisper <who> <msg>\n");  
+      return 1;  
+    }  
+    ob = find_living(lower_case(who));  
+    if(!ob || !present(ob, environment())) {  
+      write("There is no "+who+" here.\n");  
+      return 1;  
+    }  
+    if(!ob->ansi_on())
+      msg = filter_ansi(msg);
+    else
+      msg += OFF; /* turn ansi off */
+    tell_object(ob, query_name() +" whispers to you: "+ msg +" \n");  
+    write("You whisper: "+msg+"\n");  
+    say(query_name() +" whispers something to "+ capitalize(who) +".\n", ob); 
+    return 1;  
+}  
+
+
+     
+/**************************************************************************/
+/* shout */
+
+protected status shout_to_all(string str) { 
+ 
+ 
+
+    if(!str) { 
+      write("You shout.... nothing.\n"); 
+      return 1; 
+    } 
+    if(query_name(1) == "guest") {
+      write("I'm sure you don't have anything to shout about yet...\n"); 
+      return 1; 
+    }
+    if(age < 30 * 60) { 
+      write("A youngster like you, shouting?\n"); 
+      return 1; 
+    } 
+    if(ghost) { 
+      write("Your ethereal vocal chords arn't strong enough...\n"); 
+      return 1; 
+    } 
+    if(!speak_language) speak_language = "common";
+    /* the ansi code  [0m switches off ansi graphics */
+    if(speak_language == "common") {
+      check_shout(query_name() +" shouts: "+ str +" \n");
+      write("You shout: "+ str +"\n");
+    }
+    else {
+      check_shout(query_name() +" shouts in "+speak_language+
+                  ": "+ str +" \n",speak_language);
+      write("You shout in "+speak_language+": "+ str +"\n");
+    }
+    return 1; 
+} 
+
+     
+/***************************************************************************/
+
+status save_character() {  
+    save_me(1);  
+    write("Saving...\n");  
+    return 1;  
+}  
+
+
+/**************************************************************************/
+/*                  Mud Logon - calls logon() first                       */
+/**************************************************************************/
+
+void time_out() {  
+    write("Time out\n");  
+    destruct(this_object());  
+}  
+
+protected status logon() {
+    cat(WELCOME);  
+    write("Using HEAVEN7 "+ MUD_VERSION +" Mudlib.\n");
+    write("Running on a "+ version() +" Driver.\n");
+    if((sizeof(users()) == 1))
+      write("You are the first to logon!\n");
+    else if(sizeof(users()) == 2) {
+      write("There is 1 person currently connected.\n");
+    }
+    else 
+     write("There are "+(sizeof(users()) -1)+" people currently connected!\n");
+    write("Please enter your name.......> ");
+    input_to("logon2");  
+    call_out("time_out", 90);  
+    return 1;  
+}  
+
+#ifdef LOCK_OUT
+
+void destruct_lock_out() {
+  destruct(this_object());
+}
+
+#endif /* LOCK_OUT */
+
+protected void logon2(string str) { 
+    int i, length; 
+
+    if(!str || str == "") { 
+      remove_call_out("time_out"); 
+      destruct(this_object());  
+      return;  
+    } 
+    str = lower_case(str);  
+    if(str == "logon") {  
+      write("Invalid name.\n");  
+      remove_call_out("time_out"); 
+      logon();
+      return;  
+    }  
+    if((length = strlen(str)) > MAX_CHAR_NAME) {  
+      write("Name is too long (max. "+MAX_CHAR_NAME+" characters).\n");  
+      remove_call_out("time_out"); 
+      logon();
+      return;  
+    }  
+    for(i = 0; i < length; i++) {  
+      if(str[i] < 'a' || str[i] > 'z') {  
+        write("Invalid characters in name.\n");  
+        remove_call_out("time_out"); 
+        logon();
+        return;  
+      }  
+    }  
+    if(restore_object("banish/" + str)
+    && !restore_object(SAVE_NO_BANISH+ str)) {
+      write("Sorry, but that name is currently in use.\n");  
+      remove_call_out("time_out"); 
+      logon();
+      return;  
+    }
+    name = str;
+    if(!restore_me() && name != "guest") { 
+      write("\nCreating new character...\n"+
+            "Welcome "+ capitalize(name) +" !!\n");  
+    } 
+    if(sizeof(users()) >= 
+    MAX_USERS+sizeof(filter_array(users(),"filter_wizards",this_object()))) {
+      if(!secure(SEC1)) {
+        write("Sorry, "+ MUD_NAME +" is currently full.\n"+
+              "Perhaps someone might log out soon?\n");
+        remove_call_out("time_out"); 
+        destruct(this_object());
+        return;
+      }
+      else {
+        write(MUD_NAME +" is at Maximum Players.\nCreators accepted.\n");
+      }
+    }
+#ifdef LOCK_OUT
+    if(security_level < LOCK_OUT && security_level < SEC9) {
+      write(
+     MUD_NAME +" is temporarily closed.\n"+
+     "We appologise for any inconvenience.\n\n");
+      remove_call_out("time_out"); 
+      call_out("destruct_lock_out",5);
+      return;
+    }
+    else {
+      write("Creator name accepted.\n");
+    } 
+#endif /* LOCK_OUT */
+    if(name == "guest") {
+      int guest_num;
+
+      for(i = 0; i < sizeof(users()); i++) {
+        if((string)users()[i]->query_name(1) == "guest") guest_num += 1;
+      }
+      if(guest_num > MAX_NUM_GUESTS) {
+        write("Sorry, there are too many Guests.\n");
+        remove_call_out("time_out");
+        destruct(this_object());
+        return;
+      }
+      dead = 0;
+      ghost = 0;
+      remove_call_out("time_out");
+      logon7();
+      return;
+    }
+    write("Please enter unique password > ");
+    input_to("check_password", 1);  
+    return;  
+} 
+
+protected void check_password(string p) { 
+  write("\n");
+  if(++password_check > PASSWORD_CHECK) {
+    write("\nThat was your last try!\n");
+    remove_call_out("time_out"); 
+    destruct(this_object()); 
+    return;
+  }
+  if(!p || p == "") {
+    write("Please enter unique password > ");
+    input_to("check_password",1);
+    return;
+  }
+  if(!password) {
+    new_password(p);
+    return;
+  }
+  if(crypt(p, password) != password) { 
+    write("\nWrong password!"+
+          " (You have "+(PASSWORD_CHECK-password_check)+" attempts left) > ");
+    input_to("check_password",1);
+    return;
+  }
+  remove_call_out("time_out"); 
+# ifdef LOG_ENTER
+  log(LOG_ENTER, "Exit:"+ name +", Exp: "+ experience+
+                 " Lvl: "+ level +  
+                 " Gld: "+ money,0);
+# endif /* LOG_ENTER */
+  logon3();
+} 
+
+protected void new_password(string p){ 
+  write("\n"); 
+  if(!p || p == "") {
+    write("Please enter unique password > ");
+    input_to("check_password",1);
+    return;
+  }
+  if(strlen(p) < 6) { 
+    write("The password must have at least 6 characters.\n"); 
+    input_to("new_password", 1); 
+    write("Please enter password > "); 
+    return; 
+  } 
+  if(!password) { 
+    password = p; 
+    input_to("new_password", 1); 
+    write("Password (again).............> ");
+    return; 
+  } 
+  remove_call_out("time_out"); 
+  if(password != p) { 
+    write("You changed !\n");
+    destruct(this_object()); 
+    return; 
+  } 
+  password = crypt(password,0);    /* Generate new seed. */ 
+  save_me(0);
+  logon3(); 
+} 
+
+
+protected void logon3() { 
+  if(!email || email == "") { 
+    write("Please enter your EMAIL address "+
+          "(Or 'none'if you don't have one)\n"+ 
+          "> ");
+    input_to("logon4"); 
+    return; 
+  } 
+  logon5(); 
+} 
+
+protected void logon4(string maddr) { 
+  email = maddr; 
+  save_me(0);
+  logon5(); 
+} 
+
+
+protected void logon5() { 
+  if(!(gender == 1 || gender == 2)) { 
+    write("Is your character Male or Female? > "); 
+    input_to("logon6"); 
+    return; 
+  } 
+  logon7(); 
+} 
+
+
+protected void logon6(string gender_str) { 
+  gender_str = lower_case(gender_str); 
+  if(gender_str[0] == 'm') { 
+    write("Welcome, Sir!\n"); 
+    gender = 1;
+  } 
+  else if (gender_str[0] == 'f') { 
+    write("Welcome, Madam!\n"); 
+    gender = 2;
+  } 
+  else { 
+    write("Sorry, but thats too weird for this place!\n"); 
+    write("Are you, Male or Female? (type m or f) > "); 
+    input_to("logon5"); 
+    return; 
+  }   
+  save_me(0);
+  logon7(); 
+} 
+
+
+protected void logon7(){ 
+  if(name == "guest") {
+    gender = random(2) + 1; /* random male or female */
+    race = 0;
+  }
+  if(!race) {
+    write("What race do you wish to be?\n"+
+          "Dwarf, Elf, Half Giant, Halfling, Human, Minotaur, Gnome, or Orc?\n"+
+          "> ");
+    input_to("logon8");
+    return;
+  }
+  logon9_log_wizard();
+}
+
+protected void logon8(string str) {
+  if(lower_case(str) == "elf") {
+    write("There are several elvish races.\n"+
+          "High Elf, Grey Elf, Dark Elf, Wood Elf, Wild Elf, Half Elf > ");
+    input_to("logon8_validate_race");
+    return;
+  }
+  else if(lower_case(str) == "dwarf") {
+    write("There are several dwarvish races.\n"+
+          "Mountain Dwarf, Hill Dwarf > ");
+    input_to("logon8_validate_race");
+    return;
+  }
+  else
+    logon8_validate_race(str);
+}
+
+
+protected void logon8_validate_race(string str) {
+  if(!str || str == "") {
+    logon7();
+    return;
+  }
+  str = lower_case(str);
+  if(member_array(str,VALID_RACES) == -1) {
+    write("Sorry, that race is too wierd for this game.\n"); 
+    logon7(); 
+    return; 
+  } 
+  set_race(str);
+  save_me(0);
+  logon9_log_wizard(); 
+} 
+
+protected void logon9_log_wizard() {
+  if(secure(SEC1)) {
+    other_copy = this_object();
+    clone_object(WIZARD);
+    return;
+  }
+  logon9(0);
+}
+
+
+
+status query_entering() { return entering; }
+
+protected void move_enter(object where) { 
+
+  entering = 1;
+  if(objectp(where)) {
+    tell_room(where,"The statue of "+ query_name() +" starts to move!\n");
+    move_object(this_object(),where);
+    entering = 0;
+    look(0,0);
+    return;
+  }
+  else if(enter_room) {  
+    move_player("X#"+enter_room);  
+    if(!secure(SEC1)) enter_room = 0; /* reset enter room */
+  }
+  else if (!secure(SEC1))  
+    move_player("X#"+DEFAULT_ENTER);  
+  else  
+    move_player("X#"+DEFAULT_WIZ_ENTER);
+  entering = 0;
+}
+
+
+/* It is CRITICAL that nothing fails in logon9?() functions, and if
+ * they do they still allow loading of the wizard object!!
+ * So CATCH() any clones, moves, and call_others.
+ *
+ *             Zilanthius.
+ */
+
+protected void logon9(object where) { 
+  string tmp_name; 
+  status new_mail_flag;
+
+  tmp_name = name;  
+  name = 0;  
+  other_copy = find_player(tmp_name);  
+  name = tmp_name;  
+  if(other_copy && name != "guest") {  
+    write("Your character seems to already be in the game !\n");  
+    write("Throw that copy out, and log back in ? (y/n) > ");  
+    input_to("logon9_throw_out_other_copy");
+    return;  
+  }
+  enable_commands();  
+  set_living_name(lower_case(name));
+  time_to_save = age + SAVE_TIME;  /* set time before starting heart */
+  set_heart_beat(1);  
+  if(!alias_name) alias_name = capitalize(name);  
+  add_standard_commands();  
+  if(tot_value && !where) {  
+    write("You find " + tot_value + " coins of your lost money!\n");  
+    money += tot_value;  
+    tot_value = 0;  
+  }  
+  if(lower_case(name) != "tester")  
+    if(!where) { /* We don't want to see it if we */
+#if defined(AMYLAAR) || defined(MUDOS_DR)
+      if(file_time(NEWS) > last_login_time)
+        cat(NEWS);               
+      else
+        write("Nothing New in News.\n");
+      if(secure(SEC1)) {
+        if(file_time(WIZNEWS) > last_login_time)
+          cat(WIZNEWS);
+        else
+          write("Nothing New in Creator News.\n");
+      }
+#else
+      cat(NEWS);
+      if(secure(SEC1)) cat(WIZNEWS);
+#endif /* AMYLAAR */
+
+  }                       
+  if(catch(move_enter(where))) {
+    write("Entry Room Failure!\n");
+    move_object(this_object(),"room/void");
+  }
+  entering = 0; /* failsafe */
+
+  if(!where) load_auto_obj();  
+  if(is_invis && !secure(SEC2)) is_invis = 0;  
+  if(!is_invis) {
+    if(!where) check_shout(capitalize(name)+" enters the world.\n");  
+  }  
+  else  { 
+    write("\nYOU ARE INVISIBLE !\n\n");  
+  }
+  if(query_ip_number() != called_from_ip && called_from_ip)  
+  write("Your last login was from " + called_from_ip + "\n");  
+  if(last_login_time && !where) {
+    last_login = ctime(time());
+    write("Your last login was on "+ ctime(last_login_time) +".\n");  
+  }
+  last_login_time = time();
+  called_from_ip = query_ip_number();  
+  if(level == -1) { /* new player */
+    level = 1;
+    money = 250;
+    heal_self(200);
+#ifdef PURGE
+    purge = 1;
+#endif /* PURGE */ 
+  } 
+  recalc_carry();
+  recalc_ac();
+  recalc_wc();
+  save_me(0);
+#ifdef SOUL
+#ifdef NATIVE_MODE
+  if(catch(clone_object(SOUL)->move(this_object()))) {
+#else
+  if(catch(move_object(clone_object(SOUL),this_object()))) {
+#endif /* NATIVE_MODE */
+    write("Error in loading Soul.\n");
+  }
+#endif /* SOUL */
+
+#ifdef MAILER
+  if(catch((new_mail_flag = (status)call_other(MAILER,"new_mail",name)))) {
+    write("Error in querying Mail.\n");
+  }
+  if(new_mail_flag > 0) {
+    write("You have New mail.\n");
+  }
+#ifdef MAIL_FIELD_LOADER /* for default mailing fields, admin, arch etc */
+  catch(call_other(MAIL_FIELD_LOADER,"add_to_mail_field",name,security_level));
+#endif /* MAIL_FIELD_LOADER */
+#endif /* MAILER */
+
+#ifdef PURGE
+  if(!purge) {
+    weapon_prof = ({});
+    if(level > 3) {
+      if(catch(call_other(PURGE, "purge"))) {
+        write("Error in purging character.\n");
+      }
+      heal_self(200);
+      savings = 0;
+    }
+  }
+  purge = 1;
+#endif  /* PURGE */
+
+
+#ifdef PARTY_DAEMON
+  if(party) {
+    if(catch(call_other(PARTY_DAEMON, "???"))) {
+      write("Error in party object.\n");
+      party = 0;
+      return;
+    }
+    if(!call_other(PARTY_DAEMON, "query_party", party)) {
+      write("The '"+party+"' party has been disbanded!\n");
+      party = 0;
+      return;
+    }
+    if(!call_other(PARTY_DAEMON, "get_party_object", party)) {
+      write("You are no longer a member of the '"+party+"' party!\n");
+      party = 0;
+    }
+  }
+#endif /* PARTY_DAEMON */
+}  
+
+/* used by monster.c */
+
+
+
+
+protected void logon9_throw_out_other_copy(string str) {  
+  string fname1, fname2;
+  object *inv, where;  
+  int i;
+
+  if(str == "" || (str[0] != 'y' && str[0] != 'Y')) {  
+    write("Welcome another time then !!\n"); 
+    destruct(this_object());  
+    return;  
+  }  
+  if(other_copy) {
+    enable_commands();
+    sscanf(file_name(this_object()),"%s#%d",fname1,i);
+    sscanf(file_name(other_copy),"%s#%d",fname2,i);
+
+    inv = all_inventory(other_copy);  
+    for(i = sizeof(inv); i--; ) { /* so same order as old */  
+      int wt;
+
+      if(inv[i]->id("soul")) continue;
+      inv[i]->drop();
+      if(!inv[i]) continue;
+      wt = (int)inv[i]->query_weight();
+
+      if(add_weight(wt)) {  
+#ifdef NATIVE_MODE
+        if(inv[i]) inv[i]->move(this_object());  
+#else
+        if(inv[i]) move_object(inv[i], this_object());  
+#endif /* NATIVE_MODE */
+      }  
+    }  
+    where = environment(other_copy);
+    if(fname1 == fname2) {
+      other_copy->save_me(0);
+    }
+    destruct(other_copy); /* force the issue */  
+  }
+  if(restore_me() && fname1 == fname2) {
+    write("Restoring points from other copy...\n");
+  }
+  else {
+    if(security_level) {
+      write("Granting Creator Powers.\n");
+    }
+  }
+  logon9(where);  
+}  
+
+
+   
+/***************************************************************************/
+/*           Fn's called by various actions                                */ 
+/***************************************************************************/
+/* save_me() - all players saves are thru' this fn */
+
+void save_me(status value_items) {  
+  if(value_items) {
+    if(money > level * MONEY_PER_LEVEL) {  
+      tell_object(this_object(),
+                  "You feel you have a hole in your money pouch...\n");  
+       money = level * MONEY_PER_LEVEL;  
+    }
+    tot_value = compute_values(this_object());  
+  }
+  else {
+    tot_value = 0;
+  }
+  compute_auto_str();  
+  if((int)MASTER->master_file_size(SAVE_NO_BANISH+ query_name(1) +".o") > 0) {
+    save_object(SAVE_NO_BANISH+ query_name(1));
+  }
+  else if(security_level) {
+    save_object(SAVE_WIZARD+lower_case(name));
+    if(SAVE_WIZARD != SAVE_FIRST) {
+      MASTER->master_remove_file("/"+SAVE_FIRST+query_name(1)+".o");
+    }
+    if(SAVE_WIZARD != SAVE_PLAYER) {
+      MASTER->master_remove_file("/"+SAVE_PLAYER+query_name(1)+".o");
+    }
+  }
+  else if(level < 2) {
+    save_object(SAVE_FIRST+lower_case(name));
+    if(SAVE_FIRST != SAVE_PLAYER) {
+      MASTER->master_remove_file("/"+SAVE_PLAYER+query_name(1)+".o");
+    }
+  }
+  else {
+    save_object(SAVE_PLAYER+lower_case(name));
+    if(SAVE_PLAYER != SAVE_FIRST) {
+      MASTER->master_remove_file("/"+SAVE_FIRST+query_name(1)+".o");
+    }
+  }  
+}  
+
+
+/*************************************************************************/
+/* restore_me() - all player restores are thru' this fn */
+
+status restore_me() {
+  if(restore_object(SAVE_NO_BANISH + lower_case(name))) return 1;
+  if(restore_object(SAVE_WIZARD+lower_case(name))) return 1;
+  if(restore_object(SAVE_PLAYER+lower_case(name))) return 1;
+  if(restore_object(SAVE_FIRST+lower_case(name))) return 1;
+  if(restore_object("usr/"+lower_case(name))) return 1;
+  return 0; /* New player */
+}
+
+
+   
+/****************************************************************************/
+/* The reverse of loggin on  */
+
+status quit(mixed arg) {
+  if(stringp(arg)) arg = 0;
+  remove_call_out("quit");
+  if(name == "guest") {
+    destruct(this_object());
+    return 1;
+  }
+  set_heart_beat(0);  /* kill heart beat */ 
+
+#ifdef LOG_SNOOPERS
+  if(query_snoop(this_object())) log(LOG_SNOOPERS,"Quit broke snoop",0);
+#endif /* LOG_SNOOPERS */
+
+#ifdef LOG_QUITS
+  if(previous_object()) log(LOG_QUITS,"Quit called externally",0);
+#endif /* LOG_QUITS */
+
+#ifdef LOG_ENTER
+  log(LOG_ENTER, "Exit:- Exp: "+ experience+
+                 " Lvl: "+ level +  
+                 " Gld: "+ money,0);
+#endif /* LOG_ENTER */
+
+  if(!secure(SEC1)) is_invis = 0;
+  if(!is_invis) { 
+    check_shout(query_name() + " left the world.\n"); 
+  }
+  write("Saving....\n");
+#ifdef DESTRUCT_INV_ON_QUIT
+  save_me(1);
+  destruct_all_inventory(this_object());
+#else
+  save_me(arg);
+  if(secure(SEC1)) {
+    destruct_all_inventory(this_object());
+    write("Destructing excess equipment on quit for creator...\n");
+  }
+  move_or_destruct_inventory(this_object());
+#endif
+  rm(PASTE);
+  destruct(this_object()); 
+  return 1; 
+} 
+
+status Quit() {
+  if(environment()) {
+   string file;
+   int i;
+
+   file = query_current_room();
+   if(sscanf(file,"%s#%d",file,i) == 2
+   || environment()->query_no_summon() || environment()->query_no_teleport()){
+     write("A magical instability prevents you from returning to here!\n");
+   }
+   else {
+     write("You will return to this location.\n");
+     enter_room = file;
+   }
+  }
+  quit(0);
+  return 1;
+}
+
+
+/**************************************************************************/
+/* compute monetry value of inventory */
+
+int compute_values(object ob) {  
+  int total_value;  
+  object *inv;
+  int i;
+
+  if(!ob) ob = this_object();
+  inv = all_inventory(ob);
+  for(i =0; i < sizeof(inv); i++) {
+    if(inv[i]) {
+      total_value += compute_values(inv[i]);
+      total_value += (int)inv[i]->query_value()/2;
+    }
+  }
+  return total_value;
+}  
+
+
+/***************************************************************************/
+/* move or destruct inventory to environment */
+
+protected void move_or_destruct_inventory(object ob) {
+  int i, wt;
+  object *inv, env;
+
+  if(!(env = environment(ob))) {
+    destruct_all_inventory(ob);
+    return;
+  }
+  inv = all_inventory(ob);
+  for(i = sizeof(inv); i--; ) {
+    if(inv[i]) {
+      if(inv[i]->drop(1)) {
+        if(inv[i]) destruct(inv[i]);
+      }
+      else {
+        if(inv[i]) {
+          wt = (int)inv[i]->query_weight();
+          ob->add_weight(wt*(-1));
+#ifdef NATIVE_MODE
+          inv[i]->move(env);
+#else
+          move_object(inv[i], env);
+#endif /* NATIVE_MODE */
+          env->add_weight(wt);
+        }
+      }
+    }
+  }
+}
+
+
+/***************************************************************************/
+/* destruct inventory */
+
+protected void destruct_all_inventory(object ob) {
+  int i, size;
+  object *inv;
+
+  inv = all_inventory(ob);
+  for(i = 0, size = sizeof(inv); i < size; i++) {
+    if(inv[i]) destruct_all_inventory(inv[i]);
+    if(inv[i]) destruct(inv[i]);
+  }
+}
+
+ 
+/****************************************************************************/
+/* renews player object */
+void get_new_player_object() {  
+  int i;
+  string fname;
+
+  save_me(0);  
+  sscanf(file_name(this_object()),"%s#%d",fname,i);   
+  if(!(fname == WIZARD || fname == PLAYER)) return;
+  other_copy = this_object();
+#ifdef LOG_RENEWALS
+  log(LOG_RENEWALS, fname, ((security_level) ? WIZARD : PLAYER));
+#endif LOG_RENEWALS
+  if(security_level)
+      clone_object(WIZARD);
+  else
+      clone_object(PLAYER);  
+}  
+
+
+/**********************************************************************/
+/* make_path - for players */
+
+string make_path(string file) {
+  string tmp1, tmp2;
+  string *path_split;
+  int i;
+
+  if(sscanf(file,"%s..%s", tmp1, tmp2)) {
+#ifdef OLD_EXPLODE
+    path_split = explode(file+"/","/");
+#else
+    path_split = explode(file,"/");
+#endif /* OLD_EXPLODE */
+    while((i = member_array("..",path_split)) != -1) {
+      path_split = path_split[0..i-2]+path_split[i+1..sizeof(path_split)-1];
+    }
+    file = "/" +implode(path_split,"/");
+    while(sscanf(file, "%s//%s", tmp1, tmp2)) file = tmp1 + "/" + tmp2;
+  }
+  return file;
+}
+
+
+     
+/*****************************************************************************/
+/* A NO valid_read() restricted file_size */
+
+protected int FILE_SIZE(string file) {
+  return (int)MASTER->master_file_size(file); 
+}
+
+
+     
+/**************************************************************************/
+/* shout_tell - called from check_shout() */
+
+varargs void shout_tell(string str, string lang) {
+  if(!environment()) return;
+  if(this_object()->query_edit() 
+    && security_level >= (int)this_player()->query_security_level()) {
+    return;
+  }
+  if(!ansi_on) 
+    str = filter_ansi(str);
+  else
+    str += OFF; /* turn ansi off */
+  if(!lang || query_language(lang)) tell_object(this_object(),str);
+}
+
+
+     
+/***************************************************************************/
+      /* illegal patch */
+
+void illegal_patch(string what) {  
+  write("You are struck by a mental bolt from the interior of the world.\n"); 
+#ifdef LOG_ILLEGAL
+  log(LOG_ILLEGAL,"Illegal: "+what,0);
+#endif /* LOG_ILLEGAL */
+}  
+
+
+     
+/**************************************************************************/
+/* filter_users - removes invis, and players logging in */
+
+
+protected status filter_users(object ob) {
+  int sec, lvl;
+
+  if(!environment(ob)) return 0;
+  sec = (int)ob->query_security_level();
+  lvl = (int)ob->query_level();
+  if(sec) {
+    if((ob->query_invis() && sec <= security_level) || !ob->query_invis()) {
+      return 1;
+    }
+  }
+  else {
+    if((ob->query_invis() && (lvl <= level || security_level)) 
+    || !ob->query_invis()) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+status filter_wizards(object ob) {
+  return (ob->query_security_level()) ? 1 : 0;
+}
+
+     
+/***************************************************************************/
+/* sort by security level */
+
+protected status by_sec_level(object a, object b) { 
+  if((int)a->query_security_level() == (int)b->query_security_level()
+    && (int)a->query_level() < (int)b->query_level()) return 1;
+  return
+  ((int)a->query_security_level() < (int)b->query_security_level()) ? 1 : 0;
+}
+
+
+     
+/****************************************************************************/
+/* autoload */
+
+void load_auto_obj() {  
+  object ob;  
+  mixed *load;
+  int i;
+
+  load = autoload;
+
+  if(!load) return;
+  for(i = 0; i < sizeof(load); i++) {
+    if(catch((ob = clone_object(load[i][0])))) {
+      write("Error: Cannot load file.\n");
+      continue;
+    }
+    ob->init_arg(load[i][1]);
+#ifdef NATIVE_MODE
+    ob->move(this_object());
+#else
+    move_object(ob, this_object());
+#endif /* NATIVE_MODE */
+  /*
+#ifdef LOG_PLAYER_AUTO
+if(!secure(SEC1)) log(LOG_PLAYER_AUTO,"Autoloaded: "+autoload[i][0],0);
+#endif
+  */
+  }  
+}  
+
+void compute_auto_str() {  
+  object *ob;
+  int i, iarg;
+  mixed auto_load_arg, arg;
+  string fname;
+
+  if(name == "guest") return; /* no autoload stuff for guests */
+  ob = all_inventory();  
+  autoload = ({});
+  for(i = 0; i < sizeof(ob); i++) {
+    if((auto_load_arg = (mixed)ob[i]->query_auto_load())) {
+      if(intp(auto_load_arg)) { /* simple: return 1; */
+        sscanf(file_name(ob[i]),"%s#%d", fname, iarg);
+        arg = 0;
+      }
+      else if(stringp(auto_load_arg)) {  /* old way */
+        if(sscanf(auto_load_arg,"%s:%s",fname,arg) != 2) {
+          tell_object(this_object(),
+            "Invalid auto load string! Object "+ file_name(ob[i]) +"\n" +
+            "Please report this!\n");
+        }
+        else {
+          sscanf(fname,"/%s",fname);
+          sscanf(fname,"%s.lpc",fname);
+        }
+      }
+      else if(pointerp(auto_load_arg)) { /* new way */
+        if(sizeof(auto_load_arg) == 2) {
+          fname = auto_load_arg[0];
+          arg = auto_load_arg[1];
+        }
+      }
+      autoload += ({ ({ fname, arg, }), });
+    }
+  }
+}
+
+
+/**************************************************************************/
+/* more */
+
+protected status more(string file) {
+  object ob;
+
+  ob = clone_object(MORE_OB);
+#ifdef NATIVE_MODE
+  ob->move(this_object());
+#else
+  move_object(ob, this_object());
+#endif /* NATIVE_MODE */
+  ob->more(file);
+  return 1;
+}
+
+
+/************************************************************************/
+/* cat */
+
+status cat_file(string path){  
+  if(!path) return 0;  
+  path = make_path(path);
+  if(!cat(path)) return 0;
+  return 1;  
+}  
+
+
+/**************************************************************************/
+/* invis */
+
+status toggle_invis(){  
+  if(is_invis = !is_invis) {  
+    is_invis = level;  
+    say(query_name() +" "+ query_mmsgout() +".\n", this_object());  
+    tell_object(this_object(), "You are now invisible.\n");  
+  }
+  else {
+    tell_object(this_object(), "You are now visible.\n");  
+    say(query_name() +" "+ query_mmsgin() +".\n", this_object());  
+  }  
+  return 1;  
+}  
+
+/**************************************************************************/
+/* ansi */
+
+status toggle_ansi(){  
+  if(ansi_on = !ansi_on) {  
+    tell_object(this_object(), "Ansi graphics Characters are not filtered.\n"); 
+  }
+  else {
+    tell_object(this_object(), "Ansi graphics Characters are filtered "+
+                               "on shouts and tells.\n");  
+  }  
+  return 1;  
+}  
+
+
+/****************************************************************************/
+/* no wimpy */
+
+status toggle_no_wimpy() {  
+  return no_wimpy = !no_wimpy;
+}
+
+
+/**************************************************************************/
+/*  ghost */
+
+status toggle_ghost() {  
+  if(!ghost) {
+    msgin = "drifts around";
+    msgout = "drifts";
+    ghost = 1;
+  }
+  else {
+    tell_object(this_object(),  
+      "You feel a very strong force pulling your body back to reality...\n"+ 
+      "Your body solidifies in a more solid form!\n");  
+    say(query_name() + "'s body begins to solidify...\n"+  
+        query_name()+" appears whole once more!\n");  
+    ghost = 0;  
+    dead  = 0;  
+    msgin = "arrives";  
+    msgout = "leaves";
+  }  
+  save_me(1);  
+  return 1;  
+}  
+
+
+/****************************************************************************/
+/* security level routines */
+
+nomask status security(int sec_level){ 
+  if(!query_ip_number(this_player())) return 0;
+    return ((int)this_player()->query_security() >= sec_level
+           || this_player() == this_object()) ? 1 : 0;
+} 
+
+
+nomask status secure(int sec_level) {
+  object user;
+
+#ifdef AMYLAAR
+  if(!(user = (this_interactive()) ? this_interactive() : this_player())) {
+    return 0;
+  }
+#else /* 3.1.2 or mudos */
+  if(!(user = (this_player(1)) ? this_player(1) : this_player())) {
+    return 0;
+  }
+#endif
+  if(!query_ip_number(user)) return 0;
+  return ((int)user->query_security() >= sec_level) ? 1 : 0;
+}
+
+nomask int query_security() { 
+  return security_level; 
+} 
+
+nomask int query_security_level() {
+  return security_level;
+} 
+
+nomask int set_security_level(int new_level) {
+  string str;
+  int old_level;
+
+  old_level = security_level;
+
+  if(!this_player() || !interactive(this_player())
+  || previous_object() != this_player()) {
+    write("Use the 'promote' command.\n");
+    return 0;
+  }
+  if(secure(SEC9)) {
+    if(security_level < SEC9 || new_level > security_level) {
+      security_level = new_level;            
+    } /* demotion of admin is done by hand */
+  }
+  else if((secure(SEC8) && new_level < SEC8)    /* arches make elders */
+       || (secure(SEC7) && new_level < SEC6)    /* elders make lords  */
+       || (secure(SEC5) && new_level < SEC4)) { /* lords make creators */
+    security_level = new_level;
+  }
+  if(old_level == security_level) {
+    write("It is not possible for you to promote "+ query_cap_name()
+         +" to a higher security level.\n");
+     return security_level;
+   }
+   str  = (security_level >= SEC9)
+      ? "an Administator"
+      : (security_level >= SEC8)
+      ? "an Arch"
+      : (security_level >= SEC7)
+      ? "an Elder"
+      : (security_level >= SEC6) 
+      ? "a Senior"
+      : (security_level >= SEC5)
+      ? "a Lord"
+      : (security_level >= SEC4)
+      ? "a Sage"
+      : (security_level >= SEC3) 
+      ? "a Creator"
+      : (security_level >= SEC2)
+      ? "an Apprentice Creator"
+      : "an Aspirant Creator";
+
+   tell_object(this_object(),"You have become "+str+".\n"); 
+#ifdef WIZ_SCROLL
+   if(security_level <= SEC1) {
+     object scroll;
+
+     scroll = clone_object(WIZ_SCROLL);  
+#ifdef NATIVE_MODE
+     scroll->move(this_object());
+#else
+     move_object(scroll, this_object());  
+#endif /* NATIVE_MODE */
+     write(  
+       "You have been given a scroll containing valuable information.\n"+  
+       "Read it, and the docs that it outlines, now!\n\n"+  
+       "Don't seek an Elder for further advancement UNTIL you have read it\n");
+   }
+#endif
+
+   /* Note: master.c has been changed for create_wizard() */
+
+   create_wizard(query_name(1)); 
+   save_character(); 
+   write("You have promoted "+ query_name(1) +" to "+ str +".\n"); 
+   write("Security Level: "+ security_level +"\n"); 
+
+#ifdef LOG_SPONSER
+   log(LOG_SPONSER,"Lvl: "+ level +", Sec Lvl: "+ old_level,
+                   "Sec Level: "+ security_level);
+#endif   
+
+   if(old_level < SEC3) {
+     tell_object(this_object(),"Adding Wizard Commands....\n");
+     get_new_player_object(); 
+   }
+   return security_level; 
+} 
+
+
+/**********************************************************************/
+/* adds */
+
+void set_savings(int s) { savings = s; }
+
+int add_savings(int s) {
+  return savings += s;
+}
+
+int add_exp(int e) {
+  if(e > level*MAX_XP_PER_LVL)  e = level*MAX_XP_PER_LVL;
+  e = (e * (max_hp - whimpy))/max_hp; /* wimpy reduces exp */
+  if(e > 0) total_exp += e; 
+  return ::add_exp(e);
+} 
+
+int add_intoxication(int i) { 
+  return intoxicated = (intoxicated + i < 0) ? intoxicated + i : 0; 
+}
+
+int add_stuffed(int i) {
+  return stuffed = (stuffed + i < 0) ? stuffed + i : 0;
+}
+
+int add_soaked(int i) {
+  return soaked = (soaked + i < 0) ? soaked + i : 0;
+}
+
+void add_alignment(int a) {  /* This happens when you kill something! */
+  if(secure(SEC1) && !secure(SEC4)) return; 
+  if(!intp(a)) return;
+  if(!intp(alignment)) alignment = 0;
+  alignment = a + (alignment * 9)/10;
+  al_title = (alignment > NEUTRAL_AL * 100)
+      ? "(Lawful Good)"
+      : (alignment > NEUTRAL_AL * 20)
+      ? "(Lawful Neutral)"
+      : (alignment > NEUTRAL_AL * 4)
+      ? "(Neutral Good)"
+      : (alignment > - NEUTRAL_AL * 4)
+      ? "(True Neutral)"
+      : (alignment > - NEUTRAL_AL * 20)
+      ? "(Chaotic Neutral)"
+      : (alignment > - NEUTRAL_AL * 100)
+      ? "(Neutral Evil)"
+      : "(Chaotic Evil)"; 
+} 
+
+
+/************************************************************************/
+/* scars */
+
+protected void make_scar() { 
+  if (level < 10) return; 
+  scar |= 1 << random(MAX_SCAR); 
+} 
+
+
+void remove_scar() { 
+  scar = 0; 
+} 
+
+void show_scar() { 
+  int i, j, first, old_value; 
+  string *scar_desc; 
+
+  scar_desc = ({ 
+                "left leg", "right leg", "nose", "left arm", "right arm", 
+                "left hand", "right hand", "forhead", "left cheek", 
+                "right cheek",
+              }); 
+  old_value = scar; 
+  for(j = 1,first = 1; i < MAX_SCAR;j *= 2,i++) { 
+    if(scar & j) { 
+      old_value &= ~j; 
+      if(first) { 
+        write(query_name() +" has a scar on "+ query_possessive() + 
+              " " + scar_desc[i]); 
+        first = 0; 
+      }
+      else if(old_value) { 
+        write(", " + query_possessive() + " " + scar_desc[i]); 
+      }
+      else { 
+        write(" and " + query_possessive() + " " + scar_desc[i]); 
+      } 
+    } 
+  } 
+  if(!first) write(".\n"); 
+} 
+
+
+
+     
+/**************************************************************************/
+/* second_life */
+
+status second_life() {  
+  object death_mark;  
+  int i;
+
+  if(security_level) {
+    tell_object(this_object(),"   YOU DIE....luckily\n");
+    tell_object(this_object(),"Your arcane powers protect you from death.\n");
+    dead = 0;
+    return 1;
+  }
+  if(secure(SEC1)) {
+    illegal_patch("second_life");  
+  }
+  make_scar();  
+  toggle_ghost();
+  if(this_player()->query_npc()) { 
+    level        -= (level < 2) ? 0 : 1;
+    strength     -= (strength < 2) ? 0 : 1;
+    constitution -= (constitution < 2) ? 0 : 1;
+    dexterity    -= (dexterity < 2) ? 0 : 1;
+    intelligence -= (intelligence < 2) ? 0 : 1;
+    wisdom       -= (wisdom < 2) ? 0 : 1;
+    combat       -= (combat < 2) ? 0 : 1;
+    charisma     -= (charisma <  2) ? 0 : 1;
+    adj_constitution(0);
+    for(i = sizeof(classes); i--; ) {
+      call_other(this_object(),"second_life_"+ classes[i]);
+    }
+  }
+  msgin  = "drifts around";  
+  msgout = "drifts";  
+  headache    = 0;  
+  intoxicated = 0;  
+  stuffed     = 0;  
+  soaked      = 0;  
+  log_file("KILLS", name+"("+level+")"+", exp "+experience+
+           ", killed by "+(string)this_player()->query_name(1)+
+           ", Prev. Ob: "+ file_name(previous_object()) +
+           ", creator: "+creator(this_player()) + "\n");  
+  primary_attack = 0;
+  secondary_attacks = ({});
+  tell_object(this_object(),
+    "\n You slump to the ground in agony!      \n"+
+    "\n            YOU DIE...                  \n"+  
+    "  Your soul begins to leave your body...  \n"+  
+    "You have a strange feeling as you look on \n"+  
+    "     your own dead form from above.       \n\n");  
+
+#ifdef DEATH_MARK
+  death_mark = clone_object(DEATH_MARK);  
+#ifdef NATIVE_MODE
+  death_mark->move(this_object());
+#else
+  move_object(death_mark, this_object());  
+#endif /* NATIVE_MODE */
+#endif /* DEATH_MARK */
+  save_me(0);
+  return 1;  
+}  
+
+     
+/******************************************************************************/
+/* drink alco */
+
+int drink_alcohol(int drink_strength) {  
+  string tmp1;
+  int drink_bonus;
+
+  if(sscanf(race, "%s dwarf", tmp1)) drink_bonus = 2*(1+(constitution/5));  
+  if(intoxicated + drink_strength - drink_bonus > constitution * 3) {  
+   tell_object(this_object(),"You fail to reach the drink with your mouth.\n");
+   return 0;  
+  }  
+  intoxicated += drink_strength/2;  
+  if(intoxicated < 0) intoxicated = 0;  
+  if(!intoxicated && previous_object()
+  && (string)previous_object()->query_object_type() != "Potion") {
+    tell_object(this_object(),"You are completely sober.\n");
+  }  
+  else if(headache) {  
+    headache = 0;  
+    tell_object(this_object(), "Your headache disappears.\n");  
+  }  
+  if(intoxicated > max_headache) max_headache = intoxicated;  
+  if (max_headache > 8) max_headache = 8;  
+  return 1;  
+}  
+
+     
+/**************************************************************************/
+/* drink soft */
+
+status drink_soft(int drink_strength) {  
+  if(soaked + drink_strength > constitution * 8) {  
+    tell_object(this_object(),
+                "You can't possibly drink that much right now!\n" +   
+                "You feel crosslegged enough as it is.\n");  
+      return 0;  
+  }  
+  soaked += drink_strength * 2;  
+  if(soaked < 0) soaked = 0;  
+  if(!soaked && previous_object()
+  && (string)previous_object()->query_object_type() != "Potion") {
+    tell_object(this_object(),"You feel a bit thirsty.\n");
+  }
+  return 1;  
+}  
+
+
+     
+/**************************************************************************/
+/* eat food */
+
+status eat_food(int food_strength) {  
+  if(stuffed + food_strength > constitution * 8) {  
+    tell_object(this_object(),
+    "This is much too rich for you right now! Perhaps something lighter?\n"); 
+    return 0;  
+  }  
+  stuffed += food_strength * 2;  
+  if(stuffed < 0) stuffed = 0;  
+  if(!stuffed)  
+    tell_object(this_object(),"Your stomach makes a rumbling sound.\n");  
+  return 1;  
+}  
+
+
+
+
+#ifdef INTERMUD
+
+/***********************************************************************/
+/* intermud channel stuff */
+
+
+string *query_channels() {  return channels; }
+
+status query_channel(string channel) {
+  return (member_array(channel, channels) != -1) ? 1 : 0;
+}
+
+
+void add_channel(string channel) {
+  if(!query_channel(channel) && channel) channels += ({ channel, });
+}
+
+void remove_channel(string channel) {
+  int i;
+
+  if((i = member_array(channel,channels)) != -1) {
+      channels = channels[0..i-1]+channels[i+1..sizeof(channels)-1];
+  }
+}
+
+
+status intermud(string send_channel, string str, string mud) {
+  int i;
+  string verb, msg;
+  string cmd;
+
+
+#if (INTERMUD)
+  if(!secure(SEC1)) return 0;
+#endif /* WIZ_ONLY */
+  if(!str) {
+    write("   <channel> emote <msg>      - do an emote on <channel>\n"+
+          "   <channel> list             - get list of channel users\n"+
+          "   <channel> <msg>            - send msg on <channel>\n"+
+          "   intermud channel <channel> - toggle <channel> on|off\n"+
+          "   intermud off               - stop listening all channels\n"+
+          "   <channel@mud>              - send channel to only mudname\n\n");
+    write(pad_str("Currently Known Channels: ",
+          (string)call_other(UDP_CMD_DIR+"channel","known_channels") +".",75));
+    if(!(i = sizeof(channels))) {
+      write("No channels are currently open.\n");
+    }
+    else {
+      write(pad_str("You have "+i+" channel"+((i == 1) ? "" : "s")+" open: ",
+            implode(channels, ", ") +".", 75));
+    }
+    return 1;
+  }
+  if(str == "off") {
+    write("You stop listening to all channels.\n");
+    channels = ({});
+    return 1;
+  }
+  if(str == "list") cmd = "list";
+  if(sscanf(str,"emote %s",str) || sscanf(str,":%s",str)) cmd = "emote";
+  if(str == "channel") str += " "+ send_channel;
+  if(sscanf(str,"channel %s",str)) {
+    if(query_channel(str)) {
+      write("You stop listening to channel "+str+".\n");
+      remove_channel(str);
+    }
+    else {
+      write("You start listening to channel "+str+".\n");
+      add_channel(str);
+    }
+    return 1;
+  }
+  if(!sizeof(channels)) channels = ({ "intermud", });
+  call_other(UDP_CMD_DIR+"channel","channel", send_channel, str, cmd, mud);
+  return 1;
+}
+
+#endif /* INTERMUD */
+
+
+/********************************************************************/
+/* time for various time zones */
+
+
+status show_time(string arg) {
+  int n;
+
+  n = time();
+  switch(arg) {
+    case "uk":
+      n = n-36000;
+    break;
+
+    case "usa":
+      n = n -54000;
+    break;
+
+    default:
+      arg = "aust";
+    break;
+  }
+  write("Time/date @" + arg + " is " + ctime(n) + ".\n");
+  return 1;
+}
+
+
+#ifdef AMYLAAR /* this is slightly better */
+
+varargs
+status move_player(string dir_dest,mixed optional_dest_ob,status safe) {
+  set_this_player(this_object());
+  return ::move_player(dir_dest,optional_dest_ob,safe);
+}
+
+#endif /* AMYLAAR */
+
+/************************************************************************/
+/* racial bargaining bonus */
+
+int bargain_bonus() {
+  string tmp1, tmp2;
+  int bonus;
+
+  if(race) {
+    if(sscanf(race,"%self%s", tmp1, tmp2))
+      bonus -= 2;
+    else if(sscanf(race,"%sdwarf%s", tmp1, tmp2))
+      bonus -= 1;
+    else if(sscanf(race,"%sminotaur%s", tmp1, tmp2))
+      bonus -= 2;
+    else if(sscanf(race,"%sorc%s", tmp1, tmp2))
+      bonus -= 2;
+    else if(sscanf(race,"%sgiant%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%shalfling%s", tmp1, tmp2))
+      bonus += 3;
+    else if(sscanf(race,"%skender%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%spixie%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%snixie%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%skobold%s", tmp1, tmp2))
+      bonus -= 1;
+    else if(sscanf(race,"%sgoblin%s", tmp1, tmp2))
+      bonus -= 1;
+    else if(sscanf(race,"%ssprite%s", tmp1, tmp2))
+      bonus += 1;
+  }
+  return bonus;
+}
+
+
+#ifdef QUEST_ROOM
+
+/* Player's Quest Stuff. v1.01 Ramses, November 1993
+ * v1.02 revised by Angel, March 1994.
+ */
+
+
+status query_quests(string what) {
+  if(!quests || !pointerp(quests)) quests = ({});
+  return (member_array(what, quests) == -1) ? 0 : 1;
+}
+
+string *query_done_quests() {
+  if(!quests) quests = ({});
+  return quests;
+}
+
+string assign_quest(string quest_id) {
+  string temp;
+
+  if(!quest_id) {
+    if(temp = (string)QUEST_ROOM->get_new_quest(this_object())) {
+      if(query_quests(temp)) return 0;
+      log_file("QUEST.INFO", name+": current quest "+temp+", assigned "+
+      ctime(time())+"\n");
+      current_quest = temp;
+    }
+  }
+  else if(interactive(this_player())      &&
+          (this_player()->query_security_level() > SEC6)) {
+    temp = quest_id;
+    current_quest = temp;
+    log_file("QUEST.INFO", name+": current quest "+temp+", set at "+
+    ctime(time())+", by "+(string)this_player()->query_name(1)+"\n"); 
+  }
+  return temp;
+}
+
+
+status finish_quest(string quest_id) {
+  object called_by;
+  int qp;
+
+  if(quest_id == current_quest) {
+    called_by = previous_object();
+    if(qp = (int)QUEST_ROOM->finish_quest(quest_id, called_by, this_object())){
+      quests += ({ quest_id, });
+      quest_points += qp;
+      log_file("QUEST.DONE", name+": finished quest "+current_quest+" at "+
+      ctime(time())+"\n");   
+      current_quest = 0;
+      return 1;  /* success! quest is now finished! */
+    }
+  }
+  return 0;      /* failure to finish quest */
+}
+
+void quest_hint() {
+  string hint;
+
+  hint = (string)QUEST_ROOM->get_quest_hint(current_quest);
+  if(hint) 
+    write(hint);
+  else
+    write("You do not currently have a quest.\n");
+}
+
+int query_quest_points()     { return quest_points;  }
+int add_quest_points(int i)  { return quest_points += i; }
+int add_qpoints(int i)       { return quest_points += i; }
+string *query_all_quests()   { return quests;        }
+string query_current_quest() { return current_quest; }
+string query_curr_quest()    { return current_quest; }
+
+#endif /* QUEST_ROOM */
+
+status pick_up(string str) {
+  return actions::pick_up(str);
+}
+  
+
+
+#ifdef PING_PONG
+
+status ping(string who) {
+  object ob;
+
+  if (!who) {
+    write("Ping whom?\n");
+    return 1;
+  }
+  ob = find_living(who);
+  if (!ob) {
+    write("No player with that name.\n");
+    return 1;
+  }
+  if (!(ob->catch_ping())) {
+    write("Can't ping "+ capitalize(who) +".\n");
+    return 1;
+  }
+  write("You ping "+ capitalize(who) +".\n");
+  return 1;
+}
+
+
+status catch_ping() {
+  string who;
+  int i;
+
+  if(this_object()->query_edit()
+  && (int)this_player()->query_security_level() 
+   < (int)this_object()->query_security_level()) {
+    return 0;
+  }
+  pinger = this_player();
+  who = (string)pinger->query_name(1);
+  if (!who) return pinger = 0;
+  tell_object(this_object(), capitalize(who) +" pings you.\n");
+#if defined(AMYLAAR) || defined(MUDOS_DR)
+  for(i = 3; i--;) {
+    tell_object(this_object(), sprintf("%c",7));
+  }
+#endif
+  return 1;
+}
+
+
+status pong() {
+  string who;
+  int i;
+	
+  if (pinger) who = (string)pinger->query_name(1);
+  if (!(pinger && who)) {
+    pinger = 0;
+    write("No one has pinged you.\n");
+    return 1;
+  }
+  tell_object(pinger, (string)this_object()->query_name() + " pongs back.\n");
+#if defined(AMYLAAR) || defined(MUDOS_DR)
+  for(i = 3; i--; ) {
+    tell_object(pinger, sprintf("%c",7));
+  }
+#endif
+  pinger = 0;
+  write("You pong back to " + capitalize(who) + ".\n");
+  return 1;
+}
+
+#endif PING_PONG

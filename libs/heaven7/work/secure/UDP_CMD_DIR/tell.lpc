@@ -1,0 +1,61 @@
+#include <master.cfg>
+#include <pad_str.h>
+#include <udp.h>
+
+
+int udp_tell(mapping data) {
+    object ob;
+    string reply_str;
+
+    if (data[RECIPIENT] 
+    && (ob = find_player(data[RECIPIENT])) 
+    && interactive(ob)) {
+
+#ifdef WIZ_ONLY
+      if(ob->query_security_level() && !ob->query_edit())  
+#endif /* WIZ_ONLY */
+        tell_object(ob,"\n" +pad_str(capitalize(data[SENDER]) +"@"
+        +data[NAME] +" tells you: ",data[DATA], 79) +"\n");
+        
+        if(ob->query_edit())        
+          reply_str = "Sorry, that person is editing.\n";
+#ifdef WIZ_ONLY
+        else if(!ob->query_security_level()) 
+          reply_str = "Sorry, only Creators can recieve 'tells'\n";          
+#endif
+        else 
+          reply_str = pad_str("You tell "+ capitalize(data[RECIPIENT]) +"@"+
+                      LOCAL_NAME +": ", data[DATA], 79);
+
+        
+      INETD->send_udp(data[NAME], ([
+         REQUEST: REPLY,
+         RECIPIENT: data[SENDER],
+         ID: data[ID],
+         DATA: reply_str
+      ]) );
+    }
+    else
+     INETD->send_udp(data[NAME], ([
+         REQUEST: REPLY,
+         RECIPIENT: data[SENDER],
+         ID: data[ID],
+         DATA: pad_str("Root@" + LOCAL_NAME + ": ","No such player: " 
+               +capitalize(data[RECIPIENT]), 79)
+     ]) );
+    return 1;
+}
+
+
+void tell(string who, string mud, string msg) {
+  if(!MASTER->valid_player_call(previous_object())) {
+    log_file("ILLEGALS","Illegal call to inetd 'tell', by "+
+       (string)this_player()->query_name(1)+"@"+ctime(time())+"\n");
+  }
+  if(INETD->send_udp(mud, ([
+                     REQUEST: "tell",
+                     RECIPIENT: who,
+                     SENDER: (string)this_player()->query_name(1),
+                     DATA:   msg, ]), 1))
+    write("Message Sent.\n");
+}

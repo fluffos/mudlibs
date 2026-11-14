@@ -1,0 +1,632 @@
+#pragma strict_types
+#pragma save_types
+
+/* simul_ef.c
+
+  This object simulates efuns for the HEAVEN7 mudlib.
+ */
+
+#include "/include/mudlib.h"
+#include "/include/fn/shout.h"
+
+/* have 'earmuffs on shout */
+
+void shout(string str) {
+  check_shout(str,0);
+}
+
+
+
+#ifdef MUDOS_DR
+
+#ifdef MSDOS
+
+/* This is a fix for ok09193c mudos read_file() */
+
+#ifndef MAX_BYTE_READ
+#define MAX_BYTE_READ 8192
+#endif /* MAX_BYTE_READ */
+
+varargs string read_file(string file, int line, int block) {
+  string *txt_lines, txt;
+  int lines, current_byte, f_size, byte_size;
+  int  lines_in_last_block, total_lines;
+  
+  /* from more.c */
+
+  if(!MASTER->valid_read(file, previous_object(), "read_file")
+  && !MASTER->valid_read(file, this_player(), "read_file")) {
+    return 0;
+  }
+  f_size = file_size(file);
+  while(current_byte < f_size) {
+    if(current_byte + MAX_BYTE_READ >= f_size) {
+      byte_size = f_size - current_byte;
+    }
+    else {
+      byte_size = MAX_BYTE_READ;
+    }
+    txt = read_bytes(file, current_byte, byte_size);         
+    if(txt) {
+#ifdef OLD_EXPLODE
+      lines_in_last_block = sizeof(explode(txt + "\n","\n")) - 1;
+#else
+      lines_in_last_block = sizeof(explode(txt,"\n")) - 1;
+#endif /* OLD_EXPLODE */
+      total_lines += lines_in_last_block;
+    }
+    current_byte += byte_size;
+
+#ifdef MSDOS   /* hack to account for CR-LF in Olav's msdos compilation */
+    current_byte += lines_in_last_block;
+#endif
+    if(total_lines > line) break; /* ok to read_file() */
+  }
+  if(line > total_lines) return 0; /* not ok to read_file() */
+
+  if(block && txt = efun::read_file(file, line, block+1)) {
+    lines = sizeof((txt_lines = explode(txt,"\n")))-1;
+    if(block > lines) block = lines;
+    return implode(txt_lines[0..(block-1)],"\n") +"\n";
+  }
+  return efun::read_file(file, line);
+}
+
+#endif /* MSDOS */
+
+varargs string extract(string arg, int start, int end) {
+  if(start < 0) start += strlen(arg);
+  if(start < 0) start = 0;
+  if(start > end || end > strlen(arg)-1) end = strlen(arg) - 1;
+  return arg[start..end];
+}
+
+void localcmd() {
+  write("Function Disabled.\n");
+}
+
+varargs string cat(string file, int start, int block) {
+  string str;
+
+  if(!file) return 0;
+  if(!block) block = 45;
+  if(!(str = read_file(file,start,block))) {
+    str = read_file(file,start);
+  }
+  if(str) write(str);
+  return str;
+}
+
+mapping m_delete(mapping m, mixed key) {
+  mapping r;
+  r = copy(m);
+  map_delete(r, key);
+  return r;
+}
+
+int tail(string fname) {
+  int offset;
+  string str;
+
+  offset = file_size(fname);
+  if (offset < 0)
+    return 0;
+  offset -= 54 * 20;
+  if (offset < 0)
+    offset = 0;
+  str = read_bytes(fname, offset, 1080);
+  if (!str)
+    return 0;
+  if (offset)
+    str = str[strsrch(str, "\n") + 1..];
+  write(str);
+  return 1;
+}
+
+string process_string(string str) {
+  int start, end, colon;
+  string tag, func, objpath, result;
+  object target;
+  mixed err;
+
+  if (!str)
+    return str;
+  start = strsrch(str, "@@");
+  if (start == -1)
+    return str;
+  end = strsrch(str, "@@", start + 2);
+  if (end == -1)
+    return str;
+  tag = str[start + 2..end - 1];
+  colon = strsrch(tag, ":");
+  if (colon == -1)
+    return str[0..start - 1] + process_string(str[end + 2..<1]);
+  func = tag[0..colon - 1];
+  objpath = tag[colon + 1..<1];
+  target = find_object(objpath);
+  if (!target)
+    catch(target = load_object(objpath));
+  result = "";
+  if (target) {
+    err = catch(result = (string)call_other(target, func));
+    if (err || !stringp(result))
+      result = "";
+  }
+  return str[0..start - 1] + result + process_string(str[end + 2..<1]);
+}
+
+/* last time file was edited */
+
+int file_time(string path) {
+  mixed *v;
+
+  if(sizeof(v=stat(path))) return v[1];
+}
+
+
+/* when was it last loaded */
+
+int load_time(string path) {
+  mixed *v;
+
+  if(sizeof(v=stat(path))) return v[2];
+}
+
+#endif /* mudos */
+
+
+
+#if defined(NATIVE_MODE)
+
+varargs string creator(object ob) {
+  if(!ob) ob = previous_object();
+  return (string)MASTER->get_wiz_name(file_name(ob));
+}
+
+
+varargs mixed create_wizard(string owner, string domain) {
+    mixed result;
+
+    result =
+      (mixed)MASTER->master_create_wizard(owner, domain, previous_object());
+    if(stringp(result)) return result;
+    return 0;
+}
+
+
+string file_name(object ob) {
+  string file;
+
+  file = efun::file_name(ob);
+  return file[1..(strlen(file)-1)];
+}
+
+
+#endif /* NATIVE_MODE */
+
+
+
+#if defined(AMYLAAR) || defined(MUDOS_DR) /* amylaar driver */
+
+#define MAX_LOG_SIZE 50000
+
+
+void log_file(string file, string str) {
+    string file_name;
+
+    file_name = "/log/" + file;
+#ifdef AMYLAAR
+    if(file_size(file_name) > MAX_LOG_SIZE) {
+       catch(rename(file_name, file_name +".old")); 
+    }
+#endif /* AMYLAAAR */
+    write_file(file_name, str);
+}
+
+
+
+#ifndef NATIVE_MODE
+
+varargs mixed create_wizard(string owner, string domain) {
+    mixed result;
+
+    result =
+      (mixed)MASTER->master_create_wizard(owner, domain, previous_object());
+    if(stringp(result)) return result;
+    return 0;
+}
+
+#endif /* not native */
+
+
+mixed snoop(mixed snoopee) {
+    int result;
+
+    if (snoopee && query_snoop(snoopee)) {
+     write("Busy.\n");
+     return 0;
+    }
+#if defined(FLUFFOS)
+    object ob_res = snoopee ? efun::snoop(this_player(), snoopee) : efun::snoop(this_player());
+    result = ob_res ? 1 : 0;
+#elif defined(NATIVE_MODE)
+    result = efun::snoop(this_player(), snoopee);
+#elif defined(COMPAT_FLAG)
+    result = snoopee ? efun::snoop(this_player(), snoopee)
+               : efun::snoop(this_player());
+#endif /* compat - native */
+    switch (result) {
+     case -1:
+         write("Busy.\n");
+     case  0:
+         write("Failed.\n");
+     case  1:
+         write("Ok.\n");
+    }
+    if (result > 0) return snoopee;
+    return 0;
+}
+
+#endif /* amylaar or mudos */
+
+
+#ifdef AMYLAAR
+
+void localcmd() {
+  write(implode(query_actions(this_player())," ") +"\n");
+}
+
+int file_time(string path) {
+    mixed *v;
+
+    if(sizeof(v=get_dir(path,4))) return v[0];
+}
+
+mixed *unique_array(mixed *arr,string func,mixed skipnum) {
+    mixed *al, last;
+    int i, j, k, *ordinals;
+
+    if (sizeof(arr) < 32) return efun::unique_array(arr, func, skipnum);
+    for (ordinals = allocate(i = sizeof(arr)); i--; )
+     ordinals[i] = i;
+    al = order_alist(map_objects(arr, func), ordinals, (ordinals=0,arr));
+    arr = al[2];
+    ordinals = al[1];
+    al = al[0];
+    if (k = i = sizeof(al)) {
+     for (last = al[j = --i]; i--; ) {
+         if (al[i] != last) {
+          if (last != skipnum) {
+              arr[--k] = arr[i+1..j];
+              ordinals[k] = ordinals[j];
+          }
+          last = al[j = i];
+         }
+     }
+     if (last != skipnum) {
+         arr[--k] = arr[0..j];
+         ordinals[k] = ordinals[j];
+     }
+    }
+    return order_alist(ordinals[k..], arr[k..])[1];
+}
+
+#ifndef NO_MAPPINGS
+mapping m_delete(mapping m, mixed key) {
+    return efun::m_delete(copy_mapping(m), key);
+}
+#endif
+
+
+
+/*********************************************************************/
+/* Force an object to become 'this_player()'. Only callable by       */
+/* valid player objects                                              */
+
+varargs object set_this_player(object ob) {
+  if(!ob) ob = previous_object();
+  if(!MASTER->valid_player_call(previous_object())) {
+    log_file("ILLEGAL","Call set_this_player() by "+
+               file_name(previous_object()) +"\n");
+    return 0;
+  }
+  funcall(bind_lambda(#'enable_commands,ob));
+  return ob;
+}
+
+
+
+/*********************************************************************/
+/* returns an list of objects that can be found by find_living()
+   Basically giving the contents of the living 'name' hash table.
+   Used in wizard.c in 'FIND_OBJECT'  
+
+  limitations:  evaluation limits to less then 30
+
+*/
+
+
+object *find_all_living(string name) {
+  object ob, *all;
+  closure live;
+  int i;
+
+  live = unbound_lambda(({'live_name}),({#'set_living_name,'live_name}));
+  for(all = ({}),i = 0; (ob = find_living(name)) && i < 45; i++) {
+    if(member_array(ob, all) != -1) break;
+    all += ({ ob, });
+    funcall(bind_lambda(live,ob),"DUMMY");
+  }
+  for(i = sizeof(all); i--; ) {
+    funcall(bind_lambda(live,all[i]),name);
+  }
+  return all;
+}
+
+#endif
+
+
+
+#if !defined(AMYLAAR)
+
+/* fix for explode */
+
+string *explode(string txt, string delimiter) {
+  string *exploded_txt;
+  string fix;
+
+  if(!txt) return ({});
+  if(!delimiter) return ({ txt, });
+  if(delimiter != "" && sscanf(txt,delimiter +"%s", txt) == 1) {
+    fix = (delimiter == "X") ? "Y" : "X";
+    txt = fix + delimiter + txt;
+  }
+#ifndef OLD_EXPLODE
+  exploded_txt = efun::explode(txt + delimiter, delimiter);
+#else
+  exploded_txt = efun::explode(txt, delimiter);
+#endif 
+  if(fix) {
+    exploded_txt[0] = extract(exploded_txt[0],1);
+  }
+  return exploded_txt;
+}
+
+
+#endif /* MASTER312 || mudos */
+
+#if defined(MASTER312) || defined(MUDOS_DR)
+/************************************************************/
+/* returns an list of objects that can be found by find_living()
+   Basically giving the contents of the living 'name' hash table.
+   Used in wizard.c in 'FIND_OBJECT'  
+
+  limitations:  evaluation limits to less then 30,
+          works in conjunction with lfun set_living(name),
+          (it will stop evaluating if it doesn't have this
+          lfun)
+
+example lfun (it has been put in base_obj.c):
+         void set_living(string str) {
+           if(file_name(previous_object()) == SIMUL_EFUN) {
+          set_living_name(str);
+           }
+         }
+*/
+
+
+object *find_all_living(string name) {
+  object ob;
+  object *all;
+  int i;
+
+  for(all = ({}); (ob = find_living(name)) && i < 45; i++) {
+    if(member_array(ob, all) != -1) break;
+    all += ({ ob, });
+    ob->set_living("DUMMY");
+  }
+  for(i = sizeof(all); i--; ) all[i]->set_living(name);
+  return all;
+}
+  
+
+#endif /* MASTER312 */
+
+
+
+/************************************************************************/
+/* rtime -  convert a ctime() format time string back to time() int */
+/*          returns -1 if input string has wrong clock format       */
+/*          used by 'rm' action in wizard.c                         */
+
+
+#define LEAP_YEAR      ((year%4) ? 0 : 1)
+
+#define ZERO_YEAR      1970
+#define ZERO_DAY       1
+#define ZERO_HOUR      10
+#define ZERO_MIN       0
+#define ZERO_SEC       0
+#define NEXT_LEAP_YEAR 1
+
+#define YEAR   31536000
+#define DAY    86400
+#define HOUR   3600
+#define MIN    60
+
+
+int rtime(string str) {
+  int i;
+  string day, month;
+  int date, year, hour, min, sec;
+  string *month_names; 
+  int month_index, *month_days;
+  int rtime;
+
+  if(sscanf(str,"%s %s %d %d:%d:%d %d", day,
+                          month,
+                           date,
+                           hour,
+                         min,
+                         sec,
+                         year) == 7
+  || sscanf(str,"%s %s  %d %d:%d:%d %d", day,
+                           month,
+                         date,
+                         hour,
+                          min,
+                          sec,
+                          year) == 7) {
+    month = capitalize(lower_case(month));
+    month = extract(month,0,2);
+
+    month_names = ({ "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", 
+    });
+    month_days = ({ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, });
+    if((month_index = member_array(month, month_names)) == -1) return -1;
+
+    rtime = (year-ZERO_YEAR)*YEAR;
+    rtime += ((year-ZERO_YEAR+NEXT_LEAP_YEAR)/4) * DAY;
+    for(i = 0; i < month_index; i++) {
+      rtime += (month_days[i] + ((i == 1 && LEAP_YEAR) ? 1 : 0)) * DAY;
+    } 
+    rtime += (date-ZERO_DAY) * DAY;
+    rtime += (hour-ZERO_HOUR) * HOUR;
+    rtime += min * MIN;
+    rtime += sec;
+    return rtime;
+  }
+  return -1;
+}
+
+
+
+/*************************************************************************/
+/* update actions, used in room2.c                                       */
+/* limited to top 45 objects                                             */
+
+varargs void update_actions(object ob) {
+  int i;
+  object *inv;
+
+  if(!ob) ob = previous_object();
+  inv = all_inventory(ob);
+  for(i = 0; i < sizeof(inv) && i < 45; i++) {
+    if(!inv[i] || !living(inv[i])) continue;
+#ifdef NATIVE_MODE
+    inv[i]->move(ob);
+#else
+    move_object(inv[i], ob);
+#endif /* NATIVE_MODE */
+  }
+  if(environment(ob)) {
+#ifdef NATIVE_MODE
+    ob->move(environment(ob));
+#else
+    move_object(ob, environment(ob));
+#endif /* NATIVE_MODE */
+  }
+}
+
+
+#ifndef NATIVE_MODE
+
+/**********************************************************************/
+/* restrict command() usage                                           */
+
+varargs status command(string str,object ob) {
+  if(!ob) ob = previous_object();
+  if(ob != this_player() && this_player()) {
+    if((int)this_player()->query_security_level() 
+     < (int)ob->query_security_level()) {
+      return 0;
+    }
+  }
+  return efun::command(str,ob);
+}
+
+#endif /* NATIVE_MODE */
+
+
+#ifdef VERSION
+string version() { return VERSION; }
+#endif /* VERSION */
+
+#if defined(AMYLAAR) && HAVE_WIZLIST == 0
+
+#include "/include/cfg/wizlist.h"
+
+void add_worth(int value, object ob) {
+    mixed old;
+#ifdef OLD_EXPLODE
+    switch (explode(file_name(previous_object()) +"/", "/")[1]) {
+#else
+    switch (explode(file_name(previous_object()), "/")[1]) {
+#endif
+      default:
+	raise_error("Illegal call of add_worth.\n");
+      case "obj":
+      case "room":
+      case "secure":
+    }
+    if (!ob) {
+	if ( !(ob = previous_object(1)) )
+	    return;
+    }
+    if (intp(old = get_extra_wizinfo(ob)))
+        set_extra_wizinfo(ob, old + value);
+}
+
+
+void wizlist(string name) {
+    int i, pos, total_cmd;
+    int *cmds;
+    mixed *a;
+    mixed *b;
+
+    if (!name) {
+        name = (string)this_player()->query_real_name();
+        if (!name)
+            return;
+    }
+    a = transpose_array(wizlist_info());
+    cmds = a[WL_COMMANDS];
+    a[WL_COMMANDS] = a[0];
+    a[0] = cmds;
+    a = order_alist(a);
+    cmds = a[0];
+    a[0] = a[WL_COMMANDS];
+    a[WL_COMMANDS] = cmds;
+    if ((pos = member(a[WL_NAME], name)) < 0 && name != "ALL")
+        return;
+    b = allocate(sizeof(cmds));
+    for (i = sizeof(cmds); i;) {
+        b[<i] = i;
+        total_cmd += cmds[--i];
+    }
+    a = transpose_array(a + ({b}) );
+    if (name != "ALL") {
+        if (pos + 18 < sizeof(cmds)) {
+            a = a[pos-2..pos+2]+a[<15..];
+        } else if (pos < sizeof(cmds) - 13) {
+            a = a[pos-2..];
+        } else {
+            a = a[<15..];
+        }
+    }
+    write("\n\t   -=[ Top Creators of "+ MUD_NAME +" ]=-\n\n");
+    if (total_cmd == 0)
+        total_cmd = 1;
+    for (i = sizeof(a); i; ) {
+        b = a[<i--];
+        printf("%-15s %5d %2d%% (%d)\t[%4dk,%5d] %6d %d\n",
+          b[WL_NAME], b[WL_COMMANDS], b[WL_COMMANDS] * 100 / total_cmd, b[<1],
+          b[WL_EVAL_COST] / 1000,
+          b[WL_HEART_BEATS], b[WL_EXTRA], b[WL_ARRAY_TOTAL]
+        );
+    }
+    printf("\nTotal         %7d     (%d)\n\n", total_cmd, sizeof(cmds));
+}
+
+#endif /* WIZLIST */

@@ -1,0 +1,259 @@
+#include <spell.h>
+#include <rnd_name.h>
+#include <exchange.h>
+
+#define MAX_SPELL_LEVEL   SPELL_LEVEL + 10  /* < caster level */
+#define GET_LOADED_SPELL(XXX) \
+  (mixed *)clone_object("obj/shadows/get_spell")->get_loaded_spell(XXX,0,0,1)
+
+
+
+string *casting_msg(string targ, int size) {
+  int i;
+  string *msg, *data;  
+
+  data = ({
+      "You gather magical energies about you.\n",
+      "You pull in magic from all around you.\n",
+      "You feel the magic gathering all around you.\n",
+      "You gaze carefully at the "+ targ +".\n",
+      "You enchant the "+ targ +".\n",
+      "You direct the energies into the "+ targ +".\n",
+      "You chant slowly.\n",
+       "You pray with heart felt praise.\n",
+      "You pray earnestly.\n",
+  });
+  for(msg = ({}),i = 0; i < size; i++) {
+    msg += ({ data[random(sizeof(data))], });
+  }
+  return msg;
+}   
+
+
+status enchant(string targ, mixed alt_type) {
+  int i;
+  string file, spell_name;
+
+  if(!alt_type) alt_type = "level";
+
+  if(!targ || sscanf(targ,"%s with %s", targ, spell_name) != 2) {
+    notify_fail("enchant <item> with <spell name>?\n");
+    return 0;
+  }
+
+  file = file_name(this_object());
+  sscanf(file,"%s#%d",file,i);
+
+  this_player()->load_spell(({
+    "target",            targ,
+    "name",              "Enchant an Item",
+    "sphere",            alt_type, 
+    "level",             30,
+    "cast time",         30,
+    "spell object",      file,
+    "argument",          spell_name,
+    "passive",
+    "casting msg",       casting_msg(targ, 29),
+    "casting msg room", ({
+       "@@query_name:$this_player()$@@ starts enchant an item.\n",
+       "@@query_name:$this_player()$@@ continues to enchant an item.\n",
+    }),
+  }));
+  return 1;
+}
+
+
+status cast_spell(object caster,object target,object prev,int dmg) {
+  int i;
+  mixed *loaded_spell;
+  string spell_name, *caster_classes, *wand_class;
+  string tmp1, tmp2;
+  object item;
+  string protection;
+
+  target->drop(1);
+  if(!target) {
+    write("It explodes!\n");
+    destruct(this_object());
+    return 1;
+  }
+  if(living(target)) {
+    write("You cannot enchant "+  target->query_objective() +".\n");
+    destruct(this_object());
+    return 1;
+  }
+  if(target->query_quest_item()) {
+    write("The "+ target->query_name() +" is already enchanted.\n");
+    destruct(this_object());
+    return 1;
+  }
+  caster_classes = (string *)caster->query_classes();
+  if(!(wand_class = (string *)target->query_class())) wand_class = ({});
+  if(!pointerp(wand_class)) wand_class = ({});
+  if(function_exists("query_cast_level", target)) { /* wand */
+    for(i = 0; i < sizeof(caster_classes); i++) {
+      if(member_array(caster_classes[i], wand_class) != -1) break;
+    }
+    if(i == sizeof(caster_classes)) {
+      write("The "+ target->query_name() +" is already enchanted.\n");
+      destruct(this_object());
+      return 1;
+    }
+  }
+
+    /* get a loaded spell array for spell enchantment */
+
+  spell_name = (string)caster->query_spell_argument();
+  loaded_spell = GET_LOADED_SPELL(spell_name);
+  if(!sizeof(loaded_spell)) {
+    destruct(this_object());
+    return 1;
+  }
+
+    /* check for max. spell level able to be enchanted by caster */
+
+  if(objectp(SPELL_TYPE)) {
+    if(MAX_SPELL_LEVEL > (int)SPELL_TYPE->query_cast_level()) {
+      write("The "+ SPELL_TYPE->query_name() 
+           +" is not powerful enough to enchant the "+
+            target->query_name() +" with the spell "+ SPELL_NAME +".\n");
+      destruct(this_object());
+      return 1;
+    }
+  }
+  else {
+    if(MAX_SPELL_LEVEL > (int)this_player()->query(SPELL_TYPE)) {
+      write("You are not powerful enough to enchant the "+
+            target->query_name() +" with the spell "+ SPELL_NAME +".\n");
+      destruct(this_object());
+      return 1;
+    }
+  }
+  switch((string)target->query_object_type()) {
+    case "Armour":
+      if(target->query_protection()) {
+        write("The "+ target->query_name() +" is already enchanted.\n"+
+              "It cannot be enchanted any further.\n");
+        destruct(this_object());
+        return 1;
+      }
+      item = clone_object("inherit/magic_armour");
+      exchange(target, item);
+      if(!item->query_spells()) {
+        if(sscanf(lower_case(SPELL_NAME),"protection from %s",protection)
+        || sscanf(lower_case(SPELL_NAME),"resist %s",protection)) {
+          item->set_protection(protection);
+        }
+      }
+      item->set_max_charges(80);
+    break;
+
+    case "Weapon":
+      if(function_exists("weapon_hit", target)) {
+        write("The "+ target->query_name() +" is already enchanted.\n"+
+              "It cannot be enchanted any further.\n");
+        destruct(this_object());
+        return 1;
+      }
+      item = clone_object("inherit/magic_weapon");
+      exchange(target, item);
+      item->set_max_charges(80);
+    break;
+
+    default:
+      if(target->query_ac() || target->query_wc()) {
+        write("The "+ target->query_name() +" explodes!\n");
+        say("You see a flash of light from "+ caster->query_name() +".\n");
+        destruct(target);
+        if(!this_object()) return 1;
+        destruct(this_object());
+        return 1;
+      }
+      if(target->id("stick") || target->id("torch")
+      || target->id("branch") || target->id("wand")
+      || target->id("staff") || target->id("rod")
+      || target->id("gem")) {
+        item = clone_object("inherit/wand");
+        exchange(target, item);
+        item->set_max_charges(100);
+        if(target->id("staff")) {
+          item->set_name("staff");
+        }
+        else if(target->id("rod")) {
+          item->set_name("rod");
+        }
+        else if(!target->id("gem")) {
+          item->set_name("wand");
+          item->set_short("Wand");
+        }       
+        item->set_long("It looks like a "+ target->query_name() +
+                       " with runes carved in it.\n");
+        item->set_read("The runes are magical, you cannot read them.\n");
+        break;
+      }
+      write("You cannot enchant the "+ target->query_name() +".\n");
+      destruct(this_object());
+      return 1;
+    break;
+  }
+  if(objectp(SPELL_TYPE)) {
+    SPELL_TYPE->adj_charges((SPELL_COST*(-3))/2);
+  }
+  else {
+    call_other(caster,"adj_"+ SPELL_TYPE +"_points", (SPELL_COST*(-3))/2);
+  }
+  item->set_info("@@query_charges_string:$this_object()$@@"+
+                 "@@query_classes_string:$this_object()$@@"+
+                 "@@query_level_string:$this_object()$@@"+
+                 "@@query_protection_string:$this_object()$@@"+
+                 "@@query_spell_triggers:$this_object()$@@");
+  if(!protection) {
+    item->add_spell(spell_name);
+    for(i = 0; i < sizeof(caster_classes); i++) {
+      if(member_array(caster_classes[i], wand_class) == -1) {
+        wand_class += ({ caster_classes[i], });
+      }
+    }
+    item->set_class(wand_class);
+    item->adj_charges(SPELL_COST);
+    if(SPELL_LEVEL > (int)item->query_cast_level()) {
+      item->set_cast_level(SPELL_LEVEL);
+    }
+  }
+  item->set_enchanted(1);
+  move_object(item, caster);
+  write("You enchant the spell "+ SPELL_NAME +" into the "+
+         target->query_name() +".\n");
+  item->info();
+  say(caster->query_name()+" enchants a");
+  if(SPELL_LEVEL < 5)
+    say(" small ");
+  else if(SPELL_LEVEL < 10)
+    say(" ");
+  else if(SPELL_LEVEL < 15)
+    say(" powerful ");
+  else if(SPELL_LEVEL < 20)
+    say(" very powerful ");
+  else
+    say("n extremely powerful ");
+  if(sscanf(SPELL_TYPE,"%ssphere%s", tmp1, tmp2)) 
+    say("prayer into the "+ target->query_name() +".\n");
+  else
+    say("spell into the "+ target->query_name() +".\n");
+  if(COMPONENT) {  /* destruct component list */
+    for(i = 0; i < sizeof(COMPONENT); i++) {
+      if(COMPONENT[i]) COMPONENT[i]->drop(1);
+      if(COMPONENT[i] && COMPONENT[i] != target) destruct(COMPONENT[i]);
+    }
+  }
+  move_object(this_object(), caster);
+  destruct(target);
+  destruct(this_object());
+  return 1;
+}
+
+
+
+/* Native Mode Move */
+
+#include <move.h>

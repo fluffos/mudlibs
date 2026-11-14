@@ -1,0 +1,367 @@
+/*
+ * UDP port handling code. Version 0.4.3
+ * Written by Nostradamus for Zebedee.
+ * Developed from an original concept by Alvin@Sushi.
+ */
+
+#include <master.cfg>
+#include <udp.h>
+#ifndef send_imp
+#define send_imp(h, p, d) 0
+#endif
+#undef DATE
+
+#ifdef ZEBEDEE
+#include <defs.h>
+#elif !defined(DATE)
+#define DATE		ctime(time())[4..15]
+#endif
+
+#define MAX_PACKET_LEN	1024
+
+#define UNKNOWN		0
+#define UP		time()
+#define DOWN		(-time())
+
+#define DELIMITER	"|"
+
+private mapping hosts, pending_data, incoming_packets;
+private int packet_id;
+
+void set_host_list();
+varargs int send_udp(string mudname, mapping data, int expect_reply);
+
+#ifdef DEBUG
+
+void debug(string msg) {
+    object ob;
+
+    if (ob = find_player("nostradamus"))
+	tell_object(ob, "Debug: " + msg);
+}
+
+#endif /* DEBUG */
+
+#if !defined(COMPAT_FLAG) || defined(ZEBEDEE)
+void create() {
+#else
+void reset(mixed arg) {
+    if (arg)
+	return;
+#endif
+    pending_data = ([ ]);
+    incoming_packets = ([ ]);
+    set_host_list();
+}
+
+void set_host_list() {
+    mixed data;
+
+    hosts = ([ ]);
+    if (data = read_file(HOST_FILE)) {
+	int i;
+
+	data = explode(data, "\n") - ({ "" });
+	for(i = sizeof(data); i--; ) {
+	    if (data[i][0] == '#')
+		continue;
+	    data[i] = explode(data[i], ":");
+	    hosts[lower_case(data[i][HOST_NAME])] = ({
+		capitalize(data[i][HOST_NAME]),
+		data[i][HOST_IP],
+		to_int(data[i][HOST_UDP_PORT]),
+		data[i][HOST_COMMANDS..],
+		UNKNOWN
+	    });
+	    send_udp(data[i][HOST_NAME], ([ REQUEST: PING ]), 1);
+	}
+    }
+}
+
+private mixed decode_packet(string packet) {
+    string *data;
+    mapping ret;
+    string pkt_class, info;
+    int i;
+
+    data = explode(packet, DELIMITER);
+    if (data[0][0..strlen(PACKET)] == PACKET + ":") {
+	int id, n;
+
+	if (sscanf(data[0][strlen(PACKET)+1..],
+	"%s:%d:%d/%d", pkt_class, id, i, n) != 4)
+	    return 0;
+	pkt_class = lower_case(pkt_class) + ":" + id;
+	if (pointerp(incoming_packets[pkt_class])) {
+	    incoming_packets[pkt_class][i-1] = packet[strlen(data[0])+1..];
+	    if (member_array(0, incoming_packets[pkt_class]) == -1) {
+		ret = decode_packet(implode(incoming_packets[pkt_class], ""));
+		incoming_packets = m_delete(incoming_packets, pkt_class);
+		return ret;
+	    }
+	} else {
+	    incoming_packets[pkt_class] = allocate(n);
+	    incoming_packets[pkt_class][i-1] = packet[strlen(data[0])+1..];
+	    if (!pending_data[pkt_class])
+		call_out("incoming_time_out", TIME_OUT, pkt_class);
+	}
+	return 1;
+    }
+    ret = ([ ]);
+    for(i = 0; i < sizeof(data); i++) {
+	if (sscanf(data[i], "%s:%s", pkt_class, info) != 2)
+	    return 0;
+	switch(pkt_class) {
+	    case DATA:
+		info = implode(data[i..], DELIMITER)[strlen(DATA)+1..];
+		break;
+	    case REQUEST:
+	    case SENDER:
+	    case RECIPIENT:
+		info = lower_case(info);
+		break;
+	}
+	if (info[0] == '$')
+	    ret[pkt_class] = info[1..];
+	else if ((string)(ret[pkt_class] = (int)info) != info)
+	    ret[pkt_class] = info;
+	if (pkt_class == DATA)
+	    return ret;
+    }
+    return ret;
+}
+
+private int valid_request(mapping data) {
+    mapping host_data;
+    
+    if (!data[NAME] || !(host_data = hosts[lower_case(data[NAME])])) {
+	log_file(LOG_FILE, DATE + ": Unknown mud.\n");
+	return 0;
+    }
+    if (data[HOST] != host_data[HOST_IP]) {
+	log_file(LOG_FILE, DATE + ": Host mismatch.\n");
+	return 0;
+    }
+    if (!data[REQUEST] ||
+    (data[REQUEST] != REPLY && data[REQUEST] != PING &&
+    member_array("*", host_data[HOST_COMMANDS]) == -1 &&
+    member_array(data[REQUEST], host_data[HOST_COMMANDS]) == -1)) {
+	log_file(LOG_FILE, DATE + ": Illegal command.\n");
+	return 0;
+    }
+    return 1;
+}
+
+void receive_udp(string sender, string packet) {
+    mapping data;
+    string err;
+
+#if 0
+    if (!previous_object() ||
+    file_name(previous_object()) != __MASTER_OBJECT__)
+	return;
+#endif
+    if (!mappingp(data = decode_packet(packet))) {
+	if (!data)
+	    log_file(LOG_FILE, DATE + ": Received invalid packet.\nSender: " +
+	    sender + "\nPacket:\n" + packet + "\n\n");
+	return;
+    }
+    data[HOST] = sender;
+    if (!valid_request(data)) {
+	log_file(LOG_FILE, "Sender: " + sender + "\nPacket:\n" +
+	packet + "\n\n");
+	return;
+    }
+    switch(data[REQUEST]) {
+	case PING:
+	    hosts[lower_case(data[NAME])][HOST_STATUS] = UP;
+	    send_udp(data[NAME], ([ REQUEST: REPLY, ID: data[ID] ]) );
+	    break;
+	case REPLY:
+	    pending_data =
+	    m_delete(pending_data, lower_case(data[NAME]) + ":" + data[ID]);
+	    if (data[RECIPIENT]) {
+		object ob;
+
+		if (ob = find_player(data[RECIPIENT]))
+		    tell_object(ob, "\n" + data[DATA]);
+		else if (err = catch(
+		data[RECIPIENT]->udp_reply(copy_mapping(data))))
+		    log_file(LOG_FILE, DATE + ": Error in file: " +
+		    data[RECIPIENT] + "\n" + err + "\n");
+	    }
+	    else if (data[DATA])
+		log_file(LOG_FILE, DATE + ": Reply from " + data[NAME] +
+		"\n" + data[DATA] + "\n\n");
+	    break;
+	default:
+	{
+	    int ret;
+
+	    if ((err = catch(ret = call_other(
+	    UDP_CMD_DIR + data[REQUEST], "udp_" + data[REQUEST],
+	    copy_mapping(data)))) ||
+	    !ret) {
+		send_udp(data[NAME], ([
+		    REQUEST: REPLY,
+		    RECIPIENT: data[SENDER],
+		    ID: data[ID],
+		    DATA: "Root@" + LOCAL_NAME + ": " +
+		    capitalize(data[REQUEST]) + " request failed.\n"
+		]) );
+		log_file(LOG_FILE, DATE + ": " +
+		data[REQUEST] + " failed.\n" +
+		(err ? err : "No error.") + "\n");
+	    }
+	    break;
+	}
+    }
+    if (hosts[lower_case(data[NAME])])
+	hosts[lower_case(data[NAME])][HOST_STATUS] = UP;
+}
+
+private int match_mud_name(string mudname, string match_str) {
+    return mudname[0..strlen(match_str)-1] == match_str;
+}
+
+private string encode_packet(mapping data) {
+    int i;
+    mixed indices, tmp;
+    string ret;
+
+    for(i = sizeof(indices = m_indices(data)); i--; ) {
+	if (indices[i] == DATA || !data[indices[i]])
+	    continue;
+	if (pointerp(tmp = data[indices[i]]))
+	    tmp = file_name(tmp);
+	else if (stringp(tmp) && (tmp[0] == '$' ||
+	(string)to_int(tmp) == (string)tmp))
+	    tmp = "$" + tmp;
+	if (ret)
+	    ret += DELIMITER + indices[i] + ":" + tmp;
+	else
+	    ret = indices[i] + ":" + tmp;
+    }
+    if (ret) {
+	if (data[DATA])
+	    ret += DELIMITER + DATA + ":" + data[DATA];
+	return ret;
+    }
+}
+
+string *explode_packet(string packet, int len) {
+    if (strlen(packet) <= len)
+	return ({ packet });
+    return ({ packet[0..len-1] }) + explode_packet(packet[len..], len);
+}
+
+varargs int send_udp(string mudname, mapping data, int expect_reply) {
+    mixed host_data;
+    string *packet_arr;
+    string packet;
+    int i;
+    string file;
+
+    if(previous_object() 
+    && sscanf(file_name(previous_object()),UDP_CMD_DIR+"%s",file) != 1) {
+      return 0; /* cmd from illegal object */
+    }
+    mudname = lower_case(mudname);
+    if (!(host_data = hosts[mudname])) {
+	string *names;
+
+	if (sizeof(names = filter_array(
+	m_indices(hosts), "match_mud_name", this_object(), mudname)) == 1)
+	    host_data = hosts[names[0]];
+	else {
+	    write("Unknown mud: " + mudname + "\n");
+	    return 0;
+	}
+    }
+    if (data[REQUEST] != PING && data[REQUEST] != REPLY &&
+    member_array("*", host_data[HOST_COMMANDS]) == -1 &&
+    member_array(data[REQUEST], host_data[HOST_COMMANDS]) == -1) {
+	write(capitalize(data[REQUEST]) + ": Command unavailable @" +
+	host_data[HOST_NAME] + "\n");
+	return 0;
+    }
+    if (expect_reply) {
+	/* Don't use zero. */
+	packet_id++;
+	pending_data[lower_case(host_data[HOST_NAME]) + ":" + packet_id] =
+	data + ([ NAME: host_data[HOST_NAME] ]);
+	call_out("reply_time_out", TIME_OUT,
+	lower_case(host_data[HOST_NAME]) + ":" + packet_id);
+	data[ID] = packet_id;
+    }
+    data += ([ NAME: LOCAL_NAME, UDP_PORT: LOCAL_UDP_PORT ]);
+    if (!(packet = encode_packet(data))) {
+	if (expect_reply)
+	    pending_data = m_delete(pending_data,
+	    lower_case(host_data[HOST_NAME]) + ":" + packet_id);
+	write("inetd: Illegal packet.\n");
+	log_file(LOG_FILE, DATE + ": Illegal packet sent by " +
+	file_name(previous_object()) + "\n\n");
+	return 0;
+    }
+    if (strlen(packet) <= MAX_PACKET_LEN)
+	packet_arr = ({ packet });
+    else {
+	string header;
+	int max;
+
+	header = PACKET + ":" + lower_case(LOCAL_NAME) + ":" +
+	(expect_reply ? packet_id : ++packet_id) + ":";
+	packet_arr = explode_packet(packet,
+	MAX_PACKET_LEN - (strlen(header) + 8));
+	for(i = max = sizeof(packet_arr); i--; )
+	    packet_arr[i] =
+	    header + (i+1) + "/" + max + DELIMITER + packet_arr[i];
+    }
+    for(i = sizeof(packet_arr); i--; ) {
+	if (!send_imp(
+	host_data[HOST_IP], (int)host_data[HOST_UDP_PORT], packet_arr[i])) {
+	    write("inetd: Error in sending packet.\n");
+	    return 0;
+	}
+    }
+    return 1;
+}
+
+private void reply_time_out(mixed id) {
+    mapping data;
+
+    if (data = pending_data[id]) {
+	if (data[REQUEST] != PING) {
+	    object ob;
+
+	    if (data[SENDER] && (ob = find_player(data[SENDER])))
+		tell_object(ob, "\ninetd: " + capitalize(data[REQUEST]) +
+		" request to " + (data[RECIPIENT] ?
+		capitalize(data[RECIPIENT]) + "@" + data[NAME] : data[NAME]) +
+		" timed out.\n");
+	}
+	if (hosts[lower_case(data[NAME])])
+	    hosts[lower_case(data[NAME])][HOST_STATUS] = DOWN;
+	/* Should this be outside the if() ? */
+	incoming_packets =
+	m_delete(incoming_packets, lower_case(data[NAME]) + ":" + id);
+    }
+    pending_data = m_delete(pending_data, id);
+}
+
+private incoming_time_out(string id) {
+    incoming_packets = m_delete(incoming_packets, id);
+}
+
+mixed query(string what) {
+    switch(what) {
+	case "hosts":
+	    return hosts;
+	case "pending":
+	    return pending_data;
+	case "incoming":
+	    return incoming_packets;
+    }
+}

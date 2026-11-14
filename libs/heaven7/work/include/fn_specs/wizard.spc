@@ -1,0 +1,135 @@
+protected status edit(string file);
+protected status promote(string str);
+protected status load(string str);
+protected status update(string str, status no_reload);
+protected status Update(string str);
+protected status cd(string str);
+protected status makedir(string str);
+protected status removedir(string str);
+protected status dest(string str);
+protected status snoop_on(string str);
+protected status local_commands();
+protected status force_player(string str);
+protected status zap(string str);
+protected status heal(string str);
+protected status  stat(string str);
+protected status shut_down_game(string str);
+
+protected status list_peoples(string arg);
+protected status clone(string file);
+protected status echoall(string str);
+protected status echoto(string str);
+protected status wiz(string str);
+protected status home();
+protected status wizard_wizlist(string arg);
+
+protected status Delete(string arg);
+protected status delete(string arg, status arg2);
+protected void delete_files_prompt(string arg);
+protected status dir(string str);
+protected void print_files(string arg);
+protected void print_verbose(string arg);
+
+protected status plural_filter(object ob, string object_id);
+protected status present_filter(object ob, object who);
+protected status unique_filter(object ob, mixed *ob_list);
+protected status dot_filter(string file);
+protected status pattern_filter(string str, string pattern);
+protected status directory_filter(string file, string path);
+protected status file_filter(string file, string path);
+
+string set_edtitle(string s);
+string query_path();
+string query_msgtrans();
+string query_msghome();
+string query_mclone();
+string query_mdest();
+
+status toggle_edit(status silently);
+string parse_msg(string msg, object ob);
+
+string string_array(mixed *arr);
+string plural_to_single(string plural);
+protected varargs object *FIND_OBJECT(string str, object who);
+protected object *PROCESS_ARG(string arg);
+object *PROCESS_ARG_OB(mixed *ob_list, object *ob);
+status copy_file(string in_file, string out, status overwrite);
+protected void add_date(string file);
+protected string read_date(string file);
+string parse_msg(string msg, object ob);
+protected status edit(string file);
+protected status load(string str);
+protected status clone(string file);
+protected status show_main_log();
+protected status show_log(string who);
+protected status show_debug_log();  
+protected status makedir(string str);
+protected status removedir(string str);
+protected status snoop_on(string str);
+protected status force_player(string str);
+protected status zap(string str);
+protected status heal(string str);
+protected status stat(string str);
+protected status shut_down_game(string str);
+protected status Delete(string str);
+varargs protected status delete(string str, status prompt_off);
+protected void delete_files_prompt(string answer);
+protected void delete_all_files(string arg);
+protected status dir(string str);
+protected void print_files(string answer);
+protected void print_verbose(string answer);
+protected status duplicate(string str);
+protected status clean(string str);
+protected status bomb();
+protected status dest_ob(string arg);
+protected status goin(string str);
+protected status goto(string str);
+protected status Put(string str);
+protected status wiz_get(string str);
+protected status patch(string str);
+varargs protected status Reset_ob(string arg, status reset_arg);
+protected status reset_ob(string arg);
+protected status set_lighting(string str);
+protected status grab(string str);
+protected status Cat_file(string str);
+varargs protected status copy(string str, status overwrite, status mv);
+protected status copy_with_overwrite(string str);
+protected status deltree(string path);
+protected void answer_deltree(string ans);
+protected void delete_dir(string path);
+protected status find_file(string str);
+protected string search_pattern(string pattern, string path, status flg);
+protected status path_tree(string path);
+protected status Path_tree(string path);
+protected void answer_tree_prompt(string ans);
+protected void tree_prompt(string path, int *path_status);
+protected void skip();
+protected string *file_tree(string path, int *path_status);
+
+string wildcard_format(string file);
+int format_number(string format);
+string match_format(string file,string format_in,string format_out);
+void do_copy(string arg);
+status domain(string arg);
+
+/* wizard message sets */
+
+status wizard_msghome(string str);
+
+status wizard_invis_name(string str);
+status wizard_msgtran(string str);
+status wizard_mdest(string str);
+status wizard_mclone(string str);
+status wizard_msgout(string str);
+status wizard_msgin(string str);
+status wizard_mmsgout(string str);
+status wizard_mmsgin(string str);
+status wizard_edtitle(string str);
+status wizard_title(string str);
+status wizard_align(string str);
+status wizard_pretitle(string str);
+status wizard_review();
+status filter_zeros(string str);
+/* tamsyn */
+status lpc(string str);
+varargs void show_results( mixed val, string label, int no_label,int no_newline);

@@ -1,0 +1,632 @@
+#include <mudlib.h>
+inherit BASE;
+
+#include <move.h>
+#include <bad_file.h>
+
+/* 
+   help calls this_player() for valid_help(subtopic)
+   if it returns 1 the player will see help
+
+ */
+
+#define DEFAULT_FILE      "misc.hlp"
+#define DEFAULT_SUBTOPIC  "general"
+#define HELP_DIR          "/help/"
+#define MANUAL_DIR        "/manuals/"
+#define DELIMITER         "^#^\n"
+#define MAX_LENGTH        4000   /* max. characters in help text */
+#define MAX_READ_BYTE     8192   /* read file in 8 KB blocks */
+#define FILE_SIZE(X)      (int)MASTER->master_file_size(X)
+
+/* position offset */
+
+#define TOPIC    0
+#define SUBTOPIC 1
+#define HELP_TXT 2
+
+/* error codes */
+
+#define NO_HELP      0
+#define READ_ERROR   1
+#define TOPIC_EXISTS 2
+#define CORRUPT      3
+#define OVERSIZE     4
+#define NO_ACCESS    5
+#define CAT_ERROR    6
+
+#ifdef NATIVE_MODE
+void create() {
+#else
+void reset(status arg) {
+  if(arg) return;
+#endif /* native */
+  set_name("help");
+  set_alt_name("help maker");
+  set_short("Help Maker");
+  set_long(
+"                    -=[ Help Maintainer ]=-\n\n"+
+"help [topic]                                     Show Help\n"+
+"convert [file] [topic name] [<topic category>]   File->Help Data\n"+
+"hdir [directory] [category]                      Dir->Help Data\n"+
+"ut                                               Update All Categories\n"+
+"uh [file] [topic]                                Update Help Data\n"+
+"extract [file] [topic]                           Help Data->File\n"+
+"del [topic]                                      Delete Help Data\n");
+}
+
+
+void init() {
+  add_action("help","help");
+  add_action("convert","convert");
+  add_action("convert_dir","hdir");
+  add_action("update","ut");
+  add_action("ext", "extract");
+  add_action("uh","uh");
+  add_action("delete_topic","del");
+}
+  
+status get() { return 1; }
+
+status drop(status arg) { return 1; }
+
+/************************************************************************/
+/* error codes */
+
+string help_error(int code) {
+  notify_fail(({ 
+     "No Help is Available.\n",
+     "Error Reading File.\n",
+     "Topic Already Exists.\n",
+     "Help File Corrupt\n",
+     "Help File too large to convert.\n",
+     "Help File is not relevant to you.\n",
+     "Error in Category File.\n",
+  })[code]);
+}
+
+
+/************************************************************************/
+/* convert category files into subtopic data array */
+
+string *load_subtopic_file(string file) {
+  string *data, file_data, tmp;
+
+  if(!(file_data = read_bytes(file,0,FILE_SIZE(file)))) {
+    help_error(READ_ERROR);
+    return ({});
+  }
+  while(sscanf(file_data,"%s\n\n%s",file_data,tmp)) file_data += "\n" + tmp;
+#ifdef OLD_EXPLODE
+  data = explode(file_data +"\n", "\n");
+#else
+  data = explode(file_data, "\n");
+#endif /* OLD_EXPLODE */
+  if(data[sizeof(data)-1] == "") data = data[0..(sizeof(data)-2)];
+  return data;
+}
+
+
+/*************************************************************************/
+/* convert help data files into help data array */
+
+string *load_help_file(string topic_file) {
+  string help_data, *tmp_data, *topic_data;
+  int fp, fp_end;
+
+  for(topic_data = ({}), fp = 0; fp < FILE_SIZE(topic_file); fp += fp_end) { 
+    fp_end = MAX_READ_BYTE;
+    if(fp_end + fp > FILE_SIZE(topic_file)) fp_end = FILE_SIZE(topic_file)-fp;
+    if(!(help_data = read_bytes(topic_file,fp,fp_end))) {
+      help_error(READ_ERROR);
+      return ({});
+    }
+#ifdef OLD_EXPLODE
+    tmp_data = explode(help_data + DELIMITER, DELIMITER);
+#else
+    tmp_data = explode(help_data, DELIMITER);
+#endif /* OLD_EXPLODE */
+    if(sizeof(tmp_data) < 2 && sizeof(topic_data) < 2) {
+      help_error(CORRUPT);
+      return ({});
+    }
+    if(sizeof(topic_data) > 1) {
+      topic_data = topic_data[0..(sizeof(topic_data)-2)]
+                 + ({ topic_data[sizeof(topic_data)-1] + tmp_data[0], });
+    }
+    if(sizeof(tmp_data) > 1) topic_data += tmp_data[1..(sizeof(tmp_data)-1)];
+   
+#ifdef MSDOS
+#ifdef OLD_EXPLODE
+    fp_end += sizeof(explode(help_data +"\n","\n"))-1;
+#else
+    fp_end += sizeof(explode(help_data,"\n"))-1;
+#endif /* OLD_EXPLODE */
+#endif /* MSDOS */
+  }
+  return topic_data;
+}
+
+
+/*************************************************************************/
+/* get the help text from the help data files */
+
+string query_help_string(string topic) {
+  int position;
+  string alpha, topic_file;
+  string *help_data;
+  string subtopic, *subtopic_list;
+
+
+  alpha = topic[0..0];
+  alpha = lower_case(alpha);
+  if(alpha[0] < 'a' || alpha[0] > 'z') {    
+    topic_file = HELP_DIR + DEFAULT_FILE;
+  }
+  else {
+    topic_file = HELP_DIR + alpha + alpha + alpha +".hlp";
+  }
+  if(FILE_SIZE(topic_file) < 1) {
+    help_error(NO_HELP);
+    return 0;
+  }
+  if(!sizeof((help_data = load_help_file(topic_file)))) return 0;
+  if((position = member_array(topic, help_data)) == -1) {
+    help_error(NO_HELP);
+    return 0;
+  }
+  if(position + HELP_TXT >= sizeof(help_data)) {
+    help_error(CORRUPT);
+    return 0;
+  }
+  sscanf(help_data[position+SUBTOPIC],"SUBTOPIC-%s",subtopic);
+#ifdef OLD_EXPLODE
+  subtopic_list = explode(subtopic +"/","/");
+#else
+  subtopic_list = explode(subtopic,"/");
+#endif /* OLD_EXPLODE */
+  if(!this_player()->valid_help(subtopic_list)) {
+    help_error(NO_ACCESS);
+    return 0;
+  }
+  return help_data[position+HELP_TXT] +"\nCategory: "+ subtopic +" help.\n";
+}
+
+
+/*************************************************************************/
+/* get formated text from subtopic (category) data files */
+ 
+string query_subtopic_string(string subtopic) {
+  string tmp, *data, str;
+  int i;
+
+  sscanf(subtopic,"%s %s",subtopic,tmp);  
+  if(bad_file(subtopic)) return 0;
+  if(FILE_SIZE(HELP_DIR +"subtopic/"+ subtopic +".sub") < 1) {
+    help_error(CAT_ERROR);
+    return 0;
+  }
+  data = load_subtopic_file(HELP_DIR +"subtopic/"+ subtopic +".sub");
+  if(!sizeof(data)) return 0;
+  if(!this_player()->valid_help(({ subtopic, }))) {
+    help_error(NO_ACCESS);
+    return 0;
+  }
+  for(i = 0; i < sizeof(data); i++) {
+    data[i] += "                                       ";
+    data[i] = extract(data[i],0,24) +" ";
+    if(!((i+1)%3)) data[i] += "\n";
+  }
+  str = "                      -=[ "+ capitalize(subtopic) +" Help ]=-\n\n";
+  str += implode(data,"") +"\n";
+  return str +"\nThere are "+ i +" topics in "+ subtopic +" help.\n";
+}
+
+
+/************************************************************************/
+/* add a 'help' file to the help data files */
+
+status convert_file(string file, string topic, string subtopic) {
+  string alpha, topic_file, file_data, *subtopic_data;
+  string *help_data, topic_txt, *subtopic_list;
+  int i, position;
+
+  if(FILE_SIZE(file) > MAX_LENGTH) {
+    help_error(OVERSIZE);
+    return 0;
+  }
+  if(!(topic_txt = read_bytes(file,0,FILE_SIZE(file)))) {
+    help_error(READ_ERROR);
+    return 0;
+  }
+  if(!topic) {
+    for(i = strlen(file)-1; file[i] != '/' && i; i--);
+    topic = file[(i+1)..(strlen(file)-1)];
+  }
+  alpha = topic[0..0];
+  alpha = lower_case(alpha);
+  if(alpha[0] < 'a' || alpha[0] > 'z') {    
+    topic_file = HELP_DIR + DEFAULT_FILE;
+  }
+  else {
+    topic_file = HELP_DIR + alpha + alpha + alpha +".hlp";
+  }
+  if(!subtopic) subtopic = DEFAULT_SUBTOPIC;
+  /* check help for same topic */
+
+  help_data = load_help_file(topic_file);
+  if((position = member_array(topic, help_data)) == -1) {
+    write("Adding Topic....\n");
+    write_file(topic_file, DELIMITER + topic 
+                         + DELIMITER + "SUBTOPIC-"+ subtopic
+                         + DELIMITER + topic_txt);
+#ifdef OLD_EXPLODE
+    subtopic_list = explode(subtopic +"/","/");
+#else
+    subtopic_list = explode(subtopic, "/");
+#endif /* OLD_EXPLODE */
+    for(i = 0; i < sizeof(subtopic_list); i++) {
+     subtopic_data 
+       = load_subtopic_file(HELP_DIR+"subtopic/"+subtopic_list[i]+".sub");
+     if(member_array(topic, subtopic_data) != -1) break;
+     subtopic_data += ({ topic, });
+     write("Sorting "+ subtopic_list[i] +" category....\n");
+     subtopic_data 
+       = sort_array(subtopic_data,"alphabetical_order",this_object());
+     file_data = implode(subtopic_data,"\n") +"\n";
+     rm(HELP_DIR +"subtopic/"+ subtopic_list[i] +".sub");
+     write_file(HELP_DIR +"subtopic/"+subtopic_list[i]+".sub", file_data);
+    }
+    write("Help Updated\n");
+    return 1;
+  }
+  help_error(TOPIC_EXISTS);
+  return 0;
+}
+
+
+/************************************************************************/
+/* delete topic from help data files */
+
+status delete_topic(string topic) {
+  int position, i;
+  string alpha, topic_file, txt;
+  string *help_data, *data;
+  string subtopic, *subtopic_list;
+
+
+  alpha = topic[0..0];
+  alpha = lower_case(alpha);
+  if(alpha[0] < 'a' || alpha[0] > 'z') {    
+    topic_file = HELP_DIR + DEFAULT_FILE;
+  }
+  else {
+    topic_file = HELP_DIR + alpha + alpha + alpha +".hlp";
+  }
+  if(FILE_SIZE(topic_file) < 1) {
+    help_error(NO_HELP);
+    return 0;
+  }
+  help_data = load_help_file(topic_file);
+  if(!sizeof(help_data)) return 0;
+  if((position = member_array(topic, help_data)) == -1) {
+    help_error(NO_HELP);
+    return 0;
+  }
+  if(position + HELP_TXT >= sizeof(help_data)) {
+    help_error(CORRUPT);
+    return 0;
+  }
+  sscanf(help_data[position + SUBTOPIC],"SUBTOPIC-%s",subtopic);
+  help_data = help_data[0..(position-1)]
+            + help_data[(position+3)..(sizeof(help_data)-1)]; /* delete */
+  rm(topic_file);
+  for(i = 0; i < sizeof(help_data); i += 3) {
+    txt = DELIMITER + implode(help_data[i..(i+2)],DELIMITER);
+    write_file(topic_file,txt);
+  }
+  write("Deleted "+ topic +" from Help Data File.\n");
+#ifdef OLD_EXPLODE
+  subtopic_list = explode(subtopic +"/", "/");
+#else
+  subtopic_list = explode(subtopic, "/");
+#endif /* OLD_EXPLODE */
+
+  for(i = 0; i < sizeof(subtopic_list); i++) {
+    write("Updating "+ subtopic_list[i] +" Category....\n");
+    if(FILE_SIZE(HELP_DIR +"subtopic/"+ subtopic_list[i] +".sub") < 1) {
+      help_error(CAT_ERROR);
+      return 0;
+    }
+    data = load_subtopic_file(HELP_DIR+"subtopic/"+subtopic_list[i]+".sub");
+    if(!sizeof(data)) return 0;
+    if((position = member_array(topic, data)) == -1) {
+      help_error(CAT_ERROR);
+      return 0;
+    }
+    data = data[0..(position-1)] + data[(position+1)..(sizeof(data)-1)];
+    txt = implode(data, "\n") +"\n";
+    rm(HELP_DIR +"subtopic/"+ subtopic_list[i] +".sub");
+    write_file(HELP_DIR +"subtopic/"+ subtopic_list[i] +".sub", txt);
+  }
+  return 1;
+}
+
+
+/***************************************************************************/
+/* update topic in help data files */
+
+status update_topic(string topic, string txt) {
+  int position, i;
+  string alpha, subtopic, topic_file;
+  string *help_data;
+
+
+  alpha = topic[0..0];
+  alpha = lower_case(alpha);
+  if(alpha[0] < 'a' || alpha[0] > 'z') {    
+    topic_file = HELP_DIR + DEFAULT_FILE;
+  }
+  else {
+    topic_file = HELP_DIR + alpha + alpha + alpha +".hlp";
+  }
+  if(FILE_SIZE(topic_file) < 1) {
+    help_error(NO_HELP);
+    return 0;
+  }
+  help_data = load_help_file(topic_file);
+  if(!sizeof(help_data)) return 0;
+  if((position = member_array(topic, help_data)) == -1) {
+    help_error(NO_HELP);
+    return 0;
+  }
+  if(position + HELP_TXT >= sizeof(help_data)) {
+    help_error(CORRUPT);
+    return 0;
+  }
+  sscanf(help_data[position +SUBTOPIC],"SUBTOPIC-%s",subtopic);
+  help_data[position + HELP_TXT] = txt; /* update help text */
+  rm(topic_file);
+  for(i = 0; i < sizeof(help_data); i += 3) {
+    txt = DELIMITER + implode(help_data[i..(i+2)],DELIMITER);
+    write_file(topic_file,txt);
+  }
+  write("Updated "+ topic +" in Help Data File.\n");
+  return 1;
+}
+
+
+/**************************************************************************/
+/* help command */
+
+status invalid_help(string subtopic) {
+  sscanf(subtopic,"%s.sub",subtopic);
+  return (status)this_player()->valid_help(({ subtopic, }));
+}
+
+status help(string help) {
+  string txt, tmp;
+  string *list;
+  int i;
+  int count;
+  object pager;
+
+  if(!help) help = DEFAULT_SUBTOPIC;
+  if(!(txt = query_subtopic_string(help))) {
+    if(!(txt = query_help_string(help))) {
+      return 0;
+    }
+  }
+  switch(help) {
+    case "categories":
+      list = get_dir(HELP_DIR +"subtopic/.");
+      list = filter_array(list,"invalid_help",this_object());
+      txt += "\nCategories Available:\n\n";
+      for(i = 0; i < sizeof(list); i++) {
+        if(sscanf(list[i], "%s.sub", tmp) == 1) {
+          tmp += "                                       ";
+          tmp = extract(tmp,0,24) +" ";
+          txt += tmp;     
+        }
+        if(!((i+1)%3)) txt += "\n";
+      }
+      txt += "\n";
+    break;
+
+    case "manuals":
+      list = get_dir(MANUAL_DIR +".");
+      txt += "\nManuals available:\n\n";
+      for(i = 0; i < sizeof(list); i++) {
+        if(sscanf(list[i],"%s.man",tmp)) {
+          tmp += "                                       ";
+          tmp = extract(tmp,0,24) +" ";
+          txt += tmp;
+          count += 1;
+        }
+        if(this_player()->query_security_level()) {
+          if(sscanf(list[i],"%s.wiz",tmp)) {
+            tmp += "                                       ";
+            tmp = extract(tmp,0,24) +" ";
+            txt += tmp;
+            count += 1;
+          }
+        }
+        if(count >= 3) {
+          count = 0;
+          txt += "\n";
+        }
+      }
+      txt += "\n";
+    break;
+  }
+
+#ifdef PAGER
+  pager = clone_object(PAGER);
+#ifdef NATIVE_MODE
+  pager->move(this_player());
+#else
+  move_object(pager, this_player());
+#endif /* native */
+  pager->page(txt);
+#else
+  write(txt);
+#endif /* PAGER */
+  return 1;
+}
+
+
+/* convert command */
+
+status convert(string str) {
+  string file;
+  string topic;
+  string subtopic;
+
+  if(!str || sscanf(str,"%s %s <%s>", file, topic, subtopic) != 3) {
+    write("Usuage: convert [file] [topic name] [<category>]\n\n"+
+          "    eg. convert heal.txt heal <cleric>\n");
+    return 1;
+  }
+  file = (string)this_player()->make_path(file);
+  return convert_file(file,topic,subtopic);
+}
+
+
+/* update help command */
+
+status uh(string str) {
+  string topic;
+  string txt, file;
+
+  if(!str || sscanf(str,"%s %s", file, topic) != 2) {
+    write("Usuage: uh [file] [topic name]\n\n"+
+          "    eg. uh heal.txt heal\n");
+    return 1;
+  }
+  file = (string)this_player()->make_path(file);
+  if(!(txt = read_bytes(file,0,FILE_SIZE(file)))) {
+    help_error(READ_ERROR);
+    return 0;
+  }
+  return update_topic(topic,txt);
+}
+
+
+/* convert directory to hel[ data files */
+
+status convert_dir(string str) {
+  string *files, file, subtopic;
+  int i;
+
+  if(!str || sscanf(str,"%s %s",str,subtopic) != 2) {
+    write("Usuage: conv [directory] [category]\n\n"+
+          "    eg. conv /doc/helpdir/cleric cleric\n");
+    return 1;
+  }
+  str = (string)this_player()->make_path(str);
+  files = get_dir(str +"/.");
+  for(i = 0; i < sizeof(files); i++) {
+    file = str +"/"+ files[i];
+    sscanf(file,"%s.lpc",file);
+    if(FILE_SIZE(file) > 0) {    
+      if(convert_file(file,files[i],subtopic)) {
+        write("File "+ file +" Converted.\n");
+      }
+      else {
+        write("Unable to convert "+ file +"\n");
+      }
+    }
+  }
+  return 1;
+}
+
+
+
+/* update all subtopic files */ 
+
+status update() {
+  string *list, *help_data, tmp, subtopic, *subtopic_list;
+  string file_data;
+  int i, j;
+  string *subtopic_data;
+
+#ifndef MUDOS_DR
+  write("Function usuable only on Mudos.\n");
+#else
+  write("Removing Subtopics....\n");
+  subtopic_list = get_dir(HELP_DIR +"subtopic/.");
+  for(i = 0; i < sizeof(subtopic_list); i++) {
+    if(sscanf(subtopic_list[i],"%s.sub",tmp)) {
+      rm(HELP_DIR +"subtopic/"+ subtopic_list[i]);
+    }
+  }
+  write("Updating Subtopics....\n");  
+  list = get_dir(HELP_DIR +".");
+  for(i = 0; i < sizeof(list); i++) {
+    if(sscanf(list[i],"%s.hlp",tmp) == 1) {
+      help_data = load_help_file(HELP_DIR + list[i]);
+      for(j = 0; j < sizeof(help_data); j += 3) {
+        sscanf(help_data[j+SUBTOPIC],"SUBTOPIC-%s",subtopic);
+        write("Adding "+ help_data[j] +" to "+ subtopic +"\n");
+        write_file(HELP_DIR+"subtopic/"+subtopic+".sub",help_data[j] +"\n");
+      }
+    }
+  }
+  write("Sorting Subtopics....\n");
+  subtopic_list = get_dir(HELP_DIR +"subtopic/.");
+  for(i = 0; i < sizeof(subtopic_list); i++) {
+   if(sscanf(subtopic_list[i],"%s.sub",tmp)) {
+     subtopic_data = load_subtopic_file(HELP_DIR+"subtopic/"+subtopic_list[i]);
+     subtopic_data 
+       = sort_array(subtopic_data,"alphabetical_order",this_object());
+     file_data = implode(subtopic_data,"\n") +"\n";
+     rm(HELP_DIR +"subtopic/"+ subtopic_list[i]);
+     write_file(HELP_DIR +"subtopic/"+ subtopic_list[i], file_data);
+   }
+  }
+  write("Subtopics Updated\n");
+#endif
+  return 1;
+}
+
+status alphabetical_order(string one, string two) {
+  int i, len_1, len_2;
+
+  len_1 = strlen(one);
+  len_2 = strlen(two);
+  one = lower_case(one);
+  two = lower_case(two);
+  for(i = 0; i < len_1 && i < len_2 && one[i] == two[i]; i++);
+  if(i >= len_1 || i >= len_2) {
+    return (len_1 > len_2) ? 1 : ((len_1 == len_2) ? 0 : -1);
+  }
+  return (one[i] > two[i]) ? 1 : -1;
+}
+
+
+
+  
+
+status ext(string str) {
+  string file, txt, tmp;
+
+  if(!str || sscanf(str,"%s %s",file,str) != 2) {
+    write("Usuage: extract <file> <topic>\n\n"+
+          "Notes: writes to <file> the help <topic> from help data.\n");
+    return 1;
+  }
+  file = (string)this_player()->make_path(file);
+  if(FILE_SIZE(file) > 0) {
+    write("File Already exists.\n");
+    return 1;
+  }
+  if(!(txt = query_help_string(str))) {
+    help_error(NO_HELP);
+    return 0;
+  }
+  sscanf(txt,"%s\nCategory: %s help.\n",txt,tmp);
+  write_file(file, txt);
+  write("Extracted "+ str +"->"+ file +"\n");
+  return 1;
+}
+

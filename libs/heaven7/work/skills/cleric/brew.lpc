@@ -1,0 +1,138 @@
+/* brew a spell onto a potion */
+
+#include <spell.h>
+
+#define MAX_SPELL_LEVEL   SPELL_LEVEL + 10  /* < caster level */
+#define GET_LOADED_SPELL(XXX) \
+  (mixed *)clone_object("obj/shadows/get_spell")->get_loaded_spell(XXX,0,0,1)
+
+string *casting_msg(string targ, int size) {
+  int i;
+  string *msg, *data;  
+
+  data = ({
+      "You gather magical energies about you.\n",
+      "You pull in magic from all around you.\n",
+      "You feel the magic gathering all around you.\n",
+      "You gaze carefully at the bottle.\n",
+      "You start to brew a potion of "+ targ +".\n",
+      "You direct the energies into the brew.\n",
+      "You chant slowly.\n",
+      "You stamp you legs.\n",
+    });
+  for(msg = ({}),i = 0; i < size; i++) {
+    msg += ({ data[random(sizeof(data))], });
+  }
+  return msg;
+}   
+
+
+status brew(string targ, mixed alt_type) {
+  int i;
+  string file;
+
+  if(!alt_type) alt_type = "level";
+
+  if(!targ) {
+    notify_fail("brew <spell name>?\n");
+    return 0;
+  }
+  file = file_name(this_object());
+  sscanf(file,"%s#%d",file,i);
+
+  this_player()->load_spell(({
+    "target",            this_player(),
+    "name",              "Brew",
+    "sphere",            alt_type, 
+    "level",             20,
+    "cast time",         150,
+    "spell object",      file,
+    "argument",          targ,
+    "passive",
+    "casting msg",       casting_msg(targ, 149),
+    "casting msg room", ({
+       "@@query_name:$this_player()$@@ starts brewing.\n",
+       "@@query_name:$this_player()$@@ continues to brew.\n",
+    }),
+    "component",  "bottle#jug#bowl#basin#kettle#pot#keg#vase"
+  }));
+  return 1;
+}
+
+
+
+status cast_spell(object caster,object target,object prev,int dmg) {
+  int i;
+  mixed *loaded_spell;
+  string spell_name;
+  string tmp1, tmp2;
+  object item;
+
+    /* get a loaded spell array for spell enchantment */
+
+  spell_name = (string)caster->query_spell_argument();
+  loaded_spell = GET_LOADED_SPELL(spell_name);
+  if(!sizeof(loaded_spell)) {
+    destruct(this_object());
+    return 1;
+  }
+
+    /* check for max. spell level able to be enchanted by caster */
+
+  if(objectp(SPELL_TYPE)) {
+    if(MAX_SPELL_LEVEL > (int)SPELL_TYPE->query_cast_level()) {
+      write("The "+ SPELL_TYPE->query_name() 
+           +" is not powerful enough to brew the spell "+ SPELL_NAME +".\n");
+      destruct(this_object());
+      return 1;
+    }
+  }
+  else {
+    if(MAX_SPELL_LEVEL > (int)this_player()->query(SPELL_TYPE)) {
+      write("You are not powerful enough to brew the potion with "+
+             SPELL_NAME +".\n");
+      destruct(this_object());
+      return 1;
+    }
+  }
+  item = clone_object("objects/potion");
+  call_other(caster,"adj_"+ SPELL_TYPE +"_points", (SPELL_COST*(-3))/2);
+  if(!item->set_spell(spell_name)) {
+    write("You can only brew 'non'-offensive spells.\n");
+    destruct(item);
+    destruct(this_object());
+    return 1;
+  }
+  item->set_enchanted(1);
+  move_object(item, caster);
+  write("You brew a potion of "+ SPELL_NAME +".\n");
+  say(caster->query_name()+" brews a potion with a");
+  if(SPELL_LEVEL < 5)
+    say(" small ");
+  else if(SPELL_LEVEL < 10)
+    say(" ");
+  else if(SPELL_LEVEL < 15)
+    say(" powerful ");
+  else if(SPELL_LEVEL < 20)
+    say(" very powerful ");
+  else
+    say("n extremely powerful ");
+  if(sscanf(SPELL_TYPE,"%ssphere%s", tmp1, tmp2)) 
+    say("prayer.\n");
+  else
+    say("spell.\n");
+  if(COMPONENT) {  /* destruct component list */
+    for(i = 0; i < sizeof(COMPONENT); i++) {
+      if(COMPONENT[i]) COMPONENT[i]->drop(1);
+      if(COMPONENT[i]) destruct(COMPONENT[i]);
+    }
+  }
+  destruct(this_object());
+  return 1;
+}
+
+
+
+/* Native Mode Move */
+
+#include <move.h>

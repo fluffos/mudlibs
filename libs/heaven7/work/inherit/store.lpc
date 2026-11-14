@@ -1,0 +1,747 @@
+/* store.c Zilanthius sept 1992, update feb. 93 */
+/* store.c updated for new economy by Angel  Feb 1994 */
+
+/* update by kingbilly, update zilanthius jan. 94 */ 
+ 
+/* I converted some store code I made into a configurable type 
+ * This can be inherited in the same fashion as "room/room", except 
+ * you must use a prepended reset to clone in the shop owner. It would 
+ * also be advisable to mention in the long that there is a "list" to 
+ * "look at" for shop instructions. 
+ *  
+ * There is only one extra function to set, set_owner(name). 
+ * 
+ * If you wish to use your own monster add to your code the function, 
+ *  set_owner() into your own file. 
+ 
+   inherit "inherit/store"; 
+ 
+   reset(arg){ 
+     ::reset(); 
+     if(arg) return; 
+     set_owner("farin"); 
+      
+     etc..code as you would a normal room inherited from /room/room 
+   } 
+*/ 
+
+#include <mudlib.h>
+inherit ROOM; 
+
+/* shop configuration */
+ 
+#define MAX_VALUE        1000     /* max. money when selling + charisma */ 
+#define MONEY_MOD        6        /* was previously 2, now 3x what it was */
+#define STORE_ROOM "/room/city/shop/store_room"
+#define NAME             (string)this_player()->query_name() 
+#ifdef PAGER
+#define MAX_LIST_LENGTH 50
+#else
+#define MAX_LIST_LENGTH  30  /* item list length before truncate sign    */
+#endif /* PAGER */
+#define MAX_STOCK        6   /* maximum stock of each specific item      */
+#define TOTAL_STOCK      60  /* total number of armour, weapon, treasure */
+
+
+#define OWNER_STAT       15 
+#define BARGAIN (int)this_player()->query_charisma() +\
+  (int)this_player()->bargain_bonus()
+ 
+
+
+object STORE_ARMOUR; 
+object STORE_WEAPON; 
+object STORE_TREASURE; 
+ 
+
+string owner; 
+
+
+/* fn prototypes */
+
+void set_owner(string arg);
+#ifdef PAGER
+varargs void inventory(object arg, string fn);
+#else
+void inventory(object arg);
+#endif
+mixed calc_value(int i);
+ 
+
+void reset(status arg) { 
+  if(owner && !present(lower_case(owner))) set_owner(owner); 
+  if(arg) return;
+#ifdef NATIVE_MODE
+}
+
+void create() {
+#endif /* native */
+  set_weather(2, 1, 1);
+  call_other(this_object(), "reset", 0);
+} 
+ 
+void init() {
+  ::init(); 
+ 
+/*** if you do forget to set_name() - defaults to "Farin" ***/ 
+ 
+  if(!owner) set_owner(0); 
+ 
+/*** This is so you don't get a new holder everytime you update the shop ***/ 
+ 
+  if(!STORE_ARMOUR || !STORE_WEAPON || !STORE_TREASURE) { 
+    int i; 
+ 
+    object *inv; 
+ 
+    call_other(STORE_ROOM,"???"); /* load the storeroom */ 
+    inv = all_inventory(find_object(STORE_ROOM));
+    for(i = 0; i < sizeof(inv); i++) { 
+      if(inv[i]->id(file_name(this_object()))){ 
+        if(inv[i]->id("armour"))   STORE_ARMOUR = inv[i]; 
+        if(inv[i]->id("weapon"))   STORE_WEAPON = inv[i]; 
+        if(inv[i]->id("treasure")) STORE_TREASURE = inv[i]; 
+      } 
+    } 
+  } 
+ 
+/*** Make the storage containers ***/ 
+ 
+  if(!STORE_ARMOUR){ 
+    STORE_ARMOUR = clone_object(CONTAINER);
+    STORE_ARMOUR -> set_name("armour"); 
+    STORE_ARMOUR -> set_alt_name(file_name(this_object())); 
+    STORE_ARMOUR -> set_short("Armour: "+file_name(this_object())); 
+    STORE_ARMOUR -> set_weight(10000); 
+    STORE_ARMOUR -> set_max_weight(100000); 
+#ifdef NATIVE_MODE
+    STORE_ARMOUR->move(STORE_ROOM);
+#else
+    move_object(STORE_ARMOUR, STORE_ROOM); 
+#endif /* NATIVE_MODE */
+  } 
+  if(!STORE_WEAPON) {
+    STORE_WEAPON = clone_object(CONTAINER);
+    STORE_WEAPON -> set_name("weapon"); 
+    STORE_WEAPON -> set_alt_name(file_name(this_object())); 
+    STORE_WEAPON -> set_short("Weapon: "+file_name(this_object())); 
+    STORE_WEAPON -> set_weight(10000); 
+    STORE_WEAPON -> set_max_weight(100000); 
+#ifdef NATIVE_MODE
+    STORE_WEAPON->move(STORE_ROOM);
+#else
+    move_object(STORE_WEAPON, STORE_ROOM); 
+#endif /* NATIVE_MODE */
+  } 
+  if(!STORE_TREASURE){ 
+    STORE_TREASURE = clone_object(CONTAINER); 
+    STORE_TREASURE -> set_name("treasure"); 
+    STORE_TREASURE -> set_alt_name(file_name(this_object())); 
+    STORE_TREASURE -> set_short("Treasure: "+file_name(this_object())); 
+    STORE_TREASURE -> set_weight(10000); 
+    STORE_TREASURE -> set_max_weight(100000); 
+#ifdef NATIVE_MODE
+    STORE_TREASURE->move(STORE_ROOM);
+#else
+    move_object(STORE_TREASURE, STORE_ROOM); 
+#endif /* NATIVE_MODE */
+  } 
+ 
+/*** Shop actions ***/ 
+ 
+  add_action("sell","sell"); 
+  add_action("list","list"); 
+  add_action("buy","buy"); 
+  add_action("buy","browse"); /* same find ob routine */ 
+  add_action("value","value"); 
+  add_action("look_at", "read"); 
+  add_action("storeroom","storeroom"); 
+} 
+ 
+status storeroom(){ 
+  if(this_player()->query_security_level()){ 
+    this_player()->move_player("storeroom#"+STORE_ROOM); 
+    return 1; 
+  } 
+} 
+ 
+
+void long(status wiz) {
+  ::long(wiz);
+  if(this_player()->query_security_level()){ 
+    write("You also notice the store room exit: <storeroom>\n"); 
+  } 
+}
+
+
+status look_at(string str) {
+  if(str == "list" || str == "sign"){ 
+    write("  -=[ Buy, Sell, and Value - Armours, Weapons, & Treasures ]=-\n\n"+  
+  
+          "   Buy: buy <item>, buy <number> armour (or a),\n"+ 
+          "        buy <number> weapon (or w), buy <number> treasure (or t).\n"+ 
+          "  Sell: sell <all>, sell <item>.\n"+ 
+          " Value: value <item>.\n"+ 
+          "  List: list, list <armour> (or a), list <weapon> (or a),\n"+ 
+          "        list <treasure> (or t).\n"+
+          "Browse: browse <item>, browse <number>a, browse <number>w, "+
+          "browse <number>t.\n\n");
+    write("Conversion rate: 1 gold = 10 silver, 1 silver = 100 copper\n");
+    return 1; 
+  } 
+  return ::look_at(str); 
+} 
+ 
+
+status sell(string str){ 
+  int i, value; 
+  object *ob; 
+  status flag;
+ 
+  if(!present(lower_case(owner), this_object())){ 
+    write(owner+" is not here right now, so you cannot sell anything.\n"); 
+    return 1; 
+  } 
+  if(!str){ 
+    write("Sell what?\n"); 
+    return 1; 
+  } 
+  if(str == "all"){ 
+    ob = all_inventory(this_player()); 
+  }
+  else if(present(str, this_player())) {
+    ob = ({ present(str, this_player()), });
+  }
+  else {
+    write(owner+" says: I'm not interested in a "+str+".\n"); 
+    return 1; 
+  } 
+  for(i = 0; i < sizeof(ob); i++) { 
+    if(ob[i]->short() && ob[i]->query_value() && !ob[i]->drop()) {
+      if(!ob[i]) continue; 
+      value = (int)ob[i]->query_value(); 
+      if(value > MAX_VALUE) value = MAX_VALUE; 
+
+      /* Bargaining skill */
+ 
+      if(random(OWNER_STAT) > random(BARGAIN)) 
+        value -= random(value/3); 
+      else 
+        value += random(value/4); 
+
+      write(owner +" haggles with you over the price of "+
+            (string)ob[i]->short() +".\n"); 
+      write(owner +" gives you "+calc_value(value)+" coins for "+
+            (string)ob[i]->short()+".\n"); 
+      this_player()->add_money(value);
+      this_player()->add_weight((int)ob[i]->query_weight() * (-1));
+      if(ob[i]->armour_class()) {
+        if(sizeof(all_inventory(STORE_ARMOUR)) > TOTAL_STOCK) {
+          ob[i]->set_sell_destruct(1);
+        }
+      }
+      else if(ob[i]->weapon_class()) {
+        if(sizeof(all_inventory(STORE_WEAPON)) > TOTAL_STOCK) {
+          ob[i]->set_sell_destruct(1);
+        }
+      }
+      else {
+        if(sizeof(all_inventory(STORE_TREASURE)) > TOTAL_STOCK) {
+          ob[i]->set_sell_destruct(1);
+        }
+      }
+      if(ob[i]->query_sell_destruct()) { 
+        write(owner + " hides the valuable item away...\n"); 
+        destruct(ob[i]); 
+      } 
+      else { 
+#ifdef NATIVE_MODE
+        if(ob[i]->armour_class())
+          ob[i]->move(STORE_ARMOUR); 
+        else if(ob[i]->weapon_class()) 
+          ob[i]->move(STORE_WEAPON); 
+        else 
+          ob[i]->move(STORE_TREASURE); 
+#else
+        if(ob[i]->armour_class())
+          move_object(ob[i],STORE_ARMOUR); 
+        else if(ob[i]->weapon_class()) 
+          move_object(ob[i],STORE_WEAPON); 
+        else 
+          move_object(ob[i],STORE_TREASURE); 
+#endif /* NATIVE_MODE */
+      }
+      flag = 1; 
+    } 
+  }
+  if(!flag) write(owner +" isn't interested.\n");
+  return 1;
+}
+ 
+
+status list(string str) {
+  if(str == "armour" || str == "armours" || str == "a"){ 
+    inventory(STORE_ARMOUR); 
+  } 
+  else if(str == "weapon" || str == "weapons" || str == "w"){ 
+    inventory(STORE_WEAPON); 
+  }
+  else if(str == "treasure" || str == "treasures" || str == "t"){ 
+    inventory(STORE_TREASURE); 
+  } 
+  else{  /* list all */ 
+#ifdef PAGER
+    write("list armour\n");
+    inventory(STORE_ARMOUR,"armour");
+#else
+    list("a"); list("w") ; list("t");
+#endif /* PAGER */
+    return 1;
+  } 
+#ifndef PAGER
+  write("#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-\n"); 
+#endif /* PAGER */
+  return 1; 
+} 
+ 
+
+status buy(string str){ 
+  object ob, *inv; 
+  int value, number, i, j, abort;
+  string type, *item_check; 
+  string verb;
+
+  verb = query_verb();
+  if(!present(lower_case(owner))){ 
+    write(owner +" is not here right now, so you cannot "+verb+" anything.\n"); 
+    return 1; 
+  } 
+  if(!str){ 
+    write(capitalize(verb) +" what?\n"); 
+    return 1; 
+  } 
+  ob = present(str,STORE_ARMOUR); 
+  if(!ob) ob = present(str,STORE_WEAPON); 
+  if(!ob) ob = present(str,STORE_TREASURE); 
+  if(!ob) { 
+    if(sscanf(str,"%d%s",number,type) || sscanf(str,"%d %s",number,type)) { 
+      if(type == "armour" || type == " a" || type == "arm" || type == " armor" 
+      || type == " armour" || type == "a" || type == " arm" || type == "armor") 
+        ob = STORE_ARMOUR; 
+
+      else if(type == "weapon" || type == " w" || type == "weap" 
+           || type == " weapon" || type == "w" || type == " weap") 
+        ob = STORE_WEAPON; 
+
+      else if(type == "treasure" || type == " t" || type == "treas" 
+           || type == " treasure" || type == "t" || type == " treas") 
+        ob = STORE_TREASURE; 
+
+      else{ 
+        write(owner+" says: But I don't have that in stock!\n"+
+        "             Perhaps you should try ["+verb+" <number>(a|w|t)]\n"); 
+        return 1; 
+      } 
+      inv = all_inventory(ob);
+      item_check = ({});
+      ob = 0;
+
+      for(i = 0; i < sizeof(inv); i++) { 
+        string tmp;
+        int val;
+
+        val = (int)inv[i]->query_max_value(); /* armour value changes */
+        if(!val) val = (int)inv[i]->query_value();
+        tmp = (string)inv[i]->short() +"#"+ val;
+        if(member_array(tmp, item_check) != -1) continue;
+        if(++j == number) { 
+          ob = inv[i];
+          break;  
+        }
+        item_check  += ({ tmp, });
+        if(++abort > MAX_LIST_LENGTH) break;
+      }
+      if(!ob) {
+        write(owner+" says: But I don't have that in stock!\n"+ 
+        "             Perhaps you should try ["+ verb +" <number>(a|w|t)]\n"); 
+        return 1; 
+      }
+    }
+    else{ 
+      write(owner+" says: But I don't have a "+ str +" in stock!\n"); 
+      return 1; 
+    } 
+  } 
+  if(verb == "browse") {
+    write(owner +" shows you the "+ (string)ob->short() +"...\n\n");
+    ob->long();
+    return 1;
+  }
+  value = (int)ob->query_value() * 2;
+
+  if(random(OWNER_STAT) > random(BARGAIN)) 
+     value += random(value/3); 
+  else 
+     value -= random(value/4); 
+
+  write(owner+" haggles with you over the price of "+ob->short()+".\n"); 
+ 
+  if((int)this_player()->query_money() < value) { 
+    write(owner+" says: You seem to have a cash flow problem!\n"); 
+    return 1; 
+  } 
+  if(!call_other(this_player(),"add_weight",(int)ob->query_weight())){ 
+    write(owner+" says: You should gain a bit more muscle before you\n"+ 
+         "            buy the"+(string)ob->short()+".\n");
+    return 1; 
+  }  
+  say(NAME+" bought a "+ (string)ob->short() +".\n"); 
+  write(owner +" takes "+ calc_value(value) +" coins for "+
+  (string)ob->short() +"\n");
+#ifdef NATIVE_MODE
+  ob->move(this_player());
+#else
+  move_object(ob,this_player()); 
+#endif /* NATIVE_MODE */
+  this_player()->add_money(-value);     
+  return 1; 
+}  
+ 
+
+status value(string str){ 
+  object ob; 
+  int value; 
+ 
+  if(!present(lower_case(owner))){ 
+    write(owner +" is not here right now, "+
+          "so how can you get him to value anything.\n"); 
+    return 1; 
+  } 
+  if(!str){ 
+    write("Value what?\n"); 
+    return 1; 
+  } 
+  ob = present(str,this_player()); 
+  if(!ob){ 
+    write(owner+" says: You don't have a "+ str +" to value.\n"); 
+    return 1; 
+  } 
+  value = (int)ob->query_value(); 
+  if(!value) { 
+    write(owner+" looks at the "+ str +" carefully...\n"+ 
+         owner+" says: I'd wouldn't know what to give you for the "+str+"!\n"); 
+  } 
+  else  
+    write(owner +" says: I think that "+calc_value(value)+
+         " coins is a fair price, don't you?\n"); 
+  return 1; 
+} 
+
+
+#ifdef PAGER
+varargs void inventory(object obj, string pager_exit) { 
+#else
+void inventory(object obj) { 
+#endif /* PAGER */
+  object ob, *inv; 
+  int i, val, abort;
+  string str; 
+  string list;
+  int cost;
+  string *item_list, *item_check;
+  int *item_number;
+  string sh;
+  string tmp, tmp_val, tmp2;
+
+/*** Lets make sure the shop has at least one object ***/ 
+
+#ifdef NATIVE_MODE
+  if(!present("torch", STORE_TREASURE)){ 
+    clone_object("objects/torch")->move(STORE_TREASURE);
+  } 
+  if(!present("list", STORE_TREASURE)) {
+    clone_object("objects/party_list")->move(STORE_TREASURE);
+  }
+  if(!present("parchment", STORE_TREASURE)){
+    ob = clone_object(TREASURE);
+    ob -> set_name("parchment");
+    ob -> set_short("A sheet of parchment");
+    ob -> set_long(
+     "A fine sheet of parchment. Perhaps it could be used to scribe "+
+     "spells with?\n");
+    ob -> set_value(500);
+    ob -> set_weight(1);
+    ob->move(STORE_TREASURE);
+  }
+  if(!present("ore", STORE_TREASURE)) {
+    ob = clone_object(TREASURE);
+    ob -> set_name("ore");
+    ob -> set_short("A hunk of ore");
+    ob -> set_long(
+     "It seems to be a fine ore of metal, capable of being refined \n"+
+     "into a fine piece of armour, or perhaps a weapon of some sort.\n");
+    ob -> set_value(random(500) + 250);
+    ob -> set_weight(2);
+    ob->move(STORE_TREASURE);
+  }
+
+  if(!present("bag", STORE_TREASURE)){ 
+    clone_object("/objects/bag")->move(STORE_TREASURE); 
+  } 
+  if(!present("shield", STORE_ARMOUR)){ 
+    ob = clone_object(ARMOUR); 
+    ob -> set_name("shield"); 
+    ob -> set_short("Shield"); 
+    ob -> set_long("A wooden shield.\n"); 
+    ob -> set_weight(3); 
+    ob -> set_value(150); 
+    ob -> set_ac(1); 
+    ob -> set_type("shield"); 
+    ob->move(STORE_ARMOUR); 
+  }   
+  if(!present("shortsword", STORE_WEAPON)){ 
+    ob = clone_object(WEAPON); 
+    ob -> set_name("shortsword"); 
+    ob -> set_alias("sword");
+    ob -> set_short("A short sword"); 
+    ob -> set_long("A small short sword.\n"); 
+    ob -> set_weight(4); 
+    ob -> set_class(12); 
+    ob -> set_value(1300); 
+    ob -> set_type("slash"); 
+    ob -> set_length(24); 
+    ob->move(STORE_WEAPON); 
+  }   
+  if(!present("knife", STORE_WEAPON)){ 
+    ob = clone_object(WEAPON); 
+    ob -> set_name("knife"); 
+    ob -> set_short("A Knife"); 
+    ob -> set_long("A small knife.\n"); 
+    ob -> set_weight(3); 
+    ob -> set_class(6); 
+    ob -> set_value(110); 
+    ob -> set_type("thrust"); 
+    ob -> set_length(12); 
+    ob -> move(STORE_WEAPON); 
+  }   
+#else   
+  if(!present("torch", STORE_TREASURE)){ 
+    move_object(clone_object("objects/torch"),STORE_TREASURE);
+  } 
+  if(!present("list", STORE_TREASURE)) {
+    move_object(clone_object("objects/party_list"),STORE_TREASURE);
+  }
+  if(!present("parchment", STORE_TREASURE)){
+    ob = clone_object(TREASURE);
+    ob -> set_name("parchment");
+    ob -> set_short("A sheet of parchment");
+    ob -> set_long(
+     "A fine sheet of parchment. Perhaps it could be used to scribe "+
+     "spells with?\n");
+    ob -> set_value(500);
+    ob -> set_weight(1);
+    move_object(ob, STORE_TREASURE);
+  }
+  if(!present("ore", STORE_TREASURE)) {
+    ob = clone_object(TREASURE);
+    ob -> set_name("ore");
+    ob -> set_short("A hunk of ore");
+    ob -> set_long(
+     "It seems to be a fine ore of metal, capable of being refined \n"+
+     "into a fine piece of armour, or perhaps a weapon of some sort.\n");
+    ob -> set_value(random(500) + 250);
+    ob -> set_weight(2);
+    move_object(ob, STORE_TREASURE);
+  }
+
+  if(!present("bag", STORE_TREASURE)){ 
+    move_object(clone_object("/objects/bag"),STORE_TREASURE); 
+  } 
+  if(!present("shield", STORE_ARMOUR)){ 
+    ob = clone_object(ARMOUR); 
+    ob -> set_name("shield"); 
+    ob -> set_short("Shield"); 
+    ob -> set_long("A wooden shield.\n"); 
+    ob -> set_weight(3); 
+    ob -> set_value(150); 
+    ob -> set_ac(1); 
+    ob -> set_type("shield"); 
+    move_object(ob, STORE_ARMOUR); 
+  }   
+  if(!present("shortsword", STORE_WEAPON)){ 
+    ob = clone_object(WEAPON); 
+    ob -> set_name("shortsword"); 
+    ob -> set_alias("sword");
+    ob -> set_short("A short sword"); 
+    ob -> set_long("A small short sword.\n"); 
+    ob -> set_weight(4); 
+    ob -> set_class(12); 
+    ob -> set_value(1300); 
+    ob -> set_type("slash"); 
+    ob -> set_length(24); 
+    move_object(ob, STORE_WEAPON); 
+  }   
+  if(!present("knife", STORE_WEAPON)){ 
+    ob = clone_object(WEAPON); 
+    ob -> set_name("knife"); 
+    ob -> set_short("A Knife"); 
+    ob -> set_long("A small knife.\n"); 
+    ob -> set_weight(3); 
+    ob -> set_class(6); 
+    ob -> set_value(110); 
+    ob -> set_type("thrust"); 
+    ob -> set_length(12); 
+    move_object(ob, STORE_WEAPON); 
+  }   
+#endif /* NATIVE_MODE */
+  if(!obj) return 0; 
+  inv = all_inventory(obj); 
+  if(!sizeof(inv)) { 
+    string obj_name;
+ 
+    if(obj->id("treasure")) obj_name = "treasure"; 
+    if(obj->id("armour"))   obj_name = "armour"; 
+    if(obj->id("weapon"))   obj_name = "weapons"; 
+    if(obj_name){ 
+      write(owner+" says: I don't have any "+obj_name+" at the moment.\n"); 
+    } 
+    else{ 
+      write(owner+" says: I don't have anything in stock at the moment.\n"); 
+    } 
+  } 
+  else{ 
+    list = "";
+    if(obj->id("armour")) 
+      list = "\n\n          -=[ Armour ]=-\n\n"; 
+    if(obj->id("weapon")) 
+      list = "\n\n          -=[ Weapon ]=-\n\n"; 
+    if(obj->id("treasure")) 
+      list = "\n\n          -=[ Treasure ]=-\n\n"; 
+    list += "--=[ Item ]=-----------------=[ R.R.P.]=-----=[ Stock ]=---\n"; 
+    item_list = ({});
+    item_check = ({});
+    item_number = ({});
+
+    for(i = 0; i < sizeof(inv); i++) { 
+      int j;
+      
+
+      sh = (string)inv[i]->short();
+      val = (int)inv[i]->query_max_value(); /* armour value changes */
+      if(!val) val = (int)inv[i]->query_value();
+      tmp = sh +"#"+ val;
+      if((j = member_array(tmp, item_check)) != -1) {
+        if(item_number[j] == MAX_STOCK)
+          destruct(inv[i]);
+        else
+          item_number[j] += 1;
+        continue;
+      }
+      str = (sizeof(item_list) < 9) ? " " : "";
+      str += " "+(sizeof(item_list)+1)+". "+ sh +"                         ";
+      str = extract(str,0,30); 
+      cost = (int)inv[i]->query_value() * 6;
+      tmp_val = calc_value(cost);
+      sscanf(tmp_val,"%d %s %s",cost, tmp_val, tmp2);
+      if(cost < 10) str += " ";
+      if(cost < 100) str += " ";
+      str += " "+ cost +" "+ tmp_val +"                           ";
+      str = extract(str,0,49);
+      item_check  += ({ tmp, });
+      item_list   += ({ str, });        
+      item_number += ({ 1, });
+      if(++abort > MAX_LIST_LENGTH) break;
+    }
+    for(int j = 0; j < sizeof(item_list); j++) {
+      list += item_list[j] + item_number[j] +"\n";
+    }
+/* alternative - this won't bug out so much, but no stock numbers.
+    list += implode(item_list,"\n") +"\n";
+ */
+    if(i != sizeof(inv)) list += "     **** Truncated ***\n";     
+  }  
+#ifdef PAGER
+  ob = clone_object(PAGER);
+  ob->page(list,pager_exit);
+#else
+  write(list);
+#endif 
+  return; 
+} 
+ 
+#ifdef PAGER
+
+/* If 'list all' is used, page next storage container */
+
+void pager_quit(string fn) {
+  switch(fn) {
+    case "armour":
+      write("list weapon\n");
+      inventory(STORE_WEAPON,"weapon");
+    break;
+
+    case "weapon":
+      write("list treasure\n");
+      inventory(STORE_TREASURE);
+    break;
+  }
+}
+#endif /* PAGER */
+
+
+void set_owner(string owner_name){ 
+  object owner_ob;
+
+  if(!stringp(owner_name)) owner_name = "farin";
+  if(!owner) owner = capitalize(owner_name); 
+  owner_ob = clone_object("inherit/monster"); 
+  owner_ob -> set_name(lower_case(owner)); 
+  owner_ob -> set_magic_resist(100);
+  owner_ob -> set_no_kill_flag(1);
+  owner_ob -> set_race("human"); 
+  owner_ob -> set_short(owner+", the shopkeeper"); 
+  owner_ob -> set_alias("shopkeeper");
+  owner_ob -> set_long(owner +" has always run this shop. He is\n"+ 
+             "known for his greediness, and will rip-off anybody given\n"+ 
+             "given the opportunity.\n"); 
+  owner_ob -> set_al(30); 
+  owner_ob -> set_gender(1); 
+  owner_ob -> set_level(15); 
+  owner_ob -> set_wc(20); 
+  owner_ob -> set_ac(18); 
+  owner_ob -> set_hp(7050); 
+  owner_ob -> load_chat(5,({ 
+             owner+" gives you a sly grin.\n", 
+             owner+" says: Would you like to buy something?\n", 
+             owner+" glances at your purse string.\n", })); 
+  owner_ob -> load_a_chat(25,({ 
+             owner+" says: Youu'll never steal my goods!\n", 
+             owner+" gives you a wack over the head with his money bag.\n", })); 
+  owner_ob -> add_money(1200 + random(800)); 
+#ifdef NATIVE_MODE
+  owner_ob->move(this_object());
+#else
+  move_object(owner_ob, this_object()); 
+#endif /* NATIVE_MODE */
+} 
+
+
+string calc_value(int i) {
+  int amount;
+  string tmp;
+
+  amount = i;
+  tmp = "";
+  if(i >= 1000) tmp +=(i/1000 +" gold ");
+  while(i >= 1000) {
+    i -= 1000;
+  }
+  if(i >= 100) tmp += (i/100 +" silver ");
+  while(i >= 100) {
+    i -= 100;
+  }
+  if(i) tmp += (i +" copper ");
+  return tmp;
+}
+
+int query_no_fight() { return 1; }

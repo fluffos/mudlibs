@@ -1,0 +1,130 @@
+/*
+The trouble with intermud is coming up with a configuration that is 
+standard, and thus usable by people. Regardless, here is a start.
+
+My proposal is to use current standard data members with a REQUEST of
+"mail", plus two extra members; "HEADER", which is the title of the
+mail; and "ROUTE", which is a string that describes the path which the
+mail has taken. This is a string which gives the original author, 
+forwards, replies, and cc recipients of the mail.  
+*/
+
+#include <master.cfg>
+#include <udp.h>
+#define ID_MAILER  "mailer"
+#define TIME       ctime(time())[4..15]
+
+mixed *mail;
+
+status test_recipient(string who) {
+  who = lower_case(who);
+  return restore_object("usr/creators/"+ who)
+      || restore_object("usr/players/"+ who)
+      || restore_object("usr/newbies/"+ who);     
+}
+
+
+int udp_mail(mapping data) {
+  object who_ob, ob;
+  string who;
+  string route;
+
+  who = lower_case(data[RECIPIENT]);
+  if(!test_recipient(who)) {
+    INETD->send_udp(data[NAME], ([
+           REQUEST: REPLY,
+           RECIPIENT: data[SENDER],
+           ID: data[ID],
+           DATA: "No such player, "+ capitalize(who) +"@"+ LOCAL_NAME +".\n"
+         ]) );
+    return 1;
+  }
+#ifdef WIZ_ONLY
+  if(!restore_object("usr/creators/"+ who)) {
+    INETD->send_udp(data[NAME], ([
+           REQUEST: REPLY,
+           RECIPIENT: data[SENDER],
+           ID: data[ID],
+           DATA:  capitalize(who) +" is Not a Creator.\n"+
+                  "Mail is Rejected.\n"
+         ]));
+    return 1;
+  }
+#endif
+
+/*
+   this is where the exact implementation will vary depending on the
+   mailer used by the local mud. Our mailer works using an array,
+   keeping mail data orderly, and easily accessable.
+ */
+
+  /* note: I can save_object to /room/post with 3.2 when i add this object
+           to valid_write(), valid_read() in master
+   */
+  /* check for mailer object in use */
+
+  who_ob = find_player(who);  
+  if(who_ob) { /* old mailer would call invalidate() */
+    tell_object(who_ob,"You have New mail from "+ data[SENDER]
+                      +"@"+ data[NAME] +".\n");
+    if(ob = present(ID_MAILER,who_ob)) ob->refresh_mail();
+  }
+
+  mail = ({});
+  restore_object(MAIL_DIR+who);
+  route = data["ROUTE"];
+  if(!route) route = "Sent by: "+ data[SENDER] +"@"+ data[NAME]
+                    +"Received by: "+ who +"@"+ LOCAL_NAME +"\n";
+  mail += ({
+            ({               
+              data[SENDER] +"@"+ data[NAME],   /* reply address     */
+                             data["HEADER"],   /* title of mail     */
+                                      route,   /* route of mail     */
+                                 data[DATA],   /* mail message      */
+                                          1,   /* new mail flag     */
+                                          0,   /* confidential flag */
+                                       TIME,   /* local date        */
+            })
+          });
+  save_object(MAIL_DIR+who);
+  if(ob) ob->load_mail();
+  mail = ({});
+  INETD->send_udp(data[NAME], ([
+          REQUEST: REPLY,
+          RECIPIENT: data[SENDER],
+          ID: data[ID],
+          DATA: "Mail Received by "+ capitalize(who) +"@"+ LOCAL_NAME +".\n"
+         ]));
+  return 1;
+}
+
+
+status mail(string who,    /* who are we sending to */
+            string mud,    /* which mud             */
+          string title,    /* what is the header    */
+          string route,    /* what is its route     */
+        string message) {  /* what is the message   */
+  int i;
+
+#ifdef WIZ_ONLY
+  if(!this_player()->query_security_level()) return 0;
+#endif
+  if(!sscanf(file_name(previous_object()),MAILER +"#%d", i)) {
+    write("Invalid Call.\n");  
+    return 0;
+  }
+  if(INETD->send_udp(mud, ([
+     REQUEST:         "mail",
+     SENDER:          (string)this_player()->query_name(1),
+     RECIPIENT:       lower_case(who),
+     "HEADER":        title,
+     "ROUTE":         route,
+     DATA: message,
+    ]), 1))
+    write("Mail Request Sent.\n");
+  else {
+    write("Mail Request Failed.\n");
+  }
+  return 1;
+}
+

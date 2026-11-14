@@ -1,0 +1,143 @@
+#include <master.cfg>
+#include <udp.h>
+#include <pad_str.h>
+
+
+string *known_channels;  /* channels known */
+
+void reset(status arg) {
+  if(arg) return;
+  known_channels = ({ 
+                    "intermud",
+                   });
+}
+
+protected int filter_channel(object ob, string channel) {
+  return ob->query_channel(channel) && !ob->query_edit();
+}
+
+
+int udp_channel(mapping data) {
+  object *list;
+  string *who;
+  string msg;
+  int size, i;
+
+  list = filter_array(users(),"filter_channel",this_object(),data["CHANNEL"]);
+  size = sizeof(list);
+  for(who = ({}),i = 0; i < size; i++) {
+    who += ({ (string)list[i]->query_cap_name(), });
+  }
+
+ 
+  if(member_array(data["CHANNEL"],known_channels) == -1) {
+    log_file("NEW_CHANNEL","Channel: "+ data["CHANNEL"] +
+                           ",  Mud: "+ data[NAME] +
+                           ", Sender: "+  data[SENDER] +
+                           ", Message: "+ data[msg] +
+                           ", Time: "+ ctime(time()) +"\n");
+  }
+  switch(data["CMD"]) {
+    case "emote":
+      /* A channel emote. */
+
+      msg = pad_str("->"+ capitalize(data["CHANNEL"]) +":"+
+                        " -"+ capitalize(data[NAME]) +"-  ",
+                            capitalize(data[SENDER]) +" "+
+                               data[DATA],79) +"\n";
+    break;
+
+    case "list":
+      /* Request for a list of people listening to a certain channel. */
+      msg = "["+ capitalize(data["CHANNEL"]) +"@"+ LOCAL_NAME +"] ";
+      if(size) {
+        msg = pad_str(msg+"Listening: ", implode(who,", ") +".",75);
+      }
+      else {
+        msg = "Nobody Listening.\n";
+      }
+      INETD->send_udp(data[NAME], ([
+          REQUEST: REPLY,
+          RECIPIENT: data[SENDER],
+          ID: data[ID],
+          DATA: msg
+         ]) );
+      return 1;
+    break;
+
+    default:
+      /* A regular channel message. */
+      msg = pad_str("->"+ capitalize(data["CHANNEL"]) +":"+
+                        " -"+capitalize(data[NAME]) +"-  ",
+                            capitalize(data[SENDER]) +" says "+
+                                      data[DATA],75) +"\n";
+    break;
+  }
+
+  while(size--) {
+    tell_object(list[size], msg);
+  }
+  return 1;
+}
+
+
+status channel(string send_channel, string msg, string cmd, string mud) {
+  string *channels;
+  mapping data, hosts;
+  string *muds;
+  int i, j;
+  status flag;
+
+  if(!MASTER->valid_player_call(previous_object())) {
+    write("Invalid Call.\n");  
+    return 0;
+  }
+/* change my mind aboud multiple channel send
+  channels = (string *)this_player()->query_channels();
+ */
+  channels = ({ send_channel, });
+  if(!channels || !sizeof(channels)) {
+    write("You have No Channel Set!\n"); /* this should not happen */
+    return 0;
+  }
+  for(i = sizeof(muds = m_indices(hosts = INETD->query("hosts"))); i--;) {
+    if(mud && lower_case(mud) != lower_case(muds[i])) continue;
+/*
+    if (muds[i] != lower_case(LOCAL_NAME) &&
+*/
+    if (
+       (member_array("*", hosts[muds[i]][HOST_COMMANDS]) != -1 
+    ||  member_array("channel", hosts[muds[i]][HOST_COMMANDS]) != -1)) {
+ 
+      for(j = 0; j < sizeof(channels); j++) { 
+        data = ([
+          REQUEST: "channel",
+          SENDER: (string)this_player()->query_name(1),
+          "CHANNEL": channels[j],
+          "CMD": cmd,
+          DATA: msg
+        ]);
+        if(!INETD->send_udp(muds[i], data))
+          write("Channel Request to "+ capitalize(muds[i]) +" Failed.\n");
+        else
+          flag = 1;
+      }
+    }
+  }
+  if(flag)
+    write("Request Sent.\n");
+  else if(!sizeof(muds)) {
+    object ob;
+
+    write("No Host List!\n");
+    if(ob = find_object(INETD)) destruct(ob);
+    call_other(INETD,"??"); /* reload it */
+    write("Fixing....Try Again\n");
+  }
+  else
+    write("Request Failed.\n");
+  return 1;
+}
+
+
+string known_channels() { return implode(known_channels,", "); }

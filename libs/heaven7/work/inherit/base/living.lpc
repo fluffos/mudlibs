@@ -1,0 +1,2730 @@
+#pragma strict_types
+#pragma save_types
+
+#include <mudlib.h>
+inherit BASE;
+
+#include <living.cfg>      /* configuration */
+#include <living.spc>      /* fn prototypes */
+#include <compare.h>       /* compare() fun */
+#include <tell.h>          /* tell_objects() fun */
+#include <shout.h>         /* check_shout() fun  */
+#include <skills.h>
+#include <ansi.h>
+#include <spell.h>
+
+
+/* 'rename'  some base_obj stuff */
+
+#define invis_name  alt_name
+
+#define POISON_OB present("Poison", this_object())
+#define POISON (POISON_OB) ? (int)POISON_OB->query_poison_penalty() : 0
+
+#define THIS_PLAYER_WIZ  ((this_player()->query_security_level()) ? 1 : 0)
+#define THIS_OBJECT_WIZ  ((this_object()->query_security_level()) ? 1 : 0)
+#define PRIMARY_DEX      (int)primary_attack->query_dexterity()
+#define PRIMARY_DISGUISE (int)primary_attack->query_disguise()
+#define THIS_PLAYER_COM  (int)this_player()->query_combat()
+
+int level;                   /* Level of being */  
+int level_drained;           /* number of levels 'drained' */  
+ 
+string msgin;                /* Message for walking into a room */  
+string msgout;               /* Message for walking out of a room */  
+string mmsgin;               /* Message for magical entry to a room */  
+string mmsgout;              /* Message for magical exit from a room */  
+
+string race;                 /* race of this being */
+
+string *languages_known;     /* list of languages known */
+string *weapon_prof;         /* list of weapon proficiencies */
+string *classes;             /* list of classes */
+
+status ghost;                /* Is the being a ghost? */  
+status dead;                 /* Is the being dead? */  
+status no_wimpy;             /* Is the being restricted from wimpy? */  
+int whimpy;                  /* Number of hp being will run at */  
+  
+int hp;                      /* Number of hit points of being */  
+int max_hp;                  /* Maximum number that hp may reach */  
+
+int experience;              /* Experience poitns earned by being */  
+int money;                   /* Amount of gold coins possessed by being */  
+int age;                     /* Number of heartbeats being has existed */  
+int alignment;               /* Numerical alignment of being */  
+int gender;                  /* Numerical gender of being... 0 = neuter  
+                                                             1 = male  
+                                                             2 = female */  
+
+nosave string custom;        /* Custom direction for wimpy exit */
+nosave string *spell_immune; /* Spell types that being is immune to */
+nosave mixed *loaded_spell;  /* spell cast next heart beat */
+
+  
+nosave string speak_language;/* Language being spoken */
+nosave int magic_resist;     /* resistance to offensive spells */  
+nosave status is_npc;        /* Is the being not a player? */
+int is_invis;                /* Use invis_name, short() = 0 */
+nosave status is_alias;      /* Use alias_name */
+nosave status brief;         /* In brief mode */
+nosave int spell_time;       /* spell casting counter */
+
+nosave int armour_class;     /* Measure of protection */  
+nosave object *armour_worn;  /* list of armour being worn */
+nosave int ac_bonus;       
+nosave int npc_ac;
+
+nosave object *followers;    /* objects following me */
+
+nosave int right_wc;         /* right weapon */  
+nosave object right_weapon;
+nosave string right_weapon_type;
+nosave int right_weapon_bonus;
+nosave string *right_attack_msg;
+nosave int npc_wc;
+
+nosave int left_wc;          /* left weapon */ 
+nosave object left_weapon;
+nosave string left_weapon_type;
+nosave int left_weapon_bonus;
+nosave string *left_attack_msg;
+nosave int npc_wc_l; 
+
+nosave object primary_attack;     /* main opponent */  
+nosave object *secondary_attacks; /* list of other opponents */  
+
+nosave string *sec_att_names;
+
+/*** Primary skills ***/ 
+ 
+int combat;             /* replaces dex, how well do you attack */ 
+int dexterity;          /* how well you defend against attacks */ 
+int intelligence;       /* do you perceive eg. thief's stealth */ 
+int wisdom;             /* wisdom - resistance to some spells */ 
+int charisma;           /* how good you are at shopping */ 
+int constitution;       /* how many hit points */ 
+int strength;           /* how much you can carry, also different to combat */ 
+
+int max_combat;
+int max_dexterity;
+int max_intelligence;
+int max_wisdom;
+int max_charisma;
+int max_constitution;
+int max_strength; 
+
+status hp_displ;    /* display hp (tamsyn) */
+
+
+/*************************************************************************/
+/* log */
+
+void log(string file,mixed old, mixed new_val) {
+  if(is_npc || !THIS_PLAYER_WIZ) return; 
+  write_file("/log/MAIN/"+ file, "To: "+ query_name(1) +
+                ";By: "+(string)this_player()->query_name(1)+
+                ((new_val) ?  ";Old: "+old+";New: "+new_val : ";"+old)+
+                ";Time: "+ctime(time())+";\n");
+}
+
+status test_dark() {
+  if(set_light(0) > 0) return 0;
+  write("It is dark.\n");
+  return 1;
+}
+
+ 
+/*************************************************************************/
+/* sets */
+
+int set_level(int i) { 
+# ifdef LOG_SET_LEVEL
+    log(LOG_SET_LEVEL,level,i);
+# endif /* LOG_SET_LEVEL */
+  return level = i;
+}
+
+
+string set_msgin(string s)   { return msgin  = (s) ? s : DEFAULT_MSGIN;    }
+string set_msgout(string s)  { return msgout = (s) ? s : DEFAULT_MSGOUT;   }
+string set_mmsgin(string s)  { return mmsgin  = (s) ? s : DEFAULT_MMSGIN;  }
+string set_mmsgout(string s) { return mmsgout = (s) ? s : DEFAULT_MMSGOUT; }
+
+string set_race(string str) {
+  string race_type;
+  int i;
+  int *stats, *max_stats;
+  string *stat_name;
+
+# ifdef LOG_SET_RACE
+  log(LOG_SET_RACE,race,str);
+# endif /* end LOG_SET_RACE */
+  if(!str) str = "human";
+  str = lower_case(str);
+  race = str;
+  sscanf(str, "%s %s", race_type, str);
+  if(str == "elf") {    
+    stats     = ({  1,  2,  1,  1,  3,  1,  2  });   
+    if(race_type == "half") 
+      max_stats = ({  20, 25, 22, 23, 26, 25, 24  }); 
+    else if(race_type == "gray")
+      max_stats = ({  19, 27, 20, 21, 26, 22, 26  });
+    else if(race_type == "wood" || race_type == "wild")
+      max_stats = ({  20, 20, 26, 23, 26, 19, 26  });
+    else
+      max_stats = ({  20, 26, 20, 22, 26, 21, 26  });
+  }
+  else if(str == "dwarf") {  
+    stats     = ({  3,  1,  2,  1,  1,  2,  1, });
+    max_stats = ({ 27, 20, 26, 23, 23, 25, 19, }); 
+  }
+  else if(str == "minotaur") {
+    stats     = ({  2,  1,  2,  2,  2,  1,  1, });
+    max_stats = ({  27, 18, 30, 23, 20, 20, 18 }); 
+  }
+  else if(str == "orc") { 
+    stats     = ({  2,  1,  2,  2,  2,  1,  1, });   
+    max_stats = ({ 25, 18, 29, 24, 23, 25, 18, }); 
+  }
+  else if(str == "giant") {   
+    stats     = ({  3,  1,  3,  1,  1,  1,  1, });
+    max_stats = ({ 32, 15, 32, 23, 20, 20, 18, }); 
+  }   
+  else if(str == "halfling" || str == "kender") {
+    stats     = ({  1,  2,  1,  1,  2,  2,  2, });   
+    max_stats = ({ 18, 25, 20, 20, 26, 25, 22, }); 
+  }
+  else if(str == "gnome") {   
+    stats     = ({  1,  3,  1,  1,  2,  2,  1, });   
+    max_stats = ({ 20, 25, 20, 20, 26, 27, 23, }); 
+  }
+  else if(race == "pixie"  || race == "nixie" ||  race == "kobold" 
+       || race == "goblin" || race == "sprite" ) {
+    stats     = ({  1,  3,  1,  1,  2,  2,  1, });   
+    max_stats = ({  20, 25, 20, 20, 26, 27, 23   }); 
+  }
+  else {
+    stats     = ({  2,  2,  2,  2,  2,  2,  2, });   
+    max_stats = ({ 25, 25, 25, 25, 25, 25, 25, }); 
+  }
+  stat_name = ({   
+      "constitution", "intelligence", "strength",   
+      "combat",  "dexterity",    "wisdom", "charisma"   
+  });   
+
+  if(str != "human") add_language(str);
+  for(i = 0; i < sizeof(stat_name); i++) {
+    if(level < 1) {     
+      call_other(this_object(),"set_"+stat_name[i],stats[i]);
+    }
+    call_other(this_object(),"set_max_"+stat_name[i],max_stats[i]);
+  }
+  return race;
+}
+
+
+string *set_languages_known(string *arr) {
+  return languages_known = (arr) ? arr : ({});
+}
+
+
+status change_language(string str) {
+  if(str == "common" || query_language(str)) {
+    write("You begin to speak in "+ str +".\n");
+    speak_language = str;
+    return 1;
+  }
+  write("You don't know the language "+ str +".\n");
+  return 1;
+}
+
+status set_speak_language(string str) {  
+  speak_language = (query_language(str)) ?  speak_language : "common";
+  return (str == speak_language) ? 1 : 0; 
+}  
+
+string *set_weapon_prof(string *arr) {
+  return weapon_prof = (arr) ? arr : ({});
+}
+string *set_right_attack_msg(string *msg) { 
+  return right_attack_msg = (msg) ? msg : ({});
+}
+
+string *set_attack_msg(string *msg) {
+  return set_right_attack_msg(msg);
+}
+
+
+string *set_left_attack_msg(string *msg) { 
+  return left_attack_msg = (msg) ? msg : ({});
+}
+
+status set_ghost(status i)    { return ghost    = (i) ? 1 : 0; }
+status set_dead(status i)     { return dead     = (i) ? 1 : 0; }
+
+status set_no_wimpy(status i) { return no_wimpy = (i) ? 1 : 0; }
+int set_wimpy(int i)          { return whimpy   = i; }
+string set_custom(string s)   { return custom   = s; }
+  
+int set_hp(int i) { 
+# ifdef LOG_SET_HP
+    log(LOG_SET_HP, hp, i);
+# endif /* LOG_SET_HP */
+  return hp = i;
+}
+
+int set_max_hp(int i) {
+# ifdef LOG_SET_MAX_HP
+    log(LOG_SET_MAX_HP, max_hp, i);
+# endif /* LOG_SET_MAX_HP */
+  return max_hp = i;
+}
+
+int set_exp(int i) {
+# ifdef LOG_SET_EXP
+    log(LOG_SET_EXP, experience, i);
+# endif /* LOG_SET_EXP */
+  return experience = i;
+}
+
+int set_money(int i) {
+# ifdef LOG_SET_MONEY
+    log(LOG_SET_MONEY, money, i);
+# endif /* LOG_SET_MONEY */
+  return money = i;
+}
+
+int set_age(int i)       { return age        = i; }
+
+
+int set_alignment(int i) {
+# ifdef LOG_SET_ALIGN
+    log(LOG_SET_ALIGN, alignment, i);
+# endif /* LOG_SET_ALIGN */
+  if(!intp(i)) return 0;
+  return alignment = i;
+}
+
+int set_al(int i) { 
+# ifdef LOG_SET_ALIGN
+    log(LOG_SET_ALIGN, alignment, i);
+# endif /* LOG_SET_ALIGN */
+  if(!intp(i)) return 0;
+  return alignment = i;
+}
+
+int set_gender(int i)    { return gender = ((i==2) ? 2 : ((i==1) ? 1 : 0)); }
+  
+string *set_spell_immune(string *arr) { 
+  return spell_immune = (arr) ? arr : ({});
+}
+
+mixed *set_loaded_spell(mixed *arr) {
+  return loaded_spell = (arr) ? arr : ({});
+}
+
+int set_magic_resist(int i) {
+  return magic_resist = ((i > 100) ? 100 : ((i < 0) ? 0 : i));
+}
+
+status set_npc(status i)    { return is_npc = (i) ? 1 : 0; }
+int set_invis(int i)        { return is_invis = i;         }
+status set_alias_status(status i) { return is_alias = (i) ? 1 : 0; }
+status set_brief(int i)     { return brief = (i) ? 1 : 0;  }
+
+int set_ac(int i)           { npc_ac = i; return armour_class = i; }
+int set_armour_class(int i) { npc_ac = i; return armour_class = i; }
+
+int set_ac_bonus(int i) {
+# ifdef LOG_SET_AC_BONUS
+    log(LOG_SET_AC_BONUS, ac_bonus, i);
+# endif /* LOG_SET_AC_BONUS */
+  return ac_bonus = i;
+}
+
+object *set_armour_worn(object *arr) {
+  return armour_worn = (arr) ? arr : ({});
+}
+
+int set_wc(int i)                      { npc_wc = i; return right_wc = i; }
+int set_right_wc(int i)                { npc_wc = i; return right_wc = i; }
+object set_right_weapon(object ob)     { return right_weapon = ob;      }
+string set_right_weapon_type(string s) { return right_weapon_type = s;  }
+int set_right_weapon_bonus(int i)      { return right_weapon_bonus = i; }
+ 
+int set_left_wc(int i)                 { npc_wc_l = i; return left_wc = i; }
+object set_left_weapon(object ob)      { return left_weapon = ob;       }
+string set_left_weapon_type(string s)  { return left_weapon_type = s;   }
+int set_left_weapon_bonus(int i)       { return left_weapon_bonus = i;  }
+ 
+object set_primary_attack(object ob)   { return primary_attack = ob;    }
+
+object *set_secondary_attacks(object *arr) {
+  return secondary_attacks = (arr) ? arr : ({});
+}
+
+string *set_classes(string *arr) { return classes = (arr) ? arr : ({}); }
+  
+/*** Primary skills ***/ 
+ 
+int set_combat(int i)       { return combat       = i; }
+int set_dexterity(int i)    { return dexterity    = i; }
+int set_intelligence(int i) { return intelligence = i; }
+int set_wisdom(int i)       { return wisdom       = i; }
+int set_charisma(int i)     { return charisma     = i; }
+int set_strength(int i)     { return strength     = i; }
+
+int average_hp_multiplier() {
+  int i, j, total;
+
+  if((i = sizeof(classes))) {
+    for(total = 0; i--;) { 
+      if((j = member_array(classes[i], HP_PER_LEVEL)) != -1) {
+        total += HP_PER_LEVEL[j+1];
+      }
+      else {
+        log_file("HP_PER_LEVEL",
+          "Class: "+ classes[i] +" is not defined in skills.h\n");
+      }
+    }
+    return total/sizeof(classes);
+  }
+  return 8;
+} 
+ 
+int set_constitution(int i) {
+  max_hp = 60 + i * average_hp_multiplier();
+  max_hp -= POISON;
+  return constitution = i; 
+} 
+
+int set_max_combat(int i)       { return max_combat       = i; }
+int set_max_dexterity(int i)    { return max_dexterity    = i; }
+int set_max_intelligence(int i) { return max_intelligence = i; }
+int set_max_wisdom(int i)       { return max_wisdom       = i; }
+int set_max_charisma(int i)     { return max_charisma     = i; }
+int set_max_strength(int i)     { return max_strength     = i; }
+int set_max_constitution(int i) { return max_constitution = i; }
+
+/**************************************************************************/
+/* query */
+
+string query_current_room()      { return file_name(environment()); }  
+
+varargs string query_name(status real) {
+  return (real)
+       ? lower_case(name)
+       : (ghost)
+       ? DEFAULT_GHOST_NAME
+       : (is_invis) 
+       ? invis_name
+       : (is_alias || disguise_on) 
+       ? alias_name
+       : (name)
+       ? capitalize(name)
+       : "";
+}
+
+string query_real_name()         { return ((name) ? lower_case(name) : 0); }
+string query_cap_name()          { return capitalize(query_name()); }
+string query_invis_name()        { return invis_name;        }
+int query_level()                { return level;             }
+int query_level_drained()        { return level_drained;     }
+ 
+string query_msgin()             { return msgin;             }
+string query_msgout()            { return msgout;            }
+string query_mmsgin()            { return mmsgin;            }
+string query_mmsgout()           { return mmsgout;           }
+
+string query_race()              { return race;              }
+
+string *query_languages_known()  { return languages_known;   }
+string *query_weapon_prof()      { return weapon_prof;       }
+string *query_classes()          { return classes;           }
+
+status query_ghost()             { return ghost;             }
+status query_dead()              { return dead;              }
+
+status query_no_wimpy()          { return no_wimpy;          }
+int query_wimpy()                { return whimpy;            }
+string query_custom()            { return custom;            }
+  
+int query_hp()                   { return hp;                }
+int query_max_hp()               { return max_hp;            }
+
+int query_exp()                  { return experience;        }
+int query_money()                { return money;             }
+int query_age()                  { return age;               }
+int query_alignment()            { return alignment;         }
+int query_al()                   { return alignment;         }
+  
+string *query_all_spell_immune() { return spell_immune;      }
+mixed *query_loaded_spell()      { return loaded_spell;      }
+int query_magic_resist()         { return magic_resist;      }
+
+string query_speak_language()    { 
+  return (speak_language) ? speak_language : "common";
+}
+
+status query_npc()               { return is_npc;            }
+int query_invis()                { return is_invis;          }
+status query_alias_status()      { return is_alias;          }
+status query_brief()             { return brief;             }
+
+int query_ac()                   { return armour_class;      }
+int query_armour_class()         { return armour_class;      }
+object *query_all_followers()    { return followers;         }
+object *query_armour_worn()      { return armour_worn;       }
+int query_ac_bonus()             { return ac_bonus;          }
+
+int query_wc()                   { return right_wc;          }
+int query_right_wc()             { return right_wc;          }
+object query_right_weapon()      { return right_weapon;      }
+string query_right_weapon_type() { return right_weapon_type; }
+
+int query_left_wc()              { return left_wc;           }
+object query_left_weapon()       { return left_weapon;       }
+string query_left_weapon_type()  { return left_weapon_type;  }
+string query_attacker() {
+  return (primary_attack) ? (string)primary_attack->query_name() : 0;
+}
+
+object query_attack()            { return primary_attack;    }  
+object query_primary_attack()    { return primary_attack;    }
+
+object *query_secondary_attacks(){ return secondary_attacks; }
+object *query_alt_attackers()    { return secondary_attacks; }  
+
+status two_weapons_wielded() {
+  if(right_weapon && left_weapon) return 1;
+  else return 0;
+}
+
+/*** Primary skills ***/ 
+ 
+int query_combat()       { return combat;       }
+int query_dexterity()    { return dexterity;    }
+int query_intelligence() { return intelligence; }
+int query_wisdom()       { return wisdom;       }
+int query_charisma()     { return charisma;     }
+int query_constitution() { return constitution; }
+int query_strength()     { return strength;     }
+
+int query_max_combat()       { return max_combat;       }
+int query_max_dexterity()    { return max_dexterity;    }
+int query_max_intelligence() { return max_intelligence; }
+int query_max_wisdom()       { return max_wisdom;       }
+int query_max_charisma()     { return max_charisma;     }
+int query_max_constitution() { return max_constitution; }
+int query_max_strength()     { return max_strength;     }
+
+
+
+/* gender stuff */
+
+int query_gender()    { return gender;      }
+
+status query_neuter() { return !gender;     }  
+status query_male()   { return gender == 1; }  
+status query_female() { return gender == 2; }  
+  
+string query_gender_string () {  
+  return (gender == 2) ? "female" : (gender == 1) ? "male" : "neuter";
+}  
+    
+string query_pronoun () {  
+  return (gender == 2) ? "she" : (gender == 1) ? "he" : "it";
+}  
+  
+string query_possessive () {  
+  return (gender == 2) ? "her" : (gender == 1) ? "his" : "its";
+}  
+  
+string query_objective () {  
+  return (gender == 2) ? "her" : (gender == 1) ? "him" : "it";
+}  
+
+/* primary stats */
+
+void query_primary_stats() {
+  string str, stat_str, *stat_name;
+  int i;
+  stat_name = ({ 
+     "combat", "dexterity", "intelligence", "wisdom",
+     "charisma", "constitution", "strength",
+  });
+
+  for(i = 0,stat_str = ""; i < sizeof(stat_name); i++) {         
+    str = capitalize(stat_name[i])+":.................";
+    str = extract(str,0,15);
+    str += query(stat_name[i])+"/"+query("max_"+stat_name[i]);
+    str += "                               ";
+    str = extract(str,0,30);
+    if(i%2) str += "\n";
+    stat_str += str;
+  }
+  if(i%2) stat_str += "\n";
+  write(stat_str);
+}
+
+/**************************************************************************/
+/* adj */
+
+int adj_level(int i) {
+# ifdef LOG_SET_LEVEL
+    log(LOG_SET_LEVEL,level,level+i);
+# endif /* LOG_SET_LEVEL */
+  if(i > 0) level_drained -= i;
+  if(level_drained < 0) level_drained = 0;    
+  return level += i; 
+}
+
+int adj_level_drained(int i) {
+# ifdef LOG_SET_LEVEL_DRAINED
+    log(LOG_SET_LEVEL_DRAINED, level_drained, level_drained+i);
+# endif /* LOG_SET_LEVEL_DRAINED */
+ return level_drained += i;
+}
+ 
+int adj_wimpy(int i)          { return whimpy  += i; }
+  
+int adj_hp(int i) {
+# ifdef LOG_SET_HP
+    log(LOG_SET_HP, hp, hp+i);
+# endif /* LOG_SET_HP */
+ hp = (hp+i > max_hp) ? max_hp : hp + i;
+ if(hp < 0) hp = 0;
+ return hp;
+}
+
+int adj_max_hp(int i) { 
+# ifdef LOG_SET_MAX_HP
+    log(LOG_SET_MAX_HP, max_hp, max_hp+i);
+# endif /* LOG_SET_MAX_HP */
+  return max_hp += i;
+}
+
+int adj_exp(int i) {
+# ifdef LOG_SET_EXP
+    log(LOG_SET_EXP, experience, experience+i);
+# endif /* LOG_SET_EXP */
+  return experience += i; 
+}
+
+int adj_money(int i) {
+# ifdef LOG_SET_MONEY
+    log(LOG_SET_MONEY, money, money+i);
+# endif /* LOG_SET_MONEY */
+  return money += i;
+}
+
+int adj_age(int i)       { return age        += i; }
+
+int add_alignment(int i) {
+  return adj_alignment(i);
+}
+
+int adj_alignment(int i) {
+# ifdef LOG_SET_ALIGN
+    log(LOG_SET_ALIGN, alignment, alignment+i);
+# endif /* LOG_SET_ALIGN */
+  return alignment += i;
+}
+
+int adj_magic_resist(int i) {
+  return magic_resist += ((i > 100) ? 100 : ((i < 0) ? 0 : i));
+}
+
+int adj_ac(int i)           { return armour_class += i; }
+int adj_armour_class(int i) { return armour_class += i; }
+int adj_ac_bonus(int i)     { return ac_bonus     += i; }
+
+int adj_right_wc(int i)                { return right_wc += i;           }
+int adj_right_weapon_bonus(int i)      { return right_weapon_bonus += i; }
+ 
+int adj_left_wc(int i)                 { return left_wc += i;            }
+int adj_left_weapon_bonus(int i)       { return left_weapon_bonus += i;  }
+  
+/*** Primary skills ***/ 
+ 
+int adj_combat(int i)       { return combat       += i; }
+int adj_dexterity(int i)    { return dexterity    += i; }
+int adj_intelligence(int i) { return intelligence += i; }
+int adj_wisdom(int i)       { return wisdom       += i; }
+int adj_charisma(int i)     { return charisma     += i; }
+int adj_strength(int i)     { return strength     += i; }
+
+int adj_constitution(int i) { 
+  constitution += i; 
+  max_hp = 60 + constitution * average_hp_multiplier();
+  max_hp -= POISON;
+  return constitution;
+} 
+
+/****************************************************************************/
+/* adds */  
+
+status add_weight(int wt) {  
+/* causes too long evaluation errors on long lists 
+  recalc_carry();  
+ */
+  if(wt + weight > strength + 10 + carry_bonus()) return 0;  
+  weight += wt;  
+  return 1;  
+}  
+
+int add_exp(int i) {
+# ifdef LOG_SET_EXP
+    log(LOG_SET_EXP, experience, experience+i);
+# endif /* LOG_SET_EXP */
+  experience += i;
+  return i;
+}
+ 
+int add_money(int i) {
+     money += i;
+}
+  
+/****************************************************************************/
+/* show age in clock time */  
+
+string show_age(status arg) {  
+  int i;
+  string str;
+  
+  str = "Age: ";  
+  i = age;  
+  if(i/302400) {
+    str += (i/302400) + " Weeks ";
+    i = i - (i/302400)*302400;
+  }
+  if(i/43200) {  
+    str += (i/43200) +" Days ";  
+    i = i - (i/43200)*43200;  
+  }  
+  if(i/1800) {  
+    str += (i/1800) +" hours ";  
+    i = i  - (i/1800)*1800;  
+  }  
+  if(i/30) {  
+    str += (i/30) +" minutes ";  
+    i = i - (i/30)*30;   
+  }  
+  str += (i*2) +" seconds.\n";
+  if(!arg) write(str);  
+  return str;
+}  
+
+
+
+/***************************************************************************/
+/* level draining stuff */
+  
+void restore_level() {  
+  if(!level_drained) return;
+  level_drained -= 1;  
+  set_exp(GET_NEXT_EXP(query_level()));   
+  set_level(query_level() + 1);  
+}  
+
+  
+void drain_level() {  
+  if(level == 1) {
+    death();
+    return;
+  }
+  level_drained += 1;  
+  level -= 1;
+  experience -= LOST_EXPERIENCE;
+}  
+  
+/***********************************************************************/
+/* spell_immune array stuff */
+  
+status query_spell_immunity(string str) {  
+  if(!spell_immune) spell_immune = ({});
+  return (member_array(str, spell_immune) == -1) ? 0 : 1;
+}  
+  
+status query_spell_immune(string str) {
+  return query_spell_immunity(str);
+}
+
+void add_spell_immunity(string str) {  
+  if(!query_spell_immunity(str) && str) spell_immune += ({ str, });
+}  
+
+void add_spell_immune(string str) {
+  add_spell_immunity(str);
+}
+
+  
+void remove_spell_immunity(string str) {  
+  int i;
+
+  if((i = member_array(str, spell_immune)) != -1) {
+    spell_immune = spell_immune[0..i-1]
+                 + spell_immune[i+1..sizeof(spell_immune)-1];
+  }
+}     
+
+void remove_spell_immune(string str) {
+  remove_spell_immunity(str);
+}
+
+
+
+/**********************************************************************/
+/* languages_known array stuff */
+  
+status query_language(string str){  
+  if(this_player() && this_object()->query_security_level()) return 1;
+  return (member_array(str, languages_known) == -1) ? 0 : 1;
+}  
+
+status query_followers(object obj) {
+  return (member_array(obj, followers) == -1) ? 0 : 1;
+}
+
+  
+void add_language(string str){  
+  if(!query_language(str) && str) languages_known += ({ str, });
+}  
+
+
+void add_followers(object obj) {
+  if(!query_followers(obj) && obj) followers += ({ obj, });
+}
+
+  
+void remove_language(string str){  
+  int i;
+  if((i = member_array(str, languages_known)) != -1 && str != "common") {  
+    languages_known = languages_known[0..i-1]
+                    + languages_known[i+1..sizeof(languages_known)-1];
+  }
+}     
+
+void remove_followers(object obj) {
+  int i;
+  if((i = member_array(obj, followers)) != -1) {
+    followers = followers[0..i-1] + followers[i+1..sizeof(followers)-1];
+  }
+}
+
+
+/**************************************************************************/
+/* weapon_prof array stuff */
+
+status query_weapon_proficiency(string str){  
+  if(!weapon_prof) weapon_prof = ({});
+  return (member_array(str, weapon_prof) == -1) ? 0 : 1;
+}  
+  
+void add_weapon_proficiency(string str){  
+  if(!query_weapon_proficiency(str) && str) weapon_prof += ({ str, });
+}  
+  
+void remove_weapon_proficiency(string str){  
+  int i;
+
+  if((i = member_array(str, weapon_prof)) != -1) {  
+    weapon_prof = weapon_prof[0..i-1]+weapon_prof[i+1..sizeof(weapon_prof)-1];
+  }
+}     
+
+/**********************************************************************/
+/* classes array stuff */
+
+status query_class(string str) {  
+  if(!classes) classes = ({});
+  return (member_array(str, classes) == -1) ? 0 : 1;
+}  
+  
+void add_class(string str){  
+  if(!query_class(str) && str) classes += ({ str, });
+}  
+  
+void remove_class(string str){  
+  int i;
+
+  if((i = member_array(str, classes)) != -1) {  
+    classes = classes[0..i-1]+classes[i+1..sizeof(classes)-1];
+  }
+}     
+
+/************************************************************************/ 
+/* secondary_attacks array stuff */
+
+status query_secondary_attacker(object ob) {
+  return (member_array(ob, secondary_attacks) == -1) ? 0 : 1;
+}
+
+
+
+/*********************************************************************/
+/* 
+  sec_att_names is an array of player names attacking this object,
+  It has two purposes:
+  1. It stores the name, to stop the player tactic of cutting the
+     connection to stop a fight with a monster.
+
+ 
+  2. It stores the players capitalized name to indicate that that
+     player_cap_name attacked me first. Player killers are made only if
+     they are the first player. (In otherwords if the name is stored
+     as a lower case name, then I attacked first)
+ */
+
+
+status query_sec_att_name(string str) {
+  if(!sec_att_names) sec_att_names = ({});
+  return (member_array(str,sec_att_names) != -1) ? 1 : 0;
+}
+
+
+status add_secondary_attacker(object ob) {
+  int i;
+  string killer_name, killer_cap_name;
+
+  if(ob == this_object()) return 0;
+  if(!query_secondary_attacker(ob)) {
+    if(ob && !ob->query_npc() && (killer_name = (string)ob->query_name(1))) {
+      killer_cap_name = capitalize(killer_name);
+      if(!sec_att_names) sec_att_names = ({});
+      if(!query_npc() && ob->query_secondary_attack(this_object())
+      && !ob->query_sec_att_name(killer_cap_name)) { 
+        if((i = member_array(killer_name, sec_att_names)) != -1) {
+          sec_att_names = sec_att_names[0..(i-1)]
+                        + sec_att_names[(i+1)..(sizeof(sec_att_names)-1)];
+        }
+        if(member_array(killer_cap_name, sec_att_names) == -1) {
+          sec_att_names += ({ killer_cap_name, });
+        }
+      }
+      else  {
+        if((i = member_array(killer_cap_name, sec_att_names)) != -1) {
+          sec_att_names = sec_att_names[0..(i-1)]
+                        + sec_att_names[(i+1)..(sizeof(sec_att_names)-1)];
+        }
+        if(member_array(killer_name, sec_att_names) == -1) {
+          sec_att_names += ({ killer_name, });
+        }
+      }
+    }
+  }
+  if(!query_npc() && ob && !ob->query_npc()) {
+#ifdef PLAYER_KILL
+    if((THIS_OBJECT_WIZ^((ob->query_security_level()) ? 1 : 0))
+    || (query_level() < 6)
+    || (int)ob->query_level() < 6
+    || ((int)ob->query_level() < (query_level()-5)
+    && !ob->query_secondary_attacker(this_object()))) {
+      return 0;
+    }
+  }
+#else
+    return 0;
+  }
+#endif /* PLAYER_KILL */
+  if(!query_secondary_attacker(ob) && ob) secondary_attacks += ({ ob, });
+  return 1;
+}  
+
+void remove_secondary_attacker(object ob) {
+  string killer_name;
+  int i;
+
+  if(ob && (killer_name = (string)ob->query_name(1))) {
+    if(!sec_att_names) sec_att_names = ({});
+    if((i = member_array(killer_name, sec_att_names)) != -1) {
+      sec_att_names = sec_att_names[0..(i-1)]
+                     + sec_att_names[(i+1)..(sizeof(sec_att_names)-1)];
+    }
+    killer_name = capitalize(killer_name);
+    if((i = member_array(killer_name, sec_att_names)) != -1) {
+      sec_att_names = sec_att_names[0..(i-1)]
+                     + sec_att_names[(i+1)..(sizeof(sec_att_names)-1)];
+    }
+
+  }
+  if(ob == primary_attack) primary_attack = 0;
+  if((i = member_array(ob, secondary_attacks)) != -1) {  
+    secondary_attacks = secondary_attacks[0..i-1]
+                      + secondary_attacks[i+1..sizeof(secondary_attacks)-1];
+  }
+}
+
+
+
+/************************************************************************/ 
+/* armour_worn array stuff */
+
+status query_armour(object ob) {
+  return (member_array(ob, armour_worn) == -1) ? 0 : 1;
+}
+
+
+protected status filter_armour_type(object ob, string type) {
+  if(!ob) return 0;
+  if((string)ob->query_type() == type) return 1;
+  return 0;
+}
+
+object query_armour_type(mixed arg) {
+  object *obj, ob;
+  string type;
+
+  type = (objectp(arg)) ? (string)arg->query_type() : arg;
+  obj = filter_array(armour_worn,"filter_armour_type",this_object(),type);
+  ob = (sizeof(obj)) ? obj[0] : 0;
+  return ob;
+}
+
+void add_armour(object ob){  
+  if(!query_armour_type(ob) && ob) armour_worn += ({ ob, });
+}  
+ 
+/**************************************************************************/
+/* check_spell */
+
+
+varargs status check_spell(string id, object ob) {
+  object env;
+
+  if(!ob) ob = this_object();
+  env = environment(ob);
+  return (env->query_property(id) || present(id,ob) || present(id, env)) 
+       ? 1 : 0;
+}
+
+/**************************************************************************/
+/* initialise stuff */
+
+#ifdef NATIVE_MODE
+void create() {
+#else
+void reset(status arg) {
+  if(arg) return;
+#endif /* native */
+  msgout     = DEFAULT_MSGOUT;
+  msgin      = DEFAULT_MSGIN;
+  mmsgout    = DEFAULT_MMSGOUT;
+  mmsgin     = DEFAULT_MMSGIN;
+  invis_name = DEFAULT_INVISNAME;
+  speak_language = "common";
+  classes = STARTUP_CLASSES;
+  spell_immune      = ({});
+  loaded_spell      = ({});
+  secondary_attacks = ({});
+  armour_worn       = ({});
+  weapon_prof       = ({});
+  right_attack_msg  = ({});
+  left_attack_msg   = ({});
+  languages_known   = ({ "common", });
+  followers         = ({});
+}  
+
+
+/***************************************************************************/
+/* long */
+
+void long(status wiz) {  
+  string al;
+  string str;
+
+  if(query_ghost()) {
+    write("You can see right through "+ query_objective() +"!\n");
+    return;
+  }
+  ::long(wiz);
+  al = (string)this_object()->query_al_title();
+  if(al)
+  sscanf(al,"(%s)",al);
+  str = capitalize(query_pronoun());
+  if(query_disguise_on()
+  && !sizeof(compare("intelligence","disguise",({ this_object(),})))) {
+    write(str + " vaguely looks like "+capitalize(query_name(1))+".\n");
+  }
+
+  if(al) 
+  write(str + " is "+ al + "\n");
+  if(race && race != "") {
+    write(str + 
+       ((race[0]=='a'||race[0]=='e'||race[0]=='i'||race[0]=='o'||race[0]=='u')
+        ? " is an " + race +".\n"
+        : " is a "  + race +".\n"));
+  }
+  this_object()->show_scar(); 
+  str += " ";  
+  str += (hp < max_hp/12) 
+      ? "looks ready to meet "+query_possessive()+" death.\n"
+      : (hp < max_hp/6)
+      ? "has been horribly injured.\n"
+      : (hp < max_hp/3)
+      ? "looks badly wounded.\n"
+      : (hp < (max_hp*2/3))
+      ? "has sustained some minor wounds.\n"
+     : "is "+ (hp == max_hp ? "unscathed and ": "") + "looking strong.\n";
+  write(str);
+}  
+
+/****************************************************************************/
+/* id */
+
+status id(string str) {  
+  return (race && str == race) 
+      || ::id(str);
+}  
+
+
+/***************************************************************************/
+/* move_player */
+
+#ifdef DESTRUCT_DOMAIN_MOVE
+
+void domain_destruct(object ob) {
+  object *inv;
+  int i;
+
+  if(!ob) return;
+  inv = all_inventory(ob);
+  for(i = 0; i < sizeof(inv); i++) {
+    if(!inv[i]->query_domain_safe()) {
+      domain_destruct(inv[i]);
+      inv[i]->drop(1);
+      if(inv[i]) destruct(inv[i]);
+    }
+  }
+}
+
+#endif /* DESTRUCT_DOMAIN_MOVE */
+ 
+
+
+varargs 
+status move_player(string dir_dest,mixed optional_dest_ob,status safe) {
+  int i;
+  string dir;
+  mixed dest;  
+  object *who, ob;  
+  status is_light;
+  string verb;
+  object *following_players, old_room;
+
+
+  verb = query_verb();
+
+  if(!optional_dest_ob) {  
+    if(!sscanf(dir_dest, "%s#%s", dir, dest)) {  
+      write("Move to bad dir/dest\n");  
+      return 0;  
+    }
+  }  
+  else {  
+    dir = dir_dest;  
+    dest = optional_dest_ob;  
+  }
+  if((old_room = environment())) {
+    if(check_spell("Hold")) {
+      write("Something prevents you from leaving.\n");
+      return 0;
+    }
+    is_light = (set_light(0) > 0) ? 1 : 0;  
+    if(is_light) {
+      who = all_inventory(environment());  
+#ifdef THIEF_H
+      if(stealth_on) who = compare("stealth","intelligence",who);  
+#endif /* THIEF_H */
+      if(query_invis()) who = compare("invis","intelligence", who);
+      
+      if(dir == "X")  
+        tell_objects (who, query_name() +" "+ mmsgout +".\n");
+      else 
+        tell_objects (who, query_name()+" "+ msgout +" "+ dir +".\n"); 
+    }
+  }
+   
+  following_players = (object *)this_object()->query_all_followers();
+  if(verb && following_players && old_room) {
+     move_object(this_object(), dest);
+     for(i = 0; i < sizeof(following_players); i++) {
+      if(!following_players[i]) continue;
+      if(stealth_on || environment(following_players[i]) != old_room) {
+        tell_object(following_players[i], (string)this_object()->query_name()
+                   +" no longer seems to be here.\n");
+        this_object()->remove_followers(following_players[i]);
+      }
+      else {
+        tell_object(following_players[i], "You follow "+
+          (string)this_object()->query_name() +" "+ verb +"...\n");
+        command(verb, following_players[i]);
+        if(environment(following_players[i]) != environment()) {
+          this_object()->remove_followers(following_players[i]);
+          tell_object(following_players[i], "You seem to lose you way.\n");
+        }
+      }
+    }
+  }
+  else {
+    move_object(this_object(), dest);
+  }
+
+
+  is_light = (set_light(0) > 0) ? 1 : 0;  
+  if(is_light) {
+    who = all_inventory(environment());  
+#ifdef THIEF_H
+    if(stealth_on) who = compare("stealth","intelligence",who);  
+#endif /* THIEF_H */
+    if(query_invis()) who = compare("invis","intelligence", who);
+    
+    if(dir == "X")  
+      tell_objects(who, query_name() +" "+ mmsgin +".\n");
+    else
+      tell_objects(who, query_name()+" "+ msgin +".\n"); 
+  } 
+  if(is_npc) return 1;
+  if(!is_light) {  
+    write("It is dark.\n");
+    return 1;  
+  }  
+  ob = environment();  
+  if(!present("Blindness")) {
+    if(brief)  
+      write(ob->short(THIS_PLAYER_WIZ) +".\n");  
+    else  
+      ob->long(THIS_PLAYER_WIZ);
+    show_inventory(ob);
+  }
+  else {
+    write("It is dark.\nYou seem to be Blind!\n");
+  }
+
+#ifdef DESTRUCT_DOMAIN_MOVE
+  {
+  string domain1, domain2, tmp1, tmp2;
+
+  if(objectp(dest)) {
+    dest = file_name(dest);
+  }  
+  sscanf(query_current_room(),"d/%s/%s", domain1, tmp1);
+  sscanf(dest,"d/%s/%s", domain2, tmp2);
+  sscanf(dest, "/d/%s/%s", domain2, tmp2);
+  if(this_player()->query_security_level()) safe = 1;
+  if(!safe) {
+    if(domain1 != domain2) {
+      domain_destruct(this_object());
+      write("Some of your equipment is lost in the Time Domain Transfer.\n");
+    }
+  }
+  }
+#endif /* DESTRUCT_DOMAIN_MOVE */
+
+  return 1;
+}  
+ 
+  
+/************************************************************************/  
+/* insta-kill */
+  
+void death() {
+  object corpse, coins;
+  object *inv;
+  int i, wt;
+  object alt;
+  int z;
+
+  hp = 20;
+  dead = 1;  
+  if(!is_npc) {
+    say(query_name() + " died.\n", this_object());
+    if(this_player() != this_object()) {  
+      check_shout(this_player()->query_name()+
+                  " howls in triumph at the death of "+query_name()+"!!!\n");  
+    }
+    else {
+      check_shout(this_player()->query_name()+
+                  " has killed "+query_objective()+"self!!!\n");
+    }  
+  }
+
+  /* update attackers exp & alignment */
+
+  if(this_player() != this_object()) {
+    if(present("party_object", this_player())) {
+      present("party_object",this_player())->share_exp(ADDED_EXPERIENCE);
+    }
+    else {
+      this_player()->add_exp(ADDED_EXPERIENCE);
+    }
+    this_player()->add_alignment(-ADDED_ALIGNMENT);
+  }
+
+  /* update this persons exp */
+
+  experience -= LOST_EXPERIENCE;
+
+  for(z = 1; (alt = present(GUILD_OB+" "+z, this_object())); z++) {
+    alt->player_death();
+  }
+  hp = 10;  
+  corpse = clone_object(CORPSE);  
+  inv = all_inventory();  
+  for(i = 0; i < sizeof(inv); i++) {
+    if(!inv[i]->drop(1)) {
+      if(!inv[i]) continue;
+#ifdef NATIVE_MODE
+      inv[i]->move(corpse);
+#else
+      move_object(inv[i], corpse);
+#endif /* NATIVE_MODE */
+      wt += (int)inv[i]->query_weight();
+    }  
+  }
+  corpse->set_max_weight(wt);
+  if(money) {
+    coins = clone_object(MONEY);
+    coins->set_money(money);
+#ifdef NATIVE_MODE
+    coins->move(corpse);
+#else
+    move_object(coins, corpse); 
+#endif /* NATIVE_MODE */
+    money = 0;
+  }
+#ifdef NATIVE_MODE
+  corpse->move(environment());
+#else
+  move_object(corpse, environment());  
+#endif /* NATIVE_MODE */
+  recalc_carry();
+  recalc_wc();
+  recalc_wc();
+
+  /* fix attacker objects */
+
+  for(i = 0; i < sizeof(secondary_attacks); i++) {
+    if(secondary_attacks[i]) {
+      secondary_attacks[i]->stop_fight(this_object());
+    }
+  }
+  primary_attack = 0;
+  secondary_attacks = ({});
+  sec_att_names = ({});
+
+  if(this_player() != this_object()) write("You killed "+query_name()+".\n");
+  if(!this_object()->second_life()) {
+    say(query_name()+ " died.\n",this_object());  
+    destruct (this_object());  
+  }
+}
+
+/* do damage without making attacker pointers */
+
+protected int do_damage(int dam) {
+  int i;
+
+  if(!primary_attack) set_heart_beat(1); /* start heart of npcs */
+  stealth_on  = 0; 
+  disguise_on = 0;
+  is_invis    = 0;   /* make invis -> visible */
+  this_player()->set_invis(0);
+  if(ghost && !dead) {
+    tell_object(this_object(), this_player()->query_name() +
+    "'s attack passes right through you!\n");
+    write("You pass straight through "+ query_name() +"!\n");
+    return 0;
+  }
+  if(dead) return 0;  
+  if(random(THIS_PLAYER_COM) < random(query_dexterity())) {
+    dam -= random(query_dexterity()/5 + 1); 
+  }
+  else {
+    dam += random(THIS_PLAYER_COM/5 + 1); 
+  }
+  dam -= random(armour_class + 1);  
+  if(dam < 1) return 0;  
+
+#ifdef DESTROY_ARMOUR
+  if((i = sizeof(armour_worn))) {
+    i = random(i);
+    if(armour_worn[i])
+      tell_object(this_object(),"Your "+
+      (string)armour_worn[i]->query_name()+" absorbs some damage.\n");
+    if(!is_npc && armour_worn[i]) armour_worn[i]->hit_armour(dam);
+  }
+#endif /* DESTROY_ARMOUR */
+
+  /* check to see if net link is still on */  
+  
+  if(!is_npc && !query_ip_number(this_object())) {
+    write(query_name()+" is not here!\n"+  
+          "You cannot kill a player who is not logged in.\n");  
+    if(hp < 20) hp = 20;
+    stop_fight();  
+    if(this_player()) this_player()->stop_fight();  
+    return 0;  
+  }
+  hp -= dam;
+  if(dam && hp_displ) {
+    tell_object(this_object(),"** HP: "+ hp +"/"+ max_hp +" **\n");
+  }
+  if(hp > 0) return dam;
+  death();
+  return dam;  
+}
+  
+
+
+/***********************************************************************/
+/* hit player */
+
+int hit_player(int dam) {
+
+  if(this_player() != this_object()) {
+    if(environment(this_player())->query_no_fight()) {
+      write("Fighting is Not allowed here.\n");
+      this_player()->stop_fight(this_object());
+      stop_fight(this_player());
+      return 0;
+    }
+#ifdef LOG_SPECIAL_HIT /* use to detect illegal calls to hit_player */
+    if(previous_object() && !living(previous_object())) {
+      int i;
+      string file;
+      file = file_name(previous_object());
+      sscanf(file,"%s#%d",file,i);
+      switch(file) {
+        case "obj/shadows/healem":
+        case "obj/shadows/stoneskin":
+        case "skills/thief/bs":
+        case "skills/thief/steal":
+        case "obj/shadows/hit_back":
+        case "skills/mage/cloudkill":
+          /* these are currently known objects that call this fn */
+        break;
+
+        default:
+          log_file(LOG_SPECIAL_HIT,file +"\n");
+        break;
+      }
+    }
+#endif /* LOG_SPECIAL_HIT */
+
+  }
+  if(add_secondary_attacker(this_player())) {
+    if(!primary_attack || !present(primary_attack, environment())) {
+      primary_attack = this_player();
+    }
+  }      
+  return do_damage(dam);
+}
+
+
+/**************************************************************************/
+/* stop fight */
+
+varargs void stop_fight(object attacker) {
+  if(!attacker) attacker = primary_attack;
+  remove_secondary_attacker(attacker);
+  if(attacker) attacker->remove_secondary_attacker(this_object());
+}
+
+
+
+/**************************************************************************/  
+/* attack */  
+  
+
+void attack() {
+  int dam;
+  string pname;
+  int i, extra_attack;
+  int rhit, lhit;
+  string weapon_type;  
+  object alt; int z;
+  object tmp_att;
+
+  if(check_spell("Hold")) return;
+
+  /* find closest attacker */
+
+  if(primary_attack && primary_attack->query_ghost()) primary_attack = 0;
+  if(!primary_attack || !present(primary_attack,environment())) {
+    for(i = 0; i < sizeof(secondary_attacks); i++) {
+      if(secondary_attacks[i]) {
+        if((primary_attack = present(secondary_attacks[i],environment()))) {   
+          if(!primary_attack->query_ghost()) break;
+        }
+      }
+      else { /* remove zeros (dested attacks) */
+        secondary_attacks = secondary_attacks[0..i-1]
+                          +secondary_attacks[i+1..sizeof(secondary_attacks)-1];
+      }
+    }
+    if(!primary_attack) {
+      if(is_npc) return;                  
+      if(!sizeof(loaded_spell)) return; /* no attack in room */
+      else {
+        if(!AREA_EFFECT && !TARGET && !PASSIVE) {
+          write("You stop casting your "+ SPELL_NAME +" spell.\n");
+          unload_spell();
+          return;
+        }
+      }
+    }
+  }
+
+  /* a thiefs disguise can fool to stop a fight */
+
+  if(primary_attack
+  && primary_attack->query_disguise_on()
+  && !this_object()->query_aggressive()
+  && (pname = (string)primary_attack->query_name(1))) {
+    if(!sec_att_names) sec_att_names = ({});
+    if(!query_npc() || 
+       (query_npc() && member_array(capitalize(pname),sec_att_names) == -1)) {
+   if(random(query_intelligence()*DISGUISE_DIFF) < random(PRIMARY_DISGUISE+1)){
+        tell_object(primary_attack,
+          "Your diguise seems to fool "+query_name()+".\n"+
+          capitalize(query_pronoun()) + " ignores you.\n");
+        primary_attack->stop_fight(this_object());
+        stop_fight(primary_attack);
+        return;
+      }
+      else {
+        primary_attack->toggle_disguise();
+        tell_object(primary_attack,
+           query_name() +" says: Your disguise won't fool me!\n");
+        if(query_npc()) {
+          if((i = member_array(pname,sec_att_names)) != -1) {
+            sec_att_names[i] = capitalize(pname);
+          }
+          else {
+            sec_att_names += ({ capitalize(pname), });
+          }      
+        }
+      }
+    }
+    else {
+      primary_attack->toggle_disguise();
+      tell_object(primary_attack,
+         query_name() +" says: Your disguise won't fool me!\n");
+    }
+  }
+
+  /* a thiefs hide in shadows can delay stop a fight */
+
+  if(primary_attack 
+  && primary_attack->query_hide_in_shadows()) {
+    if(random(query_intelligence())
+     < random((int)primary_attack->query_hide_in_shadows()+1)) {
+      tell_object(primary_attack,
+        query_name()+" does not notice your presence, though "+
+        query_pronoun()+" appears to be hunting for you.\n");
+      return;
+    }
+     destruct((object)primary_attack->query_hide_in_shadows_object());
+  }
+
+  
+  /*****************************************************/
+  /* cast a spell */
+
+  if(sizeof(loaded_spell)) {
+    int msg_index;
+    if(++spell_time < SPELL_TIME) {
+      if(pointerp(PREPARE_MSG)) {
+        msg_index = (spell_time <= sizeof(PREPARE_MSG)) 
+                  ? spell_time-1
+                  : sizeof(PREPARE_MSG)-1;
+        write(process_msg(PREPARE_MSG[msg_index]));
+      }
+      if(pointerp(PREP_MSG_ROOM)) { 
+        msg_index = (spell_time <= sizeof(PREP_MSG_ROOM))
+                  ? spell_time-1
+                  : sizeof(PREP_MSG_ROOM)-1;
+        say(process_msg(PREP_MSG_ROOM[msg_index]));
+      }
+      return;
+    }
+    spell_time = 0;
+    cast_spell_at_target();
+#ifdef EITHER_SPELL_OR_ATTACK_IN_HEART_BEAT
+    return; 
+#endif
+  }
+
+  /*******************************************************/  
+  /* right weapon attacks */
+
+
+  if(right_weapon) {
+    rhit = (int)right_weapon->hit(primary_attack);
+#ifdef LOG_WEAPON_HIT
+    if(rhit) {
+      string file;
+      file = file_name(right_weapon);
+      sscanf(file,"%s#%d",file,i);
+      switch(file) {
+
+        default:
+          log_file(LOG_WEAPON_HIT,file +" amt: "+ rhit +" hp\n");
+        break;
+      }
+    }
+#endif
+    weapon_type = (right_weapon->query_type()) 
+                ? (string)right_weapon->query_type()
+                : "default";
+  }
+
+
+  /*********************************************************/
+  /* multiple attacks (with right weapon) */
+
+  if(query_multi_attack()) {
+    extra_attack = MULTI_ATTACK_RATE;
+  }
+  for(z = 1; (alt = present(ALT+" "+z, this_object())); z++) {
+    extra_attack += (int)alt->query_extra_attack();
+  }
+  for(z = 1; (alt = present(GUILD_OB+" "+z, this_object())); z++) {
+    extra_attack += (int)alt->query_extra_attack();
+  }
+  if(extra_attack > MAX_MULTI_ATTACK) extra_attack = MAX_MULTI_ATTACK;
+
+  for(i = 0; i <= extra_attack; i++) {  
+    dam = ((right_wc + rhit) * 2 + combat)/3;
+    dam -= i;
+    dam = (dam > 0) ? random(dam) + 1 : 0;  
+    if(!primary_attack) return; 
+    dam = (int)primary_attack->hit_player(dam);
+    add_exp(dam);   /* get experience for just attacking */
+    attack_msg(dam, weapon_type, primary_attack, "right");
+#ifdef DESTROY_WEAPON 
+    if(right_weapon && !is_npc) right_weapon->hit_weapon(dam);
+#endif 
+    if(primary_attack && query_multi_attack()) {
+      if(random(query_multi_attack()) < random(PRIMARY_DEX*MULTI_FREQ)) break;
+    }
+    else if(primary_attack) {
+      if(random(query_combat()) < random(PRIMARY_DEX*MULTI_FREQ)) break;
+    }
+    else {
+      break;
+    }
+  }
+
+  /***************************************************/
+  /* multiple opponents (with right weapon) */
+
+
+  if(primary_attack && query_multi_opponent()) {
+    for(i = 0; i < sizeof(secondary_attacks); i++) {
+      if((tmp_att = secondary_attacks[i])
+      && present(tmp_att,environment())
+      && primary_attack != tmp_att) {
+        if(random(query_multi_opponent()) 
+       < random((int)tmp_att->query_dexterity()*MULTI_FREQ)) break;
+          dam = ((right_wc + rhit) * 2 + combat)/3;
+          dam = (dam > 0) ? random(dam) + 1 : 0;  
+          dam = (int)tmp_att->hit_player(dam);
+          add_exp(dam);   /* get experience for just attacking */
+          attack_msg(dam, weapon_type, tmp_att, "right");
+#ifdef DESTROY_WEAPON 
+          if(right_weapon && !is_npc) right_weapon->hit_weapon(dam);
+#endif
+      }
+    }
+  }
+
+  /********************************************/
+  /* left weapon attack */
+
+  if(primary_attack && query_two_weapon() && left_weapon) {
+    if(random(query_two_weapon()) >= random(PRIMARY_DEX)) {
+      if(left_weapon)  lhit = (int)left_weapon->hit(primary_attack);
+      dam = ((left_wc + lhit) * 2 + combat)/3;
+      dam = (dam > 0) ? random(dam) + 1 : 0;  
+      dam = (int)primary_attack->hit_player(dam);
+      add_exp(dam);   /* get experience for just attacking */
+      weapon_type = (left_weapon) 
+                  ? (string)left_weapon->query_type()
+                  : "default";
+      attack_msg(dam, weapon_type, primary_attack, "left");
+#ifdef DESTROY_WEAPON 
+      if(left_weapon && !is_npc) left_weapon->hit_weapon(dam);
+#endif 
+    }
+  }
+}  
+  
+
+/**************************************************************************/
+/* spell attacks */
+
+/* 
+ * A spell undergoes 3 processes. 1. load spell 2. cast spell 3. hit by spell
+ *
+ * 1. load_spell() was design to give an easy to understand front-end
+ *    making the development of new spells quite easy. It easily allows
+ *    area effect, offensive and passive spells. And includes features
+ *    such as casting time, file name for cloning an object to the target,
+ *    and a spell component.
+ *
+ * 2. cast_spell_at_target() handles the target finding of the spell. It
+ *    handles both single target, and area effects.
+ *
+ * 3. spell_hit() handles the resistance checks (which can be overrided
+ *    by the "passive" flag in 1). It also features the capability of
+ *    the target to capture the spell. It also handles cloning a
+ *    "spell object" to the target and calls cast_spell() in the spell object.
+ */
+
+nosave status cast_spell_block; /* stops inappropriate cast_spell call */
+
+
+/* component extension, '#' == 'or'; '+' == 'and'
+ *
+ * eg. "component", "rope#cord+diamond#emerald",
+ *   will require a rope or a cord, and a diamond or an emerald for
+ *   spell components.
+ */  
+
+object *parse_component(string str) {
+  string *pluses, *hashes;
+  object *components, comp;
+  int i, j, k;
+
+  if(!str) return ({});
+  components = ({});
+#ifdef OLD_EXPLODE
+  pluses = explode(str +"+","+");
+#else
+  pluses = explode(str,"+");
+#endif
+  for(i = 0; i < sizeof(pluses); i++) {
+#ifdef OLD_EXPLODE
+    hashes = explode(pluses[i]+"#","#");
+#else
+    hashes = explode(pluses[i],"#");
+#endif
+    for(j = 0; j < sizeof(hashes); j++) {
+      sscanf(hashes[j],"%s %d", hashes[j], k);
+      for(k = 1, comp = 0;
+          (comp = present(hashes[j] +" "+ k))
+          && member_array(comp,components) != -1;
+          k++);
+      if(comp) {
+        components += ({ comp, });
+        break;
+      }
+    }
+    if(sizeof(components)-1 != i) { /* component not found */
+      return ({});
+    }
+  }
+  return components;
+}
+
+
+void unload_spell() {  
+  loaded_spell = ({});
+  cast_spell_block = 0;
+}
+
+/* common spell queries */
+
+int query_spell_dmg() {  return (sizeof(loaded_spell)) ? SPELL_DAM : -1; }
+
+string query_spell_name() { return (sizeof(loaded_spell)) ? SPELL_NAME : 0; }
+
+mixed query_spell_argument() { return (sizeof(loaded_spell)) ? ARGUMENT : 0; }
+
+status query_spell_area() {
+  return (!sizeof(loaded_spell)) ? 0 : ((AREA_EFFECT) ? 1 : 0);
+}
+
+/* OLD_AREA_EFFECT - get list of victims when spell is finished casting */
+/* otherwise - get list of victim when initialy start casting           */ 
+
+status load_spell(mixed *arr) { /* prepare caster to cast spell */
+  int i;
+  status prayer;
+  string tmp1, tmp2;
+
+  if(sizeof(loaded_spell)) {   /* we already had a spell loaded */
+    if(query_npc()) {
+      cast_spell_at_target();  /* cast it anyway */
+      return 1;
+    }
+    if(objectp(SPELL_TYPE)) {
+      write("You stop casting the spell.\n");
+    }
+    else if(SPELL_TYPE) {
+      prayer = (sscanf(SPELL_TYPE,"%ssphere%s",tmp1,tmp2)) ? 1 : 0;
+      if(prayer) {
+        write("You stop praying the prayer "+
+              ((SPELL_NAME) ? ", "+ SPELL_NAME : "") 
+             +".\nYour god looks down upon you with disdain.\n"); 
+      }
+      else {
+        write("You stop casting the prayer "+
+              ((SPELL_NAME) ? ", "+ SPELL_NAME : "") 
+             +".\nThe spell's energy fizzles into the Space-Time continuum.\n");
+      }
+    }
+  }
+  spell_time = 0;
+  loaded_spell = allocate(SPELL_ALLOCATE); 
+  for(i = 0; i < sizeof(arr); i++) {
+    if(!stringp(arr[i])) continue;
+    switch(arr[i]) {
+      case "target":                    TARGET      = arr[++i];     break;
+      case "name": case "spellname":    SPELL_NAME  = arr[++i];     break; 
+      case "school": case "sphere":     SPELL_TYPE  = arr[++i];     break;
+      case "cost":                      SPELL_COST  = arr[++i];     break;
+      case "damage":                    SPELL_DAM   = arr[++i];     break;
+      case "msg target":                TARGET_MSG  = arr[++i];     break;
+      case "msg room":                  ROOM_MSG    = arr[++i];     break;
+      case "msg caster":                CASTER_MSG  = arr[++i];     break;
+      case "immune":                    IMMUNE_TYPE = arr[++i];     break;
+      case "level": case "spell level": SPELL_LEVEL = arr[++i];     break;
+      case "spell object":              SPELL_OBJ   = arr[++i];     break;
+      case "time": case "cast time":    SPELL_TIME  = arr[++i];     break;
+      case "casting msg":               PREPARE_MSG = arr[++i];     break;
+      case "casting msg room":        PREP_MSG_ROOM = arr[++i];     break;    
+      case "component":                 COMPONENT   = arr[++i];     break;
+      case "passive":                   PASSIVE     = 1;            break;
+      case "aggressive":                PASSIVE     = 0;            break;
+      case "argument":                  ARGUMENT    = arr[++i];     break;
+      /* experimental */
+#ifdef OLD_AREA_EFFECT
+      case "area":                     AREA_EFFECT = this_object(); break;
+#else
+      case "area":     AREA_EFFECT = all_inventory(environment());  break;
+#endif
+    }
+  }
+  if(environment(this_player())->query_no_fight() && !PASSIVE) {
+    write("Fighting is Not allowed here.\n");
+    this_player()->stop_fight(this_object());
+    stop_fight(this_player());
+    return 0;
+  }
+  if(!objectp(SPELL_TYPE)) { 
+    if(SPELL_TYPE) {
+      prayer = (sscanf(SPELL_TYPE,"%ssphere%s",tmp1,tmp2)) ? 1 : 0;
+    }
+    if(COMPONENT) {
+      if(query_npc()) {
+        COMPONENT = ({});
+      }
+      else {
+        COMPONENT = parse_component(COMPONENT);
+        if(!sizeof(COMPONENT)) {
+          write("You do not have the necessary components for the "+
+                ((prayer) ? "prayer" : "spell")+".\n");
+          unload_spell();
+          return 0;
+        }
+      }
+    }
+    if(query(SPELL_TYPE) < SPELL_LEVEL) {
+      if(prayer) 
+        write("Your God will not grant you that prayer.\n");
+      else
+        write("You do not have enough knowledge to cast that spell.\n");
+      unload_spell();
+      return 0;
+    }
+    if(query(SPELL_TYPE+"_points") < SPELL_COST) {
+      write(((SPELL_NAME) ? "Your "+SPELL_NAME : "It") + " fizzles!!\n");
+      unload_spell();
+      return 0;
+    }
+    call_other(this_object(),"adj_"+SPELL_TYPE+"_points",-SPELL_COST);
+  }
+  else { /* wand */
+    if(COMPONENT) COMPONENT = ({});
+    if((int)SPELL_TYPE->query_charges() < SPELL_COST) {
+      write(((SPELL_NAME) ? "Your "+SPELL_NAME : "It") + " fizzles!!\n");
+      unload_spell();
+      return 0;
+    }
+    SPELL_TYPE->adj_charges(-SPELL_COST);
+  }
+
+  if(PREPARE_MSG && !pointerp(PREPARE_MSG)) {
+    PREPARE_MSG = ({ PREPARE_MSG, });
+  }
+  if(PREP_MSG_ROOM && !pointerp(PREP_MSG_ROOM)) { 
+    PREP_MSG_ROOM = ({ PREP_MSG_ROOM, });
+  }
+
+  if(!objectp(SPELL_TYPE)) {
+    if(SPELL_NAME) write("You begin chanting a "+ SPELL_NAME +" spell...\n");
+    say(query_name()+" begins chanting in an ancient language...\n");
+  }
+  return 1; 
+}
+
+/* old function name was cast_spell() but this clashed when spell object
+   was living 
+ */
+
+void cast_spell_at_target() {  /* find target */
+  object ob, *env;
+  int i, size, spell_dam;
+ /* player has entered after area spell started */
+  string who, spell_name;
+  status check_flag;
+ 
+
+  if(!sizeof(loaded_spell)) return; /* no spell loaded */
+  if(cast_spell_block) return;      /* stop inappropriate recursive calls */
+  cast_spell_block = 1;  
+  if(AREA_EFFECT) {
+#ifdef OLD_AREA_EFFECT 
+    env = all_inventory(environment());
+    size = sizeof(env);
+#else /* experimental area effect for pkill */
+    if(!pointerp(AREA_EFFECT)) {
+      log_file("AREA",file_name(this_object()) +
+                      (string)"obj/wizard"->string_results(AREA_EFFECT)
+                     +"\n");
+      AREA_EFFECT = 0;
+      size = 1;
+    }
+    else {
+      env = AREA_EFFECT;
+      AREA_EFFECT = this_object(); /* retain old behaviour */
+      size = sizeof(env);
+    }
+#endif
+  }
+  else {
+    size = 1;
+  }
+  for(i = 0; i < size; i++) {
+    spell_dam = SPELL_DAM;
+    if(AREA_EFFECT) {
+      TARGET = env[i];
+#ifndef OLD_AREA_EFFECT
+      if(!TARGET) continue; /* object destructed */
+      if(environment(TARGET) != environment()) continue; /* object left room */
+#endif
+      if(!living(TARGET)) continue;
+    }
+    if(!check_flag) {
+      check_flag = 1;
+      if(check_spell("Nulmagic")) {
+        write("Something dispels the magical energy.\n"); 
+        unload_spell();
+        return;
+      }
+      if(check_spell("Silence")) {
+        write("There is a magical silence that inhibits your spellcasting.\n");
+        unload_spell();
+        return;
+      }
+      spell_name = SPELL_NAME; /* used as reference for illegal unloading */
+      if(TARGET) {
+        who = (stringp(TARGET)) ? TARGET : (string)TARGET->query_name();
+        if(!(ob = present(TARGET,environment()))) {
+          if(!(ob = present(TARGET, this_object()))) {
+            if(TARGET == environment() || TARGET == "room") {
+              ob = environment();
+              who = "room";
+            }
+            else {
+              write(who+" is not here.\n");
+              unload_spell();
+              return;
+            }
+          }            
+        }
+        TARGET = ob;
+        if(!living(ob)) { /* cast at non-living object */ 
+          if(!SPELL_OBJ) {
+            write("It has no effect on "+who+".\n");
+            break;
+          }
+          ob = clone_object(SPELL_OBJ); 
+#ifdef NATIVE_MODE
+          ob->move(TARGET);
+#else
+          move_object(ob, TARGET); /* changed from this_object() */
+#endif /* NATIVE_MODE */
+          if(!ob->cast_spell(this_player(),TARGET,0,spell_dam)) {
+            if(CASTER_MSG) write(process_msg(CASTER_MSG));
+            if(ROOM_MSG)   say(process_msg(ROOM_MSG), this_object());
+          }
+          break;
+        }
+      }
+      if(!PASSIVE) {
+        if(!TARGET) {
+          if(primary_attack) {
+            if(present(primary_attack, environment())) {
+              TARGET = primary_attack;
+            }
+            else {
+              write(primary_attack->query_name()+" is not here.\n");
+              unload_spell();
+              return;
+            }
+          }
+          else {
+            write("Attack who?\n");
+            unload_spell();
+            return;
+          }
+        }
+      }
+      else if(!TARGET) { /* passive && no target */
+        TARGET = this_player();
+      }
+    }
+    if(!TARGET) continue; /* bypass area effect anomalies */
+    if(!PASSIVE && spell_dam != -1) attack_msg(spell_dam, "spell", TARGET, 0);
+    spell_dam = (int)TARGET->spell_hit(spell_dam,
+                                      CASTER_MSG,
+                                      TARGET_MSG, 
+                                        ROOM_MSG,
+                                     AREA_EFFECT,
+                                       SPELL_OBJ, 
+                                     IMMUNE_TYPE,
+                                      SPELL_TYPE,
+                                         PASSIVE);
+    if(!sizeof(loaded_spell)) { /* failsafe */
+      log("SPELL_UNLOAD","Illegal spell unload by "+spell_name,0);
+      return;
+    }
+    if(TARGET) AREA_EFFECT = TARGET; /* thus we know who spell hit last */
+  }
+  if(pointerp(COMPONENT)) {  /* destruct component list */
+    for(i = 0; i < sizeof(COMPONENT); i++) {
+      if(COMPONENT[i]) COMPONENT[i]->drop(1);
+      if(COMPONENT[i]) destruct(COMPONENT[i]);
+    }
+  }
+  if(objectp(SPELL_TYPE)) SPELL_TYPE->end_spell(); /* tell wand finished */
+  unload_spell(); /* unload spell */
+}  
+ 
+
+int query_save_bonus() {
+  string tmp1, tmp2;
+  string *races;
+  int *bonuses, i; /* parallel to races */
+
+  if(!race) return 0;
+  races = ({
+    "elf",    "dwarf",    "minotaur", "orc", 
+    "giant",  "halfling", "kender",   "gnome",
+    "pixie",  "nixie",    "kobold",   "goblin", 
+    "sprite", 
+  });
+
+  bonuses = ({
+     2,  3,  1, -1,
+    -1,  3,  4,  4,
+     3,  4,  2,  1,
+     4,
+  });
+
+  for(i = sizeof(races); i--; ) {
+    /* a regexp(races,race??something) would be better */
+    if(sscanf(race,"%s"+ races[i] +"%s", tmp1, tmp2)) {
+      return bonuses[i];
+    }
+  }
+  return 0;
+}
+
+  
+/* thus in process_msg(), this_object() == target, this_player() == caster */
+
+/* note that the caster will still have their spell loaded, so 
+ * caster->query_loaded_spell() will yield the spell cast at you.
+ * Also a comparison between dmg and caster->query_spell_dmg() will
+ * indicate whether the target saved, or resisted the spell.
+ */
+
+int spell_hit(int dmg,     /* spell damage */
+    string caster_msg,     /* message to caster */
+    string target_msg,     /* message to target */
+      string room_msg,     /* message to room */
+          object prev,     /* if area effect spell, previous target */
+         string fname,     /* filename of spell object */
+   string immune_type,     /* immune type */
+           mixed type,     /* the spell's type */
+       status passive) {   /* no resistance checks */
+  object alt, target_ob;
+  int save;
+  int z;
+
+  if(!passive) {
+    if(query_magic_resist() > random(100)) {
+      dmg = 0;
+    }
+    if(immune_type && query_spell_immunity(immune_type)) {
+      dmg = 0;
+    }
+    save = query_wisdom() + 1 + query_save_bonus();
+    if(save < 2) save = 2; 
+    if(objectp(type)) {  /* make our save */ 
+      if(random((int)type->query_cast_level()+1) < random(save)) {
+        dmg /= 2;
+      }
+    }
+    else {
+      if(random((int)this_player()->query(type)+1) < random(save)){
+        dmg /= 2;
+      }
+    }
+  }
+  if(fname) {
+    target_ob = clone_object(fname);  /* weakness - failure will stop heart */
+#ifdef NATIVE_MODE
+    target_ob->move(this_object());
+#else
+    move_object(target_ob, this_object());
+#endif /* NATIVE_MODE */
+  }
+  for(z = 1; (alt = present(ALT+" "+z, this_object())); z++) {
+    if(alt->spell_capture(this_player(),this_object(),target_ob,prev,dmg)) {
+      if(!passive
+      && (!prev || this_player()->query_npc() || (prev && query_npc()))) {
+        add_secondary_attacker(this_player());
+      }
+      return 0;
+    }
+  }
+  for(z = 1; (alt = present(GUILD_OB+" "+z, this_object())); z++) {
+    if(alt->spell_capture(this_player(),this_object(),target_ob,prev,dmg)) {
+      if(!passive
+      && (!prev || this_player()->query_npc() || (prev && query_npc()))) {
+        add_secondary_attacker(this_player());
+      }
+      return 0;
+    }
+  }                                           
+  if(target_ob) {          /*  caster,       target,    previous target, */
+    if(target_ob->cast_spell(this_player(),this_object(),prev,dmg)){
+      if(!passive
+      && (!prev || this_player()->query_npc() || (prev && query_npc()))) {
+        add_secondary_attacker(this_player());
+      }
+      return -1; /* No hit_player or dmg msg */
+    }
+  }
+  if(!prev && !add_secondary_attacker(this_player())) {
+    write("The law prevents you from casting spells at "+ query_name() +".\n");
+    say(this_player()->query_name() 
+       +" attempts to cast a spell at "+ query_name() +"!\n", this_object());
+    tell_object(this_object(), this_player()->query_name() 
+       +" tries to cast a spell at you!\n");
+    return -1;
+  }
+  if(caster_msg && this_object() != this_player()) {
+    write(process_msg(caster_msg));
+  }
+  if(room_msg)   say(process_msg(room_msg), this_object());
+  if(target_msg) tell_object(this_object(),process_msg(target_msg));
+  if(!prev     
+  || (prev && ((status)this_player()->query_npc()^query_npc()))) {
+    if(add_secondary_attacker(this_player())) {
+      if(!primary_attack || environment(primary_attack) != environment()) {
+        primary_attack = this_player();
+      }
+    }
+  }
+  return do_damage(dmg); 
+}
+
+status cpr() { 
+  set_heart_beat(1); 
+  write("Heart Started.\n");
+  return 1; 
+} 
+
+
+/****************************************************************************/
+/* wimpy */
+  
+void random_move() {  
+  object here;  
+  string *exits;
+
+  here = environment();  
+  if(no_wimpy) {  
+    tell_object(this_object(),"Something stops you from running!\n");  
+    return;  
+  }  
+  if(custom) {  
+    if(wisdom >= random(25)) {  
+      if(command(custom)) {
+        tell_object(this_object(),"You keep your cool and leave "+
+                                   custom +".\n");  
+      }
+      else {
+        tell_object(this_object(),"You cannot run "+custom+".\n");  
+      }
+    }  
+    else {  
+      tell_object(this_object(),"You fail to flee "+ custom +"!\n");  
+    }
+    return;
+  }
+  if(!(exits = (string *)environment()->query_open_exits())) {
+    if(!(exits = (string *)environment()->query_dest_dir())) {
+      if(!is_npc)
+        say (query_name()+" tried, but failed to run away.\n", this_object());  
+      tell_object(this_object(),"You try to run away, but fail!\n");  
+      return;
+    }
+  }
+  if(!sizeof(exits)) {
+    tell_object(this_object(),"There is no obvious way to run.\n");
+    if(!is_npc)
+     say(query_name()+" tried, but failed to run away.\n", this_object());
+    return;
+  }
+  command(exits[(random(sizeof(exits)/2)*2) + 1], this_object());
+  if(here == environment()) {  
+    if(!is_npc)
+     say (query_name()+" tried, but failed to run away.\n", this_object());  
+    tell_object(this_object(),"You try to run away, but fail!\n");  
+  }  
+  else {
+    if(!is_npc)
+     say(query_name()+" runs for "+query_possessive()+" life!\n");   
+    tell_object(this_object(),"You run for your life!!\n");  
+  }
+}  
+
+  
+/****************************************************************************/
+/* Externally Configurable bonuses */
+
+int carry_bonus() {
+  int bonus;
+  string tmp1, tmp2;
+  object alt; int z;
+
+  if(race) { /* lge races get carry bonuses, small get penalties */
+    if(sscanf(race,"%sgiant%s", tmp1, tmp2)) 
+      bonus += 5;
+    else if(sscanf(race,"%sminotaur%s", tmp1, tmp2)) 
+      bonus += 3;
+    else if(sscanf(race,"%sorc%s", tmp1, tmp2)) 
+      bonus += 2;
+    else if(sscanf(race,"%sgnome%s", tmp1, tmp2))
+      bonus -= 1;
+    else if(sscanf(race,"%shalfling%s", tmp1, tmp2)) 
+      bonus -= 2;
+    else if(sscanf(race,"%skender%s", tmp1, tmp2)) 
+      bonus -= 3;
+    else if(sscanf(race,"%spixie%s", tmp1, tmp2))
+      bonus -= 2;
+    else if(sscanf(race,"%snixie%s", tmp1, tmp2))
+      bonus -= 1;
+    else if(sscanf(race,"%skobold%s", tmp1, tmp2))
+      bonus -= 1;
+    else if(sscanf(race,"%sgoblin%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%ssprite%s", tmp1, tmp2))
+      bonus -= 1;
+  }    
+  for(z = 1; (alt = present(ALT+" "+z, this_object())); z++) {
+    bonus += (int)alt->carry_bonus();
+  }
+  for(z = 1; (alt = present(GUILD_OB+" "+z, this_object())); z++) {
+    bonus += (int)alt->carry_bonus();
+  }
+  return bonus;
+}
+
+int right_wc_bonus() { 
+  int bonus;
+  string tmp1, tmp2;
+  object alt; int z;
+
+  if(race) { /* elves get a small bonus for left as well */
+    if(sscanf(race,"%self%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%sdwarf%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%sminotaur%s", tmp1, tmp2))
+      bonus += 3;
+    else if(sscanf(race,"%sorc%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%sgiant%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%shalfling%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%spixie%s", tmp1, tmp2))
+      bonus -= 1;
+    else if(sscanf(race,"%snixie%s", tmp1, tmp2))
+      bonus -= 1;
+    else if(sscanf(race,"%skobold%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%sgoblin%s", tmp1, tmp2))
+      bonus += 2;
+  }
+  for(z = 1; (alt = present(ALT+" "+z, this_object())); z++) {
+    bonus += (int)alt->right_weapon_class_bonus();
+  }
+  for(z = 1; (alt = present(GUILD_OB+" "+z, this_object())); z++) {
+    bonus += (int)alt->right_weapon_class_bonus();
+  }
+  bonus += right_weapon_bonus;
+  return bonus;
+}
+
+int left_wc_bonus()  {
+  int bonus;
+  string tmp1, tmp2;
+  object alt; int z;
+
+  if(race) {
+    if(sscanf(race,"%self%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%sminotaur%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%shalfling%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%skender%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%sgnome%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%spixie%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%snixie%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%skobold%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%sgoblin%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%ssprite%s", tmp1, tmp2))
+      bonus += 2;
+  }
+  for(z = 1; (alt = present(ALT+" "+z, this_object())); z++) {
+    bonus += (int)alt->left_weapon_class_bonus();
+  }
+  for(z = 1; (alt = present(GUILD_OB+" "+z, this_object())); z++) {
+    bonus += (int)alt->left_weapon_class_bonus();
+  }
+  bonus += left_weapon_bonus;
+  return bonus;
+}
+
+int ac_bonus() {
+  int bonus;
+  string tmp1, tmp2;
+  object alt; int z;
+
+
+  if(race) { /* generally small races get ac bonuses */ 
+    if(sscanf(race,"%shalfling%s", tmp1, tmp2)) 
+      bonus += 1;
+    else if(sscanf(race,"%skender%s", tmp1, tmp2)) 
+      bonus += 2;
+    else if(sscanf(race,"%sgnome%s", tmp1, tmp2)) 
+      bonus  += 3;
+    else if(sscanf(race,"%sgiant%s", tmp1, tmp2)) 
+      bonus -= 1;
+    else if(sscanf(race,"%self%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%sminotaur%s", tmp1, tmp2))
+      bonus -= 2;
+    else if(sscanf(race,"%sorc%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%spixie%s", tmp1, tmp2))
+      bonus += 3;
+    else if(sscanf(race,"%snixie%s", tmp1, tmp2))
+      bonus += 2;
+    else if(sscanf(race,"%skobold%s", tmp1, tmp2))
+      bonus += 3;
+    else if(sscanf(race,"%sgoblin%s", tmp1, tmp2))
+      bonus += 1;
+    else if(sscanf(race,"%ssprite%s", tmp1, tmp2))
+      bonus += 2;
+  }
+  for(z = 1; (alt = present(ALT+" "+z, this_object())); z++) {
+    bonus += (int)alt->armour_class_bonus();
+  }
+  for(z = 1; (alt = present(GUILD_OB+" "+z, this_object())); z++) {
+    bonus += (int)alt->armour_class_bonus();
+  }
+  bonus += ac_bonus;
+  return bonus;
+}
+
+
+/***************************************************************************/
+/* carry, ac, wc calculators - these should fix problems */
+
+void recalc_carry(){  
+  int i, wt;  
+  object *inv;  
+  
+  weight = 0;
+  inv = all_inventory();  
+  for(i = 0; i < sizeof(inv); i++){  
+    if(!inv[i]) continue;
+    wt = (int)inv[i]->query_weight();  
+    if(((wt+weight) > (strength+10+carry_bonus())) && !inv[i]->drop(1)) {
+      tell_object(this_object(),"You cannot carry this much!!\n"+  
+                                "You drop "+inv[i]->short()+"\n");  
+#ifdef NATIVE_MODE
+      inv[i]->move(environment());
+#else
+      move_object(inv[i],environment());  
+#endif /* NATIVE_MODE */
+    }  
+    else{    
+      weight += wt;  
+    }  
+  }  
+}  
+  
+  
+
+void recalc_wc() {  
+  int i;
+  object *inv;
+
+  right_weapon = 0;
+  left_weapon = 0;
+  inv = all_inventory();
+  for(i = 0; i < sizeof(inv); i++) {
+    if(inv[i]->query_wielded("right")) {
+      if(right_weapon) {  
+        inv[i]->dewield();
+        continue;
+      }
+      right_weapon = inv[i];
+      right_wc = (int)right_weapon->query_wc();
+      if(!sizeof(weapon_prof)) weapon_prof = ({});
+      if(member_array((string)right_weapon->query_name(),weapon_prof) == -1) {
+        if(query_class("fighter")) {
+          right_wc -= 2;
+        }
+        else if(query_class("thief")) {
+          right_wc -= 3;
+        }
+        else if(query_class("cleric")) {
+          right_wc -= 4;
+        }
+        else {
+          right_wc -= 5;
+        }
+      }
+      right_wc += right_wc_bonus();
+      set_right_attack_msg((string *)inv[i]->query_attack_msg());
+    }
+    else if(inv[i]->query_wielded("left")) {
+      if(left_weapon) {
+        inv[i]->dewield();
+        continue;
+      }
+      left_weapon = inv[i];
+      left_wc = (int)left_weapon->query_wc();
+      if(member_array((string)left_weapon->query_name(),weapon_prof) == -1) {
+        if(query_class("fighter")) {
+          right_wc -= 3;
+        }
+        else if(query_class("thief")) {
+          right_wc -= 4;
+        }
+        else {
+          right_wc -= 5;
+        }
+      }
+      left_wc += left_wc_bonus();
+      set_left_attack_msg((string *)inv[i]->query_attack_msg());
+    }
+  }
+  if(!right_weapon) {
+    right_wc = WEAPON_CLASS_HANDS;
+    if(query_unarmed()) {
+      right_wc += unarmed;
+      if(right_wc > 30) /* unarmed 57 == wc 30 */
+        right_wc = 30 + (right_wc-30)/4;
+      else if(right_wc > 20)  /* unarmed 27 == wc 20 */
+        right_wc = 20 + (right_wc-20)/3;
+      else if(right_wc > 10)  /* unarmed 7  == wc 10 */
+        right_wc = 10 + (right_wc-10)/2;
+    }
+  }    
+  if(is_npc) {
+    right_wc = npc_wc   + right_wc_bonus();
+    left_wc  = npc_wc_l + left_wc_bonus();
+  }
+}  
+
+
+void recalc_ac() {  
+  int i;  
+  object *inv;  
+  
+  armour_class = 0;  
+  armour_worn = ({});
+  inv = all_inventory();  
+  for(i = 0; i < sizeof(inv); i++) {
+    if(inv[i]->armour_class() > 0 && inv[i]->query_worn()) {
+      if(query_armour_type(inv[i])) {
+        inv[i]->drop(1);
+        continue;
+      }
+      armour_class += (int)inv[i]->armour_class();  
+      armour_worn += ({ inv[i], });
+    }
+  }
+  armour_class += ac_bonus();
+  if(is_npc) {
+    armour_class = npc_ac + ac_bonus();
+  }
+}  
+  
+
+/**************************************************************************/
+
+
+string pad_str(string prefix,string str,int len) {
+  int pad_len, i;
+  string pad, tmp_str, new_str;
+
+  pad_len = strlen(prefix);
+  pad = "                                             "+
+        "                                             ";
+  pad = extract(pad,0,pad_len-1);
+  str = prefix + str + " "; /* space flags end of string */
+  new_str = "";
+  if(len < 1 || len > 79) len = 75; /* line length */
+  while(str && strlen(str)) {
+    if(new_str != "") str = "\n"+ pad+str;
+    tmp_str = extract(str,0,len); /* get 1 line */
+    for(i = strlen(tmp_str)-1; i >= pad_len && tmp_str[i] != ' '; i--);
+    if(i <= pad_len) i = strlen(tmp_str)-2; /* no spaces! */
+    tmp_str = extract(str,0,i);
+    str = extract(str,i+1);
+    new_str += tmp_str;
+  }
+  return new_str +"\n";
+}
+  
+  
+string filter_ansi(string str) {
+  string rest, tmp;
+
+  str = str +"";
+  while(sscanf(str,"%s"+ESC+"%sm%s",str, tmp, rest) == 3) str += rest;
+  return str;
+}
+  
+status communicate(string str) {  
+  
+  string verb, temp;  
+  string padded_str1, padded_str2, prefix, prefix2;  
+  string filtered_str;
+  object *env;
+  int i;
+  
+  if(check_spell("Silence")) {
+    write("You cannot speak, there seems to be a magical silence about you.\n");
+    return 1;
+  }  
+  if(!speak_language) {  
+    if(!this_player()->query_npc()) {  
+      speak_language = "common";  
+    }
+    else  if(!(speak_language = (string)this_player()->query_race())) {  
+      speak_language = "common";  
+    }
+  }  
+  
+  verb = query_verb();  
+  if(!str) str = "";  
+
+  if(verb[0] == "'"[0]) str = extract(verb, 1)+" "+str;  
+  if(str == "" || str == " ") {  
+    tell_object(this_player(),"You mumble incoherently.\n");  
+    say(query_name() + " mumbles incoherently.\n");  
+    return 1;  
+  }  
+
+  if(this_object()->query_intoxication() > query_constitution()*2) {  
+    str = implode(explode(str+"s","s"),"sh");  
+  }
+
+  prefix  = (sscanf(str,"%s!",temp)) 
+          ? " exclaim"  
+          : (sscanf(str,"%s?",temp))
+          ? " ask"
+          : " say";  
+
+  prefix2 = (speak_language != "common")
+         ? " in " + speak_language + ": "
+         : ": ";  
+
+
+  padded_str1 = pad_str(query_name()+prefix +"s"+ prefix2,str,79);
+  padded_str2 = pad_str("You"+prefix+prefix2,str,79);
+  filtered_str = filter_ansi(padded_str1);
+  tell_object(this_object(),padded_str2);
+  if(speak_language == "common" && filtered_str == padded_str1){  
+    say(padded_str1,this_object());  
+  }  
+  else{  
+   env = all_inventory(environment());
+   
+   for(i = 0; i < sizeof(env); i++) {
+     if(!living(env[i])) continue;
+     if(env[i] != this_object()) {
+       if(env[i]->query_language(speak_language)) {
+         if(env[i]->ansi_on()) {
+           tell_object(env[i],padded_str1+OFF);
+         }
+         else {
+           tell_object(env[i],filtered_str);
+         }
+       }
+       else {
+         tell_object(env[i],query_name() +" says something in a language "+
+         "that you don't understand.\n");
+       }
+     }
+   }
+  }
+  return 1;
+}
+  
+
+/*************************************************************************/
+void attack_msg(int dmg, string type, object who, string side) {  
+   string *msg;
+   int dam, size;  
+   string str;
+
+   if(!who) return; /* attacker dested */
+
+   if(dmg < 0) dmg = 0;
+   msg = (left_attack_msg && side == "left" && sizeof(left_attack_msg))
+       ? left_attack_msg
+
+       : (right_attack_msg && side == "right" && sizeof(right_attack_msg))
+       ? right_attack_msg
+
+       : (type == "slash")  
+          ? ({  "missed",          "",
+                "lightly touched", "with a light graze",         
+                "wounded",         "with a weak blow",  
+                "cut",             "with a fairly deep wound",  
+                "sliced",          "with a strike to the head",  
+                "slashed",         "with a slice to the chest",  
+                "devestated",      "with a severe wound to the body",  
+                "mutilated",       "\b, severely disabling a limb"})
+
+      : (type == "crush")  
+      ?      ({ "missed",          "", 
+                "grazed",          "with next to no force",  
+                "bruised",         "slightly, with a weak strike",  
+                "hit",             "in the body",  
+                "swatted",         "\b, doing a fair amount of damage",  
+                "cracked",         "with a hard hit to the body",  
+                "smashed",         "across the head with a devestating blow",  
+                "crushed",         "into a bloody mess"})
+  
+      : (type == "thrust" || type == "pierce")  
+      ?      ({ "missed",           "",
+                "poked",            "without breaking the skin",               
+                "prodded",          "with little effect",                  
+                "stabbed",          "through the leg",  
+                "thrust deep into", "drawing a great amount of blood",  
+                "gouged",           "with a viscous wound to the chest",  
+                "impaled",          "with a very deep thrust to the chest",  
+                "speared",          "straight through the body"})
+
+      : (type == "cleave")  
+      ?     ({ "missed",           "",
+                "cut",            "with a slight glace",  
+                "cut",            "somewhat, with a slow strike",  
+                "strikes",        "with an attack to the body",  
+                "cleaved",        "\b, bringing out a hunk of flesh",  
+                "mutilated",      "with a chop to the torso",  
+                "cleaved",        "through the chest with devastating force",  
+                "nearly chopped", "\b's head off with a stunning blow"})
+
+      : (type == "spell")
+      ?    ({ "missed",          "who resisted the arcane energies",
+              "lightly touched", "with a small burst of power",  
+
+               "bruised",         "with a burst of magical power",
+               "wounded",         "with a release of magical power",  
+               "swatted",         "with arcane energies",  
+               "smashed",         "with a burst arcane energies",  
+               "devestated",      "with Arcanus Energeia",  
+               "mutilated",       "severely with Arcanus Energeia"})
+
+      :      ({ "missed",         "", 
+                "brushed",        "slightly",  
+                "grazed",         "barely doing damage",  
+                "kicked",         "with some force",  
+                "tackled",        "with a hard charge",  
+                "pummled",        "with a solid blow",  
+                "clobbered",      "with a vicious kick to the head",  
+                "body slammed",   "with great force into the ground"});
+   
+  size = sizeof(msg);
+  dam = ((dmg+MSG_DAM-1)/MSG_DAM > (size/2)-1) 
+      ? ((size/2)-1)
+      : ((dmg+MSG_DAM-1)/MSG_DAM);  
+  dam *= 2;
+
+  str = (left_weapon && side == "left")
+      ? " using your left "+(string)left_weapon->query_name()
+      : (right_weapon && side == "right")
+      ? " using your right "+(string)right_weapon->query_name()
+      : "";
+
+  if(this_player() == who) {
+    write("You "+ msg[dam] +" yourself"+ ((msg[dam+1] == "") ? "" : " ") +
+          msg[dam+1] + str +
+         ((THIS_PLAYER_WIZ) ? " ["+dmg+"pts]" : "")+".\n");
+    say(query_name()+" "+msg[dam]+" "+who->query_possessive()+
+        "self"+ ((msg[dam+1] == "") ? "" : " ") + msg[dam+1] +".\n");
+  }
+  else { 
+    write("You "+ msg[dam] +" "+ who->query_name() +
+          ((msg[dam+1] == "") ? "" : " ") + msg[dam+1] + str +
+          ((THIS_PLAYER_WIZ) ? " ["+dmg+"pts]" : "")+".\n");
+    say(query_name()+" "+msg[dam]+" "+who->query_name()+
+        ((msg[dam+1] == "") ? "" : " ") + msg[dam+1] +".\n", who);
+    tell_object(who,query_name() +" "+ msg[dam] +" you"+
+               ((msg[dam+1] == "") ? "" : " ") + msg[dam+1] +
+               ((who->query_security_level()) ? " ["+dmg+"pts]" : "")+".\n");
+  }
+}  
+
+/**************************************************************************/
+
+void heal_self(int h) {
+  int i;
+  
+  if(h <= 0) return;  
+#ifdef LOG_HEAL
+  log(LOG_HEAL,"Old Hp: "+hp+" pts + Heal: "+h+" pts",0);
+#endif /* LOG_HEAL */
+  hp += h;  
+  if(hp > max_hp) hp = max_hp;  
+  for(i = sizeof(classes); i--; ) {
+    call_other(this_object(), "adj_all_"+ classes[i], h);
+  }
+}

@@ -1,0 +1,595 @@
+/* configurable guild room */
+/* allows creator to easily add a guild room to use standard skills */
+
+#include <mudlib.h>
+inherit ROOM;
+
+#define LEVEL          (int)this_player()->query_level()
+#define NAME           (string)this_player()->query_name()
+#define TEXP           (int)this_player()->query_total_exp()
+#define EXP	       (int)this_player()->query_exp()
+#define GUILD_STR      lower_case((string)this_player()->query_guild_string())
+#define COST_FOR_JOIN  1000   /* coins to join a new class */
+#define CHARISMA       (int)this_player()->query_charisma()
+#define MASTER_CHA     16
+
+
+#define QPS            (int)this_player()->query_qpoints()
+
+#define DRAINED        (int)this_player()->query_level_drained()
+#define NO_ADVANCE     present("no advance",this_player())
+#define PLAY_MONEY     (int)this_player()->query_money()
+#define G_NAME         (string)guild_master->query_name()
+
+
+mixed  *classes;        /* class-skill array       */
+mixed  *titles;         /* level titles            */
+mixed  *pretitles;      /* pretitles for 30+ level */
+int    *exp;            /* exp per level           */
+int    *qp;             /* quest points for next level */
+int    *skill_exp;      /* cost for skills         */
+object guild_master;    /* guild master            */
+string guild_name;      /* guild title             */
+int    weapon_rate;     /* rate which get weapons proficiencies */
+int    exp_multiplier;
+int    skill_exp_multiplier;
+
+object sign;
+
+void set_classes(mixed *arg)      { classes = arg;      }
+void set_titles(mixed *arg)       { titles  = arg;      }
+void set_pretitles(mixed *arg)    { pretitles  = arg;   }
+void set_exp(int *arg)            { exp = arg;          }
+void set_skill_exp(int *arg)      { skill_exp = arg;    }
+void set_guild_master(object arg) { guild_master = arg; }
+void set_guild_name(string arg)   { guild_name = arg;   }
+void set_weapon_rate(int arg)     { weapon_rate = arg;  }
+
+
+mixed *query_classes()      { return classes;      }
+mixed *query_titles()       { return titles;       }
+mixed *query_pretitle()     { return pretitles;    }
+int *query_exp()            { return exp;          }
+int *query_skill_exp()      { return skill_exp;    }
+object query_guild_master() { return guild_master; }
+string query_guild_name()   { return guild_name;   }
+int query_weapon_rate()     { return weapon_rate;  }
+
+
+void init(){
+  ::init();
+  add_action("train_weapon", "train");
+  add_action("advance","raise");
+  add_action("advance","advance");
+  add_action("cost_for_level","cost");
+  add_action("join","join");
+  add_action("leave","leave");
+  if(!sign) {
+    sign = clone_object(SIGN);
+#ifdef NATIVE_MODE
+    sign->move(this_object());
+#else
+    move_object(sign, this_object());
+#endif /* NATIVE_MODE */
+    sign->set_message(
+  "      Commands                         Comments\n"+
+  "  raise, raise <level> ....... Advance level by 1\n"+
+  "  raise <skill> .............. Advances skill by 1\n"+
+  "  cost <level> ............... Exp or coins needed to advance\n"+
+  "  cost <skill> ............... (Not)|Possible to raise skill\n"+
+  "  cost <class> ............... (Not)|Possible to raise skills in class\n"+
+  "  leave <class> .............. Leave a class, set all stats to 0\n"+
+  "  join <class> ............... Join the fighter class only\n"+
+  "  train <weapon> ............. Train in a weapon and become proficient\n"
+    );
+  }
+}
+
+
+int get_next_qp(int stat) {
+  int *qp;
+ 
+
+  qp = ({
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            0,    0,    0,    0,    0,    0,   0,    0,    0,    0,
+            12
+         });
+ 
+   if(stat < 0) return qp[0];
+   if(stat > 100) return ((stat - 100) *10) + 2;  /* worry when close */
+   return qp[stat];
+}
+
+/* exp for next level */
+
+#ifndef AMYLAAR
+
+int get_next_exp(int stat) {
+  if(!exp) {
+    exp = ({
+                  0,    1014,    1522,    2283,    3425,    5138,
+               7707,   11561,   17341,   26012,   39018,   58527,
+              87791,  131687,  197530,  296296,  444444,  666666,
+            1000000, 1500000, 2000000, 2500000, 3000000, 3500000,
+            4000000, 4500000, 5000000, 5500000, 6000000, 6500000,
+    });
+  }
+  if(stat < 0) return exp[0];
+  if(stat >= sizeof(exp)) {
+    if(!exp_multiplier) exp_multiplier = 500000;
+    return exp[sizeof(exp)-1] + (stat-(sizeof(exp)-1))*exp_multiplier;
+  }
+  return exp[stat];
+}
+
+#else /* amylaar version */
+
+int get_next_exp(int stat) {
+	int tmp;
+  if(stat < 1) return 1014;
+  if(stat < 20)
+    return 1014 + to_int(1014*exp(stat * log(1.4683496)));
+/* ok so it looks silly, but it makes xp for level 20 about 1.5 mill */
+  else
+/*
+    return to_int(get_next_exp(20) * exp((stat-20) * log(1.17)));
+*/
+{
+	tmp = get_next_exp(19) + (500000
+		* (stat - 19)) + 20000 * (stat - 20) * (stat  -19) /2;
+	if(tmp > 0) return tmp;
+		else return 500000000000;
+	}
+}
+/* The one above is a geometric series. lets try a algebraic one: */
+/*
+int get_next_exp(int stat) {
+	return 1014 * (stat + 1) + 10000 * stat * (stat + 1) /2;
+}
+*/
+
+#endif /* MASTER312 */
+
+
+/* exp for next stat */
+
+int get_skill_exp(int stat) {
+  if(stat < 0) return skill_exp[0];
+  if(stat >= sizeof(skill_exp)) {
+    if(!skill_exp_multiplier) skill_exp_multiplier = 25000;
+    return skill_exp[sizeof(skill_exp)-1] 
+         + (stat-(sizeof(skill_exp)-1))*skill_exp_multiplier;
+  }
+  return skill_exp[stat];
+}
+
+
+/* if the player is within 10% of their next level, they advance at a
+ * cost of 3 times coins of the exp difference. */
+
+int close_enuff(status costing_only){
+  int required_money, required_exp;
+ 
+  required_exp = get_next_exp(LEVEL);
+  required_money = (required_exp - EXP) * 3;
+
+  if(EXP < required_exp && (required_exp-EXP) < required_exp/10) {
+    if(PLAY_MONEY > required_money) {
+      if(!costing_only){
+        this_player()->add_money(required_money*(-1));
+	this_player()->set_exp( required_exp);
+        write(G_NAME +" takes "+ required_money +
+              " coins from you for extra training.\n");
+      }
+      return required_money;
+    }
+  }
+  return 0;
+}
+
+
+
+/*** exp required ***/
+
+string get_new_title(int next_level){
+  string *weird_titles;
+  int gender;
+
+  gender = (int)this_player()->query_gender();
+  while(!sizeof(titles[gender])) gender++;
+
+  if(next_level > sizeof((string *)titles[gender]) - 1) {
+    while(!sizeof((string *)pretitles[gender])) if(++gender > 2) return "";
+    next_level = (next_level-30)/4;
+    if(next_level > sizeof((string *)pretitles[gender])) {
+      next_level = sizeof((string *)pretitles[gender])-1;
+    }
+    if(this_player()->query_level() > 29)
+    this_player() -> set_pretitle((string)pretitles[gender][next_level]);
+     
+    weird_titles = ({
+                      "the Stranger",
+                      "the Insignificant",
+                      "the Saviour",
+                      "the Blood Stained",
+                      "the Dragon Slayer",
+                      "Orcbane",
+                      "Ironfist",
+                      "the Faithful",
+                      "the Invincible",
+                      "the Meek!!!",
+                      "the Black",
+                      "the White",
+                      "the Incorrigible",
+                    });
+                      
+     return weird_titles[random(sizeof(weird_titles))];
+  }
+  while(!sizeof((string *)titles[gender])) if(++gender > 2) return "";
+  return (string)titles[gender][next_level];
+}
+
+
+
+/*** advance levels or stats, and costing ***/
+
+status advance(string str, status costing){
+  int i, j, k;
+  string stat;
+  int total, cost, current_stat;
+  string tmp1;
+
+  if(!guild_master) {
+    write("There is no one here to train you.\n");
+    return 1;
+  } 
+  if(this_player()->query_npc()) {
+    tell_room(this_object(),G_NAME +" laughs heartily!\n");
+    return 1;
+  }
+  if(!this_player()->query_guild_string()) {
+    this_player()->set_guild_string("no");
+  }
+  if(!(lower_case(guild_name) == "no"
+  &&  (GUILD_STR == "banned" || GUILD_STR == "no"))
+    || GUILD_STR != lower_case(guild_name)) {
+    write(G_NAME +" says: Sorry, you can't train here.\n");
+    return 1;
+  }
+  if(DRAINED) {
+   write(G_NAME +" says: You have been drained by undead,\n"+
+                 "   Perhaps you should see a priest before training.\n");
+    return 1;
+  }
+
+  if(NO_ADVANCE){
+    write(G_NAME +" says: You are currently under the affect of"+
+          " magic, I cannot train you\n   until it wears off!\n");
+    return 1;
+  }
+
+  /*** advance a players level ***/
+  
+  if(!str || str == "level") {
+    if(costing) {
+      write("Next Level: "+ get_next_exp(LEVEL) +" experience points ");
+      if(EXP > get_next_exp(LEVEL)) {
+        write("(POSSIBLE)\n");
+      }
+      else if(close_enuff(1)) {
+        write("(POSSIBLE: "+ close_enuff(1) +" coins)\n");
+      }
+      else {
+        write("(NOT POSSIBLE)\n");
+      }
+      return 1;
+    }
+
+   if(QPS < get_next_qp(LEVEL)) {
+     notify_fail(G_NAME+" says: You need more quest points to advance\n");
+     return 0;
+     }
+ 
+    if(EXP > get_next_exp(LEVEL) || close_enuff(0)) {
+      this_player()->set_title(get_new_title(LEVEL));
+      this_player()->set_level(LEVEL + 1);
+      this_player()->save_character();
+      say(G_NAME +" trains "+ NAME +" to level "+ LEVEL +".\n");
+      write(G_NAME +" trains you. You are now level "+ LEVEL +", "+
+            (string)this_player()->short()+"\n");
+      return 1;
+    }
+    else {
+      write(G_NAME+" says: You need to train more before advancing.\n");
+       return 1;
+    } 
+    return 1;
+  }
+
+  if(costing) { /* recursively cost a class */
+    if((i = member_array(str,classes)) != -1) {
+      for(k = 0; k < sizeof(classes[i+1]); k++) {
+        advance(classes[i+1][k],1);
+      }
+      return 1;
+    }
+  }
+
+  for(i = 1; i < sizeof(classes); i += 2) {
+    if((j = member_array(str, classes[i])) != -1) {
+      if(!this_player()->query_class(classes[i-1]) 
+      && classes[i-1] != "general" && classes[i-1] != "primary") {
+        write(G_NAME +" says: You are not a "+ classes[i-1] +".\n");
+      }
+      else {
+        stat = str;
+        while(sscanf(stat,"%s %s",stat,tmp1))  stat += "_"+ tmp1;
+        stat = lower_case(stat);
+        current_stat = (int)call_other(this_player(),"query_"+stat);
+        cost = get_skill_exp(current_stat);
+        if(member_array(stat, ({ "strength", "intelligence", "wisdom",
+                                 "dexterity", "constitution", "charisma",
+			         "combat", })) != -1) {
+           if(current_stat >= (int)call_other(this_player(), "query_max_"+
+              stat)) {
+              write(G_NAME+" says: You are more powerful than I am! I can no "+
+		    "longer train you in "+stat+".\n");
+              return 1;
+            }
+         }  
+
+        if(!(classes[i-1] == "general" || classes[i-1] == "primary")) {
+          /* Multi-class multiple exp setting cost; was 3/2 */
+         if(sizeof((string *)this_player()->query_classes()) == 1)
+           cost *= 1;
+         else
+           cost *= (sizeof((string *)this_player()->query_classes())*3)/2;
+        }
+        for(k = 0; k < sizeof(classes[i]); k++) {
+          stat = classes[i][k];
+          while(sscanf(stat,"%s %s", stat, tmp1)) stat += "_"+ tmp1;
+          stat = lower_case(stat);
+          total += (int)call_other(this_player(),"query_"+ stat);
+        }
+        if(total > (LEVEL + 1) * sizeof(classes[i])) {
+          if(costing) {
+            write("Your level needs to be higher, before you can advance "+
+                  "your "+ str +".\n");
+          }
+          else {          
+            write(G_NAME+" says: You need to be of greater Status.\n");
+          }
+          return 1;
+        }
+	if(EXP<cost) {
+          if(costing) {
+            str = extract(str+"                         ",0,18);
+            write(capitalize(str) +"Need "+
+	(cost-EXP) +" extra experience points.\n");
+          }
+          else {
+            write(G_NAME +" says: You need to be more experienced.\n");
+          }
+          return 1;
+        }
+        if(costing) {
+          str = extract(str+"                                ",0,18);
+          write(capitalize(str) + cost +" experience points.\n");
+          return 1;
+        }
+        stat = str;
+        while(sscanf(stat,"%s %s",stat,tmp1))  stat += "_"+ tmp1;
+        call_other(this_player(),"set_"+ lower_case(stat), current_stat+1);
+	this_player()->set_exp(EXP-cost);
+        this_player()->save_character();
+        if(classes[i-1] == "general" || classes[i-1] == "primary") {
+          write(G_NAME+" helps you to raise your "+ capitalize(str) +".\n");
+        }
+        else {
+          write(G_NAME+" says: I have trained you in the skill of "+
+                capitalize(str)+"\nused from "+capitalize(classes[i][j])+".\n");
+        }
+        say(NAME +" raises "+ this_player()->query_possessive() +" "+
+            str +".\n"); 
+      }
+      return 1;
+    }
+  }
+  write(G_NAME + " looks at you in a confused manner.\n");
+  return 1;
+}
+
+
+/*** Cost for raising skill levels ***/
+
+status cost_for_level(string str){
+  
+  if(!guild_master) {
+    write("There is no one here for you to get a costing opinion.\n");
+    return 1;
+  }
+  if(!str) {
+    write("cost <class|skill|general|primary|level>\n");
+    return 1;
+  }
+  advance(str,1);
+  return 1;
+}
+
+
+/*** Leave class ***/
+
+status leave(string str) {
+  if(!guild_master) {
+    write("There is no one here to remove your class.\n");
+    return 1;
+  }
+  if(!str) {
+    write(G_NAME +" says: Leave what class?\n");
+    return 1;
+  }
+  if(member_array(str, classes) == -1) {
+    write(G_NAME +" says: You can't do that here.\n");
+    return 1;
+  }
+  if(this_player() -> query_class(str)) {
+    write("You are no longer in the class "+str+".\n");
+    this_player() -> remove_class(str);
+    call_other(this_player(),"clear_"+ str);
+    this_player() -> save_character();
+  }
+  else
+    write("You were not in the class "+ str +".\n");
+  return 1;
+}
+  
+
+/*** Join Class ***/
+
+status join(string str) {
+  int i;
+  int cost;
+  string tmp;
+  status flag;
+
+  cost = (int)this_player()->query_level();
+  cost *= COST_FOR_JOIN;
+  if(random(CHARISMA) > random(MASTER_CHA))
+    cost -= random(cost/4);
+  else
+    cost += random(cost/3);
+
+
+  if(!guild_master) {
+    write("There is no one here to join you up.\n");
+    return 1;
+  }
+  if(!str) {
+    write(G_NAME +" says: What was that? Join what class?\n");
+    return 1;
+    write(G_NAME+" says: It will cost you about "+cost+" for new training.\n");
+  }
+  if(member_array(str, classes) == -1 || str == "general" || str == "primary"){
+    write(G_NAME +" says: I can only train you in ");
+    for(i = 0; i < sizeof(classes); i += 2) {
+      if(classes[i] == "general" || classes[i] == "primary") continue;
+      if(flag && i+2 >= sizeof(classes))
+        write("and ");
+      else if(flag)
+        write(", ");
+      write(classes[i]);
+      flag = 1;
+    }
+    write(".\n");
+    return 1;
+  }
+  if(this_player()->query_class(str)) {
+    write(G_NAME+" says: You are already in the class "+ str +".\n");
+    return 1;
+  }
+
+  write(G_NAME+" says: Taking into account your set ways at your level.\n"+
+  "\t it will be more difficult to start new training.\n");
+
+  tmp = (string)call_other("obj/money", "convert", cost);
+  write(G_NAME+" haggles with you over the cost of new training.\n");
+  write(G_NAME+" says: "+
+  "I will have to charge you "+tmp+" for extra tuition.\n");
+  if((int)this_player()->query_money() < cost) {
+    write(G_NAME+" says: Without the money, I can't train you in these "+
+    "new skills.\n");
+    return 1;
+  }
+  write(G_NAME+" takes "+tmp+" for your new training.\n");
+  this_player()->add_money(-cost);
+	
+  write("You are now a member of the class "+str+".\n");
+  this_player()->add_class(str);
+  this_player() -> save_character();
+  return 1;
+}
+
+
+status train_weapon(string str) {
+  string *weap_list;
+  object obj;
+  string weapon;
+  int prof_rate;
+
+
+  if(!guild_master) {
+    write("There is no one here to train you.\n");
+    return 1;
+  }
+  if(!(lower_case(guild_name) == "no" 
+  &&  (GUILD_STR == "banned" || GUILD_STR == "no"))
+    || GUILD_STR != lower_case(guild_name)) {
+    write(G_NAME +" says: Sorry, you can't train here.\n");
+    return 1;
+  }
+  if(!str) {
+    write(G_NAME +" says: What weapon do you want to train with?\n");
+    return 1;
+  }
+  obj = present(lower_case(str), this_player());
+  if(!obj) {
+    write(G_NAME +" says: You dont have that weapon! \n"+
+     "\t\tHow can I train you in that!!\n");
+    return 1;
+  }
+  weapon = lower_case((string)obj->query_name());
+  if(this_player()->query_weapon_proficiency(weapon)) {
+    write(G_NAME +" says: You already know how to use a "+ weapon +"\n");
+    return 1;
+  }
+  if(!obj->query_wielded()) {
+    write(G_NAME +" says: You must first be able to wield your "+ weapon +
+    "before I can teach\n\tyou how to use it properly.\n");
+    return 1;
+  }
+  weap_list = (string *)this_player()->query_weapon_prof();
+  if(!weap_list) {  /* there are still some people with it defaulting to 0 */
+    weap_list = ({});
+    this_player()->set_weapon_prof(({}));
+  }
+  if(weapon_rate)
+    prof_rate = weapon_rate; /* guild specific weapon rate */
+  else if(this_player()->query_class("mage")) 
+    prof_rate = 8;
+  else if(this_player()->query_class("cleric"))
+    prof_rate = 6; 
+  else if(this_player()->query_class("thief"))
+    prof_rate = 4;
+  else /* fighter */
+    prof_rate = 2;
+  if(sizeof(weap_list) > ((LEVEL+2)*4)/prof_rate) {
+    write(G_NAME +" says: One such as you cannot learn so many weapons "+
+    " at once time\n\tWait a little longer and return later.\n");
+    return 1;
+  }
+  write(G_NAME +" trains you in the use of the "+ weapon +".\n"+
+        "You feel more proficient in its use.\n");
+  say(NAME +" trains with "+ G_NAME +" in use of the "+ weapon +".\n");
+  this_player()->add_weapon_proficiency(weapon);
+  return 1;
+}
+
+int *get_exp_arr() {
+  int *tmp;
+  int n;
+  
+  tmp = ({});
+  for(n = 0 ; n < 200; n++) tmp += ({ get_next_exp(n) });
+  return tmp;
+}
+
+int query_no_fight() { return 1; }
