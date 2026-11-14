@@ -1,0 +1,175 @@
+FUNKTION:
+     void AddExit(mixed cmd, mixed dest);
+
+DEFINIERT IN:
+     /std/room/exits
+
+ARGUMENTE:
+     cmd
+          String oder Array von Strings mit den Richtungen, in die der
+          Ausgang fuehrt.
+     dest
+          Ziel des Ausgangs.
+
+BESCHREIBUNG:
+     Es wird ein Ausgang in die Richtung(en) cmd eingefuegt. Die Art des
+     Ausgangs haengt ab von dest:
+
+        o Ist dest ein Mapping, so enthaelt es ueber einige in
+          sys/room/exits.h definierte Keys die noetigen Informationen:
+
+          EX_DEST:     Zielraum (Filename).
+          EX_TESTFUNC: Testfunktion, ob Durchschreiten ueberhaupt erlaubt
+          EX_MSG:      Bewegungsmeldung ("nach Norden" etc. - wird fuer
+                       die Standardausgaenge sowie oben/unten/links/rechts
+                       vorne und hinten automatisch richtig gesetzt)
+          EX_PLMSG:    Eine optionale "Durchschreite" Meldung, die an den
+                       Spieler ausgegeben wird.
+          EX_FUNC:     Funktion, die beim Durchschreiten aufgerufen wird.
+          EXG_ID:      ID eines Waechter-NPCs, der bei Anwesenheit Spieler
+                       sowie Magier mit 'mschau aus' nicht durchlaesst.
+          EXG_PLMSG:   Meldung, die an den Spieler ausgegeben wird, wenn
+                       ein blockierender Waechter im Raum steht. Diese
+                       Meldung wird durch process_string() bearbeitet.
+          EXG_RMMSG:   analog: Meldung fuer den Raum. Mit @Wer@, @wer@,
+                       @wessen@, @wem@ und @wen@ kann man ueberdies den
+                       Spielernamen in die Meldung einbauen.
+
+          Siehe auch die Bemerkungen weiter unten zur Semantik.
+
+        Die alten Varianten von AddExit() werden weiterhin unterstuetzt:
+
+        o Ist dest ein String mit dem Dateinamen eines anderen Raumes, so
+          fuehrt der Ausgang in diesen Raum.
+
+        o Ist dest ein String der Form "<msg>#dateiname", so fuehrt der
+          Ausgang in den mit "dateiname" angegebenen Raum. Beim Benutzen des
+          Ausgangs wird jedoch nicht "<name> geht nach <richtung>"
+          ausgegeben, sondern "<name> geht <msg>"
+
+        o Ist dest eine Closure, so wird diese beim Benutzen des Ausgangs
+          ausgefuehrt. Dies entspricht einem SpecialExit. Man muss das
+          Lebewesen also "von Hand" in den Zielraum bewegen.
+
+RUECKGABEWERT:
+     void
+
+BEMERKUNGEN:
+     Die neue, wesentlich flexiblere Angabe von Exits via Mapping hat
+     folgende Auswertungssemantik beim Durchschreiten des Exits:
+
+      1. Ist EX_TESTFUNC gesetzt, so wird sie aufgerufen. Gibt sie 0
+         zurueck, wird jegliche weitere Verarbeitung unterbunden
+         (return 1, eine Fehlermeldung sollte also per write() in der
+         Testfunktion ausgegeben werden), ansonsten geht's bei 2. weiter.
+
+      2. Ist EXG_ID gesetzt, so wird die Anwesenheit einer Wache (oder
+         generell eines Objekts mit dieser ID) ueberprueft, haelt sich
+         eine im Raum auf, so wird der Spieler am Durchschreiten ge-
+         hindert und EXG_PLMSG an ihn (sowie wenn angegeben EXG_RMMSG an
+         den Raum) ausgegeben. Die weitere Ausfuehrung wird (mit return 1)
+         abgebrochen.
+
+         Ist ein Text EX_PLMSG angegeben, so wird dieser _jetzt_ (wenn also
+         weder TESTFUNC noch Wachen im Weg stehen) an den Spieler ausgegeben.
+
+      3. Ist EX_FUNC gesetzt, so wird sie aufgerufen. Ist der Rueckgabewert
+         dieser Funktion ein String (i.e., der Name eines Zielraums), so
+         wird der Spieler per move(..., M_GO, EX_MSG) dorthin bewegt
+         (weiter bei 5.). Andernfalls gleich weiter bei 5 - das Verhalten
+         ist in diesem Fall identisch zu den frueheren Special Exits.
+
+      4. Ist EX_DEST gesetzt, so wird der Spieler per move(..., M_GO, EX_MSG)
+         dorthin bewegt. EX_DEST kann hierbei auch von der Form "<msg>#raum"
+         sein, wodurch EX_MSG implizit gesetzt wird.
+
+      5. War 3. oder 4. erfolgreich, so wird ein evtl. eingetragener
+         Forscherpunkt fuer den Exit vergeben. Der Rueckgabewert ist
+         entweder der der EX_FUNC (also 0 oder 1 - der Kompatibilitaet
+         zu den bisherigen Special Exits wegen...) oder 1.
+
+     Man kann fuer den Dateinamen des Zielraumes auch einen relativen Pfad
+     angeben. Die Auswertung erfolgt nach folgendem Schema:
+
+     Erste Pfadkomponente ist ein ".":
+          Es wird ein Zielraum relativ zum gleichen Verzeichnis wie dieser
+          Raum angesprochen.
+     Erste Pfadkomponente ist ein "..":
+          Es wird ein Zielraum relativ zur Verzeichnisebene ueber der
+          dieses Raumes angesprochen (analog mit mehrerern "../..").
+     Erste Pfadkomponente ist ein "~":
+          Es wird ein Zielraum relativ zum Homeverzeichnis des
+          Programmierers in der entsprechenden Domain (also z.B.
+          "/d/ebene/woody" oder "/players/woody") angesprochen.
+
+BEISPIELE:
+     Ein normaler Ausgang:
+
+     // Beim Kommando "sueden" kommt: "<name> geht nach Sueden."
+     AddExit("osten", "/gilden/abenteurer");
+
+     // Beim Kommando "sueden" kommt: "<name> geht in die Gilde."
+     AddExit("osten", "in die Gilde#/gilden/abenteurer");
+     
+     Neuere Variante mit Mappings:
+     AddExit ("osten", ([ EX_DEST : "/gilden/abenteurer" ]) );
+     bzw.:
+     AddExit ("osten", ([ EX_DEST : "/gilden/abenteurer",
+                          EX_MSG  : "in die Gilde" ]) );
+
+     Ausgaenge mit relativen Pfaden:
+
+     // Der Name des Raumes sei "/d/wasser/woody/fischerdorf/room/weg5"
+     // Der Ausgang geht nach "/d/wasser/woody/fischerdorf/room/weg4":
+     AddExit( "nordosten", "./weg4" );
+
+     // Und dieser nach "/d/wasser/lupus/pier/room/steg01":
+     AddExit( "sueden", "../../../lupus/pier/room/steg01" );
+
+     // Jetzt ein bewachter Ausgang:
+     AddExit( "norden", ([
+              EX_DEST  : "./weg2",
+              EXG_ID   : "wachork",
+              EXG_PLMSG: "Der Ork laesst Dich nicht vorbei!\n",
+              EXG_RMMSG: "Der Ork haelt @wen@ zurueck.\n" ]) );
+
+     // Ein (bis auf EX_DEST) 'ueberkompletter' Ausgang:
+     AddExit( "norden", ([
+              EX_TESTFUNC: #'testfunc1,
+              EX_PLMSG   : "Du durchschreitest die Schwelle des Dunklen.\n",
+              EX_FUNC    : "testfunc2",
+              EXG_ID     : "wachork",
+              EXG_PLMSG  : "@@killhim@@Der Ork laesst Dich nicht vorbei!\n",
+              EXG_RMMSG  : "Der Ork haelt @wen@ zurueck.\n" ]) );
+     // Spieler attackieren bei versuchtem Durchschreiten
+     string killhim() {
+       catch(present("wachork", this_object())->Kill(this_player()));
+       return "";
+     }
+     int testfunc1() {
+       if (this_player()->QueryProp(P_LEVEL) < 5) {
+         write("Du traust Dich noch nicht weiter.\n");
+         return 0;
+       }
+       else return 1;
+     }
+     int testfunc2() {
+       if (!present("schattenamulett", this_player())) {
+         notify_fail("Eine unbekannte Macht haelt Dich ploetzlich zurueck.\n");
+         return 0;
+       }
+       else return ROOM("weg2");
+
+      }
+
+
+Wichtiger Hinweis:
+Egal wie und wann, wenn manuell versucht wird, in der EX_TESTFUNC 
+oder EX_FUNC manuell zu bewegen, führt das zu Fehlern in der Karte,
+ist also zu unterlassen. Ein EX_DEST wird genommen, wenn die Funktion eine 
+1 zurückgibt, oder verhindert, wenn eine 0 zurück kommt.
+
+SIEHE AUCH:
+     RemoveExit(), AddGuardedExit(), AddSpecialExit(), NewDoor(),
+     GetExits(), /std/room/exits.c, /sys/room/exits.h
+

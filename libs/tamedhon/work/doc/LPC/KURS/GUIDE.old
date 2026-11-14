@@ -1,0 +1,396 @@
+ACHTUNG, DIESES HANDBUCH IST IN DIESEM MUD NICHT MEHR GUELTIG !!!!
+(Rumata)
+                          A Beginner's Guide for New
+                              Wizards on LPmuds
+                          --------------------------
+
+
+This is a short guide on how to go about building a castle.  You
+should also read the files in /doc/build.  This file is meant just
+as an example and to clarify some stuff.  Also, /doc/efun and
+/doc/lfun are very useful.
+
+The first thing to know is that everything you create comes from an
+LPC file.  LPC is a language similar to C.  If you have no knowledge
+of C, but are familiar with other programming languages, you should
+be able to follow along with the examples.  Also, you will need to
+create files.  LPC files end with the suffix ".c".  To create
+files, you must either use the 'ed' command, or edit the files
+locally on your command and send them to the lpmud machine via
+ftp, telmud, or some other means.  Learning 'ed' is important, even
+if you use ftp, so you should read 'ed1' through 'ed6' in /doc/build.
+You don't need to know how to do everything, but you should be able
+to insert, delete, substitute, and move around in a file.
+
+Now, presuming you are a brand new wizard and you have been sponsored
+and dropped your portable castle.  This is the seed from which your
+domain will grow.  Although not mentioned enough, and often ignored,
+you should plan on some sort of 'theme' for the castle.  Tossing
+mutant turtles in the middle of an elven forest tends to confuse
+people.  If you want to mix areas and themes, try to have a logical
+transition between them.  Also, make your castle entrance be logical.
+For example, having the entrance say "A house is to the west" is
+consistent most places, but placing it in the middle of the store
+is rather silly.  Also, try to be consistent with local topology.
+A shoreline in the middle of the plains is not consistent.
+
+So for these examples, we are going to have a shack in the middle of
+the plains.  First thing to do is look at your default castle.
+You can look at it with the command 'more castle.c'.  It has 6
+routines.  The first is id().  Id() is used to identify objects
+by name.  For example, we can 'look at castle', and the word 'castle'
+will get passed to id().  If we return true (non-zero) then we know
+we have found the right object.  We can have multiple names for
+objects also.  For example:
+
+  id(str) { return str=="shack" || str=="hut"; }
+
+The next routine is short().  This returns a string to be used for
+short descriptions.  For objects, this is the description you see
+when you do an inventory or enter a room.  For rooms, you get
+the short description when using brief mode.  The long() routine
+is similar, but instead of returning a string, it writes out the
+description.  This long description is used when you do 'look' or
+'look at object'.  You can also be creative and make the short and
+long routines vary the descriptions depending upon current state,
+time, etc.
+
+The next routine is init().  This is called whenever a player enters
+the room.  Normally it is used only to define commands, but you can
+also be creative here.  You shouldn't make this routine very large
+or slow, since it will get called a lot.  The function to add
+commands is add_action().
+add_action() takes the name of a function to be called when the
+command is given, and then the name of the command.
+For example, we wish to use 'south' as a command that will call enter():
+
+  init() {
+    add_action("enter", "south");
+  }
+
+Now, we define the enter() routine.  In the default castle, it just
+tells the person giving the command that the castle is closed.
+The command routines will be called with a string argument that contains
+the reset of the command line excluding the command.  The default
+enter command for castle.c uses this argument to make sure the player
+meant our castle and not something else.  To do this, id() is called
+to verify that the player typed 'enter castle'.  Command routines
+return a 1 or 0.  If the routine returns a 1, then lpmud knows that
+this command was meant for our object, and not for a different one.
+If a 0 is returned, then lpmud tries the command on the other objects
+in the room.  If nothing returns a 1, then you get the familiar 'What?'
+reponse.
+
+Now we want the enter() routine to actually move the player somewhere.
+We want to move the player to our room1.c room.  Here is the code:
+
+  enter() {
+    call_other(this_player(), "move_player", "south", "players/joe/room1");
+  }
+
+/* the call_other () efun can also be coded using another syntax:
+ * <object_pointer> -> <function_name> ( <parameters) );
+ * i.e here,
+		this_player() -> move_player("south", "players/joe/room1");
+ * Demos 
+ */
+
+This routine takes some explaining.  This_player() refers to the player
+who gave the command, returning an object.  Call_other() calls a routine
+in another object.  In this case, call_other() will call the routine
+move_player() that is associated with this_player(), also passing the
+strings "south" and "players/joe/room1" as arguments.
+Move_player() is defined for all living things.  It moves the
+player to "players/joe/room1", and players left behind will see
+the message "so-and-so leaves south".
+
+The final routine in the default castle is reset().  This routine is called
+whenever the object is first created, and at certain intervals.  When
+first called, it is passed a 0 as an argument, and at all other times
+it is passed a 1.  The purpose of this routine is to set things up initially,
+and to regenerate any monsters that were killed, etc.  A useful format is:
+
+  reset(arg) {
+    if (!arg) {
+      /* do stuff we only want done on initialization */
+    }
+    /* do stuff we always want done on reset */
+  }
+
+The reset() routine in the default castle merely moves the castle
+to its location so people can see it.  When objects are created, they
+always need to be moved someplace.  Finally, here is our complete
+"shack" castle.c: (which we have changed a bit from above)
+
+  /* where our castle gets plopped */
+  #define DEST "room/plane4"
+
+  id(str) { return str == "shack"; }
+
+  short() {
+      return "A small shack lies to the south");
+  }
+
+  long() {
+      write("This is a small shack, its door left ajar.\n");
+  }
+
+  /* we can enter by doing 'enter shack' or 'south' */
+  init() {
+      add_action("enter", "enter");
+      add_action("south", "south");
+  }
+
+  enter(str) {
+      if (!id(str))
+	  return 0;
+      return south();
+  }
+
+  south() {
+      this_player()->move_player("south", "players/joe/room1");
+      return 1;
+  }
+
+  reset(arg) {
+      if (arg)
+	  return;
+      move_object(this_object(), DEST);
+  }
+
+/* note that subsequent calls to reset () are only carried out 
+ * just before something enters the room/ objedt
+ * Demos.
+ */
+
+====================================
+
+Ok, now we want to create our first room.  If we had to write out all
+of the above commands each time, even for small rooms, it would get
+very tedious.  Fortunately, there are some standard macros for rooms
+that make this easier.  At the top of the file put the line:
+
+  #include "std.h"
+
+This defines some macros for us, as demonstrated below:
+
+  #include "std.h"
+
+  TWO_EXIT("room/plane4", "north",
+	   "players/joe/room2", "south",
+	   "Small Shack",
+	   "This is a small wooden shack.  An even smaller room is to\n"+
+	   "the south.\n", 1)
+
+This defined a complete room for us.  The TWO_EXIT macro defines a room
+that has 2 exits (north and south).  We first pass 2 pairs of destination
+and command arguments.  For example, the command 'north' will move the
+player to 'room/plane4' (back to the castle).  Move_player() is used
+for this.  After these arguments, come the short description, in our
+case 'Small Shack'.  The next argument is a string to be used in the
+long description.  Since we have multiple lines, we catentate two strings
+together using '+', and remember to use '\n' to put in carriage returns.
+The last argument is 1 if the room is lit.  If we use 0 instead, then
+the room is dark and we need a light source to see.  This one macro
+creates all of our routines for us.  There are similar macros for
+rooms with 1 through 6 (or more) exits.
+
+Now we have two rooms.  However, we would like to have the simplicity of
+
+or reset routines.  In our next room, we will have 3 additional things;
+a monster, some extra description, and we won't let the player go
+further without killing the monster.
+
+/* oh dear... B-( why isn't /room/room mentioned??
+ * room/room provides a much neater way of making rooms, by 
+ * inheriting "room/room" in your room file.
+ * please ask your sponsor about room/room...
+ * Demos.
+ */
+
+
+First, a few words about monsters.  Read /doc/build/monster thoroughly.
+We don't want to create a complete object by scratch for something as
+complex as a monster.  Instead, we 'clone' an existing monster template,
+and modify it.  Always be sure to double check your monsters to be sure
+they don't give away too much experience for an easy fight, or will
+kill utter novices in a single blow (else put in a BIG warning).  Here
+is a routine to create a simple monster:
+
+  object dog;
+
+  make_monster() {
+    if (dog && !living(dog)) {
+      object shovel;
+      dog = clone_object("obj/monster");
+      dog->set_name("dog");
+      dog->set_short("A dog");
+      dog->set_long("This is a growling dog.\n");
+      dog->set_level(2);
+
+/* hmmm.. i don't recommend changing the values of the wc or
+ * ac or other stats after having set the level, this makes 
+ * for an unbalanced game.
+ * Demos.
+ */
+
+      dog->set_wc(5);
+      dog->set_ac(2);
+      move_object(dog, this_object());
+      shovel = clone_object("obj/treasure");
+      shovel->set_id("shovel");
+      shovel->set_value(10);  /* 10 gold coins */
+      shovel->set_weight(1);
+      move_object(shovel, dog);
+    }
+  }
+
+Here, we create a dog.  The various 'set' functions allow us to
+customize the monster to our liking.  Set_name() gives us something
+to call the dog, so that 'kill dog' knows what we are talking about.
+We could also add set_alias, set_alt_name, so we can call the dog
+other things.  Set_race() is important too, since we can assign a
+generic race to the monster (for example, we could have something that
+scared all dogs away by checking their race).  But this is a simple
+example.  Set_level() gives the monster a level.  Level 2 is the same
+as a level 2 player.  Set_level() assigns default hit points, experience,
+and how much the monster can carry.  Usually, you should not modify
+hit points or experience without a good reason.  Never raise experience
+higher than what the level would give, but you might want to lower it.
+Setting level, hit points, and experience all for the same monster is
+redundant.  Set_ac() and set_wc() set the armor class and weapon class
+of the monster.  Players fighting with bare hands have weapon class of
+3, and most weapons are less than 15.  Armor class defaults to 0.
+Deciding on a good weapon and armor class takes some experience.  Check
+with your sponsor and look at other monsters for good ideas for what
+these values should be.  The move_object() moves the monster to where
+we want to put it.  Move_object(dog, this_object()) moves the dog to
+the room (this_object() refers to the object defining the routine, which
+is our room).  Next we create an item for the dog to carry.  "obj/treasure"
+is ok for our purposes, even though the item isn't really treasure.
+Move_object() moves the shovel to the dog's inventory.
+
+Now we define room2.c (assuming make_monster has been written):
+
+  #include "std.h"
+
+  object dog;
+
+  #undef EXTRA_RESET
+  #define EXTRA_RESET make_monster();
+
+  #undef EXTRA_LONG
+  #define EXTRA_LONG if (id(str)) return extra_long(str);
+
+  #undef EXTRA_MOVE2
+  #define EXTRA_MOVE2 if (dont_move()) return 1;
+
+  TWO_EXIT("players/joe/room1", "north",
+	   "players/joe/room3", "down",
+	   "Shack",
+	   "This is the back of the shack.  There is a small hole\n"+
+	   "leading down.\n", 1)
+
+  id(str) { return str=="hole"; }
+
+  extra_long(str) {
+    /* we already checked id on str */
+    write("The hole leads down into darkness.\n");
+  }
+
+  dont_move() {
+    if (present("dog")) {
+      write("The dog barks at you, preventing you from going down.\n");
+      return 1;
+    } else
+      return 0;
+  }
+
+  make_monster() {
+   ...
+  }
+
+To customize this room, we used some special macros.  The first
+is EXTRA_RESET.  This defaults to the empty string.  When the
+reset() routine is created, the value of this macro gets inserted.
+So by setting it to make_monster(), this routine gets called from
+within reset().  We do the same sort of thing with EXTRA_LONG.
+Here, if we do "look at hole", then "hole" gets passed to our long()
+routine.  Since "hole" matches in id(), we call extra_long() and
+return (instead of giving the normal room description).  EXTRA_MOVE2
+allows us to prevent moving down.  This gets inserted as part of the
+movement routine attached to the second movement command.  Here, we
+call dont_move() which checks to see if the dog is present.  If the
+dog is present, dont_move() returns 1, which causes us to return from
+the move routine before we actually move.  Note, we still return 1 from
+the EXTRA_MOVE2, else it would say 'What?'.  The present() routine in
+dont_move checks to see if any object with the appropriate id() is in
+the inventory of the object.  Check the documentation for present in
+/doc/efun/present for more information.
+
+You should probably look at /room/std.h to see how the macros are all
+defined and how they fit together.  Using these macros saves you the
+effort of writing everything, and also saves some space.
+
+Finally, we have one last room, room3.c:
+
+  #include "std.h"
+
+  status dug_up;
+
+  #undef EXTRA_RESET
+  #define EXTRA_RESET dug_up=0;
+
+  #undef EXTRA_INIT
+  #define EXTRA_INIT add_action("dig", "dig");
+
+  ONE_EXIT("players/joe/room2", "up",
+	   "Hole",
+	   "You are at the bottom of a dark hole that someone has\n"+
+	   "been digging in.\n", 0)
+
+  dig() {
+    if (!present("shovel", this_player())) {
+      write("The ground is too hard to dig into.\n");
+    } else if (dug_up) {
+      write("You dig, but find nothing.\n");
+    } else {
+      object money;
+      write("You dig up some old coins!\n");
+      money=clone_object("obj/money");
+      money->set_money(25+random(25));
+      move_object(money, this_object());
+      dug_up=1;
+    }
+    return 1;
+  }
+
+The 0 as the last argument makes this a dark room.  The EXTRA_INIT
+macro lets us add additional commands besides the movement commands.
+In this example, we have added a 'dig' command.  This command checks
+to see that we have a shovel, and that someone hasn't already dug up
+the treasure.  EXTRA_RESET will reset the dug_up variable, otherwise,
+no new money would ever show up once we dig it up.
+
+Now we have a small but complete domain.  We can expand this later if
+we want, perhaps digging our way into an underground area.  Based on this
+simple example and reading of the online files, you should be able to
+get started creating your own world.  There are lots of other things
+you should probably learn about, such as containers, armor, weapons,
+and custom objects, but understanding these basics will help you later
+on.  Also, feel free to look at the rooms and objects already created
+in /obj and /room.  For example, if you want to know how the stuff in
+the well worked, you can just look it up and get ideas.
+
+/* you will realise that making rooms which inherit room/room 
+ * will be much easier to code and understand...
+ * also, the room/room mechanism provides a few other little 
+ * niceities... make sure you take a look at it... it is much 
+ * more elegant to code rooms with room/room.
+ * Demos.
+ */
+
+/* btw, if you have any questions or suggestions as to LPC documentation,
+ * i would be only too glad to hear from you.
+ * Demos.
+ */

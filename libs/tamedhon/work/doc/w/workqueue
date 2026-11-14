@@ -1,0 +1,190 @@
+WORKQUEUE
+    Mit der Workqueue können komplexe Aufgaben verzögert abgearbeitet
+    werden, um die eval_costs nicht zu sprengen.
+
+BEISPIEL
+
+    private inherit "/std/util/workqueue";
+
+    // ...
+
+    void load_shop_objects(string * files)
+    {
+        foreach (string file: files)
+        {
+            workqueue::enqueue( (: clone_object(file) :) );
+        }
+        workqueue::start();
+    }
+
+    // ...
+
+    void create()
+    {
+        // Beispiel-Konfiguration
+
+        // Verhalten bei Fehler: Abbruch und Jobs entfernen
+        workqueue::clear_on_error();
+
+        // Callbacks setzen
+        workqueue::done_callback( (:
+            tell_room(this_object(), "Alle Objekte geladen.")
+            :) );
+        workqueue::error_callback( (:
+            tell_room(this_object(), "Fehler beim Laden: " + $1)
+            :) );
+
+        // ...
+
+        load_shop_objects( ({ "/foo/bar/thing1", "/laber/fasel/ding2" }) );
+    }
+
+
+RoleMUD - /std/util/workqueue.c
+===============================
+
+   A workqueue to prevent complex tasks from running into a too long eval.
+
+   Every queue job is defined by a function, which can be either a
+   closure or a coroutine.
+
+   Optionally the minimum available evaltime to start the job (default:
+   50% of __MAX_EVAL_COST__) and an error callback can be specified.
+
+   After the last job finishes, the done_callback is called.
+   Each time job execution is delayed the delay_callbach is called.
+
+   This program can be used either as a (preferably private) inherit, or as
+   a lwobject (if you need more than one queue). All callbacks are called via
+   funcall (except coroutine jobs, which are called via call_coroutine), so
+   previous_object() will return the queue object.
+
+
+   Configuration
+   -------------
+
+   -- continue_on_error()
+   Continue execution of the queue after an error. The failed job will be
+   removed from the queue and its result will be set to 0.
+   Default behavior.
+
+   -- stop_on_error()
+   Stop execution of the queue after an error, but keep results and all
+   waiting jobs after the failed one.
+
+   -- clear_on_error()
+   Stop execution of the queue after an error and delete all waiting jobs and
+   results.
+
+   -- delay_callback(closure fun)
+   Set a callback function, that is called whenever queue execution is
+   delayed due to evaltime constraints. This callback should obviously not
+   take too much time to execute.
+
+   -- done_callback(closure fun)
+   Set a callback function, that is called whenever the queue has executed
+   all jobs.
+
+   -- error_callback(closure fun)
+   Set a callback that should be called if there is an error during the
+   execution of a job (and no specific error-callback is set for the job).
+   It will get the error message string as argument.
+   The function will be called before any actions configured with
+   stop_on_error() or clear_on_error() are performed, i.e. the queue state
+   will be unaltered at this point and can be used for error handling.
+   If no error_callback is set, errors are silently ignored.
+
+   -- discard_zero()
+   Store job results if != 0. Results can be retreived by calling results().
+   Default behaviour.
+
+   -- store_results()
+   Store all job results. Results can be retreived by calling results().
+
+   -- discard_results()
+   Discard all job results. Does not clear results that were stored before.
+
+
+   Job management
+   --------------
+
+   -- enqueue(closure|coroutine fun
+              [, int|float evaltime]
+              [, closure error_callback])
+   Add a job to the end of the queue.
+
+   If 'fun' is a closure it will be called and the returned value will
+   be appended to the results() array.
+
+   If 'fun' is a coroutine it will be called repeatedly until it finishes
+   with return. All yield()ed values will be appended to the results() array.
+   (Note that the return-value will not be added to the results; this is
+   consistent with how foreach() handles coroutines.)
+
+   Optionally a minimal required evaltime can be specified. If there is not
+   enough evaltime left, the execution will be delayed for __ALARM_TIME__.
+   Default: 50% of __MAX_EVAL_COST__
+
+   If an error occurs the error_callback function is called with the error
+   string as argument, instead of the global error_callback().
+
+   Returns the job id.
+
+   -- enqueue_next(...)
+   Similar to enqueue(), but adds the job to the top of the queue (i.e.
+   it will be executed next).
+
+   Returns the job id.
+
+   -- dequeue(int job_id)
+   Removes the specified job from the queue.
+
+   Returns job_id if the job was found in the queue, 0 otherwise.
+
+   -- dequeue_next()
+   Removes the next pending job from the queue.
+
+   Returns its job id if there was a job, or 0 if the queue was empty.
+
+   -- repeat_job()
+   Re-Enqueues the currently running job.
+   Can be called from within a job closure to repeat execution.
+   Coroutine-jobs are automatically repeated if they yield().
+
+
+   Queue control
+   -------------
+
+   -- start()
+   Starts queue execution immediately.
+
+   -- start_delayed()
+   Starts delayed queue execution.
+
+   -- stop()
+   Stops execution of queue jobs, but keeps them waiting.
+
+   -- clear()
+   Stops execution of queue jobs and clears the queue and results.
+
+   -- results()
+   Returns the job results accumulated so far.
+
+   -- clear_results()
+   Clear the results array.
+
+   -- running()
+   Returns 1 if the queue is currently running.
+
+   -- waiting()
+   Returns the number of waiting queue jobs.
+
+   -- jobid()
+   Returns the id of the currently running job, or the next pending job
+   if execution is delayed.
+
+
+   Author
+   ------
+
+   Invisible@Beutelland

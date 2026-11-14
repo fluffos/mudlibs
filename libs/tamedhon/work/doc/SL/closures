@@ -1,0 +1,292 @@
+Author: Avatar@Avalon
+
+Folgender Text stammt im Original von Ironlord, und wurde von Avatar
+korrigiert und erweitert.
+
+Es handelt sich um eine kleine (deutsche) Einfuehrung, die einen ersten
+Einblick in die Closure-Programmierung gewaehren soll. Weiterfuehrende
+Informationen findest Du in /doc/lpc/closures und /doc/lpc/closures-example.
+Die meisten Beispiele findest Du in der Mudlib. Greppe einfach mal
+nach "lambda" durch /i oder /apps.
+
+Here we go:
+------------------------------------------------------------------------------
+
+Wann muss man Closures verwenden
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   - Wenn ein Programm einem (gecloneten) Objekt dynamische Meldungen 
+     uebergeben soll (siehe auch /doc/funktionsweisen/messages).
+   - Wenn ein Funktionsablauf von einem Parser "zusammengestellt" werden 
+     soll (siehe auch /secure/simul_efun/deklin.c)
+   - Wenn Funktionen in ein Objekt eingebunden werden muessen (koennen
+     nur privilegierte Objekte, siehe /secure/master/create_wiz.inc)
+
+Wann kann man Closures verwenden
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   - Bei Filter- und Sortieralgorithmen, da sie den Code kompakt halten
+     (siehe update_level() in /i/player/login.c oder query_active_jobs()
+     in /apps/erqd.c).
+   - Bei Funktionen wie add_command() oder set_long(), wenn bei einem
+     Funktionsaufruf auch Parameter wie this_player() uebergeben werden
+     muessen (siehe auch /d/Ela*/ava*/los*/jer*/gilde/npc/esala.c)
+
+Wann sollte man Closures lieber nicht verwenden
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   - Immer dann, wenn die Lesbarkeit des Source-Textes darunter sehr leiden
+     wuerde, sich der Aufbau der Funktion eh nie aendert, und die Closure
+     lediglich in einem einzigen Objekt benutzt wird (Negativbeispiel:
+     /d/Elandor/map.c).
+
+Um Missverstaendnisse von vornherein auszuschliessen
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   - Closures sind nicht die Assemblersprache des LPC
+     (will heissen, das sie nur dort schneller sind wo sie wirklich 
+      gebraucht werden)
+   - es hat keinen Sinn alle Funktionen eines Objektes in Closures 
+     umzuwandeln
+
+
+Folgende Beispiele sollen zeigen, wie man mit Closures arbeitet:
+
+
+Die Closure und das VItem 
+~~~~~~~~~~~~~~~~~~~~~~~~~
+In einem VItem kann man z.B. dem "long" einen festen String (Text) zuweisen.
+Was ist aber nun wenn sich dieser Text aendern soll, zum Beispiel, wenn
+eine Kerze "erzeugt" werden soll, die im brennenden Zustand anders aussieht
+als im erloschenen.
+Kein Problem, man ersetzt den String einfach durch eine Closure, und
+laesst von dieser den String waehrend der Laufzeit erzeugen.
+
+Beispiel:
+
+//Dies ist keine Closure, sondern nur die von Ihr aufgerufene Funktion
+string an_oder_aus() {
+  if (licht_an)
+    return "Die Kerze flackert im Wind.\n";
+  else
+    return "Die Kerze ist leider aus, zuende sie doch an.\n";
+}
+
+void create() {
+[...]
+   add_v_item( ([  
+      "name":    "kerze",
+      "gender":  "weiblich",
+      "long" :   #'an_oder_aus		//dies ist die Closure
+      ]) );
+
+Funktionsweise: Beim Betrachten der Kerze wird zunaechst die Funktion 
+'an_oder_aus' aufgerufen, diese schaut nach ob 'licht_an' gesetzt ist und 
+gibt den entsprechenden Text an "long", danach wird der Text an den 
+Betrachter ausgegeben.
+
+Dies ist eine recht simple Closure, die lediglich eine Funktion aufruft,
+die sich innerhalb des Objektes befindet. Solche zusaetzlichen Funktionen
+kann man sich auch ersparen, indem man eine Lambda-Closure kreiiert.
+
+
+Lambda-Closures
+~~~~~~~~~~~~~~~
+
+Grundlagen und Grundfunktionen
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Erstmal ein kleiner Einblick, wie obiges Beispiel mit Hilfe einer
+Lambda-Closure geloest werden kann:
+
+closure an_oder_aus;
+int licht_an_aus=1;
+
+int licht_an; // Globale Variable, die geaendert wird, wenn jemand die
+              // Kerze auspustet
+
+int query_licht_an() { return licht_an; }
+// Hier erfaehrt die Closure den Wert der globalen Variable
+
+void create()
+{
+   licht_an=1; // Defaultmaessig ist die Kerze an
+
+   add_v_item( ([  
+      "name":    "kerze",
+      "gender":  "weiblich",
+      "long":    lambda(0, 
+         ({ #'?,
+            ({ #'query_licht_an }),
+            "Die Kerze flackert im Wind.\n",
+            "Die Kerze ist aus.\n"
+         }) )
+      ]) );
+}
+
+Wow, ganz schoen viele neue Sachen auf einmal. Ok, gehen wir mal alles
+der Reihe nach durch:
+
+Die lambda-Funktion
+~~~~~~~~~~~~~~~~~~~
+closure lambda(mixed *Variable,mixed *Closure);
+
+Mit Hilfe der lambda-Funktion wird die Closure erzeugt. 
+Diese Funktion benoetigt zwei Uebergabeparameter. Das erste Feld enthaelt
+(lokalen) Variablen, welche spaeter per funcall() oder apply() uebergeben 
+werden, und das zweite Feld ist der "Source-Text" der Closure.
+Werden keine lokalen Variablen benoetigt, kann man als 1. Argument auch
+eine 0 uebergeben, wie im Beispiel zu sehen.
+
+
+Der Aufruf: #'?
+~~~~~~~~~~~~~~~
+Er verhaelt sich genauso wie eine if-Anweisung.
+
+Statt             if(     <check>    )       <result1>   else   <result2>
+                   |         |                   |                  |
+                   |         |                   |                  |
+schreibt man      #'?,  ({ #' ... }),       ({ #' ... }),      ({ #' ... })
+                   |         |                   |                  |
+                   |         |                   |                  |
+oder auch         #'?, ({ #'query_x }), "Ergebnis ungleich 0", "Ergebnis 0"
+
+Merke: Die ({ })-Klammern setzt man immer dann, wenn in einem "Feld" ein 
+separater Funktionsaufruf erfolgen soll. Ist dies nicht der Fall, kann 
+man die Klammern auch weglassen (siehe Beispiel).
+
+
+Closure-Operatoren
+~~~~~~~~~~~~~~~~~~
+Man sieht, das Closures in Feldern abgelegt werden. Man kann es sogar
+noch einfacher formulieren, jeder neue Befehl einer Closure wird in einem
+Feld abgelegt. Befehle sind in diesem Falle aber auch Operatoren wie 
+
+   +=     -=       <     >     !=     ? (mini-if-befehl) usw. 
+
+und so gibt es fuer jeden dieser 'Befehle' einen Closureoperator:
+
+   #'+=   #'-=   #'<   #'>   #'!=   #'?                  usw.
+
+Allerdings gibt es nicht fuer alle Operatoren einen aequivalenten
+Closurebefehl (z.B. '->' hat kein ' #'-> ').
+
+
+Erste Schritte zur Programmierung
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Man kann Closures ganz einfach erzeugen, wenn man weiss wie man sie aus 
+LPC-Quelltext erzeugen kann. Man muss also eine fertige Closure nicht 
+verstehen oder gar zurueckuebersetzen koennen, oder aber eine Closure 
+einfach so aus dem Gedaechtnis bilden. Ich werde einfach nur versuchen 
+zu zeigen wie man ein Stueck LPC-Quelltext in eine Closure umwandeln kann.
+
+Beispiele
+~~~~~~~~~
+
+ Operator  | Closure        | Beispiel
+-----------+----------------+------------------------------------------
++=, -=	   | #'+=, #'-=	    | x+=1;	({ #'+=, x, 1 })
+*=, /=, %= | #'*=, #'/=,    |
+	   | #'%=	    | x*=y;	({ #'*=, x, y })
+<, >, !=   | #'<, #'>, #'!= | x!=-1;	({ #'!=, x, -1 })
+->	   | #'call_other   | xyz->set_hp(5)  
+	   |		    | ({ #'call_other,xyz,"add_hp",-5 })
+           |                | ({ #'call_other,({#'this_player}),"add_hp",-5 })
+befehl1;   | #',,	    | ({ #',, befehl1, befehl2 })
+befehl2;   |		    | Es koennen mehrere Befehle hintereinander
+	   |		    | ausgefuehrt werden.
+
+Weiteres dazu steht in der Englischen Doku: /doc/lpc/closures
+
+Funktionen die in der Enzy als EFun's ausgewiesen sind koennen einfach
+bei ihrem Namen eingehaengt werden 
+(z.B. ({ #'living, ({ #'this_player }) }) )
+LFun's	muessen immer ueber #'call_other aufgerufen werden.
+
+Was ist mit Returnwerten?
+~~~~~~~~~~~~~~~~~~~~~~~~~
+Ein return ist in einer Closure nicht noetig, das Ergebnis der zuletzt 
+aufgerufenen Funktion ist immer auch der Returnwert der Closure.
+
+Beispiel:
+	lambda( ({}) , ({ #'this_player }) );
+	  - liefert this_player();
+	lambda( ({}) , ({ #',, tue_was, tue_nochwas, ({ #'this_player }) }) );
+	  - liefert auch this_player();
+
+
+Noch ein paar sinnvolle (!) Programmbeispiele
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(Anmerkung von Avatar: Das Fallenbeispiel habe ich geloescht, da es a)
+nicht funktionierte, und b) ein sehr schlechtes Beispiel fuer lokale
+Variablen war)
+
+Hier einige nuetzliche Beispiele fuer den taeglichen Bedarf:
+
+---
+   object *spieler;
+
+   spieler=filter_array(all_inventory(raum_object),
+      lambda(({'item}),({#'interactive,'item})));
+
+   Was wird hier gemacht:
+      * filter_array() ruft bei jedem Element des Arrays aus dem 1. Argument
+        die Funktion im 2. Argument auf
+      * Die Funktion all_inventory(raum_object) liefert alle Gegenstaende
+        des Raumes 'raum_object'. 'raum_object' koennte z.B. this_object()
+        sein.
+      * Die Lambda-Funktion liefert eine '1' zurueck, wenn es sich bei
+        dem Element 'obj (diese Variable wird von filter_array() uebergeben,
+        der Name kann uebrigens willkuerlich gewaehlt werden) um ein
+        "Interaktives Objekt" (also einem Spieler) handelt.
+      * Zurueckgegeben werden alle Interaktiven Objekte - also alle
+        Spieler des Raumes
+---
+   object *goetter;
+
+   goetter=filter_array(users(),
+      lambda(({'player}),
+         ({#'==, ({#'call_other, 'player, "query_rasse"}), "gott"})));
+
+   Was wird hier gemacht:
+      * filter_array - siehe voriges Beispiel
+      * Die Funktion users() liefert alle eingeloggten Spieler
+      * Die Lambda-Closure ruft "spieler->query_rasse()" auf, und
+        ueberprueft, ob das Ergebnis "gott" ist
+      * Zurueckgegeben werden alle eingeloggten Goetter
+---
+   string *namen;
+
+   namen=map_array(users(),
+      lambda(({#'player}),
+         ({#'call_other, 'player, "query_cap_name"})));
+
+   Was wird gemacht:
+      * map_array() ersetzt jedes Element aus dem Array des 1. Argumentes
+        durch das Resultat, welches die Funktion im 2. Argument 
+        zurueckliefert.
+      * users() liefert alle eingeloggten Spieler
+      * Die Lambda-Closure ruft "spieler->query_cap_name()" auf, und
+        ersetzt das Element 'player durch das Resultat dieses Call-Others
+        (also dem Cap-Namen)
+      * Zurueckgegeben werden die Namen aller eingeloggten Spieler.
+
+   UEBRIGENS: Dieses Problem kann man auch einfacher loesen:
+
+      namen=map_objects(users(),"query_cap_name");
+
+   ...aber hier soll ja gezeigt werden, wie man mit Closures umgeht. ;-)
+---
+
+
+
+Schlusswort
+~~~~~~~~~~~
+
+Wir hoffen, Ihr habt das jetzt einigermassen verstanden. Wer an dieser Stelle
+noch weiter machen will sollte sich die englischen Texte in der Enzy mal antun,
+und ich denke jetzt duerften auch die meisten Sachen da verstaendlich sein.
+Wer denkt er braucht nie wieder Lambda()-Closures hat auch recht, weil man 
+ja auch alles mit simplen Closure-Funktionsaufrufen umgehen kann, aber es 
+ist eben schoener mit. Zudem koennte eine einmal entwickelte Closure 
+vielen Programmierern die Arbeit erleichtern (siehe /sys/item.h).
+In diesem Sinne, Closures sollten den Leuten bleiben die anderen das Leben
+leichter und sich ihres schwerer machen wollen.
+
+----------------------------------------------------------------------

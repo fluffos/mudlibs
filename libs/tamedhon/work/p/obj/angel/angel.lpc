@@ -1,0 +1,242 @@
+// angel.c - die std. angel
+//
+// 05/17/2012 - Serii
+
+#pragma strong_types
+
+#include <properties.h>
+#include <combat.h>
+#include <class.h>
+#include <moving.h>
+
+#include <fishing.h>
+
+#include <new_skills.h>
+
+inherit "std/weapon";
+
+object TRoom;
+object TPlayer;
+
+void create()
+{
+  if(!clonep(this_object())) return;
+  ::create();
+  SetProp(P_NAME,"Angel");
+  SetProp(P_SHORT, "Eine einfache Angel");
+  SetProp(P_LONG,
+  "Eine einfache Angelrute. Sie besteht aus einem langen, recht "
+  "dünnen hölzernen Stock der "
+  "sich zu einem Ende hin noch weiter verjüngt. "
+  "Dort ist dann eine lange Leine aus stabiler Seide "  
+  "befestigt, an dessen Ende sich wiederum ein Haken befindet. "
+  "Das andere Ende des Stockes ist mit einem "
+  "langen Lederband umwickelt, um der Rute einen besseren Griff "
+  "zu verleihen.");
+  SetProp(P_GENDER, FEMALE);
+  SetProp(P_ARTICLE,1);
+  SetProp(P_WEIGHT, 250);
+  SetProp(P_WEAPON_TYPE, WT_WHIP);
+  SetProp(P_DAM_TYPE, DT_BLUDGEON);
+  SetProp(P_WC,0);
+  SetProp(P_VALUE, 100);
+  SetProp(P_NR_HANDS, 2);
+
+  SetProp(P_WATER,W_SWEET);
+
+  AddId(({"angel",ANGEL_ID}));
+  SetProp(P_MATERIAL,([MAT_MISC_WOOD:90,MAT_SILK:2,MAT_LEATHER:7,MAT_METAL:1]));
+
+  AddCmd(({"angel","angle","angele","fische"}),"c_angel");
+}
+
+#define LOC ({"in","im"})
+
+nosave string filter_loc(string str)
+{
+  string *sarr;
+  int lv;
+  if(!strlen(str))return str;
+  sarr=efun::explode(str," ");
+  str="";
+  for(lv=0;lv<sizeof(sarr);lv++)
+  {
+    if(member(LOC,sarr[lv])<0)
+    {
+      if(strlen(str))str+=" ";
+      str+=sarr[lv];
+    }
+  }
+  return str;
+}
+
+int c_angel(string str)
+{
+  object tp;
+  object room;
+  mapping locations;
+  string *loc_inds;
+  string wo;
+  int w_type;
+  int loc;
+  float fish;
+
+  object weap;
+
+  int fishingtime;
+  int atype;
+
+  tp=this_player();
+  room=environment(tp);
+
+  _notify_fail("Du angelst doch schon!\n");
+  if(find_call_out("ca_angeln")>=0&&room=TRoom)return 0;
+  if(TRoom!=room)remove_call_out("ca_angeln");
+
+  _notify_fail("Du musst erst Deine Angel zücken!\n");
+  if(objectp(weap=tp->QueryProp(P_WEAPON)))
+  {
+    if(weap!=this_object())
+      return 0;
+  }
+  else
+    return 0;
+
+  TRoom=room;
+
+  _notify_fail("Hier kannst Du nicht angeln!\n");
+
+  if(w_type=room->QueryProp(P_WATER))
+  {
+    _notify_fail(break_string(Name(WER,1)+" scheint für "
+    "die hiesige Gewässerart nicht geeignet zu sein."));
+    if(!((QueryProp(P_WATER)|W_USER)&(w_type))&&(QueryProp(P_WATER)|W_USER))
+      return 0;
+
+    locations=room->QueryProp(P_FISHING_LOCATIONS);
+    str=filter_loc(str);
+
+    if(sizeof(locations))
+    {
+      loc_inds=m_indices(locations);
+      loc=member(loc_inds,str);
+      if(loc>=0)
+      {
+        wo=locations[loc_inds[loc]]+" "+capitalize(loc_inds[loc]);
+      }
+      else
+      {
+        if(strlen(str))
+          _notify_fail("Da kannst Du nicht angeln!\n");
+        else
+          _notify_fail("Wo willst Du angeln?\n");
+        return 0;
+      }
+    }
+    else
+    {
+      wo="";
+    }
+
+    write(break_string(
+      "Du wirfst Deine Angelleine aus und "
+      "angelst ein wenig"+(strlen(wo)?" "+wo:"")+"."));
+    say(break_string(
+      tp->Name(WER)+" wirft "+
+      (tp->QueryProp(P_GENDER)==FEMALE?"ihre":"seine")+" Angelleine "
+      "aus und angelt ein wenig"+(strlen(wo)?" "+wo:"")+"."));
+
+    fish=room->QueryProp(P_FISH);
+    if(fish<=0)fish=1.0;
+    else fish=fish/100.0;
+
+    fishingtime=(int)((10+random(11))*(1/fish));
+
+    TPlayer=this_player();
+    tp->SetProp(P_TMP_MOVE_HOOK,({time()+fishingtime,this_object(),
+    "stop_angeln"}));
+
+    call_out("ca_angeln",fishingtime,tp);
+    return 1;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+void stop_angeln(varargs mixed args)
+{
+  remove_call_out("ca_angeln");
+  tell_object(TPlayer,"Du hörst auf zu angeln.\n");
+  TPlayer->SetProp(P_TMP_MOVE_HOOK,this_object());
+}
+
+void ca_angeln(object tp)
+{
+  int suc;
+  int div;
+  mixed fish;
+
+  if(!tp)return;
+  if(TRoom!=environment(tp))return;
+  if(tp->QueryProp(P_WEAPON)!=this_object())
+  {
+    stop_angeln();
+    return;
+  }
+    suc=random(20001) - 10000;
+    if(suc>=10000)
+      suc=9999;
+    if(suc<=-10000)
+      suc=-9999;
+    suc=(-10000+random(suc))+random(20000-suc);
+
+  if(suc>0)
+  {
+    if(suc<200)
+      div=7;
+    else if(suc<2000)
+      div=50;
+    else
+      div=100;
+
+    fish=call_other(FISHMASTER,"GetRandomFish",TRoom,div);
+    if(fish==-1)
+    {
+      write(break_string("Die Schnur bewegt sich ein wenig, "
+      "und Du ziehst kräftig "
+      "an der Angel. Du holst die Angelleine ein und "
+      "... irgendwas ging da wohl schief!"
+      " Informier bitte Serii!"));
+      return;
+    }
+    else if(!objectp(fish))
+    {
+      return;
+    }
+    write(break_string("Die Schnur bewegt sich ein wenig, "
+    "und Du ziehst kraeftig "
+    "an der Angel. Du holst die Angelleine ein "
+    "und "+fish->name(WER,0)+" "+
+    (fish->id(FISCH_ID)?"zappelt":"hängt")+" am Haken!"));
+    say(break_string(tp->Name(WER)+" hat "+fish->name(WEN,0)+" geangelt!"));
+    if(fish->move(tp,M_GET)==ME_TOO_HEAVY)
+    {
+      write(break_string("Da Du ihn nicht mehr tragen kannst, lässt Du "+fish->name(WEN,1)+
+        " auf dem Boden liegen."));
+      say(break_string(tp->Name(WER)+" legt "+fish->Name(WEN,0)+
+      " auf den Boden."));
+      fish->move(environment(tp),M_PUT|M_SILENT);
+    }
+  }
+  else
+  {
+    write(break_string("Die Schnur bewegt sich ein wenig, "
+    "aber es scheint kein Fisch angebissen "
+    "zu haben. Enttäuscht holst Du die Angelleine wieder ein."));
+    say(break_string(tp->Name(WER)+" holt "+
+    (tp->QueryProp(P_GENDER)==FEMALE?
+      "ihre":"seine")+" Angelleine enttäuscht wieder ein."));
+  }
+}

@@ -1,0 +1,462 @@
+
+Richtlinien zur Programmierung von NPCs
+======================================= 
+
+1. Was sind NPCs?
+-----------------
+
+NPCs sind sogenannte "Non Playing Characters", also Lebewesen,
+die keine Spieler sind. Meist werden NPCs staendig von Spielern
+gekillt, um an Erfahrungspunkte und Ausruestung oder Geld zu
+kommen. Aber auch als Informationsquelle kann man NPCs einbauen.
+NPCs inheriten /std/npc und koennen geclont werden, es existiert
+also immer eine Bluprint und mehere Clones. Die Blueprint 
+befindet sich aber nur zur Erzeugung von Clones im Speicher, 
+deshalb sollte man in der Funktion create() immer zuerst auf 
+clonep() abfragen, denn die Blueprint braucht z.B. keine 
+Properties gesetzt zu bekommen.
+
+create()
+{
+  if( !clonep(this_object()) ) return;
+  ::create(); 
+...
+
+
+2. Welche Eigenschaften sollte ein NPC unbedingt definieren?
+------------------------------------------------------------
+
+Folgende Properties sollten in create() unbedingt gesetzt werden:
+
+P_SHORT            Kurzbeschreibung (ohne Punkt und \n !!),
+                   Dieser Text wird angezeigt, wenn der NPC
+                   in einem Raum steht.
+  
+P_LONG             Langbeschreibung (sollte auf 78 Zeichen pro
+                   Zeile umgebrochen werden, am besten mit
+                   break_string()). Dieser Text beschreibt den
+                   NPC genau und wird ausgegeben, wenn man
+                   ihn untersucht.
+                   Dieser Text wird beim Setzen automatisch auf
+                   78 Zeichen pro Zeile umgebrochen, hierbei
+                   bleiben vorhandene \n erhalten. Man kann das
+                   automatische Umbrechen mit einem \t (Tabulator)
+                   als allererstes Zeichen unterdruecken, sollte
+                   dies unbedingt notwendig sein.
+
+P_INFO             Hier kann man Besonderheiten angeben, die man
+                   mittels Zauberspruch 'identifiziere' bekommt.
+                   Hier sollte man anmerken, wenn der NPC
+                   spezielle Eigenschaften hat, z.B.:
+                   "Dieser Elf ist von einer magischen Aura umgeben.\n"
+
+P_NAME             Dieser Text wird verwendet, wenn der NPC Aktionen
+                   macht, z.B. angreift, entspricht also dem Namen
+                   eines Spielers. Hierbei versucht die Mudlib, die
+                   vier Faelle automatisch abzuleiten (bei Verwendung
+                   von name() bzw. Name()), was manchmal aber auch
+                   schiefgehen kann - man sollte daher vorsichtshalber
+                   die 8 moeglichen Faelle (1.-4., bestimmter sowie
+                   unbestimmter Artikel) von name() haendisch aus-
+                   testen - gegebenenfalls kann man dann P_NAME auch
+                   auf ein Array mit den vier Faellen setzen.
+
+P_GENDER           Das Geschlecht des NPCs (DER Ork, DAS Kaninnchen).
+                   Wird durch die Konstanten MALE, FEMALE und NEUTER
+                   bestimmt. (/sys/thing/language.h)
+
+P_IDS              Diese Property sollte nur mittels AddId() gesetzt
+                   werden. Es handelt sich hier um die Woerter, mit 
+                   denen man den NPC ansprechen kann. Dieser sollte
+                   mit dem Namen identisch sein. Wenn man den NPC
+                   einmal anhand seiner ID identifizieren will, sollte
+                   man eine ID angeben, die Sonderzeichen enthaelt,
+                   z.B. '\n', um eine Verwechslung auzuschliessen.
+                   IDs werden immer klein geschrieben. Man sollte auch
+                   beachten, dass man andere Faelle einbaut, z.B.
+                   Akkusativ. (Beispiel: "identifiziere wilden")
+
+set_living_name()  Mit dieser Funktion gibt man dem NPC einen
+                   living_name. Dieser Name wird bei der Funktion
+                   find_living() benutzt. Diese braucht man z.B. als
+                   Magier bei 'goto' oder 'trans'. Man sollte auch 
+                   hier den gleichen oder einen aehnlichen Text wie
+                   bei P_NAME verwenden, aber klein geschrieben.
+                   Den Living-Name sollte man aber nur bei wichtigen
+                   NPCs setzen, z.B. ganz harte Monster oder fuer
+                   Quests wichtige, keinesfalls fuer Standard- oder
+                   Massen-NPCs wie Soeldner, Soldaten, Hasen, etc.,
+                   da hier Speicherplatz fuer eine globale Liste im
+                   Driver verbraten wird.
+
+create_default_npc(level)
+                   Diese Funktion erzeugt einen Standard-NPC, bei
+                   dem die wichtigsten Werte gesetzt sind. Bei den
+                   folgenen Properties wird das jeweils angegeben.
+
+P_LEVEL = level    Die Stufe des NPCs. Entspricht in etwa der Stufe
+                   der Spieler.
+
+P_ATTRIBUTES       Enthaelt ein Mapping mit den Attributwerten des
+                   NPCs. A_INT (Intelligenz) A_STR (Staerke),
+                   A_DEX (Geschicklichkeit), A_CON (Ausdauer).
+                   Diese entsprechen den Werten bei Spielern.
+                   Sie werden defaultmaessig auf P_LEVEL gesetzt.
+                   Zu beachten ist, dass fuer das Zuecken einer
+                   Waffe A_DEX einen bestimmten Wert haben muss.
+                   (A_DEX+5)*10 >= WC . Mit A_DEX 15 kann man 
+                   also Waffen mit WC 200 zuecken. A_STR geht auch
+                   stark in die Berechnung des Schadens ein, den
+                   ein NPC macht. (siehe /std/living/combat.c)
+                   damage = (2*damage + 10*QueryAttribute(A_STR))/3;
+                   Die Attribute kann man mittels SetAttribute setzen.
+
+P_MAX_HP = level*level+10
+                   Die Lebenspunkte des NPCs. Dies entspricht den
+                   LPs eines Spielers mit A_CON=x. Die Lebenspunkte
+                   kann man eventuell noch weiter hinaufsetzen, wenn
+                   der NPC etwas mehr aushalten soll.
+
+P_MAX_SP = level*level+10
+                   Die Magiepunkte des NPCs. Dies entspricht den
+                   MPs eines Spielers mit A_INT=x. Zur Zeit verwenden
+                   NPCs ihre Magiepunkte noch nicht automatisch. Wenn
+                   der NPC mit Magiepunkten zaubern soll, muss man
+                   das selber programmieren.
+
+P_HP/P_SP          Diese Werte werden auf die jeweiligen Maximalwerte
+                   gesetzt.
+
+P_HANDS = ({" mit blossen Haenden", level*10, DT_BLDUGEON })
+                   Die Hands bestimmen den Angriff des NPCs, solange
+                   er keine Waffe zueckt. Der erste Wert ist der 
+                   Angriffstext: Der NPC greift Dich<text> an. Das
+                   Leerzeichen am Anfang ist sehr wichtig!
+                   Der zweite Wert entspricht der WC einer Waffe, und
+                   der dritte der Schadensart. Als Schadensart sollte
+                   man eine zum NPC passende waehlen.
+
+P_BODY = level*3
+                   Der Body ist sowas wie eine natuerliche Ruestung
+                   des NPCs. Bei Spielern ist der BODY auf 0, dafuer
+                   tragen sie ja auch viel mehr Ruestungen als NPCs.
+                   Wenn man den Body weit hoeher als 200 setzt, dann
+                   kann der NPC fast nicht mehr mit normalen Waffen
+                   verletzt werden, sondern nur noch mit magischen
+                   Schadenstypen, z.B. Feuerball. Fuer normale Monster
+                   sollte P_BODY im Bereich von 50-100 sein, damit man
+                   sie mit normalen Waffen bekaempfen kann.
+
+P_XP = P_MAX_HP*P_HANDS*5
+                   Von diesen Erfahrungspunkten bekommt man 1/100,
+                   wenn man den NPC toetet. Wenn der NPC zusaetzliche
+                   Spells hat oder besonders gefaehrlich ist, sollte
+                   man die XP entsprechend erhoehen. Ansonsten sollte
+                   man sich in etwa an HP*HANDS*5 halten. Bei NPCs die
+                   ein Spieler nicht killen soll, sollte man die XP 
+                   auf Null setzten (z.B. der Muellschlucker im Laden).
+                   Man sollte das in der Form "SetProp(P_XP, 500*100);"
+                   angeben, dann sieht man sofort, wie hoch der Kill-
+                   Bonus ist. Das ist uebersichtlicher als 50000.
+
+P_RACE             Die Rasse des NPCs in Einzahl, z.B "Ork". Die Rasse
+                   wird verwendet, um z.B. Waffen gegen bestimmte Gegner
+                   staerker zu machen, z.B. ein Drachentoeter-Schwert.
+                   Die Rasse ist auch beim Wuscheln wichtig, da man zB
+                   bei einem Vogel automatisch die Federn verwuschelt,
+                   bei einem Drachen die Schuppen und bei einem Pferd
+                   die Maehne. Falls man die Rasse anders setzen will,
+                   und trotzdem das richtige wuscheln soll, kann man
+                   auch IDs mit AddId() angeben: FELL_WUSCHEL,
+                   FEDERN_WUSCHEL, MAEHNE_WUSCHEL, HAARE_WUSCHEL und
+                   SCHUPPEN_WUSCHEL. Siehe auch: man AddClass
+
+P_SIZE             Die Groesse des NPCs in cm an.
+
+P_ALIGN            Das Alignment des NPCs. Es sollte zwischen 
+                   +1000 (heilig) und -1000 (satanisch) sein.
+                   Der Defaultwert ist 0. Beim Kill des NPCs wird das
+                   neue Alignment des Spielers so berechnet:
+                   new_align=9*old_algin/10-enemy_algin/4;
+                   Beim Killen von guten Mostern wird man also schlechter
+                   und umgekehrt.
+
+P_MAX_HANDS        Dieser Wert gibt an, wieviele Haende der NPC
+                   hat. Dies ist vor allem wichtig fuer das
+                   Benutzen von Waffe und Schild. Hier sollte
+                   man den echten Wert eintragen. Menschen haben
+                   2 Haende, Insekten 6, Schlangen dagegen 0.
+                   Defaultwert ist 2. (Spinnen haben 8 Beine!)
+
+
+3. Weitere moegliche Eigenschaften
+----------------------------------
+
+P_HEAL             Gibt an, um wieviele Punkte die Leiche des NPCs
+                   beim Essen heilt. (kann auch negativ sein).
+                   Bei leichten Monster sollte er immer 0 sein.
+
+P_ARTICLE          Gibt an, ob in der Beschreibung ein Artikel
+                   ausgegeben werden soll oder nicht.
+
+P_NAME_ADJ         Adjektiv, zb "wuetend" fuer "ein wuetender Ork".
+                   Hier sollte man auch zusaetzlich AddAdjective()
+                   verwenden, denn dann werden die IDs automatisch
+                   angepasst.
+
+P_AGGRESSIVE       Wenn man diese Property setzt, greift der NPC
+                   jeden an, der den Raum betritt, in dem er sich
+                   gerade aufhaelt. Es ist aber besser, das erst
+                   beim AddItem anzugeben, dann kann man den NPC
+                   einmal autoattack und einmal friedlich machen.
+                   Die Moeglichkeiten von P_AGGRESSIVE sind auch
+                   relativ variabel, man kann auch Wahrscheinlich-
+                   keiten angeben oder bestimmte Bedingungen defi-
+                   nieren - naeheres ist der Hilfeseite zu dieser
+                   Property zu entnehmen.
+
+P_NOATTACK         Der Npc kann nicht angegriffen werden.
+                   Hier kann man einen Text angeben, der ausgegeben
+                   werden soll, wenn man es trotzdem macht. Gibt 
+                   man nur 1 an, so wird " springt geschickt aus "
+                   "Deiner Reichweite." ausgegeben.
+
+
+4. NPCs und Interaktion mit Spielern
+------------------------------------
+
+AddInfo(<frage>,<antwort>,<ident>)
+                   Damit NPCs nicht ganz dumm sind, kann man ihnen
+                   bestimmte Begriffe vorgeben, auf die sie dann 
+                   antworten koennen. 
+                   Hierbei wird der Text <antwort> automatisch
+                   umgebrochen, am Anfang jeder Zeile steht dann
+                   immer: <NPC-NAME><ident>....
+                   <ident> ist meist "sagt: "
+                   Statt einem String kann man auch einen Array von
+                   Strings ausgeben, aus dem bei Befragung des NPCs
+                   zufaellig ein Element ausgewaehlt wird, das bringt
+                   dann mehr Abwechslung.
+
+AddLibrary(<library>,<level>,<localflag>)
+                   Will man die Begriffe, die NPCs kennen, extern
+                   verwalten, so kann man sie in eine eigene Library
+                   (Bibliothek) auslagern - dies ist eine Datei, die
+                   einer bestimmten Syntax folgt. Besonders interessant
+                   ist dies, wenn man alle Einwohner eines Ortes mit
+                   Informationen zu diesem Ort versorgen will, aber
+                   nicht jedem NPC die Hundertschar an AddInfo()'s
+                   mitgeben will. Ist localflag nicht definiert, so
+                   werden diese Texte auch nur an einer einzigen Stelle
+                   (naemlich im Librarymaster /obj/libmaster) verwaltet
+                   und benoetigen weniger Speicherplatz. Mit dem <level>
+                   ist es zusaetzlich moeglich, einen Begriff qualitativ
+                   zu bewerten und duemmere und kluegere NPCs mit der-
+                   selben Bibliothek zu unterscheiden.
+
+P_DEFAULT_INFO     Dieser Text wird augegeben, wenn der NPC keine
+                   Info zu dieser Frage hat. (siehe /sys/npc/info.h)
+                   Defaultwert ist: "schaut Dich fragend an.\n".
+                   Man sollte diese Property am besten mit
+                   AddInfo( DEFAULT_INFO,"text" ); setzen. Hier lohnt
+                   sich ein Array von Strings statt einer Antwort.
+
+P_LOG_INFO         Will man wissen, welche Fragen Spieler einem
+                   NPC stellen, so kann man hier einen Filenamen
+                   angeben, in dem diese Fragen mitgeloggt werden.
+                   (Das sollte man nur bei wichtigen NPCs machen,
+                   z.B. fuer Quest.) Das File findet man im
+                   Verzeichnis /log/loginfo. Gibt man 1 an, so 
+                   werden die Fragen ins rep-file des Magiers
+                   geschrieben. ( /log/report/<magiername>.rep )
+
+P_REJECT           Hier kann man festlegen, wie NPCs reagieren, wenn
+                   man ihnen Gegenstaende gibt. Folgenen Makros sind
+                   in /sys/moving.h definiert (/std/npc/put_and_get.c)
+                   REJECT_KEEP : Der Gegenstand wird behalten (standard)
+                   REJECT_DROP : Der Gegenstand wird fallengelassen
+                   REJECT_GIVE : Der Gegenstand wird zurueck gegeben
+                   Mittels give_notify() kann man auf einzelne 
+                   Gegenstande spezeille reagieren.
+                   siehe /std/npc/put_and_get.c
+                   
+SetChats(chance, ({CHATS}) ); // P_CHAT_CHANCE, P_CHATS
+                   Hier kann man angeben, ob der NPC von sich aus
+                   etwas sagen soll. Dabei ist chance die prozentuelle
+                   Wahrscheinlichkeit fuer jede Runde, dass der NPC
+                   etwas sagt. CHATS ist ein Array mit allen moeglichen
+                   Meldungen, aus denen zufaellig eine ausgewaehlt wird.
+
+SetAttackChats(chance, ({CHATS}) ); // P_ACHAT_CHANCE, P_ACHATS
+                   Dies ist das selbe wie die normalen Chats, nur
+                   werden die AttackChats im Kapf ausgegeben.
+                   (siehe /sys/npc/chat.h und /std/npc/chat.c )
+
+
+5. Weitere Einstellungen fuer den Kampf
+---------------------------------------
+
+P_RESISTANCE       Hier koennen verschiedene Schadenstypen
+                   angegeben werden, gegen die der NPC
+                   resistent ist, d.h. der Schaden wird
+                   halbiert. z.B.  ({DT_MAGIC})
+
+P_VULNERABILITY    Hier kann man Schadenstypen angeben, gegen
+                   die der NPC empfindlich ist, d.h. der 
+                   Schaden wird verdoppelt.
+
+P_RESISTANCE_STRENGTHS
+                   In diesem Mapping kann man die Resistenz oder
+                   Verwundbarkeit des NPCs gegen bestimmte
+                   Schadenstypen einstellen. P_RESISTANCE und
+                   P_VULNERABILITY sind im Grunde genommen nur
+                   ein einfacheres Interface zu dieser Property.
+
+P_TEMPERATURE_RANGE
+                   NPCs in extremen Regionen(Polar, Wueste) sollten ihre
+                   Umweltbedingungen auch aushalten, dazu einfach die
+                   Temperaturwerte auf den richtigen Bereich legen.
+                   Defaultwert: ([T_RANGE_MIN:0,T_RANGE_MAX:40]) 
+                   
+P_NOMAGIC          Hier kann man die prozentuelle Wahrscheinlichkeit
+                   angeben, dass der NPC einen Spruch abwehrt.
+
+AddSpell(chance,schaden,<string1>,<string2>,damage_type,fun);
+                   Mit dieser Funktio kann man einem NPC
+                   einen Spell geben, d.h. eine zusaetzliche
+                   Attacke. Je hoeher chance ist, desto oefters
+                   wird dieser Spell unter mehereren ausgewaehlt.
+                   Schaden wird WC Einheiten angegeben.
+                   string1 bekommt der betroffenen Spieler angezeigt,
+                   string2 die anderen Spieler im Raum.
+                   damage_typ gibt den Schadenstyp an.
+                   fun ist entweder eine Funktion, die spezielle
+                   Sachen machen kann oder eine Spell-Info.
+                   mit ([SP_SHOW_DAMAGE:1]) bekommt der Spieler
+                   eine Trefferanzeige.
+
+P_SPELLRATE        Dieser Wert bestimmt die prozentuelle
+                   Wahrscheinlichkeit, mit der der NPC einen
+                   Spruch macht.
+
+P_WIMPY            Hier kann man die Anzahl der Lebenspunkte
+                   einstellen, bei denen der NPC flieht. Das
+                   entspricht der Vorsicht bei Spielern.
+
+P_DIE_MSG          Die Meldung, die der Spieler beim Tod des
+                   NPCs bekommt, ( " faellt tot zu Boden.\n") 
+
+P_NOCORPSE         Wenn man diesen Wert setzt, bleibt keine Leiche
+                   zurueck. Ist z.B. sinnvoll bei Geistern.
+                   Allerdings kommt dann auch keine Meldung auf
+                   dem Moerderkanel.
+
+P_MURDER_MSG       Meldung, die auf [Moerder:] erscheinen soll.
+                   Ansonsten wird einen zufaellige Meldung aus
+                   /std/corpse.c ausgegeben.
+
+P_KILL_NAME        Name, mit der der NPC auf dem Todeskanal 
+                   erscheint. Ansonsten wird P_NAME verwendet.
+
+P_KILL_MSG         Diese Meldung erscheint auf [Tod:] nach
+                   [Tod:] <KILL_NAME> hat gerade <spieler> umgebracht.
+                   [Tod:<KILL_NAME>] <KILL_MSG>
+
+P_MSG_FLAGS        Hier kann man festlegen, ob die Ausgabe auf dem
+                   Todes- oder Moerderkanal normal (0), als 'emote' (1)
+                   oder als 'gemote' (2) erfolgt; 
+                   zum Beispiel :  ([P_KILL_MSG:1,P_MURDER_MSG:2])
+                   ( Auf dem Todeskanal ist gemote nicht moeglich. )
+
+
+6. Ausruestung fuer NPCs
+------------------------
+
+Am Effektivsten nutzt man AddItem, um ein Objekt in den NPC zu packen, 
+damit er nicht ganz nackt da steht.
+
+Die Syntaxt ist hierfuer AddItem(FILENAME,METHODE);
+Als FILENAME ist der Filename des Objektes (zB "/obj/misc/wuerfel")
+zu verwenden.
+Als Methode sind folgende drei Methoden definiert:
+
+	CLONE_MOVE   Das Objekt wird nur in den NPC reingemoved
+	CLONE_WEAR   Es wird versucht, das Objekt anzuziehen
+	CLONE_WIELD  Es wird versucht, das Objekt zu zuecken
+
+Mehr Informationen sind auf der Man-Page zu AddInfo zu finden.
+
+7. Moving NPCs
+--------------
+
+Um einen echten Moving-NPC zu machen, muss man std/mnpc inheriten.
+Dann muss man noch folgende Properties setzen:
+(siehe  /sys/mnpc.h  und  /std/mnpc.c )
+
+P_MNPC_AREA        Hier kann man das Gebiet definieren, in dem
+                   der NPC herumlaufen soll. Das kann der
+                   gemeinsame Teil des Dateinamens sein oder
+                   ein Array von Raeumen.
+
+P_MNPC_WAIT        Wie lange soll der NPC warten. Entweder eine
+                   einfache Zahl oder drei Zahlen mit der Bedeutung:
+                   ({ WaitBeforeFirstMove, WaitBeforeMove, WaitRandom })
+
+P_MNPC_DEFAULTROOM Hier gibt man den Raum an, an den der NPC
+                   zurueckkehrt, wenn er sich verlaufen hat.
+
+P_MNPC_FLAGS       Einige Einstellungen mit folgender Bedeutung:
+                    MOV_BACKWARDS: MNPC darf auch zurueck gehen
+                    MOV_INDOORS: MNPC darf in geschlossene Raeume
+                    MOV_OUTDOORS: MNPC darf ins Freie
+                    MOV_SPECIAL: MNPC darf special exits verwenden
+                    MOV_MAYLOAD: MNPC darf Raeume bei Bedarf laden
+                                 (nur wenn wirklich notwendig!!)
+                    MOV_MOVES: MNPC ist aktiv, muss gesetzt sein,
+                               damit er sich bewegt
+                    MOV_CMDS: MNPC verwendet Kommandoabfolge 
+                              statt random move
+                    MOV_INFIGHT: MNPC bewegt sich auch im Kampf
+
+P_MNPC_CMDS        Hier kann man z.B. einen richtigen Weg angeben,
+                   den der MNPC laeuft statt der zufaelligen Bewegung.
+
+
+Nun muessen noch die Bewegungsmeldungen definiert werden:      
+
+P_MSGIN            Meldung, wenn der NPC in den Raum kommt.
+                   Default: "kommt an"
+
+P_MSGOUT           Meldung, wenn der NPC aus dem Raum geht.
+                   Default: "geht" , dahinter wird dann die
+                   Richtung angehaengt, z.B. "nach Norden."
+
+P_MMSGIN           Meldung, wenn der NPC in den Raum
+                   teleportiert wird. Default :
+                   "erscheint in einer Rauchwolke"
+
+P_MMSGOUT          Meldung, wenn der NPC aus den Raum hinaus
+                   teleportiert wird. Default :
+                   "verschwindet mit Knall und Schwefelduft"
+
+
+8. Details
+----------
+
+Genau wie in Raeumen kann man in NPCs auch Details angeben.
+Smell und Sound kann man mittels P_SMELL und P_SOUND angeben.
+
+
+9. Weiterfuehrende Dokumentation
+--------------------------------
+
+Neben den Dokumentationen in /doc/props/ zu den einzelnen
+Properties, in /doc/lfun (v.a. /doc/lfun/npc) zu den lfuns
+(z.B. create_default_npc(), etc.) und in /doc/efun zu den
+efuns (set_living_name(), ..) findet sich in /doc/std/npc
+noch eine Zusammenfassung bzw. Referenz ueber alle Properties
+und Funktionen von NPCs.
+
+Autor: Feyaria
+Letzte Aenderung: 23. Dezember 2023, Gralkor
+

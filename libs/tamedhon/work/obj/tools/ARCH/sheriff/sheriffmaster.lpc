@@ -1,0 +1,258 @@
+// Sheriffsternmaster, der den Sheriffsternen ihre Funktionalitaet gibt
+// morpheus@tamedhon
+
+#pragma strong_types
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <combat.h>
+#include "sheriffstern.h"
+
+int _in_jail(object opfer); 
+
+int _kicken(string str, object tp) {
+  // wirft einen Spieler aus dem Tamedhon
+  object op;
+  string grund, opfer;
+
+  notify_fail("Syntax: kicke <opfer> <grund>\n");
+    if (!str || str == "")
+      return 0;
+
+    sscanf (str, "%s %s", opfer, grund);
+    op = find_player(opfer);
+    if (!op)
+      return 0;
+    
+    if (!grund || grund == "")
+      return 0;
+
+    // Nachrichten an Sheriff und Opfer
+    write (break_string("Du wirfst " + opfer + " aus dem Tamedhon.\n"));
+    tell_object(op, break_string(tp->QueryProp(P_NAME) + 
+				 " wirft Dich als " +
+				 "Sheriff aus dem Tamedhon, weil: " +
+				 grund + ". Wenn Du " +
+				 "Dich ungerecht behandelt fühlst, " +
+				 "schreibe eine Mudmail "+
+				 "an 'sheriff'. Der Vorgang wurde " +
+				 "außerdem vermerkt.\n"));
+
+    // log
+    write_file(LOGFILE, ctime(time()) + ": " +
+	       tp->QueryProp(P_NAME) + " wirft " + opfer +
+	       " aus dem Tamedhon, weil: " + grund + ".\n\n");
+
+    // und action
+    op->quit();
+  return 1;
+}
+
+int _bestrafen(string str, object tp) {
+  // Wirft das Opfer ins Jail, aus welchem es nach der angegebenen Zeit
+  // automatisch entlassen wird.
+  object op, marke;
+  string opfer, grund;
+  int dauer;
+
+  notify_fail("Syntax: bestrafe <opfer> <minuten> <grund>\n");
+
+    if (!str || str == "")
+      return 0;
+
+    sscanf (str, "%s %d %s", opfer, dauer, grund);
+    op = find_player(opfer);
+    if (!op)
+      return 0;
+    
+    if (!grund || grund == "")
+      return 0;
+
+    if (dauer < 1) {
+      // Mindestdauer ist 1 Minute
+      write (break_string("Die Mindestdauer beträgt 1 Minute!\n"));
+      return 0;
+    }
+
+    if (_in_jail(op)) {
+      // Spieler schon im Gefaengnis
+      write(break_string("Spieler verbüßt schon eine Haftstrafe!\n"));
+      return 1;
+    }
+
+    // Nachricht an Sheriff und Opfer
+    write(break_string("Du steckst " + opfer + " für " + dauer +
+		       " Minuten ins Jail. Danach erfolgt die "+
+		       "automatische Entlassung.\n"));
+    tell_object(op, break_string(tp->QueryProp(P_NAME) +
+				 " wirft Dich als Sheriff für "+
+				 dauer + " Minuten ins Gefängnis, weil: "+
+				 grund + ". Wenn Du Dich ungerecht "+
+				 "behandelt fühlst, schreib eine "+
+				 "Mudmail an 'sheriff'. Der Vorgang "+
+				 "wurde außerdem vermerkt.\n"));
+
+    // log
+    write_file(LOGFILE, ctime(time()) + ": " +
+	       tp->QueryProp(P_NAME) + " wirft " + opfer +
+	       " für " + dauer + " Minuten ins Gefängnis, weil: " +
+	       grund + ".\n\n");
+
+    // und action
+    op -> move(JAIL, M_NOCHECK);
+    call_out("_entlassen", dauer * 60, op, tp);
+  return 1;
+}
+
+int _verbannen(string str, object tp) {
+  // steckt einen Spieler unbegrenzt ins Jail
+  object op;
+  string opfer, grund;
+
+  notify_fail("Syntax: verbanne <opfer> <grund>\n");
+    if (!str || str == "")
+      return 0;
+
+    sscanf (str, "%s %s", opfer, grund);
+    op = find_player(opfer);
+    if (!op)
+      return 0;
+    
+    if (!grund || grund == "")
+      return 0;
+    
+    if (_in_jail(op)) {
+      // Spieler schon im Gefaengnis
+      write(break_string("Spieler verbüßt schon eine Haftstrafe!\n"));
+      return 1;
+    }
+
+    // Nachricht an Sheriff und Opfer
+    write(break_string("Du steckst " + opfer + " für unbestimmte "+
+		       "Zeit ins Jail. Der Spieler muss von Hand "+
+		       "entlassen werden!\n"));
+    tell_object(op, break_string(tp->QueryProp(P_NAME) +
+				 " wirft Dich als Sheriff für "+
+				 " unbestimmte Zeit ins Gefängnis, weil: "+
+				 grund + ". Wenn Du Dich ungerecht "+
+				 "behandelt fühlst, schreib eine "+
+				 "Mudmail an 'sheriff'. Der Vorgang "+
+				 "wurde außerdem vermerkt.\n"));
+    
+    // log
+    write_file(LOGFILE, ctime(time()) + ": " +
+	       tp->QueryProp(P_NAME) + " wirft " + opfer +
+	       " für unbestimmte Zeit ins Gefängnis, weil: " +
+	       grund + ".\n\n");
+    
+    // und action
+    op -> move(JAIL, M_NOCHECK);
+  return 1;
+}
+
+int _begnadigen(string opfer, object tp) {
+  // begnadigt einen Spieler
+  object op, marke;
+  
+  notify_fail("Syntax: begnadige <opfer>\n");
+
+    if (!opfer || opfer == "")
+      return 0;
+
+    op = find_player(opfer);
+    
+    if (op) {
+      // Spieler gefunden
+      if (!_in_jail(op)) {
+	// Spieler nicht gefangen
+	write (break_string("Dieser Spieler ist gar nicht im "+
+			    "Gefängnis.\n"));
+	return 1;
+      }
+      // Nachricht an Opfer
+      tell_object(op, break_string(tp->QueryProp(P_NAME) +
+				   " begnadigt Dich und Du wirst aus "+
+				   "dem Gefängnis entlassen.\n"));
+      
+      // log
+      write_file(LOGFILE, ctime(time()) + ": " +
+		 tp->QueryProp(P_NAME) +
+		 " begnadigt " + opfer + ".\n\n");
+      
+      // und action
+      op -> move (AUSGANG, M_NOCHECK);
+      return 1;
+    }
+    write (break_string("Spieler nicht gefunden!\n"));
+  return 1;
+}
+
+int _entlassen(object opfer, object tp) {
+  // entlaesst einen Gefangenen aus dem Jail
+  object marke;
+
+  if (_in_jail(opfer)) {
+    // Nachricht an Opfer, wenn noch online
+    if(interactive(opfer)) {
+      tell_object(opfer, break_string("Du hast Deine Strafe verbüßt und "+
+				      "wirst automatisch entlassen.\n"));
+      // Nachricht an Sheriff, wenn noch online
+      if (interactive(tp)) {
+	tell_object(tp, break_string(opfer->QueryProp(P_NAME) +
+				     " wurde soeben automatisch aus dem "+
+				     "Gefängnis entlassen.\n"));
+      }
+      // log
+      write_file(LOGFILE, ctime(time()) + ": " + opfer->QueryProp(P_NAME) +
+		 " hat seine Strafe verbüßt und wurde automatisch "+
+		 "entlassen.\n\n");
+      
+      // Ok, raus mit ihm
+      opfer->move(AUSGANG, M_NOCHECK);
+    }
+    else {
+      // Nachricht an Sheriff, wenn noch online
+      if (interactive(tp)) {
+	tell_object(tp, break_string(opfer->QueryProp(P_NAME) +
+				     " sollte automatisch aus dem "+
+				     "Gefängnis entlassen werden, "+
+				     "war aber nicht mehr online.\n"));
+      }
+      // log
+      write_file(LOGFILE, ctime(time()) + ": " + opfer->QueryProp(P_NAME) +
+		 " sollte automatisch entlassen werden, war aber nicht "+
+		 "mehr online.\n\n");
+      return 1;
+    }
+  }
+  // Spieler ist auf anderem Wege rausgekommen
+  // Nachricht an Sheriff
+  if (interactive(tp)) {
+    tell_object(tp, break_string(opfer->QueryProp(P_NAME) +
+				 " sollte automatisch aus dem Gefängnis "+
+				 "entlassen werden, war aber nicht mehr "+
+				 "drin.\n"));
+  }
+  write_file(LOGFILE, ctime(time()) + ": " + opfer->QueryProp(P_NAME) +
+	     " sollte automatisch entlassen werden, war aber nicht mehr "+
+	     "im Gefängnis.\n\n");
+  return 0;
+}
+
+int _in_jail(object opfer) {
+  // testet, ob das Opfer im Jail ist oder nicht
+  if (environment(opfer)->QueryProp(P_INT_SHORT) == "Das Kittchen") {
+    return 1;
+  }
+  return 0;
+}
+
+int _anleitung(object tp) {
+  // Gibt den Hilfetext aus
+  string text;
+
+  text = read_file(HILFE);
+  tp->More(text);
+  return 1;
+}

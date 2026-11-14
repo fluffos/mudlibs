@@ -1,0 +1,494 @@
+PRELIMINARY
+CONCEPT
+        python
+
+DESCRIPTION
+        Python can be used to extend the LDMud driver. At the startup
+        of LDMud a python script will be called that can register
+        additional efuns. The python script can either be given
+        on the command line using the --python-script option,
+        or at compile time with the --with-python-script configuration
+        option.
+
+        The python script can import the builtin ldmud module for
+        extending LDMud and accessing LDMud information.
+
+STARTUP SCRIPT
+        The startup script can be a single Python script file. This script
+        is executed as the main routine (i.e. __name__ == '__main__') when
+        ldmud starts and before the master object is loaded.
+
+        It's also possible to specify a package with a __main__ module
+        (currently this may be a directory or a zip file). In this case
+        the __main__ submodule will be executed at startup. The package
+        itself will be placed into sys.path, so additional content can
+        be imported.
+
+LDMUD MODULE
+        The ldmud module is only available for Python programs executed
+        inside the ldmud process and provides the following functions:
+
+          - register_efun(name, function) -> None
+                Registers a new efun name. This is not allowed during
+                compilation of an LPC object.
+
+                If the Python function has type annotations for its
+                arguments and return value, the type is checked
+                at compile and runtime. Union types can be specified
+                as tuples of types.
+
+          - unregister_efun(name) -> None
+                Removes a python efun from registration. This is not
+                allowed during compilation of an LPC object. The
+                removal will only affect newly compiled code,
+                already compiled code will produce errors when
+                calling this efun.
+
+          - register_type(name, class) -> None
+                Registers a type for use in LPC. This is not allowed
+                during compilation of an LPC object.
+
+                The type name will then be regarded as a reserved word
+                when compiling LPC code and can be used as a regular
+                LPC type. To actually create objects of the types,
+                additional registration of corresponding efuns is needed.
+
+                For details about the usage, see PYTHON TYPES below.
+
+          - unregister_type(name) -> None
+                Removes a python type from registration. This is not
+                allowed during compilation of an LPC object. The removal
+                will only affect newly compiled code. Already compiled
+                code will still work afterwards.
+
+          - register_socket(fd, function [,eventmask]) -> None
+                Registers a socket <fd> to watch for events (like
+                poll/select). The socket must be either given as
+                an integer or an object with a fileno() method
+                returning an integer. The function must be a callable
+                accepting one argument, the actual event mask.
+                <eventmask> may be an combination of select.POLLIN,
+                select.POLLOUT and select.POLLPRI or a callable
+                returning such a combination.
+
+          - unregister_socket(fd) -> None
+                Removes a previously registered socket from the
+                watch list.
+
+          - register_hook(hook, function) -> None
+                Register a hook. The python function will be called
+                whenever <hook> happens. <hook> can be one of the
+                following:
+
+                  ON_HEARTBEAT
+                    Called without arguments for every backend loop
+
+                  ON_OBJECT_CREATED
+                    Called whenever an object was created, with the
+                    object as its first and only argument. This call
+                    happens before any LPC code of the object ran.
+
+                  ON_OBJECT_DESTRUCTED
+                    Called just before an object will be destructed,
+                    with the object as its first and only argument.
+
+                  ON_CHILD_PROCESS_TERMINATED
+                    Called without any arguments whenever a SIGCHLD signal
+                    was received. This could also happen for processes
+                    spawned by the driver itself (eg. erq).
+
+                  ON_SIGINT
+                    Called without any argument whenever a SIGINT signal
+                    was received. (This is just informative, the driver
+                    will execute the DC_SIGACTION_SIGINT action also.)
+
+                  ON_SIGTERM
+                    Called without any argument whenever a SIGTERM signal
+                    was received. The driver will terminate afterwards.
+
+                  ON_SIGHUP
+                    Called without any argument whenever a SIGHUP signal
+                    was received. (This is just informative, the driver
+                    will execute the DC_SIGACTION_SIGHUP action also.)
+
+                  ON_SIGUSR1
+                    Called without any argument whenever a SIGUSR1 signal
+                    was received. (This is just informative, the driver
+                    will execute the DC_SIGACTION_SIGUSR1 action also.)
+
+                  ON_SIGUSR2
+                    Called without any argument whenever a SIGUSR2 signal
+                    was received. (This is just informative, the driver
+                    will execute the DC_SIGACTION_SIGUSR2 action also.)
+
+          - unregister_hook(hook, function) -> None
+                Removes a hook function.
+
+          - get_master() - > Object
+                Returns the current master object.
+                Returns None, if there is no master object (yet).
+
+          - get_simul_efun() - > Object
+                Returns the current simul-efun object
+                (or None if there is none).
+
+
+        This module provides the following types:
+
+          - Object(filename)
+                Corresponds to the LPC object type.
+                On instantiation a filename for an object
+                to search or load is required.
+
+                Has the following members:
+
+                  name
+                      The object name
+
+                  functions
+                      Contains all the visible functions (private functions
+                      are excluded) as attributes. They support the call
+                      operator and contain the following attributes:
+
+                      name
+                          The name of the function
+
+                      file_name
+                          The file that contains the function's definition
+
+                      line_number
+                          The starting line number of the function's definition
+
+                      arguments
+                          A list of all arguments with their type, flags
+                          (combination of LA_* constants) and position.
+
+                      return_type
+                          The return type as Python object (maybe missing if
+                          unknown or mixed).
+
+                      flags
+                          A combination of the following flags:
+                          LF_STATIC, LF_NOMASK, LF_VARARGS, LF_VIRTUAL and
+                          LF_DEPRECATED
+
+                      visibility:
+                          One of the following:
+                          VIS_PRIVATE, VIS_PROTECTED, VIS_VISIBLE, VIS_PUBLIC
+
+                  variables
+                      Contains all variables as attributes. They contain the
+                      following attributes:
+
+                      name
+                          The name of the variable
+
+                      value
+                          The value of the variable. This attribute is writable
+                          to assign a new value.
+
+                      type
+                          The type as a Python object (maybe missing if
+                          unknown or mixed).
+
+                      flags
+                          A combination of the following flags:
+                          VF_NOSAVE, VF_NOMASK, VF_VIRTUAL and VF_DEPRECATED
+
+                      visibility:
+                          One of the following:
+                          VIS_PRIVATE, VIS_PROTECTED, VIS_VISIBLE, VIS_PUBLIC
+
+                For type checks the type object can be subscripted with a
+                filename to create a named object type: Object["/name"]
+
+          - LWObject(filename)
+                Corresponds to the LPC lwobject type.
+                On instantiation a filename of a blueprint to create
+                a lightweight object from is required.
+
+                Has the following members:
+
+                  program_name
+                      The program name (file name it was created from)
+
+                  functions
+                      Contains all the visible functions (private functions
+                      are excluded) as attributes. They are similar to the
+                      same member of the Object type.
+
+                  variables
+                      Contains all variables as attributes. They are similar
+                      to the same member of the Object type.
+
+                For type checks the type object can be subscripted with a
+                filename to create a named lwobject type: LWObject["/name"]
+
+          - Array([values | size])
+                Corresponds to an LPC array.
+                Can either be initialized with a list of values
+                or to a given size.
+
+                Supports element access with [], len() and __contains__.
+
+                For type checks the type object can be subscripted with an
+                element type to create a concrete array type: Array[Mapping]
+
+          - Mapping([values | width])
+                Corresponds to an LPC mapping.
+                Can either be initialized with a dict, a list of tuples
+                or as an empty mapping with a given width.
+
+                Supports element access with [], len(), __contains__
+                and has a width member.
+
+          - Struct(object, name [, values])
+                Corresponds to an LPC struct.
+                On initialization the name of the struct definition and
+                the correspopnding object is required. It can be initialized
+                with a list of values or dict.
+
+                Has the following members:
+
+                  name
+                      The name of the struct
+
+                  program_name
+                      The name of the program that defined the struct.
+
+                  members
+                      Contains all members as attributes. They contain the
+                      following attributes:
+
+                      name
+                          The name of the member
+
+                      value
+                          The value of the member. This attribute is writable
+                          to assign a new value.
+
+                      type
+                          The type as a Python object (maybe missing if
+                          unknown or mixed).
+
+                For type checks the type object can be subscripted to create
+                a specific struct type: Struct[program, name], whereas the
+                program can be given as a file name or object. When using this
+                for creating a struct, only values need to be passed.
+
+          - Closure(object [,name [, lfun_object]])
+                Corresponds to an LPC closure.
+                On initialization a closure bound to <object> will be created,
+                like a call to symbol_function(<name> [, <lfun_object>]).
+
+                Supports function calls.
+
+          - Coroutine()
+                Corresponds to an LPC coroutine.
+                They can only be created by LPC code and are not compatible
+                with Python coroutines.
+
+                Supports function calls and has the following members:
+
+                  object
+                      The object the coroutine belongs to.
+
+                  program_name
+                      The name of the program that defined the coroutine.
+
+                  function_name
+                      The name of the function that defined the coroutine.
+
+                  file_name
+                      The name of the file that contains the definition.
+
+                  line_number
+                      The current line where the coroutine is suspended.
+
+                  variables
+                      Contains all local variables as attributes with
+                      their current value.
+
+          - Symbol(name [, quotes])
+                Corresponds to an LPC symbol.
+                On initialization the name of the symbol is required.
+                Optionally the number of quotes (at least 1) can be specified.
+
+                Has two members: name and quotes.
+
+          - QuotedArray(array [, quotes])
+                Corresponds to an LPC quoted array.
+                On initialization an array is required.
+                Optionally the number of quotes (at least 1) can be specified.
+
+                Has two members: array and quotes.
+
+          - Lvalue(value)
+                Creates an lvalue reference for the given value.
+
+                Has two member: value and members.
+
+                If the value is an array, mapping or string, then lvalues
+                to its elements can be created with [].
+
+                If the value is a struct, then lvalues to its members can
+                be created with the members attribute. It contains all
+                the struct members as attributes and will return an Lvalue
+                object to the struct member.
+
+          - LPCType(type)
+                Corresponds to an LPC lpctype value. For basic types this
+                is a no-op and returns the basic type. This type will provide
+                the corresponding LDMud type object for basic python types,
+                and it can be used to construct a union type by passing a
+                tuple of types.
+
+                A union type allows iteration over its basic types and
+                supports __contains__.
+
+          - Integer, Float, String, Bytes
+                These are derived types from Python's int, float, str and
+                bytes. They offer the | (or) operator to create union of
+                types.
+
+
+        This module contains the following sub-namespaces:
+
+          - efuns
+                This namespace contains all original efuns (without any
+                registered Python efuns or simul-efuns). These can be called
+                as a regular function.
+
+          - registered_efuns
+                Contains all registered Python efuns.
+
+          - registered_types
+                Contains all registered Python types.
+
+
+        There is mapping of LPC values to Python values for the following types:
+            int    <-> int(, bool)
+            float  <-> float
+            string <-> str
+            bytes  <-> bytes
+
+        Type definitions are translated in a similar fashion, additionally the
+        following mappings are done:
+            void   <-> None
+            union  <-> tuple of types
+
+PYTHON TYPES
+        Without any special functions Python types are treated opaque in LPC.
+        There is no introspection available, beside what get_type_info()
+        returns, and there is no facility to create those in LPC. Python
+        objects need to be created and processed by a registered Python efun.
+        But those types can be extended with special functions to make them
+        more usable in LPC.
+
+        Regular LPC operations can be applied to those python objects and
+        will call the corresponding special member functions. If those
+        member functions are not available, the corresponding LPC operations
+        aren't either. For compile time type checking those special member
+        functions can have type annotations just like efun functions.
+        The following operations are supported:
+            +, -, *, /, %, <<, >>, &, |, ^, >, >=, ==, !=, <, <=.
+        For each operation the lhs function (i.e. __add__), the rhs function
+        (i.e. __radd__), and the assignment function (i.e. __iadd__) is
+        supported. The rhs function is also supported for the comparison
+        operations (i.e. __rlt__, this is a non-standard extension to the
+        Python functions).
+
+        Python objects can also extend regular efuns. When the first argument
+        to an efun is a Python object, a function named __efun_<name>__ is
+        called in the Python object instead (when available). The function
+        must accept the same number of arguments as the original efun. (And
+        there must not be a registered Python efun of the same name.)
+
+        Additionally a Python type can implement the following support
+        functions for LPC efuns:
+
+            __repr__
+                Used by sprintf() for printing a Python object.
+                Should return a string.
+
+            __copy__
+                Used by copy() and deep_copy() for copying a Python object.
+                (Deep copying a Python object is currently not supported.)
+                Should return a Python object of the same type.
+
+            __save__
+                Used by save_value()/save_object() to save a Python object.
+                Should return an LPC type (e.g. a string).
+
+            __restore__
+                Used by restore_value()/restore_object() to restore a Python
+                object. This should be a static method that gets the value
+                from __save__ as the only argument and will return the
+                restored object.
+
+            __convert__
+                Used by to_type() to convert the Python object into another
+                type. Gets the target type object as its first argument and
+                the to_type_options struct (which may be None) as a second
+                argument. If the conversion is not supported, can either
+                return None or an exception. Only if the function does not
+                exist, __int__, __float__, __str__ or __bytes__ are called
+                if appropriate.
+
+EXAMPLE
+        import ldmud
+
+        def hello_world(name: str) -> int:
+            print("Hello, world, %s!\n" % (name,))
+            return 1
+
+        ldmud.register_efun("hello", hello_world)
+
+NOTES
+        Just like simul-efuns python efuns can shadow real efuns. The
+        original efun is then inaccessible for LPC code (except for code
+        that was compiled before the efun was registered). Python efuns are
+        nearly indistinguishable from real efuns, they also use the efun::
+        prefix. However they can be detected with
+            CLOSURE_IS_PYTHON_EFUN(get_type_info(#'efun,1))
+
+        Without the prefix the order of name resolution for function calls is:
+         1. lfuns
+         2. simul-efuns
+         3. python efuns
+         4. real efuns
+
+        Also just like simul-efuns python-registered efuns are called
+        from LPC code that was compiled after the registration. LPC code
+        that was compiled before the registration will still call the
+        original efuns (or throw a compile error if that efun doesn't exist).
+        Therefore such efuns should be registered in the python startup
+        script.
+
+        When a python efun is unregistered, code that was compiled while the
+        registration was in effect will throw a runtime error. (Regardless
+        of whether a driver efun with the same name exists or not.)
+
+        There is a limit of 2048 python efuns. Not only registered, but also
+        formerly registered - but now unregistered - efuns count toward that
+        limit. Re-registering the same efun name again won't count a second
+        time. (LPC code that was compiled during the previous registration
+        will also call the new efun after the re-registration.)
+
+        As LDMud is single-threaded, the python code will run in the same
+        thread as the LPC machine. So any long-running python function will
+        halt the MUD for all players. Hence python functions should return
+        promptly and source out any lengthy tasks to another process. If
+        other threads are spawned from python, then these threads are not
+        allowed to access any LDMud functions or objects.
+
+        Finally a note of caution: Don't change the meaning of base efuns
+        fundamentally as it furthers confusion and hinders exchange of LPC
+        code and knowledge between mudlibs.
+
+HISTORY
+        LDMud 3.5 implemented the python functionality.
+        LDMud 3.6 added type checks.
+
+SEE ALSO
+        simul_efun(C)

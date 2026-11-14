@@ -1,0 +1,283 @@
+// SQL Master (c) 2026 Aloy
+// führt queries aus, erstellt db grundstruktur und pflegt updates ein
+
+#pragma lightweight
+#pragma strict_types
+#pragma rtt_checks
+#pragma no_clone
+#pragma no_inherit
+
+#include "sql.h"
+#include <config.h>
+#include <ansi.h>
+#include <debug_message.h>
+#include <time.h>
+#include <wizlevels.h>
+
+private inherit "/std/util/workqueue";
+
+//prototypes
+public void     startup();
+public mixed*   exec_sql_query(string query);
+private void    execute_sql_update(string file);
+private void    all_updates_executed();
+private void    updates_fail();
+private int     valid_use(object user, string query);
+
+private struct Updates
+{
+    int*    time;
+    string  content;
+    string  filename;
+    string  sha1;
+    string  timestamp;
+};
+
+private int     handle;
+private mixed*  updatescache;
+
+
+public void create()
+{
+    if(is_clone(this_object()))
+    {
+        destruct(this_object());
+        return;
+    }
+
+    workqueue::clear_on_error();
+    workqueue::done_callback( (: all_updates_executed() :) );
+    workqueue::error_callback( (: updates_fail() :) );
+    
+    startup();
+}
+
+public void startup()
+{
+    int success = 0;
+    updatescache = ({});
+
+    if(!handle)
+        handle = db_connect(MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD);
+    
+    if(handle)
+    {
+        printf("\n"+ANSI_LCYAN+"SQL: "+ANSI_LGREEN+"Datenbankverbindung aufgebaut"+ANSI_NORMAL);
+        debug_message("SQL: Datenbankverbindung aufgebaut\n", DMSG_LOGFILE | DMSG_STAMP);
+        log_file(SQL_LOG_FILE, DATE + " SQL: Datenbankverbindung aufgebaut\n");
+    }
+    else
+    {
+        printf("\n"+ANSI_LCYAN+"SQL: "+ANSI_LRED+"Datenbankverbindung nicht möglich: "+db_error(handle)+ANSI_NORMAL);
+        debug_message("SQL: Datenbankverbindung nicht möglich: "+db_error(handle)+"\n", DMSG_LOGFILE | DMSG_STAMP);
+        log_file(SQL_LOG_FILE, DATE + " SQL: Datenbankverbindung nicht möglich: "+db_error(handle)+"\n");
+        return;
+    }
+
+    //tabelle für updates erstellen
+    success = db_exec(handle,"CREATE TABLE IF NOT EXISTS `updates` ("
+                                "`name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Update Filename',"
+                                "`hash` char(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT 'SHA1 Hash vom Fileinhalt',"
+                                "`timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Ausführungszeitpunkt',"
+                                "PRIMARY KEY (`name`) USING BTREE"
+                              ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Liste aller ausgeführten Updates.';");
+
+    if(success)
+    {
+        printf("\n"+ANSI_LCYAN+"SQL: "+ANSI_LGREEN+"Tabelle 'updates' initialisiert"+ANSI_NORMAL);
+        debug_message("SQL: Tabelle 'updates' initialisiert\n", DMSG_LOGFILE | DMSG_STAMP);
+        log_file(SQL_LOG_FILE, DATE + " SQL: Tabelle 'updates' initialisiert\n");
+    }
+    else
+    {
+        printf("\n"+ANSI_LCYAN+"SQL: "+ANSI_LRED+"Tabelle 'updates' konnte nicht initialisiert werden: "+db_error(handle)+ANSI_NORMAL);
+        debug_message("SQL: Tabelle 'updates' konnte nicht initialisiert werden: "+db_error(handle)+"\n", DMSG_LOGFILE | DMSG_STAMP);
+        log_file(SQL_LOG_FILE, DATE + " SQL: Tabelle 'updates' konnte nicht initialisiert werden: "+db_error(handle)+"\n");
+        return;
+    }
+
+    //updates einspielen. wiederholen, wenn hash(damit inhalt) geändert ist
+    //mit workqueue verzögert, damit die eval costs nicht gesprengt werden
+    foreach(string sqlupdatefile:get_dir(UPDATES"*.sql")-({".",".."}))
+        workqueue::enqueue( (: execute_sql_update(sqlupdatefile) :) );
+    workqueue::start();
+}
+
+private void execute_sql_update(string file)
+{
+    mixed tmp;
+
+    int upd_in_db = 0;
+    int upd_hash_changed = 0;
+
+    struct Updates upd  = (<Updates>);
+    upd.time            = localtime();
+    upd.content         = read_file(UPDATES+file);
+    upd.filename        = file;
+    upd.sha1            = upper_case(sha1(upd.content));
+    upd.timestamp       = to_string(upd.time[TM_YEAR])+"-"+
+                            (upd.time[TM_MON]+1<10?"0"+to_string(upd.time[TM_MON]+1):to_string(upd.time[TM_MON]+1))+"-"+
+                            (upd.time[TM_MDAY]<10?"0"+to_string(upd.time[TM_MDAY]):to_string(upd.time[TM_MDAY]))+" "+
+                            (upd.time[TM_HOUR]<10?"0"+to_string(upd.time[TM_HOUR]):to_string(upd.time[TM_HOUR]))+":"+
+                            (upd.time[TM_MIN]<10?"0"+to_string(upd.time[TM_MIN]):to_string(upd.time[TM_MIN]))+":"+
+                            (upd.time[TM_SEC]<10?"0"+to_string(upd.time[TM_SEC]):to_string(upd.time[TM_SEC]));
+
+    if(!sizeof(updatescache))
+    {
+        if(db_exec(handle,"SELECT * FROM `updates`;"))
+        {      
+            while(sizeof(tmp = db_fetch(handle)))
+            {
+                updatescache += ({tmp});
+            }
+        }
+    }
+
+    //mit query aus tabelle alle updates ziehen. update nur installieren, wenn noch nicht drin und wenn drin, dann nur, wenn hash anders. wenn hash anders ist, eintrag updaten mit neuem hash und timestamp
+
+    foreach(mixed dataset:updatescache)
+    {
+        if(upd.filename == dataset[0])
+        {
+            upd_in_db = 1;
+            if(upd.sha1 != dataset[1])
+                upd_hash_changed = 1;
+        }
+    }
+
+    if(!upd_in_db || upd_hash_changed)
+    {
+        if(!upd_in_db && db_exec(handle,upd.content))
+        {
+            printf("\n"+ANSI_LCYAN+"SQL: "+ANSI_LGREEN+"Führe Update aus: \""+upd.filename+"\" '"+upd.sha1[..6]+"'..."+ANSI_NORMAL);
+            debug_message("SQL: Führe Update aus: \""+upd.filename+"\" '"+upd.sha1[..6]+"'...\n", DMSG_LOGFILE | DMSG_STAMP);
+            log_file(SQL_LOG_FILE, DATE + " SQL: Führe Update aus: \""+upd.filename+"\" '"+upd.sha1[..6]+"'...\n");
+            db_exec(handle,"INSERT INTO `updates` VALUES('"+upd.filename+"','"+upd.sha1+"','"+upd.timestamp+"');");
+        }
+        else if(upd_hash_changed && db_exec(handle,upd.content))
+        {
+            printf("\n"+ANSI_LCYAN+"SQL: "+ANSI_LGREEN+"Führe Update aus: \""+upd.filename+"\" '"+upd.sha1[..6]+"'... (Inhalt geändert)"+ANSI_NORMAL);
+            debug_message("SQL: Führe Update aus: \""+upd.filename+"\" '"+upd.sha1[..6]+"'... (Inhalt geändert)\n", DMSG_LOGFILE | DMSG_STAMP);
+            log_file(SQL_LOG_FILE, DATE + " SQL: Führe Update aus: \""+upd.filename+"\" '"+upd.sha1[..6]+"'... (Inhalt geändert)\n");
+            db_exec(handle,"UPDATE `updates` SET `hash` = '"+upd.sha1+"', timestamp = '"+upd.timestamp+"' WHERE `name` = '"+upd.filename+"';");
+        }
+        else
+        {
+            printf("\n"+ANSI_LCYAN+"SQL: "+ANSI_LRED+"Update kann nicht ausgeführt werden: "+db_error(handle)+ANSI_NORMAL+"\n");
+            debug_message("SQL: Update kann nicht ausgeführt werden: "+db_error(handle)+"\n", DMSG_LOGFILE | DMSG_STAMP);
+            log_file(SQL_LOG_FILE, DATE + " SQL: Update kann nicht ausgeführt werden: "+db_error(handle)+"\n");
+        }
+    }
+}
+
+private void all_updates_executed()
+{
+    printf("\n"+ANSI_LCYAN+"SQL: "+ANSI_LGREEN+"Alle Updates bearbeitet\n"+ANSI_NORMAL);
+    debug_message("SQL: Alle Updates bearbeitet\n", DMSG_LOGFILE | DMSG_STAMP);
+    log_file(SQL_LOG_FILE, DATE + " SQL: Alle Updates bearbeitet\n");
+}
+
+private void updates_fail()
+{
+    printf("\n"+ANSI_LCYAN+"SQL: "+ANSI_LRED+"Es konnten nicht alle Updates ausgeführt werden\n"+ANSI_NORMAL);
+    debug_message("SQL: Es konnten nicht alle Updates ausgeführt werden\n", DMSG_LOGFILE | DMSG_STAMP);
+    log_file(SQL_LOG_FILE, DATE + " SQL: Es konnten nicht alle Updates ausgeführt werden\n");
+}
+
+public mixed* exec_sql_query(string query)
+{
+    mixed *result, tmp;
+    string uquery, prefix;
+
+    if(!valid_use(previous_object(),query))
+    {
+        if(interactive(previous_object()))
+            tell_object(previous_object(), "Illegaler SQL Zugriff!\n");
+        else
+        {
+            raise_error(ANSI_LCYAN+"SQL: "+ANSI_LRED+"Illegaler SQL Zugriff"+ANSI_NORMAL+"\n");
+            debug_message("SQL: Illegaler SQL Zugriff\n", DMSG_LOGFILE | DMSG_STAMP);
+        }
+        log_file(SQL_LOG_FILE, DATE + " SQL: Illegaler SQL Zugriff von: "+object_name(previous_object())+"\n");
+
+        return 0;
+    }
+
+    if(!handle)
+    {
+        handle = db_connect(MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD);
+        if(!handle)
+        {
+            raise_error(ANSI_LCYAN+"SQL: "+ANSI_LRED+"Datenbankverbindung nicht möglich: "+db_error(handle)+ANSI_NORMAL+"\n");
+            debug_message("SQL: Datenbankverbindung nicht möglich: "+db_error(handle)+"\n", DMSG_LOGFILE | DMSG_STAMP);
+            log_file(SQL_LOG_FILE, DATE + " SQL: Datenbankverbindung nicht möglich: "+db_error(handle)+"\n");
+            return 0;
+        }
+    }
+    else
+    {
+        if(!db_exec(handle, db_conv_string(query)))
+        {
+            raise_error(ANSI_LCYAN+"SQL: "+ANSI_LRED+"Query kann nicht ausgeführt werden: "+db_error(handle)+ANSI_NORMAL+"\n");
+            debug_message("SQL: Query kann nicht ausgeführt werden: "+db_error(handle)+"\n", DMSG_LOGFILE | DMSG_STAMP);
+            log_file(SQL_LOG_FILE, DATE + " SQL: Query kann nicht ausgeführt werden: "+db_error(handle)+"\n");
+            return 0;
+        }
+
+        while(sizeof(tmp = db_fetch(handle)))
+        {
+            if(sizeof(result))
+                result += ({tmp});
+            else
+                result = ({tmp});
+        }
+
+        if(sizeof(result) == 0)
+            return 0;
+        else
+            return result;
+    }
+    return 0;
+}
+
+public int remove()
+{
+    if(handle)
+        db_close(handle);
+    destruct(this_object());
+    return 1;
+}
+
+private int valid_use(object user, string query)
+{
+    string *path;
+
+    if(interactive(user) && !IS_ELDER(user))
+        return 0;
+    else if(interactive(user) && IS_ELDER(user))
+        return 1;
+
+    if((strstr(upper_case(query),"CREATE") != -1 || strstr(upper_case(query),"DROP") != -1 || strstr(upper_case(query),"ALTER TABLE") != -1) && !IS_ELDER(user))
+        return 0;
+
+    path = explode(object_name(user),"/");
+
+    if((path[0] == "std" && path[1] == "player") ||
+        path[0] == "secure" ||
+        (path[0] == "p" && path[1] == "daemon") ||
+        (path[0] == "p" && path[1] == "service") ||
+        path[0] == "obj" ||
+        path[0] == "mail" ||
+        path[0] == "news" ||
+        path[0] == "gilden" ||
+        path[0] == "spellbooks")
+        return 1;
+
+    if(path[0] == "players" && IS_ELDER(path[1]))
+        return 1;
+
+    if(path[0] == "d" && strstr(query,path[2]+"_") != -1)
+        return 1;
+
+    return 0;
+}

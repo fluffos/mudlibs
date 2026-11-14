@@ -1,0 +1,192 @@
+GEGEN SPEICHER- und RECHENZEITVERSCHWENDUNG
+-------------------------------------------
+// Ketos - 6.2.92
+// Armageddon wegen Speicherfresser aktiviert.
+// Bitte moegen alle erfahrenen LPC'ler Ihren Senf dazu geben. 
+
+Der Kampf gegen das LAG-Monster und Armageddon:
+
+Ursachen und Abhilfen !
+
+Inhalt:
+-------
+- Speicheranalye
+- call_outs und heart_beats sind teuer
+- AddRoomMessage gegen Stimmungsmache
+- Loesungen fuer preiswerte Monster und Raeume
+- Defines sind versteckte Funktionen
+- private static Funktionen
+
+Wieviel Speicher braucht MG?:
+-----------------------------
+Das genehmigte Maximum ist 32 MB. Bei Ueberschreitung kommt Armageddon.
+
+Befehle zur Speicheranalye:
+malloc
+status
+status swap
+minfo (Lupe)
+
+CALL_OUT: - sind teuer
+----------------------
+Alle call_outs stehen in einer Liste die abgearbeitet werden muss.
+Man sehe sich mit der Lupe (/obj/tool/lupe.c) die Liste an: call_out
+
+AddRoomMessage erzeugt call_out.
+
+
+HEART_BEAT: - sind noch teuerer
+-------------------------------
+Ein heart_beat wird alle 2 Sekunden (TEUER!!) aufgerufen.
+
+Man sehe sich mit der Lupe (/obj/tool/lupe.c) die Liste an: heart_beat
+
+Alle Spieler haben einen heart_beat.
+Das xtool hat einen heart_beat.
+Der Teddy hat einen heart_beat.
+Verfolgende und umherlaufende Monster haben haeufig einen heart_beat.
+
+LOESUNG: Billige Methode fuer verfolgende Monster mit  catch_tell()
+-------------------------------------------------------------------
+> // globale variable owner 
+> string owner;
+>  
+> int catch_tell( string str )
+> {
+>   string move, what;
+>
+>   if(!str) return 0;
+> 
+>   if( sscanf( str, owner+" %s nach %s.\n", move, what) ==2 )
+>     {
+>       command_me(lower_case(what));
+>       return 0;
+>     }
+> }
+
+(dazu demnaechst mehr in ~ketos/mon/wwolpie.c)
+
+AddRoomMessage: - gegen Stimmungsmache 
+---------------
+Jede AddRoomMessage erzeugt einen call_out !!!!!
+Also bitte: Keine ganzen Gebiete mit AddRoomMessages ausstatten,
+es ist ein sehr teures Mittel, um Stimmung zu erzeugen!
+
+Abgesehen davon nerven AddRoomMessages oft ebenso wie echoalls oder rufen.
+
+Stimmung kann und sollte in den Raumbeschreibungen erzeugt werden.
+Hier ist Phantasie gefragt!!!
+
+
+MONSTER: Die Blueprints - brauchen i.A. keine Properties
+--------------------------------------------------------
+BESSER: if(!clonep(ME)) return;   vor ::create();
+
+Blueprints sind die compilierte Form des Codes im Spiecher, von der
+alle Clones abgeleitet werden. Da die Blueprint meistens nichts zu tun
+hat, ausser ihr kuemmerliches Dasein zu fristen, braucht man sie auch
+nicht zu konfigurieren. Insbesondere kann eine Blueprint in 99.9% aller
+Faelle auf heart_beat und call_out verzichten.
+
+> #include <defines.h>
+> 
+> void create()
+> {
+>   if(!clonep(ME)) return;
+>   ::create();
+>   // Dies verhindert call_out-Ketten der Blueprint, sofern das Monster
+>   // call_outs startet (spart Rechenzeit)
+>   // und unnoetige Properties fuer das Blueprint (Speicher)
+>   SetProp(P_SHORT, "Ein sparsames Monster");
+>   ....
+> }
+
+
+
+? Gilt das auch fuer Dinge ?
+
+RAEUME: - brauchen keine unnoetigen Standardfunktionen
+------------------------------------------------------
+BESSER: replace_program("std/room"); vor ::create();
+
+replace_program() funktioniert nur mit Objekten, die nicht gecloned
+werden, die also nur als Blueprint existieren, z.B. Raeume
+
+> void create()
+> {
+>   replace_program("std/room");
+>   // Spart Speicher
+>   // Der Raum DARF ausser create() keine weiteren Funktionen haben!!
+>   ::create();
+>   SetProp(P_INT_SHORT, "Ein sparsamer Raum");
+>   ....
+> }
+>
+> void no_extra_functions()
+> {
+> // Falls man extra Funktionen im Raum hat (dazu zaehlt auch init(), reset(),
+> // etc.), darf man replace_program
+> // nicht verwenden.
+> }
+
+
+
+DEFINES: - sind haeufig versteckte Funktionsaufrufe 
+---------------------------------------------------
+
+Hinter Definitionen wie TP oder TO verbergen sich jedesmal Funktions-
+aufrufe. Wegen der kurzen Schreibweise ist die Versuchung gross, laufend
+diese Abkuerzungen zu verwenden! Das ist aber langsam und schlecht...
+
+BESSER:
+
+> void irgendeine_funktion()
+> {
+>   object tp;
+>   tp = this_player(); 
+>   // Nur ein Funktionsaufruf !
+>   // und dann tp statt TP oder PL verwenden.
+>
+>   if(!interactive(tp)) ...
+>   if(present("geld",tp)) ...
+>   tp->move(irgendwohin) ...
+> }
+
+Das Gleiche gilt fuer Definition wie:
+
+> pl  = this_player();     statt PL
+> env = environment();     statt ENV
+> to  = this_object();     statt TO, ME
+> po  = previous_object(); statt PO
+
+und andere mehr.
+
+
+FUNKTIONEN:
+-----------
+Alle Funktionen in Objekten, die nicht von anderen Objekten aufgerufen
+werden muessen und sollen, sollten als "private static" deklariert werden !
+
+BESSER:
+private static diese_funktion_brauche_nur_ich() { ... }
+
+Alle "oeffentlichen" Funktionen werden in eine Liste eingetragen (Speicher!)
+und verlangsamen die call_other Abarbeitung, da call_other die Liste der
+Funktionen durchsuchen muss.
+
+Typen von Funktionen:
+
+nomask  - nicht ueberladbar
+static  - nicht von aussen aufrufbar
+private - wie static, aber zusaetzlich auch nicht von abgeleiteten
+          Klassen aus aufrufbar.
+
+
+
+
+
+      +-------------------------------------------------------------+
+	    |                                                             |
+      |  ZUWIDERHANDLUNGEN SIND UNTER SCHWERE STRAFE GESTELLT !!!!  |
+	    |                                                             |
+	    +-------------------------------------------------------------+

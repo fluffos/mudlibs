@@ -1,0 +1,160 @@
+/*
+ * FluffOS catalog login for Tamedhon (LDMud -> FluffOS conversion).
+ * Preserves Tamedhon's /etc/ansi/WELCOME.localhost artwork with the
+ * mudlibs.fluffos.info archive stamp.
+ */
+
+string name;
+string password;
+int tries;
+
+void create() {
+  seteuid(getuid());
+}
+
+void logon() {
+  string welcome;
+
+  welcome = read_file("/etc/ansi/WELCOME.localhost");
+  if (welcome) {
+    welcome = replace_string(welcome, sprintf("%c(B", 27), "");
+    write(welcome);
+  } else
+    write("\n=== TAMEDHON ===\n");
+  write("\n    Tamedhon (LDMud -> FluffOS) | Preserved at https://mudlibs.fluffos.info\n");
+  write("    Name (2-16 letters a-z, oder 'gast'/'guest'): ");
+  input_to("get_name", 0);
+}
+
+int valid_name(string str) {
+  int i, n;
+
+  if (!stringp(str))
+    return 0;
+  n = strlen(str);
+  if (n < 2 || n > 16)
+    return 0;
+  for (i = 0; i < n; i++) {
+    if (str[i] < 'a' || str[i] > 'z')
+      return 0;
+  }
+  return 1;
+}
+
+string save_path(string n) {
+  return sprintf("/data/%c/%s", n[0], n);
+}
+
+void get_name(string str) {
+  object p;
+  string err;
+
+  if (!str)
+    str = "";
+  str = lower_case(str);
+  while (strlen(str) && (str[0] == ' ' || str[<1] == ' ')) {
+    if (str[0] == ' ')
+      str = str[1..];
+    else
+      str = str[0..<2];
+  }
+  if (str == "gast" || str == "guest") {
+    p = clone_object("/catalog/player");
+    p->setup_guest();
+    err = catch(exec(p, this_object()));
+    if (err) {
+      write("exec failed: " + err + "\n");
+      destruct(p);
+      destruct(this_object());
+      return;
+    }
+    p->enter_world();
+    destruct(this_object());
+    return;
+  }
+  if (!valid_name(str)) {
+    write("Name must be 2-16 letters (a-z).\nName: ");
+    input_to("get_name", 0);
+    return;
+  }
+  name = str;
+  if (file_size(save_path(name) + ".o") > 0) {
+    write("Passwort / Password: ");
+    input_to("get_password", 1);
+    return;
+  }
+  write("Neuer Charakter / New character.\nPasswort / Password (6+ chars): ");
+  input_to("new_password", 1);
+}
+
+void get_password(string str) {
+  object p;
+  string stored, err;
+
+  if (!str || strlen(str) < 1) {
+    write("Passwort / Password: ");
+    input_to("get_password", 1);
+    return;
+  }
+  p = clone_object("/catalog/player");
+  if (!p || !p->restore_me(name)) {
+    write("Charakter konnte nicht geladen werden.\n");
+    destruct(this_object());
+    return;
+  }
+  stored = p->query_password();
+  if (crypt(str, stored) != stored && crypt(str, 0) != stored) {
+    tries++;
+    destruct(p);
+    if (tries >= 3) {
+      write("Zu viele Fehlversuche.\n");
+      destruct(this_object());
+      return;
+    }
+    write("Falsches Passwort.\nPasswort / Password: ");
+    input_to("get_password", 1);
+    return;
+  }
+  err = catch(exec(p, this_object()));
+  if (err) {
+    write("exec failed: " + err + "\n");
+    destruct(p);
+    destruct(this_object());
+    return;
+  }
+  p->enter_world();
+  destruct(this_object());
+}
+
+void new_password(string str) {
+  if (!str || strlen(str) < 6) {
+    write("Passwort muss mindestens 6 Zeichen lang sein.\nPasswort / Password: ");
+    input_to("new_password", 1);
+    return;
+  }
+  password = str;
+  write("Passwort bestaetigen / Confirm password: ");
+  input_to("confirm_password", 1);
+}
+
+void confirm_password(string str) {
+  object p;
+  string err;
+
+  if (str != password) {
+    write("Passwoerter stimmen nicht ueberein.\nPasswort / Password: ");
+    input_to("new_password", 1);
+    return;
+  }
+  p = clone_object("/catalog/player");
+  p->setup_new(name, crypt(password, 0));
+  err = catch(exec(p, this_object()));
+  if (err) {
+    write("exec failed: " + err + "\n");
+    destruct(p);
+    destruct(this_object());
+    return;
+  }
+  p->enter_world();
+  destruct(this_object());
+}

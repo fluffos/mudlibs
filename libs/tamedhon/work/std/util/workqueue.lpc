@@ -1,0 +1,539 @@
+/*
+   RoleMUD - /std/util/workqueue.c
+   ===============================
+
+   A workqueue to prevent complex tasks from running into a too long eval.
+
+   Every queue job is defined by a function, which can be either a
+   closure or a coroutine.
+
+   Optionally the minimum available evaltime to start the job (default:
+   50% of __MAX_EVAL_COST__) and an error callback can be specified.
+
+   After the last job finishes, the done_callback is called.
+   Each time job execution is delayed the delay_callbach is called.
+
+   This program can be used either as a (preferably private) inherit, or as
+   a lwobject (if you need more than one queue). All callbacks are called via
+   funcall (except coroutine jobs, which are called via call_coroutine), so
+   previous_object() will return the queue object.
+
+
+   Configuration
+   -------------
+
+   -- continue_on_error()
+   Continue execution of the queue after an error. The failed job will be
+   removed from the queue and its result will be set to 0.
+   Default behavior.
+
+   -- stop_on_error()
+   Stop execution of the queue after an error, but keep results and all
+   waiting jobs after the failed one.
+
+   -- clear_on_error()
+   Stop execution of the queue after an error and delete all waiting jobs and
+   results.
+
+   -- delay_callback(closure fun)
+   Set a callback function, that is called whenever queue execution is
+   delayed due to evaltime constraints. This callback should obviously not
+   take too much time to execute.
+
+   -- done_callback(closure fun)
+   Set a callback function, that is called whenever the queue has executed
+   all jobs.
+
+   -- error_callback(closure fun)
+   Set a callback that should be called if there is an error during the
+   execution of a job (and no specific error-callback is set for the job).
+   It will get the error message string as argument.
+   The function will be called before any actions configured with
+   stop_on_error() or clear_on_error() are performed, i.e. the queue state
+   will be unaltered at this point and can be used for error handling.
+   If no error_callback is set, errors are silently ignored.
+
+   -- discard_zero()
+   Store job results if != 0. Results can be retreived by calling results().
+   Default behaviour.
+
+   -- store_results()
+   Store all job results. Results can be retreived by calling results().
+
+   -- discard_results()
+   Discard all job results. Does not clear results that were stored before.
+
+
+   Job management
+   --------------
+
+   -- enqueue(closure|coroutine fun
+              [, int|float evaltime]
+              [, closure error_callback])
+   Add a job to the end of the queue.
+
+   If 'fun' is a closure it will be called and the returned value will
+   be appended to the results() array.
+
+   If 'fun' is a coroutine it will be called repeatedly until it finishes
+   with return. All yield()ed values will be appended to the results() array.
+   (Note that the return-value will not be added to the results; this is
+   consistent with how foreach() handles coroutines.)
+
+   Optionally a minimal required evaltime can be specified. If there is not
+   enough evaltime left, the execution will be delayed for __ALARM_TIME__.
+   Default: 50% of __MAX_EVAL_COST__
+
+   If an error occurs the error_callback function is called with the error
+   string as argument, instead of the global error_callback().
+
+   Returns the job id.
+
+   -- enqueue_next(...)
+   Similar to enqueue(), but adds the job to the top of the queue (i.e.
+   it will be executed next).
+
+   Returns the job id.
+
+   -- dequeue(int job_id)
+   Removes the specified job from the queue.
+
+   Returns job_id if the job was found in the queue, 0 otherwise.
+
+   -- dequeue_next()
+   Removes the next pending job from the queue.
+
+   Returns its job id if there was a job, or 0 if the queue was empty.
+
+   -- repeat_job()
+   Re-Enqueues the currently running job.
+   Can be called from within a job closure to repeat execution.
+   Coroutine-jobs are automatically repeated if they yield().
+
+
+   Queue control
+   -------------
+
+   -- start()
+   Starts queue execution immediately.
+
+   -- start_delayed()
+   Starts delayed queue execution.
+
+   -- stop()
+   Stops execution of queue jobs, but keeps them waiting.
+
+   -- clear()
+   Stops execution of queue jobs and clears the queue and results.
+
+   -- results()
+   Returns the job results accumulated so far.
+
+   -- clear_results()
+   Clear the results array.
+
+   -- running()
+   Returns 1 if the queue is currently running.
+
+   -- waiting()
+   Returns the number of waiting queue jobs.
+
+   -- jobid()
+   Returns the id of the currently running job, or the next pending job
+   if execution is delayed.
+
+
+   Author
+   ------
+
+   Invisible@Beutelland
+
+ */
+
+#pragma strong_types
+#pragma rtt_checks
+#pragma no_clone
+#pragma lightweight
+
+#define WQ_EVALCOST         (__MAX_EVAL_COST__ / 2)
+
+#define WQ_ERR_CONTINUE     0
+#define WQ_ERR_STOP         1
+#define WQ_ERR_CLEAR        2
+
+#define WQ_RESULT_DISCARDZERO   0
+#define WQ_RESULT_DISCARD       1
+#define WQ_RESULT_STORE         2
+
+private nosave int _on_error            = WQ_ERR_CONTINUE;
+private nosave int _store_results       = WQ_RESULT_DISCARDZERO;
+private nosave closure _delay_callback  = 0;
+private nosave closure _done_callback   = 0;
+private nosave closure _error_callback  = 0;
+
+private struct QueueJob {
+    int id;
+    closure|coroutine fun;
+    int evalcost;
+    closure on_error;
+    int repeat;
+};
+
+private nosave int _job_id = 0;
+private nosave struct QueueJob * _queue = ({ });
+private nosave mixed * _results = ({ });
+
+private void _workloop();
+
+// continue with next job after an error
+void
+continue_on_error()
+{
+    _on_error = WQ_ERR_CONTINUE;
+}
+
+// stop queue if an error occurs
+void
+stop_on_error()
+{
+    _on_error = WQ_ERR_STOP;
+}
+
+// stop and clear the queue and results if an error occors
+void
+clear_on_error()
+{
+    _on_error = WQ_ERR_CLEAR;
+}
+
+varargs void
+delay_callback(closure cb)
+{
+    _delay_callback = cb;
+}
+
+varargs void
+done_callback(closure cb)
+{
+    _done_callback = cb;
+}
+
+varargs void
+error_callback(closure cb)
+{
+    _error_callback = cb;
+}
+
+void
+store_results()
+{
+    _store_results = WQ_RESULT_STORE;
+}
+
+void
+discard_results()
+{
+    _store_results = WQ_RESULT_DISCARD;
+}
+
+void
+discard_zero()
+{
+    _store_results = WQ_RESULT_DISCARDZERO;
+}
+
+// returns 1 if the workqueue is running
+int
+running()
+{
+    return (find_call_out(CLSR(_workloop)) != -1);
+}
+
+// returns the number of waiting jobs
+int
+waiting()
+{
+    return sizeof(_queue);
+}
+
+int
+jobid()
+{
+    if (!sizeof(_queue))
+    {
+        return 0;
+    }
+
+    return _queue[0].id;
+}
+
+// start the workqueue immediately
+void
+start()
+{
+    // let _workloop handle the evaltime check
+    // this allows for shorter jobs to be enqueue_next()'ed and run
+    // immediately, even if queue execution has been delayed before
+    _workloop();
+}
+
+// start delayed execution of waiting queue jobs
+void
+start_delayed()
+{
+    // start the call_out if it's not already running
+    if (!running())
+    {
+        call_out(CLSR(_workloop), __ALARM_TIME__);
+    }
+}
+
+// stop the queue (but keep waiting jobs)
+void
+stop()
+{
+    while (remove_call_out(CLSR(_workloop)) != -1) /* do */;
+}
+
+// stop the queue and remove all waiting jobs and results
+void
+clear()
+{
+    stop();
+
+    _queue = ({ });
+    _results = ({ });
+}
+
+// return the job results that have accumulated so far
+mixed *
+results()
+{
+    return _results;
+}
+
+// clear the results array
+void
+clear_results()
+{
+    _results = ({});
+}
+
+// create a new job struct and set default values if not defined otherwise
+private varargs struct QueueJob
+_create_job(closure|coroutine fun,
+        int evalcost, closure on_error)
+{
+    evalcost ||= WQ_EVALCOST;
+
+    if (evalcost > __MAX_EVAL_COST__ * 0.9)
+    {
+        raise_error("requested remaining evalcost > 90% of __MAX_EVAL_COST__");
+    }
+    if (evalcost < __MAX_EVAL_COST__ * 0.1)
+    {
+        raise_error("requested remaining evalcost < 10% of __MAX_EVAL_COST__");
+    }
+
+    return (<QueueJob> id: ++_job_id,
+            fun: fun,
+            evalcost: evalcost,
+            on_error: on_error,
+            repeat: coroutinep(fun));
+}
+
+// add a job to the end of the queue
+// returns the job id
+varargs int
+enqueue(closure|coroutine fun,
+        int|float|closure evalcost, closure on_error)
+{
+    if (closurep(evalcost))
+    {
+        on_error = evalcost;
+        evalcost = 0;
+    }
+
+    struct QueueJob job = _create_job(fun, to_int(evalcost), on_error);
+
+    _queue += ({ job });
+
+    return job.id;
+}
+
+// add a job to the top of the queue (i.e. to be executed next)
+// returns the job id
+varargs int
+enqueue_next(closure|coroutine fun,
+        int|float|closure evalcost, closure on_error)
+{
+    if (closurep(evalcost))
+    {
+        on_error = evalcost;
+        evalcost = 0;
+    }
+
+    struct QueueJob job = _create_job(fun, to_int(evalcost), on_error);
+
+    _queue = ({ job }) + _queue;;
+
+    return job.id;
+}
+
+// remove a job from the queue
+// returns the job id if found, 0 otherwise
+int
+dequeue(int job_id)
+{
+    if (!sizeof(_queue)) return 0;
+
+    int found = 0;
+
+    _queue = filter(_queue, (: ($1.id == job_id) ? (found = job_id, 0) : 1 :));
+
+    return found;
+}
+
+// remove the next waiting job from the queue
+// returns the job id or 0 if there were no jobs waiting
+int
+dequeue_next()
+{
+    if (!sizeof(_queue)) return 0;
+
+    int job_id = _queue[0].id;
+
+    _queue = _queue[1..];
+
+    return job_id;
+}
+
+// re-enqueue the currently executing job
+// can be called from within the job function
+int
+repeat_job()
+{
+    if (!sizeof(_queue)) return 0;
+
+    _queue[0].repeat = 1;
+
+    return _queue[0].id;
+}
+
+// run a job
+private void
+_run_job(struct QueueJob job)
+{
+    if (closurep(job.fun))
+    {
+        job.repeat = 0;
+        mixed result = funcall(job.fun);
+
+        switch (_store_results)
+        {
+            case WQ_RESULT_DISCARDZERO:
+                if (result != 0) _results += ({ result });
+                break;
+            case WQ_RESULT_STORE:
+                _results += ({ result });
+                break;
+            default:
+                /* dont store result */
+        }
+    }
+    else if (coroutinep(job.fun))
+    {
+        mixed result = call_coroutine(job.fun);
+        // if the coroutine still exists, store result and repeat executing it
+        if (job.fun)
+        {
+            switch (_store_results)
+            {
+                case WQ_RESULT_DISCARDZERO:
+                    if (result != 0) _results += ({ result });
+                    break;
+                case WQ_RESULT_STORE:
+                    _results += ({ result });
+                    break;
+                default:
+                    /* dont store result */
+            }
+        }
+        else
+        {
+            job.repeat = 0;
+        }
+    }
+    else
+    {
+        raise_error("internal error: queue job must be closure or coroutine!");
+    }
+}
+
+// handle error during job execution
+// return 1 if queue execution should stop
+private int
+_handle_error(string err)
+{
+    funcall(_queue[0].on_error || _error_callback, err);
+
+    switch (_on_error)
+    {
+        case WQ_ERR_CLEAR:
+            clear();
+            return 1;
+        case WQ_ERR_STOP:
+            stop();
+            return 1;
+        default:
+            _queue[0].repeat = 0;
+            return 0;
+    }
+
+    raise_error(__FILE__ + ": unreachable");
+    return 0;
+}
+
+private void
+_workloop()
+{
+    if (!sizeof(_queue))
+    {
+        stop();
+        funcall(_done_callback);
+        return;
+    }
+
+    while (sizeof(_queue))
+    {
+        struct QueueJob job = _queue[0];
+
+        if (job.evalcost > get_eval_cost())
+        {
+            break;
+        }
+
+        string err = catch(_run_job(job); publish);
+        if (err && _handle_error(err))
+        {
+            return;
+        }
+
+        if (!job.repeat)
+        {
+            _queue = _queue[1..];
+        }
+    }
+
+    if (sizeof(_queue))
+    {
+        funcall(_delay_callback);
+        start_delayed();
+    }
+    else
+    {
+        funcall(_done_callback);
+        clear();
+    }
+}
+

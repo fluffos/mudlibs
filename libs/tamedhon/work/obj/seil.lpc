@@ -1,0 +1,2 @@
+inherit "/p/obj/seil";
+

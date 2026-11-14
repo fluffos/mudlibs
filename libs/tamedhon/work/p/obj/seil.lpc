@@ -1,0 +1,294 @@
+// /obj/seil.c   Ein Seil
+//
+// Das Seil kann an Gegenstaende gebunden werden.
+// Dafuer ruft es in dem Gegenstand die Funktion 'tie' mit der ID des
+// Gegenstandes als Parameter auf. Wenn diese '1' oder den Namen des
+// Gegenstandes zurueckgibt, ist das Seil dort festgebunden. Analog
+// dazu ruft 'binde seil los' im Zielgegenstand 'untie' (ohne Parameter)
+// auf, ein Rueckgabewert von '1' signalisiert das erfolgreiche Losbinden.
+// Die Funktion 'query_tied_to_ob()' gibt das Objekt zurueck, an das das
+// Seil gebunden ist, oder 0, wenn das Seil nicht angebunden ist.
+// Ein Seil kann nur an einer Seite festgebunden werden.
+// Kommentare und kleinere Aenderungen von Mupfel@AnderLand
+
+// IDEE: Seil verlaengern: 'verlaengere seil1 mit seil2' (Laenge * 2)
+//       Seil verstaerken: 'verstaerke seil1 mit seil2' (Staerke * 2)
+
+// Ergaenzung um Material und eindeutige ID
+// Shannara@Turithil, 10. 7. 1999
+
+// Sep. 03, 2004 - Serii@Tamedhon
+// nun kann man das seil auch ordentlich an anderen sachen (nicht nur im raum)
+// fest binden, und das seil bzw. der gegenstand wird zusamen mit dem jeweiligen
+// anderen gegenstand bewegt
+
+// Oct. 19, 2004 - Serii@Tamedhon
+//
+// man kann die ausgabe beim seil an- bzw. abbinden selber festlegen, wenn
+// man bei tie() bzw. untie() ein array zurueck gibt.
+//
+// fuer tie() saeh das so aus:
+//
+// return 
+//   ({"text fuer den anbindenden spieler"," text fuer alle spieler im raum",
+//     "worans angebunden wird (z.B. 'am Pfosten')"});
+//
+// fuer untie():
+// return 
+//   ({"text fuer den anbindenden spieler"," text fuer alle spieler im raum"});
+//
+// dem Text der an den Raum ausgegeben wird, wird jeweils der Name des
+// seilbindenden Spielers voran gestellt, daher das Leerzeichen am Anfang nicht
+// vergessen :)
+//
+//
+// Feb 23, 2007 - Serii@Tamedhon
+// Seile die an Sachen angebunden sind und die Sachen an denen sie angebunden sind kann
+// man von nunan nicht mehr verkaufen, bis das Seil wieder abgebunden ist
+
+inherit "std/thing";
+
+#include <properties.h>
+#include <language.h>
+#include <moving.h>
+#include <defines.h>
+#include <new_skills.h>
+#include <thing/material.h>
+
+private nosave object tied_to_ob;
+private nosave string tied_name;
+private nosave int TiedToMoveOb=0;
+private nosave int ob_moved=0;
+private nosave int rope_moved=0;
+private nosave mixed ob_orig_nosell=0;
+private nosave mixed this_orig_nosell=0;
+
+void create()
+{
+  if (IS_BLUE(ME)) return;
+	::create();
+	AddId(({"Seil", "seil", "\nseil"}));
+	SetProp(P_SHORT, "Ein Seil@@tied@@");
+  SetProp(P_LONG,
+    "Du siehst ein ganz normales Seil. "
+    "Du kannst es an Gegenständen festbinden.\n");
+  SetProp(P_NAME, "Seil");
+  SetProp(P_GENDER, NEUTER);
+  SetProp(P_VALUE, 15);
+  SetProp(P_WEIGHT, 300);
+  SetProp(P_MATERIAL, MAT_MISC_PLANT);
+	AddCmd(({"binde", "bind", "knote", "befestige"}), "tie");
+}
+
+nosave string tied()
+{
+	if (tied_to_ob)
+		return ", das an "+
+			     (tied_name?tied_name:(tied_to_ob->name(WEM)))+
+           " festgebunden ist";
+  else
+    return "";
+}
+
+mixed _query_noget()
+{
+  if (tied_to_ob&&!TiedToMoveOb)
+    return "Das geht nicht, solange das Seil festgebunden ist.\n";
+  if(TiedToMoveOb&&environment()!=environment(tied_to_ob))
+    return 1;
+  if(TiedToMoveOb&&
+     (this_player()->MayAddWeight(QueryProp(P_WEIGHT)+
+                                  tied_to_ob->QueryProp(P_WEIGHT))!=0)
+    )
+    return "Das kannst Du nicht mehr tragen.\n";
+  if(TiedToMoveOb)return tied_to_ob->QueryProp(P_NOGET);
+  return Query(P_NOGET);
+}
+
+mixed _move(mixed dest,int method,string dir)
+{
+  if((objectp(dest)&&environment()!=dest)||
+     (stringp(dest)&&object_name(environment())!=dest)
+     &&!rope_moved)
+     {
+      rope_moved=1;
+      this_object()->move(dest,M_NOCHECK);
+     }
+if(rope_moved&&ob_moved)rope_moved=ob_moved=0;
+  return ({dest,method});
+}
+
+mixed _move_ob(mixed dest,int method,string dir)
+{
+    if(((objectp(dest)&&environment(tied_to_ob)!=dest)||
+     (stringp(dest)&&object_name(environment(tied_to_ob))!=dest))
+    &&!ob_moved)
+    {
+     ob_moved=1;
+     tied_to_ob->move(dest,M_NOCHECK);
+    }
+if(rope_moved&&ob_moved)rope_moved=ob_moved=0;
+  return ({dest,method});
+}
+
+nosave void ca_smoveh(object ob)
+{
+  ob->SetProp(P_TMP_MOVE_HOOK,({time()+3601,this_object(),sprintf("_move%s",ob!=this_object()?"":"_ob")}));
+  call_out("ca_smoveh",3600,ob);
+}
+
+nosave void setMoveHook(object ob)
+{
+  if(find_call_out("ca_smoveh")==-1)
+  {
+    ca_smoveh(ob);
+    ca_smoveh(this_object());
+  }
+}
+
+nosave void removeMoveHook(object ob)
+{
+  while(remove_call_out("ca_smoveh")!=-1);
+  ob->SetProp(P_TMP_MOVE_HOOK,this_object());
+  SetProp(P_TMP_MOVE_HOOK,this_object());
+}
+
+varargs int remove(int s)
+{
+  if(TiedToMoveOb)
+    removeMoveHook(tied_to_ob);
+  if(tied_to_ob)
+    call_other(tied_to_ob,"untie");
+  return::remove(s);
+}
+
+int tie(string str)
+{
+  string seil, was;
+  mixed tieret;
+  object ob;
+  string verb;
+
+  notify_fail("Binde was?\n");
+  if (!stringp(str)) return 0;
+
+  verb = query_verb();
+	
+  if (sscanf(str, "%s an %s", seil, was) != 2 &&
+      sscanf(str, "%s los", seil) != 1)
+		return 0;
+
+  // Seil anbinden
+  
+  if (sscanf(str, "%s an %s", seil, was)==2)
+	{
+		if (tied_to_ob)
+		{
+			write("Es ist bereits irgendwo festgebunden.\n");
+			return 1;
+		}
+
+		if (!id(seil)) return 0;
+
+		if (was == "mich")
+		{
+			notify_fail("Warum willst Du das denn machen?\n");
+			return 0;
+		}
+
+		if (!ob = present(was, PL))           // Im Inventory?
+			ob = present(was, environment(PL)); // Im Environment?
+		if (!ob)                              // Vielleicht das Env selber?
+			if (call_other(environment(PL), "id", was))
+				ob = environment(PL);
+
+		notify_fail( "Soetwas findest Du hier nicht.\n" );
+		if (!ob) return 0;
+		
+//		if (!(tied_name=(string)call_other(ob, "tie", was)))
+		tieret=call_other(ob, "tie", was);
+
+		if(pointerp(tieret))tied_name=tieret[2];
+		else tied_name=tieret;
+
+		if(!tied_name)
+		{
+			if (ob != environment(PL))
+			{
+				write("Du kannst das Seil nicht an "+ob->name(WEM)+" festbinden.\n");
+				return 1;
+			}
+			else
+			{
+				write("Du kannst das Seil nicht daran festbinden.\n");
+        return 1;
+			}
+			
+		}
+		// Seil aus Inventory in Environment verschieben, wenns nicht
+		// der Gegenstand an dem festgebunden wird nicht im Spieler ist
+		if ((environment()==PL)&&(environment(ob)!=PL))
+			move(environment(PL), M_PUT);
+		else{TiedToMoveOb=1;setMoveHook(ob);}
+
+		tied_to_ob = ob;
+
+                ob_orig_nosell=ob->QueryProp(P_NOSELL); // seil + object kann nicht mehr verkauft werden
+		this_orig_nosell=this_object()->QueryProp(P_NOSELL);
+		this_object()->SetProp(P_NOSELL,1);
+		ob->SetProp(P_NOSELL,1);
+
+		if (tied_to_ob != environment(PL))
+			tied_name =(tied_to_ob->name(WEM));
+		else
+			if(!stringp(tied_name)) tied_name = "etwas";
+
+		if(pointerp(tieret))
+		  write(tieret[0]);
+		else
+		  write("Du bindest das Seil an "+tied_name+" fest.\n");
+		if(pointerp(tieret))
+		  say(PL->name()+(tieret[1]));
+		else
+		  say(PL->name()+" bindet das Seil an "+tied_name+" fest.\n");
+		return 1;
+	}
+	
+	// Seil losbinden
+	
+	if ((verb == "binde" || verb == "bind" || verb == "knote" ) && 
+      sscanf(str, "%s los", seil)==1)
+	{
+		if (!tied_to_ob)
+		{
+			write("Das Seil ist nirgendwo festgebunden.\n");
+			return 1;
+		}
+		if (!(tieret=call_other(tied_to_ob, "untie")))
+		{
+			write("Das klappt leider nicht.\n");
+			return 1;
+		}
+
+                tied_to_ob->SetProp(P_NOSELL,ob_orig_nosell); // seil + obj kann wieder verkauft werden
+		this_object()->SetProp(P_NOSELL,this_orig_nosell);
+
+		if(pointerp(tieret))
+		  write(tieret[0]);
+		else
+		  write("Du bindest das Seil los.\n");
+		if(pointerp(tieret))
+		  say(PL->name()+(tieret[1]));
+		else
+		  say(PL->name()+" bindet das Seil los.\n");
+		if(TiedToMoveOb){TiedToMoveOb=0;removeMoveHook(tied_to_ob);}
+		tied_to_ob = 0;
+		return 1;
+	}
+return 0;	
+}
+
+object query_tied_to_ob()
+{
+  return tied_to_ob;
+}

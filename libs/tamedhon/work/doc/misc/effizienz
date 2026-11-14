@@ -1,0 +1,133 @@
+  Hi !
+
+ Da MorgenGrauen mittlerweile aufgrund seiner Groesse an die Grenzen der
+Leistungsfaehigkeit von pascal stoesst, hab ich mal ein paar Tips zur
+effizienteren Programmierung aufgeschrieben. Ich habs so aufgeschrieben, wie
+es mir einfiel - die Liste wird wohl im Lauf der Zeit noch wachsen.
+
+ All dieses steht auch in "/doc/misc/effizienz".
+
+  1.) Das Mappings, Arrays usw. so klein wir moeglich gehalten werden sollen,
+     ist ja wohl selbstverstaendlich; sprich, wenn man nicht genau weiss,
+     wie gross ein Array wird, sollte man nicht am Anfang des Programms
+     den Maximalwert allozieren, sondern den Array lieber dynamisch+
+     vergroessern (und ggf. auch wieder verkleinern!!!); wenn Werte aus
+     Mappings enfternt werden sollen, sollte man dazu m_delete benutzen und
+     nicht einfach den Wert auf 0 setzen.
+
+  2.) In einem Objekt sollte die Zahl der globalen Variablen so klein wie
+     moeglich gehalten werden; dies gilt insbesondere fuer Variablen, die
+     viel Speicher brauchen (lange Strings zB.). Der von zu einer Methode 
+     (Funktion) lokalen Variablen belegte Speicher wird am Ende der Funktion
+     automatisch wieder freigegeben. Wenn man unbedingt grosse globale Var-
+     iablen braucht, muss man darauf achten, sie auf 0 zu setzen, sobald
+     die Werte nicht mehr gespeichert werden muessen; dies fuehrt ebenfalls
+     zum Freigeben des vorher vom String, Array... belegten Platzes. (Aus-
+     nahme: einfache "int"s; hier belegt ein Wert !=0 auch nicht mehr
+     Platz als die 0).
+
+  3.) Wenn man mehrere Objekte schreibt, die im wesentlichen dieselben Me-
+     thoden haben, ist es guenstig, eine Basisklasse zu schreiben, die von 
+     den anderen Raeumen dann inherited wird; damit vermeidet man verschwen-
+     derische Code-Verdoppelung (dies trifft oft auf Raeume zu, die irgendwas 
+     besonderes koennen muessen; wenn ein Raum einer Gegend eine Eigenschaft
+     haben soll, sollen die Nachbarraeume diese ja meisstens auch haben).
+     Beispiel wie man sowas machen kann: /d/wald/troy/room/zw* oder 
+     /d/inseln/rochus/sumpf* oder viele andere Stellen.
+
+  4.) Objekte einsparen. Wenn irgendwo irgendwelche Objekt rumstehen,
+     die man sowieso nicht mitnehmen kann (oder bei Monstern: auch
+     nicht angreifen soll), sind sie meisstens eigentlich ueberfluessig.
+     Stattdessen kann man dann besser Details einbauen. Die Dinge, die
+     sonst das Objekt kann, muss dann eben der Raum beherrschen 
+     (AddCmd usw). Der Programmieraufwand duerfte sich oft nicht wesent-
+     lich unterscheiden; die Methode ohne eigene Objekte wird sogar oft
+     weniger aufwendig sein. Wenn es einem nicht gefaellt, das die
+     Objekte dann VOR der Raumbeschreibung stehen, muss man wohl
+     int_long() ueberladen; das ist noch nicht so schoen, mal sehen,
+     was ich da machen kann. Das normale int_long() steht in
+     std/room/description.c, falls es jemand ueberladen moechte, kann
+     er sich ja dort ansehen, was es tut (ist trivial).
+
+ 5.)  heart_beat() vermeiden. heart_beat-Objekte haben verschiedene
+     Nachteile:
+      - ein eingschalteter HB kostet ziemlich viel Rechenzeit.
+      - Objekte mit aktivem HB werden niemals ausgeswapped.
+     Wenn ein HB wirklich erforderlich ist, sollte man ihn auf jeden Fall
+     abschalten, sobald er nicht mehr gebraucht wird. Beispiel:
+     ein "normaler" NPC stellt den HB aus, wenn 1.) kein Spieler in dem
+     Raum ist, in dem der NPC sich aufhaelt und 2.) der NPC vollstaendig
+     geheilt ist. Da er seinem HB im init() wieder einschaltet, wenn
+     this_player() ein Spieler ist, aendert sich sein Verhalten aufgrund
+     der HB-Abschaltung nicht.
+
+ 6.)  call_out(). call_out() ist ja eigentlich eine schoene Sache - wenn er
+     mit Vorsicht eingesetzt wird. Die Zahl der call_out()s sollte auf jeden
+     Fall wiederum moeglichst klein gehalten werden. Bei call_out()s, die
+     in regelmaessigen Abstaenden wiederkehren, sollte der Abstand nicht
+     zu klein gewaehlt werden (je groesser, desto besser ...). Als
+     1. Parameter ist entweder ein Funktionsname oder auch eine closure
+     moeglich; an dieser Stelle kann ich vor der Verwendung von closures
+     aber nur warnen !!! Sie bringt nur (teilweise gefaehrliche) Nachteile,
+     da man solche call_out()s nicht via remove_call_out() loeschen kann :(.
+     Vor allem sollte man sich SEHR genau ueberlegen, an welcher Stelle
+     in einer von einem call_out aufgerufenen Methode ein neuer call_out
+     erzeugt werden koennte: Zwei Crashes verdanken wir naemlich schon
+     einer endlosen call_out-Vermehrung. Beide Male wurde in einem NPC von
+     catch_tell aus ein call_out auf eine Funktion gemacht, die das Monster
+     bewegen sollte. Dabei wurden natuerlich Meldungen an das Monster
+     ausgegeben, Raumbeschreibung etc. Fuer jede Zeile wurde wieder
+     catch_tell aufgerufen und ein weiterer call_out erzeugt (uebrigens
+     mit delay 0...). 
+
+ 7.)  Moving NPCs. Wenn es geht, sollte man sie bei Gelegenheit anhalten.
+     Es geht zB dann, wenn sie innerhalb eine festen Gegend rumlaufen und
+     man feststellen kann, ob/wann Spieler da drin waren (so macht zB Troy
+     es bei seiner Wueste). Noch besser waere es, den NPC dann in den Raum
+     zu moven, in dem er erzeugt wurde :). Warum ist das Anhalten wichtig ?
+     Jeder Raum definiert eine Methode clean_up(). Wenn diese aufgerufen wird,
+     entscheidet sie, ob der Raum momentan benoetigt wird. Wenn zB Gegenstaende
+     drin sind, die nicht via AddItem erzeugt wurde, oder wenn solche nicht
+     drin sind, die via AddItem erzeugt wurden und REFRESH_NONE oder _DESTRUCT
+     sind, wird der Raum noch gebraucht; wenn er nicht gebraucht wird, entfernt
+     er sich selbst vollstaendig aus dem Speicher (zusammen mit den Dingen,
+     die drinliegen). Diese Methode wird aber erst 90-105 Minuten nach dem
+     letzten Referenzieren des Raums aufgerufen; dh, 90-105 Minuten, nachdem
+     zum letzten Mal eine Methode dieses Raumes aufgerufen wurde. Wenn
+     NPCs da durchrennen, werden natuerlich laufend welche aufgerufen, und
+     so bleiben diese Raeume auf ewig im Speicher.
+
+ 8.)  "Wertlose" Fun-Objekte. Wenn es fuer einen Spieler moeglich ist, 
+     irgendwo einfache Objekte zu bekommen, die zu nichts gut sind und auch
+     keinen Wert haben, sollte man drauf achten, das a) pro Reset nur eine
+     begrenzte Menge davon zu bekommen ist und b) die Objekte nach ner
+     Weile verschwinden (verfaulen, zerfallen, wasauchimmer). Es gibt
+     naemlich immer wieder Spieler, die hunderte dieser Dinger mitnehmen,
+     ob es ihnen nun was bringt oder nicht :)
+
+ 9.)  replace_program: Da herrscht wohl noch einige Verwirrung, wann man es
+     einsetzen kann und wann nicht; ich erklaere es also nochmal:
+     replace_program kann immer dann eingesetzt werden, wenn ein Objekt nicht
+     gecloned werden soll (das trifft auf so gut wie alle Raeume zu) und keine
+     eigenen Funktionen ausser create() definieren. Wenn diese Bedingungen
+     erfuellt sind, kann man replace_program auf das Objekt, welches inherited
+     wird (zB replace_program("std/room")) ins create() schreiben; wichtig:
+     es MUSS ganz vorn stehen, also noch VOR dem Aufruf von ::create().
+     replace_program sorgt fuer einiges an Speicherplatzersparnis.
+
+10.)  Blueprints nicht initialisieren. Bei Objekten, die gecloned werden
+    (praktisch alles ausser Raeumen) sollte man UNBEDINGT darauf achten,
+    das nicht auch in der sogenannten "blueprint" alle Properties initiali-
+    siert werden; das ist nicht noetig, verschwendet Speicher und produziert
+    oft sogar Fehler. (Was ist die Blueprint: Wenn man sich den Filenamen
+    anschaut, fehlt das "#NUMMER"; die Blueprint ist sozusagen die
+    Vorlage, die kopiert wird, wenn man ein Objekt cloned. Die Variablen-
+    inhalte werden jedoch dabei nicht kopiert.)
+     Um die Initialisierung zu vermeiden, gehoert an den Anfang von create()
+    eine Zeile dieser Art:
+      if (!clonep(this_obeject())) return;
+     Diese Zeile gehoert GANZ an den Anfang vom create(), noch vor das 
+    ::create(). Eigentlich sollte also ::create() immer erst die 2.
+    Zeile im create() sein; davor steht immer die o.g. Zeile oder aber
+    ein replace_program, ausser es handelt sich um einen Raum, der
+		eigene Funktionen definiert.

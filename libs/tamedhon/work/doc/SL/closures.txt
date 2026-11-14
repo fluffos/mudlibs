@@ -1,0 +1,288 @@
+----------------------------------------------------------------------------
+
+                      Kurse fr's Gueldenland: Closures
+
+----------------------------------------------------------------------------
+
+Index:
+
+   * Einfach(st)e Closures
+   * Variable Details
+   * Ersatz fr process_string()
+   * Komplexe Closures
+   * Ersatz fr geschlechtspezifische Details
+
+----------------------------------------------------------------------------
+
+Was ist eine Closure berhaupt?
+
+Die einfachsten Closures sehen so aus:
+
+  #'func
+
+Diese Closure liefert -- wenn ausgefhrt -- den Rckgabewert von
+
+  func()
+
+Dabei kann func() sowohl eine efun [1], eine lfun [2] oder sogar ein
+Operator (z.B.: +, *, += usw.) sein.
+----------------------------------------------------------------------------
+
+Und was bringt mir das?
+
+Nun, zunchst einmal gar nichts. Allerdings, man kann es benutzen, um
+variable Details einzubauen:
+
+create() {
+    ::create();
+    [...]
+    AddDetail("wand",#'unt_wand);
+    [...]
+}
+
+string unt_wand() {
+    if( this_player()->QueryProp(P_RACE) == "zwerg" )
+        return "Eine solide Wand aus Kanraxschem Marmor (der dunkleren Sorte).\n";
+    else
+        return "Eine solide Wand aus dunklem Marmor.\n";
+}
+
+Damit kriegen die Zwerge einen anderen Text als die anderen Spieler, wenn
+sie sich diesen Detail anschauen.
+Dies geht natrlich auch an anderen Stellen, wo Texte ausgegeben werden: bei
+P_INT_LONG und P_INT_SHORT, allen Arten von Details (ReadDetails, Smell,
+...), AddInfo, AddRoomMessage usw.
+----------------------------------------------------------------------------
+
+Bislang habe ich process_string() verwendet, etwa so:
+
+AddDetail("tuer","Eine @@zustand@@ Tuer.\n")
+
+Wie geht das mit Closures?
+
+Nun, es gibt zwei Mglichkeiten. Erstens, wir knnten wieder die vorherige
+Methode benutzen:
+
+create() {
+    ::create();
+    [...]
+    AddDetail("tuer",#'tuer_zustand);
+    [...]
+}
+
+string tuer_zustand() {
+    return "Eine "+zustand()+" Tuer.\n";
+}
+
+Die andere Methode ist etwas komplizierter, bentigt allerdings keine
+zustzliche Funktion.
+
+create() {
+    ::create();
+    [...]
+    AddDetail("tuer",lambda(0,
+        ({#'sprintf, "Eine %s Tuer.\n",
+            ({#'zustand})
+        }) ) );
+    [...]
+}
+
+Der komplizierte Teil ist die Closure:
+
+    lambda(0, ({#'sprintf, "Eine %s Tuer.\n", ({#'zustand}) }) );
+
+Der erste Argument von lambda() ist ein Array (eine Tabelle) mit Werten, die
+als Argumente fr den zweiten Argument von lambda(), der eigentlichen
+Closure, verwendet werden. In unserem Fall haben wir an dieser Stelle keine
+Argumente, und die Closure entspricht der Funktion:
+
+string _irgend_eine_funktion() {
+    return sprintf("Eine %s Tuer.\n", zustand());
+}
+
+Die Closure wird von Innen nach Aussen abgearbeitet; zuerst wird die Closure
+#'zustand aufgerufen (was dem Aufruf der Funktion zustand() entspricht).
+Anschliessend wird die Closure #'sprintf aufgerufen, und zwar mit den
+Argumenten "Eine %s Tuer.\n" und ({#'zustand}) (dem Rckgabewert der
+Funktion zustand()).
+Das Ergebnis des letzten Funktionsaufrufs wird dann als Ergebnis der Closure
+selbst interpretiert (deswegen brauchen wir auch kein #'return :-)
+----------------------------------------------------------------------------
+
+Was kann ich noch damit machen?
+
+Alles Mgliche, hier kommt ein ausfhrliches Beispiel: [3]:
+
+Nehmen wir mal an, wir wollen eine Funktion schreiben, die an alle Spieler
+in einem Enviroment (einer Umgebung -- im Normalfall ein Raum) einen Text
+mit Hilfe von tell_object() ausgibt. Jeder normale Mensch wrde da sowas
+schreiben:
+
+    tell_room(env,text);    // *grins*
+
+Da gibt es nur ein Problem: Der Text "text" wird auch an Nicht-Spieler
+verschickt. Daher mssen wir eine andere Lsung suchen:
+
+    object *obs;
+    obs = filter_array( all_inventory(env), #'interactive );
+    map_array( obs, #'tell_func, text );
+    [...]
+
+int tell_func( object ob, string text ) {
+    tell_object( ob, text );
+}
+
+Die Funktionen tun folgendes: Zuerst wird der Inhalt des Enviromants "env"
+geholt (all_inventory(env)). Dieses Array (diese Tabelle) mit objects
+(Objekten) als Inhalt wird nun durch die efun [1] interactive() gemappt,
+soll heissen, fuer jeden Element aus dem Array wird die Funktion
+interactive(Element) aufgerufen. Wenn diese Funktion den Wert 1 liefert
+(Also, wenn der Element ein Spieler ist), dann wird dieser Element im Array
+behalten, ansonsten wird es verworfen. (Hier kann man auch recht gut sehen,
+wie praktisch die Benutzung der Closures sein kann :-)
+
+In der Variablen "obs" haben wir ein Array, in welchem nur die Spieler in
+diesem Enviroment stehen. Mit der Funktion map_array() koennen wir nun fuer
+jeden einzelnen Element die Funktion tell_func() aufrufen, die als ersten
+Argument den Element und als zweiten Argument den Inhalt der Variablen
+"text" bekommt. Hier sehen wir wieder eine Verwendungsmglichkeit fr
+einfache Closures...
+
+Die Funktion tell_func() macht nichts weiter, als den Text an den jeweiligen
+Objekt (also, in unserem Fall, an den Spieler) auszugeben.
+
+Und jetzt versuchen wir dasselbe mit Closures :-)
+
+map_array( filter_array( all_inventory(env), #'interactive ),
+    lambda( ({ 'pl, 'text }),
+        ({ #'tell_object, 'pl, 'text }) ),
+    text );
+
+Nun, das war die einfache Version. Wir haben den Funktionsaufruf fr die
+Funktion tell_func() durch eine Closure ersetzt. Das Neue dabei ist das
+Array
+
+    ({ 'pl, 'text })
+
+als erster Argument von lambda(). Dieses Array bedeutet ganz einfach, da
+diese Closure 2 Argumente hat, und da sie innerhalb der Closure mit 'pl
+bzw. 'text bezeichnet werden.
+
+Die eigentliche Closure,
+
+    ({ #'tell_object, 'pl, 'text })
+
+ist dagegen recht einfach: Es wird die Funktion tell_object( pl, text )
+aufgerufen.
+
+Fr die "Fanatiker" kommt nun die Ganz-Closure-Variante:
+
+closure c;
+c = lambda( ({ 'env, 'message }),
+    ({ #'map_array,
+        ({ #'filter_array,
+            ({ #'all_inventory, 'env }),
+            #'interactive }),
+        ({ #'lambda,
+            '({ 'pl, 'text }),
+            '({ #'tell_object, 'pl, 'text }) }),
+        'message }) );
+
+Nett, nicht wahr? :-)
+
+Es gibt hier ein paar neue Dinge. Erstens, #'interactive steht nicht in
+Klammern -- das kommt daher, dass wir die Closure selbst brauchen, und
+nicht, wie bisher blich, ihren Wert.
+
+Die zweite berraschung ist die erneute Verwendung der lambda()-Funktion --
+diesmal im Inneren einer Closure. Auch an dieser Stelle brauchen wir nunmal
+eine Closure, und zwar die, die uns die innere lambda() liefert. Die
+Funktion selbst braucht zwei Arrays als Argumente, und, um zu verhindern,
+da diese wie gewhnlich interpretiert werden (was einen Fehler verursachen
+wrde), mssen wir vor jedem ein Apostroph-Zeichen setzen:
+
+    '({ 'pl, 'text }),
+    '({ #'tell_object, 'pl, 'text })
+
+Damit bleiben die Arrays als Arrays erhalten, und wir haben ein gutes
+Beispiel fr verschachtelte Closures :-)
+
+Wozu der Stre? Nun, jetzt knnen wir die Closure hnlich einer Funktion
+benutzen:
+
+    funcall(c, find_object("/players/akjosch/workroom"), "Hallo!\n" );
+
+tut genau das, was wir uns davon erhoffen: an alle anwesenden Spieler
+(allerdings NICHT an NPCs oder andere Objekte) im Raum
+"/players/akjosch/workroom" wird der Text "Hallo!\n" ausgegeben...
+----------------------------------------------------------------------------
+
+Die geschlechtspezifischen Details sind ja nicht mehr da, kann man sowas
+auch mit Closures machen?
+
+Ja, man kann. Zuerst definiert man eine Funktion, die folgendes macht:
+
+string _get_detail(string text_md, string text_mn, string text_fd, string text_fn) {
+    int gen;
+    gen = this_player()->QueryProp(P_GENDER);
+    if( gen == MALE )
+        if( is_day() )
+            return text_md;
+        else
+            return text_mn;
+    else
+        if( is_day() )
+            return text_fd;
+        else
+            return text_fn;
+}
+
+Also, der Funktion werden 4 Zeichenketten bergeben:
+
+   * text_md: Text fr die Mnner, am Tag sichtbar.
+   * text_mn: Text fr die Mnner, in der Nacht sichtbar.
+   * text_fd: Text fr die Frauen, am Tag sichtbar.
+   * text_fn: Text fr die Frauen, in der Nacht sichtbar.
+
+Statt eines Textes kann man auch eine 0 bergeben, das generiert den "Sowas
+siehst Du nicht!\n"-Text.
+
+Und so benutzt man es: [4]
+
+create() {
+    [...]
+    AddDetail(({"lachen","laecheln"}), lambda(0, ({#'_get_detail,
+        "Du bekommst ganz weiche Knie, als Du Dir dieses Laecheln naeher "
+        "anschaust. Was fuer eine Frau...\n",
+        0,
+        "Die Statue laechelt in einer Art, die bei braven Ehefrauen "
+        "im allgemeinen dazu fuehrt, dass sie ihren Gatten an den Arm nehmen "
+        "und schnell aus der Reichweite einer auf diese bewusste Art laechelnden "
+        "Frau bringen.\n",
+        0}) ) );
+    [...]
+}
+
+Voil!
+
+Wird nun dieses Detail untersucht, so ruft die Closure die Funktion
+_get_detail() mit den 4 angegebenen Argumenten auf. Der Vorteil dieser
+Methode ist, da man die Funktion _get_detail() mehrfach an verschiedenen
+Stellen verwenden kann.
+
+----------------------------------------------------------------------------
+[1] Eine efun ist eine globale Funktion. Diese sind meistens im Driver oder
+in der Datei /secure/simul_efun.c definiert und knnen von jeder Datei aus
+jederzeit aufgerufen werden.
+
+[2] Eine lfun ist eine lokale Funktion. Diese ist meistens in der Datei
+selbst oder in einer der durch "inherit" eingebundenen Dateien enthalten und
+damit nur auf einen Teil -- oft sogar nur auf eine einzige -- der im Mud
+vorhandenen Dateien beschrnkt.
+
+[3] Idee von Khidar.
+
+[4] Der Beispiel stammt aus einem von Tigerauges Rumen, nmlich
+/d/gareth/tigerauge/rooms/monumnt3.c.
+
+Martin Sojka (maso@cscip.uni-sb.de)

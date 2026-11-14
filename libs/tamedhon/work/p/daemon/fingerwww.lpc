@@ -1,0 +1,708 @@
+// Tamedhon MUDlib
+//
+// /p/daemon/fingerwww -- webfinger object
+//
+
+#pragma strong_types,save_types
+#pragma no_clone, no_shadow
+
+#include <config.h>
+#include <properties.h>
+#include <wizlevels.h>
+#include <new_skills.h>
+#include <moredef.h>
+#include <ansi.h>
+
+#define HBINT    2   /* interval between two heart_beats in seconds */
+#define MINIDLE 60   /* minimum idle time in seconds to be stated idle */
+#define wiz (local && IS_LEARNER(TP))
+// #define TMASTER "/p/service/querolin/team/teammaster.lpc"
+#define SCHEIDUNGSMASTER "/secure/scheidung.lpc"
+
+#define TITLE1 \
+"  ________________________________________________________________________\n"\
+" /                                                                      / \\\n"
+#define TITLE2 \
+" \\______________________________________________________________________\\ |\n"\
+"  |                                                                       |\n"
+
+#define FOOTER \
+"  \\_______________________________________________________________________/\n"
+
+inherit "/p/daemon/finger";
+
+void create()
+{
+  mixed data;
+  seteuid(getuid());
+
+  // SL-Erweiterungen (Wiznames und Aliases aus finger.init)
+  //
+  wiznames = ([]);
+  aliases = ([]);
+  if (data = read_file("/p/daemon/finger.init"))
+    map(explode(data, "\n"), #'parse_init_line);
+}
+
+varargs mixed finger_single(string str,int local)
+{
+  mixed  *userinfo;
+  string ip,text,ipnum,filename,guild,title,pp;
+  int wizlevel,playerlevel,idle,pos,tmp,noplan,avatar,last;
+  int i,anzahl;
+  mixed h,data;
+  mapping gl;
+  object player;
+
+  // Set(P_HOMEPAGE, SAVE, F_MODE_AS);
+
+  str=lower_case(str);
+  text="";
+
+  h=new_explode(str," ");
+  if (member(h,"-n")>=0) noplan=1;
+  if (member(h,"-p")>=0) noplan=0;
+  if (member(h,"-a")>=0) avatar=1;
+  h=(h-({"-n","-p","-a"}));
+  if (!sizeof(h)) {
+    text="Du solltest schon sagen, wer Dich interessiert!\n";
+    if (local) return write(text),0;
+    else return text;
+  }
+  str=h[0];
+  sscanf(str, "gast%d%s", i, text);
+  // dh. fuer Gast1..n ist d != 0 und text ein Leerstring
+
+  if (str=="mich") str=lower_case(TP->Name());
+
+  // Alias-Handling, Variante 1
+  /*
+  if (member(aliases,str))
+  {
+    if (local)
+      write(CAP(str)+" ist ein Alias auf "+CAP(aliases[str])+".\n");
+      str=aliases[str];
+  }
+  */
+
+  /* does this player exist? */
+  userinfo=MASTER->get_userinfo(str);
+  player=find_player(str);
+
+  if (previous_object() && previous_object()->QueryProp(P_NO_ASCII_ART))
+  pp=" ";  else pp="|";
+
+  if(!userinfo && !player) {
+    // Alias-Handling, Variante 2
+    if (member(aliases,str))
+      text=aliases[str]+"\n";
+    else if (text="/secure/master"->QueryBanished(str))
+      text=
+       "Hoppla - dieser Name ist reserviert oder gesperrt (\"gebanisht\") !\n"+
+       (wiz ? "Grund: "+text+"\n" : "");
+    else
+      text="Hmm... diesen Namen gibt es im "+MUDNAME+" nicht.\n";
+    if (local) return write(text),0;
+    else return text;
+  }
+  if (player)
+    properties=player->QueryProperties();
+  else if (find_netdead(str)) {
+    properties=find_netdead(str)->QueryProperties();
+    age=find_netdead(str)->QueryProp(P_AGE);
+  }
+  else
+    restore_object("/save/"+str[0..0]+"/"+str);  
+
+  if (!properties)
+  {
+    text+="Mist!!! Das Einlesen der Daten klappt nicht wie es soll :-(\n";
+    properties=0;
+    if (!local)
+      return text;
+    write(text);
+    return 1;
+  }
+  guild=properties[P_GUILD];
+  if (!guild || guild=="")
+    guild=properties[P_DEFAULT_GUILD] || DEFAULT_GUILD;
+  title=properties[P_TITLE];
+  if (!query_wiz_level(player) && (!title || title=="") &&
+       mappingp(properties[P_GUILD_TITLE]))
+    title=(properties[P_GUILD_TITLE])[guild];
+  if (!stringp(title)) title="";
+  ipnum=properties[P_CALLED_FROM_IP] || "unbekannt";
+  ip=properties[P_CALLED_FROM_IP_NAME] || ipnum;
+  if(player)
+  {
+    if (ipnum=query_ip_number(player))
+    {
+      ip=player->QueryProp(P_CALLED_FROM_IP_NAME) || query_ip_name(player);
+      if ((idle=query_idle(player))<MINIDLE)
+	idle=0;
+    }
+    age=(IS_WIZARD(player) && player->QueryProp(P_INVIS))
+      ? player->QueryProp(P_INVIS)
+      : player->QueryProp(P_AGE);
+  }
+  else
+    // idle=file_date("/save/"+str[0..0]+"/"+str+".o");
+    idle=properties[P_LAST_LOGOUT];
+
+  wizlevel=query_wiz_level(str);
+  if ((last=properties[P_LAST_LOGOUT])==-1)
+    last=file_time("/save/"+str[0..0]+"/"+str+".o");
+
+    if(properties[P_AVATAR_URI])
+      text+="<img src='"+properties[P_AVATAR_URI]+"' height=250 alt='"+capitalize((h=properties[P_NAME]) ? h : str)+"' />\n\n";
+
+  /* output routine for all */
+    if (!previous_object() || !previous_object()->QueryProp(P_NO_ASCII_ART)) {
+      text += sprintf(TITLE1+"|    %-65s |  |\n"+TITLE2,
+        "");
+    }
+
+    if (previous_object()->QueryProp(P_TTY)=="vt100" || previous_object()->QueryProp(P_TTY)=="ansi")
+    {
+    stra="  "+pp+"  Voller Name: "+ANSI_BOLD+(((h=properties[P_PRESAY]) && h!="") ?h+" " : "")+
+    capitalize((h=properties[P_NAME]) ? h : str)+" "+
+    ((h=title) ? h : "");
+    playername=properties[P_NAME];
+    stra=extract(stra,0,73);
+    text+=sprintf("%-74s"+ANSI_NORMAL+pp+"\n",stra);
+    }
+    else
+    {
+    stra="  "+pp+"  Voller Name: "+(((h=properties[P_PRESAY]) && h!="") ?h+" " : "")+
+    capitalize((h=properties[P_NAME]) ? h : str)+" "+
+    ((h=title) ? h : "");
+    playername=properties[P_NAME];
+    stra=extract(stra,0,73);
+    text+=sprintf("%-74s"+pp+"\n",stra);
+    }
+  if (player)
+  {
+    if(ipnum && (wiz || !(player->QueryProp(P_INVIS))))
+    {
+      playername=player->query_real_name();
+      stra="  "+pp+"  Anwesend seit "+
+        (time()-player->QueryProp(P_LAST_LOGIN) >= 86400 ?
+          dtime(player->QueryProp(P_LAST_LOGIN))[0..23] :
+          dtime(player->QueryProp(P_LAST_LOGIN))[19..23]) +
+        " Uhr ";
+      text+=sprintf("%-48s",stra);
+        stra="";
+        if (idle) stra="(Idle-Zeit: "+timediff(idle)+")";
+        text+=sprintf("%25s "+pp+"\n",stra);
+        stra="  "+pp+"  Er ";
+        i=0;
+	if (wiz)
+        {
+          if (properties[P_GENDER]==2) { stra="  "+pp+"  Sie "; i=1; }
+	          text+=stra+"kommt von: ";
+          stra=ip;
+          if (sizeof(stra)>53) stra=extract(stra,0,53);
+          text+=sprintf("%-54s",stra);
+          stra=pp+"\n";
+          if (i==0) stra=" "+stra;
+          text+=stra;
+        }
+    }
+    else
+    {
+      stra="  "+pp+"  "+capitalize(str)+" ist leider nicht anwesend.";
+      text+=sprintf("%-73s "+pp+"\n",stra);
+
+      if (wiz)
+      {
+        stra+=ip+" ("+ipnum+")";
+        if (sizeof(stra)>72) stra=extract(stra,0,72);
+        text+=sprintf("%-73s "+pp+"\n",stra);
+      }
+
+      stra="Zuletzt ausgeloggt: "+dtime(last)+" ("+timediff(time()-last)+")";
+      text+=sprintf("  "+pp+"  %-68s "+pp+"\n",stra);
+    }
+  }
+  else
+  {
+      stra="  "+pp+"  "+capitalize(str)+" ist leider nicht anwesend.";
+      text+=sprintf("%-73s "+pp+"\n",stra);
+      stra="  "+pp+"  Zuletzt eingeloggt von: ";
+
+      if (wiz)
+      {
+        stra+=ip;
+        if (sizeof(stra)>72) stra=extract(stra,0,72);
+        text+=sprintf("%-73s "+pp+"\n",stra);
+      }
+
+      stra="Zuletzt ausgeloggt: "+dtime(last)+" ("+timediff(time()-last)+")";
+      text+=sprintf("  "+pp+"  %-68s "+pp+"\n",stra);
+
+  // }
+
+    // stra=TMASTER->_queryteam(str);
+    // if (stra)
+    // {
+    // stra="  "+pp+"  "+(properties[P_GENDER]==MALE?"Er":"Sie")+" ist stolzes Mitglied im Team '"+
+    //       capitalize(stra)+"'";
+    // stra=extract(stra,0,73);
+    // text+=sprintf("%-74s"+pp+"\n",stra);
+    }
+
+if (properties[P_GHOST])
+  {
+    stra="  "+pp+"  Hoppla, derzeit ist "+capitalize(str)+" ein Geist!";
+    text+=sprintf("%-73s "+pp+"\n",stra);
+  }
+
+if (i="secure/mailer"->FingerMail(str))
+{
+   switch(i) {
+      case 1 : stra="einen ungelesenen Brief."; break;
+      case 2 : stra="zwei ungelesene Briefe."; break;
+      case 3 : stra="drei ungelesene Briefe."; break;
+      case 4 : stra="vier ungelesene Briefe."; break;
+      case 5 : stra="fünf ungelesene Briefe."; break;
+      default : stra=to_string(i); stra+=" ungelesene Briefe."; break;
+   }
+   stra="  "+pp+"  "+(properties[P_GENDER]==MALE?"Er":"Sie")+
+         " hat derzeit "+stra;
+
+    stra=extract(stra,0,73);
+    text+=sprintf("%-74s"+pp+"\n",stra);
+
+}
+
+  if (!previous_object() || !previous_object()->QueryProp(P_NO_ASCII_ART))
+    text+="  +-----------------------------------+-----------------------------------+\n";
+  stra= "  "+pp+"  Rasse: "+
+    ((h=properties[P_RACE]) ? h :
+       ( (userinfo && pointerp(userinfo) && sizeof(userinfo)>4 &&
+          stringp(userinfo[4]) &&
+          sizeof(h=explode(userinfo[4],"/"))>2 ) ?
+            (h=capitalize(h[2]),
+             ([ "Human"   : "Mensch",
+                "Dwarf"   : "Zwerg",
+		"Orc"	  : "Ork",
+                "Darkelf" : "Dunkelelf"])[h] || h) :
+            "<keine>"));
+  if (properties[P_FROG]!=0) {
+   stra= "  "+pp+"  Rasse: Frosch"; }
+   if (previous_object() && previous_object()->QueryProp(P_NO_ASCII_ART))
+     text+=sprintf("%-38s\n     Gilde: %-25s "+pp+"\n",stra,capitalize(guild));
+   else
+     text+=sprintf("%-38s"+pp+"  Gilde: %-25s "+pp+"\n",stra,capitalize(guild));
+
+//    (seer ? "Alter: "+timediff(age*HBINT)+",  " : "")+
+
+    if (wizlevel>=10)
+    {
+       // Folgt der Form halber weiter unten ;)
+    }
+    else
+    {
+     if (wizlevel==0)
+     {
+      stra="  "+pp+"  Spieler Level: "+properties[P_LEVEL];
+     }
+     else
+     {
+      if (wizlevel==5)
+      {
+        stra="  "+pp+"  Imposanter Helfer"+(properties[P_GENDER]==FEMALE ? "in":"");
+        stra+=" Level: "+properties[P_LEVEL];
+      }
+      if (wizlevel>=2 && wizlevel<5)
+      {
+        stra="  "+pp+"  Erzseher"+(properties[P_GENDER]==FEMALE ? "in":"");
+        stra+=" Level: "+properties[P_LEVEL];
+      }
+      if (wizlevel==1)
+      {
+        stra="  "+pp+"  Seher"+(properties[P_GENDER]==FEMALE ? "in":"");
+        stra+=" Level: "+properties[P_LEVEL];
+      }
+     }
+
+     if (properties[P_LAST_ADVANCE])
+     {
+        if ((time() - properties[P_LAST_ADVANCE]) < 86400)
+        {
+           anzahl=(time() - properties[P_LAST_ADVANCE]) / 3600;
+           if (anzahl==1)
+           {
+             stra+=" ("+to_string(anzahl)+" Stunde)";
+           }
+           else
+           {
+             stra+=" ("+to_string(anzahl)+" Stunden)";
+           }
+        }
+        else
+        {
+           anzahl=(time() - properties[P_LAST_ADVANCE]) / 86400;
+           if (anzahl==1)
+           {
+             stra+=" ("+to_string(anzahl)+" Tag)";
+           }
+           else
+           {
+             stra+=" ("+to_string(anzahl)+" Tage)";
+           }
+        }
+     }
+
+     text+=sprintf("%-38s",stra);
+     stra="";
+     if (previous_object() && previous_object()->QueryProp(P_NO_ASCII_ART))
+        text+="\n  ";
+   // Gildenlevel laut original Finger - funktioniert aber leider net... :(
+//    stra=(((h=properties[P_GUILD_LEVEL]) && h=h[properties[P_GUILD_LEVEL]]) ?
+//      ("Gildenlevel: "+h) : "" );
+    if (guild=="abenteurer")
+    {
+       // Bei den Abenteurern wird der Gildenlevel (vermutlich da auch
+       // automatisch gleich Level) nicht (immer) korrekt gesetzt.
+       stra="Gildenlevel: "+properties[P_LEVEL];
+    }
+    else
+    {
+       gl=properties[P_GUILD_LEVEL];
+       if (guild && mappingp(gl)) {
+       stra="Gildenlevel: "+to_string(gl[lower_case(guild)]); }
+    }
+//        stra="Gildenlevel: "+to_string(properties[P_GUILD_LEVEL]);
+    // ein kleiner versuch noch doch an den gildenlevel zu kommen ;)
+     if (stra=="")
+     {
+       if (player) stra="Gildenlevel: "+player->QueryProp(P_GUILD_LEVEL);
+     }
+
+     if (properties[P_LAST_ADVANCE_GUILD])
+     {
+        if ((time() - properties[P_LAST_ADVANCE_GUILD]) < 86400)
+        {
+           anzahl=(time() - properties[P_LAST_ADVANCE_GUILD]) / 3600;
+           if (anzahl==1)
+           {
+             stra+="  ("+to_string(anzahl)+" Stunde)";
+           }
+           else
+           {
+             stra+="  ("+to_string(anzahl)+" Stunden)";
+           }
+        }
+        else
+        {
+           anzahl=(time() - properties[P_LAST_ADVANCE_GUILD]) / 86400;
+           if (anzahl==1)
+           {
+             stra+="  ("+to_string(anzahl)+" Tag)";
+           }
+           else
+           {
+             stra+="  ("+to_string(anzahl)+" Tage)";
+           }
+        }
+     }
+
+     text+=sprintf(pp+"  %-32s "+pp+"\n",stra);
+   }
+
+    stra="  "+pp+"  Geschlecht: "+
+    ( ([ NEUTER:"neutral ?!", MALE:"männlich",
+         FEMALE:"weiblich"]) [properties[P_GENDER]] ||
+      "<verdammt seltsam>");
+    text+=sprintf("%-38s"+pp+"  ",stra);
+
+   if (previous_object() && previous_object()->QueryProp(P_NO_ASCII_ART))
+      text+="\n     ";
+   if ( find_player(str) && (properties[P_INVIS]!=0))
+   {
+     stra="Alter: "+timediff(properties[P_AGE]*HBINT);
+   }
+   else
+   {
+      stra="Alter: "+timediff(age*HBINT);
+   }
+      text+=sprintf("%-32s "+pp+"\n",stra);
+
+   h=lowerstring(properties[P_MARRIED]);
+   switch(h)
+   {
+	case "verwitwet":
+	    stra="  "+pp+"  Spieler"+
+		 (properties[P_GENDER]==FEMALE?"in":"")+
+		 " ist verwitwet";
+	    /*if(properties[P_GENDER] == MALE)
+	    { stra+= "r"; }*/
+	    break;
+
+	case "geschieden":
+	    stra="  "+pp+"  Ehe geschieden";
+	    break;
+
+	case "":
+	case 0:
+	    stra="  "+pp+"  Derzeit ohne Ehepartner";
+	    break;
+
+	default:
+	    stra="  "+pp+"  Verheiratet mit "+extract(capitalize(h),0,15);
+	    break;
+   }
+   if (SCHEIDUNGSMASTER->_finger_check(str))
+   {
+            stra="  "+pp+"  Derzeit in Scheidung";
+   }
+/*
+   stra=((h=properties[P_MARRIED]) ?
+     "  "+pp+"  Verheiratet mit: "+extract(capitalize(h),0,15)
+     )
+    :
+     "  "+pp+"  Derzeit ohne Ehepartner"
+    );
+*/
+    text+=sprintf("%-38s"+pp+"  ",stra);
+
+   if (previous_object() && previous_object()->QueryProp(P_NO_ASCII_ART))
+      text+="\n     ";
+    if (h=properties[P_DEADS])
+    {
+      stra="Bisher "+properties[P_DEADS]+" mal gestorben!";
+    }
+    else
+    {
+     stra="Bisher nicht gestorben!";
+    }
+    text+=sprintf("%-32s "+pp+"\n",stra);
+
+  if ( (h=properties[P_TESTPLAYER]) || ( h=properties[P_SECOND]))
+  {
+  if (h=properties[P_TESTPLAYER])
+  {
+    if (stringp(h))
+    {
+    stra="  "+pp+"  Testspieler"+
+          (properties[P_GENDER]==FEMALE ? "in" : "");
+    }
+    else
+    {
+    stra="  "+pp+"  "+capitalize(str)+" ist Testspieler"+
+          (properties[P_GENDER]==FEMALE ? "in" : "");
+    }
+    if (stringp(h)) stra+=" von "+h;
+  }
+  else
+  {
+   stra="  "+pp;
+  }
+
+  text+=sprintf("%-37s "+pp,stra);
+
+  if ( h=properties[P_SECOND])
+  {
+    if (stringp(h))
+    {
+    stra="  Zweitspieler"+
+          (properties[P_GENDER]==FEMALE ? "in" : "");
+    }
+    else
+    {
+    stra="  "+capitalize(str)+" ist Zweitspieler"+
+          (properties[P_GENDER]==FEMALE ? "in" : "");
+    }
+
+    if (intp(properties[P_SECOND_INVIS])) {
+        if(query_wiz_level(this_player())<properties[P_SECOND_INVIS]) {
+	   if (stringp(h)) stra+=" von UNBEKANNT";
+
+    } else
+
+      if (stringp(h)) stra+=" von "+h;
+    }
+  }
+
+  else
+  {
+   stra="";
+  }
+
+    text+=sprintf("%-34s "+pp+"\n",stra);
+  }
+
+  if (!previous_object() || !previous_object()->QueryProp(P_NO_ASCII_ART))
+    text+="  +-----------------------------------+-----------------------------------+\n";
+
+    if (wizlevel>=10)
+    {
+      stra="  "+pp+"  Magierlevel: "+wizlevel+" - "+
+                    wiz_level_name(wizlevel,properties[P_GENDER],str);
+      text+=sprintf("%-73s "+pp+"\n",stra);
+    }
+
+    if(userinfo && pointerp(userinfo))
+    {
+   (userinfo && pointerp(userinfo)
+     ? stra=sprintf("Datum des ersten Login: %s",
+       (userinfo[5] > 0 ? dtime(userinfo[5])
+                        : "vor dem 15. März 2000"))
+     : stra="");
+    text+=sprintf("  "+pp+"  %-68s "+pp+"\n",stra);
+     }
+
+  if (this_player()) {
+   if (( (properties[P_MAILADDR]!="none") &&
+         (properties[P_MAILADDR]!=0) &&
+         ((properties[P_MAILADDR_INVIS]==0) || IS_ARCH(this_player()) ||
+                                               (getuid(this_player())==str)) &&
+         (properties[P_MAILADDR]!="") ))
+   {
+   stra="";
+   if ( (properties[P_MAILADDR]!="none") &&
+         ((properties[P_MAILADDR_INVIS]==0) || IS_ARCH(this_player()) ||
+                                               (getuid(this_player())==str)) &&
+         (properties[P_MAILADDR]!=0) &&
+         (properties[P_MAILADDR]!="") )
+   {
+    stra="E-Mail-Adresse: "+properties[P_MAILADDR];
+
+   }
+
+    text+=sprintf("  "+pp+"  %-68s "+pp+"\n",stra);
+   }
+  }
+  if ( (properties[P_HOMEPAGE]!="none") &&
+       (properties[P_HOMEPAGE]!=0) &&
+       (properties[P_HOMEPAGE]!="") )
+  {
+    stra="Homepage: <a href='"+properties[P_HOMEPAGE]+"' target='_blank'>"+properties[P_HOMEPAGE]+"</a>";
+    // if (sizeof(stra)>67)
+    // {
+    //   stra=extract(stra,0,67);
+    // }
+    string spaces="";
+    for(int z=0;z<=68-sizeof("Homepage: "+properties[P_HOMEPAGE])-1;z++)
+      spaces+=" ";
+    text+=sprintf("  "+pp+"  %-s%s "+pp+"\n",stra,spaces);
+  }
+
+  if (properties[P_AWAY])
+  {
+    stra="AFK: "+properties[P_AWAY];
+    stra=extract(stra,0,67);
+    text+=sprintf("  "+pp+"  %-68s "+pp+"\n",stra);
+  }
+
+  if (/*wiz && */userinfo)
+  {
+    data=userinfo[3];
+    if (sizeof(data))
+    {
+        h=break_string(implode(map(data,#'capitalize/*'*/),", ")+".",44);
+        h=explode(h,"\n");
+        text+=  sprintf("  "+pp+"  %-68s "+pp+"\n","Regionsmagier von     : "+h[0]);
+        for(i=1;i<sizeof(h);i++)
+          text+=sprintf("  "+pp+"  %-68s "+pp+"\n","                        "+h[i]);
+    }
+    data="/secure/master"->get_domain_homes(str);
+    if (sizeof(data))
+    {
+        h=break_string(implode(map(data,#'capitalize/*'*/),", ")+".",44);
+        h=explode(h,"\n");
+        text+=  sprintf("  "+pp+"  %-68s "+pp+"\n","Regionsmitarbeiter von: "+h[0]);
+        for(i=1;i<sizeof(h);i++)
+          text+=sprintf("  "+pp+"  %-68s "+pp+"\n","                        "+h[i]);
+    }
+  }
+  filename="/players/"+str+"/.project";
+  if(file_size(filename)>=0)
+    {
+    stra="  "+pp+"  Projekt: "+explode(read_file(filename), "\n")[0];
+    stra=extract(stra,0,72);
+    text+=sprintf("%-73s "+pp+"\n",stra);
+    }
+  else
+  {
+    filename="/p/service/loco/save/plans/"+str+".project";
+    if(file_size(filename)>=0)
+    {
+      stra="  "+pp+"  Projekt: "+explode(read_file(filename), "\n")[0];
+      stra=extract(stra,0,72);
+      text+=sprintf("%-73s "+pp+"\n",stra);
+    }
+  }
+
+  if(properties[P_LOGON_PLACE] != 0)
+    text+=  sprintf("  "+pp+"  %-68s "+pp+"\n","Heimat: "+properties[P_LOGON_PLACE]);
+  else
+    text+=  sprintf("  "+pp+"  %-68s "+pp+"\n","Heimat: Unbekannt");
+
+  if(avatar)
+    text+=  sprintf("  "+pp+"  %-68s "+pp+"\n","Avatar-URI: "+properties[P_AVATAR_URI]);
+
+// BEGINN SPIELPAUSE
+  if (i=__MASTER_OBJECT__->QueryTBanished(str))
+  {
+    stra=capitalize(str)+" macht eine Spielpause bis ";
+    (i == -1 ? stra+="zum St. Nimmerleinstag." :
+        stra+=funcall(symbol_function('dtime),i)[0..16]+".");
+
+    text+=sprintf("  "+pp+"  %-68s "+pp+"\n",stra);
+  }
+
+// ENDE SPIELPAUSE
+
+    if (!previous_object() || !previous_object()->QueryProp(P_NO_ASCII_ART))
+      text += FOOTER;
+
+  if (!noplan)
+  {
+    filename="/players/"+str+"/.plan";
+    if(file_size(filename)>=0)
+      text+="</PRE><DIV style=\"display: inline-block; width: 78ch; text-align: left; white-space: pre-wrap;\">Plan:\n"+strip_ansi_color(read_file(filename))+"</DIV><PRE>";
+    else
+    {
+      filename="/p/service/loco/save/plans/"+str+".plan";
+      if(file_size(filename)>=0)
+	text+="</PRE><DIV style=\"display: inline-block; width: 78ch; text-align: left; white-space: pre-wrap;\">Plan:\n"+strip_ansi_color(read_file(filename))+"</DIV><PRE>";
+//    else
+//	text+="Keine .plan-Datei.\n";   // Wird net wirklich gebraucht... :)
+    }
+  }
+  properties=0;
+  if (!local)
+    return text;
+
+  if(interactive(this_player()))
+  {
+    this_player()->More(text);
+  }
+  //  write(text);
+
+//  tell_object(find_player("querolin"),break_string(":"+playername));
+  if (!playername) { return 1; }
+
+  if ( (find_player(lower_case(playername))) &&
+       (this_player()!=player) )
+  {
+   if (query_wiz_level(player)>=query_wiz_level(this_player()))
+   {
+    if (find_player(lower_case(this_player()->QueryProp(P_NAME))))
+    {
+      tell_object(player,break_string(
+              capitalize(this_player()->QueryProp(P_NAME)) + " informierte "
+               +"sich gerade über Dich.\n"));
+    }
+    else
+    {
+      tell_object(player,break_string("Jemand informierte sich gerade "
+            +"über Dich.\n"));
+    }
+   }
+  }
+
+  return 1;
+}

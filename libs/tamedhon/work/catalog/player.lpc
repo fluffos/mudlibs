@@ -1,0 +1,406 @@
+/*
+ * Catalog player for Tamedhon Strategy A (LDMud -> FluffOS).
+ * Login is /catalog/login; the body lands in /gilden/abenteurer.
+ */
+
+string name;
+string password;
+int hp;
+int max_hp;
+nosave int guest;
+
+int cmd_look(string arg);
+int cmd_read(string arg);
+int cmd_smell(string arg);
+int cmd_score(string arg);
+int cmd_inventory(string arg);
+int cmd_help(string arg);
+int cmd_go(string dir);
+int cmd_quit(string arg);
+
+void create() {
+  seteuid(getuid());
+  hp = 50;
+  max_hp = 50;
+}
+
+string query_name() { return name; }
+string query_password() { return password; }
+int query_hp() { return hp; }
+int query_mhp() { return max_hp; }
+int query_level() { return 1; }
+int query_guest() { return guest; }
+
+string save_path() {
+  if (guest || !name || name == "")
+    return 0;
+  return sprintf("/data/%c/%s", name[0], name);
+}
+
+void ensure_letter_dir() {
+  string d;
+
+  if (guest || !name)
+    return;
+  d = sprintf("/data/%c", name[0]);
+  if (file_size("/data") != -2)
+    mkdir("/data");
+  if (file_size(d) != -2)
+    mkdir(d);
+}
+
+int restore_me(string n) {
+  name = n;
+  guest = 0;
+  return restore_object(save_path());
+}
+
+void setup_new(string n, string pw) {
+  name = n;
+  password = pw;
+  hp = 50;
+  max_hp = 50;
+  guest = 0;
+}
+
+void setup_guest() {
+  name = "gast";
+  password = "";
+  hp = 50;
+  max_hp = 50;
+  guest = 1;
+}
+
+void save_me() {
+  string p;
+
+  p = save_path();
+  if (!p)
+    return;
+  ensure_letter_dir();
+  save_object(p);
+}
+
+void wire_commands() {
+  enable_commands();
+  add_action("cmd_look", "look");
+  add_action("cmd_look", "l");
+  add_action("cmd_look", "schau");
+  add_action("cmd_look", "untersuche");
+  add_action("cmd_look", "unt");
+  add_action("cmd_read", "lies");
+  add_action("cmd_read", "read");
+  add_action("cmd_smell", "riech");
+  add_action("cmd_smell", "rieche");
+  add_action("cmd_smell", "smell");
+  add_action("cmd_score", "score");
+  add_action("cmd_score", "sc");
+  add_action("cmd_score", "status");
+  add_action("cmd_inventory", "inventory");
+  add_action("cmd_inventory", "i");
+  add_action("cmd_help", "help");
+  add_action("cmd_help", "hilfe");
+  add_action("cmd_quit", "quit");
+  add_action("cmd_quit", "ende");
+}
+
+void enter_world() {
+  object dest;
+
+  set_living_name(name);
+  wire_commands();
+  dest = 0;
+  catch(dest = load_object("/gilden/abenteurer"));
+  if (dest)
+    efun::move_object(dest);
+  else
+    efun::move_object("/catalog/void");
+  write("\nWillkommen in Tamedhon, " + capitalize(name || "Gast") + "!\n");
+  write("Befehle: schau/look, unt <ding>, lies <ding>, rieche, norden/sueden/osten/westen,\n");
+  write("oben/unten/hinten/rechts, status/score, hilfe/help, ende/quit.\n\n");
+  command("look");
+  save_me();
+}
+
+int move_room(string path) {
+  object dest;
+
+  dest = 0;
+  catch(dest = load_object(path));
+  if (!dest) {
+    write("Dieser Ausgang fuehrt ins Nichts.\n");
+    return 1;
+  }
+  efun::move_object(dest);
+  cmd_look(0);
+  return 1;
+}
+
+mixed process_input(string str) {
+  object env;
+  string verb, rest;
+
+  if (!str)
+    return 0;
+  while (strlen(str) && (str[0] == ' ' || str[<1] == ' ')) {
+    if (str[0] == ' ')
+      str = str[1..];
+    else
+      str = str[0..<2];
+  }
+  if (str == "")
+    return 1;
+  if (sscanf(str, "%s %s", verb, rest) != 2) {
+    verb = str;
+    rest = 0;
+  }
+  verb = lower_case(verb);
+  switch (verb) {
+    case "look":
+    case "l":
+    case "schau":
+    case "untersuche":
+    case "unt":
+      cmd_look(rest);
+      return 1;
+    case "lies":
+    case "read":
+      cmd_read(rest);
+      return 1;
+    case "riech":
+    case "rieche":
+    case "smell":
+      cmd_smell(rest);
+      return 1;
+    case "score":
+    case "sc":
+    case "status":
+      cmd_score(rest);
+      return 1;
+    case "inventory":
+    case "i":
+      cmd_inventory(rest);
+      return 1;
+    case "help":
+    case "hilfe":
+      cmd_help(rest);
+      return 1;
+    case "quit":
+    case "ende":
+      cmd_quit(rest);
+      return 1;
+    case "north":
+    case "norden":
+    case "nord":
+    case "n":
+    case "south":
+    case "sueden":
+    case "sued":
+    case "s":
+    case "east":
+    case "osten":
+    case "ost":
+    case "o":
+    case "e":
+    case "west":
+    case "westen":
+    case "w":
+    case "up":
+    case "oben":
+    case "hinauf":
+    case "u":
+    case "down":
+    case "unten":
+    case "hinab":
+    case "d":
+    case "hinten":
+    case "rechts":
+    case "raus":
+      cmd_go(verb);
+      return 1;
+  }
+  env = environment();
+  if (env && function_exists("room_cmd", env)) {
+    if (env->room_cmd(verb, rest))
+      return 1;
+  }
+  return 0;
+}
+
+int cmd_look(string arg) {
+  object env, *inv;
+  string out, brief, item;
+  int i;
+
+  env = environment();
+  if (!env) {
+    write("Du schwebst im Nichts.\n");
+    return 1;
+  }
+  if (arg && sscanf(arg, "at %s", arg) == 1)
+    ;
+  if (arg && arg != "") {
+    arg = lower_case(arg);
+    if (function_exists("query_item", env)) {
+      item = env->query_item(arg);
+      if (stringp(item) && item != "") {
+        write(item);
+        if (item[<1] != '\n')
+          write("\n");
+        return 1;
+      }
+    }
+    write("So etwas Besonderes siehst Du hier nicht.\n");
+    return 1;
+  }
+  brief = env->query_short();
+  if (brief && brief != "")
+    write(brief + "\n");
+  out = env->query_long();
+  if (!out || out == "")
+    out = "Du siehst nichts Besonderes.";
+  write(out);
+  if (out[<1] != '\n')
+    write("\n");
+  if (function_exists("query_exit_string", env))
+    write(env->query_exit_string());
+  inv = all_inventory(env);
+  for (i = 0; i < sizeof(inv); i++) {
+    if (inv[i] != this_object() && inv[i]->query_name())
+      write(capitalize(inv[i]->query_name()) + " ist hier.\n");
+  }
+  return 1;
+}
+
+int cmd_read(string arg) {
+  object env;
+  string txt;
+
+  env = environment();
+  if (!env) {
+    write("Hier gibt es nichts zu lesen.\n");
+    return 1;
+  }
+  if (!arg || arg == "") {
+    write("Was moechtest Du lesen?\n");
+    return 1;
+  }
+  arg = lower_case(arg);
+  if (function_exists("query_read", env)) {
+    txt = env->query_read(arg);
+    if (stringp(txt) && txt != "") {
+      write(txt);
+      if (txt[<1] != '\n')
+        write("\n");
+      return 1;
+    }
+  }
+  write("Dort steht nichts Besonderes geschrieben.\n");
+  return 1;
+}
+
+int cmd_smell(string arg) {
+  object env;
+  string txt;
+
+  env = environment();
+  if (!env) {
+    write("Du riechst nichts.\n");
+    return 1;
+  }
+  if (arg)
+    arg = lower_case(arg);
+  else
+    arg = "default";
+  if (function_exists("query_smell", env)) {
+    txt = env->query_smell(arg);
+    if (stringp(txt) && txt != "") {
+      write(txt);
+      if (txt[<1] != '\n')
+        write("\n");
+      return 1;
+    }
+  }
+  write("Du riechst nichts Ungewoehnliches.\n");
+  return 1;
+}
+
+int cmd_score(string arg) {
+  write(capitalize(name || "jemand") + " (Stufe " + query_level() + (guest ? ", Gast" : "") + ")\n");
+  write("LP: " + hp + "/" + max_hp + "\n");
+  return 1;
+}
+
+int cmd_inventory(string arg) {
+  object *inv;
+  string brief;
+  int i, n;
+
+  inv = all_inventory(this_object());
+  n = sizeof(inv);
+  if (!n) {
+    write("Du traegst nichts bei Dir.\n");
+    return 1;
+  }
+  write("Du traegst bei Dir:\n");
+  for (i = 0; i < n; i++) {
+    brief = inv[i]->query_short();
+    if (!brief || brief == "")
+      brief = inv[i]->query_name();
+    if (brief && brief != "")
+      write("  " + brief + "\n");
+  }
+  return 1;
+}
+
+int cmd_help(string arg) {
+  write("Tamedhon (FluffOS-Portierung der Open-Source-Mudlib):\n");
+  write("  schau / look              - Raum betrachten\n");
+  write("  unt / look at <objekt>    - Details ansehen\n");
+  write("  lies / read <objekt>      - Schild/Wegweiser/Liste lesen\n");
+  write("  rieche [<objekt>]         - Gerueche wahrnehmen\n");
+  write("  n, s, o, w, oben, unten   - Richtungsbewegung (auch norden, hinten, rechts)\n");
+  write("  status / score / i        - Charakterstatus / Inventar\n");
+  write("  ende / quit               - Speichern und verlassen\n");
+  return 1;
+}
+
+int cmd_go(string dir) {
+  object env, dest;
+  string path;
+
+  if (!dir)
+    dir = query_verb();
+  env = environment();
+  if (!env) {
+    write("Du schwebst im Nichts.\n");
+    return 1;
+  }
+  if (function_exists("query_exit", env))
+    path = env->query_exit(dir);
+  else
+    path = 0;
+  if (!path) {
+    write("In diese Richtung geht es nicht.\n");
+    return 1;
+  }
+  dest = 0;
+  catch(dest = load_object(path));
+  if (!dest) {
+    write("Dieser Ausgang ist nicht erreichbar (" + path + ").\n");
+    return 1;
+  }
+  efun::move_object(dest);
+  cmd_look(0);
+  return 1;
+}
+
+int cmd_quit(string arg) {
+  if (!guest)
+    write("Speichere " + capitalize(name || "jemand") + ".\n");
+  else
+    write("Auf Wiedersehen, Gast!\n");
+  save_me();
+  destruct(this_object());
+  return 1;
+}

@@ -20,7 +20,7 @@ Decisions below are verified in-tree; human must close/comment on GitHub.
 | 28 | Heaven7 | **Onboarded & closed** `libs/heaven7/` (192, port 40397) | Boot + register(`hero`) → Tempus square/Town Hall/gardens + WASM `wasm_client.js` + `lpcc --batch` 472/472 (0 warnings, 0 errors). `NOTES.md`. |
 | 22 | NannyMUD lib | **Onboarded & closed** `libs/nanny/` (193, port 40398) | `nannylib.tgz` (1996-03-29) converted; `lpcc --batch` 544/544 viable files (0 warnings, 0 errors); native (`guest` + `testera`) & WASM (`testerw`) tested through village/church/guild/shop/Harry; banner stamped. `NOTES.md`. |
 | 23 | Silberland | **Defer (LDMud/German)** | URL reachable (codeberg); LDMud family. |
-| 24 | Tamedhon | **Defer (LDMud)** | codeberg td-mudlib; open-source part only. |
+| 24 | Tamedhon | **Onboarded & closed** `libs/tamedhon/` (194, port 40399) | `td-mudlib` (GPLv3 open-source release) converted; Strategy A FluffOS catalog + authentic `/gilden/abenteurer` + `/room/{kreuzung,lehrlingsbude,mkz,jail,void,debug,lagerraum}` + `/players/gott/workroom`; `lpcc --batch` 14/14 active files (0 warnings, 0 errors); native & WASM (`testerw`) verified; `WELCOME.localhost` banner stamped. `NOTES.md`. |
 | 26 | UNItopia | **Defer (LDMud)** | Wayback mudlib.tar.gz verified in issue comment (516 `.c`). |
 | 13 | Older Dead Souls point releases | **Defer / optional snapshots** | Museum already has dsI/II/III/ds386 stack (006*). Extra point releases are provenance-nice, not required for playable coverage. Wayback links in issue. |
 

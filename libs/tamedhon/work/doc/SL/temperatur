@@ -1,0 +1,146 @@
+
+Das Temperatursystem im Tamedhon
+===========================================================================
+                                                    Autor: Woody@Silberland
+                                            ursprgl. Idee: Mupfel@Anderland
+
+Involvierte Objekte:
+--------------------
+
+        - Spielerobjekt
+        - Raum (Environment des Spielers)
+        - getragene Ruestungen des Spielers
+
+
+Grundlagen:
+-----------
+
+Jeder Raum hat eine Temperatur definiert -  die zustaendige Property ist
+P_ENVIRONMENT, ein Mapping,  deren Key  ENV_TEMPERATURE  die  Temperatur
+definiert (weitere Keys sind u.a. ENV_TERRAIN, ENV_FLAGS, etc). Default-
+Temperatur fuer Raeume, die keine definieren, ist im Moment 15.
+
+Jede Rasse hat eine 'Temperaturbereich'  (P_TEMPERATURE_RANGE, Mapping),
+in dem sie gut leben kann. Fuer die bisherigen Rassen ist dieser Bereich
+relativ gleich (10-30 Grad, Hobbits: 8-28 Grad).  Wird dieser Bereich in
+einem Raum unter- oder ueberschritten, so heilt der Spieler  dort  lang-
+samer; wird der Bereich weit unter- oder ueberschritten, so kann das dem
+Spieler Schaden zufuegen, der bis zum Tod fuehren kann.
+
+Ruestungsteile koennen gegen  Hitze  und/oder  Kaelte  schuetzen;  jedem
+Ruestungsteil  kann  ein  'Schutzwert'  (P_TEMPERATURE_PROTECTION,   ein
+Mapping, das  T_COLD_PROT  und  T_HEAT_PROT  beinhaltet,  also  zwischen
+Kaelte- und Hitzeschutz unterscheidet)  zugewiesen werden,  der den Tem-
+peraturbereich des Spielers manipuliert.   Negative  Schutzwerte  bieten
+demgemaess also auch gegenteilige Wirkung,   unter einem Helm mit Hitze-
+schutz -2 wird man also etwas frueher  zu schwitzen  beginnen  als  ganz
+ohne.  Der solcherart manipulierte Temperaturbereich wird dann  mit  der
+Temperatur des Raumes verglichen - allerdings nicht staendig sondern nur
+alle paar Heartbeats  -  man muss sich an neue Temperaturen schliesslich
+auch erst mal gewoehnen.
+
+Defaultwerte fuer Ruestungstypen:
+
+                                    T_COLD_PROT     T_HEAT_PROT
+    Panzer                               +4              -3
+    Umhang                               +4              -1
+    Helm (auch Schutz vor Sonne)         +2              +1
+    Hose                                 +3              -1
+    Schuhe                               +2               0
+    Handschuhe                           +2              -1
+    Armschienen                          +1               0
+    Schild auch eine Art Sonnenschirm)    0              +3
+    Guertel, Ring, Amulett                0               0
+
+Die Summe wird aehnlich P_TOTAL_AC bei jedem An-  oder  Ausziehen  eines
+Ruestungsteils neu berechnet (P_TOTAL_TEMPERATURE_PROTECTION).
+
+Beispiel:
+
+    Aussentemperatur:  0 Grad
+    Wohlfuehlbereich:  10..30 Grad
+    Ruestungsschutz:   Panzer +4/-3, Helm +2/+1, Hose +2/-1, Schuhe +2/0
+    Summe:             +10/-2
+    neuer Bereich:     0..28 Grad
+
+    -> Spieler hat noch keine Nachteile.
+
+
+Offsets:
+--------
+
+Um etwas mehr Variation ins Spiel zu bringen, gibt es auch die Moeglich-
+keit, Offsets sowohl im Raum als auch im Spieler zu setzen - diese soll-
+ten kurzzeitlicher Natur sein, vorstellbar  waere  dies  in  Form  eines
+Getraenks oder Spells. Diese Offset-Werte (P_TEMPERATURE_OFFSET)  werden
+auf die Aussentemperatur aufaddiert, die Zeitlichkeit  kann  z.B.  durch
+den TmpPropMaster (/obj/tmp_prop_master) erreicht werden,  dieser sollte
+zu diesem Zwecke allerdings erstmal geaendert werden, um  auch  zeitlich
+ueberschneidende Aenderungen ohne Nebenwirkungen zu ermoeglichen.
+
+Beispiel:
+
+Ein Monster benutzt einen Kaeltespell, der beim Spieler einen Offset von
+-10 Grad fuer 2 Minuten erreicht.  Der Spieler kann  nun  zur  naechsten
+Kneipe rennen und da ein Waermegetraenk zu sich nehmen,   das  ihn  fuer
+eine Minute um 9 Grad erwaermt (wenn er noch so weit kommt :-).
+
+(Das Monster koennte auch den  TmpPropMaster  benutzen,   um  die  Raum-
+temperatur fuer 2 Minuten um 10 Grad zu senken;  dann reicht es fuer den
+Spieler, den Raum zu verlassen.)
+
+   konkreter:
+
+     Gluehwein. In der Kneipe:
+     erhoeht den Offset von this_player() fuer 180 Sekunden um 7 Grad.
+
+     call_other("/obj/tmp_prop_master", "SetTmpProp", this_player(),
+                P_TEMPERATURE_OFFSET,
+                this_player()->QueryProp(P_TEMPERATURE_OFFSET)+7,
+                180)
+
+
+Berechnung:
+-----------
+
+Da man sich an geaenderte Temperaturen nicht beliebig schnell  gewoehnt,
+wird die Aussentemperatur nur alle 10 Sek. (in jedem 5. HB, frisst  auch
+weniger Rechenzeit),  und  wenn  Ruestungsteile  an-/ausgezogen  werden,
+ermittelt.  P_TEMPERATURE_RANGE ist fest und  als  Variable  im  Spieler
+gespeichert.  Bei jedem  An-/Ausziehen  von  Ruestungsteilen  wird  also
+'tot_prot' = SUMME(prot(Ruestungsteil)) ermittelt.
+
+Der Wert 'temp + offsets' wird dann mit  'range + tot_prot'  verglichen.
+Wenn der Wert innerhalb dieses Bereichs liegt, passiert  nichts  weiter.
+Ist er kleiner als range[0], so wird er von range[0] abgezogen,  ist  er
+groesser als range[1], so wird range[1] vom ihm abgezogen;  das Ergebnis
+steuert das 'Wohlbefinden' des Spielers:
+
+Differenz <  5 : Heilungsrate halbiert sich
+Differenz < 10 : keine Heilung mehr
+sonst          : Schaden wie bei POISON = Differenz / 4 o.ae.
+
+Der Spieler erhaelt natuerlich Meldungen, wie 'Dir ist kalt'  oder  'Die
+Hitze macht Dich total fertig' oder so.
+
+Abkuerzungen:
+
+  temp      ENV_TEMPERATURE
+  range     P_TEMPERATURE_RANGE
+  offsets   P_TEMPERATURE_OFFSET (im Raum und im Spieler)
+  prot      P_TEMPERATURE_PROTECTION
+  tot_prot  P_TOTAL_TEMPERATURE_PROTECTION
+
+
+Defines:
+--------
+
+#define P_TEMPERATURE_RANGE            "temp_range"
+#define P_TEMPERATURE_OFFSET           "temp_offset"
+#define P_TEMPERATURE_PROTECTION       "temp_protect"
+#define P_TOTAL_TEMPERATURE_PROTECTION "tot_protect"
+#define T_RANGE_MIN 0
+#define T_RANGE_MAX 1
+#define T_COLD_PROT 0
+#define T_HEAT_PROT 1
+
