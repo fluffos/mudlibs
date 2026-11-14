@@ -815,3 +815,6 @@ PID.
 
 `obj/water` `inherit F_DRINK`，但 `globals.h` 只有 `F_FOOD`、没有 `/feature/drink.lpc`。从 dfgs2 领养 drink（`query_stat`/`supplement_stat` 与本库 ES2 一致），并补 `#define F_DRINK`。证明：drink + water HEAD FAIL → PASS。
 
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40059。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。

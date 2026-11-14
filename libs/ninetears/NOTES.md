@@ -1032,3 +1032,7 @@ oldsys 锁甲继承 `/obj/armor`，本体是 `/obj/armour`。薄别名。证明�
 ## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
 
 同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40241。西语注册进入 `Plano Inmaterial`，`look`/`score`/`i`/`quit` 正常，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。

@@ -503,3 +503,7 @@ A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whos
 ## 深度功能测试（2026-11-04，madrid obj/guild 薄别名 §6.15）
 
 `world/cult/rooms/wiz101` 继承 `/home/madrid/obj/guild`，正文在 `/inherit/guild`。薄别名。证明：HEAD 1 PASS / 1 FAIL；树 2 PASS（wiz101 仍另有加载失败，与缺失继承无关）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40252。进入游戏提示符 `> `，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。

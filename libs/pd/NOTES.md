@@ -610,3 +610,6 @@ fresh driver boot plus the full long-sit idle window below.
 
 `OLD_SPELL`（`/std/bak/spell`）路径上曾是 `spell.daos`（注释写明 new spell daemon），与 `cmds/oldskills` / `venenum` 所需的 Seeker API（`set_min_mp`、`set_class`、`set_skills`…）不一致；该 API 在 `/std/bak1/spell`。在 `std/bak/spell.lpc` 做薄别名指向 bak1。另：`inherit "/std/Object"` 大小写路径本库只有 `object.lpc`，加 `std/Object.lpc` 薄别名。证明：`lpc_listcheck` 对 bak/spell + 6 个 OLD_SPELL 继承者 HEAD 0 PASS → 树 7 PASS；Object 别名 PASS；`philosop/_cmd` 的 `query_auto_load` 返回类型与 `/std/object` 不一致另案。
 
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40254。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。

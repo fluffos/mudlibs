@@ -1372,3 +1372,7 @@ The archive's `strlen()` counts bytes (a Chinese character is two), this driver'
 ## §7.349 死 `add_action` 残留（2026-11-10）
 
 `clone/npc/huolang.lpc` 注册 `do_buy`/`do_list`，本文件与继承链无此函数；各地 `guanchai` 注册 `do_ok` 同。`lpc_fix_dead_add_action.py` 删除整行注册。对象本身另有无关语法错误（HEAD/tree 同）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，port 40008。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。
