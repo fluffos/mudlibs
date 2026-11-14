@@ -1,0 +1,319 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /room/rathaus/kontor.c
+// Description: Lagerverwaltung der Gemischtwarenlaeden.
+// Author:      Garthan (27.02.96)
+//
+// $Log: kontor.c,v $
+// Revision 1.9  2008/02/29 14:34:39  gnomi
+// Static add_actions rausgehauen.
+//
+// Revision 1.8  2002/09/09 20:31:24  sissi
+// Aktion unser Rathaus soll schoener werden:
+// Ueberall ne Pflanze eingebaut.
+//
+// Revision 1.7  2001/04/07 00:23:55  gnomi
+// Header und/oder CVS-Log eingebaut.
+//
+
+#include <apps.h>
+#include <level.h>
+#include <more.h>
+#include <move.h>
+
+inherit "/i/room";
+inherit "/i/tools/security";
+
+object *stores, *import_stores;
+
+int query_prevent_shadow(object ob) { return 1; }
+
+void reset()
+{
+   stores = import_stores = 0;
+   "/room/rathaus/div/lager"->get_moebel(this_object());
+   "/room/rathaus/div/lager"->get_pflanze(this_object());
+}
+
+void create()
+{
+   init_security_for_actions();
+   set_short("Im Kontor");
+   add_type("kunstlicht", 1);
+   add_type("teleport_rein_verboten", 1);
+   add_type("nocleanup", 1);
+   set_own_light(1);
+   set_short("Im Buero des Gemischtwarenkontors");
+   set_long("Das Buero des Gemischtwarenkontors.\n"
+            "Hier laufen alle Informationen ueber die ueber die ganze Welt "
+	    "verteilten\nGemischtwarenlaeden zusammen.\n"
+	    "   Kommandos: liste          Zeigt alle Lager an.\n"
+	    "              clean <nr>     Leert das Lager mit Nummer <nr>\n"
+	    "              clean all      Leert alle Lager!\n"
+	    "              idlist <id>    Listet Objekte mit ID <id>\n"
+	    "              adjlist <adj>  Listet Objekte mit Adjektiv <adj>\n"
+	    "              idclean <id>   "
+	            "Entfernt alle Objekte mit ID <id> in allen Lagern\n"
+	    "              adjclean <adj> "
+	            "Enfernt alle Obj. mit Adj. <adj> in allen Lagern\n"
+	    "              goto <nr>      Bringt Dich in das angegebene Lager\n"
+	    "              bilanz         Handelsbilanz der letzen Tage\n"
+	    );
+
+   set_exit("forum", "forum");
+   set_room_domain("Pantheon");
+   reset();
+}
+
+void update()
+{
+   stores = sort_array(STORE_MASTER->query_stores(),
+      lambda(({'a,'b}),({#'>,({#'object_name, 'a}),({#'object_name, 'b})})));
+   import_stores = STORE_MASTER->query_import_stores();
+}
+
+
+void init()
+{
+   if(wizp(this_player()))
+   {
+      add_action("list", "liste", -4);
+      add_action("clean", "clean");
+      add_action("idclean", "idclean");
+      add_action("idlist", "idlist");
+      add_action("adjclean", "adjclean");
+      add_action("adjlist", "adjlist");
+      add_action("goto", "goto");
+      add_action("goto", "zgehzu");
+      add_action("show_bilanz", "bilanz");
+      update();
+   }
+}
+
+int list(string str)
+{
+   int i, anz, sum;
+   string *res;
+
+   update();
+   res = ({"Nr Objs I i Name",
+           "-- ---- - - ------------------------------------"});
+   for(i = 0; i < sizeof(stores); i++)
+   {
+      anz = sizeof(all_inventory(stores[i]));
+      sum += anz;
+      res += ({ sprintf("%2d %4d %s %s %s",
+	       i+1,
+               anz,
+	       stores[i]->want_import() ? " " : ".",
+	       stores[i]->query_import() ? " " : ".",
+	       object_name(stores[i])
+	       ) });
+   }
+   res += ({ sprintf("-- %4d - - ------------------------------------", sum) });
+   this_player()->more(res, 0,0,M_AUTO_END);
+   return 1;
+}
+
+private int get_nr(string str, string err)
+{
+   int nr;
+
+   if(!str)
+   {
+      notify_fail(err);
+      return -1;
+   }
+   if(!stores || !import_stores)
+   {
+      notify_fail("Du solltest Dir erst mal die Liste ansehen\n");
+      return -1;
+   }
+   if(!sscanf(str, "%d", nr) || nr <= 0 || nr > sizeof(stores))
+   {
+      notify_fail("Ein Lager mit dieser Nummer gibt es nicht.\n");
+      return -1;
+   }
+   nr--;
+   if(!stores[nr])
+   {
+      notify_fail("Das Lager mit dieser Nummer ist zerstoert worden.\n");
+      return -1;
+   }
+   return nr;
+}
+
+private int secure()
+{
+   if(!lordp(this_player()) || !check_security())
+   {
+      notify_fail("Du darfst das leider nicht.\n");
+      return 0;
+   }
+   return 1;
+}
+
+int clean(string str)
+{
+   int nr;
+   string name;
+
+   if(!secure())
+      return 0;
+   if(str == "all")
+   {
+      update();
+      for(nr = 0; nr < sizeof(stores); nr++)
+      {
+	 name = object_name(stores[nr]);
+	 stores[nr]->remove();
+	 touch(name);
+      }
+      return 1;
+   }
+   if((nr = get_nr(str, query_verb()+" <ladennr>|all\n")) < 0)
+      return 0;
+   name = object_name(stores[nr]);
+   stores[nr]->remove();
+   touch(name);
+   return 1;
+}
+
+int idclean(string str)
+{
+   int nr, i, anz;
+   object *obs;
+
+   if(!secure())
+      return 0;
+   if(!str)
+   {
+      notify_fail(query_verb()+" <id>\n");
+      return 0;
+   }
+   update();
+
+   for(nr = sizeof(stores); nr--;)
+      for(i = sizeof(obs = all_inventory(stores[nr])); i--;)
+         if(obs[i]->id(str) && !living(obs[i]))
+	 {
+	    obs[i]->remove();
+	    anz++;
+	 }
+   write(anz+" Objekt"+(anz == 1? "":"e")+" removed.\n");
+   return 1;
+}
+
+int idlist(string str)
+{
+   int nr, i, anz;
+   object *obs;
+   string *res;
+
+   if(!str)
+   {
+      notify_fail(query_verb()+" <id>\n");
+      return 0;
+   }
+   update();
+
+   for(res = ({}), nr = 0; nr < sizeof(stores); nr++)
+      for(i = sizeof(obs = all_inventory(stores[nr])); i--;)
+         if(obs[i]->id(str) && !living(obs[i]))
+	 {
+	    res += ({ sprintf("%3d %s(%s)",
+			 nr+1,
+			 object_name(obs[i]), 
+			 obs[i]->query_short()) });
+	    anz++;
+	 }
+   this_player()->more(res+({ anz+" Objekt"+(anz == 1? "":"e")+" gefunden." })
+               ,0,0,M_AUTO_END);
+   return 1;
+}
+
+int adjclean(string str)
+{
+   int nr, i, anz;
+   object *obs;
+
+   if(!secure())
+      return 0;
+   if(!str)
+   {
+      notify_fail(query_verb()+" <id>\n");
+      return 0;
+   }
+   update();
+
+   for(nr = sizeof(stores); nr--;)
+      for(i = sizeof(obs = all_inventory(stores[nr])); i--;)
+         if(obs[i]->adjektiv(str) && !living(obs[i]))
+	 {
+	    obs[i]->remove();
+	    anz++;
+	 }
+   write(anz+" Objekt"+(anz == 1? "":"e")+" removed.\n");
+   return 1;
+}
+
+int adjlist(string str)
+{
+   int nr, i, anz;
+   object *obs;
+   string *res;
+
+   if(!str)
+   {
+      notify_fail(query_verb()+" <id>\n");
+      return 0;
+   }
+   update();
+
+   for(res = ({}), nr = 0; nr < sizeof(stores); nr++)
+      for(i = sizeof(obs = all_inventory(stores[nr])); i--;)
+         if(obs[i]->adjektiv(str) && !living(obs[i]))
+	 {
+	    res += ({ sprintf("%3d %s(%s)",
+			 nr+1,
+			 object_name(obs[i]), 
+			 obs[i]->query_short()) });
+	    anz++;
+	 }
+   this_player()->more(res+({ anz+" Objekt"+(anz == 1? "":"e")+" gefunden." })
+               ,0,0,M_AUTO_END);
+   return 1;
+}
+
+int goto(string str)
+{
+   int nr;
+
+   if((nr = get_nr(str, query_verb()+" <ladennr>\n")) < 0)
+      return 0;
+   this_player()->move(stores[nr],MOVE_MAGIC);
+   return 1;
+}
+
+mapping bilanz = ([]);
+int stamp = time();
+int today = 0;
+
+void umsatz(int value)
+{
+   if(time() >= stamp+86400)
+   {
+      stamp = time();
+      today++;
+   }
+   bilanz[today] += value;
+}
+
+int show_bilanz()
+{
+   int i, *idxs;
+
+   for(i = sizeof(idxs = sort_array(m_indices(bilanz), #'<)); i--;)
+      write(sprintf("%02d %d\n", idxs[i], bilanz[idxs[i]]));
+   return 1;
+}

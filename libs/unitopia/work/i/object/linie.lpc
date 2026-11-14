@@ -1,0 +1,329 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/object/linie.c
+// Description:
+// $Log: linie.c,v $
+// Revision 1.13  2011-06-19 21:08:14  sorcerer
+// nur nach /room/void, wenn !ENV
+//
+// Revision 1.12  2008/01/24 22:49:30  gnomi
+// Typo.
+//
+// Revision 1.11  2008/01/16 09:18:32  gnomi
+// query_driving und query_waiting eingebaut.
+//
+// Revision 1.10  2007/12/05 10:54:35  gnomi
+// reset() eingebaut, der ggf. die Linie neu startet.
+//
+// Revision 1.9  2006/01/22 18:50:45  gnomi
+// Typo in Doku.
+//
+// Revision 1.8  2005/01/05 21:52:04  gnomi
+// Typo.
+//
+// Revision 1.7  2004/02/19 21:39:48  gnomi
+// Typo.
+//
+// Revision 1.6  2001/06/25 18:47:23  gnomi
+// query-Funktionen eingebaut.
+//
+// Revision 1.5  2001/06/25 11:48:23  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.4  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+ * /i/object/linie.c
+ *
+ * Dieser Inherit-File ist fuer Objekte gedacht, die vorbestimmte feste Kurse
+ * abfahren. Fuer von Spielern frei zu bewegende Objekte sind /i/object/vehikel
+ * oder /i/schiff/schiff vorgesehen.
+ *
+ *   Mit
+ *          void set_stationen(string *stations)
+ *
+ *   gibt man die Filenamen der einzelnen Stationen an, die abgefahren werden
+ *   sollen. Nach der letzten Station wird wieder automatisch die erste
+ *   angefahren. Will man keinen Kreisverkehr, so kann man
+ *   zB folgendes machen:
+ *
+ *               set_stationen(({  "Station1",
+ *                                 "Station2",
+ *                                 "Station3",
+ *                                 "Station2" }));
+ *
+ *   Mit 
+ *          void set_aufenthalte(int *zeiten)
+ *
+ *   kann man die Aufenthaltsdauer in den einzelnen Stationen setzen.
+ *   Diese Angaben werden aber nur dann verwendet, wenn die Routine
+ *   int arrive_action() Null zurueckliefert, ansonsten werden deren Werte
+ *   benutzt (Siehe weiter unten).
+ *
+ *   Mit
+ *          void set_enter_room(string room)
+ *
+ *   gibt man den Raum an, in den ein Spieler versetzt wird, wenn er
+ *   die Linie betreten will. Folgende Kommandos sind von der Linie
+ *   gesetzt:
+ *                          enter,1          (entern von schiffen)
+ *                          steig,1
+ *                             steig in      (in S-Bahnen einsteigen)
+ *                             steig auf     (Tiere ??)
+ *                          betrete          (allgemein)
+ *
+ *   Mit
+ *           void set_passenger_enter_messages(string out, string in)
+ *           void set_passenger_leave_messages(string out, string in)
+ *
+ *   gibt man die Move-Meldungen an, die ausgegeben werden sollen, wenn
+ *   ein Spieler die Linie betritt oder verlaesst.
+ *
+ *   Die Bewegung des Spielers kann man auch selbst uebernehmen, hierzu
+ *   muss man ein Routine
+ *                           int passenger_enter_action()
+ *                 oder      int passenger_leave_action()
+ *
+ *   selbst programmieren. Liefert sie 1 zurueck macht die Linie keinen
+ *   eigenen Move. Man kann in diesen Routinen auch nur testen, ob der
+ *   Spieler rein oder raus darf und entsprechende Meldungen ausgeben.
+ *   Beispiel:
+ *                      int passenger_enter_action() {
+ *                          if (this_player()->query_name() == "detlef") {
+ *                             write("Du nicht!\n");
+ *                             return 1;
+ *                             }
+ *                          return 0;
+ *                      }
+ *
+ *   Mit
+ *                 void starte()
+ *
+ *   wir die Linie schliesslich gestartet.
+ *
+ *   Um eine Startverzoegerung zu erzielen, zB um bei S-Bahnen die Meldung
+ *   "Bitte zurueckbleiben" auszugeben, oder um in der naechsten Station
+ *   die Ankunft anzukuendigen, zB "Die hoerst ein leises Rauschen" oder
+ *   "Bitte Vorsicht an Gleis 2, Zug faehrt ein",
+ *   kann man eine eigene Routine:
+ *
+ *                     int announce_leave_action()
+ *
+ *   schreiben. Ihr Rueckgabe-Wert wird als Zeitverzoegerung in Sekunden
+ *   benutzt.
+ *
+ *   Nach dieser Zeit wird vor dem Verlassen des Raumes noch die Routine:
+ *
+ *                         void leave_action()
+ *
+ *   aufgerufen, soweit sie einprogrammiert wurde. In ihr kann man noch
+ *   Zusatz-Meldungen ausbringen, zB "Die Tueren schliessen sich" oder
+ *   "Die Leinen loesen sich" etc ausgeben.
+ *
+ *   Danach wird der Positions-Zaehler aufaddiert und der eigentliche move
+ *   ausgefuehrt.
+ *
+ *   Schliesslich wird noch, wenn vorhanden, die Routine:
+ *
+ *                    int arrive_action()
+ *
+ *   aufgerufen. Sie ist zB fuer Meldungen "Die Tueren oeffnen sich" o.ae.
+ *   gedacht. Ihr Rueckgabewert wird, wenn > 0, als Wartezeit bis zur
+ *   Ankuendigung der naechsten Abfahrt genommen.
+ *
+ *   In den .._action() - Routinen kann man folgendes gut gebrauchen:
+ *
+ *            query_stationen() liefert das Stations-Feld zurueck...
+ *
+ *            query_position() gibt die aktuelle Position der Linie zurueck,
+ *                              (  0  bis  sizeof(query_stationen())-1 )
+ *
+ *            query_next_position() die naechste Station. 
+ *
+ *            Einen Objekt-Pointer auf die aktuelle Station bekommt man durch
+ *            environment().
+ *
+ *            Den Filenamen der aktuellen Station bekommt man mit
+ *            object_name(environment()) 
+ *
+ *            den der naechsten Station mit
+ *            query_stationen()[query_next_position()]          :-)
+ *   
+ *            Einen Objekt-Pointer der naechsten Station bekommt man mit:
+ *            touch(query_stationen()[query_next_position()])
+ *
+ *            Den Filenamen des Innenraumes der Linie:
+ *            query_enter_room()
+ *
+ *            Einen Objekt-Pointer drauf:
+ *            touch(query_enter_room())
+ *
+ *   /d/Campus/aeneas/linie1.c           und
+ *   /d/Kokosinsel/aeneas/ballon1.c      sind zwei Beispielanwendungen.
+ *
+ */
+#pragma save_types
+
+#include <move.h>
+
+inherit "/i/item";
+inherit "/i/move";
+inherit "/i/tools/move_msg";
+
+private string *stationen;
+private int *aufenthalte;
+private int position;
+private string enter_room;
+private string passenger_enter_out, passenger_enter_in;
+private string passenger_leave_out, passenger_leave_in;
+
+void create() {
+    seteuid(getuid());
+    set_id( ({ "linie","bahn" }) );
+    set_gender("weiblich");
+    set_long("Du siehst nichts Besonderes.\n");
+    set_name("bahn");
+    set_msg_in("$Ein() naehert sich $dir().");
+    set_msg_out("$Der() entfernt sich $dir().");
+    set_mmsg_in("$Ein() erscheint in einem Lichtblitz.");
+    set_mmsg_out("$Der() verschwindet in einem Lichtblitz.");
+    set_weight(10000);
+}
+
+void init() {
+    add_action("passenger_enter","entere",-5);
+    add_action("passenger_enter","steige",-5);
+    add_action("passenger_enter","betrete");
+}
+
+int passenger_enter(string str) {
+	string obj;
+
+    if (!enter_room) {
+	notify_fail("Da gehts leider nicht weiter.\n");
+	return 0;
+	}
+    if (!str) {
+	notify_fail(capitalize(query_verb())+" was?\n");
+	return 0;
+	}
+    if (!sscanf(str,"in %s",obj) && !sscanf(str,"auf %s",obj))
+	obj = str;
+
+    if (!me(obj)) {
+        notify_fail(query_verb()[0..4] == "steig"?
+		capitalize(query_verb())+" worein oder worauf?\n":
+		capitalize(query_verb())+" was?\n");
+	return 0;
+	}
+
+    if (!this_object()->passenger_enter_action())
+	this_player()->move(enter_room,MOVE_NORMAL,passenger_enter_out,passenger_enter_in);
+    return 1;
+}
+
+int passenger_leave(string str) {
+    if (!environment()) {
+	notify_fail("Da geht's nicht weiter.\n");
+	return 0;
+	}
+    if (!this_object()->passenger_leave_action())
+	this_player()->move(environment(),MOVE_NORMAL,passenger_leave_out,passenger_leave_in);
+    return 1;
+}
+
+void set_enter_room(string str) { enter_room = str; }    
+string query_enter_room() { return enter_room; }    
+
+void set_passenger_enter_messages(string m_out, string m_in) {
+    passenger_enter_out = m_out;
+    passenger_enter_in = m_in;
+}
+
+string query_passenger_enter_out_message() { return passenger_enter_out; }
+string query_passenger_enter_in_message() { return passenger_enter_in; }
+
+void set_passenger_leave_messages(string m_out, string m_in) {
+    passenger_leave_out = m_out;
+    passenger_leave_in = m_in;
+}
+
+string query_passenger_leave_out_message() { return passenger_leave_out; }
+string query_passenger_leave_in_message() { return passenger_leave_in; }
+
+void set_stationen(string *strs) { stationen = strs; }
+string *query_stationen() { return stationen; }
+
+void set_aufenthalte(int *zeiten) { aufenthalte = zeiten; }
+int *query_aufenthalte() { return aufenthalte; }
+
+int query_position() { return position; }
+
+int query_next_position() {
+    return (position+1) % sizeof(stationen);
+}
+
+int query_driving() { return find_call_out("fahre")>=0; }
+int query_waiting() { return find_call_out("kuendige_verlasse_an")>=0; }
+
+void starte() {
+    if (!stationen || sizeof(stationen) <= 0) {
+	write(query_cap_name()+" hat keine Stationen.\n");
+	return;
+	}
+    if (aufenthalte && sizeof(stationen) != sizeof(aufenthalte)) {
+	write("Falsche Deklaration der Stationen oder Aufenthaltszeiten von "+query_cap_name()+".\n");
+	return;
+	}
+    if (!environment())
+        move("/room/void");  /* Damit environment() != 0 */
+    call_out("kuendige_verlasse_an",1);
+}
+
+void fahre() {
+	int warten;
+
+    if (find_call_out("fahre") >= 0)
+	return;
+
+    this_object()->leave_action();
+
+    position = query_next_position();
+
+    if (move(stationen[position],MOVE_NORMAL) != MOVE_OK) {
+	if (environment())
+	    write(Der()+" meldet Fehler beim Fahren von "+
+		  object_name(environment())+" nach "+stationen[position]+".\n");
+	else
+	    write(Der()+" meldet Fehler beim Fahren nach "+stationen[position]+".\n");
+	return;
+	}
+
+    warten = (int)this_object()->arrive_action();
+    if (!warten && aufenthalte && position < sizeof(aufenthalte))
+	call_out("kuendige_verlasse_an",aufenthalte[position]);
+    else
+	call_out("kuendige_verlasse_an",warten);
+}
+
+void kuendige_verlasse_an() {
+	int warten;
+
+    if (find_call_out("kuendige_verlasse_an") >= 0)
+	return;
+    warten = (int)this_object()->announce_leave_action();
+    if (warten > 0)
+	call_out("fahre",warten);
+    else
+	fahre();
+}
+
+void reset()
+{
+    if(environment() && find_call_out("fahre")<0 &&
+	find_call_out("kuendige_verlasse_an")<0)
+	    starte();
+}

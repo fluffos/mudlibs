@@ -1,0 +1,929 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/money/laden.c
+// Description: Verkaufsraum des Ladens
+// Author:	Maulwurf (Warenankauf)
+//		Garthan (Lagerverwaltung, Warenverkauf, Listen)
+// Concepts:	Inspiration durch TappMud Store
+// Modified by:	Garthan (06.03.96) Seltsames aus sell_all entfernt
+//		Monty (06.12 96) v_items fuehren nicht mehr zu RZLs.
+//
+// $Log: laden.c,v $
+// Revision 1.26  2008-04-02 08:05:25  gnomi
+// Wenn ein Gegenstand nicht in das Lager bewegt werden kann,
+// keine Kaufmeldung ausgeben.
+//
+// Revision 1.25  2006/08/29 22:32:50  gnomi
+// Grundwaehrung ist 0 und nicht "taler".
+//
+// Revision 1.24  2006/04/20 21:41:49  gnomi
+// set_worn_adjektiv kann auch ein Array ({ Grundform, Wortstamm }) sein.
+//
+// Revision 1.23  2005/03/28 00:52:43  gnomi
+// Die Wertberechnung von gefuehrten/angezogenen Waffen/Sachen verweigern.
+// (Zusaetzliche Adjektive beeinflussen das Ergebnis.)
+//
+// Revision 1.22  2005/02/06 03:30:10  gnomi
+// set_max_value/factor dokumentiert.
+//
+// Revision 1.21  2004/02/19 21:38:23  gnomi
+// Typo.
+//
+// Revision 1.20  2003/12/14 15:38:03  menaures
+// Laden-Objekt als zusaetzlicher Parameter fuer die Controller
+// Controller auch im betroffenen Objekt aufrufen
+//
+// Revision 1.19  2003/04/16 03:28:44  gnomi
+// Abfrage auf ob==this_player() war falsch.
+//
+// Revision 1.18  2002/12/17 03:55:16  gnomi
+// Controller forbidden_verkauf, notify_verkauf.
+//
+// Revision 1.17  2002/12/10 01:30:07  gnomi
+// Der Laden ist nie mehr knapp bei Kasse.
+//
+// Revision 1.16  2002/01/15 03:38:28  gnomi
+// query_short umgestellt.
+//
+// Revision 1.15  2002/01/14 04:16:47  gnomi
+// Bei der query_long-Abfrage beim Pruefen wird der Betrachter angegeben.
+//
+// Revision 1.14  2001/08/25 13:32:09  freaky
+// Evals angepasst
+//
+// Revision 1.13  2001/07/20 21:58:34  gnomi
+// virtual inherit "/i/room";
+//
+// Revision 1.12  2001/07/16 18:05:27  gnomi
+// Testen, ob der Gegenstand bei der Bewegung zerstoert wurde.
+//
+// Revision 1.11  2001/06/25 11:48:20  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.10  2001/01/21 01:24:36  gnomi
+// Ueberlagerung von moved_out korrigiert. (::moved_out aufgerufen)
+//
+
+#pragma save_types
+
+virtual inherit "/i/room";
+inherit "/i/money/exchange";
+
+#include <deklin.h>
+#include <message.h>
+#include <more.h>
+#include <move.h>
+#include <parse_com.h>
+
+#define KONTOR "/room/rathaus/kontor"
+
+#define FAIL(x) { notify_fail(x); return 0; }
+#define FORWARD(i,x)  for(i=0; i<sizeof(x); i++)
+#define MAX_OBJ_DISP 3
+#define FILL ".............................."
+#define MAX_VALUE 2500
+#define MAX_OBJ 6
+#define SQR(x) ((x)*(x))
+
+private string lager, valuta, valutas;
+private int max_value, max_factor = 200;
+
+int set_max_value(int a)       { return max_value = a; }
+int query_max_value()          { return max_value; }
+void set_max_factor(int a)     { max_factor = a; }
+int query_max_factor()         { return max_factor; }
+string set_valuta(string str)  { return valuta = str; }
+string query_valuta()          { return valuta; }
+string set_valutas(string str) { return valutas = str; }
+string query_valutas()         { return valutas; }
+string set_lager(string str)   { return lager = str; }
+string query_lager()           { return lager; }
+
+private nosave mapping players = ([]);
+
+private nosave mapping sortinfo =
+([
+   "w" : ({ 2,#'>,3,#'> }),
+   "W" : ({ 2,#'<,3,#'> }),
+   "t" : ({ 4,#'>,3,#'> }),
+   "T" : ({ 4,#'<,3,#'> }),
+   "a" : ({ 3,#'>,2,#'< })
+]);
+
+// Ja, set_max_value ist nicht void, aber das nur aus Kompatibilitaetsgruenden
+/*
+FUNKTION: set_max_value
+DEKLARATION: void set_max_value(int a)
+BESCHREIBUNG:
+Damit kann man angeben, wieviel Geld jemand maximal fuer ein Objekt bekommt.
+/doc/richtlinien/geschaefte ist dabei zu beachten.
+VERWEISE: set_max_factor, query_max_value
+GRUPPEN: handel
+*/
+/*
+FUNKTION: query_max_value
+DEKLARATION: int query_max_value()
+BESCHREIBUNG:
+Liefert zurueck, wieviel Geld jemand maximal fuer ein Objekt bekommt.
+VERWEISE: query_max_factor, set_max_value
+GRUPPEN: handel
+*/
+/*
+FUNKTION: set_max_factor
+DEKLARATION: void set_max_factor(int a)
+BESCHREIBUNG:
+Damit kann man in Prozent angeben, das Wievielfache des Objektwertes
+ein Spieler maximal (d.h. wenn ein solches Objekt noch nicht im Lager
+ist) bekommt. /doc/richtlinien/geschaefte ist dabei zu beachten.
+VERWEISE: set_max_value, query_max_factor
+GRUPPEN: handel
+*/
+/*
+FUNKTION: query_max_factor
+DEKLARATION: int query_max_factor()
+BESCHREIBUNG:
+Diese Funktion liefert zurueck, das Wievielfache (in Prozent) des
+Objektwertes ein Spieler maximal (d.h. wenn ein solches Objekt noch
+nicht im Lager ist) bekommt.
+VERWEISE: query_max_value, set_max_factor
+GRUPPEN: handel
+*/
+
+///////////////////////////////////////////////////////////////////////////
+//
+// Dokumenatationen zu notify_ankauf und forbidden_ankauf
+//
+/*
+FUNKTION: notify_ankauf
+DEKLARATION: void notify_ankauf(object ware, object wer, object laden)
+BESCHREIBUNG:
+Wird beim ankauf einer Ware im Laden aufgerufen, kurz bevor das Geld
+ausgeteilt wird. Beste Moeglichkeit, um noch irgendwelchem Schabernack
+ausgeben zu lassen. Moeglicherweise kann man damit dann im Laden mal wirklich
+nen Verkaeufer hinstellen.
+VERWEISE: forbidden_ankauf, notify, allowed, add_controller, query_controller,
+	  forbidden_verkauf, notify_verkauf
+GRUPPEN: handel
+*/
+
+/*
+FUNKTION: forbidden_ankauf
+DEKLARATION: int forbidden_ankauf(object ware, object wer, object laden)
+BESCHREIBUNG:
+Wird in eingetragenen Controllern aufgerufen und kann den Ankauf eines 
+Gegenstandes im Laden verhindern. Dies ist die beste Moeglichkeit, z.B.
+den Ankauf von Hehlerware aus der gleichen Stadt zu unterbinden.
+Vielleicht baut mal wer nen echten Marktschreier zum Laden dazu.
+Fuer die Ausgabe einer Meldung, warum diese Ware nicht angenommen wird,
+ist der Controller zustaendig.
+VERWEISE: notify_ankauf, notify, allowed, add_controller, query_controller,
+	  forbidden_verkauf, notify_verkauf
+GRUPPEN: handel
+*/
+
+/*
+FUNKTION: notify_wert
+DEKLARATION: void notify_wert(object ware, object wer, object laden)
+BESCHREIBUNG:
+Wird nach der Wertbestimmung einer Ware im Laden aufgerufen, nachdem die
+Auskunft erteilt wurde. Damit kann man noch irgendwas hinterher rufen...
+VERWEISE: forbidden_wert, notify_ankauf, notify, add_controller,
+	  forbidden_verkauf, notify_verkauf
+GRUPPEN: handel
+*/
+
+/*
+FUNKTION: forbidden_wert
+DEKLARATION: int forbidden_wert(object ware, object wer, object laden)
+BESCHREIBUNG:
+Wird in eingetragenen Controllern aufgerufen und kann die Wertbestimmung
+eines Gegenstandes im Laden verhindern. Dies ist die beste Moeglichkeit, z.B.
+den Ankauf von Hehlerware aus der gleichen Stadt zu unterbinden.
+VERWEISE: notify_wert, forbidden_ankauf, forbidden, add_controller,
+	  forbidden_verkauf, notify_verkauf
+GRUPPEN: handel
+*/
+
+/*
+FUNKTION: forbidden_verkauf
+DEKLARATION: int forbidden_verkauf(object was, object wer, object laden)
+BESCHREIBUNG:
+Bevor der Gegenstand was an das Lebewesen wer verkauft wird, wird im Laden
+forbidden("verkauf", was, wer) aufgerufen. forbidden ruft bei allen mit
+laden->add_controller("forbidden_verkauf", other) angemeldeten Controllern
+other die Funktion other->forbidden_verkauf(was, wer) auf, bis eine
+der Controller einen Wert ungleich 0 liefert. In diesem Falle wird der
+Verkauf unterbunden, anderenfalls erlaubt.
+Fuer eine entsprechende Meldung an wer ist der Controller selber zustaendig.
+VERWEISE: forbidden, add_controller, notify_verkauf,
+          forbidden_ankauf, notify_ankauf, forbidden_wert, notify_wert
+GRUPPEN: handel
+*/
+
+/*
+FUNKTION: notify_verkauf
+DEKLARATION: void notify_verkauf(object was, object wer, object laden)
+BESCHREIBUNG:
+Nachdem der Gegenstand was an das Lebewesen wer verkauft wurde, wird im Laden
+notify("verkauf", was, wer) aufgerufen. notify ruft dann bei allen mit
+laden->add_controller("notify_verkauf", other) angemeldeten Controllern
+other die Funktion other->notify_verkauf(was, wer) auf.
+Diese Controller haben somit die Moeglichkeit auf den Verkauf zu reagieren.
+VERWEISE: notify, add_controller, forbidden_verkauf,
+          forbidden_ankauf, notify_ankauf, forbidden_wert, notify_wert
+GRUPPEN: handel
+*/
+
+//
+///////////////////////////////////////////////////////////////////////////
+
+private string pv(object ob, string s, string p)
+{
+   return ob?plural(s,p,ob):s;
+}
+
+void create()
+{
+   add_type("kunstlicht",1);
+   set_own_light(1);
+   set_short("Der Gemischtwarenladen");
+   set_long(
+"Du bist in einem Gemischtwarenladen. Hier kannst Du Dinge kaufen und "+
+"verkaufen, vorausgesetzt Du hast genug Geld. Mit 'hilfe laden' erfaehrst "+
+"Du naeheres.");
+   set_valuta_tafel( ({"taler"}));
+   set_valutas_tafel(({"taler"}));
+   set_kurs_tafel(   ({ 1000  }));
+   set_valuta("taler");
+   set_valutas("taler");
+   set_max_value(1000);
+}
+
+void init()
+{
+   if(this_player()->query_wiz_level())
+   {
+      add_action("aun","aun");
+      add_action("klaue", "klaue",-4);
+   }
+   add_action("hilfe", "hilfe");
+   add_action("pruefe","pruefe", -5);
+   add_action("kaufe", "kaufe", -4);
+   add_action("value", "wert");
+   add_action("sell",  "verkaufe", -7);
+   add_action("liste", "liste", -4);
+}
+
+int hilfe(string str)
+{
+   if(!str || lower_case(str) != "laden")
+      return 0;
+   write("Folgende Kommandos sind hier moeglich:\n"+
+   "    'liste',\n"+
+   "    'liste <name>',\n"+
+   "    'liste waffen', 'liste ruestungen', 'liste sonstiges',\n"+
+   "       oder kuerzer: 'list w', 'list r', 'list s',\n"+
+   "    'pruefe <name|nummer>'\n"+
+   "    'kaufe <name|nummer>',\n"+
+   "    'wert <name>'\n"+
+   "    'verkaufe <name>|alles',\n"+
+   "Das Kommando 'liste' kennt noch folgende Optionen:\n"+
+   "    'liste -w ...'     sortiert nach Preisen (niedrige zuerst)\n"+
+   "    'liste +w ...'     sortiert nach Preisen (hohe zuerst)\n"+
+   "    'liste -t ...'     sortiert nach Ladenhuetern\n"+
+   "    'liste +t ...'     sortiert nach Ladenhuetern\n"+
+   "    'liste -u ...'     unsortiert (das ist ein bisschen schneller)\n");
+   if(this_player()->query_wiz_level())
+   {
+     write("Folgende Goetterbefehle kennt der Laden:\n"+
+   "    'klaue <name|nummer>\n"+
+   "    'aun [<preis>]'\n"+
+   "    Bei liste kann den Optionen ein '!' angehaengt werden, dann wird\n"+
+   "    die Anzahl der angekauften Objekte jeder Sorte angezeigt.\n");
+   }
+   return 1;
+}
+
+int filter_angebot(mixed * element, string filter)
+{
+   if(!element[1])
+      return 0;
+   switch(filter)
+   {
+      case "waffen" :
+	 return element[1]->query_weapon() ||
+	        element[1]->query_bomb() ||
+	        element[1]->query_geschoss();
+      case "ruestungen" :
+	 return element[1]->query_armour();
+      case "kleidungen" :
+	 return element[1]->query_cloth();
+      case "sonstiges"  :
+	 return !element[1]->query_weapon() &&
+		!element[1]->query_armour() &&
+		!element[1]->query_cloth() &&
+	        !element[1]->query_bomb() &&
+	        !element[1]->query_geschoss();
+      default:
+	 return element[1]->id(filter);
+   }
+}
+
+int marktpreis(int value, int amount)
+{
+   if(max_factor>200 || max_factor<=0)
+      max_factor = 200;
+
+   value = convert(value, 0, valuta);
+
+   if (value <= 0)
+       return 0;
+   if (amount > MAX_OBJ)
+       return value * max_factor * SQR(MAX_OBJ) / SQR(amount) / 400 || 1;
+   if (amount > 3)
+       return value * max_factor * (MAX_OBJ-1)  / (amount-1)  / 400 || 1;
+   if (amount == 3)
+       return value * max_factor / 200;
+   if (amount == 2)
+       return value * max_factor * 3 / 400;
+   return value * max_factor / 100;
+}
+
+int verkaufspreis(int value, int amount)
+{
+   return 2 * marktpreis(value, amount);
+}
+
+int ankaufspreis(int value, int amount)
+{
+   return marktpreis(value, amount + 1);
+}
+
+int aun(string str)
+{
+   int i, value;
+
+   if(!str)
+      str = "100";
+
+   value = to_int(str);
+   write("lager value akauf vkauf\n");
+   write("----- ----- ----- -----\n");
+   for(i = 0; i <= 2*MAX_OBJ; i++)
+   {
+      write(sprintf("%5d %5d %5d %5d\n", i, value, 
+	    ankaufspreis(value,i),
+	    verkaufspreis(value,i+1)));
+      if(i==MAX_OBJ)
+	 write("- - - - - - - - - - - -\n");
+      if(i==MAX_OBJ/2)
+	 write("----- ----- ----- -----\n");
+   }
+   return 1;
+}
+
+#define I(x,y) ({ #'[, 'x, y })
+
+closure sorter(string mode)
+{
+  mixed sort;
+  if(!(sort = sortinfo[mode]))
+     sort = sortinfo["a"];
+  return lambda( ({'a,'b}),
+	({ #'||, 
+	   ({ sort[1], I(a,sort[0]), I(b,sort[0]) }),
+	   ({ #'&&,
+	      ({ #'==, I(a,sort[0]),I(b,sort[0]) }),
+	      ({ sort[3], I(a, sort[2]), I(b, sort[2]) })
+	   })
+	}) );
+}
+
+mixed query_angebot(string test_id, string sort)
+{
+   object laden;
+   mapping store, sold;
+   string * shorts;
+   mixed angebot;
+   mixed items;
+   int i, j, add, last, tmp;
+
+   if(!(laden = touch(lager)))
+      FAIL("Dieser Laden hat scheinbar gar kein Warenlager!\n");
+  
+   if(!mappingp(store = laden->query_store()) ||
+      !mappingp(sold  = laden->query_sold()))
+      FAIL("Dieser Laden hat scheinbar kein brauchbares Warenlager!\n");
+
+   shorts = m_indices(store);
+   angebot = ({});
+   FORWARD(i, shorts)
+   {
+      items = store[shorts[i]];
+      for(add = last = j = 0; j < sizeof(items); j++)
+	 if(last != items[j][1] && add < MAX_OBJ_DISP)
+	 {
+	    tmp = sold[shorts[i]];
+	    angebot += ({  shorts[i..i] +
+			   items[j][0..0] +
+			   ({verkaufspreis(items[j][1], tmp)}) +
+			   items[j][2..2]+
+			   ({ tmp }) });
+	    add++;
+	    last = items[j][1];
+	 }
+   }
+   if(test_id)
+      angebot = filter(angebot, "filter_angebot",
+			     this_object(), lower_case(test_id));
+   if(sort && sort != "" && sort != "-")
+      angebot = sort_array(angebot, sorter(sort));
+   return angebot;
+}
+
+
+
+int liste(string str)
+{
+   mixed angebot;
+   string print, tmp;
+   int i, v, s, debug;
+   string *argv, option;
+
+   if(str)
+   {
+      str = lower_case(str);
+      if(sizeof(argv = explode(str, " ")-({""})) >= 1)
+      {
+	 if(argv[0][<1] == '!')
+	 {
+	    debug = 1;
+	    option = "";
+	    argv[0] = argv[0][0..<2];
+	 }
+	 switch(argv[0])
+	 {
+	    case "-w":
+	    case "-wert":
+	       option = "w"; break;
+	    case "+w":
+	    case "+wert":
+	       option = "W"; break;
+	    case "-u":
+	    case "-unsortiert":
+	       option = "-"; break;
+	    case "-t":
+	    case "-top":
+	       option = "t"; break;
+	    case "+t":
+	    case "+top":
+	       option = "T"; break;
+	    case "-a":
+	    case "-alphabetisch":
+	       option = "a";
+	 }
+      }
+      if(option)
+	 str = sizeof(argv) >= 2 ? implode(argv[1..], " ") : 0;
+      switch(str)
+      {
+	 case "w" :
+	 case "waffe" :
+	    str = "waffen"; break;
+	 case "r":
+	 case "ruestung":
+	    str = "ruestungen"; break;
+	 case "k":
+	 case "kleidung":
+	    str = "kleidungen"; break;
+	 case "s":
+	    str = "sonstiges"; break;
+      }
+   }
+   if(!option || option == "")
+      option = "a";
+   if(!(angebot = query_angebot(str,option)))
+      return 0;
+   players[this_player()] = ({ angebot, str, option });
+   m_delete(players,0);
+   if(!sizeof(angebot))
+   {
+      if(str)
+	 write("Wir haben nichts auf Lager, was zur Kategorie '"+
+	       capitalize(str)+"' gehoert.\n");
+      else
+	 write("Der Laden ist total ausverkauft!\n");
+      return 1;
+   }
+   print = "";
+   FORWARD(i, angebot)
+   {
+      v = angebot[i][2];
+      if(debug && this_player()->query_wiz_level())
+      {
+	 s = angebot[i][4];
+	 tmp = sprintf("(%d) %d", s, v);
+	 print += sprintf("%3d: %s %s\n", 
+		          i+1, (angebot[i][0]+FILL)[0..(30-strlen(tmp))], tmp);
+
+      }
+      else
+	 print += sprintf("%3d: %s %d\n", 
+		          i+1, (angebot[i][0]+FILL)[0..(30-strlen(""+v))], v);
+   }
+   if(tmp=this_player()->more( explode(sprintf("%-79#s",print),"\n"),
+                           "--Mehr--", 0, M_AUTO_END )) {
+      notify_fail(M_ERR(tmp));
+      return 0;
+      }
+   return 1;
+}
+
+int check_item(object item)
+{
+   if(environment(item) != touch(lager))
+   {
+      notify_fail(Dieser(item)+" "+pv(item,"ist","sind")+
+		  " leider schon verkauft.\n");
+      return 0;
+   }
+   return 1;
+}
+
+mixed * find_stored_object(string str)
+{
+   string *res, option, test_id;
+   mixed angebot;
+   mixed saved;
+   int i, nr;
+
+   if(!str || str == "")
+      FAIL("Was soll's denn sein?\n");
+   if(saved = players[this_player()])
+   {
+      angebot = saved[0];
+      test_id = saved[1];
+      option  = saved[2];
+   }
+   else if(!(angebot = query_angebot(0, 0)))
+      return 0;
+
+   if(sscanf(str, "%d", nr) != 1 && sscanf(str, "#%d", nr) != 1)
+   {
+      notify_fail(capitalize(str)+
+		  "? Das haben wir zur Zeit nicht auf Lager.\n");
+      str = lower_case(str);
+      FORWARD(i, angebot)
+	 if(angebot[i][1] && angebot[i][1]->id(str) && 
+	    check_item(angebot[i][1]))
+	    return angebot[i][1..2];
+      if(saved)
+      {
+	 angebot = query_angebot(0, 0);
+	 FORWARD(i, angebot)
+	    if(angebot[i][1]->id(str) && check_item(angebot[i][1]))
+	       return angebot[i][1..2];
+      }
+   }
+   else
+   {
+      if(test_id)
+	 notify_fail(
+	    "Soviele Gegenstaende gibt es nicht auf der Liste '"+
+	    capitalize(test_id)+"'.\n");
+      else
+	 notify_fail(
+	    "Soviele Gegenstaende haben wir nicht auf Lager!\n");
+
+      if(nr >= 1 && nr <= sizeof(angebot) && 
+	 angebot[nr-1][1] && check_item(angebot[nr-1][1]))
+	 return angebot[nr-1][1..2];
+   }
+   return 0;
+}
+
+int kaufe(string item)
+{
+   object ob, money;
+   int res, value;
+   mixed * tmp;
+   string ware;
+
+   if (!item)
+      FAIL("Was willst Du kaufen?\n");
+
+   if(!(tmp = find_stored_object(item)) || !(ob = tmp[0]))
+      return 0;
+   if ((value = tmp[1])<=0)
+   {
+      write(capitalize(item)+" "+pv(ob,"hat","haben")+" keinen Wert.\n");
+      ob->remove();
+      return 1;
+   }
+   if(forbidden("verkauf",ob,this_player(),this_object()) ||
+      ob->forbidden("verkauf", ob, this_player(), this_object()))
+     return 1;
+   if(!(money = present(valuta,this_player())) || 
+        money->query_money() < value)
+   {
+      write(Der(ob)+" "+pv(ob,"wuerde","wuerden")+" dich "+value+" "+
+         (value == 1 ? capitalize(valuta) : capitalize(valutas))+
+         " kosten, die Du allerdings nicht hast.\n");
+      return 1;
+   }
+   ware = einen(ob); // multiobs wie Pfeile 'verschmelzen' ja nach move evtl.
+   if((res = ob->move(this_object()))!=MOVE_OK)
+   {
+      write(Der(ob)+" "+pv(ob,"laesst", "lassen")+
+	    " sich leider nicht aus dem Lager holen.\n");
+      return 1;
+   }
+   if(!objectp(ob))
+   {
+      write("Das besagte Ding hat sich in Luft aufgeloest, deshalb kannst Du "
+	    "es\nauch nicht kaufen.\n");
+      return 1;
+   }
+   money->add_money(-value);
+   KONTOR->umsatz(convert(value, valuta, 0));
+   if((res = ob->move(this_player())) != MOVE_OK)
+      write(Dein(ob,0,this_player())+" "+pv(ob,"liegt","liegen")+
+	    " jetzt hier, weil Du "+ihn(ob)+" nicht tragen kannst!\n");
+   say(Der(OBJ_TP)+" kauft "+ware+".\n");
+   write("Du kaufst Dir "+ware+" fuer "+value+" "+
+       capitalize(value == 1 ? valuta : valutas)+".\n");
+   ob && notify("verkauf",ob,this_player(),this_object());
+   ob && ob->notify("verkauf", ob, this_player(), this_object());
+   return 1;
+}
+
+int klaue(string item)
+{
+   object ob;
+   int res;
+   mixed * tmp;
+
+   if (!item)
+      FAIL("Was willst Du klauen?\n");
+
+   if(!(tmp = find_stored_object(item)) || !(ob = tmp[0]))
+      return 0;
+   if((res = ob->move(this_object()))!=MOVE_OK)
+   {
+      write(Der(ob)+" "+pv(ob,"laesst","lassen")+
+	    " sich leider nicht aus dem Lager holen.\n");
+      return 1;
+   }
+   if((res = ob->move(this_player())) != MOVE_OK)
+      write(Dein(ob,0,this_player())+" "+pv(ob,"liegt","liegen")+
+	    " jetzt hier, weil Du "+ihn(ob)+" nicht tragen kannst!\n");
+   say(Der(OBJ_TP)+" klaut "+einen(ob)+".\n");
+   write("Du klaust Dir "+einen(ob)+".\n");
+   return 1;
+}
+
+int pruefe(string item)
+{
+   object ob;
+   int value;
+   mixed * tmp;
+   string brk;
+
+   if(!item)
+      FAIL("Was willst Du begutachten?\n");
+   if(!(tmp = find_stored_object(item)) || !(ob = tmp[0]))
+      return 0;
+   value = tmp[1];
+
+   write(Ein(ob,"wunderschoen")+" fuer laeppische "+value+" "+
+	 capitalize(value == 1 ? valuta : valutas)+ ":\n"+
+	 (ob->query_broken()? Er(ob)+" ist "+
+	    (stringp(brk = ob->query_broken_adjektiv()) ? brk : "beschaedigt") +
+	    ".\n" : "")+
+	 ob->query_long(this_player()));
+   say(Der(this_player())+" laesst sich "+einen(ob)+" vorfuehren.\n");
+   return 1;
+}
+
+#define GRUND_ADJ(adj,alt) (!adj ? alt : pointerp(adj) ? adj[0] : adj)
+
+private int is_sellable(object ob)
+{
+  if(ob->query_wield() && ob)
+  {
+     mixed adj = ob->query_wield_adjektiv();
+     
+     write(wrap (Der(ob)+" "+pv(ob,"ist","sind")+" noch "+
+         GRUND_ADJ(adj, "gefuehrt") + "."));
+     return 0;
+  }
+
+  else if(ob->query_worn() && ob)
+  {
+     mixed adj = ob->query_worn_adjektiv();
+
+     write(wrap(Der(ob)+" "+pv(ob,"ist","sind")+" noch "+
+         GRUND_ADJ(adj, "angezogen") + "."));
+     return 0;
+  }
+  
+  return 1;
+}
+
+int value(string item)
+{
+  int val;
+  object ob;
+  mixed *parsed;
+
+  parsed = parse_com(item,this_player());
+  if (parsed[PARSE_RET_CODE]!=PARSE_OK)
+    parsed = parse_com(item);
+  if (parse_com_error(parsed,"Wovon willst Du den Wert wissen?\n",1))
+    return 0;
+
+  // Wenn man dem Laden ein v_item anbietet, lehnt er ab.
+  if (!objectp(parsed[PARSE_OBS][0])) 
+  {
+    notify_fail(wrap("Der Laden nimmt so einen Firlefanz wie "+
+      den(parsed[PARSE_OBS][0])+" nicht an!"));
+    return 0;
+  }
+  ob = parsed[PARSE_OBS][0];
+
+  if(ob == this_player())
+  {
+     write("Probier's doch mal auf dem Sklavenmarkt!\n");
+     say(Der(OBJ_TP)+" erkundigt sich nach "+
+            seinem((["gender":"maennlich","name":"wert"]),0,OBJ_TP)+".\n");
+     return 1;
+  }
+  if(!ob || forbidden("wert",ob,this_player(),this_object()) ||
+     !ob || ob->forbidden("wert", ob, this_player(), this_object()) ||
+     !ob || !is_sellable(ob))
+      return 1;
+  say(Der(OBJ_TP)+" erkundigt sich nach dem Wert "+seines(ob)+".\n");
+  if (!objectp(ob) || !ob->query_sellable()) {
+    write(Der(ob)+" "+pv(ob,"ist","sind")+" nicht zu verkaufen.\n");
+    return 1;
+    }
+
+  if (!(val = ankaufspreis(ob->query_value(),
+                      touch(lager)->query_sold()[ob->query_short(this_player())])) )
+    write(wrap(Der(ob)+" "+pv(ob,"hat","haben")+" keinen Wert."));
+  else if(val > max_value)
+    write(wrap("Hier in diesem Laden wuerdest Du maximal "+max_value+" "+
+	capitalize(max_value == 1 ? valuta : valutas) +
+          " fuer "+deinen(ob)+" bekommen."));
+  else
+    write(wrap("Du wuerdest "+val+" "+capitalize(val == 1 ? valuta : valutas)+
+          " fuer "+deinen(ob)+" bekommen."));
+  ob && notify("wert",ob,this_player(),this_object());
+  ob && ob->notify("wert", ob, this_player(), this_object());
+  return 1;
+}
+
+
+int do_sell(object ob) 
+{
+  object money;
+  int value, do_destroy, res, i;
+  string raum, desc;
+  string den_ob, einen_ob;
+
+  if(!ob || ob->forbidden("ankauf",ob,this_player(),this_object()) ||
+     !ob || forbidden("ankauf", ob, this_player(), this_object()) ||
+     !ob || !is_sellable(ob))
+     return 0;
+
+  else if(ob->query_is_lighted() && ob)
+     ob->light_off();
+
+  if (!ob)
+     return 0;
+
+  value = ankaufspreis(ob->query_value(), 
+                       touch(lager)->query_sold()[ob->query_short(this_player())]);
+  if (value <= 0) 
+  {
+    write(wrap(Der(ob)+" "+pv(ob,"hat","haben")+" keinen Wert."));
+    return 0;
+  }
+  if (value > max_value) 
+    value = max_value;
+  desc = Der(ob) + ist(ob,3) + "verschwunden.";
+  if (ob->move(this_object()) != MOVE_OK) 
+  {
+    write(wrap("Du kannst "+den(ob)+" nicht ablegen."));
+    return 0;
+  }
+  if(!ob)
+  {
+    write(wrap(desc));
+    return 0;
+  }
+
+  einen_ob = einen(ob);
+  den_ob = den(ob);
+ 
+  res = ob->move(lager);
+  if(res != MOVE_OK && res != MOVE_DESTRUCTED)
+  {
+    write(wrap(Der(ob)+" "+pv(ob,"konnte","konnten")+
+	  " nicht ins Lager gebracht werden, nun "+pv(ob,"liegt","liegen")+
+	  " "+er(ob)+" hier!"));
+    return 0;
+  }
+
+  ob && ob->notify("ankauf", ob, this_player(), this_object());
+  ob && notify("ankauf",ob,this_player(),this_object());
+  ob && ob->just_sold();
+  do_destroy && ob && ob->remove();
+
+  say(wrap(Der(OBJ_TP)+" verkauft "+einen_ob+"."));
+  write(wrap("Fuer "+den_ob+" bekommst du "+value+" "+
+     capitalize(value == 1 ? valuta : valutas)+"."));
+
+  money = clone_object("/obj/money");
+  money->init_money(value,valuta);
+  if (money->move(this_player()) != MOVE_OK) 
+  {
+    write("Du hast zu viel dabei als dass ich dir das Geld direkt "+
+      "geben koennte;\nEs liegt neben Dir.\n");
+    money->move(this_object());
+  }
+  if (ob && ob->query_value() > MAX_VALUE)
+  {
+    sys_log("shop_teuer",object_name(ob)+":"+ob->query_value()+":"+
+      ob->query_first_room()+".\n");
+    ob->remove();
+  }
+  KONTOR->umsatz(-convert(value, valuta, 0));
+  return 1;
+}
+
+int sell_all(object *obs)
+{
+  int a, found;
+  string short;
+
+  for (a=0; a<sizeof(obs); a++) 
+    if (obs[a])
+    {
+      if(get_eval_cost() < 100000)
+      {
+	 write("Aechz, das schaff ich nicht auf einen Ruck, "+
+	       "Du hast zuviel dabei.\n");
+	 return found;
+      }
+      if (obs[a]->query_container() && !obs[a]->query_con_close())
+        found += sell_all(all_inventory(obs[a]));
+      short = obs[a]->query_short(this_player());
+      if (short && short != "" && obs[a]->query_sellable()) 
+      {
+	printf("%-30s",capitalize(short)+":");
+	found += do_sell(obs[a]);
+      }
+    }
+  return found;
+}
+
+int sell(string item) {
+  object *obs;
+  int a, found;
+  mixed *parsed;
+
+  parsed = parse_com(item,this_player());
+/*
+  if (parsed[PARSE_RET_CODE]!=PARSE_OK)
+    parsed = parse_com(item);
+*/
+  if (parse_com_error(parsed,"Was willst du verkaufen?\n"))
+      return 0;
+  obs = parsed[PARSE_OBS];
+  if (sizeof(obs)>1)
+      found=sell_all(obs);
+  else
+  {
+    if (!objectp(obs[0]) || !obs[0]->query_sellable()) 
+    {
+      write(Den(obs[0])+" kann man nicht verkaufen!\n");
+      return 1;
+    }
+    if (obs[0]->query_container() && !obs[0]->query_con_close())
+      found = sell_all(all_inventory(obs[0]));
+    found += do_sell(obs[0]);
+  }
+  if (found > 1)
+    write(found+" Gegenstaende verkauft.\n");
+  else if (!found && sizeof(obs) > 1) 
+    write("Du hast nichts von Wert bei Dir.\n");
+  return 1;
+}
+
+void moved_out(object was, object wohin, string dir, int way)
+{
+    m_delete(players,was);
+    m_delete(players,0);
+    ::moved_out(was,wohin,dir,way);
+}

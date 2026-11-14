@@ -1,0 +1,109 @@
+// This file is part of UNItopia Schiffe.
+// ----------------------------------------------------------------
+// File:    /z/Schiffe/Linienschiffe/i/wait_kurstafel.c
+// Description: 
+//      
+//
+// Changes:
+// wyvern       11.03.2012  find_living statt find_player, damit auch NPCs wie
+//                          Muck warten und reisen koennen
+// ANIN         26.03.2013  ENV(TO) -> ENV_TO
+//                          query_enter_messages_wait(who); fehlte $
+//
+
+inherit "/z/Schiffe/Linienschiffe/i/wait";
+
+#define PDBG_LEVEL -2
+#define PDBG_GROUP "Schiffe:Kurstafel"  // Gruppe erst nachher setzen!!
+
+#include <p/debugger.h>  // PDBG_XXX
+#include <move.h>        // MOVE_OK
+#include <message.h>     // MT_XXX, MA_XXX
+#include <error.h>       // do_warning
+#include <misc.h>       // 
+
+#define MSG_AUSSEN   0
+#define MSG_INNEN    1
+#define MSG_SPIELER  2
+
+#define REISE_EINSTEIGEN           4
+
+void just_moved(){
+        ENV_TO->add_controller("notify_ship_arrive_here");
+        ENV_TO->add_controller("notify_ship_depart_here");
+}
+
+void delayed_wait_handling(object schiffsobj, object hafenobj){
+    object enter_room, who;
+    string *enter_messages_wait;
+
+    if(!sizeof(query_wartende())){
+        return; //es wartet hier aktuell niemand
+    }
+    
+    foreach(string name, string schiff, string hafen : query_wartende())
+    {
+//      sollte eigentlich nicht passieren, wenn doch, korrigieren und 
+//      warning werfen
+        // ANIN: kann aber doch passieren wenn NPC stirbt oder Spieler ausloggt
+        if( (!who=find_living(name)) || (!present(who, ENV_TO)))
+        {
+            delete_wartende(name);
+            log_file("ship_wait",
+                     sprintf("warn: %s %s\n",
+                             shorttimestr(time()),
+                             name+" nicht anwesend in "+mixed2str(ENV_TO)
+                             +(who
+                               ? " sondern in "+mixed2str(ENV(who))
+                               : "")));
+          //do_warning(name+" nicht anwesend in "+mixed2str(ENV_TO)+"\n");
+            break;
+        } 
+    
+        if(schiff == schiffsobj->query_cap_name())
+        {
+            enter_room=schiffsobj->query_enter_room();
+            enter_messages_wait=schiffsobj->query_enter_messages_wait(who);
+
+            // ANIN: Meldungen brauchen ein $ weil query_enter_messages_wait
+            //       schon closures ausgewertet hat:
+            if(who->move(enter_room, MOVE_NORMAL, 
+                         enter_messages_wait[MSG_AUSSEN]+"$", 
+                         enter_messages_wait[MSG_INNEN]+"$") == MOVE_OK)
+            {
+                who->send_message_to(who, MT_LOOK|MA_NOISE, MA_MOVE, 
+                        wrap(enter_messages_wait[MSG_SPIELER]));
+//      move war erfolgreich? Dann Daten ([name: schiff; hafen]) uebergeben
+                enter_room->reisedaten_aendern(who, schiff, hafen, REISE_EINSTEIGEN);
+            }
+            else {
+//                PDBG("move nicht erfolgreich");  
+            }
+        }
+        else {
+//            PDBG("schiff != schiffsobj->query_cap_name()");  
+        }
+    }
+}
+
+string PDBG_Gruppe(object schiff){
+    string grp;
+    grp=PDBG_GROUP+(schiff?":"+RCN(schiff):"");
+    return grp-" ";
+}
+
+void notify_ship_arrive_here(object schiff, object hafen){
+
+    L_PDBG_FUN0(PDBG_LEVEL, PDBG_Gruppe(schiff), 
+            "notify_ship_arrive_here(schiff, hafen): ",({schiff, hafen}));
+
+//  kurze Verzoegerung, damit der Spieler die Meldung, dass das Schiff 
+//  einlaeuft noch mitbekommt
+    call_out("delayed_wait_handling", 1, schiff, hafen);
+}
+
+void notify_ship_depart_here(object schiff, object hafen){
+
+    L_PDBG_FUN0(PDBG_LEVEL, PDBG_Gruppe(schiff),
+            "notify_ship_depart_here(schiff, hafen): ",({schiff, hafen}));
+}

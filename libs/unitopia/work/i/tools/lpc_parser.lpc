@@ -1,0 +1,1903 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/tools/lpc_parser.c
+// Description: Ein Parser (Strings->Lambda)
+// Author:      Gnomi (01.04.2000)
+// Modified:
+//
+// $Log: lpc_parser.c,v $
+// Revision 1.31  2009-04-15 13:39:30  gnomi
+// Indexing past string end.
+//
+// Revision 1.30  2005/08/25 22:21:52  gnomi
+// Indexing past string end...
+//
+// Revision 1.29  2005/03/14 19:07:47  gnomi
+// Aenderungen bei der Stringindizierung (fuer den 3.3er).
+//
+// Revision 1.28  2004/07/19 21:20:39  gnomi
+// Leerzeichenerkennung auf den 3.3er angepasst und optimiert.
+// (Nach unzaehligen statistischen Tests von Menaures... ;-)
+//
+// Revision 1.27  2004/07/04 00:06:46  gnomi
+// Rekursive Includes prinzipiell zulassen, aber nur bis zu einer bestimmten
+// Tiefe.
+//
+// Revision 1.26  2004/05/26 21:41:25  gnomi
+// Eine vermutlich ueberfluessige Fehlerabfrage bei #include auskommentiert.
+//
+// Revision 1.25  2003/05/06 02:45:25  gnomi
+// Typo.
+//
+// Revision 1.24  2002/08/20 21:59:13  gnomi
+// Ein paar kleine Optimierungen.
+//
+// Revision 1.23  2002/04/20 18:51:28  gnomi
+// Prototypen korrigiert.
+//
+// Revision 1.22  2001/08/25 13:32:12  freaky
+// Evals angepasst
+//
+// Revision 1.21  2001/07/02 14:23:51  freaky
+// Variablen private deklariert.
+//
+// Revision 1.20  2001/07/02 02:31:40  freaky
+// Variablen nicht verwenden.
+//
+// Revision 1.19  2001/06/25 11:48:30  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.18  2001/06/22 23:55:05  gnomi
+// Ein paar clear-Funktionen.
+//
+// Revision 1.17  2001/04/29 19:09:04  gnomi
+// Dateien bis zu 150000 Bytes einlesen koennen.
+//
+// Revision 1.16  2001/04/29 14:20:10  gnomi
+// Bugfix zum vorherigen Patch.
+//
+// Revision 1.15  2001/04/28 23:48:43  gnomi
+// Besseres Define-Management mit Weitergabe von Dateinamen.
+//
+// Revision 1.14  2001/04/09 21:41:36  gnomi
+// Bei defined und __EFUN_DEFINED__ koennen in Klammern Identifier stehen und
+// nicht unbedingt Strings.
+//
+// Revision 1.13  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#include <error.h>
+#include <config.h>
+#include <rtlimits.h>
+#include <strings.h>
+
+//Die Grenze fuer read_include
+#define MIN_EVAL 150000
+
+/*
+ Wir erkennen Strings, Chars, Mappings, Arrays, Zahlen, Rollen-Partner,
+ Variablen, weitere Funktionsaufrufe, Closures (keine Inlines)
+ und alle Pre-/In-/Postfix-Operationen
+ Es liefert eine Lambda
+ Aufruf:
+  parse_expr(String,Position,Fehler)
+ String ist die zu parsende Zeichenkette,
+ Position bezeichnet die Stelle, ab der der String geparsed wird,
+ Fehler ist eine per Referenz zu uebergebene Variable, in welcher
+  im Fehlerfalle ein Array mit der Fehlerposition und einem Fehlertext
+  uebergeben wird.
+
+ Falls man Zugriff auf globale Variablen wuenscht, muss im Programm
+ lpc_parser.h includet werden und darunter in einer einzelnen Zeile
+  LPC_PARSER_VARS
+ stehen. (Oder LPC_PARSER_IVARS, wenn ein inheritetes Objekt auch schon den
+ Zugriff gestattete.)
+*/
+
+/*
+WHITE(string white, string text, int pos);
+
+Falls es sich bei text[pos] um Whitespace handelt (als Whitespace
+angesehene Zeichen stehen in 'white'), wird pos erhoeht, so dass
+das neue text[pos] auf das naechste Nicht-Whitespace-Zeichen zeigt,
+bzw. auf das Stringende, falls es kein solches Zeichen mehr gibt.
+*/
+#define WHITE(white, str, pos) \
+    if(pos<sizeof(str) && member(white, str[pos]) >= 0) \
+        pos = strlen(str) - strlen(trim(str[pos..], TRIM_LEFT, white));
+
+
+private nosave mapping konstanten=([
+#ifdef __MASTER_OBJECT__
+                         "__MASTER_OBJECT__":__MASTER_OBJECT__,
+#endif
+#ifdef __VERSION__
+                         "__VERSION__":__VERSION__,
+#endif
+#ifdef __DOMAIN_NAME__
+                         "__DOMAIN_NAME__":__DOMAIN_NAME__,
+#endif
+#ifdef __HOST_IP_NUMBER__
+                         "__HOST_IP_NUMBER__":__HOST_IP_NUMBER__,
+#endif
+#ifdef __HOST_NAME__
+                         "__HOST_NAME__":__HOST_NAME__,
+#endif
+#ifdef __MAX_RECURSION__
+                         "__MAX_RECURSION__":__MAX_RECURSION__,
+#endif
+#ifdef __MAX_EVAL_COST__
+                         "__MAX_EVAL_COST__":__MAX_EVAL_COST__,
+#endif
+#ifdef __ERQ_MAX_SEND__
+                         "__ERQ_MAX_SEND__":__ERQ_MAX_SEND__,
+#endif
+#ifdef __ERQ_MAX_REPLY__
+                         "__ERQ_MAX_REPLY__":__ERQ_MAX_REPLY__,
+#endif
+#ifdef __VERSION_MAJOR__
+                         "__VERSION_MAJOR__":__VERSION_MAJOR__,
+#endif
+#ifdef __VERSION_MINOR__
+                         "__VERSION_MINOR__":__VERSION_MINOR__,
+#endif
+#ifdef __VERSION_MICRO__
+                         "__VERSION_MICRO__":__VERSION_MICRO__,
+#endif
+#ifdef __VERSION_PATCH__
+                         "__VERSION_PATCH__":__VERSION_PATCH__,
+#endif
+                          ]);
+
+private nosave mapping makros=([]);
+private nosave mapping defines=([
+#ifdef UNItopia
+                         "UNItopia",
+#endif
+#ifdef TestMUD
+                         "TestMUD",
+#endif
+#ifdef LPC3
+                         "LPC3",
+#endif
+#ifdef __EUIDS__
+                         "__EUIDS__",
+#endif
+#ifdef COMPAT_FLAG
+                         "COMPAT_FLAG",
+#endif
+#ifdef __COMPAT_MODE__
+                         "__COMPAT_MODE__",
+#endif
+#ifdef __STRICT_EUIDS__
+                         "__STRICT_EUIDS__",
+#endif
+#ifdef __IPV6__
+                         "__IPV6__",
+#endif
+#ifdef __LPC_NOSAVE__
+                         "__LPC_NOSAVE__",
+#endif
+			 "__LPC_PARSER__",
+                       ]);
+private nosave mixed aparser=({});
+
+/*
+FUNKTION: add_parser
+DEKLARATION: varargs void add_parser(mixed what, mixed ob)
+BESCHREIBUNG:
+Damit werden Parsererweiterungen angemeldet. what ist entweder eine Closure
+oder ein Funktionsname. Bei letzterem muss bei ob das Objekt angegeben werden,
+falls die Funktion nicht im this_object() ist.
+Die Erweiterung wird immer dann aufgerufen, wenn der Parser bei einem Text
+ein einzelnes Symbol (Konstanten, Variablen usw.) erwartet. Die Parameter
+entsprechen dabei denen von parse_value.
+VERWEISE: delete_parser, query_parser, parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs void add_parser(mixed what, mixed ob)
+{
+  if(closurep(what))
+    aparser+=({what});
+  else if(stringp(what) && ((!ob) || stringp(ob) || objectp(ob)))
+    aparser+=({({what,ob||this_object()})});
+}
+
+/*
+FUNKTION: delete_parser
+DEKLARATION: varargs void delete_parser(mixed what, mixed ob)
+BESCHREIBUNG:
+Damit wird eine Erweiterung wieder entfernt.
+Als Parameter haben dieselbe Form wie bei add_parser.
+VERWEISE: add_parser, query_parser, parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs void delete_parser(mixed what, mixed ob)
+{
+  if(closurep(what))
+    aparser-=({what});
+  else if(stringp(what) && ((!ob) || stringp(ob) || objectp(ob)))
+    aparser=filter(aparser,
+      lambda(({'ap,'fun,'ob}),
+        ({#'||,
+          ({#'!,({#'sizeof,'ap})}),
+          ({#'&&,
+            ({#'==,({#'[,'ap,0}),'fun}),
+            ({#'==,({#'[,'ap,1}),'ob})
+          })
+        })),
+      what,ob||this_object());
+}
+
+/*
+FUNKTION: query_parser
+DEKLARATION: mixed query_parser()
+BESCHREIBUNG:
+Liefert alle angemeldeten Parsererweiterungen in einem Array.
+VERWEISE: add_parser, delete_parser, parse_value, parse_expr
+GRUPPEN: Parser
+*/
+mixed query_parser()
+{
+  return aparser;
+}
+
+/*
+FUNKTION: add_makro
+DEKLARATION: varargs void add_makro(string name, closure unbound_cl, string *file)
+BESCHREIBUNG:
+Traegt ein Makro unter dem im 1. Parameter angegeben Namen ein.
+Wird beim Parsen dieser Name als Funktionsname gefunden,
+so wird stattdessen die angegebene Closure aufgerufen.
+
+file gibt die Datei an, in welcher das Makro gefunden wurde.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: delete_makro, query_makro, query_makros, clear_makros,
+          parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs void add_makro(string name, closure cl, string* file)
+{
+  makros+=([name:cl]);
+}
+
+/*
+FUNKTION: delete_makro
+DEKLARATION: varargs void delete_makro(string name, string *file)
+BESCHREIBUNG:
+Loescht das angegebene Makro. file gibt die Datei an, in welchem die
+Aufforderung zum Loeschen des Makros steht.
+
+file gibt die Datei an, in welcher die Aufforderung zum Loeschen steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: add_makro, query_makro, query_makros, clear_makros,
+          parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs void delete_makro(string name, string* file) {makros-=([name]);}
+
+/*
+FUNKTION: query_makro
+DEKLARATION: varargs closure query_makro(string name, int bound, string *file)
+BESCHREIBUNG:
+Liefert ein spezielles Makro. Ist bound!=0, wird eine gebundene Closure
+geliefert, ansonsten eine ungebundene.
+
+file gibt die Datei an, in welcher die Abfrage des Makros steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: add_makro, delete_makro, query_makros, clear_makros,
+          parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs closure query_makro(string name, int bound, string *file)
+{
+  if(file && name=="__PATH__")
+  {
+      if(bound)
+          return lambda(({'nr}),
+            ({#'+,"/",({#'+,({#'implode,
+            ({#'[..<],explode(file[<1],"/")[1..<2],0,'nr}),"/"}),"/"})}));
+      else
+          return unbound_lambda(({'nr}),
+            ({#'+,"/",({#'+,({#'implode,
+            ({#'[..<],explode(file[<1],"/")[1..<2],0,'nr}),"/"}),"/"})}));
+  }
+  return bound?(makros[name] && bind_lambda(makros[name])):makros[name];
+}
+
+/*
+FUNKTION: is_makro
+DEKLARATION: varargs int is_makro(string name, string *file)
+BESCHREIBUNG:
+Liefert 1, falls name ein eingetragenes Makro ist.
+
+file gibt die Datei an, in welcher die Abfrage des Makros steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: query_makro, add_makro, delete_makro, query_makros, clear_makros,
+          parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs int is_makro(string name, string *file)
+{
+    if(file && name=="__PATH__")
+        return 1;
+    return member(makros,name);
+}
+
+/*
+FUNKTION: query_makros
+DEKLARATION: varargs mapping query_makros(string *file)
+BESCHREIBUNG:
+Liefert alle eingetragenen Makros.
+
+file gibt die Datei an, in welcher die Abfrage des Makros steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: add_makro, delete_makro, query_makro, clear_makros,
+          parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs mapping query_makros(string *file)
+{
+    if(!file)
+        return makros;
+    return makros+(["__PATH__":
+        unbound_lambda(({'nr}),
+            ({#'+,"/",({#'+,({#'implode,
+            ({#'[..<],explode(file[<1],"/")[1..<2],0,'nr}),"/"}),"/"})}))
+        ]);
+}
+
+/*
+FUNKTION: clear_makros
+DEKLARATION: void clear_makros()
+BESCHREIBUNG:
+Loescht alle Makros.
+VERWEISE: add_makro, delete_makro, query_makro, query_makros,
+          parse_value, parse_expr
+GRUPPEN: Parser
+*/
+void clear_makros()
+{
+    makros = ([]);
+}
+
+/*
+FUNKTION: add_konstante
+DEKLARATION: varargs void add_konstante(string name, mixed cl, string *file)
+BESCHREIBUNG:
+Traegt den angegeben Wert unter dem im 1. Parameter angegebene Namen als
+Konstante ein. Trifft der Parser auf einen Bezeichner mit diesem Namen,
+wird dieser Wert dort eingesetzt.
+
+file gibt die Datei an, in welcher das Makro gefunden wurde.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: delete_konstante, query_konstante, query_konstanten,
+          clear_konstanten, parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs void add_konstante(string name, mixed cl, string *file)
+{
+  konstanten+=([name:cl]);
+}
+
+/*
+FUNKTION: delete_konstante
+DEKLARATION: varargs void delete_konstante(string name, string *file)
+BESCHREIBUNG:
+Loescht eine eingetragene Konstante.
+
+file gibt die Datei an, in welcher die Aufforderung zum Loeschen steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: add_konstante, query_konstante, query_konstanten, clear_konstanten,
+          parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs void delete_konstante(string name, string *file) {konstanten-=([name]);}
+
+/*
+FUNKTION: query_konstante
+DEKLARATION: varargs mixed query_konstante(string name, string *file)
+BESCHREIBUNG:
+Liefert eine eingetragene Konstante.
+
+file gibt die Datei an, in welcher die Abfrage der Konstante steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: add_konstante, delete_konstante, query_konstanten, clear_konstanten,
+          parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs mixed query_konstante(string name, string *file)
+{
+    if(file)
+    {
+        if(name=="__FILE__")
+            return file[<1];
+        else if(name=="__DIR__")
+            return regreplace(file[<1],"/[^/]*","/",0);
+    }
+    return konstanten[name];
+}
+
+/*
+FUNKTION: is_konstante
+DEKLARATION: varargs int is_konstante(string name, string *file)
+BESCHREIBUNG:
+Liefert 1, falls name eine eingetragene Konstante ist.
+
+file gibt die Datei an, in welcher die Abfrage der Konstante steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: query_konstante, add_konstante, delete_konstante, query_konstanten,
+          clear_konstanten, parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs int is_konstante(string name, string *file)
+{
+  if(file && member((["__FILE__","__DIR__"]),name))
+      return 1;
+  return member(konstanten,name);
+}
+
+/*
+FUNKTION: query_konstanten
+DEKLARATION: varargs mapping query_konstanten(string *file)
+BESCHREIBUNG:
+Liefert alle eingetragenen Konstanten.
+
+file gibt die Datei an, in welcher die Abfrage der Konstanten steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: add_konstante, delete_konstante, query_konstante, clear_konstanten,
+          is_konstante, parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs mapping query_konstanten(string *file)
+{
+  if(!file) return konstanten;
+  return konstanten + (["__FILE__":file[<1],
+                        "__DIR__":regreplace(file[<1],"/[^/]*","/",0)]);
+}
+
+/*
+FUNKTION: clear_konstanten
+DEKLARATION: void clear_konstanten()
+BESCHREIBUNG:
+Loescht alle Konstanten.
+VERWEISE: add_konstante, delete_konstante, query_konstanten, is_konstante,
+          parse_value, parse_expr
+GRUPPEN: Parser
+*/
+void clear_konstanten()
+{
+    konstanten=([]);
+}
+
+/*
+FUNKTION: add_define
+DEKLARATION: varargs void add_define(string name, string *file)
+BESCHREIBUNG:
+Traegt den angegeben Wert unter dem im 1. Parameter angegebene Namen als
+Define ein. Defines werden beim Einlesen von Include-Dateien mit read_include
+beachtet. (Sie unterscheiden sich von Konstanten darin, dass sie keinen
+Wert haben.)
+
+file gibt die Datei an, in welcher das Makro gefunden wurde.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: delete_define, query_define, query_defines, clear_defines,
+          read_include
+GRUPPEN: Parser
+*/
+varargs void add_define(string name, string *file) {defines+=([name]);}
+
+/*
+FUNKTION: delete_define
+DEKLARATION: varargs void delete_define(string name, string *file)
+BESCHREIBUNG:
+Loescht ein eingetragenes Define.
+
+file gibt die Datei an, in welcher die Aufforderung zum Loeschen steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: add_define, query_define, query_defines, clear_defines, read_include
+GRUPPEN: Parser
+*/
+varargs void delete_define(string name, string *file) {defines-=([name]);}
+
+/*
+FUNKTION: is_define
+DEKLARATION: varargs int is_define(string name, string *file)
+BESCHREIBUNG:
+Liefert 1, falls name ein eingetragenes Define ist.
+
+file gibt die Datei an, in welcher die Abfrage des Defines steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: add_define, delete_define, query_defines, clear_defines, read_include
+GRUPPEN: Parser
+*/
+varargs int is_define(string name, string *file) {return member(defines,name);}
+
+/*
+FUNKTION: query_defines
+DEKLARATION: varargs mapping query_defines(string *file)
+BESCHREIBUNG:
+Liefert alle eingetragenen Defines.
+
+file gibt die Datei an, in welcher die Abfrage der Defines steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: add_define, delete_define, query_define, clear_defines, read_include
+GRUPPEN: Parser
+*/
+varargs mapping query_defines(string *file) {return defines;}
+
+/*
+FUNKTION: clear_defines
+DEKLARATION: void clear_defines()
+BESCHREIBUNG:
+Loescht alle Defines.
+VERWEISE: add_define, delete_define, query_define, query_defines, read_include
+GRUPPEN: Parser
+*/
+void clear_defines()
+{
+    defines=([]);
+}
+/*
+FUNKTION: parser_defined
+DEKLARATION: varargs int parser_defined(string was, string *file)
+BESCHREIBUNG:
+Liefert 1, wenn der angegebene String als define bekannt ist.
+
+file gibt die Datei an, in welcher die Abfrage des Defines steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs int parser_defined(string was, string *file)
+{
+ return is_define(was,file) || is_konstante(was,file) || is_makro(was,file);
+}
+
+/*
+FUNKTION: parser_efun_defined
+DEKLARATION: int parser_efun_defined(string was)
+BESCHREIBUNG:
+Liefert 1, wenn der angegebene String eine Efun ist.
+(Aehnlich dem __EFUN_DEFINED__)
+Zur Zeit wird auch bei Simul-Efuns eine 1 geliefert.
+VERWEISE: parse_value, parse_expr
+GRUPPEN: Parser
+*/
+int parser_efun_defined(string was)
+{
+  return symbol_function(was)&&1;
+}
+
+/*
+FUNKTION: allowed_char
+DEKLARATION: int allowed_char(int c)
+BESCHREIBUNG:
+Liefert 1, wenn das angegebene Zeichen in einem Bezeichner vorkommen darf.
+VERWEISE:
+GRUPPEN: Parser
+*/
+int allowed_char(int c)
+{
+  return c && (member("abcdefghijklmnopqrstuvwxyz"
+		      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		      "0123456789_",c)>=0);
+/*
+  if((c>='a') && (c<='z')) return 1;
+  if((c>='A') && (c<='Z')) return 1;
+  if((c>='0') && (c<='9')) return 1;
+  return member((['_']),c);
+*/
+}
+
+//Zu erkennende Operator- oder Efun-Closures.
+nosave string *additional_closures=
+ ({"[", "[<", "[..]", "[..<]", "[<..]", "[<..<]", "[..", "[,]", "[<..",
+   "+", "-", "*", "/", "%", "^", "|", "&", "~", "<<", ">>", ">>>", "!", ",",
+   "<=", "<", ">=", ">", "==", "!=", "?", "?!", "&&", "||", "({", "([",
+   "=", "+=", "++", "-=", "--", "*=", "/=", "%=", "^=", "|=", "&=",
+   "<<=", ">>=", ">>>="
+ });
+
+nosave mapping special_chars=(["a":"\a", //BEL (Bell)
+                               "b":"\b", //BS  (Backspace)
+                               "t":"\t", //HT  (Horizontal Tabulator)
+                               "n":"\n", //LF  (Line Feed)
+                               "f":"\f", //FF  (Form Feed)
+                               "r":"\r", //CR  (Carriage Return)
+                               "e":"\e"  //ESC (Escape)
+                             ]);
+
+nosave mapping type_cast_funs=(["string":#'to_string,
+                                "int":#'to_int,
+                                "object":#'to_object,
+                                "float":#'to_float,
+                                "int*":#'to_array
+                              ]);
+
+#define PREOPS_VORRANG 7
+//Ein Mapping mit allen Operationen
+//Der erste Eintrag ist der Typ der Operation:
+//  0: symbol_function(str)
+//  1: Sonderbehandlung
+//  2: Postfix
+//  3: 2. Parameter nicht behandeln
+//  4: Abbrechen
+//2. Parameter: Der Vorrang (je kleiner, desto wichtiger)
+
+private nosave mapping ops=
+ ([
+   "::": 1;1,
+   "->": 1;2,
+   "(":  3;3,
+   "[":  3;4,
+   "--": 2;5,
+   "++": 2;6,
+   "/":  0;8,
+   "%":  0;9,
+   "*":  0;10,
+   "-":  0;11,
+   "+":  0;12,
+   ">>>":0;13,
+   ">>": 0;14,
+   "<<": 0;15,
+   "<=": 0;16,
+   "<":  0;17,
+   ">=": 0;18,
+   ">":  0;19,
+   "!=": 0;20,
+   "==": 0;21,
+   "&":  0;22,
+   "^":  0;23,
+   "|":  0;24,
+   "&&": 0;25,
+   "||": 0;26,
+   "?":  1;27,
+   "/=": 0;28,
+   "%=": 0;29,
+   "*=": 0;30,
+   ">>>=":0;31,
+   ">>=":0;32,
+   "<<=":0;33,
+   "^=": 0;34,
+   "|=": 0;35,
+   "&=": 0;36,
+   "-=": 0;37,
+   "+=": 0;38,
+   "=":  0;39,
+   ":":  4;40,
+   ",":  0;41,
+ ]);
+
+// #define WHITESPACE while(params[pos] && member(" \t\n",params[pos])>=0) pos++
+#define WHITESPACE WHITE(" \t\n", params, pos)
+
+//Ein error=({int pos, string fehler}) zeigt einen Fehler an.
+varargs mixed parse_expr(string params, int pos, mixed error, int max, string *symbols,string *file);
+
+protected mapping query_ops()
+{
+    return ops;
+}
+
+/*
+FUNKTION: parse_value
+DEKLARATION: varargs mixed parse_value(string params, int pos, mixed error, string *symbols, string *file)
+BESCHREIBUNG:
+Der Parser versucht an der Stelle pos im String params eine Konstante oder
+einen Bezeichner zu erkennen. Gelingt dies, so wird das erkannte Ergebnis
+zurueckgeliefert und pos auf die Position des naechsten Zeichens gesetzt.
+Anderenfalls wird in error ein Array mit der Position des Fehlers als 1. Element
+und einer Fehlerbeschreibung als 2. Element geliefert. Sobald error!=0
+zurueckkommt, ist das Ergebnis von parse_value unbestimmt.
+In symbols werden alle verwendeten Symbole zurueckgeliefert.
+
+file gibt die Datei an, in welcher dieser Ausdruck steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: parse_expr
+GRUPPEN: Parser
+*/
+varargs mixed parse_value(string params, int pos, mixed error, string *symbols, string *file)
+{
+  int i;
+  mixed back,temp,stemp=({});
+  WHITESPACE;
+  error=0;
+  symbols=({});
+  if(pos>=strlen(params))
+  {
+    error=({pos,"Unerwartetes Ende"});
+    return 0;
+  }
+  
+  i=pos;
+  foreach(temp:aparser)
+  {
+ //Der error-Paramter hat bis jetzt nur die Funktion eines Flags (==0 oder !=0)
+ //Das kann sich aber in Zukunft aendern, daher richtiges error-Format nutzen.
+ //Es sollte nur dann ein nicht-Array in error geliefert werden,
+ //wenn sich die Funktion ueberhaupt nicht angesprochen fuehlt.
+    if(closurep(temp))
+      back=funcall(temp,params,&pos,&error,&symbols);
+    else
+      back=call_other(temp[1],temp[0],params,&pos,&error,&symbols);
+    if(!error) break;
+    error=0;
+    pos=i;
+  }
+  if(pos!=i) return back;
+  if(params[pos]=='"')
+  {
+    back="";
+    pos++;
+    while(member("\"",params[pos])<0) // Testet auf \" oder \0!
+    {
+      if(params[pos]=='\\')
+      {
+        pos++;
+        if(pos<strlen(params))
+          back+=special_chars[params[pos..pos]]||params[pos..pos];
+        else
+        {
+          error=({pos,"Fehlendes String-Ende"});
+          return 0;
+        }
+      }
+      else
+        back+=params[pos..pos];
+      pos++;
+    }
+    if(pos>=strlen(params))
+    {
+      error=({pos,"Fehlendes String-Ende"});
+      return 0;
+    }
+    pos++;
+    i=pos;
+    temp=parse_value(params,&i,&error,&stemp,file); //combine strings
+    if(error)
+      error=0;
+    else if(stringp(temp))
+    {
+      back+=temp;
+      pos=i;
+      symbols=stemp;
+    }
+  }
+  else if(params[pos]=='\'') //Ein einzelnes Zeichen, Symbol oder quoted array
+  {
+    int count;
+    count=1;
+    pos++;
+    while((pos<strlen(params))&&(params[pos]=='\''))
+    {
+      count++;
+      pos++;
+    }
+    if((pos+1<strlen(params))&&(params[pos..pos+1]=="({")) //quoted array
+    {
+      back=parse_value(params,&pos,&error,&symbols,file); //Array parsen
+      if(error) return 0;
+      while(count>0)
+      {
+        back=({#'quote,back});
+        count--;
+      }
+    }
+    else
+    {
+      back="";
+      for(;(pos<strlen(params))&&allowed_char(params[pos]);pos++)
+        back+=params[pos..pos];
+      if(params[pos]=='\'') // Ein einzelnes Zeichen
+      {
+        if((strlen(back)==1)&&(count==1)) back=back[0];
+        else {error=({pos,"Syntax-Fehler"}); return 0;}
+      }
+      else if(back=="")
+      {
+        if(count==3) back=''';
+        else if(count==1)
+        {
+          if(params[pos]=='\\')
+          {
+            pos++;
+            if(pos<strlen(params))
+              back=(special_chars[params[pos..pos]]||params[pos..pos])[0];
+            else
+            {
+              error=({pos,"Unerwartetes Ende"});
+              return 0;
+            }
+          }
+          else
+            back=params[pos];
+          pos++;
+          if(pos>=strlen(params))
+          {
+            error=({pos,"Unerwartetes Ende"});
+            return 0;
+          }
+          if(params[pos]=='\'') pos++;
+          else
+          {
+            error=({pos,"Fehlendes schliessendes Apostroph"});
+            return 0;
+          }
+        }
+        else
+        {
+          error=({pos,"Syntax-Fehler"});
+          return 0;
+        }
+      }
+      else
+      {
+        count++;
+        while(count>0)
+        {
+          back=quote(back);
+          count--;
+        }
+      }
+    }
+  }
+  else if(params[pos]=='#') //Ah, eine Closure
+  {
+    pos++;
+    if(pos>=strlen(params))
+    {
+      error=({pos,"Unerwartetes Ende"});
+      return 0;
+    }
+    else if(params[pos]!='\'')
+    {
+      error=({pos,"Syntax-Fehler"});
+      return 0;
+    }
+    else
+    {
+      pos++;
+      i=6;
+      while(i>0)
+      {
+        if((pos+i<=strlen(params)) && (member(additional_closures,params[pos..(pos+i-1)])>=0))
+        {
+          back=symbol_function(params[pos..(pos+i-1)]);
+          pos+=i;
+          break;
+        }
+        i--;
+      }
+      if(!i)
+      {
+        back="";
+        for(;(pos<strlen(params))&&allowed_char(params[pos]);pos++)
+          back+=params[pos..pos];
+        if((pos+1<strlen(params))&&(params[pos..pos+1]=="::"))
+        {
+          back+="::"; pos+=2;
+          for(;(pos<strlen(params))&&allowed_char(params[pos]);pos++)
+            back+=params[pos..pos];
+        }
+        if(back=="")
+        {
+          error=({pos,"Syntax-Fehler"});
+          return 0;
+        }
+        back=symbol_function(back,this_object())
+           ||this_object()->parser_get_symbol_variable(back)
+           ||symbol_function(back);
+        if(!back)
+        {
+          error=({pos,"Unbekannte Funktion"});
+          return 0;
+        }
+      }
+    }
+  }
+  else if((params[pos]>='0') && (params[pos]<='9')) //Eine einfache Zahl
+  {
+    back=0;
+    if((pos+1<strlen(params))&&(params[pos..(pos+1)]=="0x"))
+    {
+      pos+=2;
+      while(pos<strlen(params))
+      {
+        if((params[pos]>='0')&&(params[pos]<='9'))
+          back=back*16+params[pos]-'0';
+        else if((params[pos]>='a')&&(params[pos]<='z'))
+          back=back*16+params[pos]-'a'+10;
+        else if((params[pos]>='A')&&(params[pos]<='Z'))
+          back=back*16+params[pos]-'A'+10;
+        else
+          break;
+        pos++;
+      }
+    }
+    else
+      while((pos<strlen(params))&&(params[pos]>='0')&&(params[pos]<='9'))
+      {
+        back=back*10+params[pos]-'0';
+        pos++;
+      }
+  }
+  else if(params[pos]=='(') //Array oder Mapping
+  {
+    pos++;
+    WHITESPACE;
+    if(pos>=strlen(params))
+    {
+      error=({pos,"Fehlende schliessende Klammer"});
+      return 0;
+    }
+    if(params[pos]=='{')
+    {
+      back=({#'({});
+      pos++;
+      WHITESPACE;
+      while((pos<strlen(params))&&(params[pos]!='}'))
+      {
+        back+=({parse_expr(params,&pos,&error,ops[",",1],&stemp,file)});
+        symbols+=stemp-symbols;
+        if(error) return 0;
+        WHITESPACE;
+        if(params[pos]=='}') break;
+        if((pos>=strlen(params))||((params[pos]!=',')))
+        {
+          error=({pos,"Syntax-Fehler"});
+          return 0;
+        }
+        pos++;
+        WHITESPACE;
+      }
+      pos++;
+      if(params[pos]==')') pos++;
+      else
+      {
+        error=({pos,"Fehlende schliessende Klammer"});
+        return 0;
+      }
+    }
+    else if(params[pos]=='[')
+    {
+      back=({#'([});
+      pos++;
+      WHITESPACE;
+      while((pos<strlen(params))&&(params[pos]!=']'))
+      {
+        mixed eintrag;
+        eintrag=({parse_expr(params,&pos,&error,ops[",",1],&stemp,file)});
+        symbols+=stemp-symbols;
+        if(error) return 0;
+        WHITESPACE;
+        if((pos>=strlen(params))||((params[pos]!=':')&&(params[pos]!=',')&&(params[pos]!=']')))
+        {
+          error=({pos,"Syntax-Fehler"});
+          return 0;
+        }
+        while((pos<strlen(params))&&(params[pos]!=',')&&(params[pos]!=']'))
+        {
+          pos++;
+          WHITESPACE;
+          eintrag+=({parse_expr(params,&pos,&error,ops[",",1],&stemp,file)});
+          symbols+=stemp-symbols;
+          if(error) return 0;
+          WHITESPACE;
+          if((params[pos]==']')||(params[pos]==',')) break;
+          if((pos>=strlen(params))||(params[pos]!=';'))
+          {
+            error=({pos,"Syntax-Fehler"});
+            return 0;
+          }
+        }
+        back+=({eintrag});
+        if(params[pos]==']') break;
+        pos++;
+      }
+      pos++;
+      if(params[pos]==')') pos++;
+      else
+      {
+        error=({pos,"Fehlende schliessende Klammer"});
+        return 0;
+      }
+    }
+    else
+    {
+      back=parse_expr(params,&pos,&error,0,&symbols,file);
+      if(error) return 0;
+      WHITESPACE;
+      if((pos>=strlen(params))||(params[pos]!=')'))
+      {
+        error=({pos,"Fehlende schliessende Klammer"});
+        return 0;
+      }
+      pos++;
+    }
+  }
+  else
+  {
+    back="";
+    for(;(pos<strlen(params))&&allowed_char(params[pos]);pos++)
+      back+=params[pos..pos];
+    if(back=="")
+    {
+      error=({pos,"Syntax-Fehler"});
+      return 0;
+    }
+    if(is_konstante(back,file)) back=query_konstante(back,file);
+    else back=(temp=this_object()->parser_get_symbol_variable(back))?({temp}):(symbols=({back}),quote(back));
+    if(stringp(back)) //combine strings
+    {
+      i=pos;
+      temp=parse_value(params,&i,&error,&stemp,file);
+      if(error) error=0;
+      else if(stringp(temp))
+      {
+        back+=temp;
+        pos=i;
+        symbols+=stemp-symbols;
+      }
+    }
+  }
+  WHITESPACE;
+  return back;
+}
+
+/*
+FUNKTION: parse_expr
+DEKLARATION: varargs mixed parse_expr(string params, int pos, mixed error, int max, string *symbols, string *file)
+BESCHREIBUNG:
+Der im 1. Parameter uebergebene String wird als LPC-Ausdruck analysiert und
+daraus ein entsprechendes Array mit Closures, welches zur Konstruktion einer
+Lambda genutzt werden kann, aufgebaut. Im 2. Parameter wird die Position, ab
+der der String durchsucht werden soll, angegeben und die Position des Zeichens,
+welcher nicht mehr zum gefundenen Ausdruck gehoert, zurueckgegeben. Im 3.
+Parameter wird im Fehlerfall ein Array mit der Position des Fehlers als 1. und
+der Fehlerbeschreibung als 2. Element zurueckgegeben. Sobald error!=0 ist,
+ist das Ergebnis von parse_expr unbestimmt. Bei der syntaktischen Analyse
+werden nur Operationen mit einem Vorrang < max beachtet, falls der 4. Parameter
+angegeben wurde.
+In symbols werden alle verwendeten Symbolnamen zurueckgeliefert.
+
+file gibt die Datei an, in welcher dieser Ausdruck steht.
+(Als Array ({file1, file2, ...}), wobei file1 file2 includet hat usw.)
+VERWEISE: parse_value
+GRUPPEN: Parser
+*/
+varargs mixed parse_expr(string params, int pos, mixed error, int max, string *symbols, string *file)
+{
+  mixed back,arg2,sarg2;
+  string op;
+  int i;
+  if(!max) max=256;
+  WHITESPACE;
+  error=0;
+  if(pos>=strlen(params))
+  {
+    error=({pos,"Unerwartetes Ende"});
+    return 0;
+  }
+  //Prefix-Behandlung und Finden des ersten nicht-Operator-Symbols
+  if((pos+1<strlen(params))
+   &&member((["++","--"]),params[pos..(pos+1)])
+   &&((pos+2==strlen(params))||(params[pos+1]!='-')||(params[pos+2]!='-')))
+  {
+    pos+=2;
+    back=({(params[pos-1]=='+')?(#'+=):(#'-=),parse_expr(params,&pos,&error,PREOPS_VORRANG,&symbols,file),1});
+    if(error) return 0;
+  }
+  else if(member((['-','!','~']),params[pos]))
+  {
+    pos++;
+    back=({(['-':#'negate,'!':#'!,'~':#'~])[params[pos-1]],parse_expr(params,&pos,&error,PREOPS_VORRANG,&symbols,file)});
+    if(error) return 0;
+  }
+  else
+  {
+    symbols=({});
+    if(params[pos]=='(')
+    {
+      i=pos+1;
+      while(params[i] && member(" \t\n",params[i])>=0) i++;
+      if(params[i]=='{') //Typecast?
+      {
+        i++;
+        while(params[i] && member(" \t\n",params[i])>=0) i++;
+        back="";
+        for(;(i<strlen(params))&&allowed_char(params[i]);i++)
+          back+=params[i..i];
+        while(params[i] && member(" \t\n",params[i])>=0) i++;
+        if((i<=strlen(params))&&(params[i]=='*'))
+        {
+          i++;
+          while(params[i] && member(" \t\n",params[i])>=0) i++;
+        }
+        if((i<=strlen(params))
+         &&(params[i]=='}')
+         &&(member( (["mixed","string","int","object","float","status",
+                      "mapping","closure","symbol"]),back)))
+        {
+          i++;
+          while(params[i] && member(" \t\n",params[i])>=0) i++;
+          if(params[i]==')')
+          {
+            pos=i+1;
+            //Dieser Typecast is total egal
+            back=parse_expr(params,&pos,&error,PREOPS_VORRANG,&symbols,file);
+            if(error) return 0;
+          }
+          else
+            back=0;
+        }
+        else
+          back=0;
+      }
+      else
+      {
+        back="";  //Isses'n Typecast?
+        for(;(i<strlen(params))&&allowed_char(params[i]);i++)
+          back+=params[i..i];
+        while(params[i] && member(" \t\n",params[i])>=0) i++;
+        if((i<=strlen(params))&&(params[i]=='*'))
+        {
+          back+="*";
+          i++;
+          while(params[i] && member(" \t\n",params[i])>=0) i++;
+        }
+        if((i<=strlen(params))
+         &&(params[i]==')')
+         &&(member(type_cast_funs,back)))
+        {
+          pos=i+1;
+          back=({type_cast_funs[back],parse_expr(params,&pos,&error,PREOPS_VORRANG,&symbols,file)});
+          if(error) return 0;
+        }
+        else
+          back=0;
+      }
+    }
+    if(!back)
+    {
+      back=parse_value(params,&pos,&error,&symbols,file);
+      if(error) return 0;
+    }
+  }
+  //Infix-Behandlung
+  WHITESPACE;
+  while(pos<strlen(params))
+  {
+    if(((pos+3>=strlen(params))|| !member(ops,(op=params[pos..(pos+3)])))
+     &&((pos+2>=strlen(params))|| !member(ops,(op=params[pos..(pos+2)])))
+     &&((pos+1>=strlen(params))|| !member(ops,(op=params[pos..(pos+1)])))
+     && !member(ops,(op=params[pos..pos])))
+      return back;
+    if(ops[op,1]>=max) return back;
+    if(ops[op,0]==4) return back;
+    pos+=strlen(op);
+    WHITESPACE;
+    if(ops[op,0]==2) //Postfix
+    {
+      back=({symbol_function(op),back});
+      continue;
+    }
+    if(ops[op,0]!=3) //2. Parameter nicht behandeln.
+    {
+      arg2=parse_expr(params,&pos,&error,(op=="?")?ops[":",1]:ops[op,1],&sarg2,file);
+      if(error) return 0;
+    }
+    if(ops[op,0]) //Besonderer Operator
+    {
+      WHITESPACE;
+      if(pos>=strlen(params)) {error=({pos,"Unerwartetes Ende"}); return 0;}
+      switch(op)
+      {
+        default:
+          error=({pos,"Syntax-Fehler"});
+          return 0;
+        case "?":
+          if(params[pos]!=':')
+          {
+            error=({pos,"Fehlendes : zu ?"});
+            return 0;
+          }
+          pos++;
+          symbols+=sarg2-symbols;
+          back=({#'?,back,arg2,parse_expr(params,&pos,&error,ops[":",1],&sarg2,file)});
+          if(error) return 0;
+          symbols+=sarg2-symbols;
+          break;
+        case "->":  //call_other
+          if(params[pos]!='(')
+          {
+            error=({pos,"Syntax-Fehler"});
+            return 0;
+          }
+          pos++;
+          WHITESPACE;
+          if(pos>=strlen(params))
+          {
+            error=({pos,"Unerwartetes Ende"});
+            return 0;
+          }
+          if(symbolp(arg2))
+          {
+            arg2=to_string(arg2);
+            sarg2=({});
+          }
+          back=({#'call_other,back,arg2});
+          symbols+=sarg2-symbols;
+        case "::":  //Funktion im Inherit
+          if(op=="::")
+          {
+            if(symbolp(back)) back=to_string(back);
+            if((!symbolp(arg2))|| (!stringp(back)))
+            {
+              error=({pos,"Syntax-Fehler"});
+              return 0;
+            }
+            arg2=to_string(arg2);
+            back=({symbol_function(back+"::"+arg2)});
+            symbols=({});
+            if(!back[0]) {error=({pos,"Unbekannte Funktion"}); return 0;}
+          }
+        case "(": //Normaler Funktionsaufruf
+          i=0; // 1 heisst, dass ein Symbol nach String konvertiert werden soll
+          if(op=="(")
+          {
+            if(!symbolp(back))
+            {
+              error=({pos,"Syntax-Fehler"});
+              return 0;
+            }
+            back=to_string(back);
+            symbols=({});
+            if(is_makro(back,file)) back=({#'funcall,query_makro(back,1,file)});
+            else if(back=="defined")
+            {
+              back=({#'funcall,lambda(({'def}),({#'parser_defined,'def,quote(file)}))});
+              i=1;
+            }
+            else if(back=="__EFUN_DEFINED__")
+            {
+              back=({#'parser_efun_defined});
+              i=1;
+            }
+            else back=({symbol_function(back,this_object())||symbol_function(back)});
+            if(!back[0])
+            {
+              error=({pos,"Unbekannte Funktion"});
+              return 0;
+            }
+          }
+          while((pos<strlen(params))&&(params[pos]!=')')) //Alle Argumente durchgehen
+          {
+            back+=({parse_expr(params,&pos,&error,ops[",",1],&sarg2,file)});
+            if(error) return 0;
+            if(i && symbolp(back[<1]))
+            {
+              back[<1]=to_string(back[<1]);
+            }
+            else
+              symbols+=sarg2-symbols;
+            WHITESPACE;
+            if(pos>=strlen(params))
+            {
+              error=({pos,"Unerwartetes Ende"});
+              return 0;
+            }
+            if(params[pos]==')') break;
+            if(params[pos]!=',')
+            {
+              error=({pos,"Syntax-Fehler"});
+              return 0;
+            }
+            pos++;
+            WHITESPACE;
+          }
+          if(pos>=strlen(params))
+          {
+            error=({pos,"Unerwartetes Ende"});
+            return 0;
+          }
+          pos++;
+          break;
+        case "[": //Alle moeglichen und unmoeglichen Arten der Indizierung
+          back=({back});
+          arg2=0;
+          if(params[pos..(pos+1)]=="..")
+            back+=({0});
+          else
+          {
+            if(params[pos]=='<')
+            {
+              arg2++;
+              pos++;
+              WHITESPACE;
+              if(pos>=strlen(params))
+              {
+                error=({pos,"Fehlende schliessende eckige Klammer"});
+                return 0;
+              }
+            }
+            back+=({parse_expr(params,&pos,&error,ops[",",1],&sarg2,file)});
+            if(error) return 0;
+            symbols+=sarg2-symbols;
+          }
+          WHITESPACE;
+          if(pos>=strlen(params))
+          {
+            error=({pos,"Fehlende schliessende eckige Klammer"});
+            return 0;
+          }
+          if(params[pos]==']')  //Die ganz einfache Variante
+          {
+            back=({ ({#'[,#'[<})[arg2] })+back;
+            pos++;
+            break;
+          }
+          else if(params[pos]==',') //Fuer Mappings
+          {
+            if(arg2)
+            {
+              error=({pos,"Syntax-Fehler"});
+              return 0;
+            }
+            arg2=4;
+            pos++;
+          }
+          else if(pos+1>=strlen(params))
+          {
+            error=({pos,"Fehlende schliessende eckige Klammer"});
+            return 0;
+          }
+          else if(params[pos..(pos+1)]=="..")
+          {
+            pos+=2;
+            WHITESPACE;
+            if(pos>=strlen(params))
+            {
+              error=({pos,"Fehlende schliessende eckige Klammer"});
+              return 0;
+            }
+            if(params[pos]==']')
+            {
+              back=({ ({#'[..,#'[<..})[arg2] })+back;
+              pos++;
+              break;
+            }
+            else if(params[pos]=='<')
+            {
+              arg2+=2;
+              pos++;
+            }
+          }
+          else
+          {
+            error=({pos,"Syntax-Fehler"});
+            return 0;
+          }
+          WHITESPACE;
+          if(pos>=strlen(params))
+          {
+            error=({pos,"Fehlende schliessende eckige Klammer"});
+            return 0;
+          }
+          back+=({parse_expr(params,&pos,&error,ops[",",1],&sarg2,file)});
+          if(error) return 0;
+          symbols+=sarg2-symbols;
+          WHITESPACE;
+          if(pos>=strlen(params))
+          {
+            error=({pos,"Fehlende schliessende eckige Klammer"});
+            return 0;
+          }
+          if(params[pos]==']')
+          {
+            back=({ ({#'[..],#'[<..],#'[..<],#'[<..<],#'[,]})[arg2] })+back;
+            pos++;
+            break;
+          }
+          else
+          {
+            error=({pos,"Fehlende schliessende eckige Klammer"});
+            return 0;
+          }
+      }
+    }
+    else
+    {
+      back=({symbol_function(op),back,arg2});
+      symbols+=sarg2-symbols;
+    }
+    WHITESPACE;
+  }
+  return back;
+}
+
+nosave mixed *additional_includes=({});
+varargs void read_include(mixed file, closure callback, varargs mixed *callback_params);
+
+/*
+FUNKTION: get_lines_from_file
+DEKLARATION: string *get_lines_from_file(string file)
+BESCHREIBUNG:
+Liest alle Zeilen aus file ein. Dabei werden Unix-, Win- und
+Mac-Zeilenumbrueche beachtet und Zeilen mit \ am Ende zusammengefasst.
+Die Anzahl an Zeilen bleibt dabei aber gleich.
+VERWEISE: read_include
+GRUPPEN: Parser
+*/
+string *get_lines_from_file(string file)
+{
+  mixed neu,lines="";
+  int bytes,anz=file_size(file); 
+  if(anz<=0 || anz>150000)
+      return 0;
+  bytes=query_limits()[LIMIT_BYTE];
+  anz=0;
+  do
+  {
+      neu=read_bytes(file,anz,bytes);
+      if(neu)
+          lines+=neu;
+      anz+=bytes;
+  }while(neu && strlen(lines)<500000);
+
+  if(!strlen(lines)) return 0;
+  //Win-/Mac-Zeilenumbrueche korrigieren
+  lines=regreplace(lines,"\r(\n|)","\n",1);
+  //Zeilen mit einem \ am Ende zusammenfassen
+  lines=regreplace(lines,"([^\\\\]|^)((\\\\\\\\)*)\\\\[\t ]*\n","\\1\\2\r",1);
+  //Falls Leerzeichen/Tabs vor/nach \, dann zu einem Leerzeichen zusammenfassen.
+  lines=regreplace(lines,"[\t ]*([\t ]\r|\r[\t ])[\t ]*"," \r",1);
+  while(member(lines,'\r')>=0)
+    lines=regreplace(lines,"\r([^\n]*)","\\1\n",1);
+  return explode(lines,"\n");
+}
+
+/*
+FUNKTION: delete_comments
+DEKLARATION: string *delete_comments(string *lines)
+BESCHREIBUNG:
+Entfernt alle Kommentare (// oder *) aus den Zeilen.
+Die Anzahl an Zeilen bleibt dabei aber gleich.
+VERWEISE: read_include
+GRUPPEN: Parser
+*/
+
+string *delete_comments(string *lines)
+{
+  string file;
+  if(!lines) return 0;
+  file=regreplace(implode(lines,"\n"),"//[^\n]*\n","\n",1);
+  while(strstr(file,"/*")>=0)
+  {
+    file=regreplace(file,"/\\*([^*\n]|(\\*[^/]))*\n","\n/*",1);
+    file=regreplace(file,"/\\*([^*\n]|(\\*[^/]))*(\\*/|$)","",1);
+  }
+  return explode(file,"\n");
+}
+
+/*
+FUNKTION: preprocess_include_lines
+DEKLARATION: protected varargs string *preprocess_include_lines(string *lines, string filename)
+BESCHREIBUNG:
+Wird von process_one_include_line aufgerufen, wenn es eine Datei includen soll.
+Standardmaessig ruft sie delete_comments auf und liefert das Ergebnis zurueck.
+VERWEISE: read_include, process_include_lines, process_one_include_line
+GRUPPEN: Parser
+*/
+protected varargs string *preprocess_include_lines(string *lines, string filename)
+{
+  return delete_comments(lines);
+}
+
+/*
+FUNKTION: process_pragma
+DEKLARATION: protected varargs mixed process_pragma(string text, string *file, int zeile, mixed *lines)
+BESCHREIBUNG:
+Wird von process_one_include_line aufgerufen, wenn es auf ein #pragma stoesst.
+Dabei enthaelt text die restliche Zeile und lines die restlichen Zeilen.
+Das Ergebnis liefert process_one_include_file direkt zurueck.
+Die Originalfunktion macht gar nichts.
+VERWEISE: read_include, process_include_lines, process_one_include_line
+GRUPPEN: Parser
+*/
+protected varargs mixed process_pragma(string text, string *file, int zeile, mixed *lines) {}
+
+/*
+FUNKTION: handle_preprocessor_symbols
+DEKLARATION: protected varargs mixed handle_preprocessor_symbols(mixed *parr, mixed l, string *symbols, mixed *line, mixed error, int mkcl)
+BESCHREIBUNG:
+Wird von process_one_include_line aufgerufen, wenn eine Lambda-Closure
+erstellt werden soll, um eventuell aufgetretene Symbole zu behandeln.
+Dabei entsprechen parr und l den Parameter der Efun lambda.
+symbols ist die Liste aller aufgetretenen Symbole in l und
+line die aktuelle Zeile. In error wird ein gegebenenfalls aufgetretener Fehler
+zurueckgeliefert und wenn mkcl!=0 ist, wird die l in eine Lambda-Closure
+umgewandelt, ansonsten wird nur der 2. Parameter fuer die lambda()
+zurueckgeliefert.
+Die Originalfunktion liefert einen Fehler, wenn unbekannte Symbole aufgetreten
+sind.
+VERWEISE: read_include, process_include_lines, process_one_include_line
+GRUPPEN: Parser
+*/
+protected varargs mixed handle_preprocessor_symbols(mixed *parr, mixed l, string *symbols, mixed *line, mixed error, int mkcl)
+{
+  mixed tmp;
+  if(sizeof(tmp=symbols-(parr?map(parr,#'to_string):({}))))
+  {
+    error=({"Variables "+liste(tmp," and ")+" not declared"})+line;
+    return 0;
+  }
+  else
+    error=0;
+  if(mkcl)
+    return lambda(parr,l);
+  else
+    return l;
+}
+
+/*
+FUNKTION: process_one_include_line
+DEKLARATION: varargs mixed process_one_include_line(mixed *lines)
+BESCHREIBUNG:
+Verarbeitet fuer read_include/process_include_lines eine Zeile.
+Liefert einen Wert !=0 bei einem Fehler.
+VERWEISE: read_include, process_include_lines
+GRUPPEN: Parser
+*/
+varargs mixed process_one_include_line(mixed *lines)
+{
+// #define IWHITESPACE while(linetext[j] && member(" \t",linetext[j])>=0) j++
+#define IWHITESPACE WHITE(" \t", linetext, j)
+#define IERROR(x) return ({x})+line
+  int j;
+  mixed k;
+  string name,pname;
+  mixed expr,params,symbols=({});
+  mixed line=lines[0];
+  string linetext=line[0];
+
+  lines=lines[1..<1];
+  if(sizeof(lines) && !lines[0][2]) lines[0][2]=line[2]+1;
+  if(!sizeof(linetext) || linetext[0]!='#') return 0;
+  j=1;
+  IWHITESPACE;
+  k=j;
+  while(j<strlen(linetext) && allowed_char(linetext[j]))
+    j++;
+  name = linetext[k..j-1];
+  IWHITESPACE;
+  switch(name)
+  {
+    case "include":
+      if(j>=strlen(linetext)) IERROR("Missing leading \" or < in #include");
+      name="";
+      if(linetext[j]=='<')
+      {
+        j++;
+        for(;(j<strlen(linetext))&&(linetext[j]!='>');j++)
+          name+=linetext[j..j];
+        if(j>=strlen(linetext)) IERROR("Missing trailing \" or > in #include");
+        k=1;
+      }
+      // else if(linetext[j]!='\"') IERROR("Missing leading \" or < in #include");
+      else
+      {
+        expr=parse_value(linetext, &j, &params,&symbols,line[1]);
+        if(params)
+          IERROR(sprintf("%s an Position %d",params[1],params[0]));
+        expr=handle_preprocessor_symbols(0,expr,symbols,line,&params,1);
+        if(params)
+          return params;
+        name=funcall(expr);
+        k=0;
+      }
+      expr=MASTER_OB->include_file(name,line[1][<1],k);
+      if(!expr)
+        expr=abs_path(name,implode(explode(line[1][<1],"\\")[0..<2],"\\"));
+      if(!stringp(expr))
+        IERROR("Cannot #include '"+name+"'");
+#if 0
+      if(member(line[1],expr)>=0)
+        IERROR("Cannot #include '"+expr+"' recursivly");
+#else
+      if(sizeof(line[1])>20)
+        IERROR("#includes nested too deep.");
+#endif
+      params=preprocess_include_lines(get_lines_from_file(expr),expr);
+      if(!params) IERROR("Cannot read file '"+expr+"'");
+      lines=transpose_array(({params,({line[1]+({expr})})*sizeof(params),({1})+({0})*(sizeof(params)-1)}))+lines;
+      break;
+    case "if":
+    case "ifdef":
+    case "ifndef":
+      if(name=="if")
+      {
+        expr=parse_expr(linetext,&j,&params,0,&symbols,line[1]);
+        if(params)
+          IERROR(sprintf("%s an Position %d",params[1],params[0]));
+        expr=handle_preprocessor_symbols(0,expr,symbols,line,&params,1);
+        if(params)
+          return params;
+        params=funcall(expr);
+      }
+      else if(name=="ifdef")
+      {
+        if(j>=strlen(linetext))
+          IERROR("Missing argument in  #ifdef");
+        name="";
+        for(;(j<strlen(linetext))&&allowed_char(linetext[j]);j++)
+          name+=linetext[j..j];
+        if(name=="") 
+          IERROR("Missing argument in #ifdef");
+        params=parser_defined(name,line[1]);
+      }
+      else if(name=="ifndef")
+      {
+        if(j>=strlen(linetext))
+          IERROR("Missing argument in #ifndef");
+        name="";
+        for(;(j<strlen(linetext))&&allowed_char(linetext[j]);j++)
+          name+=linetext[j..j];
+        if(name=="")
+          IERROR("Missing argument in #ifndef");
+        params=!parser_defined(name,line[1]);
+      }
+      k=0;
+      if(!params)
+        for(;sizeof(lines);lines=lines[1..<1])
+        {
+          if((sizeof(lines)>1) && !lines[1][2]) lines[1][2]=lines[0][2]+1;
+          if(!sizeof(lines[0][0]) || lines[0][0][0]!='#') continue;
+          j=1;
+          IWHITESPACE;
+          name="";
+          for(;(j<strlen(lines[0][0]))&&allowed_char(lines[0][0][j]);j++)
+           name+=lines[0][0][j..j];
+          if(member((["ifdef","if","ifndef"]),name)) k++;
+          else if(name=="endif") k--;
+          if(k<0)
+          {
+            lines=lines[1..<1];
+            break;
+          }
+          else if(!k)
+          {
+            if(name=="else")
+            {
+              lines=lines[1..<1];
+              break;
+            }
+            else if(name=="elif")
+            {
+              lines[0][0]="#if"+lines[0][0][j..<1];
+              break;
+            }
+          }
+        }
+      break;
+    case "else":
+    case "elif":
+      k=1;
+      for(;sizeof(lines);lines=lines[1..<1])
+      {
+        if((sizeof(lines)>1) && !lines[1][2]) lines[1][2]=lines[0][2]+1;
+        if(!sizeof(lines[0][0]) || lines[0][0][0]!='#') continue;
+        j=1;
+        IWHITESPACE;
+        name="";
+        for(;(j<strlen(lines[0][0]))&&allowed_char(lines[0][0][j]);j++)
+         name+=lines[0][0][j..j];
+        if(member((["ifdef","if","ifndef"]),name)) k++;
+        else if(name=="endif") k--;
+        if(!k) break;
+      }
+      lines=lines[1..<1];
+      break;
+    case "undef":
+      if(j>=strlen(linetext)) 
+        IERROR("Missing argument in #undef");
+      name="";
+      for(;(j<strlen(linetext))&&allowed_char(linetext[j]);j++)
+        name+=linetext[j..j];
+      if(name=="")
+        IERROR("Missing argument in #undef");
+      delete_define(name,line[1]);
+      delete_konstante(name,line[1]);
+      delete_makro(name,line[1]);
+      break;
+    case "define":
+      if(j>=strlen(linetext))
+        IERROR("Missing definition in #define");
+      name="";
+      for(;(j<strlen(linetext))&&allowed_char(linetext[j]);j++)
+        name+=linetext[j..j];
+      if(name=="")
+        IERROR("Missing definition in #define");
+      if(j<strlen(linetext) && linetext[j]=='(')
+      {
+        j++;
+        IWHITESPACE;
+        params=({});
+        while((j<strlen(linetext))&&(linetext[j]!=')'))
+        {
+          pname="";
+          for(;(j<strlen(linetext))&&allowed_char(linetext[j]);j++)
+            pname+=linetext[j..j];
+          if(pname=="") break;
+          params+=({quote(pname)});
+          IWHITESPACE;
+          if(j>=strlen(linetext)) break;
+          if(linetext[j]==')') break;
+          if(linetext[j]!=',') break;
+          j++;
+          IWHITESPACE;
+        }
+        if(linetext[j]!=')')
+          IERROR("Missing ',' in #define parameter list");
+        j++;
+      }
+      else
+       params=0;
+      IWHITESPACE;
+      if((!params) && (j>=strlen(linetext)))
+      {
+        add_define(name,line[1]);
+        return 0;
+      }
+      pname=linetext[j..<1];
+      k=strstr(pname,"//");
+      if(k>=0) pname=pname[0..(k-1)];
+      k=strstr(pname,"/*");
+      while(k>=0)
+      {
+        j=strstr(pname,"*/",k+2);
+        if(j>=0)
+          pname=pname[0..(k-1)]+pname[j+2..<1];
+        else
+          pname=pname[0..(k-1)];
+        k=strstr(pname,"/*");
+      }
+      k=0;
+      expr=parse_expr(pname,0,&k,0,&symbols,line[1]);
+      if(k)
+        IERROR(sprintf("%s an Position %d",k[1],k[0]));
+      expr=handle_preprocessor_symbols(params,expr,symbols,line,&k,0);
+      if(k)
+        return k;
+      if(params)
+        add_makro(name,unbound_lambda(params,expr),line[1]);
+      else
+        add_konstante(name,expr,line[1]);
+      break;
+    case "pragma":
+      IWHITESPACE;
+      return process_pragma(linetext[j..<1],line[1],line[2],&lines);
+  }
+}
+
+/*
+FUNKTION: process_include_lines
+DEKLARATION: varargs void process_include_lines(mixed *lines, closure callback, mixed *callback_params)
+BESCHREIBUNG:
+Verarbeitet fuer read_include die angegebenen Zeilen.
+Ein Element von lines hat die Struktur
+({string Zeile, string *Woraus, int Zeilennummer}).
+VERWEISE: read_include, add_makro, add_konstante, parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs void process_include_lines(mixed *lines, closure callback, mixed *callback_params)
+{
+
+  while(sizeof(lines) && (get_eval_cost()>MIN_EVAL))
+    process_one_include_line(&lines);
+  if(sizeof(lines))
+    call_out("process_include_lines",2,lines,callback,callback_params);
+  else
+  {
+    apply(callback,callback_params);
+    if(sizeof(additional_includes))
+    {
+      call_out(#'apply,0,#'apply,#'read_include,additional_includes[0]);
+      additional_includes=additional_includes[1..<1];
+    }
+  }
+}
+
+/*
+FUNKTION: read_include
+DEKLARATION: varargs void read_include(string file|string *files, closure callback, varargs mixed *callback_params)
+BESCHREIBUNG:
+read_include ist ein einfacher Header-Datei-Parser.
+Er nimmt sich alle #define-Zeilen aus der/den angegebenen Datei(en),
+jagt sie durch den Parser und traegt sie ein, falls es keinen Fehler dabei
+gibt. Dabei achtet er auf #if's und verarbeitet auch #include.
+Kommentare werden dabei beachtet.
+Er ist sehr(!) eval-aufwendig, startet aber selbststaendig einen call_out,
+wenn zuwenig Evals vorhanden sind. Wurde(n) die Datei(en) vollstaendig
+eingelesen, ruft er callback mit den angegebenen Parametern auf.
+VERWEISE: add_makro, add_konstante, parse_value, parse_expr
+GRUPPEN: Parser
+*/
+varargs void read_include(mixed file, closure callback, varargs mixed *callback_params)
+{
+  mixed lines;
+  if(stringp(file)) file=({file});
+  if(!sizeof(file))
+  {
+    apply(callback,callback_params);
+    return;
+  }
+  if(find_call_out("process_include_lines")>=0)
+  {
+    additional_includes+=map(file[0..<2],(:({$1,0,0}):)) 
+                       + ({({file[<1],callback,callback_params})});
+    return;
+  }
+  if(sizeof(file)>1)
+  {
+    additional_includes+=map(file[1..<2],(:({$1,0,0}):)) 
+                       + ({({file[<1],callback,callback_params})});
+    callback=0;
+    callback_params=0;
+  }
+  file=file[0];
+  lines=preprocess_include_lines(get_lines_from_file(file),file);
+  if(!lines)
+  {
+    apply(callback,callback_params);
+    return;
+  }
+  process_include_lines(transpose_array(({lines,({({file})})*sizeof(lines),({1})+({0})*(sizeof(lines)-1)})),
+    callback,callback_params);
+}
+
+/*Anwendungsbeispiel:
+mixed dofun(string param)
+{
+ mixed i;
+ mixed fun;
+ fun=parse_expr(param,0,&i);
+ if(i) do_error(sprintf("%s in %O an Position %i!\n",i[1],param,i[0]));
+ else
+  return funcall(lambda(0,fun));
+}
+*/
+
+void icreate()
+{
+  if(is_makro("QUERY")) return;
+  seteuid(getuid());
+  add_makro("QUERY",unbound_lambda(({'x,'ob}),({#'?,({#'mappingp,'ob}),({#'funcall,({#'[,'ob,'x})}),({#'call_other,'ob,({#'+,"query_",'x})})})));
+  read_include("/sys/deklin.h");
+/*
+  read_include("/sys/apps.h");
+  read_include("/sys/config.h");
+  read_include("/sys/invis.h");
+  read_include("/sys/level.h");
+  read_include("/sys/message.h");
+  read_include("/sys/move.h");
+  read_include("/sys/parse_com.h");
+  read_include("/sys/room.h");
+  read_include("/sys/stats.h");
+*/
+}
+
+void create() //Verbraucht ca. 85000 Evals...
+{
+ if(this_object()!=touch(__FILE__))
+ {
+   __FILE__->icreate(); //Create wird nicht bei Inherits aufgerufen :(
+   konstanten=deep_copy(__FILE__->query_konstanten());
+   makros=deep_copy(__FILE__->query_makros());
+   defines=deep_copy(__FILE__->query_defines());
+ }
+ else
+   icreate();  //Wir haben Glueck
+}

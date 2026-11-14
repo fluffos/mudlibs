@@ -1,0 +1,107 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/player/extern.c
+// Description:	Anbindung an externe Services
+// Author:	Gnomi
+//
+// $Log: extern.c,v $
+// Revision 1.2  2011-02-02 23:22:55  gnomi
+// Meldung in der dritten Person ausgeben (als Option).
+//
+// Revision 1.1  2011-02-02 22:22:29  gnomi
+// Twitter-Anbindung.
+//
+
+#include <input_to.h>
+#include <achievements.h>
+#include "player.h"
+
+#define TWITTER_RPC "/secure/rpc/twitter"
+
+private string* twitter_token;
+private int twitter_filter;
+
+nomask nosave int has_twitter_token()
+{
+    return twitter_token != 0;
+}
+
+nomask nosave int query_twitter_filter()
+{
+    return twitter_filter;
+}
+
+nomask nosave void set_twitter_filter(int type, int set)
+{
+    if(set)
+        twitter_filter |= (1<<type);
+    else
+        twitter_filter &= ~(1<<type);
+}
+
+nomask nosave void switch_twitter_filter(int type)
+{
+    twitter_filter ^= (1<<type);
+}
+
+private void get_twitter_pin(string pin, string token, string secret, closure cb)
+{
+    if(!pin || sizeof(pin & "&?;/=@"))
+    {
+       write("Breche ab.\n");
+       funcall(cb);
+       return;
+    }
+
+    TWITTER_RPC->authorize(function void(string* values)
+    {
+        call_with_this_player(function void()
+        {
+            if(!values)
+                write("Falsche PIN eingegeben. Breche ab.\n");
+            else
+            {
+                twitter_token = values;
+                write("Verbindung zu Twitter hergestellt.\n");
+            }
+            funcall(cb);
+        });
+    }, token, secret, pin);
+}
+
+nomask nosave void start_twitter_authorization(closure cb)
+{
+    write("Generiere Zugangsdaten fuer Twitter...\n");
+    TWITTER_RPC->get_auth_url(function void(string* values)
+    {
+        call_with_this_player(function void()
+        {
+            printf("Logge Dich bitte unter folgender URL "
+                   "mit Deinem Twitter-Account ein:\n"
+                   "  %-=75s\n", values[0]);
+
+            input_to(#'get_twitter_pin,  INPUT_PROMPT,
+                   "Gib bitte die auf der Seite angezeigte PIN ein: ",
+                   values[1], values[2], cb);
+        });
+    });
+}
+
+void announce_achievement(int type, mapping info)
+{
+    if(twitter_token && (twitter_filter & (1<<type)))
+    {
+        string msg;
+
+        if(this_object()->query_player_flag(PF_TWITTER_3RD_PERSON))
+            msg = info[AI_TEXT_OTHER];
+        else
+            msg = info[AI_TEXT_ME] || info[AI_TEXT_OTHER];
+
+        TWITTER_RPC->send_player_msg(function void(int result)
+        {
+            if(result < 0)
+                twitter_token = 0;
+        }, msg[0..139], twitter_token[0], twitter_token[1]);
+    }
+}

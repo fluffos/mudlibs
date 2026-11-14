@@ -1,0 +1,255 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/room/death_room.c
+// Description: Inherit fuer Todesraeume.
+//
+// $Log: death_room.c,v $
+// Revision 1.21  2009-03-20 08:02:14  gnomi
+// Falls die Kirche nicht ladbar ist, in die Kathedrale von Tadmor bewegen.
+//
+// Revision 1.20  2009-01-15 08:59:08  gnomi
+// OOC-Befehle zulassen.
+//
+// Revision 1.19  2006/12/30 01:08:30  gnomi
+// Sequenzstandsabfrage fuer T_GREATER/T_LESSER-Checks eingebaut.
+//
+// Revision 1.18  2004/05/26 21:41:58  gnomi
+// Kirchenhandling korrigiert.
+//
+// Revision 1.17  2004/05/12 20:47:54  gnomi
+// Letzten Patch rueckgaengig gemacht. Wird jetzt vom Player geregelt.
+//
+// Revision 1.16  2003/05/30 00:00:00  menaures
+// Bugfix zum vorhergehenden Patch
+//
+// Revision 1.15  2003/05/10 17:25:21  menaures
+// Bei unbekannter Kirche stattdessen DEFAULT_ROOM_AFTER_DEATH benutzen.
+//
+// Revision 1.14  2003/05/06 02:46:05  gnomi
+// Wiederauferstehungsraum beim Player abfragen.
+//
+// Revision 1.13  2003/01/26 03:55:19  gnomi
+// Einstellungsbefehl erlauben.
+//
+// Revision 1.12  2003/01/25 04:25:44  gnomi
+// NPCs duerfen da nicht rein.
+//
+// Revision 1.11  2002/06/18 01:12:40  gnomi
+// Todesshadow mit NO_MULTI_SHADOW ueberwerfen.
+//
+// Revision 1.10  2002/06/17 00:40:10  gnomi
+// Definition von query_prevent_shadow korrigiert.
+//
+// Revision 1.9  2002/05/09 01:07:31  gnomi
+// Typo und Toll gehen dort jetzt auch...
+//
+// Revision 1.8  2001/06/25 11:48:28  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.7  2001/04/15 12:51:15  sissi
+// DEFAULT_ROOM_AFTER_DEATH statt "/room/church"
+//
+// Revision 1.6  2001/03/19 03:20:18  gnomi
+// Room und Monster virtual inheritet.
+//
+// Revision 1.5  2001/03/04 04:51:25  freaky
+// von sent.h auf commands.h umgestellt.
+//
+// Revision 1.4  2001/03/03 22:55:20  gnomi
+// Zahlen in add_action's durch ihre Defines ersetzt.
+//
+// Revision 1.3  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+virtual inherit "/i/room";
+
+#include <move.h>
+#include <commands.h>
+#include <config.h>
+#include <shadow.h>
+#include <description.h>
+
+private object *players = ({});
+private string nicht_tot = "Der Tod sagt: WAS TUST DU HIER? "
+                   "DEINE ZEIT IST NOCH NICHT REIF!\n\n";
+private string kirche = 0;
+private string ende_meldung = "Der Tod sagt: DU KANNST DEM TOD NICHT ENTRINNEN!";
+
+// --------------- Anfang Interface nach "Aussen" ---------------
+
+nosave void set_nicht_tot_meldung(string s) { if (s) nicht_tot = s; }
+// Spieler landet beim Tod, obwohl er gar nicht tot ist
+
+nosave void set_ende_meldung(string s) { if (s) ende_meldung = s; }
+// Spieler gibt 'ende' ein.
+
+/*
+FUNKTION: set_kirche
+DEKLARATION: nosave void set_kirche(string kirche)
+BESCHREIBUNG:
+Damit wird der generelle Auferstehungsort gesetzt.
+VERWEISE: query_kirche
+GRUPPEN: spieler
+*/
+nosave void set_kirche(string s) { if (s && touch(s)) kirche = s; }
+// Dateiname der Kirche, hier landet der Spieler nach dem Tod.
+
+void get_tod() {} // zum Ueberladen da
+// Erschaffen eines "Todesmonsters", falls erwuenscht
+
+void reset() {} // zum Ueberladen da
+// Clonen von Runen oder so
+
+/*
+FUNKTION: query_kirche
+DEKLARATION: string query_kirche(object player)
+BESCHREIBUNG:
+Liefert den Auferstehungsort fuer den Spieler.
+Wird 0 geliefert, so wird dieser aufgrund des Sterbeortes ermittelt.
+VERWEISE: set_kirche
+GRUPPEN: spieler
+*/
+string query_kirche(object player)
+{
+    return kirche;
+}
+
+// --------------- Ende Interface nach "Aussen" ---------------
+
+int query_prevent_shadow (object shadow) { return 1; }
+
+void init()
+{
+   add_action("filter", "", AA_SHORT);
+   get_tod();
+   if(playerp(this_player()))
+   {
+      if(this_player()->query_ghost() < 1)
+      {
+         write(nicht_tot);
+	 // this_player()->query_kirche() alleine entscheidet, wo die
+	 // Kirche liegt (es fragt ggf. unser query_kirche ab.).
+	 // Das '|| DEFAULT_ROOM_AFTER_DEATH' ist nur zur Sicherheit.
+         this_player()->move(
+		this_player()->query_kirche() || DEFAULT_ROOM_AFTER_DEATH,
+		MOVE_MAGIC);
+         return;
+      }
+      players += ({ this_player() });
+      this_player()->set_ghost(1);
+      set_heart_beat(1);
+   }
+}
+
+void create()
+{
+   set_own_light(1);
+   add_type("kunstlicht", 1);
+   add_type("kein_startraum", 1);
+   add_type("teleport_raus_verboten",1);
+   add_type("teleport_rein_verboten",1);
+   set_short("Arbeitszimmer des Todes");
+   add_controller("forbidden_move_in", (: $3 && !playerp($2) :));
+   reset();
+}
+
+int do_sequence (object wer, int nr)
+{
+    tell_object (wer,"Nicht ins Inherit springen.\n");
+    return -1;
+}
+
+protected mixed desc_number(string name, mixed info, mixed* par)
+{
+    switch(name)
+    {
+	case "sequence":
+	    return info[TI_VIEWER] &&
+		info[TI_VIEWER]->query_ghost();
+    }
+    
+    return ::desc_number(name, info, par);
+}
+
+void heart_beat()
+{
+   int i;
+
+   players = filter(players - ({ 0 }), 
+      lambda(({'pl}), ({#'== , this_object(), ({ #'environment, 'pl }) })));
+   if(sizeof(players))
+      for(i = sizeof(players); i--;)
+      {
+	 players[i]->add_ghost(1);
+         if (do_sequence (players[i], players[i]->query_ghost()) == -1)
+	 {
+	    // players[i]->query_kirche() alleine entscheidet, wo die
+	    // Kirche liegt (es fragt ggf. unser query_kirche ab).
+	    // Alles andere bringt Inkonsistenzen...
+	    // Das '|| DEFAULT_ROOM_AFTER_DEATH' ist nur zur Sicherheit.
+	    //
+	    // Es muss vor set_ghost abgefragt werden, weil
+	    // set_ghost die Kirche loescht.
+	    string my_church = players[i]->query_kirche() ||
+			       DEFAULT_ROOM_AFTER_DEATH;
+	    players[i]->set_ghost(-1);
+	    clone_object("/room/death/obj/death_shadow")
+	       ->init_shadow(players[i], NO_MULTI_SHADOW);
+	    players[i]->close_con();
+	    
+	    if(!touch(my_church))
+		my_church = DEFAULT_ROOM_AFTER_DEATH;
+	    
+	    players[i]->move(my_church, MOVE_NORMAL,
+	       "$Der() verschwindet ploetzlich.",
+	       "$Ein(OBJ_TP,vergeistigt) erscheint ploetzlich!");
+	 }
+      }
+   else
+      set_heart_beat(0);
+}
+
+int filter(string str)
+{
+   switch(query_verb())
+   {
+      case "ende":
+      case "#ende":
+	 write(ende_meldung);
+      case "schaue":
+      case "schau":
+      case "betrachte":
+      case "nehme":
+      case "nehm":
+      case "nimm":
+      case "fehler":
+      case "idee":
+      case "typo":
+      case "toll":
+      case "wuerdige":
+      case "wuerdigung":
+      case "kuri":
+      case "erei":
+      case "hilfe":
+      case "suizid":
+      case "einst":
+         return 0;
+      default:
+         if(query_verb() && query_verb()[0]=='#')
+	    return 0;
+	
+	 write("Das ist unmoeglich in Deinem nichtmateriellen Zustand.\n");
+	 if(this_player()->query_wiz_level())
+	 {
+	    write("... als Gott andererseits, kein Problem.\n");
+	    return 0;
+	 }
+	 return 1;
+   }
+}
+
+int query_death_room() { return 1; }

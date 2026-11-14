@@ -1,0 +1,2549 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/player/login.c
+// Description: Konfiguration des Players nach dem Einloggen
+// Author:      Francis/Freaky/Garthan
+// Modified By: Garthan	(20.10.94) Verwendung von get_start_room in ende_statue
+//		Garthan (13.12.94) advanced suicid
+//		Freaky  (14.03.95) last_host
+//		Freaky  (26.03.95) Statue-Handling (jetzt mit shadow)
+//		Freaky	(24.11.95) update_last_host()
+//              Freaky, Garthan (28.11.95) Beim 'suizid' wird in der Gilde
+//                              player_suicid(this_object()) aufgerufen.
+//              Sissi   (29. 5.96) notify_net_dead in net_dead
+//                      (14. 6.96) vom Statuendasein erwachende Goetter
+//                                 kriegen keinen Heart Beat mehr
+//		Freaky  (19.08.96) change_password: auf switch umgestellt
+//              Sissi   (23.09.96) Selbstsperrung eines Spielers zu bestimmten
+//                                 Uhrzeiten an bestimmten Wochentagen,
+//                                 interaktives Menue
+//              Copperhead (16.8.97) query_letzte_gilden()
+//			   (25.8.97) query_letzte_gilden ueberarbeitet.
+//		Freaky (04.09.97) query_letzte_gilden() deaktiviert.
+//		Jesaia (22.10.97) query_letzte_gilden() auf 2-dim Array
+//		Freaky (10.03.1998) message auf send_message umgebaut.
+//              Copper (1.7.98) www Befehl fuer newbiep() deaktiviert.
+//		Freaky (21.07.1998) do_statue: Statue wird man erst nach
+//				5 + random(10) Sekunden nach dem Netzausfall
+//		Freaky (05.02.1999) load_player_inv(): encumbrance = 0 (s.d.)
+//		Parsec (24.10.1999) Lebenslaeufe fuer Daemmerungen konvertiert
+//              Sissi  (21.06.2000) query_no_www_page Aufruf
+//
+// $Log: login.c,v $
+// Revision 1.111  2016/03/21 12:37:18  gnomi
+// Vor efun::interactive_info-Aufruf pruefen, dass wir kein InterMUD-Gast sind.
+//
+// Revision 1.110  2016/01/25 19:10:53  gnomi
+// 'neues tk' eingebaut.
+//
+// Revision 1.109  2015/08/26 21:40:28  gnomi
+// Anpassungen an LDMud 3.5.0
+//
+// Revision 1.108  2015/01/22 18:12:44  myonara
+// typo in doku zu query_gilden_info
+//
+// Revision 1.107  2014/09/27 12:17:53  myonara
+// Bugfix zu vorherigem: logout_cia_start_or_stadt und get_logon_mode
+// nicht nosave gemacht.
+//
+// Revision 1.105  2014/09/27 07:40:49  myonara
+// Neue defines aus /sys/player.h fuer notify_login und notify_net_dead
+//
+// Revision 1.104  2013/07/29 20:53:19  sorcerer
+// quit() ohne call_other() aufrufen
+//
+// Revision 1.103  2013/06/01 13:23:39  sorcerer
+// geaenderte Berechnung der statue_room_time
+//
+// Revision 1.102  2013-03-16 15:48:02  gnomi
+// Properties speichern.
+//
+// Revision 1.101  2012-12-16 14:29:44  sorcerer
+// Kein Fackeln an Geister
+//
+// Revision 1.100  2012-11-26 22:20:22  gnomi
+// Unterstuetzung fuer InterMUD-Portale eingebaut.
+//
+// Revision 1.99  2011-10-31 22:43:12  sorcerer
+// ende start/stadt beruecksichtigen
+//
+// Revision 1.98  2011-10-30 20:57:57  sorcerer
+// Fackeln nach Arma fuer Kleine
+//
+// Revision 1.97  2009-09-10 12:11:34  gnomi
+// Besondere Unterstuetzung fuer den Webmud-Client eingebaut.
+//
+// Revision 1.96  2009-07-30 16:47:25  gnomi
+// IP-Proxy-Aufloesung ueber den RPC-Daemon.
+//
+// Revision 1.95  2009-06-17 07:50:10  gnomi
+// Bei Gruppen-NPCs den zugehoergen Gott registrieren.
+//
+// Revision 1.94  2009-03-20 07:58:06  gnomi
+// Login: Beim Fuehren von Waffen pruefen, ob noch eine Hand frei ist.
+//
+// Revision 1.93  2009-01-15 08:55:09  gnomi
+// Beim Clonen der Autoloader die Traglast des Spielers ignorieren.
+//
+// Revision 1.92  2008/01/21 14:11:39  gnomi
+// notify_ed_enter/exit erhalten einen Parameter, der angibt, ob der
+// VT100-Client voruebergehend deaktiviert werden muss.
+//
+// Revision 1.91  2007/10/24 21:43:04  gnomi
+// IP-Filter-Check auch bei Proxy-Nutzung. TOR-Nodes werden gefiltert.
+// More-Strukturen nur dann aufraeumen, wenn keine getrennte
+// Eingabezeile genutzt wird (bei dieser ueberleben die input_tos naemlich).
+//
+// Revision 1.90  2007/08/30 20:24:11  gnomi
+// Bei Goettern Heartbeat auch dann anschalten, wenn ein regelmaessiger Ping
+// eingeschaltet wurde.
+//
+// Revision 1.89  2007/08/20 18:15:26  gnomi
+// set_max_internal_encumbrance(0) vor jedem Objekt aus dem Inv-Container
+// aufrufen, da einige Kleidung das beim Anziehen zuruecksetzt.
+//
+// Revision 1.88  2007/08/11 21:32:13  gnomi
+// INPUT_PROMPT nutzen.
+//
+// Revision 1.87  2007/07/27 15:05:10  gnomi
+// Eval-Reserve bei den Catches verringert.
+//
+// Revision 1.86  2007/04/02 18:35:44  gnomi
+// get_object_state und init_object_state dokumentiert.
+//
+// Revision 1.85  2007/02/14 18:38:24  gnomi
+// Merkt sich den Zustand von Objekten (angezogen, gefuehrt)
+// ueber das Ausloggen hinaus.
+//
+// Revision 1.84  2007/02/04 22:10:27  gnomi
+// Fehler vom ERQ abfangen.
+//
+// Revision 1.83  2006/12/30 01:26:47  gnomi
+// ident-Anfrage nur dann senden, wenn Ports bekannt sind.
+//
+// Revision 1.82  2005/08/26 22:18:51  gnomi
+// query_auto_load-Fehlermeldung verschoenert...
+//
+// Revision 1.81  2005/05/06 22:59:54  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.80  2005/05/06 22:49:13  gnomi
+// Goetterurlaub beachten.
+//
+// Revision 1.79  2005/02/13 14:22:46  menaures
+// Variable 'spielie' und query_spielie() gibt es nicht mehr
+//
+// Revision 1.78  2005/01/07 23:41:28  sissi
+// query_statue_time hinzugefuegt.
+//
+// Revision 1.77  2004/11/27 21:21:01  menaures
+// Warnhinweis bei Selbstsperrung
+//
+// Revision 1.76  2004/06/14 22:17:37  gnomi
+// AUTO_OBJ-syslog ausgebaut (geht eh in die FDB) und
+// zugehoerige Fehlermeldungen leicht verbessert.
+// Und von Menaures sind hier noch ein paar HLP-Aenderungen dabei...
+//
+// Revision 1.75  2004/01/08 14:49:26  menaures
+// catch(x) -> catch(x; publish)
+//
+// Revision 1.74  2003/12/13 16:02:05  gnomi
+// Typo im check_password.
+// change_password nomask gemacht.
+// Erweiterter Sicherheitscheck fuer set_level.
+//
+// Revision 1.73  2003/11/14 04:17:02  gnomi
+// Passwortabfragemoeglichkeit eingebaut.
+//
+// Revision 1.72  2003/11/06 23:03:30  menaures
+// *_PASS -> PASSWD_* (Makros nach passwd.h umgezogen)
+//
+// Revision 1.71  2003/11/05 21:09:27  menaures
+// CHECK_PASS zur Passwortueberpruefung verwenden.
+//
+// Revision 1.70  2003/07/16 02:17:32  gnomi
+// Neues Aggressionshandlung weiter programmiert. (Naehert sich dem Ende.)
+//
+// Revision 1.69  2003/07/16 00:59:42  gnomi
+// Bei SSL-Tunnel: Fragt die wirkliche IP ab.
+//
+
+
+#pragma save_types
+#pragma strong_types
+
+nosave variables inherit "/i/money/exchange"; // fuer convert()
+inherit "/i/tools/passwd";
+nosave variables private functions inherit "/i/tools/security";
+
+#define APPRECIATION_CONTROLLER  "/room/rathaus/filed"
+
+#include <apps.h>
+#include <config.h>
+#include <delayed_action.h>
+#include <erq.h>
+#include <error.h>
+#include <gilden.h>
+#include <input_to.h>
+#include <invis.h>
+#include <level.h>
+#include <mail.h>
+#include <message.h>
+#include <money.h>
+#include <move.h>
+#include <passwd.h>
+#include <shadow.h>
+#include <time.h>
+#include <security.h>
+#if __EFUN_DEFINED__(interactive_info)
+#include <interactive_info.h>
+#endif
+
+#include "/sys/player.h"
+#include "player.h"
+
+protected void save_properties();
+int quit(string str);
+int query_age();
+int query_ghost();
+int remove();
+void halt_delayed_action(int i);
+void set_prompt_string(string str);
+string query_prompt_string();
+object *query_followers();
+nosave void restart_age();
+nosave void init_aliases();
+void close_con();
+nosave void reset_auto_save();
+void notify(string message, varargs mixed data);
+void set_max_internal_encumbrance(int v1);
+void update_max_encumbrance();
+void clean_more();
+protected void aggression_login();
+protected void aggression_logout();
+
+private string password;
+private string *auto_load_files;
+private mixed *auto_load_parameter;
+private nosave object *auto_load_objects;
+
+private mixed hlp_data;
+
+#ifdef PLAYER_DAY
+private nosave string *temp_auto_load_files = ({});
+private nosave mixed *temp_auto_load_parameter = ({});
+private nosave int is_player_day;
+int player_day() {return is_player_day;}
+#endif
+
+/* private */ protected int level;
+private string mail_address;
+
+#if 0
+private int forwarding;
+#endif
+#ifdef RETAIN_PLAYER_INVENTORY
+private int value_of_inventory;
+private int logout_via_start_or_stadt;
+#endif
+private string www_page;
+private string last_host, last_town;
+
+private string gilde;
+private int rang;
+private mixed gilden_data;
+private mixed *letzte_gilden2 = ({});
+
+private mixed level_dates = ({});
+private mixed level_ages  = ({}); // unbenutzt seit Lebenslaufkonvertierung
+				  // muss aber erhalten bleiben, damit alte
+				  // Daten eingelesen werden koennen
+
+nomask void check_level();
+
+private nosave string real_name;
+private string real_cap_name;
+private nosave string wiz_owner;
+
+private string sperren;
+private int sperre_bis;
+private nosave int plusminus;
+private nosave int *sperrungswochentage;
+private nosave string birthdaystring;
+private nosave string hlpdaystring;
+private nosave int statue_room_time;
+private nosave int statue_time;
+
+private nosave int security_initialized;
+
+#ifdef UNItopia
+private nosave string real_ip_name, real_ip_number;
+private void set_real_ip(string addr, string ip, int local_port, int remote_port);
+#endif
+
+nomask string query_last_host() { return ""; /* return last_host; */ }
+
+nomask string query_last_town() { return last_town; }
+
+#ifdef UNItopia
+nomask void set_last_town(string t)
+{
+    if(this_interactive() && this_interactive()==this_player() &&
+       geteuid(this_interactive())==geteuid(previous_object()) &&
+       this_interactive()->query_real_name()=="gnomi")
+         last_town = t;
+}
+#endif
+
+#ifdef RETAIN_PLAYER_INVENTORY
+nosave void set_logout_via_start_or_stadt(int val)
+{
+    logout_via_start_or_stadt = val;
+}
+#endif
+
+nosave void update_last_host()
+{
+    mixed ob;
+    string ip;
+
+#if __EFUN_DEFINED__(query_ip_number)
+    ip = efun::query_ip_number(this_object());
+    last_host = efun::query_ip_name(this_object());
+    ob = this_object();
+    efun::query_ip_number(&ob);
+#else
+    if(efun::interactive(this_object()))
+    {
+        ip = efun::interactive_info(this_object(), II_IP_NUMBER);
+        last_host = efun::interactive_info(this_object(), II_IP_NAME);
+        ob = efun::interactive_info(this_object(), II_IP_ADDRESS);
+    }
+#endif
+    last_town = TOWN_MASTER->town(this_object());
+
+    if(!pointerp(ob))
+	return;
+
+#if defined(UNItopia) && !defined(TestMUD)
+    real_ip_name = real_ip_number = 0;
+    // Bei localhost schauen, ob es da ein Relay gibt
+    if(member(({"127.0.0.1", "::1", "::ffff:127.0.0.1"}), ip) >= 0)
+    {
+	int port = ((ob[2]+(ob[2]<0?256:0))<<8)+ob[3]+(ob[3]<0?256:0);
+	
+        "/secure/rpc/player"->call(
+	    function void(mixed* ergebnis)
+	    {
+	        if(ergebnis)
+		{
+		    set_real_ip(ergebnis[1], ergebnis[0], 0, ergebnis[2]);
+		    return;
+		}
+	    }, "webmud", "get_addr", port);
+    }
+#endif
+}
+
+#ifdef UNItopia
+private void set_real_ip(string addr, string ip, int local_port, int remote_port)
+{
+    string fmsg;
+
+    real_ip_name = strlen(addr) && addr;
+    real_ip_number = ip;
+
+    last_host = real_ip_name || real_ip_number;
+    LEVEL_LISTER->correct_list(last_host, real_ip_number);
+    last_town = TOWN_MASTER->town(this_object());
+
+    if((fmsg = IP_FILTER->ip_filter(real_ip_number, real_name)) &&
+	(!sizeof(fmsg) || fmsg[0]!='*'))
+    {
+	call_out("remove",0);
+	tell_object(this_object(), "\n\n" + wrap(fmsg)+"\n\n");
+	"/secure/log_adjektiv"->log_banish(
+	    real_ip_name || real_ip_number, fmsg);
+	quit(0);
+    }
+}
+
+string query_real_ip_name()
+{
+    if(!MASTER_OB->mudlib_privilege_violation("query_ip",previous_object()))
+	    return 0;
+    return real_ip_name || real_ip_number;
+}
+
+string query_real_ip_number()
+{
+    if(!MASTER_OB->mudlib_privilege_violation("query_ip",previous_object()))
+	    return 0;
+    return real_ip_number;
+}
+
+#endif
+
+nomask int query_level()
+{
+#ifdef PLAYER_DAY
+    if (is_player_day)
+        return 1;
+#endif	
+    return level;
+}
+
+nomask int query_wiz_level()
+{
+#ifdef PLAYER_DAY
+    if (is_player_day)
+        return 0;
+#endif	
+    if (level >= LVL_WIZ)
+	return level;
+}
+
+// Keine andere Funktion aendert die level Variable
+// CALLED FROM: set_level, check_level
+nomask private void _set_level(int i)
+{
+#ifdef PLAYER_DAY
+    if(level && is_player_day)
+       return;
+#endif
+
+    EVENT_MASTER->event("Level", this_object(), 0, ({ level, i }));
+
+    level = i;
+
+    if (!level_dates)
+	level_dates = ({});
+
+    if (!sizeof(level_dates) || level_dates[<1][LVL_D_LEVEL] != level)
+	level_dates += ({ ({ level, time(), query_age() }) });
+}
+
+nomask void set_level(int i)
+{
+   if(!security_initialized)
+   {
+      add_security_condition(LOGIN_OB "#");
+      add_security_condition("/room/rathaus/div/leo");
+      add_security_condition(this_object());
+      security_initialized=1;
+   }
+   check_security(CHECK_ERROR);
+
+   if (
+       ( // set_level(LVL_PLAYER) vom LOGIN_OB aus
+	 i == LVL_PLAYER 
+	 && 
+	 !strstr(object_name(previous_object()),LOGIN_OB)  
+
+	 ||
+
+	 // set_level(...) von /room/rathaus/div/leo aus
+	 member(({LVL_HLP, LVL_LEARNER, LVL_GESELLE, LVL_VOGT}), i) >= 0 
+	 &&
+	 object_name(previous_object()) == "/room/rathaus/div/leo"
+       ) && i < BANISHD->query_banished(real_name) 
+      )
+    {
+	check_level(); // evtl. alte Lebenslaeufe vorher korrigieren
+	_set_level(i);
+    }
+}
+
+// Zum Anpassen an das neue Levelsystem
+// oder nach dem Editieren der Playerfiles
+// CALLED FROM: player::setup_player(), 
+//              /room/rathaus/domains::new_lord,delete_lord
+//              /apps/filed::update_player_level
+nomask void check_level()
+{
+    mixed dates;
+
+    // alte Lebenslaeufe konvertieren
+    if (mappingp(level_dates))
+    {
+	dates = sort_array(m_indices(level_dates), #'>);
+	dates = map(
+	    dates, lambda( ({'lev}),
+			   ({ #'({, 'lev, ({ #'[, level_dates, 'lev }),
+					  ({ #'[, level_ages, 'lev })
+							})));
+	if (sizeof(dates) && dates[<1][LVL_D_LEVEL] != level)
+	    // Konvertierung markieren, falls aktuelles Level
+	    // nicht mit letztem Eintrag uebereinstimmt
+	    dates += ({ ({ level, 0, query_age() }) });
+	level_dates = dates;
+	level_ages = 0;
+    }
+    if(level>LVL_GESELLE)
+        level = LVL_VOGT;
+
+    if (sizeof(level_dates) && level_dates[<1][LVL_D_LEVEL] != level)
+	// Level hat sich geaendert, level_dates nicht
+	// -> Playerfile wurde geaendert
+	// -> level_dates nachkorrigieren
+	level_dates += ({ ({ level, time(), query_age() }) });
+
+    // Daten des HLP-Tool loeschen, falls kein Engel (mehr)
+    if(level < LVL_HLP)
+    {
+        hlp_data = 0;
+    }
+}
+
+nomask varargs mixed query_level_dates(int level)
+{
+    int  i;
+
+    if (!level_dates)
+	level_dates = ({});
+
+    if (level)
+    {
+	for (i = 0; i < sizeof(level_dates); i++)
+	    if (level_dates[i][LVL_D_LEVEL] == level)
+		return level_dates[i][LVL_D_DATE];
+	return 0;
+    }
+    else
+	return deep_copy(level_dates);
+}
+
+nomask varargs mixed query_level_ages(int level)
+{
+    int i;
+
+    if (level)
+    {
+	for (i = 0; i < sizeof(level_dates); i++)
+	    if (level_dates[i][LVL_D_LEVEL] == level)
+		return level_dates[i][LVL_D_AGE];
+	return 0;
+    }
+    else
+	return deep_copy(level_dates);
+}
+
+string query_birthday()
+{
+    int bday;
+
+    if (birthdaystring)
+        return birthdaystring;
+    if (bday = query_level_dates(LVL_PLAYER))
+	return (birthdaystring = vtimestr(bday - BIRTHDAY,2));
+}
+
+string query_hlpday()
+{
+    int hlpday, hlpage;
+    if (level != LVL_HLP) return 0;
+    if (hlpdaystring == "") return 0;
+    else if (hlpdaystring) return hlpdaystring;
+    if ((hlpday = query_level_dates(LVL_HLP))
+      && (hlpage = query_level_ages(LVL_HLP)))
+        hlpdaystring = (vtimestr(hlpday - BIRTHDAY,2)+
+        ", Alter: "+format_seconds(hlpage / 3600 * 3600));
+    else hlpdaystring = "";
+    return hlpdaystring;
+}
+
+/************************ GILDE INFO ***************************/
+
+/*
+FUNKTION: query_gilden_info
+DEKLARATION: nomask mixed query_gilden_info(string was)
+BESCHREIBUNG:
+Liefert eine Information ueber die Gildenzugehoerigkeit des Players.
+Dazu sind fuer 'what' in gilden.h definiert:
+
+		GILDEN_NAME             Name der Gilde.
+
+		GILDEN_GESCHLECHT	Das Geschlecht der Gilde.
+		
+		KUERZEL                 Kuerzel der Gilde.
+
+		GILDEN_MEISTER          Meister der Gilde.
+
+		PROGRAMMIRER		Die Programmierer ger Gilde.
+		
+		VALID_CALLER            Feld von Strings mit den
+					Namen von Objekten, die
+					zusaetzlich zur Gilde den
+					Eintrag im Player aendern
+					duerfen.
+
+		FILE_NAME               Filename der Gilde
+
+		STATUS                  Status der Gilde:
+			OK              Alles in Ordnung.
+			NOT_ACTIVE      In /adm/Gilden disabled.
+			NOT_LOADABLE    Fehler beim Laden der Gilde.
+			INVALID_ENTRY   Fehlerhafte Gildenkofiguration.
+			TEST            Testbetrieb
+
+		REASON                  Kurzer Text im Fall von
+					NOT_ACTIVE.
+
+		MITGLIED                Allgemeiner Name eines
+					Gildenmitglieds unabhaengig
+					vom Rang (Geschlecht (m/w/s)
+					bereits beruecksichtigt).
+
+		MITGLIED_PLURAL         Pluralform davon.
+
+		RANG                    Rang innerhalb der Gilde
+					(Geschlecht (m/w/s) bereits
+					beruecksichtigt).
+
+		RANG_PLURAL             Pluralform davon.
+
+		RANG_NAME               Benennung des Ranges innerhalb
+					der Gilde. 
+
+Weitere Informationen dazu gibt es in /doc/funktionsweisen/gilden.
+VERWEISE: query_gilde, query_rang
+GRUPPEN: spieler
+*/
+nomask mixed query_gilden_info(string what)
+{
+    return GILDEN_OB->query_gilden_info(this_object(),what);
+}
+
+/*
+FUNKTION: query_gilde
+DEKLARATION: nomask string query_gilde()
+BESCHREIBUNG:
+Liefert den Namen der Gilde zurueck, in der sich der Spieler befindet.
+VERWEISE: query_gilden_info, query_rang
+GRUPPEN: spieler
+*/
+nomask string query_gilde() { return gilde; }
+
+/*
+FUNKTION: query_rang
+DEKLARATION: nomask int query_rang()
+BESCHREIBUNG:
+Liefert den Rang, den ein Spieler in einer Gilde einnimmt, zurueck.
+VERWEISE: query_gilde, query_gilden_info
+GRUPPEN: spieler
+*/
+nomask int query_rang() { return rang; }
+
+/*
+ * Service-Routine fuer set_rang(), enter_gilde() und leave_gilde()
+ */
+nomask varargs string get_caller(object ob, string gildenname)
+{
+    string caller;
+    mixed meister;
+
+    if (!(caller = GILDEN_OB->valid_caller(previous_object())))
+    {
+       if (!this_interactive())
+	   return 0;
+       if(gildenname)
+       {
+           if(member(GILDEN_OB->query_gilden_names(),gildenname)<0)
+	       return 0;
+           meister = GILDEN_OB->query_one_gilden_info(gildenname,GILDEN_MEISTER);
+       }
+       else
+	   meister = query_gilden_info(GILDEN_MEISTER);
+       if (meister)
+	   meister = ({ lower_case(meister) });
+       else
+           meister = ({ });
+
+       if(gildenname)
+           meister += GILDEN_OB->query_one_gilden_info(gildenname,
+	       PROGRAMMIERER)||({});
+       else
+           meister += query_gilden_info(PROGRAMMIERER)||({});
+       meister += FILED->query_auth(GILDEN_AUTH_NAME);
+
+       caller = this_interactive()->query_real_name();
+       if(!adminp(this_interactive()) && member(meister,caller)<0)
+           return 0;
+
+       caller = gildenname||gilde;
+    }
+    return caller;
+}
+
+nomask int set_rang(int new_rang)
+{
+    string caller, err;
+    int old_rang;
+
+    if (!(caller = get_caller(previous_object())))
+	return INVALID_CALLER;
+
+    if (!gilde)
+	return NO_GUILD;
+
+    if (gilde != caller)
+	return OTHER_GUILD;
+
+    old_rang = rang;
+    rang = new_rang;
+    if(sizeof(letzte_gilden2))
+    {
+	letzte_gilden2[<1][2] = new_rang;
+	if(sizeof(letzte_gilden2[<1])>4)
+	    letzte_gilden2[<1][4] = query_gilden_info(ORIG_RANG);
+    }
+    if (err = catch(query_gilden_info(FILE_NAME)->do_player_new_rang
+                        (this_object(),old_rang,new_rang); publish))
+    {
+	do_error("Error while calling player_new_rang(): " + err);
+    }
+    return OK;
+}
+
+nomask varargs int enter_gilde(string gildenname)
+{
+    string caller, err;
+
+    if (!(caller = get_caller(previous_object(),gildenname)))
+	return INVALID_CALLER;
+
+    if (gilde)
+    {
+	if (gilde == caller)
+	    return ALREADY_MEMBER;
+	return OTHER_GUILD;
+    }
+    gilde = caller;
+    rang = 0;
+    gilden_data = 0;
+    letzte_gilden2 += ({ ({time(),query_gilden_info(KUERZEL),0,0,query_gilden_info(ORIG_RANG)}) });
+    EVENT_MASTER->event("Gilden", this_object(), gilde, 1);
+    if (!testplayerp(this_object()))
+        STATISTIK->enter_gilde(gilde,level,(sizeof(letzte_gilden2)==1)?1:0);
+    if (err = catch(query_gilden_info(FILE_NAME)->do_enter_gilde(this_object()); publish))
+    {
+	do_error("Error while calling enter_gilde(): " + err);
+    }
+    return OK;
+}
+
+protected void update_letzte_gilden()
+{
+    if(!sizeof(letzte_gilden2) || 
+	(sizeof(letzte_gilden2[0])!=4 && letzte_gilden2[<1][2]!=0))
+	return;
+    
+    for(int i=0;i<sizeof(letzte_gilden2);i++)
+    {
+	string gilde, ob;
+	int rang_nr;
+	mixed rang;
+	
+	if(i==sizeof(letzte_gilden2)-1)
+	{
+	    rang_nr = this_object()->query_rang();
+	    letzte_gilden2[i] = letzte_gilden2[i][0..3];
+	    letzte_gilden2[i][2] = rang_nr;
+	}
+	else
+	{
+	    if(sizeof(letzte_gilden2[i])!=4)
+		continue;
+	    rang_nr = letzte_gilden2[i][2];
+	}
+
+	gilde = GILDEN_OB->query_name_from_kuerzel(letzte_gilden2[i][1]);
+	if(!gilde)
+	{
+	    letzte_gilden2[i]+=({"unbekannt"});
+	    continue;
+	}
+
+	ob = GILDEN_OB->query_one_gilden_info(gilde, FILE_NAME);
+	if(ob && letzte_gilden2[i][3] &&
+	    rang=ob->get_old_rang(rang_nr, letzte_gilden2[i][3]))
+	{
+	    letzte_gilden2[i]+=({rang[
+		member(({"maennlich","weiblich","saechlich"}),
+		    this_object()->query_real_gender())] });
+	    continue;
+	}
+        rang = GILDEN_OB->query_one_gilden_info(gilde,RAENGE);
+	if(!rang || sizeof(rang)<=rang_nr)
+	{
+	    letzte_gilden2[i]+=({"unbekannt"});
+	    continue;
+	}
+	
+	rang = rang[rang_nr][
+	        ([ "maennlich": MAENNLICH,
+		   "weiblich": WEIBLICH,
+		   "saechlich": SAECHLICH
+		])[this_object()->query_real_gender()]];
+	letzte_gilden2[i]+=({rang || "unbekannt"});
+    }
+}			     
+
+// Wird auch vom setup_player aufgerufen, wenn Gilde nicht mehr existiert.
+protected void internal_leave_gilde()
+{
+    string err;
+    
+    EVENT_MASTER->event("Gilden", this_object(), gilde, 0);
+    if (!testplayerp(this_object()))
+        STATISTIK->leave_gilde(gilde,level);
+    update_letzte_gilden();
+    if (!sizeof(letzte_gilden2)) 
+	letzte_gilden2 = ({ ({0,query_gilden_info(KUERZEL),0,0,0}) });
+    letzte_gilden2[<1][2] = rang;
+    letzte_gilden2[<1][3] = time();
+    letzte_gilden2[<1][4] = query_gilden_info(ORIG_RANG) || letzte_gilden2[<1][4] || "unbekannt";
+ 
+    err = query_gilden_info(FILE_NAME);
+    if (err && (err = catch(err->do_leave_gilde(this_object()); publish)))
+	do_error("Error while calling leave_gilde(): " + err);
+
+    gilde = 0;
+    rang = 0;
+    gilden_data = 0;
+}
+
+nomask int leave_gilde()
+{
+    string caller;
+
+    if (!(caller = get_caller(previous_object())))
+	return INVALID_CALLER;
+
+    if (!gilde)
+	return NO_GUILD;
+
+    if (gilde != caller)
+	return OTHER_GUILD;
+
+    internal_leave_gilde();
+    return OK;
+}
+
+
+/*
+FUNKTION: query_gilden_data
+DEKLARATION: nomask mixed query_gilden_data()
+BESCHREIBUNG:
+Liefert die gildenspezifischen Daten des Spielers.
+VERWEISE: set_gilden_data
+GRUPPEN: spieler
+*/
+nomask mixed query_gilden_data()
+{
+    string caller;
+
+    if (!(caller = get_caller(previous_object())))
+	return INVALID_CALLER;
+
+    if (!gilde)
+	return NO_GUILD;
+
+    if (gilde != caller)
+	return OTHER_GUILD;
+    
+    return gilden_data;
+}
+
+/*
+FUNKTION: set_gilden_data
+DEKLARATION: nomask int set_gilden_data(mixed data)
+BESCHREIBUNG:
+Setzt die gildenspezifischen Daten des Spielers.
+VERWEISE: query_gilden_data
+GRUPPEN: spieler
+*/
+nomask int set_gilden_data(mixed data)
+{
+    string caller;
+
+    if (!(caller = get_caller(previous_object())))
+	return INVALID_CALLER;
+
+    if (!gilde)
+	return NO_GUILD;
+
+    if (gilde != caller)
+	return OTHER_GUILD;
+    
+    gilden_data = data;
+    return OK;
+}
+
+/*
+FUNKTION: query_letzte_gilden
+DEKLARATION: nomask mixed query_letzte_gilden()
+BESCHREIBUNG:
+Liefert ein 2 dimensionales Array ueber alle Gildenwechsel eines Spielers
+zurueck:
+ ({ ({Eintrittsdatum,Gildenkuerzel,Rang,Austrittsdatum,Rangname}),  
+    ({Eintrittsdatum,Gildenkuerzel,Rang,Austrittsdatum,Rangname}), ... })
+     
+     
+VERWEISE: query_gilde, query_rang, time
+GRUPPEN: spieler
+*/
+nomask mixed query_letzte_gilden()
+{
+    return deep_copy(letzte_gilden2);
+}
+
+
+/************************ GILDE ENDE ***************************/
+
+/*
+FUNKTION: query_hlp_data
+DEKLARATION: nomask mixed query_hlp_data()
+BESCHREIBUNG:
+Liefert die Daten des HLP-Tools.
+Darf nur vom HLP-Tool aufgerufen werden.
+VERWEISE: set_hlp_data
+GRUPPEN: spieler
+*/
+nomask mixed query_hlp_data()
+{
+    if(level < LVL_HLP)
+    {
+        hlp_data = 0;
+        return 0;
+    }
+
+    if(level >= LVL_HLP && previous_object() &&
+       environment(previous_object()) == this_object() &&
+       member( ({"/obj/hlptool","/obj/hlptool2"}),
+               load_name(previous_object()) ) != -1)
+    {
+        return hlp_data;
+    }
+}
+
+/*
+FUNKTION: set_hlp_data
+DEKLARATION: nomask void set_hlp_data(mixed data)
+BESCHREIBUNG:
+Setzt die Daten des HLP-Tools.
+Darf nur vom HLP-Tool aufgerufen werden.
+VERWEISE: query_hlp_data
+GRUPPEN: spieler
+*/
+nomask void set_hlp_data(mixed data)
+{
+    if(level < LVL_HLP)
+    {
+        hlp_data = 0;
+        return;
+    }
+
+    if(level >= LVL_HLP && previous_object() &&
+       environment(previous_object()) == this_object() &&
+       member( ({"/obj/hlptool","/obj/hlptool2"}),
+               load_name(previous_object()) ) != -1)
+    {
+        hlp_data = data;
+    }
+}
+
+nomask nosave string get_real_name()
+{
+    if (!real_name && previous_object() &&
+	    (!strstr(object_name(previous_object()),LOGIN_OB"#")
+	     && this_interactive() == this_object()
+	     || object_name(previous_object()) == "/secure/chsh"
+	     || (previous_object() == this_object() && this_object()->is_intermud_guest())))
+    {
+        if(previous_object() == this_object())
+        {
+            real_name = this_object()->get_intermud_real_name();
+        }
+        else
+        {
+	    real_name = previous_object()->query_real_name();
+	    wiz_owner = previous_object()->query_current_wiz_owner();
+	}
+    }
+    else
+    {
+	raise_error(sprintf("Illegal call of get_real_name() "
+		    "PO:%O TI:%O TP:%O\n",previous_object(),
+		    this_interactive(),this_object()));
+    }
+    return real_name;
+}
+
+/*
+FUNKTION: query_real_name
+DEKLARATION: nomask string query_real_name()
+BESCHREIBUNG:
+Liefert ganz sicher den Spielernamen zurueck, wobei eine Tarnung durchschaut 
+wird.
+VERWEISE: query_name, set_name
+GRUPPEN: spieler
+*/
+nomask string query_real_name() { return real_name; }
+
+/*
+FUNKTION: query_real_cap_name
+DEKLARATION: nomask string query_real_cap_name()
+BESCHREIBUNG:
+Liefert den "echten", nicht shadowbaren Namen des Spielers mit gross -
+Kleinschreibung zurueck, Tarnungen werden durchschaut.
+Es gibt kein set_real_cap_name.
+VERWEISE: query_cap_name, query_name, set_name, set_personal, query_personal,
+          set_cap_name, query_real_name
+GRUPPEN: grundlegendes
+*/
+
+nomask string query_real_cap_name()
+{
+    return real_cap_name || capitalize(real_name);
+}
+
+void set_cap_name(string s);
+void set_name(string s);
+
+nosave nomask void set_real_cap_name(string str)
+{
+    real_cap_name = str;
+    set_cap_name (str);
+}
+
+/*
+FUNKTION: query_current_wiz_owner
+DEKLARATION: nomask string query_current_wiz_owner()
+BESCHREIBUNG:
+Liefert bei Testies den tatsaechlichen Spieler.
+VERWEISE: query_name, set_name
+GRUPPEN: spieler
+*/
+nomask string query_current_wiz_owner() { return wiz_owner; }
+
+
+/*
+FUNKTION: query_auto_load_parameter
+DEKLARATION: mixed query_auto_load_parameter(string dateiname)
+BESCHREIBUNG:
+Liefert die Autoload - Parameter des Autoloaders dateiname, falls ein
+Spieler diesen Dateiname als Autoloader eingetragen hat.
+Kann nur von Objekten aus /z/Gilden/X/apps/ aus und nur fuer Autoloader
+aus /d/ aufgerufen werden.
+VERWEISE: query_auto_load, init_arg
+GRUPPEN: spieler
+*/
+
+mixed query_auto_load_parameter(string dateiname)
+{
+    int i; string dummy;
+    if (!previous_object()) return;
+    if (1 != sscanf (object_name(previous_object()),"/z/Gilden/%s/apps/",dummy))
+	return 0;
+    if (!dateiname || (dateiname [0..2] != "/d/"))
+	return 0;
+    i=member(auto_load_files,dateiname);
+    if (i > -1)
+	return deep_copy(auto_load_parameter[i]);
+    return 0;
+}
+
+// 2 Dummy-Dokus, fuer den Autoloader-Mechanismus
+/*
+FUNKTION: query_auto_load
+DEKLARATION: mixed query_auto_load()
+BESCHREIBUNG:
+Bei einem Autoloader liefert diese Funktion alle Variablen zurueck, die 
+fuer den spaeteren Gebrauch gespeichert werden sollen. Im einfachsten Fall
+ist das eine 1, in komplizierteren Faellen kann ein Array mit allen
+wichtigen Daten zurueckgeliefert werden.
+Siehe /doc/funktionsweisen/auto_loading.
+VERWEISE: init_arg, query_auto_load_shadow
+GRUPPEN: spieler
+*/
+/*
+FUNKTION: init_arg
+DEKLARATION: void init_arg(mixed auto_load)
+BESCHREIBUNG:
+Ein Autoloader, der mit query_auto_load() wichtige Daten abgespeichert hat,
+bekommt diese ueber die Funktion init_arg() zurueck. In dieser Funktion koennen
+diese Daten wieder zurueck in Variablen geschrieben werden.
+Siehe /doc/funktionsweisen/auto_loading.
+VERWEISE: query_auto_load
+GRUPPEN: spieler
+*/
+
+/*
+FUNKTION: query_auto_load_shadow
+DEKLARATION: mixed query_auto_load_shadow(object shadow)
+BESCHREIBUNG:
+Bei einem Autoloadshadow liefert diese Funktion alle Variablen zurueck,
+die fuer den spaeteren Gebrauch gespeichert werden sollen.
+Im einfachsten Fall ist das eine 1, in komplizierteren Faellen kann ein
+Array oder Mapping mit allen wichtigen Daten zurueckgeliefert werden.
+Eine 0 sollte bei einem Autoloadshadow auf keinen Fall geliefert werden.
+
+Diese Funktion sollte nur etwas liefern, wenn das Shadow direkt mit
+dem 1. Parameter angesprochen wurde, ansonsten den Aufruf an query_shadow_owner
+weiterleiten. Beispiel:
+    
+    mixed query_auto_load_shadow(object shadow)
+    {
+	if(shadow!=this_object())
+	    return query_shadow_owner()->query_auto_load_shadow(shadow);
+	
+	return irgendwelcheinteressantendatendieabgespeichertwerdensollen;
+    }
+
+VERWEISE: init_arg_shadow, query_auto_load
+GRUPPEN: spieler
+*/
+/*
+FUNKTION: init_arg_shadow
+DEKLARATION: void init_arg_shadow(object spieler, mixed auto_load)
+BESCHREIBUNG:
+Ein Autoloadshadow, der mit query_auto_load_shadow() wichtige Daten
+abgespeichert hat, bekommt diese ueber die Funktion init_arg_shadow() zurueck.
+In dieser Funktion kann sich der Shadow dann wieder ueber den Spieler legen
+und diese Daten zurueck in die Variablen schreiben.
+VERWEISE: query_auto_load_shadow
+GRUPPEN: spieler
+*/
+
+/*
+FUNKTION: get_object_state
+DEKLARATION: mixed get_object_state()
+BESCHREIBUNG:
+Hiermit kann ein Objekt zum Auslogzeitpunkt einen Wert zurueckliefern,
+mit dem es nach dem Login wieder initialisiert wird, damit der
+Spieler es im gleichen Zustand in seinem Inventory wiederfindet.
+VERWEISE: init_object_state
+GRUPPEN: spieler
+*/
+
+/*
+FUNKTION: init_object_state
+DEKLARATION: void init_object_state(mixed state)
+BESCHREIBUNG:
+Nachdem sich ein Spieler wieder einloggte und das Objekt
+wieder in den Spieler bewegt wurde, wird diese Funktion im Objekt
+mit dem Wert aufgerufen, welchen es via get_object_state vor
+dem Ausloggen lieferte.
+VERWEISE: get_object_state
+GRUPPEN: spieler
+*/
+#define DEBUG_EVALS ({"imp","gnomi","menaures","myonara","anin","mammi",\
+    "demolition"})
+
+#ifdef DEBUG_EVALS
+#define PRINT_EVALS(x) if (debug) printf("Autoloader: Evals: %6d (%s) %s\n",evals - (evals = get_eval_cost()),ctime(utime())[11..25],x)
+#else
+#define PRINT_EVALS(x)
+#endif
+
+nosave void load_auto_obj()
+{
+    object ob;
+    int a, ret;
+    string res;
+#ifdef DEBUG_EVALS
+    int debug, evals;
+#endif
+
+    /* Seele zuerst */
+#if __VERSION__ > "3.3.560"
+#define RESERVE , reserve 10000
+#else
+#define RESERVE
+#endif
+
+#ifdef DEBUG_EVALS
+    // Zum Testen, welche Autoloader am meisten Evals verbrauchen;
+    debug = member(DEBUG_EVALS,query_real_name())>=0;
+    PRINT_EVALS("Autoloader-Start");
+    PRINT_EVALS("Seele");
+#endif
+    catch( (ob = clone_object(SOUL_SRC))->move(this_object()); publish RESERVE);
+    if (ob &&
+	pointerp(auto_load_files) && 
+	(a = member(auto_load_files, SOUL_SRC)) >= 0 &&
+	pointerp(auto_load_parameter))
+	catch( ob->init_arg(auto_load_parameter[a]); publish RESERVE);
+
+    /* Restliche Autoloader! */
+
+    call_out("update_max_encumbrance",0);
+    for (a=0; a<sizeof(auto_load_files); a++)
+	if (stringp(auto_load_files[a]) && (auto_load_files[a] != SOUL_SRC))
+	{
+	    string *il;
+
+	    PRINT_EVALS(auto_load_files[a]);
+	    auto_load_files[a]
+	        = "/apps/autoloader"->query_autoloader_replacement (
+	            auto_load_files[a]);
+	    if ("/apps/autoloader"->query_genehmigt(auto_load_files[a])
+#ifdef PLAYER_DAY
+            && (!is_player_day || 
+	        member(({"/obj/hlptool","/obj/mailreader","/obj/newsreader"}),
+	               auto_load_files[a])<0)
+#endif
+	       )
+	    {
+		ob=0;
+		res = catch(ob = clone_object(auto_load_files[a]); publish RESERVE);
+		PRINT_EVALS("Clone");
+		if (res)
+		{
+		    do_error3(
+			sprintf("Clonen des Autoloaders fehlgeschlagen:\nSpieler: %s\nRTE: %O\n",
+			    real_name, res),
+			    __FILE__,auto_load_files[a],
+			    __LINE__,({"Root"}));
+		}
+		if (!ob)
+		    continue;
+		il = inherit_list(ob);
+		if (member(il,"/i/move.lpc")>=0)
+		{
+		    set_max_internal_encumbrance(0);
+		    res = catch( ret=ob->move(this_object()); publish RESERVE);
+		    PRINT_EVALS("Move");
+		    if (res || ret!=MOVE_OK)
+		    {
+			do_error3(
+			    sprintf("Bewegung des Autoloaders fehlgeschlagen:\nSpieler: %s\nReturnwert: %O\nRTE: %O\n",
+				real_name, ret, res),
+				__FILE__,ob?object_name(ob):auto_load_files[a],
+				__LINE__,({"Root"}));
+			if (ob)
+			    destruct(ob);
+		    }
+		    else if (ob) // Falls sich ein Objekt beim init()
+				 // zerstoert hat
+		    {
+			if (pointerp(auto_load_parameter) &&
+				(a < sizeof(auto_load_parameter)))
+			{
+			    res = catch(ob->init_arg(auto_load_parameter[a]); publish RESERVE);
+			    PRINT_EVALS("Init-Arg");
+			    if (res)
+			    {
+				do_error3(
+				    sprintf("init_arg des Autoloaders fehlgeschlagen.\nSpieler: %s\nRTE: %O\n",
+					real_name, res),
+					__FILE__,ob?object_name(ob):auto_load_files[a],
+					__LINE__,({"Root"}));
+				if (ob)
+				    destruct(ob);
+			    }
+			}
+		    }
+		}
+		else if(member(il,"/i/shadow.lpc")>=0)
+		{
+		    res = catch(ob->init_arg_shadow(this_object(),
+			(a < sizeof(auto_load_parameter)) &&
+			auto_load_parameter[a]); publish RESERVE);
+		    PRINT_EVALS("Init-Arg-Shadow");
+		    if (res)
+		    {
+			do_error3(
+			    sprintf("init_arg_shadow des Autoload-Shadows fehlgeschlagen.\nSpieler: %s\nRTE: %O\n",
+				real_name, res),
+				__FILE__,ob?object_name(ob):auto_load_files[a],
+				__LINE__,({"Root"}));
+			if (ob)
+			    destruct(ob);
+		    }
+		}
+		else
+		{
+		    do_error3(
+			sprintf("Unbekannter Autoloadertyp\nSpieler: %s\n",
+			    real_name),
+			    __FILE__,auto_load_files[a],
+			    __LINE__,({"Root"}));
+		    destruct(ob);
+		}
+	    }
+#ifdef PLAYER_DAY
+            else if(is_player_day)
+	    {
+	        temp_auto_load_files+=auto_load_files[a..a];
+		temp_auto_load_parameter+=auto_load_parameter[a..a];
+	    }
+#endif	    
+	}
+
+    update_max_encumbrance();
+    remove_call_out("update_max_encumbrance");
+
+#ifdef DEBUG_EVALS
+   evals = 0;
+   PRINT_EVALS("Autoloader-Ende");
+#endif
+}
+
+#ifdef RETAIN_PLAYER_INVENTORY
+#ifdef PLAYER_NOTIFY_MODES
+int get_logon_mode()
+{
+    if (!find_object(PLAYER_INVENTORY_CONTAINER+real_name))
+    {
+        switch (logout_via_start_or_stadt)
+        {
+        case NQ_ENDE_STADT: return NL_STADT;
+        case NQ_ENDE_START: return NL_START;
+        default: return NL_ARMAGEDDON;
+        }
+    }
+    return NL_DEFAULT;
+}
+#endif // PLAYER_NOTIFY_MODES
+
+nosave int load_player_inv()
+{
+    object invcontainer;
+    object *inv;
+    int i;
+    if (!invcontainer=find_object(PLAYER_INVENTORY_CONTAINER+real_name))
+    {
+        string txt;
+        if (value_of_inventory > 99)
+        {
+            txt="Ich habe Deine ganze Ausruestung vernichten muessen. "
+                "Ich habe Dir dafuer auf Deinem Konto "+(value_of_inventory)+
+                " Taler gutgeschrieben.\n";
+            this_object()->add_konto(value_of_inventory);
+        }
+        if (query_level() == 1 && query_age() > 60 && !query_ghost() &&
+            !logout_via_start_or_stadt)
+        {
+            if (clone_object("/obj/fackel")->move(this_object(), 
+                                                  MOVE_ERR_REMOVE) != MOVE_OK)
+                do_warning("login::load_player_inv(): Konnte Fackel nicht in "
+                           "Spieler bewegen.\n");
+            else
+            {
+                if (strlen(txt))
+                    txt+="Ausserdem habe ich ";
+                else 
+                    txt="Ich habe ";
+                txt+="Dir eine Fackel zugesteckt, damit Du allzeit sichere "
+                     "Wege findest.\n";
+            }
+        }
+        if (strlen(txt)) 
+        {
+            this_object()->send_message_to(this_object(),
+                MT_SENSE|MT_FAR, MA_COMM,
+                wrap_say("Armageddon redet zu Dir:", txt));
+            this_object()->add_to_rede_puffer(
+                wrap_say("Armageddon redete zu Dir:",txt));
+        }
+	return 0;
+    }
+    inv = all_inventory(invcontainer);
+    // Damit die ganzen Objekte aus dem Inv-Container in den Spieler
+    // gemoved werden koennen, auch wenn der Spieler so erstmal weniger
+    // tragen kann, wird max_encumbrance auf 0 gesetzt
+    // Falls was schief geht, einfach mal per call-out neu berechnen
+    call_out("update_max_encumbrance",0);
+    for (i=sizeof(inv);i--;)
+    {
+	set_max_internal_encumbrance(0);
+	if (inv[i]->move(this_object()) != MOVE_OK)
+	{
+	    inv[i]->remove();
+	    if (inv[i])
+		destruct(inv[i]);
+	}
+	else
+	{
+	    mixed state = invcontainer->query_object_state(inv[i]);
+	    inv[i]->init_object_state(state);
+	    
+	    if(state)
+	    {
+		if(inv[i]->query_cloth())
+		    inv[i]->do_wear();
+		else if(inv[i]->query_weapon())
+		{
+		    int fhand = this_object()->free_hand();
+		    if(fhand >= 0)
+			this_object()->wield(inv[i], fhand, 1);
+		}
+	    }
+	}
+    }
+    update_max_encumbrance();
+    remove_call_out("update_max_encumbrance");
+    return 1;
+}
+#endif //RETAIN_PLAYER_INVENTORY
+
+nosave object* query_auto_loading_objects()
+{
+    // wird verwendet, um zu verhindern, dass AutoLoader im
+    // Player Container oder im Environment des Spielers landen
+    // Bevor hier was sinnvolles drinsteht, muss get_auto_loading_objects
+    // aufgerufen worden sein.
+    return auto_load_objects || ({});
+}
+
+nosave void get_auto_loading_objects()
+{
+   int i, num, val, no_value_retain;
+   string name, filename, err, *opfer;
+   object *obs;
+   mixed paras;
+
+   auto_load_objects = ({});
+   opfer = this_object()->query_opfer();
+   auto_load_files     = ({});
+   auto_load_parameter = ({});
+#ifdef RETAIN_PLAYER_INVENTORY
+   value_of_inventory = 0;
+   if (logout_via_start_or_stadt || (opfer && sizeof (opfer)))
+       no_value_retain = 1;
+#endif
+   for(i = sizeof(obs = all_inventory()); i--;)
+      if(obs[i])
+      {
+	 filename = object_name(obs[i]);
+	 if(err = catch(paras = obs[i]->query_auto_load(); publish))
+	 {
+	    do_error3(
+		sprintf("query_auto_load fehlgeschlagen.\nSpieler: %s\n"
+                        "RTE: %O\nEvals uebrig: %d\n",
+		    real_name, err, get_eval_cost()),
+		__FILE__,filename,__LINE__,({"Root"}));
+	    write(level >= LVL_WIZ ?
+	       "Fehler im Auto-Load-Objekt "+filename+":\n"+err+"\n" :
+	       "Mit "+dem(obs[i])+" stimmt was nicht!\n");
+	 }
+	 else if(paras && sscanf(filename, "%s#%d", name, num) == 2)
+	 {
+	    auto_load_files     += ({ name });
+	    auto_load_parameter += ({ paras });
+	    auto_load_objects   += ({ obs[i] });
+	 }
+#ifdef RETAIN_PLAYER_INVENTORY
+	 else if (!no_value_retain && !obs[i]->query_no_move()) {
+	    if (obs[i]->query_money()) {
+		val = convert(obs[i]->query_money(),
+		    obs[i]->query_valuta(),"taler") / 2;
+		if (val>0) value_of_inventory += val;
+	    } else {
+		val = obs[i]->query_value();
+		if (val > 1000) value_of_inventory += 1000;
+		else if (val > 0) value_of_inventory += val;
+	    }
+	 }
+#endif
+      }
+   for(object sh = this_object(); sh=shadow(sh,0);)
+      if(function_exists("query_auto_load_shadow", sh))
+      {
+	 filename = object_name(sh);
+	 if(err = catch(paras = sh->query_auto_load_shadow(sh); publish))
+	 {
+	    do_error3(
+		sprintf("query_auto_load_shadow fehlgeschlagen.\nSpieler: %s\nRTE: %O\nEvals uebrig: %n\n",
+		    real_name, err, get_eval_cost()),
+		__FILE__,filename,__LINE__,({"Root"}));
+	 }
+	 else if(paras && sscanf(filename, "%s#%d", name, num) == 2)
+	 {
+	    auto_load_files     += ({ name });
+	    auto_load_parameter += ({ paras });
+	 }
+      }
+
+#ifdef PLAYER_DAY
+   auto_load_files     += temp_auto_load_files;
+   auto_load_parameter += temp_auto_load_parameter;
+#endif
+
+#ifdef RETAIN_PLAYER_INVENTORY
+   obs = deep_inventory() - all_inventory() - auto_load_objects;
+   for(i = sizeof(obs); i--; )
+      if(obs[i]) {
+	 if (!no_value_retain && !obs[i]->query_no_move()) {
+	    if (obs[i]->query_money()) {
+		val = convert(obs[i]->query_money(),
+		    obs[i]->query_valuta(),"taler") / 2;
+		if (val>0) value_of_inventory += val;
+	    } else {
+		val = obs[i]->query_value();
+		if (val > 1000) value_of_inventory += 1000;
+		else if (val > 0) value_of_inventory += val;
+	    }
+	 }
+      }
+#endif
+}
+
+void call_save()
+{
+    if (find_call_out("do_only_save") == -1)
+	call_out("do_only_save",30);
+}
+
+void do_only_save()
+{
+    reset_auto_save();
+    remove_call_out("do_only_save");
+    if (real_name)
+    {
+        if(this_object()->is_intermud_guest())
+            this_object()->send_intermud_data();
+        else
+        {
+            save_properties();
+            save_object(PLAYER_FILE(real_name));
+        }
+    }
+}
+
+void do_save()
+{
+    if (real_name)
+    {
+	get_auto_loading_objects();
+	do_only_save();
+    }
+}
+
+void do_save_before_wiz()
+{
+    if (previous_object() && real_name &&
+	(object_name(previous_object()) == "/room/rathaus/div/leo"))
+    {
+	get_auto_loading_objects();
+        save_properties();
+	save_object(PLAYER_FILE_BEFORE_WIZ(real_name));
+    }
+}
+				    
+int save_command()
+{
+    do_save();
+    write("Ok.\n");
+    return 1;
+}
+
+private int valid_password(string pass)
+{
+   string msg;
+   int res;
+
+   if(msg = passwd_msg(res = insecure_passwd(pass, real_name), PASSWD_ALL))
+      write(msg);
+   return !(res & PASSWD_ERRORS);
+}
+
+nomask nosave int change_password
+(string pass, int count, string password1,closure callback)
+{
+    switch(count)
+    {
+      case 0:
+	input_to("change_password",INPUT_NOECHO|INPUT_IGNORE_BANG|INPUT_PROMPT,
+	    "Altes Passwort: ",1,0,callback);
+	break;
+      case 1:
+	write("\n");
+	if (!PASSWD_CHECK(pass,password))
+	{
+	    write("Falsches Passwort.\n");
+	    funcall(callback);
+	}
+	else
+	{
+	    input_to("change_password",INPUT_NOECHO|INPUT_IGNORE_BANG|INPUT_PROMPT,
+		"Neues Passwort: ",2,0,callback);
+	}
+	break;
+      case 2:
+	write("\n");
+	if (!valid_password(pass))
+	{
+	    write("Passwort nicht geaendert.\n");
+	    funcall(callback);
+	}
+	else
+	{
+	    input_to("change_password",INPUT_NOECHO|INPUT_IGNORE_BANG|INPUT_PROMPT,
+		"Bitte neues Passwort nochmal eingeben: ",3,pass,callback);
+	}
+	break;
+      case 3:
+	write("\n");
+	if (pass == password1)
+	{
+	    password = PASSWD_CRYPT(password1);
+	    write("Passwort geaendert.\n");
+	    do_save();
+	    funcall(callback);
+	}
+	else
+	{
+	    write("\nFehler bei der Passwort-Bestaetigung.\n"
+		  "Passwort nicht geaendert.\n");
+	    funcall(callback);
+	}
+	break;
+      default:
+	write("Fehler in der Programm-Logik.\nCount="+count+".\n"+
+	      "Passwort nicht geaendert.\n");
+	break;
+    }
+    return 1;
+}
+
+private void check_the_password(string pass, closure cb_yes, closure cb_no)
+{
+    if (!PASSWD_CHECK(pass,password))
+    {
+	write("Falsches Passwort.\n");
+	funcall(cb_no);
+    }
+    else
+	funcall(cb_yes);
+}
+
+nosave void check_password(closure cb_yes, closure cb_no)
+{
+    input_to(#'check_the_password,INPUT_NOECHO|INPUT_IGNORE_BANG|INPUT_PROMPT,
+	"Dein Passwort: ", cb_yes, cb_no);
+}
+
+/*
+NOENZY: notify_net_dead (veraltet)
+DEKLARATION: void notify_net_dead(object who)
+BESCHREIBUNG:
+Wird ein Spieler zur Statue, so wird diese Funktion mit dem Spieler als
+Parameter in allem, was er dabei hat, in allem, was in seiner Umgebung
+liegt, in seiner Umgebung selber, bei allen fuer "notify_net_dead" am
+Spieler eingetragenen Controllern sowie bei allen eingetragenen "followern"
+(siehe "add_follower") aufgerufen.
+
+Die Verfolger gelten als veraltet; man sollte stattdessen die Controller
+nutzen.
+
+Zerfaellt die Statue, so wird uebrigens notify_quit (siehe dort) auch
+aufgerufen.
+VERWEISE: notify_quit, notify_login
+GRUPPEN: spieler
+*/
+
+/*
+FUNKTION: notify_net_dead
+DEKLARATION: void notify_net_dead(object who, int flag, in mode)
+BESCHREIBUNG:
+Wird ein Spieler zur Statue, so wird diese Funktion mit dem Spieler als
+Parameter in allem, was er dabei hat, in allem, was in seiner Umgebung
+liegt, in seiner Umgebung selber, bei allen fuer "notify_net_dead" am
+Spieler eingetragenen Controllern sowie bei allen eingetragenen "followern"
+(siehe "add_follower") aufgerufen. flag und mode werden derzeit mit dem
+Parameter NND_DEFAULT (=0, /sys/player.h) vorbelegt.
+
+Die Verfolger gelten als veraltet; man sollte stattdessen die Controller
+nutzen.
+
+Zerfaellt die Statue, so wird uebrigens notify_quit (siehe dort) auch
+aufgerufen.
+VERWEISE: notify_quit, notify_login
+GRUPPEN: spieler
+*/
+
+/*
+NOENZY: notify_login (veraltet, s.u.)
+DEKLARATION: void notify_login(object who, int flag)
+BESCHREIBUNG:
+Wenn ein Spieler sich neu einloggt oder Statue war, dann wird beim
+(Wieder-)Einloggen diese Funktion mit dem Spieler als Parameter
+in allem, was er dabei hat, in allem, was in seiner Umgebung
+liegt, in seiner Umgebung selber, bei allen fuer "notify_net_dead" am
+Spieler eingetragenen Controllern sowie bei allen eingetragenen "followern"
+(siehe "add_follower") aufgerufen.
+
+Die Verfolger gelten als veraltet; man sollte stattdessen die Controller
+nutzen.
+
+Flag:
+  0 : Spieler loggt sich ein
+  1 : Spieler war nur Statue
+VERWEISE: notify_net_dead, notify_quit
+GRUPPEN: spieler
+*/
+
+/*
+FUNKTION: notify_login
+DEKLARATION: void notify_login(object who, int flag, int mode)
+BESCHREIBUNG:
+Wenn ein Spieler sich neu einloggt oder Statue war, dann wird beim
+(Wieder-)Einloggen diese Funktion mit dem Spieler als Parameter
+in allem, was er dabei hat, in allem, was in seiner Umgebung
+liegt, in seiner Umgebung selber, bei allen fuer "notify_login" am
+Spieler eingetragenen Controllern sowie bei allen eingetragenen "followern"
+(siehe "add_follower") aufgerufen.
+
+Die Verfolger gelten als veraltet; man sollte stattdessen die Controller
+nutzen.
+
+Fuer Flag werden folgende Werte aus /sys/player.h genutzt:
+  NL_LOGON  : Spieler loggt sich ein
+  NL_STATUE : Spieler war nur Statue
+Fuer Mode werden folgende Werte aus /sys/player.h verwendet:
+  NL_DEFAULT        Normaler Logon.
+  NL_ARMAGEDDON     Der erste Login nach einem Armageddon.
+  NL_STADT          Der Spieler hat sich vorher mit ende stadt ausgeloggt.
+  NL_START          Der Spieler hat sich vorher mit ende start ausgeloggt.
+  NL_PORTAL_ENTER   Ein Spieler aus einem anderen Mud betritt dieses Mud.
+  NL_PORTAL_REENTER Ein Spieler kehrt in dieses Mud zurueck.
+VERWEISE: notify_net_dead, notify_quit
+GRUPPEN: spieler
+*/
+
+#ifdef PLAYER_NOTIFY_MODES
+void do_normal_notify(string str, int flag, int mode) // ohne Gilden-Ob
+{
+    notify(str, this_object(), flag, mode);
+    str = "notify_" + str;
+
+    call_other(this_object(),str,this_object(),flag,mode);
+    call_other(all_inventory(),str,this_object(),flag,mode);
+    if (environment())
+    {
+        call_other(all_inventory(environment())-({this_object()}),str,
+            this_object(),flag,mode);
+        call_other(environment(),str,this_object(),flag,mode);
+    }
+    call_other(query_followers(),str,this_object(),flag,mode);
+}
+
+void do_notify(string str, int flag, int mode)
+{
+    string gilden_master_ob;
+
+    if (gilden_master_ob = query_gilden_info(FILE_NAME))
+        call_other(gilden_master_ob,"do_notify_" + str,
+            this_object(),flag,mode);
+
+    do_normal_notify(str, flag, mode);
+}
+#else
+void do_normal_notify(string str, int flag) // ohne Gilden-Ob
+{
+    notify(str, this_object(), flag);
+    str = "notify_" + str;
+
+    call_other(this_object(),str,this_object(),flag);
+    call_other(all_inventory(),str,this_object(),flag);
+    if (environment())
+    {
+	call_other(all_inventory(environment())-({this_object()}),str,
+	    this_object(),flag);
+	call_other(environment(),str,this_object(),flag);
+    }
+    call_other(query_followers(),str,this_object(),flag);
+}
+
+void do_notify(string str, int flag)
+{
+    string gilden_master_ob;
+
+    if (gilden_master_ob = query_gilden_info(FILE_NAME))
+	call_other(gilden_master_ob,"do_notify_" + str,this_object(),flag);
+
+    do_normal_notify(str, flag);
+}
+#endif
+
+/*
+FUNKTION: query_statue_time
+DEKLARATION: int query_statue_time
+BESCHREIBUNG:
+Liefert, seit wann ein Spieler bereits eine Statue ist.
+Will man wissen, wie lange ein Spieler eine Statue ist, so erhaelt man
+dies mit time() - player->query_statue_time().
+VERWEISE: time, notify_quit
+GRUPPEN: spieler
+*/
+
+int query_statue_time()
+{
+    if ((find_call_out("do_statue") == -1)
+        && (find_call_out("ende_statue") == -1)) return 0;
+    return statue_time;
+}
+
+void net_dead()
+{
+    if (!real_name)
+    {
+	remove();
+	return;
+    }
+    while (remove_call_out("do_it") != -1) ;
+    
+    if (find_call_out("do_statue") == -1)
+	call_out("do_statue",random(10)+5);
+	
+    statue_time = time();
+}
+
+protected void set_last_login();
+
+nosave void do_statue()
+{
+    int ret;
+
+    if (interactive(this_object()))
+	return;
+
+#ifdef STATUE_ROOM
+    // Wenn ich im Statue-Raum bin, ist das schon in Ordnung ;)
+    if (object_name(environment()) == STATUE_ROOM)
+	return;
+#endif
+
+    // delayed_action stoppen
+    halt_delayed_action(DA_BREAK);
+
+    if (guestp(this_object()))
+    {
+        say(Der()+" zerfaellt ploetzlich zu Staub.\n");
+        set_last_login();
+#ifdef PLAYER_NOTIFY_MODES
+        do_notify("quit",NQ_NETZTOT, NQ_KEIN_ENDE);
+#else
+        do_notify("quit",1);
+#endif
+        remove();
+        return;
+    }
+
+    // Alter neu berechnen.
+    query_age();
+    this_object()->set_start_room(this_object()->get_start_room());
+#ifdef PLAYER_NOTIFY_MODES
+    do_notify("net_dead",NND_DEFAULT,NND_DEFAULT);
+#else
+    do_notify("net_dead",0);
+#endif
+    aggression_logout();
+    do_save();
+
+    set_heart_beat(0);
+#if NET_DEAD_TIME > 0
+    remove_call_out("ende_statue");
+    call_out("ende_statue",NET_DEAD_TIME);
+#endif
+    ret = clone_object("/obj/statue_shadow")->init_shadow(this_object(),
+						    NO_MULTI_SHADOW);
+#ifdef UNItopia
+    if(ret != SHADOWING_OK)
+	do_warning(sprintf("Fehler (%d) beim Ueberwerfen des Statue-Shadow.\n", ret));
+#endif
+
+    if (!IS_INVIS(this_object()))
+	say(wrap(Der()+" erstarrt zu einer Statue."));
+    EVENT_MASTER->event("Statue", this_object(), 0, 0);
+    // do_notify("net_dead",0);
+}
+
+#ifdef STATUE_ROOM
+int query_statue_room_time()
+{
+    return statue_room_time;
+}
+
+nosave void move_to_statue_room()
+{
+    if (!this_object()->query_shadow("/obj/statue_shadow"))
+	clone_object("/obj/statue_shadow")->init_shadow(this_object(),
+							NO_MULTI_SHADOW);
+
+    set_living_name("STATUE "+real_name);
+    set_heart_beat(0);
+
+    statue_room_time = time();
+
+    if (this_object()->move(STATUE_ROOM,MOVE_SECRET) != MOVE_OK)
+    {
+	object old_room;
+
+	old_room = environment();
+	efun::move_object(this_object(),find_object(STATUE_ROOM));
+	if (old_room)
+	    old_room->moved_out(this_object());
+    }
+}
+#endif
+
+#if NET_DEAD_TIME > 0
+nosave void ende_statue()
+{
+    object *inv;
+    int i, money, tmp, junk;
+    string filename, nr;
+
+    if (interactive(this_object()))
+    {
+	this_object()->remove_shadow("/obj/statue_shadow");
+	if (!query_wiz_level())
+	    set_heart_beat(1);
+	return;
+    }
+    if (!IS_INVIS(this_object()))
+	this_object()->send_message(MT_LOOK,MA_UNKNOWN,
+	   Ihr((["gender":"weiblich","name":"statue"]),0,this_object())+
+		  " zerfaellt zu Staub.\n");
+#ifdef STATUE_ROOM
+#ifdef PLAYER_NOTIFY_MODES
+    do_notify("quit",NQ_NETZTOT, NQ_KEIN_ENDE); 
+            // ein wenig kritisch, da dabei Fehler auftreten koennten
+#else
+    do_notify("quit",1); // ein wenig kritisch, da dabei Fehler auftreten koennten
+#endif
+    do_save();
+    move_to_statue_room();
+    return;
+#else
+#ifdef RETAIN_PLAYER_INVENTORY
+    this_object()->remove_shadow("/obj/statue_shadow");
+    quit(0);
+    return;
+#endif
+    // Alles Geld auf der Bank einzahlen.
+    inv = deep_inventory(this_object());
+    for (i = 0; i < sizeof(inv); i++)
+	if (inv[i])
+	{
+	    tmp =convert(inv[i]->query_money(),inv[i]->query_valuta(),"taler");
+	    if (tmp > 0)
+		money += tmp;
+	}
+    this_object()->add_konto(money);
+#if 0
+    get_auto_loading_objects();
+    for (i = 0; i < sizeof(inv); i++)
+	if (inv[i])
+	{
+	    inv[i]->remove();
+	    if (inv[i])
+		destruct(inv[i]);
+	}
+#ifdef PLAYER_NOTIFY_MODES
+    do_notify("quit",NQ_NETZTOT, NQ_KEIN_ENDE); 
+#else
+    do_notify("quit",1);
+#endif
+    do_only_save();
+#else
+#ifdef PLAYER_NOTIFY_MODES
+    do_notify("quit",NQ_NETZTOT, NQ_KEIN_ENDE); 
+#else
+    do_notify("quit",1);
+#endif
+    do_save();
+    close_con();
+#endif
+    remove();
+#endif // STATUE_ROOM
+}
+#endif
+
+protected void init_webmud();
+void wieder_belebung(int was_non_interactive)
+{
+    if (strstr(object_name(previous_object()),LOGIN_OB))
+	return;
+
+#if NET_DEAD_TIME > 0
+    remove_call_out("ende_statue");
+#endif
+    remove_call_out("do_statue");
+    // Freaky: Damit das auch wieder stimmt.
+    update_last_host();
+    // Namen wieder setzen
+    set_living_name(real_name);
+    wiz_owner = previous_object()->query_current_wiz_owner();
+
+    // Freaky: Damit das Alter richtig funktioniert.
+    if (was_non_interactive)
+	restart_age();
+    if (!query_wiz_level() || this_object()->query_telnet_ping())
+	set_heart_beat(1);
+    init_aliases();
+    if(this_object()->query_client_option(CLIENT_VT100))
+	this_object()->start_mudclient();
+    this_object()->remove_shadow("/obj/statue_shadow");
+    this_object()->notify_ed_exit(1);
+    if(this_object()->query_away())
+	this_object()->send_message_to(this_object(),MT_NOTIFY,MA_UNKNOWN,
+	    wrap_say("Du bist noch weg:",this_object()->query_away()));
+
+    if(!this_object()->query_client_option(CLIENT_VT100))
+	clean_more();
+
+#ifdef STATUE_ROOM
+    if (object_name(environment()) == STATUE_ROOM)
+    {
+	if (this_object()->move(this_object()->query_start_room()) != MOVE_OK
+		&& this_object()->move(DEFAULT_START_ROOM) != MOVE_OK)
+	{
+	    this_object()->send_message_to(this_object(),MT_NOTIFY,MA_UNKNOWN,
+		"Einloggen ist nicht moeglich.\n"
+		"Bitte schreibe eine Mail an "+EMAIL+"\n");
+	    clone_object("/obj/statue_shadow")->init_shadow(this_object(),
+							NO_MULTI_SHADOW);
+	    remove_interactive(this_object());
+	    raise_error(sprintf("Login ging nicht: %O\n",this_object()));
+	    return;
+	}
+	if (!IS_INVIS(this_object()))
+	    this_object()->send_message(MT_LOOK,MA_MOVE_IN,Der()+" betritt "+MUD_NAME+".\n");
+	EVENT_MASTER->event("Login", this_object());
+#ifdef PLAYER_NOTIFY_MODES
+    do_notify("login",NL_LOGON, get_logon_mode()); 
+#else
+    do_notify("login",0);
+#endif
+    }
+    else
+#endif  // STATUE_ROOM
+	if (was_non_interactive)
+	{
+            aggression_login();
+	   /* Freaky: Damit die Monster wieder weiterkaempfen !!! */
+	   //this_object()->move(environment());
+	   if (!IS_INVIS(this_object()))
+	       this_object()->send_message(MT_LOOK,MA_UNKNOWN,
+	          wrap(Der()+" erwacht wieder zum Leben."));
+	   EVENT_MASTER->event("Statue", this_object(), 0, 1);
+#ifdef PLAYER_NOTIFY_MODES
+        do_notify("login",NL_STATUE, NL_DEFAULT); 
+#else
+        do_notify("login",1);
+#endif
+	   // Kurdel, 9.9.97: notify("moved_in",...) reicht fuer aggr. Monster
+	   environment()->notify("moved_in", this_object());
+	}
+    init_webmud();
+}
+
+nomask nosave void set_email(string str)
+{
+    mail_address = str;
+}
+
+nomask nosave string query_email()
+{
+    return mail_address;
+}
+
+nomask nosave void set_www_page(string str)
+{
+    www_page = str;    
+}
+
+nomask string query_www_page()
+{
+    return www_page;
+}
+
+int read_news(string str)
+{
+    object ob;
+
+    if (sizeof(str) && !member((["tk","traegerkreis","verein"]), lower_case(str)))
+	return 0;
+
+    ob=present("newsreader",this_object());
+    if (!ob)
+    {
+	ob=clone_object("/obj/newsreader");
+	if (this_object()->query_con_close())
+	{
+	    this_object()->open_con();
+	    ob->move(this_object());
+	    this_object()->close_con();
+	}
+	else
+	    ob->move(this_object());
+    }
+    if(sizeof(str))
+        ob->set_brett_name("Traegerkreis","+Verlautbarungen+");
+    else
+        ob->set_brett_name("Spieler","+Neues+");
+    // this_object()->do_command("lese news");
+    ob->query_read("", "", this_object());
+    return 1;
+}
+
+nosave int suicid(string str)
+{
+    string file;
+
+    if (!this_interactive() || this_interactive()!=this_object())
+    {
+	write("So geht es aber nicht!\n");
+	return 1;
+    }
+    if(guestp(this_object()))
+    {
+       notify_fail("Bei Gaesten ist so etwas unnoetig.\n");
+       return 0;
+    }
+    if(wizp(this_object()) ||
+	GOETTER_REGISTER->is_wiz_on_vacation(query_real_name()))
+    {
+       if(!(file = read_file("/nosave/adm/ABSCHIED")) ||
+	  member(regexp(explode(file,"\n")-({""}),"^[^#]"),
+		 query_real_name()) < 0)
+       {
+	  write("Goetter sollten sich persoenlich beim Obersten Rat des "
+		"Pantheons verabschieden!\n");
+	  return 1;
+       }
+    }
+    if(str)
+    {
+       write("Suizid wird ohne Parameter aufgerufen und loescht DEINEN "
+	     "Charakter!\n");
+       return 1;
+    }
+#ifdef PLAYER_DAY
+    if(level>=LVL_HLP && is_player_day)
+    {
+       write("Mein Gott, das war doch nurn Aprilscherz!\n");
+       return 1;
+    }
+#endif    
+    write("Wenn du Deinen Charakter wirklich loeschen willst, "
+	  "dann gib Dein Passwort ein.\n"
+	  "    ACHTUNG: Die Eingabe Deines Passworts loescht"
+	  " DEINEN Charakter!!!\n"
+	  "    ACHTUNG: Diese Aktion ist nicht rueckgaengig "
+	  "zu machen!!!\n");
+    input_to("suicid2",INPUT_NOECHO|INPUT_IGNORE_BANG|INPUT_PROMPT,
+	get_genitiv(capitalize(real_name))+" Passwort: ");
+    return 1;
+}
+
+nosave void suicid2(string str)
+{
+    object ob;
+    int i;
+
+    write("\n");
+    if (PASSWD_CHECK(str,password))
+    {
+        if (!newbiep (this_object())) {
+	    this_object()->send_message_to(this_object(),MT_LOOK,MA_MOVE_IN,
+	        "Der Tod erscheint ploetzlich.\n");
+	    this_object()->send_message_to(this_object(),MT_NOISE,MA_COMM,
+	        "Der Tod sagt: SOSO, DU BIST ALSO DES LEBENS MUEDE.\n"
+	        "              UND ICH HABE WIEDER DIE ARBEIT.\n");
+	    this_object()->send_message_to(this_object(),MT_NOISE,MA_EMOTE,
+	        "Der Tod seufzt tief.\n");
+	    this_object()->send_message_to(this_object(),MT_NOISE,MA_COMM,
+	        "Der Tod sagt: DU HAST JETZT EINE WOCHE ZEIT, ES DIR ANDERS ZU UEBERLEGEN.\n"
+	        "              WENN DU IN DIESER ZEIT UNITOPIA BETRITTST, WERDE ICH DEINEN\n"
+	        "              WUNSCH VERGESSEN. ANDERNFALLS WIRST DU IN EINER WOCHE FUER\n"
+	        "              IMMER AUS DIESER WELT VERSCHWUNDEN SEIN.\n");
+	    PLAYER_DELETER->suicide();
+            quit (0);
+	    return;
+        }
+	this_object()->send_message(MT_LOOK,MA_MOVE_IN,"Der Tod erscheint ploetzlich.\n");
+	this_object()->send_message_to(this_object(),MT_LOOK,MA_MOVE_IN,"Der Tod erscheint ploetzlich.\n");
+	this_object()->send_message(MT_NOISE,MA_COMM,"Der Tod sagt: SOSO, DU BIST ALSO DES LEBENS MUEDE.\n              UND ICH HABE WIEDER DIE ARBEIT.\n");
+	this_object()->send_message_to(this_object(),MT_NOISE,MA_COMM,"Der Tod sagt: SOSO, DU BIST ALSO DES LEBENS MUEDE.\n              UND ICH HABE WIEDER DIE ARBEIT.\n");
+	this_object()->send_message(MT_NOISE,MA_EMOTE,"Der Tod seufzt tief.\n");
+	this_object()->send_message_to(this_object(),MT_NOISE,MA_EMOTE,"Der Tod seufzt tief.\n");
+	write("Der Tod schwingt seine Sense und ploetzlich ist alles weg.\n");
+	say("Der Tod schwingt seine Sense und ploetzlich ist "+der()+
+		" verschwunden.\n");
+	say("Der Tod verschwindet wieder.\n");
+#ifdef PLAYER_NOTIFY_MODES
+        do_notify("quit",NQ_SUIZID, NQ_KEIN_ENDE);
+#else
+        do_notify("quit",2);
+#endif
+	// Objekte entfernen, insbesondere Wichte...
+	while(ob=first_inventory(this_object()))
+	{
+	   ob->remove();
+	   if(ob)
+	      destruct(ob);
+	}
+
+        if (gilde && rang)
+            if (!testplayerp(this_object()))
+                STATISTIK->suicid_gilde(gilde,level);
+	PLAYER_DELETER->delete_player();
+	EVENT_MASTER->event("Logout", this_object(), 0, 1);
+	remove();
+    }
+    else
+    {
+	write("Du willst also doch noch weiterleben.\n");
+	write("Nun gut.\n");
+    }
+}
+
+#ifdef RELAYD
+private nosave string real_ip_name, real_ip_number;
+
+void set_real_ip(string ip_number, string ip_name)
+{
+    int junk;
+
+    if (sscanf(object_name(previous_object()),LOGIN_OB"#%d",junk)==1)
+    {
+	real_ip_name=ip_name;
+	real_ip_number=ip_number;
+    }
+}
+
+string query_real_ip_name() { return real_ip_name; }
+string query_real_ip_number() { return real_ip_number; }
+#endif
+
+//
+// So, jetzt kommt der Krams zur Selbstbeschraenkung
+//
+
+#define SONNTAG_24_UHR 672
+
+nomask int query_sperre_vorhanden()
+{
+    int i;
+    if (!sperren) return 0;
+    for (i=0; i < SONNTAG_24_UHR; i++)
+	if (test_bit (sperren,i)) return 1;
+    sperren = 0;
+}
+
+nosave int selbstsperrung(string str)
+{
+    if ((this_player() != this_interactive())
+	|| (this_player() != this_object()))
+	return 0;
+    if (guestp(this_object())) {
+       notify_fail("Bei Gaesten ist so etwas unnoetig.\n");
+       return 0;
+    }
+    if (query_input_pending (this_object()) || query_editing (this_object())) {
+	write ("Jetzt geht das nicht. Eines nach dem anderen.\n");
+	return 1;
+    }
+    if (str) {
+       write(wrap("Selbstsperrung wird ohne Parameter aufgerufen und sperrt "
+	   "den Zugang fuer Deinen Charakter zu bestimmten Uhrzeiten an "
+	   "bestimmten Wochentagen."));
+       return 1;
+    }
+    write(wrap ("Wenn Du Deinen Charakter wirklich fuer bestimmte Uhrzeiten "
+	"an bestimmten Wochentagen sperren moechtest so gib Dein "
+	"Passwort ein. Abbruch mit Leereingabe.")+"\n"+
+        wrap_say("ACHTUNG:", "Sobald dein Charakter gesperrt ist, kann er "
+                             "nicht mehr einloggen. Die Sperre kann von dir "
+                             "NICHT vorzeitig aufgehoben werden.", 75, 9)
+        +"\n");
+    input_to("selbstsperrung2",INPUT_NOECHO|INPUT_IGNORE_BANG|INPUT_PROMPT,
+	get_genitiv(capitalize(real_name))+" Passwort: ");
+    return 1;
+}
+
+nosave void selbstsperrungsmenue(string str)
+{
+    int zeit, wochentag, bitnr;
+    if (sperre_bis <= time()) sperre_bis = 0;
+    if ((str == "-") && !query_sperre_vorhanden())
+	write ("Es existiert doch ueberhaupt keine Sperrung fuer Dich.\n");
+    else if ((str == "+") || (str == "-")) {
+	if (str == "+") {
+	    plusminus = 1;
+	    write ("Sperrung hinzufuegen.\n"
+		"Zunaechst Kuerzel fuer die Wochentage eingeben, an denen "
+		"die Sperrung gelten\n");
+	} else {
+	    plusminus = -1;
+	    write ("Existierende Sperrung entfernen.\n"
+		"Zunaechst Kuerzel fuer die Wochentage eingeben, an denen "
+		"die Sperrung entfernt werden\n");
+	}    
+	write ("soll. Dabei steht \"Mo\" fuer Montag, \"Di\" fuer Dienstag "
+	    "usw.\n"
+	    "Beispiel: \"Mo Mi Do So\" fuer eine Sperrung an Montag, "
+	    "Mittwoch, Donnerstag\nund Sonntag.\n");
+	input_to ("selbstsperrungswochentag", INPUT_PROMPT,
+	    "Wochentagskuerzel, Abbruch mit \".\"): ");
+	return;
+    }
+    else if (str == "q" || str == "~q" || str == "." || str == "**") {
+	write ("Fertig.\n");
+	return;
+    }
+    else if (str == "r") {
+	if (sperre_bis)
+	    write ("Du bist gesperrt bis zum "+timestr(sperre_bis)+".\n");
+	else if (!query_sperre_vorhanden())
+	    write ("Es sind keine Sperrungen eingetragen.\n");
+	else {
+	    write ("\n            Uhrzeit: ");
+	    for (zeit = 0; zeit < 12; zeit++)
+		write (left (zeit,4));
+	    write ("Uhr\n Wochentag:          ");
+	    for (zeit = 12; zeit < 24; zeit++)
+		write (left (zeit,4));
+	    write ("Uhr\n");
+	    for (wochentag = 0; wochentag < 7; wochentag++) {
+		switch (wochentag) {
+		    case 0: write ("    Montag:"); break;
+		    case 1: write ("  Dienstag:"); break;
+		    case 2: write ("  Mittwoch:"); break;
+		    case 3: write ("Donnerstag:"); break;
+		    case 4: write ("   Freitag:"); break;
+		    case 5: write ("   Samstag:"); break;
+		    case 6: write ("   Sonntag:");
+		}
+		write ("  vor 12: ");
+		for (zeit = 0; zeit < 48; zeit++, bitnr++)
+		    if (test_bit (sperren,bitnr)) write ("|");
+		    else write (".");
+		write ("\n            nach 12: ");
+		for (zeit = 0; zeit < 48; zeit++, bitnr++)
+		    if (test_bit (sperren,bitnr)) write ("|");
+		    else write (".");
+		write ("\n");
+	    }
+	}
+    }
+    else if (str == "s") {
+	if (sperre_bis) {
+	    write ("Sperre bis zum "+timestr(sperre_bis)+" ist aufgehoben.\n");
+	    sperre_bis = 0;
+	} else {
+	    write ("Bitte gib die Anzahl an Stunden ein, fuer die Du Dich "
+		   "selbst sperren moechtest.\n");
+	    input_to ("selbstsperrungsstundenzahl", INPUT_PROMPT,
+		   "Stundenzahl (Abbruch mit \".\"): ");
+	    return;
+	}
+    }
+    else if (str == "t") {
+	if (sperre_bis) {
+	    write ("Sperre bis zum "+timestr(sperre_bis)+" ist aufgehoben.\n");
+	    sperre_bis = 0;
+	} else {
+	    write ("Bitte gib die Anzahl an Tagen ein, fuer die Du Dich "
+		   "selbst sperren moechtest.\n");
+	    input_to ("selbstsperrungstagezahl", INPUT_PROMPT,
+		   "Tagezahl (Abbruch mit \".\"): ");
+	    return;
+	}
+    }
+    else if (str == "?") {
+	write ("    +: zu einer bestimmten Uhrzeit an einem oder mehreren "
+	       "Wochentagen\n       eine Sperrung hinzufuegen\n"
+	       "    -: eine vorhandene Sperrung entfernen\n"
+	       "    r: vorhandene Sperrungen anzeigen\n"
+	       "    s: Sperre fuer eine bestimmte Anzahl von Stunden setzen "
+		      "/ wieder aufheben.\n"
+	       "    t: Sperre fuer eine bestimmte Anzahl von Tagen setzen "
+		      "/ wieder aufheben.\n"
+	       "    ?: diese Hilfe\n"
+	       "    q: fertig.\n");
+    }
+    input_to ("selbstsperrungsmenue", INPUT_PROMPT,
+	"Sperrung (+/-/r/q/?): ");
+}
+
+nosave void selbstsperrungsstundenzahl(string str)
+{
+    int t;
+    t = to_int (str);
+    if (!t || (t < 0) || (t>219300)) {
+	write ("Gut, lassen wir das eben. Waere eh zu brutal.\n");
+	selbstsperrungsmenue ("dummy");
+	return;
+    }
+    sperre_bis = time() + t * 3600;
+    write ("Du bist jetzt gesperrt bis "+timestr(sperre_bis)+".\n");
+    selbstsperrungsmenue ("dummy");
+}
+
+nosave void selbstsperrungstagezahl(string str)
+{
+    int t;
+    t = to_int (str);
+    if (!t || (t < 0) || (t>3655)) {
+	write ("Gut, lassen wir das eben. Waere eh zu brutal.\n");
+	selbstsperrungsmenue ("dummy");
+	return;
+    }
+    sperre_bis = time() + t * 86400;
+    write ("Du bist jetzt gesperrt bis "+timestr(sperre_bis)+".\n");
+    selbstsperrungsmenue ("dummy");
+}
+
+nosave void selbstsperrungswochentag(string str)
+{
+    sperrungswochentage = ({});
+    if (!str || str == "" || str == ".") {
+	write ("Dann eben nicht.\n");
+	selbstsperrungsmenue ("dummy");
+	return;
+    }
+    str = lower_case (str);
+    if (strstr (str,"mo") != -1) sperrungswochentage += ({0});
+    if (strstr (str,"di") != -1) sperrungswochentage += ({1});
+    if (strstr (str,"mi") != -1) sperrungswochentage += ({2});
+    if (strstr (str,"do") != -1) sperrungswochentage += ({3});
+    if (strstr (str,"fr") != -1) sperrungswochentage += ({4});
+    if (strstr (str,"sa") != -1) sperrungswochentage += ({5});
+    if (strstr (str,"so") != -1) sperrungswochentage += ({6});
+    if (!sizeof (sperrungswochentage)) {
+	write ("Keine Wochentage angegeben.\n");
+	selbstsperrungsmenue ("dummy");
+	return;
+    } else {
+	write (wrap ("So, jetzt bitte die Uhrzeit fuer die Sperrung bitte "
+	       "im folgenden Format eingeben: Startzeit - Stopzeit, "
+	       "Startzeit und Stopzeit bitte als SS:MM")+
+	       "Beispiel: 17:15 - 20:45 fuer Sperrung von 17:15 - 20:45\n"
+	       "          21:15 - 3:30 fuer Sperrung von abends 21:15 bis "
+	       "nachts 3:30 am \n"
+	       "                       naechsten Tag\n");
+	input_to ("selbstsperrungsuhrzeit", INPUT_PROMPT,
+	       "Uhrzeit (Abbruch mit \".\": ");
+    }
+}
+
+nosave void selbstsperrungsuhrzeit(string str)
+{
+    int vonstunde,vonminute,bisstunde,bisminute,von,bis,bitnr,wochentag;
+    if (!str || str == "" || str == ".") {
+	write ("Dann eben nicht.\n");
+	selbstsperrungsmenue ("dummy");
+	return;
+    }
+    if ((sscanf (str,"%d:%d - %d:%d",
+	vonstunde,vonminute,bisstunde,bisminute) != 4) &&
+	(sscanf (str,"%d:%d-%d:%d",
+	 vonstunde,vonminute,bisstunde,bisminute) != 4)) {
+	write ("Ungueltige Eingabe.\n");
+	selbstsperrungsmenue ("dummy");
+	return;
+    }
+    if ((vonminute < 0) || (vonminute > 59) || (bisminute < 0) || 
+	(bisminute > 59) || (vonstunde < 0) || (vonstunde > 24) ||
+	(bisstunde < 0) || (bisstunde > 24)) {
+	write ("Ungueltige Uhrzeit.\n");
+	selbstsperrungsmenue ("dummy");
+	return;
+    }
+    vonminute = vonminute / 15;
+    bisminute = bisminute / 15;
+    if (bisstunde < vonstunde) bisstunde += 24;
+    else if ((bisstunde == vonstunde) && (bisminute <= vonminute))
+	bisstunde += 24;
+    else if ((bisstunde == vonstunde) && (bisminute-1 <= vonminute)) {
+	write ("Fuer so kurze Zeitraeume geht das nicht.\n");
+	selbstsperrungsmenue ("dummy");
+	return;
+    }
+    for (wochentag=0; wochentag<sizeof(sperrungswochentage); wochentag++) {
+	von = sperrungswochentage[wochentag] * 96 + vonstunde * 4 + vonminute;
+	bis = sperrungswochentage[wochentag] * 96 + bisstunde * 4 + bisminute;
+	if (bis > SONNTAG_24_UHR) bis -= SONNTAG_24_UHR;
+	if (plusminus > 0) {
+	    if (!sperren) sperren = "";
+	    for (bitnr = von; bitnr != bis; bitnr++) {
+		if (bitnr == SONNTAG_24_UHR) bitnr = 0;
+		sperren = set_bit (sperren,bitnr);
+	    }
+	    write ("Sperrung hinzugefuegt.\n");
+	} else {
+	    for (bitnr = von; bitnr != bis; bitnr++) {
+		if (bitnr == SONNTAG_24_UHR) bitnr = 0;
+		sperren = clear_bit (sperren,bitnr);
+	    }
+	    write ("Sperrung entfernt.\n");
+	}
+    }
+    selbstsperrungsmenue ("r");
+}
+
+nosave void selbstsperrung2(string str)
+{
+    write("\n");
+    if (PASSWD_CHECK(str, password))
+	selbstsperrungsmenue ("?");
+    else
+	write("Nun, dann nicht. Auch gut.\n");
+}
+
+nomask varargs int query_gesperrt(int t)
+{
+    mapping wtage;
+    string wtag, monat;
+    int tag, jahr, stu, min, sek, bitnr;
+
+    if (!t) t = time();
+    if (!query_sperre_vorhanden()) return 0;
+    wtage = (["Mon":0,"Tue":1,"Wed":2,"Thu":3,"Fri":4,"Sat":5,"Sun":6]);
+    sscanf(ctime(t),"%s %s %d %d:%d:%d %d",
+	wtag,monat,tag,stu,min,sek,jahr);
+    bitnr = wtage[wtag] * 96 + stu * 4 + min / 15;
+    return test_bit (sperren,bitnr);
+}
+
+#if 0
+int query_forwarding()
+{
+   return forwarding;
+}
+
+int forwarding(string str)
+{
+   string user, rechner, domain;
+
+   if(forwarding)
+   {
+      write("Deine "+MUD_NAME+"-Post wird nun nicht mehr an Deine mit 'email' "
+	    "angegebene\nMailadresse umgeleitet.\n");
+      forwarding = 0;
+   }
+   else
+   {
+      if(!mail_address)
+      {
+	 write("Du musst zuerst eine gueltige E-Mailadresse von Dir mit "
+	       "dem Befehl 'email'\nangeben, bevor Du Deine Post umleiten "
+	       "kannst.\n");
+      }
+      else
+      {
+	 forwarding = 1;
+	 write("Deine "+MUD_NAME+"-Post wird nun zu\n'"+mail_address+
+	       "' umgeleitet.\n");
+      }
+   }
+   return 1;
+}
+#endif

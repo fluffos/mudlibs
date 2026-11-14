@@ -1,0 +1,385 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/rathaus/schiffahrt.c
+// Description: Startet und verwaltet alle Faehren
+// Author:	Francis
+// Modified by:	Freaky (18.10.95) Faehren bekommen ein set_preven_cleanup()
+//
+// $Log: schiffahrt.c,v $
+// Revision 1.11  2016/03/20 14:25:28  myonara
+// liste_cmd von einzelwrites auf zwei printfs umgestellt...
+//
+// Revision 1.10  2002/11/24 22:42:17  gnomi
+// Schiffe auch dann starten, wenn sie geladen sind, aber keine Umgebung haben.
+//
+// Revision 1.9  2002/09/09 20:31:25  sissi
+// Aktion unser Rathaus soll schoener werden:
+// Ueberall ne Pflanze eingebaut.
+//
+// Revision 1.8  2001/04/07 00:23:55  gnomi
+// Header und/oder CVS-Log eingebaut.
+//
+
+#pragma strong_types
+
+inherit "/i/room";
+
+#include <move.h>
+#include <apps.h>
+#include <filed.h>
+
+/*
+ * Beim Laden ALLER Schiffe im Preloading gibts Probleme,
+ * wenn zu viele call-outs aufeinanderlaufen:
+ * Der Driver schmiert einfach ab.
+ *
+ * Mit den folgenden Parametern kann man den Ladevorgang zeitlich
+ * etwas dehnen. 
+ */
+#define FAEHRE_P_FLAGS 0
+#define FAEHRE_F_TEST  1
+
+#define OFFSET 20              // Bis zum ersten Schiff
+#define DIST   3               // Zwischen den einzelnen Schiffen
+
+string *faehren;
+
+nosave object starte_faehre(string name) {
+    object schiff;
+    string err, room;
+    int ret;
+
+    if (name && name != "") {
+	if ((schiff = find_object(name)) && environment(schiff))
+	    return schiff;
+	if (!schiff) err = catch(schiff = touch(name));
+	if (!schiff) {
+	    write("Fehler beim Laden des Schiffes "+name+":\n"+err+"\n");
+	    return 0;
+	    }
+	room = schiff->query_default_room();
+	if (!room || room == "")
+	    room = "/map/m8_0";
+
+	if ((ret = schiff->move(room)) != MOVE_OK) {
+	    write("Fehler beim Moven des Schiffes "+name+" in den Raum "+room+":"+ret+".\n");
+	    return 0;
+	    }
+	schiff->set_prevent_cleanup();
+	return schiff;
+	}
+    write("Kein Schiffs-Name angegeben.\n");
+    return 0;
+}
+
+
+
+private int faehren_flag(mixed *entry, int flag)
+{
+   return sizeof(entry[FD_PARAMETERS]) > FAEHRE_P_FLAGS &&
+      entry[FD_PARAMETERS][FAEHRE_P_FLAGS] & flag;
+}
+
+
+
+varargs void starte_alle_faehren(int dist) {
+    mixed *entries;
+    int i;
+
+    entries = FILED->query_entries("faehren");
+    for(faehren = ({}), i = 0; i < sizeof(entries); i++)
+       if(!faehren_flag(entries[i], FAEHRE_F_TEST))
+	  faehren += ({ entries[i][FD_FILE] });
+
+    call_out("starte_naechste_faehre",dist,0);
+}
+
+nosave void starte_naechste_faehre(int num) {
+    if (num<sizeof(faehren)) {
+	call_out("starte_naechste_faehre",DIST,num+1);
+	starte_faehre(faehren[num]);
+	}
+}
+
+// Wird von /room/rathaus/filed aufgerufen, wenn die Faehreneintraege 
+// geaendert wurden.
+void reload(string type)
+{
+   if(type == "faehren")
+   {
+      remove_call_out("starte_naechste_faehre");
+      starte_alle_faehren();
+   }
+}
+
+void starte_alles() {
+    starte_alle_faehren(OFFSET);
+}
+
+void reset() {
+    starte_alles();
+    "/room/rathaus/div/lager"->get_moebel(this_object());
+    "/room/rathaus/div/lager"->get_pflanze(this_object());
+}
+
+void create() {
+    set_short("Buero fuer Schiffahrts-Angelegenheiten");
+    set_long(
+"Dies ist das Buero fuer Schiffahrts-Angelegenheiten. Hier werden alle Dinge\n"+
+"geregelt, die in irgendeinem Zusammenhang mit Schiffbau und Schiffahrt in\n"+
+"Magyra zusammenhaengen. Insbesondere werden hier die Haupt-Verbindungen\n"+
+"zwischen den Inseln und Kontinenten verwaltet.\n"+
+"Sir Francis hat hier seinen Arbeitsplatz, ist jedoch selten anzutreffen,\n"+
+"da er staendig unterwegs ist, um liegengebliebene Schiffe wieder flottzumachen,\n"+
+"neue Schiffslinien zu eroeffnen oder um neue Inseln zu entdecken.\n"+
+
+"   Kommandos: liste [-l]                    (alle Faehren)\n"+
+"              starte alle                   (alle Faehren)\n"+
+"              starte <nummer>               (spezielle Faehre)\n"+
+"              passagiere <nummer>           (einer Faehre)\n"+
+"              versenke <nummer>             (eine Faehre)\n"
+"              test <schiffs-file>           (Testflag einer Faehre aendern)\n"
+	     );
+    set_own_light(1);
+    add_type("kunstlicht",1);
+    add_type("teleport_rein_verboten", 1);
+    set_exits(({"forum"}),({"forum"}));
+    set_room_domain("Pantheon");
+    reset();
+}
+
+void init() {
+    add_action("starte_cmd","starte",-5);
+    add_action("liste_cmd","liste",-4);
+    add_action("versenke","versenke",-7);
+    add_action("passagiere","passagiere",-5);
+    add_action("test","test");
+    if (!present("nauta"))
+	clone_object(abs_path("obj/nauta"))->move(this_object());
+}
+
+int starte_cmd(string str) {
+	int num;
+
+    if (sizeof(faehren) <= 0) {
+	write("Keine Faehren eingetragen.\n");
+	return 1;
+	}
+    if (!str || str == "") {
+	write("Starte welche Faehre ?\n");
+	return 1;
+	}
+    if (lower_case(str) == "alle") {
+	starte_alle_faehren();
+	write("Ok.\n");
+	say(Der(this_player())+" startet alle Faehren.\n");
+	return 1;
+	}
+    if (sscanf(str,"%d",num)) {
+	num -= 1;
+	if (num > sizeof(faehren) || num < 0) {
+	    write("Diese Faehre gibt es nicht.\n");
+	    return 1;
+	    }
+	starte_faehre(faehren[num]);
+	write("Ok.\n");
+	say(Der(this_player())+" startet die Faehre "+(num+1)+".\n");
+	return 1;
+	}
+    write("Starte welche Faehre ?\n");
+    return 1;
+}
+
+int liste_cmd(string str) {
+    int a,i, last_time;
+    object schiff, env, kapi;
+    string room,*line;
+    mixed *entries;
+
+    say(Der(this_player())+" schaut sich die Liste der Faehren an.\n");
+    if (sizeof(faehren) <= 0) 
+    {
+        write("Es sind keine Faehren hier eingetragen.\n");
+        return 1;
+    }
+    write("               Faehre                   Idle/gestoppt       Ort\n");
+    write(copies("-",79)+"\n");
+    for (a=0;a<sizeof(faehren); a++) 
+    {
+        schiff = find_object(faehren[a]);
+        line = ({ right((a+1)+": ",4), faehren[a] });
+        // write(right((a+1)+": ",4)+left(faehren[a],39)+" ");
+        if (schiff) 
+        {
+            last_time = schiff->query_last_time();
+            line += ({ right(time()-last_time,5) });
+            // write(right(time()-last_time,5)+" ");
+            if (schiff->query_stopped())
+                line += ({ "S " }); // write("S ");
+            else
+                line += ({ "  " }); // write("  ");
+            env = environment(schiff);
+            if (env) 
+            {
+                room = object_name(env);
+                line+= ({ room }); // write(room);
+            }
+            else
+                line += ({ "Nirwana" }) ; // write(left("Nirwana",30));
+            // write("\n");
+            printf("%-4s%-=39s%-5s%-2s%-=29s\n",
+                line[0],line[1],line[2],line[3],line[4]);
+            if (str=="-l") 
+            {
+                kapi=schiff->query_commander();
+                if (kapi)
+                    printf("    %s: %s (%d)\n",Name(kapi),
+                      implode(kapi->query_route(),","),schiff->query_speed());
+                else
+                    write("Kein Kapitaen.\n");
+            }
+        }
+        else
+        {
+            printf("%-4s%-=39s nicht geladen\n", line[0],line[1]);
+            // write("  nicht geladen\n");
+        }
+    }
+    write("Faehren im Test (nicht in Betrieb):\n");
+    entries = FILED->query_entries("faehren");
+    for(i = 0; i < sizeof(entries); i++)
+       if(faehren_flag(entries[i], FAEHRE_F_TEST))
+       {
+          write("    "+left(entries[i][FD_FILE], 39)+" "+entries[i][FD_REMARKS]+"\n");
+       }
+    return 1;
+}
+
+private string error(int err)
+{
+   switch(err)
+   {
+      case FDR_OK: return "Ok.\n";
+      case FDR_ILLEGAL_TYPE: return "Unbekannter Typ.\n";
+      case FDR_NO_AUTH: return "Du darfst das leider nicht.\n";
+      case FDR_NO_FILE: return "Uebergebener Filename ist ungueltig.\n";
+      case FDR_NO_CODERS: return "Keine Programmierer angegeben.\n";
+      case FDR_ENTRY_EXISTS: return "Eintrag existiert bereits.\n";
+      case FDR_ENTRY_NOT_EXISTANT: return "Faehre existiert nicht.\n";
+      case FDR_NO_TESTER: return "Keine Tester eingetragen.\n";
+      case FDR_FILE_NOT_FOUND: return "Importfile nicht gefunden.\n";
+      default: return "Unbekannter Fehler von "+FILED+".\n";
+   }
+}
+
+private int toggle_faehren_flag(string file, int flag)
+{
+   int res;
+   mixed *parms;
+
+   parms = ({}) + (FILED->query_parameters("faehren", file) || ({}));
+   if(sizeof(parms) <= FAEHRE_P_FLAGS)
+      parms = ({0});
+   parms[FAEHRE_P_FLAGS] ^= flag;
+   if(!(res = FILED->set_parameters("faehren",file,parms)))
+      reload("faehren");
+   return res;
+}
+
+int test(string str)
+{
+   if(!str)
+   {
+      notify_fail(query_verb()+" <schiffs-file>\n");
+      return 0;
+   }
+   write(error(toggle_faehren_flag(str, FAEHRE_F_TEST)));
+   return 1;
+}
+
+
+
+int versenke(string str) {
+	int num, a;
+	object schiff, env, *inv;
+	string default_room, name;
+
+    if (!str || str == "") {
+	notify_fail("Versenke welches Schiff ?\n");
+	return 0;
+	}
+    if (!sscanf(str,"%d",num)) {
+	notify_fail("Bitte die Schiffsnummer angeben.\n");
+	return 0;
+	}
+    if (sizeof(faehren) <= 0) {
+	notify_fail("Es sind keine Faehren eingetragen.\n");
+	return 0;
+	}
+    num -= 1;
+    if (num < 0 || num > sizeof(faehren)-1) {
+	notify_fail("Diese Faehre gibt es nicht.\n");
+	return 0;
+	}
+    schiff = find_object(faehren[num]);
+    if (!schiff) {
+	notify_fail("Das Schiff ist nicht geladen.\n");
+	return 0;
+	}
+    default_room = schiff->query_default_room();
+    if (!default_room || default_room == "")
+	default_room = "/map/m8_0";
+    name = schiff->query_cap_name();
+    env = environment(schiff);
+    schiff->remove();
+    if (env) {
+	inv = all_inventory(env);
+	for (a=0; a<sizeof(inv); a++)
+	    if (interactive(inv[a]))
+		if(inv[a]->move(default_room) != MOVE_OK)
+		    if(inv[a])
+			inv[a]->move("/room/void");
+	}
+    write("Das Schiff "+name+" wurde versenkt.\n");
+    say(Der(this_player())+" hat soeben die Faehre "+(num+1)+" versenkt.\n");
+    return 1;
+}
+
+string *query_faehren() { return ({})+faehren; }
+
+int passagiere(string str) {
+	int num, a;
+	object *passengers;
+
+    if (sizeof(faehren) <= 0) {
+	write("Keine Faehren eingetragen.\n");
+	return 1;
+	}
+    if (!str || str == "") {
+	write("Von welcher Faehre ?\n");
+	return 1;
+	}
+    if (sscanf(str,"%d",num)) {
+	num -= 1;
+	if (num >= sizeof(faehren) || num < 0) {
+	    write("Diese Faehre gibt es nicht.\n");
+	    return 1;
+	    }
+	passengers = faehren[num]->query_passagiere();
+	if (sizeof(passengers) <= 0) {
+	    write("Es ist niemand an Bord.\n");
+	    return 1;
+	    }
+	write("An Bord "+des(touch(faehren[num]))+" befinden sich:\n");
+	for (a=0; a<sizeof(passengers); a++)
+	    if (playerp (passengers[a]))
+	        write(Der(passengers[a])+" (Spieler).\n");
+	    else
+	        write(Der(passengers[a])+" (NPC).\n");
+	say(Der(this_player())+" schaut sich die Passagierliste der Faehre "+(num+1)+" an.\n");
+	return 1;
+	}
+    write("Von welcher Faehre ?\n");
+    return 1;
+}
+

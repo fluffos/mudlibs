@@ -1,0 +1,282 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /apps/object_stats.c
+// Description: Statistik ueber diverse Grundobjekte
+// Author:      Garthan (19.11.96)
+
+// UID: Apps
+
+// Modified by:	Garthan (26.11.96) Andere Indizierung der Mappings
+//
+// $Log: object_stats.c,v $
+// Revision 1.5  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.4  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.3  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+ 
+#ifdef LIEST_EH_KEINER
+
+#include <config.h>
+#include <level.h>
+#include <object_stats.h>
+
+#define OS_REST_EVALS 170000
+#define OS_DELAY 3
+
+// Interface: add_object_stats(), liste(), new(), create(), remove()
+
+mapping object_stats;
+nosave int save_me;
+
+private void save()
+{
+   save_object(OS_SAVE_FILENAME);
+   save_me = 0;
+}
+
+
+// --------------- Aufnahme der Daten ------------------
+
+// Reihenfolge der Elemente umkehren
+private string *reverse_array(string *arr)
+{
+   int i, s;
+   string *new;
+
+   for(new = allocate(sizeof(arr)), s = i = sizeof(arr); i--;)
+      new[s-i-1] = arr[i];
+   return new;
+}
+
+// Clonenumern eines Filenamens abschneiden, Mapkoordinaten wegschneiden
+private string base_name(string filename)
+{
+   int i, nr, x, y, ret;
+   string fn;
+  
+   for(i = strlen(filename); i--;)
+      if(filename[i] == '/')
+         break;
+   if(sscanf(filename[i..], "%s/m%d_%d", fn, x, y)==3)
+      filename = filename[0..i-1] + fn + "/mx_y";
+   sscanf(filename, "%s#%d", filename, nr);
+   return filename;
+}
+
+// base_name auf alle Eintraege im query_first_room, Reihenfolge invertieren
+private string base_first_room(string first_room)
+{
+   int i;
+   string *fr, *parts;
+
+   fr = explode(first_room, "|");
+
+   for(i = sizeof(fr); i--;)
+   {
+      parts = explode(fr[i], "(");
+      parts[0] = base_name(parts[0]);
+      fr[i] = implode(parts, "(");
+   }
+   return implode(reverse_array(fr), "|");
+  
+}
+
+// Vergleicht zwei Arrays auf Elementgleichheit (rekursiv)  1==identisch
+private int compare_stats(mixed *s1, mixed *s2)
+{
+   int i;
+
+   if(sizeof(s1) != sizeof(s2))
+      return 0;
+   for(i = sizeof(s1); i--;)
+      if(pointerp(s1[i]) && pointerp(s2[i]))
+      {
+         if(!compare_stats(s1, s2))
+	    return 0;
+      }
+      else if(s1[i] != s2[i])
+         return 0;
+   return 1;
+}
+
+// Hinzufuegen eines Objekts in die Objektstatistik
+// type:  Ein Objekt aus <object_stats.h>
+// ob:    Das hinzuzufuegende Objekt
+// stats: Stats dieses Objekts
+int add_object_stats(int type, object ob, mixed *stats)
+{
+   int i, inserted, ret;
+   string index;
+   mixed *entry;
+   
+   index = base_name(object_name(ob)) +
+           base_first_room(ob->query_first_room());
+
+   if(!object_stats)
+      object_stats = ([]);
+   if(!object_stats[type])
+      object_stats[type] = ([]);
+   if(!(entry = object_stats[type][index]))
+      entry = ({});
+
+   for(i = sizeof(entry); i--;)
+      if(compare_stats(entry[i][OS_STATS] , stats))
+      {
+         ret = ++entry[i][OS_REF];
+         inserted = 1;
+	 break;
+      }
+   if(!inserted)
+      entry += ({ ({ ret = 1, stats }) });
+
+   object_stats[type][index] = entry;
+         
+   if(ret && ++save_me >= OS_SAVE_EVERY)
+      save();
+   return ret;
+}
+
+
+// ---------- Ausgabe der Daten -----------
+
+
+// Teilliste fuer vom Ort her identische Objekte (idx),
+// wird fuer alle Indices erstellt, evalprotected
+nosave void index_list(string res, int type, int flag, int j, string *idxs)
+{
+   int l, m;
+   string idx, fmt;
+   mixed *entries, entry;
+
+   if(!(flag & OS_FLAG_QUIET))
+      write(".");
+
+   for(; j < sizeof(idxs) && get_eval_cost() > OS_REST_EVALS; j++)
+      for(l = sizeof(entries = object_stats[type][idx = idxs[j]]); l--;)
+      {
+	 res += sprintf("%1d %5d ", type, entries[l][OS_REF]);
+	 entry = entries[l][OS_STATS];
+
+	 for(m = 0, fmt = ""; m < sizeof(entry); m++)
+	    if(stringp(entry[m]))
+	       fmt += "%-12.12s ";
+	    else if(intp(entry[m]))
+	       fmt += "%7d ";
+	    else
+	       fmt += "%O ";
+	 res += apply(#'sprintf, fmt, entry);
+
+	 if(flag & OS_FLAG_ROOMS)
+	    res += idx+"\n";
+	 else
+	    res[<1] = '\n';
+      }
+
+   if(j+1 < sizeof(idxs))
+      call_out("index_list", OS_DELAY, res, type, flag, j+1, idxs);
+   else
+   {
+      write_file(OS_OUTFILE, res);
+      if(!(flag & OS_FLAG_QUIET))
+	 write(" done.\n");
+   }
+}
+
+// Teilliste fuer einen Objekttyp rauschreiben
+private void type_list(int type, int flag)
+{
+   if(!(flag & OS_FLAG_QUIET))
+      write(OS_HEADERS[type,1]+" ");
+
+   index_list(
+         "#\n"
+         "### "+OS_HEADERS[type,1]+" ###\n"
+	 "#\n"
+         "# count\t"+OS_HEADERS[type,0]+"\n",
+         type, flag, 0, m_indices(object_stats[type]));
+}
+
+// Alle Teillisten rauschreiben (alle Objekttypen)
+nosave string multi_list(int i, int *types, int flag)
+{
+   int delay;
+
+   if(i < sizeof(types))
+      if((delay = find_call_out("index_list")) >= 0)
+         call_out("multi_list", delay, i, types, flag);
+      else
+      {
+	  call_out("multi_list", OS_DELAY, i+1, types, flag);
+	  type_list(types[i], flag);
+      }
+}
+
+// Liste der Objekte erzeugen
+// type == 0: alle Types
+//      != 0: dieser Objekttyp (siehe <object_stats.h>)
+// flag: OS_FLAG_ROOMS: mit Index(also orts-)angabe und Filename
+//       OS_FLAG_QUIET: Keine writes waehrend der Erzeugung
+varargs void liste(int type, int flag)
+{
+   int *types;
+   string liste;
+
+   liste = "Object Stats vom "+shorttimestr(time())+"\n"
+           "Erstellt von "+object_name()+"::liste()"+
+           (this_interactive()?
+	   " durch "+capitalize(this_interactive()->query_real_name()):"")+"\n";
+   rm(OS_OUTFILE);
+   write_file(OS_OUTFILE, liste);
+   if(type)
+      type_list(type, flag);
+   else
+      multi_list(0, sort_array(m_indices(object_stats), #'>), flag);
+}
+
+// Loescht ganze Datenbank (i==0) oder Bereich i
+varargs void new(int i)
+{
+   if(!extern_call() || (this_player() == this_interactive() &&
+      this_player() && adminp(this_player())))
+      if(i)
+	 object_stats[i] = ([]);
+      else
+	 object_stats = 0;
+   save();
+}
+
+nosave void do_new()
+{
+   // jetzt ist es kein extern_call mehr.
+   new();
+}
+
+
+// ----------------- Allgemeine Objektgunktionen
+
+void create()
+{
+   restore_object(OS_SAVE_FILENAME);
+
+   if(previous_object() == touch(MASTER_OB))
+   {
+      // funktioniert offenbar nicht
+      // liste(0, OS_FLAG_ROOMS|OS_FLAG_QUIET);
+      call_out("do_new", OS_MAX+10);
+   }
+}
+
+int remove()
+{
+   save();
+   destruct(this_object());
+   return 1;
+}
+
+#endif

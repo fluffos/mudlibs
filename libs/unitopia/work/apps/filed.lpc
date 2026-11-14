@@ -1,0 +1,727 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /apps/filed.c
+// Description: Verwaltung der Spiele, Raetsel und Gildeneintraege
+// Author:      Garthan (17.08.94)
+
+// UID: Apps
+
+// Modified by:	Freaky (22.11.96) PRESET erweitert
+//
+// $Log: filed.c,v $
+// Revision 1.14  2015/03/03 18:27:04  myonara
+// neue Funktionen query_files und query_file_of
+//
+// Revision 1.13  2014/10/03 16:54:51  myonara
+// temporaer P:Schiffe (Sorcerer)
+//
+// Revision 1.12  2013/07/07 14:06:29  sorcerer
+// P:Schiffe ist Schiffe bis zur Aufloesung von Schiffe
+//
+// Revision 1.11  2009-01-07 15:24:03  gnomi
+// Plugin-Ersatz-Mechanismus von Sorcerer eingebaut.
+//
+// Revision 1.10  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.9  2001/05/30 16:19:38  freaky
+// w-Abhaengigkeit rausgenommen.
+//
+// Revision 1.8  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.7  2001/02/20 22:27:16  gnomi
+// Neues Format der Autoloaderersatzliste.
+//
+// Revision 1.6  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#include <level.h>
+#include <gilden.h>
+#include <touch.h>
+#include <filed.h>
+#include <game.h>
+#include <quest.h>
+
+#define SAVE_FILE   "/var/filed"
+#define EXPORT_FILE "/var/filed.txt"
+#define CONTROLLER  "/room/rathaus/filed"
+
+#define SECURE
+
+/*
+reg = ([ "raetsel":
+	({
+	 ({ "/d/fasel...", ({ programmers }), ({ parms }), remarks }),
+	 ({ .... }),
+	});
+	({ testers }),
+	 "spiele": ...
+	 "gilden": ...
+      ]);
+*/
+
+#define PRESET  \
+            ([ GILDEN_AUTH_NAME : 0; ({}); GILDEN_OB, \
+	       "autoloader"     : 0; ({}); "/apps/autoloader", \
+	       "faehren"        : 0; ({}); "/room/rathaus/schiffahrt", \
+	       "schiffe"	: 0; ({}); 0, \
+	       "p"		: 0; ({}); 0, \
+	       Q_AUTH_NAME      : 0; ({}); QUEST_ROOM, \
+	       G_AUTH_NAME      : 0; ({}); GAME_ROOM ])
+
+mapping reg;
+mapping autoloader_replacement;
+mapping plugin_replacement;
+
+
+void create()
+{
+   int i, j;
+   string *idxs;
+
+   restore_object(SAVE_FILE);
+   if(!sizeof(reg))
+      reg = PRESET;
+//   if (!member(reg,"p")) {
+//       reg["p",0] = 0;
+//       reg["p",1] = ({});
+//       reg["p",2] = 0;
+//   }
+//   wer weiss; braucht man vielleicht nochmal.
+   for(i = sizeof(idxs = m_indices(reg)); i--;)
+      for(j = sizeof( reg[idxs[i], FD_ENTRY] ); j--;)
+         if(!pointerp(reg[idxs[i], FD_ENTRY][j][FD_PARAMETERS]))
+            reg[idxs[i], FD_ENTRY][j][FD_PARAMETERS] =
+	       ({ reg[idxs[i], FD_ENTRY][j][FD_PARAMETERS] });
+// nur fuer den Moment, bis Schiffe ganz in P sind
+   reg["schiffe",1] = ({"P:Schiffe",});
+}
+
+void save()
+{
+   save_object(SAVE_FILE);
+}
+
+int remove()
+{
+   save();
+   destruct(this_object());
+}
+
+void prepare_renewal() { save(); }
+void abort_renewal()   {}
+void finish_renewal(object neu) {}
+
+// Hier darf nur vom CONTROLLER aus gefuscht werden
+private int auth(string type)
+{
+   string *tester;
+   string name;
+   
+   if(!(tester = reg[type, FD_TESTER]))
+      return FDR_ILLEGAL_TYPE;
+   if(!previous_object() || object_name(previous_object()) != CONTROLLER ||
+      !this_player() || this_player() != this_interactive() ||
+      !(name = this_player()->query_real_name()) ||
+      !adminp(this_player()) && (!sizeof(tester) || member(tester, name) < 0))
+      return FDR_NO_AUTH;
+}
+
+// Hier darf auch das FD_ADMIN_OB pfuschen.
+private int auth_admin_obj(string type)
+{
+   string *tester;
+   string name;
+   
+   if(!(tester = reg[type, FD_TESTER]))
+      return FDR_ILLEGAL_TYPE;
+   if(!previous_object() ||
+      object_name(previous_object()) != CONTROLLER &&
+      object_name(previous_object()) != reg[type, FD_ADMIN_OB] ||
+      !this_player() || this_player() != this_interactive() ||
+      !(name = this_player()->query_real_name()) ||
+      !adminp(this_player()) && (!sizeof(tester) || member(tester, name) < 0))
+      return FDR_NO_AUTH;
+} 
+
+private int auth_admin()
+{
+   if(
+#ifdef SECURE
+      !previous_object() || object_name(previous_object()) != CONTROLLER ||
+#endif
+      !this_player() || this_player() != this_interactive() ||
+      !adminp(this_player()))
+      return FDR_NO_AUTH;
+}
+
+int export()
+{
+   int i, j, err;
+   string *idxs, res;
+   mixed *entries;
+
+   if(err = auth_admin())
+      return err;
+
+   res = "# filed - text export\n"
+         "# generated "+ctime(time())+" by "+object_name()+"\n"
+	 "#\n"
+	 "# You may edit and reimport this file into filed.\n"
+	 "# No syntax check, while importing, so be careful!!!\n"
+	 "\n";
+
+   for(i = sizeof(idxs = sort_array(m_indices(reg),#'<)); i--;)
+   {
+      res += "["+idxs[i]+":";
+      res += implode(reg[idxs[i], FD_TESTER], ",")+":";
+      res += reg[idxs[i], FD_ADMIN_OB]+"]\n";
+
+      entries = reg[idxs[i], FD_ENTRY];
+      for(j = 0; j < sizeof(entries); j++)
+      {
+         res += entries[j][FD_FILE]+":"+
+	        implode(entries[j][FD_CODERS],",")+":"+
+		entries[j][FD_REMARKS]+":"+
+		mixed2str(entries[j][FD_PARAMETERS])+"\n";
+      }
+      res += "\n";
+   }
+   rm(EXPORT_FILE);
+   write_file(EXPORT_FILE ,res);
+   printf(object_name()+": exported to "+EXPORT_FILE+"\n");
+   return FDR_OK;
+}
+
+int import()
+{
+   string file, header;
+   string *sections, *sl, *lines, *headers, *bodies, str;
+   int i, j, err;
+   mapping res;
+
+   if(err = auth_admin())
+      return err;
+
+   if(!(file = read_file(EXPORT_FILE)))
+      return FDR_FILE_NOT_FOUND;
+
+   lines = explode(file, "\n");
+   lines = map(lines, #'trim);
+   lines -= ({""});
+   lines = regexp(lines, "^[^#]");
+   file = "\n"+implode(lines, "\n");
+   sections = explode(file,"\n[")-({""});
+
+   res = m_allocate(10,3);
+   for(i = 0; i < sizeof(sections); i++)
+   {
+      sl = explode(sections[i],"\n");
+      header = sl[0];
+      sscanf(header,"%s]",header);
+      headers = explode(header, ":");
+      lines  = sl[1..];
+      res[headers[0], FD_ENTRY] = ({ });
+      res[headers[0], FD_TESTER] = explode(headers[1], ",")-({""});
+      res[headers[0], FD_ADMIN_OB] = headers[2];
+      for(j = 0; j < sizeof(lines); j++)
+      {
+	  bodies = explode(lines[j], ":");
+          res[headers[0], FD_ENTRY] += ({ ({ bodies[0],
+	                                     explode(bodies[1],",")-({""}),
+					     bodies[3] != "0" ? bodies[3] : 0,
+					     ({})//to_int(bodies[2])
+				       }) });
+      }
+   }
+   reg = res;
+   save();
+   return FDR_OK;
+}
+
+int add(string type, string file, string *coders)
+{
+   int res, i;
+
+   if(res = auth(type))
+      return res;
+   if(!stringp(file) || file_size(file+".lpc") < 0)
+      return FDR_NO_FILE;
+   if(!pointerp(coders) || !sizeof(coders))
+      return FDR_NO_CODERS;
+   if(!reg[type, FD_ENTRY])
+      reg[type, FD_ENTRY] = ({});
+   for(i = sizeof(reg[type, FD_ENTRY]); i--;)
+      if(file == reg[type, FD_ENTRY][i][FD_FILE])
+	 return FDR_ENTRY_EXISTS;
+   reg[type, FD_ENTRY] += ({ ({ file, coders, ({}), 0 }) });
+   save();
+   return FDR_OK;
+}
+
+int delete(string type, string file)
+{
+   int res, i;
+   mixed *entry;
+
+   if(res = auth(type))
+      return res;
+   if(!stringp(file))
+      return FDR_NO_FILE;
+   for(i = sizeof(entry = reg[type, FD_ENTRY]); i--;)
+      if(file == entry[i][FD_FILE])
+      {
+	 reg[type, FD_ENTRY] = entry[0..i-1] + entry[i+1..];
+	 save();
+	 return FDR_OK;
+      }
+   return FDR_ENTRY_NOT_EXISTANT;
+}
+
+int add_type(string type, string admin_ob)
+{
+   int res;
+
+   if(res = auth(type))
+      return res;
+   reg[type, FD_TESTER] = ({});
+   reg[type, FD_ADMIN_OB] = admin_ob;
+   return FDR_OK;
+}
+
+int delete_type(string type)
+{
+   int res;
+   if(res = auth(type))
+      return res;
+   m_delete(reg, type);
+   return FDR_OK;
+}
+
+int reposition(string type, string file, int newpos)
+{
+   int res, i;
+   mixed *entry;
+
+   if(res = auth(type))
+      return res;
+   if(!stringp(file))
+      return FDR_NO_FILE;
+   for(i = sizeof(entry = ({})+(reg[type, FD_ENTRY]||({}))); i--;)
+      if(file == entry[i][FD_FILE] && newpos >= 0 && newpos <= sizeof(entry))
+      {
+         reg[type, FD_ENTRY][i] = 0;
+         if(newpos < sizeof(entry))
+	    reg[type, FD_ENTRY][newpos..newpos] = 
+	       entry[i..i]+reg[type, FD_ENTRY][newpos..newpos];
+         else
+            reg[type, FD_ENTRY] += entry[i..i];
+         reg[type, FD_ENTRY] -= ({ 0 });
+         save();
+	 return FDR_OK;
+      }
+   return FDR_ENTRY_NOT_EXISTANT;
+}
+
+int set(string type, string file, int op, mixed value)
+{
+   int res, i;
+   mixed *entry;
+
+   if(extern_call() && (res = auth(type)))
+      return res;
+   if(!stringp(file))
+      return FDR_NO_FILE;
+   for(i = sizeof(entry = reg[type, FD_ENTRY]); i--;)
+      if(file == entry[i][FD_FILE] && op >= 0 && op < sizeof(entry[i]) )
+      {
+	 reg[type, FD_ENTRY][i][op] = value;
+	 save();
+	 return FDR_OK;
+      }
+   return FDR_ENTRY_NOT_EXISTANT;
+}
+
+int set_parameters(string type, string file, mixed value)
+{
+   int res; 
+
+   if(res = auth_admin_obj(type))
+      return res;
+   return set(type, file, FD_PARAMETERS, value);
+}
+
+mixed query(string type, string file, int op)
+{
+   int i;
+   mixed *entry;
+   mixed ret;
+
+   for(i = sizeof(entry = reg[type, FD_ENTRY]); i--;)
+      if(file == entry[i][FD_FILE] && op >= 0 && op < sizeof(entry[i]) )
+	 if(pointerp(ret = reg[type, FD_ENTRY][i][op]))
+            return ({})+ret;
+	 else
+	    return ret;
+}
+
+mixed query_parameters(string type, string file, mixed value)
+{
+   return query(type, file, FD_PARAMETERS);
+}
+
+mixed *query_entries(string type)
+{
+#ifdef SECURE
+   if(strstr(object_name(previous_object()), "/room/") &&
+      strstr(object_name(previous_object()), "/apps/"))
+      return 0;
+   if(strstr(object_name(previous_object()), "closure_container") != -1)
+      return 0;
+#endif
+
+   if(!member(reg, type))
+      return 0;
+   return reg[type, FD_ENTRY] || ({});
+}
+
+private void update_player_level(string name)
+{
+   object pl;
+
+   if(pl = find_player(name))
+      pl->check_level();
+}
+
+int add_auth(string type, string name)
+{
+   int res;
+   object ob;
+
+   if(res = auth_admin())
+      return res;
+   if(!reg[type, FD_TESTER])
+      reg[type, FD_TESTER] = ({});
+   if(!stringp(name))
+      return FDR_NO_TESTER;
+   name = lower_case(name);
+   reg[type, FD_TESTER] -= ({ name });
+   reg[type, FD_TESTER] += ({ name });
+   save();
+   update_player_level(name);
+   return FDR_OK;
+}
+
+int delete_auth(string type, string name)
+{
+   int res;
+
+   if(res = auth_admin())
+      return res;
+   if(!reg[type, FD_TESTER])
+      reg[type, FD_TESTER] = ({});
+   if(!stringp(name))
+      return FDR_NO_TESTER;
+   reg[type, FD_TESTER] -= ({ lower_case(name) });
+   save();
+   update_player_level(name);
+   return FDR_OK;
+}
+
+string *query_auth(string type)
+{
+   return ({}) + ( reg[type, FD_TESTER] || ({}) );
+}
+
+int set_admin_ob(string type, string file)
+{
+   int res;
+
+   if(res = auth_admin())
+      return res;
+   reg[type, FD_ADMIN_OB] = file;
+   save();
+   return FDR_OK;
+}
+
+string query_admin_ob(string type)
+{
+   return reg[type, FD_ADMIN_OB];
+}
+
+string *query_types()
+{
+   return m_indices(reg);
+}
+
+string *query_all_auth()
+{
+   int i;
+   string *types, *ret;
+
+   for(ret = ({}), i = sizeof(types = query_types()); i--;)
+   {
+      ret -= query_auth(types[i]);
+      ret += query_auth(types[i]);
+   }
+   return ret;
+}
+
+string *query_auth_of(string wiz)
+{
+   int i;
+   string *types, *ret;
+
+   for(ret = ({}), i = sizeof(types = query_types()); i--;)
+      if(member((reg[types[i], FD_TESTER] || ({})), wiz) >= 0)
+         ret += ({ types[i] });
+   return ret;
+}
+
+string *query_coders(string auth)
+{
+   mixed *tmp;
+   string *coders;
+   int i;
+
+   coders = ({});
+   tmp = reg[auth, FD_ENTRY];
+   if(tmp = reg[auth, FD_ENTRY])
+      for(i = sizeof(tmp); i--;)
+	 coders += tmp[i][FD_CODERS];
+   return m_indices(mkmapping(coders));
+}
+
+string *query_coder_of(string auth, string project)
+{
+    string file;
+    mixed *tmp;
+    int i;
+
+    tmp = reg[auth, FD_ENTRY];
+    if (!tmp)
+    	return ({});
+    file = "/z/"+capitalize(auth)+"/"+project+"/";
+    for (i = sizeof(tmp); i--; )
+    	if (!strstr(tmp[i][FD_FILE],file))
+	    return ({}) + tmp[i][FD_CODERS];
+    return reg[auth, FD_ADMIN_OB]->query_programmers_of(project);
+}
+
+int is_coder_of(string auth, string project, string wiz)
+{
+    string file;
+    mixed *tmp;
+    int i;
+
+    tmp = reg[auth, FD_ENTRY];
+    if (!tmp)
+    	return 0;
+    file = "/z/"+capitalize(auth)+"/"+project+"/";
+    for (i = sizeof(tmp); i--; )
+    	if (!strstr(tmp[i][FD_FILE],file))
+	    return member(tmp[i][FD_CODERS],wiz) != -1;
+    return member(reg[auth, FD_ADMIN_OB]->query_programmers_of(project),
+    	wiz) != -1;
+}
+
+string *query_files(string auth)
+{
+   mixed *tmp;
+   string *files;
+   int i;
+
+   files = ({});
+   tmp = reg[auth, FD_ENTRY];
+   if(tmp = reg[auth, FD_ENTRY])
+      for(i = sizeof(tmp); i--;)
+        files += ({ tmp[i][FD_FILE] });
+   return m_indices(mkmapping(files));
+}
+
+string query_file_of(string auth, string project)
+{
+    string file;
+    mixed *tmp;
+    int i;
+
+    tmp = reg[auth, FD_ENTRY];
+    if (!tmp)
+        return 0;
+    file = "/z/"+capitalize(auth)+"/"+project+"/";
+    for (i = sizeof(tmp); i--; )
+        if (!strstr(tmp[i][FD_FILE],file))
+            return tmp[i][FD_FILE];
+    return 0;
+}
+
+string *query_projects_of(string auth, string wiz)
+{
+    int i;
+    mixed *tmp;
+    string *ret;
+
+    tmp = reg[auth, FD_ENTRY];
+    if (!tmp)
+    	return ({});
+
+    ret = ({});
+    for (i = 0; i < sizeof(tmp); i++)
+	if (member(tmp[i][FD_CODERS],wiz) != -1)
+	    ret += ({ tmp[i][FD_FILE] });
+    return ret;
+}
+
+int project_exists(string auth, string project)
+{
+    int i;
+    mixed *tmp;
+    string file;
+
+    tmp = reg[auth, FD_ENTRY];
+    if (!tmp)
+    	return 0;
+
+    file = "/z/"+capitalize(auth)+"/"+project+"/";
+    for (i = sizeof(tmp); i--; )
+    	if (!strstr(tmp[i][FD_FILE],file))
+	    return 1;
+    return 0;
+}
+
+int set_autoloader_replacement(string oldfile, string newfile)
+{
+    int res, i;
+
+    if(res = auth("autoloader"))
+	return res;
+    if(!stringp (oldfile))
+	return FDR_NO_FILE;
+    if(!newfile)
+    {
+	// delete replacement entry
+	if (autoloader_replacement)
+    	    m_delete(autoloader_replacement, oldfile);
+    }
+    else
+    {
+	if(!stringp(newfile) || file_size(newfile+".lpc") < 0)
+    	    return FDR_NO_FILE;
+	
+	if (!autoloader_replacement)
+    	    autoloader_replacement = ([]);
+
+	autoloader_replacement [oldfile] = newfile;
+    }
+    
+    save();
+    return FDR_OK;
+}
+
+string query_autoloader_replacement(string oldfile)
+{
+    string sn;
+    if(autoloader_replacement)
+    {
+	do
+	{
+	    sn = oldfile;
+	    oldfile = autoloader_replacement [oldfile];
+        } while (oldfile);
+      
+        return sn;
+   }
+   return oldfile;
+}
+
+string query_autoloader_replacement_list()
+{
+    mixed repl_index;
+    string list = "", format;
+    int maxold, maxnew;
+    if(!autoloader_replacement) return "";
+    foreach(string old, string new:autoloader_replacement)
+    {
+        if(strlen(old)>maxold) maxold=strlen(old);
+        if(strlen(new)>maxnew) maxnew=strlen(new);
+    }
+    if(maxold+maxnew+4<80)
+        format = "%-"+maxold+"s -> %-"+maxnew+"s\n";
+    else if(maxnew>76)
+       format = "%s\n-> %s\n";
+    else
+        format = "%s\n"+(" "*(72-maxnew))+"-> %s\n";
+    repl_index = sort_array(m_indices(autoloader_replacement),#'>);
+    foreach(string old:repl_index)
+        list+=sprintf(format,old,autoloader_replacement[old]);
+    return list;
+}
+
+int set_plugin_replacement(string oldfile, string newfile)
+{
+    int res, i;
+
+    if(res = auth("autoloader"))
+        return res;
+    if(!stringp (oldfile))
+        return FDR_NO_FILE;
+    if(!newfile)
+    {
+	// delete replacement entry
+        if(plugin_replacement)
+    	    m_delete(plugin_replacement, oldfile);
+    }
+    else
+    {
+	if(!stringp(newfile) || file_size(newfile+".lpc") < 0)
+    	    return FDR_NO_FILE;
+        if(!plugin_replacement)
+    	    plugin_replacement = ([]);
+       plugin_replacement[oldfile] = newfile;
+    }
+   
+    save();
+    return FDR_OK;
+}
+
+string query_plugin_replacement(string oldfile)
+{
+    string sn;
+    if (plugin_replacement)
+    {
+        do
+        {
+            sn = oldfile;
+            oldfile = plugin_replacement[oldfile];
+        }while (oldfile);
+       
+        return sn;
+    }
+    return oldfile;
+}
+
+string query_plugin_replacement_list()
+{
+    mixed repl_index;
+    string list = "", format;
+    int maxold, maxnew;
+    if (!plugin_replacement) return "";
+    foreach (string old, string new : plugin_replacement)
+    {
+        if (strlen(old)>maxold) maxold=strlen(old);
+        if (strlen(new)>maxnew) maxnew=strlen(new);
+    }
+    if (maxold+maxnew+4<80)
+        format = "%-"+maxold+"s -> %-"+maxnew+"s\n";
+    else if (maxnew>76)
+       format = "%s\n-> %s\n";
+    else
+        format = "%s\n"+(" "*(72-maxnew))+"-> %s\n";
+    repl_index = sort_array(m_indices(plugin_replacement),#'>);
+    foreach (string old : repl_index)
+        list+=sprintf(format,old,plugin_replacement[old]);
+    return list;
+}

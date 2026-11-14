@@ -1,0 +1,516 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/item/name.c
+// Description: Inherit-File fuer Name und Unsichtbarkeit
+// Author:	FFG
+// Modified by:	Freaky (20.10.95) set_name() wieder repariert 
+// Modified by: Freaky (26.11.95) nomask von query_personal_title() weg
+//		Monty (17.04.1996) set_cap_name() testet auf Sinnvolle
+//		    Grossschreibung.
+//
+// $Log: name.c,v $
+// Revision 1.20  2013-03-16 16:15:04  gnomi
+// set_name() loescht den cap_namen, wenn er anders lautet.
+//
+// Revision 1.19  2009-06-17 07:45:38  gnomi
+// Verkraften, wenn ein Name Grossbuchstaben enthaelt...
+//
+// Revision 1.18  2009-01-15 08:40:29  gnomi
+// Warnung, wenn cap_name nicht dem normalen Name entspricht.
+//
+// Revision 1.17  2006/10/02 20:04:52  gnomi
+// Typo in Doku.
+//
+// Revision 1.16  2003/06/19 22:39:15  gnomi
+// Doku korrigiert.
+//
+// Revision 1.15  2003/05/12 20:17:06  menaures
+// Doku zu set_invis uebersichtlicher gestaltet
+//
+// Revision 1.14  2003/01/25 04:32:55  gnomi
+// notify_invis-Doku hierher bewegt.
+//
+// Revision 1.13  2002/09/18 23:48:29  gnomi
+// Namernsaenderungen nicht bei Goettern mit TI=0 loggen.
+//
+// Revision 1.12  2001/11/12 01:41:35  gnomi
+// set_name nicht loggen, wenn TI==TP==TO && wizp(TO).
+//
+// Revision 1.11  2001/04/19 19:14:52  gnomi
+// Nur dann Loggen, wenn neuer Name!=alter Name.
+//
+// Revision 1.10  2001/01/31 21:19:34  gnomi
+// notify_invis_self eingefuehrt.
+//
+// Revision 1.9  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strong_types
+
+#include <invis.h>
+#include <level.h>
+#include <error.h>
+
+private int is_invis, personal, eigen;
+private string name, cap_name, personal_title;
+private mixed menge;
+
+/*
+FUNKTION: set_invis
+DEKLARATION: void set_invis(int wert)
+BESCHREIBUNG:
+Gibt dem Objekt einen bestimmten Unsichtbarkeits-Wert.
+Die zu benutzenden Werte sind in invis.h definiert:
+
+  Wert          Beschreibung
+
+  V_VIS       - Default-Einstellung. Das Objekt ist ganz normal sichtbar.
+  V_NOLIST    - Objekt taucht nicht in Listen auf (betrachte, ausruestung)
+  V_HIDDEN    - Das Objekt ist versteckt. Wenn das Objekt z.B. von einem
+                Spieler angesehen wird, erscheint bei anderen Spielern
+                nicht der Name des Objekts, sondern "etwas".
+  V_SHIMMER   - Die Grammatikfunktionen liefern "Jemand" und "Etwas" statt
+                des Namens. Das Objekt erzeugt einen Schimmer im Raum.
+  V_INVIS     - Echte Unsichtbarkeit. Das Objekt kann von Spielern nicht
+                gefunden werden.
+
+VERWEISE: query_invis, query_short, set_hidden_until_next_move
+GRUPPEN: grundlegendes
+*/
+void set_invis(int wert) {
+  int old_invis;
+  old_invis = is_invis;
+  is_invis = wert & V_ATOM_MASK;
+  
+  this_object()->add_setter_conservation("set_invis",({is_invis}) );
+  
+  this_object()->notify("invis_self", this_object(), old_invis, is_invis);
+  if (environment())
+    environment()->notify("invis", this_object(), old_invis, is_invis);
+}
+
+/*
+FUNKTION: notify_invis_self
+DEKLARATION: void notify_invis_self(object who, int alt, int neu)
+BESCHREIBUNG:
+Aendert sich die Unsichtbarkeitsstufe eines Objektes who von alt auf neu,
+wird who->notify("invis", who, alt, neu) aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller("notify_invis_self",
+other) angemeldeten Objekten other die Funktionen other->notify_invis_self(
+who, alt, neu) auf.
+
+Sowohl who als auch other haben dann eine Moeglichkeit, auf das Sichtbar-
+oder Unsichbarwerden eines Spielers z.B. zu reagieren.
+VERWEISE: forbidden, notify, set_invis, query_invis, notify_invis
+GRUPPEN: grundlegendes
+*/
+
+/*
+FUNKTION: query_invis
+DEKLARATION: int query_invis()
+BESCHREIBUNG:
+Liefert den mit set_invis gesetzten Wert.
+
+Speziell: !query_invis() bedeutet:
+    Das Objekt ist sichtbar.
+
+VERWEISE: set_invis, query_short
+GRUPPEN: grundlegendes
+*/
+int query_invis() { return is_invis; }
+
+
+private void log_set_name_set_cap_name (string new, int flag)
+{
+    string log;
+    string t;
+    if ((previous_object() && (t = object_name(previous_object()))
+        && (t[0..6] == "/secure")) || (flag?cap_name:name)==new)
+        return;
+    if ((this_interactive()==0 || this_interactive() == this_object()) &&
+	this_player() == this_object() && wizp(this_object()))
+	return;
+    if (flag) log = "set_cap_name\n"; else log = "set_name\n";
+    log += "Wann: "+timestr(time())+"\n"
+           "Opfer: "+this_object()->query_real_name()+"\n";
+    if (this_interactive())
+        if (playerp (this_interactive()))
+            log += "Taeter: "+this_interactive()->query_real_name()+"\n";
+        else
+            log += "this interactive ist kein player (kann ja gar nicht sein)\n";
+    else if (this_player())
+         if (playerp (this_player()))
+             log += "Taeter: "+this_player()->query_real_name()+"\n";
+         else
+             log += "this player: "+this_player()->query_name()+" "
+                   + object_name(this_player())+"\n";
+    else log += "kein This Player\n";
+    log += "Previous Objekt: "+object_name(previous_object())+" "
+        +" eUid: "+geteuid (previous_object())+" UID: "+getuid(previous_object())+"\n";
+    if (flag)
+        log += wrap ("alter cap_name: "+cap_name);
+    else
+        log += wrap ("alter name: "+name);
+    log += wrap ("neuer Name: "+new);
+    log += "\n";
+    sys_log ("SetName",log);
+}
+
+
+/*
+FUNKTION: set_name
+DEKLARATION: void set_name(string name)
+BESCHREIBUNG:
+Setzt den Namen des Objektes.
+Weicht name von lower_case(cap_name) ab, so wird der cap_name geloescht.
+VERWEISE: query_name, query_cap_name, set_personal
+GRUPPEN: grundlegendes
+*/
+void set_name(string str) {
+    if (playerp (this_object()) && (previous_object() != this_object()))
+        log_set_name_set_cap_name(str,0);
+    name = str;
+    this_object()->add_setter_conservation("set_name",({name}) );
+
+    if (cap_name && lower_case(cap_name) != name)
+    {
+        cap_name = 0;
+        this_object()->add_setter_conservation("set_cap_name",({cap_name}) );
+    }
+}
+
+
+
+
+
+/*
+FUNKTION: query_name
+DEKLARATION: string query_name()
+BESCHREIBUNG:
+Liefert den Namen des Objektes zurueck.
+VERWEISE: set_name, query_cap_name, query_personal, set_personal
+GRUPPEN: grundlegendes
+*/
+string query_name() { return name; }
+
+
+
+
+
+/*
+FUNKTION: query_cap_name
+DEKLARATION: string query_cap_name()
+BESCHREIBUNG:
+Liefert den Namen des Objektes mit grossem Anfangsbuchstaben zurueck.
+VERWEISE: query_real_cap_name, query_name, set_name, set_personal, query_personal,
+          set_cap_name
+GRUPPEN: grundlegendes
+*/
+string query_cap_name() { return cap_name || (name ? capitalize(name) : 0); }
+
+
+/* 
+FUNKTION: set_cap_name
+DEKLARATION: void set_cap_name(string cap_name)
+BESCHREIBUNG:
+Mit diesem Befehl kann man die Grossschreibung eines Objektes festsetzen, 
+wenn man mit dem Standard capitalize nicht zufrieden ist. Dabei wird 
+automatisch der Name des Objekts auf lower_case(cap_name) gesetzt.
+cap_name ist der grossgeschriebene Name des Objekts.
+Ist cap_name 0, dann wird wieder die capitalize Funktion benutzt.
+
+BEISPIEL:
+   set_name("barbaren-axt");
+   set_cap_name("Barbaren-Axt");
+
+   (Hinweis: Barbarenaxt schreibt man im Deutschen EH OHNE BINDESTRICH!,
+	     das ist also ein rechtschreibtechnisch gesehen 'schlechtes'
+	     Beispiel.)
+
+VERWEISE: query_cap_name, query_name, set_name
+GRUPPEN: grundlegendes
+*/
+void set_cap_name(string str) { 
+    if (playerp (this_object()) && (previous_object() != this_object()))
+        log_set_name_set_cap_name(str,1);
+
+    cap_name = str;
+    this_object()->add_setter_conservation("set_cap_name",({cap_name}) );
+    if (str)
+    {
+        name = lower_case(str);
+        this_object()->add_setter_conservation("set_name",({name}) );
+    }
+}
+
+
+/*
+FUNKTION: set_personal
+DEKLARATION: void set_personal(int logical)
+BESCHREIBUNG:
+Setzt fest, ob es sich bei diesem Objekt um ein personifiziertes Objekt 
+handelt oder nicht.
+
+1 = personifiziertes Objekt
+0 = gewoehnliches Objekt
+
+Beispiele fuer personifizierte Objekte:
+   Detlef          (ein Lebewesen mit Eigenname und Persoenlichkeit)
+   Arijanim        (ein totes, aber personifiziertes Objekt)
+   alle Spieler
+Beispiele fuer gewoehnliche Objekte:
+   Ein Ork         
+   Ein Schwert
+
+Personifizierte und gewoehnliche Objekte werden in den Deklinations-Routinen
+unterschiedlich behandelt.
+(Personifizierte Objekte tragen keinerlei Artikel, gewoehnliche
+ bekommen die jeweiligen Artikel verpasst.)
+VERWEISE: set_name, query_name, query_cap_name, query_personal
+GRUPPEN: grundlegendes, grammatik
+*/
+void set_personal(int flag)
+{
+    personal = flag!=0; 
+    this_object()->add_setter_conservation("set_personal",({personal}) );
+}
+
+
+/*
+FUNKTION: query_personal
+DEKLARATION: int query_personal()
+BESCHREIBUNG:
+Liefert, ob es sich bei diesem Objekt um ein personifiziertes Objekt 
+handelt oder nicht.
+
+1 = personifiziertes Objekt
+0 = gewoehnliches Objekt
+
+Beispiele fuer personifizierte Objekte:
+   Detlef          (ein Lebewesen mit Eigenname und Persoenlichkeit)
+   Arijanim        (ein totes, aber personifiziertes Objekt)
+   alle Spieler
+Beispiele fuer gewoehnliche Objekte:
+   Ein Ork         
+   Ein Schwert
+
+Personifizierte und gewoehnliche Objekte werden in den Deklinations-Routinen
+unterschiedlich behandelt.
+(Personifizierte Objekte tragen keinerlei Artikel, gewoehnliche
+ bekommen die jeweiligen Artikel verpasst.)
+VERWEISE: set_name, query_name, query_cap_name, query_personal
+GRUPPEN: grundlegendes, grammatik
+*/
+int query_personal() { return personal; }
+
+
+/*
+FUNKTION: set_personal_title
+DEKLARATION: string set_personal_title(string personal_title)
+BESCHREIBUNG:
+Mit dieser Funktion kann man allen Lebenwesen, bei denen das 
+personal flag mittels set_personal() gesetzt wurde, einen Prefix
+vor den Namen stellen. Zum Beispiel "Lord Darcy" statt Darcy.
+Bei allen Grammatikaufrufen und bei der Anzeige der 'wer' Liste wird
+dieser Titel dann beruecksichtigt.
+Die Grammatik beruecksichtigt keine Adjektive bei Objekten mit
+personal_title und personal flag. Diese Objekte sollten deshalb auch kein
+Adjektiv gesetzt haben.
+Personal_titles sind auf 15 Zeichen begrenzt und duerfen keine Leerzeichen
+oder Underscores enthalten.
+Uebergibt man den Wert 0, so wird der personal_title geloescht.
+Bei erfolgreicher Operation liefert die Funktion den gesetzten Wert.
+
+Beispiel:
+   ob = clone_object("/obj/monster");
+   ob->set_name("darcy");
+   ob->set_gender("maennlich");
+   ob->set_personal(1);
+   ob->set_personal_title("Lord");
+VERWEISE: query_personal_title, set_personal, query_personal
+GRUPPEN: grundlegendes, grammatik
+*/
+string set_personal_title(string str)
+{
+   if(!str || stringp(str) && str != "" && strlen(str) <= 15 &&
+      member(str, ' ') < 0  && member(str, '_') < 0)
+    {
+        this_object()->add_setter_conservation("set_personal_title",({str}) );
+        return personal_title = str;
+    }
+}
+
+/*
+FUNKTION: query_personal_title
+DEKLARATION: string query_personal_title()
+BESCHREIBUNG:
+Mit dieser Funktion kann man den mit set_personal_title() gesetzten
+Personaltitel abfragen. siehe dort.
+VERWEISE: set_personal_title, set_personal, query_personal
+GRUPPEN: grundlegendes, grammatik
+*/
+string query_personal_title()
+{
+   return personal_title;
+}
+
+
+/*
+FUNKTION: set_eigen
+DEKLARATION: void set_eigen(int logical)
+BESCHREIBUNG:
+Setzt fest, ob dieses Objekt ein 'bestimmtes' Objekt mit 
+Eigennamen ist und sich dadurch aus einer uebergeordneten Gruppe hervorhebt.
+
+1 = bestimmtes Objekt mit Eigennamen aus einer Gruppe
+0 = gewoehnliches Objekt, das nur den Gruppennamen der Gruppe traegt.
+
+Beispiele fuer bestimmte Objekte mit Eigennamen:
+   die Argo     (ein bestimmtes Schiff mit Namen aus der Gruppe der Schiffe)
+   das Lancelot (ein bestimmtes Spiel mit Namen aus der Gruppe der Spiele)
+   Manfred      (ein bestimmter Ork aus der Gruppe der Orks)
+
+Beispiele fuer gewoehnliche Objekte:
+   Ein Schiff         
+   Ein Ork
+   Ein Schwert
+
+Bestimmte und gewoehnliche Objekte werden in den Deklinations-Routinen
+unterschiedlich behandelt.
+(Bestimmte (tote) Objekte tragen immer bestimmten Artikel, gewoehnliche
+ bekommen die jeweiligen Artikel verpasst.)
+VERWEISE: set_name, query_name, query_cap_name, query_personal, 
+	  set_personal, query_eigen
+GRUPPEN: grundlegendes, grammatik
+*/
+void set_eigen(int flag)
+{
+    eigen = flag!=0;
+    this_object()->add_setter_conservation("set_eigen",({eigen}) );
+}
+
+/*
+FUNKTION: query_eigen
+DEKLARATION: int query_eigen()
+BESCHREIBUNG:
+Liefert zurueck, ob dieses Objekt ein 'bestimmtes' Objekt mit 
+Eigennamen ist und sich dadurch aus einer uebergeordneten Gruppe hervorhebt.
+
+1 = bestimmtes Objekt mit Eigennamen aus einer Gruppe
+0 = gewoehnliches Objekt, das nur den Gruppennamen der Gruppe traegt.
+
+Beispiele fuer bestimmte Objekte mit Eigennamen:
+   die Argo     (ein bestimmtes Schiff mit Namen aus der Gruppe der Schiffe)
+   das Lancelot (ein bestimmtes Spiel mit Namen aus der Gruppe der Spiele)
+   Manfred      (ein bestimmter Ork aus der Gruppe der Orks)
+
+Beispiele fuer gewoehnliche Objekte:
+   Ein Schiff         
+   Ein Ork
+   Ein Schwert
+
+Bestimmte und gewoehnliche Objekte werden in den Deklinations-Routinen
+unterschiedlich behandelt.
+(Bestimmte (tote) Objekte tragen immer bestimmten Artikel, gewoehnliche
+ bekommen die jeweiligen Artikel verpasst.)
+VERWEISE: set_name, query_name, query_cap_name, query_personal, 
+	  set_personal, set_eigen
+GRUPPEN: grundlegendes, grammatik
+*/
+int query_eigen() { return eigen; }
+
+/*
+FUNKTION: set_menge
+DEKLARATION: void set_menge(mixed menge)
+BESCHREIBUNG:
+Setzt eine Mengenangabe fuer dieses Objekt. menge kann sein:
+
+ - Ein Mapping: Dieses V-Item wird der eigentlichen Objektbeschreibung
+                vorangestellt.
+		Beispiel: (["name":"haufen","gender":"maennlich"]) ergibt
+		dann bei Stroh: "Ein Haufen Stroh".
+
+ - Ein Array der Form: ({ string stamm, int art }), wobei
+    - stamm der Stamm eines unbestimmten Pronomens,
+    - art eine Kombination (mittels |) aus folgenden Flags ist:
+       PRON_NICHT_DEKLIN: Pronomen wird nicht dekliniert (z.B. "etwas")
+       PRON_NICHT_NACH_BEST: Pronomen darf nicht nach einem bestimmten
+                             Artikel folgen (z.B.: "einige" im Gegensatz
+			     zu "die wenigen")
+   Beispiele:
+     ({"wenig",0}),
+     ({"zwei",PRON_NICHT_DEKLIN}),
+     ({"etwas",PRON_NICHT_DEKLIN|PRON_NICHT_NACH_BEST}),
+     ({"einig",PRON_NICHT_NACH_BEST})
+
+ - Ein String str: dieser verhaelt sich genauso wie ({str, 0}).
+
+VERWEISE: query_menge, query_personal, set_personal
+GRUPPEN: grundlegendes, grammatik
+*/
+void set_menge(mixed m)
+{
+    menge = m;
+    this_object()->add_setter_conservation("set_menge",({menge}) );
+}
+
+/*
+FUNKTION: query_menge
+DEKLARATION: mixed query_menge()
+BESCHREIBUNG:
+Liefert die mit set_menge gesetzte Mengenangabe:
+
+ - Ein Mapping: Dieses V-Item wird der eigentlichen Objektbeschreibung
+                vorangestellt.
+		Beispiel: (["name":"haufen","gender":"maennlich"]) ergibt
+		dann bei Stroh: "Ein Haufen Stroh".
+
+ - Ein Array der Form: ({ string stamm, int art }), wobei
+    - stamm der Stamm eines unbestimmten Pronomens,
+    - art eine Kombination (mittels |) aus folgenden Flags ist:
+       PRON_NICHT_DEKLIN: Pronomen wird nicht dekliniert (z.B. "etwas")
+       PRON_NICHT_NACH_BEST: Pronomen darf nicht nach einem bestimmten
+                             Pronomen folgen (z.B.: "einige" im Gegensatz
+			     zu "die wenigen")
+   Beispiele:
+     ({"wenig",0}),
+     ({"drei",PRON_NICHT_DEKLIN}),
+     ({"einig",PRON_NICHT_NACH_BEST})
+     ({"etwas",PRON_NICHT_DEKLIN | PRON_NICHT_NACH_BEST}),
+
+ - Ein Array der Form: ({ ({ u_stamm, u_art}), ({b_stamm, b_art}) })
+   verhaelt sich wie ({ u_stamm, u_art }), wenn es alleine als unbestimmtes
+   Pronomen vorkommt und wie ({ b_stamm, b_art }), wenn es nach einem
+   bestimmten Pronomen erscheint.
+   Beispiel: ({ ({"zwei",PRON_NICHT_DEKLIN}), ({"beid",0}) })
+
+ - Ein String str: dieser verhaelt sich genauso wie ({str, 0}).
+
+VERWEISE: set_menge, query_personal, set_personal
+GRUPPEN: grundlegendes, grammatik
+*/
+mixed query_menge() { return menge;}
+
+/*
+FUNKTION: notify_invis
+DEKLARATION: void notify_invis(object who, int alt, int neu)
+BESCHREIBUNG:
+Aendert sich die Unsichtbarkeitsstufe eines Objektes who von alt auf neu, 
+wird im umgebenden Raum room->notify("invis", who, alt, neu) aufgerufen.
+
+Die Funktion notify ruft in allen mit room->add_controller("notify_invis",
+other) angemeldeten Objekten other die Funktionen other->notify_invis(who, alt,
+neu) auf.
+
+Sowohl room als auch other haben dann eine Moeglichkeit, auf das Sichtbar-
+oder Unsichbarwerden eines Spielers z.B. zu reagieren.
+Ein aggressives Monster greift Spieler an, wenn sie sich naehern, und
+auch, wenn sie sichtbar werden, indem es sich fuer "invis" an den ihn
+umgebenden Raum anmeldet (bereits standardmaessig).
+VERWEISE: forbidden, notify, set_invis, query_invis
+GRUPPEN: grundlegendes
+*/

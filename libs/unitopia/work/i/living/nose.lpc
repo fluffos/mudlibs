@@ -1,0 +1,298 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/living/nose.c
+// Description:	Eine Nase, hauptsaechlich zum Riechen da.
+// Modified by: Freaky (10.03.1998) message auf send_message umgebaut.
+//
+// $Log: nose.c,v $
+// Revision 1.16  2009-01-07 15:28:58  gnomi
+// Typo.
+//
+// Revision 1.15  2008/01/21 14:05:38  gnomi
+// Typos.
+//
+// Revision 1.14  2006/01/22 00:51:30  gnomi
+// Du hoerst/richts nichts *Besonderes*.
+//
+// Revision 1.13  2006/01/12 23:41:40  gnomi
+// Ein paar wraps rein.
+//
+// Revision 1.12  2005/04/10 01:21:26  gnomi
+// Typo in der Doku.
+//
+// Revision 1.11  2004/10/06 22:06:05  gnomi
+// notify/forbidden_smell-Controller ueber do_notifies/do_forbiddens behandeln.
+// (Und damit gibt's jetzt auch ein notify/forbidden_smell_here.)
+//
+// Revision 1.10  2003/03/13 23:23:08  gnomi
+// Menaures: Eigene Befehle in LFun add_actions() definieren
+//
+
+#pragma save_types
+#pragma strong_types
+
+#include <control.h>
+#include <parse_com.h>
+#include <invis.h>
+#include <message.h>
+
+varargs void notify_message(string msg, int type);
+
+int rieche_command(string str)
+{
+    mixed *parsed, ob;
+    string text, desc, tmp;
+    object where, owner;
+
+    if (!str || str == "hier")
+    {
+        where = environment(this_player());
+	
+	if(this_object()->do_forbiddens(C_RESORT, "smell",
+	    ({"","_me"}), ({this_object(), where})))
+		return 1;
+
+	if(where && (text = where->query_smell()))
+	{
+	   if (!IS_INVIS(this_object()))
+	   {
+	      if (tmp=where->query_smell_msg())
+	      {
+		 if (tmp != "")
+		    this_object()->send_message(MT_LOOK|MT_NOISE,MA_SMELL,wrap(tmp));
+	      }
+	      else
+		 this_object()->send_message(MT_LOOK|MT_NOISE,MA_SMELL,
+                    wrap(Der()+" schnuppert herum."));
+	   }
+	   this_object()->send_message_to(this_object(),MT_SMELL,MA_SMELL,text);
+
+	   this_object()->do_notifies(C_RESORT, "smell",
+	      ({"","_me"}), ({this_object(), where}));
+
+	   return 1;
+	}
+	return notify_fail("Du riechst hier nichts Besonderes.\n");
+    }
+    sscanf(str,"an %s",str);
+    parsed = parse_com(str);
+    if (parse_com_error(parsed,"Rieche woran?\n",1))
+	return 0;
+    ob = parsed[PARSE_OBS][0];
+
+    if(this_object()->do_forbiddens(C_RESORT, "smell",
+	({"","_me"}), ({this_object(), ob})))
+	    return 1;
+	    
+    text = QUERY("smell",ob);
+
+    if (!text)
+    {
+	if (mappingp(ob) && (text=QUERY("far",ob)))
+	    notify_message(stringp(text)?text:wrap(Der(ob)+" "+
+		ist(ob)+
+		" viel zu weit weg, um dran zu riechen."),MA_SMELL);
+	else
+	    this_object()->send_message_to(this_object(),MT_SMELL,MA_SMELL,
+	    	"Du riechst nichts Besonderes.\n");
+
+	this_object()->do_notifies(C_RESORT, "smell",
+	    ({"","_me"}), ({this_object(), ob}));
+		
+	return 1;
+    }
+
+    if (text == "")
+    {
+	this_object()->do_notifies(C_RESORT, "smell",
+	    ({"","_me"}), ({this_object(), ob}));
+
+	return 1;
+    }
+
+    this_object()->send_message_to(this_object(),MT_SMELL,MA_SMELL,text);
+
+    /* MELDUNG fuer OTHERS */
+
+    if(!IS_INVIS(this_object()))
+       if (ob == this_object())
+	  this_object()->send_message(MT_LOOK|MT_NOISE,MA_SMELL,
+             wrap(Der()+" riecht an sich."));
+       else if (tmp=QUERY("smell_msg",ob))
+       {
+	  if (tmp != "")
+	     this_object()->send_message(MT_LOOK|MT_NOISE,MA_SMELL,wrap(tmp));
+       }
+       else if (objectp(ob) && living(ob))
+	  this_object()->send_message(MT_LOOK|MT_NOISE,MA_SMELL,
+	     ob->query_invis() & V_ATOM_HIDDEN ?
+		wrap(Der()+" schnuppert an jemandem herum.") : 
+		wrap(Der()+" riecht an "+seinem(ob)+"."),
+	     wrap(Der()+" riecht an dir."), ob);
+       else if (QUERY("invis",ob) & V_ATOM_HIDDEN)
+	  this_object()->send_message(MT_LOOK|MT_NOISE,MA_SMELL,
+            wrap(Der()+" schnuppert an etwas herum."));
+       else
+	  if((owner = auto_owner_search(ob)) && owner != this_object())
+	     this_object()->send_message(MT_LOOK|MT_NOISE,MA_SMELL,
+		wrap(Der()+" riecht an "+ihrem(ob)+"."),
+		wrap(Der()+" riecht an "+deinem(ob)+"."),
+		owner);
+	  else
+	     this_object()->send_message(MT_LOOK|MT_NOISE,MA_SMELL,
+                wrap(Der()+" riecht an "+seinem(ob)+"."));
+
+    this_object()->do_notifies(C_RESORT, "smell",
+	({"","_me"}), ({this_object(), ob}));
+
+    return 1;
+}
+
+/* --- add_actions: --- */
+
+protected void add_actions()
+{
+    add_action("rieche_command",    "rieche",   -5);
+}
+
+/*
+FUNKTION: forbidden_smell
+DEKLARATION: int forbidden_smell(mixed what, object who)
+BESCHREIBUNG:
+Bevor das Objekt oder Mapping (v-item) what vom Lebewesen who beschnuppert
+werden kann, wird who->forbidden("smell", what) aufgerufen, liefert dieser
+Aufruf einen Wert ungleich 0 zurueck, kann das Objekt nicht gerochen werden.
+
+Die Funktion forbidden ruft in allen mit who->add_controller("forbidden_smell",
+ other) angemeldeten Objekten other die Funktionen other->forbidden_smell(what,
+who) auf. Liefert auch nur eine dieser Funktionen einen Wert ungleich
+0, dann returnt forbidden diesen und what kann nicht gerochen werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who muss der Programmierer
+in forbidden_smell oder forbidden, falls er diese Funktion ueberlagern will,
+sorgen.
+
+Bemerkung: Es wird auch what->forbidden("smell_me", who) aufgerufen
+VERWEISE: forbidden, notify, notify_smell
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: forbidden_smell_me
+DEKLARATION: int forbidden_smell_me(object who, mixed what)
+BESCHREIBUNG:
+Bevor das Objekt oder Mapping (v-item) what vom Lebewesen who beschnuppert
+werden kann, wird what->forbidden("smell_me", who) aufgerufen, liefert dieser
+Aufruf einen Wert ungleich 0 zurueck, kann das Objekt nicht gerochen werden.
+
+Die Funktion forbidden ruft in allen mit what->add_controller(
+"forbidden_smell_me", other) angemeldeten Objekten other die Funktionen
+other->forbidden_smell_me(who, what) auf. Liefert auch nur eine dieser
+Funktionen einen Wert ungleich 0, dann returnt forbidden diesen und what kann
+nicht gerochen werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who muss der Programmierer
+in forbidden_smell_me oder forbidden, falls er diese Funktion ueberlagern will,
+sorgen.
+
+Bemerkung: Es wird auch who->forbidden("smell", what) aufgerufen.
+VERWEISE: forbidden, notify, notify_smell
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: forbidden_smell_here
+DEKLARATION: int forbidden_smell_here(object who, mixed what)
+BESCHREIBUNG:
+Bevor das Objekt oder Mapping (v-item) what vom Lebewesen who beschnuppert
+werden kann, wird im Raum room->forbidden("smell_here", who, what) aufgerufen,
+liefert dieser Aufruf einen Wert ungleich 0 zurueck, kann das Objekt nicht
+gerochen werden.
+
+Die Funktion forbidden ruft in allen mit room->add_controller(
+"forbidden_smell_here", other) angemeldeten Objekten other die Funktionen
+other->forbidden_smell_here(who, what) auf. Liefert auch nur eine dieser
+Funktionen einen Wert ungleich 0, dann returnt forbidden diesen und what kann
+nicht gerochen werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who muss der Programmierer
+in forbidden_smell_here oder forbidden, falls er diese Funktion ueberlagern
+will, sorgen.
+
+Bemerkung: Es wird auch who->forbidden("smell", what) und
+           what->forbidden("smell_me", who) aufgerufen.
+VERWEISE: forbidden, notify, notify_smell
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: notify_smell
+DEKLARATION: void notify_smell(mixed what, object who)
+BESCHREIBUNG:
+Nachdem das Objekt oder Mapping (v-item) what vom Lebewesen who beschnuppert
+wurde, wird who->notify("smell", what) aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller("notify_smell",
+ other) angemeldeten Objekten other die Funktionen other->notify_smell(what,
+who) auf. Sowohl who als auch other haben dann die Moeglichkeit, auf
+das Fuehlen von what zu reagieren.
+
+Bemerkung: Es wird auch what->notify("smell_me", who) aufgerufen.
+VERWEISE: forbidden, notify, forbidden_smell
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: notify_smell_me
+DEKLARATION: void notify_smell_me(object who, mixed what)
+BESCHREIBUNG:
+Nachdem das Objekt oder Mapping (v-item) what vom Lebewesen who beschnuppert
+wurde, wird what->notify("smell_me", who) aufgerufen.
+
+Die Funktion notify ruft in allen mit what->add_controller("notify_smell_me",
+other) angemeldeten Objekten other die Funktionen other->notify_smell_me(who,
+what) auf. Sowohl what als auch other haben dann die Moeglichkeit, auf das
+Fuehlen von what zu reagieren.
+
+Bemerkung: Es wird auch who->notify("smell", what) aufgerufen.
+VERWEISE: forbidden, notify, forbidden_smell
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: notify_smell_here
+DEKLARATION: void notify_smell_here(object who, mixed what)
+BESCHREIBUNG:
+Nachdem das Objekt oder Mapping (v-item) what vom Lebewesen who beschnuppert
+wurde, wird im Raum room->notify("smell_here", who, what) aufgerufen.
+
+Die Funktion notify ruft in allen mit room->add_controller("notify_smell_here",
+other) angemeldeten Objekten other die Funktionen other->notify_smell_here(who,
+what) auf. Sowohl what als auch other haben dann die Moeglichkeit, auf das
+Fuehlen von what zu reagieren.
+
+Bemerkung: Es wird auch who->notify("smell", what) und
+           what->notify("smell_me", who) aufgerufen.
+VERWEISE: forbidden, notify, forbidden_smell
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: query_smell_msg
+DEKLARATION: string query_smell_msg()
+BESCHREIBUNG:
+Liefert die Beschreibung fuer andere, wenn this_player() an etwas riecht.
+Sie wird nur aufgerufen, wenn query_smell() einen Wert ungleich 0
+zurueckgeliefert hat.
+
+Rueckgabewert:
+0    : Eine Standardmeldung wird generiert.
+""   : Es wird keine Meldung ausgegeben.
+sonst: Der Text wird umbrochen.
+
+Diese Lfun ist eine applied Lfun, d.h. es existiert kein set_smell_msg()
+und man muss sie in ein Objekt einbauen, wenn man eine eigene Meldung
+haben will.
+VERWEISE: set_smell, query_smell
+GRUPPEN: grundlegendes, nase
+*/

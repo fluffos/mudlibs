@@ -1,0 +1,196 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/z/Schiffe/Linienschiffe/i/ship_room.c
+// Description:
+
+//  Menaures (06.09.2001): inherit -> virtual inherit
+//  Menaures (24.05.2002): Testweise quit-logging
+//  Menaures (12.01.2003): repraesentant
+//  Wyvern   (17.02.2012): wait-inhertit und "*"::set_ship(str, name); zum durchreichen hinzu 
+/*
+ * /z/Schiffe/Linienschiffe/i/ship_room.c
+ *
+ * Dieser File ist fuer alle normalen Schiffs-Raeume gedacht; fuer den
+ * Raum, von dem aus man das Schiff steuern koennen sollte, muss man den
+ * Inherit-File /z/Schiffe/Linienschiffe/i/command/room benutzen.
+ *
+ * Funktionen:
+ *
+ *	set_ship(string schiffsname)	unbedingt notwendig.
+ *
+ *      set_ausschau(1)                 Ist im create() aufzurufen,
+ *                                      wenn man das Kommando "halte ausschau"
+ *					zulassen moechte.
+ *
+ *	set_depht(int wieviel)          Damit kann man angeben, wie weit
+ *					man Ausschau halten kann.
+ *					0:	(default) man sieht nur die
+ *						Umgebung des Schiffes.
+ *					>0:     Man sieht die angegebene Anzahl
+ *						Raeume zusaetzlich in die
+ *						bei halte ausschau  angegebene
+ *						Richtung.
+ *
+ *	set_messages(1)                 Ist aufzurufen, wenn man die Bewegungs-
+ *					meldungen des Schiffes hoeren will.
+ *
+ *	set_leave(1)			Ist aufzurufen, wenn man innerhalb
+ *					dieses Raumes das Schiff verlassen
+ *					koennen sollte.
+ *
+ * Kommandos:
+ *
+ *	verlasse			zum Verlassen
+ *	ausgang				des
+ *	springe				Schiffes
+ *
+ *	halte ausschau			 	Raumbeschreibung der Umgebung
+ *	halte ausschau <nach himmelsrichtung>	des Schiffes und der Nachbar-
+ *						Raeume.
+ *
+ * Gegebenenfalls mit :: weiterzureichende Funktionen:
+ *
+ *	init()
+ *
+ *
+ */ 
+
+#pragma save_types
+
+virtual inherit "/i/room";
+virtual inherit "/z/Schiffe/Linienschiffe/i/ausschau";
+virtual inherit "/z/Schiffe/Linienschiffe/i/ship_leave";
+inherit "/z/Schiffe/Linienschiffe/i/wait_ship_room";
+
+string schiff;
+int messages;
+
+#include <move.h>
+
+#define F_LOG
+#define Q_LOG
+
+#ifdef Q_LOG
+
+void q_log(object who, int flag)
+{
+  log_file("/log/Schiff_Q", sprintf("%Q %Q %Q\n", this_object(), who, shorttimestr(time())));
+}
+
+void notify_quit(object who, int flag)
+{
+       if(!playerp(who) || strstr(object_name(), who->query_real_name()+"_") != -1) return;
+       q_log(who, flag);
+}
+
+#endif
+
+#ifdef F_LOG
+
+void f_log(object who, object * ziele)
+{
+  log_file("/log/Schiff_F", sprintf("%Q %Q %Q %Q\n", this_object(), who, mixed2str(ziele->query_real_name()), shorttimestr(time())));
+}
+
+void notify_moved_in(object wer, object woher, string dir, int way)
+{
+   if(!playerp(wer) || strstr(object_name(), wer->query_real_name()+"_") != -1) return;
+    if(load_name(woher) == "/obj/flugraum")
+    f_log(wer, filter(all_inventory(), (: playerp($1) :)) - ({wer}));
+}
+
+#endif
+
+string query_ship() { 
+
+  return schiff; 
+}
+
+varargs void set_ship(string str,string name) {
+    "*"::set_ship(str, name);
+    (schiff = str)->add_ship_room(name ? name : this_object());
+    if (messages)
+        schiff->add_message_room(name ? name : this_object());
+}
+
+mixed query_type(string str)
+{
+   object ob_schiff;
+
+   if(schiff)
+      ob_schiff = touch(schiff);
+
+   switch(str)
+   {
+      case "repraesentant" :
+      case "mein_schiff" :
+         if(ob_schiff)
+	    return ob_schiff;
+         break;
+      case "temperatur" :
+         if(ob_schiff && environment(ob_schiff))
+	    return environment(ob_schiff)->query_type("temperatur");
+	 break;
+   }
+   return room::query_type(str);
+}
+
+mapping query_types()
+{
+   return (room::query_types() || ([])) +
+   ([ "mein_schiff" :  query_type("mein_schiff"),
+      "repraesentant" : query_type("repraesentant"),
+      "temperatur"  :  query_type("temperatur") ]);
+}
+
+string query_room_domain()
+{
+    object ob_schiff;
+
+    if (schiff)
+	ob_schiff = touch(schiff);
+
+    if (ob_schiff && environment(ob_schiff))
+	return environment(ob_schiff)->query_room_domain();
+    return ::query_room_domain();
+}
+
+void create() {
+  add_controller("notify_quit", #'q_log);
+  ::create();
+  add_type("graben_verboten", 1);
+}
+
+void init() {
+  "*"::init();
+  
+  if (query_leave()) {
+    add_action("leave", "verlass",1);
+    add_action("leave", "ausgang");
+    add_action("leave", "spring",1);
+  }
+  if (query_ausschau())
+    add_action("look_out","halte");
+  call_out("register_room", 0);
+}
+
+void register_room()
+{
+  if (schiff) {
+    schiff->add_ship_room(this_object());
+    if (messages)
+      schiff->add_message_room(this_object());
+  }
+}
+
+int query_messages() { 
+
+  return messages; 
+}
+
+void set_messages(int a) {
+  
+  messages = (a != 0);
+  if (messages && schiff)
+    schiff->add_message_room(this_object());
+}

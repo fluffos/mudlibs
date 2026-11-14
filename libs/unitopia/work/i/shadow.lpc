@@ -1,0 +1,343 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/shadow.c
+// Description: Generisches Inherit-File fuer Shadows
+// Author:	Freaky (23.12.93)
+//		Freaky (12.11.1999) Globale Variable 'name' geloescht
+//
+// $Log: shadow.c,v $
+// Revision 1.13  2007/08/30 20:19:38  gnomi
+// Typo.
+//
+// Revision 1.12  2006/04/13 07:00:30  gnomi
+// Beachten, dass sich einige Shadows im shadow_create_action zerstoeren...
+//
+// Revision 1.11  2005/02/17 20:37:22  menaures
+// Auch Filenamen mit #nummer beachten
+//
+// Revision 1.10  2003/11/06 04:10:25  gnomi
+// unshadow_shadow: owner auf 0 setzen.
+//
+// Revision 1.9  2002/07/19 23:51:08  gnomi
+// Den Erschaffer abspeichern.
+//
+// Revision 1.8  2002/06/18 01:08:19  gnomi
+// Ruft automatisch update_actions auf, wenn es inheritet wurde.
+//
+// Revision 1.7  2001/04/11 16:31:24  gnomi
+// Doku zu shadow_remove_action korrigiert.
+//
+// Revision 1.6  2001/03/04 22:40:12  gnomi
+// In der Doku shadow_create/remove_action schreiben, dass der Aufruf
+// weitergeleitet werden sollte.
+//
+// Revision 1.5  2001/02/07 00:02:07  gnomi
+// Funktionsdoku fuer die Enzy.
+//
+// Revision 1.4  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+#include <shadow.h>
+
+private nosave object owner;
+private nosave string creator = sprintf("%s (UID: %s, EUID: %s)",
+				    object_name(previous_object()),
+				    getuid(previous_object())||"0",
+				    geteuid(previous_object())||"0");
+/*
+FUNKTION: query_shadow_creator
+DEKLARATION: nomask string query_shadow_creator(object shadow)
+BESCHREIBUNG:
+Liefert das Objekt, welches diesen Shadow 'shadow' erschaffen hat.
+Der String hat die Form: "Dateiname (UID: uid, EUID: euid)"
+VERWEISE: init_shadow
+GRUPPEN: shadow
+*/
+nomask string query_shadow_creator(object shadow)
+{
+    if(shadow==this_object())
+	return creator;
+    if (owner)
+	return owner->query_shadow_creator(shadow);
+}
+
+/*
+FUNKTION: destruct_shadow
+DEKLARATION: nosave void destruct_shadow()
+BESCHREIBUNG:
+Diese Funktion zerstoert den Shadow.
+ACHTUNG: Diese Funktion kann nur innerhalb des Objektes aufgerufen werden.
+Also nicht mit ob->destruct_shadow() !!!
+VERWEISE: remove_shadow, init_shadow, query_shadow_owner
+GRUPPEN: shadow
+*/
+nosave void destruct_shadow()
+{
+    unshadow();
+    // Wenns nicht dazu inheritet wurde, ist es einfach ein harmloses funcall(0,owner).
+    if(owner)
+	funcall(symbol_function("update_actions",this_object()),owner);
+    destruct(this_object());
+}
+
+/*
+FUNKTION: query_prevent_shadow
+DEKLARATION: int query_prevent_shadow(object shadow)
+BESCHREIBUNG:
+Diese Funktion wird vom Shadow waehrend des init_shadow() im zu shadowenden
+Objekt aufgerufen. Parameter ist der Shadow selbst. Liefert
+query_prevent_shadow eine 1 zurueck, so bricht das Shadowueberwerfen mit
+COULD_NOT_SHADOW ab, der Shadow zerstoert sich selbststaendig.
+Liefert query_prevent_shadow eine 0 oder ist nicht im Objekt definiert,
+so darf der Shadow das Objekt (im allgemeinen) shadowen.
+VERWEISE: init_shadow, shadow
+GRUPPEN: shadow
+*/
+
+/*
+FUNKTION: init_shadow
+DEKLARATION: varargs int init_shadow(object victim, int flag)
+BESCHREIBUNG:
+Mit dieser Funktion wird der Shadow ueber das Objekt <victim> gelegt.
+Wenn kein Flag angegeben wird, wird der Shadow einfach ueber das Objekt
+gelegt.
+Wenn flag == NO_MULTI_SHADOW ist, wird nachgeschaut, ob schon ein Shadow
+des gleichen Filenamens das Objekt <victim> shadowed.
+Wenn flag == REPLACE_OLD_SHADOW ist, wird ein eventuell schon vorhandener
+Shadow des gleichen Filenamens ersetzt (d.h. der andere Shadow wird zerstoert)
+
+Returnwerte:
+  bei flag == NO_MULTI_SHADOW: SHADOW_ALREADY_EXISTS
+	Ein Shadow des gleichen Filenamens existiert bereits.
+  bei flag == REPLACE_OLD_SHADOW: OLD_SHADOW_REPLACED
+	Ein Shadow des gleichen Filenamens wurde durch diesen ersetzt.
+  allgemein: SHADOWING_OK
+	Das Shadowen hat geklappt.
+  allgemein: COULD_NOT_SHADOW
+	Das Shadowen ist fehlgeschlagen. (der Shadow wird dabei automatisch
+					  zerstoert)
+
+Wenn das Shadowen geklappt hat, wird noch ein
+	this_object()->shadow_create_action(this_object())
+aufgerufen.
+
+Die Flags und Returnwerte sind in shadow.h definiert.
+
+VERWEISE: query_shadow_owner
+GRUPPEN: shadow
+*/
+varargs int init_shadow(object victim, int arg)
+{
+    object ob;
+    int ret;
+    string name;
+
+    if (!victim)
+    {
+	destruct_shadow();
+	return 0;
+    }
+    if (sscanf(object_name(),"%s#%d",name,ret) != 2)
+	name = object_name();
+    if (victim->forbidden("shadow", this_object()))
+    {
+	destruct_shadow();
+	return SHADOWING_FORBIDDEN;
+    }
+    if (arg == NO_MULTI_SHADOW && victim->query_shadow(name))
+    {
+	destruct_shadow();
+	return SHADOW_ALREADY_EXISTS;
+    }
+    if (arg == REPLACE_OLD_SHADOW && victim->remove_shadow(name))
+	ret = OLD_SHADOW_REPLACED;
+    else
+	ret = SHADOWING_OK;
+    ob = shadow(victim,1);
+    if (!ob)
+    {
+	destruct_shadow();
+	return COULD_NOT_SHADOW;
+    }
+    owner = victim;
+    this_object()->shadow_create_action(this_object());
+    this_object() && victim->notify("shadow", this_object());
+    funcall(symbol_function("update_actions",this_object()),owner);
+    return ret;
+}
+
+/*
+FUNKTION: remove_shadow
+DEKLARATION: int remove_shadow( { object sh | string sh } )
+BESCHREIBUNG:
+Diese Funktion zerstoert den Shadow.
+Als Parameter muss man entweder den Objekt-Pointer des Shadows uebergeben,
+oder den Filenamen des Shadows (auch ohne #<nummer>)
+Es wird 1 returned, wenn der Shadow sich zerstoert hat.
+Vor dem Zerstoeren wird noch ein
+    this_object()->shadow_remove_action(this_object())
+ausgefuehrt.
+VERWEISE: destruct_shadow, init_shadow, query_shadow_owner, unshadow_shadow
+GRUPPEN: shadow
+*/
+int remove_shadow(mixed sh)
+{
+    if (!sh)
+	return 0;
+    if ((sh == this_object()) || (sh == object_name()) ||
+	(stringp(sh) && (!strstr(object_name(),sh + "#"))))
+    {
+	this_object()->shadow_remove_action(this_object());
+	if (owner)
+	    owner->notify("unshadow", this_object());
+	destruct_shadow();
+	return 1;
+    }
+    if (owner)
+	return owner->remove_shadow(sh);
+    else
+	return 0;
+}
+
+/*
+FUNKTION: query_shadow
+DEKLARATION: object query_shadow(string str)
+BESCHREIBUNG:
+Diese Funktion liefert this_object(), wenn <str> der Filename des Shadows ist.
+VERWEISE: init_shadow, remove_shadow, query_shadow_owner
+GRUPPEN: shadow
+*/
+object query_shadow(string str)
+{
+    if (!str)
+	return 0;
+    if (str != object_name() && strstr(object_name(),str + "#"))
+	return owner->query_shadow(str);
+    return this_object();
+}
+
+/*
+FUNKTION: query_shadow_owner
+DEKLARATION: object query_shadow_owner()
+BESCHREIBUNG:
+Diese Funktion liefert den Objektpointer des Objektes, das es shadowed.
+VERWEISE: init_shadow, remove_shadow, query_shadow
+GRUPPEN: shadow
+*/
+object query_shadow_owner() { return owner; }
+
+/*
+FUNKTION: query_shadow_object
+DEKLARATION: object query_shadow_object()
+BESCHREIBUNG:
+Diese Funktion liefert this_object()
+VERWEISE: init_shadow, remove_shadow, query_shadow_owner, query_shadow
+GRUPPEN: shadow
+*/
+object query_shadow_object() { return this_object(); }
+
+/*
+FUNKTION: unshadow_shadow
+DEKLARATION: int unshadow_shadow(object ob)
+BESCHREIBUNG:
+Unshadowed den Shadow.
+ACHTUNG: Diese Funktion sollte eigentlich nie verwendet werden, es sei
+	 denn, man weiss, was man tut.
+VERWEISE: init_shadow, remove_shadow, query_shadow_owner, query_shadow
+GRUPPEN: shadow
+*/
+int unshadow_shadow(object ob)
+{
+    if (ob == this_object())
+    {
+	unshadow();
+	owner=0;
+	return 1;
+    }
+    return owner->unshadow_shadow(ob);
+}
+
+/*
+FUNKTION: forbidden_shadow
+DEKLARATION: int forbidden_shadow(object shadow, object victim)
+BESCHREIBUNG:
+Bevor ein Shadow shadow ueber ein Objekt victim von gelegt wird,
+wird victim->forbidden("shadow",shadow) aufgerufen. Liefert dieser Aufruf
+einen Wert ungleich 0 zurueck, wird das Shadowen abgelehnt.
+
+Die Funktion forbidden ruft in allen mit victim->add_controller(
+"forbidden_shadow", other) angemeldeten Objekten other die Funktion
+other->forbidden_shadow(shadow, victim) auf. Liefert auch nur eine dieser
+Funktionsaufrufen einen Wert ungleich 0, so liefert forbidden diesen und
+das Shadowen wird verhindert.
+
+Diese Funktion sollte nur mit sehr guten Gruenden genutzt werden, denn
+dem Spieler kann man dieses Fehlschlagen nicht mitteilen und viele
+Funktionen gehen davon aus, dass das Shadowen funktioniert.
+VERWEISE: init_shadow, notify_shadow, notify_unshadow
+GRUPPEN: shadow
+*/
+
+/*
+FUNKTION: notify_shadow
+DEKLARATION: void notify_shadow(object shadow, object victim)
+BESCHREIBUNG:
+Nachdem ein Shadow shadow ueber ein Objekt victim von gelegt wurde,
+wird in victim (und damit auch in shadow) notify("shadow",shadow) aufgerufen.
+
+Die Funktion notify ruft in allen mit victim->add_controller("notify_shadow",
+other) angemeldeten Objekten other die Funktion other->notify_shadow(
+shadow, victim) auf. Sowohl victim als auch other koennen dann darauf
+reagieren.
+VERWEISE: init_shadow, forbidden_shadow, notify_unshadow
+GRUPPEN: shadow
+*/
+
+/*
+FUNKTION: notify_unshadow
+DEKLARATION: void notify_unshadow(object shadow, object owner)
+BESCHREIBUNG:
+Bevor ein Shadow shadow von einem Objekt owner entfernt wird,
+wird in owner (und damit auch in shadow) notify("unshadow",shadow) aufgerufen.
+
+Die Funktion notify ruft in allen mit owner->add_controller("notify_shadow",
+other) angemeldeten Objekten other die Funktion other->notify_unshadow(
+shadow, owner) auf. Sowohl owner als auch other koennen dann darauf
+reagieren.
+VERWEISE: remove_shadow, notify_shadow, forbidden_shadow
+GRUPPEN: shadow
+*/
+
+/*
+FUNKTION: shadow_create_action
+DEKLARATION: void shadow_create_action(object shadow)
+BESCHREIBUNG:
+Nach erfolgreichem Shadowen wird im Shadow diese Funktion aufgerufen.
+Ein Shadow kann damit mit der Arbeit beginnen. (Ausgabe von Erfolgsmeldungen
+oder aehnlichem.) Ein Shadow sollte nur dann reagieren, wenn
+shadow==this_object(), denn anderenfalls war dieser Funktionsaufruf fuer
+einen anderen Shadow bestimmt, weshalb dann mit
+  query_shadow_owner()->shadow_create_action(shadow)
+der Aufruf weitergeleitet werden sollte.
+VERWEISE: init_shadow, notify_shadow, shadow_remove_action
+GRUPPEN: shadow
+*/
+
+/*
+FUNKTION: shadow_remove_action
+DEKLARATION: void shadow_remove_action(object shadow)
+BESCHREIBUNG:
+Vor dem Entfernes eines Shadows wird im Shadow diese Funktion aufgerufen.
+Ein Shadow kann dann Melden, dass es mit der Arbeit aufhoert. (Ausgabe
+entsprechender Meldungen.) Ein Shadow sollte nur dann reagieren, wenn
+shadow==this_object(), denn anderenfalls war dieser Funktionsaufruf fuer
+einen anderen Shadow bestimmt, weshalb dann mit
+  query_shadow_owner()->shadow_remove_action(shadow)
+der Aufruf weitergeleitet werden sollte.
+VERWEISE: remove_shadow, notify_unshadow, shadow_create_action
+GRUPPEN: shadow
+*/

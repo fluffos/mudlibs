@@ -1,0 +1,390 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/wahlen
+// Description:	Saveobject fuer geheime Wahlen
+// Author:	Garthan (21.03.96)
+
+// UID: Apps
+
+//
+// $Log: wahlen.c,v $
+// Revision 1.10  2009-09-07 21:24:58  gnomi
+// filter_array -> filter.
+//
+// Revision 1.9  2009-03-20 07:47:59  gnomi
+// "Variable shadows previous declaration" in Inlines.
+//
+// Revision 1.8  2005/02/02 22:22:43  gnomi
+// An den 3.3er angepasst.
+//
+// Revision 1.7  2004/04/16 18:15:10  menaures
+// Stimmenvalidierung
+//
+// Revision 1.6  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.5  2001/04/22 19:29:25  gnomi
+// Sicherheitsabfrage in set_votes: Schauen ob votes!=0 ist.
+// (Fehler in einer Urne hat die Listen zerhauen...)
+//
+// Revision 1.4  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.3  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#include <apps.h>
+#include <config.h>
+#include <level.h>
+
+#define DEBUGGER "menaures"
+#include <debug.h>
+
+#define SAVE_FILE "/var/spool/wahlen/wahlen"
+private mapping wahlen = ([]);
+
+void create()
+{
+   restore_object(SAVE_FILE);
+}
+
+void save()
+{
+   save_object(SAVE_FILE);
+}
+
+int remove()
+{
+   save();
+   destruct(this_object());
+}
+
+void prepare_renewal()
+{
+   save();
+}
+
+int set_votes(mixed votes)
+{
+   string file;
+
+   if(votes && previous_object() &&
+      !clonep(previous_object()) &&
+      (file=object_name(previous_object())))
+   {
+      wahlen[file]=votes;
+      save();
+   }
+}
+
+mixed query_votes()
+{
+   if(previous_object())
+      return wahlen[object_name(previous_object())];
+}
+
+private void show_results(string topic, string * punkte, mapping waehler, mapping zaehler, mapping second, mapping suicid)
+{
+/*
+punkte: 
+    ({ string punkt0, ..., punktN });
+
+// Gueltige Stimmen:
+waehler: 
+([
+    string name : int pid | ({ int stimme0, ..., stimmeN })
+    int pid : ({ int stimme0, ..., stimmeN })
+])
+
+zaehler:
+([
+    int stimmeN : ({ ({ string waehler0, ..., string waehlerN }), ({ int pid0, ..., int pidN }) })
+])
+
+// Ungueltige Stimmen:
+second:
+([
+    int pid : ({ ({ string name0, ..., nameN }), ({ int stimme0, ..., stimmeN }) })
+])
+
+suicid:
+([
+    string name : ({ int stimme0, ..., stimmeN })
+])
+*/
+
+    // Erstmal die Stimmenuebersicht der gueltigen Stimmen:
+    int gesamt;
+    int * sort = m_indices(zaehler);
+    map(zaehler, (: $3 += sizeof($2[0]) :), &gesamt);
+    sort = sort_array(sort, (: sizeof($3[$1][0]) < sizeof($3[$2][0]) :), zaehler);
+
+    printf("="*75+"\n");
+    printf("Auswertung fuer: %s\n", topic);
+    printf("---- Insgesamt %d gueltige Stimmen: ----\n", gesamt);
+
+    int pos = 0, linenum = 0;
+
+    foreach(int stimme : sort)
+    {
+        if(pos == 0 || (sizeof(zaehler[sort[pos-1]][0]) != sizeof(zaehler[sort[pos]][0])))
+        {
+            linenum++;
+            printf("  %3d) ", linenum);
+        }
+
+        else
+        {
+            printf("       ");
+        }
+
+        pos++;        
+
+        printf("%5d (%7.3f%%)  %s\n", 
+            sizeof(zaehler[stimme][0]),
+            to_float(100*sizeof(zaehler[stimme][0]))/to_float(gesamt),
+            punkte[stimme]);
+// Namensliste:
+//        printf("      %-=70s\n", liste(sort_array(zaehler[stimme][0], #'>), ", "));
+    }
+
+    printf("\n---- Ungueltige Stimmen durch Suizid / Wiz: ----\n");
+
+    string * names = sort_array(m_indices(suicid), #'>);
+
+    foreach(string name : names)
+    {
+        printf("  %s (%d):\n", name, sizeof(suicid[name]));
+
+        foreach(int stimme : suicid[name])
+        {
+            printf("      %s\n", punkte[stimme]);
+        }
+    }
+
+    printf("\n---- Ungueltige Stimmen durch Xties: ----\n");
+    
+    foreach(int pid, mixed * arr : second)
+    {
+        arr = transpose_array(arr);
+        arr = sort_array(arr, (: $1[1] > $2[1] || 
+                                 ($1[1] == $2[1] && $1[0] > $2[0]) :));
+
+        printf("  PID: %d  Gesamt: %d\n", pid, sizeof(arr));
+
+        int i, h, j;
+
+        for(i = 0; i < sizeof(arr); )
+        {
+            mixed * arr2;
+
+            h = i;
+            j = 1;
+            
+            while(++i < sizeof(arr))
+            {
+                // Zaehlen, wie viele Charaktere fuer diesen Punkt stimmten.
+                if(arr[i][1] == arr[h][1])
+                {
+                    j++;
+                }
+
+                else
+                {
+                    break;
+                }
+            }
+
+            arr2 = arr[h..i-1];
+            arr2 = transpose_array(arr2)[0];
+            printf("  %d  %s\n        %-=70s\n", j, punkte[arr[h][1]], liste(sort_array(arr2, #'>), ", "));
+        }
+    }
+
+    printf("\n");
+}
+
+public void validate_votes(string ob, int nowiz)
+{
+    mixed t;
+
+    mapping wiz = ([:1]);
+
+    if(!(this_player() && adminp(this_player()) &&
+       this_interactive() == this_player() &&
+       geteuid(previous_object()) == geteuid(this_player())))
+    {
+        // Das duerfen nur Admins.
+        return;
+    }
+
+    if(!member(wahlen, ob))
+    {
+        write("Dateiname ist unbekannt.\n");
+    }
+
+    // deep_copy, um nichts versehentlich puttmachen zu koennen.
+    t = deep_copy(wahlen[ob]);
+
+    /*
+    Format:
+    ({
+        ({ string topic0, ..., string topicN }), // "Schoenstes Raetsel", ...
+        ({ string topic_desc0, ..., string topicN }), // "Welches Raetsel gefaellt dir am besten?"
+        ({
+            // Topic 0:
+            ({
+                ({ string punkt0, ..., string punktN }), // "Dornroeschen", "Hackbart", ...
+                ({
+                    ({ string punkt0_waehler0, ..., string punkt0_waehlerN }), // "fritz", "hans", ...
+                    ...
+                    ({ string punktN_waehler0, ..., string punktN_waehlerN }),
+                })
+            }),
+            ...,
+            // Topic N:
+            ...
+        }),
+        ({ int maxvote_topic0, ..., int maxvote_topicN }),
+        ({ int time_topic0, ..., int time_topicN }),
+    })    
+    */
+
+#define T		0 // TOPIC
+#define T_DESC		1 // TOPIC_DESC
+#define T_PW		2 // TOPIC_PUNKTE_WAEHLER
+#  define P		0    // PUNKTE
+#  define W		1    // WAEHLER
+#define T_COUNT		3 // TOPIC_COUNT
+#define T_TIME		4 // TOPIC_TIME
+
+    string topic, topic_desc, punkt;
+    int maxvote, time;
+    int a,b,c,d,e,f; // Counter
+    mapping waehler, zaehler, second, suicid;
+
+    // for topic0 .. topicN
+    for(a = 0; a < sizeof(t[T]); a++)
+    {
+        mixed p = t[T_PW][a][P]; // Punkte von topicN
+        mixed w = t[T_PW][a][W]; // Waehler von topicN
+
+        waehler = ([:1]);
+        zaehler = ([:1]);
+        suicid = ([:1]);
+        second = ([:1]);
+
+        // for punkt0 .. punktN
+        for(b = 0; b < sizeof(p); b++)
+        {
+            mixed pw = w[b]; // Waehler von punktN
+            string punktN_waehlerN;
+
+            foreach(punktN_waehlerN : pw)
+            {
+                int pid;
+
+                if(nowiz && !member(wiz, punktN_waehlerN))
+                {
+                    mixed x = testplayerp(punktN_waehlerN) ||
+                                        (GOETTER_REGISTER->is_wiz(punktN_waehlerN) &&
+                                         punktN_waehlerN);
+                    if(x) wiz[punktN_waehlerN] = x;
+                }
+
+                if(member(wiz, punktN_waehlerN) || !player_exists(punktN_waehlerN))
+                {
+                    // Spieler existiert nicht oder ist Gott - Stimme ungueltig
+                    if(wiz[punktN_waehlerN])
+                    {
+                        punktN_waehlerN = "WIZ: "+punktN_waehlerN+" ["+wiz[punktN_waehlerN]+"]";
+                    }
+
+                    suicid[wiz[punktN_waehlerN] || punktN_waehlerN] ||= ({});
+                    suicid[wiz[punktN_waehlerN] || punktN_waehlerN] += ({ b });
+                    continue;
+                }
+
+                // Zweitietest:
+                pid = PLAYER_SECOND->query_pid(punktN_waehlerN);
+
+                if(pid)
+                {
+                    if(nowiz && !member(wiz, punktN_waehlerN))
+                    {
+                        mixed x = PLAYER_SECOND->query_second_chars(pid);
+                        x = filter(x, "is_wiz", GOETTER_REGISTER);
+
+                        if(sizeof(x))
+                        {
+                            x = x[0];
+                            wiz[punktN_waehlerN] = x;
+                            suicid["WIZ: "+punktN_waehlerN+" ["+x+"]"] ||= ({});
+                            suicid["WIZ: "+punktN_waehlerN+" ["+x+"]"] += ({b});
+                            continue;
+                        }
+                    }
+
+                    if(!member(waehler, pid))
+                    {
+                        // Dieser Spieler hat noch nicht gewaehlt.
+                        waehler[pid] ||= ({});
+                        waehler[pid] += ({ b });
+                        waehler[punktN_waehlerN] = pid;
+                        zaehler[b] ||= ({ ({ /* Name */ }), ({ /* PID */ }) });
+                        zaehler[b][0] += ({punktN_waehlerN});
+                        zaehler[b][1] += ({pid});
+                        continue;
+                    }
+
+                    else if(!member(waehler, punktN_waehlerN))
+                    {
+                        string * names;
+
+                        // Oi! Ein anderer Charakter des Spielers hat gewaehlt!
+                        second[pid] ||= ({ ({ /* Name */ }), ({ /* Punkt */ }) });
+                        second[pid][0] += ({ punktN_waehlerN });
+                        second[pid][1] += ({ b });
+
+                        // Alle Stimmen des Spielers fuer ungueltig erklaeren.
+                        names = PLAYER_SECOND->query_second_chars(pid);
+
+                        waehler[pid] = 0;
+                        map(names, lambda(({'a,'b}), ({#'m_delete, 'b, 'a})), waehler);
+                        map(zaehler, (:
+                            // $1: Key, $2: Value, $3: Pid, $4: Names, $5: Zaehler, $6: Second, $7: Closure
+                            mixed x = $2[0]-$4; // Waehler austragen
+                            mixed y = $2[1]-({$3}); // PID austragen
+                            mixed z = filter($2[0], $7, $4);
+                            // Ungueltige Stimmen zaehlen
+                            $6[$3][0] += z; // Namen ins Second-Mapping
+                            $6[$3][1] += allocate(sizeof(z), $1); // Stimmpunkte ins Second-Mapping
+                            $5[$1] = ({ x, y }); // Ungueltiges aus Zaehler-Mapping entfernen
+                            :), pid, names, zaehler, second, (: member($2,$1) != -1 :) );
+                        continue;
+                    }
+
+                    else
+                    {
+                        // Gueltige Stimme eines Waehlers
+                        waehler[pid] += ({ b });
+                        zaehler[b] ||= ({ ({ /* Name */ }), ({ /* PID */ }) });
+                        zaehler[b][0] += ({ punktN_waehlerN });
+                        zaehler[b][1] += ({ pid });
+                        continue;
+                    }
+                }
+
+                waehler[punktN_waehlerN] ||= ({});
+                waehler[punktN_waehlerN] += ({ b });
+                zaehler[b] ||= ({ ({ /* Name */ }), ({ /* PID */ }) });
+                zaehler[b][0] += ({ punktN_waehlerN });
+                zaehler[b][1] += ({ 0 });
+            }
+        }
+
+        show_results(t[T][a], p, waehler, zaehler, second, suicid);
+    }
+}

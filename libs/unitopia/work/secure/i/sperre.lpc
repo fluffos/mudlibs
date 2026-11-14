@@ -1,0 +1,158 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/i/sperre.c
+// Description: Sperr-Infos von Spielern
+// Author:	Gnomi (13.06.2005)
+//
+// $Log: sperre.c,v $
+// Revision 1.4  2015/09/23 19:48:40  gnomi
+// Korrektur zur letzten Anpassung.
+//
+// Revision 1.3  2015/08/26 21:40:29  gnomi
+// Anpassungen an LDMud 3.5.0
+//
+// Revision 1.2  2009-04-15 08:00:19  gnomi
+// Banish-Check vom Passwort-Check getrennt.
+//
+// Revision 1.1  2005/06/13 22:24:35  gnomi
+// Login-Check in ein Inherit ausgelagert.
+//
+
+#pragma strong_types
+
+#ifdef UNItopia
+#define BANISHED_LOG "/var/adm/BANISHED_LOGINS"
+#define IPFILTER_LOG "/var/adm/IP_FILTERED"
+#endif
+
+inherit "/i/tools/passwd";
+
+#include <config.h>
+#include <apps.h>
+#include <passwd.h>
+#include <uids.h>
+#include <level.h>
+#if __EFUN_DEFINED__(interactive_info)
+#include <interactive_info.h>
+#endif
+
+public string password;
+public string sperren;
+public int sperre_bis;
+public int pid;
+
+
+nosave void clear_vars()
+{
+    password = sperren = sperre_bis = pid = 0;
+}
+
+nosave void log_banished_player(string name)
+{
+#ifdef BANISHED_LOG
+    if (file_size(BANISHED_LOG)>65000)
+        rename(BANISHED_LOG,BANISHED_LOG".old");
+    write_file(BANISHED_LOG,
+               left(name,11)+
+               shorttimestr(time())+" "+
+#if __EFUN_DEFINED__(query_ip_name)
+               efun::query_ip_name()+"\n");
+#else
+               (efun::interactive(this_object()) ? efun::interactive_info(this_object(), II_IP_NAME) : "Non-Interactive") +"\n");
+#endif
+#endif
+}
+
+nosave string query_gesperrt ()
+{
+    mapping wtage;
+    string wtag, monat;
+    int tag, jahr, stu, min, sek, bitnr, i;
+
+    if (!sperren) return 0;
+    wtage = (["Mon":0,"Tue":1,"Wed":2,"Thu":3,"Fri":4,"Sat":5,"Sun":6]);
+    sscanf(ctime(time()),"%s %s %d %d:%d:%d %d",
+        wtag,monat,tag,stu,min,sek,jahr);
+    bitnr = wtage[wtag] * 96 + stu * 4 + min / 15;
+    if (!test_bit (sperren,bitnr)) return 0;
+    if (bitnr == 671) i = 0; else i = bitnr + 1;
+    while (test_bit (sperren,i))
+        if (i == bitnr) return "nach dem Ende dieser Welt ";
+        else if (i == 671) i = 0;
+        else i++;
+    bitnr = i;
+    tag = bitnr / 96;
+    bitnr -= tag * 96;
+    stu = bitnr / 4;
+    bitnr -= stu * 4;
+    min = bitnr * 15;
+    return ({"Montag","Dienstag","Mittwoch","Donnerstag","Freitag",
+        "Samstag","Sonntag"})[tag]+", "+stu+" Uhr "+(min?(string)min+" ":"");
+}
+
+nosave string check_banished(string real_name)
+{
+    string tmp;
+    
+    if(LVL_PLAYER >= BANISHD->query_banished(real_name))
+    {
+       log_banished_player(real_name);
+       return "";
+    }
+
+    if (sperre_bis > time())
+        return wrap("Du hast Deinen Charakter bis zum " +
+            timestr(sperre_bis) + " leider selbst gesperrt. Bis bald!");
+
+    if (tmp = query_gesperrt())
+        return "Du hast Deinen Charakter fuer diesen Wochentag zu dieser "
+               "Uhrzeit\nleider selbst gesperrt.\n"
+               "Du darfst " + MUD_NAME + " erst wieder " + tmp + "betreten.\n"
+               "Bis bald!\n";
+
+    if(tmp = PLAYER_SECOND->prevent_login(real_name, &pid))
+        return tmp;
+}
+
+nosave string check_password(string pass, string real_name, int ins_passwd)
+{
+    string tmp;
+    
+    if(extern_call() || strstr(object_name(),"/secure/"))
+	return "Falscher Aufruf.\n";
+
+    if (pass == "")
+        return "Kein Passwort eingegeben.\nProbiers doch nochmal.\n";
+
+    if (time()-FAILD->query_time_of_last_but_two_fail(real_name) < 300)
+        return wrap("In den letzten 5 Minuten waren mindestens 3 Versuche "
+            "mit falschem Passwort, sich mit Deinem Namen einzuloggen. "
+            "Daher ist der Login mit Deinem Namen jetzt 5 Minuten "
+            "gesperrt. Wende Dich in dringenden Faellen an die Admins.");
+
+    if (!PASSWD_CHECK(pass, password))
+    {
+#if __EFUN_DEFINED__(query_ip_name)
+	FAILD->add_fail(real_name, efun::query_ip_name());
+#else
+	FAILD->add_fail(real_name, efun::interactive(this_object()) ? efun::interactive_info(this_object(), II_IP_NAME) : "Unbekannt");
+#endif
+        return "Falsches Passwort.\n";
+    }
+
+    ins_passwd = insecure_passwd(pass, real_name);
+
+    // Passwort ggf. in neues Format konvertieren.
+    tmp = PASSWD_CONVERT(pass, password);
+
+    if(tmp != password)
+    {
+        password = tmp;
+        tmp = geteuid();
+        seteuid(ROOT_UID);
+        write_file(PLAYER_FILE(real_name)+".o", "password \""+password+"\"\n");
+        seteuid(tmp);
+    }
+
+    return check_banished(real_name);
+}

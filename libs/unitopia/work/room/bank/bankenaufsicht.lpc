@@ -1,0 +1,1238 @@
+// This file is part of UNItopia mudlib.
+// -------------------------------------------------------------------
+// File:        /room/bank/bankenaufsicht.c
+// Description: zentrale Kontrolle der Banken.
+// Author:      Myonara (30.12.2015)
+// Modified by:
+//  Myonara 24.Apr.2016  Rewrite fuer Schliessfaecher
+//
+// $Log: bankenaufsicht.c,v $
+// Revision 1.4  2016/09/11 15:05:16  myonara
+// WEitere Menus, Zwischenstand.
+//
+// Revision 1.2  2016/09/04 15:09:05  myonara
+// Testraum fuer Schliessfaecher an Bankenaufsicht angeschlossen.
+//
+// Revision 1.1  2016/09/03 14:30:17  myonara
+// Initialer Stand bei Uebernahme in Mudlib.
+//
+//
+
+/* --- Inherits: --- */
+protected functions nosave variables inherit "/i/tools/security";
+nosave variables inherit "/i/room";
+protected functions nosave variables inherit "/i/tools/build_table";
+nosave variables inherit "/i/tools/dynamic_browser";
+//protected functions nosave variables inherit "/p/Misc/i/array";
+//protected functions nosave variables inherit "/p/Misc/i/queue";
+
+/* --- Includes: --- */
+#include <acl.h>
+#include <config.h>
+#include <database.h>
+#include <dynamic_browser.h>
+#include <level.h>
+#include <message.h>
+#include <misc.h>
+#include <more.h>
+#include <move.h>
+#include <notify_fail.h>
+#include <parse_com.h>
+#include <security.h>
+
+#include <money.h>
+
+#define LINE      "------------------------------------------------------" \
+                  "-------------------------"
+#define MORE_LINE "...---------------------------------------------------" \
+                  "------------------ (MORE)"
+
+nosave int bank_files_menu_total(mapping menue);
+
+private int check_access_for_bank(string bank_id, object wiz)
+{
+    if (adminp(wiz)) return 1;
+    if (!wizp(wiz)) return 0;
+    string * banks = ZENTRALBANK->get_bank_ids_by_access(
+        ([ ZB_BANK_ID: bank_id,ZB_BANK_WIZARD: wiz ]), 0);
+    return 0 && sizeof(banks)==1; // TODO freigeben?
+}
+
+private string* get_all_accessible_banks(object wiz)
+{
+    return ZENTRALBANK->get_bank_ids_by_access(([ ZB_BANK_WIZARD: wiz ]), 0);
+}
+
+private int check_v_item_entry(mapping entry, string ids, string *adj)
+{
+    if (mappingp(entry) && HAS_ID(entry,ids)) {
+        if (adj) {
+            foreach(string str : adj) {
+                if (member(entry["adjektiv"]||({}),str) == -1) {
+                    return 0;
+                }
+            }
+        }
+        return 1;
+    }
+    return 0;
+}
+
+varargs mapping query_v_item(mixed *pfad, int flag)
+{
+    mapping ret, what, *visa;
+    string id, *adj;
+    int anzahl, nummer;
+
+    visa = ZENTRALBANK->get_all_bank_safe_room_v_items();
+    if(!(ret = ::query_v_item(pfad,flag)) &&
+       sizeof(pfad)==1)
+    {
+        if(stringp(pfad[0]))
+        {
+            id = lower_case(pfad[0]);
+        }
+        else if(mappingp(pfad[0]))
+        {
+            id = lower_case(pfad[0]["name"]);
+            adj = pfad[0]["adjektiv"];
+            nummer=pfad[0]["nummer"];
+        }
+        visa=filter(visa,#'check_v_item_entry,id,adj);
+        if(anzahl=sizeof(visa))
+        {
+            if(nummer > 1)
+            {
+                if(sizeof(visa)>=nummer)
+                    what = visa[nummer-1];
+                else
+                    return 0;
+            } else {
+                what = visa[0];
+            }
+            ret = what + ([
+              "environment"   : TO,
+              "v_item_master" : TO,
+                              ]);
+        }
+    }
+    return ret;
+}
+
+mixed *query_all_v_items()
+{
+    mapping *visa;
+    visa = ZENTRALBANK->get_all_bank_safe_room_v_items();
+    return (::query_all_v_items()||({}))
+            +map(visa,
+                 function(mapping entry)
+                 {
+                     return entry + ([
+                 "environment"   : TO,
+                 "v_item_master" : TO,
+                                 ]);
+                     });
+}
+
+
+/*
+    DL/DH versus query_member_of?: ==> Listen nach "meiner" Domain...
+*/
+
+//-------------------------------------------------------------------------
+/*
+nosave mixed <type>_init(mapping old)
+{
+}
+
+nosave int <type>_total(mapping menue)
+{
+}
+
+nosave string * <type>_display(mapping menue)
+{
+}
+
+nosave string <type>_prompt(mapping menue)
+{
+}
+
+nosave mixed <type>_action(string str, mapping * menues)
+{
+}
+
+*/
+
+
+//-------------------------------------------------------------------------
+nosave mixed main_menu_init(mapping old)
+{
+    old[B_START_LINE]=0;
+    old[B_DATA] = ({
+        "- 1- 'Meine' Daten filtern.",
+        "- 2- Daten generell filtern."
+        "- 3- 'Alle' Daten anzeigen.",
+        
+        "- 1- AdHoc-Suchmaske",
+    });
+    old[B_DATA] = ({
+        "- 1- Alle Banken",
+        "- 2- Meine Banken mit Schreibzugriff",
+        "- 3- Alle ausgelagerten Dateien",
+        "- 4- Alle auslagernden Banken",
+        "- 5- Alle auslagernden Eigentuemer",
+        "- 6- Alle ausgelagerten, fehlerbehafteten Dateien",
+        "- 7- Alle ausgelagerten, fehlerbehafteten Dateien mit Schreibzugriff",
+        "- 8- Alle Antraege",
+    });
+}
+
+nosave int main_menu_total(mapping menue)
+{
+    return sizeof(menue[B_DATA]);
+}
+
+nosave string * main_menu_display(mapping menue)
+{
+    return staticmore_display(menue);
+}
+
+nosave string main_menu_prompt(mapping menue)
+{
+    return sprintf("Hauptmenu %d,%d [<nr>,q]",menue[B_CURRENT_LINE],
+        sizeof(menue[B_DATA]));
+}
+
+nosave mixed main_menu_action(string str, mapping * menues)
+{
+    int i;
+    mapping menue = menues[<1];
+    if (!str2int(space(str),&i) && i>0 && i <= sizeof(menue[B_DATA]))
+    {
+        switch(i)
+        {
+            case 1:
+                return menues + ({([ B_TYPE:"banks" ])});
+            case 2:
+                return menues + ({([ B_TYPE:"banks_with_access" ])});
+            case 3:
+                return menues + ({([ B_TYPE:"bank_safe_files",
+                                ZB_BANK_OUTPUT: ZB_BANK_FILE,
+                                ZB_BANK_SORTBY: ZB_BANK_FILE,
+                ]) });
+            case 4:
+                return menues + ({([ B_TYPE:"bank_safe_files",
+                                ZB_BANK_OUTPUT: ZB_BANK_ID,
+                                ZB_BANK_SORTBY: ZB_BANK_ID,
+                ]) });
+            case 5:
+                return menues + ({([ B_TYPE:"bank_safe_files",
+                                ZB_BANK_OUTPUT: ZB_BANK_OWNER,
+                                ZB_BANK_SORTBY: ZB_BANK_OWNER,
+                ]) });
+            case 6:
+                return menues + ({([ B_TYPE:"bank_safe_files",
+                                ZB_BANK_OUTPUT: ZB_BANK_FILE,
+                                ZB_BANK_SORTBY: ZB_BANK_FILE,
+                                ZB_BANK_WITH_ERROR: 1,
+                ]) });
+            case 7:
+                return menues + ({([ B_TYPE:"bank_safe_files",
+                                ZB_BANK_OUTPUT: ZB_BANK_FILE,
+                                ZB_BANK_SORTBY: ZB_BANK_FILE,
+                                ZB_BANK_WITH_ERROR: 1,
+                                ZB_BANK_WIZARD: TP,
+                ]) });
+            case 8:
+                return menues + ({([ B_TYPE:"bank_request_files" ])});
+        }
+    }
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+
+private string* get_search_mask(mapping menue)
+{
+    string * mask = ({});
+    mask += ({"(D) Dateifilter: "+menue[ZB_BANK_FILE_PATTERN]||"%" });
+    mask += ({"(A) Datenanzeige."});
+    return mask;
+}
+
+nosave mixed search_mask_init(mapping old)
+{
+    old[B_START_LINE]=0;
+    return old;
+}
+
+nosave int search_mask_total(mapping menue)
+{
+    return sizeof(get_search_mask(menue));
+}
+
+nosave string * search_mask_display(mapping menue)
+{
+    menue[B_DATA] = get_search_mask(menue);
+    return staticmore_display(menue);
+}
+
+nosave string search_mask_prompt(mapping menue)
+{
+    return "Suchmaske [d,a,q]";
+}
+
+nosave mixed search_mask_action(string str, mapping * menues)
+{
+    string * split = explode(strip(str)," ");
+    string param = implode(split[1..]," ");
+    mapping menue = menues[<1];
+    switch (lower_case(split[0]))
+    {
+        case "d":
+            if (param == "")
+            {
+                m_delete(menue,ZB_BANK_FILE_PATTERN);
+                browse_write_line("Dateimaske geloescht.");
+            }
+            else
+            {
+                menue[ZB_BANK_FILE_PATTERN] = param;                
+                browse_write_line("Dateimaske gesetzt.");
+            }
+            return B_REBUILT;
+        case "a":
+            return menues+({([
+                B_TYPE : "sub_menu",
+                ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN],
+            ])});
+    }
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+
+nosave mixed sub_menu_init(mapping old)
+{
+    old[B_START_LINE]=0;
+
+    old[B_DATA] = ({
+        "- 1- Alle Banken",
+        "- 2- Banken mit ausgelagerten Dateien",
+        "- 3- Ausgelagerte Dateien",
+        "- 4- Ausgelagerte Dateien mit Fehlerflag",
+        "- 5- Eigentuemer, die Dateien ausgelagert haben",
+        "- 6- Alle Antraege (DL/Admin)",
+        "- 7- Freigegebene Einzelobjekte und Shadows",
+        //"- 8- Freigegebene Factory-Objekte",
+        "-21- Statistik eingelagerte Objekte und Shadows",
+    });
+}
+
+nosave int sub_menu_total(mapping menue)
+{
+    return sizeof(menue[B_DATA]);
+}
+
+nosave string * sub_menu_display(mapping menue)
+{
+    return staticmore_display(menue);
+}
+
+nosave string sub_menu_prompt(mapping menue)
+{
+    string filter = menue[ZB_BANK_FILE_PATTERN];
+    if (filter)
+        return sprintf("Menue gefiltert (%s) (%d/%d) [<nr>,z,q]",
+            filter, menue[B_CURRENT_LINE],sub_menu_total(menue));
+    return sprintf("Menue ungefiltert (%d/%d) [<nr>,z,q]",
+            menue[B_CURRENT_LINE],sub_menu_total(menue));
+}
+
+nosave mixed sub_menu_action(string str, mapping * menues)
+{
+    int i;
+    mapping menue = menues[<1];
+    if (!str2int(space(str),&i) && i>0)
+    {
+        switch(i)
+        {
+            case 1:
+                return menues + ({([ B_TYPE:"banks",
+                      ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN] ])});
+            case 2:
+                return menues + ({([ B_TYPE:"bank_safe_files",
+                                ZB_BANK_OUTPUT: ZB_BANK_ID,
+                                ZB_BANK_SORTBY: ZB_BANK_ID,
+                      ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN],
+                ]) });
+            case 3:
+                return menues + ({([ B_TYPE:"bank_safe_files",
+                                ZB_BANK_OUTPUT: ZB_BANK_FILE,
+                                ZB_BANK_SORTBY: ZB_BANK_FILE,
+                      ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN],
+                ]) });
+            case 4:
+                return menues + ({([ B_TYPE:"bank_safe_files",
+                                ZB_BANK_OUTPUT: ZB_BANK_FILE,
+                                ZB_BANK_SORTBY: ZB_BANK_FILE,
+                                ZB_BANK_WITH_ERROR: 1,
+                      ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN],
+                ]) });
+            case 5:
+                return menues + ({([ B_TYPE:"bank_safe_files",
+                                ZB_BANK_OUTPUT: ZB_BANK_OWNER,
+                                ZB_BANK_SORTBY: ZB_BANK_OWNER,
+                      ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN],
+                ]) });
+            case 6:
+                return menues + ({([ B_TYPE:"bank_request_files",
+                      ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN] ])});
+            case 7:
+                return menues + ({([ B_TYPE:"bank_safe_filters",
+                      ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN],
+                ]) });
+            // case 8:
+                // return menues + ({([ B_TYPE:"bank_factory_filters",
+                      // ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN],
+                // ]) });
+            case 21:
+                return menues + ({([ B_TYPE:"file_statistics",
+                      ZB_BANK_FILE_PATTERN: menue[ZB_BANK_FILE_PATTERN],
+                ]) });
+        }
+    }
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+
+nosave mixed banks_init(mapping old)
+{
+    old[B_START_LINE]=0;
+    return old;
+}
+
+nosave int banks_total(mapping menue)
+{
+    return ZENTRALBANK->get_bank_list(menue,1);
+}
+
+nosave string * banks_display(mapping menue)
+{
+    string * lines = ZENTRALBANK->get_bank_list(
+        menue+([
+            DB_DBG_LIMIT:menue[B_NUM_LINES],
+            DB_DBG_OFFSET:menue[B_CURRENT_LINE]
+            ]),0);
+    if (lines == 0 || !pointerp(lines))
+        return ({ "interner Zugriffsfehler." });
+    for (int i = 0;i<sizeof(lines);i++)
+    {
+        lines[i] = sprintf("%2d %s",i+1+menue[B_CURRENT_LINE],lines[i]);
+    }
+    return lines;
+}
+
+nosave string banks_prompt(mapping menue)
+{
+    return sprintf("Banken (%d/%d) [<nr>,z,q]",
+        menue[B_CURRENT_LINE],banks_total(menue));
+}
+
+nosave mixed banks_action(string str, mapping * menues)
+{
+    int i;
+    string * lines ;
+    mapping menue = menues[<1];
+    if (!str2int(space(str),&i) && i>0 && i <= banks_total(menue))
+    {
+        lines = ZENTRALBANK->get_bank_list(
+            menue+([ DB_DBG_LIMIT:1, DB_DBG_OFFSET:i-1, ]),0);
+        if (sizeof(lines))
+        {
+            return menues + ({([ B_TYPE:"bank_menu",ZB_BANK_ID:lines[0] ])});
+        }
+    }
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+
+nosave mixed banks_with_access_init(mapping old)
+{
+    old[B_START_LINE]=0;
+    return old;
+}
+
+nosave int banks_with_access_total(mapping menue)
+{
+    menue[ZB_BANK_WIZARD] = TP;
+    return ZENTRALBANK->get_bank_ids_by_access(menue,1);
+}
+
+nosave string * banks_with_access_display(mapping menue)
+{
+    menue[ZB_BANK_WIZARD] = TP;
+    string * lines = ZENTRALBANK->get_bank_ids_by_access(
+        menue+([
+            DB_DBG_LIMIT:menue[B_NUM_LINES],
+            DB_DBG_OFFSET:menue[B_CURRENT_LINE]
+            ]),0);
+    if (lines == 0 || !pointerp(lines))
+        return ({ "interner Zugriffsfehler." });
+    for (int i = 0;i<sizeof(lines);i++)
+    {
+        lines[i] = sprintf("%2d %s",i+1+menue[B_CURRENT_LINE],lines[i]);
+    }
+    return lines;
+}
+
+nosave string banks_with_access_prompt(mapping menue)
+{
+    return sprintf("Banken (%d/%d) [<nr>,z,q]",
+        menue[B_CURRENT_LINE],banks_with_access_total(menue));
+}
+
+nosave mixed banks_with_access_action(string str, mapping * menues)
+{
+    int i;
+    string * lines ;
+    mapping menue = menues[<1];
+    menue[ZB_BANK_WIZARD] = TP;
+    if (!str2int(space(str),&i) && i>0 && i <= banks_with_access_total(menue))
+    {
+        lines = ZENTRALBANK->get_bank_ids_by_access(
+            menue+([ DB_DBG_LIMIT:1, DB_DBG_OFFSET:i-1, ]),0);
+        if (sizeof(lines))
+        {
+            return menues + ({([ B_TYPE:"bank_menu",ZB_BANK_ID:lines[0] ])});
+        }
+    }
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+private string * get_bank_menu(mapping menue)
+{
+    mapping bankmap = ZENTRALBANK->get_bank(menue[ZB_BANK_ID]);
+    string * lines = ({}),line="";
+    int flags;
+    if (sizeof(bankmap)==0)
+    {
+        return ({ "Es liegen keine Daten vor."});
+    }
+    lines += ({ "Bank-ID: "+bankmap[ZB_BANK_ID] });
+    flags = bankmap[ZB_BANK_FLAGS];
+    if (flags & ZB_BANK_CLASSIC)
+    {
+        line += "Klassische Bank";
+    }
+    else
+    {
+        line += "Bank mit NPCs";
+    }
+    if (flags & ZB_BANK_ACTIVE)
+    {
+        line += " (Aktiv)";
+    }
+    lines += ({ line });
+    lines += ({ "D: "+bank_files_menu_total(menue)+" Dateien." });
+    return lines;
+}
+
+nosave mixed bank_menu_init(mapping old)
+{
+    old[B_START_LINE]=0;
+    return old;
+}
+
+nosave int bank_menu_total(mapping menue)
+{
+    return sizeof(get_bank_menu(menue));
+}
+
+nosave string * bank_menu_display(mapping menue)
+{
+    menue[B_DATA] = get_bank_menu(menue);
+    return staticmore_display(menue);
+}
+
+nosave string bank_menu_prompt(mapping menue)
+{
+    return sprintf("Bank \"%s\" (%d/%d) [+,-,d,t,z,q]",
+        menue[ZB_BANK_ID],menue[B_CURRENT_LINE], bank_menu_total(menue));
+}
+
+nosave mixed bank_menu_action(string str, mapping * menues)
+{
+    mapping menue = menues[<1];
+    string bank_id = menue[ZB_BANK_ID];
+    switch (lower_case(space(str)))
+    {
+        case "d":
+            return menues + ({([ 
+                B_TYPE:"bank_files_menu",  
+                ZB_BANK_ID:bank_id ]) });
+        case "+":
+            bank_id = ZENTRALBANK->get_next_bank(bank_id,1);
+            if (bank_id==0) 
+            {
+                browse_write_line("Ende der Daten erreicht.");
+                return B_DONE;
+            }
+            else
+            {
+                return menues[..<2]+({
+                    ([ B_TYPE:"bank_menu",ZB_BANK_ID:bank_id ]) 
+                    });
+            }
+        case "-":
+            bank_id = ZENTRALBANK->get_next_bank(bank_id,-1);
+            if (bank_id==0) 
+            {
+                browse_write_line("Anfang der Daten erreicht.");
+                return B_DONE;
+            }
+            else
+            {
+                return menues[..<2]+({
+                    ([ B_TYPE:"bank_menu",ZB_BANK_ID:bank_id ]) 
+                    });
+            }
+    }
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+
+nosave mixed bank_files_menu_init(mapping old)
+{
+    old[B_START_LINE] = 0;
+    return old;
+}
+
+nosave int bank_files_menu_total(mapping menue)
+{
+    return ZENTRALBANK->get_bank_files(menue,1);
+}
+
+nosave string * bank_files_menu_display(mapping menue)
+{
+    string * lines = ZENTRALBANK->get_bank_files(
+        menue+([
+            DB_DBG_LIMIT:menue[B_NUM_LINES],
+            DB_DBG_OFFSET:menue[B_CURRENT_LINE]
+            ]),0);
+    if (lines == 0 || !pointerp(lines))
+        return ({ "Keine Anzeige." });
+    for (int i = 0;i<sizeof(lines);i++)
+    {
+        lines[i] = sprintf("%2d %s",i+1+menue[B_CURRENT_LINE],lines[i]);
+    }
+    return lines;
+}
+
+nosave string bank_files_menu_prompt(mapping menue)
+{
+    return sprintf("Dateien der Bank \"%s\" (%d/%d) [g <nr>,z,q]",
+        menue[ZB_BANK_ID],menue[B_CURRENT_LINE], bank_files_menu_total(menue));
+}
+
+nosave mixed bank_files_menu_action(string str, mapping * menues)
+{
+    string * split = explode(space(str)," ");
+    int i;
+    mapping menue = menues[<1];
+    object ob;
+    switch (lower_case(split[0]))
+    {
+        case "g":
+            if (sizeof(split)<2)
+            {
+                browse_write_line("g <nr> zum Anspringen von Bank/Raum oder "
+                    "geladenem NPC");
+                return B_DONE;
+            }
+            if (!str2int(split[1],&i) && i > 0 
+                    && i <= bank_files_menu_total(menue))
+            {
+                split = ZENTRALBANK->get_bank_files(
+                    menue+([ DB_DBG_LIMIT:1, DB_DBG_OFFSET:(i-1) ]),0);
+                split = explode(split[0]," ");
+                if (split[1] == "(Bank)" || split[1] == "(Raum)")
+                {
+                    ob = find_object(split[0]) || touch(split[0]);
+                }
+                else
+                {
+                    ob = find_object(split[0]);
+                    if (ob) 
+                    {
+                        ob = ENVR(ob);
+                    }
+                }
+                if (ob && TP->move(ob) == MOVE_OK)
+                {
+                    browse_write_line("Transport durchgefuehrt.");
+                    return B_QUIT;
+                }
+            }
+            browse_write_line("Transport nicht durchgefuehrt.");
+            return B_DONE;
+    }
+    return B_NOTHING;
+}
+//-------------------------------------------------------------------------
+nosave mixed bank_safe_files_init(mapping old)
+{
+    old[B_START_LINE] = 0;
+    return old;
+}
+
+nosave int bank_safe_files_total(mapping menue)
+{
+    return ZENTRALBANK->retrieve_bank_safe_files(menue,1);
+}
+
+nosave string * bank_safe_files_display(mapping menue)
+{
+    string * lines = ZENTRALBANK->retrieve_bank_safe_files(
+        menue+([
+            DB_DBG_LIMIT:menue[B_NUM_LINES],
+            DB_DBG_OFFSET:menue[B_CURRENT_LINE]
+            ]),0);
+    if (lines == 0 || !pointerp(lines))
+        return ({ "Keine Anzeige." });
+    for (int i = 0;i<sizeof(lines);i++)
+    {
+        lines[i] = sprintf("%3d %s",i+1+menue[B_CURRENT_LINE],lines[i]);
+    }
+    return lines;
+}
+
+nosave string bank_safe_files_prompt(mapping menue)
+{
+    string title = "Unbekannt";
+    switch (menue[ZB_BANK_OUTPUT])
+    {
+        case ZB_BANK_FILE:   title = "Ausgelagerte Dateien";break;
+        case ZB_BANK_ITEMID: title = "Ausgelagerte Gegenstaende";break;
+        case ZB_BANK_ID:     title = "Banken mit ausgelagerten Dateien";break;
+        case ZB_BANK_OWNER:  
+            title = "Eigentuemer mit ausgelagerten Dateien";break;
+    }
+    return sprintf("%s (%d/%d) [<nr>,z,q]",
+        title,menue[B_CURRENT_LINE], bank_safe_files_total(menue));
+}
+
+nosave mixed bank_safe_files_action(string str, mapping * menues)
+{
+    mapping menue = menues[<1];
+    string mtype;
+    mixed lines;
+    int i;
+    if (!str2int(space(str),&i) && i>0 && i <= bank_safe_files_total(menue))
+    {
+        lines = ZENTRALBANK->retrieve_bank_safe_files(
+            menue+([ ZB_BANK_OUTPUT:0, DB_DBG_LIMIT:1, DB_DBG_OFFSET:i-1, ]),0);
+        if (sizeof(lines))
+        {
+            switch (menue[ZB_BANK_OUTPUT])
+            {
+                case ZB_BANK_FILE:   
+                    return menues + ({ menue + ([
+                        B_TYPE: "bank_safe_files",
+                        ZB_BANK_OUTPUT: ZB_BANK_ITEMID,
+                        ZB_BANK_SORTBY: ZB_BANK_ITEMID,
+                        ZB_BANK_FILE: lines[0][0]
+                    ]) });
+                case ZB_BANK_ITEMID: 
+                    return menues + ({ ([
+                        B_TYPE: "bank_safe_item",
+                        ZB_BANK_ITEMID: lines[0][1],
+                    ]) });
+                case ZB_BANK_ID:
+                    return menues + ({ menue + ([
+                        B_TYPE: "bank_safe_files",
+                        ZB_BANK_OUTPUT: ZB_BANK_ITEMID,
+                        ZB_BANK_SORTBY: ZB_BANK_ITEMID,
+                        ZB_BANK_ID: lines[0][2],
+                    ]) });
+                case ZB_BANK_OWNER:
+                    return menues + ({ menue + ([
+                        B_TYPE: "bank_safe_files",
+                        ZB_BANK_OUTPUT: ZB_BANK_ITEMID,
+                        ZB_BANK_SORTBY: ZB_BANK_ITEMID,
+                        ZB_BANK_OWNER: lines[0][3],
+                    ]) });
+            }
+       }
+    }
+
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+
+private string * get_bank_safe_item(mapping menue)
+{
+    string *lines=({});
+    mixed result = ZENTRALBANK->retrieve_bank_safe_files(
+            ([ ZB_BANK_ITEMID:menue[ZB_BANK_ITEMID] ]),0);
+    //bwf.file,bwf.itemid, bw.bank_id, bw.owner, bw.item, bw.error_count
+    mapping vitem;
+    if (!sizeof(result))
+    {
+        return ({ "Ungueltiger Gegenstand, Datenfehler!" });
+    }
+    vitem = restore_value(result[0][4]);
+    lines += ({ "Itemid: "+result[0][1] + " Errors: "+result[0][5] });
+    lines += ({ "Bank: "+result[0][2]+" Eigentuemer: "+result[0][3] });
+    lines += ({ "Name: "+vitem["name"] });
+    lines += explode(wrap("IDs: "+liste(vitem["id"],", ")),"\n");
+    lines += explode(wrap("LONG:\n"+vitem["long"]),"\n");
+    lines += ({ "Dateien:" });
+    lines += map(result,(: $1[0] :));
+    return lines;
+}
+
+nosave mixed bank_safe_item_init(mapping old)
+{
+    old[B_START_LINE] =0;
+    return old;
+}
+
+nosave int bank_safe_item_total(mapping menue)
+{
+    return sizeof(get_bank_safe_item(menue));
+}
+
+nosave string * bank_safe_item_display(mapping menue)
+{
+    menue[B_DATA] = get_bank_safe_item(menue);
+    return staticmore_display(menue);
+}
+
+nosave string bank_safe_item_prompt(mapping menue)
+{
+    return sprintf("Gegenstandsanzeige %d,%d [z,q]",menue[B_CURRENT_LINE],
+        sizeof(get_bank_safe_item(menue)));
+}
+
+nosave mixed bank_safe_item_action(string str, mapping * menues)
+{
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+nosave mixed bank_request_files_init(mapping old)
+{
+    old[B_START_LINE] =0;
+    return old;
+}
+
+nosave int bank_request_files_total(mapping menue)
+{
+    return ZENTRALBANK->get_file_requests(menue,1);
+}
+
+nosave string * bank_request_files_display(mapping menue)
+{
+    string * lines = ZENTRALBANK->get_file_requests(
+        menue+([
+            DB_DBG_LIMIT:menue[B_NUM_LINES],
+            DB_DBG_OFFSET:menue[B_CURRENT_LINE]
+            ]),0);
+    if (lines == 0 || !pointerp(lines))
+        return ({ "Keine Anzeige." });
+    for (int i = 0;i<sizeof(lines);i++)
+    {
+        lines[i] = left(sprintf("%3d %s",
+                        i+1+menue[B_CURRENT_LINE],lines[i]),78);
+    }
+    return lines;
+}
+
+nosave string bank_request_files_prompt(mapping menue)
+{
+    return sprintf("Antraege nach Dateiname %d,%d [<nr>,f <nr>,z,q]",
+        menue[B_CURRENT_LINE], bank_request_files_total(menue));
+}
+
+nosave mixed bank_request_files_action(string str, mapping * menues)
+{
+    mapping menue = menues[<1];
+    string mtype,*split;
+    mixed lines;
+    int i;
+    split = explode(space(str)," ");
+    switch (lower_case(split[0]))
+    {
+        case "f":
+            if (sizeof(split)==2)
+            {
+                if (!str2int(space(split[1]),&i) && i>0 
+                    && i <= bank_request_files_total(menue))
+                {
+                    lines = ZENTRALBANK->get_file_requests(
+                        menue+([ ZB_BANK_OUTPUT:0, 
+                                 DB_DBG_LIMIT:1, 
+                                 DB_DBG_OFFSET:i-1, ]),0);
+                    if (!sizeof(lines))
+                    {
+                        browse_write_line("Fehler bei der Auswahl der Datei!");
+                        return B_DONE;
+                    }
+                    lines = explode(lines[0]," ");
+                    if (!sizeof(lines))
+                    {
+                        browse_write_line("Fehler bei der Auswahl der Datei.");
+                        return B_DONE;
+                    }
+                    if (!adminp(TP))
+                    {
+                        browse_write_line("Keine Freigaberecht!");
+                        return B_DONE;
+                    }
+                    if (sizeof(lines)>2)
+                    {
+                        if (!ZENTRALBANK->release_bank_safe_factory_file(
+                            lines[0],lines[1],lines[2][1..<2]))
+                        {
+                            browse_write_line("Interner Fehler!");
+                            return B_DONE;
+                        }
+                    }
+                    else if (!ZENTRALBANK->release_bank_safe_file(lines[0]))
+                    {
+                        browse_write_line("Interner Fehler.");
+                        return B_DONE;
+                    }
+                    browse_write_line("Freigabe erteilt, Antraege geloescht.");
+                    return B_REBUILT;
+                }
+            }
+            browse_write_line("f <nr>   fuer Freigabe der Datei.");
+            return B_DONE;
+        default:
+            if (!str2int(space(str),&i) && i>0 
+                    && i <= bank_request_files_total(menue))
+            {
+                lines = ZENTRALBANK->get_file_requests(
+                    menue+([ ZB_BANK_OUTPUT:0, 
+                             DB_DBG_LIMIT:1, 
+                             DB_DBG_OFFSET:i-1, ]),0);
+                if (!sizeof(lines))
+                {
+                    browse_write_line("Fehler bei der Auswahl der Datei!");
+                    return B_DONE;
+                }
+                lines = explode(lines[0]," ");
+                if (!sizeof(lines))
+                {
+                    browse_write_line("Fehler bei der Auswahl der Datei.");
+                    return B_DONE;
+                }
+                return menues + ({([
+                    B_TYPE : "bank_requests_per_file",
+                    ZB_BANK_FILE : lines[0],
+                    ])});
+            }
+    }
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+nosave mixed bank_requests_per_file_init(mapping old)
+{
+    old[B_START_LINE] =0;
+    return old;
+}
+
+nosave int bank_requests_per_file_total(mapping menue)
+{
+    return ZENTRALBANK->get_requests_per_file(menue,1);
+}
+
+nosave string * bank_requests_per_file_display(mapping menue)
+{
+    string * lines = ZENTRALBANK->get_requests_per_file(
+        menue+([
+            DB_DBG_LIMIT:menue[B_NUM_LINES],
+            DB_DBG_OFFSET:menue[B_CURRENT_LINE]
+            ]),0);
+    if (lines == 0 || !pointerp(lines))
+        return ({ "Keine Anzeige." });
+    return lines;
+}
+
+nosave string bank_requests_per_file_prompt(mapping menue)
+{
+    return sprintf("Antraege fuer Datei %s %d,%d [<nr>,z,q]",
+        space(right(menue[ZB_BANK_FILE],50)),menue[B_CURRENT_LINE],
+        menue[B_END_LINE]);
+}
+
+nosave mixed bank_requests_per_file_action(string str, mapping * menues)
+{
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+
+nosave mixed bank_safe_filters_init(mapping old)
+{
+    old[B_START_LINE] =0;
+    return old;
+}
+
+nosave int bank_safe_filters_total(mapping menue)
+{
+    return ZENTRALBANK->get_bank_safe_filters(menue,1);
+}
+
+nosave string * bank_safe_filters_display(mapping menue)
+{
+    int i;
+    mapping cache = ([]);
+    string * lines = ZENTRALBANK->get_bank_safe_filters(menue+([
+            DB_DBG_LIMIT:menue[B_NUM_LINES],
+            DB_DBG_OFFSET:menue[B_CURRENT_LINE]
+            ]),0);
+    if (lines == 0 || !pointerp(lines))
+        return ({ "Keine Anzeige." });
+    for (i=0;i<sizeof(lines);i++)
+    {
+        cache[i+menue[B_CURRENT_LINE]+1] = lines[i];
+        lines[i] = sprintf("%3d %s",1+i+menue[B_CURRENT_LINE],lines[i]);
+    }
+    menue[ZB_DATA_CACHE] = cache;
+    return lines;
+}
+
+nosave string bank_safe_filters_prompt(mapping menue)
+{
+    return sprintf("Freigegebene Objekte und Shadows (%d,%d) [<nr>,z,q]",
+        menue[B_CURRENT_LINE]+1,menue[B_END_LINE]+1);
+}
+
+nosave mixed bank_safe_filters_action(string str, mapping * menues)
+{
+    int i;
+    mapping menue = menues[<1],cache = menue[ZB_DATA_CACHE];
+    if (!str2int(space(str),&i) && i>0 && member(cache,i))
+    {
+        return B_DONE;
+    }
+    return B_NOTHING;
+}
+//-------------------------------------------------------------------------
+
+private string* list_flags(int flags)
+{
+    string * tmp;
+    if (flags & ZB_BANK_ACTIVE)
+    {
+        tmp += ({"Aktiv"});
+    }
+    if (flags & ZB_F_WAREHOUSE_STORE)
+    {
+        tmp += ({"Anti-No-Store"});
+    }
+    if (flags & ZB_F_VALID_CONTAINER)
+    {
+        tmp += ({"Valid-Container"});
+    }
+    if (flags & ZB_F_VALID_IN_CONTAINER)
+    {
+        tmp += ({"Valid-in-Container"});
+    }
+    if (flags & ZB_F_SPECIAL_CONTAINER)
+    {
+        tmp += ({"Special-Container"});
+    }
+    return tmp;
+}
+
+private string* get_one_filter(mapping fil)
+{
+    string* lines = ({});
+    int flags;
+    if (!mappingp(fil)) return ({"Keine Daten."});
+    if (member(fil,ARMA_FACTORY))
+    {
+        lines += ({ "(Y) Factory: "+fil[ARMA_FACTORY]});
+        lines += ({ "(I) Factory-ID:"+fil[ARMA_FACTORY_ID]});
+    }
+    lines += ({"(D) Dateiname: "+fil[ZB_BANK_FILE]});
+    flags = fil[ZB_BANK_FLAGS];
+    lines += explode(wrap_say("(F) Flags: ",liste(
+                list_flags(flags),", ")),"\n")[..<2];
+    if (member(fil,ZB_BANK_REPLACE_WITH))
+    {
+        lines += ({ "(R) Replace-With: "+fil[ZB_BANK_REPLACE_WITH] });
+    }
+    return lines;
+}
+
+nosave mixed bank_safe_filter_init(mapping old)
+{
+    old[B_START_LINE] =0;
+    return old;
+}
+
+nosave int bank_safe_filter_total(mapping menue)
+{
+    return sizeof(get_one_filter(
+            ZENTRALBANK->get_one_bank_safe_filter(menue[ZB_BANK_FILE])
+        ));
+}
+
+nosave string * bank_safe_filter_display(mapping menue)
+{
+    menue[B_DATA] = get_one_filter(
+            ZENTRALBANK->get_one_bank_safe_filter(menue[ZB_BANK_FILE])
+        );
+    return staticmore_display(menue);
+}
+
+nosave string bank_safe_filter_prompt(mapping menue)
+{
+    return "Bank-Safe-Filter [d <pfad>,f,r <pfad>,z,q]";
+}
+
+nosave mixed bank_safe_filter_action(string str, mapping * menues)
+{
+    mapping menue = menues[<1];
+    string * split = explode(space(str)," ");
+    switch (lower_case(split[0]))
+    {
+        case "d": // Dateinamen aendern
+            if (!adminp(TP))
+            {
+                browse_write_line("Kein Zugriff.");
+                return B_DONE;
+            }
+            if (sizeof(split<=1))
+            {
+                browse_write_line("d <vollst.dateipfad>");
+                return B_DONE;
+            }
+            if (!ZENTRALBANK->set_one_bank_safe_filter(menue[ZB_BANK_FILE],
+                    ([ZB_BANK_FILE:split[1] ]) ) )
+            {
+                browse_write_line("Keine Aenderung.");
+                return B_DONE;
+            }
+            menue[ZB_BANK_FILE] = split[1];
+            browse_write_line("Dateinamen geaendert.");
+            return B_REBUILT;
+        case "r": // replace with aendern
+            if (!adminp(TP))
+            {
+                browse_write_line("Kein Zugriff.");
+                return B_DONE;
+            }
+            if (sizeof(split<=1))
+            {
+                split += ({""});
+            }
+            if (!ZENTRALBANK->set_one_bank_safe_filter(menue[ZB_BANK_FILE],
+                    ([ZB_BANK_REPLACE_WITH:split[1] ]) ) )
+            {
+                browse_write_line("Keine Aenderung.");
+                return B_DONE;
+            }
+            browse_write_line("Replace-With geaendert.");
+            return B_REBUILT;
+        case "f": // Flags aendern.
+            if (!adminp(TP))
+            {
+                browse_write_line("Kein Zugriff.");
+                return B_DONE;
+            }
+    }
+    return B_NOTHING;
+}
+
+//-------------------------------------------------------------------------
+nosave mixed file_statistics_init(mapping old)
+{
+    old[B_START_LINE] = 0;
+    return old;
+}
+
+nosave int file_statistics_total(mapping menue)
+{
+    return ZENTRALBANK->get_file_statistik(menue,1);
+}
+
+nosave string * file_statistics_display(mapping menue)
+{
+    string *lines = ZENTRALBANK->get_file_statistik(menue+
+        ([  DB_DBG_LIMIT:menue[B_NUM_LINES],
+            DB_DBG_OFFSET:menue[B_CURRENT_LINE]
+        ]),0);
+    int ix;
+    mapping cache = ([]);
+    for (ix = 0;ix < sizeof(lines); ix++)
+    {
+        cache[ix+menue[B_CURRENT_LINE]+1] = explode(lines[ix]," ")[<1];
+        lines[ix] = sprintf("%3d: %s",ix+menue[B_CURRENT_LINE]+1,lines[ix]);
+    }
+    menue[ZB_DATA_CACHE] = cache;
+    return lines;
+}
+
+nosave string file_statistics_prompt(mapping menue)
+{
+    return sprintf("Statistik eingelagerte Dateien (%d,%d) [<nr>,z,q]",
+        menue[B_CURRENT_LINE]+1,menue[B_END_LINE]+1);
+}
+
+nosave mixed file_statistics_action(string str, mapping * menues)
+{
+    return B_NOTHING; // TODO verzweigen je Datei.
+}
+
+//-------------------------------------------------------------------------
+
+int cmd_menue(string str)
+{
+    if (!check_security())
+    {
+        FAILWP("Zugriffsproblem.", FAIL_INTERNAL);
+    }
+    dynamic_browse( ([ B_TYPE: "search_mask" ]) );
+    return 1;
+}
+
+void init()
+{
+    "*"::init();
+    add_action("cmd_menue","menue",-4);
+}
+
+void create()
+{
+  "*"::create();
+
+  set_own_light(1);
+  add_type("kunstlicht",1);
+  add_type("nocleanup",1);
+  set_room_domain("Pantheon");
+  set_short("Nirgends");
+  set_long("Dies ist die Bankenaufsicht. Befehl: menue");
+        
+    init_security_for_actions();
+    
+  add_exit("test_schliessfaecher","runter",0,"Testbank");
+
+}
+
+void abort_renewal() {}
+void finish_renewal(object neu) {}
+void prepare_renewal() {}
+
+/* --- End of file. --- */

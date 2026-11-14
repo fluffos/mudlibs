@@ -1,0 +1,816 @@
+
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/monster/communicate.c
+// Description: Kommunikation von Monstern (parse_conversation ...)
+// Author:	Francis
+// Modified by: Freaky (23.12.93)
+// Modified by: Garthan (22.12.95) add_parse_conversation
+//                                 tokenize_parse_conversation (neu gehackt)
+//		Freaky (20.05.1999) do_error bei tokenize_parse_conversation
+//              Jesper (13.09.2000) load_a_chat und load_chat ueberarbeitet
+//                                  und nach /i/tools/chat.c ausgelagert
+//
+// $Log: communicate.c,v $
+// Revision 1.25  2015/06/01 19:38:43  gnomi
+// Interne call_outs gegen Shadows absichern.
+//
+// Revision 1.24  2013/06/25 17:02:05  myonara
+// RULE_OB: object bei clones, object_name sonst
+// (Nachtrag fuer eine Aenderung von Gnomi)
+//
+// Revision 1.23  2013-03-16 16:17:38  gnomi
+// RE_DOTALL verwenden, um ueber Zeilengrenzen hinweg zu parsen.
+//
+// Revision 1.22  2009-07-30 16:46:30  gnomi
+// Bei PARSE_SOUL wurde faelschlicherweise 0 als Adverb uebergeben.
+//
+// Revision 1.21  2008-05-19 14:21:07  gnomi
+// filter_message/query_messages_filter nun auch fuer NPCs.
+//
+// Revision 1.20  2008-04-26 18:17:40  gnomi
+// Typo bei der Regexp-Behandlung.
+//
+// Revision 1.19  2008-04-02 08:14:36  gnomi
+// Menaures: Ein paar Konversionen nach escape_string ausgelagert.
+//           Fehlermeldungen bei vermutlich ungueltigen Regeln.
+//           Mehrere Woerter in einer Bedingung spezifizierbar.
+// Gnomi: Direkte Angabe von regulaeren Ausdruecken moeglich.
+//
+// Revision 1.18  2008/02/28 08:53:24  gnomi
+// filter_message beachten.
+//
+// Revision 1.17  2008/02/25 11:40:56  gnomi
+// Klargestellt, dass <verb> nicht mit PARSE_MESSAGE funktioniert.
+//
+// Revision 1.16  2007/12/05 10:52:39  gnomi
+// Regexp-Test it catch-reserve-Angabe.
+// Conversations aufraeumen, wenn kein call_out laeuft.
+//
+// Revision 1.15  2007/08/30 20:21:21  gnomi
+// __PCRE__ beachten.
+// Woerter escapen, bevor sie in die regexp eingebettet werden.
+// add_controller nicht beim Laden des Inherits aufrufen.
+//
+// Revision 1.14  2007/08/20 18:13:44  gnomi
+// PARSE_INFO_MSG_ACTION/TYPE implementiert.
+//
+// Revision 1.13  2007/08/16 18:39:01  gnomi
+// parse_conversation erweitert und modernisiert.
+//
+// Revision 1.12  2006/02/21 21:29:47  gnomi
+// Wenn die Evals ausgehen, versteht er nur noch Bahnhof.
+//
+// Revision 1.11  2004/02/19 21:39:33  gnomi
+// Typo.
+//
+// Revision 1.10  2001/09/02 20:56:31  freaky
+// typo gefixed
+//
+// Revision 1.9  2001/09/02 20:55:37  freaky
+// catch_tell aufrufen in receive-message
+//
+// Revision 1.8  2001/08/28 23:03:36  freaky
+// hart auf das message-system umgestellt.
+//
+// Revision 1.7  2001/07/01 13:21:05  freaky
+// receive_notify_fail() eingebaut
+//
+// Revision 1.6  2000/11/14 23:58:11  freaky
+// Bugfix im catch_tell (Variablenname vertauscht)
+//
+// Revision 1.5  2000/11/08 23:21:29  freaky
+// handle_message() eingebaut fuer das Message-System
+//
+
+#pragma save_types
+#pragma strong_types
+
+#include <error.h>
+#include <message.h>
+#include <monster.h>
+#include <regexp.h>
+#include <simul_efuns.h>
+
+/*
+ * General Settings:
+ *
+ * set_parse_conversation
+ * add_parse_conversation
+ *
+ * Internals:
+ *
+ * receive_message
+ * parse_conversation
+ */
+
+#ifdef __PCRE__
+#define USE_PCRE
+#endif
+
+#ifdef USE_PCRE
+
+#define BEGIN_WORD       "\\b"
+#define END_WORD         "\\b.*"
+#define REGEXP_FLAG      (RE_PCRE | RE_DOTALL)
+#define MAKE_WORD(str)   escape_string((str), ESCAPE_PCRE|ESCAPE_LISTE)
+#define MAKE_NOCASE(str) escape_string((str), ESCAPE_PCRE|ESCAPE_LISTE|ESCAPE_NOCASE)
+
+#else
+
+#define BEGIN_WORD       "\\<"
+#define END_WORD         "\\>.*"
+#define REGEXP_FLAG	 RE_TRADITIONAL
+#define MAKE_WORD(str)   escape_string((str), ESCAPE_REGEXP|ESCAPE_LISTE)
+#define MAKE_NOCASE(str) escape_string((str), ESCAPE_REGEXP|ESCAPE_LISTE|ESCAPE_NOCASE)
+/* ("["+implode(map(transpose_array(({explode(lower_case(str),""),explode(upper_case(str),"")})),#'implode,""),"][")+"]") */
+
+#endif
+
+#define END_NEXT ".*"
+#define BEGIN_RULE "("
+#define END_RULE ")|"
+
+private int start_parse_conversation;
+private int only_parse_players;
+
+// RULE_OB: object bei Clones, object_name bei allen anderen
+#define RULE_OB		0
+#define RULE_FUNC	1
+#define RULE_REGEXP	2
+#define RULE_FLAGS	3
+private mixed* parse_rules;
+
+#define CAUGHT_TEXT	0
+#define CAUGHT_VERB	1
+#define CAUGHT_TO_ME	2
+#define CAUGHT_WHAT	3
+#define CAUGHT_INFO	4
+#define CAUGHT_START	5
+private nosave mixed *catch_str = ({});
+private nosave object *prev_obs = ({});
+
+
+/*
+FUNKTION: set_start_parse_conversation
+DEKLARATION: int set_start_parse_conversation(int i)
+BESCHREIBUNG:
+Mit Dieser Funktion setzt man, ob ein Monster das gesetzt parse_conversation
+ueberhaupt verwenden soll, oder ob es gerade nicht parsen soll.
+Der gesetzte Wert wird zurueckgeliefert.
+Standard ist 1, wird durch set_parse_conversation und add_parse_conversation
+gesetzt.
+VERWEISE: set_parse_conversation, set_only_parse_players, add_parse_conversation
+GRUPPEN: monster
+*/
+
+int set_start_parse_conversation(int i) { return start_parse_conversation = i; }
+
+/*
+FUNKTION: query_start_parse_conversation
+DEKLARATION: int query_start_parse_conversation(int i)
+BESCHREIBUNG:
+Mit Dieser Funktion fraegt man ab, ob ein Monster das gesetzte
+parse_conversation ueberhaupt verwenden soll, oder ob es gerade nicht
+parsen soll. 1 = ja, 0 = nein.
+Standard ist 1, wird durch set_parse_conversation und add_parse_conversation
+gesetzt.
+VERWEISE: set_start_parse_conversation, set_parse_conversation,
+          set_only_parse_players, query_only_parse_players
+GRUPPEN: monster
+*/
+int query_start_parse_conversation() { return start_parse_conversation; }
+
+private mixed *tokenize_parse_conversation(object ob, mixed *sets)
+{
+    int linenum, reflag;
+    string* rules = ({});
+
+    if(!ob)
+    {
+	do_error("set_parse_conversation: Kein Objekt uebergeben.\n");
+        return 0;
+    }
+    else if(!pointerp(sets))
+    {
+        do_error("set_parse_conversation: Kein Stringfeld uebergeben.\n");
+        return 0;
+    }
+    else if(!sizeof(sets))
+    {
+        do_error("set_parse_conversation: Leeres Stringfeld uebergeben.\n");
+        return 0;
+    }
+
+    for(int i = 0; i < sizeof(sets); i++)
+    {
+	int flag;
+	string func, raw_rule, rule;
+	string *conds;
+
+	linenum++;
+
+	if(sscanf(sets[i], "%s:%s", func, raw_rule) != 2)
+	{
+	    do_error("set_parse_conversation: Zeile " + linenum +
+		     ": keine Funktion gefunden: " + sets[i] + ".\n");
+	    return 0;
+	}
+
+	if(i+1<sizeof(sets) && intp(sets[i+1]))
+	{
+	    flag = sets[++i];
+	    if((flag & (PARSE_TELL|PARSE_SAY|PARSE_SOUL)) &&
+		flag & (PARSE_MESSAGE))
+	    {
+		do_error("set_parse_conversation: Zeile " + linenum +
+		     ": PARSE_MESSAGES mit anderen Flags kombiniert.\n");
+		return 0;
+	    }
+	    
+	    if((flag&(PARSE_RE_TRADITIONAL|PARSE_RE_PCRE)) == (PARSE_RE_TRADITIONAL|PARSE_RE_PCRE))
+	    {
+		do_error("set_parse_conversation: Zeile " + linenum +
+		     ": PARSE_RE_TRADITIONAL und PARSE_RE_PCRE koennen nicht gemeinsam verwendet werden.\n");
+		return 0;
+	    }
+	    
+	    if(flag&(PARSE_RE_TRADITIONAL|PARSE_RE_PCRE))
+		flag |= PARSE_RE;
+	
+	    if(!(flag&PARSE_RE))
+		flag &= ~ PARSE_RE_CASE_SENSITIVE;
+	}
+	
+	if(!(flag & (PARSE_SAY|PARSE_TELL|PARSE_SOUL)))
+	    flag |= PARSE_MESSAGE;
+
+	
+	if(flag&PARSE_RE)
+	{
+	    rule = trim(raw_rule);
+	    if(!(flag&PARSE_RE_CASE_SENSITIVE))
+		rule = lower_case(rule);
+	
+	    if(flag & PARSE_RE_TRADITIONAL)
+		reflag = RE_TRADITIONAL;
+	    else if(flag & PARSE_RE_PCRE)
+		reflag = RE_PCRE;
+	}
+	else
+	{
+	    conds = map(explode(raw_rule, "||"),#'trim)-({""});
+	    if(!sizeof(conds))
+	    {
+		do_error("set_parse_conversation: Zeile " + linenum +
+			 ": keine Suchwoerter gefunden: " + raw_rule + ".\n");
+	        return 0;
+	    }
+
+	    rule = "";
+
+	    foreach(string cond: conds)
+	    {
+		string *words;
+	        string rulepart = "";
+	        string* verben = ({});
+
+	        words = map(explode(cond, "&&"),#'trim)-({""});
+		if(!sizeof(words))
+    		{
+		    do_error("set_parse_conversation: Zeile " + linenum +
+			     ": && ohne Woerter: " + cond + ".\n");
+		    return 0;
+		}
+
+	        foreach(string word: words)
+	        {
+        	    // Warnen, wenn komische Klammern im Wort auftauchen,
+        	    // die auf falsche Syntax hindeuten:
+        	    if(strlen(word & "(|)") ||
+            	       strlen(word[2..] & "[{<") ||
+            	       strlen(word[..<3] & "]}>"))
+            	        do_warning("set_parse_conversation: Zeile " + linenum +
+                               ": Wort eventuell ungueltig: " + word + ".\n");
+
+		    if(word[0..1] == "[{" && word[<2..] == "}]" ||
+	               word[0..1] == "{[" && word[<2..] == "]}")
+		        rulepart += MAKE_WORD(word[2..<3]) + END_NEXT;
+		    else if(word[0] == '{' && word[<1] == '}')
+		        rulepart += BEGIN_WORD + MAKE_WORD(word[1..<2]) + END_WORD;
+		    else if(word[0] == '[' && word[<1] == ']')
+		        rulepart += MAKE_NOCASE(word[1..<2]) + END_NEXT;
+		    else if(word[0] == '<' && word[<1] == '>')
+		        verben += map(explode(word[1..<2],","),#'trim) - ({""});
+		    else
+		        rulepart += BEGIN_WORD + MAKE_NOCASE(word) + END_WORD;
+		}
+    
+	        if(sizeof(rulepart) || sizeof(verben))
+	        {
+	    	    rule += BEGIN_RULE;
+	    	    if(sizeof(verben))
+		        rule += "^("+implode(verben,"|")+")\t.*";
+		    else if(!(flag & PARSE_MESSAGE))
+		        rule += "\t.*";
+
+		    if(sizeof(rulepart))
+		        rule += rulepart;
+
+		    rule += END_RULE;
+	        }
+	    }
+	    
+	    reflag = REGEXP_FLAG;
+	    rule = rule[0..<2]; // Abschliessendes '|' entfernen.
+	}
+	    
+
+	if(sizeof(rule) && catch(regexp(({"dummy"}),rule,reflag)
+#ifdef __VERSION__ > "3.3.560"
+	    ; reserve 10000
+#endif
+	))
+	{
+	    do_error("set_parse_conversation: Zeile " + linenum +
+		  ": Regular-Expression falsch: " + rule + ".\n");
+	     return 0;
+	}
+
+	rules += ({({
+	    clonep(ob) ? ob : object_name(ob),
+	    trim(func),
+	    rule,
+	    flag
+	    })});
+    }
+
+    return rules;
+}
+
+/*
+FUNKTION: set_parse_conversation
+DEKLARATION: void set_parse_conversation(object ob, mixed *regeln)
+BESCHREIBUNG:
+
+Die Programmierung 'intelligenter' Monster, d.h. Monster, die auf Ansprache
+durch einen Spieler oder auf Verhaltensweisen eines Spielers angepasst
+reagieren koennen, kann man sich durch die set_parse_conversation
+stark vereinfachen.
+
+Anhand des Regelwerks <regeln> werden saemtliche Meldungen, die das Monster
+erhaelt (das sind im Prinzip alle, die auch ein Spieler erhaelt !!),
+begutachtet, und im Falle einer Uebereinstimmung wird eine in den Regeln
+benannte Routine im Objekt <ob> aufgerufen. Diese bekommt als Parameter
+die entsprechende Meldung und kann diese bei Bedarf noch genauer unter die
+Lupe nehmen und entsprechend darauf reagieren.
+
+Wird ein Monster durch einen Raum geclonet, so schreibt man zweckmaessiger-
+weise diese Routinen in den Raumfile und setzt ob auf den Raum. Ein
+anderes Beispiel ist /room/rathaus/div/leo. Er inheritet /i/monster/monster
+und wird nur geladen, nicht geclonet. Hier stehen die Routinen in Leo selbst,
+nicht in dem Raum, von dem aus Leo geladen wird.
+
+Syntax der Regeln:
+
+     ({ Regel1, Regel2, ... })
+
+Syntax einer Regel:
+
+     "Funktionsname: Bedingung1 || Bedingung2 || .....", Flags
+
+Syntax einer Bedingung:
+
+     Wort1 && Wort2 && ......
+
+und schlieslich die Syntax eines Wortes:
+
+          wort
+oder     {wort}
+oder     [silbe]
+oder     [{silbe}]
+
+Wie funktioniert das?
+
+Eine Regel gilt dann als erfuellt, wenn MINDESTENS EINE ihrer Bedingungen
+erfuellt ist. Ein Bedingung wiederum ist dann erfuellt, wenn JEDES ihrer
+Worte in der angegebenen Reihenfolge innerhalb der Meldung gefunden wird.
+
+Wann wir ein Wort gefunden?
+
+wort      steht fuer ein einzelnes, vollstaendiges Wort (das Wort muss
+          so im Text vorkommen, davor und dahinter duerfen keine weiteren
+	  Buchstaben stehen).
+
+{wort}    verhaelt sich wie letzteres; allerdings wird hier auf Gross-
+          Klein-Schreibung geachtet.
+
+[silbe]   Dies wird gefunden, sobald die angegebene Zeichenkette als einzelnes
+          Wort ODER als Teil eines Wortes innerhalb der Meldung auftaucht.
+          Gross- oder Klein-Schreibung ist hierbei NICHT signifikant.
+
+{[silbe]} Beide Schreibweisen verhalten sich identisch und wie [..], nur dass
+[{silbe}] auf Gross-Klein-Schreibung geachtet wird.
+
+<befehl>  Dieses Wort muss dem verwendeten Befehl entsprechen (red, sag,
+          verkuend, grins, kicher). (Funktioniert nicht mit PARSE_MESSAGE,
+	  es muss also irgendeine andere PARSE-Option angegeben werden.)
+
+Innerhalb der Klammern duerfen zudem mehrere Wort-Alternativen durch Kommata
+getrennt genannt werden, folgendes ist also moeglich:
+
+wort,wort         findet eines der angegebenen Woerter
+[silbe,silbe]     findet eine der angegebenen Silben
+<befehl,befehl>   findet einen der angegebenen Befehle
+
+Nicht erlaubt dagegen ist die Kombination von verschiedenen Klammerungen,
+also wort,[silbe],<befehl> ist nicht moeglich, bzw. wuerde nach diesen Klammern
+als Teil des Wortes selbst suchen.
+
+Hinter jeder Regel kann man eine Reihe von Flags angeben, welche mit Oder (|)
+verbunden werden muessen:
+
+    PARSE_SAY	    Nur lokale Kommunikation (sage, bemerke, verkuende,
+                    denke) wird beachtet.
+
+    PARSE_TELL	    Fernkommunikation (rede) wird begutachtet.
+
+    PARSE_SOUL	    Seele-Reaktionen werden erkannt.
+		    (Das Seele-Kommando und sein Adverb werden untersucht.)
+
+    PARSE_FOR_ME    Die Meldung ist direkt an das Monster gerichtet
+		    (sage zu monster, rede monster, knuddle monster).
+
+    PARSE_MESSAGE   Es werden alle Meldungen, die der NPC erhaelt, untersucht.
+                    (Dieses Flag kann nicht zusammen mit PARSE_SAY, PARSE_TELL,
+		    PARSE_SOUL oder PARSE_FOR_ME verwendet werden.)
+
+    PARSE_CONTINUE  Selbst wenn diese Regel gepasst hat, sollen zusaetzlich
+                    auch nachfolgende Regeln untersucht werden. (Die weiteren
+		    Funktionen werden dann zeitverzoegert ausgefuehrt.)
+
+Sollten die normalen Regeln nicht ausreichen, kann man regulaere Ausdruecke
+angeben. Aus Gruenden der Wartbarkeit und Leserlichkeit sollte man dies
+aber weitgehend vermeiden. Folgende Flags sind dafuer vorgesehen:
+
+    PARSE_RE_TRADITIONAL     Die Regel enthaelt einen traditionellen
+                             regulaeren Ausdruck (siehe regexp-Efun).
+    
+    PARSE_RE_PCRE            Die Regel enthaelt einen PCRE.
+
+    PARSE_RE_CASE_SENSITIVE  Per default wird der regulaere Ausdruck ohne
+                             Beachtung von Gross-/Kleinschreibung ausgewertet.
+			     Mit diesem Flag wird die Schreibung beachtet.
+
+Man kann alle diese Flags auch weglassen, dann gilt PARSE_MESSAGE.
+Diese Defines sind in monster.h definiert.
+
+WICHTIG:  In den aufgerufenen Routinen gilt folgendes:
+
+          this_player()     == Spieler
+          this_object()     == ob (meistens der Raum, der das Monster erzeugt)
+          previous_object() == Monster
+
+Die Routinen erhalten folgende Parameter:
+
+string str	Der Text.
+string verb	Das benutzte Verb (red, sag, kicher)
+object monster	Das Monster, das die Meldung erhalten hat.
+object player	Das Lebewesen, das die Meldung verursacht hat.
+int flags	Zur Anwendung gekommene PARSE-Flags.
+mapping info	Weitere Details zur Meldung mit folgendem Inhalt:
+		PARSE_INFO_RECIPIENTS: Alle Empfaenger eines Rede-Textes.
+		PARSE_INFO_MSG_ACTION: Der Aktions-Typ
+		PARSE_INFO_MSG_TYPE:   Der Meldungs-Typ
+
+Die Routinen koennen PARSE_CONTINUE zurueckliefern, um die Auswertung
+weiterer Regeln (ohne Zeitverzoegerung) zu bewirken.
+
+
+BEISPIEL:
+
+   In einem Raum-File koennte folgendes programmiert sein:
+
+
+void reset()
+{
+    .........
+   monster->set_parse_conversation(this_object(),({
+"gruss:     hallo || gruess gott || guten tag || hi", PARSE_SAY|PARSE_CONTINUE,
+"smalltalk: harry && wie geht || was macht && harry", PARSE_SAY,
+"suche:     wo && [finde] || [such]",                 PARSE_SAY,
+"bedanke:   <dank>",                                  PARSE_SOUL,
+"wetter:    [wetter]",                                PARSE_SAY
+        }));
+
+    ........
+}
+
+int gruss(string str, string verb, object monster, object player, int flags)
+
+    monster->exec_command("sage Tach!");
+}
+
+int smalltalk(string str, string verb, object monster, object player,
+    int flags)
+{
+    monster->exec_command("sage Der schlaeft... wie immer... irgendwo.");
+}
+
+int bedanke(string str, string verb, object monster, object player, int flags)
+{
+    monster->exec_command("sage zu", player, "Nichts zu danken.");
+}
+
+VERWEISE: add_parse_conversation, set_only_parse_players,
+          query_rules, query_funcs
+GRUPPEN: monster
+*/
+
+void set_parse_conversation(object ob, mixed *sets)
+{
+    mixed *res;
+
+    if(res = tokenize_parse_conversation(ob, sets))
+    {
+	set_start_parse_conversation(1);
+	parse_rules = res;
+    }
+    else
+	parse_rules = 0;
+}
+
+/*
+FUNKTION: add_parse_conversation
+DEKLARATION: void add_parse_conversation(object ob, string *regeln)
+BESCHREIBUNG:
+siehe set_parse_conversation.
+Die Regeln werden jedoch nicht gesetzt, sondern hinzugefuegt.
+Ein anderes ob, wie das bei set_parse_conversation benutze ist moeglich.
+VERWEISE: set_parse_conversation, set_only_parse_players,
+          query_rules, query_funcs,
+GRUPPEN: monster
+*/
+
+void add_parse_conversation(object ob, mixed *sets)
+{
+    mixed *res;
+
+    if(res = tokenize_parse_conversation(ob, sets))
+    {
+	set_start_parse_conversation(1);
+	parse_rules = (parse_rules || ({})) + res;
+    }
+}
+
+nosave void parse_conversation(int nr)
+{
+    mixed caught;
+    object caught_ob;
+    string txt, lctxt;
+
+    if (!prev_obs[nr])
+	return;
+    caught = catch_str[nr];
+    caught_ob = prev_obs[nr];
+    catch_str[nr] = 0;
+    prev_obs[nr] = 0;
+
+    // Da wird zuviel gelabert und wir verstehen nur Bahnhof.
+    if(get_eval_cost()<100000)
+	return;
+
+    if(caught[CAUGHT_WHAT] & PARSE_MESSAGE)
+	txt = caught[CAUGHT_TEXT];
+    else
+	txt = caught[CAUGHT_VERB]+"\t"+caught[CAUGHT_TEXT];
+
+    lctxt = lower_case(caught[CAUGHT_TEXT]);
+
+    foreach(mixed rule: parse_rules[caught[CAUGHT_START]..<1])
+    {
+	int flags = rule[RULE_FLAGS];
+	int reflag;
+	
+	if(flags & PARSE_RE)
+	{
+	    if(flags & PARSE_RE_TRADITIONAL)
+		reflag = RE_TRADITIONAL;
+	    else if(flags & PARSE_RE_PCRE)
+		reflag = RE_PCRE;
+	}
+	else
+	    reflag = REGEXP_FLAG;
+    
+	if((caught[CAUGHT_WHAT] & flags) &&
+	   (caught[CAUGHT_TO_ME] || !(flags & PARSE_FOR_ME)) &&
+	    sizeof(regexp(
+		({ (flags&PARSE_RE_CASE_SENSITIVE)?caught[CAUGHT_TEXT]:
+		   (flags&PARSE_RE)               ?lctxt:
+		                                   txt
+		}), rule[RULE_REGEXP], reflag)))
+	{
+	    int res = call_other(touch(rule[RULE_OB]),
+		rule[RULE_FUNC],
+		(sizeof(caught[CAUGHT_TEXT]) && caught[CAUGHT_TEXT][<1]=='\n')?
+		    caught[CAUGHT_TEXT][0..<2]:caught[CAUGHT_TEXT],
+		caught[CAUGHT_VERB],
+		this_object(),
+		caught_ob,
+		caught[CAUGHT_WHAT] | (caught[CAUGHT_TO_ME] && PARSE_FOR_ME)
+				    | (caught[CAUGHT_START] && PARSE_CONTINUE),
+		caught[CAUGHT_INFO]);
+
+	    if(res & PARSE_CONTINUE)
+		continue;
+
+	    if(flags & PARSE_CONTINUE)
+	    {
+		if(catch_str[nr]) // Schon befuellt
+		{
+		    nr = member(catch_str, 0);
+		    if(nr<0)
+		    {
+			nr = sizeof(catch_str);
+			catch_str += ({0});
+			prev_obs += ({0});
+		    }
+		}
+
+		caught[CAUGHT_START] = member(parse_rules, rule)+1;
+		catch_str[nr] = caught;
+		prev_obs[nr] = caught_ob;
+
+		call_out(#'parse_conversation, 2, nr);
+	    }
+
+	    return;
+	}
+
+	if(get_eval_cost()<100000)
+    	    return;
+    }
+
+    if(find_call_out(#'parse_conversation)<0)
+    {
+	// Kein call_out, also loeschen wir catch_str.
+
+	catch_str = ({});
+	prev_obs = ({});
+    }
+}
+
+/*
+FUNKTION: set_only_parse_players
+DEKLARATION: void set_only_parse_players(int i)
+BESCHREIBUNG:
+Mit Dieser Funktion setzt man, ob ein Lebewesen nur auf das parsen soll,
+was ein Spieler sagt, nicht aber auf das, was andere Lebewesen (Monster)
+sagen.
+Dies sollte man immer setzen, wenn das Lebewesen nicht unbedingt
+auf andere Lebewesen parsen muss, da das Parsen SEHR viel Zeit kostet !!!
+VERWEISE: set_parse_conversation, query_only_parse_players
+GRUPPEN: monster
+*/
+void set_only_parse_players(int i)
+{
+    only_parse_players = i != 0;
+}
+
+/*
+FUNKTION: query_only_parse_players
+DEKLARATION: int query_only_parse_players()
+BESCHREIBUNG:
+Mit Dieser Funktion fragt man ab, ob ein Lebewesen nur auf das parsed,
+was ein Spieler sagt, nicht aber auf das, was andere Lebewesen (Monster)
+sagen.
+VERWEISE: set_parse_conversation, set_only_parse_players
+GRUPPEN: monster
+*/
+int query_only_parse_players()
+{
+    return only_parse_players;
+}
+
+int filter_message(int msg_type, int msg_action)
+{
+    if(msg_type)
+        return (msg_type & this_object()->query_messages_filter()) == msg_type;
+
+    return 0;
+}
+
+private void handle_message(string str, string verb, object who, int anmich, int what, mapping info)
+{
+    if (query_start_parse_conversation() &&
+	    sizeof(parse_rules) &&
+	    stringp(str) &&
+	    who &&
+	    (!only_parse_players || interactive(who)) &&
+	    !this_object()->filter_message(info && (info[PARSE_INFO_MSG_TYPE] & MT_MASK), info && info[PARSE_INFO_MSG_ACTION]))
+    {
+	int i;
+	
+	if ((i = member(prev_obs, who)) >= 0 &&
+	    verb=="" && // Nur fuer receive_message
+	    catch_str[i][CAUGHT_VERB] == verb &&
+	    catch_str[i][CAUGHT_TO_ME] == anmich &&
+	    catch_str[i][CAUGHT_WHAT] == what &&
+	    catch_str[i][CAUGHT_START] == 0)
+	    catch_str[i][CAUGHT_TEXT] += str;
+	else if ((i = member(catch_str, 0)) >= 0)
+	{
+	    prev_obs[i] = who;
+	    catch_str[i] = ({ str, verb, anmich, what, info, 0 });
+	    call_out(#'parse_conversation, 0, i);
+	}
+	else
+	{
+	    prev_obs += ({ who });
+	    catch_str += ({ ({ str, verb, anmich, what, info, 0 }) });
+	    call_out(#'parse_conversation, 0, sizeof(catch_str) - 1);
+	}
+    }
+}
+
+void catch_tell(string str)
+{
+}
+
+void receive_message(int msg_type, int msg_action, object who, string msg)
+{
+    if (this_player() && who && previous_object() != this_object() &&
+	    this_player() != this_object() && who != this_object() &&
+	    !this_object()->filter_message(msg_type, msg_action))
+	handle_message(msg, "", living(who) ? who : this_player(), 0, PARSE_MESSAGE,
+	    ([
+		PARSE_INFO_MSG_ACTION: msg_action,
+		PARSE_INFO_MSG_TYPE:   msg_type,
+	    ]));
+
+    // Hier muss catch_tell() aufgerufen werden, um kompatibel zu bleiben :(
+    catch_tell(msg);
+}
+
+private void comm_tell_me(string controller, object wer, object wen, object *wen_noch, string was)
+{
+    handle_message(was, "red", wer, 1, PARSE_TELL,
+	([
+	    PARSE_INFO_RECIPIENTS: ({wen})+(wen_noch||({})),
+	    PARSE_INFO_MSG_ACTION: MA_COMM,
+	    PARSE_INFO_MSG_TYPE:   MT_NOISE|MT_FAR,
+	]));
+}
+
+private void comm_comm(string controller, object wer, mixed wen, string what,
+    string adverb, int flags, int msg_typ_wer, int msg_typ_wen, int msg_typ_andere)
+{
+    if(wer && wer != this_object() && (!wen || wen == this_object()))
+	handle_message(adverb, what, wer, wen == this_object(), PARSE_SAY,
+	    ([
+	        PARSE_INFO_MSG_ACTION: MA_COMM,
+		PARSE_INFO_MSG_TYPE:   MT_NOISE,
+	    ]));
+}
+
+private void comm_seele(string controller, object wer, mixed wen, string what, string adverb,
+    int align, int flags, int msg_typ_wer, int msg_typ_wen, int msg_typ_andere)
+{
+    if(wer && wer != this_object() && (!wen || wen == this_object()))
+	handle_message(adverb||"", what, wer, wen == this_object(), PARSE_SOUL,
+	    ([
+	        PARSE_INFO_MSG_ACTION: MA_EMOTE,
+		PARSE_INFO_MSG_TYPE:   (wen==this_object())?msg_typ_wen:msg_typ_wer,
+	    ]));
+}
+
+void receive_notify_fail(string msg, object msgobj, object orig_cmd_giver)
+{
+    this_object()->receive_message(MT_NOTIFY,MA_UNKNOWN,
+	    msgobj || this_object(),msg);
+}
+
+/*
+FUNKTION: query_rules
+DEKLARATION: mixed *query_rules()
+BESCHREIBUNG:
+Mit query_rules kann man die Regeln abfragen, nach denen ein Monster auf
+eine Anrede reagiert. Die Regeln, die man zurueckbekommt, sind die,
+die man mit der Funktion set_parse_conversation gesetzt hat.
+VERWEISE: set_parse_conversation, query_funcs
+GRUPPEN: monster
+*/
+string *query_rules() { return parse_rules; }
+string *query_catch_str() { return catch_str; }
+object *query_prev_obs() { return prev_obs; }
+
+varargs int add_controller(mixed func, mixed ob);
+void create()
+{
+    if(object_name()+".lpc" != __FILE__)
+    {
+	add_controller("notify_tell_me", #'comm_tell_me);
+	add_controller("notify_comm", #'comm_comm);
+	add_controller("notify_seele", #'comm_seele);
+    }
+}

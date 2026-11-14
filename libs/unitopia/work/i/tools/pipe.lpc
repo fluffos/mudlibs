@@ -1,0 +1,330 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/tools/pipe.c
+// Description: Piping von Ausgaben (include-File ist <pipe.h>)
+// Author:      Freaky (23.12.93)
+// Modified:	Freaky (24.01.94)  | cat
+//		Freaky (10.01.2000) set_max_output ist jetzt nosave
+//
+// $Log: pipe.c,v $
+// Revision 1.6  2008-04-10 08:46:26  gnomi
+// Nach Selbstzerstoerung nix mehr ausgeben.
+//
+// Revision 1.5  2003/05/28 01:04:41  gnomi
+// MAY_WRITE statt MASTER->valid_write nutzen.
+//
+// Revision 1.4  2001/06/25 11:47:41  freaky
+// output-Funktionen eingebaut
+//
+// Revision 1.3  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma strict_types
+#pragma save_types
+
+#include <more.h>
+#include <acl.h>
+
+#define FAIL(x) return notify_fail(x)
+#define OWN (owner ? owner : this_player())
+#define MAX_CAT 50
+#define COMMANDS ({"tail","cat","more"})
+
+private nosave string mode, bef1;
+private nosave mixed bef2;
+private nosave object owner;
+private nosave string output;
+private int max_output;
+
+nosave void set_max_output(int i)
+{
+    max_output = i;
+    if (max_output < 1)
+	max_output = 1;
+    else if (max_output >= MAX_CAT)
+	max_output = MAX_CAT - 1;
+}
+
+int query_max_output() { return max_output; }
+
+nosave void add_output(string str)
+{
+    output += str;
+}
+nosave void set_output(string str)
+{
+    output = str;
+}
+nosave string query_output()
+{
+    return output;
+}
+
+nosave void set_owner(object ob)
+{
+    if (!owner)
+	owner = ob;
+}
+
+private int grep_str(string str, string in);
+
+nosave int begin_output(string str)
+{
+    int ok;
+    string tmp;
+
+    output = "";
+    bef1 = 0;
+    bef2 = 0;
+    mode = 0;
+
+    if (!str)
+	return 1;
+
+    if (str[0..1] == "| " || sscanf(str,"%s | %s",bef1,bef2) == 2)
+    {
+	if (!bef2)
+	{
+	    bef2 = str[2..];
+	    if (member(COMMANDS,bef2) < 0 && bef2[0..4] != "grep ")
+		FAIL("Fehler in der Pipe: '" + bef2 + "' gibt es nicht.\n");
+	}
+	else
+	    do
+	    {
+		if (bef2[0..4] != "grep ")
+		{
+		    if (member(COMMANDS,bef2) < 0)
+		    {
+			if (sscanf(bef2,"%s | %s",tmp,bef2) == 2)
+			    bef1 += " | " + tmp;
+			else
+			{
+			    bef1 = str;
+			    bef2 = 0;
+			    ok = 1;
+			}
+		    }
+		    else
+			ok = 1;
+		}
+		else
+		{
+		    if (strstr(bef2,"\"") != -1)
+		    {
+			if (sscanf(bef2,"%s | %s",tmp,bef2) == 2)
+			    bef1 += " | " + tmp;
+			else
+			{
+			    bef2 = 0;
+			    bef1 = str;
+			    ok = 1;
+			}
+		    }
+		    else
+			ok = 1;
+		}
+	    }
+	    while(!ok)
+		;
+
+	if (bef2)
+	    mode = "pipe";
+	str = bef1;
+	return 1;
+    }
+
+    if (str[0..1] == "> " || sscanf(str,"%s > %s",bef1,bef2) == 2)
+    {
+	if (!bef2)
+	    bef2 = str[2..];
+	else
+	{
+	    while(sscanf(bef2,"%s > %s",tmp,bef2) == 2)
+		bef1 += " > " + bef2;
+	    if (strstr(bef2,"\"") != -1)
+	    {
+		bef1 = str;
+		bef2 = 0;
+		return 1;
+	    }
+	}
+	if (bef2[0..3] == "OBJ(" && bef2[<1] == ')')
+	{
+	    bef2 = search_object(bef2[4..<2]);
+	    if (!bef2)
+		return 0;
+	    mode = "objekt";
+	}
+	else
+	{
+	    bef2 = ({string})OWN->add_path(bef2);
+	    if (!MAY_WRITE(bef2, this_object()))
+		FAIL("Kann Datei '" + bef2 + "' nicht anlegen.\n");
+	    rm(bef2);
+	    mode = "file";
+	}
+	str = bef1;
+	return 1;
+    }
+
+    if (str[0..2] == ">> " || sscanf(str,"%s >> %s",bef1,bef2) == 2)
+    {
+	if (!bef2)
+	    bef2 = str[3..];
+	else
+	{
+	    while(sscanf(bef2,"%s >> %s",tmp,bef2) == 2)
+		bef1 += " >> " + bef2;
+	    if (strstr(bef2,"\"") != -1)
+	    {
+		bef1 = str;
+		bef2 = 0;
+		return 1;
+	    }
+	}
+	bef2 = ({string})OWN->add_path(bef2);
+	if (!MAY_WRITE(bef2, this_object()))
+	    FAIL("Kann Datei '" + bef2 + "' nicht schreiben.\n");
+	mode = "append";
+	str = bef1;
+	return 1;
+    }
+
+    bef1 = str;
+    return 1;
+}
+
+nosave int end_output()
+{
+    mixed tmp;
+
+    if (!OWN || !this_object())
+    {
+	output = "";
+	return 1;
+    }
+
+    switch(mode)
+    {
+      case "pipe":
+	if (bef2 == "more")
+	{
+	    tmp = ({string})OWN->more(explode(output[0..<2],"\n"));
+	    output = "";
+	    if (tmp)
+		FAIL(M_ERR(tmp));
+	    return 1;
+	}
+	else if (bef2 == "tail")
+	{
+	    write(implode(explode(output,"\n")[<24..],"\n"));
+	    output = "";
+	    return 1;
+	}
+	else if (bef2=="cat")
+	{
+	    tmp = explode(output,"\n");
+	    if (sizeof(tmp) > MAX_CAT)
+		output = implode(tmp[0..MAX_CAT - 1],"\n") +
+		    "\n*****TRUNCATED****\n";
+	    write(output);
+	    output = "";
+	    return 1;
+	}
+	else
+	{
+	    tmp = grep_str(bef2[5..],output);
+	    output = "";
+	    return tmp;
+	}
+	break;
+      case "append":
+      case "file":
+	write_file(bef2,output);
+	break;
+      case "objekt":
+	if (bef2)
+	{
+	    tmp = explode(output,"\n");
+	    if (sizeof(tmp) > MAX_CAT)
+		output = implode(tmp[0..MAX_CAT - 1],"\n") +
+		    "\n*****TRUNCATED****\n";
+	    tell_object(bef2,"Meldung von " +
+		    capitalize(({string})OWN->query_real_name()) + ":\n" +
+		    output);
+	    tell_object(OWN,"Output von '" + query_verb() + " " + bef1 +
+		    "' an " + Name(bef2) + " weitergeleitet.\n");
+	}
+	else
+	    tell_object(OWN,"Ziel-Objekt ist nicht mehr vorhanden.\n");
+	break;
+      default:
+	tmp = explode(output[0..<2],"\n");
+	if (sizeof(tmp) >= max_output)
+	{
+#if 0 // Wird nicht mehr benoetigt, da more geschachtelt werden kann.
+	    if (query_input_pending(OWN))
+	    {
+		if (sizeof(tmp) > MAX_CAT)
+		    output = implode(tmp[0..MAX_CAT - 1],"\n") +
+			"\n*****TRUNCATED****\n";
+		write(output);
+		output = "";
+		return 1;
+	    }
+#endif
+	    if (strlen(output))
+	    {
+		tmp = ({string})OWN->more(tmp,0,0,M_AUTO_END);
+		output = "";
+		if (tmp)
+		    FAIL(M_ERR(tmp));
+	    }
+	}
+	else
+	    tell_object(OWN,output);
+    }
+    output = "";
+    return 1;
+}
+
+private int grep_str(string str, string in)
+{
+    string para, gr, *out, *tmp;
+    int i, not_in;
+
+    if (!begin_output(&str))
+	return 0;
+
+    if (sscanf(str,"-%s %s",para,gr) != 2)
+    {
+	para = "";
+	gr = str;
+    }
+    for(i = 0; i < strlen(para); i++)
+	switch(para[i])
+	{
+	  case 'i':
+	    in = lower_case(in);
+	    gr = lower_case(gr);
+	    break;
+	  case 'v':
+	    not_in = 1;
+	    break;
+	  default:
+	    FAIL("Fehler im Grep-Parameter.\n");
+	}
+    tmp = explode(in,"\n")[0..<2];
+    out = regexp(tmp,gr);
+    if (!out)
+	FAIL("Fehler in Regular-Expression '" + gr + "'\n");
+    if (not_in)
+	out = tmp - out;
+    output += implode(out,"\n") + "\n";
+    if (!end_output())
+	return 0;
+    return 1;
+}

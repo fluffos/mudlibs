@@ -1,0 +1,371 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/second.c
+// Description:
+// Author:	Garthan
+// Modified:    Sissi (17.7.97) - Register listet jetzt nicht nur
+//                      Zweitie -> Gott auf sondern auch Gott -> Zweitie.
+
+// UID: Apps
+
+//
+// $Log: second.c,v $
+// Revision 1.17  2015/01/17 18:09:28  myonara
+// query_all_seconds_and_specials
+//
+// Revision 1.16  2013-03-16 15:39:16  gnomi
+// Portalbesucher aus HomeMUDs werden als Testies gefuehrt.
+//
+// Revision 1.15  2010-10-28 18:23:00  sorcerer
+// Darstellung entzerrt (lange Gruppennamen)
+//
+// Revision 1.14  2009-07-30 16:57:25  gnomi
+// VARARGS raus.
+//
+// Revision 1.13  2009-06-17 07:44:22  gnomi
+// Unterstuetzung fuer Gruppen-NPCs.
+//
+// Revision 1.12  2009-03-20 07:46:01  gnomi
+// Static Actions raus.
+//
+// Revision 1.11  2005/05/26 00:55:26  gnomi
+// Goetter auf Urlaub beachten.
+//
+// Revision 1.10  2004/01/28 23:24:36  gnomi
+// Hinweistext geaendert: Anmeldung der Zweities uebers Einstellungsmenue.
+//
+// Revision 1.9  2003/10/01 00:42:19  gnomi
+// Admins duerfen sich auch Testies anmelden, die nicht eingeloggt sind...
+//
+// Revision 1.8  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.7  2002/05/26 10:49:33  sissi
+// Formulierungen so geaendert, dass klar wird, dass man hier Testies
+// anmeldet und nicht etwa Spielzweities.
+//
+// Revision 1.6  2002/01/17 23:40:16  gnomi
+// Konsistenzcheck erweitert, so dass auch getest wird, ob derjenige noch Gott
+// ist. Ausserdem ein weiteres Mapping eingebaut, fuer Chars, welche News und
+// Mail schreiben duerfen, obwohl sie vielleicht zu jung sind. (Zweities von
+// Spielern, die fuer Ankeundigungen verwendet werden.)
+// TODO: EIn Interface (add_action) dafuer
+//
+// Revision 1.5  2002/01/13 04:49:58  freaky
+// query_long() umgestellt.
+//
+// Revision 1.4  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.3  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+nosave variables inherit "/i/item";
+nosave variables inherit "/i/install";
+nosave variables inherit "/i/tools/security";
+
+#include <level.h>
+#include <more.h>
+#include <uids.h>
+#include <apps.h>
+#include <portal.h>
+
+private mapping second = ([]);
+private mapping writer = ([]);
+private mapping special = ([]);
+
+#define SAVE_FILE "/var/second"
+
+nosave string desc = "Das Register der Testies.\n"+
+   "Melde Deine Testcharaktere hier mit 'melde <name>' an,\n"+
+   "so dass sie nicht mehr in der Spielerliste erscheinen\n"
+   "und als Testies, mit denen Du experimentieren darfst,\n"
+   "gekennzeichnet sind.\n"
+   "Achtung, hier meldest Du *nicht* Zweities an, mit denen Du\n"
+   "spielen willst; diese meldest Du im Menue \"Zweitcharaktere\"\n"
+   "im Einstellungsmenue an.\n";
+
+string query_long(object who)
+{
+   return desc + "Man kann das Register lesen.\n"+
+    (adminp(who) ? "Admin Kommandos: loesche, konsistenz.\n" : "");
+}
+
+int sort_owner(string a, string b)
+{
+    if (second[a]==second[b]) return a<b;
+    return second[a]<second[b];
+}
+
+varargs string query_read(string rest, string str)
+{
+   string *indices, *indices2;
+   string res;
+   int i;
+
+   res = desc + "\n"+
+   "Testie     Gott                    Gott       Testie\n"
+   "------     ----                    ----       ------\n";
+   indices = sort_array(m_indices(second), #'<);
+   indices2 = sort_array(m_indices(second),#'sort_owner);
+   for(i = sizeof(indices); i--;)
+      res += sprintf("%-10s %-20s    %-10s %-s\n",
+		capitalize(indices[i]),
+		capitalize(second[indices[i]]),
+		capitalize(second[indices2[i]]),
+		capitalize(indices2[i]));
+
+
+   res += "\n"+
+   "Testie       Gruppe\n"
+   "------       ------\n";
+   indices = sort_array(m_indices(special), #'<);
+   for(i = sizeof(indices); i--;)
+      res += sprintf("%-10s   %-26s\n",
+	        capitalize(indices[i]), special[indices[i]]);
+   res += "\n"+
+   "Gruppe                                        Testie\n"
+   "------                                        ------\n";
+   indices2 = sort_array(m_indices(special),
+       function int(string a, string b)
+       {
+          return (special[a]==special[b])?(a<b):(special[a]<special[b]);
+       });
+   for(i = sizeof(indices2); i--;)
+      res += sprintf("%-45s %-10s\n",
+                special[indices2[i]], capitalize(indices2[i]));
+
+   this_player()->more(explode(res,"\n"),0,0,M_AUTO_END);
+   return "";
+}
+
+void create()
+{
+   init_security_for_actions();
+   set_name("register");
+   set_gender("saechlich");
+   set_id(({"register", "second"}));
+   set_short("Das Register der Testcharaktere");
+   restore_object(SAVE_FILE);
+}
+
+void init()
+{
+   add_action("insert_second", "melde");
+   add_action("delete_second", "loesche");
+   add_action("konsistenz", "konsistenz");
+}
+
+void save()
+{
+   save_object(SAVE_FILE);
+}
+
+int remove()
+{
+   save();
+   install::remove();
+}
+
+int insert_second(string str)
+{
+   string tmp;
+   object zweit;
+   if(!str)
+   {
+      notify_fail(query_verb()+" wen?\n");
+      return 0;
+   }
+   if(!wizp(this_player()) || !check_security())
+   {
+      notify_fail("Du darfst das noch nicht!\n");
+      return 0;
+   }
+   str = (explode(lower_case(str)," ")-({""}))[0];
+   if(!adminp(this_player()) &&
+       (!(zweit = find_player(str)) || !present(str, environment())))
+   {
+      notify_fail(capitalize(zweit?zweit->query_real_name():str)+
+		  " ist nicht hier!\n");
+      return 0;
+   }
+   if(wizp(zweit))
+   {
+      notify_fail("Es gibt keine Zweit/Testiegoetter!\n");
+      return 0;
+   }
+   if(!(tmp = this_player()->query_real_name()))
+   {
+      notify_fail("Anonym geht das nicht.\n");
+      return 0;
+   }
+   second[str,0]=tmp;
+   write("Ok.\n");
+   remove_call_out("save");
+   call_out("save",30);
+   return 1;
+}
+
+nosave int delete_second(string str)
+{
+   string tmp;
+
+   if(!str)
+   {
+      notify_fail(query_verb()+" wen?\n");
+      return 0;
+   }
+   if(!wizp(this_player()) || !check_security())
+   {
+      notify_fail("Du darfst das noch nicht!\n");
+      return 0;
+   }
+   str = lower_case(str);
+   if(!member(second, str))
+   {
+      notify_fail("Solch einen Testcharakter ist nicht gemeldet!\n");
+      return 0;
+   }
+   if(!adminp(this_player()))
+   {
+      write("Einmal Testcharakter, immer Testcharakter!\n");
+      return 1;
+   }
+   m_delete(second, str);
+   write("Ok.\n");
+   remove_call_out("save");
+   call_out("save",30);
+   return 1;
+}
+
+int delete_testplayer(string name)
+{
+   if(previous_object() && geteuid(previous_object()) == ROOT_UID)
+   {
+      m_delete(second, name);
+      save();
+      return 1;
+   }
+}
+
+string is_testplayer(mixed who)
+{
+   string name, mud;
+
+   if(objectp(who))
+      who = who->query_real_name();
+
+   if(sscanf(who, "%s@%s", name, mud) == 2)
+      return PORTAL_SERVER->is_homemud(mud);
+
+   return second[who];
+}
+
+string *query_testplayers_of(mixed who)
+{
+   if (objectp(who))
+      who = who->query_real_name();
+   return m_indices(filter_indices(second,
+   	lambda(({'a}),({#'==, who, ({#'[, second, 'a})}))));
+}
+
+string is_testplayer_or_special(mixed who)
+{
+   object ob;
+   
+   if(objectp(who))
+   {
+      if(!playerp(who))
+          return 0;
+      ob = who;
+      who = who->query_real_name();
+   }
+   else if(stringp(who))
+      ob = find_player(who);
+   
+   return (ob && ob->query_current_wiz_owner()) ||
+          second[who] || special[who];
+}
+
+
+/*
+ * Zum Melden von Chars, die ans Brett schreiben duerfen, auch wenn es
+ * keine Zweities von Goettern sind. Ein besseres Interface kommt spaeter,
+ * jetzt geht das mit:
+ *   zlpc "/apps/second"->query_writer()["charname"]="Kleine Erklaerung";
+ * Loeschen mit:
+ *   zlpc mapping w="/apps/second"->query_writer(); w-=(["charname"]);
+*/
+mapping query_writer()
+{
+    if(!adminp(this_interactive()) || this_player()!=this_interactive() ||
+	geteuid(previous_object())!=geteuid(this_player()))
+	return 0;
+    return writer;
+}
+
+int is_writer(string name)
+{
+    return member(writer, name);
+}
+
+mapping query_special()
+{
+    if(!adminp(this_interactive()) || this_player()!=this_interactive() ||
+	geteuid(previous_object())!=geteuid(this_player()))
+	return copy(special);
+    return special;
+}
+
+string is_special(string name)
+{
+    return special[name];
+}
+
+string * query_all_seconds_and_specials()
+{
+    return m_indices(second) + m_indices(special);
+}
+
+nosave int konsistenz()
+{
+   string *idxs, val;
+   int i;
+
+   if(!adminp(this_player()) || this_player() != this_interactive() || !check_security())
+   {
+      write("Finger weg! Danke.\n");
+      return 1;
+   }
+
+   for(i = sizeof(idxs = m_indices(second)); i--;)
+      if(!idxs[i] || strlen(idxs[i]) <= 1)
+	 m_delete(second, idxs[i]);
+      else
+      if(!player_exists(idxs[i]))
+      {
+	 write(idxs[i]+" existiert nicht, wurde entfernt.\n");
+	 m_delete(second, idxs[i]);
+      }
+      else
+      if(!(val = second[idxs[i]]) || strlen(val) <= 1)
+	 m_delete(second, idxs[i]);
+      else
+      if(!player_exists(val))
+      {
+	 write(val+" existiert nicht, "+idxs[i]+" wurde entfernt.\n");
+	 m_delete(second, idxs[i]);
+      }
+      else if(!GOETTER_REGISTER->is_wiz(val) &&
+              !GOETTER_REGISTER->is_wiz_on_vacation(val))
+          write(val+" ist kein Gott mehr, hat aber Testie "+idxs[i]+".\n");
+
+   write("Ok.\n");
+   return 1;
+}
+
+void prepare_renewal() { save(); }
+void finish_renewal(object neu) {}
+void abort_renewal() {}

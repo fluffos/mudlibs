@@ -1,0 +1,420 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/adv_guild.c
+// Description: Abenteurergilde
+// Author:      Francis
+
+inherit "/i/room";
+
+#include <config.h>
+#include <gilden.h>
+#include <level.h>
+
+#define S_NAME		0
+#define EXP_MIN		1
+#define EXP_MAX		2
+#define BEGIN_SILBEN    3
+
+mixed *staende = ({
+    ({ "wanderer", 1,250,"wander","laeufe","laufe","streune",
+	                 "bettle","bettel","wald","waeld","sorg" }),
+    ({ "krieger", 120,340,"kriege","kampf","kaempf","sold","soeld",
+			  "wacht","waecht","schuetz","traege","werfe",
+			  "haue","feld","jungfr","knecht"}),
+    ({ "ritter", 340,600,"ritter","reit","amazon","burg","stein","fels"}),
+
+    ({ "kriegsherren", 600,900,"kriegsherr","offiz","oberst","general",
+			       "schlacht","schlaecht","strateg","taktik"}),
+    ({ "magier", 666,900,"magi","hex","kraut","kraeut","misch","gift",
+	   		 "zaub"}),
+    ({ "barden", 280,850,"bard","spiel","sing","saeng","sang","floet",
+			 "klampf","harf","leier","glueck","pech"}),
+    ({ "bauern", 1,180,"bauer","baeuer","land","acker","pflug","knecht",
+	   	       "magd","maegd","winze","feld"}),
+    ({ "seeleute", 1,300,"seeleu","seema","seefr","matros","schiffsj",
+			 "schiffsm","maat","bootsm","tauch","fisch"}),
+    ({ "schiffer", 300,700,"schiff","apit","pilot","reed","navig","skip",
+			   "steuer","hand"}),
+    ({ "handwerker", 1,400,"werk","mach","deck","schmied","wagn","meister",
+			   "schneid","tisch","bau","baeu"}),
+    ({ "haendler", 180,450,"handl","haendl","kauf","reis","markt",
+			   "steller"}),
+    ({ "adligen", 500,900,"adlig","adel","graf","herzog","baron","lord",
+	   		  "schloss","fuerst","stein","fels"}),
+    ({ "mediziner", 400,750,"mediz","dok","doc","kraut","kraeut","heil",
+			    "arzt","apoth"}),
+    ({ "geistlichen", 350,900,"geistl","moench","nonne","predig","taeuf",
+			      "pfarr","kardin","abt","bischof","pope"}),
+    ({ "schauspieler", 130,610,"spiel","schau","buehn","darst","komoed",
+			       "trag"}),
+    ({ "gelehrten", 400,800,"wissen","forsch","chem","phys","lese","astro",
+			    "lehr"}),
+    ({ "kreaturen", 1,250,"kreat","vog","voeg","wurm","schlang","wolf",
+			  "woelf","ratt"}),
+    ({ "untiere", 250,570,"untier","dunkel","vamp","drach",
+			  "saur"}),
+    ({ "monster", 570,900,"monst","daem","geist","gesp","tot",
+			  "toed"})
+	});
+
+int convert_rang(string rang)
+{
+    switch(rang)
+    {
+      case "wanderer":
+	  return 0;
+	case "krieger":		
+	    return 1;
+	case "ritter":
+	    return 2;
+	case "kriegsherr":
+	    return 3;
+	case "magier":
+	    return 4;
+	case "barde":
+	    return 5;
+	case "bauer":
+	    return 6;
+	case "seemann":
+	    return 7;
+	case "schiffer":
+	    return 8;
+	case "handwerker":
+	    return 9;
+	case "haendler":
+	    return 10;
+	case "adliger":
+	    return 11;
+	case "mediziner":
+	    return 12;
+	case "geistlicher":
+	    return 13;
+	case "schauspieler":
+	    return 14;
+	case "gelehrter":
+	    return 15;
+	case "kreatur":
+	    return 16;
+	case "untier":
+	    return 17;
+	case "monster":
+	    return 18;
+      }
+    return 0;
+}
+
+void init() {
+    add_action("silben","silben");
+    add_action("staende","staende");
+    add_action("titel","titel");
+    add_action("beitritt", "beitritt");
+    add_action("austritt", "austritt");
+}
+
+void create() {
+    set_own_light(1);
+    add_type("kunstlicht",1);
+    set_short("Die Gilde der Abenteurer");
+    set_long(
+"In der Abenteurergilde.\n"+
+"Diese Gilde ist die aelteste ueberhaupt in Magyra und ist weit ueber\n"+
+"die Grenzen Tadmors hinaus bekannt und beruehmt. Sie nimmt im Gegensatz zu\n"+
+"anderen Gilden jeden vorurteilslos und ohne irgendwelche Bedingungen auf.\n"+
+"Auch sind in ihr alle Staende vertreten, von den Bauern bis zu den Adligen !\n"+
+"Alle Mitglieder koennen sich ihren Stand frei auswaehlen, wobei die\n"+
+"hoeheren Staende allerdings erst den erfahreneren Abenteurern offenstehen.\n"+
+"\n"+
+"Moegliche Kommandos: staende, beitritt <stand>,\n"+
+"                     silben <stand>, titel, titel <neuer titel>,\n"+
+"                     austritt.\n"+
+"\n");
+    set_exits(({ "/d/Vaniorh/uluji/ile/plaza2" }),({ "osten" }));
+}
+
+
+private int get_exp(object player) {
+	int exp;
+
+    if (!player)
+	return 0;
+    exp = (int)player->query_sum_skill();
+    return (exp*1000)/TOTAL_EXPERIENCE;
+}
+
+int beitritt(string new_stand)
+{
+    object player;
+    string player_name, stand_name;
+    int stand, exp, retcode, a, gret, rret;
+    mixed *stand_desc;
+
+
+    player = this_player();
+    player_name = (string)player->query_cap_name();
+
+    if (guestp(player))
+    {
+	write("Gaeste duerfen das nicht.\n");
+	return 1;
+    }
+
+    if (!new_stand) {
+	write("Welchem Stand wollen Sie beitreten ?\n");
+	return 1;
+	}
+    new_stand = lower_case(new_stand);
+    stand = -1;
+    for (a=0; a<sizeof(staende); a++)
+	if (staende[a][S_NAME] == new_stand)
+	{
+	    stand = a;
+	    break;
+	}
+
+    if (stand < 0)
+    {
+	write("Diesen Stand gibt es nicht !\n");
+	return 1;
+        }
+
+    exp = get_exp(player);
+
+    if (exp < staende[stand][EXP_MIN]) {
+	write("Fuer diesen Stand sind Sie noch nicht erfahren genug.\n");
+	return 1;
+        }
+    stand_name = capitalize(new_stand);
+    
+    gret = player->enter_gilde();
+    rret = player->set_rang(stand);
+    if (gret == INVALID_CALLER)
+    {
+	write("Diese Gilde ist momentan gesperrt.\n"+
+	      "Wenden Sie sich bitte an den Gildenmeister "+
+	      ENTRY(GILDEN_MEISTER)+".\n");
+	return 1;
+    }
+
+    if (gret == OTHER_GUILD)
+    {
+	write("Sie muessen zuerst aus ihrer alten Gilde austreten.\n");
+	return 1;
+    }
+
+    player->set_title("vom Stande der "+stand_name);
+
+    write("Willkommen im Stand der "+stand_name+"!\n");
+    say(player_name+" ist soeben in den Stand der "+stand_name+
+	" aufgenommen worden.\n");
+    return 1;
+}
+
+
+private void write_silben(int stand) {
+    write(implode(staende[stand][BEGIN_SILBEN..]," ")+"\n");
+}
+
+int titel(string titel) {
+    object player;
+    string player_name, *worte, tmp1, tmp2, silbe, wort, rang;
+    string o_name;
+    int stand, exp, a, b, stand_exp, anz_worte, gefunden, distanz, res;
+
+    player = this_player();
+    player_name = (string)player->query_cap_name();
+
+    o_name = player->query_gilde();
+    if (!o_name || o_name != ENTRY(GILDEN_NAME)) {
+	write("Sie sind nicht Mitglied dieser Gilde.\n");
+	return 1;
+	}
+    stand = player->query_rang();
+    if (stand < 0 || stand >= sizeof(staende))
+    {
+	write("Sie muessen zuerst einem Stand beitreten.\n");
+	return 1;
+    }
+    exp = get_exp(player);
+
+    stand_exp = ((exp - staende[stand][EXP_MIN]) * 100) /
+	        (staende[stand][EXP_MAX] - staende[stand][EXP_MIN]);
+
+    if (stand_exp >= 100) {
+	anz_worte = 5;
+	distanz = 999;
+	rang = "den hoechsten";
+	}
+    else if (stand_exp >= 50) {
+	anz_worte = 4;
+	distanz = ((100-stand_exp)*100) / 50;
+	rang = "einen hohen";
+	}
+    else if (stand_exp >= 20) {
+	anz_worte = 3;
+	distanz = ((50-stand_exp)*100) / 30;
+	rang = "einen mittleren";
+	}
+    else {
+	anz_worte = 2;
+	distanz = ((20-stand_exp)*100) / 20;
+	rang = "einen niedrigen";
+	}
+    if (!titel) {
+	write("Willkommen, "+player_name+" vom Stande der "+
+	      capitalize(staende[stand][S_NAME])+" !\n\n"+
+	      "Sie bekleiden in Ihrem Stand "+rang+
+	      " Rang, damit steht Ihnen ein Titel\n"+
+	      "mit maximal "+anz_worte+
+	      " Worten zu, wobei eine der folgenden Silben\n"+
+	      "enthalten sein muss:\n\n");
+	write_silben(stand);
+	if (distanz == 999)
+	    write("\nVielleicht koennen Sie ja innerhalb eines anderen Standes mehr erreichen ...\n");
+	else if (distanz >= 75)
+	    write("\nBis zum naechsten Rang innerhalb Ihres Standes ist's allerdings noch\n"+
+		  "ein sehr langer Weg.\n");
+	else if (distanz >= 50)
+	    write("\nBis zum naechsten Rang ist's noch ein langer Weg.\n");
+	else if (distanz >= 25)
+	    write("\nBis zum naechsten Rang dauerts nicht mehr so lang.\n");
+	else if (distanz > 0)
+	    write("\nBald haben Sie den naechsten Rang erreicht.\n");
+	say(Der(this_player())+
+	    " informiert sich ueber "+seinen((["name":"Titel-Moeglichkeiten",
+	    "gender":"weiblich"]),0,this_player())+".\n");
+	return 1;
+	}
+    worte = explode(lower_case(titel)," ");
+    if (!worte || sizeof(worte) == 0) {
+	write("Welchen Titel wollen Sie sich zulegen ?\n");
+	return 1;
+	}
+    if (sizeof(worte) > anz_worte) {
+	write("Ihnen steht nur ein Titel mit maximal "+
+	      anz_worte+" Worte zu.\n");
+	say(Der(this_player())+
+	    " informiert sich ueber "+seinen((["name":"Titel-Moeglichkeiten",
+	    "gender":"weiblich","plural":1]),0,this_player())+".\n");
+	return 1;
+	}
+    gefunden = 0;
+    for (a=0 ;a<sizeof(worte); a++) {
+	wort = "|"+worte[a]+"|";
+	for (b=BEGIN_SILBEN; b<sizeof(staende[stand]); b++) {
+	    silbe = staende[stand][b];
+	    res = sscanf(worte[a],"%s"+silbe+"%s",tmp1,tmp2);
+	    if (res > 0) {
+		gefunden = 1;
+		break;
+		}
+	    }
+	if (gefunden)
+	    break;
+	}
+    if (!gefunden) {
+	write("In ihren Titel muss mindestens eine der folgenden Silben auftreten:\n\n");
+	write_silben(stand);
+	say(Der(this_player())+
+	    " informiert sich ueber "+seinen((["name":"Titel-Moeglichkeiten",
+	    "gender":"weiblich","plural":1]),0,this_player())+".\n");
+	}
+    else {
+	player->set_title(titel);
+	write("Ok.\n");
+	say(Der(this_player())+" hat soeben "+seinen((["name":"Titel",
+	    "gender":"maennlich"]),0,this_player())+" geaendert.\n");
+	}
+    return 1;
+}
+
+int staende(string str) {
+    object player;
+    string player_name, *indices;
+    int stand, exp, a, zumerstenmal;
+
+    player = this_player();
+    player_name = (string)player->query_cap_name();
+
+    exp = get_exp(player);
+    zumerstenmal = 1;
+
+
+    for (a=0; a<sizeof(staende); a++)
+	if (exp >= staende[a][EXP_MIN]) {
+	    if (zumerstenmal) {
+		zumerstenmal = 0;
+		write("Folgende Staende stehen Ihnen offen:\n");
+		}
+	    write("Stand der "+capitalize(staende[a][S_NAME])+"\n");
+	    }
+    if (zumerstenmal)
+	write(
+ "Sie koennen erst dann in einen Stand eintreten, wenn Sie schon etwas\n"+
+ "Erfahrung gesammelt haben.\n");
+    else
+	say(Der(this_player())+" schaut sich die Liste der Staende an.\n");
+
+    return 1;
+}
+    
+int silben(string str) {
+    object player;
+    int stand, gefunden, a;
+    string player_name;
+    mixed *stand_desc;
+
+    player = this_player();
+    player_name = (string)player->query_cap_name();
+
+    if (!str) {
+	write("Von welchem Stand moechten Sie die Silben wissen ?\n");
+	return 1;
+	}
+    str = lower_case(str);
+
+    stand = -1;
+    for (a=0; a<sizeof(staende); a++)
+	if (str == staende[a][S_NAME])
+	{
+	    stand = a;
+	    break;
+	}
+
+    if (stand < 0) {
+	write("Diesen Stand gibt es nicht !\n");
+	return 1;
+        }
+    write("In diesem Stand sind folgende Silben im Titel zugelassen:\n\n");
+    write_silben(stand);
+    say(Der(this_player())+" schaut sich die Liste der Silben an.\n");
+    return 1;
+}
+
+int austritt(string str) {
+    string gender;
+    
+    switch(this_player()->leave_gilde())
+    {
+      case INVALID_CALLER:
+	write("Diese Gilde ist momentan gesperrt\n"+
+	      "bitte wenden Sie sich an den Gildenmeister "+
+	      ENTRY(GILDEN_MEISTER)+".\n");
+	return 1;
+      case NO_GUILD:
+      case OTHER_GUILD:
+	write("Sie sind nicht Mitglied dieser Gilde.\n");
+	return 1;
+    }
+    write("Mit Bedauern nehmen wir deinen Abschied zur Kenntnis !\n");
+    say(Der(this_player())+
+	" ist soeben aus der Abenteurergilde ausgetreten.\n");
+
+    gender = (string)this_player()->query_gender();
+    if (gender == "weiblich")
+	this_player()->set_title("die Standeslose");
+    else if (gender == "maennlich")
+	this_player()->set_title("der Standeslose");
+    else
+	this_player()->set_title("das Standeslose");
+    return 1;
+}

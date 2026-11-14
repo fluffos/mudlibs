@@ -1,0 +1,1717 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/simul_efun/parse_com.c
+// Description: Parse_com um Objekte zu finden
+// Author:	Francis
+// Modified by: Freaky : Einfuehren von virtuellen Objekten (23.12.93)
+//			 Dadurch komplette Umstellung von parse_com
+// Modified by: Freaky : Fixed Bug mit Objekten und v-Items gleicher ID
+//			 (08.02.94)
+// Modified by: Freaky : Casting jetzt mit ({type})ob->fun() anstatt (type)
+//			 (29.06.94)
+// Modified by: Monty  : Man kann jetzt v_items an v_items mit betrachte <ding>
+//                       am oder im <ding> angucken
+// Modified by:	Freaky : sscanf durch strstr ersetzt, da sscanf Fehler macht
+//			 (14.09.95)
+// Modified by: Monty (08.05 1996) parse_com_error() modernisiert,
+//			 Bei PARSE_NOT_SEARCHED wird jetzt 1 returnt und die
+//			 default-Fehlermeldung gesetzt.
+// Modified by: Kurdel (19.02.97) neben "alle","alles" auch "jedes" u.ae.
+// Modified by: Parsec (15.05.98) parse_com() und quick_search() nehmen jetzt
+//                       auch Objektlisten in denen gesucht werden soll
+//              Freaky (23.04.2000) me() repariert (me("das") liefert 0)
+//              Sissi  (01.09.2000) easy parse com eingebaut, erstmal nur
+//                       zu Testzwecken und als Diskussionsgrundlage
+//              Sissi  (09.09.2000) easy parse com wieder ausgebaut.
+//
+// $Log: parse_com.c,v $
+// Revision 1.33  2016/03/21 12:45:31  gnomi
+// strlen -> sizeof
+//
+// Revision 1.32  2015/08/26 21:40:30  gnomi
+// Anpassungen an LDMud 3.5.0
+//
+// Revision 1.31  2013/05/01 18:44:24  sorcerer
+// Doku update
+//
+// Revision 1.30  2009-09-07 22:09:28  gnomi
+// V-Items an unsichtbaren Objekten ignorieren.
+//
+// Revision 1.29  2009-03-20 08:22:18  gnomi
+// Doku zu PARSE_ALL_MATCHES klarergestellt.
+// Im check_item() abfangen, dass der Satzteil keine ID haben kann.
+//
+// Revision 1.28  2008-04-09 07:57:37  gnomi
+// parse_com_neu -> parse_com.
+//
+// Revision 1.15  2008/01/16 09:48:18  gnomi
+// Eval-Check eingebaut.
+//
+// Revision 1.14  2007/08/30 20:36:30  gnomi
+// Die generischen IDs wie "ding" und "lebewesen" werden nur dann erkannt, wenn
+// das Objekt sichtbar (!V_ATOM_NOLIST) ist.
+//
+// Revision 1.13  2007/07/27 15:11:17  gnomi
+// parse_com-Doku neu geschrieben.
+//
+// Revision 1.12  2007/05/26 23:11:27  gnomi
+// Typo. Ausserdem in der Fehlerbeschreibung den Raum nicht erwaehnen (weil er
+// keinen Namen hat).
+//
+// Revision 1.11  2006/10/02 21:24:13  gnomi
+// Invis-Objekte frueher rausfiltern, da die Invis-Sortierung nicht bestehen
+// bleibt (weil this_player() immer am Ende eingetragen wird).
+//
+// Revision 1.10  2006/06/07 20:37:47  gnomi
+// Weniger Einschraenkungen durch Dunkelheit.
+//
+// Revision 1.9  2006/04/23 00:27:40  gnomi
+// Reststring besser ermitteln.
+//
+// Revision 1.8  2006/04/13 06:59:36  gnomi
+// Nuller bei Ortsangaben rausfiltern.
+//
+// Revision 1.7  2006/03/16 21:51:54  gnomi
+// here() beachtet nicht mehr Gross-/Kleinschreibung.
+//
+// Revision 1.6  2006/03/11 23:59:38  gnomi
+// Noch eine kleinere Korrektur bei der Fehlermeldungsauswahl
+// (reine Zahlwoerter dort nicht als ID akzeptieren).
+//
+// Revision 1.5  2006/03/11 23:41:15  gnomi
+// Korrektur im build_path.
+// plural_id wird nur dann abgefragt, wenn es notwendig ist.
+//
+// Revision 1.4  2006/02/21 21:25:40  gnomi
+// Lebewesen erkennen und weitere Bugfixes.
+//
+// Revision 1.3  2006/02/05 23:09:21  gnomi
+// Diverse kleine Fehlerchen.
+//
+// Revision 1.2  2006/01/13 08:22:55  gnomi
+// parse_com_error: exec_command-IDs nicht in der Fehlermeldung erwaehnen.
+//
+// Revision 1.1  2005/11/18 21:48:39  gnomi
+// Neues Parse_com fuer TestMUDs eingebaut.
+//
+// Revision 1.25  2005/08/28 21:15:55  gnomi
+// PARSE_DONT_SPLIT dokumentiert.
+//
+// Revision 1.24  2005/08/28 00:20:53  gnomi
+// Neues Count-Ob-Handling.
+//
+// Revision 1.23  2005/08/27 23:25:55  gnomi
+// Geschweifte Klammern zur besseren Lesbarkeit eingefuegt.
+//
+
+#pragma save_types
+#pragma strict_types
+#include "/sys/invis.h"
+#include "/sys/parse_com.h"
+#include "/sys/notify_fail.h"
+#include "/sys/v_item.h"
+
+#undef DEBUG
+#define DEBUG_ME 0
+#define DEBUG_HERE 0
+
+int playerp(mixed ob);
+//inherit "/secure/simul_efun/deklin";
+
+#ifdef DEBUG
+#include "/sys/level.h"
+#define D(x) if (this_interactive() && \
+		 adminp(this_interactive())) \
+		 printf("x:%O:%d\n",x,get_eval_cost())
+#else
+#define D(x)
+#endif
+
+#define EVAL_RESERVE 200000
+
+
+/******************************************************************************
+ * Alles zu parse_com:
+ */
+nosave string *meinesgleichen = ({ "mein","meine","meiner",
+			    "meines","meinen","meinem" });
+/* Deaktivieren, wg. der Seine in Gallien.
+nosave string *seinesgleichen = ({ "sein","seine","seiner",
+			    "seines","seinen","seinem",
+			    "ihr","ihre","ihrer",
+			    "ihres","ihren","ihrem" });
+*/
+nosave string *seinesgleichen = ({ });
+nosave string *hiesiges = ({ "hiesig","hiesige","hiesiger",
+			     "hiesiges","hiesigen","hiesigem" });
+nosave string *best_artikel = ({
+		"der","die","das","den","dem","des",
+		"dieser","diese","dieses","diesen","diesem" });
+nosave string *unbest_artikel = ({
+		"ein","eine","einen","einem","einer","eines" });
+nosave string *zahlen = ({"eins", "zwei", "drei", "vier", "fuenf", "sechs",
+		"sieben", "acht", "neun", "zehn", "elf", "zwoelf" });
+nosave string *dinge = ({"ding", "dinge", "sache", "sachen",
+			 "gegenstand", "gegenstaende", "zeug", "zeugs" });
+nosave string *personen = ({"person", "personen", "gestalt", "gestalten",
+			    "lebewesen", "wesen" });
+nosave string *alles = ALLES;
+
+string *query_pc_meinesgleichen()
+{
+    return copy(meinesgleichen);
+}
+string *query_pc_artikel()
+{
+    return best_artikel + unbest_artikel;
+}
+string *query_pc_dinge()
+{
+    return copy(dinge);
+}
+string *query_pc_alles()
+{
+    return copy(alles);
+}
+
+/* Kurzer Ueberblick ueber die parse_com-Funktionen:
+ ***************************************************
+ * 
+ *  - parse_com trennt den Befehl in einzelne Satzteile auf
+ *    (A an B in C), es probiert erst alle Satzteile zu parsen.
+ *    Bei Fehlschlag laesst es immer den hintersten weg, bis
+ *    es irgendwann keine Satzteile mehr gibt oder ein Objekt
+ *    gefunden wurde.
+ *
+ *  - parse_item parst danach jedes einzelne Satzteil, bis auf
+ *    das hintere und klassizifiert die Worte (Ordnungszahl, 
+ *    Artikel, alle/meine/mich, sonstiges). Es sucht noch keine
+ *    Objekte, sondern speichert nur seine Erkenntnisse ab.
+ *
+ *  - parse_first_item parst danach das hinterste Satzteil
+ *    auf aehnliche Art wie parse_item. Nur bei jedem unbekannten
+ *    Wort wird mittel search_items getestet, ob das eine ID
+ *    sein kann und ggf. das Parsing beendet.
+ *
+ *  - search_items sucht nach Objekten mit einer bestimmten ID
+ *    (es geht einfach alle verfuegbaren Objekte durch).
+ *    Es laesst sie entweder von check_item durchpruefen (falls
+ *    es um Objekte geht) oder via search_v_item nach V-Items
+ *    suchen.
+ *
+ *  - search_v_item bastelt aus der Abfrage ein V-Item-Pfad
+ *    und fragt query_v_item bei jedem Kandidaten ab.
+ *
+ *  - check_item prueft, ob alle Bedingungen (Adjektive, Anzahl, usw.)
+ *    auf ein bestimmtes Objekt zutreffen. Falls ja, sucht es
+ *    dann ein Objekt fuer das davor kommende Satzteil mittels
+ *    search_item. (Hier gibt es also eine Rekursion fuer jedes
+ *    Satzteil.)
+ *
+ *  - failure speichert eine Fehlermeldung ab. Es funktioniert mit
+ *    Prioritaeten aehnlich wie notify_fail, nur, dass es seine
+ *    Prioritaeten aus den uebergebenen Infos selbst berechnet.
+ *    Schlaegt das parse_com fehl, wird (hoffentlich) die
+ *    aufschlussreichste Fehlermeldung ausgegeben.
+ */
+
+// Die Datenstruktur fuer einen Parsing-Vorgang
+#define PC_OPT_WHERE	0	// Wo soll gesucht werden
+#define PC_OPT_FLAGS	1	// Die uebergebenen Flags
+#define PC_PATH		2	// Der Pfad ('X an Y an Z' => ({ Z, Y, X }))
+#define PC_REST		3	// Reststring
+#define PC_ERROR	4	// Fehlerinfos
+#define PC_SIZE		5	// Die Anzahl benoetigter Felder
+
+// Die Eintraege im Pfad
+//  - Eingangsinfos:
+#define PCP_SEARCH	0	// Was der Spieler eingegeben hat.
+#define PCP_PREP	1	// Die gewaehlte Praeposition
+#define PCP_WHERE	2	// Wo gesucht werden soll.
+//  - Durch die Wortanalyse gefunden:
+#define PCP_ID		3	// Die gefundene ID
+#define PCP_POS		4	// Die Position (Ordnungszahl)
+#define PCP_SONST	5	// Sonstige Woerter (Adjektive,
+				// PTitel, Counts, inkl. ID)
+#define PCP_FLAGS	6	// Flags
+#define PCP_REST	7	// Der ganze Rest
+//  - Durch die Suche gewonnen:
+#define PCP_COUNT	8	// Der geparste Count
+#define PCP_OBS		9	// Gefundene Objekte
+#define PCP_SIZE	10	// Die Anzahl benoetigter Felder
+
+// Die Flags fuer PC_FLAGS
+#define PCF_ALL		1	// "alle" kam vor
+#define PCF_MEIN	2	// "mein" kam vor
+#define PCF_SEIN	4	// "sein"/"ihr" kam vor
+#define PCF_HIESIG	8	// ...
+#define PCF_NO_ID	16	// Das Objekt hat keine ID
+#define PCF_LIVING	32	// Das Objekt lebt
+#define PCF_DEAD	64	// Das Objekt lebt nicht.
+#define PCF_COUNTING	128	// Es kam ein Zahlwort vor.
+
+// Die Eintraege fuer die Fehlermeldung
+#define PCE_PRIORITY	0	// Die ermittelte Prioritaet fuer den Fehler.
+#define PCE_CODE	1	// Der Fehlercode
+#define PCE_ID		2	// Die auszugebende ID
+#define PCE_FLAGS	3	// Flags (mein, sein, alle)
+#define PCE_SIZE	4
+
+// Interne Fehlercodes (sortiert nach Genauigkeit, ungenaueste zuerst)
+#define PCEC_ID_NOT_FOUND	1	// Das angegebene Objekt wurde
+					// einfach nicht gefunden.
+#define PCEC_WRONG_ID		2	// Das angegebene Wort passt dort
+					// einfach nicht in den Satz
+					// (z.B. "mich an X", "X in alles")
+#define PCEC_CONDITIONS_FAILED	3	// Die ID wurde gefunden, Adjektiv
+					// PTitel etc. passten aber nicht.
+#define PCEC_TOO_DARK		4	// Es ist zu dunkel.
+#define PCEC_TOO_MANY		5	// "alle drei", aber es gibt vier
+					// davon.
+#define PCEC_NOT_ENOUGH		6	// Man will "drei", aber es gibt nur
+					// zwei davon.
+
+private int simple_parse_count(string word)
+{
+    int tmp;
+    string junk;
+    
+    if(member(unbest_artikel,word) >= 0)
+	return 1;
+    else if ((tmp=member(zahlen, word)) >= 0)
+    {
+	return tmp+1;
+    }
+    else if (sscanf(word,"%d%s",tmp,junk) && junk=="" && tmp>0)
+    {
+	return tmp;
+    }
+}
+
+private int failure(int code, mixed* info, int startidx, string id)
+{
+    int prio;
+    mixed *err = info[PC_ERROR];
+    mixed *pob = info[PC_PATH][startidx];
+
+D(code);
+D(info);
+D(startidx);
+D(id);    
+    
+    prio = sizeof(info[PC_PATH]) + startidx;
+
+D(prio);
+
+    if(err[PCE_PRIORITY] > prio ||
+	(err[PCE_PRIORITY] == prio && 
+	    (err[PCE_CODE] > code ||
+		(err[PCE_CODE] == code && err[PCE_ID] &&
+		    !simple_parse_count(err[PCE_ID])))))
+	    return 0;
+
+    err[PCE_PRIORITY] = prio;
+    err[PCE_CODE] = code;
+    err[PCE_FLAGS] = pob[PCP_FLAGS];
+    // PCF_MEIN/SEIN/HIESIG auch aus den vorherigen sammeln
+    for(int i=0;i<startidx;i++)
+	err[PCE_FLAGS] |= info[PC_PATH][i][PCP_FLAGS] &
+			    (PCF_MEIN|PCF_SEIN|PCF_HIESIG);
+
+    // Jetzt nur noch eine ordentliche ID fuer die
+    // Fehlermeldung suchen.    
+    err[PCE_ID] = 0;
+    foreach(mixed* cob: info[PC_PATH][startidx..<1])
+    {
+D(cob);
+	err[PCE_ID] = trim(implode(cob[PCP_SONST]," ") +
+			(id ? " " + id :
+			 cob[PCP_ID] ? " " + cob[PCP_ID] :
+			 "") +
+			(err[PCE_ID]?(" "+err[PCE_ID]):""));
+
+D(err[PCE_ID]);
+	id = 0;
+
+	if(cob[PCP_POS])
+	    err[PCE_ID] = cob[PCP_POS] + ". " + err[PCE_ID];
+	
+	if(cob[PCP_PREP])
+	    err[PCE_ID] = cob[PCP_PREP][1..<1] + err[PCE_ID];
+    }
+    
+    if(startidx)
+    {
+	if(member(pob[PCP_WHERE], this_player())>=0)
+	    err[PCE_FLAGS] |= PCF_MEIN;
+	else
+	    err[PCE_ID] += " " + ({string}) this_object()->liste(
+		map( pob[PCP_WHERE], (:
+		    !$1->query_room() &&
+		    ($1->query_personal()
+			?"von "+this_object()->deinem($1)
+			:this_object()->deines($1)) :)) -
+		    ({0}));
+//		($1==this_player())?"von dir":this_object()->deines($1) :)));
+    }
+
+D(err);
+
+    // Liefert immer 0, da ein Fehler vorliegt...
+    return 0;
+}
+
+private int search_items(string id, mixed *info, int startidx);
+private int check_item(object item, int pos, string id, mixed* info, int startidx)
+{
+    /* Wir ueberpruefen, ob ein gefundens Objekt mit den restlichen
+       Eigenschaften aus info[startidx] uebereinstimmt.
+       Wir suchen dann auch nach den restlichen Satzteilen.
+       item ist per Referenz zu uebergeben, da das Objekt beim
+       Splitten von CountObs gewechselt wird.
+    */
+    
+    // Also, dann wollen wir mal.
+    //  - Wir muessen PCP_SONST durchgehen und ueberpruefen,
+    //    ob es ein unbestimmter Artikel, Zahl, Adjektiv oder PTitel ist.
+    //    (Die Zahl in PCP_COUNT speichern)
+    //  - Im Erfolgsfalle pos (per Referenz uebergeben)
+    //    inkrementieren und dann mit PCP_POS vergleichen.
+    //  - Die Nachfolgenden Satzteile suchen:
+    //     * PCP_WHERE fuers naechste Objekt setzen
+    //     * Dabei PCF_SEIN behandeln (this_player() ausschliessen)
+    //     * Nach der PCP_ID durch search_item suchen
+    //       (Dabei "dinge" beachten.)
+    
+    mixed *pob = info[PC_PATH][startidx];
+    mixed *pnext;
+    string* adjektive;
+    object splitted;
+    int errcode = PCEC_CONDITIONS_FAILED;
+
+D(item);
+D(pos);
+D(id);
+
+    pob[PCP_COUNT] = 0;
+
+    if (item->undo_split())	// Das Objekt hat sich selbst zerstoert.
+	return 0;
+
+    for(int i=0; i<sizeof(pob[PCP_SONST]); i++)
+    {
+	string word = lower_case(pob[PCP_SONST][i]);
+	int tmp;
+	string junk;
+	
+	// Zuerst CountObjekte
+	if(!pob[PCP_COUNT])
+	{
+	    if(item->query_count() && function_exists("parse_count", item))
+	    {
+		int rest = ({int}) item->parse_count(pob[PCP_SONST][i..<1]+({id}),
+				    &(pob[PCP_COUNT]));
+		
+		if(rest>0 && pob[PCP_COUNT]>0)
+		    i += rest-1;
+		else
+		    pob[PCP_COUNT] = 0;
+	    }
+	    else
+		// Wir zaehlen auch bei Nicht-CountObs
+		pob[PCP_COUNT] = simple_parse_count(word);
+
+	    // Haben wir soviel im Objekt?
+	    // (Bei "alle 3" exakt soviele im Objekt?)
+	    if(pob[PCP_COUNT]>0)
+	    {
+		if(!item->query_count() ||
+		    ((pob[PCP_FLAGS]&PCF_ALL)?
+			(item->query_count() == pob[PCP_COUNT]):
+			(item->query_count() >= pob[PCP_COUNT])))
+		    continue;
+		else if(item->query_count() > pob[PCP_COUNT])
+		    // Fehlercode speichern, aber noch
+		    // weitertesten (auf Artikel, Adjektiv usw.)
+		    errcode = PCEC_TOO_MANY;
+		else
+		    errcode = PCEC_NOT_ENOUGH;
+	    }
+	}
+	
+        if(member(unbest_artikel,word) >= 0)
+	    // Unbestimmte Artikel ignorieren, sofern
+	    // sie das Count-Zeugs ueberlebt haben.
+	    continue;
+	else if(item->adjektiv(word))
+	    continue;
+	else if(i==sizeof(pob[PCP_SONST])-1 && // PTitel nur direkt vor der ID
+	    lower_case(item->query_personal_title()||"")==word)
+	    continue;
+	
+	// Nix gefunden.
+	return failure(errcode, info, startidx, id);
+    }
+
+    // Die Position ueberpruefen.
+    pos++;
+    
+    if(pob[PCP_POS] && pob[PCP_POS]!=pos)
+	return failure(PCEC_CONDITIONS_FAILED, info, startidx, id);
+	
+    // CountOB zerteilen
+    if(pob[PCP_COUNT] && pob[PCP_COUNT] < item->query_count() &&
+	!(info[PC_OPT_FLAGS] & PARSE_DONT_SPLIT))
+    {
+	splitted = ({object}) item->split_object(pob[PCP_COUNT]);
+	if(splitted && splitted != item)
+	{
+	    splitted->delayed_undo_split();
+	    item = splitted;
+	}
+    }
+
+    // Die nachfolgenden Satzteile suchen.
+    startidx++;
+    
+    if(startidx >= sizeof(info[PC_PATH]))
+	return 1;
+
+    pnext = info[PC_PATH][startidx];
+    pnext[PCP_WHERE] = ({ item });
+    
+    // Einschraenkungen testen.
+    if((pnext[PCP_FLAGS] & PCF_HIESIG) && item != environment(this_player()))
+	return failure(PCEC_CONDITIONS_FAILED, info, startidx, 0);
+    if((pnext[PCP_FLAGS] & PCF_MEIN) && item != this_player() &&
+	!this_object()->deep_present(item, this_player()))
+	return failure(PCEC_CONDITIONS_FAILED, info, startidx, 0);
+    if((pnext[PCP_FLAGS] & PCF_SEIN) && (item == this_player() ||
+	this_object()->deep_present(item, this_player())))
+	return failure(PCEC_CONDITIONS_FAILED, info, startidx, 0);
+    
+    if(!(pnext[PCP_FLAGS] & PCF_NO_ID) && sizeof(pnext[PCP_SONST]))
+    {
+	string nid = pnext[PCP_SONST][<1];
+	pnext[PCP_SONST] = pnext[PCP_SONST][0..<2];
+	
+	if(search_items(nid, info, startidx))
+	{
+	    pnext[PCP_ID] = nid;
+	    return 1;
+	}
+	else if(member(dinge, lower_case(nid))>=0)
+	{
+	    pnext[PCP_FLAGS] |= PCF_DEAD;
+	    if(search_items(0, info, startidx))
+	    {
+		pnext[PCP_ID] = nid;
+		return 1;
+	    }
+	    pnext[PCP_FLAGS] &= ~PCF_DEAD;
+	}
+	else if(member(personen, lower_case(nid))>=0)
+	{
+	    pnext[PCP_FLAGS] |= PCF_LIVING;
+	    if(search_items(0, info, startidx))
+	    {
+		pnext[PCP_ID] = nid;
+		return 1;
+	    }
+	    pnext[PCP_FLAGS] &= ~PCF_LIVING;
+	}
+	
+	pnext[PCP_SONST] += ({nid});	
+    }
+    
+    return (pnext[PCP_FLAGS]&PCF_ALL) && search_items(0, info, startidx);
+}
+
+private int search_v_item(string firstid, object* candidates, int pos, mixed* info, int startidx)
+{
+    mixed *pob = info[PC_PATH][startidx];
+    mixed *vi_path;
+    mixed vitem;
+    int vi_flags = (info[PC_OPT_FLAGS] & PARSE_NOSHIMMER_INVIS)?VV_INVIS:0;
+    int ignore_invis = !(info[PC_OPT_FLAGS] & PARSE_NOSHIMMER_INVIS);
+
+D(firstid);
+D(startidx);
+D(info);
+
+    if(!firstid)
+	return 0;
+    
+    // Dann basteln wir uns mal einen V-Item-Pfad zusammen.
+    // (Die Artikel sind noch fuer die CountOB-Behandlung
+    // im PC_SONST vorhanden, die muessen wir rausfiltern.)
+    vi_path = map(info[PC_PATH][startidx+1..<1],
+	(: sizeof($1[PCP_SONST]) && ([
+		"name":		sizeof($1[PCP_SONST])?
+				    lower_case($1[PCP_SONST][<1]):"",
+		"adjektiv":	map($1[PCP_SONST][0..<2],#'lower_case)-
+				    unbest_artikel,
+		"nummer":	$1[PCP_POS],
+	]) :));
+
+    vi_path = ({ ([
+	"name": 	firstid && lower_case(firstid),
+	"adjektiv":	map(pob[PCP_SONST], #'lower_case)-unbest_artikel,
+	"nummer":	pob[PCP_POS] - pos
+	]) }) + vi_path;
+
+    // Wir haben noch kein Satzteil gefunden?
+    // Dann zaehlen wir objektuebergreifend.
+    if(!startidx)
+        m_add(vi_path[0], "offset", 0);
+
+D(vi_path);
+		
+    // Alle V-Items an cont und, falls wir das Startobjekt
+    // suchen, alle V-Items an allen Objekten in cont durchgehen.
+	    
+    foreach(object candidate: candidates)
+    {
+	if(ignore_invis && (({int})candidate->query_invis() & V_ATOM_NOSHIMMER))
+	    continue;
+	
+	vitem = ({mapping})candidate->query_v_item(vi_path, vi_flags);
+	if(vitem)
+	{
+	    // Toll, wir haben was gefunden.
+	    // Jetzt muessen wir die einzelnen V-Items nur auf
+	    // info[PC_PATH] verteilen.
+	    int idx = sizeof(info[PC_PATH]);
+	
+	    while(vitem && idx)
+	    {
+		idx--;
+		
+		info[PC_PATH][idx][PCP_OBS] = ({vitem});
+		
+		if(mappingp(vitem))
+		    vitem = vitem["environment"];
+		else
+		    break;
+	    }
+	    pob[PCP_ID] = firstid;
+	
+	    return 1;
+	}
+    }
+    
+    return 0;
+}
+
+private int search_items(string id, mixed *info, int startidx)
+{
+    /* Wir suchen ein Objekt mit der ID "id", welches auch sonst
+       die Merkmale aus info[PC_PATH][startidx] besitzt.
+       Es werden ebenfalls alle weiteren Objekte unter
+       in info[PC_PATH][startidx+1..] gesucht.
+       
+       Wenn wir erfolgreich sind, tragen wir die ID unter PCP_ID
+       und die Objekte unter PCP_OBS ein und liefern einen Wert !=0
+       zurueck.
+    */
+    
+    mixed *pob = info[PC_PATH][startidx];
+    string lcid = id && lower_case(id);
+    int pos;
+
+D(id);
+D(startidx);
+D(info);
+
+    if(!pob[PCP_OBS])
+	pob[PCP_OBS] = ({});
+
+    if(pob[PCP_FLAGS] & PCF_ALL)
+    {
+	mixed cons = filter(pob[PCP_WHERE], "can_see", this_player());
+	if(!sizeof(cons))
+	    return failure(PCEC_TOO_DARK, info, startidx, id);
+	pob[PCP_WHERE] = cons;
+    }
+    
+    foreach(object cont: pob[PCP_WHERE])
+    {
+	object *obs;
+	
+	// Alle Objekte int cont nur bei startidx==0 oder,
+	// wenn cont transparent ist, durchgehen.
+
+	if(!startidx || (cont->query_transparent() && !living(cont)))
+	{
+	    mixed *iobs; // obs mit invis
+	    
+	    obs = all_inventory(cont);
+	    iobs = transpose_array(({obs,obs->query_invis()}));
+
+	    // Invis15-Objekte ignorieren?
+	    if(!(info[PC_OPT_FLAGS] & PARSE_NOSHIMMER_INVIS))
+		iobs = filter(iobs, (: !($1[1] & V_ATOM_NOSHIMMER) :));
+	
+	    // Bei "alle" beachten wir auch NOLIST-Objekte nicht.
+	    if(pob[PCP_FLAGS] & PCF_ALL)
+		iobs = filter(iobs, (: !($1[1] & V_ATOM_NOLIST) :));
+	
+	    obs = map(sort_array(iobs, (: $1[1] > $2[1] :)), #'[, 0);
+	}
+	else
+	    obs = ({});
+	    
+	if(member(obs, this_player())>=0)
+	{
+	    obs -= ({ this_player() });
+	    if(!(pob[PCP_FLAGS] & (PCF_ALL|PCF_SEIN)))
+		obs += ({ this_player() });
+	}
+	
+	if(pob[PCP_FLAGS] & PCF_LIVING)
+	    obs = filter(obs, #'living);
+	
+	if(pob[PCP_FLAGS] & PCF_DEAD)
+	    obs = filter(obs, (: !living($1) :));
+
+D(pob);
+D(pob[PCP_FLAGS] & (PCF_ALL|PCF_SEIN));
+D(obs);
+	
+	foreach(object ob: obs)
+	{
+	    if ((id?(ob->id(lcid) || 
+		    ((pob[PCP_FLAGS]&(PCF_ALL|PCF_COUNTING)) &&
+			ob->plural_id(lcid)))
+		   :!(({int})ob->query_invis()&V_ATOM_NOLIST)) &&
+		check_item(&ob, &pos, id, info, startidx))
+	    {
+		pob[PCP_OBS] += ({ob});
+		pob[PCP_ID] = id || "";
+		
+		// Also, wenn "alle" angegeben wurde, suchen wir
+		// bedingungslos weiter. Setzen aber 'pos' zurueck.
+		// (z.B. fuer "jede 3. flasche")
+		
+		if(pob[PCP_FLAGS] & PCF_ALL)
+		{
+		    pos = 0;
+		    continue;
+		}
+		
+		// Es wurde eine Anzahl erwartet, aber kein
+		// CountOb gefunden, dann durchzaehlen...
+		if(pob[PCP_COUNT])
+		{
+		    object* cobs = filter(pob[PCP_OBS],
+			(: objectp($1) && $1->query_count() :));
+		
+		    if(sizeof(cobs))
+			pob[PCP_OBS] = cobs;
+		    else if(sizeof(pob[PCP_OBS])==pob[PCP_COUNT])
+			return 1;
+		    else
+			continue;
+		}
+
+		// Satzglied eine Wirkung. Und auch nur dann,
+		// wenn keine Ordnungszahl angegeben wurde.
+		if((info[PC_OPT_FLAGS] & PARSE_ALL_MATCHES) &&
+		    !pob[PCP_POS] && startidx+1 == sizeof(info[PC_PATH]))
+			continue;
+
+		// Wir sind fertig. *jubelier*
+		return 1;
+	    }
+	}
+	
+	// Wenn "all" angegeben wurde, dann kommen wir bis hierher,
+	// obwohl wir ein Ergebnis haben.
+	if(sizeof(pob[PCP_OBS]) && !startidx)
+	{
+	    pob[PCP_ID] = id;
+	    return 1;
+	}
+
+	// V-Items betrachten wir nur dann, wenn "all" nicht angegeben 
+	// wurde.
+	if(!(info[PC_OPT_FLAGS] & PARSE_NO_V_ITEMS) &&
+	   !(pob[PCP_FLAGS] & PCF_ALL))
+	{
+	    if(search_v_item(id,  ({cont})+(startidx?({}):all_inventory(cont)),
+		&pos, info, startidx))
+		    return 1;
+	}
+    }
+    
+    if(sizeof(pob[PCP_OBS]))
+    {
+	pob[PCP_ID] = id;
+	return 1;
+    }
+    
+    return failure(PCEC_ID_NOT_FOUND, info, startidx, id);
+}
+
+/* continue_search wird mit der vermeintlichen ID,
+   dem info-Array und dem Index in info[PC_PATH]
+   aufgerufen und sollte einen Wert != 0 im Erfolgsfalle liefern.
+   (Gleiche Parameter und Rueckgabewerte wie search_items)
+*/
+private int parse_first_item(mixed *info, closure continue_search)
+{
+    /* Wir parsen den hinteren Satzteil (info[PC_PATH][0]]
+       und suchen davon ausgehend alle weiteren Objekte in info[PC_PATH].
+
+       Wenn diese Funktion einen Wert != 0 liefert, dann sind
+       wir fertig. info[PC_PATH][<1][PCP_OBS] enthaelt dann das
+       gesuchte Objekt. Bei 0 ist die Suche fehlgeschlagen.
+    */
+    
+    mixed *pob = info[PC_PATH][0];
+    string *words;
+    
+    pob[PCP_SONST] = ({});
+    pob[PCP_ID] = pob[PCP_POS] = pob[PCP_COUNT] =
+		  pob[PCP_OBS] = pob[PCP_FLAGS] = 0;
+
+D(info);
+    
+    words=explode(regreplace(pob[PCP_SEARCH],","," ",1)," ")-({""});
+    for(int i=0; i<sizeof(words); i++)
+    {
+	string word = lower_case(words[i]);
+	int tmp;
+	
+	if(get_eval_cost()<EVAL_RESERVE)
+	    break;
+	
+	if (word=="mich" || word=="mir")
+        {
+            /* Nicht das erste Wort, dann brechen wir ab. Ab hier kommt dann
+               nix anstaendiges mehr. Oder es ist nicht der letzte Satzteil.
+	       Auch das bringt nix.*/
+            if(i)
+		return failure(PCEC_WRONG_ID, info, 0, words[i]);
+
+	    pob[PCP_ID] = words[i];
+	    pob[PCP_OBS] = ({ this_player() });
+
+	    /* Den restlichen Satz pruefen. */
+	    if(!check_item(this_player(), 0, words[i], info, 0))
+		return 0;
+        }
+	else if(sscanf(word, "##%~d#%~d%~.1s")==2) // exec_command
+	{
+	    object ob;
+	    
+	    if(i)
+		return failure(PCEC_WRONG_ID, info, 0, words[i]);
+	    
+	    foreach(object env: pob[PCP_WHERE])
+		if(ob=present(word, env))
+		{
+		    if(!check_item(ob, 0, words[i], info, 0))
+			return 0;
+	    
+		    pob[PCP_ID] = words[i];
+		    pob[PCP_OBS] = ({ ob });
+		}
+
+	    if(!sizeof(pob[PCP_OBS])) // Nix gefunden?
+		return failure(PCEC_WRONG_ID, info, 0, words[i]);
+	}
+	else if (member(best_artikel, word)>=0)
+	{
+	    // Ignorieren.
+	}
+	else if (member(alles,word)>=0)
+        {
+	    mixed cons;
+	    
+            if(i)
+		return failure(PCEC_WRONG_ID, info, 0, words[i]);
+
+	    pob[PCP_FLAGS] |= PCF_ALL;
+	    
+	    // Abkuerzung, search_items macht das nochmal.
+	    cons = filter(pob[PCP_WHERE], "can_see", this_player());
+	    if(!sizeof(cons))
+		return failure(PCEC_TOO_DARK, info, 0, words[i]);
+	    pob[PCP_WHERE] = cons;
+        }
+	else if (member(hiesiges, word) >= 0)
+	{
+	    if (member(pob[PCP_WHERE], environment(this_player()))<0)
+		return failure(PCEC_WRONG_ID, info, 0, words[i]);
+	    
+	    pob[PCP_WHERE] = ({ environment(this_player()) });
+	    pob[PCP_FLAGS] |= PCF_HIESIG;
+	}
+	else if (member(meinesgleichen,word) >= 0)
+        {
+	    pob[PCP_WHERE] = filter(pob[PCP_WHERE],
+		(:
+		    $1 == $2 || this_object()->deep_present($1, $2)
+		:), this_player());
+		
+	    if (!sizeof(pob[PCP_WHERE]))
+		return failure(PCEC_WRONG_ID, info, 0, words[i]);
+	    
+	    pob[PCP_FLAGS] |= PCF_MEIN;
+        }
+	else if (member(seinesgleichen,word) >= 0)
+        {
+	    pob[PCP_WHERE] = filter(pob[PCP_WHERE],
+		(:
+		    $1 != $2 && !this_object()->deep_present($1, $2)
+		:), this_player());
+		
+	    if (!sizeof(pob[PCP_WHERE]))
+		return failure(PCEC_WRONG_ID, info, 0, words[i]);
+
+	    pob[PCP_FLAGS] |= PCF_SEIN;
+        }
+	else if (word[<1]=='.' && sscanf(word[0..<2],"%d",tmp) && tmp>0)
+	    pob[PCP_POS] = tmp;
+	else if (funcall(continue_search, words[i], info, 0))
+	{
+	    // Alles klar.
+	}
+	else if (member(dinge,word)>=0)
+	{
+	    pob[PCP_FLAGS] |= PCF_DEAD;
+	    // z.B.: "das gruene ding"
+	    if(!funcall(continue_search, 0, info, 0))
+	    {
+		pob[PCP_FLAGS] &= ~PCF_DEAD;
+		// Nix gefunden, dann kommt nix anstaendiges mehr.
+		return 0;
+	    }
+	}
+	else if (member(personen,word)>=0)
+	{
+	    pob[PCP_FLAGS] |= PCF_LIVING;
+	    // z.B.: "das gruene ding"
+	    if(!funcall(continue_search, 0, info, 0))
+	    {
+		pob[PCP_FLAGS] &= ~PCF_LIVING;
+		// Nix gefunden, dann kommt nix anstaendiges mehr.
+		return 0;
+	    }
+	}
+	else
+	{
+	    if (simple_parse_count(word)>1)
+		pob[PCP_FLAGS] |= PCF_COUNTING;
+
+	    pob[PCP_SONST] += ({words[i]});
+	}
+
+	if(sizeof(pob[PCP_OBS])) // Wir sind fertig.
+	{
+	    int rpos = 0; // Reststring suchen
+	    while (1)
+	    {
+		rpos = strstr(pob[PCP_SEARCH], words[i], rpos);
+		if(rpos<0)
+		    break;
+		    
+		if(rpos>0 && member(" ,",pob[PCP_SEARCH][rpos-1])<0)
+		{
+		    rpos++;
+		    continue;
+		}
+		
+		rpos += sizeof(words[i]);
+		if(rpos < sizeof(pob[PCP_SEARCH]) &&
+		    member(" ,", pob[PCP_SEARCH][rpos])<0)
+			continue;
+		
+		break;
+	    }
+
+	    if(rpos<0)	// Sollte eigentlich nicht passieren
+		pob[PCP_REST] = "";
+	    else
+		pob[PCP_REST] = pob[PCP_SEARCH][rpos+1..<1];
+D(pob);
+D(words);
+D(i);
+	    return 1;
+	}
+    }
+    
+    pob[PCP_REST] = "";
+    
+    // Okay, vielleicht nur Adjektive ohne Substantive ("alles gruene")
+    return (pob[PCP_FLAGS]&PCF_ALL) && funcall(continue_search, 0, info, 0);
+}
+
+private int parse_item(mixed *info, int startidx)
+{
+    /* Wir parsen ein Satzteil (jedes, bis auf den hintersten),
+       so gut wir koennen. Wir betrachten dabei nur die Worte aus
+       info[PC_PATH][startidx][PC_SEARCH] an sich und klassifizieren
+       sie entsprechend.
+
+       Wenn diese Funktion einen Wert != 0 liefert, dann gab
+       es keine Konflikte und die Daten wurden in info[PC_PATH][startidx]
+       gespeichert.
+       
+       Diese Funktion uebernimmt nur ein vorlaeufiges Parsing,
+       setzt daher keine Fehlermeldung (das macht dann parse_first_item).
+    */
+    
+    mixed *pob = info[PC_PATH][startidx];
+    string *words = explode(regreplace(pob[PCP_SEARCH],","," ",1)," ")-({""});
+    int no_id = 1;
+
+D(words);
+    
+    pob[PCP_SONST] = ({});
+    
+    if(!sizeof(words))
+	return 0;
+
+    for(int i=0; i<sizeof(words); i++)
+    {
+	string word = lower_case(words[i]);
+	int tmp;
+	
+	no_id = 1;
+	
+	if (word=="mich" || word=="mir")
+        {
+	    /* "mich in blub" macht wenig Sinn. Wir brechen ab. */
+	    return 0;
+        }
+	else if (member(best_artikel, word)>=0)
+	{
+	    // Ignorieren.
+	}
+	else if (member(alles, word)>=0)
+        {
+            if(i)
+		return 0;
+
+	    pob[PCP_FLAGS] |= PCF_ALL;
+        }
+	else if (member(hiesiges, word) >= 0)
+	{
+	    /* Beisst sich mit "mein" */
+	    if (pob[PCP_FLAGS] & PCF_MEIN)
+		return 0;
+	    
+	    pob[PCP_FLAGS] |= PCF_HIESIG;
+	}
+	else if (member(meinesgleichen,word) >= 0)
+        {
+	    /* Beisst sich mit "hiesig" oder "sein" */
+	    if (pob[PCP_FLAGS] & (PCF_HIESIG|PCF_SEIN))
+		return 0;
+	    
+	    pob[PCP_FLAGS] |= PCF_MEIN;
+        }
+	else if (member(seinesgleichen,word) >= 0)
+        {
+	    /* Beisst sich mit "mein". */
+	    if (pob[PCP_FLAGS] & PCF_MEIN)
+		return 0;
+
+	    pob[PCP_FLAGS] |= PCF_SEIN;
+        }
+	else if(member(dinge, word)>=0 || member(personen, word)>=0)
+	    /* "ding" oder "zeug" mittem in der Wortgruppe und nicht
+	       am Ende macht keinen Sinn. */
+	    return 0;
+	else if (word[<1]=='.' && sscanf(word[0..<2],"%d",tmp) && tmp>0)
+	    pob[PCP_POS] = tmp;
+	else
+	{
+	    if (simple_parse_count(word)>1)
+		pob[PCP_FLAGS] |= PCF_COUNTING;
+
+	    pob[PCP_SONST] += ({words[i]});
+	    no_id = 0;
+	}
+    }
+    
+    if(no_id)
+	pob[PCP_FLAGS] |= PCF_NO_ID;
+
+D(pob);
+    
+    return 1;
+}
+
+private void build_path(string command, mixed* info)
+{
+    string* satz;
+    
+    /* Jetzt den String auf virtual-Trenner untersuchen */
+    satz=regexplode(command,
+	   "( auf )|( an )|( von )|( in )|( am )|( im )|( vom )|( aus )");
+    info[PC_PATH] = ({});
+
+    /* PC_PATH aufbauen, alle bis auf die hinterste Wortgruppe
+       schonmal parsen. */
+    for(int i=sizeof(satz)-1;i>=0;i-=2)
+    {
+	mixed* pentry = allocate(PCP_SIZE);
+
+	pentry[PCP_SEARCH] = satz[i];
+	if(i)
+	    pentry[PCP_PREP] = satz[i-1];
+	
+	// copy() damit wir es nachher nochmal nutzen koennen.
+	info[PC_PATH] += ({ copy(pentry) });
+	
+	// Alle bis auf den hintersten Satzteil durch parse_item jagen.
+	if(i<sizeof(satz)-1 && !parse_item(info, sizeof(info[PC_PATH])-1))
+	{
+	    // Dieser Satzteil darf nicht mittendrin stehen.
+	    info[PC_REST] = implode(
+#if __VERSION__ < "3.3.529"
+		sort_array(
+#else
+		reverse(
+#endif
+		    map(info[PC_PATH][0..<2],
+			(: ($1[PCP_PREP]||"") + $1[PCP_SEARCH] :))
+#if __VERSION__ < "3.3.529"
+		    , (:1:)
+#endif
+		), "") + info[PC_REST];
+	    
+	    info[PC_PATH] = ({ pentry });
+	}
+    }
+}
+
+
+// TODO: Einmaliges Parsing (Ergebnis im Player speichern)
+
+
+/*
+FUNKTION: parse_com
+DEKLARATION: varargs mixed *parse_com(string command, mixed where, string *trenner, int flag)
+BESCHREIBUNG:
+parse_com sucht die in einem String angegebenen Gegenstaende in der
+Umgebung des aktuellen Spielers (this_player()) und in seinem Inventar.
+
+Beispiel:
+
+    #include <parse_com.h>
+    
+    int brutzle_fun(string str)
+    {
+        mixed parsed;
+	object ob;
+        
+        parsed = parse_com(str);
+        if(parse_com_error(parsed, "Was willst Du brutzeln?\n", 1))
+            return 0;
+	
+	ob = parsed[PARSE_OBS][0];
+	        
+        write(wrap("Du brutzelst "+den(ob)+"."));
+        
+        return 1;
+    }
+
+In den allermeisten Faellen braucht man parse_com nur den zu analysierenden
+String zu uebergeben und parse_com liefert das Ergebnis in einem mixed-Feld
+zurueck. parse_com beachtet dabei Artikel, Adjektive, Zahl-Angaben (1.)
+und Pronomen wie 'alle', 'meine', 'mich' etc.
+
+
+Bis auf den ersten Parameter sind alle weiteren optional. Folgende
+Parameter kann man uebergeben:
+
+    string command
+	Der zu analyisierende String, etwas wie "die gruene Tasche"
+
+    mixed where
+	Ein Container oder eine Liste von Containern, in denen
+	gesucht werden soll. Falls weggelassen (oder 0), so wird
+	in der Umgebung von this_player() und in this_player()
+	selbst gesucht.
+
+    string* trenner
+	Hier kann man Trennwoerter angeben, bis zu denen geparst
+	werden soll. Zum Beispiel beim Befehl 'brutzle A mit B'
+	kann ({"mit"}) als Trenner angegeben werden, so dass
+	parse_com zu "A mit B" spaetestens beim "mit" abbricht.
+	
+	Das gefundene Trennwort wird in parsed[PARSE_TRENNER]
+	gespeichert ("", wenn keines gefunden wurde), der
+	Text hinter dem Trennwort in parsed[PARSE_BEYOND_TRENNER].
+	Diesen Text kann man dann in einem zweiten parse_com-Aufruf
+	parsen.
+
+    int flag
+	Hier kann man Steuerflags angeben, die die Auswertung
+	von parse_com beeinflussen. Mehrere Flags werden durch Oder
+	(|-Operator) getrennt.
+	
+	PARSE_ALL_MATCHES
+		Ist im Kommando KEIN Zahlwort (1. oder 2.) angegeben,
+		werden statt nur dem ERSTEN Objekt ALLE darauf passenden
+		Objekte (welche sich im gleichen Container befinden)
+		zurueckgeliefert.
+
+        PARSE_NO_V_ITEMS
+                Verhindert, dass V_Items mitgeparsed werden, und somit
+                in parsed[PARSE_OBS] erscheinen.
+
+        PARSE_AFTER_TRENNER
+                Hiermit beginnt der Parser erst nach einem der gegebenen
+                Trenner zu parsen.
+
+        PARSE_NOT_WITHOUT_TRENNER
+                Das Parsing wird abgebrochen, falls keiner der angegeben
+                Trenner im String command zu finden ist.
+                Ist dies der Fall, wird PARSE_NOT_SEARCHED zurueckgegeben.
+
+	PARSE_DONT_SPLIT
+		Normalerweise zerteilt parse_com Count-Obs automatisch.
+		Dies kann mit diesem Flag unterbunden werden.
+    
+        PARSE_NOSHIMMER_INVIS
+		Beachtet auch invis-15-Dinge. (Nur fuer Goettertools!)
+
+
+parse_com liefert als Ergebnis ein Array mit folgenden Elementen zurueck:
+
+    parsed[PARSE_NUM_OBS]
+	Anzahl der gefundenen Objekte. Im Fehlerfalle ist dies 0.
+
+    parsed[PARSE_OBS]
+	Dies ist ein Array mit den gefundenen Objekten.
+
+    parsed[PARSE_REST]
+	Dies ist der Reststring, also der Text hinter den gefundenen
+	Gegenstaenden (z.B. "durch" bei "knuddle emma durch").
+
+    parsed[PARSE_RET_CODE]
+	Ein Code, der die Art eines Fehlers angibt. Folgende
+	Werte kann er annehmen:
+	    PARSE_OK		Alles klar (kein Fehler)
+	    PARSE_NO_ARG	Es wurde nichts uebergeben.
+	    PARSE_NO_OB		Objekt nicht gefunden.
+	    PARSE_NO_MY_OB	Objekt nicht gefunden, "mein" war angegeben.
+	    PARSE_NO_ALL_OB	Objekt nicht gefunden, "alle" war angegeben.
+	    PARSE_NO_ALL_MY_OB	Objekt nicht gefunden, "mein" und "alles"
+				war angegeben.
+	    PARSE_WRONG_ID	Syntaxfehler. Parse_com konnte nicht erkennen,
+				wo ein Gegenstand bezeichnet wurde.
+    	    PARSE_NOT_SEARCHED	Es sollte nach dem Trenner geparst werden,
+				dieser war allerdings nicht vorhanden.
+
+    parsed[PARSE_ID]
+	Die in dem Text gefundene ID (sowas wie "tasche", wenn nach
+	"eine gruene Tasche" gesucht wurde). Falls keine ID erkannt
+	wurde, so ist dies in leerer String.
+
+    parsed[PARSE_TRENNER]
+	Das Trennwort, welches gefunden wurde.
+
+    parsed[PARSE_BEYOND_TRENNER]
+	Alles, was nach dem gefundenen Trennwort im String steht.
+      
+
+Beispiel:
+parse_com("eine gruene Tasche umher") wuerde beispielsweise folgendes
+Ergebnis bringen:
+
+	parsed[PARSE_NUM_OBS]		1
+	parsed[PARSE_OBS]		({ OBJ(/obj/tasche#947270) })
+	parsed[PARSE_REST]		"umher"
+	parsed[PARSE_RET_CODE]		PARSE_OK
+	parsed[PARSE_ID]		"eine gruene tasche"
+	parsed[PARSE_TRENNER]           ""
+	parsed[PARSE_BEYOND_TRENNER]	""
+
+Die Auswertung von Fehlern kann die Routine parse_com_error() uebernehmen.
+(Siehe obiges Beispiel und die Dokumentation zu parse_com_error bzw.
+parse_com_error_string.)
+
+ACHTUNG: 
+  - Falls nicht mit PARSE_NO_V_ITEMS explizit angegeben, werden auch
+    virtuelle Objekte im Feld PARSE_OBS zurueckgegeben. Deshalb muss das
+    Programm in diesem Falle in der Lage sein, Mappings zu verarbeiten!
+  - Wird ein kurz vorher zerteiltes CountOb gefunden, so werden beide
+    Teile erstmal wiedervereinigt, bevor sie von parse_com genutzt
+    werden. Dies kann bei doppelten Aufrufen von parse_com ein ggf.
+    vorher gefundenes Objekt zerstoeren. Man entkommt dem, indem
+    das vorher gefundene Objekt wegbewegt wird.
+    
+VERWEISE: parse_com_error, present, deep_present
+GRUPPEN: simul_efun, string, player
+*/
+varargs mixed *parse_com(string command, mixed rwo, string *trenn, int flag)
+{
+    string pc_trenner = "", pc_beyond_trenner = "";
+    string *satz;
+    mixed *info;
+    mixed *err;
+
+    if (!sizeof(command))
+	return ({ 0, ({}), "", PARSE_NO_ARG, "", "", "" });
+
+    /* Erstmal den String auf Trenner untersuchen */
+    if(trenn)
+    {
+	string before, beyond;
+	
+	foreach(string trenner: trenn)
+	    if( sscanf(" "+command+" ","%s "+trenner+" %s",before,beyond))
+	    {
+		pc_trenner = trenner;
+		before = before[1..<1];
+		beyond = beyond?beyond[0..<2]:"";
+		break;
+	    }
+	
+	if (sizeof(pc_trenner))
+	{
+	    /* Soll VOR oder NACH dem Trenner gesucht werden? */
+	    
+	    if (flag & PARSE_AFTER_TRENNER)
+	    {
+		pc_beyond_trenner = before;
+		command = beyond;
+	    }
+	    else
+	    {
+		pc_beyond_trenner = beyond;
+		command = before;
+	    }
+        }
+	else	// Soll ueberhaupt gesucht werden?
+	    if (flag & PARSE_NOT_WITHOUT_TRENNER)
+		return ({ 0, ({}), "", PARSE_NOT_SEARCHED, "", "", "" });
+    }
+    
+    info = allocate(PC_SIZE);
+    info[PC_OPT_WHERE] = (objectp(rwo) ? ({ rwo }) :
+			  pointerp(rwo) ? rwo :
+    			  ({ environment( this_player()), this_player() }))
+		       - ({0});
+    info[PC_OPT_FLAGS] = flag;
+    info[PC_REST] = "";
+    info[PC_ERROR] = allocate(PCE_SIZE);
+    
+D(command);
+    build_path(command, info);
+
+D(command);
+D(info);
+    
+    /* Nun alles durchprobieren... */
+    foreach(mixed pentry: info[PC_PATH])
+    {
+	pentry[PCP_WHERE] = info[PC_OPT_WHERE];
+	
+	if(parse_first_item(info, #'search_items)) /* Parsen erfolgreich? */
+	{
+	    int counterr;
+	    
+	    // Dann zaehlen wir sicherheitshalber mal nach...
+	    foreach(mixed *pob: info[PC_PATH])
+	    {
+		mixed* cobs;
+		
+		if(!pob[PCP_COUNT])
+		    continue;
+		
+		cobs = filter(pob[PCP_OBS],
+		    (: objectp($1) && $1->query_count() :));
+		if(sizeof(cobs)) // Dann stimmt das schon, wurde gesplittet.
+		    continue;
+		
+		if(sizeof(pob[PCP_OBS]) < pob[PCP_COUNT])
+		{
+		    failure(PCEC_NOT_ENOUGH, info,
+				member(info[PC_PATH], pob), 0);
+		    counterr = 1;
+		    break;
+		}
+	    }
+	    if(!counterr)
+		break;
+	}
+	    
+	info[PC_REST] = pentry[PCP_PREP] + pentry[PCP_SEARCH] + info[PC_REST];
+	info[PC_PATH] = info[PC_PATH][1..<1];
+	foreach(mixed pob: info[PC_PATH])
+	    pob[PCP_OBS] = 0;
+D(info);
+    }
+
+D(info);
+    if(sizeof(info[PC_PATH]) && sizeof(info[PC_PATH][<1][PCP_OBS]))
+	return ({
+	    sizeof(info[PC_PATH][<1][PCP_OBS]),
+	    info[PC_PATH][<1][PCP_OBS],
+	    trim(info[PC_PATH][0][PCP_REST] + info[PC_REST]),
+	    PARSE_OK,
+	    implode(info[PC_PATH][<1][PCP_SONST] + 
+		(info[PC_PATH][<1][PCP_ID]?({info[PC_PATH][<1][PCP_ID]}):({})),
+		" "),
+	    pc_trenner, pc_beyond_trenner });
+    
+    /* Wir haben nix gefunden, also geben wir den besten Fehler aus. */
+    err = ({ 0, ({}), command, PARSE_NO_OB, "",
+	    pc_trenner, pc_beyond_trenner });
+    
+    switch(info[PC_ERROR][PCE_CODE])
+    {
+	case PCEC_ID_NOT_FOUND:
+	case PCEC_CONDITIONS_FAILED:
+	    err[PARSE_RET_CODE] = 
+		(info[PC_ERROR][PCE_FLAGS] & PCF_MEIN)?
+		((info[PC_ERROR][PCE_FLAGS] & PCF_ALL)?
+		    PARSE_NO_ALL_MY_OB:PARSE_NO_MY_OB):
+		((info[PC_ERROR][PCE_FLAGS] & PCF_ALL)?
+		    PARSE_NO_ALL_OB:PARSE_NO_OB);
+	    break;
+	case PCEC_TOO_DARK:
+	    err[PARSE_RET_CODE] = PARSE_CANT_SEE;
+	    break;
+	case PCEC_TOO_MANY:	/* Dafuer gibt's keinen speziellen Code */
+	case PCEC_WRONG_ID:
+	    err[PARSE_RET_CODE] = PARSE_WRONG_ID;
+	    break;
+	case PCEC_NOT_ENOUGH:
+	    err[PARSE_RET_CODE] = PARSE_NOT_ENOUGH;
+	    break;
+    }
+    
+    if(sizeof(info[PC_ERROR][PCE_ID]))
+	err[PARSE_ID] = info[PC_ERROR][PCE_ID];
+
+    return err;    
+}
+
+/*
+FUNKTION: parse_com_error_string
+DEKLARATION: string parse_com_error_string(mixed *parsed, string errormsg [, string only_one] )
+BESCHREIBUNG:
+parse_com_error_string dient der einfachen Behandlung von Fehlermeldungen.
+Liefert parse_com einen Fehler zurueck, kreiert parse_com_error_string eine
+entsprechende Fehlermeldung dazu und liefert sie zurueck. Falls kein
+Fehler auftrat, wird 0 geliefert.
+
+Parameter:
+
+    mixed *parsed
+	ist das Resultat eines vorhergehenden parse_com-Aufrufs.
+	
+    string errormsg
+	ist ein String, der dann genommen wird, wenn kein Objekt gefunden
+	wurde (z.B. ein Tippfehler im Kommando) und keine passendere
+	Fehlermeldung generiert werden kann. (Normalerweise wird z.B.
+	bei 'trete xy' eine Fehlermeldung "Xy nicht gefunden." erzeugt.)
+	Wurde keine solche Fehlermeldung angegeben, wird "" geliefert.
+
+    string only_one
+	Dieser Parameter ist optional. 
+	Findet parse_com mehr als nur ein Objekt, auf dass die Beschreibung
+	passt, funktioniert aber das eigene Programm nur mit EINEM Objekt,
+	so wird dieser String als Fehlermeldung ausgegeben. Ist only_one
+	0, so beklagt sich parse_com_error_string nicht darueber.
+	(Zum Beispiel bei "alle fackeln" koennen mehrere Objekte gefunden
+	werden. Sie werden dann alle in parsed[PARSE_OBS] aufgelistet.)
+
+VERWEISE: parse_com, parse_com_error
+GRUPPEN: simul_efun, player
+*/
+varargs string parse_com_error_string(mixed *pa, string str, mixed only_one)
+{
+    switch (pa[PARSE_RET_CODE])
+    {
+	case PARSE_OK:
+	    if (only_one && pa[PARSE_NUM_OBS]>1)
+		return stringp(only_one) ? only_one :
+                    "Immer eines nach dem anderen.\n";
+	    return 0;
+	case PARSE_NO_ARG:
+	case PARSE_WRONG_ID:
+	case PARSE_NOT_SEARCHED:
+            return str || "";
+	case PARSE_NO_OB:
+            return (pa[PARSE_ID] == "" ||
+		    sscanf(pa[PARSE_ID], "##%~d#%~d%~.1s")==2)?
+		"Das gibt es da nicht.\n" :
+	    	capitalize(pa[PARSE_ID])+" nicht gefunden.\n";
+	case PARSE_NO_MY_OB:
+            return (pa[PARSE_ID] == "" ||
+		    sscanf(pa[PARSE_ID], "##%~d#%~d%~.1s")==2)?
+		"Du hast das nicht bei dir.\n" :
+	    	capitalize(pa[PARSE_ID])+" hast du nicht bei dir.\n";
+	case PARSE_NO_ALL_OB:
+            return pa[PARSE_ID] == "" ?
+		"Da siehst du nichts.\n" : "Da siehst du nichts derartiges.\n";
+	case PARSE_NO_ALL_MY_OB:
+            return pa[PARSE_ID] == "" ?
+		"Du hast nichts bei dir.\n" :
+		"Du hast nichts derartiges bei dir.\n";
+#ifdef AUTO_COUNTOB
+	case PARSE_NOT_ENOUGH:
+	    return (sizeof(pa[PARSE_OBS]) &&
+			present(pa[PARSE_OBS][0], this_player())) ?
+		"Soviel hast du nicht.\n" :
+		"Soviel gibt es da nicht.\n";
+#endif /* AUTO_COUNTOB */
+	case PARSE_CANT_SEE:
+		return "Es ist zu dunkel.\n";
+	default:
+	    return "Da hat Monty wohl sagenhaften Mist programmiert.\n";
+    }
+
+    return 0;
+}
+
+/*
+FUNKTION: parse_com_error
+DEKLARATION: int parse_com_error(mixed *parsed, string errormsg [, string only_one [, int dont_overwrite]] )
+BESCHREIBUNG:
+parse_com_error dient der einfachen Behandlung von Fehlermeldungen.
+Liefert parse_com einen Fehler zurueck, kreiert parse_com_error eine
+entsprechende Fehlermeldung dazu und setzt sie via notify_fail().
+parse_com_error() liefert in diesem Falle dann 1 zurueck, so dass
+in der eigentlichen Action daraufhin ein 'return 0' folgenden sollte,
+so dass die notify_fail()-Meldung aktiv wird.
+
+Parameter:
+
+    mixed *parsed
+	ist das Resultat eines vorhergehenden parse_com-Aufrufs.
+	
+    string errormsg
+	ist ein String, der dann genommen wird, wenn kein Objekt gefunden
+	wurde (z.B. ein Tippfehler im Kommando) und keine passendere
+	Fehlermeldung generiert werden kann. (Normalerweise wird z.B.
+	bei 'trete xy' eine Fehlermeldung "Xy nicht gefunden." erzeugt.)
+	Wurde keine solche Fehlermeldung angegeben, wird "" geliefert.
+
+    string only_one
+	Dieser Parameter ist optional. 
+	Findet parse_com mehr als nur ein Objekt, auf dass die Beschreibung
+	passt, funktioniert aber das eigene Programm nur mit EINEM Objekt,
+	so wird dieser String als Fehlermeldung ausgegeben. Ist only_one
+	0, so beklagt sich parse_com_error_string nicht darueber.
+	(Zum Beispiel bei "alle fackeln" koennen mehrere Objekte gefunden
+	werden. Sie werden dann alle in parsed[PARSE_OBS] aufgelistet.)
+
+Beispiel:
+
+    mixed *parsed;
+
+    parsed = parse_com(command);
+    if (parse_com_error(parsed,"Nimm was?\n", "Immer nur eines nehmen.\n"))
+	return 0;
+    nimm(parsed[PARSE_OBS][0]);
+
+VERWEISE: parse_com, parse_com_error_string
+GRUPPEN: simul_efun, player
+*/
+varargs int parse_com_error(mixed *pa, string str, mixed only_one, int dont_overwrite)
+{
+    string err=parse_com_error_string(pa, str, only_one);
+    if(!err) return 0;
+
+    if(sizeof(err))
+    {
+        if(function_exists("notify_fail"))
+            this_object()->notify_fail(err,(pa[PARSE_RET_CODE]==PARSE_OK)?FAIL_WRONG_ARG:FAIL_NOT_OBJ,dont_overwrite);
+        else
+            notify_fail(err);
+    }
+
+    return 1;
+}
+
+/******************************************************************************
+ * parse_com ENDE !!!!
+ *****************************************************************************/
+
+
+string its_me(string command, object ob)
+{
+    mixed *info;
+    mixed* pentry;
+
+    if (!ob || !sizeof(command))
+	return 0;
+
+    pentry = allocate(PCP_SIZE);
+    pentry[PCP_SEARCH] = command;
+    pentry[PCP_WHERE] = ({ environment(ob) }) - ({0});
+    
+    info = allocate(PC_SIZE);
+    info[PC_OPT_WHERE] = pentry[PCP_WHERE];
+    info[PC_OPT_FLAGS] = PARSE_DONT_SPLIT | PARSE_NO_V_ITEMS;
+    info[PC_PATH] = ({ pentry });
+    info[PC_REST] = "";
+    info[PC_ERROR] = allocate(PCE_SIZE);
+
+    if(parse_first_item(info,
+#ifndef __LPC_INLINE_CLOSURES__
+	lambda(({'id,'info,'idx}),({(:
+	    string id = $1;
+	    mixed *info = $2;
+	    int startidx = $3;
+	    object ob = $4;
+#else
+	function int (string id, mixed *info, int startidx)
+	{
+#endif
+	    string lcid = id && lower_case(id);
+	    mixed *pob = info[PC_PATH][startidx];
+	    
+	    if(id?(!ob->id(lcid) &&
+		    (!(pob[PCP_FLAGS]&(PCF_ALL|PCF_COUNTING)) ||
+		      !ob->plural_id(lcid)))
+		 :(({int})ob->query_invis()&V_ATOM_NOLIST))
+		return 0;
+	
+	    // Falls keine Ordnungszahl genannt wurde, nehmen
+	    // wir die Abkuerzung. Ansonsten muessen wir durchzaehlen...
+	    if(!pob[PCP_POS])
+	    {
+		if(check_item(ob, 0, id, info, startidx))
+		{
+		    pob[PCP_OBS] = ({ ob });
+		    pob[PCP_ID] = id;
+		    return 1;
+		}
+		else
+		    return 0;
+	    }
+	
+	    return search_items(id, info, startidx);
+#ifdef __LPC_INLINE_CLOSURES__
+	}
+#else
+	:),'id,'info,'idx,ob}))
+#endif
+	))
+    {
+	// Parsen war erfolgreich.
+	// Schauen wir mal, ob wir wirklich erwischt wurden...
+	
+	if(member(info[PC_PATH][0][PCP_OBS], ob)>=0)
+	    return info[PC_PATH][0][PCP_REST];
+    }
+
+    return 0;
+}
+
+varargs string its_here(string command, object ob, mixed name, mapping ret)
+{
+    mixed *info;
+
+    if (!ob || !sizeof(command))
+	return 0;
+
+    info = allocate(PC_SIZE);
+    info[PC_OPT_WHERE] = ({ ob });
+    info[PC_OPT_FLAGS] = PARSE_DONT_SPLIT;
+    info[PC_REST] = "";
+    info[PC_ERROR] = allocate(PCE_SIZE);
+    
+    build_path(command, info);
+    
+    foreach(mixed pentry: info[PC_PATH])
+    {
+	pentry[PCP_WHERE] = info[PC_OPT_WHERE];
+	
+	if(parse_first_item(info,
+#ifndef __LPC_INLINE_CLOSURES__
+	    lambda(({'id,'info,'idx}),({(:
+		string id = $1;
+		mixed *info = $2;
+		int startidx = $3;
+		object ob = $4;
+#else
+	    function int (string id, mixed *info, int startidx)
+	    {
+#endif
+	        string lcid = id && lower_case(id);
+		mixed *pob = info[PC_PATH][startidx];
+	    
+		// Zuerst schauen wir mal, ob es ein V-Item mit dieser
+		// ID gibt. (query_v_item dient als Schnelltest...)
+	        if(!(pob[PCP_FLAGS] & PCF_ALL) && ob->query_v_item(({lcid})) &&
+	    	    search_v_item(id, ({ob}), 0, info, startidx))
+			return 1;
+	    
+		// Kein V-Item, vielleicht ist es auch unser Objekt.
+	        // (Das ist jetzt wie beim its_me().)
+		// Das fragen wir aber nur dann ab, wenn wir nicht
+		// beim einzigen Element des Pfades sind.
+		if(sizeof(info[PC_PATH])==1)
+		    return 0;
+
+		if(id?(!ob->id(lcid) &&
+		       (!(pob[PCP_FLAGS]&(PCF_ALL|PCF_COUNTING)) ||
+		         !ob->plural_id(lcid)))
+		     :(({int})ob->query_invis()&V_ATOM_NOLIST))
+		    return 0;
+
+		if(!pob[PCP_POS])
+		{
+		    if(check_item(ob, 0, id, info, startidx))
+		    {
+			pob[PCP_OBS] = ({ ob });
+			pob[PCP_ID] = id;
+			return 1;
+		    }
+		    else
+			return 0;
+		}
+	
+		return search_items(id, info, startidx);
+#ifdef __LPC_INLINE_CLOSURES__
+	    }
+#else
+	    :),'id,'info,'idx,ob}))
+#endif
+	    ))
+	{
+	    // Parsen war auch diesmal erfolgreich.
+	    mixed* result = filter(info[PC_PATH][<1][PCP_OBS],
+		(:
+		    mixed env = $1;
+		    if(!mappingp($1))
+			return 0;
+		    
+		    if($3 && $1["name"] != $3 &&
+		      (!$1["id"] || member($1["id"], $3)<0))
+			return 0;
+		
+		    while(mappingp(env))
+			env = env["environment"];
+		
+		    return env == $2;
+		:), ob, name);
+	
+	    if(!sizeof(result))
+		return 0;
+	
+	    ret = result[0];
+	    return trim(info[PC_PATH][0][PCP_REST] + info[PC_REST]);
+	}
+	
+	// Nicht erfolgreich, einen Satzteil weniger probieren.
+	info[PC_REST] = pentry[PCP_PREP] + pentry[PCP_SEARCH] + info[PC_REST];
+	info[PC_PATH] = info[PC_PATH][1..<1];
+	foreach(mixed pob: info[PC_PATH])
+	    pob[PCP_OBS] = 0;
+    }
+
+    return 0;
+}

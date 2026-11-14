@@ -1,0 +1,276 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        gift.c
+// Description: Gift fuer Brunnen und Flasche, infiziert den Spieler beim
+//              Trinken mit einem Virus (mehr zu Viren in /obj/virus.c).
+// Author:      Jafar & Yellow
+// Modified by: Jafar, 04.11.97
+//              Funktionen fuer virus_look hinzugefuegt.
+//
+// $Log: gift.c,v $
+// Revision 1.6  2002/06/15 15:42:44  gnomi
+// Hinweis auf /p/jafar/doc entfernt.
+//
+// Revision 1.5  2001/05/02 21:10:33  gnomi
+// seteuid(getuid()) eingebaut.
+//
+// Revision 1.4  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+
+#pragma save_types
+#pragma strong_types
+#pragma verbose_errors
+
+#include <move.h>
+#include <invis.h>
+#include <wasser.h>
+
+
+#define UNDEFINED -100000
+
+
+inherit WASSER_I;
+
+
+private int infected,                      // Spieler wurde infiziert?
+            virus_infection_chance = 100,  // Chance einer Infizierung
+            virus_str = UNDEFINED,         // Abzug (HPs pro Minute)
+            virus_min = UNDEFINED,         // Grenze fuer AP-Abfall
+            virus_dur = UNDEFINED,         // Verweildauer des Virus
+            virus_chance = UNDEFINED,      // Ansteckungsgefahr bei Seuche
+            virus_immun_time = UNDEFINED;  // Dauer einer Immunisierung
+
+private closure virus_infection_message,       // Meldung bei Infizierung
+                virus_other_infection_message;
+
+private string virus_heal_msg,    // Meldung bei Heilung
+               virus_type,        // Art des Virus
+               virus_name,        // Name des Virus
+               virus_look,        // Extra-Beschreibung eines Erkrankten
+               *virus_messages,   // Meldungen fuer den Krankheitsverlauf
+               virus_shadow_path; // Pfad fuer Shadow
+
+
+/*
+FUNKTION: set_virus_infection_chance
+DEKLARATION: void set_virus_infection_chance(int chance)
+BESCHREIBUNG:
+Setzt die Wahrscheinlichkeit, mit der ein Spieler beim Trinken des Giftes
+mit dem Virus infiziert wird.
+VERWEISE: query_virus_infection_chance, set_virus_chance (virus),
+query_virus_chance (virus), set_virus_infection_message,
+set_virus_other_infection_message, query_virus_infection_message,
+query_other_virus_infection_message
+GRUPPEN: wasser
+*/
+void set_virus_infection_chance(int chance)
+{
+   virus_infection_chance = chance;
+}
+
+
+/*
+FUNKTION: query_virus_infection_chance
+DEKLARATION: int query_virus_infection_chance()
+BESCHREIBUNG:
+Liefert die Wahrscheinlichkeit, mit der ein Spieler beim Trinken des Giftes
+mit dem Virus infiziert wird.
+VERWEISE: set_virus_infection_chance, set_virus_chance (virus),
+query_virus_chance (virus), set_virus_infection_message,
+set_virus_other_infection_message, query_virus_infection_message,
+query_virus_other_infection_message
+GRUPPEN: wasser
+*/
+int query_virus_infection_chance()
+{
+   return virus_infection_chance;
+}
+
+
+/*
+FUNKTION: set_virus_infection_message
+DEKLARATION: void set_virus_infection_message(mixed s)
+BESCHREIBUNG:
+Wird ein Spieler beim Trinken des Giftes durch den Virus infiziert, so
+wird die Trinkmeldung entsprechend erweitert. set_virus_infection_message
+legt diese Erweiterung fest. Die Meldung kann eine Pseudoclosure oder
+Closure sein, die Default-Meldung ist ein Leerstring. Da sie an die
+Trinkmeldung angehaengt wird, sollte diese mit einem Leerzeichen enden.
+VERWEISE: set_virus_infection_chance, query_virus_infection_chance,
+set_virus_chance (virus), query_virus_chance (virus),
+set_virus_other_infection_message, query_virus_infection_message,
+query_virus_other_infection_message, set_success_message,
+set_other_success_message, query_success_message, query_other_success_message
+GRUPPEN: wasser
+*/
+void set_virus_infection_message(mixed s)
+{
+   virus_infection_message = mixed_to_closure(s);
+}
+
+
+/*
+FUNKTION: set_virus_other_infection_message
+DEKLARATION: void set_virus_other_infection_message(mixed s)
+BESCHREIBUNG:
+Wird ein Spieler beim Trinken des Giftes durch den Virus infiziert, so wird die
+Trinkmeldung fuer die Umstehenden entsprechend erweitert.
+set_virus_other_infection_message legt diese Erweiterung fest. Die Meldung
+kann eine Pseudoclosure oder Closure sein, die Default-Meldung ist ein
+Leerstring. Da sie an die Trinkmeldung angehaengt wird, sollte diese mit
+einem Leerzeichen enden.
+VERWEISE: set_virus_infection_chance, query_virus_infection_chance,
+set_virus_chance (virus), query_virus_chance (virus),
+set_virus_infection_message, query_virus_infection_message,
+query_virus_other_infection_message, set_success_message,
+set_other_success_message, query_success_message, query_other_success_message
+GRUPPEN: wasser
+*/
+void set_virus_other_infection_message(mixed s)
+{
+   virus_other_infection_message = mixed_to_closure(s);
+}
+
+
+/*
+FUNKTION: query_virus_infection_message
+DEKLARATION: string query_virus_infection_message()
+BESCHREIBUNG:
+query_virus_infection_message liefert die Erweiterung der Trinkmeldung fuer
+den Spieler zurueck, wenn er durch den Virus infiziert wurde.
+VERWEISE: set_virus_infection_chance, query_virus_infection_chance,
+set_virus_chance (virus), query_virus_chance (virus),
+set_virus_infection_message, set_virus_other_infection_message,
+query_other_virus_infection_message, set_success_message,
+set_other_success_message, query_success_message, query_other_success_message
+GRUPPEN: wasser
+*/
+string query_virus_infection_message()
+{
+   if (virus_infection_message)
+     return closure_to_string(virus_infection_message);
+   else
+     return "";
+}
+
+
+/*
+FUNKTION: query_virus_other_infection_message
+DEKLARATION: string query_virus_other_infection_message()
+BESCHREIBUNG:
+query_virus_other_infection_message liefert die Erweiterung der Trinkmeldung
+fuer die Umstehenden zurueck, wenn ein Spieler durch den Virus infiziert wurde.
+VERWEISE: set_virus_infection_chance, query_virus_infection_chance,
+set_virus_chance (virus), query_virus_chance (virus),
+set_virus_infection_message, set_virus_other_infection_message,
+query_virus_infection_message, set_success_message,
+set_other_success_message, query_success_message, query_other_success_message
+GRUPPEN: wasser
+*/
+string query_virus_other_infection_message()
+{
+   if (virus_other_infection_message)
+     return closure_to_string(virus_other_infection_message);
+   else
+     return "";
+}
+
+// nach einer Infektion die Meldungen entsprechend erweitern
+
+string query_success_message()
+{
+   return ::query_success_message() +
+       (infected ? query_virus_infection_message() : "");
+}
+
+
+string query_other_success_message()
+{
+   return ::query_other_success_message() +
+       (infected ? query_virus_other_infection_message() : "");
+}
+
+// die Eigenschaften des Virus setzen und abfragen
+
+void set_virus_str(int strength) { virus_str = strength; }
+void set_virus_min(int minimum) { virus_min = minimum; }
+void set_virus_dur(int duration) { virus_dur = duration; }
+void set_virus_chance(int chance) { virus_chance = chance; }
+void set_virus_immun_time(int immun_time) { virus_immun_time = immun_time; }
+void set_virus_heal_msg(string heal_msg) { virus_heal_msg = heal_msg; }
+void set_virus_type(string type) { virus_type = type; }
+void set_virus_name(string name) { virus_name = name; }
+void set_virus_look(string look) { virus_look = look; }
+void set_virus_messages(string *messages) { virus_messages = messages; }
+void set_virus_shadow_path(string path) { virus_shadow_path = path; }
+
+int query_virus_str() { return virus_str; }
+int query_virus_min() { return virus_min; }
+int query_virus_dur() { return virus_dur; }
+int query_virus_chance() { return virus_chance; }
+int query_virus_immun_time() { return virus_immun_time; }
+string query_virus_heal_msg() { return virus_heal_msg; }
+string query_virus_type() { return virus_type; }
+string query_virus_name() { return virus_name; }
+string query_virus_look() { return virus_look; }
+string *query_virus_messages() { return virus_messages; }
+string query_virus_shadow_path() { return virus_shadow_path; }
+
+// mit einer gewissen Wahrscheinlichkeit wird der Spieler nach
+// erfolgreichem Trinken mit dem Virus infiziert
+
+int drink_action()
+{
+   int result;
+   object virus;
+
+
+   if ((result = ::drink_action()) && random(100) < virus_infection_chance) {
+
+     // Virus erzeugen und Eigenschaften uebernehmen
+
+     virus = clone_object("/obj/virus");
+
+     if (virus_str != UNDEFINED) virus->set_virus_str(virus_str);
+     if (virus_min != UNDEFINED) virus->set_virus_min(virus_min);
+     if (virus_dur != UNDEFINED) virus->set_virus_dur(virus_dur);
+     if (virus_chance != UNDEFINED) virus->set_virus_chance(virus_chance);
+     if (virus_immun_time != UNDEFINED) virus->set_virus_immun_time(virus_immun_time);
+     if (virus_heal_msg) virus->set_virus_heal_msg(virus_heal_msg);
+     if (virus_type) virus->set_virus_type(virus_type);
+     if (virus_name) virus->set_virus_name(virus_name);
+     if (virus_look) virus->set_virus_look(virus_look);
+     if (virus_messages) virus->set_virus_messages(virus_messages);
+     if (virus_shadow_path) virus->set_virus_shadow_path(virus_shadow_path);
+
+     if (virus->move(this_player()) == MOVE_OK)
+       infected = 1;  // Spieler wurde infiziert
+     else {
+       infected = 0;  // Infektion ging daneben
+
+       write(wrap("Da hast du ja noch einmal Glueck gehabt. Weiss der Teufel, "
+           "warum du verschont bleibst."));
+       virus->remove();
+     }
+   } else
+     infected = 0;    // Spieler konnte nicht trinken, oder blieb verschont
+
+   return result;
+}
+
+
+void create()
+{
+   if (!clonep())
+     return;
+
+   seteuid(getuid());
+   set_name("gift");
+   set_id("gift");
+   set_gender("saechlich");
+   set_material(({"wasser"}));
+   set_invis(V_NOLIST);
+}

@@ -1,0 +1,335 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/living/die.c
+// Description:
+// Modified by:	Zandru (22.12.95) um set_eatable_corpse() etc. zu ermoeglichen
+//		Monty (07.06 96) die() ist nicht mehr nosave, da Thor es
+//			shadowen muss, ausserdem wirds nu in hands.c per
+//			call_other aufgerufen.
+//			Zandrus Leichen-Patch in #ifdef UNItopia #endif
+// 			eingeschachtelt.
+//              Sissi (30.10.96) Wiederbelebung fuer Finsterlinge - Gilde
+//                    (alles, was mit "resurrection" zu tun hat)
+//		Freaky (10.03.1998) message auf send_message umgebaut.
+//		Freaky (14.03.2000) die() aufgeraeumt und beliebigen corpse
+//
+// $Log: die.c,v $
+// Revision 1.34  2011-11-16 20:59:39  sorcerer
+// eatable_corpse ist jetzt mapping und kann ein kadaver_file enthalten
+//
+// Revision 1.33  2008-05-19 14:10:03  gnomi
+// AH_ORIGINATOR erhaelt auch Align-Aenderungen verpasst
+// (falls != AH_ATTACKER).
+//
+// Revision 1.32  2006/06/07 20:57:01  gnomi
+// Sicherstellen, dass ein Toter auch wirklich tot ist.
+//
+// Revision 1.31  2005/05/06 22:59:52  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.30  2005/01/05 21:53:55  gnomi
+// Doku zu notify_died korrigiert.
+//
+// Revision 1.29  2004/11/27 21:11:33  gnomi
+// add_hp-Aenderung: Deklaration von notify_died, die, call_die und
+// query_corpse geaendert.
+//
+// Revision 1.28  2004/07/19 21:17:32  gnomi
+// Alpha-Konversionen...
+//
+// Revision 1.27  2004/07/04 00:09:42  gnomi
+// Objekte, die nicht in die Leiche bewegt werden koennen, werden in die
+// Umgebung bewegt.
+//
+// Revision 1.26  2003/04/16 03:29:08  gnomi
+// Moerder in der Leiche speichern.
+//
+// Revision 1.25  2003/01/26 03:59:36  gnomi
+// real_gender an die Leiche uebergeben.
+//
+// Revision 1.24  2002/10/31 23:03:53  gnomi
+// Autoload-Gegenstaende nicht beim Tod verlieren.
+// (Lehrlingsvertrag, Bardeninstrument)
+//
+
+#pragma save_types
+#pragma strong_types
+
+#include <deklin.h>
+#include <config.h>
+#include <message.h>
+#include <level.h>
+#include <add_hp.h>
+
+private string no_resurrection;
+
+// Prototypes:
+nosave void second_life(object corpse);
+varargs void notify_message(string msg, int type);
+void notify(string message, varargs mixed data);
+string query_real_name();
+void set_hp(int hp);
+int query_hp();
+
+/*
+FUNKTION: notify_killed
+DEKLARATION: void notify_killed(object wer, object moerder, object leiche)
+BESCHREIBUNG:
+Stirbt ein Lebewesen und ist der Moerder bekannt (d.h. wurde ein Objekt
+als 1. Parameter von die() uebergeben), so wird moerder->notify("killed",
+wer, moerder, leiche) aufgerufen.
+"wer" ist der Gestorbene, "moerder" die Ursache und "leiche" die
+uebriggebliebene Leiche. Ist ein Objekt beim Moerder fuer "notify_killed"
+(mittels moerder->add_controller("notify_died", object); ) angemeldet,
+so wird dann in diesem Objekt die Funktion notify_killed(wer, moerder, leiche)
+aufgerufen.
+VERWEISE: add_controller, notify, notify_died, notify_death
+GRUPPEN: spieler, monster
+*/
+
+/*
+FUNKTION: notify_died
+DEKLARATION: void notify_died(object wer, object leiche, mapping infos)
+BESCHREIBUNG:
+Stirbt ein Lebewesen, wird diese Funktion in ihm und seiner Umgebung
+aufgerufen. "wer" ist der Gestorbene, "leiche" seine uebriggebliebene Leiche.
+"infos" ist das Mapping, welches die() und add_hp() uebergeben wurden.
+
+Ist ein Objekt beim Gestorbenen oder dem Raum als Controller fuer
+"notify_died" angemeldet (lebewesen_bzw_raum->add_controller("notify_died",
+object); ), so wird dann in diesem Objekt die Funktion
+notify_died(wer, leiche, infos) aufgerufen.
+VERWEISE: forbidden, notify, notify_killed, notify_death
+GRUPPEN: spieler, monster
+*/
+
+/*
+FUNKTION: query_corpse
+DEKLARATION: object query_corpse(object living, mapping infos)
+BESCHREIBUNG:
+Diese Funktion wird beim Tod eines Lebewesens aufgerufen, um eine Leiche
+zu erzeugen. Als Parameter wird das gestorbene Lebewesen und das Mapping,
+welches bei add_hp() und die() angegeben wurde, uebergeben.
+In die Leiche werden dann die Objekte bewegt, wenn man Objekte in die
+Leiche bewegen kann, ansonsten werden sie inden Raum gelegt.
+Dann werden die Wiederbelebungs-Daten in der Leiche gesetzt, um sie
+evtl. wiederbeleben zu koennen.
+Die Funktion wird zuerst im dead_ob aufgerufen, und dann im Lebewesen selbst.
+VERWEISE: set_dead_ob, set_no_resurrection, set_resurrection_info
+GRUPPEN: spieler, monster
+*/
+
+/*
+FUNKTION: die
+DEKLARATION: nosave varargs void die(mapping infos)
+BESCHREIBUNG:
+Damit stirbt das Monster. Das uebergebene Mapping hat die gleichen
+Eintraege wie das von add_hp.
+VERWEISE: add_hp, query_corpse, set_dead_ob, notify_died,
+          set_no_resurrection, set_resurrection_info
+GRUPPEN: spieler, monster
+*/
+nosave varargs void die(mapping infos)
+{
+    object attacker = infos && infos[AH_ATTACKER];
+    object corpse, *ob_list;
+    string dead_ob;
+    
+    if (!this_object())
+	return;
+
+    this_object()->stop_all_fights();
+    notify_message("Du bist soeben gestorben.\n",MA_FIGHT);
+    
+    if (attacker)
+    {
+        if(attacker==this_object())
+            this_object()->send_message(MT_NOISE|MT_LOOK,MA_FIGHT,
+                wrap(Der(attacker) + " hat sich selber getoetet."));
+        else
+            this_object()->send_message(MT_NOISE|MT_LOOK,MA_FIGHT,
+                wrap(Der(attacker) + " hat " + wen(0, ART_AAA) + " getoetet."),
+                wrap("Du hast " + den() + " getoetet.\n"), attacker);
+	attacker->add_align(-(this_object()->query_align() +
+			ALIGN_STRETCH * 2) / 4 );
+    }
+    else
+	this_object()->send_message(MT_NOISE|MT_LOOK,MA_FIGHT,
+		Wer(0,ART_AAA) + " stirbt.\n");
+	
+    if(infos && infos[AH_ORIGINATOR])
+    {
+        object origpl = find_player(infos[AH_ORIGINATOR]);
+        if(origpl && origpl != attacker)
+	    origpl->add_align(-(this_object()->query_align() +
+	    	ALIGN_STRETCH * 2) / 4 );
+    }
+
+    // Kurdel, 18.02.3000: Viren entfernen
+    map_objects(filter_objects(all_inventory(), "query_virus"), "remove");
+    
+    if(query_hp()>=0)
+	set_hp(-1);
+
+    // Erstmal einen Corpse holen.
+    if (dead_ob = this_object()->query_dead_ob())
+	corpse = dead_ob->query_corpse(this_object(), infos);
+    if (!corpse)
+	corpse = this_object()->query_corpse(this_object(), infos);
+
+#ifdef UNItopia
+    if (this_object()->query_eatable_corpse())
+    {
+	// changed: new corpse object...
+	if (!corpse)
+	{
+	    corpse = clone_object(
+                this_object()->query_eatable_corpse()["kadaver_file"] ||
+                "/p/Npc/obj/kadaver");   
+	    corpse->set_weight(this_object()->query_weight());
+	}
+    }
+    else
+    {
+	// standard corpse...
+	if (!corpse)
+	{
+	    corpse = clone_object("/obj/leiche");
+	    corpse->set_weight(this_object()->query_weight());
+	}
+	if (this_object()->query_personal()) {
+	    corpse->set_long("Das ist die Leiche von " + dem() + ".");
+	    corpse->set_decay_long("Dies sind die Ueberreste von " + dem() + ".");
+	} else {
+	    corpse->set_long("Das ist die Leiche " + eines() + ".");
+	    corpse->set_decay_long("Dies sind die Ueberreste " + eines() + ".");
+	}
+    }
+#else
+    // standard corpse...
+    if (!corpse)
+    {
+	corpse = clone_object("/obj/leiche");
+        corpse->set_weight(this_object()->query_weight());
+    }
+#endif
+
+    if(attacker && attacker != this_object())
+	corpse->set_murderer(filter((
+	    attacker->query_magic_disguise() ||
+	    map(([ "name", "cap_name", "personal", "gender", "personal_title",
+		   "adjektiv", "plural", "eigen", "menge"]),
+		(: call_other($3,"query_"+$1) :), attacker))+
+	    (["real_name":attacker->query_real_name()]),(:$2:)));
+
+    // Fuer die Daemonengilde Infos zur Wiederbelebung einer Leiche
+    // an diese weitergeben.
+    corpse->set_resurrection_info(({
+	playerp(this_object()),
+	playerp(this_object()) ? query_real_name()
+				: this_object()->query_name(),
+	playerp(this_object()) ? this_object()->query_real_gender()
+				: this_object()->query_gender(),
+	this_object()->query_real_stats(),
+	this_object()->query_max_hp(),
+	this_object()->query_max_sp(),
+	this_object()->query_num_hands(),
+	this_object()->query_min_damage(),
+	this_object()->query_max_damage(),
+	this_object()->query_personal()
+    }));
+    
+    corpse->set_no_resurrection(no_resurrection);
+    corpse->start_decay(this_object());
+    corpse->force_move(environment());
+    
+    this_object()->open_con();
+    ob_list = filter(all_inventory(this_object()),(:!$1->query_auto_load():));
+    // der corpse koennte vom move zerstoert worden sein
+    if (corpse && corpse->query_container())
+    {
+        int max_ie = corpse->query_max_internal_encumbrance();
+        corpse->set_max_internal_encumbrance(0);
+	
+	for (int i = sizeof(ob_list); i--; )
+	    if (ob_list[i] && !ob_list[i]->query_worn())
+	        ob_list[i]->move(corpse); 
+	for (int i = sizeof(ob_list); i--; )
+	    if (ob_list[i] && ob_list[i]->query_worn())
+	    {
+	        ob_list[i]->move(corpse); 
+	        if(ob_list[i]) ob_list[i]->do_wear();
+	    }
+	    
+	foreach (object inv_ob: ob_list)
+	    if(inv_ob && present(inv_ob,this_object())) // Noch da?
+		inv_ob->move(environment());
+	
+	corpse->set_max_internal_encumbrance (max_ie);
+    }
+    else
+    {
+	for (int i = sizeof(ob_list); i--; )
+	    if (ob_list[i] && !ob_list[i]->query_worn())
+		ob_list[i]->move(environment());
+	for (int i = sizeof(ob_list); i--; )
+	    if (ob_list[i] && ob_list[i]->query_worn())
+		ob_list[i]->move(environment());
+    }
+    
+    notify("died", this_object(), corpse, infos);
+    environment()->notify("died", this_object(), corpse, infos);
+    
+    if(attacker)
+	attacker->notify("killed", this_object(), attacker, corpse);
+
+    second_life(corpse);
+}
+
+varargs void call_die(mapping infos)
+{
+    if (wizp(this_object()))
+	this_object()->send_message_to (this_object(), MT_NOTIFY, MA_UNKNOWN,
+	    "Beinahe waerst Du gestorben, aber zum Glueck bist Du ja ein "
+	    "Gott.\n" +
+	    wrap("("+this_object()->determine_erf_tod_message(infos)+")"));
+    else
+	die(infos);
+}
+
+#ifdef UNItopia
+/*
+FUNKTION: set_no_resurrection
+DEKLARATION: void set_no_resurrection(string warum)
+BESCHREIBUNG:
+Damit kann
+- fuer ein (lebendiges) Wesen gesetzt werden, dass seine Leiche
+  nicht wiederbelebt werden kann, wenn es gestorben ist,
+- fuer eine Leiche (also wenn das Monster bereits tot ist oder aber
+  es das Monster nie gegeben hat, weil die Leiche geclont worden ist,
+  ohne dass es jemals ein Monster gab),
+verboten werden, dass die Leiche wiederbelebt wird.
+Der uebergebene Parameter ist ein string mit der Begruendung dafuer,
+VERWEISE: query_no_resurrection, query_resurrection_info
+GRUPPEN: spieler, monster
+*/
+void set_no_resurrection(string warum)
+{
+    no_resurrection = warum;
+}
+
+/*
+FUNKTION: query_no_resurrection
+DEKLARATION: string query_no_resurrection()
+BESCHREIBUNG:
+Liefert 0, falls ein Monster bzw. eine Leiche wiederbelebt werden darf,
+andernfalls liefert es eine Begruendung dafuer, warum das Monster, wenn
+es einmal gestorben ist, bzw. die Leiche, nicht wiederbelebt werden darf.
+VERWEISE: set_no_resurrection, query_resurrection_info
+GRUPPEN: spieler, monster
+*/
+string query_no_resurrection()
+{
+    return no_resurrection;
+}
+#endif

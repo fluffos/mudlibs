@@ -1,0 +1,1164 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/obj/virus.c
+// Description: Ein Virus um Krankheiten zu simulieren
+// Author:	Aeneas (23.12.93)
+// Modified by: Crowsis@FinalFrontier on 27.11.94
+//     		Virus muss absofort nicht mehr Hps abziehen
+// 	Bert@FinalFrontier on 29.11.94
+//     		Virus etwas modularer aufgebaut (Kleine Aenderungen an 
+//		einzelnen Funktionen.)
+//     		inherit "/i/move" mit "/i/install" ersetzt.
+//     		Die Ursprungslebensdauer des Virus wird jetzt
+//       	mit uebergeben (Bei Seuche) bei einer Infektion.
+//     		Virus hat jetzt einen Namen.
+// 	Bert@FinalFrontier on 30.11.94
+//     		Bei einer Seuche wird man jetzt fuer 'ne bestimmte Zeit 
+//		immunisiert. Neue Funktion void set_immun_time(int time)
+// 	Monty (19.04 1996) 
+//		im UNItopia Standard dokumentiert, 
+// 		autoloading eingebaut, kleine Verbesserungen, einige 
+//		query-Funktionen
+// 	Monty (22.04 1996) 
+//		heal_virus() removed den virus nicht mehr, sondern beendet die
+//		Krankheit (=> Bei Seuchen beginnt die Immunisierung!)
+//		Kleines Facelifting. init_virus gegen ein Buendel 
+//		set_virus_blabla() ersetzt. Doku geupdatet.
+//	Monty (02.05 1996) 
+//		Bugfix: messages und virus_chance werden jetzt mit 
+//		abgespeichert, query_info() verschoenert.
+//
+//	Garthan (02.04.96) Test ob move auch klappt bei Ansteckung!
+//	Freaky (22.06.96)  shadow wird im init schon gestartet und gecloned
+//	Monty (01.07 96)   shadow wird im remove() entfernt.
+//      Monty (27.11 96)   Der Virus wird removed, wenn die AP des owners unter
+//		0 gehen => Auch Unsterbliche Engel verlieren den Virus jetzt,
+//		wenn Lyrion kommt.
+//      Crynool (02.12.96) shadow ueberwurf im init per call_out gestartet.
+//                         *grins monty*
+//      Crynool (11.12.96) set_virus_verursacher() und 
+//		           query_virus_verursacher() eingebaut. Sollen den Erzeuger 
+//		           des Virus uebermitteln
+//	Monty (12.03.97)   Goetter koennen niemanden mehr anstecken.
+//	Freaky (18.05.97)  Beim Net-Dead und Ausloggen wird der Virus angehalten
+//			   Beim Einloggen wieder gestartet.
+//      Sissi (26.11.98)   Beim Einloggen wird der Virus nun wirklich wieder
+//                         gestartet.
+//
+//
+// $Log: virus.c,v $
+// Revision 1.48  2016/04/12 11:26:11  sorcerer
+// duration_bak bei Verlaengerung auch anpassen
+//
+// Revision 1.47  2014/08/27 18:52:39  myonara
+// Bugfix zu vorherigem Patch (sizeof)
+//
+// Revision 1.46  2014/08/15 16:18:28  myonara
+// String als Parameter fuer set_virus_messages zugelassen, zuviele RTE's.
+//
+// Revision 1.45  2012-11-26 22:04:43  sorcerer
+// add_hp_infos hinzugefuegt
+//
+// Revision 1.44  2010-05-01 20:57:41  sorcerer
+// plural speichern, bei Seuchen plural+ids uebernehmen, seteuid() raus
+//
+// Revision 1.43  2008/01/16 09:44:50  gnomi
+// Call from destructed object.
+//
+// Revision 1.42  2005/10/20 19:33:58  gnomi
+// Indexing past string end.
+//
+// Revision 1.41  2005/05/06 22:59:57  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.40  2005/03/28 00:55:33  gnomi
+// Typo.
+//
+// Revision 1.39  2004/11/27 21:29:41  gnomi
+// add_hp-Aenderung: Aufruf angepasst.
+//
+// Revision 1.38  2004/07/04 00:18:00  gnomi
+// syslog nur aufrufen, wenn dies ein /obj/virus-Clone ist.
+//
+// Revision 1.37  2004/04/17 02:21:47  gnomi
+// heal_virus: Als ersten Schritt autoloading auf 0 setzen (fuer den Fall eines
+// Fehlers).
+// Seuchen breiten sich nicht mehr bei imm_time=0 aus.
+//
+// Revision 1.36  2003/12/13 15:59:52  gnomi
+// Logausgabe verbessert.
+//
+// Revision 1.35  2003/11/18 06:33:59  gnomi
+// Automatische Aggressionserkennung und Log bei moeglichen Aggressionen
+// eingebaut.
+//
+
+// FUNKTIONSWEISE: /doc/funktionweisen/virus
+
+inherit "/i/install";
+inherit "/i/item";
+
+#include <add_hp.h>
+#include <config.h>
+#include <move.h>
+#include <deklin.h>
+#include <invis.h>
+#include <error.h>
+#include <level.h>
+#include <message.h>
+
+#define LOCATION 	__FILE__
+#define DESEASE_RATE 	60
+#define MAX_IMMUN_TIME 	7200
+#define TYPES		({"fluch","krankheit","seuche","gift","verletzung"})
+
+// Nur zum Debuggen, wenn 1 und es wird neue Dauer gesetzt -> Log-Ausgabe
+nosave int duration_set;
+
+int abzug, min, duration, duration_bak , chance, imm_time, autoloading;
+string look, kind, name, gender, hmsg, shadow_path, virus_verursacher;
+closure c_look;
+object shadow;
+int rest_disease_time;
+mixed additional_data, *meldung;
+mapping add_hp_infos=([]);
+
+nosave int aggression_handled;
+nomask void set_no_aggression() {aggression_handled=1;} // Nur mudlib-intern zu verwenden!
+
+// Prototypes:
+varargs void disease( int heal_virus_called);
+void heal_virus();
+
+string extra_look()
+{
+    if (c_look)
+	return sprintf("%-=75s", funcall(c_look, environment()));
+}
+
+/*
+FUNKTION: set_add_hp_infos
+DEKLARATION: void set_add_hp_infos(mapping infos)
+BESCHREIBUNG:
+Setzt Eintraege fuer das add_hp-infos-Mapping. Dabei wird ein Mapping wie in
+der Dokumentation zu add_hp beschrieben uebergeben.
+Derzeit werden folgende Keys unterstuetzt:
+AH_ERF_TOD, AH_ERF_TOD_OTHER, AH_ERF_RETTUNG 
+Alle anderen Keys werden ignoriert.
+VERWEISE: query_add_hp_infos, add_hp
+GRUPPEN: virus
+*/
+varargs void set_add_hp_infos(mapping infos) 
+{
+    add_hp_infos=infos & ([AH_ERF_TOD, AH_ERF_TOD_OTHER, AH_ERF_RETTUNG,]);
+    return;
+}
+
+/*
+FUNKTION: query_add_hp_infos
+DEKLARATION: mapping query_add_hp_infos()
+BESCHREIBUNG:
+Gibt die Eintraege zurueck, die bei einem add_hp-Aufruf im Virus dem infos-
+Mapping hinzugefuegt werden. Wenn keine zusaetzlichen Eintraege gesetzt sind,
+wird ein leeres Mapping zurueckgegeben.
+VERWEISE: set_add_hp_infos, add_hp
+GRUPPEN: virus
+*/
+mapping query_add_hp_infos() 
+{
+    return copy(add_hp_infos);
+}
+
+/*
+FUNKTION: set_virus_verursacher
+DEKLARATION: void set_virus_verursacher(string|object who)
+BESCHREIBUNG:
+Setzt den Verursacher des Virus. Funktioniert nur bei Spielern.
+Wenn ein String angegeben wurde, so wird er als real_cap_name des
+Spielers interpretiert.
+VERWEISE: query_virus_verursacher
+GRUPPEN: virus
+*/
+void set_virus_verursacher(mixed ob)
+{
+   if (playerp(ob))
+       virus_verursacher = ob->query_real_cap_name();
+   else if(stringp(ob))
+       virus_verursacher = ob;
+}
+
+/*
+FUNKTION: query_virus_verursacher
+DEKLARATION: string query_virus_verursacher()
+BESCHREIBUNG:
+Liefert den Verursacher des Virus zurueck.
+VERWEISE: set_virus_verursacher
+GRUPPEN: virus
+*/
+string query_virus_verursacher() { return virus_verursacher; }
+
+/*
+FUNKTION: set_virus_shadow_path
+DEKLARATION: void set_virus_shadow_path(string virus_shadow_path)
+BESCHREIBUNG:
+Setzt beim Virus einen Shadow, der waehrend der gesamten Krankheit ueber
+dem Opfer gehalten wird. Fies, echt.
+Mit set_virus_additional_data koennen Werte, die der Shadow benoetigt, im
+Virus gespeichert werden und somit ueber das ausloggen erhalten bleiben,
+siehe dort.
+VERWEISE: query_virus_shadow_path, query_virus_shadow, do_virus_shadow_action,
+          set_virus_additional_data, query_virus_additional_data
+GRUPPEN: virus
+*/
+void set_virus_shadow_path(string sh) { shadow_path = sh;}
+/*
+FUNKTION: query_virus_shadow_path
+DEKLARATION: string query_virus_shadow_path()
+BESCHREIBUNG:
+Liefert den Pfad des Krankheitsbegleitenden Schattens (so vorhanden).
+VERWEISE: set_virus_shadow_path, query_virus_shadow, do_virus_shadow_action
+GRUPPEN: virus
+*/
+string query_virus_shadow_path() { return shadow_path;}
+/*
+FUNKTION: query_virus_shadow
+DEKLARATION: object query_virus_shadow()
+BESCHREIBUNG:
+Liefert einen Objectpointer auf einen Krankheitsbegleitenden Shadow (so
+vorhanden).
+VERWEISE: set_virus_shadow_path, query_virus_shadow_path, 
+do_virus_shadow_action
+GRUPPEN: virus
+*/
+object query_virus_shadow() { return shadow; }
+
+/*
+FUNKTION: query_virus_look
+DEKLARATION: string query_virus_look()
+BESCHREIBUNG:
+Liefert das Aussehen, das ein Virus einem Spieler verleiht. 
+VERWEISE: set_virus_look
+GRUPPEN: virus
+*/
+string query_virus_look() { return look; }
+
+/*
+FUNKTION: set_virus_look
+DEKLARATION: void set_virus_look(string look)
+BESCHREIBUNG:
+Mit set_virus_look() setzt man eine Extra-Beschreibung des erkrankten Spielers.
+Dabei ist 'look' eine Pseudoclosure, welche den vollstaendigen Text
+enthaelt, der dann der Beschreibung angehaengt wird.
+Aufrufe von Grammatikfuntkionen in der Pseudoclosure ohne Argument erhalten
+automatisch den Spieler als Argument.
+
+BEISPIEL:
+    set_virus_look("$Er() ist gruen im Gesicht.");
+gesetzt wurde, erscheint bei der Beschreibung eines z.B. saechlichen Spielers 
+    Es ist gruen im Geschicht.
+
+Der traditionelle Aufruf mit einem String, welchem automatisch das Personal-
+pronomen vorangestellt wird, funktioniert ebenfalls:
+
+    set_virus_look("ist gruen im Gesicht.");
+
+Ergibt das gleiche Ergebnis wie das 1. Beispiel.
+VERWEISE: query_virus_look
+GRUPPEN: virus
+*/
+void set_virus_look(string str)
+{
+    look = str;
+    if(str)
+    {
+	if(strstr(str,"$") < 0)
+	    str = "$Er() "+str;
+	c_look = bind_lambda(mixed_to_closure(str, ({'tp}), 1, 1));
+    }
+    else
+	c_look = 0;
+}
+
+/*
+FUNKTION: set_immun_time
+DEKLARATION: void set_immun_time(int immun_time)
+BESCHREIBUNG:
+Setzt die Dauer, die ein Spieler nach einer Seuche immun bleibt. Es sind nur
+Werte zwischen 300 und 7200 oder 0 erlaubt.
+VERWEISE: query_immun_time
+GRUPPEN: virus
+*/
+void set_immun_time(int time){ 
+    imm_time= (!time ? 0 : ((time < 300) ? 300 : 
+	((time > MAX_IMMUN_TIME) ? MAX_IMMUN_TIME : time))); 
+}
+
+/*
+FUNKTION: query_immun_time
+DEKLARATION: int query_immun_time()
+BESCHREIBUNG:
+Liefert die Dauer, die ein Spieler nach einer Seuche immun bleibt.
+VERWEISE: set_immun_time
+GRUPPEN: virus
+*/
+int query_immun_time() { return imm_time; }
+
+/*
+FUNKTION: set_virus_messages
+DEKLARATION: void set_virus_messages(mixed *messages)
+BESCHREIBUNG:
+Setzt die Meldungen, die der Spieler vom Virus beim AP-Abzug bekommt.
+Bei jedem AP-Abzug wird ein Element des Arrays zufaellig ausgegeben.
+
+Eine Meldung kann dabei sein:
+ - ein normaler String:
+   Meldung wird an den Virustragenden ausgegeben.
+   Beispiel: "Dir ist total uebel."
+ - ein String, der mit einem Ausrufezeichen beginnt:
+   Der Text wird als Befehl vom Virustragenden ausgefuehrt.
+   Beispiel: "!huste herzergreifend",
+ - ein Stringarray aus zwei Strings:
+   Der erste Text wird an den Virustraeger ausgegeben, der zweite an
+   die anderen im Raum.
+   Beispiel: ({"Meldung fuer Spieler", "Meldung fuer andere"}),
+ - wie oben, nur kann zusaetzlich der MessageTyp und MessageAction fuer
+   die Meldung, die an "die anderen" geht, angegeben werden:
+   Beispiele: ({"fuer Spieler", "mit MT fuer andere", MT_NOISE}),
+              ({"fuer Spieler", "mit MT und MA fuer andere", MT_NOISE, MA_EAT})
+Die Meldungen fuer andere koennen dabei Pseudoclosures enthalten:
+   "$Der(OBJ_TP) wird ganz gruen im Gesicht, $er(OBJ_TP) sieht krank aus."
+VERWEISE: query_virus_messages
+GRUPPEN: virus
+*/
+void set_virus_messages(mixed mess)
+{
+    if (stringp(mess)) // da haben einige die Doku nicht gelesen
+    { // dass das eigentlich immer ein Array von Meldungen ist.
+        meldung = ({ mess }); // es wird hier mal abgefangen.-myonara
+    }
+    else if (pointerp(mess) && sizeof(mess)) 
+    {
+        meldung = mess;
+    }
+    else
+    {
+        meldung = ({ "" });
+    }
+}
+
+/*
+FUNKTION: query_virus_messages
+DEKLARATION: mixed *query_virus_messages()
+BESCHREIBUNG:
+Liefert die Meldungen eines Virus zurueck.
+VERWEISE: set_virus_messages
+GRUPPEN: virus
+*/
+mixed *query_virus_messages() { return meldung; }
+
+/*
+FUNKTION: query_virus
+DEKLARATION: int query_virus()
+BESCHREIBUNG:
+Liefert bei Viren natuerlich 1.
+VERWEISE: query_virus_type
+GRUPPEN: virus
+*/
+int query_virus() { return 1; }
+
+/*
+FUNKTION: query_virus_type
+DEKLARATION: string query_virus_type()
+BESCHREIBUNG:
+Liefert den Typ des Virus. Moegliche Returnwerte sind momentan:
+"fluch", "krankheit", "gift", "seuche" und "verletzung".
+VERWEISE: set_virus_type, query_virus
+GRUPPEN: virus
+*/
+string query_virus_type() { return kind; }
+
+/*
+FUNKTION: set_virus_type
+DEKLARATION: void set_virus_type(string type)
+BESCHREIBUNG:
+Setzt den Typ eines Virus. Moegliche Argumente:
+"gift","krankheit","seuche","fluch","verletzung". 
+Andere Argumente fuehren zu einem Laufzeitfehler. Die Einzelnen
+Typen unterscheiden sich nur in der Defaultmeldung bei ihrem Ende, ausser
+die "seuche", sie ist ansteckend und nach Ende der Seuche ist man eine
+Weile immun.
+VERWEISE: query_virus_type, set_immun_time, set_virus_chance
+GRUPPEN: virus
+*/
+void set_virus_type(string str) {
+    if (member(TYPES, str)==-1) {
+	do_error("Virus: Typ "+str+" nicht erlaubt\n");
+	kind = TYPES[0];
+    }
+    else
+	kind = str;
+}
+
+/*
+FUNKTION: add_virus_str
+DEKLARATION: void add_virus_str(int strength)
+BESCHREIBUNG:
+Damit kann man den AP-Abzug pro Minute eines Virus veraendern. Positive
+Werte verschaerfen die Krankheit, negative lindern.
+VERWEISE: set_virus_str, query_virus_str
+GRUPPEN: virus
+*/
+void add_virus_str(int i) {
+    if((abzug+=i) < 1)
+	heal_virus();
+}
+
+/*
+FUNKTION: set_virus_str
+DEKLARATION: void set_virus_str(int strength)
+BESCHREIBUNG:
+Setzt die Aggressivitaet eines Virus, das heisst, die Anzahl der APs, die pro
+Minute abgezogen werden. strength == 0 ist erlaubt.
+VERWEISE: add_virus_str, query_virus_str
+GRUPPEN: virus
+*/
+void set_virus_str(int strength) {
+    abzug = (strength < 0) ? 0 : strength;
+}
+
+/*
+FUNKTION: query_virus_str
+DEKLARATION: int query_virus_str()
+BESCHREIBUNG:
+Liefert die momentane Staerke (also AP-Abzug pro Minute) eines Virus
+VERWEISE: set_virus_str, add_virus_str
+GRUPPEN: virus
+*/
+int query_virus_str() { return abzug;  }
+
+/*
+FUNKTION: set_virus_dur
+DEKLARATION: void set_virus_dur(int duration)
+BESCHREIBUNG:
+Setzt die Verweildauer eines Virus. 0 ist ein nicht besonders sinnvoller
+Wert (es sei denn, als Seuchen-Immunserum), -1 bedeutet ohne zeitliches
+Limit (Vorsicht, Viren sind Autoloader!). Sind <duration> Sekunden vergangen,
+dann verabschiedet sich der Virus, bei einer Seuche bleibt der Virus 
+die mit set_immun_time() gesetzte Zeit bestehen und wirkt als Schutz gegen
+diese spezielle Seuche.
+VERWEISE: add_virus_dur, query_virus_dur, set_immun_time, set_virus_min,
+          query_infected_since
+GRUPPEN: virus
+*/
+void set_virus_dur(int t)
+{
+    if((duration_set || t<0) && load_name()+".lpc"==__FILE__)
+	sys_log("set_virus_dur",
+	    sprintf("%s %s (%s) von %O\n"+
+	            " "*18+"Dauer: %d/%d -> %d%s\n"+
+		    " "*18+"Staerke: %d\n"+
+		    " "*18+"Creator: %s\n"+
+		    " "*18+"previous_object: %O\n",
+		shorttimestr(time()), object_name(), query_cap_name(),
+		environment(),
+		duration, duration_bak, t, duration_set?"":" (erster Aufruf)",
+		query_virus_str(),
+		query_creator(), previous_object()));
+    else
+	duration_set = 1;
+    if (t < -1)
+	t = -1;
+    duration = duration_bak = t;
+}
+
+/*
+FUNKTION: query_virus_dur
+DEKLARATION: int query_virus_dur()
+BESCHREIBUNG:
+Liefert die momentane Dauer eines Virus
+VERWEISE: set_virus_dur, add_virus_dur, query_infected_since
+GRUPPEN: virus
+*/
+int query_virus_dur() { return duration; }
+
+/*
+FUNKTION: add_virus_dur
+DEKLARATION: void add_virus_dur(int duration)
+BESCHREIBUNG:
+Damit aendert man die Dauer eines Virus. 
+VERWEISE: set_virus_dur, query_virus_dur, query_infected_since
+GRUPPEN: virus
+*/
+void add_virus_dur(int i) {
+    if ((duration+=i) < 1)
+	heal_virus();
+    else
+        duration_bak+=i;
+}
+
+/*
+FUNKTION: query_infected_since
+DEKLARATION: int query_infected_since()
+BESCHREIBUNG:
+Liefert, seit wann ein Spieler mit einem Virus infiziert ist.
+VERWEISE: set_virus_dur, query_virus_dur, add_virus_dur
+GRUPPEN: virus
+*/
+int query_infected_since()
+{
+    return duration_bak - duration;
+}
+  
+
+/*
+FUNKTION: set_vanishing_virus
+DEKLARATION: void set_vanishing_virus()
+BESCHREIBUNG:
+Setzt einen Virus auf 'old style', das heisst, er verschwindet, wenn man
+sich ausloggt.
+VERWEISE: 
+GRUPPEN: virus
+*/
+void set_vanishing_virus() { autoloading = 0; }
+
+/*
+FUNKTION: query_virus_name
+DEKLARATION: string query_virus_name()
+BESCHREIBUNG:
+Liefert den Namen eines Virus.
+VERWEISE: set_virus_name
+GRUPPEN: virus
+*/
+string query_virus_name() { return name; }
+
+/*
+FUNKTION: set_virus_name
+DEKLARATION: void set_virus_name(string str) 
+BESCHREIBUNG:
+Setzt den Namen, ueber den ein Virus identifiziert wird. Der Name und die
+Id des Objekts werden gleich mit gesetzt.
+VERWEISE: query_virus_name
+GRUPPEN: virus
+*/
+void set_virus_name(string str) {
+    name = str;
+    set_name(str);
+    set_id(({"virus",lower_case(str)}));
+}
+
+/*
+FUNKTION: query_virus_gender
+DEKLARATION: string query_virus_gender()
+BESCHREIBUNG:
+Liefert den Geschlecht eines Virus.
+VERWEISE: set_virus_name, query_virus_name
+GRUPPEN: virus
+*/
+string query_virus_gender() { return gender; }
+
+/*
+FUNKTION: set_virus_gender
+DEKLARATION: void set_virus_gender(string str) 
+BESCHREIBUNG:
+Setzt das Geschlecht, welches zum Namen des Viruses passt.
+VERWEISE: query_virus_gender, set_virus_name
+GRUPPEN: virus
+*/
+void set_virus_gender(string str) {
+    gender = str;
+    set_gender(str);
+}
+
+/*
+FUNKTION: query_virus_min
+DEKLARATION: int query_virus_min()
+BESCHREIBUNG:
+Liefert den AP-Wert, bei dem der Virus sein Opfer in Ruhe laesst. Bei
+0 oder negativem Wert, fuehrt der Virus zum Tode, wenn er nicht geheilt wird.
+VERWEISE: set_virus_min
+GRUPPEN: virus
+*/
+int query_virus_min() { return min; }
+
+/*
+FUNKTION: set_virus_min
+DEKLARATION: void set_virus_min(int min)
+BESCHREIBUNG:
+Setzt die minimalen APs, bei der ein Spieler gesundet. Wenn die APs eines
+Spielers unter diesen Wert fallen, dann verschwindet der Virus. Es sind
+alle Werte erlaubt, bei Werten <= 0 bleibt der Virus, bis der Spieler tot
+ist, oder bis die Maximaldauer ueberschritten ist.
+VERWEISE: query_virus_min, set_virus_dur
+GRUPPEN: virus
+*/
+void set_virus_min(int i) { min = i; }
+
+/*
+FUNKTION: set_virus_chance
+DEKLARATION: void set_virus_chance(int chance)
+BESCHREIBUNG:
+Setzt bei Seuchen die Ansteckungswahrscheinlichkeit in Prozent (das heisst,
+es gelten nur Werte zwischen 0 und 100. 0 beudeutet: nicht Ansteckend, 100 
+heisst: extrem ansteckend). Die Extremwerte sollten nicht verwendet werden:
+Bei 0% sollte man gleich den Typ "krankheit" waehlen, 100% sind mehr als 
+Unfair!
+VERWEISE: query_virus_chance
+GRUPPEN: virus
+*/
+void set_virus_chance(int i) {
+    chance = (i<0) ? 0 : ((i>100) ? 100 : i); 
+}
+
+/*
+FUNKTION: query_virus_chance
+DEKLARATION: int query_virus_chance()
+BESCHREIBUNG:
+Liefert bei Seuchen die Ansteckungswahrscheinlichkeit in Prozent. Bei anderen
+Virustypen ist sie 0.
+VERWEISE: set_virus_chance
+GRUPPEN: virus
+*/
+int query_virus_chance() { return (kind == "seuche") ? chance : 0; }
+
+/*
+FUNKTION: set_virus_heal_msg
+DEKLARATION: void set_virus_heal_msg(string heal_msg)
+BESCHREIBUNG:
+Setzt die Meldung, die ein Spieler beim Ausheilen eines Virus bekommt.
+Muss nicht unbedingt gesetzt werden, fuer jeden Virus-Typ gibt es einen
+Default.
+VERWEISE: query_virus_heal_msg
+GRUPPEN: virus
+*/
+void set_virus_heal_msg(string heal_msg) { hmsg = heal_msg; }
+
+/*
+FUNKTION: query_virus_heal_msg
+DEKLARATION: string query_virus_heal_msg()
+BESCHREIBUNG:
+Liefert die Meldung, die ein Spieler beim Ausheilen eines Virus bekommt.
+VERWEISE: set_virus_heal_msg
+GRUPPEN: virus
+*/
+string query_virus_heal_msg() {
+    return hmsg ? hmsg : 
+        (["fluch":"Du spuerst, wie eine grosse Last von Dir faellt.\n",
+	"krankheit":"Du bist auf dem Weg der Besserung.\n",
+	"seuche":"Du bist auf dem Weg der Besserung.\n",
+	"verletzung":"Der letzte Grind ist nun von deinen Wunden abgefallen.\n",
+	"gift":"Das Gift hat sich in deinen Adern aufgeloest.\n"])
+    [query_virus_type()];
+}
+
+/*
+FUNKTION: init_virus
+DEKLARATION: deprecated void init_virus(string name, int staerke, int bis_zu, int dauer, string aussehen, string art, string heal_msg, string gender) 
+BESCHREIBUNG:
+Old-Style Funktion, bei neuen Viren bitte die Set-Funktionen verwenden.
+-------------- VERALTET! ---------------------------------------------
+Mit dieser Funktion bereitet man einen Virus auf die Verpflanzung vor.
+    name  	= Name der Krankheit bzw. Vergiftung.
+    staerke	= HP-Abzug pro Minute (nur str>=0 moeglich!)
+    bis_zu   	= Untere Grenze. Unterschreitet die HP-Zahl min, ist die
+	  	  Krankheit auskuriert. min=-1 fuer keine Untergrenze, was
+		  u.U. zum Tod des Spielers fuehrt! (ebenso min=0).
+    dauer 	= Dauer der Krankheit in Sekunden. Praktisch sind nur
+	    	  Vielfache von 60 interessant, da der Abzug alle 60 Sekunden
+	    	  ausgefuehrt wird. dur=-1 heisst endlose Krankheit. Auch
+	    	  hierbei kann ein Spieler sterben!
+    aussehen  	= Eine Beschreibung des Spielers welche in extra_look()
+	    	  zurueckgegeben wird. Dieser String erscheint unter der
+	    	  Spielerbeschreibung bei einem 'schau auf <spieler>'.
+    art  	= Virus-Art. Folgendes steht zur Auswahl: "verletzung",
+	    	  "krankheit", "gift", "seuche" und "fluch". Seuchen stecken
+	    	  andere Spieler an! Je nach Art des Virus, sollte man diesen
+	    	  auch auf unterschiedliche Arten heilen koennen.
+	    	  Spieler an! Krankheiten und Vergiftungen sind natuerlich
+	    	  auf verschiedene Arten zu heilen!
+    heal_msg 	= Welche Nachricht, soll der Spieler erhalten, wenn er die
+	    	  Krankheit ueberwunden hat ?
+	    	  Wenn keine Nachrricht angegeben, wird eine Standarnachricht
+	    	  fuer die Art des Viruses ausgegeben.
+    gender      = Zum Name passende Geschlecht.
+VERWEISE: set_virus_name, query_virus_name, set_virus_str, query_virus_str, 
+    set_virus_min, query_virus_min, set_virus_dur, query_virus_dur,
+    set_virus_type, query_virus_type, set_virus_look, query_virus_look,
+    set_virus_heal_msg, query_virus_heal_msg
+GRUPPEN: virus
+*/
+deprecated varargs void init_virus(string bez, int staerke, int bis_zu, int dauer,
+		string aussehen, string art, string heal_msg, string gen) {
+    set_virus_str(staerke);
+    set_virus_min(bis_zu);
+    set_virus_heal_msg(heal_msg);
+    set_virus_look(aussehen);
+    set_virus_type(art);
+    set_virus_name(bez);
+    set_virus_gender(gen);
+    set_virus_dur(dauer);
+}
+
+// Hilfsfunktion zum Beenden der Krankheit: gibt Meldungen aus, und
+// regelt die Immunisierung bei Seuchen. Entfernt den Shadow
+nosave nomask void _heal( object owner, int heal_virus_called)
+{
+    autoloading = 0; // Falls es einen RTE gibt...
+    
+    // Die Meldung ausgeben: (wenn der Spieler tot ist, is das zu gemein)
+    if (!owner->query_ghost()) 
+        send_message_to(owner, MT_NOTIFY, MA_SENSE, wrap(query_virus_heal_msg()));
+
+    owner->notify( "virus_cure", this_object(), heal_virus_called);
+
+    // Alles ausser Seuchen wird einfach weggeschmissen
+    if(kind!="seuche" || !imm_time) {
+	remove();
+	return;
+    }
+
+    // Seuchen werden noch behalten.
+    if(find_call_out("remove")==-1 && imm_time) {
+	autoloading = 0;
+	duration = -2;
+	call_out("remove",imm_time);
+    }
+    if (shadow)
+	shadow->remove_shadow(shadow);
+    look=0;
+    c_look=0;
+}
+
+/*
+FUNKTION: query_virus_healed
+DEKLARATION: int query_virus_healed()
+BESCHREIBUNG:
+Dient bei einer Seuche dazu, zu entscheiden, ob der Virus noch aktiv
+ist (siehe set_immun_time()). Ein Virus, der den Player lediglich
+immunisiert, liefert hier 1.
+VERWEISE: set_immun_time, query_immun_time, heal_virus
+GRUPPEN: virus
+*/
+int query_virus_healed() {
+    return find_call_out("remove") != -1;
+}
+
+// Eine Dummy-Deklaration fuer do_virus_shadow_action()
+/*
+FUNKTION: do_virus_shadow_action
+DEKLARATION: void do_virus_shadow_action(object shadow, object virus)
+BESCHREIBUNG:
+Wird bei einem Virus mit Shadow in seinem Shadow aufgerufen, wenn der
+Virus seinen Schaden macht. Ein Shadow sollte nur darauf ansprechen, wenn
+der erste Parameter this_object() entspricht.
+
+So sollte jede Implementierung dieser Funktion ungefaehr folgenden
+Text am Anfang enthalten:
+
+    if(shadow!=this_object())
+    {
+	query_shadow_owner()->do_virus_shadow_action(shadow, virus);
+        return;
+    }
+	
+VERWEISE: set_virus_shadow_path, query_virus_shadow_path, query_virus_shadow,
+          set_virus_additional_data, query_virus_additional_data
+GRUPPEN: virus
+*/
+
+/*
+FUNKTION: set_virus_additional_data
+DEKLARATION: void set_virus_additional_data(mixed data)
+BESCHREIBUNG:
+Um in einem Virus weitere Daten ueber das Ausloggen hinaus abzuspeichern,
+beispielsweise Daten, die der vom Virus zu ladende Shadow benoetigt, kann
+diese Funktion im Virus verwendet werden.
+VERWEISE: set_virus_shadow_path, query_virus_shadow_path, query_virus_shadow,
+          do_virus_shadow_action, query_virus_additional_data
+GRUPPEN: virus
+*/
+
+void set_virus_additional_data (mixed data)
+{
+    additional_data = data;
+}
+    
+/*
+FUNKTION: query_virus_additional_data
+DEKLARATION: mixed query_virus_additional_data()
+BESCHREIBUNG:
+Liefert die mit set_virus_additional_data gesetzten Daten, siehe dort.
+VERWEISE: set_virus_shadow_path, query_virus_shadow_path, query_virus_shadow,
+          do_virus_shadow_action, set_virus_additional_data
+GRUPPEN: virus
+*/
+
+mixed query_virus_additional_data ()
+{
+    return additional_data;
+}
+    
+// Die zentrale Funktion: sie wird im 60-Sec-Takt aufgerufen
+varargs void disease( int heal_virus_called)
+{
+    object owner, *list, ob;
+    int r,ret;
+    mixed meld;
+
+    // Wenn kein Owner mehr da ist, dann weg mit.
+    if (!(owner=environment())) 
+    {
+	remove();
+	return;
+    }
+
+    // Ende wegen Ueberschreitung der Krankheitszeit
+    // Duration == -1 ist unendlich lange
+    if (duration!=-1) 
+    { 
+	if((duration-=DESEASE_RATE) < 1) 
+	{
+	    _heal(owner, heal_virus_called);
+	    return;
+	}
+    }
+
+    // Ende, da owner weniger als min APs hat
+    if (owner->query_hp()<=min) {
+	_heal(owner, heal_virus_called);
+	return;
+    }
+
+    // Meldung ausgeben
+    meld = meldung[random(sizeof(meldung))];
+    if (stringp (meld) && sizeof(meld)) {
+        if (meld[0] == '!')
+            owner->do_command(meld[1..]);
+        else
+            send_message_to(owner, MT_NOTIFY, MA_UNKNOWN, wrap(meld));
+    }
+    else if (pointerp (meld)) {
+        int mt, ma;
+        mt = MT_NOTIFY;
+        ma = MA_UNKNOWN;
+        switch (sizeof (meld)) {
+            case 4: ma = meld[3];
+            case 3: mt = meld[2];
+            case 2: owner->send_message (mt,ma,
+                        wrap(closure_to_string(mixed_to_closure(meld[1]))));
+            case 1: send_message_to (owner,MT_NOTIFY,MA_UNKNOWN,wrap(meld[0]));
+        }
+    }
+
+    ret = owner->add_hp(-abzug, 
+                        ([AH_ORIGINATOR: virus_verursacher,
+	                  AH_FLAGS: AH_NO_AGGRESSION,
+	                  AH_CAUSE: this_object(),])+add_hp_infos);
+        
+    // Wenn Spieler oder Engel stirbt, wird der Shadow jetzt zerstoert.
+    // Bei Engeln mit Unsterblichkeit wurde query_ghost() nie wahr, so dass
+    // diese Abbruchsbedingung nix taugt. Also muessen die AP unter 0 sinken.
+    if (!this_object() || !owner || owner->query_hp() < 0 || ret < 0)
+    {
+	// Hier muss man aufpassen. Wenn der Owner stirbt wird der Inhalt
+	// zerstoert -> this_object()==0 !!
+	// Komische Sache, aber ich lass es mal drin. Monty (22.04 1996)
+	if (this_object())
+	    remove();
+	return;
+    }
+
+    // Fuer Seuchen mit shadow: im shadow do_virus_shadow_action aufrufen!
+    if (shadow)
+	shadow->do_virus_shadow_action(shadow, this_object());
+
+    // Auch shadow_action kann Muell machen...
+    if (!this_object() || !owner || owner->query_hp() < 0 || ret < 0)
+    {
+	if (this_object())
+	    remove();
+	return;
+    }
+    
+    // Die Ansteckung (nur bei Seuchen). Der neue Virus ist nicht mehr so
+    // Ansteckend wie der alte...
+    if(kind=="seuche" && !wizp(owner) && environment(owner)
+        && !environment(owner)->query_type("kaempfen_verboten") &&
+        (!query_once_interactive(owner) || interactive(owner)) &&
+	owner->query_invis() != V_SHIMMER) {
+	// List = Menge aller interactives im Raum, ohne den Owner.
+	list=filter(all_inventory(environment(owner)), #'interactive)-
+	    ({owner});
+	for(r=sizeof(list); r--; )
+	    if(!present(lower_case(name),list[r]) &&  random(100)<chance &&
+		    list[r]->query_invis() != V_INVIS) {
+		ob=clone_object(LOCATION);
+                ob->set_id(query_id());
+                ob->set_plural(query_plural());
+		ob->set_virus_name(name);
+	        ob->set_virus_gender(gender);
+		ob->set_virus_str(abzug);
+		ob->set_virus_min(min);
+		ob->set_virus_dur(duration_bak-1);
+		ob->set_virus_look(look);
+		ob->set_virus_type(kind);
+		ob->set_virus_heal_msg(hmsg);
+		ob->set_virus_messages(meldung);
+		ob->set_virus_shadow_path(shadow_path);
+		ob->set_virus_chance(chance / 2 >= 5 ? chance / 2 : 0);
+		ob->set_virus_verursacher(virus_verursacher);
+		ob->set_no_aggression();
+		if(ob->move(list[r]) == MOVE_OK)
+		   tell_object(list[r],"Du hast Dich bei "+
+		                       dem(owner)+" angesteckt!\n");
+                else
+                   ob->remove();
+	    }
+    }
+
+    // Nach DESEASE_RATE the same procedure again:
+    call_out("disease",DESEASE_RATE);
+}
+
+/*
+FUNKTION: heal_virus
+DEKLARATION: void heal_virus()
+BESCHREIBUNG:
+heal_virus() heilt einen Virus. Dies ist das Mittel der Wahl, wenn man einen
+Virus heilen will, NICHT virus->remove().
+(Bei Seuchen wird sonst die Immunisierung nicht durchgefuehrt!)
+VERWEISE: 
+GRUPPEN: virus
+*/
+void heal_virus()
+{
+    // call_out anhalten
+    remove_call_out("disease");
+    // Dauer der Krankheit beenden => die Heal_msg wird ausgegeben, bei
+    // Seuchen wird die Immun-Zeit angetreten
+    duration = 0;
+    disease( 1);
+}
+
+mixed *query_auto_load()
+{
+    if (autoloading)
+	return ({abzug,min,hmsg,duration_bak,duration,look,kind,name,
+	    meldung,chance,shadow_path,virus_verursacher,
+	    additional_data,gender,query_id(),query_plural(),
+            add_hp_infos,});
+}
+
+void init_arg(mixed *args)
+{
+    if (!pointerp(args) || (sizeof(args) < 12))
+	remove();
+    else
+    {
+	set_virus_str(args[0]);
+	set_virus_min(args[1]);
+	set_virus_heal_msg(args[2]);
+	set_virus_look(args[5]);
+	set_virus_type(args[6]);
+	set_virus_name(args[7]);
+	set_virus_messages(args[8]);
+	set_virus_chance(args[9]);
+	set_virus_shadow_path(args[10]);
+	set_virus_verursacher(args[11]);
+	set_no_aggression();
+	set_virus_dur(args[4]);
+	duration_bak = args[3];
+        if (sizeof (args) > 12)
+        {
+            set_virus_additional_data(args[12]);
+            if (sizeof(args) > 13)
+            {
+                set_virus_gender(args[13]);
+                if (sizeof (args) > 14)
+                {
+                    add_id (args[14]-query_id());
+                    if (sizeof (args) > 15)
+                    {
+                        set_plural(args[15]);
+                        if (sizeof (args) > 16)
+                        {
+                            set_add_hp_infos(args[16]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void create()
+{
+    set_id(({"virus"}));
+    set_weight(0);
+    set_material( ({"biologisch"}) );
+    set_gender("saechlich");
+    set_invis(V_INVIS);
+    set_virus_name("Grippe");
+    set_virus_gender("weiblich");
+    set_virus_str(1);
+    set_virus_min(25);
+    set_virus_dur(300); duration_set=0;
+    set_virus_look("$Er() sieht total verschwitzt aus.");
+    set_virus_type("seuche");
+    set_virus_chance(30);
+    set_immun_time(MAX_IMMUN_TIME);
+    set_virus_messages(({
+	"Eine Hitzewelle durchlaeuft Deinen Koerper.\n",
+	"Dein Magen fuehlt sich hohl und aufgeblasen an.\n",
+	"Du bekommst starkes Herzklopfen und Gleichgewichtsstoerungen.\n",
+	"Du fuehlst dich sehr, sehr schlapp und Du scheinst erhoehte "
+	"Temperatur zu haben!\n", 
+	"Du hast fiebrige Tagtraeume und klappst schier zusammen!\n",
+	"Du bekommst auf einmal ein starkes Schwaechegefuehl.\n",
+	"Du fuehlst Dich sehr unwohl und Deine Gelenke schmerzen.\n"}));
+    add_controller("forbidden_move",
+	(:
+	    // $1: controller, $2: wer, $3: woher, $4: whonin, $5: dir, $6: wie
+	    return !living($4) ||
+	        $4->forbidden("virus_infection", this_object());
+	:));
+    autoloading = 1;
+}
+
+int remove()
+{
+    if (shadow)
+	shadow->remove_shadow(shadow);
+    return ::remove();
+}
+   
+void init()
+{
+    if (environment() != this_player()) return;
+    if (!aggression_handled && virus_verursacher && (abzug>0))
+    {
+	environment()->become_aggression_victim(virus_verursacher);
+	aggression_handled = 1;
+    }
+    if (!shadow && this_player() == environment())
+        call_out("re_init_shadow",0);
+    if (find_call_out("disease") == -1 && find_call_out("remove") == -1)
+    {
+	call_out("disease", DESEASE_RATE);
+	//call_out("re_init_shadow",0);
+	environment()->notify("virus_infection",this_object());
+    }
+}
+
+void just_moved()
+{
+    if(!aggression_handled && (abzug>0) && playerp(this_player())
+	&& this_player()!=environment() && playerp(environment()))
+	sys_log("Virus-Aggression", sprintf("[%s] ENV: %O TP: %O, PO: %O, TO: %O, VV: %O\n",
+	    shorttimestr(time()), environment(), this_player(),
+	    previous_object(1), this_object(),
+	    virus_verursacher));
+}
+
+void re_init_shadow()
+{
+    if (shadow_path && !shadow && this_player() == environment())
+        (shadow=clone_object(shadow_path))->init_shadow(environment());
+}
+
+string query_info()
+{
+    string tmp;
+    return "Staerke:    "+query_virus_str()+" AP pro "+DESEASE_RATE+" Sec\n"
+           "Minimal:    "+query_virus_min()+" APs\n"
+	   "Dauer:      "+query_virus_dur()+
+			" Sec (von urspruenglich "+duration_bak+")\n"
+	   "Typ:        "+capitalize(tmp = query_virus_type())+
+	   ((tmp=="seuche") ? "\n"
+	       "Ansteckung: "+query_virus_chance()+" %" : "");
+}
+
+void notify_quit(object who, int flag)
+{
+    int tim;
+
+    if (who == environment() && (tim = remove_call_out("disease")) != -1)
+	rest_disease_time = tim;
+}
+
+void notify_net_dead(object who)
+{
+    notify_quit(who,0);
+}
+
+void notify_login(object who, int flag)
+{
+    if (who == environment())
+    {
+	if (find_call_out("disease") == -1)
+	{
+	    if (rest_disease_time > 0)
+		call_out("disease",rest_disease_time);
+	    else
+		disease();
+	}
+	rest_disease_time = 0;
+    }
+}
+/*
+FUNKTION: forbidden_virus_infection
+DEKLARATION: int forbidden_virus_infection(object virus)
+BESCHREIBUNG:
+Bevor der Virus virus ein Lebewesen who infizieren darf, wird in who
+who->forbidden("virus_infection", virus) aufgerufen, liefert dieser Aufruf
+einen Wert ungleich 0 zurueck, wird der Virus zerstoert.
+
+Die Funktion forbidden ruft in allen mit who->add_controller(
+"forbidden_virus_infection", other) angemeldeten Objekten other die Funktionen
+other->forbidden_virus_infection(virus) auf. Liefert auch nur eine dieser
+Funktionen einen Wert ungleich 0, dann returnt forbidden diesen und das
+Lebewesen who kann nicht infiziert werden, der Virus wird zerstoert.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen muss der Programmierer in
+forbidden_virus_infection oder forbidden, falls er diese Funktion ueberlagern
+will, sorgen.
+Eine moegliche Anwendung koennte ein Heiltrank sein, der fuer eine kurze
+Zeitspanne die Ansteckung durch bestimmte Viren verhindert.
+VERWEISE: forbidden, notify, notify_virus_infection
+GRUPPEN: virus
+*/
+
+/*
+FUNKTION: notify_virus_infection
+DEKLARATION: void notify_virus_infection(object virus)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who mit dem Virus virus infiziert wurde, wird
+who->notify("virus_infection", virus) im Lebewesen aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller(
+"notify_virus_infection", other) angemeldeten Objekten other die Funktionen
+other->notify_virus_infection(virus) auf.
+
+Sowohl who als auch other haben dann eine Moeglichkeit, auf die Infektion
+des Lebewesens who durch virus zu reagieren.
+Eine Moeglichkeit waere ein Objekt, welches das Immunsystem staerkt und
+Krankheiten/Seuchen nach Beginn abschwaecht.
+VERWEISE: forbidden, notify, forbidden_virus_infection
+GRUPPEN: virus
+*/
+
+/*
+FUNKTION: notify_virus_cure
+DEKLARATION: void notify_virus_cure(object virus)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who mit dem Virus virus gesund geworden ist, wird
+who->notify("virus_cure", virus) im Lebewesen aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller(
+"notify_virus_cure", other) angemeldeten Objekten other die Funktionen
+other->notify_virus_cure(virus) auf.
+
+Sowohl who als auch other haben dann eine Moeglichkeit, auf die Heilung
+des Lebewesens who mit dem Virus zu reagieren.
+VERWEISE: forbidden, notify, forbidden_virus_cure
+GRUPPEN: virus
+*/

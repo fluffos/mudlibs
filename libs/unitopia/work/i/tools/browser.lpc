@@ -1,0 +1,595 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/tools/browser.c
+// Description:	Inherit-File fuer Browser aller Art
+// Author:	Freaky (11.07.95)
+// Modified by:	
+//
+// $Log: browser.c,v $
+// Revision 1.24  2012-11-26 22:20:47  gnomi
+// Debug-Meldung ausgebaut.
+//
+// Revision 1.23  2012-10-29 23:25:47  gnomi
+// Menue-Informationen im More speichern.
+//
+// Revision 1.22  2008-04-10 08:45:59  gnomi
+// query_current_line() gibt's nicht mehr.
+//
+// Revision 1.21  2007/06/25 22:19:18  gnomi
+// continue_browse: get_continued_more_info besser beachten.
+//
+// Revision 1.20  2003/11/18 06:31:38  gnomi
+// continue_browse varargs gemacht.
+//
+// Revision 1.19  2003/11/14 04:12:50  gnomi
+// Eine Funktion, um das Menue nach einem continue_browse zu veraendern,
+// eingebaut.
+//
+// Revision 1.18  2001/12/03 01:01:32  gnomi
+// Doku-Korrektur.
+//
+// Revision 1.17  2001/11/26 12:08:42  freaky
+// Typo in Doku gefixed.
+//
+// Revision 1.16  2001/11/19 23:15:41  freaky
+// Doku gefixed.
+//
+// Revision 1.15  2001/06/25 11:48:30  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.14  2001/06/01 02:30:56  gnomi
+// Auch ein M_AUTO_END ermoeglichen.
+//
+// Revision 1.13  2001/05/29 19:33:49  gnomi
+// Kleine Aenderung im more_end, damit auch Dateinamen als Menue uebergeben
+// werden koennen.
+//
+// Revision 1.12  2001/04/27 02:40:00  gnomi
+// Last_line schon vorm browse_action setzen.
+//
+// Revision 1.11  2001/04/26 23:53:26  gnomi
+// more_end neu gemacht. Statusinformationen besser vom more_action nach
+// more_end transferiert.
+//
+// Revision 1.10  2001/04/26 02:46:18  gnomi
+// +/- auch bei einem nicht-Menue zulassen, da das vorherige ja ein Menue
+// gewesen sein muss.
+//
+// Revision 1.9  2001/04/25 21:56:10  gnomi
+// Bugfix: browse erst nach dem browse_end auf 0 setzen.
+//
+// Revision 1.8  2001/03/11 21:43:49  gnomi
+// Bugfix zu BR_NUMBERS fuer Kompatibilitaet.
+//
+// Revision 1.7  2001/03/11 02:57:06  gnomi
+// browse_end eingefuehrt.
+//
+// Revision 1.6  2001/03/10 04:09:34  gnomi
+// Eigene Numerierung mit BR_NUMBERS ermoeglichen.
+// Moeglichkeit, eine Datei anzuzeigen.
+//
+// Revision 1.5  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+ * Dieses Inherit-File ist fuer Browser aller Art gedacht.
+ * Es werden 4 Grundfunktionen angeboten, die sich aber jederzeit
+ * erweitern lassen:
+ *  '+': Waehlt den naechsten Menuepunkt auf derselben Ebene an
+ *  '-': Waehlt den vorherigen Menuepunkt auf der selben Ebene an
+ *  'z': Geht eine Ebene zurueck
+ *  <nr>: Waehlt den Menuepunkt <nr> an
+ *
+ * Um es so einfach wie moeglich zu machen, gibt es einige Funktionen,
+ * die man ueberlagern kann, um die einzelnen Menuepunkte auszuwaehlen.
+ *
+ * Ein einfacher Browser ohne Zusatzfunktionen muss nur 2 Funktionen
+ * ueberlagern:
+ *
+ *   mixed get_initial_more_info(mixed str)
+ *
+ * Diese Funktion liefert das Start-Menue. Wenn es keines gibt, kann man
+ * eine Fehlermeldung in Form eines Strings zurueckgeben, die dann
+ * ausgegeben wird.
+ * Das Start-Array sieht so aus:
+ *
+ *    ({ ({ Menuepunkte-Array, Status-Zeile, Start-Zeile, More-Byte,
+ *          0, benutzerdefinierte Daten, Nummern }) })
+ *
+ * Die Angabe von Nummern ist freiwillig. Damit kann jedem Menuepunkt eine
+ * Nummer zuordnen. Diese wird nur dazu verwendet, um die Spielereingabe
+ * umzuwandeln. Gearbeitet wird dann wieder mit den Array-Indizes + 1.
+ * Eine negative Zahl bedeutet, dass das kein Menuepunkt ist.
+ *
+ *
+ * Die 2. Funktion, die man ueberlagern muss ist:
+ *
+ *   mixed get_menue_more_info(mixed *m, int nr)
+ *
+ * Diese Funktion bekommt die bisherige Menuestruktur und den angewaehlten
+ * Menuepunkt uebergeben, und sollte die vollsatendige Menuestruktur
+ * PLUS das neue Untermenue uebergeben:
+ *
+ *   return m+({ ({ Untermenue, Status-Zeile, Start-Zeile, More-Byte,
+ *                  angewaehlter Menuepunkt, benutzerdefinierte Daten, Nummern
+ *            }) })
+ *
+ * Der angewaehlte Menuepunkt ist dabei der Index in das Array des ueber-
+ * geordneten Menues + 1. Alle anderen Daten haben die gleiche Funktion
+ * wie im Hauptmenue.
+ *
+ * Wenn man Zusatzbefehle definieren moechte, so kann man die Funktion
+ *
+ *   mixed browse_action(string str, mixed *m)
+ *
+ * ueberlagern. Dieser Funktion wird der eingegebene String und die komplette
+ * Menuestruktur uebergeben.
+ * Wenn diese Funktion einen String zurueckgibt, wird dieser als Fehlermeldung
+ * ausgegeben. Wenn eine Menuestruktur zurueckgegeben wird, wird mit
+ * dieser weitergearbeitet. Bei einer 1 wird einfach gestoppt. Mit der
+ * Funktion 'continue_browse()' kann man wieder in den Browser gelangen.
+ *
+ * Bei allen Funktionen besteht die Moeglichkeit einen String als Fehler-
+ * meldung zurueckzugeben, die dann ausgegeben wird.
+ */
+
+#pragma strong_types
+#pragma save_types
+
+#include <more.h>
+#include <browser.h>
+
+#define BROWSER_MORE_ID "Browser"
+
+// Indizes ins more_id_Array
+#define MORE_BROWSE_ID  0
+#define MORE_BROWSER    1
+#define MORE_STATUS     2
+#define MORE_SIZE       3
+// MORE_STATUS: Zahl um den Zustand vom more_action fuers more_end zu merken:
+//  1: Es wurde gerade ein (anderes) more gestartet,
+//  0: Nix gemacht
+// -1: Browser beendet
+
+#define MORE_ID(mo) ({ BROWSER_MORE_ID, (mo), 0 })
+
+#define LAST more_id[MORE_BROWSER][<1]
+#define SET_LAST_LINE(ml) LAST[BR_BEGIN_LINE]=ml
+
+private nosave mapping suspended = ([]); // Player -> Browse
+
+
+varargs nosave mixed get_more_info(mixed m, int flag, int nr);
+
+/*
+FUNKTION: browse
+DEKLARATION: int browse(mixed str)
+BESCHREIBUNG:
+Damit startet man das Menue fuer this_player(). Der Wert str wird bei
+get_initial_more_info uebergeben. Dies ist als Interface fuer eine Action
+gedacht, deshalb wird im Fehlerfall eine notify_fail-Meldung gesetzt
+und 0 zurueckgeliefert. Im Erfolgsfall liefert browse einen Wert !=0.
+VERWEISE: get_initial_more_info, get_menue_more_info, continue_browse
+GRUPPEN: browser
+*/
+int browse(mixed str) {
+    string ret;
+    mixed mo, *last;
+
+    m_delete(suspended, this_player());
+    mo=get_more_info(str,B_INITIAL);
+    if (!mo || (pointerp(mo) && pointerp(mo[<1][BR_MENUE]) && 
+		!sizeof(mo[<1][BR_MENUE]) && !(mo[<1][BR_STATUS_BYTE]&M_FORCE)))
+	mo="Kein Menue vorhanden.\n";
+    if (stringp(mo)) {
+	notify_fail(mo);
+	return 0;
+	}
+    last=mo[<1];
+    ret=this_player()->more(last[BR_MENUE],last[BR_STATUS_LINE],
+			    last[BR_BEGIN_LINE],last[BR_STATUS_BYTE],
+			    MORE_ID(mo));
+    if (ret)
+    {
+	notify_fail(M_ERR(ret));
+	return 0;
+    }
+    return 1;
+}
+
+/*
+FUNKTION: get_initial_more_info
+DEKLARATION: nosave mixed get_initial_more_info(mixed str)
+BESCHREIBUNG:
+Diese Funktion wird beim Menuestart aufgerufen, um ein initiales Menue
+zu erhalten. str ist dabei das beim Aufruf von browse uebergebe Argument.
+Das Startmenue ist ein Array mit folgendem Aufbau:
+
+  ({ Menue, Untermenue, ... })
+
+Im Normalfall wird man nur ein einziges Menue angegeben, um das Browsen
+im Hauptmenue zu beginnen. Ein Menue hat dann folgenden Aufbau:
+
+  ({ ({ Menuepunktearray, Statuszeile, Startzeile, More-Byte,
+        gewaehlter Menuepunkt, benutzerdefinierte Daten, Nummern }) })
+
+Das Menuepunktearray ist ein Array aus den einzelnen Zeilen des Hauptmenues.
+Dies kann entweder ein String oder ein Array der Form ({"Zeile",Nummer})
+sein. Die Statuszeile ist eine Statuszeile entsprechend dem more(), d.h.
+entweder ein String, wobei das 1. %d durch die aktuelle Zeile und das 2. %d
+durch die Anzahl an Zeilen ersetzt wird, oder eine Closure, deren Argumente
+beim Aufruf die aktuelle Zeile und die Anzahl an Zeilen sind.
+Die Startzeile gibt die Zeile an, ab der die Ausgabe des Menues begonnen wird.
+Das More-Byte ist ein Flag mit folgenden Werten:
+
+   M_LINE_NUMBERS: Zeilennummern werden vorangestellt
+   M_DO_NOT_END:   Keine automatische Beendigung, wenn das Menue ausgegeben
+                   wurde. (Diese Option sollte unbedingt angeschaltet werden.)
+   M_FRAME:        Der Ausgabe wird eine Linie voran- und nachgestellt.
+   M_HEADER_LINE:  Dem Menue wird eine Linie voran- und nachgestellt.
+   M_AUTO_END:     Wenn Menue auf einmal ausgegeben wurde, sofort beenden.
+                   (Diese Option ist beim Menue im Allgemeinen sinnlos.)
+
+Falls zu einem Menue bereits ein Untermenue angegeben wurde, dann
+steht die Nummer des Untermenues bei 'gewaehlter Menuepunkt' im
+uebergeordneten Menue. Im 6. Element hat man die Moeglichkeit,
+weitere Daten zum Menue abzuspeichern. Die Angabe von Nummern im 7. Element
+ist freiwillig. Damit kann jedem Menuepunkt eine Nummer zuordnen. Diese wird
+nur dazu verwendet, um die Spielereingabe umzuwandeln. Gearbeitet wird dann
+aber wieder mit den Array-Indizes + 1. Eine negative Zahl bedeutet, dass das
+kein Menuepunkt ist.
+
+Wenn es kein Menue gibt, dann kann eine Fehlermeldung als String
+zurueckgeliefert werden.
+VERWEISE: browse, more, get_menue_more_info, continue_browse
+GRUPPEN: browser
+*/
+nosave mixed get_initial_more_info(mixed str) {}
+
+/*
+FUNKTION: get_back_more_info
+DEKLARATION: nosave mixed get_back_more_info(mixed m)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, um das uebergeordnete Menue zu ermitteln.
+m ist dabei die Menuestruktur (siehe get_initial_more_info). Die
+Standardimplementation liefert einfach diese Menuestruktur ohne das
+Untermenue zurueck. Zurueckgeliefert wird entweder die neue Menuestruktur,
+ein Fehlerstring, 0, wenn kein neues Menue angezeigt werden soll,
+END_BROWSE um das Menue zu beenden oder BREAK_BROWSE um es zu unterbrechen.
+VERWEISE: browse, get_initial_more_info, get_menue_more_info, continue_browse
+GRUPPEN: browser
+*/
+nosave mixed get_back_more_info(mixed m) {
+    if (sizeof(m)>1)
+	return m[0..<2];
+}
+
+/*
+FUNKTION: get_next_more_info
+DEKLARATION: nosave mixed get_next_more_info(mixed m)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, um zu einem Menue das naechste
+Menue auf derselben Ebene zu ermitteln. m ist dabei die Menuestruktur
+(siehe get_initial_more_info). Die Standardimplementation
+nutzt get_menue_more_info, um dieses Menue zu erhalten.
+Zurueckgeliefert wird entweder die neue Menuestruktur, ein Fehlerstring,
+0, wenn kein neues Menue angezeigt werden soll, END_BROWSE um das
+Menue zu beenden oder BREAK_BROWSE um es zu unterbrechen.
+VERWEISE: browse, get_initial_more_info, get_menue_more_info, continue_browse
+GRUPPEN: browser
+*/
+
+// Testet, ob nr eine Zeile vom Menue ist.
+private int is_in_menu(mixed menu, int nr)
+{
+    if(nr<=0) return 0;
+    if(stringp(menu[BR_MENUE]))
+    {
+	string f=read_file(menu[BR_MENUE]);
+	if(!f) return 1; // Wir sagen erstmal ja...
+	if(f[<1]=='\n') f[<1..<1]="";
+	return nr<=strlen(f&"\n")+1;
+    }
+    else if(pointerp(menu[BR_MENUE]))
+	return nr<=sizeof(menu[BR_MENUE]);
+    return 0;
+}
+
+nosave mixed get_next_more_info(mixed m) {
+    int nr;
+
+    if (sizeof(m)<2)
+	return 0;
+    nr=m[<1][BR_PATH]+1;
+    if (is_in_menu(m[<2],nr))
+    {
+	m[<2][BR_BEGIN_LINE]=nr;
+	return get_more_info(m[0..<2],B_MENUE,nr);
+    }
+}
+
+/*
+FUNKTION: get_prev_more_info
+DEKLARATION: nosave mixed get_prev_more_info(mixed m)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, um zu einem Menue das vorhergehende
+Menue auf derselben Ebene zu ermitteln. m ist dabei die Menuestruktur
+(siehe get_initial_more_info). Die Standardimplementation
+nutzt get_menue_more_info, um dieses Menue zu erhalten.
+Zurueckgeliefert wird entweder die neue Menuestruktur, ein Fehlerstring,
+0, wenn kein neues Menue angezeigt werden soll, END_BROWSE um das
+Menue zu beenden oder BREAK_BROWSE um es zu unterbrechen.
+VERWEISE: browse, get_initial_more_info, get_menue_more_info, continue_browse
+GRUPPEN: browser
+*/
+nosave mixed get_prev_more_info(mixed m) {
+    int nr;
+
+    if (sizeof(m)<2)
+	return 0;
+    nr=m[<1][BR_PATH]-1;
+    if (nr>0)
+    {
+	m[<2][BR_BEGIN_LINE]=nr;
+	return get_more_info(m[0..<2],B_MENUE,nr);
+    }
+}
+
+/*
+FUNKTION: get_menue_more_info
+DEKLARATION: nosave mixed get_menue_more_info(mixed m, int nr)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, um das Untermenue nr zu einem gebenen
+Menue m zu erhalten. m ist dabei die aktuelle Menuestruktur (siehe
+get_initial_more_info).
+Es kann entweder die neue Menuestruktur, ein Fehlerstring, 0, wenn kein
+neues Menue angezeigt werden soll, END_BROWSE, um das Menue zu beenden,
+oder BREAK_BROWSE, um es zu unterbrechen, zurueckgeliefert werden.
+VERWEISE: browse, get_initial_more_info, get_menue_more_info, continue_browse
+GRUPPEN: browser
+*/
+nosave mixed get_menue_more_info(mixed m, int nr) {}
+
+varargs nosave mixed get_more_info(mixed m, int flag, int nr) {
+    switch(flag) {
+      case B_INITIAL:
+	return get_initial_more_info(m);
+      case B_BACK:
+	return get_back_more_info(m);
+      case B_NEXT:
+	return get_next_more_info(m);
+      case B_PREV:
+	return get_prev_more_info(m);
+      case B_MENUE:
+	return get_menue_more_info(m,nr);
+      }
+}
+
+/*
+FUNKTION: browse_action
+DEKLARATION: nosave mixed browse_action(string str, mixed *mo)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, um eine Eingabe str im Menue mo zu
+verarbeiten. mo ist dabei die Menuestruktur (siehe get_initial_more_info).
+Es kann entweder die neue Menuestruktur, ein Fehlerstring, 0, wenn die
+Eingabe nicht verarbeitet wurde, END_BROWSE, um das Menue zu beenden,
+oder BREAK_BROWSE, um es zu unterbrechen, zurueckgeliefert werden.
+Die Standardbehandlung der Eingabe erfolgt, wenn 0 zurueckgeliefert wurde.
+VERWEISE: browse, get_initial_more_info, get_menue_more_info, continue_browse
+GRUPPEN: browser
+*/
+nosave mixed browse_action(string str, mixed *mo) {}
+
+public int more_action(string str, int more_line, int max_line, mixed more_id) {
+    mixed mo, *last, *oldbrowse;
+    string ret;
+    int nr;
+
+    if (!pointerp(more_id) || sizeof(more_id) != MORE_SIZE || more_id[MORE_BROWSE_ID] != BROWSER_MORE_ID)
+	return 0;
+
+    if (suspended[this_player()])
+    {
+	write("FEHLER im Browser: suspendiertes Menue vorhanden.\n");
+	m_delete(suspended, this_player());
+    }
+
+    SET_LAST_LINE(more_line);
+    if (!(mo=browse_action(str,more_id[MORE_BROWSER])))
+	switch(str)
+	{
+	  case "+":
+	  case "n":
+	  case " ":
+	  case "-":
+	    mo=more_id[MORE_BROWSER]; nr=0;
+	    do
+	    {
+	        mo=get_more_info(mo,(str=="-")?B_PREV:B_NEXT);
+	        nr++;
+	    }while(pointerp(mo) && pointerp(mo[<1][BR_MENUE]) &&
+		   !sizeof(mo[<1][BR_MENUE]) && !(mo[<1][BR_STATUS_BYTE]&M_FORCE));
+	    if (!mo)
+	    {
+	        if(nr==1)
+		    mo=(str=="-")
+		        ?"Es gibt keinen vorherigen Menuepunkt.\n"
+		        :"Es gibt keinen weiteren Menuepunkt.\n";
+		else
+		    mo=(str=="-")
+		        ?"Der vorherige Menupunkt ist leer.\n"
+		        :"Der naechste Menupunkt ist leer.\n";
+	    }	
+	    break;
+	  case "z":
+	    mo=get_more_info(more_id[MORE_BROWSER],B_BACK);
+	    if (!mo)
+		mo="Weiter zurueck geht es nicht.\n";
+	    else if (pointerp(mo) && pointerp(mo[<1][BR_MENUE]) &&
+		     !sizeof(mo[<1][BR_MENUE]) && !(mo[<1][BR_STATUS_BYTE]&M_FORCE))
+		mo="Mhh. Schlecht. Das uebergeordnete Menu ist leer.\n";
+	    break;
+	  default:
+	    if (sscanf(str,"%d",nr) && !(LAST[BR_STATUS_BYTE]&BF_NO_MENUE)) {
+		if (nr>=0 && sizeof(LAST)>BR_NUMBERS && pointerp(LAST[BR_NUMBERS]))
+		    nr=member(LAST[BR_NUMBERS],nr)+1;
+		if (is_in_menu(LAST,nr)) {
+		    mo=get_more_info(more_id[MORE_BROWSER],B_MENUE,nr);
+		    }
+		if (!mo)
+		    mo="Diesen Menuepunkt gibt es nicht.\n";
+		else if (pointerp(mo) && pointerp(mo[<1][BR_MENUE]) &&
+			 !sizeof(mo[<1][BR_MENUE]) && !(mo[<1][BR_STATUS_BYTE]&M_FORCE))
+		    mo="Dieser Menupunkt ist leer.\n";
+		}
+	    break;
+	  }
+
+    if (intp(mo))
+    {
+	switch (mo)
+	{
+	    case END_BROWSE:
+		mo=END_MORE;
+		more_id[MORE_STATUS] = -1;
+		break;
+	    case BREAK_BROWSE:
+		m_add(suspended, this_player(), more_id[MORE_BROWSER]);
+		mo=END_MORE;
+		more_id[MORE_STATUS] = 1;
+		break;
+	    default:
+		more_id[MORE_STATUS] = 0;
+		break;
+	}
+	return mo;
+    }
+
+    if (stringp(mo)) {
+	write(mo);
+	return NOTHING;
+	}
+
+    last=mo[<1];
+    ret=this_player()->more(last[BR_MENUE],last[BR_STATUS_LINE],
+			    last[BR_BEGIN_LINE],last[BR_STATUS_BYTE],
+			    MORE_ID(mo));
+    if (ret)
+    {
+	write(M_ERR(ret));
+	return NOTHING;
+    }
+    
+    more_id[MORE_STATUS] = 1;
+    return END_MORE;
+}
+
+/*
+FUNKTION: browse_end
+DEKLARATION: nosave void browse_end(mixed m)
+BESCHREIBUNG:
+Diese Funktion wird mit dem letzten Menue aufgerufen, wenn der Benutzer
+das Menue verlaesst.
+VERWEISE: browse, more_end, continue_browse
+GRUPPEN: browser
+*/
+nosave void browse_end(mixed m) {}
+
+public void more_end(string str, int more_line, int max_line, mixed more_id) {
+    if (!pointerp(more_id) || sizeof(more_id) != MORE_SIZE || more_id[MORE_BROWSE_ID] != BROWSER_MORE_ID)
+        return;
+
+    if(more_id[MORE_STATUS]==1) // Es wurde gerade ein anderes more gestartet
+        return;
+
+    if(!more_id[MORE_STATUS]) // More hat sich selbststaendig beendet.
+    {                         // -> Wir gehen eine Stufe zurueck
+        mixed mo;
+        string ret;
+        
+        SET_LAST_LINE(more_line);
+        mo = get_more_info(more_id[MORE_BROWSER], B_BACK);
+        
+        // Es ist ein ordentliches Menue.
+	if (pointerp(mo) && (stringp(mo[<1][BR_MENUE]) ||
+            (pointerp(mo[<1][BR_MENUE]) && sizeof(mo[<1][BR_MENUE]) &&
+            !(mo[<1][BR_STATUS_BYTE]&M_FORCE))))
+        {
+            ret=this_player()->more(mo[<1][BR_MENUE],mo[<1][BR_STATUS_LINE],
+	        mo[<1][BR_BEGIN_LINE],mo[<1][BR_STATUS_BYTE], MORE_ID(mo));
+
+            if (ret)
+            {
+                write(M_ERR(ret));
+                return;
+            }
+
+            return;
+	}
+        if (stringp(mo))
+            write(mo);
+    }
+
+    // Oki, wir beenden uns.
+    browse_end(more_id[MORE_BROWSER]);
+}
+
+/*
+FUNKTION: get_continued_more_info
+DEKLARATION: nosave mixed get_continued_more_info(mixed m, mixed str)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, wenn ein abgebroches Menue wieder angezeigt
+wird. m ist dabei die Menuestruktur (siehe get_initial_more_info), str der
+bei continue_browse uebergebene Parameter.
+Die Standardimplementation liefert einfach diese Menuestruktur ohne
+eine Aenderung zurueck.
+
+Zurueckgeliefert wird entweder die neue Menuestruktur, ein Fehlerstring,
+END_BROWSE um das Menue zu beenden oder BREAK_BROWSE um es zu unterbrechen.
+VERWEISE: browse, continue_browse
+GRUPPEN: browser
+*/
+nosave mixed get_continued_more_info(mixed m, mixed str)
+{
+    return m;
+}
+
+/*
+FUNKTION: continue_browse
+DEKLARATION: varargs nosave void continue_browse(mixed str)
+BESCHREIBUNG:
+Falls ein Menue mit BREAK_BROWSE unterbrochen wurde, so wird es hiermit
+wieder angezeigt. Der Parameter str wird an get_continued_more_info uebergeben.
+VERWEISE: browse, get_initial_more_info, get_menue_more_info,
+          get_continued_more_info
+GRUPPEN: browser
+*/
+varargs nosave void continue_browse(mixed str)
+{
+    mixed mo, browse;
+
+    browse=suspended[this_player()];
+    m_delete(suspended, this_player());
+    
+    mo = get_continued_more_info(browse, str);
+    if(intp(mo))
+    {
+	if(mo==BREAK_BROWSE)
+	    m_add(suspended, this_player(), browse);
+	browse_end(browse);
+    }
+    else if(stringp(mo))
+    {
+	write(mo);
+	browse_end(browse);
+    }
+    else
+    {
+	mixed *last=mo[<1];
+	this_player()->more(last[BR_MENUE],last[BR_STATUS_LINE],
+			    last[BR_BEGIN_LINE],last[BR_STATUS_BYTE],
+			    MORE_ID(mo));
+    }
+}

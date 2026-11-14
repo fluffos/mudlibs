@@ -1,0 +1,139 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/udp/email.c
+// Description:	MailD fuer UDP-Internet-Mail
+// Author:	Freaky (15.04.96)
+// 		Garthan (23.01.97) strip_address nur wenn recpient ok
+//
+// $Log: email.c,v $
+// Revision 1.6  2005/11/12 18:43:35  gnomi
+// Header von Internet-Mails speichern.
+//
+// Revision 1.5  2005/01/05 21:44:15  gnomi
+// Aufpassen, wenn eine Mail keine oder leere 'To:'- und 'Cc:'-Zeilen im Header
+// hat.
+//
+// Revision 1.4  2002/07/04 23:07:57  gnomi
+// seteuid(getuid()) entfernt; EUID wird vom Master aus gesetzt.
+//
+// Revision 1.3  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#include <udp.h>
+#include "udp_mail.h"
+#include <mail.h>
+#include <apps.h>
+
+#define HOST_NAMES ({"unitopia.rus.uni-stuttgart.de", \
+		     "unitopia.uni-stuttgart.de", \
+		     "unitopia" })
+
+void create()
+{
+}
+
+string strip_address(string adr)
+{
+    string to, host;
+
+    if (sscanf(lower_case(adr),"%s@%s",to,host) == 2)
+	if (member(HOST_NAMES,host) >= 0 && MAILD->query_recipient_ok(to))
+	    adr = to;
+    return strip(adr);
+}
+
+private void do_exit(string file, string msg)
+{
+    sys_log("Mail",msg);
+    if (file_size(file + ".d") != -1)
+	rename(file + ".d",file + ".d.fail");
+    if (file_size(file) != -1)
+	rename(file,file + ".fail");
+}
+
+void udp_email(mapping data)
+{
+    string file, str, *lines, *cc, *to;
+
+    if (!stringp(data["FILE"]))
+    {
+	sys_log("Mail","Invalid udp_email packet. No file.\n");
+	return;
+    }
+    file = MQUEUE + "/IN" + data["FILE"];
+    str = read_file(file + ".d");
+    if (!str)
+    {
+	do_exit(file,"Email: Datafile is missing (" + file + ")\n");
+	return;
+    }
+    lines = explode(str,"\n");
+    if (sizeof(lines) < 5)
+    {
+	do_exit(file,"Email: Datafile is corrupt (" + file + ")\n");
+	return;
+    }
+    to = explode(lines[0],",");
+    to = map(to,#'strip_address);
+    to = filter(to, #'sizeof);
+    /*
+    if (!sizeof(to))
+    {
+	do_exit(file,"Email: Datafile is corrupt (to) (" + file + ")\n");
+	return;
+    }
+    */
+    cc = explode(lines[1],",");
+    /* Das ist sinnlos. cc hat mind. 1 Element
+    if (!sizeof(cc))
+    {
+	do_exit(file,"Email: Datafile is corrupt (cc) (" + file + ")\n");
+	return;
+    }
+    */
+    cc = map(cc,#'strip_address);
+    cc = filter(cc, #'sizeof);
+    
+    if(!sizeof(cc))
+    {
+	if(!sizeof(to))
+	{
+	    do_exit(file,"Email: Datafile is corrupt (to and cc are empty) (" + file + ")\n");
+	    return;
+	}
+	cc = to;
+    }
+
+    LOCAL_MAILER->deliver_mail(
+	to,					/* To */
+	strip_address(lines[2]),		/* From */
+	cc[1..],				/* Cc */
+	lines[3],				/* Subject */
+	read_file(file),			/* Mail Body */
+	cc[0],					/* real-to */
+	implode(lines[4..],"\n")		/* header */
+	);
+    rm(file);
+    rm(file + ".d");
+}
+
+void clean_mqueue()
+{
+    string *files;
+    int i;
+
+    files = get_dir(MQUEUE+"/IN*.d");
+
+    for (i = sizeof(files); i--; )
+    {
+	sys_log("Mail","Mail was in incoming: " + files[i] + "\n");
+    	udp_email((["FILE":files[i][2..<3]]));
+    }
+}
+
+void reset()
+{
+    clean_mqueue();
+}

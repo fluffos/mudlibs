@@ -1,0 +1,169 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/living/command.c
+// Description: Kommandoausfuehrung
+// Created:     Parsec   11.10.99
+// Modified by:
+//
+// $Log: command.c,v $
+// Revision 1.10  2013-03-16 16:15:33  gnomi
+// Doku zu exec_command() ergaenzt.
+//
+// Revision 1.9  2007-02-14 18:36:39  gnomi
+// Typos.
+//
+// Revision 1.8  2003/06/19 22:41:59  gnomi
+// Doku korrigiert.
+//
+// Revision 1.7  2001/09/16 14:38:57  sissi
+// Code lesbar gemacht und an Mudlib - Konventionen angepasst.
+//
+// Revision 1.6  2001/05/14 21:55:54  gnomi
+// CVS Log eingebaut.
+//
+
+#pragma save_types
+#pragma strong_types
+
+
+int do_command(string befehl);
+
+
+// Wichtig: obs muessen alles echte obs sein!
+private string generate_id(object *obs)
+{
+    string  id;
+
+    id = "##"+get_unique_string();
+    map_objects(obs, "add_id", id);
+
+    return id;
+}
+
+
+private int remove_id(mixed ob_id)
+{
+    if (ob_id[0])
+        ob_id[0]->delete_id(ob_id[1]);
+    return 0;
+}
+
+
+private int append_command_str(mixed command, mixed str, mixed obs_ids)
+{
+    string id;
+
+    if (stringp(command))
+        // nur ein String - den nehmen wir
+        str += regreplace(command, "  *$", "", 1)+" ";
+    else if (objectp(command))
+    {
+        // ein Objekt - bekommt neue Id, Id anhaengen
+        id = generate_id(({command}));
+        obs_ids += ({ ({ command, id }) });
+        str += id + " ";
+    }
+    else if (pointerp(command) && sizeof(command))
+    {
+        // Feld von Objekten - alle bekommen gleiche Id, "alle "+id anhaengen
+        command = filter(command, #'objectp);
+        id = generate_id(command);
+        obs_ids += map(command, lambda(({'com, 'id}),
+                                               ({ #'({, 'com, 'id})), id);
+        if (sizeof(command) > 1)
+            str += "alle ";
+        if (sizeof(command))
+            str += id+" ";
+    }
+
+    return 0;
+}
+
+
+/*
+FUNKTION: exec_command
+DEKLARATION: int exec_command(string befehl, [mixed argument, ...])
+BESCHREIBUNG:
+exec_command laesst das Monster ein Kommando ausfuehren.
+
+Ist ein einzelner String befehl angegeben, so wird dieser direkt als
+Kommando ausgefuehrt, genau wie bei do_command.
+Beispiel:
+    exec_command("nimm alles")
+
+Sind mehrere Befehlsteile angegeben, so wird das auszufuehrende
+Kommando aus den Befehlsteilen zusammengesetzt.
+Befehlsteile koennen sein:
+  - ein String: der String wird an das Kommando angehaengt.
+  - ein Objekt: eine Id, die das Objekt eindeutig bestimmt, wird an
+                das Kommando angehaengt.
+  - ein Feld von Objekten: der String "alle" und eine Id, die alle Objekte
+                eindeutig bestimmt wird an das Kommando angehaengt.
+Nach Ausfuehrung des Kommandos sind die internen Ids nicht mehr verfuegbar.
+
+Beispiele:
+    exec_command("toete", ork)           -> Ork bekommt Id "##id1",
+                                            Kommando ist:  "toete ##id1"
+    exec_command("lege", ob, "in", con)  -> ob bekommt Id "##id1",
+                                            con bekommt Id "##id2",
+                                            Kommando ist: "lege ##id1 in ##id2"
+    exec_command("nimm", ({ ob1, ob2 })) -> ob1 und ob2 bekommen Id "##id1",
+                                            Kommando ist:  "nimm alle ##id1"
+    exec_command("nimm", ({ ob1, ob2 }), "aus", con) -> ...
+
+
+Die exec_command-Variante mit mehreren Befehlsteilen sollte immer dann
+verwendet werden, wenn mit dem Kommando andere Objekte angesprochen werden
+sollen.
+Sie behebt die Probleme mit den Ids, die bei do_command entstehen, wenn man
+Objekte ansprechen will.
+Kommandos wie
+    do_command("toete "+ob->query_real_name())    (*schlecht*)
+    do_command("nimm "+ob->query_name())          (*schlecht*)
+    do_command("winke "+ob->query_id()[0])        (*schlecht*)
+
+  - koennen versagen wenn die ermittelte Id eine Leerstellen oder
+    Grossbuchstaben enthalten
+  - koennen falsche Objekte ansprechen, wenn mehrere Objekte mit gleicher
+    Id im Raum sind.
+  - funtionieren teilweise nur mit Spielern (query_real_name) oder
+    koennen Probleme machen, wenn die Objekte verschattet sind
+  - produzieren falsche Ausgaben (bei Seele, z. B. winke), wenn
+    Id nicht mehr anwesend ist.
+
+ACHTUNG:
+    Wenn exec_command in einem Spieler aufgerufen wird, sollte dem Befehl
+    ein \\ vorangestellt werden, damit keine Kuerzel erwischt werden.
+
+VERWEISE: do_command, command
+GRUPPEN: monster
+*/
+int exec_command(varargs mixed command)
+{
+    string  command_str;
+    int     ret;
+    mixed   *obs_ids;  // Feld mit Paaren (obj, id) von Objekten, die Id
+                       // bekommen haben
+
+    if (!command || !sizeof(command))
+        return 0;
+    if (sizeof(command) == 1 && pointerp(command[0]))
+        command = command[0];
+
+    if (sizeof(command) == 1 && stringp(command[0]))
+        return do_command(command[0]);
+    else
+    {
+        command_str = "";
+        obs_ids = ({});
+        // Befehlsteile analysien, Kommando-String zusammensetzen, Ids vergeben
+        filter(command, #'append_command_str, &command_str, &obs_ids);
+        if (strlen(command_str))
+            command_str = command_str[0..<2];
+
+        ret = do_command(command_str);
+        filter(obs_ids, #'remove_id); // vergebene Ids wieder entfernen
+
+        return ret;
+    }
+}

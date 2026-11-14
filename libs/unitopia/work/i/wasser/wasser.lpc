@@ -1,0 +1,526 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        wasser.c
+// Description: Wasser fuer Brunnen und Flasche
+// Author:      Jafar & Yellow
+// Modified by:
+//
+// $Log: wasser.c,v $
+// Revision 1.12  2005/05/06 22:59:56  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.11  2004/11/27 21:23:40  gnomi
+// add_hp-Aenderung: add_hp-Aufrufe angepasst.
+//
+// Revision 1.10  2004/04/19 22:17:07  gnomi
+// Typo.
+//
+// Revision 1.9  2003/01/24 01:23:01  gnomi
+// Doku zu drink_action korrigiert.
+//
+// Revision 1.8  2002/11/20 04:02:43  gnomi
+// Doku zu den forbidden_drink_water-Controllern.
+//
+// Revision 1.7  2002/08/23 00:06:04  gnomi
+// Inheritet nun wieder /i/move, ruft im create aber set_no_move(1); auf.
+//
+// Revision 1.6  2002/06/15 15:42:44  gnomi
+// Hinweis auf /p/jafar/doc entfernt.
+//
+// Revision 1.5  2001/03/03 23:00:23  gnomi
+// Inherit /i/install anstatt /i/move.
+//
+// Revision 1.4  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strong_types
+#pragma verbose_errors
+
+inherit "/i/move";
+inherit "/i/item";
+
+#include <add_hp.h>
+#include <invis.h>
+#include <deklin.h>
+#include <wasser.h>
+
+
+private int healing  = HEALING,   // einmalige Heilung (HP & SP)
+            strength = STRENGTH,  // Alkoholgehalt
+            amount   = AMOUNT;    // Wasserpunkte
+
+private closure success_message,       // Trinken war erfolgreich
+                other_success_message,
+                failure_message,       // Trinken war nicht erfolgreich
+                other_failure_message;
+
+/*
+FUNKTION: set_healing
+DEKLARATION: void set_healing(int n)
+BESCHREIBUNG:
+Setzt die einmalige Heilung des Wassers pro Schluck.
+VERWEISE: set_strength, set_amount, query_healing, query_strength, query_amount
+GRUPPEN: wasser
+*/
+void set_healing(int n) { healing = n; }
+
+
+/*
+FUNKTION: set_strength
+DEKLARATION: void set_strength(int n)
+BESCHREIBUNG:
+Setzt den Alkoholgehalt des Wassers pro Schluck.
+VERWEISE: set_healing, set_amount, query_healing, query_strength, query_amount
+GRUPPEN: wasser
+*/
+void set_strength(int n) { strength = n; }
+
+
+/*
+FUNKTION: set_amount
+DEKLARATION: void set_amount(int n)
+BESCHREIBUNG:
+Setzt die Anzahl der Wasserpunkte des Wassers pro Schluck.
+VERWEISE: set_healing, set_strength, query_healing, query_strength,
+query_amount
+GRUPPEN: wasser
+*/
+void set_amount(int n) { amount = n; }
+
+
+/*
+FUNKTION: query_healing
+DEKLARATION: int query_healing()
+BESCHREIBUNG:
+Liefert die einmalige Heilung des Wassers pro Schluck.
+VERWEISE: set_healing, set_strength, set_amount, query_strength, query_amount
+GRUPPEN: wasser
+*/
+int query_healing() { return healing; }
+
+
+/*
+FUNKTION: query_strength
+DEKLARATION: int query_strength()
+BESCHREIBUNG:
+Liefert den Alkoholgehalt des Wassers pro Schluck.
+VERWEISE: set_healing, set_strength, set_amount, query_healing, query_amount
+GRUPPEN: wasser
+*/
+int query_strength() { return strength; }
+
+
+/*
+FUNKTION: query_amount
+DEKLARATION: int query_amount()
+BESCHREIBUNG:
+Liefert die Anzahl der Wasserpunkte des Wassers pro Schluck.
+VERWEISE: set_healing, set_strength, set_amount, query_healing, query_strength
+GRUPPEN: wasser
+*/
+int query_amount() { return amount; }
+
+/*
+FUNKTION: set_success_message
+DEKLARATION: void set_success_message(mixed s)
+BESCHREIBUNG:
+Setzt die Meldung, die der Spieler bekommt, wenn er das Wasser trinken konnte.
+VERWEISE: set_other_success_message, set_failure_message,
+set_other_failure_message, query_success_message, query_other_success_message,
+query_failure_message, query_other_failure_message
+GRUPPEN: wasser
+*/
+void set_success_message(mixed s) { success_message = mixed_to_closure(s); }
+
+
+/*
+FUNKTION: set_other_success_message
+DEKLARATION: void set_other_success_message(mixed s)
+BESCHREIBUNG:
+Setzt die Meldung, die Umstehende bekommen, wenn der Spieler das Wasser
+trinken konnte.
+VERWEISE: set_success_message, set_failure_message,
+set_other_failure_message, query_success_message, query_other_success_message,
+query_failure_message, query_other_failure_message
+GRUPPEN: wasser
+*/
+void set_other_success_message(mixed s) { other_success_message = mixed_to_closure(s); }
+
+
+/*
+FUNKTION: set_failure_message
+DEKLARATION: void set_failure_message(mixed s)
+BESCHREIBUNG:
+Setzt die Meldung, die der Spieler bekommt, wenn er das Wasser nicht (zu
+viele Wasserpunkte oder Alkohol) trinken konnte.
+VERWEISE: set_success_message, set_other_success_message,
+set_other_failure_message, query_success_message, query_other_success_message,
+query_failure_message, query_other_failure_message
+GRUPPEN: wasser
+*/
+void set_failure_message(mixed s) { failure_message = mixed_to_closure(s); }
+
+
+/*
+FUNKTION: set_other_failure_message
+DEKLARATION: void set_other_failure_message(mixed s)
+BESCHREIBUNG:
+Setzt die Meldung, die Umstehende bekommen, wenn der Spieler das Wasser nicht
+(zu viele Wasserpunkte oder Alkohol) trinken konnte.
+VERWEISE: set_success_message, set_other_success_message, set_failure_message,
+query_success_message, query_other_success_message, query_failure_message,
+query_other_failure_message
+GRUPPEN: wasser
+*/
+void set_other_failure_message(mixed s) { other_failure_message = mixed_to_closure(s); }
+
+
+/*
+FUNKTION: query_success_message
+DEKLARATION: string query_success_message()
+BESCHREIBUNG:
+Nachdem ein Spieler das Wasser getrunken hat, erhaelt er eine Meldung die aus
+einem Teil vom Wasser und einem Teil vom Brunnen oder der Flasche zusammen-
+gesetzt wird. query_success_message liefert den Teil des Wassers zurueck, der
+an den Teil der Flasche oder des Brunnens angehaengt wird.
+VERWEISE: set_success_message, set_other_success_message, set_failure_message,
+set_other_failure_message, query_other_success_message, query_failure_message,
+query_other_failure_message
+GRUPPEN: wasser
+*/
+string query_success_message()
+{
+   if (success_message)
+     return closure_to_string(success_message);
+   else
+     return "";
+}
+
+
+/*
+FUNKTION: query_other_success_message
+DEKLARATION: string query_other_success_message()
+BESCHREIBUNG:
+Nachdem ein Spieler das Wasser getrunken hat, erhalten die Umstehenden eine
+Meldung die aus einem Teil vom Wasser und einem Teil vom Brunnen oder der
+Flasche zusammengesetzt wird. query_other_success_message liefert den Teil des
+Wassers zurueck, der an den Teil der Flasche oder des Brunnens angehaengt
+wird.
+VERWEISE: set_success_message, set_other_success_message, set_failure_message,
+set_other_failure_message, query_success_message, query_failure_message,
+query_other_failure_message
+GRUPPEN: wasser
+*/
+string query_other_success_message()
+{
+   if (other_success_message)
+     return closure_to_string(other_success_message);
+   else
+     return "";
+}
+
+
+/*
+FUNKTION: query_failure_message
+DEKLARATION: string query_failure_message()
+BESCHREIBUNG:
+Wenn ein Spieler das Wasser nicht trinken kann (zuviele Wasserpunkte oder
+zuviele Alkoholpunkte) erhaelt er eine Meldung, die aus einem Teil vom Wasser
+und einem Teil vom Brunnen oder der Flasche zusammengesetzt wird.
+query_failure_message liefert den Teil des Wasser zurueck, der an den Teil der
+Flasche oder des Brunnens angehaengt wird.
+VERWEISE: set_success_message, set_other_success_message, set_failure_message,
+set_other_failure_message, query_success_message, query_other_success_message,
+query_other_failure_message
+GRUPPEN: wasser
+*/
+string query_failure_message()
+{
+   if (failure_message)
+     return closure_to_string(failure_message);
+   else
+     return "Noch "+einen(([
+	    "name":	query_name(),
+	    "cap_name":	query_cap_name(),
+	    "gender":	query_gender(),
+	    "adjektiv": query_adjektiv(),
+	    "plural":	query_plural(),
+	    "personal": query_personal(),
+	    "personal_title": query_personal_title(),
+	    "eigen":	query_eigen(),
+	    "akkusativ": this_object()->query_akkusativ(),
+	    "menge": (["name":"schluck","gender":"maennlich"])
+	])) + " bekommst du nicht runter.";
+}
+
+
+/*
+FUNKTION: query_other_failure_message
+DEKLARATION: string query_other_failure_message()
+BESCHREIBUNG:
+Wenn ein Spieler das Wasser nicht trinken kann (zuviele Wasserpunkte oder
+zuviele Alkoholpunkte) erhalten die Umstehenden eine Meldung, die aus einem
+Teil vom Wasser und einem Teil vom Brunnen oder der Flasche zusammengesetzt
+wird. query_other_failure_message liefert den Teil des Wasser zurueck, der
+an den den Teil der Flasche oder des Brunnens angehaengt wird.
+VERWEISE: set_success_message, set_other_success_message, set_failure_message,
+set_other_failure_message, query_success_message, query_other_success_message,
+query_failure_message
+GRUPPEN: wasser
+*/
+string query_other_failure_message()
+{
+   if (other_failure_message)
+     return closure_to_string(other_failure_message);
+   else
+     return "";
+}
+
+
+/*
+FUNKTION: heal_player
+DEKLARATION: void heal_player(int amount)
+BESCHREIBUNG:
+heal_player fuellt mit der angegebenen Punktzahl zuerst die HPs, dann die
+SPs von this_player() auf.
+VERWEISE:
+GRUPPEN: wasser
+*/
+void heal_player(int amount)
+{
+   int hp_needed, hp_get, sp_get;
+
+   if (amount <= 0)
+     return;
+
+   hp_needed = this_player()->query_max_hp() - this_player()->query_hp();
+
+   if (amount > hp_needed) {
+     hp_get = hp_needed;
+     sp_get = amount - hp_needed;
+   }else {
+     hp_get = amount;
+     sp_get = 0;
+   }
+
+   this_player()->add_hp(hp_get, ([ AH_HEAL_TYPE: AH_HEAL_MEDIC ]));
+   this_player()->add_sp(sp_get);
+}
+
+
+/*
+FUNKTION: drink_action
+DEKLARATION: int drink_action()
+BESCHREIBUNG:
+Die Funktion wird beim Trinken von drink_action in der Flasche oder dem
+Brunnen aufgerufen. Sie ist fuer die Auswirkungen des Wassers (Heilung,
+Erhoehen der Wasserpunkte und des Alkoholgehalts, ...) verantwortlich. Kann
+der Spieler das Wasser trinken, werden die entsprechenden Werte aktualisiert.
+Ansonsten wird eine Fehlermeldung ausgegeben.
+Diese Funktion liefert 1 zurueck, wenn sie sich fuer zustaendig befand und
+entsprechende (Erfolgs- oder auch Misserfolgs-)Meldungen ausgegeben hat.
+Ansonsten (im notify_fail-Falle) wird 0 zurueckgeliefert.
+VERWEISE: drink_action (brunnen, flasche)
+GRUPPEN: wasser
+*/
+int drink_action()
+{
+   if ((amount > 0 && this_player()->has_enough_wp(amount)) ||
+       (strength > 0 && this_player()->has_enough_alc(strength)))
+     return 0;
+
+   this_player()->add_wp(amount);
+
+   if (strength != 0)
+     this_player()->add_alc(strength);
+
+   if (healing > 0)
+     heal_player(healing);
+
+   return 1;
+}
+
+
+/*
+FUNKTION: is_water
+DEKLARATION: int is_water()
+BESCHREIBUNG:
+Wasser antwortet darauf mit 1.
+VERWEISE: is_bottle (flasche), is_well (brunnen)
+GRUPPEN: wasser
+*/
+int is_water() { return 1; }
+
+
+// das Wasser kann vom Spieler nicht bewegt werden
+
+int no_take(object player, object container)
+{
+    if (container->query_room())
+	write(wrap("Du kannst " + den() + " nicht nehmen."));
+    else
+	write(wrap("Du kannst " + den() + " nicht aus " + deinem(container) +
+		    " nehmen."));
+    return 1;
+}
+
+
+void create()
+{
+   if (!clonep())           // den Blueprint nicht initialisieren
+     return;
+
+   set_name("wasser");
+   set_id("wasser");
+   set_gender("saechlich");
+   set_material(({"wasser"}));
+   set_invis(V_NOLIST);
+   set_no_move(1);
+}
+
+/*
+FUNKTION: notify_drink_water
+DEKLARATION: void notify_drink_water(mixed water, mixed well, object who)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who Wasser water aus einem Brunnen well getrunken hat,
+wird who->notify("drink_water", water, well, who) aufgerufen.
+water ist entweder das Wasserobjekt oder ein Mapping, welches das Wasser
+beschreibt (siehe /i/wasser/fluss). Entsprechend ist well entweder das Objekt,
+welches das Wasserobjekt beinhaltet, ein Mapping, welches den Brunnen
+beschreibt, welcher das Wasser (beschrieben durch das Mapping water)
+beinhaltet, oder 0, wenn das Mapping water keinen Brunnen besitzt.
+
+Die Funktion notify ruft in allen mit who->add_controller("notify_drink_water",
+other) angemeldeten Objekten other die Funktion other->notify_drink_water(
+water, well, who) auf. Sowohl who als auch other haben dann eine Moeglichkeit,
+auf den Genuss des Wassers water durch das Lebewesen who zu reagieren.
+VERWEISE: notify, notify_drink_water_well, notify_drink_water_self
+GRUPPEN: wasser
+*/
+
+/*
+FUNKTION: notify_drink_water_well
+DEKLARATION: void notify_drink_water_well(mixed water, mixed well, object who)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who Wasser water aus einem Brunnen well getrunken hat,
+wird well->notify("drink_water_well", water, well, who) bzw.
+room->notify("drink_water_well", water, well, who), wenn well ein V-Item im
+Raum room ist, aufgerufen. water ist entweder das Wasserobjekt oder ein
+Mapping, welches das Wasser beschreibt (siehe /i/wasser/fluss).
+Entsprechend ist well entweder das Objekt, welches das Wasserobjekt
+beinhaltet, oder ein Mapping, welches den Brunnen beschreibt, welcher das
+Wasser (beschrieben durch das Mapping water) beinhaltet.
+
+Die Funktion notify ruft in allen mit who->add_controller(
+"notify_drink_water_well", other) angemeldeten Objekten other die Funktion
+other->notify_drink_water_well(water, well, who) auf. Sowohl well bzw. room
+als auch other haben dann eine Moeglichkeit, auf den Genuss des Wassers water
+durch das Lebewesen who zu reagieren.
+VERWEISE: notify, notify_drink_water, notify_drink_water_self
+GRUPPEN: wasser
+*/
+
+/*
+FUNKTION: notify_drink_water_self
+DEKLARATION: void notify_drink_water_self(mixed water, mixed well, object who)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who Wasser water aus einem Brunnen well getrunken hat,
+wird water->notify("drink_water_self", water, well, who) bzw.
+room->notify("drink_water_self", water, well, who), wenn water ein V-Item im
+Raum room ist, aufgerufen. water ist entweder das Wasserobjekt oder ein
+Mapping, welches das Wasser beschreibt (siehe /i/wasser/fluss).
+Entsprechend ist well entweder das Objekt, welches das Wasserobjekt
+beinhaltet, ein Mapping, welches den Brunnen beschreibt, welcher das Wasser
+(beschrieben durch das Mapping water) beinhaltet, oder 0, falls das Mapping
+water keinen Brunnen besitzt.
+
+Die Funktion notify ruft in allen mit who->add_controller(
+"notify_drink_water_self", other) angemeldeten Objekten other die Funktion
+other->notify_drink_water_self(water, well, who) auf. Sowohl water bzw. room
+als auch other haben dann eine Moeglichkeit, auf den Genuss des Wassers water
+durch das Lebewesen who zu reagieren.
+VERWEISE: notify, notify_drink_water, notify_drink_water_well
+GRUPPEN: wasser
+*/
+
+/*
+FUNKTION: forbidden_drink_water
+DEKLARATION: string* forbidden_drink_water(mixed water, mixed well, object who)
+BESCHREIBUNG:
+Bevor ein Lebewesen who Wasser water aus einem Brunnen well trinken kann,
+wird who->forbidden("drink_water", water, well, who) aufgerufen.
+water ist entweder das Wasserobjekt oder ein Mapping, welches das Wasser
+beschreibt (siehe /i/wasser/fluss). Entsprechend ist well entweder das Objekt,
+welches das Wasserobjekt beinhaltet, ein Mapping, welches den Brunnen
+beschreibt, welcher das Wasser (beschrieben durch das Mapping water)
+beinhaltet, oder 0, wenn das Mapping water keinen Brunnen besitzt.
+
+Die Funktion forbidden ruft in allen mit who->add_controller(
+"forbidden_drink_water", other) angemeldeten Objekten other die Funktion
+other->forbidden_drink_water(water, well, who) auf. Liefert diese
+Funktion einen Wert ungleich 0 zurueck, so wird das Trinken verboten.
+
+Der Rueckgabewert der Funktion sollte ein Array ({ "Meldung fuer 'wer'",
+"Meldung fuer alle Umstehenden" }) sein, welches dann automatisch umgebrochen
+und ausgegeben wird.
+
+VERWEISE: forbidden, forbidden_drink_water_well, forbidden_drink_water_self
+GRUPPEN: wasser
+*/
+
+/*
+FUNKTION: forbidden_drink_water_well
+DEKLARATION: string* forbidden_drink_water_well(mixed water, mixed well, object who)
+BESCHREIBUNG:
+Bevor ein Lebewesen who Wasser water aus einem Brunnen well trinken kann,
+wird well->forbidden("drink_water_well", water, well, who) bzw.
+room->forbidden("drink_water_well", water, well, who), wenn well ein V-Item
+im Raum room ist, aufgerufen. water ist entweder das Wasserobjekt oder
+ein Mapping, welches das Wasser beschreibt (siehe /i/wasser/fluss).
+Entsprechend ist well entweder das Objekt, welches das Wasserobjekt
+beinhaltet, oder ein Mapping, welches den Brunnen beschreibt, welcher
+das Wasser (beschrieben durch das Mapping water) beinhaltet.
+
+Die Funktion forbidden ruft in allen mit who->add_controller(
+"forbidden_drink_water_well", other) angemeldeten Objekten other die
+Funktion other->forbidden_drink_water_well(water, well, who) auf. 
+Liefert diese Funktion einen Wert ungleich 0 zurueck, so wird das Trinken
+verboten.
+
+Der Rueckgabewert der Funktion sollte ein Array ({ "Meldung fuer 'wer'",
+"Meldung fuer alle Umstehenden" }) sein, welches dann automatisch umgebrochen
+und ausgegeben wird.
+
+VERWEISE: forbidden, forbidden_drink_water, forbidden_drink_water_self
+GRUPPEN: wasser
+*/
+
+/*
+FUNKTION: forbidden_drink_water_self
+DEKLARATION: string* forbidden_drink_water_self(mixed water, mixed well, object who)
+BESCHREIBUNG:
+Bevor ein Lebewesen who Wasser water aus einem Brunnen well trinken kann,
+wird water->forbidden("drink_water_self", water, well, who) bzw.
+room->forbidden("drink_water_self", water, well, who), wenn water ein V-Item
+im Raum room ist, aufgerufen. water ist entweder das Wasserobjekt oder
+ein Mapping, welches das Wasser beschreibt (siehe /i/wasser/fluss).
+Entsprechend ist well entweder das Objekt, welches das Wasserobjekt
+beinhaltet, ein Mapping, welches den Brunnen beschreibt, welcher das Wasser
+(beschrieben durch das Mapping water) beinhaltet, oder 0, falls das Mapping
+water keinen Brunnen besitzt.
+
+Die Funktion forbidden ruft in allen mit who->add_controller(
+"forbidden_drink_water_self", other) angemeldeten Objekten other die Funktion
+other->forbidden_drink_water_self(water, well, who) auf. Liefert diese
+Funktion einen Wert ungleich 0 zurueck, so wird das Trinken verboten.
+
+Der Rueckgabewert der Funktion sollte ein Array ({ "Meldung fuer 'wer'",
+"Meldung fuer alle Umstehenden" }) sein, welches dann automatisch umgebrochen
+und ausgegeben wird.
+
+VERWEISE: forbidden, forbidden_drink_water, forbidden_drink_water_well
+GRUPPEN: wasser
+*/

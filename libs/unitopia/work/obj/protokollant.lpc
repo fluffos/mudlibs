@@ -1,0 +1,885 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:            /obj/protokollant.c
+// Description:     Ein Protokollant pro Spieler(VC ueber realname)
+// Author:          Myonara.
+//
+// $Log: protokollant.c,v $
+// Revision 1.7  2015/01/23 18:51:15  myonara
+// Bugfixes
+//
+// Revision 1.6  2014/01/26 08:36:28  myonara
+// Beschreibungen, BugFixes und mudlib-Klammern
+//
+// Revision 1.5  2013/06/15 15:11:56  myonara
+// folge-Modus aktiviert und query_animal -1 implementiert.
+//
+// Revision 1.4  2013-05-26 19:59:42  myonara
+// query_long,Bugfixing renewal,speichern und andere.
+//
+// Revision 1.3  2013-05-18 15:16:53  myonara
+// Haufenweises Bugfixing.
+//
+// Revision 1.2  2013-05-06 16:54:25  myonara
+// Kommandos ende,?,neu ergaenzt und verfeinert
+//
+// Revision 1.1  2013-05-03 17:06:40  myonara
+// Erstellung.
+//
+
+inherit "/i/monster/monster";
+inherit "/i/tools/security";
+inherit "/p/Misc/i/array";
+inherit "/i/tools/dynamic_browser";
+
+#include <commands.h>
+#include <dynamic_browser.h>
+#include <editor.h>
+#include <files.h>
+#include <level.h>
+#include <message.h>
+#include <misc.h>
+#include <monster.h>
+#include <more.h>
+#include <move.h>
+#include <notify_fail.h>
+#include <protokoll.h>
+
+#define DEBUGGER "myonara"
+#include <debug.h>
+
+#define LINE      "-------------------------------------------------------------------------------"
+#define MORE_LINE "...--------------------------------------------------------------------- (MORE)"
+#define SAVE_CALL_OUT  61
+#define BPARAM_NAME     "bparam:name"
+#define BPARAM_MSG_IN   "bparam:msg:in"
+#define BPARAM_MSG_OUT  "bparam:msg_out"
+#define BPARAM_MMSG_IN  "bparam:mmsg:in"
+#define BPARAM_MMSG_OUT "bparam:mmsg_out"
+#define BPARAM_ADJEKTIV "bparam:adjektiv"
+#define BPARAM_LANGTEXT "bparam:langtext"
+#define BPARAM_TITEL    "bparam:titel"
+#define BPARAM_PTITEL   "bparam:ptitel"
+
+
+private string owner;
+private mapping einst = ([ ]), zustand = ([ ]), protokoll =([]), bparam=([]);
+private string * iprotokoll =({});
+private int flag_save = 0;
+
+// Damit er beim zernen nicht zerstoert wird.
+int query_animal () { return -1; }
+
+string query_long(object viewer)
+{
+    string s = ::query_long(viewer);
+    if (wizp(viewer) && object_time() < object_time(touch(__FILE__))) 
+    {
+        return s+"Der Protokollant benoetigt eine ZERNeuerung.\n";
+    }
+    return s;
+}
+
+varargs void save_bparam(mapping bparneu)
+{
+    if (mappingp(bparneu))
+    {
+        bparam = bparneu;
+    }
+    string name = bparam[BPARAM_NAME]||"Protokollant";
+    string titel = bparam[BPARAM_TITEL];
+    string ptitel = bparam[BPARAM_PTITEL];
+    string *adj = bparam[BPARAM_ADJEKTIV]||({});
+    string lang = bparam[BPARAM_LANGTEXT];
+    string rn;
+    object pl,ix;
+    if (name != "Protokollant")
+    {
+        set_personal(1);
+        set_id(({ "protokollant",lower_case(name)}));
+    }
+    else
+    {
+        set_id(({"protokollant"}));
+    }
+    set_name(name);
+    bparam[BPARAM_PTITEL] = set_personal_title(ptitel);
+    set_adjektiv(adj);
+    if (titel)
+        set_short(Der()+titel);
+    else
+        set_short(Der());
+    if (lang) 
+        set_long(space(lang));
+    
+    if (sscanf(ON(TO), PROTOKOLL_VC+"protokollant_%s", rn) == 1)
+    {
+        pl = find_player(rn);
+        if (!titel)
+        {
+            set_short(Der()+", der Protokollant von "+capitalize(rn));
+        }
+        if (pl) ix = present_clone("/obj/protokollindex",pl);
+        if (ix) 
+        {
+            ix->set_bparam(bparam);
+            //DEBUG("set_bparam ausgefuehrt (protokollant)");
+        }
+    }
+}
+
+void setup_renamed_object(object vc, string old_name)
+{
+    string str,rn;
+    object pl,ix;
+    str = ON(TO);
+    if (sscanf(str, PROTOKOLL_VC+"protokollant_%s", rn) && player_exists(rn)) 
+    {
+        owner = rn;
+        einst[PR_SCHREIBZUGRIFFE] = ({ owner });
+        if (objectp(pl = find_player(rn))) 
+        {
+            set_short(Des(pl)+ " Protokollant");
+            set_long("Der Protokollant von "+pl->query_real_cap_name()+".");
+            ix = present_clone("/obj/protokollindex",pl);
+            if (objectp(ix))
+            {
+                save_bparam(ix->query_bparam());
+                //DEBUG("query_bparam ausgefuehrt (protokollant)");
+            }
+        } 
+        else 
+        {
+            set_short(Des(capitalize(rn))+ " Protokollant");
+            set_long("Der Protokollant von "+capitalize(rn));
+        }
+        set_parse_conversation(this_object(), ({
+"pr_stop:      <fluester> && [stop,pause]", PARSE_SAY,
+"pr_start:     <fluester> && [start]", PARSE_SAY,
+"pr_anzeige:   <fluester> && [anzeige]", PARSE_SAY,
+"pr_status:    <fluester> && [status]", PARSE_SAY,
+"pr_loeschen:  <fluester> && [loeschen]", PARSE_SAY,
+"pr_speichern: <fluester> && [speichern]", PARSE_SAY,
+"pr_ende:      <fluester> && [ende]", PARSE_SAY,
+"pr_hilfe:     <fluester> && [hilfe]", PARSE_SAY,
+        }) );
+        add_controller(({"forbidden_seele","forbidden_put_into",
+                    "forbidden_vampyrsaugen" }));
+    }
+}
+
+private mixed _save_protokoll()
+{
+    while (remove_call_out("save_protokoll")!=-1);
+    if (!pointerp(iprotokoll) || !sizeof(iprotokoll))
+        return 0;
+    mixed result;
+    string * prot = flatten_array(map(iprotokoll,(: explode($1,"\n")[..<2] :)));
+    if (!mappingp(protokoll)) 
+    {
+        protokoll = PROTOKOLL_MASTER->get_empty_protokoll();
+    }
+    if (!pointerp(protokoll[PR_INHALT])) 
+    {
+        protokoll[PR_INHALT] = prot;
+    } 
+    else 
+    {
+        protokoll[PR_INHALT] += prot;
+    }
+    iprotokoll = ({ });
+        protokoll[PR_STICHWORTE] = einst[PR_STICHWORTE];
+        protokoll[PR_LESEZUGRIFFE] = einst[PR_LESEZUGRIFFE];
+        protokoll[PR_SCHREIBZUGRIFFE] = einst[PR_SCHREIBZUGRIFFE];
+        protokoll[PR_TITEL] = einst[PR_TITEL];
+        protokoll[PR_AUTOR] = owner;
+        protokoll[PR_ZUSTAND] = PR_ZUSTAND_AKTIV;
+        protokoll[PR_TYPKLASSE] = einst[PR_TYPKLASSE];
+    result = PROTOKOLL_MASTER->speichere_protokoll(protokoll);
+    if (mappingp(result))
+    {
+        protokoll = result;
+    }
+    flag_save = 0;
+    return result;
+}
+
+nosave void save_protokoll()
+{
+    _save_protokoll();
+}
+
+void receive_message(int msg_type, int msg_action, object who, string msg)
+{
+    string * rex;
+    int ix;
+    if (!member(zustand,PR_AKTIV) || msg_type == MT_DEBUG) 
+    {
+        return;
+    }
+    if (!member(einst,PR_FLAG_ALLES)) 
+    {
+        if (msg_type != MT_NOISE || msg_action != MA_COMM) 
+        {
+            return;
+        }
+    }
+    if (!member(einst,PR_FLAG_NPC) && !playerp(who)) 
+    {
+        return;
+    } 
+    else if (!playerp(who)) 
+    {
+        if (strstr(msg, "fluestert zu dir:")!=-1) 
+        {
+            return;
+        }
+    }
+    ix = strstr(msg,":");
+    if (ix >= 0) 
+        rex = regexplode(msg[0..ix], "(sagt|fragt|antwortet).*:");
+    if (sizeof(rex)==3 || member(einst,PR_FLAG_ALLES)) 
+    {
+        iprotokoll += ({ msg });
+        flag_save++;
+        if (find_call_out("save_protokoll")==-1)
+            call_out("save_protokoll",SAVE_CALL_OUT);
+    }
+    //DEBUG(sprintf("receive_msg %Q %d %d",einst,msg_type,msg_action));
+}
+
+public mapping query_einstellungen()
+{
+    return einst || ([]);
+}
+
+public void set_einstellungen(mapping e)
+{
+    if (strstr(ON(PO),"/obj/protokollindex#")!=0)
+    {
+        return;
+    }
+    if (mappingp(e)) 
+    {
+        einst = e;
+        ({find_player(owner)})->delete_controller("notify_move", TO);
+        if (einst[PR_FOLGE_MODUS]) 
+        {
+            ({find_player(owner)})->add_controller("notify_move", TO);
+        }
+        if (mappingp(protokoll)) 
+        {
+            protokoll[PR_STICHWORTE] = e[PR_STICHWORTE];
+            protokoll[PR_LESEZUGRIFFE] = e[PR_LESEZUGRIFFE];
+            protokoll[PR_SCHREIBZUGRIFFE] = e[PR_SCHREIBZUGRIFFE];
+            protokoll[PR_TITEL] = e[PR_TITEL];
+            protokoll[PR_TYPKLASSE] = e[PR_TYPKLASSE];
+            flag_save++;
+        }
+    }
+}
+
+private void protokoll_status()
+{
+    string str ="Protokollstatus: ";
+    if (!member(zustand,PR_AKTIV)) 
+    {
+        str+= "Protokollaufzeichnung pausiert.\n";
+    } 
+    else 
+    {
+        str+= "Protokollaufzeichnung aktiv.\n";
+    }
+    str += wrap_say("Titel:",einst[PR_TITEL]||"");
+    str += wrap_say("Typklasse/Thema:", einst[PR_TYPKLASSE]||"");
+    str += wrap_say("Stichworte:",
+            liste(einst[PR_STICHWORTE]||({})));
+    str += "\n";
+    if (member(einst,PR_FLAG_ALLE)) 
+    {
+        str += "Alle anwesenden Spieler/Engel/Goetter werden belauscht.\n";
+    } 
+    if (member(einst,PR_FLAG_NPC)) 
+    {
+        str += "Alle anwesenden NPC werden belauscht.\n";
+    }
+    if (member(einst,PR_FLAG_ALLES)) 
+    {
+        str += "Alle Messagetypen werden protokolliert.\n";
+    } 
+    else 
+    {
+        str += "Nur sage, frage, antworte werden protokolliert.\n";
+    }
+    str += "\n";
+    str += wrap_say("Leseberechtigte:",
+            liste(einst[PR_LESEZUGRIFFE]||({})));
+    str += wrap_say("Schreibberechtigte:",
+            liste(einst[PR_SCHREIBZUGRIFFE]||({})));
+    
+    send_message_in(ENV(TO), MT_NOISE, MA_COMM, str,0, TO);
+}
+
+nomask nosave int pr_hilfe(string str,string verb,object monster, 
+             object player,int flags, mapping info)
+{
+    if (RN(player) != owner) 
+    {
+        exec_command("fluestere zu",player,
+            "Du bist nicht mein Eigentuemer, da nehme ich keine Befehle "
+            "entgegen.");
+        return 0;
+    }
+    exec_command("fluestere zu",player,
+        "Generell gibt es 'pr:?' um Hilfe zu den pr:-Kommandos zu bekommen. "
+        "Per Fluestern nehme ich noch folgende Befehle entgegen: "
+        "start (um die Aufzeichnung zu starten), stop (um sie zu beenden) "
+        "anzeige (um das aktuelle Protokoll anzuzeigen) "
+        "status (akutelle Statusanzeige), "
+        "speichern (um das aktuelle Protokoll zu speichern) "
+        "ende (um den Protokollanten wieder weg zu schicken).");
+    return 0;
+}
+
+nomask nosave int pr_start(string str,string verb,object monster, 
+             object player,int flags, mapping info)
+{
+    if (RN(player) != owner) 
+    {
+        exec_command("fluestere zu",player,
+            "Du bist nicht mein Eigentuemer, da nehme ich keine Befehle "
+            "entgegen.");
+        return 0;
+    }
+    zustand[PR_AKTIV] = 1;
+    if (!mappingp(protokoll)) 
+    {
+        protokoll = PROTOKOLL_MASTER->get_empty_protokoll();
+    }
+    protokoll[PR_ZUSTAND] = PR_ZUSTAND_AKTIV;
+    protokoll_status();
+    //exec_command("sage Fuers Protokoll: Es ist "+shorttimestr(time(),1));
+    return 0;
+}
+
+nomask nosave int pr_stop(string str,string verb,object monster, 
+             object player, int flags, mapping info)
+{
+    if (RN(player) != owner) 
+    {
+        exec_command("fluestere zu",player,
+            "Du bist nicht mein Eigentuemer, da nehme ich keine Befehle "
+            "entgegen.");
+        return 0;
+    }
+    m_delete(zustand,PR_AKTIV);
+    protokoll_status();
+    return 0;
+}
+
+nomask nosave int pr_anzeige(string str,string verb,object monster, 
+             object player, int flags, mapping info)
+{
+    string * prot;
+    if ( RN(player) == owner && ENV(player) == ENV_TO) 
+    {
+        prot = flatten_array(map(iprotokoll||({}),
+                (: explode($1,"\n")[..<2] :)));
+        prot = (protokoll[PR_INHALT]||({})) + prot;
+        player->more(prot,({ "Protokoll [?,w,q,z] ",
+           "----------- Protokoll: -------------------------------------------------------",
+           LINE, MORE_LINE, MORE_LINE
+        }), 0,
+        M_DO_NOT_END|M_FRAME|M_THIS_OBJECT,
+        "Root:Protokollant:001");
+    }
+}
+
+nomask nosave int pr_speichern(string str,string verb,object monster, 
+             object player, int flags, mapping info)
+{
+    string * prot;
+    mixed result;
+    if (RN(player) == owner && ENV(player) == ENV_TO) 
+    {
+        result = _save_protokoll();
+        if (mappingp(result)) 
+        {
+            send_message_to(player, MT_NOISE, MA_COMM, wrap(
+                "Protokoll gesichert."));
+        } 
+        else 
+        {
+            send_message_to(player, MT_NOISE, MA_COMM, wrap(
+                "Protokoll nicht gesichert, Fehler:"+result));
+        }
+    }
+}
+
+nomask nosave int pr_loeschen(string str,string verb,object monster, 
+             object player, int flags, mapping info)
+{
+    if (RN(player) == owner && ENV(player) == ENV_TO) 
+    {
+            iprotokoll = ({ });
+            protokoll = PROTOKOLL_MASTER->get_empty_protokoll();
+            m_delete(zustand,PR_AKTIV);
+            protokoll_status();
+    }
+}
+
+nomask nosave int pr_status(string str,string verb,object monster, 
+             object player, int flags, mapping info)
+{
+    protokoll_status();
+}
+
+nomask nosave int pr_ende(string str,string verb,object monster, 
+             object player, int flags, mapping info)
+{
+    if (RN(player) == owner) 
+    {
+        if (sizeof(iprotokoll)) 
+        {
+            pr_speichern(str,verb,monster,player,flags,info);
+        }
+        send_message(MT_NOISE, MA_MOVE_OUT, 
+            wrap(message_expansion(message_parser(
+                 bparam[BPARAM_MMSG_OUT]||"$Der() verschwindet."),TO,"")));
+        remove();
+    }
+}
+
+nosave void pr_msg_text(string *text, string ob)
+{
+    object obj;
+
+    if (!obj=touch(ob))
+    {
+        send_message_to(find_player(owner),MT_NOTIFY,MA_UNKNOWN, wrap(
+        "Zielobjekt ist nicht mehr vorhanden. Meldung wurde nicht "
+            "ausgegeben."));
+        return;
+    }
+
+    if (!sizeof(text))
+    {
+        send_message_to(find_player(owner),MT_NOTIFY,MA_UNKNOWN, wrap(
+        "Abbruch der Meldung (Meldung wurde nicht ausgegeben)"));
+        return;
+    }
+    iprotokoll += ({ "[Protokoll-Meldung]\n" }) + map(text,(: wrap($1) :)) 
+                + ({ "[Ende der Protokoll-Meldung]\n" });
+    send_message_in(obj,MT_NOTIFY,MA_UNKNOWN,
+            "[Protokoll-Meldung von "+capitalize(owner)+"]\n" +
+            implode(text,"\n") + "\n[Ende der Meldung]\n",
+            "[Ende der Meldung]\n",find_player(owner));
+    return;
+}
+
+private int pr_msg(string str)
+{
+    object ob=ENV_TP;
+
+    if (!ob || !wizp(TP)) // IDEE Player Editor fuer Spieler bereitstellen.
+        return 0;
+    
+    TP->mini_ed(lambda(({'text}),({#'pr_msg_text,'text,object_name(ob)})), 0,
+        (file_size("/w/"+owner+"/priv")==FSIZE_DIR)
+            ?"/w/"+owner+"/priv/PR_MSG_TEXT"
+            :"/w/"+owner+"/PR_MSG_TEXT",
+        ([MINI_ED_START_TEXT: 
+            "Sende Meldung in den Raum und ins Protokoll.\n" +
+            "Ende mit '.' oder '**' Abbruch mit '~q' (Meldung wird nicht "
+            "ausgegeben)\n"
+        ]));
+    return 1;
+}
+
+nosave mixed pr_beschreiben_init(mapping old)
+{
+    if (!member(old,B_HELP))
+    {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            // B_HEADER_LINES : B_HEADER4HELP,
+            B_DATA : ({
+"In diesem Menu kann die Beschreibung des Protokollanten angepasst werden.",
+            }),
+            ]);
+    }
+}
+
+nosave string * pr_beschreiben_display(mapping menue)
+{
+    string name = bparam[BPARAM_NAME]||"Protokollant";
+    string titel = bparam[BPARAM_TITEL]||"";
+    string ptitel = bparam[BPARAM_PTITEL]||"";
+    string adj = liste(bparam[BPARAM_ADJEKTIV]||({}), ", ");
+    string lang = bparam[BPARAM_LANGTEXT]||"";
+    string msgout = bparam[BPARAM_MSG_OUT]||"$Der() geht.";
+    string msgin = bparam[BPARAM_MSG_IN]||"$Der() kommt heran.";
+    string mmsgout = bparam[BPARAM_MMSG_OUT]||"$Der() verschwindet.";
+    string mmsgin = bparam[BPARAM_MMSG_IN]||"$Der() kommt heran.";
+    return ({
+"Bei aller Freiheit beim Konfigurieren sollte der Protokollant als solcher ",
+"erkennbar sein. Er ist ein OOC-Instrument z.B. fuer die Spielerraete.",
+"",
+"(N)ame:           "+name,
+"(T)itel:          "+titel,
+"(P)ersoenl.Titel: "+ptitel,
+"(A)dejektive:     "+adj,
+wrap_say("(l)angtext:       ",lang),
+"(K)ommtmeldung:   "+msgin,
+"(G)ehtmeldung:    "+msgout,
+"(E)rscheinen:     "+mmsgin,
+"(V)erschwinden:   "+mmsgout,
+    });
+}
+
+nosave string pr_beschreiben_prompt(mapping menue)
+{
+    return "Beschreibung des Protokollanten [n,t,p,a,l,k,g,e,v,?,q]";
+}
+
+nosave mixed pr_beschreiben_action(string str, mapping * menues)
+{
+    string p,*xstr;
+    if (space(str)=="") return B_NOTHING;
+    if (sizeof(str)>1)
+        p = str[1..];
+    else
+        p = "";
+    switch(lower_case(str[0..0]))
+    {
+    case "n": // name
+        if (p=="")
+        {
+            m_delete(bparam,BPARAM_NAME);
+            return B_REDRAW;
+        }
+        else
+        {
+            xstr = regexplode(p,"[^A-Za-z]");
+            if (sizeof(xstr)>1)
+            {
+                browse_write_line("Ungueltige Zeichen.");
+                return B_DONE;
+            }
+            bparam[BPARAM_NAME] = p;
+            return B_REDRAW;
+        }
+    case "t": // titel
+        if (p=="")
+        {
+            m_delete(bparam,BPARAM_TITEL);
+            return B_REDRAW;
+        }
+        else
+        {
+            bparam[BPARAM_TITEL] = p;
+            return B_REDRAW;
+        }
+    case "p": // ptitel
+        if (p=="")
+        {
+            m_delete(bparam,BPARAM_PTITEL);
+            return B_REDRAW;
+        }
+        else
+        {
+            xstr = regexplode(p,"[^A-Za-z]");
+            if (sizeof(xstr)>1)
+            {
+                browse_write_line("Ungueltige Zeichen.");
+                return B_DONE;
+            }
+            bparam[BPARAM_PTITEL] = p;
+            return B_REDRAW;
+        }
+    case "a": // Adjektive
+        if (p=="")
+        {
+            m_delete(bparam,BPARAM_ADJEKTIV);
+            return B_REDRAW;
+        }
+        else
+        {
+            xstr = regexplode(p,"[^A-Za-z, ]");
+            if (sizeof(xstr)>1)
+            {
+                browse_write_line("Ungueltige Zeichen.");
+                return B_DONE;
+            }
+            xstr = regexplode(p,"[,]") - ({""," ",","});
+            bparam[BPARAM_ADJEKTIV] = xstr;
+            return B_REDRAW;
+        }
+    case "l": // Langtext
+        if (p=="")
+        {
+            m_delete(bparam,BPARAM_LANGTEXT);
+            return B_REDRAW;
+        }
+        else
+        {
+            bparam[BPARAM_LANGTEXT] = p;
+            return B_REDRAW;
+        }
+    case "k": // Kommtmeldung
+        if (p=="")
+        {
+            m_delete(bparam,BPARAM_MSG_IN);
+            return B_REDRAW;
+        }
+        else
+        {
+            bparam[BPARAM_MSG_IN] = p;
+            return B_REDRAW;
+        }
+    case "g": // Gehtmeldung
+        if (p=="")
+        {
+            m_delete(bparam,BPARAM_MSG_OUT);
+            return B_REDRAW;
+        }
+        else
+        {
+            bparam[BPARAM_MSG_OUT] = p;
+            return B_REDRAW;
+        }
+     case "e": // Erscheinen
+        if (p=="")
+        {
+            m_delete(bparam,BPARAM_MMSG_IN);
+            return B_REDRAW;
+        }
+        else
+        {
+            bparam[BPARAM_MMSG_IN] = p;
+            return B_REDRAW;
+        }
+    case "v": // Verschwinden
+        if (p=="")
+        {
+            m_delete(bparam,BPARAM_MMSG_OUT);
+            return B_REDRAW;
+        }
+        else
+        {
+            bparam[BPARAM_MMSG_OUT] = p;
+            return B_REDRAW;
+        }
+   case "q": 
+        save_bparam();
+        return B_QUIT;
+    default:
+        return B_NOTHING;
+    }
+}
+
+public nomask int cmd_pr(string str)
+{
+    if (!check_security() || RN(TP) != owner) 
+    {
+        FAILWP("Nur der Eigentuemer kann dem Protokollanten Befehle geben.",
+            FAIL_WRONG_ARG);
+    }
+    string *param = explode(space(str)," ");
+    switch (lower_case(param[0])) {
+    case "":
+    case "?":
+        TP->more(PR_CMD_HILFE,({ "pr:-Hilfe [?,w,q,z] ",
+           "----------- Protokoll: -------------------------------------------------------",
+           LINE, MORE_LINE, MORE_LINE
+        }), 0,
+        M_DO_NOT_END|M_FRAME,
+        0);
+        return 1;
+    case "stop":
+    case "pause":
+        pr_stop(0,0,0,TP,0,0);
+        return 1;
+    case "start":
+        pr_start(0,0,0,TP,0,0);
+        return 1;
+    case "anzeige":
+        pr_anzeige(0,0,0,TP,0,0);
+        return 1;
+    case "status":
+        protokoll_status();
+        return 1;
+    case "msg":
+        return pr_msg(0);
+    case "loesch":
+    case "loesche":
+    case "loeschen":
+    case "neu":
+        pr_loeschen(0,0,0,TP,0,0);
+        return 1;
+    case "speicher":
+    case "speichere":
+    case "speichern":
+        pr_speichern(0,0,0,TP,0,0);
+        return 1;
+    case "ende":
+        pr_ende(0,0,0,TP,0,0);
+        return 1;
+    case "beschreib":
+    case "beschreibe":
+    case "beschreiben":
+        return dynamic_browse(([B_TYPE:"pr_beschreiben"]));
+    case "hole":
+    case "einst":
+    case "einstellung":
+    case "einstellungen":
+    case "menu":
+    case "menue":
+        return 0; // wird durch protokoll_index behandelt.
+    default:
+        FAILWP("Kommando \""+param[0]+"\" unbekannt. Siehe \"pr: ?\"", 
+            FAIL_NOT_OBJ);
+    }
+}
+
+void init()
+{
+    if (RN(TP) == owner) 
+    {
+        add_action("cmd_pr", "pr:",AA_IMM_ARGS);
+    }
+}
+
+nosave void folge_owner(object wohin)
+{
+    if (objectp(wohin) && wohin->query_room() && wohin != ENV_TO) 
+    {
+        move(wohin,MOVE_NORMAL,
+            bparam[BPARAM_MSG_OUT]||"$Der() geht.",
+            bparam[BPARAM_MSG_IN]||"$Der() kommt heran.");
+    }
+}
+
+public void hole(object pl)
+{
+    if (pl && RN(pl)==owner)
+    {
+        object envr = ENV(pl);
+        TO->move(envr,MOVE_NORMAL,
+                bparam[BPARAM_MMSG_OUT]||"$Der() verschwindet.",
+                bparam[BPARAM_MMSG_IN]||"$Der() kommt heran.");
+    }
+}
+
+void notify_move(object wer, object woher, object wohin, string
+                 dir, int wie, string verlassen, string ankommen)
+{
+    if (einst[PR_FOLGE_MODUS] && RN(wer) == owner) 
+    {
+        while (remove_call_out("folge_owner")!=-1);
+        if (wohin != ENV_TO) 
+        {
+            call_out("folge_owner",0,wohin);
+        }
+    }
+}
+
+nomask int query_prevent_shadow(object shadow)
+{
+    return 1;
+}
+
+int forbidden_put_into(object who, object ob, object where)
+{
+    //DEBUG(sprintf("forbidden_put_into %Q,%Q,%Q",who,ob,where));
+    if (where == TO)
+    {
+        send_message_to(who,MT_NOTIFY,MA_UNKNOWN,wrap(
+            Der()+" nimmt nichts entgegen."));
+        return 1;
+    }
+    return 0;
+}
+
+int forbidden_seele(object wer, mixed wen, string what, string
+                 adverb, int align, int flags, int msg_typ_wer, int
+                 msg_typ_wen, int msg_typ_andere)
+{
+    if (objectp(wen) && wen == TO)
+    {
+        send_message_to(wer, MT_NOTIFY, MA_UNKNOWN, wrap(
+            Der()+" muss Protokolle schreiben, da werden Seelekommandos "
+                "geblockt."));
+        return 1;
+    }
+}
+
+varargs int add_hp(int hps, mapping infos)
+{
+    if (hps >=0)
+    {
+        return ::add_hp(hps,infos);
+    }
+    return 0;
+}
+
+mixed forbidden_vampyrsaugen(object wen, object vamp)
+{
+    if (wen == TO)
+    {
+        return wrap(Der()+" steht als Protokollant ausserhalb des Spiels "
+            "und kann nicht ausgesaugt werden.");
+    }
+}
+
+int no_attack(object attacker, object weapon)
+{
+    send_message_to(attacker, MT_LOOK|MT_NOTIFY, MA_FIGHT,
+            wrap("Du versuchst, "+den()+" anzugreifen, aber "+
+                er()+" als Protokollant steht er ausserhalb "
+                "des Spieles und der Kaempfe."));
+    return 1;
+}
+
+void create()
+{
+    monster::create();
+    init_security_for_actions();
+    clone_object("/obj/soul")->move(this_object());
+    initialize("mensch",100);
+    set_name("protokollant");
+    set_id(({"protokollant","proto"}));
+    set_short("Der Protokollant");
+    set_long("Ein nutzloser Protokollant. Zerstoere ihn und "
+             "zerschaffe /obj/protokollindex. Danach hast du "
+             "pr:? zur Verfuegung.");
+    set_gender("maennlich");
+    einst[PR_FLAG_ALLE] = 1;
+    
+    // TODO: stand alone clone vernichten, da nur ueber vc gueltig.
+}
+
+public void set_iprot(string * prot,mapping pr,mapping ei,mapping zu)
+{
+    if ( implode(explode(object_name(PO),"$"),"") == object_name()) 
+    {
+        iprotokoll = prot || ({});
+        protokoll = pr ||([]);
+        einst = ei || ([]);
+        zustand = zu || ([]);
+    }
+}
+
+void abort_renewal() 
+{
+}
+
+void finish_renewal(object neu)
+{
+    neu->set_iprot(iprotokoll,protokoll,einst,zustand);
+}
+
+void prepare_renewal() 
+{
+}
+

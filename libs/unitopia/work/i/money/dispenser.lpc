@@ -1,0 +1,330 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/money/dispenser.c
+// Description:
+// Modified:	Offler (6.9.99) seinen() in query_long eingefuegt.
+//
+// $Log: dispenser.c,v $
+// Revision 1.7  2013-04-26 16:57:37  myonara
+// auf send_message umgestellt.
+//
+// Revision 1.6  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.5  2006/12/30 01:11:13  gnomi
+// Beispiel ist jetzt die Nische im Rathaus.
+//
+// Revision 1.4  2002/04/25 08:38:53  gnomi
+// make_object kann auch im Object selber definiert sein.
+//
+// Revision 1.3  2002/01/13 04:50:14  freaky
+// query_long() umgestellt.
+//
+// Revision 1.2  2002/01/13 00:56:57  gnomi
+// Deklaration von query_long geaendert.
+//
+// Revision 1.1  2001/11/21 22:42:19  sissi
+// Von /obj/dispenser nach /i/object/dispenser umgezogen.
+//
+// Revision 1.5  2001/07/09 21:02:48  gnomi
+// Zeilenumbruch im Spendenhinweis
+//
+// Revision 1.4  2001/04/22 00:13:38  gnomi
+// seteuid(getuid()); eingebaut.
+//
+//
+
+inherit "/i/item";
+inherit "/i/money/exchange";
+inherit "/i/install";
+
+#include <message.h>
+#include <misc.h>
+#include <move.h>
+#include <deklin.h>
+
+private string *taste, *name, *pfad, desc, spender, valuta, valutas;
+private int chargeable, charge, *preis, *max;
+
+/* Ein Standard-Dispenser. Damit lassen sich simple Automaten
+ * relativ einfach implementieren. Funktionen: 
+ * set_disp_text(string str)    - Setzt die Ueberschrift des Automaten auf
+ *                                str.
+ * set_disp_items(string *item, string *path) - In *item werden die Namen
+ *                                (bzw. Beschreibungen) der Waren uebergeben,
+ *                                in *path stehen die Pfade der Waren-Obj's.
+ *       Wichtig: Auf diese Weise koennen NUR Objekte verkauft werden, die
+ *       als einzelnes File vorliegen. Wird statt dem Pfad nur ein Name
+ *       angegeben, muss man noch eine Funktion definieren, die das Objekt
+ *       zurueckliefert:
+ *				object make_object(string str) {}
+ *       Diese Funktion erhaelt als Paramter str den Namen, der als Pfad
+ *       angegeben wurde und sollte das geclonte Objekt zurueckgeben!
+ * set_disp_buttons(string *butt) - Setzt die Namen der Tasten des Automaten
+ *                                auf *butt.
+ * set_disp_prices(int *price)  - Setzt die Preise der Waren.
+ * set_disp_max(int *max)       - Setzt den Vorrat an Waren. Sollen unbegrenzt
+ *                                viele von einer Ware vorhanden sein, ist
+ *                                -1 zu uebergeben, ansonsten die Anzahl.
+ * set_disp_chargeable(int i)   - Ist i=1, dann dann kann ein Spieler eine
+ *                                beliebige Anzahl von Talern deponieren, die
+ *                                von anderen Spielern aufgebraucht werden
+ *                                koennen.
+ * Ein Beispiel ist in /room/rathaus/nische.c zu finden.
+ */
+
+
+void set_disp_items(string *item, string *path)
+{
+   if(sizeof(item)==sizeof(path))
+   {
+      name=item;
+      pfad=path;
+   }
+}
+
+void set_disp_text(string str) { desc=str; }
+void set_disp_prices(int *price) { preis=price; }
+void set_disp_buttons(string *butt) { taste=butt; }
+void set_disp_max(int *anz) { max=anz; }
+void set_disp_chargeable(int i) { chargeable=i; }
+
+void set_valuta(string str1, string str2)
+{
+   if(str1 && str2)
+   {
+      valuta=str1;
+      valutas=str2;
+   }
+}
+
+void init()
+{
+   add_action("press","betaetige");
+   add_action("press","druecke",-6);
+   add_action("charge","spendiere");
+}
+
+void create()
+{
+   set_id(({"automat"}));
+   set_name("Automat");
+   set_gender("maennlich");
+   set_material( ({"metall"}) );
+   set_disp_items( ({"Eine Fackel"}), 
+    ({"/obj/fackel"}) );
+   set_disp_text("Ein Fackelautomat.\n");
+   set_disp_buttons(({ "1","2","3","4","5","6","7","8","9" }));
+   set_disp_prices(({ 10,0,0,0,0,0,0,0,0,0 }));
+   set_disp_max(({ -1,-1,-1,-1,-1,-1,-1,-1,-1,-1 }));
+   set_disp_chargeable(0);
+   set_valuta("taler", "taler");
+   seteuid(getuid());
+}
+
+string query_long(object viewer)
+{
+   string str, tmp;
+   int i,maxlen;
+
+   for(i=maxlen=0; i<sizeof(pfad); i++)
+      maxlen = strlen(name[i]) < maxlen ? maxlen : strlen(name[i]);
+   str=desc+"\n"+sprintf("%=5s   %=-*s   %=|*s   %=-10s\n",
+    "Taste",maxlen,"Artikel",6+strlen(valutas),
+    "Preis","Vorrat");
+   for (i=0; i<sizeof(pfad); i++)
+   {
+      switch(max[i])
+      {
+      case 0 :
+	 tmp = "leer"; break;
+      case -1:
+	 tmp = "unbegrenzt"; break;
+      default:
+	 tmp = (string)max[i];
+      }
+      if(name[i])
+	 str +=
+	 sprintf("%=3s     %=-*s   %=5s "+capitalize(valutas)+"   %=-10s\n",
+	  taste[i], maxlen, name[i], (string)preis[i], tmp);
+      else
+	 str += "\n";
+   }
+   str += "\n";
+   if(chargeable && charge>0)
+      str+="Es befinden sich noch "+charge+" "+capitalize(valutas)+
+      " von "+spender+
+      " im Automaten.\n";
+   str += "Bedienung: 'druecke <Taste>'";
+   if(chargeable)
+      str += " oder 'spendiere <n> "+capitalize(valutas)+"'";
+   str += ".\n";
+   if(chargeable)
+      str += wrap(
+      Dieser()+" haelt dann fuer die gespendete Summe " +
+      seinen((["name":"waren","gender":"weiblich","plural":1]), 0,
+      this_object())+ " gratis bereit!");
+   return str;
+}
+
+
+int press(string str) {
+   int i, hilfspreis;
+   object money, ob;
+   string tmp;
+
+   if(!str) {
+      notify_fail(wrap(capitalize(query_verb())+" WAS?"));
+      return 0;
+   }
+   for(i=0;i<sizeof(pfad);i++)
+   {
+      if(name[i] && lower_case(str)==lower_case(taste[i])) {
+         if (!objectp(TP)) return 1; // Kein Objekt, keine Meldung.
+	 if(max[i]==0) {
+            send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,wrap(
+                    "Der Vorrat "+des()+" ist aufgebraucht!"));
+	    return 1;
+	 }
+	 money=present(valutas,this_player());
+	 if(!money && preis[i]>0 && preis[i]>charge) {
+	    if(charge>0) {
+               send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,wrap(
+                    "Du hast aber kein Geld um die Differenz " +
+                    "zwischen Preis und Spende zu bezahlen!"));
+	    }
+	    else {
+               send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,wrap(
+                    "Du hast aber kein Geld!"));
+	    }
+	    return 1;
+	 }
+	 if(money) {
+	    if(money->query_money()<preis[i] && !charge) {
+               send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,wrap(
+                    "Du hast zu wenig Geld!"));
+	       return 1;
+	    }
+	    if(chargeable && preis[i]>charge) {
+	       hilfspreis = preis[i] - charge;
+	       if(money->query_money()<hilfspreis) {
+                  send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,wrap(
+                    "Du hast aber kein Geld um die Differenz " +
+                    "zwischen Preis und Spende zu bezahlen!"));
+		  hilfspreis = 0;
+		  return 1;
+	       }
+	       charge = 0;
+	    }
+	 }
+	 if (right(pfad[i],2)!=".lpc") /* Freaky: wenn kein .c am Ende */
+	    tmp = pfad[i]+".lpc";
+	 else
+	    tmp = pfad[i];
+	 if(file_size(tmp)<0) {
+	    ob=this_object()->make_object(pfad[i]);
+	 } else
+	    ob=clone_object(pfad[i]);
+	 if(!ob) {
+            send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,wrap(
+                    "Es ist ein Fehler aufgetreten."));
+	    return 1;
+	 }
+	 else
+	 {
+	    if((int)ob->move(this_player())==MOVE_OK)
+	    {
+	       if(preis[i]>charge)
+		  if(hilfspreis>0 && hilfspreis!=preis[i])
+		  {
+		     money->add_money(-hilfspreis);
+		     hilfspreis = 0;
+                     send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,wrap(
+                       "Du bezahlst die Differenz zwischen Preis und " +
+		       "Spende."));
+		  }
+		  else
+		     money->add_money(-preis[i]);
+	       else 
+		  charge-=preis[i];
+	       if(ob)
+	       {
+	          send_message(MT_NOTIFY,MA_UNKNOWN, wrap(
+		    Der(OBJ_TP)+" erhaelt "+einen(ob)+" aus "
+		        +wem(0,ART_AAA)+"."),wrap(
+		    "Du erhaeltst "+einen(ob)+" aus "+wem(0,ART_AAA)+"."),
+		        TP);
+	       }
+	       else
+	       {
+	          send_message(MT_NOTIFY,MA_UNKNOWN, wrap(
+		    Der(OBJ_TP)+" scheiterte daran, etwas aus "+
+		      wem(0,ART_AAA)+" zu holen."),wrap(
+		    "Schade das durftest Du aus irgendeinem Grund nicht "
+			"behalten."),
+		        TP);
+	       }
+	       if(max[i]>0) 
+		  max[i]--;
+	    }
+	    else
+	    {
+               send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,wrap(
+                       "Du kannst "+den(ob)+" nicht annehmen!"));
+	       ob->remove();
+	    }
+	    return 1;
+	 }
+	 break;
+      }
+   }
+   return 0;
+}
+
+int charge(string str) {
+   int amount;
+   object money;
+   if(!chargeable) {
+      notify_fail(wrap(Dieser()+" erlaubt keine Spenden!"));
+      return 0;
+   }
+   if(!str) {
+      notify_fail(wrap("Spendiere WAS bzw. WIEVIEL?"));
+      return 0;
+   }
+   if (!objectp(TP)) {
+       return 0; // RTE's wegen send_message_to abfangen.
+   }
+   str=lower_case(str);
+   if(sscanf(str,"%d "+valutas,amount)) {
+      if(amount<100) {
+         send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,wrap(
+                       "Sorry, Minimum ist 100 "+capitalize(valutas)+"!"));
+	 return 1;
+      }
+      money=present(valutas,this_player());
+      if(!money) {
+	 notify_fail(wrap("Du hast aber kein Geld!"));
+	 return 0;
+      }
+      if(money->query_money()<amount) {
+	 notify_fail(wrap("Du hast aber keine "+amount+" "
+	     +capitalize(valutas)+"!"));
+	 return 0;
+      }
+      charge+=amount;
+      money->add_money(-amount);
+      spender=einem(OBJ_TP);
+      send_message(MT_NOTIFY,MA_UNKNOWN,wrap(
+          Der(OBJ_TP)+" spendiert "+amount+" "+capitalize(valutas)+"! "+
+          "Fuer diese Summe kannst Du nun umsonst Waren aus "
+          +dem()+" nehmen!"),wrap("Oh, wirklich sehr grosszuegig!"),TP);
+      return 1;
+   }
+   return 0;
+}
+
+object make_object(string name)
+{
+    return environment(this_object())->make_object(name);
+}

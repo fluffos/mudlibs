@@ -1,0 +1,3052 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:    /apps/error_db.c
+// Description: Fehler-Datenbank
+// Author:  Freaky/Monty (02.07.95)
+
+// UID: Apps
+
+// $Log: error_db.c,v $
+// Revision 1.41  2016/03/22 05:01:17  myonara
+//  dem add_to_archive neue Evals zufuehren, wegen haeufigen TLEs in dem
+//  Bereich sonst Diskrepanz Archive FDB sowie unvollstaendige
+//  Fehler in der FDB auftauchen koennen.
+//
+// Revision 1.40  2016/03/20 21:45:02  myonara
+// Bereinigung von sys_errors bei _purge_error und als Reperaturfunktion.
+//
+// Revision 1.39  2015/06/01 19:17:15  myonara
+// 15:18 am gleichen Tag Bugfix zu vorherigem Patch.
+//
+// Revision 1.38  2015/04/19 12:53:00  myonara
+// recreate_all_questions eingebaut...
+//
+// Revision 1.37  2015/02/26 18:35:40  myonara
+// Debug_infos fuer die TLE's
+//
+// Revision 1.36  2015/02/23 18:15:40  myonara
+// Verursacher hat Schreibrechte auf Fehler.
+//
+// Revision 1.35  2015/01/04 12:31:04  myonara
+// delete_all_done als Admin-Aufruf.
+//
+// Revision 1.34  2014/09/22 17:19:46  myonara
+// evaluate_all_done
+//
+// Revision 1.33  2014/08/26 16:57:50  myonara
+// bei exec_hide_debugger Default bei v* => v*,!*:Done
+//
+// Revision 1.32  2014/08/02 16:04:08  myonara
+// neu: check_consistency und check_disk_storage
+// catch in query_error_file und query_error_data
+//
+// Revision 1.31  2014/03/12 14:57:16  myonara
+// komplettes Rewrite
+//
+
+#pragma strong_types
+
+inherit "/i/tools/security";
+
+#include <apps.h>
+#include <config.h>
+#include <error_db.h>
+#include <files.h>
+#include <game.h>
+#include <gilden.h>
+#include <level.h>
+#include <message.h>
+#include <quest.h>
+#include <regexp.h>
+#include <rtlimits.h>
+#include <uids.h>
+
+
+// Die Zeit, die gewartet wird, bis die Datenbank wieder gespeichert wird
+#define TIME_TO_SAVE 300
+// Wieviele Fehler vom selben Typ abgespeichert werden
+#define MAX_ERRORS 5
+// Wieviele Fehler sind im Cache
+#define MAX_CACHE 100
+// Makro, um alte Schnittstellenfunktionen zu markieren
+#if 1
+#define DEPRECATED
+#else
+#define DEPRECATED deprecated
+#endif
+
+// Wo werden die Fehler gespeichert
+
+
+// Beim Hinzufuegen von globalen Variablen
+// bitte restore_error_from_file anpassen.
+
+// Struktur des Mappings:
+// ([ int Fehler-Nummer: mixed *fehler, ... ])
+// Fehler hat folgende Eintraege (siehe error_db.h):
+//   EDB_H_TYPE:        EDB_FEHLER, EDB_IDEE, EDB_RUNTIME, EDB_COMPILE,
+//                      EDB_LOB, EDB_TYPO, EDB_DETAIL
+//   EDB_H_FILE:        Verantwortliche Datei
+//   EDB_H_PLAYER:      Verursachender Spieler
+//   EDB_H_OPENED:      Datum des Fehlers
+//   EDB_H_LAST_CHANGE: Letzte Aenderung
+//   EDB_H_CLOSED:      Schliessung des Fehlers
+//   EDB_H_DEBUGGER:    Debugger der Fehler
+//   EDB_H_LINE:        Zeilennummer des Fehlers (Runtime/Compile)
+//
+// Die eigentlichen Fehlerdaten werden in einem getrennten Mapping
+// aufbewahrt, dieses Mapping hat folgende Elemente:
+//   EDB_E_TYPE:     Der Typ des Fehlers (wie EDB_H_TYPE)
+//   EDB_E_PLAYER:   Verursachender Spieler (bei Ideen/Fehlern)
+//   EDB_E_DATE:     Auftreten des Fehlers (bei Compilefehlern der letzte)
+//   EDB_E_ERROR:    Die Fehlermeldung
+//   EDB_E_HISTORY:  Geschichte der Fehlermeldung, Array aus Arrays:
+//     EDB_EH_DATE:  Datum des Eintrages
+//     EDB_EH_WIZ:   Verursacher des Eintrages
+//     EDB_EH_TYPE:  EDB_EHT_COMMENT, EDB_EHT_REASSIGN_FILE, EDB_EHT_CLOSE,
+//                   EDB_EHT_REOPEN,
+//                   EDB_EHT_ADD_DEBUGGER, EDB_EHT_REMOVE_DEBUGGER
+//     EDB_EH_INFO:  Bei EDB_EHT_COMMENT: Der Kommentartext (String)
+//                   Bei EDB_EHT_REASSIGN_FILE: An welches Objekt (String)
+//                   Bei EDB_EHT_ADD/REMOVE_DDEBUGGER: Die Debugger (String*)
+//   EDB_E_SUBERRORS:Zugehoerige Fehler (z.B. weitere Runtime-/Compilefehler
+//                   gleichen Typs), ein Array aus Mappings mit solchen
+//                   Eintraegen wie der Hauptfehler (abgesehen von
+//                   EDB_E_DEBUGGER)
+//   EDB_E_OBJ:      Das urspruengliche Objekt
+// Wird in den Header uebertragen:
+//   EDB_E_DEBUGGER: Debugger der Fehler (EDB_DEBUGGER_MOVE_TO_HEADER)
+// Ausser bei Compilefehlern:
+//   EDB_E_FIRSTROOM: Erster Raum des Objektes
+//   EDB_E_USER_INFO: Debuginformationen
+// Bei Runtime- oder Compilefehlern:
+//   EDB_E_FILE:     Dateiname + Include
+// Bei Runtimefehlern:
+//   EDB_E_LINE:     Zeilennummer
+//   EDB_E_COMMAND:  Eingegebener Befehl
+//   EDB_E_TRACE:    Auszug aus dem Debug.log
+//   EDB_E_WHO:      Aktueller TP oder TI.
+//   EDB_E_SUBTYPE:  EDB_RUN_RUNTIME, EDB_RUN_HB, EDB_RUN_USER_DEFINED
+// Bei Spielerfehlern:
+//   EDB_E_ROOM:     Aktueller Raum des Spielers
+//   EDB_E_OBJ_DESC: Spielerverstaendliche Objektbeschreibung
+// Bei Raumdetails:
+//   EDB_E_ITEM:     Das Detail als Mapping
+//
+
+
+// Prototypen
+private int is_responsible(int errnr, object wiz);
+private void delete_from_wiz_errors(string wiz, int number);
+
+// Die Fehler ansich
+mapping errors;
+// Die momentane Fehlernummer (hoechste Zahl)
+int error_number;
+// Fehlernummern der einzelnen Goetter/ACL-Gruppen
+// ein Mapping "Debugger": ({Fehlernummern,}),
+mapping wiz_errors;
+// Fehlernummern der System-Fehler (Compile-, Runtime-Fehler)
+// der einzelnen Goetter. Wird als Speedup fuer add_error benutzt.
+mapping sys_wiz_errors; // veraltet
+// Enthaelt alle Compile- und Runtime-Fehler:
+// ([ "Eindeutiger String": neueste Fehlernummer dazu ])
+// Der String besteht bei Compile-Fehlern aus Dateiname und Fehlerbeschreibung
+// und bei Runtime-Fehlern aus Datei, Zeile und Fehlerbeschreibung
+mapping sys_errors;
+
+// Fehlerfeedback:
+mapping feedback = ([]);
+
+// Fuer das clean_error_db als tempraere Variable
+nosave mapping err_numbers;
+
+nosave int* cached_numbers = ({});  // Maximal MAX_CACHE Eintraege
+nosave mapping cached_errors = ([]);    // Die Daten dazu.
+
+// Debuginfos
+nosave mapping dbgi = 0;
+
+// Daten und Funktionen fuer die spezifische logmeldung...
+nosave object *dbg_producer = ({}), *dbg_consumer = ({});
+
+mapping query_debug_info()
+{
+    return dbgi;
+}
+
+void add_dbg_producer(object pl)
+{
+    if (playerp(pl))
+    {
+        dbg_producer += ({ pl });
+    }
+}
+
+void delete_dbg_producer(object pl)
+{
+    dbg_producer -= ({ pl });
+}
+
+object * query_dbg_producer()
+{
+    return dbg_producer;
+}
+
+void set_dbg_producer(object * prds)
+{
+    dbg_producer = prds;
+}
+
+void add_dbg_consumer(object pl)
+{
+    if (playerp(pl))
+    {
+        dbg_consumer += ({ pl });
+    }
+}
+
+void delete_dbg_consumer(object pl)
+{
+    dbg_consumer -= ({ pl });
+}
+
+object * query_dbg_consumer()
+{
+    return dbg_consumer;
+}
+
+void set_dbg_consumer(object * cms)
+{
+    dbg_consumer = cms;
+}
+
+void debug_msg(string msg)
+{
+    dbg_producer -= ({  0  });
+    dbg_consumer -= ({  0  });
+    if (!sizeof(dbg_producer) || !sizeof(dbg_consumer)
+            || member(dbg_producer, this_player())==-1)
+    {
+        return;
+    }
+    this_player()->send_message_to(dbg_consumer, MT_DEBUG, MA_UNKNOWN,
+        wrap(msg));
+}
+
+#if 1
+#undef DEBUG
+#define DEBUG(msg) debug_msg(msg)
+#else
+#undef DEBUG
+#define DEBUG(msg) ()
+#endif
+
+// interne Funktion, siehe query_error_header
+private mixed* _query_error_header(int nr)
+{
+    return errors[nr];
+}
+
+/*
+FUNKTION: query_error_header
+DEKLARATION: mixed* query_error_header(int nr)
+BESCHREIBUNG:
+Die Funktion liefert ein Array mit Eintraege aus der /sys/error_db.h,
+welche mit EDB_H_ beginnen.
+Falls der Fehler nicht existiert, wird 0 geliefert.
+VERWEISE: query_error_data
+GRUPPEN: fehlerdatenbank
+*/
+mixed* query_error_header(int nr)
+{
+    if (member(errors,nr)) {
+        return deep_copy(errors[nr]);
+    } else {
+        return 0;
+    }
+}
+
+// Funktion fuer den internen Umlaufpuffer.
+private void purge_one_cache_entry()
+{
+    if(sizeof(cached_numbers) >= MAX_CACHE)
+    {
+        int old = cached_numbers[0];
+
+        m_delete(cached_errors, old);
+        cached_numbers = cached_numbers[1..<1];
+    }
+}
+
+private void purge_err_in_cache(int errnum)
+{
+    int old = member(cached_numbers, errnum);
+    if (old == 0)
+    {
+        cached_numbers = cached_numbers[1..<1];
+    } 
+    else if (old == (sizeof(cached_numbers) - 1))
+    {
+        cached_numbers = cached_numbers[0..<2];
+    } else if (old > 0)
+    {
+        cached_numbers = cached_numbers[0..(old-1)] 
+                       + cached_numbers[(old+1)..<1];
+    }
+    m_delete(cached_errors, errnum);
+}
+
+// Interne Funktion zum direkten Lesen ohne cache...
+private mapping _query_error_file(int nr)
+{
+    mapping err;
+    string errdata, cerr;
+    errdata = read_file(ERROR_DB_DATA_FILE(nr));
+    if(!stringp(errdata))
+        return 0;
+
+    cerr = catch( err = restore_value(errdata);reserve 4*__CATCH_EVAL_COST__ );
+    if (cerr) 
+    {
+        sys_log("ERROR_DB_KONSISTENZ",
+                    sprintf("[%s] %d ungueltiges Formet: %s\n",
+                    shorttimestr(time()),nr,cerr));
+        return 0;
+    }
+    return err;
+}
+
+// Interne Funktion inkl cache, siehe query_error_data
+private mapping _query_error_data(int nr)
+{
+    mapping err = cached_errors[nr];
+    string errdata,cerr;
+
+    if(err)
+        return err;
+
+    errdata = read_file(ERROR_DB_DATA_FILE(nr));
+    if(!errdata)
+        return 0;
+
+    cerr = catch( err = restore_value(errdata) );
+    if (cerr) 
+    {
+        sys_log("ERROR_DB_KONSISTENZ",
+                    sprintf("[%s] %d ungueltiges Formet\n",
+                    shorttimestr(time()),nr));
+        return 0;
+    }
+    purge_one_cache_entry();
+    m_add(cached_errors, nr, err);
+    cached_numbers += ({nr});
+    return err;
+}
+
+private int _push_error_to_archive(int errnum,string text,
+                int opened, int last_change, int flagvis)
+{
+    return ERROR_ARCHIVE->add_error(errnum,text,opened,last_change, flagvis);
+}
+
+private int push_error_to_archive(int errnum)
+{
+    mixed * header = errors[errnum];
+    mapping edata;
+    int flagvis = 0;
+    string text;
+    // return 0;
+    if (!pointerp(header)) return 0;
+    edata = _query_error_data(errnum);
+    if(!mappingp(edata)) return 0;
+    if ( member(header[EDB_H_DEBUGGER],EDB_NO_ARCHIVE_GROUP) !=-1)
+    {
+        flagvis = 1;
+        header[EDB_H_DEBUGGER] -= ({ EDB_NO_ARCHIVE_GROUP });
+    }
+    text = "/obj/zauberstab"->zfe_get_errmsg(errnum);
+    if (flagvis)
+    {
+        header[EDB_H_DEBUGGER] += ({ EDB_NO_ARCHIVE_GROUP });
+    }
+    if (!stringp(text)) 
+    {
+        return 0;
+    }
+    if (header[EDB_H_TYPE] == EDB_COMPILE)
+    {
+        mixed history = edata[EDB_E_HISTORY];
+        if (!sizeof(filter(history||({ }), 
+                (: $1[EDB_EH_TYPE] == EDB_EHT_COMMENT :))))
+        {
+            return 0; // Compilefehler ohne Kommentare => nicht speichern
+        }
+    }
+    return limited(lambda(0, ({#'_push_error_to_archive,errnum,text,
+             header[EDB_H_OPENED], header[EDB_H_LAST_CHANGE], flagvis})),
+        LIMIT_EVAL,500000,
+        LIMIT_MAPPING_SIZE,LIMIT_UNLIMITED,
+        LIMIT_MAPPING_KEYS,LIMIT_UNLIMITED,
+        LIMIT_ARRAY,LIMIT_UNLIMITED );
+}
+
+
+
+/*
+FUNKTION: query_error_data
+DEKLARATION: mapping query_error_data(int nr)
+BESCHREIBUNG:
+Die Funktion liefert ein Mapping mit Eintraege aus der /sys/error_db.h,
+welche mit EDB_E_ beginnen.
+Falls der Fehler nicht existiert, wird 0 geliefert.
+VERWEISE: set_error_data,query_error_header
+GRUPPEN: fehlerdatenbank
+*/
+mapping query_error_data(int nr)
+{
+    mapping m = _query_error_data(nr);
+    if (mappingp(m)) {
+        return deep_copy(m);
+    }
+    return 0;
+}
+
+// setzen eines Fehlers, nur intern
+private void set_error_data(int nr, mapping data)
+{
+    string dirname;
+
+    if(member(cached_errors, nr))
+        cached_errors[nr] = data;
+    else
+    {
+        purge_one_cache_entry();
+        m_add(cached_errors, nr, data);
+        cached_numbers += ({nr});
+    }
+
+    mkdir(ERROR_DB_DATA_DIR(nr));
+
+#if 0 //__VERSION__ >= "3.3.512"
+    write_file(ERROR_DB_DATA_FILE(nr), save_value(data), 1);
+#else
+    rm(ERROR_DB_DATA_FILE(nr));
+    write_file(ERROR_DB_DATA_FILE(nr), save_value(data));
+#endif
+    push_error_to_archive(nr); // Archiv-Kopie anfertigen
+}
+
+private int _add_history(int nr, object wiz, string type, string info)
+{
+    mixed * err;
+    mapping edata;
+    err = errors[nr];
+    if (!pointerp(err))
+        return NO_ERROR;
+    if (!member(EDB_HISTORY_TYPES,type))
+        return NOT_VALID;
+    if (member(err[EDB_H_DEBUGGER],EDB_BACKUP_GROUP)>-1 
+            && type == EDB_EHT_COMMENT)
+        return NOT_RESPONSIBLE;
+    // Komentieren darf jeder alles, ausser in der Backupgruppe, s.o.
+    //if (!is_responsible(nr, wiz))
+    //    return NOT_RESPONSIBLE;
+    edata = _query_error_data(nr); // Daten so spaet wie moeglich laden!
+    if (!mappingp(edata))
+        return NO_ERROR;
+    edata[EDB_E_HISTORY] ||= ({ });
+    edata[EDB_E_HISTORY] += ({ ({ time(), 
+            playerp(wiz)?wiz->query_real_name() : "Unbekannt",
+                                  type, info }) });
+    err[EDB_H_LAST_CHANGE] = time();
+    set_error_data(nr, edata);
+    return ERROR_OK;
+}
+
+// neue Funktionen fuer das neue zfehler:
+int add_history(int nr, object wiz, string type, string info)
+{
+    if (!check_security()) return 0;
+    return _add_history(nr,wiz,type,info);
+}
+
+private string extract_filename(string file)
+{
+    string path, inc;
+
+    if (!file || file == "")
+        return file;
+
+    file = MASTER_OB->add_slash(file);
+    if (sscanf(file, "%s (%s)", path, inc) == 2)
+    {
+        path = MASTER_OB->include_file(inc,path,0);
+        if (stringp(path))
+            file = path;
+    }
+    else
+    file=map2domain(file,1)||file;
+
+    if (file[<2..] == ".lpc")
+        file = file[0..<3];
+    return file;
+}
+
+private string get_sys_error_string(mapping err)
+{
+    switch(err[EDB_E_TYPE])
+    {
+        case EDB_COMPILE:
+            return sprintf("C %Q\n%Q",
+                err[EDB_E_FILE],
+                err[EDB_E_ERROR]);
+
+        case EDB_RUNTIME:
+            return sprintf("R %Q\n%d\n%Q",
+                err[EDB_E_FILE], err[EDB_E_LINE],
+                // Die #<nr> in Meldungen wegmachen.
+                regreplace(err[EDB_E_ERROR],
+                  "'([a-z_0-9]+/[A-Za-z_0-9/]+)#[0-9]+'","'\\1#<nr>'",
+                  RE_GLOBAL));
+
+        default:
+        return 0;
+    }
+}
+
+// Fuer die Konvertierung auf die neue Fehlerstruktur
+private mixed *do_convert(int nr)
+{
+    mixed *err, *ret;
+    string sys;
+    mapping data = ([]);
+
+    err = errors[nr];
+    ret = allocate(EDB_H_SIZE);
+
+    ret[EDB_H_TYPE] = err[0];
+    ret[EDB_H_FILE] = extract_filename(err[1]);
+    ret[EDB_H_LAST_CHANGE] = err[3];
+    ret[EDB_H_OPENED] = pointerp(err[5])?err[5][0]:err[5];
+    ret[EDB_H_DEBUGGER] = err[6];
+    data[EDB_E_DEBUGGER] = err[6]; // erstmal doppelte Speicherung.
+
+    data[EDB_E_TYPE] = err[0];
+    data[EDB_E_FILE] = err[1];
+    data[EDB_E_DATE] = err[5];
+    data[EDB_E_ERROR] = err[2];
+    data[EDB_E_HISTORY] = map(err[4] || ({}),
+    (:
+        mixed* h = allocate(EDB_EH_SIZE);
+        h[EDB_EH_DATE] = $1[1];
+        h[EDB_EH_WIZ] = $1[0];
+        h[EDB_EH_TYPE] = EDB_EHT_COMMENT;
+        h[EDB_EH_INFO] = $1[2];
+        return h;
+    :));
+    if(!strstr(err[2],"Warning:"))
+        data[EDB_E_WARNING] = 1;
+
+    switch(err[0])
+    {
+    case EDB_RUNTIME:
+        data[EDB_E_OBJ] = err[7];
+        data[EDB_E_LINE] = err[8];
+        ret[EDB_H_LINE] = err[8];
+        data[EDB_E_COMMAND] = err[9];
+        data[EDB_E_WHO] = err[10];
+        data[EDB_E_FIRSTROOM] = err[11];
+        data[EDB_E_SUBTYPE] = err[12];
+        data[EDB_E_TRACE] = ({err[13],err[14]});
+        if (sizeof(err)>15)
+            data[EDB_E_USER_INFO] = err[15];
+
+        if(pointerp(err[5]))
+        {
+            mapping* suberrs = allocate(sizeof(err[5])-1,([]));
+
+            data[EDB_E_TRACE] = transpose_array(data[EDB_E_TRACE]);
+            foreach(string idx: ({EDB_E_DATE, EDB_E_COMMAND, EDB_E_WHO,
+                    EDB_E_FIRSTROOM, EDB_E_SUBTYPE, EDB_E_TRACE}))
+                {
+                    for(int i=0;i<sizeof(suberrs);i++)
+                        suberrs[i][idx] = data[idx][i+1];
+
+                    data[idx] = data[idx][0];
+                }
+            data[EDB_E_SUBERRORS] = suberrs;
+        }
+
+        foreach(mapping rte: ({data}) + (data[EDB_E_SUBERRORS]||({})))
+        // Trace abspeichern:
+        if(rte[EDB_E_TRACE][1]) // Laenge > 0
+        {
+            int tim = rte[EDB_E_DATE];
+            int off = rte[EDB_E_TRACE][0];
+            int len = rte[EDB_E_TRACE][1];
+
+            if(tim >= time() - query_up_time())
+            {
+            rte[EDB_E_TRACE] =
+#ifdef UNItopia
+                    read_bytes("/UNItopia.debug.log",off,len);
+#else
+                    read_bytes("/" __HOST_NAME__ ".debug.log",off,len);
+#endif
+            }
+            else
+            {
+                // Schauen, ob das letzte File noch da ist.
+            string lastfile;
+
+            foreach(string debug: get_dir("/log/sys/debug.*")+({0}))
+            {
+                int date;
+
+                if(!debug)
+                {
+                lastfile = 0;
+                break;
+                }
+
+                date = to_int(debug[6..]);
+                if (tim < date)
+                break;
+                lastfile = debug;
+            }
+
+            if (lastfile)
+                rte[EDB_E_TRACE] =
+                read_bytes("/log/sys/" + lastfile, off, len);
+            else
+                m_delete(rte, EDB_E_TRACE);
+            }
+        }
+        break;
+
+    case EDB_COMPILE:
+        {
+            int lineno;
+            data[EDB_E_FILE] = err[1];
+            if (sscanf(data[EDB_E_ERROR],"%!s line %d :",lineno))
+                ret[EDB_H_LINE] = lineno;
+        }
+        break;
+
+    default: // Fehler, Idee, Typo, Lob, Details
+        ret[EDB_H_PLAYER] = err[7];
+        data[EDB_E_PLAYER] = err[7];
+        data[EDB_E_ROOM] = err[8];
+        if (sizeof(err)>9)
+            data[EDB_E_OBJ_DESC] = err[9];
+        if (sizeof(err)>10)
+            data[EDB_E_USER_INFO] = err[10];
+        break;
+    }
+
+    errors[nr] = ret;
+    set_error_data(nr, data);
+    sys = get_sys_error_string(data);
+    if(sys)
+        sys_errors[sys] = nr;
+    return ret;
+}
+
+private void do_convert_errors()
+{
+    errors = map_indices(errors,#'do_convert);
+}
+
+private void convert_errors()
+{
+    copy_file(ERROR_DB_SAVE_FILE + ".o",ERROR_DB_SAVE_FILE + ".o." +time());
+    limited(#'do_convert_errors);
+    save_object(ERROR_DB_SAVE_FILE);
+    printf("Done.\n");
+}
+
+void create()
+{
+    mkdir(ERROR_DB_DIR);
+    
+    init_security_for_actions();
+    
+    if (!errors)
+    {
+        errors = ([]);
+        wiz_errors = ([]);
+        sys_errors = ([]);
+        error_number = 1;
+        limited(lambda(({}),({#'restore_object,ERROR_DB_SAVE_FILE})));
+        if(sys_wiz_errors)
+        {
+            sys_wiz_errors = 0;
+            convert_errors();
+        }
+    }
+}
+
+void save_error_db()
+{
+    // Hier braucht man kein limited.
+    save_object(ERROR_DB_SAVE_FILE);
+}
+
+int remove()
+{
+    save_error_db();
+    destruct(this_object());
+    return 1;
+}
+
+void prepare_renewal()
+{
+    save_error_db();
+}
+
+void finish_renewal(object neu) 
+{
+    neu->set_dbg_consumer(query_dbg_consumer());
+    neu->set_dbg_producer(query_dbg_producer());
+}
+void abort_renewal() {}
+
+private mixed *merge_array(mixed *a, mixed *b)
+{
+    return a + (b - a);
+}
+
+private void _do_add_error(int error_number, mixed *error, string sys)
+{
+    errors[error_number] = error;
+
+    if(sys)
+    sys_errors[sys] = error_number;
+}
+
+private void do_add_error(int error_number, mixed *error, string sys)
+{
+    limited(lambda(({}),({#'_do_add_error, error_number, quote(error), sys})),
+        LIMIT_MAPPING_KEYS,LIMIT_UNLIMITED,
+            LIMIT_MAPPING_SIZE,LIMIT_UNLIMITED);
+}
+
+#define SUBERR_FILTER ({EDB_E_DATE, EDB_E_COMMAND, EDB_E_WHO, \
+                    EDB_E_FIRSTROOM, EDB_E_SUBTYPE, EDB_E_TRACE})
+
+private mapping filter_suberr(mapping error)
+{
+    return filter(error||([]), (: member(SUBERR_FILTER,$1)!=-1 :));
+}
+
+// Hiermit traegt man einen neuen Fehler ein
+void add_error(mapping error)
+{
+    int oldnr;
+    mixed *oldheader;
+    mapping olderr;
+    mixed *history;
+    string *debugger;
+    string sys;
+
+    // Damit keiner Fake-Errors machen kann.
+    if (object_name(previous_object()) != MASTER_OB)
+    {
+        sys_log("ERROR_DB",
+                sprintf("[%s] Invalid caller: PO: %O\n",
+                shorttimestr(time()),previous_object()));
+        return;
+    }
+
+    if (find_call_out("save_error_db") < 0)
+        call_out("save_error_db",TIME_TO_SAVE);
+
+    debugger = error[EDB_E_DEBUGGER];
+    sys = get_sys_error_string(error);
+
+    if(sys && (oldnr = sys_errors[sys]) &&
+       (oldheader = query_error_header(oldnr)) &&
+       (olderr = query_error_data(oldnr)))
+    {
+        oldheader[EDB_H_LAST_CHANGE] = time();
+
+        switch(error[EDB_E_TYPE])
+        {
+        default:
+            sys_log("ERROR_DB",sprintf("[%s] get_sys_error: Liefert ID fuer Spielerfehler: %Q\n",
+            shorttimestr(time()), sys));
+        // Pass through.
+
+        case EDB_RUNTIME:
+            // Als Subfehler eintragen.
+            olderr[EDB_E_SUBERRORS] ||= ({});
+            // Maximal MAX_ERRORS
+            olderr[EDB_E_SUBERRORS] -= filter(olderr[EDB_E_SUBERRORS],
+                (: get_sys_error_string($1) == $2 :), sys)[0..<MAX_ERRORS];
+            olderr[EDB_E_SUBERRORS] += ({ filter_suberr(error) });
+            break;
+
+        case EDB_COMPILE:
+        // Datum aktualisieren. 
+            olderr[EDB_E_DATE] = error[EDB_E_DATE];
+            break;
+        }
+
+        debugger -= oldheader[EDB_H_DEBUGGER];
+        oldheader[EDB_H_DEBUGGER] += debugger;
+
+        if(oldheader[EDB_H_CLOSED])
+        {
+            history = allocate(EDB_EH_SIZE);
+            history[EDB_EH_DATE] = time();
+            history[EDB_EH_TYPE] = EDB_EHT_REOPEN;
+
+            olderr[EDB_E_HISTORY] ||= ({});
+            olderr[EDB_E_HISTORY] += ({ history });
+            oldheader[EDB_H_CLOSED] = 0;
+            history = 0;
+        }
+    }
+    else if(sys)
+        sys_errors[sys] = error_number;
+
+#if 0
+    if (sizeof(debugger))
+    {
+        history = allocate(EDB_EH_SIZE);
+        history[EDB_EH_DATE] = time();
+        history[EDB_EH_TYPE] = EDB_EHT_ADD_DEBUGGER;
+        history[EDB_EH_INFO] = liste(debugger, ", ");
+    }
+#endif
+
+    foreach(string deb: debugger)
+        wiz_errors[deb] = (wiz_errors[deb] || ({})) 
+                        + ({ olderr?oldnr:error_number });
+
+    if(olderr)
+    {
+
+        olderr[EDB_E_HISTORY] ||= ({});
+        if (history)
+        {
+            olderr[EDB_E_HISTORY] += ({ history });
+        }
+        errors[oldnr] = oldheader;
+        set_error_data(oldnr, olderr);
+    }
+    else
+    {
+        mixed *header;
+
+        error[EDB_E_HISTORY] ||= ({});
+        if (history)
+            error[EDB_E_HISTORY] += ({ history });
+
+        // Header-Daten umtragen.
+        header = allocate(EDB_H_SIZE);
+        header[EDB_H_TYPE] = error[EDB_E_TYPE];
+        header[EDB_H_FILE] = extract_filename(error[EDB_E_FILE]);
+        header[EDB_H_PLAYER] = error[EDB_E_PLAYER];
+        header[EDB_H_OPENED] = error[EDB_E_DATE];
+        header[EDB_H_LAST_CHANGE] = time();
+        header[EDB_H_DEBUGGER] = debugger;
+        if (header[EDB_H_TYPE] == EDB_COMPILE)
+        {
+            int lineno;
+            if (sscanf(error[EDB_E_ERROR],"%!s line %d :",lineno))
+                header[EDB_H_LINE] = lineno;
+        }
+        else if (header[EDB_H_TYPE] == EDB_RUNTIME)
+        {
+            header[EDB_H_LINE] = error[EDB_E_LINE];
+            error[EDB_E_SUBERRORS] = ({ filter_suberr(error) });
+        }
+        else
+        {
+            header[EDB_H_LINE] = error[EDB_E_LINE];
+        }
+        
+        do_add_error(error_number, header, sys);
+        set_error_data(error_number++, error);
+    }
+}
+
+// Altfunktion, auch fuer neu.
+private string check_pattern(string pattern)
+{
+    if (pattern == "." || pattern == ".*" || pattern == "*")
+        return 0;
+    return pattern;
+}
+
+// NEU: Gegenueber vorher nur ein Fileeintrag.
+private int is_error_in_regexp_file(int nr, string pattern)
+{
+    return sizeof(regexp(
+                ({errors[nr][EDB_H_FILE],
+                  map2domain(errors[nr][EDB_H_FILE] || "-",1)
+                }),pattern));
+}
+
+// NEU: Verursacher filtern
+private int is_error_in_regexp_verursacher(int nr, string pattern)
+{
+    return (sizeof(regexp(({errors[nr][EDB_H_PLAYER]}),pattern)) > 0);
+}
+
+// NEU: Error-Typ filtern
+private int is_error_type(int nr, int type)
+{
+    return errors[nr][EDB_H_TYPE] == type;
+}
+
+// Gibt aus, wo wieviele Fehler vorliegen
+int check_errors(string wiz)
+{
+    string *zus;
+    int i;
+
+//    zus = query_wiz_projects(wiz,1,0,0);
+    zus = GROUP_MASTER->query_immediate_fdb_groups(wiz);
+    if (sizeof(zus))
+    {
+        int ausgegeben;
+        for (i = 0; i < sizeof(zus); i++)
+            if (sizeof(wiz_errors[zus[i]]))
+            {
+                if(!ausgegeben)
+                {
+                write("Fuer Dich liegen folgende Fehler vor:\n");
+                ausgegeben = 1;
+                }
+            printf("    %-30s : %3d\n",zus[i],sizeof(wiz_errors[zus[i]]));
+            }
+        if(!ausgegeben)
+            write("Herzlichen Glueckwunsch, fuer Dich liegen keine Fehler vor!\n");
+        return 1;
+    }
+    return 0;
+}
+
+#define EDB_EH_CONVERT_TYPES ({EDB_EHT_COMMENT, EDB_EHT_REASSIGN_FILE, \
+                               EDB_EHT_CLOSE, EDB_EHT_REOPEN })
+
+// Zur Kompatibilitaet:
+// Zum Abfragen des Fehler Nummer 'nr' in alter Struktur
+/*
+FUNKTION: query_error
+DEKLARATION: DEPRECATED mixed *query_error(int nr)
+BESCHREIBUNG:
+Gibt den Fehler in der alten Datenstruktur zurueck.
+Die Funktion existiert z.Zt. nur aus Kompatibilitaetsgruenden.
+VERWEISE: hide_error
+GRUPPEN: fehlerdatenbank
+*/
+DEPRECATED mixed *query_error(int nr)
+{
+    mapping err;
+    mixed *header;
+    mixed *ret;
+
+    header = query_error_header(nr);
+    if(!header)
+    return 0;
+
+    err = query_error_data(nr);
+    if(!err)
+    return 0;
+    switch(err[EDB_E_TYPE])
+    {
+    case EDB_RUNTIME:
+        ret = allocate(16);
+        ret[5] = err[EDB_E_DATE];
+        ret[7] = err[EDB_E_OBJ];
+        ret[8] = err[EDB_E_LINE];
+        ret[9] = err[EDB_E_COMMAND];
+        ret[10] = err[EDB_E_WHO];
+        ret[11] = err[EDB_E_FIRSTROOM];
+        ret[12] = err[EDB_E_SUBTYPE];
+        ret[15] = err[EDB_E_USER_INFO];
+
+        foreach(mapping suberr: err[EDB_E_SUBERRORS]||({}))
+        if(suberr[EDB_E_TYPE] == EDB_RUNTIME)
+        {
+            foreach(int idx: ({5,9,10,11,12,13,14}))
+            if(!pointerp(ret[idx]))
+                ret[idx] = ({ret[idx]});
+
+            ret[5] += ({ suberr[EDB_E_DATE] });
+            ret[9] += ({ suberr[EDB_E_COMMAND] });
+            ret[10] += ({ suberr[EDB_E_WHO] });
+            ret[11] += ({ suberr[EDB_E_FIRSTROOM] });
+            ret[12] += ({ suberr[EDB_E_SUBTYPE] });
+            ret[13] += ({ 0 });
+            ret[14] += ({ 0 });
+        }
+        break;
+
+    case EDB_COMPILE:
+        ret = allocate(7);
+        break;
+
+    default:
+        ret = allocate(11);
+        ret[7] = header[EDB_H_PLAYER];
+        ret[8] = err[EDB_H_PLAYER];
+        ret[9] = err[EDB_E_ROOM];
+        ret[9] = err[EDB_E_OBJ_DESC];
+        ret[10] = err[EDB_E_USER_INFO];
+        break;
+    }
+
+    ret[0] = header[EDB_H_TYPE];
+    ret[1] = err[EDB_E_FILE] || header[EDB_H_FILE];
+    ret[2] = err[EDB_E_ERROR];
+    ret[3] = header[EDB_H_LAST_CHANGE];
+    ret[4] = map(filter( err[EDB_E_HISTORY]||({}),
+    (: member(EDB_EH_CONVERT_TYPES, $1[EDB_EH_TYPE]) != -1 :)),
+    (: ({ $1[EDB_EH_WIZ], $1[EDB_EH_DATE], $1[EDB_EH_INFO] }) :));
+    ret[5] ||= header[EDB_H_OPENED];
+    ret[6] = err[EDB_H_DEBUGGER];
+    return ret;
+}
+
+#define SECURE if (!(adminp(this_interactive()) && \
+        this_interactive() == this_player() && \
+        geteuid(previous_object()) == geteuid(this_interactive()))) \
+        return 0
+int query_error_number() { return error_number; }
+int query_num_errors() { return sizeof(errors); }
+int query_num_wiz_errors(string wiz)
+{
+    return sizeof(wiz_errors[wiz]);
+}
+int query_num_sys_wiz_errors(string wiz)
+{
+    return sizeof(sys_wiz_errors[wiz]);
+}
+mapping query_error_sizes(int flag)
+{
+    if (flag)
+        return map_indices(wiz_errors,#'query_num_sys_wiz_errors);
+    else
+        return map_indices(wiz_errors,#'query_num_wiz_errors);
+}
+mapping _query_errors(int num)
+{
+    SECURE;
+    if (num)
+        return errors[num];
+    return errors;
+}
+mapping _query_wiz_errors(string wiz)
+{
+    SECURE;
+    if (wiz)
+        return wiz_errors[wiz];
+    return wiz_errors;
+}
+
+/*
+FUNKTION: valid_debugger
+DEKLARATION: string valid_debugger(string deb)
+BESCHREIBUNG:
+Ueberprueft, ob der Debugger erlaubt ist. und gibt den Namen korrekt zurueck.
+VERWEISE: add_debugger
+GRUPPEN: fehlerdatenbank
+*/
+string valid_debugger(string deb)
+{
+    string *tmp, admin_ob;
+
+    if (!stringp(deb))
+        return 0;
+    if (deb == ROOT_UID)
+        return deb;
+    if (deb == EDB_BACKUP_GROUP)
+        return 0; // Die darf niemand von Hand eintragen.
+    if (GOETTER_REGISTER->is_wiz(deb) ||
+        GOETTER_REGISTER->is_wiz_on_vacation(deb))
+        return lower_case(deb);
+    if (GROUP_MASTER->group_exists(deb))
+        return deb;
+    return 0; // sonst.
+}
+
+private void _purge_error(mixed * err, mapping edata, int number)
+{
+    string *wizzes;
+    string wiz,sys;
+    int i;
+
+    wizzes = err[EDB_H_DEBUGGER];
+    if (!mappingp(edata))
+        edata = _query_error_file(number);
+    if (mappingp(edata))
+        sys = get_sys_error_string(edata);
+    if (sys && sys_errors[sys] == number)
+        m_delete(sys_errors,sys); // sys_errors bereinigen.
+    for (i = sizeof(wizzes); i--; )
+        delete_from_wiz_errors(wizzes[i], number);
+    m_delete(errors, number); // und im Speicher weg.
+    purge_err_in_cache(number); // Cache Eintrag auch loeschen.
+    rm(ERROR_DB_DATA_FILE(number)); // Fehlerdatei loeschen.
+}
+
+/*
+FUNKTION: _delete_error
+DEKLARATION: private void _delete_error(mixed * err, mapping edata, int number)
+BESCHREIBUNG:
+Loescht einen Fehler, der sicher da ist
+Oder stellt skurrilerweise einen geloeschten Fehler wieder her...
+VERWEISE: valid_debugger
+GRUPPEN: fehlerdatenbank
+*/
+private void _delete_error(mixed * err, mapping edata, int number)
+{
+    string *wizzes;
+    string wiz;
+    int i;
+
+    wizzes = err[EDB_H_DEBUGGER];
+    // Ist der Fehler schon geloescht?
+    if(member(wizzes, EDB_BACKUP_GROUP) == -1)
+    {
+        // Nein. Aus allen Gruppen austragen.
+        for (i = sizeof(wizzes); i--; )
+            delete_from_wiz_errors(wizzes[i], number);
+
+        // RTEs nicht in die Backup-Gruppe aufnehmen.
+        if(err[EDB_H_TYPE] == EDB_RUNTIME || err[EDB_TYPE] == EDB_COMPILE)
+        {
+            _add_history(number, this_player(),EDB_EHT_CLOSE, 
+                         "*** CLOSE ***");
+            _purge_error(err,edata,number);
+            return;
+        }
+
+        // Backup-Gruppe eintragen.
+        err[EDB_H_DEBUGGER] += ({EDB_BACKUP_GROUP});
+        wiz_errors[EDB_BACKUP_GROUP] ||= ({});
+
+        // Diesen Fehler reinnehmen:
+        wiz_errors[EDB_BACKUP_GROUP] = ({number}) + wiz_errors[EDB_BACKUP_GROUP];
+
+        // Ueberschuessige Fehler rausschmeissen:
+        foreach(i : wiz_errors[EDB_BACKUP_GROUP][EDB_BACKUP_COUNT..])
+        {
+            m_delete(errors, i);
+            rm(ERROR_DB_DATA_FILE(i));
+        }
+
+        wiz_errors[EDB_BACKUP_GROUP] = wiz_errors[EDB_BACKUP_GROUP][..EDB_BACKUP_COUNT-1];
+
+        // Und einen Kommentar drunter inkl Speicher von edata:
+        _add_history(number, this_player(), EDB_EHT_CLOSE, "*** CLOSE ***");
+    }
+    else
+    {
+        // Fehler bereits geloescht. Wiederherstellen.
+        wiz_errors[EDB_BACKUP_GROUP] -= ({number});
+        err[EDB_H_DEBUGGER] = filter(err[EDB_H_DEBUGGER],
+                               #'valid_debugger);
+        // Und einen Kommentar drunter inkl Speicher von edata:
+        _add_history(number,this_player(), EDB_EHT_REOPEN, "*** REOPEN ***");
+
+        // Den ganzen Schotter wieder eintragen.
+        foreach(wiz : err[EDB_H_DEBUGGER])
+        {
+            wiz_errors[wiz] ||= ({});
+            wiz_errors[wiz] += ({number});
+        }
+    }
+}
+
+
+void delete_wiz(string wiz)
+{
+    if(geteuid(previous_object()) != ROOT_UID)
+        return;
+
+    if(!member(wiz_errors, wiz))
+        return;
+
+    foreach(int nr: wiz_errors[wiz])
+    {
+        mixed *err = errors[nr];
+
+        if(sizeof(err[EDB_H_DEBUGGER])<=1)
+            _delete_error(err, 0, nr);
+        else
+        {
+            err[EDB_H_LAST_CHANGE] = time();
+            err[EDB_H_DEBUGGER] -= ({wiz});
+        }
+    }
+
+    m_delete(wiz_errors, wiz);
+}
+
+void rename_group (string old, string new)
+{
+    if (object_name(previous_object()) != "/apps/groups")
+        return;
+
+    if(wiz_errors[old])
+    {
+        foreach(int nr: wiz_errors[old])
+        {
+            mixed *err = errors[nr];
+            err[EDB_H_DEBUGGER] = (err[EDB_H_DEBUGGER] - ({ old, new })) + ({ new });
+        }
+
+        if(wiz_errors[new])
+            wiz_errors[new] = (wiz_errors[new] - wiz_errors[old] + wiz_errors[old]);
+        else
+            wiz_errors[new] = wiz_errors[old];
+        m_delete(wiz_errors,old);
+    }
+}
+
+private int check_and_add_feedback(string origin, mapping fb)
+{
+    mapping fbm;
+    if (!feedback[origin])
+    {
+        feedback[origin] = ({fb});
+        return 1;
+    }
+    foreach (fbm : feedback[origin])
+    {
+        if (fbm["date_fb"] == fb["date_fb"]
+                && fbm["date_err"] == fb["date_err"]
+                && fbm["text"] == fb["text"]
+                && fbm["fb"] == fb["fb"]
+                && fbm["nr"] == fb["nr"]
+                && fbm["typ"] == fb["typ"]
+                && fbm["by"] == fb["by"])
+        {
+            return 0;
+        }
+    }
+    feedback[origin] += ({fb});
+    return 1;
+}
+
+void add_feedback (string origin, mapping fb)
+{
+    if (!feedback[origin])
+        feedback[origin] = ({fb});
+    else
+        feedback[origin] += ({fb});
+    object pl = find_player(origin);
+    if (playerp(pl))
+    {
+        pl->send_message_to(pl,MT_NOTIFY, MA_UNKNOWN, wrap(
+            "Fuer Dich liegt Fehlerfeedback vor.\n"
+            "Mit dem Befehl \"feedback\" kannst du es lesen."));
+    }
+}
+
+mapping *get_feedback (string origin)
+{
+    int i;
+    // bei allen Feedbacks des Typs "r" (Rueckfrage), bei denen
+    // der zugehoerige Fehler nicht mehr existiert, die Rueckfrage
+    // loeschen.
+
+    // Ebenso Rueckfragen von Fehlern in der Backup-Gruppe loeschen,
+    // da solche Rueckantworten ja womoeglich gar nicht mehr gelesen werden.
+
+    if (feedback [origin]) {
+        for (i = sizeof (feedback[origin]); i--; )
+            if ((feedback[origin][i]["typ"]=="r")
+              && ((!errors[feedback[origin][i]["nr"]] ||
+                    member(errors[feedback[origin][i]["nr"]][EDB_H_DEBUGGER], 
+                                                  EDB_BACKUP_GROUP) != -1 )))
+                feedback[origin] = arr_delete (feedback[origin],i);
+        if(!sizeof(feedback[origin]))
+            feedback = m_delete(feedback, origin);
+        return feedback[origin];
+    }
+}
+
+void del_feedback (string origin, int nr)
+{
+    if (feedback[origin])
+    {
+        feedback[origin] = arr_delete (feedback[origin],nr);
+        if(!sizeof(feedback[origin]))
+            feedback = m_delete(feedback, origin);
+    }
+}
+
+// Kompatibilitaetsfunktionen
+
+/*
+FUNKTION: query_wiz_errors
+DEKLARATION: deprecated varargs int *query_wiz_errors(string wiz, string file_pattern, string verursacher_pattern, int error_type)
+BESCHREIBUNG:
+Diese Funktion liefert die Liste an Fehlernummern, die dem Denugger 'wiz'
+(Gott oder acl-Gruppe) und den Parametern file_pattern,verursacher_pattern
+und error_type entspricht.
+Die Funktion existiert z.Zt. nur aus Kompatibilitaetsgruenden.
+VERWEISE: query_wiz_projects
+GRUPPEN: fehlerdatenbank
+*/
+DEPRECATED varargs int *query_wiz_errors(string wiz, string file_pattern,
+                              string verursacher_pattern, int error_type)
+{
+    int *ret;
+
+    ret = wiz_errors[wiz];
+    if (!ret)
+        return 0;
+    if (check_pattern(file_pattern))
+        ret = filter(ret, #'is_error_in_regexp_file,
+                           file_pattern);
+    if (check_pattern(verursacher_pattern))
+        ret = filter(ret, #'is_error_in_regexp_verursacher,
+                           verursacher_pattern);
+    if (error_type)
+        ret = filter(ret, #'is_error_type, error_type);
+
+    return ret;
+}
+
+/*
+FUNKTION: query_wiz_projects
+DEKLARATION: DEPRECATED string *query_wiz_projects(string wiz, int only_non_empty, string file_pattern, string verursacher_pattern, int error_type)
+BESCHREIBUNG:
+Zum Abfragen der Bereiche, fuer die 'wiz' zustaendig ist Wenn Flag
+only_non_empty gesetzt ist, werden nur die Bereiche zurueckgegeben,
+in denen Fehler fuer 'wiz' eingetragen sind. Fuer diese Auswertung
+werden die zwei pattern(file_pattern und verursacher_pattern)
+herangezogen.
+Die Funktion existiert z.Zt. nur aus Kompatibilitaetsgruenden.
+VERWEISE: query_wiz_errors
+GRUPPEN: fehlerdatenbank
+*/
+DEPRECATED string *query_wiz_projects(string wiz, int only_non_empty,
+                           string file_pattern,
+                           string verursacher_pattern,
+                           int error_type)
+{
+    string *zus, *tmp, *types;
+    int i, *nums, test_pattern;
+
+    zus = GROUP_MASTER->query_fdb_groups(wiz);
+
+    file_pattern = check_pattern(file_pattern);
+    verursacher_pattern = check_pattern(verursacher_pattern);
+
+    if (only_non_empty)
+    {
+        test_pattern = file_pattern || verursacher_pattern || error_type;
+
+        for (i = sizeof(zus); i--; )
+        {
+            nums = wiz_errors[zus[i]];
+            if (!sizeof(nums))
+            {
+                zus[i] = 0;
+            }
+            else if (test_pattern)
+            {
+                if (file_pattern)
+                {
+                    nums = filter(nums,#'is_error_in_regexp_file,
+                           file_pattern);
+                    if (!sizeof(nums))
+                        zus[i] = 0;
+        }
+        if (verursacher_pattern && zus[i])
+        {
+            nums = filter(nums,
+                    #'is_error_in_regexp_verursacher,
+                    verursacher_pattern);
+            if (!sizeof(nums))
+            zus[i] = 0;
+        }
+        if (error_type && zus[i])
+                {
+                    nums = filter(nums,#'is_error_type,error_type);
+                    if (!sizeof(nums))
+                        zus[i] = 0;
+                }
+            }
+        }
+        zus -= ({ 0 });
+    }
+    return zus;
+}
+
+public int is_active_debugger(int errnr, string deb)
+{
+    mixed eheader = errors[errnr];
+    if (!pointerp(eheader))
+    {
+        return 0;
+    }
+    return member(eheader[EDB_H_DEBUGGER],deb)!=-1;
+}
+
+// NEU: umgeschriebenes Verantwortlichkeitsprofil
+private int is_responsible(int errnr, object wiz)
+{
+    string *tmp, name, *who;
+    int i;
+    mixed eheader = errors[errnr];
+    if (!pointerp(eheader) ||!playerp(wiz))
+        return 0;
+
+    // Admins sind fuer alles Verantwortlich!
+    if (adminp(wiz))
+        return 1;
+    name = wiz->query_real_name();
+    if (name == eheader[EDB_H_PLAYER])
+    {
+        return 1; // fuer den selbst geschaffenen Fehler verantwortlich sein.
+    }
+    who = eheader[EDB_H_DEBUGGER] - ({EDB_BACKUP_GROUP});
+    tmp = GROUP_MASTER->query_fdb_groups(name);
+    for (i = 0; i < sizeof(tmp); i++)
+    {
+        if (member(who,tmp[i]) != -1)
+            return 1;
+    }
+    return 0;
+}
+
+/*
+FUNKTION: precheck_responsible
+DEKLARATION: varargs int * precheck_responsible(int * errnums, int flag_deleted)
+BESCHREIBUNG:
+Prueft alle Fehlernummern auf Existenz und Zustaendigkeit.
+Bei flag_deleted!=0 werden geloeschte Fehler nicht rausgeloescht.
+Rueckgabe ist die Liste der zulaessigen Fehlernummern.
+VERWEISE: precheck_add_debugger
+GRUPPEN: fehlerdatenbank
+*/
+varargs int * precheck_responsible(int * errnums, int flag_deleted)
+{
+    if (!check_security() || !pointerp(errnums) || !sizeof(errnums) 
+            || !playerp(this_player()))
+    {
+        return ({ });
+    }
+    // erstmal nur vorhandene Fehler filtern:
+    if (flag_deleted)
+    {
+        errnums = filter(errnums, (: member(errors,$1) :) );
+    }
+    else 
+    {
+        errnums = filter(errnums, (: member(errors,$1) && 
+               member(errors[$1][EDB_H_DEBUGGER],EDB_BACKUP_GROUP)==-1 :) );
+    }
+    if (adminp(this_player()))
+    {
+        return errnums; // Admins sind fuer alles verantwortlich.
+    }
+    return filter(errnums, (: sizeof(errors[$1][EDB_H_DEBUGGER] & $2)>0
+                || errors[$1][EDB_H_PLAYER] == $3 :), 
+           GROUP_MASTER->query_fdb_groups(this_player()->query_real_name()),
+           this_player()->query_real_name());
+}
+
+/*
+FUNKTION: precheck_add_debugger
+DEKLARATION: int * precheck_add_debugger(int * errnums, string * deb)
+BESCHREIBUNG:
+Prueft alle Fehlernummern ob der Debugger noch hinzugefuegt werden muss.
+Gibt alle Fehlernummern zurueck, bei der noch was getan werden muss.
+VERWEISE: precheck_responsible 
+GRUPPEN: fehlerdatenbank
+*/
+int * precheck_add_debugger(int * errnums, string * deb)
+{
+    if (!check_security() || !pointerp(errnums) || !sizeof(errnums) 
+        || !playerp(this_player()) || !pointerp(deb) || !sizeof(deb))
+    {
+        return ({ });
+    }
+    return filter(errnums, (: member(errors,$1) 
+        && sizeof($2 - errors[$1][EDB_H_DEBUGGER] - ({EDB_BACKUP_GROUP}) )>0 :), 
+                    deb);
+}
+
+/*
+FUNKTION: exec_change_error_type
+DEKLARATION: string exec_change_error_type(int errnum, string neuer_typ)
+BESCHREIBUNG:
+Prueft, ob der this_player Zugriff hat und aendert dann im Falle eines
+von Spielern abgesetzten Fehlern den Fehlertyp (neuer_typ=f,t,d,i,w)
+VERWEISE: precheck_responsible 
+GRUPPEN: fehlerdatenbank
+*/
+string exec_change_error_type(int errnum, string neuer_typ)
+{
+    string alt,neu;
+    if (!check_security() || !playerp(this_player()))
+    {
+        return "Zugriffssperre";
+    }
+    if (!sizeof(precheck_responsible(({ errnum }), 0)))
+    {
+        return "Nicht zustaendig.";
+    }
+    mixed* eheader = errors[errnum];  // precheck hat geprueft, dass fehler da
+    switch (eheader[EDB_H_TYPE])
+    {
+    case EDB_FEHLER:
+        if (neuer_typ == "f")
+            return "Ist schon vom Typ Fehler.";
+        alt = "Fehler";
+        break;
+    case EDB_IDEE:
+        if (neuer_typ == "i")
+            return "Ist schon vom Typ Idee.";
+        alt = "Idee";
+        break;
+    case EDB_DETAIL:
+        if (neuer_typ == "d")
+            return "Ist schon vom Typ Detail.";
+        alt = "Detail";
+        break;
+    case EDB_TYPO:
+        if (neuer_typ == "t")
+            return "Ist schon vom Typ Typo.";
+        alt = "Typo";
+        break;
+    case EDB_LOB:
+        if (neuer_typ == "w")
+            return "Ist schon vom Typ Wuerdigung.";
+        alt = "Wuerdigung";
+        break;
+    default:
+        return "Fehler wurde nicht von einem Spieler abgesetzt.";
+    }
+    switch (neuer_typ)
+    {
+    case "f": 
+        eheader[EDB_H_TYPE] = EDB_FEHLER; 
+        neu = "Fehler";
+        break;
+    case "i": 
+        eheader[EDB_H_TYPE] = EDB_IDEE; 
+        neu = "Idee";
+        break;
+    case "d": 
+        eheader[EDB_H_TYPE] = EDB_DETAIL; 
+        neu = "Detail";
+        break;
+    case "t": 
+        eheader[EDB_H_TYPE] = EDB_TYPO; 
+        neu = "Typo";
+        break;
+    case "w": 
+        eheader[EDB_H_TYPE] = EDB_LOB; 
+        neu = "Wuerdigung";
+        break;
+    }
+    _add_history(errnum,this_player(), EDB_EHT_CHANGE_TYPE, 
+                "Typ "+alt+" => "+neu);
+}
+
+/*
+FUNKTION: exec_add_debugger
+DEKLARATION: int * exec_add_debugger(int * errnums, string * deb)
+BESCHREIBUNG:
+Fuehrt das add_debugger fuer alle angegebenen Fehler durch.
+VERWEISE: precheck_responsible, precheck_add_debugger 
+GRUPPEN: fehlerdatenbank
+*/
+int * exec_add_debugger(int * errnums,string * deb)
+{
+    int size = sizeof(errnums);
+    if (!check_security() || !pointerp(errnums) || !sizeof(errnums) 
+        || !playerp(this_player())
+        || !pointerp(deb) || !sizeof(deb))
+    {
+        return ({ });
+    }
+    // Checks sicherheitshalber durchfuehrem, 
+    // sollten vorher schon passiert sein.
+    errnums = precheck_add_debugger(precheck_responsible(errnums,0),deb);
+    if (size != sizeof(errnums))
+        return ({}); // sollte sich nicht mehr aendern!
+    foreach (int errnum : errnums)
+    {
+        string * curdeb = deb - errors[errnum][EDB_H_DEBUGGER];
+        if (sizeof(curdeb))
+        {
+            errors[errnum][EDB_H_DEBUGGER] += curdeb;
+            foreach(string onedeb: curdeb)
+                wiz_errors[onedeb] = (wiz_errors[onedeb] || ({})) 
+                        + ({ errnum });
+            _add_history(errnum,this_player(), EDB_EHT_ADD_DEBUGGER, 
+                "a "+liste(curdeb,", "));
+        }
+    }
+}
+
+/*
+FUNKTION: exec_hide_debugger
+DEKLARATION: int * exec_hide_debugger(int * errnums, string zreg, string nzreg)
+BESCHREIBUNG:
+Fuehrt das exec_debugger fuer alle angegebenen Fehler durch.
+VERWEISE: precheck_responsible 
+GRUPPEN: fehlerdatenbank
+*/
+int * exec_hide_debugger(int * errnums, string zreg, string nzreg)
+{
+    int size = sizeof(errnums);
+    int * newnums = ({ });
+    if ( !check_security() || !pointerp(errnums) || !sizeof(errnums) 
+        || !playerp(this_player()))
+    {
+        return ({ });
+    }
+    // Checks sicherheitshalber durchfuehrem, 
+    // sollten vorher schon passiert sein.
+    errnums = precheck_responsible(errnums,0);
+    if (size != sizeof(errnums))
+        return ({}); // sollte sich nicht mehr aendern!
+    DEBUG(sprintf("hide_debugger:%Q,%Q,%Q",errnums,zreg,nzreg));
+    foreach (int errnum : errnums)
+    {
+        string * curdeb = errors[errnum][EDB_H_DEBUGGER];
+        string * deldeb = regexp(curdeb, zreg);
+        string * keepdeb = regexp(curdeb, nzreg);
+        if (sizeof(curdeb - deldeb - keepdeb + keepdeb) >= 1) 
+        {
+            curdeb = curdeb - deldeb - keepdeb + keepdeb;
+            errors[errnum][EDB_H_DEBUGGER] = curdeb;
+            if (sizeof(deldeb-keepdeb)>0)
+            {
+                foreach(string deb : (deldeb-keepdeb))
+                {
+                    delete_from_wiz_errors(deb,errnum);
+                }
+                _add_history(errnum,this_player(), EDB_EHT_REMOVE_DEBUGGER, 
+                    "v "+liste(deldeb-keepdeb,", "));
+            }
+            newnums += ({ errnum });
+            continue;
+        }
+        if (zreg == "^(.*)$" && nzreg == "^()$") // bei v *
+        {
+            keepdeb = regexp(curdeb, "^(.*:Done)$"); // Default Done uebrig
+            if (sizeof(curdeb - deldeb - keepdeb + keepdeb) >= 1) 
+            {
+                curdeb = curdeb - deldeb - keepdeb + keepdeb;
+                errors[errnum][EDB_H_DEBUGGER] = curdeb;
+                if (sizeof(deldeb-keepdeb)>0)
+                {
+                    foreach(string deb : (deldeb-keepdeb))
+                    {
+                        delete_from_wiz_errors(deb,errnum);
+                    }
+                    _add_history(errnum,this_player(), EDB_EHT_REMOVE_DEBUGGER, 
+                        "v "+liste(deldeb-keepdeb,", "));
+                }
+                newnums += ({ errnum });
+                continue;
+            }
+        }
+    }
+    return newnums;
+}
+/*
+FUNKTION: exec_reassign_file
+DEKLARATION: int * exec_reassign_file(int * errnums, string filename)
+BESCHREIBUNG:
+Fuehrt das reassign fuer alle angegebenen Fehler durch.
+VERWEISE: precheck_responsible 
+GRUPPEN: fehlerdatenbank
+*/
+int * exec_reassign_file(int * errnums, string filename)
+{
+    int size = sizeof(errnums);
+    int * newnums = ({ });
+    if (!check_security() || !pointerp(errnums) || !sizeof(errnums)
+            || !playerp(this_player()))
+    {
+        return ({ });
+    }
+    // Checks sicherheitshalber durchfuehrem, 
+    // sollten vorher schon passiert sein.
+    errnums = precheck_responsible(errnums,0);
+    if (size != sizeof(errnums))
+        return ({}); // sollte sich nicht mehr aendern!
+    foreach (int errnum : errnums)
+    {
+        mixed *err;
+        mapping edata;
+        string oldfile;
+
+        err = errors[errnum];
+        edata = _query_error_data(errnum);
+        oldfile = err[EDB_H_FILE];
+        if (oldfile == filename)
+            continue; // no change.
+
+        err[EDB_H_FILE] = filename;
+        // Kommentar mit urspruenglichen File,
+        _add_history(errnum, this_player() , EDB_EHT_REASSIGN_FILE,
+                 " "+oldfile+" -> "+filename);        
+    }
+}
+
+// Loescht die Nummer number aus wiz_errors
+private void delete_from_wiz_errors(string wiz, int number)
+{
+    int *nums, pos;
+
+    nums = wiz_errors[wiz];
+    if (nums)
+    {
+        pos = member(nums,number);
+        if (pos >= 0)
+        {
+            if (sizeof(nums) == 1)
+                m_delete(wiz_errors,wiz);
+            else
+                wiz_errors[wiz] = arr_delete(nums,pos);
+        }
+    }
+}
+
+/*
+FUNKTION: exec_delete_error
+DEKLARATION: int * exec_delete_error(int * errnums)
+BESCHREIBUNG:
+Loescht die Fehler errnums aus der Datenbank oder stellt sie wieder her,
+falls in der Backupgroup. Zurueckgeleifert werden die Fehlernummern,
+die erfolgreich behandelt wurden oder ein leeres Array bei Fehlern,
+z.B. wird der precheck_responsible durchgefuehrt und es wird erwartet,
+dass hier keine Fehlernummern mehr anfallen.
+VERWEISE: hide_error, precheck_responsible
+GRUPPEN: fehlerdatenbank
+*/
+int * exec_delete_error(int * errnums)
+{
+    int size = sizeof (errnums);
+
+    if (!check_security() || !playerp(this_player()))
+        return ({});
+
+    if (!pointerp(errnums) || !size) 
+        return ({});
+    
+    errnums = precheck_responsible(errnums, 1);
+    if (size != sizeof(errnums))
+    {
+        return ({});
+    }
+    foreach (int errnum : errnums)
+    {
+        _delete_error(errors[errnum],0,errnum);
+    }
+    return errnums;
+}
+
+private void do_check_wiz(string wiz, int * err_nums)
+{
+    int i, *to_del;
+    string tmp;
+
+    tmp = (wiz == "Backup" ? "Backup" : valid_debugger(wiz));
+
+    if (!tmp || tmp != wiz)
+        printf("%Q ist kein Debugger.\n",wiz);
+
+    to_del = ({});
+    for (i = sizeof(err_nums); i--; )
+        if (!member(errors,err_nums[i]))
+        {
+            printf("Fehler bei '%s': %d\n",wiz,err_nums[i]);
+            to_del += ({ err_nums[i] });
+        }
+        else
+        {
+            err_numbers[err_nums[i]] = 1;
+        }
+    if (sizeof(err_nums))
+        err_nums -= to_del;
+    if (!sizeof(err_nums))
+        m_delete(wiz_errors,wiz);
+    else
+        wiz_errors[wiz] = err_nums;
+}
+
+private void do_check_wiz2err()
+{
+    err_numbers = ([]);
+    walk_mapping(wiz_errors,#'do_check_wiz);
+}
+
+/*
+FUNKTION: query_group_list
+DEKLARATION: mixed query_group_list(string wiz, mapping options)
+BESCHREIBUNG:
+Erstellt eine Gruppenliste abhaengig von den angegeben Optionen:
+- EDB_OPT_GROUP_ONE: eine einzelne Gruppe (string) zurueckgeben.
+- EDB_OPT_GROUP_ALL: wenn vorhanden, werden alle Fehlergruppen herangezogen
+                     wenn nicht, dann nur die fuer wiz zustaendigen.
+- EDB_OPT_GROUP_PATTERN: welche der obigen Gruppen passen ins Schema(string)
+- EDB_OPT_GROUP_INCLUDE: Fehlergruppen (string *), welche zur Auswahl
+                         hinzugefuegt wird.
+- EDB_OPT_GROUP_PREFIX:  Prefix der Fehlergruppen (string).
+- EDB_OPT_GROUP_EXCLUDE: Fehlergruppen (string *), welche von der Auswahl
+                         ausgeschlossen werden.
+- EDB_OPT_GROUP_EXCLUDE_PATTERN: Ein Muster zum Ausschliessen von Gruppen.
+- EDB_OPT_EXLUSIVE_GROUPS  Nur Fehlergruppen dieser Liste (string*) anzeigen.
+- EDB_OPT_ADD_W_GROUP    Private und andeere Work-Groups hinzufuegen
+- EDB_OPT_ADD_S_GROUP    Groups hinzufuegen.
+- EDB_OPT_ADD_Z_GROUP    nur diese Zustaendigen filtern (mapping zus:errnums)
+- EDB_OPT_ERROR_TYPE:    Fehlertyp zum Filtern der Fehler (int)
+- EDB_OPT_FILE_PATTERN:  Die Fehler pro Gruppe werden bzgl der eingetragenen
+                         Datei gefiltert, falls vorhanden. (string)
+- EDB_OPT_VERURSACHER_PATTERN: Die Fehler werden nach Verursacher dieser
+                         Suchmaske (string) gefiltert.
+- EDB_OPT_NO_EMPTY_ERR:  Wenn 1, dann werden leere Fehlergruppen aus der
+                         Gruppenliste entfernt.
+- EDB_OPT_NEWER_SINCE:   Nur Fehler geaendert-neuer als Zeitstempel(int).
+- EDB_OPT_NEWER_BEFORE:  Nur Fehler geaendert-aelter als Zeitstempel(int).
+- EDB_OPT_CREATED_SINCE: Nur Fehler erstellt-neuer als Zeitstempel(int).
+- EDB_OPT_CREATED_BEFORE:Nur Fehler erstellt-aelter als Zeitstempel(int).
+- EDB_OPT_ONLY_NEW_ERR:  Nur Fehler aus EDB_OPT_NEW_ERRNUMS filtern.
+Das Ergebnis ist ein mapping mit Gruppennamen als key
+und die (gefilterten) Fehlerlisten als value des mappings.
+VERWEISE: query_main_groups
+GRUPPEN: fehlerdatenbank
+*/
+private mapping _query_group_list(string wiz, mapping options)
+{
+    string patt,*zus,*negzus;
+    mapping zust,negsammel;
+    closure testcl;
+    int tmp;
+
+    options ||= ([ ]);
+    dbgi = ([ "error_db:query_group_list:evals" : get_eval_cost() ]);
+    dbgi["error_db:query_group_list:options"] = sprintf("%Q",options);
+    options = deep_copy(options);
+    negzus = ({});
+    negsammel = ([]);
+    DEBUG(sprintf("query_group_list: %d",get_eval_cost()));
+
+    if (member(options,EDB_OPT_ZUSTAENDIGER))
+    {
+        wiz = options[EDB_OPT_ZUSTAENDIGER];
+    }
+    if (member(options,EDB_OPT_GROUP_ONE))
+    {
+        zus = ({ options[EDB_OPT_GROUP_ONE] });
+        if (member(options,EDB_OPT_GROUP_EXCLUDE))
+        {
+            negzus += options[EDB_OPT_GROUP_EXCLUDE];
+        }
+        if (member(options,EDB_OPT_GROUP_EXCLUDE_PATTERN))
+        {
+            patt = check_pattern(options[EDB_OPT_GROUP_EXCLUDE_PATTERN]);
+            if (patt)
+            {
+                negzus += regexp(zus,patt);
+            }
+        }
+    }
+    else
+    {
+        if (member(options,EDB_OPT_EXLUSIVE_GROUPS))
+        {
+            zus = options[EDB_OPT_EXLUSIVE_GROUPS];
+        }
+        else if (member(options,EDB_OPT_GROUP_ALL))
+        {
+            zus = m_indices(wiz_errors);
+        }
+        else
+        {
+            zus = GROUP_MASTER->query_fdb_groups(wiz);
+        }
+        if (member(options,EDB_OPT_GROUP_PATTERN))
+        {
+            patt = check_pattern(options[EDB_OPT_GROUP_PATTERN]);
+            if (patt)
+                zus = regexp(zus, patt);
+        }
+        if (member(options,EDB_OPT_GROUP_INCLUDE))
+        {
+            zus -= options[EDB_OPT_GROUP_INCLUDE]; // unique!
+            zus += options[EDB_OPT_GROUP_INCLUDE];
+        }
+        if (member(options,EDB_OPT_ADD_S_GROUP))
+        {
+            zus -= m_indices(options[EDB_OPT_ADD_S_GROUP]);
+            zus += m_indices(options[EDB_OPT_ADD_S_GROUP]);
+        }
+        patt = options[EDB_OPT_GROUP_PREFIX];
+        if (stringp(patt) && sizeof(patt) && patt[<1]=='*')
+        {
+            if (patt == "/w/*")
+            {
+                if (member(options,EDB_OPT_ADD_W_GROUP))
+                {
+                    zus = m_indices(options[EDB_OPT_ADD_W_GROUP]);
+                    m_delete(options,EDB_OPT_GROUP_PREFIX);
+                }
+                else
+                {
+                    options[EDB_OPT_GROUP_PREFIX] = wiz;
+                }
+            }
+            else
+            {
+                options[EDB_OPT_GROUP_PREFIX] = patt[..<2];
+            }
+        }
+        if (member(options,EDB_OPT_GROUP_PREFIX))
+        {
+            patt = "^"+options[EDB_OPT_GROUP_PREFIX]+".*";
+            zus = regexp(zus, patt);
+        }
+        if (member(options,EDB_OPT_GROUP_EXCLUDE))
+        {
+            zus -= options[EDB_OPT_GROUP_EXCLUDE];
+            negzus += options[EDB_OPT_GROUP_EXCLUDE];
+        }
+        if (member(options,EDB_OPT_GROUP_EXCLUDE_PATTERN))
+        {
+            patt = check_pattern(options[EDB_OPT_GROUP_EXCLUDE_PATTERN]);
+            if (patt)
+            {
+                negzus += regexp(zus,patt);
+                zus -= regexp(zus, patt);
+            }
+        }
+    }
+    if (member(options,EDB_OPT_ADD_Z_GROUP))
+    {
+        zust = options[EDB_OPT_ADD_Z_GROUP]; //exklusiv die Gruppe filtern.
+    }
+    else
+    {
+        zust = mkmapping(zus, map(zus, (: wiz_errors[$1]||({ }) :) ));
+    }
+    if (sizeof(negzus)>0) // Fehlerbereiche ueberall ausblenden...
+    {
+        foreach(string nnz : negzus)
+        {
+            negsammel += mkmapping(wiz_errors[nnz]||({}));
+        }
+        zust = map(zust, (: $2-$3 :), m_indices(negsammel));
+    }
+    tmp = options[EDB_OPT_ERROR_TYPE];
+    if (tmp)
+    {
+        testcl = function int (int errnum)
+            {
+              return (errors[errnum][EDB_H_TYPE] == tmp);
+            };
+        zust = map(zust,(: filter($2, $3) :), testcl);
+    }
+    tmp = options[EDB_OPT_NEWER_SINCE];
+    if (tmp)
+    {
+        testcl = function int (int errnum)
+            {
+              return (errors[errnum][EDB_H_LAST_CHANGE] > tmp);
+            };
+        zust = map(zust,(: filter($2, $3) :), testcl);
+    }
+    tmp = options[EDB_OPT_NEWER_BEFORE];
+    if (tmp)
+    {
+        testcl = function int (int errnum)
+            {
+              return (errors[errnum][EDB_H_LAST_CHANGE] < tmp);
+            };
+        zust = map(zust,(: filter($2, $3) :), testcl);
+    }
+    tmp = options[EDB_OPT_CREATED_SINCE];
+    if (tmp)
+    {
+        testcl = function int (int errnum)
+            {
+              return (errors[errnum][EDB_H_OPENED] > tmp);
+            };
+        zust = map(zust,(: filter($2, $3) :), testcl);
+    }
+    tmp = options[EDB_OPT_CREATED_BEFORE];
+    if (tmp)
+    {
+        testcl = function int (int errnum)
+            {
+              return (errors[errnum][EDB_H_OPENED] < tmp);
+            };
+        zust = map(zust,(: filter($2, $3) :), testcl);
+    }
+    patt = check_pattern(options[EDB_OPT_FILE_PATTERN]);
+    if (patt)
+    {
+        testcl = function int (int errnum)
+            {
+              return (sizeof(regexp(
+                ({errors[errnum][EDB_H_FILE],
+                  map2domain(errors[errnum][EDB_H_FILE] || "-",1)
+                }),patt))>0);
+            };
+        zust = map(zust,(: filter($2, $3) :), testcl);
+    }
+    patt = check_pattern(options[EDB_OPT_VERURSACHER_PATTERN]);
+    if (patt)
+    {
+        testcl = function int (int errnum)
+            {
+              return (sizeof(regexp(({errors[errnum][EDB_H_PLAYER]}),
+                      patt)) > 0);
+            };
+        zust = map(zust,(: filter($2, $3) :), testcl);
+    }
+    if (options[EDB_OPT_ONLY_NEW_ERR])
+    {
+        zust = map(zust,(: $2 & $3 :), options[EDB_OPT_NEW_ERRNUMS]);
+    }
+    if (options[EDB_OPT_NO_EMPTY_ERR])
+    {
+        zust = filter(zust, (: sizeof($2) > 0 :) );
+    }
+    dbgi = 0;
+    return zust;
+}
+
+mapping query_group_list(string wiz, mapping options)
+{
+    return limited(lambda(0, ({#'_query_group_list,wiz,options})),
+        // LIMIT_EVAL,(query_limits(1)[LIMIT_EVAL] * 5),
+        LIMIT_MAPPING_SIZE,LIMIT_UNLIMITED,
+        LIMIT_MAPPING_KEYS,LIMIT_UNLIMITED,
+        LIMIT_ARRAY,LIMIT_UNLIMITED );
+}
+
+// Gnomis Prefix-Algorithmus
+string* get_prefixes(string* groups, string prefix)
+{
+    int plen = sizeof(prefix);
+    int lastidx;
+    string lastprefix;
+    string* result = ({});
+
+    if(!sizeof(groups))
+        return ({});
+
+    foreach(int i: sizeof(groups)+1)
+    {
+        string curprefix;
+
+        if(i == sizeof(groups))
+            curprefix = "";
+        else
+        {
+            int pos = strstr(groups[i], ":", plen+1);
+            if(pos < 0)
+            {
+                curprefix = "";
+                result += groups[i..i];
+            }
+            else
+                curprefix = groups[i][..pos];
+        }
+
+        if(!sizeof(lastprefix))
+        {
+            lastprefix = curprefix;
+            lastidx = i;
+            continue;
+        }
+
+        if(lastprefix != curprefix)
+        {
+            while(1)
+            {
+                int lastpos = strstr(groups[lastidx], ":", sizeof(lastprefix)+1);
+                int prevpos = strstr(groups[i-1], ":", sizeof(lastprefix)+1);
+
+                string commonprefix = groups[lastidx][..lastpos];
+                if(lastpos < 0 || prevpos < 0 || commonprefix != groups[i-1][..prevpos])
+                    break;
+
+                lastprefix = commonprefix;
+            }
+            result += ({lastprefix});
+
+            lastprefix = curprefix;
+            lastidx = i;
+        }
+    }
+
+    return result;
+}
+
+/*
+FUNKTION: query_main_groups
+DEKLARATION: mapping query_main_groups(string wiz, mapping options)
+BESCHREIBUNG:
+Erstellt eine Toplevel Gruppenliste abhaengig von den angegeben Optionen,
+wie sie in query_group_list definiert sind, Ausnahmen:
+- EDB_OPT_GROUP_PREFIX wird genutzt, um gruppenweise die Fehler zu sammeln.
+- EDB_OPT_GROUP_ONE macht hier kein Sinn.
+- EDB_OPT_ZUSTAENDIGER  ersetzt den Parameter wiz
+Das Ergebnis ist ein mapping mit Gruppennamen als key
+und die (gefilterten) Fehlerlisten als value des mappings.
+VERWEISE: query_group_list
+GRUPPEN: fehlerdatenbank
+*/
+mapping query_main_groups(string wiz, mapping options)
+{
+    string * sgroups = GROUP_MASTER->query_maingroups();
+    string * privgroups, * ngroups;
+    string patt,prefix_alt,prefix_akt,prefix2;
+    mapping gesamt,zust,sammel;
+    int flag_leaf, i,i2, pos,newpos;
+    
+
+    gesamt = ([ ]);
+    options = deep_copy(options || ([])); // Rueckwirkungsfrei.
+
+    if (member(options,EDB_OPT_ZUSTAENDIGER))
+    {
+        wiz = options[EDB_OPT_ZUSTAENDIGER];
+    }
+    privgroups = regexp(options[EDB_OPT_GROUP_INCLUDE]||({}),"[a-z].*");
+    privgroups = privgroups - ({ wiz }) + ({ wiz });
+
+    patt = options[EDB_OPT_GROUP_PREFIX];
+    if (stringp(patt) && sizeof(patt) && patt[<1]=='*')
+    {
+        if (patt == "/w/*")
+        {
+            options[EDB_OPT_GROUP_PREFIX] = wiz;
+            sgroups = ({ });
+            flag_leaf = -1;
+        }
+        else
+        {
+            options[EDB_OPT_GROUP_PREFIX] = patt[..<2];
+            privgroups = ({ });
+            DEBUG("query_main_groups-1:"+patt);
+            zust = query_group_list(wiz, options
+                 + ([ EDB_OPT_GROUP_PREFIX : patt[..<2] ])
+                 - ([ EDB_OPT_GROUP_ONE, EDB_OPT_ZUSTAENDIGER ]) );
+            gesamt += zust;
+            sgroups = regexp(m_indices(wiz_errors),patt[..<2] + ":.*");
+        }
+    }
+    ngroups = ({});
+    foreach(string grp: sgroups)
+    {
+        DEBUG("query_main_groups-2: "+grp);
+        zust = query_group_list(wiz, options
+             + ([ EDB_OPT_GROUP_PREFIX : grp ])
+             - ([ EDB_OPT_GROUP_ONE, EDB_OPT_ZUSTAENDIGER ]) );
+        if (sizeof(zust))
+        {
+            foreach (string errgrp, int * errnums : zust)
+            {
+                if (sizeof(errnums))
+                {
+                    ngroups += ({ errgrp });
+                }
+            }
+        }
+    }
+    if (stringp(patt) && sizeof(patt) && patt[<1]=='*')
+    {
+        ngroups = map(get_prefixes(map(sort_array(ngroups, #'> ),
+                                #'+, ":"), patt[..<2]+":"), #'[..<], 0, 2);
+    }
+    else
+    {
+        ngroups = map(get_prefixes(map(sort_array(ngroups, #'> ),
+                                #'+, ":"), ""), #'[..<], 0, 2);
+    }
+    foreach(string grp: ngroups)
+    {
+        sammel = ([ ]); // Collect only Unique errnums...
+        flag_leaf = 1;
+        DEBUG("query_main_groups-3: "+grp);
+        zust = query_group_list(wiz, options
+             + ([ EDB_OPT_GROUP_PREFIX : grp ])
+             - ([ EDB_OPT_GROUP_ONE, EDB_OPT_ZUSTAENDIGER ]) );
+        if (sizeof(zust))
+        {
+            foreach (string errgrp, int * errnums : zust)
+            {
+                if (sizeof(errnums))
+                {
+                    if (errgrp != grp)
+                        flag_leaf = 0;
+                    sammel += mkmapping(errnums);
+                    ngroups += ({ errgrp });
+                }
+            }
+        }
+        if (!options[EDB_OPT_NO_EMPTY_ERR] || sizeof(sammel))
+        {
+            if (flag_leaf)
+                gesamt[grp] = m_indices(sammel);
+            else
+                gesamt[grp+"*"] = m_indices(sammel);
+        }
+    }
+    if (!member(options,EDB_OPT_GROUP_ALL) &&
+        stringp(patt) && sizeof(patt) && patt[<1]=='*' &&
+        GROUP_MASTER->is_group_member(wiz,patt[..<2]))
+    {
+        DEBUG("query_main_groups-4: "+patt);
+        zust = query_group_list(wiz, options
+             + ([ EDB_OPT_GROUP_ONE : patt[..<2] ])
+             - ([ EDB_OPT_GROUP_PREFIX, EDB_OPT_ZUSTAENDIGER ]) );
+        gesamt[ patt[..<2] ] = zust[ patt[..<2]];
+    }
+    sammel = ([ ]);
+    foreach(string grp : privgroups)
+    {
+        DEBUG("query_main_groups-5: "+grp);
+        zust = query_group_list(wiz, options
+             + ([ EDB_OPT_GROUP_ONE : grp ]) );
+        if (sizeof(zust))
+        {
+            if (flag_leaf == -1)
+            {
+                gesamt += zust;
+                continue;
+            }
+            foreach (string errgrp, int * errnums : zust)
+            {
+                if (sizeof(errnums))
+                {
+                    sammel += mkmapping(errnums);
+                }
+            }
+        }
+    }
+    if (flag_leaf >= 0 && sizeof(sammel))
+    {
+        gesamt["/w/*"] = m_indices(sammel);
+    }
+    if (options[EDB_OPT_NO_EMPTY_ERR])
+    {
+        gesamt = filter(gesamt, (: sizeof($2) > 0 :) );
+    }
+    else
+    {
+        // die leeren Excludes rausholen
+        if (member(options,EDB_OPT_GROUP_EXCLUDE))
+        {
+            gesamt -= mkmapping(options[EDB_OPT_GROUP_EXCLUDE]);
+        }
+        if (member(options,EDB_OPT_GROUP_EXCLUDE_PATTERN))
+        {
+            patt = check_pattern(options[EDB_OPT_GROUP_EXCLUDE_PATTERN]);
+            if (patt)
+                gesamt -= mkmapping(regexp(m_indices(gesamt), patt));
+        }
+    }
+    // Untergruppen wieder rausschmeissen
+    foreach(string grp: regexp(m_indices(gesamt),"^.*\\*$"))
+    {
+        grp = "^"+grp[..<2] + "([^\\*]+|)$";
+        gesamt -= mkmapping(regexp(m_indices(gesamt),grp));
+    }
+    return gesamt;
+}
+
+/*
+FUNKTION: query_wiedervorlage
+DEKLARATION: mapping query_wiedervorlage(string wiz, mapping options)
+BESCHREIBUNG:
+In options[EDB_OPT_WIEDERVORLAGE] ist ein mapping bestehend aus
+Zeitstempel als key und Arrays von Fehlernummern als values.
+Die Fehlernummern werden hier auf Vorhandensein geprueft
+und wieder als korrigiertes mapping zurueckgegeben.
+VERWEISE: query_group_list, query_error_list
+GRUPPEN: fehlerdatenbank
+*/
+mapping query_wiedervorlage(string wiz, mapping options)
+{
+    string patt,*zus;
+    mapping zust;
+    closure testcl;
+    int tmp;
+
+    options ||= ([ ]);
+
+    zust = options[EDB_OPT_WIEDERVORLAGE];
+    if (sizeof(options[EDB_OPT_NEW_ERRNUMS]))
+        zust[0] = options[EDB_OPT_NEW_ERRNUMS];
+    if (!mappingp(zust) || !sizeof(zust))
+        return ([ ]);
+
+    testcl = function int * (int key, int * errlist)
+         {
+             return filter(errlist, (: member(errors, $1) :));
+         };
+    zust = map(zust, testcl);
+
+    return zust;
+}
+
+
+#define ERROR_SHORT   ([EDB_FEHLER    : "F",            \
+                        EDB_IDEE      : "I",                \
+                        EDB_RUNTIME   : "R",        \
+                        EDB_COMPILE   : "C",              \
+                        EDB_LOB       : "W",                 \
+                        EDB_TYPO      : "T",            \
+                        EDB_DETAIL    : "D"])
+
+/*
+FUNKTION: query_error_list
+DEKLARATION: mixed query_error_list(string wiz, mapping options)
+BESCHREIBUNG:
+Diese Funktion liefert passend zum Suchmuster (wiz,options) die Fehlerliste.
+Intern wird query_group_list verwendet, wenn diese mehr als einen Fehlerbereich
+zurueckgibt, so werden die darin enthaltenen Fehlerlisten zu einer Fehlerliste
+zusammengefasst.
+Sollte keine Fehler vorhanden sein, wird 0 zurueckgegeben.
+Ansonsten wird die Fehlerliste zurueckgegeben, wo jeder Eintrag wiederrum
+ein Array mit folgenden Feldern darstellt:
+- EDB_ERRLIST_ERRNUM :  Fehlernummer
+- EDB_ERRLIST_TIME   :  Erstelldatum oder das Datum der letzten Aenderung
+- EDB_ERRLIST_TYPE   :  Typeschluessel: F,I,R,C,W,T,D
+- EDB_ERRLIST_PLAYER :  Verursacher
+- EDB_ERRLIST_FILE   :  Referenzierte Datei
+Die Fehler werden sortiert, wenn folgende Elemente in options sind:
+- EDB_OPT_SORT_OPEN_ASC    : Aufsteigend sortiert nach Erstelldatum
+- EDB_OPT_SORT_OPEN_DESC   : Absteigend sortiert nach Erstelldatum
+- EDB_OPT_SORT_CHANGE_ASC  : Aufsteigend sortiert nach letztem Aenderungsdatum
+- EDB_OPT_SORT_CHANGE_DESC : Absteigend sortiert nach letztem Aenderungsdatum
+- keine der obigen         : Unsortiert.
+VERWEISE: query_group_list
+GRUPPEN: fehlerdatenbank
+*/
+mixed query_error_list(string wiz, mapping options)
+{
+    DEBUG("query_error_list-1: "+wiz);
+    mapping zust = query_group_list(wiz, options
+            +([EDB_OPT_NO_EMPTY_ERR: 1]));
+    mapping sammel = ([ ]);
+    int * errnums;
+    closure sorting, extract;
+    if (wiz == "Fehlernummern")
+    {
+        errnums = options[EDB_OPT_ERRNUMS];
+        if (!pointerp(errnums))
+            return 0;
+        errnums = filter(errnums, (:member($2,$1):),errors);
+        if (!sizeof(errnums))
+            return 0;
+        zust = ([ "Fehlernummern" : errnums ]);
+    }
+    else if (wiz == "Wiedervorlage")
+    {
+        zust = filter(query_wiedervorlage(wiz, options),
+               (: $1==$3 :),options[EDB_OPT_GROUP_ONE]);
+
+    }
+    if (!mappingp(zust) || !sizeof(zust))
+        return 0;
+    foreach (string errgrp, int * nums : zust)
+    {
+        if (sizeof(nums))
+        {
+            sammel += mkmapping(nums);
+        }
+    }
+    if (member(options, EDB_OPT_SORT_OPEN_ASC))
+    {
+        sorting = function int (mixed *a,mixed *b)
+        {
+            return a[EDB_ERRLIST_TIME] > b[EDB_ERRLIST_TIME];
+        };
+        extract = function mixed * (int errnum)
+        {
+            string pl,esh;
+            esh = ERROR_SHORT[errors[errnum][EDB_H_TYPE]];
+            if (esh == "R" || esh == "C") 
+                pl = sprintf("%10d",errors[errnum][EDB_H_LINE]);
+            else
+                pl = errors[errnum][EDB_H_PLAYER];
+            return ({ errnum, errors[errnum][EDB_H_OPENED],
+                      esh,
+                      pl,
+                      errors[errnum][EDB_H_FILE]
+                   });
+        };
+    }
+    else if (member(options, EDB_OPT_SORT_OPEN_DESC))
+    {
+        sorting = function int (mixed *a,mixed *b)
+        {
+            return a[EDB_ERRLIST_TIME] < b[EDB_ERRLIST_TIME];
+        };
+        extract = function mixed * (int errnum)
+        {
+            string pl,esh;
+            esh = ERROR_SHORT[errors[errnum][EDB_H_TYPE]];
+            if (esh == "R" || esh == "C") 
+                pl = sprintf("%10d",errors[errnum][EDB_H_LINE]);
+            else
+                pl = errors[errnum][EDB_H_PLAYER];
+            return ({ errnum, errors[errnum][EDB_H_OPENED],
+                      esh,
+                      pl,
+                      errors[errnum][EDB_H_FILE]
+                   });
+        };
+    }
+    else if (member(options, EDB_OPT_SORT_CHANGE_ASC))
+    {
+        sorting = function int (mixed *a,mixed *b)
+        {
+            return a[EDB_ERRLIST_TIME] > b[EDB_ERRLIST_TIME];
+        };
+        extract = function mixed * (int errnum)
+        {
+            string pl,esh;
+            esh = ERROR_SHORT[errors[errnum][EDB_H_TYPE]];
+            if (esh == "R" || esh == "C") 
+                pl = sprintf("%10d",errors[errnum][EDB_H_LINE]);
+            else
+                pl = errors[errnum][EDB_H_PLAYER];
+            return ({ errnum, errors[errnum][EDB_H_LAST_CHANGE],
+                      esh,
+                      pl,
+                      errors[errnum][EDB_H_FILE]
+                   });
+        };
+    }
+    else if (member(options, EDB_OPT_SORT_CHANGE_DESC))
+    {
+        sorting = function int (mixed *a,mixed *b)
+        {
+            return a[EDB_ERRLIST_TIME] < b[EDB_ERRLIST_TIME];
+        };
+
+        extract = function mixed * (int errnum)
+        {
+            string pl,esh;
+            esh = ERROR_SHORT[errors[errnum][EDB_H_TYPE]];
+            if (esh == "R" || esh == "C") 
+                pl = sprintf("%10d",errors[errnum][EDB_H_LINE]);
+            else
+                pl = errors[errnum][EDB_H_PLAYER];
+            return ({ errnum, errors[errnum][EDB_H_LAST_CHANGE],
+                      esh,
+                      pl,
+                      errors[errnum][EDB_H_FILE]
+                   });
+        };
+    }
+    else
+    {
+        sorting = 0;
+        errnums = m_indices(sammel);
+        extract = function mixed * (int errnum)
+        {
+            string pl,esh;
+            esh = ERROR_SHORT[errors[errnum][EDB_H_TYPE]];
+            if (esh == "R" || esh == "C") 
+                pl = sprintf("%10d",errors[errnum][EDB_H_LINE]);
+            else
+                pl = errors[errnum][EDB_H_PLAYER];
+            return ({ errnum, errors[errnum][EDB_H_OPENED],
+                      esh,
+                      pl,
+                      errors[errnum][EDB_H_FILE]
+                   });
+        };
+    }
+    errnums = map(m_indices(sammel), extract);
+    if (sorting)
+        errnums = sort_array(errnums, sorting);
+    return errnums;
+}
+
+private void limited_push_all_errors_to_archive()
+{
+    map(m_indices(errors), (: push_error_to_archive($1) :));
+}
+
+public int push_all_errors_to_archive()
+{
+    SECURE;
+    limited(#'limited_push_all_errors_to_archive);
+    return 1;
+}
+
+/*
+Das siegreiche Gnomi sagt: Das Clean wird manuell aufgerufen, waer
+        vermutlich schoen, das auch in Zukunft zu haben
+*/
+private void do_clean(string wiz, int *err_nums)
+{
+    int i, *to_del, *sys_nums;
+    string tmp;
+
+    tmp = (wiz == "Backup" ? "Backup" : valid_debugger(wiz));
+
+    if (!tmp || tmp != wiz)
+        printf("%Q ist kein Debugger.\n",wiz);
+
+    to_del = ({});
+    for (i = sizeof(err_nums); i--; )
+        if (!member(errors,err_nums[i]))
+        {
+            printf("Fehler bei '%s': %d\n",wiz,err_nums[i]);
+            to_del += ({ err_nums[i] });
+        }
+        else
+        {
+            err_numbers[err_nums[i]] = 1;
+        }
+    if (sizeof(err_nums))
+        err_nums -= to_del;
+    if (!sizeof(err_nums))
+        m_delete(wiz_errors,wiz);
+    else
+        wiz_errors[wiz] = err_nums;
+#if 0
+    sys_nums = sys_wiz_errors[wiz];
+    if (sys_nums)
+    {
+        sys_nums -= to_del;
+        if (!sizeof(sys_nums))
+            m_delete(sys_wiz_errors,wiz);
+        else
+            sys_wiz_errors[wiz] = sys_nums;
+    }
+#endif
+}
+
+private void do_clean_errors(int nr, mixed *err)
+{
+    if (!sizeof(err[EDB_H_DEBUGGER]))
+    printf("Kein Zustaendiger mehr bei Fehler %d\n",nr);
+    if (!member(err_numbers,nr))
+    printf("Fehler ist nicht geloescht worden: %d\n",nr);
+}
+
+private int do_clean_error_db()
+{
+    err_numbers = ([]);
+    walk_mapping(wiz_errors,#'do_clean);
+    call_out("clean_error_db2",0);
+    return 1;
+}
+
+// Ueberprueft die Datenbank nach falschen Eintraegen
+int clean_error_db()
+{
+    SECURE;
+    return limited(#'do_clean_error_db,
+        LIMIT_EVAL,(query_limits(1)[LIMIT_EVAL] * 5),
+        LIMIT_MAPPING_SIZE,LIMIT_UNLIMITED,
+            LIMIT_MAPPING_KEYS,LIMIT_UNLIMITED,
+        LIMIT_ARRAY,LIMIT_UNLIMITED);
+}
+
+nosave void clean_error_db2()
+{
+    walk_mapping(errors,#'do_clean_errors);
+    err_numbers = 0;
+    write("Clean-Error-DB fertig.\n");
+}
+
+#define EDB_CDS_EVALS 100000
+#define EDB_CDS_TIME 500
+#define EDB_CDS_MAX_FILES 500
+
+nosave void do_check_disk_storage(mixed dirs, mixed ferrs)
+{
+    string cdir,cerrfile;
+    int errnum, anz = 0;
+    mixed * usg1, * usg2; int eval1,eval2;
+    usg1 = rusage(); eval1 = get_eval_cost();
+    if (dirs == 0)
+    {
+        dirs = get_dir(ERROR_DB_DIR+"/*", GETDIR_PATH) 
+             - ({ ERROR_DB_DIR+"/.", ERROR_DB_DIR+"/.." });
+        ferrs = 0;
+        sys_log("ERROR_DB_KONSISTENZ",
+                sprintf("[%s] check_disk_storage startet (%d)\n",
+                shorttimestr(time()),sizeof(dirs)));
+    }
+    if (ferrs == 0 || sizeof(ferrs)==0)
+    {
+        if (sizeof(dirs))
+        {
+            cdir = dirs[<1];
+            ferrs = get_dir(cdir+"/*", GETDIR_PATH) 
+                  - ({ cdir+"/.", cdir+"/.." });
+            dirs = dirs[..<2];
+        }
+        else
+        {
+            sys_log("ERROR_DB_KONSISTENZ",
+                    sprintf("[%s] check_disk_storage endet.\n",
+                    shorttimestr(time())));
+            return;
+        }
+    }
+    while (1)
+    {
+        usg2 = rusage(); eval2 = get_eval_cost();
+        if ((eval2-eval1 > EDB_CDS_EVALS)
+          || ( anz >= EDB_CDS_MAX_FILES))
+          // || ( (usg2[0] + usg2[1] - usg1[0] - usg1[1]) > EDB_CDS_TIME))
+        {
+            call_out("do_check_disk_storage",2,dirs,ferrs);
+            return;
+        }
+        if (ferrs == 0 || sizeof(ferrs)==0)
+        {
+            if (sizeof(dirs))
+            {
+                cdir = dirs[<1];
+                ferrs = get_dir(cdir+"/*", GETDIR_PATH) 
+                      - ({ cdir+"/.", cdir+"/.." });
+                dirs = dirs[..<2];
+                anz++;
+                continue;
+            }
+            else
+            {
+                sys_log("ERROR_DB_KONSISTENZ",
+                        sprintf("[%s] check_disk_storage endet.\n",
+                        shorttimestr(time())));
+                return;
+            }
+        }
+        cerrfile = ferrs[<1];
+        ferrs = ferrs[..<2];
+        errnum = to_int(explode(cerrfile,"/")[<1]);
+        if (!pointerp(_query_error_header(errnum)))
+        {
+            sys_log("ERROR_DB_KONSISTENZ",
+                    sprintf("[%s] %d existiert nicht: %s\n",
+                    shorttimestr(time()),errnum,cerrfile));
+            rm(ERROR_DB_DATA_FILE(errnum));
+        }
+        anz++;
+    }
+}
+
+int check_disk_storage()
+{
+    SECURE;
+    call_out("do_check_disk_storage",1,0,0);
+    return 1;
+}
+
+#define EDB_CC_MAX_ERRORS 500
+mapping hist_sizes;
+int max_hist_size;
+int hist_size_last_err;
+
+mixed * query_hist_sizes()
+{
+    return ({ hist_size_last_err, max_hist_size, hist_sizes });
+}
+
+nosave void check_consistency(mixed numbers)
+{
+    int count = 0;
+    int errnum;
+    mixed n1;
+    mixed* eheader;
+    mapping edata;
+    while (count < EDB_CC_MAX_ERRORS && sizeof(numbers) > 0) 
+    {
+        n1 = numbers[<1];
+        if (pointerp(n1)) 
+        {
+            if (sizeof(n1))
+            {
+                errnum = n1[<1];
+                n1 = n1[..<2];
+                numbers[<1] = n1;
+            }
+            else
+            {
+                numbers = numbers[..<2];
+                count++;
+                continue;
+            }
+        }
+        else
+        {
+            numbers = numbers[..<2];
+            count++;
+            continue;
+        }
+        if (member(errors,errnum)) 
+        {
+            eheader = errors[errnum];
+            if (!pointerp(eheader))
+            {
+                sys_log("ERROR_DB_KONSISTENZ",
+                    sprintf("[%s] %d ungueltiger Datentyp\n",
+                    shorttimestr(time()),errnum));
+            }
+            edata = _query_error_file(errnum);
+            if (!mappingp(edata))
+            {
+                string errtext = "/obj/zauberstab"->zfe_get_errmsg(errnum);
+                errtext = explode(errtext,"\n")[1];
+                sys_log("ERROR_DB_KONSISTENZ",
+                    sprintf("[%s] %d existierte nur im Speicher\n%s\n",
+                    shorttimestr(time()),errnum,errtext));
+                _purge_error(eheader,edata,errnum);
+            } else {
+                if (max_hist_size < sizeof(edata[EDB_E_HISTORY])) {
+                    max_hist_size = sizeof(edata[EDB_E_HISTORY]);
+                    hist_size_last_err = errnum;
+                }
+                hist_sizes[sizeof(edata[EDB_E_HISTORY])]++;
+            }
+        } 
+        else 
+        {// kann nur passieren, falls waehrend der laufzeit was geloescht wurde.
+            edata = _query_error_file(errnum);
+            if (mappingp(edata))
+            {
+                sys_log("ERROR_DB_KONSISTENZ",
+                    sprintf("[%s] %d existierte nur auf Festplatte\n",
+                    shorttimestr(time()),errnum));
+                rm(ERROR_DB_DATA_FILE(errnum));
+            }        
+        }
+        count++;
+    }
+    if (sizeof(numbers) > 0)
+    {
+        call_out("check_consistency",2, numbers);
+    } 
+    else
+    {
+        sys_log("ERROR_DB_KONSISTENZ",
+                sprintf("[%s] init_consistency endet (%d)\n",
+                shorttimestr(time()),sizeof(errors)));
+    }
+}
+
+int limit_array;
+
+private int init_consistency()
+{
+    mixed result = ({ });
+    mixed list = m_indices(errors); // no limit indix, no limit array
+    while (sizeof(list) > limit_array && sizeof(result) < limit_array)
+    {
+        result += ({ list[0..(limit_array-1)] });
+        list = list[limit_array..];
+    }
+    if (sizeof(list) >0 && sizeof(list) <= limit_array)
+    {
+        result += ({ list });
+    }
+    if (sizeof(result) < limit_array) 
+    {
+        sys_log("ERROR_DB_KONSISTENZ",
+                sprintf("[%s] init_consistency startet (%d)\n",
+                shorttimestr(time()),sizeof(errors)));
+        hist_sizes = ([ ]);
+        max_hist_size = 0;
+        hist_size_last_err = 0;
+        call_out("check_consistency",1, result);
+        return sizeof(errors);
+    }
+    else
+    {
+        return - sizeof(result);
+    }
+}
+
+int check_all_consistency()
+{
+    SECURE;
+    limit_array = query_limits(1)[LIMIT_ARRAY] - 1;
+    if (limit_array <= 0) return 0;
+    return limited(#'init_consistency,
+        LIMIT_EVAL,(query_limits(1)[LIMIT_EVAL] * 5),
+        LIMIT_MAPPING_SIZE,LIMIT_UNLIMITED,
+            LIMIT_MAPPING_KEYS,LIMIT_UNLIMITED,
+        LIMIT_ARRAY,LIMIT_UNLIMITED);
+}
+
+private int _delete_error_from_done(int errnum)
+{
+    mixed * err = _query_error_header(errnum);
+    mapping edata = _query_error_data(errnum);
+    if (!err) return 0;
+    if (mappingp(edata))
+    {
+        _add_history(errnum, this_player(),EDB_EHT_CLOSE, 
+                 "*** CLOSE ***");
+    }
+    _purge_error(err,edata,errnum);
+    return 1;
+}
+
+private string _delete_all_done()
+{
+    mixed * result = query_error_list("", ([ 
+        EDB_OPT_GROUP_ALL : 1, 
+        EDB_OPT_GROUP_PATTERN : ".*:Done",
+        EDB_OPT_SORT_CHANGE_ASC : 1
+        ]) );
+    int c1,c2,c3,c4,t1 = time() -60*60*24*365;
+    closure fi_done = function int (mixed * arr)
+        {
+            mixed * err = errors[arr[EDB_ERRLIST_ERRNUM]];
+            string * deb = err[EDB_H_DEBUGGER];
+            return (sizeof(deb) == sizeof(regexp(deb,".*:Done")));
+        };
+    closure fi_old = function int (mixed * arr)
+    {
+        return (arr[EDB_ERRLIST_TIME] < t1);
+    };
+    closure fi_delete = function int (mixed * arr)
+    {
+        return _delete_error_from_done(arr[EDB_ERRLIST_ERRNUM]);
+    };
+    c1 = sizeof(result);
+    if (c1 == 0) return "Keine Dones ueberhaupt.\n";
+    result = filter(result, fi_done);
+    c2 = sizeof(result);
+    result = filter(result, fi_old);
+    c3 = sizeof(result);
+    result = filter(result, fi_delete);
+    c4 = sizeof(result);
+    return wrap(sprintf(
+        "*:Done Insgesamt: %d, davon pur %d und davon aelter als ein Jahr %d. "
+        "%d Geloescht.",
+        c1,c2,c3,c4));
+}
+
+string delete_all_done()
+{
+    SECURE;
+    return limited(#'_delete_all_done,
+        LIMIT_EVAL,1000000000,
+        LIMIT_MAPPING_SIZE,LIMIT_UNLIMITED,
+            LIMIT_MAPPING_KEYS,LIMIT_UNLIMITED,
+        LIMIT_ARRAY,LIMIT_UNLIMITED);
+}
+
+private string _evaluate_all_done()
+{
+    mixed * result = query_error_list("", ([ 
+        EDB_OPT_GROUP_ALL : 1, 
+        EDB_OPT_GROUP_PATTERN : ".*:Done",
+        EDB_OPT_SORT_CHANGE_ASC : 1
+        ]) );
+    int c1,c2,c3,c4,t1 = time() -60*60*24*365;
+    closure fi_done = function int (mixed * arr)
+        {
+            mixed * err = errors[arr[EDB_ERRLIST_ERRNUM]];
+            string * deb = err[EDB_H_DEBUGGER];
+            return (sizeof(deb) == sizeof(regexp(deb,".*:Done")));
+        };
+    closure fi_old = function int (mixed * arr)
+    {
+        return (arr[EDB_ERRLIST_TIME] < t1);
+    };
+    c1 = sizeof(result);
+    if (c1 == 0) return "Keine Dones ueberhaupt.\n";
+    result = filter(result, fi_done);
+    c2 = sizeof(result);
+    result = filter(result, fi_old);
+    c3 = sizeof(result);
+    return wrap(sprintf(
+        "*:Done Insgesamt: %d, davon pur %d und davon aelter als ein Jahr %d.",
+        c1,c2,c3));
+}
+
+string evaluate_all_done()
+{
+    SECURE;
+    return limited(#'_evaluate_all_done,
+        LIMIT_EVAL,1000000000,
+        LIMIT_MAPPING_SIZE,LIMIT_UNLIMITED,
+            LIMIT_MAPPING_KEYS,LIMIT_UNLIMITED,
+        LIMIT_ARRAY,LIMIT_UNLIMITED);
+}
+
+private int count_new_questions;
+
+#define EDB_RSQ_MAX_ERRORS 100
+
+nosave void restore_some_questions(mixed numbers)
+{
+    int count = 0;
+    int errnum;
+    mixed n1, *history,*ehis,*onehis;
+    mixed* eheader;
+    mapping edata;
+    while (count < EDB_RSQ_MAX_ERRORS && sizeof(numbers) > 0) 
+    {
+        n1 = numbers[<1];
+        if (pointerp(n1)) 
+        {
+            if (sizeof(n1))
+            {
+                errnum = n1[<1];
+                n1 = n1[..<2];
+                numbers[<1] = n1;
+            }
+            else
+            {
+                numbers = numbers[..<2];
+                count++;
+                continue;
+            }
+        }
+        else
+        {
+            numbers = numbers[..<2];
+            count++;
+            continue;
+        }
+        if (member(errors,errnum)) 
+        {
+            eheader = errors[errnum];
+            if (!pointerp(eheader))
+            {
+                count++;
+                continue;
+            }
+            if (member(eheader[EDB_H_DEBUGGER], EDB_BACKUP_GROUP) != -1 )
+            {
+                count++;
+                continue; // geloeschte Fehler ignorieren.
+            }
+            edata = _query_error_file(errnum);
+            if (!mappingp(edata))
+            {
+                count++;
+                continue;
+            }
+            history = edata[EDB_E_HISTORY];
+            if (sizeof(ehis = filter(history, 
+                (: $1[EDB_EH_TYPE] == EDB_EHT_QUESTION :) )) == 0)
+            {
+                count++;
+                continue;
+            }
+            if (sizeof(filter(history, 
+                    (: $1[EDB_EH_TYPE] == EDB_EHT_ANSWER :) )) > 0)
+            {
+                sys_log("ERROR_DB_QUESTIONS",
+                    sprintf("[%s] Antwort vorhanden (%d)\n",
+                    shorttimestr(time()),errnum));
+                count++;
+                continue;
+            }
+            foreach(onehis : ehis )
+            {
+                count_new_questions +=
+                    check_and_add_feedback(eheader[EDB_H_PLAYER],
+                       (["date_err":eheader[EDB_H_OPENED],
+                         "date_fb":onehis[EDB_EH_DATE],
+                         "text":edata[EDB_E_ERROR],
+                         "fb":onehis[EDB_EH_INFO],
+                         "nr":errnum,
+                         "typ":"r",
+                         "by":onehis[EDB_EH_WIZ],
+                         "objekt":"" // TODO EDB_F_OBJECT_CLEARTEXT
+                       ]));
+            }
+        } 
+        count++;
+    }
+    if (sizeof(numbers) > 0)
+    {
+        call_out("restore_some_questions",2, numbers);
+    } 
+    else
+    {
+        sys_log("ERROR_DB_QUESTIONS",
+                sprintf("[%s] restore_questions endet (%d/%d)\n",
+                shorttimestr(time()),count_new_questions,sizeof(errors)));
+    }
+}
+
+
+string _recreate_all_questions()
+{
+    mixed result = ({ });
+    mixed list = m_indices(errors); // no limit indix, no limit array
+    count_new_questions = 0;
+    while (sizeof(list) > limit_array && sizeof(result) < limit_array)
+    {
+        result += ({ list[0..(limit_array-1)] });
+        list = list[limit_array..];
+    }
+    if (sizeof(list) >0)
+    {
+        result += ({ list });
+    }
+    if (sizeof(result) < limit_array) 
+    {
+        sys_log("ERROR_DB_QUESTIONS",
+                sprintf("[%s] restore_questions startet (%d)\n",
+                shorttimestr(time()),sizeof(errors)));
+        hist_sizes = ([ ]);
+        max_hist_size = 0;
+        hist_size_last_err = 0;
+        call_out("restore_some_questions",1, result);
+        return "restore_questions started: "+sizeof(errors);
+    }
+    else
+    {
+        return "restore_questions failed: "+sizeof(errors);
+    }
+}
+
+string recreate_all_questions()
+{
+    SECURE;
+    limit_array = query_limits(1)[LIMIT_ARRAY] - 1;
+    if (limit_array <= 0) return 0;
+    return limited(#'_recreate_all_questions,
+        LIMIT_EVAL,1000000000,
+        LIMIT_MAPPING_SIZE,LIMIT_UNLIMITED,
+            LIMIT_MAPPING_KEYS,LIMIT_UNLIMITED,
+        LIMIT_ARRAY,LIMIT_UNLIMITED);
+}
+
+nosave int _clean_sys_errors()
+{
+    sys_errors = filter(sys_errors, (: member(errors,$2) :));
+    return sizeof(sys_errors);
+}
+
+int clean_sys_errors()
+{
+    SECURE;
+    return limited(#'_clean_sys_errors,
+        LIMIT_EVAL,1000000000,
+        LIMIT_MAPPING_SIZE,LIMIT_UNLIMITED,
+            LIMIT_MAPPING_KEYS,LIMIT_UNLIMITED,
+        LIMIT_ARRAY,LIMIT_UNLIMITED);
+}
+
+// EOF

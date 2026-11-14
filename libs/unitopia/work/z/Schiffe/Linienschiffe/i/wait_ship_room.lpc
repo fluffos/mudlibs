@@ -1,0 +1,112 @@
+// This file is part of UNItopia Schiffe.
+// ----------------------------------------------------------------
+// File:    /z/Schiffe/Linienschiffe/i/wait_ship_room.c
+// Description: 
+//
+// Changes:
+// wyvern       11.03.2012  find_living statt find_player, damit auch NPCs wie
+//                          Muck warten und reisen koennen
+// ANIN         26.03.2013  ENV(TO) -> TO (c&p Fehler von Kurstafel)
+//                          do_warning -> log, da das durch Ausloggen sein kann
+//                          query_leave_messages_wait(who); fehlte who und $
+// ANIN         22.06.2013  !hafenobj abgesichert
+
+inherit "/z/Schiffe/Linienschiffe/i/wait";
+
+#define PDBG_LEVEL -3
+#define PDBG_GROUP "Schiffe:Kurstafel"  // Gruppe erst nachher setzen!!
+
+#include <p/debugger.h>  // PDBG_XXX
+#include <move.h>        // MOVE_OK
+#include <message.h>     // MT_XXX, MA_XXX
+#include <error.h>       // do_warning
+#include <misc.h>       // 
+
+#define MSG_AUSSEN   0
+#define MSG_INNEN    1
+#define MSG_SPIELER  2
+
+varargs void set_ship(string schiff, string name) {
+    touch(schiff)->add_controller(({"notify_ship_arrive",
+                                    "notify_ship_depart"}));
+}
+
+void delayed_wait_handling(object schiffsobj, object hafenobj){
+    string hafenname;
+    string *leave_messages_wait;
+    object who;
+    
+    if(!hafenobj || (!hafenname=hafenobj->query_type("hafen"))){
+        return; //draussen ist gar kein Hafen
+    }
+
+    if(!sizeof(query_wartende())){
+        return; //es wartet hier aktuell niemand
+    }
+    
+    foreach(string name, string schiff, string hafen : query_wartende())
+    {
+//      sollte eigentlich nicht passieren, wenn doch, korrigieren und
+//      warning werfen
+        // ANIN: kann aber doch passieren wenn NPC stirbt oder Spieler ausloggt
+        if( (!who=find_living(name)) || (!present(who, TO)))
+        {
+            delete_wartende(name);
+            log_file("ship_wait",
+                     sprintf("warn: %s %s\n",
+                             shorttimestr(time()),
+                             name+" nicht anwesend in "+mixed2str(TO)
+                             +(who
+                               ? " sondern in "+mixed2str(ENV(who))
+                               : "")));
+          //do_warning(name+" nicht anwesend in "+mixed2str(TO)+"\n");
+            break;
+        } 
+
+        if(hafen)
+        {
+            if((lower_case(hafen-" ") == lower_case(hafenname-" ")))
+            {
+                PDBG_VAL("notify_ship_arrive: hafen erreicht: ",hafenname);
+                leave_messages_wait=schiffsobj->query_leave_messages_wait(who);
+                
+            // ANIN: Meldungen brauchen ein $ weil query_leave_messages_wait
+            //       schon closures ausgewertet hat:
+                if(who->move(hafenobj, MOVE_NORMAL, 
+                             leave_messages_wait[MSG_INNEN]+"$",
+                             leave_messages_wait[MSG_AUSSEN]+"$") == MOVE_OK)
+                {
+                    who->send_message_to(who, MT_LOOK|MA_NOISE, MA_MOVE, 
+                            wrap(leave_messages_wait[MSG_SPIELER]));
+                }
+            }
+            else {
+                PDBG_VAL("falscher Hafen: ",hafenname);
+                PDBG_VAL("Zielhafen: ",hafen);
+            }        
+        }
+        else {
+            PDBG("kein Hafen angegeben");
+        }
+    }
+}
+
+string PDBG_Gruppe(object schiff){
+    string grp;
+    grp=PDBG_GROUP+(schiff?":"+RCN(schiff):"");
+    return grp-" ";
+}
+
+void notify_ship_arrive(object hafen, object schiff){
+    L_PDBG_FUN0(PDBG_LEVEL, PDBG_Gruppe(schiff), 
+            "notify_ship_arrive(hafen, schiff): ",({hafen, schiff}));
+
+//  kurze Verzoegerung, damit der Spieler die Meldung, dass das Schiff 
+//  einlaeuft noch mitbekommt    
+    call_out("delayed_wait_handling", 1, schiff, hafen);
+}
+
+void notify_ship_depart(object hafen, object schiff){
+    L_PDBG_FUN0(PDBG_LEVEL, PDBG_Gruppe(schiff), 
+            "notify_ship_depart(hafen, schiff): ",({hafen, schiff}));
+}

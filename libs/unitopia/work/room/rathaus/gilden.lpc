@@ -1,0 +1,781 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/rathaus/gilden
+// Description:	Der Gildenmaster
+// Author:	Francis
+// Modified by:	Freaky (24.01.97) Security-Checks in query_one_gilden_info()
+//
+// $Log: gilden.c,v $
+// Revision 1.23  2009-06-17 07:54:35  gnomi
+// Gilden-Update mit catch() versehen, damit eine Gilde beim Neustart
+// nicht auch alle anderen ausschaltet.
+//
+// Revision 1.22  2008/02/29 14:34:39  gnomi
+// Static add_actions rausgehauen.
+//
+// Revision 1.21  2004/11/27 21:46:44  menaures
+// Aktualisierung bei Gildenobjekt-Erneuerung
+//
+// Revision 1.20  2004/05/12 20:54:07  gnomi
+// Klammerfehler und bessere Pruefung auf Ladbarkeit eiens Gildenobs.
+//
+// Revision 1.19  2003/02/14 03:48:31  gnomi
+// Fuer den valid_caller-Test den load_name heranziehen (anstatt des vorderen
+// Teils des object_name), damit VC-umbenanne Objekte auch eingetragen werden
+// koennen.
+//
+// Revision 1.18  2002/12/12 00:34:29  gnomi
+// ORIG-Abfragen unter Benutzung von real_gender.
+//
+// Revision 1.17  2002/10/28 03:01:56  gnomi
+// Der RAENGE-Eintrag ist Pflicht.
+// (Hat jede Gilde und wird fuer 'erf gilden' benoetigt.)
+//
+// Revision 1.16  2002/09/09 20:31:24  sissi
+// Aktion unser Rathaus soll schoener werden:
+// Ueberall ne Pflanze eingebaut.
+//
+// Revision 1.15  2002/04/15 04:24:20  gnomi
+// Fehlerbehandlung des name-Befehls aktualisiert.
+//
+// Revision 1.14  2001/08/23 13:34:23  freaky
+// Laden der Gilden-Objekte mit limited
+//
+// Revision 1.13  2001/05/02 23:54:00  sissi
+// Ineffizientere for-schleifen-Reihenfolge fuer query_name_from_kuerzel
+// gewaehlt, damit das Kuerzel fuer das Hexenvolk nicht das Kuerzel der
+// Hexenvolkumzugstestgilde liefert.
+//
+// Revision 1.12  2001/05/02 21:59:01  sissi
+// query_gildenbretter_offener_gilden hinzugefuegt, was die Gildenbretter
+// aller offener Gilden liefert.
+//
+// Revision 1.11  2001/04/29 14:21:51  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.10  2001/03/14 17:31:06  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.9  2001/03/12 01:00:30  gnomi
+// set_light -> set_own_light
+//
+// Revision 1.8  2001/02/21 04:32:46  gnomi
+// Etwas gemuetlicher gemacht...
+//
+// Revision 1.7  2001/01/24 20:08:21  freaky
+// CVS-Log eingebaut.
+//
+
+#include <gilden.h>
+#include <apps.h>
+#include <filed.h>
+#include <touch.h>
+#include <rtlimits.h>
+#include <level.h>
+
+inherit "/i/room";
+inherit "/i/tools/security";
+
+#define SECURE	(wizp(this_player()) && check_security())
+#define MAX_LOAD_EVALS (query_limits(1)[LIMIT_EVAL] + 1)
+
+mapping gilden;
+
+/* Freaky: Sicherheitsloch wegen Arrays im Mapping
+mapping query_gilden() { return deep_copy(gilden); }
+*/
+
+int check_entry(mapping entry)
+{
+    int a;
+
+    if (!entry)
+	return -1;
+    /*
+    if (!entry[GILDEN_NAME])
+	return -2;
+    */
+    if (!entry[KUERZEL])
+	return -3;
+    if (!entry[MITGLIED])
+	return -4;
+    if (!entry[MITGLIED][MAENNLICH])
+	return -5;
+    if (!entry[MITGLIED][MAENNLICH_PLURAL])
+	return -6;
+    if (!entry[MITGLIED][WEIBLICH])
+	return -7;
+    if (!entry[MITGLIED][WEIBLICH_PLURAL])
+	return -8;
+    if (!entry[MITGLIED][SAECHLICH])
+	return -9;
+    if (!entry[MITGLIED][SAECHLICH_PLURAL])
+	return -10;
+    if (!entry[GILDEN_MEISTER])
+	return -11;
+    if (entry[VALID_CALLER] && !pointerp(entry[VALID_CALLER]))
+	return -19;
+    if (!entry[RAENGE])
+	return -12;
+    for (a=0; a<sizeof(entry[RAENGE]); a++)
+    {
+	if (!entry[RAENGE][a][MAENNLICH])
+	    return -13;
+	if (!entry[RAENGE][a][MAENNLICH_PLURAL])
+	    return -14;
+	if (!entry[RAENGE][a][WEIBLICH])
+	    return -15;
+	if (!entry[RAENGE][a][WEIBLICH_PLURAL])
+	    return -16;
+	if (!entry[RAENGE][a][SAECHLICH])
+	    return -17;
+	if (!entry[RAENGE][a][SAECHLICH_PLURAL])
+	    return -18;
+    }
+
+    return 0;
+}
+
+string valid_caller(object caller)
+{
+    string *i, name, filename;
+    int a, num;
+
+    if (!caller)
+	return 0;
+/*
+    filename = object_name(caller);
+
+    if (sscanf(filename,"%s#%d",name,num) == 2)
+	filename = name;
+*/
+    filename = load_name(caller);
+
+    i = m_indices(gilden);
+
+    for (a=sizeof(i); a--; )
+    {
+	if (gilden[i[a]][STATUS] != OK &&
+	    gilden[i[a]][STATUS] != TEST )
+	    continue;
+	if (member(gilden[i[a]][VALID_CALLER],filename) >= 0)
+	    return gilden[i[a]][GILDEN_NAME];
+    }
+    return 0;
+}
+
+string valid_autoloader(mixed caller)
+{
+    string *i, name, filename;
+    int a, num;
+
+    if (!caller)
+	return 0;
+
+    if (stringp (caller))
+        filename = caller;
+    else filename = object_name (caller);
+
+    if (sscanf(filename,"%s#%d",name,num) == 2)
+	filename = name;
+
+    i = m_indices(gilden);
+
+    for (a=sizeof(i); a--; )
+    {
+	if (gilden[i[a]][STATUS] != OK &&
+	    gilden[i[a]][STATUS] != TEST )
+	    continue;
+	if ((gilden[i[a]][AUTO_LOADER]) && 
+            (filename == gilden[i[a]][AUTO_LOADER]))
+	    return gilden[i[a]][GILDEN_NAME];
+    }
+    return 0;
+}
+
+
+private string is_guild(string file_name)
+{
+    string *i;
+    int a;
+
+    if (!file_name)
+	return 0;
+
+    i = m_indices(gilden);
+
+    for (a=sizeof(i); a--; )
+	if ((gilden[i[a]][STATUS] == OK ||
+	     gilden[i[a]][STATUS] == TEST ) &&
+	    (member(gilden[i[a]][VALID_CALLER],file_name) >= 0))
+	    return i[a];
+    return 0;
+}
+
+mixed query_gilden_info(mixed ob, string what)
+{
+    string gilde, gender;
+    mapping entry;
+    mixed rang, ret;
+
+    if (!ob)
+	return 0;
+
+    if (stringp(ob))
+    {
+	if (!(gilde = is_guild(ob)))
+	    return 0;
+	return deep_copy(gilden[gilde][what]);
+    }
+
+    if (!objectp(ob))
+	return 0;
+
+    if (!(gilde = ob->query_gilde()))
+	return 0;
+
+    if (!(entry = gilden[gilde]))
+	return 0;
+
+    rang = ob->query_rang();
+
+    if (what == RANG_NAME)
+    {
+	if (entry[RAENGE] && rang >= 0 && rang < sizeof(entry[RAENGE]))
+	    return entry[RAENGE][rang][RANG_NAME];
+
+	return entry[MITGLIED][MAENNLICH];
+    }
+
+    if (member(({ORIG_MITGLIED, ORIG_MITGLIED_PLURAL, ORIG_RANG, ORIG_RANG_PLURAL}),what)>=0)
+	gender = ob->query_real_gender() || ob->query_gender();
+    else
+	gender = ob->query_gender();
+
+    if (what == MITGLIED || what == ORIG_MITGLIED)
+	switch(gender)
+	{
+	  case "maennlich":
+	      return entry[MITGLIED][MAENNLICH];
+	  case "weiblich":
+	      return entry[MITGLIED][WEIBLICH];
+	  default:
+	      return entry[MITGLIED][SAECHLICH];
+	}
+
+    if (what == MITGLIED_PLURAL || what == ORIG_MITGLIED_PLURAL)
+	switch(gender)
+	{
+	  case "maennlich":
+	      return entry[MITGLIED][MAENNLICH_PLURAL];
+	  case "weiblich":
+	      return entry[MITGLIED][WEIBLICH_PLURAL];
+	  default:
+	      return entry[MITGLIED][SAECHLICH_PLURAL];
+	}
+
+    if (what == RANG || what == ORIG_RANG)
+    {
+	if (!entry[RAENGE] || rang < 0 || rang >= sizeof(entry[RAENGE]))
+	    switch(gender)
+	    {
+	      case "maennlich":
+		return entry[MITGLIED][MAENNLICH];
+	      case "weiblich":
+		return entry[MITGLIED][WEIBLICH];
+	      default:
+		return entry[MITGLIED][SAECHLICH];
+	    }
+	
+	switch(gender)
+	{
+	  case "maennlich":
+	      return entry[RAENGE][rang][MAENNLICH];
+	    case "weiblich":
+		return entry[RAENGE][rang][WEIBLICH];
+	    default:
+	      return entry[RAENGE][rang][SAECHLICH];
+	  }
+    }
+
+    if (what == RANG_PLURAL || what == ORIG_RANG_PLURAL)
+    {
+	if (!entry[RAENGE] || rang < 0 || rang >= sizeof(entry[RAENGE]))
+	    switch(gender)
+	    {
+	      case "maennlich":
+		return entry[MITGLIED][MAENNLICH_PLURAL];
+	      case "weiblich":
+		return entry[MITGLIED][WEIBLICH_PLURAL];
+	      default:
+		return entry[MITGLIED][SAECHLICH_PLURAL];
+	    }
+
+	switch(gender)
+	{
+	  case "maennlich":
+	      return entry[RAENGE][rang][MAENNLICH_PLURAL];
+	  case "weiblich":
+	      return entry[RAENGE][rang][WEIBLICH_PLURAL];
+	  default:
+	      return entry[RAENGE][rang][SAECHLICH_PLURAL];
+	}
+    }
+
+    return deep_copy(entry[what]);
+}
+
+string *query_gilden_names()
+{
+    return m_indices(gilden);
+}
+
+mixed query_one_gilden_info(string gilde, string what)
+{
+    mixed ret;
+
+    if (!stringp(gilde) || !stringp(what))
+	return 0;
+
+    if (ret = gilden[gilde])
+    {
+	return deep_copy(ret[what]);
+    }
+    return 0;
+}
+
+string *query_gildenbretter_offener_gilden ()
+{
+    string *g, *ret, *tmp;
+    int i, j;
+    g = m_indices (gilden);
+    for (i = sizeof (g), ret = ({}); i--; )
+        if (gilden [g[i]] [STATUS] == OK) {
+            tmp = query_one_gilden_info (g[i],GILDEN_BRETTER);
+            if (tmp && sizeof (tmp))
+                for (j = sizeof (tmp); j--; )
+                    if (member (ret, tmp[j]) == -1)
+                        ret += ({tmp[j]});
+         }
+    return ret;
+}
+
+int gilden_exists(string gilde)
+{
+    return member(gilden,capitalize(gilde));
+}
+
+private int gilden_flag(mixed *entry, int flag)
+{
+   return entry[FD_PARAMETERS][GLP_FLAG] & flag;
+   /*
+   return sizeof(entry[FD_PARAMETERS]) > GLP_FLAGS &&
+      entry[FD_PARAMETERS][GLP_FLAGS] & flag;
+      */
+}
+
+private object limited_load(string file)
+{
+    return limited(#'touch,({MAX_LOAD_EVALS}),file,NO_LOG|NO_WRITE);
+}
+
+void update_entry(object gilde)
+{
+    int retcode;
+    mapping entry;
+    mixed fd;
+
+    // Sicherheitscheck.
+    if(!objectp(gilde) || (extern_call() && previous_object() != gilde))
+    {
+        return;
+    }
+
+    // Passenden Eintrag suchen.
+    fd = FILED->query_entries(GILDEN_AUTH_NAME);
+
+    if(pointerp(fd))
+    {
+        fd = filter(fd, (: $1[FD_FILE] == $2 :), object_name(gilde));
+
+        if(sizeof(fd))
+        {
+            fd = fd[0];
+        }
+
+        else
+        {
+            // Kein passender Eintrag...
+            return;
+        }
+    }
+
+    else
+    {
+        // Kein Eintrag im FILED...
+        return;
+    }
+
+    // Daten vom Gildenobjekt holen, pruefen und cachen:
+    if(entry = gilde->do_query_entry())
+    {
+        entry = deep_copy(entry);
+    }
+
+    else
+    {
+        entry = 0;
+    }
+
+    if(retcode = check_entry(entry))
+    {
+        entry = ([ GILDEN_NAME   : fd[FD_FILE],
+                   FILE_NAME     : fd[FD_FILE],
+                   STATUS        : INVALID_ENTRY,
+                   PROGRAMMIERER : fd[FD_CODERS],
+                   REASON        : retcode
+                ]);
+    }
+
+    else
+    {
+        entry[FILE_NAME] = fd[FD_FILE];
+
+        if(gilden_flag(fd, GLF_TEST))
+        {
+            entry[STATUS] = TEST;
+        }
+
+        else
+        {
+            entry[STATUS] = OK;
+        }
+
+        if(!entry[VALID_CALLER])
+        {
+            entry[VALID_CALLER] = ({fd[FD_FILE]});
+        }
+
+        entry[PROGRAMMIERER] = fd[FD_CODERS];
+        entry[GILDEN_NAME] = fd[FD_PARAMETERS][GLP_NAME] || fd[FD_FILE];
+    }
+
+    gilden[entry[GILDEN_NAME]] = entry;
+}
+
+void reload(string type)
+{
+    string  file_name, rest, *words, err;
+    int a, retcode;
+    object gilde;
+    mapping o_entry, entry;
+    mixed *param, *list;
+
+    if(type != GILDEN_AUTH_NAME)
+       return;
+    gilden = ([]);
+    list = FILED->query_entries(type);
+
+    for (a=0; a<sizeof(list); a++)
+    {
+	file_name = list[a][FD_FILE];
+	rest = list[a][FD_REMARKS];
+	param = list[a][FD_PARAMETERS];
+	if (sizeof(param) < GLP_SIZE)
+	{
+	    if (!sizeof(param))
+	    	param = allocate(GLP_SIZE);
+	    else
+	    	param += allocate(GLP_SIZE - sizeof(param));
+	    FILED->set_parameters(GILDEN_AUTH_NAME,file_name,param);
+	}
+
+	if(rest && !gilden_flag(list[a], GLF_TEST))
+	{
+	    gilden[file_name] = ([ 
+                      GILDEN_NAME	: file_name,
+		      FILE_NAME		: file_name,
+		      STATUS		: NOT_ACTIVE,
+		      PROGRAMMIERER	: list[a][FD_CODERS],
+		      REASON		: rest
+		    ]);
+	}
+	else if ((err = catch(gilde = limited_load(file_name))) || !gilde)
+	{
+	    if (err)
+	    {
+		write("Error loading gilden-ob " + file_name + ": " + err);
+		debug_message("Error loading gilden-ob " + file_name + ": " + err);
+	    }
+	    gilden[file_name] = ([
+                      GILDEN_NAME	: file_name,
+		      FILE_NAME		: file_name,
+		      STATUS		: NOT_LOADABLE,
+		      PROGRAMMIERER	: list[a][FD_CODERS],
+		      REASON		: err
+		    ]);
+	}
+	else
+	{
+            catch(update_entry(gilde); publish);
+        }
+    }
+}
+
+void init()
+{
+    if (!present("gildenfibel",this_object()))
+    {
+	object ob;
+
+	ob = clone_object("/obj/zeitschrift");
+	ob->add_id(({"fibel","gildenfibel","buch"}));
+	ob->set_name("Gildenfibel");
+	ob->set_gender("weiblich");
+	ob->set_long("Ein Buch mit dem Titel: \"Gildenfibel\"\n");
+	ob->set_page_name("/doc/funktionsweisen/gilden");
+	ob->move(this_object());
+   }
+    add_action("listen","listen",-4);
+    add_action("name","name");
+    add_action("test","test");
+}
+
+private int toggle_gilden_flag(string file, int flag)
+{
+   int res;
+   mixed *parms;
+
+   parms = FILED->query_parameters(GILDEN_AUTH_NAME, file);
+   if(!parms)
+      return FDR_NO_FILE;
+   parms[GLP_FLAG] ^= flag;
+   if(!(res = FILED->set_parameters(GILDEN_AUTH_NAME,file,parms)))
+      reload(GILDEN_AUTH_NAME);
+   return res;
+}
+
+private string error(int err)
+{
+   switch(err)
+   {
+      case FDR_OK: return "Ok.\n";
+      case FDR_ILLEGAL_TYPE: return "Unbekannter Typ.\n";
+      case FDR_NO_AUTH: return "Du darfst das leider nicht.\n";
+      case FDR_NO_FILE: return "Uebergebener Filename ist ungueltig.\n";
+      case FDR_NO_CODERS: return "Keine Programmierer angegeben.\n";
+      case FDR_ENTRY_EXISTS: return "Eintrag existiert bereits.\n";
+      case FDR_ENTRY_NOT_EXISTANT: return "Eintrag existiert nicht.\n";
+      case FDR_NO_TESTER: return "Keine Tester eingetragen.\n";
+      case FDR_FILE_NOT_FOUND: return "Importfile nicht gefunden.\n";
+      default: return "Unbekannter Fehler von "+FILED+".\n";
+   }
+}
+
+nosave int bau(string str)
+{
+   if (!str)
+   {
+      notify_fail(query_verb()+" <gilden-library>\n");
+      return 0;
+   }
+   write(error(toggle_gilden_flag(str, GLF_CONSTRUCTION)));
+   return 1;
+}
+
+int test(string str)
+{
+   if(!SECURE)
+      return 0;
+
+   if(!str)
+   {
+      notify_fail(query_verb()+" <gilden-library>\n");
+      return 0;
+   }
+   write(error(toggle_gilden_flag(str, GLF_TEST)));
+   return 1;
+}
+
+int name(string str)
+{
+    string lib, name;
+    int res;
+    mixed *parms;
+
+   if(!SECURE)
+      return 0;
+
+    if (!str || sscanf(str,"%s %s",lib,name)!=2)
+    {
+        notify_fail(query_verb()+" <gilden-library> <Name der Gilde>\n");
+	return 0;
+    }
+    name = space(name);
+
+    parms = FILED->query_parameters(GILDEN_AUTH_NAME, lib);
+    if (!parms)
+    {
+    	write("Diese Gilde gibt es nicht.\n");
+	return 1;
+    }
+    parms[GLP_NAME] = name;
+    if (!(res = FILED->set_parameters(GILDEN_AUTH_NAME,lib,parms)))
+	reload(GILDEN_AUTH_NAME);
+    switch(res)
+    {
+	case FDR_OK:
+	    write("Ok.\n");
+	    break;
+	case FDR_NO_AUTH:
+	    write("Du darfst das nicht.\n");
+	    break;
+	case FDR_ENTRY_NOT_EXISTANT:
+	    write("Diese Gilde ist nicht eingetragen.\n");
+	    break;
+	default:
+	    printf("Interner Fehler: %d\n", res);
+	    break;
+    }
+    return 1;
+}
+
+void reset()
+{
+    "/room/rathaus/div/lager"->get_moebel(this_object());
+    "/room/rathaus/div/lager"->get_pflanze(this_object());
+}
+
+void create()
+{
+    init_security_for_actions();
+    set_own_light(1);
+    add_type("kunstlicht",1);
+    add_type("teleport_rein_verboten", 1);
+    set_short("Gildenbuero");
+    set_long(
+"Im Gilden-Buero. Hier werden alle Gilden zentral verwaltet.\n"+
+"   Kommandos: liste                        (Listet alle Gilden auf)\n"
+"              test <gilden-library>        (Testflag umstellen)\n"
+"              name <gilden-library> <name> (Name der Gilde setzen)\n"
+);
+    set_exit("forum","forum");
+    add_type("kaempfen_verboten",1);
+    reload(GILDEN_AUTH_NAME);
+    set_room_domain("Pantheon");
+    reset();
+}
+
+
+int listen(string str)
+{
+    string *i, text;
+    int a, others, tests;
+
+    say(Der(this_player())+" schaut sich die Gildenliste an.\n");
+    write(copies("-",79)+"\n");
+    write("Aktive Gilden     Kuerzel Meister    File\n");
+    write(copies("-",79)+"\n");
+
+    i = m_indices(gilden);
+    for (a=0; a<sizeof(i); a++)
+    {
+	if (gilden[i[a]][STATUS] == OK)
+	    write(left(" "+gilden[i[a]][GILDEN_NAME],20)+
+		  left(" "+gilden[i[a]][KUERZEL],6)+
+		  left(capitalize(gilden[i[a]][GILDEN_MEISTER]),11)+
+		  left(gilden[i[a]][FILE_NAME],42)+"\n");
+	else if (gilden[i[a]][STATUS] == TEST)
+	    tests++;
+	else
+	    others++;
+    }
+    write(copies("-",79)+"\n");
+
+    if (tests)
+    {
+    write("Gilden im Testbetrieb\n");
+    write(copies("-",79)+"\n");
+
+	for (a=0; a<sizeof(i); a++)
+	    if (gilden[i[a]][STATUS] == TEST)
+		write(left(" "+gilden[i[a]][GILDEN_NAME],20)+
+		      left(" "+gilden[i[a]][KUERZEL],6)+
+		      left(capitalize(gilden[i[a]][GILDEN_MEISTER]),11)+
+		      left(gilden[i[a]][FILE_NAME],42)+"\n");
+
+    write(copies("-",79)+"\n");
+    }
+    if (!others)
+	return 1;
+
+    write(left("Inaktive Gilden",43)+" Grund\n");
+    write(copies("-",79)+"\n");
+
+    for (a=0; a<sizeof(i); a++)
+    {
+	if (gilden[i[a]][STATUS] == OK ||
+	    gilden[i[a]][STATUS] == TEST )
+	    continue;
+
+	switch(gilden[i[a]][STATUS])
+	{
+	  case NOT_ACTIVE:
+	    text = gilden[i[a]][REASON];
+	    break;
+	  case NOT_LOADABLE:
+	    text = "nicht ladbar";
+	    break;
+	  case INVALID_ENTRY:
+	    text = "defekter Gilden-Eintrag: "+gilden[i[a]][REASON];
+	    break;
+	  default:
+	    text = "unbekannt";
+	}
+	write(left(" "+gilden[i[a]][FILE_NAME],42)+
+	      " "+
+	      left(text,36)+"\n");
+    }
+    write(copies("-",79)+"\n");
+    return 1;
+}
+
+
+int has_programmed(string gilde, string user)
+{
+    return member(gilden[gilde][PROGRAMMIERER] || ({}), user) != -1 &&
+	   gilden[gilde][STATUS] == OK ;
+}
+
+string *query_programmed_gilden(string user)
+{
+    return filter(m_indices(gilden), #'has_programmed, user);
+}
+
+string *query_programmers_of(string gilde)
+{
+    mixed tmp;
+    string *ret;
+
+    tmp = gilden[gilde];
+    if (tmp)
+    	ret = gilden[gilde][PROGRAMMIERER];
+    if (ret)
+    	return ({}) + ret;
+    return ({});
+}
+
+string query_gilden_kuerzel(string gilde)
+{
+    return gilden[gilde][KUERZEL];
+}
+
+string query_name_from_kuerzel(string kuerzel)
+{
+  int i;
+  mixed tmp;
+  tmp = m_indices(gilden);
+  for (i=0; i < sizeof(tmp); i++)
+      if (gilden[tmp[i]][KUERZEL]==kuerzel)
+         return tmp[i];
+}

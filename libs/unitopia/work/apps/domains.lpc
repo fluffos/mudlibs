@@ -1,0 +1,564 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/domains.c
+// Description: Enthaelt alle Informationen ueber Domains
+// Author:	Gnomi
+//
+// UID: Apps
+//
+// $Log: domains.c,v $
+// Revision 1.13  2013/07/04 16:33:42  myonara
+// Admins duerfen letzten DL loeschen.
+// goetter_register darf domain_members hinzufuegen und entfernen.
+//
+// Revision 1.12  2013/05/30 17:00:03  sorcerer
+// Nur OR darf Lords ein-/absetzen
+//
+// Revision 1.11  2013-03-16 15:36:34  gnomi
+// Eigene Domaindefinitionen fuer Orbit.
+//
+// Revision 1.10  2009-06-17 07:40:27  gnomi
+// Goetterregister darf auch ein paar Sachen (zum Daemmern).
+//
+// Revision 1.9  2007/08/11 16:12:02  gnomi
+// Das Fehlen der /nosave/adm/DOMAIN besser verkraften.
+//
+// Revision 1.8  2005/02/17 20:27:09  gnomi
+// Sicherheitsabfrage, falls keine Konfigurationsdatei existiert.
+//
+// Revision 1.7  2004/12/07 22:25:01  gnomi
+// Nur die im Rathaus angemeldeten Domains werden beachtet.
+// Fehler ausgeben, wenn diese Domains in /nosave/adm/DOMAIN fehlen.
+// 'erf -t'-Funktionalitaet.
+//
+// Revision 1.6  2004/11/27 20:58:29  gnomi
+// Sicherheitsabfrage in query_startraum_of_domain, falls keine Domaindaten
+// vorhanden sind.
+//
+// Revision 1.5  2004/07/19 21:10:57  gnomi
+// Domain-Infos aus dem Master hierher verschoben.
+//
+// Revision 1.4  2003/08/29 17:53:27  menaures
+// Typo
+//
+// Revision 1.3  2003/05/09 01:46:43  gnomi
+// Newbies haben immer die Standardkirche.
+//
+// Revision 1.2  2003/05/07 04:46:18  gnomi
+// Kleine Absicherung bei der Startraum-Abfrage.
+//
+// Revision 1.1  2003/05/06 02:39:37  gnomi
+// Stellt Informationen ueber die Domains bereit.
+//
+#ifdef UNItopia
+nosave variables private functions inherit "/i/schiff/compass_logic";
+#endif
+nosave variables private functions inherit "/i/tools/config";
+nosave variables private functions inherit "/i/tools/security";
+
+#include <apps.h>
+#include <config.h>
+#include <level.h>
+#include <security.h>
+#include <uids.h>
+#include <error.h>
+
+#define DOMAIN_FILE "/nosave/adm/DOMAIN"
+
+#define SAVE_FILE "/var/domains"
+
+#define MAX_LORDS  2
+#define MAX_HELFER 2
+
+#define D_LORDS   0
+#define D_HELFER  1
+#define D_MEMBERS 2
+#define D_SIZE    3		// Groesse des Mappings
+
+// Dieses Mapping wird aus /nosave/adm/DOMAIN eingelesen
+nosave mapping domains;
+// Dieses Mapping wird aus /var/domain.o eingelesen
+mapping members = m_allocate(0,D_SIZE);
+
+#ifndef UNItopia
+// Bei UNItopia genauere Variante in /i/schiff/compass_logic drin.
+object get_environment(object wer) { return all_environment(wer)[<1]; }
+#endif
+
+void create()
+{
+    add_security_condition(#'sc_euid_as_ti);
+    add_security_condition("/room/rathaus/domain");
+    add_security_condition("/apps/goetter_register");
+    foreach(string adm: ADMINS)
+	add_security_condition(adm);	// Admin-Tools.
+
+    restore_object(SAVE_FILE);
+    
+    domains = read_config(
+#ifdef Orbit
+        file_size(DOMAIN_FILE ".Orbit") > 0 ?
+        DOMAIN_FILE ".Orbit" :
+#endif
+        DOMAIN_FILE,
+	([
+	    "Position":
+		(:
+		    int x,y;
+		    sscanf($3, "%d %d",x,y);
+		    return ({x,y});
+		:),
+	    "Dimension":
+		(:
+		    int x,y;
+		    sscanf($3, "%d %d",x,y);
+		    return ({x,y});
+		:),
+	    "NotInMap": (:to_int($3):)
+	]));
+    MAP_OB->update_domains();
+    
+    if(sizeof(members-(domains||([]))))
+	do_error("Folgende Domains sind nicht in /nosave/adm/DOMAIN "
+	    "vorhanden: " + liste(m_indices(members-domains)));
+}
+
+void save_domains()
+{
+    save_object(SAVE_FILE);
+}
+
+mixed query_domain_entry(string dom, string entry)
+{
+    if(!domains)
+	return 0;
+    return (domains[dom] && member(domains[dom], entry))
+		?domains[dom][entry]
+		:domains["default"][entry];
+}
+
+mixed query_entry(object player, string entry)
+{
+    object env;
+    string dom;
+    if(!domains)
+	return 0;
+    if(!player || !(env = get_environment(player)))
+	return domains["default"][entry];
+    dom = env->query_room_domain();
+    return query_domain_entry(dom, entry);
+}
+
+/*
+FUNKTION: query_domains
+DEKLARATION: string *query_domains()
+BESCHREIBUNG:
+Mit dieser Funktion kann man alle Domains abfragen
+VERWEISE:
+GRUPPEN: domain, map
+*/
+string *query_domains()
+{
+    return sort_array(m_indices(members||([])),#'>);
+//    return sort_array(
+//	m_indices(m_reallocate(domains||([]),0)+m_reallocate(members||([]),0))-({"default"}),#'>);
+}
+
+// So, jetzt noch spezielle Anfragen:
+
+string query_startraum(object player)
+{
+    return query_entry(player, "Startraum");
+}
+
+string query_startraum_of_domain(string domainname)
+{
+   return domains && domains[domainname] && domains[domainname]["Startraum"];
+}
+
+string query_kirche(object player)
+{
+    object env;
+    if(newbiep(player))
+	return query_domain_entry("default", "kirche");
+    if(player && (env = get_environment(player)) &&
+	stringp(env->query_type("kirche")))
+	    return env->query_type("kirche");
+    return query_entry(player, "Kirche");
+}
+
+#define ERR(x) do { write(x); return 0; } while(0)
+#define SECURE(x) do { \
+	check_security(CHECK_ERROR); \
+	if (this_player()!=this_interactive()) \
+	    ERR("Dies ist ein illegaler Versuch!\n"); } while(0)
+
+#define TEST_DOM { \
+	if (!stringp(domain) || strlen(domain)<1) \
+	    ERR("Du musst den Namen der Domain angeben.\n"); \
+	if (!member(members,domain)) \
+	    ERR("Diese Domain gibt es nicht.\n"); }
+
+#define TEST_WIZ { \
+	if (!stringp(wiz) || strlen(wiz)<1) \
+	    ERR("Du musst den Namen des Spielers angeben.\n"); \
+	if (!player_exists(wiz)) \
+	    ERR("Diesen Spieler gibt es nicht.\n"); }
+
+#define TEST_LORD { \
+	if (!adminp(this_player()) && \
+	    !domain_lord(domain,({string})this_player()->query_real_name()) && \
+	    object_name(previous_object()) != GOETTER_REGISTER) \
+	    ERR("Du bist nicht Domainlord von '"+domain+"'\n"); }
+
+#define SAVE_MEMBERS save_domains()
+#define SAVE_LORDS   save_domains()
+#define SAVE_HELFER  save_domains()
+#define SAVE_DOMAINS save_domains()
+
+#define IS_MEMBER(domain,name,which) (member(members[(domain),(which)]||({}),(name))>=0)
+#define ALL_MEMBERS(domain,which) copy(members[(domain),(which)])
+
+/*
+FUNKTION: domain_member
+DEKLARATION: int domain_member(string domain, string name)
+BESCHREIBUNG:
+Returned 1, wenn <name> ein Mitglied der Domain <domain> ist.
+VERWEISE: domain_lord, query_domain_lords
+GRUPPEN: domain, map
+*/
+int domain_member(string domain, string name)
+{
+    return IS_MEMBER(domain,name,D_MEMBERS);
+}
+
+/*
+FUNKTION: domain_lord
+DEKLARATION: int domain_lord(string domain, string name)
+BESCHREIBUNG:
+Returned 1, wenn <name> ein Domain-Lord der Domain <domain> ist.
+VERWEISE: domain_member, query_domain_lords
+GRUPPEN: domain, map
+*/
+int domain_lord(string domain, string name)
+{
+    return IS_MEMBER(domain,name,D_LORDS);
+}
+
+/*
+FUNKTION: domain_helfer
+DEKLARATION: int domain_helfer(string domain, string name)
+BESCHREIBUNG:
+Returned 1, wenn <name> ein Domain-Helfer der Domain <domain> ist.
+VERWEISE: domain_member, query_domain_lords
+GRUPPEN: domain, map
+*/
+int domain_helfer(string domain, string name)
+{
+    return IS_MEMBER(domain,name,D_HELFER);
+}
+
+/*
+FUNKTION: query_domain_lords
+DEKLARATION: string *query_domain_lords(string domain)
+BESCHREIBUNG:
+Liefert den Namen aller Domain-Lords der Domain <domain>
+VERWEISE: domain_lord, domain_member, query_domain_helfer, query_domain_member
+GRUPPEN: domain, map
+*/
+string *query_domain_lords(string domain)
+{
+    return ALL_MEMBERS(domain,D_LORDS);
+}
+
+/*
+FUNKTION: query_domain_helfer
+DEKLARATION: string *query_domain_helfer(string domain)
+BESCHREIBUNG:
+Liefert den Namen aller Domain-Helfer der Domain <domain>
+VERWEISE: domain_lord, domain_member, query_domain_lords
+GRUPPEN: domain, map
+*/
+string *query_domain_helfer(string domain)
+{
+    return ALL_MEMBERS(domain,D_HELFER);
+}
+
+/*
+FUNKTION: query_domain_members
+DEKLARATION: string *query_domain_members(string domain)
+BESCHREIBUNG:
+Liefert den Namen aller Domain-Members der Domain <domain>
+VERWEISE: domain_lord, domain_member, query_domain_lords
+GRUPPEN: domain, map
+*/
+string *query_domain_members(string domain)
+{
+    return ALL_MEMBERS(domain,D_MEMBERS);
+}
+
+/*
+FUNKTION: query_domains_of
+DEKLARATION: string *query_domains_of(string lord)
+BESCHREIBUNG:
+Liefert die Domains, von denen <lord> der Domainlord ist.
+VERWEISE: domain_lord, domain_member, query_domain_lords, query_memberships_of
+GRUPPEN: domain, map
+*/
+string *query_domains_of(string lord)
+{
+    return filter(m_indices(members), #'domain_lord, lord);
+}
+
+/*
+FUNKTION: query_memberships_of
+DEKLARATION: string *query_memberships_of(string wiz)
+BESCHREIBUNG:
+Liefert die Domains, in denen <wiz> Mitglied ist.
+VERWEISE: domain_lord, domain_member, query_domain_lords, query_domains_of
+GRUPPEN: domain, map
+*/
+string *query_memberships_of(string wiz)
+{
+    return filter(m_indices(members), #'domain_member, wiz);
+}
+
+/*
+FUNKTION: query_domainhelfer_of
+DEKLARATION: string *query_domainhelfer_of(string wiz)
+BESCHREIBUNG:
+Liefert die Domains, in denen <wiz> Helfer ist.
+VERWEISE: domain_lord, domain_member, query_domain_lord, query_domains_of
+GRUPPEN: domain, map
+*/
+string *query_domainhelfer_of(string wiz)
+{
+    return filter(m_indices(members), #'domain_helfer, wiz);
+}
+
+int add_domain_member(string domain, string wiz)
+{
+    SECURE("add_domain_member");
+
+    TEST_DOM;
+    TEST_WIZ;
+    if (object_name(previous_object()) != "/apps/goetter_register")
+        TEST_LORD;
+
+    if (domain_member(domain,wiz))
+	ERR("'"+wiz+"' ist schon Mitglied in '"+domain+"'\n");
+
+    members[domain,D_MEMBERS]+=({wiz});
+    SAVE_MEMBERS;
+    return 1;
+}
+
+int delete_domain_member(string domain, string wiz)
+{
+    SECURE("delete_domain_member");
+
+    TEST_DOM;
+    // TEST_WIZ;
+    if (object_name(previous_object()) != "/apps/goetter_register")
+        TEST_LORD;
+
+    if (!domain_member(domain,wiz))
+	ERR("'"+wiz+"' ist nicht Mitglied in '"+domain+"'\n");
+
+    members[domain,D_MEMBERS]-=({wiz});
+    SAVE_MEMBERS;
+    return 1;
+}
+
+int add_domain_lord(string domain, string wiz, int pos)
+{
+    string *lords;
+
+    SECURE("add_domain_lord");
+
+    TEST_DOM;
+    TEST_WIZ;
+    // TEST_LORD;
+
+    if (!adminp(this_player()))
+        ERR("Nur der Oberste Rat darf Lords einsetzen.\n");
+    
+    if (!intp(pos))
+	ERR("Du musst die Position als Zahl angeben.\n");
+
+    if (!domain_member(domain,wiz))
+	ERR("'"+wiz+"' ist noch nichtmal Mitglied in '"+domain+"'\n");
+
+    lords=members[domain,D_LORDS]-({wiz});
+    if (sizeof(lords)>=MAX_LORDS)
+	ERR("Es gibt schon genug Domainlords fuer '"+domain+"'\n");
+
+    if (pos<=0 || pos>sizeof(lords))
+	members[domain,D_LORDS]=lords+({wiz});
+    else
+	members[domain,D_LORDS]=lords[0..pos-2]+({wiz})+lords[pos-1..];
+    SAVE_LORDS;
+    return 1;
+}
+
+int delete_domain_lord(string domain, string wiz)
+{
+    SECURE("delete_domain_lord");
+
+    TEST_DOM;
+    // TEST_WIZ;
+    // TEST_LORD;
+
+    if (!adminp(this_player()))
+        ERR("Nur der Oberste Rat darf Lords absetzen.\n");
+
+    if (!domain_lord(domain,wiz))
+	ERR("'"+wiz+"' ist nicht Domainlord von '"+domain+"'\n");
+
+    if (sizeof(members[domain,D_LORDS])<=1 && !adminp(this_player()))
+	ERR("Du kannst nicht den einzigen Domainlord von '"+domain+"' rausnehmen.\n");
+
+    members[domain,D_LORDS]-=({wiz});
+    SAVE_LORDS;
+    return 1;
+}
+
+int add_domain_helfer(string domain, string wiz, int pos)
+{
+    string *helfer;
+
+    SECURE("add_domain_helfer");
+
+    TEST_DOM;
+    TEST_WIZ;
+    TEST_LORD;
+
+    if (!intp(pos))
+	ERR("Du musst die Position als Zahl angeben.\n");
+
+    if (!domain_member(domain,wiz))
+	ERR("'"+wiz+"' ist noch nichtmal Mitglied in '"+domain+"'\n");
+
+    if (domain_lord(domain,wiz))
+	ERR("'"+wiz+"' ist doch Domainlord von '"+domain+"'\n");
+
+    helfer=members[domain,D_HELFER]-({wiz});
+    if (sizeof(helfer)>=MAX_HELFER)
+	ERR("Es gibt schon genug Domainhelfer fuer '"+domain+"'\n");
+
+    if (pos<=0 || pos>sizeof(helfer))
+	members[domain,D_HELFER]=helfer+({wiz});
+    else
+	members[domain,D_HELFER]=helfer[0..pos-2]+({wiz})+helfer[pos-1..];
+    SAVE_HELFER;
+    return 1;
+}
+
+int delete_domain_helfer(string domain, string wiz)
+{
+    SECURE("delete_domain_helfer");
+
+    TEST_DOM;
+    // TEST_WIZ;
+    TEST_LORD;
+
+    if (!domain_helfer(domain,wiz))
+	ERR("'"+wiz+"' ist nicht Domainlord von '"+domain+"'\n");
+
+    members[domain,D_HELFER]-=({wiz});
+    SAVE_HELFER;
+    return 1;
+}
+
+int add_domain(string domain)
+{
+    int i;
+    string tmp;
+
+    SECURE("add_domain");
+
+    if (!adminp(this_player()))
+	ERR("Nur der Oberste Rat darf neue Domains anlegen.\n");
+
+    if (!stringp(domain) || strlen(domain)<1)
+	ERR("Du musst den Namen der Domain angeben.\n");
+    if (member(members,domain))
+	ERR("Diese Domain gibt es schon.\n");
+
+    tmp=lower_case(domain);
+    for (i=0; i<strlen(tmp); i++)
+	switch(tmp[i]) {
+	    case 'a'..'z':
+	    case '0'..'9':
+	    case '_':
+	    case '-':
+	    case '+':
+	    case '=':
+	    case '.':
+		break;
+	    default:
+		ERR("Der Domainname darf nur aus Buchstaben, Zahlen und _-+=. bestehen.\n");
+	    }
+
+    members[domain,D_LORDS]=({});
+    members[domain,D_MEMBERS]=({});
+    members[domain,D_HELFER]=({});
+    SAVE_DOMAINS;
+    return 1;
+}
+
+int delete_domain(string domain)
+{
+    SECURE("delete_domain");
+
+    if (!adminp(this_player()))
+	ERR("Nur der Oberste Rat darf Domains loeschen.\n");
+
+    TEST_DOM;
+
+    m_delete(members,domain);
+    SAVE_DOMAINS;
+    return 1;
+}
+
+void remove_wiz(string wiz)
+{
+    if (playerp(previous_object()) || geteuid(previous_object()) == ROOT_UID)
+    {
+	foreach(string dom: members)
+       	{
+	    members[dom,D_MEMBERS]-=({wiz});
+	    members[dom,D_HELFER]-=({wiz});
+	    members[dom,D_LORDS]-=({wiz});
+	}
+    }
+}
+
+private void check_wizzes(string *wizzes, string dom)
+{
+    foreach(string wiz: wizzes)
+    {
+	if (!player_exists(wiz))
+	    printf("%-10s hat kein Playerfile (%s).\n",wiz,dom);
+	if (!GOETTER_REGISTER->is_wiz(wiz))
+	    printf("%-10s ist kein Gott (%s).\n",wiz,dom);
+    }
+}
+
+void check_domains()
+{
+    foreach(string dom: members)
+	if (file_size("/d/"+dom)!=-2)
+	    printf("%-15s hat kein /d/-Verzeichniss.\n",dom);
+	else
+       	{
+	    check_wizzes(members[dom,D_LORDS],dom);
+	    check_wizzes(members[dom,D_HELFER],dom);
+	    check_wizzes(members[dom,D_MEMBERS],dom);
+	}
+}
+
+// Nichts notwendig, da wir immer sofort speichern:
+void prepare_renewal() {}
+void abort_renewal() {}
+void finish_renewal(object neu) {}

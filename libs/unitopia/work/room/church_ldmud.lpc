@@ -1,0 +1,509 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/church.c
+// Description: Kathedrale Tadmor
+// Modified by: Garthan (20.02.04) - Gruftabfrage, Kirchturm
+//              Kurdel  (03.03.97) - Ausweichlandeplaetze in der ganzen Kirche
+//              Sissi   (08.08.99) - Landschaftstypen
+//		Freaky  (19.11.99) - fluchen gegen Viren geht nicht mehr
+//              Tmm     (28.05.00) - an neues Vaniorh angepasst
+//
+// $Log: church.c,v $
+// Revision 1.24  2016/05/13 18:54:23  myonara
+// vitem kathedrale fuers heilige empfinden der vampyre...
+//
+// Revision 1.23  2014/12/23 22:26:41  gnomi
+// Beispielapplikation fuer neue Homepage: Blick ins MUD.
+//
+// Revision 1.22  2014/09/13 19:28:29  myonara
+// Den Nagel zur Kiste/P-Haken mutiert.
+//
+// Revision 1.21  2008/01/21 14:25:59  gnomi
+// Typos.
+//
+// Revision 1.20  2007/08/30 20:33:04  gnomi
+// Typos.
+//
+// Revision 1.19  2003/06/19 22:43:36  gnomi
+// Die Uhr kann man auch ablesen.
+//
+// Revision 1.18  2003/05/06 02:43:14  gnomi
+// Todesmeldungsbeispiel eingebaut.
+//
+// Revision 1.17  2003/04/25 02:38:05  gnomi
+// Typo.
+//
+// Revision 1.16  2003/01/13 02:08:27  gnomi
+// In UNItopia Muell fuer die Asche nehmen. Ausserdem die Initialisierung
+// der Asche mit call_proved (als Beispiel und Test) vornehmen.
+//
+// Revision 1.15  2002/06/18 01:43:13  gnomi
+// Tiere nicht fuer die Taten ihrer Besitzer bestrafen.
+//
+// Revision 1.14  2002/05/09 01:05:44  gnomi
+// Die Funktionen, welche als V-Item-Eintraege genutzt werden, nutzen nun die
+// uebergebenen Parameter.
+//
+// Revision 1.13  2001/11/10 09:09:15  gnomi
+// Typo.
+//
+// Revision 1.12  2001/04/18 20:30:57  gnomi
+// Ausgang fuers HomeMUD gesetzt.
+//
+// Revision 1.11  2001/03/29 16:55:13  gnomi
+// Typo: "welches"->wen(ob,ART_NUR_WELCHER)
+//
+// Revision 1.10  2001/03/24 20:26:50  gnomi
+// Exportdefine aus dem Campus nutzen.
+//
+// Revision 1.9  2001/02/04 01:07:59  gnomi
+// Ein paar Autoloader doch nicht blitzen.
+//
+// Revision 1.8  2001/02/03 19:01:55  gnomi
+// Blitz geaendert.
+//
+
+inherit "/i/room";
+
+#include <move.h>
+#include <landschaft.h>
+#include <invis.h>
+#include <message.h>
+#include <deklin.h>
+#include <apps.h>
+#include <simul_efuns.h>
+
+#ifdef UNItopia
+#include "/d/Vaniorh/sys/vaniorh_exports.h"
+#include "/d/Campus/sys/export.h"
+#define P_WANDNAGEL
+#endif
+
+object door;
+
+/*
+FUNKTION: get_death_message
+DEKLARATION: string get_death_message(object who)
+BESCHREIBUNG:
+Diese Funktion in der Kirche liefert die Meldung, welche ueber den
+Todeskanal gesendet wird, wenn der Spieler 'who' stirbt.
+VERWEISE: set_kirche
+GRUPPEN: spieler
+*/
+string get_death_message(object who)
+{
+    return "Die Totenglocke 'Verdombde' traegt eine traurige Botschaft"
+	   " uebers Land:\n" + Der(who,"") + " ist tot!\n";
+}
+
+string look_uhr(mapping vitem, object betrachter)
+{
+  return "Es ist jetzt "+vtimestr(vtime(), TIMESTR_ONLY_TIME)+".\n";
+}
+
+#ifndef P_WANDNAGEL
+string look_nagel(mapping vitem, object betrachter)
+{
+   if(present("kirchturm#key"))
+      return wrap("An dem Nagel haengt ein alter, bruechiger Schluessel.");
+   else
+      return wrap("Normalerweise haengt hier der Schluessel zum Kirchturm.");
+}
+#endif
+
+void reset()
+{
+   object key;
+   object nagel;
+
+   if(!find_living("armageddon"))
+      touch("/room/rathaus/div/shut");
+   if(!door)
+   {
+      door = clone_object("/obj/tuer");
+      door->set_pass_cmd("norden");
+      door->set_door_exit("/room/kirche/unten");
+      door->set_keys(({"kirchturm#key"}));
+      door->set_long("Eine schmale Tuer, "
+                     "die in den Sockel des Nordturms fuehrt. "
+                     "Direkt neben der Tuer ist ein Nagel in die Wand "
+                     "geschlagen worden.");
+      door->set_crack(85);
+      door->move(this_object());
+   }
+   door->lock_door();
+#ifdef P_WANDNAGEL   
+   if (!nagel = present("kirche # wandnagel"))
+   {
+        nagel = clone_object("/room/kirche/obj/wandnagel");
+        nagel->move(this_object());
+   }
+   if(!key = present("kirchturm#key",nagel))
+   {
+      key = clone_object("/obj/schluessel");
+      key->add_id("kirchturm#key");
+      key->set_long("Ein alter, bruechiger Schluessel.");
+      key->move(nagel);
+   }
+#else
+   if(!key = present("kirchturm#key"))
+   {
+      key = clone_object("/obj/schluessel");
+      key->add_id("kirchturm#key");
+      key->set_long("Ein alter, bruechiger Schluessel.");
+      key->move(this_object());
+      key->set_hidden_until_next_move();
+   }
+#endif
+}
+
+string gedenktafel_read(string parse_rest, string str,
+			mapping vitem, object betrachter)
+{
+    betrachter->more (STATISTIK->query_letzte_tode(),0,0,0x10);
+    return "";
+}
+
+void create() {
+   set_own_light(1);
+   add_type("kunstlicht",1);
+   add_type("tempel",1);
+   add_type("kaempfen_verboten",1);
+   add_type("keine_magie","Die maechtige Aura der Kathedrale behindert Dich.\n");
+   add_type("stehlen_verboten",1);
+   add_type("graben_verboten",1);
+#ifdef UNItopia
+   add_type("landeplatz", K_PLATZ_SO);
+   set_exits(({K_PLATZ_SO}), ({ "westen" }) );
+#else
+   set_exits(({"/room/rathaus/treppe"}), ({"westen"}));
+#endif
+   add_type(LANDSCHAFT, L_DRINNEN | L_HAUS | L_SIEDLUNG);
+   set_short("Kathedrale");
+   set_long(
+      "Du befindest dich in der Kathedrale von Tadmor.\n"
+      "In der Mitte des Chores ist eine tiefe Gruft eingelassen. "
+      "Die Leute sagen, dass manchmal die Geister der Toten hierher kommen "
+      "und in der Hoffnung, zum Leben wiedererweckt zu werden, "
+      "anfangen zu beten.\n"
+      "In der Naehe des Ausgangs steht ein Schild, und "
+      "ueber dem Portal im Westen haengt eine grosse Uhr. Im Osten erkennst du "
+      "ein grosses, buntes Kirchenfenster. An der Seitenmauer steht ein "
+      "grosser Stein. "
+      "An der noerdlichen Mauer, in der Naehe des Portals, fuehrt eine "
+      "schmale Tuer in einen Nebenraum.");
+   add_v_item(([
+      "name":"stein an der Seitenwand der Kathedrale",
+      "gender":"maennlich","adjektiv":"gross",
+      "id":({"stein","tafel","gedenktafel"}),
+      "long":"An der Seitenwand in der Kathedrale steht ein grosser "
+             "Stein, die vielen Buchstaben, die auf ihm stehen, "
+             "deuten darauf hin, dass es sich dabei um eine "
+             "Gedenktafel handelt, auf der man lesen kann, "
+             "wer wann woran gestorben ist.",
+      "read":#'gedenktafel_read,
+      "read_msg":"$Der(OBJ_TP) liest die Buchstaben auf dem grossen "
+                 "Stein an der Seitenwand der Kathedrale"
+   ]));
+   add_v_item(([
+      "name":"buchstaben auf dem grossen Stein an der Seitenwand "
+             "der Kathedrale",
+      "gender":"maennlich","plural":1,
+      "id":({"buchstaben","reihen"}),
+      "long":"Die Buchstaben auf dem grossen Stein leuchten ganz matt, "
+             "sie sind in Reihen angeordnet, wie es nunmal in der Natur "
+             "von Buchstaben liegt, sodass man sie bequem lesen kann.",
+      "read":#'gedenktafel_read,
+      "read_msg":"$Der(OBJ_TP) liest die Buchstaben auf dem grossen "
+                 "Stein an der Seitenwand der Kathedrale"
+   ]));
+   add_v_item(([
+      "name":"seitenwand der Kathedrale","gender":"weiblich",
+      "long":"An der Seitenwand der Kathedrale steht ein grosser Stein."
+   ]));
+   add_v_item(([
+      "name":"gruft",
+      "gender":"weiblich",
+      "look_msg":"$Der() wirft einen nachdenklichen Blick in die Gruft",
+      "long":"Im Innern herrscht tiefe Dunkelheit, so dass du keine "
+             "Einzelheiten erkennen kannst."]));
+   add_v_item(([
+      "name":"portal",
+      "id": ({"portal","westportal"}),
+      "gender":"saechlich",
+      "long":"Von innen wirkt das Portal im Gegensatz zum Anblick von "+
+             "Aussen recht schlicht."]));
+   add_v_item(([
+      "name":"schild",
+      "gender":"saechlich",
+      "long":"Es ist etwas draufgeschrieben.",
+      "read":"Zum Kloster der Barmherzigen Magyrianerinnen nach Westen."]));
+   add_v_item(([
+      "name":"uhr",
+      "gender":"weiblich",
+      "long":#'look_uhr,
+      "read":(:look_uhr($3,$4):)
+      ]));
+   add_v_item(([
+      "name": "mauer",
+      "id": ({"mauer", "kirchenmauer", "wand"}),
+      "adjektiv": ({"noerdlich"}),
+      "gender": "weiblich",
+      "look_msg": "$Der() betrachtet die noerdliche Kirchenmauer",
+      "long": "Die Mauer ist schlicht gehalten, in der Naehe des "
+              "Westportals fuehrt eine kleine Tuer nach Norden."]));
+#ifndef P_WANDNAGEL
+   add_v_item(([
+      "name": "nagel",
+      "gender": "maennlich",
+      "look_msg": "$Der() betrachtet etwas an der Nordmauer",
+      "long": #'look_nagel]));
+#endif
+   add_v_item(([
+      "name": "fenster",
+      "gender": "saechlich",
+      "id": ({"fenster", "kirchenfenster"}),
+      "long": "Es ist eines jener bunten Motivfenster, die vollgestopft "
+	      "sind mit irgendwelchen Gestalten aus dem Pantheon. "
+	      "In einem der Teilfenster meinst du eine Darstellung eines "
+	      "Turmes zu erkennen. Hinter den Fenstern erkennst du nur "
+	      "schemenhaft einen kleinen Friedhof."]));
+   add_v_item(([
+      "name": "teilfenster",
+      "gender": "saechlich",
+      "id": ({"teilfenster", "turm"}),
+      "long": "Der Turm, der im rechten Teilfenster dargestellt ist, "
+	      "erinnert Dich an das Logo des Sueddeutschen Rundfunks, "
+	      "den Stuttgarter Fernsehturm. Aber warum eigentlich? "
+	      "Sicher nur Zufall."]));
+   add_v_item(([
+      "name": "friedhof",
+      "gender": "maennlich",
+      "far":1,
+      "look_msg": "$Der() versucht, den Friedhof hinter der Kirche durch "
+		  "das Kirchenfenster zu betrachten",
+      "long": "Viel erkennst du durch die bunten Fenster nicht. Aber einige "
+	      "Grabsteine wird man dort schon finden koennen."]));
+   add_v_item(([
+      "name": "gestalten",
+      "gender": "weiblich",
+      "plural": 1,
+      "look_msg": "$Der() schaut sich die Gestalten im Fenster an",
+      "long": "So genau kennst du dich nicht aus mit dem Pantheon, aber "
+	      "du erkennst zumindest einen aelteren Gott mit einer Schere "
+	      "in der Hand, wer das wohl sein mag?"]));
+    add_v_item(([
+      "name":"kathedrale",
+      "gender":"weiblich",
+      "id":({"kathedrale"}),
+      "long": "Du erfasst die Kathedrale als eine Gesamtheit und erfaehrst "
+              "so von ihrer zentralen Funktion in den Lebenszyklen der "
+              "Spieler.",
+      "look_msg" : "",
+    ]));
+   reset();
+}
+
+void init()
+{
+   add_action("pray", "beten",-4);
+   add_action("rein_gruft", "betrete",-6);
+   add_action("rein_in_gruft","kletter");
+   add_action("rein_in_gruft","klettere");
+   add_action("rein_in_gruft","steig");
+   add_action("rein_in_gruft","steige");
+   add_action("blitz","verfluch");
+   add_action("blitz","verfluche");
+   add_action("blitz","fluche");
+   add_action("blitz","fluch");
+}
+
+int pray()
+{
+   this_player()->send_message(MT_LOOK,MA_UNKNOWN,
+       wrap(Der(this_player())+" versinkt in tiefer Andacht."),
+       "Du versinkst in tiefer Andacht....\n",this_player());
+   this_player()->revive();
+   return 1;
+}
+
+int rein_gruft(string str)
+{
+   if (!str || lower_case(str) != "gruft")
+   {
+      notify_fail("Betrete was?\n");
+      return 0;
+   }
+#ifdef UNItopia
+      this_player()->move(CAMPUS_KATHEDRALE,MOVE_NORMAL,
+                          "$Der() betritt die Gruft",
+                          "$Ein() erscheint etwas verdattert neben Dir");
+#else
+      this_player()->move("/room/void",MOVE_NORMAL,
+                          "$Der() betritt die Gruft",
+                          "$Ein() erscheint etwas verdattert neben Dir");
+#endif
+   return 1;
+}
+
+int rein_in_gruft(string str)
+{
+   if (!str || (strstr(lower_case(str),"gruft") == -1))
+   {
+      notify_fail(query_verb()+" wohinein?\n");
+      return 0;
+   }
+#ifdef UNItopia
+      this_player()->move(CAMPUS_KATHEDRALE,MOVE_NORMAL,
+                          "$Der() betritt die Gruft",
+                          "$Ein() erscheint etwas verdattert neben Dir");
+#else
+      this_player()->move("/room/void",MOVE_NORMAL,
+                          "$Der() betritt die Gruft",
+                          "$Ein() erscheint etwas verdattert neben Dir");
+#endif
+   return 1;
+}
+
+// Autoloader, die man sich problemlos wiederbeschaffen kann.
+#define BLITZ_AUTOLOADER ({"frosch", "ballonpass", "buddelschiff", "rose", \
+                           "ausweis", "orkamulett", "uhr", "stoffdrache" })
+
+int ist_blitzbar(object ob)
+{
+    if(IS_INVIS(ob) || ob->id("asche")) return 0;
+    if(sizeof(filter(BLITZ_AUTOLOADER,"id",ob))) // Bei besonderen IDs
+        return 1;
+    if(ob->query_no_move() || ob->query_animal()) return 0;
+    return 1;
+}
+
+int blitz(string str)
+{
+    object *obs=filter(all_inventory(this_player()),#'ist_blitzbar);
+
+    this_player()->send_message(MT_NOISE,MA_EMOTE,
+	wrap(Der(this_player())+" faengt an zu fluchen."),
+	"Du faengst an zu fluchen.\n", this_player());
+    if(!sizeof(obs))
+    {
+	send_message(MT_NOISE,MA_UNKNOWN,
+	    wrap("\nEin gewaltiger Blitz faehrt durch das Dach und schlaegt "
+	         "mit einem lauten Knall direkt vor "+dem(this_player())+
+		 " ein, so dass es "+ihn(this_player())+" davon schleudert!\n"),
+	    wrap("\nEin gewaltiger Blitz faehrt durch das Dach und schlaegt "
+	         "mit einem lauten Knall direkt vor dir ein, so dass es dich "
+		 "davon schleudert!\n"),this_player());
+	if(this_player()->move("westen",0)==MOVE_OK)
+	    this_player()->send_message(MT_LOOK,MA_MOVE_IN,
+	       wrap(Der(this_player())+" kommt aus der Kathedrale geflogen."));
+    }
+    else
+    {
+	object ob=obs[random(sizeof(obs))];
+	send_message(MT_NOISE,MA_UNKNOWN,
+	    wrap("\nEin Blitz faehrt durch das Dach und schlaegt "
+	         "mit einem lauten Knall direkt in "+den(ob)+" ein, "+
+		 wen(ob,ART_NUR_WELCHER)+
+		 " sich daraufhin in ein Haeufchen Asche "+
+		 plural("verwandelt!\n","verwandeln!\n",ob)),
+	    wrap("\nEin Blitz faehrt durch das Dach und schlaegt "
+	         "mit einem lauten Knall direkt in "+deinen(ob)+" ein, "+
+		 wen(ob,ART_NUR_WELCHER)+
+		 " sich daraufhin in ein Haeufchen Asche "+
+		 plural("verwandelt!\n","verwandeln!\n",ob)),
+	    this_player());
+	if(ob->remove())
+	{
+	    if(ob=present("asche aus der kathedrale",this_player()))
+	    {
+		ob->set_weight(ob->query_weight()+1);
+		switch(ob->query_weight())
+		{
+		    case 2..3:
+			ob->set_menge((["name":"haeufchen",
+		    	    		"gender":"saechlich"]));
+			break;
+		    case 4:
+			ob->set_menge((["name":"haeufchen",
+		    	    		"gender":"saechlich",
+					"adjektiv":({"groesser"})]));
+			break;
+		    case 5..7:
+			ob->set_menge((["name":"haufen",
+		    	    		"gender":"maennlich"]));
+			ob->delete_id("haeufchen");
+			ob->add_id("haufen");
+			break;
+		    case 8..9:
+			ob->set_menge((["name":"haufen",
+		    	    		"gender":"maennlich",
+					"adjektiv":({"gross"})]));
+			break;
+		    case 10..12:
+			ob->set_menge((["name":"berg",
+		    	    		"gender":"maennlich",
+					"adjektiv":({"klein"})]));
+			ob->delete_id("haufen");
+			ob->add_id("berg");
+			break;
+		    case 13..16:
+			ob->set_menge((["name":"berg",
+		    	    		"gender":"maennlich"]));
+			break;
+		    case 17..20:
+			ob->set_menge((["name":"berg",
+		    	    		"gender":"maennlich"]));
+			break;
+		    default:
+			ob->set_menge((["name":"berg",
+		    	    		"gender":"maennlich",
+					"adjektiv":({"gross"})]));
+			break;
+		}
+	    }
+	    else
+	    {
+#ifdef UNItopia
+		ob=clone_object("/p/Item/obj/muell");
+		ob->set_remove_message("");
+#else
+		ob=clone_object("/obj/schatz");
+#endif
+		call_proved(ob,
+		({
+		    ({"set_value", 0}),
+		    ({"set_id", ({"asche","haeufchen","asche aus der kathedrale"})}),
+		    ({"set_name", "asche"}),
+		    ({"set_gender", "weiblich"}),
+		    ({"set_menge",
+			(["name": "haeufchen",
+		          "gender": "saechlich",
+			  "adjektiv": ({"klein"})]) }),
+		    ({"set_weight", 1}),
+		    ({"set_long", 
+			"Feine, schwarze Asche. Was auch immer es frueher "
+			"gewesen ist, du kannst es nicht mehr erkennen." }),
+		    ({"set_smell", "Du riechst *HATSCHI* nichts."})
+		}));
+
+		if(ob->move(this_player())!=MOVE_OK)
+		    ob->remove();
+	    }
+	}
+    }
+    this_player()->add_headache(15);
+    this_player()->set_handeln() ;
+    return 1;
+}
+
+#ifdef Orbit
+void receive_message(int msg_type, int msg_action, object who, string msg)
+{
+    catch("/secure/rpc/peep"->send_room_message(msg); publish);
+}
+#endif
+
+void abort_renewal() {}
+void finish_renewal(object neu) {}
+void prepare_renewal() {}

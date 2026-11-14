@@ -1,0 +1,987 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/skill_checker.c
+// Description:	Anpassen der Skills
+// Author:	Parsec (12/97)
+
+// UID: Apps
+
+//
+// Modified by:
+//  Parsec     14.09.98:  geloeschte Gildenskills werden dem
+//                        Gilden-Skill-Obj mitgeteilt
+//
+// $Log: skill_checker.c,v $
+// Revision 1.9  2005/12/18 21:40:06  gnomi
+// Ein paar Sicherheitsabfragen fuer den letzten Patch.
+//
+// Revision 1.8  2005/11/18 21:49:44  gnomi
+// Moeglichkeit, um Skills umzubenennen oder die Punkte zu modifizieren,
+// eingebaut.
+//
+// Revision 1.7  2004/07/04 00:17:28  gnomi
+// syslog deaktiviert.
+//
+// Revision 1.6  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.5  2001/04/29 14:21:40  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.4  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.3  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+//
+// -----------------------------------------------------------------
+//  Anpassen der Skillbaeume im Spieler.
+//  -> Loeschen ungueltiger Skills
+//  -> Anpassungen veraenderter Skills
+// -----------------------------------------------------------------
+/*
+  Doku:
+  -----
+
+  Objekt zum Testen und Anpassen ungueltiger Skills.
+  
+  Das Objekt speichert alle vom MASTER erfragten Maximalskills sowie
+  alle schon getesteten Spieler in der Datei  SKILL_SAVE_FILE  
+  ("/var/skill_cache")
+  
+  - Bei Skill-Aenderungen                       -> clear_skill_cache()
+    (d.h. in MASTER_OB, QUEST_ROOM, GAME_ROOM oder die Konstante MAX_SKILL)
+    
+  - Sollen die Spieler alle neu getestet werden -> clear_player_cache()
+
+  
+  --- Baumkorrektur ---
+  
+  *  mixed *compute_new_skill_structure( string player_name,
+                                         mixed *skill_structure)
+     Das ist die Funktion die aus dem Player raus aufgerufen werden sollte
+     die den neuen Skill-Baum berechnet
+     
+     mixed *test_skill_structure( mixed *skill_structure)
+     Das ist die Funktion die um die Baumtransformation zu testen
+     
+     
+     Beide nehmen den Skill-Baum und liefert einen Angepassten zurueck.
+     Dabei werden alle ungueltigen Skills entfernt und alle Skills,
+     die ueber dem Maximum liegen auf dieses reduziert.
+
+     
+     Fuer Spiele und Raetsel werden die Maximalwerte aus dem
+     QUEST_ROOM und dem GAME_ROOM genommen.
+     Fuer alle anderen Skills wird der MASTER gerfagt ob dieser Skill
+     gueltig ist. Fall er gueltig ist wird sein Maximum als
+     MAX_SKILL (ist z.Z. 4500) angenommen.
+
+     ACHTUNG: dieses Objekt cached all die einmal von irgendwoher abgefragten
+     Maximalskills in sich. Die Cacheinhalte werden gespeichert, 
+     sie ueberstehen ein zerstoeren des Objektes!
+     -> auch nach einem Neustart sind die ersten Anfragen an das billig
+     -> ALLERDINGS bekommt das Objekt jetzt die Aenderung von Maximalskills
+        oder das ungueltigwerden von Skills nicht mehr automatisch mit.
+        -> clear_skill_cache() in diesem Objekt muss in diesem Fall aufgerufen
+           werden.
+
+        
+  --- Spieler auf Korrekturen testen ---
+        
+  *  int skill_test_player( object player)
+     Untersucht den Spieler  player  auf notwendige Veraenderungen in dessen 
+     Skillbaum und protokolliert diese.
+     Hier werden AUCH die evtl. zu reduzierenden Gilden-Skills beruecksichtigt!
+     (Konstante TEST_GILDEN_SKILLS).
+     Jeder einzelne Test wird nach /log/sys/SKILL protokolliert.
+     Komplett Ausschreiben der Protokolle mit:  write_player_cache()
+     Rueckgabe: Summe der Abzuege in den Skills
+
+  *  mapping query_player_cache()
+     Protokolle abfragen
+ 
+  *  varargs void write_player_cache( string file_name, 
+                                      int auf_headerzeile_verzichten)
+     Protokolle von  skill_test_player()  in Datei schreiben.
+  
+  *  void clear_player_cache()
+     Intern gespeicherete Testprotokolle loeschen.
+
+
+  --- Allgemeines ---
+     
+  *  void clear_skill_cache()
+     Loescht die Cache-Inhalte des Objektes.
+     Notwendig wenn alte Skills ungueltig geworden sind oder Maximalskills sich
+     veraendert haben.
+
+  --- Tests ---
+     
+  *  string test( string player)
+     Testen welche Aenderungen im Skillbaum von  player  vorgenommen
+     wuerden.
+     
+  *  void test_and_write( string player, string pfad)
+     Zum testen den Skillbaum von  player  erneuern und in das Verzeichnis
+     pfad  schreiben.
+     
+----------------------------------------------------------------------*/  
+
+protected functions nosave variables inherit "/i/tools/security";
+
+// Bezieht sich nur auf das Testen, NICHT auf die Baumkorrektur
+// Bei der Baumkorrektur wird der MASTER nach der Gueltigkeit der
+// Skills gefragt.
+#define TEST_GILDEN_SKILLS  0
+
+
+
+
+#include <gildenskills.h>
+#include <apps.h>
+#include <config.h>
+#include <level.h>
+#include <game.h>
+#include <quest.h>
+#include <skill.h>
+
+// Dateinamen
+#define SKILL_SAVE_FILE     "/var/skill_cache"
+#undef SKILL_LOG
+#undef SKILL_LOG_UPDATE
+//#define SKILL_LOG           "SKILL"
+//#define SKILL_LOG_UPDATE    "SKILL_UPDATE"
+
+
+#define FORMAT_STR     "%-10.10s %7d %7d %7d %7d\n"
+#define FORMAT_STR_H   "%-10.10s %7s %7s %7s %7s\n"
+#define FORMAT_STR2    "%-15.15s %-10.10s %7d %7d %7d  %s\n"
+#define FORMAT_STR_H2  "%-15.15s %-10.10s %7s %7s %7s  %s\n"
+
+
+#define DEBUGGER           ({ "parsec" })
+#define CALL_ALLOWED(wiz)  (lordp(wiz) || wizp(wiz) && \
+                            member( DEBUGGER, wiz->query_real_name()) != -1)
+
+
+
+/* prototypes */
+mixed *compute_new_skill_structure( string player_name, mixed *skill_structure);
+mixed *test_skill_structure( mixed *skill_structure);
+int query_prevent_shadow( object shadow);
+void create();
+int remove();
+int save_data();
+void init_geloeschte_gilden_skills();
+nosave mixed *parse_skill_structure( mixed *skill_structure);
+nosave mixed *parse_skill( mixed *node,
+                           string *skill_path,
+                           string skill_string);
+int max_skill( string *skill_path, string skill_string);
+nosave int skill_nach_oben_korrigieren( string skill_string, int skill);
+mapping query_player_cache();
+void clear_player_cache();
+nosave void write_player( string player_name, int gesamt,
+                          int ungueltige, int angepasste, int gilden,
+                          string file_name);
+varargs void write_player_cache( string file_name,
+                                 int auf_headerzeile_verzichten);
+int skill_test_player( object player);
+nosave void parse_skill_player_test( mixed *node,
+                                     string *skill_path,
+                                     string skill_string);
+void skill_test_all_users();
+void skill_test_some_users_co( object * players);
+void skill_test_some_users( object * players);
+nosave void echo( string str);
+mapping query_skill_cache();
+void clear_skill_cache();
+void set_echo( int flag);
+int query_echo();
+string test( string player);
+void test_and_write( string player, string pfad);
+string skill_print( mixed m);
+/* end prototypes */
+
+
+#if IM_TEST_BETRIEB
+nosave int      gilden ;
+#endif
+
+
+nosave int      echo, new_skills_found ;
+nosave int      gesamt, ungueltige, angepasste, *geloeschte_gilden_skills ;
+
+
+mapping  skill_cache = ([]) ;
+mapping  player_cache = ([]) ;
+
+
+// ACHTUNG: es duerfen KEINE rekursiven Erhoehungen moeglich sein !!!!
+// d.h. in der Art:  skill,a:10 : 20  und  skill,a:20 : 50
+nosave mapping  zu_erhoehende_skills = ([
+    "skill,raetsel,anfaengerpraktikum:250" : 350,
+    "skill,raetsel,bruno:250"              : 350,
+    "skill,raetsel,dinopark:3000"          : 3500,
+    "skill,raetsel,dornroeschen:2000"      : 2400,
+    "skill,raetsel,ehrenbuerger:1500"      : 2000,
+    "skill,raetsel,hustensaft:1500"        : 2200,
+    "skill,raetsel,kraeuterquest:100"      : 200,
+    "skill,raetsel,kraeuterquest:1500"     : 3300,
+    "skill,raetsel,kraeuterquest:1600"     : 3500,    
+    "skill,raetsel,muck:500"               : 700,
+    "skill,raetsel,muck:1000"              : 1400,
+    "skill,raetsel,muck:1500"              : 2100,
+    "skill,raetsel,natumo:2000"            : 2500,
+    "skill,raetsel,nautik:3000"            : 3500,
+    "skill,raetsel,orkfamilie:500"         : 700,
+    "skill,raetsel,orkfamilie:1000"        : 1400,
+    "skill,raetsel,orkfamilie:1500"        : 2100,
+    "skill,raetsel,rakoths_burg:1500"      : 2500,
+    "skill,raetsel,sandwurmjaeger:1500"    : 2000,
+    "skill,raetsel,sprechpilz:100"         : 200,
+    ]) ;
+
+
+nosave mapping  gilden_skills = ([
+    "skill,magie,manipulation":   MAGIE_MANIPULATION,
+    "skill,magie,offensiv":       MAGIE_OFFENSIV,
+    "skill,magie,illusion":       MAGIE_ILLUSION,
+    "skill,magie,defensiv":       MAGIE_DEFENSIV,
+    "skill,magie,information":    MAGIE_INFORMATION,
+    "skill,zauber,suche":         ZAUBER_SUCHE,
+    "skill,zauber,tarnen":        ZAUBER_TARNEN,
+    "skill,zauber,nehmen":        ZAUBER_NEHMEN,
+    "skill,handwerk,stehlen":     HANDWERK_STEHLEN
+    ]) ;
+
+
+// Nur das letzte Element des Namens kann geaendert werden.
+// Hat ein Spieler bereits den neuen Skill-Namen, wird
+// das Maximum aus beiden Skills genommen.
+nosave mapping renamed_skills = ([
+    "skill,spiel,werbefernsehen_quiz":	"fernsehquiz",
+    "skill,spiel,ponder":		"senfkoernersieb",
+    ]);
+
+// ------------------------------------------------------------------------
+
+// Das ist die Funktion die aus dem Player raus aufgerufen werden sollte
+// die den neuen Skill-Baum berechnet
+mixed *compute_new_skill_structure( string player_name, mixed *skill_structure)
+{
+    mixed  *res ;
+
+    if ( !playerp( previous_object()) )
+        return skill_structure ;
+    
+    set_echo( 0) ;
+        
+    res = parse_skill_structure( skill_structure) ;
+
+    if ( gesamt || previous_object()->query_sum_skill() )
+    {
+        // Kein Loggen wenn: Keine Skill-Aenderung und Spieler 0 Skills hat
+        // Damit werden Spieler bei denen sich nichts geaendert hat
+        // trotzdem noch gelogt
+        // (Damit werden alle Neuling nicht geloggt)
+        
+        touch( GILDENSKILL_OB)->init_skills( player_name, geloeschte_gilden_skills) ;
+
+#ifdef SKILL_LOG_UPDATE        
+        if ( file_size( "/log/sys/" SKILL_LOG_UPDATE) <= 0 )
+            sys_log( SKILL_LOG_UPDATE,
+                     sprintf( FORMAT_STR_H2, "", "",
+                              "Gesamt", "Unguel.", "Reduz.", "Gilden")) ;
+        sys_log( SKILL_LOG_UPDATE,
+                 sprintf( FORMAT_STR2, 
+                          ctime()[4..<6],
+                          player_name || "", gesamt,
+                          ungueltige, angepasste, mixed2str( geloeschte_gilden_skills))) ;
+#endif
+    }
+
+    return res ;
+}
+
+
+// Das ist die Funktion die um die Baumtransformation zu testen
+mixed *test_skill_structure( mixed *skill_structure)
+{
+    mixed  *res ;
+    
+    set_echo( 1) ;
+    
+    res = parse_skill_structure( skill_structure) ;
+
+    echo( "Gesamt: "+gesamt+"  Ungueltige: "+ungueltige+
+          "  Angepasste: "+angepasste+
+          "  Gildenskills: "+ mixed2str( geloeschte_gilden_skills)) ;
+
+    return res ;
+}
+
+
+// ------------------------------------------------------------------------
+
+
+int query_prevent_shadow( object shadow)
+{
+    return 1 ;
+}
+
+
+void create()
+{
+    set_echo( 1) ;
+    restore_object( SKILL_SAVE_FILE) ;
+    add_security_condition(#'sc_euid_as_tp);
+    add_security_condition(QUEST_ROOM);
+}
+
+
+int remove()
+{
+    save_object( SKILL_SAVE_FILE) ;
+    
+    destruct( this_object()) ;
+    return 1 ;
+}
+
+void prepare_renewal()
+{
+    save_object(SKILL_SAVE_FILE);
+}
+
+void abort_renewal() {}
+void finish_renewal() {}
+
+int save_data()
+{
+    save_object( SKILL_SAVE_FILE) ;
+}
+
+
+void init_geloeschte_gilden_skills()
+{
+    geloeschte_gilden_skills = allocate( MAX_GILDENSKILL + 1) ;
+}
+
+
+// Die Funktion die alles anstoesst
+// nimmt alten Skillbaum und liefert korrigierten zurueck
+nosave mixed *parse_skill_structure( mixed *skill_structure)
+{
+    mixed  * res ;
+
+    gesamt = ungueltige = angepasste = 0 ;
+    init_geloeschte_gilden_skills() ;
+    res = parse_skill( skill_structure, ({}), "") ;
+    gesamt = ungueltige + angepasste ;
+        
+    return res ;
+}
+
+
+// Die Funktion, die die Arbeit tut
+nosave mixed *parse_skill( mixed *node,
+                           string *skill_path,
+                           string skill_string)
+{
+   int    i, max, skill ;
+   mixed  *result;
+
+   if ( sizeof( node) == 3 && stringp( node[0]) )
+   {
+       // Wir sind in einem Knoten mit 3 Eintraegen -> Innerer Knoten
+       // Subkill
+       result = parse_skill( node[2],
+                             skill_path + ({ node[0] }),
+                             ((skill_string=="")?"":skill_string +",")+
+                             node[0]) ;
+
+       if ( sizeof( result) )
+           return ({ ({ node[0], node[1], result }) });
+       else
+       {
+           // Oh Mist der 3. Eintrag ist ganz leer,
+           // d.h. der ganze Unterbaum dort ist ungueltig
+           // - Entweder wurden dort Skills geloescht
+           //   -> dann entfaellt auch dieser Subskill
+           // - Oder dies ist ein Blatt im Sinne der alten
+           //   Baum-Syntax ({ "langschwert", 4500, ({ }) })
+           // Testen wir das doch einfach -> Rekursion
+
+           return parse_skill( ({ node[0], node[1] }), 
+                               skill_path, skill_string) ;
+       }
+   }
+   else if ( sizeof( node) == 2 && stringp( node[0]) )
+   {
+       // Wir sind in einem Knoten mit 2 Eintraegen -> Blatt
+       // Skill
+
+       skill = node[1] ;
+       skill = 
+           skill_nach_oben_korrigieren( 
+               skill_string +","+ node[0], skill) ;
+       
+       if ( skill != node[1] )
+           angepasste += -node[1]+skill ;
+       if ( skill < node[1] && echo )
+           echo( sprintf( "Skill %-36s von %4d auf %4d gesenkt (korr).",
+                          skill_string+","+node[0], node[1], skill)) ;
+       if ( skill > node[1] && echo )
+           echo( sprintf( "Skill %-36s von %4d auf %4d erhoeht (korr).",
+                          skill_string+","+node[0], node[1], skill)) ;
+       
+       if ( 0 > (max =
+                 max_skill( skill_path + ({ node[0] }),
+                            skill_string +","+ node[0])) )
+       {
+           // Skill ist ungueltig
+           ungueltige += -skill ;
+           
+           if ( member( gilden_skills, skill_string+","+node[0]) )
+               geloeschte_gilden_skills[ gilden_skills[skill_string+","+node[0]] ] = skill ;
+           
+           if ( echo )
+               echo( "Skill '"+node[0]+"' unter '"+skill_string+
+                     "' mit "+skill+" entfernt.") ;
+           return ({}) ;
+       }
+       else if ( max < skill )
+       {
+           // Skill ist hoeher als erlaubt
+           angepasste += -skill+max ;
+           
+           if ( echo )
+               echo( sprintf( "Skill %-36s von %4d auf %4d gesenkt (>max).",
+                              skill_string+","+node[0], skill, max)) ;
+           return ({ ({ node[0], max }) }) ;
+       }
+       else
+           return ({ ({ node[0], skill }) }) ;
+   }
+   else
+   {
+       // Wir sind in irgendeinem der Arrays, die die Skills zusammenfassen
+       
+       for( result = ({}), i = 0 ; i < sizeof( node) ; i++ )
+           result += parse_skill( node[i], skill_path, skill_string) ;
+	   
+       return result;
+   }
+}
+
+
+// Was ist der Maximalwert eines Skills ?
+// return < 0  falls Skill ungueltig
+int max_skill( string *skill_path, string skill_string)
+{
+    int res ;
+
+    if ( member( skill_cache, skill_string) )
+        return skill_cache[skill_string] ;
+    
+    if ( sizeof( skill_path) > 1  &&  skill_path[1] == "raetsel" )
+        res = QUEST_ROOM->query_quest_points( skill_path[<1]) ;
+    else if ( sizeof( skill_path) > 1  &&  skill_path[1] == "spiel" )
+        res = GAME_ROOM->query_game_points( skill_path[<1]) ;
+    else if ( !MASTER_OB->valid_skill( skill_path) )
+        res = -1 ;
+    else
+        res = MAX_SKILL ;
+
+    skill_cache += ([ skill_string : res ]) ;
+
+    if ( new_skills_found++ % 5 == 0  &&  find_call_out( "save_data") == -1 )
+        call_out( "save_data", 0) ;
+    
+    return res ;
+}
+
+
+nosave int skill_nach_oben_korrigieren( string skill_string, int skill)
+{
+    return zu_erhoehende_skills[skill_string+":"+skill] || skill ;
+}
+
+
+
+// ------------------------------------------------------------------
+//  Funktionen zum testen wieviel EPs bei Anpassungen dazu bzw
+//  abgezogen wuerden.
+// ------------------------------------------------------------------
+
+
+
+mapping query_player_cache()
+{
+    return copy( player_cache) ;
+}
+
+
+void clear_player_cache()
+{
+    if ( CALL_ALLOWED( this_player()) )
+    {
+        player_cache = ([]) ;
+        save_object( SKILL_SAVE_FILE) ;
+    }
+}
+
+
+nosave void write_player( string player_name, int gesamt,
+                          int ungueltige, int angepasste, int gilden,
+                          string file_name)
+{
+    write_file( file_name,
+                sprintf( FORMAT_STR,
+                         player_name || "", gesamt,
+                         ungueltige, angepasste, gilden)) ;
+}
+
+
+#if IM_TEST_BETRIEB
+varargs void write_player_cache( string file_name,
+                                 int auf_headerzeile_verzichten)
+{
+    rm( file_name) ;
+    if ( !auf_headerzeile_verzichten )
+        write_file( file_name,
+                    sprintf( FORMAT_STR_H, 
+                             "", "Gesamt", "Unguel.", "Reduz.", "Gilden")) ;
+
+    walk_mapping( player_cache, #'write_player, //'
+                  file_name) ;
+    // clear_player_cache() ;
+}
+#endif
+
+
+#if IM_TEST_BETRIEB
+// Untersucht den Spieler  player  auf notwendige Veraenderungen in dessen 
+// Skillbaum und protokolliert diese.
+// Ausschreiben der Protokolle mit:  write_player_cache()
+int skill_test_player( object player)
+{
+    string  player_name ;
+    
+    gesamt = 0 ;
+    if ( playerp( player) &&
+         !member( player_cache, player_name = player->query_real_name()) )
+    {
+        gesamt = ungueltige = angepasste = gilden = 0 ;
+        parse_skill_player_test( player->query_skill_structure(), ({}), "") ;
+        gesamt = ungueltige + angepasste + gilden ;
+
+#ifdef SKILL_LOG        
+        if ( !sizeof( player_cache) )
+            sys_log( SKILL_LOG,
+                    sprintf( FORMAT_STR_H, "",
+                             "Gesamt", "Unguel.", "Reduz.", "Gilden")) ;
+        sys_log( SKILL_LOG,
+                 sprintf( FORMAT_STR,
+                          player_name || "", gesamt,
+                          ungueltige, angepasste, gilden)) ;
+#endif
+        
+        player_cache += 
+            ([ player_name : gesamt; ungueltige; angepasste; gilden ]) ;
+        if ( sizeof( player_cache) % 10 == 0 )
+            call_out( "save_data", 0) ;
+    }
+    return gesamt ;
+}
+#endif
+
+// Skill-Baumdurchlauf 
+nosave void parse_skill_player_test( mixed *node,
+                                     string *skill_path,
+                                     string skill_string)
+{
+   int    i, max, skill ;
+
+   if ( sizeof( node) == 3 && stringp( node[0]) )
+   {
+       // Wir sind in einem Knoten mit 3 Eintraegen -> Innerer Knoten
+       // Subkill
+       parse_skill_player_test( node[2],
+                                skill_path + ({ node[0] }),
+                                ((skill_string=="")?"":skill_string +",")+
+                                node[0]) ;
+
+       if ( !sizeof( node[2]) )
+       {
+           // Oh Mist der 3. Eintrag ist ganz leer,
+           // d.h. der ganze Unterbaum dort ist ungueltig
+           // - Entweder wurden dort Skills geloescht
+           //   -> dann entfaellt auch dieser Subskill
+           // - Oder dies ist ein Blatt im Sinne der alten
+           //   Baum-Syntax ({ "langschwert", 4500, ({ }) })
+           // Testen wir das doch einfach -> Rekursion
+
+           parse_skill_player_test( ({ node[0], node[1] }), 
+                                    skill_path, skill_string) ;
+       }
+   }
+   else if ( sizeof( node) == 2 && stringp( node[0]) )
+   {
+       // Wir sind in einem Knoten mit 2 Eintraegen -> Blatt
+       // Skill
+
+       skill = node[1] ;
+       skill =
+           skill_nach_oben_korrigieren(
+               skill_string +","+ node[0], skill) ;
+       if ( skill != node[1] )
+           angepasste += -node[1]+skill ;
+              
+#if TEST_GILDEN_SKILLS       
+       if ( member( gilden_skills, skill_string+","+node[0]) )
+       {
+           gilden += -skill ;
+       }
+       else
+#endif           
+       if ( 0 > (max =
+                 max_skill( skill_path + ({ node[0] }),
+                            skill_string +","+ node[0])) )
+       {
+           // Skill ist ungueltig
+           ungueltige += -skill ;
+       }
+       else if ( max < skill )
+       {
+           // Skill ist hoeher als erlaubt
+           angepasste += -skill+max ;
+       }
+   }
+   else
+   {
+       // Wir sind in irgendeinem der Arrays, die die Skills zusammenfassen
+       
+       for( i = 0 ; i < sizeof( node) ; i++ )
+           parse_skill_player_test( node[i], skill_path, skill_string) ;
+   }
+}
+
+
+
+// --- Test Zeug ...
+#if IM_TEST_BETRIEB
+
+nosave int some_counter = 0 ;
+
+void skill_test_all_users()
+{
+    some_counter=0 ;
+    filter(
+        split_array( users(), 4, 1), #'skill_test_some_users_co //'
+        ) ;
+}
+
+
+void skill_test_some_users_co( object * players)
+{
+    call_out( "skill_test_some_users", some_counter++, players) ;
+}
+
+
+void skill_test_some_users( object * players)
+{
+    filter( players, #'skill_test_player //'
+        );
+}
+
+#endif
+
+
+// ------------------------------------------------------
+
+nosave void echo( string str)
+{
+    write( str+"\n") ;
+}
+
+
+mapping query_skill_cache()
+{
+    return copy( skill_cache) ;
+}
+
+
+void clear_skill_cache()
+{
+    if ( CALL_ALLOWED( this_player()) )
+    {
+        skill_cache = ([]) ;
+        save_object( SKILL_SAVE_FILE) ;
+    }
+}
+
+
+void set_echo( int flag)
+{
+    echo = flag ;
+}
+
+
+int query_echo()
+{
+    return echo ;
+}
+
+
+string test( string player)
+{
+    object  pl ;
+    int     tmp, old_eval, new_eval ;
+    mixed   old_skill_structure, new_skill_structure ;
+
+    if ( !(pl = find_player( lower_case( player))) )
+        return 0 ;
+
+    old_skill_structure = pl->query_skill_structure() ;
+
+    tmp = get_eval_cost() ;
+    new_skill_structure = test_skill_structure( old_skill_structure) ;
+    new_eval = tmp - get_eval_cost() ;
+    
+#if IM_TEST_BETRIEB
+    touch( GILDENSKILL_OB)->init_skills( pl->query_real_name(), geloeschte_gilden_skills) ;
+#endif    
+
+    printf(
+        "Skill-Baum von %s erneuern: %d evals\n",
+        capitalize( player), new_eval) ;
+    return skill_print( new_skill_structure) ;
+}
+
+
+#ifdef IM_TEST_BETRIEB
+void test_and_write( string player, string pfad)
+{
+    object  pl ;
+    
+    if ( !(pl = find_player( lower_case( player))) )
+        return ;
+
+    rm( pfad+"/"+player) ;
+    write_file( pfad+"/"+player, skill_print(
+        pl->query_skill_structure())) ;
+
+    rm( pfad+"/"+player+".new") ;
+    write_file( pfad+"/"+player+".new", skill_print(
+        test_skill_structure(
+            pl->query_skill_structure()))) ;
+}
+#endif
+
+
+string skill_print( mixed m)
+{
+    // Eine Ausgabe mit sprintf() ist leinder :( nicht moeglich, da
+    // die Baeume zu gross werden ...
+    return regreplace( mixed2str( m), "\\({\"","\n({\"", 1) ;
+}
+
+// ===========================================================================
+// Ab hier modernes Aenderungsmanagement
+
+mixed *changes = ({});
+#define S_NAME		0
+#define S_POINTS	1
+#define S_SUBSKILL	2
+
+mixed* query_skill_changes() { return deep_copy(changes); }
+
+private nosave mapping valid_skills = ([ // skillname: filed-auth (0 = Admins only)
+    "spiel":	"spiele",
+    "raetsel":	"raetsel",
+    "wissen":	0,
+    "zauber":	0,
+    "getoetet":	0,
+    "offensiv":	0,
+    "defensiv":	0
+    ]);
+    
+// type:	args
+// SCT_RENAME	Zielname
+// SCT_CHANGE	({ bisheriger Wert, neuer Wert})
+string add_skill_change(int type, string path, mixed args)
+{
+    string* patharr = explode(path,",");
+    
+    if(sizeof(patharr)<3 || patharr[0] != "skill" ||
+	!member(valid_skills, patharr[1]))
+	return "Ungueltiger Skillpfad.";
+
+    if(!playerp(this_player()))
+	return "Wer bist Du?";
+
+    if(!adminp(this_player()) && 
+	member(FILED->query_auth(valid_skills[patharr[1]]),
+		this_player()->query_real_name())<0)
+	    return "Das darfst Du nicht.";
+
+    if(!check_security())
+	return "Aufruf ueber nicht vertrauenswuerdige Objekte.";
+
+    switch(type)
+    {
+	case SCT_RENAME:
+	    if(!stringp(args) || member(args,',')>=0)
+		return "Falsches Argument.";
+	    break;
+	case SCT_CHANGE:
+	    if(!pointerp(args) || sizeof(args)!=2 ||
+		!intp(args[0]) || !intp(args[1]))
+		    return "Falsches Argument.";
+	    break;
+	default:
+	    return "Unbekannter Aenderungstyp.";
+    }
+    changes += ({ ({ type, path, args, time() }) });
+
+    save_data();
+    return "Aenderung gespeichert.";
+}
+
+private mixed* merge_tree(mixed *node1, mixed* node2)
+{
+    string *names1, *names2;
+    
+    if(node1[S_POINTS]<node2[S_POINTS])
+	node1[S_POINTS] = node2[S_POINTS];
+
+    if(sizeof(node2)<=S_SUBSKILL)
+	return node1;
+
+    if(sizeof(node1)<=S_SUBSKILL)
+	return node1 + node2[S_SUBSKILL..S_SUBSKILL];
+    
+    names1 = filter(node1[S_SUBSKILL], #'[, S_NAME);
+    names2 = filter(node2[S_SUBSKILL], #'[, S_NAME);
+
+    for(int i=0; i<sizeof(node1[S_SUBSKILL]); i++)
+    {
+	int j = member(names2, node1[S_SUBSKILL][i][S_NAME]);
+	if(j>=0)
+	    node1[S_SUBSKILL][i] = merge_tree(
+		node1[S_SUBSKILL][i], node2[S_SUBSKILL][j]);
+    }
+
+    for(int i=0; i<sizeof(node2[S_SUBSKILL]); i++)
+	if(member(names1, node2[S_SUBSKILL][i][S_NAME])<0)
+	    node1[S_SUBSKILL] += node2[S_SUBSKILL][i..i];
+
+    return node1;
+}
+
+private mixed* change_skill_recursive(mixed* nodes, string skillname,
+				mapping renames, mapping valchanges)
+{
+    for(int i=0; i<sizeof(nodes); i++)
+    {
+	string name = (sizeof(skillname)?(skillname+","):"")+nodes[i][S_NAME];
+	mapping vm;
+
+	// Werteaenderungen bearbeiten	
+	vm = valchanges[name];
+	if(vm && member(vm, nodes[i][S_POINTS]))
+	    nodes[i][S_POINTS] = vm[nodes[i][S_POINTS]];
+	
+	// Umbenennungen bearbeiten...
+	if(member(renames, name))
+	{
+	    string newname = renames[name];
+	    int j;
+	    
+	    // Gibt es den neuen Namen schon?
+	    j = member(filter(nodes, #'[, S_NAME), newname);
+	    nodes[i][S_NAME] = newname;
+
+	    if(j>=0)
+	    {
+		nodes[i] = merge_tree(nodes[i], nodes[j]);
+		nodes[j..j] = ({});
+		if(j<i)
+		    i--;
+	    }
+	}
+	
+	// Unterknoten bearbeiten:
+	if(sizeof(nodes[i])>S_SUBSKILL)
+	    change_skill_recursive(nodes[i][S_SUBSKILL],
+		(sizeof(skillname)?(skillname+","):"") + nodes[i][S_NAME],
+		renames, valchanges);
+    }
+    
+    return nodes;
+}
+
+mixed* change_skill_structure(int version, mixed* skills)
+{
+    mapping renames, valchanges;
+    
+    if(version>=sizeof(changes))
+    {
+	version = sizeof(changes);
+	return skills;
+    }
+
+    // Nun alle Aenderungen zusammensuchen.
+    renames = ([:2]);	// Altpfad -> Neupfad
+    valchanges = ([:1]);// Pfad -> ([ Alter Wert -> NeuerWert ])
+    
+    foreach(mixed change: changes[version..<1])
+	switch(change[SC_TYPE])
+	{
+	    case SCT_RENAME:
+	    {
+		int pos = strrstr(change[SC_PATH], ",");
+		string dstpath = change[SC_PATH][0..pos] + change[SC_ARGS];
+		
+		// Alle bisherigen Umbennungen durchforsten.
+		renames = map(renames,
+		    (: ($2 == $3) ? $4 : $2 :), change[SC_PATH], dstpath);
+
+		m_add(renames, change[SC_PATH], dstpath);
+		break;
+	    }
+
+	    case SCT_CHANGE:
+		// Umbenennungen beachten
+		foreach(string srcpath, string dstpath:
+			    ([change[SC_TYPE]: change[SC_TYPE]]) + renames)
+
+		    if(change[SC_PATH] == dstpath)
+		    {
+			if(member(valchanges, srcpath))
+			{
+			    mapping vm = map(valchanges[srcpath],
+				(: ($2 == $3)?$4:$2 :),
+			    change[SC_ARGS][0], change[SC_ARGS][1]);
+			
+			    m_add(vm, change[SC_ARGS][0], change[SC_ARGS][1]);
+			    vm = map(vm, (: ($2 == $3)?$4:$2 :),
+				change[SC_ARGS][0], change[SC_ARGS][1]);
+			}
+			else
+			    m_add(valchanges, srcpath,
+				([ change[SC_ARGS][0]: change[SC_ARGS][1] ]));
+		    }
+		break;
+	}
+
+    // renames nachbehandeln. Aus den Pfaden die Namen extrahieren.
+    renames = map(renames, (: $2[strrstr($2, ",") + 1..<1] :));
+    
+    version = sizeof(changes);
+    return change_skill_recursive(skills, "", renames, valchanges);
+}

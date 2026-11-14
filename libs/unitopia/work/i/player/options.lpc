@@ -1,0 +1,4886 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/player/options.c
+// Description:	Einstellungen fuer den Spieler
+// Author:	Gnomi (26. 11. 2001)
+//
+// $Log: options.c,v $
+// Revision 1.83  2015/08/18 17:12:50  gnomi
+// Typo.
+//
+// Revision 1.82  2015/06/01 19:32:17  gnomi
+// Texte automatisch auf Terminalbreite umbrechen.
+//
+// Revision 1.81  2015/04/27 18:45:18  gnomi
+// Keine Passwortabfrage bei 'einst zweities ?'.
+//
+// Revision 1.80  2015/02/21 14:29:14  gnomi
+// Ignoriere-Menue: Auswahl des Spielers korrigiert.
+//
+// Revision 1.79  2015/01/22 19:00:54  gnomi
+// Ueberfallkanaloption vertauscht.
+//
+// Revision 1.78  2014/12/03 23:07:18  gnomi
+// Auch 'hilfe' statt '?' zulassen.
+// Falsche Anzeige im Anzeigedialog.
+//
+// Revision 1.77  2014/11/03 21:12:34  gnomi
+// Menues Anzeige, Spieler & Client blindenfreundlicher gemacht.
+//
+// Revision 1.76  2013-03-16 16:23:13  gnomi
+// Erweiterte Farbeinstellungen.
+//
+// Revision 1.75  2011-02-04 23:20:54  gnomi
+// Neue experimentelle WebMUD-Funktionalitaeten.
+//
+// Revision 1.74  2011-02-02 23:22:55  gnomi
+// Meldung in der dritten Person ausgeben (als Option).
+//
+// Revision 1.73  2011-02-02 22:22:29  gnomi
+// Twitter-Anbindung.
+//
+// Revision 1.72  2010-12-04 23:25:30  sorcerer
+// email-Einstellungen debuggt, colors aus Kontext genutzt
+//
+// Revision 1.71  2010-04-30 12:49:47  gnomi
+// Ueberfallkanal ist nun abschaltbar.
+//
+// Revision 1.70  2010-04-01 23:40:53  gnomi
+// Pieptoene fuer Trigger.
+// Klangeinstellungen fuer das WebMUD.
+//
+// Revision 1.69  2009-10-14 19:48:46  gnomi
+// WebMUD-Editor statt des Mini-ED verwenden.
+//
+// Revision 1.68  2009-10-14 18:09:20  gnomi
+// WebMUD-Stil auswaehlen.
+//
+// Revision 1.67  2009-09-07 21:46:27  gnomi
+// Typo. E-Mail-Adresse nicht durch lower_case() jagen.
+//
+// Revision 1.66  2009-03-20 07:58:45  gnomi
+// "Variable shadows previous declaration" in Inline.
+//
+// Revision 1.65  2008-05-28 07:36:57  gnomi
+// Piepton mit in die Farbeinstellungen aufgenommen.
+//
+// Revision 1.64  2008-05-26 09:09:06  gnomi
+// Getrennete VT100-Eingabezeile in der Wiz-Shell.
+//
+// Revision 1.63  2008-04-26 18:20:01  gnomi
+// Typo.
+//
+// Revision 1.62  2008-04-02 08:17:36  gnomi
+// Angabe einer speziellen E-Mail-Adresse fuer de.alt.mud.
+//
+// Revision 1.61  2008/02/25 11:45:16  gnomi
+// Noch eine Sicherheitsabfrage bei den Triggers und ihren Nummern.
+//
+// Revision 1.60  2008/01/31 07:52:44  gnomi
+// 'einst anzeige zeile' geht jetzt.
+// Unterstuetzung fuer 256 Farben.
+// Farb-Trigger.
+//
+// Revision 1.59  2008/01/24 22:50:40  gnomi
+// Numpad-Walking als Option fuer die getrennte Eingabezeile.
+//
+// Revision 1.58  2008/01/16 09:30:12  gnomi
+// VT100-Eingabezeile fuer Spieler freigegeben.
+//
+// Revision 1.57  2007/10/24 21:38:44  gnomi
+// MUD-Client- und E-Mail-Einstellungen in ein eigenes Menue verlagert.
+//
+// Revision 1.56  2007/08/30 20:25:31  gnomi
+// Telnet-Ping-Option eingebaut.
+//
+// Revision 1.55  2007/08/20 18:16:33  gnomi
+// Kuri: EVC_PERSONS kann enthaelt bei manchen leere Eintraege.
+//
+// Revision 1.54  2007/08/11 21:33:40  gnomi
+// Typo.
+//
+// Revision 1.53  2007/08/11 16:21:07  gnomi
+// Automatische More-Zeilenzahl.
+// VT100-Client-Option.
+//
+// Revision 1.52  2006/06/25 00:06:49  gnomi
+// Intermud-Ignore eingebaut.
+//
+// Revision 1.51  2006/01/24 21:35:15  gnomi
+// Indexing past string end.
+//
+// Revision 1.50  2005/10/12 22:08:43  gnomi
+// Indexing past string end...
+//
+// Revision 1.49  2005/05/06 22:59:54  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+
+#pragma strict_types
+#pragma pedantic
+
+#include <achievements.h>
+#include <add_hp.h>
+#include <config.h>
+#include <input_to.h>
+#include <notify_fail.h>
+#include <more.h>
+#include <message.h>
+#include <level.h>
+#include <hpspview.h>
+#include <finger.h>
+#include <colours.h>
+#include <event.h>
+#include <commands.h>
+#include <udp.h>
+
+#include "player.h"
+
+// Defines fuer query_filter_spam
+#define MAIL_UNFILTERED	 0
+#define MAIL_BOUNCE     -1
+
+protected virtual inherit "/i/tools/colours";
+
+private int option_flags; // Flags fuer die Einstellungsmenues
+#define OF_SECPASS	0x01	// Passwort wird fuers Zweitiemenue benoetigt
+
+
+#define OPTIONS_ID "options"
+#define OWN_MENUES ({ "Spieler und Charakter", \
+		      "Anzeigen", \
+		      "Farben", \
+		      "Kurier und Erinnerungen", \
+		   })
+#define OWN_ACTIONS ({ "spieler", "charakter", "kampf", \
+		       "ausruestung", "finger", "apanzeige", \
+		       "raumbeschreibung", "anzeige", \
+		       "farben", \
+		       "erinnerungen", "kurier", \
+		    })
+#define LINE      "-------------------------------------------------------------------------------"
+#define MORE_LINE "...--------------------------------------------------------------------- (MORE)"
+#define OPT_HELP_PATH HELP_PATH "/Options"
+
+#define MSG(str) this_object()->send_message_to(this_object(), MT_NOTIFY, MA_UNKNOWN, str)
+
+// Menuename: Menuefunktion
+// Verb: ({Name, Flag, Funktion})
+private nosave mapping menues, actions;
+private nosave mixed* active_menue;
+private nosave mapping hilfe_cmd = ([ "?", "hilf", "hilfe" ]);
+
+// Flags fuer change_*-Funktionen:
+#define OPT_MENUE		1	// Wenn das Menue aktiv ist (ansonsten
+					// ist es eine Kommandozeilenoption)
+#define OPT_INPUT_TO		2	// Wurde aus einem input_to heraus aufgerufen
+
+// Rueckgabewerte der change_*-Funktionen:
+//  - String (dies ist dann die ungewrapte Ausgabe fuer den Kommandozeilenmodus)
+#define OPT_MESSAGE		1	// Es wurde eine (Fehler-)Meldung
+					// ausgegeben
+#define OPT_INPUT_TO_STARTED	2	// Ein input_to wurde gestartet
+
+/*
+ * Struktur dieser Datei:
+ *
+ *  - Am Anfang kommen alle oeffentlichen Funktionen zum An- und Abmelden
+ *    von Menues oder Kommandozeilenoptionsbehandlungsroutinen,
+ *    zum Aufruf des Hauptmenues und Anzeige eines Hilfetextes.
+ *  - Gefolgt wird dies von ein paar Hilfsfunktion, welche die einzelnen
+ *    Menues benoetigen.
+ *  - Danach kommen die einzelnen Menues des Players. Jedes Menue
+ *    besteht aus 4 Funktionen:
+ *     - display_<menue>_options: Gibt dieses Menue mittels more() aus
+ *     - change_<menue>_options: Erhaelt eine Option und eventuelle Parameter
+ *       und aendert diese Option ab, gibt eventuelle Fehlermeldungen aus.
+ *     - handle_<menue>_options: Erhaelt die Eingabe beim more() und
+ *       reagiert entsprechend darauf (meist durch Aufruf von change_*).
+ *     - handle_<menue>_actions: Erhaelt die Kommandozeilenoption und
+ *       reagiert entsprechend darauf (meist durch Aufruf von change_*).
+ *  - Abschliessend folgen Funktionen fuer das Interface zum more, die
+ *    add_action und das create().
+ *
+ */
+
+/*
+FUNKTION: add_options_menue
+DEKLARATION: nomask varargs void add_options_menue(string name, closure menuefun | object ob[, string menuefun])
+BESCHREIBUNG:
+Damit meldet man ein weiteres Menue mit Einstellungsmoeglichkeiten an.
+'name' ist dabei der Text, der im Hauptmenue ausgegeben wird.
+
+Wurde dieses Menue ausgewaehlt, so wird dann ob->menuefun() bzw.
+funcall(menuefun) aufgerufen. Die Funktion ist von da an fuer die
+Eingaben zustaendig und sollte beim Ruecksprung dann
+this_player()->start_options_menue() aufrufen.
+Falls Parameter fehlen, so wird previous_object() und "start_options_menue"
+genommen.
+
+Folgende Richtlinien gelten fuer Menues:
+ - Sie sollten den Menues des Players aehneln. Man sollte also nicht
+   erkennen, dass nun ein anderes Objekt fuer das Menue zustaendig ist.
+ - Ruecksprung mit dem Befehl 'z'.
+ - Mit dem Befehl 'q' sollte es beendet werden koennen.
+ - '?' sollte eine Erklaerung zu allen Einstellungen anbieten.
+   (Mit print_options_help steht eine Funktion zur Verfuegung die
+   einen entsprechenden Hilfe-Text anzeigt.)
+ - Die Standard-More-Befehle r, <, > sollten nicht ueberlagert werden.
+VERWEISE: delete_options_menue, start_options_menue, print_options_help,
+          add_options_action
+GRUPPEN: spieler
+*/
+nomask varargs void add_options_menue(string name, mixed ob, string menuefun)
+{
+    if(!name || member(OWN_MENUES, name)>=0)
+	return;
+    if(!ob)
+	ob = previous_object();
+    if(!stringp(menuefun) && objectp(ob))
+	menuefun = "start_options_menue";
+    menues[name] = closurep(ob)?ob:({ob,menuefun});
+}
+
+/*
+FUNKTION: delete_options_menue
+DEKLARATION: nomask void delete_options_menue(string name)
+BESCHREIBUNG:
+Damit wird ein Menue aus der Liste aller Menues mit Einstellungen entfernt.
+VERWEISE: add_options_menue
+GRUPPEN: spieler
+*/
+nomask void delete_options_menue(string name)
+{
+    if(member(OWN_MENUES, name)>=0)
+	return;
+    m_delete(menues, name);
+}
+
+/*
+FUNKTION: add_options_action
+DEKLARATION: nomask varargs void add_options_action(string name, string cmd, int flag, closure fun | object ob[, string fun])
+BESCHREIBUNG:
+Hiermit meldet man eine Behandlungsroutine fuer Kommandozeilenoptionen an.
+'name' ist eine Beschreibung, welche in der Hauptuebersicht ausgegeben wird.
+'cmd' und 'flag' entsprechen in ihrem Sinn den Parametern von add_action.
+
+Passt ein Parameter auf diese Option, so wird ob->fun(string rest) bzw.
+funcall(fun, rest) aufgerufen. Falls 'ob' fehlt, wird previous_object()
+genommen; falls 'fun' fehlt, wird 'cmd' stattdessen genommen.
+
+Es gelten folgende Richtlinien fuer diese Kommandozeilenoptionen:
+ - Die Verben sollten einzigartig sein, d.h. man sollte nicht andere Verben
+   der Einstellungen ueberlagern.
+ - Flag sollte <= 0 sein (siehe add_action)
+ - Es sollte auf ? als Reststring mit einem geeigneten Hilfetext reagiert
+   werden.
+ - Jede Option, auf welche ueber die Kommandozeile zugegriffen werden kann,
+   sollte ebenfalls in einem Menue erscheinen.
+VERWEISE: delete_options_action, add_options_menue, add_action
+GRUPPEN: spieler
+*/
+nomask varargs void add_options_action(string name, string cmd, int flag, mixed ob, string menuefun)
+{
+    if(!cmd || member(OWN_ACTIONS, cmd)>=0)
+	return;
+    if(!ob)
+	ob = previous_object();
+    if(!stringp(menuefun) && objectp(ob))
+	menuefun = cmd;
+    actions[cmd] = ({name, flag, closurep(ob)?ob:({ob,menuefun})});
+}
+
+/*
+FUNKTION: delete_options_action
+DEKLARATION: nomask void delete_options_action(string cmd)
+BESCHREIBUNG:
+Damit wird eine Behandlungsroutine fuer Kommandozeilenoptionen
+aus der Liste aller Routinen entfernt.
+VERWEISE: add_options_action
+GRUPPEN: spieler
+*/
+nomask void delete_options_action(string cmd)
+{
+    if(member(OWN_ACTIONS, cmd)>=0)
+	return;
+    m_delete(actions, cmd);
+}
+
+/*
+FUNKTION: print_options_help
+DEKLARATION: nomask void print_options_help(int quiet, string filename, string command, closure callback, mixed parameter)
+BESCHREIBUNG:
+Zeigt die Hilfe zu einem bestimmten Einstellungsmenue oder zu einer
+bestimmten Einstellung an. 
+Ist quiet == 1, so wird erstmal nur die Statuszeile ausgegeben.
+(Dies ist sinnvoll, falls man eine Meldung ausgeben will und gleichzeitig
+in dieses Menue springen will.)
+filename ist der Name der Datei mit den Hilfetexten. Diese Datei muss
+folgenden Aufbau haben:
+
+Am Anfang kommen ein paar Zeilen mit einer allgemeinen Erklaerung des
+Menues. Diese Zeilen sind nicht eingerueckt. Danach folgt eine Leerzeile.
+
+ Dann die Beschreibung eines Abschnittes des Menues, wobei die erste Zeile
+        Mit einem Leerzeichen eingerueckt ist und alle nachfolgenden Zeilen
+	mit mindestens 2 Leerzeichen. Danach folgt eine Leerzeile
+	
+   Befehl: Der Befehl und seine Beschreibung
+           Der Befehl muss mit genau 3 Leerzeichen eingerueckt sein und von
+	   einem Doppelpunkt und mindestens einem Leerzeichen gefolgt sein.
+	   Alle weiteren Zeilen muessen mit mindestens 2 Leerzeichen
+	   eingerueckt werden.
+
+Alle Abschnitte und Befehle muessen mit mindestens einer Leerzeile voneinander
+getrennt sein. Der Parameter command gibt (falls nicht 0 und nicht leer)
+einen Befehl an, dessen Hilfe ausschliesslich angezeigt werden soll.
+Wenn man aus diesem Hilfemenue zurueckkehrt, wird
+funcall(callback, quiet, parameter) aufgerufen, wobei quiet dann angibt,
+ob das neue Menue sofort neu ausgegeben werden soll (==0) oder erstmal
+nur die Statuszeile (==1).
+VERWEISE: add_options_menue, print_color_options
+GRUPPEN: spieler
+*/
+nomask void print_options_help(int quiet, string filename,
+	string command, closure callback, mixed parameter)
+{
+    string file, zauberpunkte;
+    string *text;
+    filename = abs_path(filename, OPT_HELP_PATH);
+    if(wizp(this_object()))
+	file = read_file(filename + ".wiz");
+    if(!file)
+	file = read_file(filename);
+    if(!file)
+    {
+	funcall(callback, 0, parameter);
+	return;
+    }
+    text = explode(file,"\n")[0..<2];
+    if(command && strlen(command))
+    {
+	// Die Datei hat folgenden Aufbau:
+	//<Einfuehrender Text ohne Einzug>
+	//Leerzeile
+	// <Text zum Abschnitt, 1. Zeile mit 1 Leerzeichen eingerueckt,
+	//            der Rest etwas mehr>
+	//Leerzeile
+	//   Command: Name
+	//            Beschreibung
+	//Leerzeile
+	int headerend, parbegin=-1, parend, combegin, comend, comfirst;
+
+	for(headerend=0;headerend<sizeof(text);headerend++)
+	    if(trim(text[headerend])=="")
+		break;
+		
+	command = "   "+lower_case(command)+": ";
+	for(combegin=headerend;combegin<sizeof(text);combegin++)
+	{
+	    if(trim(text[combegin])=="")
+	    {
+		if(!parend)
+		    parend = combegin;
+		comfirst = 0;
+	    }
+	    else if(text[combegin][0]==' ' && text[combegin][1]!=' ')
+	    {
+		parbegin = combegin;
+		parend = 0;
+	    }
+	    else if(!strstr(lower_case(text[combegin]), command) ||
+		command[0..<3] == lower_case(text[combegin]))
+		break;
+	    else if(text[combegin][0..2]=="   " && !comfirst)
+		comfirst = combegin;
+	}
+	if(combegin<sizeof(text))
+	{
+	    for(comend=combegin;comend<sizeof(text);comend++)
+		if(trim(text[comend])=="")
+		    break;
+	    if(comfirst)
+		combegin = comfirst;
+	    if(parbegin==-1)
+		text = text[0..headerend] + text[combegin..comend];
+	    else
+		text = text[0..headerend] + text[parbegin..parend] + text[combegin..comend];
+	}
+    }
+    text = map(text, #'regreplace, "Zauberpunkte", ({string}) this_object()->query_sp_name(), 1);
+    text = map(text, #'regreplace, "\<ZP\>", ({string}) this_object()->query_sp_short_name(), 1);
+    text = map(text, #'regreplace, "\<zp\>", lower_case(({string}) this_object()->query_sp_short_name()), 1);
+    text = map(text, #'regreplace, "UNItopia", MUD_NAME, 1);
+    this_object()->more(text,
+	    ({ "Hilfe [q,z] ",
+	       "----------- Hilfe zu den Einstellungen: ---------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_AUTO_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    (["Options: Help": 1,
+	      "filename": filename,
+	      "command": command,
+	      "callback": callback,
+	      "param": parameter
+	    ]));
+}
+
+private int handle_options_help(string str, string topic,
+	string command, closure callback, mixed parameter)
+{
+    enable_commands();
+    if(strlen(str)==1 || (strlen(str)>1 && str[1]==' '))
+    {
+	int c = lower_case(str)[0];
+	str = trim(str[2..<1]);
+	switch(c)
+	{
+	    case 'q':
+		return END_MORE;
+	    case 'z':
+		funcall(callback, 0, parameter);
+		return END_MORE;
+	}
+    }
+}
+
+/*
+FUNKTION: start_options_menue
+DEKLARATION: nomask varargs void start_options_menue(int quiet)
+BESCHREIBUNG:
+Gibt das Hauptmenue fuer die Einstellungen aus.
+Ist quiet == 1, so wird erstmal die Eingabe des Spielers abgewartet.
+(Dies ist sinnvoll, falls ein Untermenue einen Fehler ausgeben moechte
+und gleichzeitig wieder ins Hauptmenue zurueckspringen will.)
+VERWEISE: add_options_menue, delete_options_menue
+GRUPPEN: spieler
+*/
+nomask varargs void start_options_menue(int quiet)
+{
+    string *text = ({});
+    string result;
+    menues = filter(menues, (: $2 && (!pointerp($2) || $2[0]) :));
+    active_menue = ({});
+    foreach(string name: sort_array(m_indices(menues),#'>))
+    {
+	text += ({name});
+	active_menue += ({menues[name]});
+    }
+    if(!sizeof(text))
+	MSG("Keine Menues mit Einstellungen vorhanden.\n");
+    else
+    {
+	result = ({string}) this_object()->more(text,
+	    ({ "[q,<nr>,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_LINE_NUMBERS|M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    OPTIONS_ID);
+	if(result)
+	    MSG(M_ERR(result));
+    }
+}
+
+// Wird von der add_action aufgerufen, wenn Parameter angegeben wurden.
+private void handle_options_cmd(string str)
+{
+// Verb: ({Name, Flag, Funktion})
+    actions = filter(actions, (: $2[2] && (!pointerp($2[2]) || $2[2][0]) :));
+    if(member(hilfe_cmd, str))
+    {
+	string *text = ({ });
+	foreach(string cmd:sort_array(m_indices(actions),#'>))
+	    text += explode(sprintf("  %-=20.20s %-=55s\n",
+	         (actions[cmd][1]<0)
+		?cmd[0..(-actions[cmd][1]-1)]+"["+cmd[(-actions[cmd][1])..<1]+"]"
+		:cmd, funcall(actions[cmd][0], this_object())),"\n")[0..<2];
+	if(!sizeof(text))
+	    MSG("Es sind keine Kommandozeileneinstellmoeglichkeiten vorhanden.\n");
+	else
+	{
+	    string result = ({string}) this_object()->more( ({
+		"In folgenden Bereichen kannst du mit 'einstellung <bereich> <optionen>'",
+	        "Einstellungen vornehmen:",
+		"" }) + text +({
+		"",
+		"Mit 'einstellung <bereich> ?' solltest Du weitere Informationen zu jedem",
+		"Bereich erhalten."
+		}), "(Zeile %d von %d) [q,<,>,/<such>] ", 0,
+		M_AUTO_END|M_THIS_OBJECT, "Options: Command Line");
+	    if(result)
+		MSG(M_ERR(result));
+	}
+    }
+    else
+    {
+	string *words = explode(str," ");
+	string verb = lower_case(words[0]);
+	string rest = implode(words[1..<1]," ");
+	foreach(string cmd:sort_array(m_indices(actions),#'>))
+	{
+	    if(actions[cmd][1]<0)
+	    {
+		if(strstr(cmd, verb) || strlen(verb) < -actions[cmd][1])
+		    continue;
+	    }
+	    else switch(actions[cmd][1])
+	    {
+		case AA_SHORT:
+		    if(strstr(verb, cmd))
+			continue;
+		    break;
+		case AA_NOSPACE:
+		case AA_IMM_ARGS:
+		    if(!strstr(verb, cmd))
+			continue;
+		    rest = verb[strlen(cmd)..<1]+" "+rest;
+		    break;
+		case 0:
+		    if(verb!=cmd)
+			continue;
+		    break;
+		default:
+		    continue;
+	    }
+	    if(pointerp(actions[cmd][2]))
+		call_other(actions[cmd][2][0], actions[cmd][2][1], rest);
+	    else
+		funcall(actions[cmd][2], rest);
+	    return;
+	}
+	MSG("Unbekannte Einstellung '"+str+"'.\n");
+    }
+}
+
+/* Dies ist eine Hilfsfunktion, welche anhand eines Mappings
+ * ([ Taste: Einstellungscode ]) Eingaben des more in Aufrufe der
+ * angegebenen change_fun umwandelt. Es wird ein Code zurueckgegeben,
+ * welcher von more_action dann zurueckgeliefert werden sollte.
+ */
+private varargs int handle_menue_options(string str, mapping cmds, closure change_fun, closure display_fun, string help_file, closure parent_menue)
+{
+    enable_commands();
+    if(strlen(str)==1 || (strlen(str)>1 && str[1]==' '))
+    {
+	int c = lower_case(str)[0];
+	str = trim(str[2..<1]);
+	if(member(cmds, c))
+	{
+	    mixed ret = funcall(change_fun, cmds[c], str, OPT_MENUE,
+		lambda(({'result}),({
+		    (:
+			if(stringp($1))
+			{
+			    if(this_object()->query_no_ascii_art())
+			        MSG(wrap(ret));
+			    funcall($2);
+			}
+			else if($1==OPT_MESSAGE)
+			    funcall($2,1);
+		    :), 'result, display_fun})));
+	    if(stringp(ret))
+	    {
+	        if(this_object()->query_no_ascii_art())
+	            MSG(wrap(ret));
+		funcall(display_fun);
+		return END_MORE;
+	    }
+	    else switch(ret)
+	    {
+		case OPT_MESSAGE:
+		    funcall(display_fun, 1);
+		    return END_MORE;
+		case OPT_INPUT_TO_STARTED:
+		    return END_MORE;
+	    }
+	}
+	else switch(c)
+	{
+	    case 'q':
+		return END_MORE;
+	    case 'z':
+		funcall(parent_menue||#'start_options_menue);
+		return END_MORE;
+	    case '?':
+		print_options_help(0, help_file, str, display_fun, 0);
+		return END_MORE;
+	}
+    }
+}
+
+private void handle_cmds_actions(string *parts, int wanthelp, int kein, mixed *cmds, closure change_fun, string help_file)
+{
+    while(sizeof(parts))
+    {
+	int local_wanthelp = 0;
+	int done = 0;
+	string * words = explode(parts[0], " ");
+	string cmd = words[0];
+	string rest = implode(words[1..<1]," ");
+
+	parts = parts[1..<1];
+	
+	if(member(hilfe_cmd, strip(rest)))
+	    local_wanthelp = 1;
+	else if(member(hilfe_cmd, cmd))
+	{
+	    local_wanthelp = 1;
+	    cmd = rest;
+	}
+	else if((lower_case(cmd)=="kein" ||
+	         lower_case(cmd)=="keine" ||
+		 lower_case(cmd)=="keinen") && sizeof(words)>1)
+	{
+	    cmd = words[1];
+	    rest = implode(({"keine"})+words[2..<1], " ");
+	}
+	else if(kein)
+	    rest = implode(({"keine"})+words[1..<1], " ");
+	
+	foreach(mixed ac: cmds)
+	    if((!strlen(ac[0]) && !strlen(cmd) && !wanthelp) ||
+	       (!strstr(ac[0], lower_case(cmd)) && strlen(cmd)>=ac[1]))
+	    {
+		mixed ret;
+	    
+		if(wanthelp || local_wanthelp)
+	        {
+		    print_options_help(0, help_file, ac[3],
+			lambda(0, ({ #'handle_cmds_actions, quote(parts), wanthelp,
+			    kein, quote(cmds), change_fun, help_file }) ), 0);
+		    return;
+		}
+		ret = funcall(change_fun, ac[2], rest, 0,
+		    (:
+			if(stringp($1) && strlen($1))
+			    MSG(wrap($1));
+		    :) );
+		if(stringp(ret) && strlen(ret))
+		    MSG(wrap(ret));
+		else if(!ret)
+		    MSG("Unbekannte Einstellung '"+cmd+"'.\n");
+		else if(ret==OPT_INPUT_TO_STARTED)
+		    return;
+		done = 1;
+		break;
+	    }
+	if(!done)
+	{
+	    if(wanthelp || local_wanthelp)
+	    {
+		print_options_help(0, help_file, rest, 0 ,0);
+		return;
+	    }
+	    else if(!strlen(cmd+rest))
+	    {
+		MSG("Keine Option angegeben.\n");
+		return;
+	    }
+	    else
+		MSG("Unbekannte Einstellung '"+cmd+"'.\n");
+	}
+    }
+}
+
+/* Dies ist eine Hilfsfunktion, welche anhand eines Arrays
+ * mit Elementen der Form ({ string Befehl, int Anzahl signifikanter Stellen
+ * des Befehls, int Einstellungscode, string Hilfeeintrag })
+ * Kommandozeilenoptionen in Aufrufe der angegebenen change_fun umwandelt.
+ */
+private varargs void handle_cmd_actions(string str, mixed *cmds, closure change_fun, string help_file, string trenner)
+{
+    string *parts = explode(str, " ");
+    string cmd = parts[0];
+    string rest = implode(parts[1..<1]," ");
+    int wanthelp = 0, kein = 0;
+
+    if(member(hilfe_cmd, strip(rest)))
+    {
+	wanthelp = 1;
+	rest = cmd;
+    }
+    else if(member(hilfe_cmd, cmd))
+	wanthelp = 1;
+    else if((lower_case(cmd)=="kein" ||
+	     lower_case(cmd)=="keine" ||
+	     lower_case(cmd)=="keinen") && sizeof(parts)>1)
+	kein = 1;
+    else
+	rest = cmd + (strlen(rest)?(" "+rest):"");
+
+    if(strlen(trenner))
+	parts = regexplode(rest, "["+trenner+"]") - explode(trenner, "") - ({""});
+    else
+	parts = ({ rest });
+    if(!sizeof(parts))
+	parts = ({ "" });
+
+    handle_cmds_actions(parts, wanthelp, kein, cmds, change_fun, help_file);
+}
+
+private string show_input_line(string what, int len)
+{
+    if(what)
+	return "[ "+left(what,len)+" ]";
+    else
+	return "[ "+(len*"_")+" ]";
+}
+
+private string show_value(string what)
+{
+    if(what)
+        return " (" + what + ")";
+    else
+        return "";
+}
+
+
+// ----- Und nun kommen wir zu den einzelnen Menues: -----
+private varargs void print_player_options(int quiet)
+{
+    int reattack = ({int})this_object()->query_reattack();
+    int mailfilter = ({int})this_object()->query_filter_spam();
+    
+    this_object()->more(
+        this_object()->query_no_ascii_art() ?
+        (({
+" Einstellungen zum Charakter:",
+"   P: Passwort",
+"   N: Namensschreibweise" + show_value(({string})this_object()->query_real_cap_name()),
+"",
+" Einstellungen zum Spieler:",
+"   E: E-Mail-Adresse" + show_value(({string})this_object()->query_email()),
+	    }) + ("/obj/player"->query_no_www_page(this_object()->query_real_name())?({}):({
+"   W: WWW-Adresse" + show_value(({string})this_object()->query_www_page()),
+"   T: Twitter",
+	    })) + ({
+"",
+" Kampf:",
+"   A: Verteidigungsmodus ausschalten"+((reattack==REATTACK_DONT)?" (derzeit aus)":""),
+"   O: Nur bei Notwehr verteidigen"+((reattack==REATTACK_ONLY_SELF_DEFENSE)?" (derzeit an)":""),
+"   V: Immer verteidigen"+((reattack==REATTACK_ALWAYS)?" (derzeit an)":" "),
+"   K: Kurze Kampfmeldungen "+(this_object()->query_short_combat_msg()?"ausschalten":"einschalten"),
+"   F: Fluchtmodus setzen "+(this_object()->query_whimpy()?"(derzeit bei "+this_object()->query_whimpy()+" APs)":"(derzeit aus)"),
+"   U: Ueberfallkanalmeldungen "+(this_object()->query_player_flag(PF_NO_UEBERFALL_MSG)?"einschalten":"ausschalten"),
+"",
+" Sonstiges:",
+"   R: Trennzeichen fuer den Tue-Befehl (derzeit: "+this_object()->query_tue_trenner()+")",
+        })) :
+        (({
+" Einstellungen zum Charakter:",
+"   -  (P)asswort:           "+show_input_line("**********",10),
+"   -  (N)amensschreibweise: "+show_input_line(({string})this_object()->query_real_cap_name(),10),
+"",
+" Einstellungen zum Spieler:",
+"   -  (E)-Mail-Adresse:  "+show_input_line(({string})this_object()->query_email(),50),
+	    }) + ("/obj/player"->query_no_www_page(this_object()->query_real_name())?({}):({
+"   -  (W)WW-Adresse:     "+show_input_line(({string})this_object()->query_www_page(),50),
+"   -  (T)witter",
+	    })) + ({
+"",
+" Kampf:",
+"  ("+((reattack==REATTACK_DONT)?"*":" ")+             ") Verteidigungsmodus (a)us               ["+(this_object()->query_short_combat_msg()?"*":" ")+"] (K)urze Kampfmeldungen",
+"  ("+((reattack==REATTACK_ONLY_SELF_DEFENSE)?"*":" ")+") Nur bei N(o)twehr verteidigen          ["+(this_object()->query_whimpy()?"*":" ")+"] (F)luchtmodus bei "+(this_object()->query_whimpy()||"___")+" APs",
+"  ("+((reattack==REATTACK_ALWAYS)?"*":" ")+           ") Immer (v)erteidigen                    ["+(this_object()->query_player_flag(PF_NO_UEBERFALL_MSG)?" ":"*")+"] (U)eberfallkanalmeldungen",
+"",
+" Sonstiges:",
+"   -  T(r)ennzeichen fuer den Tue-Befehl: "+this_object()->query_tue_trenner(),
+	    })),
+	    ({ "Spieler- und Charaktereinstellungen [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    "Options: General");
+}
+
+private varargs void print_twitter_options(int quiet)
+{
+    int filter = ({int})this_object()->query_twitter_filter();
+
+    this_object()->more(
+        this_object()->query_no_ascii_art() ?
+        (({
+" Twitter:",
+"   V: Mit Account verbinden "+(({int})this_object()->has_twitter_token()?"(mit Account verbunden)":"(nicht verbunden)"),
+"   D: Meldungen immer in der dritten Person senden "+(({int})this_object()->query_player_flag(PF_TWITTER_3RD_PERSON)?"(derzeit an)":"(derzeit aus)"),
+"",
+" Meldungen senden ueber:",
+"   R: Geloeste Raetsel " +(filter&(1<<AT_QUEST)  ? "(derzeit an)":"(derzeit aus)"),
+"   S: Geloeste Spiele "  +(filter&(1<<AT_GAME)   ? "(derzeit an)":"(derzeit aus)"),
+"   G: Gildenaufstiege "  +(filter&(1<<AT_GUILD)  ? "(derzeit an)":"(derzeit aus)"),
+"   L: Levelaenderungen " +(filter&(1<<AT_LEVEL)  ? "(derzeit an)":"(derzeit aus)"),
+"   M: Getoetete Monster "+(filter&(1<<AT_KILLED) ? "(derzeit an)":"(derzeit aus)"),
+"   B: Geblitzte Spieler",
+"   T: Eigene Tode "      +(filter&(1<<AT_DEATH)  ? "(derzeit an)":"(derzeit aus)"),
+"   O: Sonstiges "        +(filter&(1<<AT_OTHER)  ? "(derzeit an)":"(derzeit aus)"),
+        })) :
+        (({
+" Twitter:",
+"   -  (V)erbindung: "+(({int})this_object()->has_twitter_token()?"ja":"nein"),
+"  ["+(({int})this_object()->query_player_flag(PF_TWITTER_3RD_PERSON)?"*":" ")+"] Meldungen immer in der (d)ritten Person senden.",
+"",
+" Meldungen senden ueber:",
+"  ["+(filter&(1<<AT_QUEST)  ? "*":" ")+"] Geloeste (R)aetsel",
+"  ["+(filter&(1<<AT_GAME)   ? "*":" ")+"] Geloeste (S)piele",
+"  ["+(filter&(1<<AT_GUILD)  ? "*":" ")+"] (G)ildenaufstiege",
+"  ["+(filter&(1<<AT_LEVEL)  ? "*":" ")+"] (L)evelaenderungen",
+"  ["+(filter&(1<<AT_KILLED) ? "*":" ")+"] Getoetete (M)onster",
+"  [ ] Ge(b)litzte Spieler",
+"  ["+(filter&(1<<AT_DEATH)  ? "*":" ")+"] Eigene (T)ode",
+"  ["+(filter&(1<<AT_OTHER)  ? "*":" ")+"] S(o)nstiges",
+        })),
+        ({ "Twitter [q,z,?] ",
+           "----------- Einstellungen: ----------------------------------------------------",
+           LINE, MORE_LINE, MORE_LINE
+        }), 0,
+        M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+        "Options: Twitter");
+}
+
+#define OPT_TWITTER_AUTHORIZATION 1
+#define OPT_TWITTER_QUEST         2
+#define OPT_TWITTER_GAME          3
+#define OPT_TWITTER_GUILD         4
+#define OPT_TWITTER_LEVEL         5
+#define OPT_TWITTER_KILLED        6
+#define OPT_TWITTER_DEATH         7
+#define OPT_TWITTER_OTHER         8
+#define OPT_TWITTER_3RD_PERSON    9
+
+private varargs mixed change_twitter_options(int what, string str, int flags, closure input_to_callback)
+{
+    str = trim(str);
+    switch(what)
+    {
+        case OPT_TWITTER_AUTHORIZATION:
+            this_object()->start_twitter_authorization(
+                function void()
+                {
+                    funcall(input_to_callback, OPT_MESSAGE);
+                });
+            return OPT_INPUT_TO_STARTED;
+
+        case OPT_TWITTER_QUEST:
+            this_object()->switch_twitter_filter(AT_QUEST);
+            return "";
+
+        case OPT_TWITTER_GAME:
+            this_object()->switch_twitter_filter(AT_GAME);
+            return "";
+
+        case OPT_TWITTER_GUILD:
+            this_object()->switch_twitter_filter(AT_GUILD);
+            return "";
+
+        case OPT_TWITTER_LEVEL:
+            this_object()->switch_twitter_filter(AT_LEVEL);
+            return "";
+
+        case OPT_TWITTER_KILLED:
+            this_object()->switch_twitter_filter(AT_KILLED);
+            return "";
+
+        case OPT_TWITTER_DEATH:
+            this_object()->switch_twitter_filter(AT_DEATH);
+            return "";
+
+        case OPT_TWITTER_OTHER:
+            this_object()->switch_twitter_filter(AT_OTHER);
+            return "";
+
+        case OPT_TWITTER_3RD_PERSON:
+            this_object()->set_player_flag(PF_TWITTER_3RD_PERSON,
+                !this_object()->query_player_flag(PF_TWITTER_3RD_PERSON));
+            return "";
+    }
+}
+
+private int handle_twitter_options(string str)
+{
+    return handle_menue_options(str,
+        ([
+            'v': OPT_TWITTER_AUTHORIZATION,
+            'r': OPT_TWITTER_QUEST,
+            's': OPT_TWITTER_GAME,
+            'g': OPT_TWITTER_GUILD,
+            'l': OPT_TWITTER_LEVEL,
+            'm': OPT_TWITTER_KILLED,
+            't': OPT_TWITTER_DEATH,
+            'o': OPT_TWITTER_OTHER,
+            'd': OPT_TWITTER_3RD_PERSON,
+        ]), #'change_twitter_options, #'print_twitter_options, "Twitter",
+            #'print_player_options);
+}
+
+// Einstellungsmoeglichkeiten
+#define OPT_PLAYER_PASSWORT		1
+#define OPT_PLAYER_NAME			2
+#define OPT_PLAYER_EMAIL		3
+#define OPT_PLAYER_WWW			4
+#define OPT_PLAYER_VERTEIDIGUNG		5
+#define OPT_PLAYER_VERTEIDIGUNG_AUS	6
+#define OPT_PLAYER_VERTEIDIGUNG_SD	7
+#define OPT_PLAYER_VERTEIDIGUNG_IMMER	8
+#define OPT_PLAYER_KAMPFANZEIGE		9
+#define OPT_PLAYER_FLUCHT		10
+#define OPT_PLAYER_TUE_TRENNER  	11
+#define OPT_PLAYER_UEBERFALLKANAL	12
+#define OPT_PLAYER_TWITTER		13
+
+// Bei input_to's wird dann der callback mit dem Rueckgabewert aufgerufen.
+private varargs mixed change_player_options(int what, string str, int flags, closure input_to_callback)
+{
+    str = trim(str);
+    switch(what)
+    {
+
+	case OPT_PLAYER_EMAIL: // E-Mail-Adresse
+	    if(strlen(str))
+	    {
+		if(str == "keine")
+		    str = 0;
+		if (strlen(str) && sscanf(str,"%~s@%~s.%~s")!=3)
+		{
+		    MSG("Eine korrekte E-Mail-Adresse hat folgendes Aussehen:\n"+
+	                "'username@rechnername.domain'.\n"+
+			"z.B.: mudadm@unitopia.de\n"+
+			"Wenn Du keine E-Mail-Adresse hast, gib 'keine' an.\n");
+		    return OPT_MESSAGE;
+		}
+		this_object()->set_email(str);
+		return str
+		    ?("Okay, E-Mail-Adresse wurde auf '"+str+"' gesetzt.")
+		    :("Deine E-Mail-Adresse wurde geloescht.");
+	    }
+	    else if(!(flags&OPT_MENUE))
+		return (str=({string})this_object()->query_email())
+		    ?("Deine E-Mail-Adresse lautet: "+str)
+		    :("Du hast keine E-Mail-Adresse gesetzt.");
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else if(this_object()->query_email())
+	    {
+		this_object()->set_email(0);
+		return "E-Mail_Adresse geloescht.";
+	    }
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2,
+			    change_player_options(OPT_PLAYER_EMAIL, $1,
+				$3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Bitte gib Deine E-Mail-Adresse ein: ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+
+	case OPT_PLAYER_FLUCHT: // Fluchtmodus
+	    if(strlen(str))
+	    {
+	        int nr;
+		if(sscanf(str,"%d",nr) && nr>=0)
+		{
+		    if(nr > ({int})this_object()->query_max_hp())
+		    {
+			MSG("Soviel Ausdauerpunkte hast Du nicht.\n");
+			return OPT_MESSAGE;
+		    }
+		    this_object()->set_whimpy(nr);
+		    return nr
+			?("Fluchtmodus bei "+nr+" Ausdauerpunkten eingeschaltet.")
+			:("Fluchtmodus ausgeschaltet.");
+		}
+		else if(lower_case(str)=="aus")
+		{
+		    this_object()->set_whimpy(0);
+		    return "Fluchtmodus ausgeschaltet.";
+		}
+		else    
+		{
+		    MSG("Gib bitte eine positive Zahl an, um den Fluchtmodus bei diesen\n"
+		        "Ausdauerpunkten einzuschalten, oder 'aus' um ihn auszuschalten.\n");
+		    return OPT_MESSAGE;
+		}
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else if((flags&OPT_MENUE) && ({int})this_object()->query_whimpy())
+	    {
+		this_object()->set_whimpy(0);
+		return "Fluchtmodus ausgeschaltet.";
+	    }
+	    else
+	    {
+	        input_to(
+		    (:
+			funcall($2,
+			    change_player_options(OPT_PLAYER_FLUCHT, $1,
+				$3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Ab wieviel Ausdauerpunkten willst du die Flucht ergreifen? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;;
+	    }
+
+	case OPT_PLAYER_KAMPFANZEIGE: // Kurze Kampfmeldungen
+	    this_object()->set_short_combat_msg(!this_object()->query_short_combat_msg());
+	    return this_object()->query_short_combat_msg()
+		?"Du erhaeltst jetzt kurze Kampfmeldungen."
+		:"Du erhaeltst jetzt lange Kampfmeldungen.";
+
+	case OPT_PLAYER_NAME: // Namensschreibweise
+	    if(strlen(str))
+	    {
+	        if(lower_case(str) != ({string})this_object()->query_real_name())
+	        {
+		    MSG(wrap("Die neue Schreibweise Deines Namens darf sich "
+			     "von der alten nur durch eine geaenderte Gross- / Klein"
+			     "schreibung unterscheiden, jedoch keine anderen Buchstaben "
+			     "oder Zeichen verwenden."));
+		    return OPT_MESSAGE;
+		}
+		this_object()->set_real_cap_name(str);
+		return "Ok, Du wirst jetzt '"+str+"' geschrieben.";
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2,
+			    change_player_options(OPT_PLAYER_NAME, $1,
+				$3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Wie soll Dein Name geschrieben werden? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+
+	case OPT_PLAYER_PASSWORT: // Passwort
+	    this_object()->change_password(0,0,0,
+		lambda(0,({#'funcall, input_to_callback, OPT_MESSAGE})));
+	    return OPT_INPUT_TO_STARTED;
+
+	case OPT_PLAYER_VERTEIDIGUNG_AUS:
+	    this_object()->set_reattack(REATTACK_DONT);
+	    return "Verteidigungsmodus ausgeschaltet.";
+	case OPT_PLAYER_VERTEIDIGUNG_SD:
+	    this_object()->set_reattack(REATTACK_ONLY_SELF_DEFENSE);
+	    return "Verteidigungsmodus nur bei Notwehr eingeschaltet.";
+	case OPT_PLAYER_VERTEIDIGUNG_IMMER:
+	    this_object()->set_reattack(REATTACK_ALWAYS);
+	    return "Verteidigungsmodus immer eingeschaltet.";
+	case OPT_PLAYER_VERTEIDIGUNG: // Verteidigungsmodus
+	    if(!strstr(str,"aus"))
+		this_object()->set_reattack(REATTACK_DONT);
+	    else if(!strstr(str,"ein") || !strstr(str,"an"))
+		this_object()->set_reattack(REATTACK_ONLY_SELF_DEFENSE);
+	    else if(!strstr(str,"immer") &&
+		(strstr(str," an")>0 || strstr(str," ein")>0))
+		this_object()->set_reattack(REATTACK_ALWAYS);
+	    else
+		this_object()->set_reattack(!this_object()->query_reattack());
+	    return this_object()->query_reattack()
+		?("Verteidigungsmodus "+((({int})this_object()->query_reattack()==REATTACK_ALWAYS)?"immer":"nur bei Notwehr")+" eingeschaltet.")
+		:"Verteidigungsmodus ausgeschaltet.";
+	case OPT_PLAYER_UEBERFALLKANAL:
+	{
+	    int erg;
+	    str = lower_case(str);
+	    if(!strstr(str,"an") || !strstr(str,"ein"))
+		erg = 1;
+	    else if(!strstr(str,"aus") || !strstr(str,"kein") || str=="nicht")
+	        erg = 0;
+	    else
+	        erg = ({int})this_object()->query_player_flag(PF_NO_UEBERFALL_MSG);
+	    this_object()->set_player_flag(PF_NO_UEBERFALL_MSG, !erg);
+
+	    return erg
+		? "Meldung auf dem Ueberfallkanal eingeschaltet."
+		: "Meldung auf dem Ueberfallkanal ausgeschaltet.";
+	}
+	
+	case OPT_PLAYER_WWW: // WWW-Adresse
+	    if ("/obj/player"->query_no_www_page (({string})this_object()->query_real_name()))
+		return 0;
+	    if (newbiep(this_player())) //Newbies duerfen noch keine anlegen.
+	    {
+		MSG(wrap("Du bist leider noch zu jung um eine Homepage eintragen "
+			 "zu duerfen. Dazu musst Du mindestens einen Tag alt sein."));
+		return OPT_MESSAGE;
+	    }
+	    if(strlen(str))
+	    {
+		if(str == "keine")
+		    str = 0;
+		if (str && sscanf(str,"%~s://%~s")!=2)
+		{
+		    MSG("Eine korrekte URL-Adresse hat folgendes Aussehen:\n"+
+	                "'http://mein.rechner.de/meine_seite/'.\n"+
+			"z.B.: http://www.unitopia.de/~monty/\n"+
+			"Wenn Du keine WWW-Seite hast, gib 'keine' an.\n");
+		    return OPT_MESSAGE;
+		}
+
+                if(str && strlen(str) > 100)
+                {
+                    MSG("Diese URL ist leider zu lang.\n");
+                    return OPT_MESSAGE;
+                }
+
+		this_object()->set_www_page(str);
+		return str
+		    ?("Okay, WWW-Seite auf '"+str+"' gesetzt.")
+		    :("Deine WWW-Seiteninformation wurde geloescht.");
+	    }
+	    else if(!(flags&OPT_MENUE))
+		return (str=({string})this_object()->query_www_page())
+		    ?("Deine WWW-Seite: "+str)
+		    :("Du hast keine WWW-Seite gesetzt.");
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else if(this_object()->query_www_page())
+	    {
+	        this_object()->set_www_page(0);
+		return "Deine WWW-Seiteninformation wurde geloescht.";
+	    }	    
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2,
+			    change_player_options(OPT_PLAYER_WWW, $1,
+				$3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Bitte gib Deine WWW-Seite ein: ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;;
+	    }
+	case OPT_PLAYER_TUE_TRENNER: // Tue-Kuerzel Trenner
+	    if(strlen(str))
+	    {
+		this_object()->set_tue_trenner(str);
+		return "Ok, Du hast als Tue-Trenner jetzt '"+str+"' gesetzt.";
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2,
+			    change_player_options(OPT_PLAYER_TUE_TRENNER, $1,
+				$3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Was soll Dein Tue-Trenner sein? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+
+	case OPT_PLAYER_TWITTER:
+	    print_twitter_options();
+	    return OPT_INPUT_TO_STARTED;
+    }
+}
+
+private int handle_player_options(string str)
+{
+    return handle_menue_options(str,
+	([
+	    'a': OPT_PLAYER_VERTEIDIGUNG_AUS,
+	    'e': OPT_PLAYER_EMAIL,
+	    'f': OPT_PLAYER_FLUCHT,
+	    'k': OPT_PLAYER_KAMPFANZEIGE,
+	    'n': OPT_PLAYER_NAME,
+	    'o': OPT_PLAYER_VERTEIDIGUNG_SD,
+	    'p': OPT_PLAYER_PASSWORT,
+	    'r': OPT_PLAYER_TUE_TRENNER,
+	    't': OPT_PLAYER_TWITTER,
+	    'u': OPT_PLAYER_UEBERFALLKANAL,
+	    'v': OPT_PLAYER_VERTEIDIGUNG_IMMER,
+	    'w': OPT_PLAYER_WWW,
+	]), #'change_player_options, #'print_player_options, "Player");
+}
+
+#define OPT_CMD_CHARACTER	0
+#define OPT_CMD_PLAYER		1
+#define OPT_CMD_KAMPF		2
+#define OPT_CMD_SONST		3
+
+private void handle_player_actions(string str, int which)
+{
+    handle_cmd_actions(str,
+	({ 
+	    ({
+		({ "passwort",		5, OPT_PLAYER_PASSWORT, "Passwort" }),
+		({ "name",		4, OPT_PLAYER_NAME, "Name <neue Schreibweise>" }),
+	    }),
+	    ({
+		({ "email",		5, OPT_PLAYER_EMAIL, "email" }),
+	        ({ "mail",		4, OPT_PLAYER_EMAIL, "email" }),
+		({ "www",		3, OPT_PLAYER_WWW, "www" }),
+	        ({ "url",		3, OPT_PLAYER_WWW, "www" }),
+	    }),
+	    ({
+		({ "verteidigung",	4, OPT_PLAYER_VERTEIDIGUNG, "vert[eidigung]" }),
+	        ({ "kampfanzeige",	8, OPT_PLAYER_KAMPFANZEIGE, "kampfanz[eige]" }),
+		({ "anzeige",		3, OPT_PLAYER_KAMPFANZEIGE, "anz[eige]" }),
+	        ({ "flucht",		5, OPT_PLAYER_FLUCHT, "flucht aus" }),
+	        ({ "ueberfallkanalmeldung", 9, OPT_PLAYER_UEBERFALLKANAL, "ueberfall[kanalmeldung]" }),
+	    }),
+	    ({
+	        ({ "tuetrenner",        3, OPT_PLAYER_TUE_TRENNER, "<neuer Tue-Trenner>" }),
+	    }),
+	})[which], #'change_player_options,
+	({"Character.cl", "Player.cl", "Fight.cl","Sonst.cl"})[which]);
+}
+
+private varargs void print_client_options(int quiet)
+{
+    int mailfilter = ({int})this_object()->query_filter_spam();
+    int webmud = ({int})this_object()->uses_webmud();
+    string wstil = ({string})this_object()->query_webmud_style() || "normal";
+    
+    this_object()->more(
+        this_object()->query_no_ascii_art() ?
+        (({
+" Telnet/MUD-Client:",
+"   G: Getrennte VT100-Eingabezeile "+(({int})this_object()->query_client_option(CLIENT_VT100)?"ausschalten":"einschalten"),
+"   A: Bewegung mit Numpad-Tasten bei getrennter Eingabezeile "+(({int})this_object()->query_client_option(CLIENT_VT100_NUMPAD)?"ausschalten":"einschalten"),
+	    }) + (wizp(this_object())?({
+"   W: Getrennte VT100-Eingabezeile in der Wiz-Shell "+(({int})this_object()->query_client_option(CLIENT_VT100_WIZSHELL)?"ausschalten":"einschalten"),
+	    }):({})) + ({
+"   P: Prompt "+(({string})this_object()->query_prompt_string()==""?"nicht mehr ":"")+"anzeigen",
+"   E: EOR-Prompt-Protokoll "+(({int})this_object()->query_client_option(CLIENT_NO_EOR)?"ausschalten":"einschalten"),
+"   I: Telnet-Ping setzen (derzeit "+(this_object()->query_telnet_ping() ? "alle " + (({int})this_object()->query_telnet_ping()/60)+" Minuten" : "ausgeschaltet")+")",
+"   O: Zeilen bei more (derzeit "+(this_object()->query_real_more_chunk() || "automatisch")+")",
+            }) + (wizp(this_object()) ? ({
+"   T: Terminalbreite (derzeit "+(this_object()->query_set_client_width() || "automatisch")+")",
+            }) : ({})) + (webmud ? ({
+"   D: WebMUD-Editor "+(({int})this_object()->query_client_option(CLIENT_WEBMUD_NO_EDIT)?"nicht mehr ":"")+"verwenden.",
+            }) : ({})) + ({
+"",
+" Externe E-Mails:",
+"   U: Ungeprueft akzeptieren"+((mailfilter==MAIL_UNFILTERED)?" (derzeit an)":""),
+"   S: Spam-Filter einschalten"+((mailfilter>0)?" (derzeit an)": ""),
+"   B: Alle ablehnen"+((mailfilter==MAIL_BOUNCE)?" (derzeit an)": ""),
+"",
+           }) + (webmud ? ({
+" WebMUD-Stil:",
+"   N: Normal"+(wstil=="normal"?" (derzeit aktiv)":""),
+"   C: Schwarz auf Weiss"+(wstil=="weiss"?" (derzeit aktiv)":""),
+"   D: Dunkel"+(wstil=="dunkel"?" (derzeit aktiv)":""),
+"",
+           }) : ({})) + ({
+" Usenet/InterMUD-Brett:",
+"   M: E-Mail-Adresse"+show_value(({string})this_object()->query_usenet_email()),
+        })) :
+        (({
+" Telnet/MUD-Client:",
+"  ["+(({int})this_object()->query_client_option(CLIENT_VT100)?"*":" ")+"] (G)etrennte VT100-Eingabezeile",
+"      ["+(({int})this_object()->query_client_option(CLIENT_VT100_NUMPAD)?"*":" ")+"] Bewegung mit Nump(a)d-Tasten",
+	    }) + (wizp(this_object())?({
+"  ["+(({int})this_object()->query_client_option(CLIENT_VT100_WIZSHELL)?"*":" ")+"] Getrennte VT100-Eingabezeile in der (W)iz-Shell",
+	    }):({})) + ({
+"  ["+(({string})this_object()->query_prompt_string()==""?" ":"*")+"] (P)rompt anzeigen",
+"  ["+(({int})this_object()->query_client_option(CLIENT_NO_EOR)?" ":"*")+"] (E)OR-Prompt-Protokoll",
+"   -  Telnet-P(i)ng alle "+((({int})this_object()->query_telnet_ping()/60)||"___")+" Minuten senden",
+"   -  Zeilen bei m(o)re: "+(this_object()->query_real_more_chunk() || "auto"),
+            }) + (wizp(this_object()) ? ({
+"   -  (T)erminalbreite:  "+(this_object()->query_set_client_width() || "auto"),
+            }) : ({})) + (webmud ? ({
+"  ["+(({int})this_object()->query_client_option(CLIENT_WEBMUD_NO_EDIT)?" ":"*")+"] WebMUD-E(d)itor verwenden.",
+            }) : ({})) + ({
+"",
+" Externe E-Mails:"+(webmud?"                    WebMUD-Stil:":""),
+"  ("+((mailfilter==MAIL_UNFILTERED)?"*": " ")+") (U)ngeprueft akzeptieren"+(webmud?"        ("+(wstil=="normal"?"*":" ")+") (N)ormal":""),
+"  ("+((mailfilter>0)?"*": " ")+") (S)pam-Filter einschalten"+(webmud?"       ("+(wstil=="weiss"?"*":" ")+") S(c)hwarz auf Weiss":""),
+"  ("+((mailfilter==MAIL_BOUNCE)?"*": " ")+") A(b)lehnen"+(webmud?"                      ("+(wstil=="dunkel"?"*":" ")+") D(u)nkel":""),
+"",
+" Usenet/InterMUD-Brett:",
+"   -  E-(M)ail-Adresse:  "+show_input_line(({string})this_object()->query_usenet_email(),50),
+	    })),
+	    ({ "MUD-Client und E-Mail [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    "Options: Client");
+}
+
+#define OPT_CLIENT_VT100_CLIENT 	 1
+#define OPT_CLIENT_NUMPAD_WALKING	 11
+#define OPT_CLIENT_VT100_CLIENT_WIZSHELL 13
+#define OPT_CLIENT_PROMPT		 2
+#define OPT_CLIENT_EOR			 3
+#define OPT_CLIENT_TELNETPING		 4
+#define OPT_CLIENT_MORECHUNK		 5
+#define OPT_CLIENT_EXTMAIL		 6
+#define OPT_CLIENT_EXTMAIL_UNFILTERED	 7
+#define OPT_CLIENT_EXTMAIL_SPAMFILTER	 8
+#define OPT_CLIENT_EXTMAIL_BOUNCE	 9
+#define OPT_CLIENT_EXTMAIL_SPAMFILTER_C	10
+#define OPT_CLIENT_USENET_ADDR		12
+#define OPT_CLIENT_WEBMUD_NORMAL	14
+#define OPT_CLIENT_WEBMUD_WEISS		15
+#define OPT_CLIENT_WEBMUD_DUNKEL	16
+#define OPT_CLIENT_WEBMUD_EDITOR	17
+#define OPT_CLIENT_WIDTH		18
+
+private varargs mixed change_client_options(int what, string str, int flags, closure input_to_callback)
+{
+    int an, aus, erg;
+    string lcstr;
+
+    str = trim(str);
+    lcstr = lower_case(str);
+    if(!strstr(lcstr,"an") || !strstr(lcstr,"ein"))
+	an = 1;
+    else if(!strstr(lcstr,"aus") || !strstr(lcstr,"kein") || lcstr=="nicht")
+	aus = 1;
+
+    switch(what)
+    {
+	case OPT_CLIENT_VT100_CLIENT: // VT100-Client nutzen
+	    this_object()->set_client_option(CLIENT_VT100,
+		erg = (an || (!aus && !this_object()->query_client_option(CLIENT_VT100))));
+	    return erg
+		? "VT100-Client eingeschaltet."
+		: "VT100-Client deaktiviert.";
+	case OPT_CLIENT_NUMPAD_WALKING:
+	    this_object()->set_client_option(CLIENT_VT100_NUMPAD,
+		erg = (an || (!aus && !this_object()->query_client_option(CLIENT_VT100_NUMPAD))));
+	    return erg
+		? "Numpad-Bewegung eingeschaltet."
+		: "Numpad-Bewegung deaktiviert.";
+	case OPT_CLIENT_VT100_CLIENT_WIZSHELL: // VT100-Client in der Wiz-Shell
+	    this_object()->set_client_option(CLIENT_VT100_WIZSHELL,
+		erg = (an || (!aus && !this_object()->query_client_option(CLIENT_VT100_WIZSHELL))));
+	    return erg
+		? "VT100-Client in der Wiz-Shell eingeschaltet."
+		: "VT100-Client in der Wiz-Shell deaktiviert.";
+	case OPT_CLIENT_PROMPT: // Prompt anzeigen
+	    this_object()->set_prompt_string(
+		(erg = (an || (!aus && ({string})this_object()->query_prompt_string()=="")))
+	        ?"> ":"");
+	    return erg
+		?"Prompt eingeschaltet."
+		:"Prompt ausgeschaltet.";
+	case OPT_CLIENT_EOR: // EOR deaktivieren
+	    this_object()->set_client_option(CLIENT_NO_EOR,
+		erg = (aus || (!an && !this_object()->query_client_option(CLIENT_NO_EOR))));
+	    return erg
+		? "EOR-Prompt-Protokoll ausgeschaltet."
+		: "EOR-Prompt-Protokoll eingeschaltet.";
+	
+	case OPT_CLIENT_TELNETPING:
+	    if(strlen(str))
+	    {
+	        int nr;
+		if(sscanf(str,"%d",nr) && nr>=0)
+		{
+		    this_object()->set_telnet_ping(nr*60);
+		    return nr
+			?("Telnet-Ping alle "+nr+" Minuten eingeschaltet.")
+			:("Regelmaessigen Telnet-Ping ausgeschaltet.");
+		}
+		else if(lcstr=="aus")
+		{
+		    this_object()->set_telnet_ping(0);
+		    return "Regelmaessigen Telnet-Ping ausgeschaltet.";
+		}
+		else    
+		{
+		    MSG("Gib bitte eine positive Zahl an, alle wieviel Minuten ein\n"
+		        "Telnet-Ping gesendet werden soll, oder 'aus' um ihn auszuschalten.\n");
+		    return OPT_MESSAGE;
+		}
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else if((flags&OPT_MENUE) && ({int})this_object()->query_telnet_ping())
+	    {
+		this_object()->set_telnet_ping(0);
+		return "Regelmaessigen Telnet-Ping ausgeschaltet.";
+	    }
+	    else
+	    {
+	        input_to(
+		    (:
+			funcall($2,
+			    change_client_options(OPT_CLIENT_TELNETPING, $1,
+				$3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Alle wieviel Minuten soll ein Telnet-Ping gesendet werden? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;;
+	    }
+	case OPT_CLIENT_MORECHUNK: // More-Zeilen
+	    if(strlen(str))
+	    {
+	        int nr=-1;
+	        if(sscanf(str,"%d",nr) && nr>4)
+	        {
+		    this_object()->set_more_chunk(nr);
+		    return "Es werden nun immer bis zu "+nr+" Zeilen auf einmal ausgegeben.";
+	        }
+		else if(!nr || !strstr("automatisch", lcstr))
+	        {
+		    this_object()->set_more_chunk(0);
+		    return "Die Zeilenanzahl wird der Fenstergroesse angepasst.";
+	        }
+		MSG("Gib bitte eine Zahl groesser als 4 oder 'auto' an.\n");
+	        return OPT_MESSAGE;
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else if(!(flags&OPT_MENUE))
+	    {
+		int num = ({int})this_object()->query_real_more_chunk();
+		if(!num)
+		    return "Die Zeilenanzahl wird der Fenstergroesse angepasst.";
+		return "Es werden immer "+num+" Zeilen auf einmal ausgegeben.";
+	    }
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2,
+			    change_client_options(OPT_CLIENT_MORECHUNK, $1,
+				$3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Wieviel Zeilen sollen auf einmal ausgegeben werden? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+	case OPT_CLIENT_WIDTH: // Terminalbreite
+	    if(strlen(str))
+	    {
+	        int nr=-1;
+	        if(sscanf(str,"%d",nr) && nr>78)
+	        {
+		    this_object()->set_client_width(nr);
+		    return "Terminalbreite auf "+nr+" festgelegt.";
+	        }
+		else if(!nr || !strstr("automatisch", lcstr))
+	        {
+		    this_object()->set_client_width(0);
+		    return "Die Breite wird der Fenstergroesse angepasst.";
+	        }
+		MSG("Gib bitte eine Zahl groesser als 78 oder 'auto' an.\n");
+	        return OPT_MESSAGE;
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else if(!(flags&OPT_MENUE))
+	    {
+		int num = ({int})this_object()->query_set_client_width();
+		if(!num)
+		    return "Die Breite wird der Fenstergroesse angepasst.";
+		return "Terminalbreite ist auf "+num+" festgelegt.";
+	    }
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2,
+			    change_client_options(OPT_CLIENT_WIDTH, $1,
+				$3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Welche Terminalbreite soll eingestellt werden? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+
+	case OPT_CLIENT_EXTMAIL_UNFILTERED:
+	    this_object()->set_filter_spam(MAIL_UNFILTERED);
+	    return "Empfang externer E-Mails ohne Spam-Filter eingeschaltet.";
+	case OPT_CLIENT_EXTMAIL_SPAMFILTER:
+	    this_object()->set_filter_spam(time());
+	    return "Spam-Filter eingeschaltet.";
+	case OPT_CLIENT_EXTMAIL_BOUNCE:
+	    this_object()->set_filter_spam(MAIL_BOUNCE);
+	    return "Empfang externer E-Mails abgeschaltet.";
+	case OPT_CLIENT_EXTMAIL:
+	    if(aus)
+		this_object()->set_filter_spam(MAIL_BOUNCE);
+	    else if(an)
+		this_object()->set_filter_spam(MAIL_UNFILTERED);
+	    else if(!strstr(lcstr,"spam"))
+	    {
+		str = trim(implode(explode(lcstr," ")[1..<1], " "));
+		if(!strstr(str,"an") || !strstr(str,"ein"))
+		    an = 1;
+		else if(!strstr(str,"aus") || !strstr(str,"kein") || str=="nicht")
+		    aus = 1;
+
+		if(aus)
+		    this_object()->set_filter_spam(MAIL_UNFILTERED);
+		else if(an)
+		    this_object()->set_filter_spam(time());
+		else
+		    this_object()->set_filter_spam(
+			(this_object()->query_filter_spam()==MAIL_UNFILTERED)
+			    ?time():MAIL_UNFILTERED);
+	    }
+	    else
+		this_object()->set_filter_spam(
+		    (({int})this_object()->query_filter_spam()==MAIL_UNFILTERED)
+			?MAIL_BOUNCE:MAIL_UNFILTERED);
+	    return (this_object()->query_filter_spam()==MAIL_UNFILTERED)
+		?"Empfang externer E-Mails ohne Spam-Filter eingeschaltet."
+		:(({int})this_object()->query_filter_spam()==MAIL_BOUNCE)
+		?"Empfang externer E-Mails abgeschaltet."
+		:"Empfang externer E-Mails mit Spam-Filter aktiviert.";
+	case OPT_CLIENT_EXTMAIL_SPAMFILTER_C:
+	    if(aus)
+		this_object()->set_filter_spam(MAIL_UNFILTERED);
+	    else if(an)
+		this_object()->set_filter_spam(time());
+	    else
+		this_object()->set_filter_spam(
+		    (this_object()->query_filter_spam()==MAIL_UNFILTERED)
+		    ?time():MAIL_UNFILTERED);
+	    return (this_object()->query_filter_spam()==MAIL_UNFILTERED)
+		?"Spam-Filter ausgeschaltet."
+		:"Spam-Filter eingeschaltet.";
+	case OPT_CLIENT_USENET_ADDR: // E-Mail-Adresse fuers Usenet
+	    if(strlen(str))
+	    {
+		if(lcstr == "keine")
+		    str = 0;
+		if (strlen(str) && sscanf(str,"%~s@%~s.%~s")!=3)
+		{
+		    MSG("Eine korrekte E-Mail-Adresse hat folgendes Aussehen:\n"+
+	                "'username@rechnername.domain'.\n"+
+			"z.B.: mudadm@unitopia.de\n"+
+			"Wenn Du keine E-Mail-Adresse hast, gib 'keine' an.\n");
+		    return OPT_MESSAGE;
+		}
+		this_object()->set_usenet_email(str);
+		return str
+		    ?("Okay, E-Mail-Adresse fuer das Usenet wurde auf '"+str+"' gesetzt.")
+		    :("Deine E-Mail-Adresse fuer das Usenet wurde geloescht.");
+	    }
+	    else if(!(flags&OPT_MENUE))
+		return (str=({string})this_object()->query_usenet_email())
+		    ?("Deine E-Mail-Adresse fuer das Usenet lautet: "+str)
+		    :("Du hast keine E-Mail-Adresse fuer das Usenet gesetzt.");
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else if(this_object()->query_usenet_email())
+	    {
+		this_object()->set_usenet_email(0);
+		return "E-Mail_Adresse fuer das Usenet geloescht.";
+	    }
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2,
+			    change_client_options(OPT_CLIENT_USENET_ADDR, $1,
+				$3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Bitte gib die E-Mail-Adresse ein: ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+	case OPT_CLIENT_WEBMUD_NORMAL:
+	    this_object()->set_webmud_style("normal");
+	    return "WebMUD-Stil 'Normal' aktiviert.";
+	case OPT_CLIENT_WEBMUD_WEISS:
+	    this_object()->set_webmud_style("weiss");
+	    return "WebMUD-Stil 'Schwarz auf Weiss' aktiviert.";
+	case OPT_CLIENT_WEBMUD_DUNKEL:
+	    this_object()->set_webmud_style("dunkel");
+	    return "WebMUD-Stil 'Dunkel' aktiviert.";
+	case OPT_CLIENT_WEBMUD_EDITOR:
+	    this_object()->set_client_option(CLIENT_WEBMUD_NO_EDIT,
+		erg = (aus || (!an && !this_object()->query_client_option(CLIENT_WEBMUD_NO_EDIT))));
+	    return erg
+		? "WebMUD-Editor deaktiviert."
+		: "WebMUD-Editor aktiviert.";
+    }
+}
+
+private int handle_client_options(string str)
+{
+    return handle_menue_options(str,
+	([
+	    'g': OPT_CLIENT_VT100_CLIENT,
+	    'a': OPT_CLIENT_NUMPAD_WALKING,
+	    'w': OPT_CLIENT_VT100_CLIENT_WIZSHELL,
+	    'p': OPT_CLIENT_PROMPT,
+	    'e': OPT_CLIENT_EOR,
+	    'i': OPT_CLIENT_TELNETPING,
+	    'o': OPT_CLIENT_MORECHUNK,
+	    't': OPT_CLIENT_WIDTH,
+	    'u': OPT_CLIENT_EXTMAIL_UNFILTERED,
+	    's': OPT_CLIENT_EXTMAIL_SPAMFILTER,
+	    'b': OPT_CLIENT_EXTMAIL_BOUNCE,
+	    'm': OPT_CLIENT_USENET_ADDR,
+	])
+	+ (this_player()->uses_webmud()?
+	([
+	    'n': OPT_CLIENT_WEBMUD_NORMAL,
+	    'c': OPT_CLIENT_WEBMUD_WEISS,
+	    'u': OPT_CLIENT_WEBMUD_DUNKEL,
+	    'd': OPT_CLIENT_WEBMUD_EDITOR,
+	]):([]))
+	, #'change_client_options, #'print_client_options, "Client");
+}
+
+#define OPT_CMD_CLIENT 		0
+#define OPT_CMD_EMAIL		1
+#define OPT_CMD_USENET		2
+
+private void handle_client_actions(string str, int which)
+{
+    handle_cmd_actions(str,
+	({ 
+	    ({
+		({ "zeile",		5, OPT_CLIENT_VT100_CLIENT, "zeile" }),
+		({ "numpad",		3, OPT_CLIENT_NUMPAD_WALKING, "num[pad]" }),
+		({ "wizshell",		3, OPT_CLIENT_VT100_CLIENT_WIZSHELL, "wiz[shell]" }),
+		({ "prompt",		6, OPT_CLIENT_PROMPT,	    "prompt" }),
+		({ "eor",		3, OPT_CLIENT_EOR,          "eor" }),
+		({ "ping",		4, OPT_CLIENT_TELNETPING,   "ping" }),
+		({ "more",		4, OPT_CLIENT_MORECHUNK,    "more" }),
+		({ "breite",            5, OPT_CLIENT_WIDTH,        "breite" }),
+		({ "zeilen",		6, OPT_CLIENT_MORECHUNK,    "zeilen" }),
+	    }),
+	    ({
+		({ "spamfilter",	4, OPT_CLIENT_EXTMAIL_SPAMFILTER_C, "spam[filter]" }),
+		({ "empfang",		4, OPT_CLIENT_EXTMAIL, "empf[ang]" }),
+	    }),
+	    ({
+		({ "email",		5, OPT_CLIENT_USENET_ADDR,  "email" }),
+	    }),
+	})[which], #'change_client_options,
+	({"Client.cl", "EMail.cl", "Usenet.cl"})[which],",;");
+}
+
+
+private string graphical_exit_str (int i, int kurz)
+{
+    if (i != 0 && i != 1 && i != 9 && i != 5 && i != 13)
+        i = -1;
+    if (!kurz)
+        return wrap (([
+           -1:"Unbekannter Ausgangsanzeige.",
+            0:"Keine grafische Anzeige von Ausgaengen.",
+            1:"Grafische Anzeige normaler Ausgaenge.",
+            9:"Grafische Anzeige normaler Ausgaenge sowie hoch und runter.",
+            5:"Grafische Anzeige normaler Ausgaenge, keine Anzeige dieser "
+              "Ausgaenge in Ausgangsliste.",
+           13:"Grafische Anzeige normaler Ausgaenge sowie hoch und runter, "
+              "keine Anzeige dieser Ausgaenge in der Ausgangsliste."])
+              [i]);
+    else if (kurz == 1)
+        return wrap (([
+           -1:" - Unbekannt",
+            0:"",
+            1:"",
+            9:" inkl. hoch & runter",
+            5:", verschwinden in Ausgangsliste",
+           13:" inkl. hoch & runter, verschwinden in Ausgangsliste"
+              ]) [i]);
+    else if (kurz == 2)
+        return ([-1:"?",0:" ",1:"1",9:"2",5:"3",13:"4"])[i];
+    else if (kurz == 3)
+        return ([
+           -1:"unbekannt",
+            0:"ausgeschaltet",
+            1:"normale Ausgaenge",
+            9:"normal inkl. hoch & runter",
+            5:"normal; verschwinden in Ausgangsliste",
+           13:"normal inkl. hoch & runter; nicht in Liste"
+              ]) [i];
+}
+
+private varargs void print_display_options(int quiet)
+{
+    mapping eye_options = ({mapping}) this_object()->query_eye_option();
+    int hpspview = ({int}) this_object()->query_hp_view();
+    int fingerflags = ({int}) this_object()->query_own_finger_flags();
+    string zauberpunkte = ({string}) this_object()->query_sp_name()||"Zauberpunkte";
+
+    if(!(fingerflags&FINGER_FLAG_VALID))
+	fingerflags = FINGER_FLAG_OWN_DEFAULT;
+    
+    this_object()->more(
+        this_object()->query_no_ascii_art() ?
+        (({
+" Inventaroptionen:",
+"   N: Einteilung nach Klassen "                    +(member(eye_options["invstyle"]||"",'k')>=0?"ausschalten":"einschalten"),
+"   M: Verwenden von 'more' zur Ausgabe "           +(member(eye_options["invstyle"]||"",'m')>=0?"ausschalten":"einschalten"),
+"   C: Anzeige von Tascheninhalten "                +(member(eye_options["invstyle"]||"",'r')>=0?"ausschalten":"einschalten"),
+"   S: Sortierung nach Namen "                      +(member(eye_options["invstyle"]||"",'s')>=0?"ausschalten":"einschalten"),
+"   W: Zweispaltige Ausgabe "                       +(member(eye_options["invstyle"]||"",'t')>=0?"ausschalten":"einschalten"),
+"   1: VT100-Unterstuetzung "                       +(member(eye_options["invstyle"]||"",'v')>=0?"ausschalten":"einschalten"),
+"   F: Auflistung stets vorhandener Gegenstaende "  +(member(eye_options["invstyle"]||"",'z')>=0?"einschalten":"ausschalten"),
+"",
+" Ausdauer- und "+zauberpunkte+"anzeige",
+"   E: Erhoehung der Ausdauerpunkte "  +(hpspview&HP_SP_VIEW_HP_PLUS?"nicht mehr ":"")+"anzeigen",
+"   A: Verluste der Ausdauerpunkte "   +(hpspview&HP_SP_VIEW_HP_MINUS?"nicht mehr ":"")+"anzeigen",
+"   H: Erhoehung der "+zauberpunkte+" "+(hpspview&HP_SP_VIEW_SP_PLUS?"nicht mehr ":"")+"anzeigen",
+"   V: Verluste der "+zauberpunkte+" " +(hpspview&HP_SP_VIEW_SP_MINUS?"nicht mehr ":"")+"anzeigen",
+"   X: Maximalwerte "+(hpspview&HP_SP_VIEW_MAX?"nicht mehr ":"")+"mitanzeigen",
+"",
+" Raumbeschreibung:",
+"   L: Lange Raumbeschreibung"        +(eye_options["kurz"]==0?" (derzeit aktiv)":""),
+"   K: Kurze Raumbeschreibung"        +(eye_options["kurz"]==1?" (derzeit aktiv)":""),
+"   &: Lange & kurze Raumbeschreibung"+(eye_options["kurz"]==2?" (derzeit aktiv)":""),
+"   R: Graphische Ausgaenge (derzeit: "+graphical_exit_str(({int})this_object()->query_exit_mode(),3)+")",
+"",
+" Finger - Was andere von Dir sehen duerfen:",
+"   B: Das Geburtsdatum Deines Charakters "    +(fingerflags&FINGER_FLAG_OWN_BIRTHDAY?"nicht mehr ":"")+"zeigen",
+"   D: Das Datum Deines letzten Erscheinens "  +(fingerflags&FINGER_FLAG_OWN_DATE?"nicht mehr ":"")+"zeigen",
+"   U: Die Uhrzeit Deines letzten Erscheinens "+(fingerflags&FINGER_FLAG_OWN_TIME?"nicht mehr ":"")+"zeigen",
+"",
+" Sonstiges:",
+"   G: "+(({int})this_object()->query_no_ascii_art()?"Mehr":"Weniger")+" ASCII-Graphiken anzeigen",
+"   T: "+(({int})this_object()->query_no_tips()?"":"Keine ")+"Tips anzeigen",
+        })) :
+        (({
+" Inventaroptionen:                          Ausdauer- und "+zauberpunkte+"anzeige",
+"  ["+(member(eye_options["invstyle"]||"",'k')>=0?"*":" ")+"] Ei(n)teilung nach Klassen              ["+(hpspview&HP_SP_VIEW_HP_PLUS?"*":" ")+"] (E)rhoehung der Ausdauerpunkte",
+"  ["+(member(eye_options["invstyle"]||"",'m')>=0?"*":" ")+"] Verwenden von '(m)ore' zur Ausgabe     ["+(hpspview&HP_SP_VIEW_HP_MINUS?"*":" ")+"] Verluste der (A)usdauerpunkte",
+"  ["+(member(eye_options["invstyle"]||"",'r')>=0?"*":" ")+"] Tas(c)heninhalte anzeigen              ["+(hpspview&HP_SP_VIEW_SP_PLUS?"*":" ")+"] Er(h)oehung der "+zauberpunkte,
+"  ["+(member(eye_options["invstyle"]||"",'s')>=0?"*":" ")+"] (S)ortierung nach Namen                ["+(hpspview&HP_SP_VIEW_SP_MINUS?"*":" ")+"] (V)erluste der "+zauberpunkte,
+"  ["+(member(eye_options["invstyle"]||"",'t')>=0?"*":" ")+"] Z(w)eispaltige Ausgabe                 ["+(hpspview&HP_SP_VIEW_MAX?"*":" ")+"] Ma(x)imalwerte mitanzeigen",
+"  ["+(member(eye_options["invstyle"]||"",'v')>=0?"*":" ")+"] VT(1)00-Unterstuetzung",
+"  ["+(member(eye_options["invstyle"]||"",'z')>=0?"*":" ")+"] Immer vorhandene Gegenstaende nicht au(f)listen",
+"",
+" Raumbeschreibung:               Finger - Was andere von Dir sehen duerfen:",
+//    ["+(fingerflags&FINGER_FLAG_OWN_TOWN?"*":" ")+"] Deinen Herkun(f)tsort",
+"  ("+(eye_options["kurz"]==0?"*":" ")+") (L)ange Raumbeschreibung    ["+(fingerflags&FINGER_FLAG_OWN_BIRTHDAY?"*":" ")+"] Das Ge(b)urtsdatum Deines Charakters",
+"  ("+(eye_options["kurz"]==1?"*":" ")+") (K)urze Raumbeschreibung    ["+(fingerflags&FINGER_FLAG_OWN_DATE?"*":" ")+"] Das (D)atum Deines letzten Erscheinens",
+"  ("+(eye_options["kurz"]==2?"*":" ")+") Lang (&) kurz               ["+(fingerflags&FINGER_FLAG_OWN_TIME?"*":" ")+"] Die (U)hrzeit Deines letzten Erscheinens",
+"  ("+graphical_exit_str(({int})this_object()->query_exit_mode(),2)+     ") g(r)aphische Ausgaenge" + graphical_exit_str (({int})this_object()->query_exit_mode(),1),
+"",
+" Sonstiges:",
+"  ["+(({int})this_object()->query_no_ascii_art()?"*":" ")+"] Weniger ASCII-(G)raphiken",
+"  ["+(({int})this_object()->query_no_tips()?" ":"*")+"] (T)ips anzeigen",
+	    })),
+	    ({ "Anzeigen [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    "Options: Display");
+}
+
+#define OPT_DISPLAY_KLASSEN	1
+#define OPT_DISPLAY_MORE	2
+#define OPT_DISPLAY_TASCHEN	3
+#define OPT_DISPLAY_SORT	4
+#define OPT_DISPLAY_TABELLE	5
+#define OPT_DISPLAY_VT100	6
+#define OPT_DISPLAY_AUTOLOADER	7
+#define OPT_DISPLAY_HPPLUS	8
+#define OPT_DISPLAY_HPMINUS	9
+#define OPT_DISPLAY_SPPLUS	10
+#define OPT_DISPLAY_SPMINUS	11
+#define OPT_DISPLAY_HPSPMAX	12
+#define OPT_DISPLAY_LANG	13
+#define OPT_DISPLAY_KURZ	14
+#define OPT_DISPLAY_KURZLANG	15
+#define OPT_DISPLAY_HERKUNFT	16
+#define OPT_DISPLAY_DATUM	17
+#define OPT_DISPLAY_UHRZEIT	18
+#define OPT_DISPLAY_GEBURTSTAG	19
+#define OPT_DISPLAY_TIPS	21
+#define OPT_DISPLAY_ASCII_ART	23
+#define OPT_DISPLAY_ASCII_ART_NEG 24
+#define OPT_DISPLAY_GRAPHIC_EXITS 25
+
+
+private varargs mixed change_display_options(int what, string str, int flags, closure input_to_callback)
+{
+    int an, aus, erg;
+    string inv;
+    int val = ({int}) this_object()->query_own_finger_flags();
+    if(!(val&FINGER_FLAG_VALID))
+	val = FINGER_FLAG_OWN_DEFAULT;
+    
+    str = lower_case(trim(str));
+    if(!strstr(str,"an") || !strstr(str,"ein"))
+	an = 1;
+    else if(!strstr(str,"aus") || !strstr(str,"kein") || str=="nicht")
+	aus = 1;
+	
+    switch(what)
+    {
+	case OPT_DISPLAY_KLASSEN: // inv: Einteilung nach Klassen
+	    inv = ({string}) this_object()->query_eye_option("invstyle")||"";
+	    if(erg = (an || (!aus && member(inv,'k')<0)))
+		this_object()->set_eye_option("invstyle", inv+"k");
+	    else
+		this_object()->set_eye_option("invstyle", inv-"k");
+	    return erg
+		?"Deine Gegenstaende werden nun nach Klassen eingeteilt."
+		:"Deine Ausruestung wird nicht mehr nach Klassen getrennt ausgegeben.";
+	case OPT_DISPLAY_MORE: // inv: Verwenden von 'more' zur Ausgabe
+    	    inv = ({string}) this_object()->query_eye_option("invstyle")||"";
+	    if(erg = (an || (!aus && member(inv,'m')<0)))
+		this_object()->set_eye_option("invstyle", inv+"m");
+	    else
+		this_object()->set_eye_option("invstyle", inv-"m");
+	    return erg
+		?"Deine Gegenstaende werden nun seitenweise angezeigt."
+		:"Deine Ausruestung wird nicht mehr seitenweise angezeigt.";
+	case OPT_DISPLAY_TASCHEN: // inv: Tascheninhalte anzeigen
+	    inv = ({string}) this_object()->query_eye_option("invstyle")||"";
+	    if(erg = (an || (!aus && member(inv,'r')<0)))
+	        this_object()->set_eye_option("invstyle", inv+"r");
+	    else
+	        this_object()->set_eye_option("invstyle", inv-"r");
+	    return erg
+		?"Es werden nun bei der Ausruestung auch Tascheninhalte angezeigt."
+		:"Tascheninhalte werden nun nicht mehr automatisch angezeigt.";
+	case OPT_DISPLAY_SORT: // inv: Sortierung nach Namen
+	    inv = ({string}) this_object()->query_eye_option("invstyle")||"";
+	    if(erg = (an || (!aus && member(inv,'s')<0)))
+	        this_object()->set_eye_option("invstyle", inv+"s");
+	    else
+	        this_object()->set_eye_option("invstyle", inv-"s");
+	    return erg
+		?"Deine Gegenstaende werden nun nach ihren Namen sortiert."
+		:"Deine Ausruestung wird nicht mehr namensweise sortiert angezeigt.";
+	case OPT_DISPLAY_TABELLE: // inv: Zweispaltige Ausgabe
+	    inv = ({string}) this_object()->query_eye_option("invstyle")||"";
+	    if(erg = (an || (!aus && member(inv,'t')<0)))
+	        this_object()->set_eye_option("invstyle", inv+"t");
+	    else
+	        this_object()->set_eye_option("invstyle", inv-"t");
+	    return erg
+		?"Deine Gegenstaende werden nun in zwei Spalten angezeigt."
+		:"Deine Ausruestung wird nicht mehr zweispaltig ausgegeben.";
+	case OPT_DISPLAY_VT100: // inv: VT100 Unterstuetzung
+	    inv = ({string}) this_object()->query_eye_option("invstyle")||"";
+	    if(erg = (an || (!aus && member(inv,'v')<0)))
+	        this_object()->set_eye_option("invstyle", inv+"v");
+	    else
+	        this_object()->set_eye_option("invstyle", inv-"v");
+	    return erg
+		?"Die Anzeige Deine Gegenstaende nutzt nun VT100-Steuerzeichen."
+		:"Die Ausruestungsanzeige nutzt keine VT100-Steuerzeichen mehr.";
+	case OPT_DISPLAY_AUTOLOADER: // inv: Keine Autoloader
+	    inv = ({string}) this_object()->query_eye_option("invstyle")||"";
+	    if(erg = (an || (!aus && member(inv,'z')<0)))
+	        this_object()->set_eye_option("invstyle", inv+"z");
+	    else
+	        this_object()->set_eye_option("invstyle", inv-"z");
+	    return erg
+		?"Immer vorhandene Gegenstaende werden nicht mehr aufgelistet."
+		:"Die Ausruestungsanzeige listet wieder alle Gegenstaende auf.";
+	case OPT_DISPLAY_HERKUNFT: // finger: Herkunftsort
+	    if(erg = (an || (!aus && !(val&FINGER_FLAG_OWN_TOWN))))
+		this_object()->set_own_finger_flags(val|FINGER_FLAG_OWN_TOWN);
+	    else
+		this_object()->set_own_finger_flags(val&~FINGER_FLAG_OWN_TOWN);
+	    return erg
+		?"Andere Spieler koennen nun Deinen Herkunftsort mittels 'finger' sehen."
+		:"Dein Herkunftsort wird nicht mehr bei den 'finger'-Informatinen angezeigt.";
+	case OPT_DISPLAY_DATUM: // finger: Datum
+	    if(erg = (an || (!aus && !(val&FINGER_FLAG_OWN_DATE))))
+		this_object()->set_own_finger_flags(val|FINGER_FLAG_OWN_DATE);
+	    else
+		this_object()->set_own_finger_flags(val&~FINGER_FLAG_OWN_DATE);
+	    return erg
+		?"Das RL-Datum Deines letzten Besuches wird beim 'finger' angezeigt."
+		:"Das RL-Datum Deines letzten Besuches von "+MUD_NAME+" wird nicht mehr angezeigt.";
+	case OPT_DISPLAY_UHRZEIT: // finger: Uhrzeit
+	    if(erg = (an || (!aus && !(val&FINGER_FLAG_OWN_TIME))))
+		this_object()->set_own_finger_flags(val|FINGER_FLAG_OWN_TIME);
+	    else
+		this_object()->set_own_finger_flags(val&~FINGER_FLAG_OWN_TIME);
+	    return erg
+		?"Die Uhrzeit Deines letzten Besuches wird beim 'finger' angezeigt."
+		:"Die Uhrzeit Deines letzten Besuches von "+MUD_NAME+" wird nicht mehr angezeigt.";
+	case OPT_DISPLAY_GEBURTSTAG: // finger: Geburtsdatum
+	    if(erg = (an || (!aus && !(val&FINGER_FLAG_OWN_BIRTHDAY))))
+		this_object()->set_own_finger_flags(val|FINGER_FLAG_OWN_BIRTHDAY);
+	    else
+		this_object()->set_own_finger_flags(val&~FINGER_FLAG_OWN_BIRTHDAY);
+	    return erg
+		?"Andere Spieler koennen nun Deinen Geburtstag mittels 'finger' sehen."
+		:"Dein Geburtstag wird nicht mehr beim 'finger' angezeigt.";
+	case OPT_DISPLAY_HPPLUS: // AP/ZP Anzeige: AP Erhoehung
+	    val = ({int})this_object()->query_hp_view();
+	    if(erg = (an || (!aus && !(val&HP_SP_VIEW_HP_PLUS))))
+		this_object()->set_hp_view(val|HP_SP_VIEW_HP_PLUS);
+	    else
+		this_object()->set_hp_view(val&~HP_SP_VIEW_HP_PLUS);
+	    return erg
+		?"Ausdauerpunkteerhoehungen werden Dir nun angezeigt."
+		:"Ausdauerpunkteerhoehungen werden nicht mehr angezeigt.";
+	case OPT_DISPLAY_HPMINUS: // AP/ZP Anzeige: AP Verlust
+	    val = ({int})this_object()->query_hp_view();
+	    if(erg = (an || (!aus && !(val&HP_SP_VIEW_HP_MINUS))))
+		this_object()->set_hp_view(val|HP_SP_VIEW_HP_MINUS);
+	    else
+		this_object()->set_hp_view(val&~HP_SP_VIEW_HP_MINUS);
+	    return erg
+		?"Ausdauerpunkteverluste werden Dir nun angezeigt."
+		:"Ausdauerpunkteverluste werden nicht mehr angezeigt.";
+	case OPT_DISPLAY_SPPLUS: // AP/ZP Anzeige: ZP Erhoehung
+	    val = ({int})this_object()->query_hp_view();
+	    if(erg = (an || (!aus && !(val&HP_SP_VIEW_SP_PLUS))))
+		this_object()->set_hp_view(val|HP_SP_VIEW_SP_PLUS);
+	    else
+		this_object()->set_hp_view(val&~HP_SP_VIEW_SP_PLUS);
+	    return erg
+		?("Erhoehungen der "+(({string})this_player()->query_sp_name())+
+		  " werden Dir nun gemeldet.")
+		:("Erhoehungen der "+(({string})this_player()->query_sp_name())+
+		  " werden nun nicht mehr gemeldet.");
+	case OPT_DISPLAY_SPMINUS: // AP/ZP Anzeige: ZP Verlust
+	    val = ({int})this_object()->query_hp_view();
+	    if(erg = (an || (!aus && !(val&HP_SP_VIEW_SP_MINUS))))
+		this_object()->set_hp_view(val|HP_SP_VIEW_SP_MINUS);
+	    else
+		this_object()->set_hp_view(val&~HP_SP_VIEW_SP_MINUS);
+	    return erg
+		?("Verluste von "+(({string})this_player()->query_sp_name())+
+		  "n werden Dir nun gemeldet.")
+		:("Verluste von "+(({string})this_player()->query_sp_name())+
+		  "n werden nun nicht mehr gemeldet.");
+	case OPT_DISPLAY_HPSPMAX: // AP/ZP Anzeige: Maximalwerte
+	    val = ({int})this_object()->query_hp_view();
+	    if(erg = (an || (!aus && !(val&HP_SP_VIEW_MAX))))
+		this_object()->set_hp_view(val|HP_SP_VIEW_MAX);
+	    else
+		this_object()->set_hp_view(val&~HP_SP_VIEW_MAX);
+	    return erg
+		?("Maximalwerte werden nun zusammen mit Ausdauer- und "+
+		  (({string})this_player()->query_sp_name())+"n angezeigt.")
+		:("Maximalwerte der Ausdauer- und "+
+		  (({string})this_player()->query_sp_name())+
+		  " werden nicht mehr angezeigt.");
+	case OPT_DISPLAY_LANG: // Lange Raumbeschreibung
+	    this_object()->set_eye_option("kurz",0);
+	    return "Lange Raumbeschreibungen werden nun ausgegeben.";
+	case OPT_DISPLAY_KURZ: // Kurze Raumbeschreibung
+	    this_object()->set_eye_option("kurz",1);
+	    return "Kurze Raumbeschreibungen werden nun angezeigt.";
+	case OPT_DISPLAY_KURZLANG: // Lange und kurze Raumbeschreibung
+	    this_object()->set_eye_option("kurz",2);
+	    return "Es werden nun lange und kurze Raumbeschreibungen angezeigt.";
+	case OPT_DISPLAY_GRAPHIC_EXITS:
+	    this_object()->set_exit_mode(([0:1,1:9,9:5,5:13,13:0])[this_object()->query_exit_mode()]);
+	    return "Graphische Anzeige der Ausgaenge wurde geaendert:\n"
+	        +graphical_exit_str (({int})this_object()->query_exit_mode(),0);
+	case OPT_DISPLAY_ASCII_ART_NEG: // keine ASCII-Graphiken anzeigen
+	    this_object()->set_no_ascii_art(
+		erg = (an || (!aus && !this_object()->query_no_ascii_art())));
+	case OPT_DISPLAY_ASCII_ART: // ASCII-Graphiken anzeigen
+	    if(what == OPT_DISPLAY_ASCII_ART)
+		this_object()->set_no_ascii_art(
+		    erg = (aus || (!an && !this_object()->query_no_ascii_art())));
+	    return erg
+		?("Es werden jetzt weniger ASCII-Graphiken angezeigt.")
+		:("Es werden wieder alle ASCII-Graphiken angezeigt.");
+	case OPT_DISPLAY_TIPS: // Tips anzeigen
+	    this_object()->set_no_tips(
+		erg = (aus || (!an && !this_object()->query_no_tips())));
+	    return erg
+		?("Du erhaeltst jetzt keine Tips mehr beim Betreten von "+MUD_NAME+".")
+		:("Du erhaeltst jetzt Tips beim Betreten von "+MUD_NAME+".");
+    }
+}
+
+private int handle_display_options(string str)
+{
+    return handle_menue_options(str,
+	([
+	    'n': OPT_DISPLAY_KLASSEN,
+	    'm': OPT_DISPLAY_MORE,
+	    'c': OPT_DISPLAY_TASCHEN,
+	    's': OPT_DISPLAY_SORT,
+	    'w': OPT_DISPLAY_TABELLE,
+	    '1': OPT_DISPLAY_VT100,
+	    'f': OPT_DISPLAY_AUTOLOADER,
+	    // 'f': OPT_DISPLAY_HERKUNFT,
+	    'd': OPT_DISPLAY_DATUM,
+	    'u': OPT_DISPLAY_UHRZEIT,
+	    'b': OPT_DISPLAY_GEBURTSTAG,
+	    'e': OPT_DISPLAY_HPPLUS,
+	    'a': OPT_DISPLAY_HPMINUS,
+	    'h': OPT_DISPLAY_SPPLUS,
+	    'v': OPT_DISPLAY_SPMINUS,
+	    'x': OPT_DISPLAY_HPSPMAX,
+	    'l': OPT_DISPLAY_LANG,
+	    'k': OPT_DISPLAY_KURZ,
+	    '&': OPT_DISPLAY_KURZLANG,
+	    't': OPT_DISPLAY_TIPS,
+	    'g': OPT_DISPLAY_ASCII_ART,
+	    'r': OPT_DISPLAY_GRAPHIC_EXITS,
+	]), #'change_display_options, #'print_display_options, "Display");
+}
+
+#define OPT_CMD_AUSRUESTUNG 	0
+#define OPT_CMD_FINGER		1
+#define OPT_CMD_APANZEIGE	2
+#define OPT_CMD_RAUM		3
+#define OPT_CMD_ANZEIGE		4
+
+private void handle_display_actions(string str, int which)
+{
+    string zp = lower_case(({string})this_object()->query_sp_short_name());
+    handle_cmd_actions(str,
+	({ 
+	    ({
+		({ "klasseneinteilung",	7, OPT_DISPLAY_KLASSEN,	"klassen[einteilung]" }),
+		({ "seitenweise",	5, OPT_DISPLAY_MORE,	"seite[nweise]" }),
+		({ "tascheninhalte",	6, OPT_DISPLAY_TASCHEN,	"tasche[ninhalte]" }),
+		({ "sortiert",		4, OPT_DISPLAY_SORT,	"sort[iert]" }),
+		({ "zweispaltig",	4,OPT_DISPLAY_TABELLE,	"zwei[spaltig]" }),
+		({ "vt100",		5, OPT_DISPLAY_VT100,	"vt100" }),
+	    }),
+	    ({
+		({ "herkunftsort",	8, OPT_DISPLAY_HERKUNFT, "herkunft[sort]" }),
+		({ "datum",		5, OPT_DISPLAY_DATUM,	"datum" }),
+		({ "uhrzeit",		7, OPT_DISPLAY_UHRZEIT,	"uhrzeit" }),
+		({ "geburtstag",	6, OPT_DISPLAY_GEBURTSTAG, "geburt[stag]" }),
+	    }),
+	    ({
+		({ "ap+",		3, OPT_DISPLAY_HPPLUS,	"ap+" }),
+		({ "ap-",		3, OPT_DISPLAY_HPMINUS,	"ap-" }),
+		({ zp+"+",   strlen(zp)+1, OPT_DISPLAY_SPPLUS,	"zp+" }),
+		({ zp+"-",   strlen(zp)+1, OPT_DISPLAY_SPMINUS,	"zp-" }),
+		({ "maximum",		3, OPT_DISPLAY_HPSPMAX,	"max[imum]" }),
+	    }),
+	    ({
+		({ "lang",		4, OPT_DISPLAY_LANG,	"lang" }),
+		({ "kurz",		4, OPT_DISPLAY_KURZ,	"kurz" }),
+		({ "kurzlang",		8, OPT_DISPLAY_KURZLANG, "beides" }),
+		({ "beides",		4, OPT_DISPLAY_KURZLANG, "beides" }),
+		({ "ausgaenge",         4, OPT_DISPLAY_GRAPHIC_EXITS, "ausgaenge" }),
+	    }),
+	    ({
+		({ "tips",		4, OPT_DISPLAY_TIPS,	"tips" }),
+		({ "ascii",		3, OPT_DISPLAY_ASCII_ART, "ascii" }),
+		({ "blind",		3, OPT_DISPLAY_ASCII_ART_NEG, "ascii" }),
+	    }),
+	})[which], #'change_display_options,
+	({"Inventory.cl", "Finger.cl", "HPSPView.cl", "Room.cl", "Display.cl"})[which],
+	",;");
+}
+
+private string printecol(string code, int num, int current)
+{
+    return sprintf("%s%dm%s%03d%s", code, num, (num==current)?"[":" ", num, (num==current)?"]":" ");
+}
+
+private void print_extended_color_options(int quiet, int bg, int col, closure setfunction, closure parentmenu, mapping info)
+{
+    string* farben = ({});
+    string code;
+    
+    if(bg)
+	code = VT_ESC "[30;48;5;";
+    else
+	code = VT_ESC "[38;5;";
+    
+    // Systemfarben 0-15:
+    for(int b=0; b<2; b++)
+    {
+	string str = "  ";
+	
+	for(int c=0; c<8; c++)
+	    str += printecol(code, b*8+c, col);
+	farben += ({ str + VT_NORM });
+    }
+    
+    // Farben 16-231
+    for(int a=0; a<3; a++)
+    {
+	farben += ({""});
+	for(int b=0; b<6; b++)
+	{
+	    string str = "  ";
+	    
+	    for(int c=0; c<2; c++)
+	    {
+		for(int d=0; d<6; d++)
+		    str += printecol(code, 16+72*a+36*c+6*b+d, col);
+		str += VT_NORM "  ";
+	    }
+	    
+	    farben += ({ str + VT_NORM });
+	}
+    }
+    
+    farben += ({""});
+    
+    // Graustufen 232-255
+    for(int a=0; a<2; a++)
+    {
+	string str = "  ";
+	
+	for(int b=0;b<12;b++)
+	{
+	    if(b==6)
+		str += VT_NORM "  ";
+	
+	    str += printecol(code, 232+12*a+b, col);
+	}
+	
+	farben += ({ str + VT_NORM });
+    }
+    
+    this_object()->more(farben,
+	    ({ "Erweiterte Farbwahl [q,z,?,<nr>] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    (["Options: Extended Color": 1,
+	      "BG": bg,
+	      "Col": col,
+	      "Set": setfunction,
+	      "Parent": parentmenu,
+	      "Info": info
+	     ]));
+}
+
+private int handle_extended_color_options(string str, mapping info)
+{
+    int col;
+    
+    if(sscanf(str, "%d", col))
+    {
+	if(col<0 || col>255)
+	{
+	    MSG("Bitte eine Zahl zwischen 0 und 255 auswaehlen.\n");
+	    return NOTHING;
+	}
+	
+	funcall(info["Set"], col, info["Info"]);
+	print_extended_color_options(0, info["BG"], col,
+	    info["Set"], info["Parent"], info["Info"]);
+	return END_MORE;
+    }
+    else if(strlen(str)==1 || (strlen(str)>1 && str[1]==' '))
+    {
+	int c = lower_case(str)[0];
+	str = trim(str[2..<1]);
+	switch(c)
+	{
+	    case 'q':
+		return END_MORE;
+	    case 'z':
+		funcall(info["Parent"], info["Info"]);
+		return END_MORE;
+	    case '?':
+		print_options_help(0, "EColor", str,
+		    (: print_extended_color_options($1, $2[0], $2[1], $2[2], $2[3], $2[4]); :),
+		    ({ info["BG"], info["Col"], info["Set"], info["Parent"], info["Info"] }));
+		return END_MORE;
+	    default:
+		return CONTINUE;
+	}
+    }
+}
+
+private void print_extended_beep_options(int quiet, string beep, closure setfunction, closure parentmenu, mapping info)
+{
+    this_object()->more(({
+"  ("+(beep == 0           ?"*":" ")+") Kein Piep(t)on",
+"  ("+(beep == "visuell"   ?"*":" ")+") (V)isuelle Darstellung",
+"",
+"  ("+(beep == "standard"  ?"*":" ")+") Standar(d)                ("+(beep == "steigend"  ?"*":" ")+") Zweiklang steigend (1)",
+"  ("+(beep == "dreiklang" ?"*":" ")+") Dreiklang (3)             ("+(beep == "fallend"   ?"*":" ")+") Zweiklang fallend (2)",
+"  ("+(beep == "beep"      ?"*":" ")+") Beep (4)                  ("+(beep == "pling"     ?"*":" ")+") Pli(n)g",
+"  ("+(beep == "plopp"     ?"*":" ")+") (P)lopp                   ("+(beep == "tropf"     ?"*":" ")+") Trop(f)",
+"  ("+(beep == "gong"      ?"*":" ")+") G(o)ng                    ("+(beep == "glocke"    ?"*":" ")+") G(l)ocke",
+"  ("+(beep == "zwisch"    ?"*":" ")+") Zwis(c)h                  ("+(beep == "zwusch"    ?"*":" ")+") Zw(u)sch",
+"  ("+(beep == "blubb"     ?"*":" ")+") (B)lubb                   ("+(beep == "quietsch"  ?"*":" ")+") Qui(e)tsch",
+"  ("+(beep == "klirr"     ?"*":" ")+") Kl(i)rr                   ("+(beep == "muenze"    ?"*":" ")+") (M)uenze",
+"  ("+(beep == "miau"      ?"*":" ")+") Mi(a)u                    ("+(beep == "kraehen"   ?"*":" ")+") (K)raehen",
+"  ("+(beep == "whaa"      ?"*":" ")+") (W)haa                    ("+(beep == "schrei"    ?"*":" ")+") (S)chrei",
+"  ("+(beep == "yeah"      ?"*":" ")+") (Y)eah                    ("+(beep == "gekicher"  ?"*":" ")+") (G)ekicher",
+	    }),
+	    ({ "Auswahl des Pieptons [q,z,?,<nr>] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    (["Options: Extended Beep": 1,
+	      "Beep": beep,
+	      "Set": setfunction,
+	      "Parent": parentmenu,
+	      "Info": info
+	     ]));
+}
+
+private int handle_extended_beep_options(string str, mapping info)
+{
+    mapping cmds = ([
+        '1': "steigend",
+        '2': "fallend",
+        '3': "dreiklang",
+        '4': "beep",
+        'a': "miau",
+        'b': "blubb",
+        'c': "zwisch",
+        'd': "standard",
+        'e': "quietsch",
+        'f': "tropf",
+        'g': "gekicher",
+        'i': "klirr",
+        'k': "kraehen",
+        'l': "glocke",
+        'm': "muenze",
+        'n': "pling",
+        'o': "gong",
+        'p': "plopp",
+        's': "schrei",
+        't': 0,
+        'u': "zwusch",
+        'v': "visuell",
+        'w': "whaa",
+        'y': "yeah",
+    ]);
+
+    if(strlen(str)==1 || (strlen(str)>1 && str[1]==' '))
+    {
+	int c = lower_case(str)[0];
+	str = trim(str[2..<1]);
+	
+	if(member(cmds, c))
+	{
+	    funcall(info["Set"], cmds[c], info["Info"]);
+	    if(cmds[c])
+	        efun::binary_message("\e_beep:"+cmds[c]+"\e\\", 3);
+	    print_extended_beep_options(0, cmds[c],
+		info["Set"], info["Parent"], info["Info"]);
+	    return END_MORE;
+	}
+	
+	switch(c)
+	{
+	    case 'q':
+		return END_MORE;
+	    case 'z':
+		funcall(info["Parent"], info["Info"]);
+		return END_MORE;
+	    case '?':
+		print_options_help(0, "EBeep", str,
+		    (: print_extended_beep_options($1, $2[0], $2[1], $2[2], $2[3]); :),
+		    ({ info["Beep"], info["Set"], info["Parent"], info["Info"] }));
+		return END_MORE;
+	    default:
+		return CONTINUE;
+	}
+    }
+}
+
+/*
+FUNKTION: print_color_options
+DEKLARATION: nomask void print_color_options(int quiet, string name, int color, closure setfunction, closure parentmenue, mixed parameter)
+BESCHREIBUNG:
+Zeigt dem Spieler ein Farbauswahlmenue an.
+Ist quiet == 1, so wird erstmal die Eingabe des Spielers abgewartet.
+(Dies ist sinnvoll, falls man eine Meldung ausgeben moechte und
+gleichzeitg in dieses Menue springewn will.)
+name ist der Name dieser Farboption und wird in der Statuszeile ausgegeben.
+color ist die derzeitige Farbe. Wurde die Farbe geaendert, so wird
+funcall(setfunction, neue_farbe, parameter) aufgerufen. Dies geschieht
+unmittelbar bei jeder Aenderung, nicht erst nach Beendigung des Menues.
+Wurde das Menue beendet, so wird funcall(parentmenue, parameter) aufgerufen.
+VERWEISE: add_options_menue, delete_options_menue, start_options_menue
+GRUPPEN: spieler
+*/
+nomask varargs void print_color_options(int quiet, string name, int color,
+		    closure setfunction, closure parentmenue, mixed parameter, int ecolor, string beep)
+{
+    int webmud = ({int})this_object()->uses_webmud();
+
+    int fg, bg;
+    if(ecolor & COE_FG256_SET)
+	fg = -2;
+    else if(color & CO_FG_SET)
+	fg = CO_TO_FG(color);
+    else
+	fg = -1;
+
+    if(ecolor & COE_BG256_SET)
+	bg = -2;	
+    else if(color & CO_BG_SET)
+	bg = CO_TO_BG(color);
+    else
+	bg = -1;
+	
+    this_object()->more(({
+" Vordergrund:                           Hintergrund:",
+"  ("+(fg==VT_BLACK?"*":" ")+") (S)chwarz   ("+(fg==VT_BLUE?"*":" ")+") (B)lau                ("+(bg==VT_BLACK?"*":" ")+") Sc(h)warz   ("+(bg==VT_BLUE?"*":" ")+") Bl(a)u",
+"  ("+(fg==VT_RED?"*":" ")+") (R)ot       ("+(fg==VT_MAGENTA?"*":" ")+") (M)agenta             ("+(bg==VT_RED?"*":" ")+") R(o)t       ("+(bg==VT_MAGENTA?"*":" ")+") Mage(n)ta",
+"  ("+(fg==VT_GREEN?"*":" ")+") (G)ruen     ("+(fg==VT_CYAN?"*":" ")+") (C)yan                ("+(bg==VT_GREEN?"*":" ")+") Gr(u)en     ("+(bg==VT_CYAN?"*":" ")+") C(y)an",
+"  ("+(fg==VT_YELLOW?"*":" ")+") G(e)lb      ("+(fg==VT_WHITE?"*":" ")+") (W)eiss               ("+(bg==VT_YELLOW?"*":" ")+") Ge(l)b      ("+(bg==VT_WHITE?"*":" ")+") We(i)ss",
+"  ("+(fg==-1?"*":" ")+") Ni(x)       ("+(fg==-2?"*":" ")+") Erweitert (#)         ("+(bg==-1?"*":" ")+") S(t)andard  ("+(bg==-2?"*":" ")+") Erweitert (%)",
+"",
+"  ["+(color&CO_BOLD?"*":" ")+"] (f)ett               ["+(color&CO_REVERS?"*":" ")+"] in(v)ers             ["+(color&CO_UNDERLINE?"*":" ")+"] unterstrichen (_)",
+"  ["+(color&CO_LOW?"*":" ")+"] (d)unkel             ["+(color&CO_BLINK?"*":" ")+"] blin(k)end",
+"",
+"  ["+(color&CO_INDENT_MASK)+"] Einrueckung: (0) - (7) Zeichen",
+            }) + (webmud ? ({
+"   -  Mit (P)iepton: " + ((color&CO_BEEP) ? capitalize(beep || "Standard") : "Kein"),
+            }) : ({
+"  ["+(color&CO_BEEP?"*":" ")+"] Mit (P)iepton",
+            })) + ({
+"      (J)edoch nur, wenn "+(COE_TO_IDLEBEEP(ecolor)||"__")+" Minute"+(COE_TO_IDLEBEEP(ecolor)==1?"":"n")+" idle.",
+"",
+"                                  "+((colour_to_ansi(color, ecolor)||"")-"\a")+"Beispieltext"+VT_NORM,
+	    }),
+	    ({ name + " [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    (["Options: Color": 1,
+	      "Name": name,
+	      "Color": color,
+	      "EColor": ecolor,
+	      "Beep": beep,
+	      "set": setfunction,
+	      "parent": parentmenue,
+	      "param": parameter
+	    ]));
+}
+
+private int handle_color_options(string str, string name, int color, int ecolor, string beep,
+		    closure setfunction, closure parentmenue, mixed parameter)
+{
+    enable_commands();
+    if(strlen(str)==1 || (strlen(str)>1 && str[1]==' '))
+    {
+	int c = lower_case(str)[0];
+	str = trim(str[2..<1]);
+	switch(c)
+	{
+	    case 'a': // Hintergrund Blau
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_BG))
+		      | ((CO_SET + VT_BLUE)<<CO_OFFSET_BG);
+		ecolor &= ~COE_BG256_SET;
+		break;
+	    case 'b': // Vordergrund Blau
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_FG))
+		      | ((CO_SET + VT_BLUE)<<CO_OFFSET_FG);
+		ecolor &= ~COE_FG256_SET;
+		break;
+	    case 'c': // Vordergrund Cyan
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_FG))
+		      | ((CO_SET + VT_CYAN)<<CO_OFFSET_FG);
+		ecolor &= ~COE_FG256_SET;
+		break;
+	    case 'd': // Dunkel
+		color ^= CO_LOW;
+		break;
+	    case 'e': // Vordergrund Gelb
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_FG))
+		      | ((CO_SET + VT_YELLOW)<<CO_OFFSET_FG);
+		ecolor &= ~COE_FG256_SET;
+		break;
+	    case 'f': // Fett
+		color ^= CO_BOLD;
+		break;
+	    case 'g': // Vordergrund Gruen
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_FG))
+		      | ((CO_SET + VT_GREEN)<<CO_OFFSET_FG);
+		ecolor &= ~COE_FG256_SET;
+		break;
+	    case 'h': // Hintergrund Schwarz
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_BG))
+		      | ((CO_SET + VT_BLACK)<<CO_OFFSET_BG);
+		ecolor &= ~COE_BG256_SET;
+		break;
+	    case 'i': // Hintergrund Weiss
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_BG))
+		      | ((CO_SET + VT_WHITE)<<CO_OFFSET_BG);
+		ecolor &= ~COE_BG256_SET;
+		break;
+	    case 'j': // Idle, wenn Piepton
+		if(strlen(str))
+		{
+		    int nr=-1;
+		    if(sscanf(str,"%d",nr) && nr>=0)
+		    {
+		        if(nr > 60)
+		            nr = 60;
+		
+		        ecolor = (ecolor & ~COE_IDLEBEEP_MASK) | (nr <<  COE_OFFSET_IDLEBEEP);
+		        break;
+		    }
+	        }
+	        
+	        if(COE_TO_IDLEBEEP(ecolor))
+	        {
+	            ecolor = (ecolor & ~COE_IDLEBEEP_MASK);
+	            break;
+	        }
+	
+		input_to(
+		    (:
+		        if(strlen($1))
+		        {
+			    int nr=-1;
+			    if(sscanf($1,"%d",nr) && nr>=0)
+			    {
+			        if(nr > 60)
+			            nr = 60;
+			
+			        $2["EColor"] = ($2["EColor"] & ~COE_IDLEBEEP_MASK) | (nr <<  COE_OFFSET_IDLEBEEP);
+			    }
+		        }
+		
+			funcall($2["Set"], $2["Color"], $2["Parameter"], $2["EColor"], $2["Beep"]);
+			print_color_options(0, 
+			    $2["Name"], $2["Color"],
+			    $2["Set"], $2["Parent"], $2["Parameter"],
+			    $2["EColor"], $2["Beep"]);
+		    :), INPUT_PROMPT,
+		    "Ab wieviel Idlesekunden soll ein Piepton ausgegeben werden? ",
+		    ([
+			"Name": name,
+			"Color": color,
+			"EColor": ecolor,
+			"Beep": beep,
+			"Set": setfunction,
+			"Parent": parentmenue,
+			"Parameter": parameter
+		    ]));
+		return END_MORE;
+	    
+	    case 'k': // Blinkend
+		color ^= CO_BLINK;
+		break;
+	    case 'l': // Hintergrund Gelb
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_BG))
+		      | ((CO_SET + VT_YELLOW)<<CO_OFFSET_BG);
+		ecolor &= ~COE_BG256_SET;
+		break;
+	    case 'm': // Vordergrund Magenta
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_FG))
+		      | ((CO_SET + VT_MAGENTA)<<CO_OFFSET_FG);
+		ecolor &= ~COE_FG256_SET;
+		break;
+	    case 'n': // Hintergrund Magenta
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_BG))
+		      | ((CO_SET + VT_MAGENTA)<<CO_OFFSET_BG);
+		ecolor &= ~COE_BG256_SET;
+		break;
+	    case 'o': // Hintergrund Rot
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_BG))
+		      | ((CO_SET + VT_RED)<<CO_OFFSET_BG);
+		ecolor &= ~COE_BG256_SET;
+		break;
+	    case 'p': // Piepton
+		if(({int})this_object()->uses_webmud())
+		{
+		    print_extended_beep_options(0, 
+		        beep || ((color&CO_BEEP) && "standard"),
+		        (:
+		            if($1)
+		            {
+		                $2["Color"] |= CO_BEEP;
+		            }
+		            else
+		                $2["Color"] &= ~CO_BEEP;
+		
+		            $2["Beep"] = $1;
+			    funcall($2["Set"], $2["Color"], $2["Parameter"], $2["EColor"], $1);
+		        :),
+		        (:
+			    print_color_options(0, 
+			        $1["Name"], $1["Color"],
+			        $1["Set"], $1["Parent"], $1["Parameter"],
+			        $1["EColor"], $1["Beep"]);
+		        :),
+		        ([
+			    "Name": name,
+			    "Color": color,
+			    "EColor": ecolor,
+			    "Beep": beep,
+			    "Set": setfunction,
+			    "Parent": parentmenue,
+			    "Parameter": parameter
+		        ]));
+		    return END_MORE;
+		}
+		else
+		    color ^= CO_BEEP;
+		break;
+	    case 'r': // Vordergrund Rot
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_FG))
+		      | ((CO_SET + VT_RED)<<CO_OFFSET_FG);
+		ecolor &= ~COE_FG256_SET;
+		break;
+	    case 's': // Vordergrund Schwarz
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_FG))
+		      | ((CO_SET + VT_BLACK)<<CO_OFFSET_FG);
+		ecolor &= ~COE_FG256_SET;
+		break;
+	    case 't': // Hintergrund Standard
+		color &= ~((CO_SET|CO_COLOUR_MASK)<<CO_OFFSET_BG);
+		ecolor &= ~COE_BG256_SET;
+		break;
+	    case 'u': // Hintergrund Gruen
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_BG))
+		      | ((CO_SET + VT_GREEN)<<CO_OFFSET_BG);
+		ecolor &= ~COE_BG256_SET;
+		break;
+	    case 'v': // Invers
+		color ^= CO_REVERS;
+		break;
+	    case 'w': // Vordergrund Weiss
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_FG))
+		      | ((CO_SET + VT_WHITE)<<CO_OFFSET_FG);
+		ecolor &= ~COE_FG256_SET;
+		break;
+	    case 'x': // Vordergrund Standard
+		color &= ~((CO_SET|CO_COLOUR_MASK)<<CO_OFFSET_FG);
+		ecolor &= ~COE_FG256_SET;
+		break;
+	    case 'y': // Hintergrund Cyan
+		color = (color&~(CO_COLOUR_MASK<<CO_OFFSET_BG))
+		      | ((CO_SET + VT_CYAN)<<CO_OFFSET_BG);
+		ecolor &= ~COE_BG256_SET;
+		break;
+	    case '_': // Unterstreichen
+		color ^= CO_UNDERLINE;
+		break;
+	    case '#': // Erweiterten Vordergrund
+		print_extended_color_options(0, 0, COE_TO_FG256(ecolor),
+		    (:
+			$2["EColor"] = ($2["EColor"] & ~COE_FG256_MASK) | ($1 << COE_OFFSET_FG256) | COE_FG256_SET;
+			funcall($2["Set"], $2["Color"], $2["Parameter"], $2["EColor"], $2["Beep"]);
+
+		    :),
+		    (:
+			print_color_options(0, 
+			    $1["Name"], $1["Color"],
+			    $1["Set"], $1["Parent"], $1["Parameter"],
+			    $1["EColor"], $1["Beep"]);
+		    :),
+		    ([
+			"Name": name,
+			"Color": color,
+			"EColor": ecolor,
+			"Beep": beep,
+			"Set": setfunction,
+			"Parent": parentmenue,
+			"Parameter": parameter
+		    ]));
+		return END_MORE;
+	    case '%': // Erweiterten Hintergrund
+		print_extended_color_options(0, 1, COE_TO_BG256(ecolor),
+		    (:
+			$2["EColor"] = ($2["EColor"] & ~COE_BG256_MASK) | ($1 << COE_OFFSET_BG256) | COE_BG256_SET;
+			funcall($2["Set"], $2["Color"], $2["Parameter"], $2["EColor"], $2["Beep"]);
+		    :),
+		    (:
+			print_color_options(0, 
+			    $1["Name"], $1["Color"],
+			    $1["Set"], $1["Parent"], $1["Parameter"],
+			    $1["EColor"], $1["Beep"]);
+		    :),
+		    ([
+			"Name": name,
+			"Color": color,
+			"EColor": ecolor,
+			"Beep": beep,
+			"Set": setfunction,
+			"Parent": parentmenue,
+			"Parameter": parameter
+		    ]));
+		return END_MORE;
+	    case '0' .. '7': // Einrueckung
+		color = (color &~ CO_INDENT_MASK) | (c - '0');
+		break;
+	    case 'q':
+		return END_MORE;
+	    case 'z':
+		funcall(parentmenue, parameter);
+		return END_MORE;
+	    case '?':
+		print_options_help(0, "Color", str,
+		    (: print_color_options($1, $2[0], $2[1], $2[2], $2[3], $2[4], $2[5], $2[6]) :),
+		    ({name, color, setfunction, parentmenue, parameter, ecolor, beep}));
+		return END_MORE;
+	    default:
+		return CONTINUE;
+	}
+	funcall(setfunction, color, parameter, ecolor, beep);
+	print_color_options(0, name, color, setfunction, parentmenue, parameter, ecolor, beep);
+	return END_MORE;
+    }
+}
+
+private varargs void print_colors_options(int quiet)
+{
+    int webmud = ({int})this_object()->uses_webmud();
+    mapping colors = ({mapping}) this_object()->query_colours();
+    mapping act_names = ACT_NAMES;
+
+    if(wizp(this_object()))
+	act_names += ACT_WIZ_NAMES;
+
+    this_object()->more(({
+" Farben:",
+"  ["+(colors[ACT_CONFIG,0]&CO_CONFIG_OFF?" ":"*")+"] (A)n"})+
+	explode(sprintf(
+"   -  (B)ewegung:          %-=40s %s[Beispiel]"VT_NORM"\n"
+"   -  (K)ampf:             %-=40s %s[Beispiel]"VT_NORM"\n"
+"   -  Komm(u)nikation:     %-=40s %s[Beispiel]"VT_NORM"\n"	
+"   -  (F)ernkommunikation: %-=40s %s[Beispiel]"VT_NORM"\n"	
+"   -  (M)eldungen:         %-=40s %s[Beispiel]"VT_NORM"\n"	
+"   -  (S)eele:             %-=40s %s[Beispiel]"VT_NORM"\n",
+	    colour_to_string(colors[act_names["bewegung"],0],colors[act_names["bewegung"],2]),
+	    (colour_to_ansi(colors[act_names["bewegung"],0],colors[act_names["bewegung"],2])||"")-"\a",
+	    colour_to_string(colors[act_names["kampf"],0],colors[act_names["kampf"],2]),
+	    (colour_to_ansi(colors[act_names["kampf"],0],colors[act_names["kampf"],2])||"")-"\a",
+	    colour_to_string(colors[act_names["kommunikation"],0],colors[act_names["kommunikation"],2]),
+	    (colour_to_ansi(colors[act_names["kommunikation"],0],colors[act_names["kommunikation"],2])||"")-"\a",
+	    colour_to_string(colors[act_names["fernkommunikation"],0],colors[act_names["fernkommunikation"],2]),
+	    (colour_to_ansi(colors[act_names["fernkommunikation"],0],colors[act_names["fernkommunikation"],2])||"")-"\a",
+	    colour_to_string(colors[act_names["meldungen"],0],colors[act_names["meldungen"],2]),
+	    (colour_to_ansi(colors[act_names["meldungen"],0],colors[act_names["meldungen"],2])||"")-"\a",
+	    colour_to_string(colors[act_names["seele"],0],colors[act_names["seele"],2]),
+	    (colour_to_ansi(colors[act_names["seele"],0],colors[act_names["seele"],2])||"")-"\a"),"\n")[0..<2]+
+	(wizp(this_object())?explode(sprintf(
+"   -  (D)ebug:             %-=40s %s[Beispiel]"VT_NORM"\n",
+	    colour_to_string(colors[act_names["debug"],0],colors[act_names["debug"],2]),
+	    (colour_to_ansi(colors[act_names["debug"],0],colors[act_names["debug"],2])||"")-"\a"),"\n")[0..<2]:({}))+
+({
+"",
+"   -  (T)extuelle Hervorhebungen",
+}) + (webmud ? ({
+"",
+" Toene:",
+"  ["+(colors[ACT_CONFIG,0]&CO_CONFIG_MUTE?" ":"*")+"] A(n)",
+"   -  Standardt(o)n: "+ capitalize(colors[ACT_CONFIG, COL_BEEP_TYPE] || "Standard"),
+}) : ({}))
+	    ,
+	    ({ "Farbe [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    "Options: Colors");
+}
+
+#define OPT_COLORS_CHANGE		1
+#define OPT_COLORS_AN			2
+#define OPT_COLORS_AUS			3
+#define OPT_COLORS_BEWEGUNG		4
+#define OPT_COLORS_KAMPF		5
+#define OPT_COLORS_KOMMUNIKATION	6
+#define OPT_COLORS_FERNKOMMUNIKATION	7
+#define OPT_COLORS_MELDUNGEN		8
+#define OPT_COLORS_SEELE		9
+#define OPT_COLORS_DEBUG		10
+#define OPT_COLORS_TRIGGER		11
+#define OPT_COLORS_MUTE			12
+#define OPT_COLORS_DEFAULTBEEP		13
+
+private varargs void print_trigger_options(int quiet);
+private varargs mixed change_colors_options(int what, string str, int flags, closure input_to_callback)
+{
+    mapping colors = ({mapping}) this_object()->query_colours();
+    mapping act_names = ACT_NAMES;
+    string name;
+    if(wizp(this_object()))
+	act_names += ACT_WIZ_NAMES;
+
+    str = trim(str);
+    switch(what)
+    {
+	case OPT_COLORS_CHANGE:
+	    this_object()->set_colour(ACT_CONFIG,
+		colors[ACT_CONFIG,0]^CO_CONFIG_OFF);
+	    return (colors[ACT_CONFIG,0]&CO_CONFIG_OFF)
+		?"Farben ausgeschaltet."
+		:"Farben eingeschaltet.";
+	case OPT_COLORS_AN:
+	    this_object()->set_colour(ACT_CONFIG,
+		colors[ACT_CONFIG,0]&~CO_CONFIG_OFF);
+	    return "Farben angeschaltet.";
+	case OPT_COLORS_AUS:
+		this_object()->set_colour(ACT_CONFIG,
+		    colors[ACT_CONFIG,0]|CO_CONFIG_OFF);
+		return "Farben ausgeschaltet.";
+	case OPT_COLORS_BEWEGUNG:
+	    name = "bewegung";
+	    break;
+	case OPT_COLORS_KAMPF:
+	    name = "kampf";
+	    break;
+	case OPT_COLORS_KOMMUNIKATION:
+	    name = "kommunikation";
+	    break;
+	case OPT_COLORS_FERNKOMMUNIKATION:
+	    name = "fernkommunikation";
+	    break;
+	case OPT_COLORS_MELDUNGEN:
+	    name = "meldungen";
+	    break;
+	case OPT_COLORS_SEELE:
+	    name = "seele";
+	    break;
+	case OPT_COLORS_DEBUG:
+	    if(!wizp(this_object()))
+	        return 0;
+	    name = "debug";
+	    break;
+	case OPT_COLORS_TRIGGER:
+	    print_trigger_options(0);
+	    return OPT_INPUT_TO_STARTED;
+	case OPT_COLORS_MUTE:
+	{
+	    int cfg;
+	    
+	    if(!({int})this_object()->uses_webmud())
+	        return 0;
+	
+	    this_object()->set_colour(ACT_CONFIG,
+		cfg = (colors[ACT_CONFIG,0]^CO_CONFIG_MUTE));
+	    if(cfg&CO_CONFIG_MUTE)
+	    {
+		efun::binary_message("\e_mutebeep\e\\",3);
+		return "Toene ausgeschaltet.";
+	    }
+	    else
+	    {
+		efun::binary_message("\e_unmutebeep\e\\",3);
+		return "Toene eingeschaltet.";
+	    }
+	    break;
+	}
+	case OPT_COLORS_DEFAULTBEEP:
+	    if(!({int})this_object()->uses_webmud())
+	        return 0;
+	
+	    print_extended_beep_options(0,
+	        colors[ACT_CONFIG, COL_BEEP_TYPE] || "standard",
+	        (:
+		    this_object()->set_colour(ACT_CONFIG, colors[ACT_CONFIG,0], colors[ACT_CONFIG, COL_ON_ECOLOR], $1);
+		
+		    efun::binary_message("\e_defaultbeep:"+($1||"standard")+"\e\\",3);
+	        :),
+	        lambda(0, ({#'funcall, input_to_callback, ""})), 0);
+	    return OPT_INPUT_TO_STARTED;
+	
+	default:
+	    return 0;
+    }
+    if(strlen(str))
+    {
+        int ecol;
+	mixed ret = string_to_colour(str, &ecol);
+	
+	if(stringp(ret))
+	{
+	    MSG(ret);
+	    return OPT_MESSAGE;
+	}
+	this_object()->set_colour(act_names[name], ret, ecol, colors[act_names[name], COL_BEEP_TYPE]);
+	return "Farbdefinition von '"+capitalize(name)+"' auf '"+
+	    colour_to_string(ret, ecol)+"' eingestellt.";
+    }
+    else if(flags&OPT_MENUE)
+    {
+	print_color_options(0, capitalize(name), colors[act_names[name],COL_ON_COLOR],
+	    (:
+		this_object()->set_colour($2, $1, $3, $4);
+	    :),
+	    lambda(0, ({#'funcall, input_to_callback, ""})),
+	    act_names[name],
+	    colors[act_names[name],COL_ON_ECOLOR],
+	    colors[act_names[name],COL_BEEP_TYPE]);
+	return OPT_INPUT_TO_STARTED;
+    }
+    else
+    {
+	MSG(wrap("Farbdefinition fuer '"+capitalize(name)+"' ist auf '"+
+	    colour_to_string(colors[act_names[name],0],colors[act_names[name],2])+"' eingestellt."));
+	return OPT_MESSAGE;
+    }
+}
+
+private int handle_colors_options(string str)
+{
+    return handle_menue_options(str,
+	([
+	    'a': OPT_COLORS_CHANGE,
+	    'b': OPT_COLORS_BEWEGUNG,
+	    'k': OPT_COLORS_KAMPF,
+	    'u': OPT_COLORS_KOMMUNIKATION,
+	    'f': OPT_COLORS_FERNKOMMUNIKATION,
+	    'm': OPT_COLORS_MELDUNGEN,
+	    's': OPT_COLORS_SEELE,
+	    'd': OPT_COLORS_DEBUG,
+	    't': OPT_COLORS_TRIGGER,
+	    'n': OPT_COLORS_MUTE,
+	    'o': OPT_COLORS_DEFAULTBEEP,
+	]), #'change_colors_options, #'print_colors_options, "Colors");
+}
+
+private void handle_colors_actions(string str)
+{
+    if(!strlen(str))
+    {
+	mapping colors = ({mapping}) this_object()->query_colours();
+	mapping act_names = ACT_NAMES;
+	if(wizp(this_object()))
+	    act_names += ACT_WIZ_NAMES;
+	if (colors[ACT_CONFIG,0] & CO_CONFIG_OFF)
+	    MSG("Farbeinstellungen: (AUSGESCHALTET)\n");
+	else
+	    MSG("Farbeinstellungen:\n");
+	foreach(string col: sort_array(m_indices(act_names),#'<))
+	    MSG(sprintf("%-18s  %s\n",col + ":",
+                colour_to_string(colors[act_names[col],0], colors[act_names[col],2])));
+    }
+    else
+	handle_cmd_actions(str,
+	    ({
+		({ "anschalten",	2, OPT_COLORS_AN, "farben an" }),
+		({ "einschalten",	3, OPT_COLORS_AN, "farben aus" }),
+		({ "ausschalten",	3, OPT_COLORS_AUS, "farben <meldungstyp> <hervorhebung>" }),
+		({ "keine",		4, OPT_COLORS_AUS, "farben <meldungstyp> <hervorhebung>" }),
+		({ "bewegung",		3, OPT_COLORS_BEWEGUNG, "farben <meldungstyp> <hervorhebung>" }),
+		({ "kampf",		5, OPT_COLORS_KAMPF, "farben <meldungstyp> <hervorhebung>" }),
+		({ "kommunikation",	4, OPT_COLORS_KOMMUNIKATION, "farben <meldungstyp> <hervorhebung>" }),
+		({ "fernkommunikation", 8, OPT_COLORS_FERNKOMMUNIKATION, "farben <meldungstyp> <hervorhebung>" }),
+		({ "fkommunikation",	5, OPT_COLORS_FERNKOMMUNIKATION, "farben <meldungstyp> <hervorhebung>" }),
+		({ "meldungen",		4, OPT_COLORS_MELDUNGEN, "farben <meldungstyp> <hervorhebung>" }),
+		({ "seele",		5, OPT_COLORS_SEELE, "farben <meldungstyp> <hervorhebung>" }),
+		({ "debug",		5, OPT_COLORS_DEBUG, "farben <meldungstyp> <hervorhebung>" }),
+	    }), #'change_colors_options, "Colors.cl");
+}
+
+protected mixed* query_color_trigger();
+protected void set_color_trigger(mixed* trigger);
+protected string convert_glob(string str, int casesensitive);
+
+private varargs void print_single_trigger_options(int quiet, int num)
+{
+    mixed *trigger = query_color_trigger();
+    mixed *t = trigger[num];
+
+    // Alte Option, nun in den Farbeinstellungen
+    if(t[TRIGGER_OPTIONS]&TO_BELL)
+    {
+        t[TRIGGER_COLOR] |= CO_BEEP;
+        t[TRIGGER_OPTIONS] &= ~TO_BELL;
+        set_color_trigger(trigger);
+    }
+    
+    if(sizeof(t)<TRIGGER_SIZE)
+    {
+	t += ({0})*(TRIGGER_SIZE-sizeof(t));
+	trigger[num]  = t;
+	set_color_trigger(trigger);
+    }
+
+    this_object()->more(({
+" Textuelle Hervorhebung:",
+})+  (explode(sprintf(
+"   -  (T)ext:             %-=52s\n"
+"   -  (P)osition:         %d\n"
+"   -  (F)arbe auswaehlen: %-41.41s %s[Beispiel]" VT_NORM "\n",
+    t[TRIGGER_TEXT] || ("_"*52), (num||sizeof(trigger)),
+    colour_to_string(t[TRIGGER_COLOR],t[TRIGGER_ECOLOR]),
+    (t[TRIGGER_ANSI]||"")-"\a"),"\n"))+({
+"  ["+((t[TRIGGER_OPTIONS]&TO_CASESENSITIVE)?"*":" ")+"] (G)ross-/Kleinschreibung beachten",
+"  ["+((t[TRIGGER_OPTIONS]&TO_KEEPCOLOR)?"*":" ")+"] Farb(a)ttribute des Textes uebernehmen",
+	    }),
+	    ({ "Hervorhebung [q,z,<,>,<nr>,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    (["Options: Single-Trigger":1, "trigger": num]));
+}
+
+private varargs void print_trigger_options(int quiet)
+{
+    mixed *trigger = query_color_trigger();
+    string *liste = ({});
+    int numlen;
+
+    numlen = sizeof(to_string(sizeof(trigger)-1));
+    foreach(int num: sizeof(trigger))
+    {
+	mixed* t = trigger[num];
+	if(!num)
+	    continue;
+	
+	if(sizeof(t)<TRIGGER_SIZE)
+	    t += ({0})*(TRIGGER_SIZE-sizeof(t));
+	string desc = colour_to_string(t[TRIGGER_COLOR],t[TRIGGER_ECOLOR]);
+	
+	liste += ({ sprintf("  %d: %-*.*s %s %s[Beispiel]" VT_NORM,
+	    num, 62-numlen-sizeof(desc), 62-numlen-sizeof(desc), t[TRIGGER_TEXT]||"",
+	    desc, (colour_to_ansi(t[TRIGGER_COLOR],t[TRIGGER_ECOLOR])||"")-"\a") });
+    }
+
+    this_object()->more(({
+" Textuelle Hervorhebungen:",
+"  ["+(trigger[0]?"*":" ")+"] (A)n",
+"   -  (H)inzufuegen",
+	    })+(sizeof(trigger)?({
+"   -  (L)oeschen",
+	    }):({}))+({
+"",
+	    }) + liste,
+	    ({ "Hervorhebungen [q,z,<,>,<nr>,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    "Options: Trigger");
+}
+
+#define OPT_STRIGGER_TEXT	1
+#define OPT_STRIGGER_POSITION	2
+#define OPT_STRIGGER_FARBE	3
+#define OPT_STRIGGER_KEINRESET	5
+#define OPT_STRIGGER_CASE	6
+private varargs mixed change_single_trigger_options(int num, int what, string str, int flags, closure input_to_callback)
+{
+    int an, aus, erg;
+    string msg;
+    
+    mixed *trigger = query_color_trigger();
+    mixed *t = trigger[num];
+    
+    if(sizeof(t)<TRIGGER_SIZE)
+    {
+	t += ({0})*(TRIGGER_SIZE-sizeof(t));
+	trigger[num]  = t;
+	set_color_trigger(trigger);
+    }
+
+    str = trim(str);
+    if(!strstr(str,"an") || !strstr(str,"ein"))
+	an = 1;
+    else if(!strstr(str,"aus") || !strstr(str,"kein") || str=="nicht")
+	aus = 1;
+
+    switch(what)
+    {
+	case OPT_STRIGGER_FARBE: // Farbe
+	    if(strlen(str))
+	    {
+	        int ecol;
+		mixed ret = string_to_colour(str, &ecol);
+		
+		if(stringp(ret))
+		{
+		    MSG(ret);
+		    return OPT_MESSAGE;
+		}
+		
+		t[TRIGGER_COLOR] = ret;
+		t[TRIGGER_ECOLOR] = ecol;
+		t[TRIGGER_ANSI] = colour_to_ansi(ret, ecol);
+		msg = "Farbe geaendert.";
+		break;
+	    }
+	    else if(flags&OPT_MENUE)
+	    {
+		print_color_options(0, "Hervorhebung Nr. "+num, t[TRIGGER_COLOR],
+	    	    (:
+			mixed *itrigger = query_color_trigger();
+			mixed *it = itrigger[$2];
+			it[TRIGGER_COLOR] = $1;
+			it[TRIGGER_ECOLOR] = $3;
+			it[TRIGGER_ANSI] = colour_to_ansi($1,$3);
+			it[TRIGGER_BEEP_TYPE] = $4;
+			set_color_trigger(itrigger);
+		    :),
+		    (:
+			print_single_trigger_options(0, $1);
+		    :), num, t[TRIGGER_ECOLOR], t[TRIGGER_BEEP_TYPE]);
+		return OPT_INPUT_TO_STARTED;
+	    }
+	    else
+	    {
+		MSG(wrap("Farbe fuer die Hervorhebung Nr. "+num+" ist auf '"+
+		    colour_to_string(t[TRIGGER_COLOR], t[TRIGGER_ECOLOR])+"' eingestellt."));
+		return OPT_MESSAGE;
+	    }
+	
+	case OPT_STRIGGER_TEXT:
+	    if(strlen(str))
+	    {
+		t[TRIGGER_TEXT] = str;
+		t[TRIGGER_REGEXP] = convert_glob(str, t[TRIGGER_OPTIONS]&TO_CASESENSITIVE);
+		if(!t[TRIGGER_REGEXP])
+		{
+		    MSG("Der Ausdruck ist fehlerhaft.\n");
+		    return OPT_MESSAGE;
+		}
+
+		msg = "Text wurde geaendert.";
+		break;
+	    }
+	    else if(!(flags&OPT_MENUE))
+		return "Der Text lautet: "+t[TRIGGER_TEXT];
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2,
+			    change_single_trigger_options($3,
+				OPT_STRIGGER_TEXT, $1, 
+				$4|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Bitte gib den Text ein: ",
+		    input_to_callback, num, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+	    
+	case OPT_STRIGGER_POSITION:
+	    if(strlen(str))
+	    {
+	        int nr=-1;
+	        if(sscanf(str,"%d",nr) && nr>=1)
+	        {
+		    if(nr >= sizeof(trigger))
+			nr = sizeof(trigger)-1;
+		    
+		    trigger = arr_delete(trigger, num);
+		    trigger = trigger[0..nr-1] + ({t}) + trigger[nr..<1];
+		    set_color_trigger(trigger);
+		    
+		    print_single_trigger_options(0, nr);
+		    return OPT_INPUT_TO_STARTED;
+	        }
+		MSG("Gib bitte eine positive Zahl an.\n");
+	        return OPT_MESSAGE;
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else if(!(flags&OPT_MENUE))
+		return "Gib bitte eine positive Zahl an.\n";
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2,
+			    change_single_trigger_options($3,
+				OPT_STRIGGER_POSITION, $1,
+				$4|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Welche Position soll diese Hervorhebung einnehmen? ",
+		    input_to_callback, num, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+
+	case OPT_STRIGGER_KEINRESET:
+	    if(erg = (an || (!aus && !(t[TRIGGER_OPTIONS]&TO_KEEPCOLOR))))
+		t[TRIGGER_OPTIONS] |= TO_KEEPCOLOR;
+	    else
+		t[TRIGGER_OPTIONS] &= ~TO_KEEPCOLOR;
+	    msg = erg
+	        ?"Bestehende Farbattribute werden beibehalten."
+		:"Bestehende Farbattribute werden nicht beibehalten.";
+	    break;
+	
+	case OPT_STRIGGER_CASE:
+	    if(erg = (an || (!aus && !(t[TRIGGER_OPTIONS]&TO_CASESENSITIVE))))
+		t[TRIGGER_OPTIONS] |= TO_CASESENSITIVE;
+	    else
+		t[TRIGGER_OPTIONS] &= ~TO_CASESENSITIVE;
+		
+	    if(sizeof(t[TRIGGER_TEXT]))
+	    {
+		string re = convert_glob(t[TRIGGER_TEXT], t[TRIGGER_OPTIONS]&TO_CASESENSITIVE);
+		if(re)
+		    t[TRIGGER_REGEXP] = re;
+	    }
+
+	    msg = erg
+	        ?"Gross-/Kleinschreibung wird beachtet."
+		:"Gross-/Kleinschreibung wird nicht beachtet.";
+	    break;
+	    
+	default:
+	    return 0;
+    }
+
+    set_color_trigger(trigger);
+    return msg ? ("Hervorhebung: "+num+": "+msg) : "Ok.";
+}
+
+private int handle_single_trigger_options(string str, int num)
+{
+    return handle_menue_options(str,
+        ([
+	    't': OPT_STRIGGER_TEXT,
+	    'p': OPT_STRIGGER_POSITION,
+	    'f': OPT_STRIGGER_FARBE,
+	    'a': OPT_STRIGGER_KEINRESET,
+	    'g': OPT_STRIGGER_CASE,
+	]), 
+	lambda(({'what, 'str, 'flags, 'cb}),
+	    ({#'change_single_trigger_options, num, 'what, 'str, 'flags, 'cb})),
+	lambda(({'quiet}), ({#'print_single_trigger_options, 'quiet, num})),
+	"SingleTrigger", #'print_trigger_options);
+}
+
+#define OPT_TRIGGER_CHANGE	1
+#define OPT_TRIGGER_ON		2
+#define OPT_TRIGGER_OFF		3
+#define OPT_TRIGGER_ADD		4	// Nur fuers Menue
+#define OPT_TRIGGER_REMOVE	5	// Nur fuers Menue
+
+private varargs mixed change_trigger_options(int what, string str, int flags, closure input_to_callback)
+{
+    mixed *trigger = query_color_trigger();
+    
+    str = trim(str);
+    switch(what)
+    {
+	case OPT_TRIGGER_CHANGE:
+	    trigger[0] = !trigger[0];
+	    set_color_trigger(trigger);
+	    return (trigger[0])
+		?"Hervorhebungen eingeschaltet."
+		:"Hervorhebungen ausgeschaltet.";
+
+	case OPT_TRIGGER_ON:
+	    trigger[0] = 1;
+	    set_color_trigger(trigger);
+	    return "Hervorhebungen eingeschaltet.";
+
+	case OPT_TRIGGER_OFF:
+	    trigger[0] = 0;
+	    set_color_trigger(trigger);
+	    return "Hervorhebungen ausgeschaltet.";
+	
+	case OPT_TRIGGER_ADD:
+	{
+	    mixed t = allocate(TRIGGER_SIZE);
+	    
+	    if(sizeof(str))
+	    {
+		t[TRIGGER_TEXT] = str;
+		t[TRIGGER_REGEXP] = convert_glob(str, t[TRIGGER_OPTIONS]&TO_CASESENSITIVE);
+		if(!t[TRIGGER_REGEXP])
+	        {
+	    	    MSG("Der Ausdruck ist fehlerhaft.\n");
+		    return OPT_MESSAGE;
+		}
+	    }
+	    
+	    trigger += ({ t });
+	    set_color_trigger(trigger);
+		
+	    print_single_trigger_options(0, sizeof(trigger)-1);
+	    return OPT_INPUT_TO_STARTED;
+	}    
+	case OPT_TRIGGER_REMOVE:
+	    if(strlen(str))
+	    {
+		int num;
+		
+		if(sscanf(str, "%d", num) && num>0 && num<sizeof(trigger))
+		{
+		    set_color_trigger(arr_delete(trigger, num));
+		    return "Hervorhebung Nr. "+num+" entfernt.";
+		}
+
+		MSG("Bitte die Nummer der Hervorhebung angeben.\n");
+		return OPT_MESSAGE;
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2, change_trigger_options(OPT_TRIGGER_REMOVE,
+			    $1, $3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Welche Hervorhebung soll entfernt werden? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+    }
+}
+
+private int handle_trigger_options(string str)
+{
+    mixed *trigger = query_color_trigger();
+    int num;
+    
+    if(sscanf(str, "%d", num) && num>0 && num<sizeof(trigger))
+    {
+	print_single_trigger_options(0, num);
+	return END_MORE;
+    }
+    else
+	return handle_menue_options(str,
+	    ([
+		'a': OPT_TRIGGER_CHANGE,
+		'h': OPT_TRIGGER_ADD,
+		'l': OPT_TRIGGER_REMOVE,
+	    ]), #'change_trigger_options, #'print_trigger_options, "Trigger",
+	    #'print_colors_options);
+}
+
+private string *get_event_liste()
+{
+    mapping event_liste = ({mapping}) EVENT_MASTER->query_events();
+    mixed *config_events;
+    int level = ({int}) this_object()->query_level();
+    string gilde = ({string}) this_object()->query_gilde();
+    
+    if(this_object()->query_global_colourmode())
+	config_events = ({mixed*})this_object()->query_events();
+    
+    return map(sort_array(m_indices(event_liste),#'>),
+	    (:
+		string col;
+		
+		if(!this_object()->validate_event($2,$1,$3,$4))
+		    return 0;
+		    
+		if($5)
+		{
+		    int idx = member($5[EVC_ID_NR], $1);
+		    if(idx>=0 && $5[EVC_COLOUR][idx])
+			col = $5[EVC_COLOUR][idx][1];
+		}
+		
+		return sprintf("  %3d %s%-19.19s %s%1.50s%s", $1,
+			this_object()->event($1,0,0,0)?"*":" ",
+			$2[$1]["name"], (col || "")-"\a", $2[$1]["desc"],
+			col?VT_NORM:"");
+	    :), event_liste, level, gilde, config_events) - ({0});
+}
+
+private varargs void print_events_options(int quiet)
+{
+    string pufferopts = ({string}) this_object()->query_pufferoptionen();
+
+    this_object()->more(({
+" Kurier:                                   Erinnerungen:",
+"  ["+(this_object()->query_online()?"*":" ")+"] (A)n                                  ["+(member(pufferopts,'k')>=0?"*":" ")+"] Erei(g)nis-/Kanalnamen anzeigen",
+	    }) + (wizp(this_object())?({
+"  ["+(({int})this_object()->query_global_eventmode()&EVF_G_MODE_BRACKETS?"*":" ")+"] (K)lammermodus                        ["+(member(pufferopts,'n')>=0?"*":" ")+"] (N)amen der Verursacher",
+	    }):({})) + ({
+"  ["+(this_object()->query_global_colourmode()?"*":" ")+"] (F)arben an                           ["+(member(pufferopts,'z')>=0?"*":" ")+"] (U)hrzeit in extra Spalte",
+"  ["+(this_object()->query_echomode()?"*":" ")+"] (E)cho bei sage und rede              ["+(member(pufferopts,'y')>=0?"*":" ")+"] U(h)rzeit dem Text anhaengen",
+"  ["+(this_object()->query_edpuffer()?"*":" ")+"] Meldungen (p)uffern beim Editieren    ["+(member(pufferopts,'d')>=0?"*":" ")+"] (D)atum in extra Spalte",
+"                                            ["+(member(pufferopts,'c')>=0?"*":" ")+"] Da(t)um dem Text anhaengen",
+" Kanaele:"
+	    }) + get_event_liste(),
+	    ({ "Kurier und Erinnerungen [q,z,<,>,<nr>,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    "Options: Events");
+}
+
+private void print_channel_options(int quiet, int nr, mapping info)
+{
+    mixed *events = ({mixed*})this_object()->query_events();
+    int webmud = ({int})this_object()->uses_webmud_beta(), webmud_status;
+    string stat, str;
+    string *persons;
+    int color, ecolor;
+    int index = member(events[EVC_ID_NR],nr);
+
+    if(index >= 0)
+    {
+	mixed *col;
+	
+	stat = events[EVC_STATUS][index];
+	persons = (events[EVC_PERSONS][index]||({}))-({""});
+	col = (events[EVC_COLOUR][index]||({0}));
+	color = col[0];
+	ecolor = sizeof(col)>2?col[2]:0;
+    }
+    else
+    {
+	stat = "";
+	persons = ({});
+	color = 0;
+	ecolor = 0;
+    }
+    
+    webmud_status = read_bits(stat, COMM_WEBMUD, COMM_WEBMUD_WIDTH);
+    
+    this_object()->more(({
+" "+info["name"]+":",
+"  ["+(test_bit(stat,6)?"*":" ")+"] V(o)ruebergehend aus                       ["+(test_bit(stat,COMM_MICH)?" ":"*")+"] (K)eine eigenen Meldungen",
+"   -  (F)arbe: "+colour_to_string(color, ecolor),
+"",
+"  ("+(test_bit(stat,0)?"*":" ")+") Alle Meldungen a(u)sser von:               ("+(test_bit(stat,0)?" ":"*")+") (N)ur Meldungen von:",
+"",
+"  ["+(test_bit(stat,COMM_S)?"*":" ")+"] (S)pielern (incl. Gaeste)    ["+(test_bit(stat,COMM_GAESTE)?"*":" ")+"] (G)aesten           ["+(test_bit(stat,COMM_M)?"*":" ")+"] (M)onstern",
+	    }) + (wizp(this_object())?({
+"  ["+(test_bit(stat,COMM_N)?"*":" ")+"] (V)oegten                    ["+(test_bit(stat,COMM_D)?"*":" ")+"] (L)ords             ["+(test_bit(stat,COMM_A)?"*":" ")+"] (A)dmins",
+	    }):({})) + ({
+"  ["+(test_bit(stat,COMM_GRATSFILTER)?"*":" ")+"] Gra(t)ulanten",
+"",
+	    }) +
+	    (explode(sprintf(test_bit(stat,0)?
+"   -  Diese Namen au(c)h ausschliessen: %-=39s\n"
+"   -  Diese Namen jedoch zulass(e)n:    %-=39s\n":
+"   -  Diese Namen au(c)h zulassen:      %-=39s\n"
+"   -  Diese Namen aber auschli(e)ssen:  %-=39s\n",
+		strlen(str=implode(sort_array(map(filter(persons,(:$1[0]!='!':)),#'capitalize),#'>),", "))?str:("_"*38),
+		strlen(str=implode(sort_array(map(filter(persons,(:$1[0]=='!':)),(:capitalize($1[1..<1]):)),#'>),", "))?str:("_"*38)
+	    ),"\n")[0..<2]) +
+	    ({
+"      (Zum Hinzufuegen 'c+ <name>, <name>...' bzw. 'e+ <namen>',",
+"      zum Entfernen 'c- <name>, <name>...' bzw. 'e- <namen>'",
+"      und zum Setzen nur 'c <name>, <name>...' bzw. 'e <namen>' eingeben.)",
+	    })+(webmud ?
+	    ({
+"",
+" WebMUD:",
+"  ("+(webmud_status == CW_MAIN_WINDOW  ? "*": " ")+") Meldungen im (H)auptfenster anzeigen",
+"  ("+(webmud_status == CW_OWN_WINDOW   ? "*": " ")+") Meldungen in e(i)genem Fenster anzeigen",
+"  ("+(webmud_status == CW_BOTH_WINDOWS ? "*": " ")+") Meldungen in (b)eiden Fenstern anzeigen",
+	    }) : ({})),
+	    ({ "Kanal: "+info["name"]+" [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    (["Options: Channel":1, "nr":nr, "info":info]));
+}
+
+#define OPT_CHANNEL_CHANGE	1
+#define OPT_CHANNEL_AUS		2
+#define OPT_CHANNEL_AN		3
+#define OPT_CHANNEL_MICH	4
+#define OPT_CHANNEL_FARBE	5
+#define OPT_CHANNEL_CHANGE_NURAUSSER 6
+#define OPT_CHANNEL_AUSSER	7
+#define OPT_CHANNEL_NUR		8
+#define OPT_CHANNEL_SPIELER	9
+#define OPT_CHANNEL_GAESTE	10
+#define OPT_CHANNEL_MONSTER	11
+#define OPT_CHANNEL_VOEGTE	12
+#define OPT_CHANNEL_LORDS	13
+#define OPT_CHANNEL_ADMINS	14
+#define OPT_CHANNEL_GRATS	15
+#define OPT_CHANNEL_PERSONEN	16
+#define OPT_CHANNEL_NPERSONEN	17
+#define OPT_CHANNEL_WEBMUD_MAIN	18
+#define OPT_CHANNEL_WEBMUD_OWN	19
+#define OPT_CHANNEL_WEBMUD_BOTH	20
+
+private varargs mixed change_channel_options(int nr, mapping info, int what, string str, int flags, closure input_to_callback)
+{
+#define CHANGE_BIT(bitstr, bitnr, reverse, str) \
+	((((!strstr(str,"an") || !strstr(str,"ein") || str=="doch") || \
+	   (strstr(str,"aus") && strstr(str,"kein") && str!="nicht" && \
+	    (test_bit(bitstr,bitnr)^reverse)))^reverse)\
+	    ?clear_bit(bitstr,bitnr):set_bit(bitstr,bitnr))
+
+    mixed *events = ({mixed*})this_object()->query_events();
+    string stat;
+    string *persons;
+    int index = member(events[EVC_ID_NR],nr);
+    mixed color;
+    string *hoeren = ({}), *nhoeren = ({});
+
+    if(index >= 0)
+    {
+	stat = events[EVC_STATUS][index];
+	persons = events[EVC_PERSONS][index]||({});
+	color = events[EVC_COLOUR][index];
+    }
+    else
+    {
+	stat = "";
+	persons = ({});
+	color = 0;
+    }
+    str = trim(str);
+    
+    switch(what)
+    {
+	case OPT_CHANNEL_FARBE: // Farbe
+	    if(strlen(str))
+	    {
+	        int ecol;
+		mixed ret = string_to_colour(str, &ecol);
+		
+		if(stringp(ret))
+		{
+		    MSG(ret);
+		    return OPT_MESSAGE;
+		}
+		color = (ret || ecol || (sizeof(color)>3)) &&  ({ ret, colour_to_ansi(ret, ecol), ecol }) + (color ? color[3..] : ({}));
+		break;
+	    }
+	    else if(flags&OPT_MENUE)
+	    {
+		print_color_options(0, "Kanal: "+info["name"], (color||({0}))[0],
+	    	    (:
+	    		mixed *ievents = ({mixed*})this_object()->query_events();
+	        	int iindex = member(ievents[EVC_ID_NR],$2[0]);
+	    	
+			if(iindex < 0)
+	    		{
+	    		    iindex = sizeof(ievents[EVC_ID_NR]);
+	    		    ievents[EVC_ID_NR]   += ({$2[0]});
+	    		    ievents[EVC_STATUS]  += ({ "" });
+			    ievents[EVC_PERSONS] += ({ 0 });
+			    ievents[EVC_COLOUR] += ({ 0 });
+			}
+			ievents[EVC_COLOUR][iindex] = ($1||$3||$4) && ({ $1, colour_to_ansi($1, $3), $3, $4 });
+			this_object()->set_events(ievents);
+		    :),
+		    (:
+			print_channel_options(0, $1[0], $1[1]);
+		    :), ({nr,info}),
+		    sizeof(color)>EVCC_ECOLOR?color[EVCC_ECOLOR]:0,
+		    sizeof(color)>EVCC_BEEP_TYPE?color[EVCC_BEEP_TYPE]:0);
+		return OPT_INPUT_TO_STARTED;
+	    }
+	    else
+	    {
+		MSG(wrap("Farbe fuer '"+info["name"]+"' ist auf '"+
+		    colour_to_string(color && color[0], sizeof(color)>2 && color[2])+"' eingestellt."));
+		return OPT_MESSAGE;
+	    }
+	case OPT_CHANNEL_CHANGE: // Ausschalten
+	    stat = CHANGE_BIT(stat, 6, 0, "");
+	    break;
+	case OPT_CHANNEL_AN: // Ausschalten
+	    stat = clear_bit(stat, 6);
+	    break;
+	case OPT_CHANNEL_AUS: // Ausschalten
+	    stat = set_bit(stat, 6);
+	    break;
+	case OPT_CHANNEL_NUR: // Nur Meldungen von
+	    stat = clear_bit(stat, 0);
+	    break;
+	case OPT_CHANNEL_AUSSER: // Alle Meldungen ausser
+	    stat = set_bit(stat, 0);
+	    break;
+	case OPT_CHANNEL_CHANGE_NURAUSSER:
+	    stat = CHANGE_BIT(stat, 0, 0, "");
+	    break;
+	case OPT_CHANNEL_MICH: // mich
+	    stat = CHANGE_BIT(stat, COMM_MICH, 1, str);
+	    break;
+	case OPT_CHANNEL_SPIELER: // Spieler
+	    stat = CHANGE_BIT(stat, COMM_S, !test_bit(stat,0), str);
+	    break;
+	case OPT_CHANNEL_GAESTE: // Gaeste
+	    stat = CHANGE_BIT(stat, COMM_GAESTE, !test_bit(stat,0), str);
+	    break;
+	case OPT_CHANNEL_MONSTER: // NPCs
+	    stat = CHANGE_BIT(stat, COMM_M, !test_bit(stat,0), str);
+	    break;
+	case OPT_CHANNEL_VOEGTE: // Voegte
+	    if(!wizp(this_object()))
+	        return 0;
+	    stat = CHANGE_BIT(stat, COMM_N, !test_bit(stat,0), str);
+	    break;
+	case OPT_CHANNEL_LORDS: // Lords
+	    if(!wizp(this_object()))
+	        return 0;
+	    stat = CHANGE_BIT(stat, COMM_D, !test_bit(stat,0), str);
+	    break;
+	case OPT_CHANNEL_ADMINS: // Admins
+	    if(!wizp(this_object()))
+	        return 0;
+	    stat = CHANGE_BIT(stat, COMM_A, !test_bit(stat,0), str);
+	    break;
+	case OPT_CHANNEL_GRATS: // Gratulanten
+	    stat = CHANGE_BIT(stat, COMM_GRATSFILTER, !test_bit(stat,0), str);
+	    break;
+	case OPT_CHANNEL_PERSONEN: // name
+	    {
+		int last = 1;
+		if(strlen(str) && member("+-",str[0]||' ')<0)
+		    persons = ({});
+		foreach(string name: map(regexplode(str[0..<1],"[ ,;]")-({""," ",",",";"}),#'lower_case))
+		{
+		    if(member("+-", name[0])>=0)
+		    {
+			last = (name[0]=='+');
+			name = trim(name[1..<1]);
+		    }
+		    if(!strlen(name))
+			continue;
+		    else if(last)
+		    {
+			if(name[0]=='!')
+			    persons -= ({name[1..<1]});
+			else
+			    persons -= ({"!"+name});
+			persons+=({name})-persons;
+		    }
+		    else
+			persons-=({name});
+		}
+	    }
+	    break;
+	case OPT_CHANNEL_NPERSONEN: // !name
+	    {
+		int last = 1;
+		if(strlen(str) && member("+-",str[0]||' ')<0)
+		    persons = ({});
+		foreach(string name: map(regexplode(str[0..<1],"[ ,;]")-({""," ",",",";"}),#'lower_case))
+		{
+		    if(member("+-", name[0])>=0)
+		    {
+			last = (name[0]=='+');
+			name = trim(name[1..<1]);
+		    }
+		    if(!strlen(name))
+			continue;
+		    else if(last)
+		    {
+			persons -= ({name});
+			persons+=({"!"+name})-persons;
+		    }
+		    else
+			persons-=({"!"+name});
+		}
+	    }
+	    break;
+	case OPT_CHANNEL_WEBMUD_MAIN:
+	    stat = write_bits(stat, COMM_WEBMUD, COMM_WEBMUD_WIDTH, CW_MAIN_WINDOW);
+	    break;
+	case OPT_CHANNEL_WEBMUD_OWN:
+	    stat = write_bits(stat, COMM_WEBMUD, COMM_WEBMUD_WIDTH, CW_OWN_WINDOW);
+	    break;
+	case OPT_CHANNEL_WEBMUD_BOTH:
+	    stat = write_bits(stat, COMM_WEBMUD, COMM_WEBMUD_WIDTH, CW_BOTH_WINDOWS);
+	    break;
+	default:
+	    return 0;
+    }
+
+    if(!sizeof(persons))
+	persons = 0;
+    if(!persons && trim(stat)=="" && !color)
+    {
+	if(index >= 0)
+	    for(int i=0;i<sizeof(events);i++)
+	        events[i] = arr_delete(events[i], index);
+    }
+    else
+    {
+        if(index < 0)
+        {
+    	    index = sizeof(events[EVC_ID_NR]);
+    	    events[EVC_ID_NR]   += ({ nr });
+    	    events[EVC_STATUS]  += ({ stat });
+    	    events[EVC_PERSONS] += ({ persons });
+	    events[EVC_COLOUR] += ({ color });
+        }
+        else
+        {
+	    events[EVC_STATUS][index] = stat;
+	    events[EVC_PERSONS][index] = persons;
+	    events[EVC_COLOUR][index] = color;
+        }
+    }
+    this_object()->set_events(events);
+    foreach(mixed h: ({
+			({ "Spielern",	COMM_S }),
+			({ "Gaesten",	COMM_GAESTE }),
+			({ "Monstern",	COMM_M }),
+		     }) + (wizp(this_object())?({
+			({ "Voegten",	COMM_N }),
+			({ "Lords",	COMM_D }),
+			({ "Admins",	COMM_A }),
+		     }):({})) + ({
+		        ({ "Gratulanten", COMM_GRATSFILTER }),
+		     }) )
+	if(test_bit(stat, h[1]))
+	    hoeren += h[0..0];
+    if(persons)
+    {
+	nhoeren += sort_array(map(filter(persons,(:$1[0]=='!':)),(:capitalize($1[1..<1]):)),#'>);
+	hoeren +=  sort_array(map(filter(persons,(:$1[0]!='!':)),#'capitalize),#'>);
+    }
+
+    return "Ereignis '"+info["name"]+"':\n" +
+	(test_bit(stat, 6)?"    Kanal ist voruebergehend ausgeschaltet.\n":"") +
+	(test_bit(stat, 0)
+	    ?sprintf("    %-=70s\n", "Du hoerst alle Meldungen"+
+		(sizeof(hoeren)?(" ausser von "+liste(hoeren) +
+		 (sizeof(nhoeren)?(" aber jedoch von "+liste(nhoeren)):"")):"")+".")
+	    :sprintf("    %-=70s\n", sizeof(hoeren)
+		?("Du hoerst nur Meldungen von "+liste(hoeren) +
+		  (sizeof(nhoeren)?(" aber nicht von "+liste(nhoeren)):"")+".")
+		:"Du hoerst keine Meldungen.")) +
+	(test_bit(stat, COMM_MICH)?"":"    Deine eigenen Meldungen werden nicht ausgegeben.\n") +
+	(color?("    Die Farbe '"+colour_to_string(color && color[0], sizeof(color)>2 && color[2])+"' ist eingestellt.\n"):"");
+}
+
+private int handle_channel_options(string str, int nr, mapping info)
+{
+    if(strlen(str)>1 && member("ceCE",str[0])>=0 && member("+-",str[1])>=0)
+	str = str[0..0] + " " + str[1..<1];
+    return handle_menue_options(str,
+	([
+	    'a': OPT_CHANNEL_ADMINS,
+	    'b': OPT_CHANNEL_WEBMUD_BOTH,
+	    'c': OPT_CHANNEL_PERSONEN,
+	    'e': OPT_CHANNEL_NPERSONEN,
+	    'f': OPT_CHANNEL_FARBE,
+	    'g': OPT_CHANNEL_GAESTE,
+	    'h': OPT_CHANNEL_WEBMUD_MAIN,
+	    'i': OPT_CHANNEL_WEBMUD_OWN,
+	    'k': OPT_CHANNEL_MICH,
+	    'l': OPT_CHANNEL_LORDS,
+	    'm': OPT_CHANNEL_MONSTER,
+	    'n': OPT_CHANNEL_NUR,
+	    'o': OPT_CHANNEL_CHANGE,
+	    's': OPT_CHANNEL_SPIELER,
+	    't': OPT_CHANNEL_GRATS,
+	    'u': OPT_CHANNEL_AUSSER,
+	    'v': OPT_CHANNEL_VOEGTE,
+	]), 
+	lambda(({'what, 'str, 'flags, 'cb}),
+	    ({#'change_channel_options, nr, info, 'what, 'str, 'flags, 'cb})),
+	lambda(({'quiet}), ({#'print_channel_options, 'quiet, nr, info})),
+	"Channel", #'print_events_options);
+}
+
+private void handle_channel_actions(string str, int nr, mapping info)
+{
+    handle_cmd_actions(str,
+        ({
+	    ({ "anschalten",	2, OPT_CHANNEL_AN, "an"}),
+	    ({ "einschalten",	3, OPT_CHANNEL_AN, "an"}),
+	    ({ "ausschalten",	3, OPT_CHANNEL_AUS, "aus"}),
+	    ({ "farbe",		4, OPT_CHANNEL_FARBE, "farbe"}),
+	    ({ "mich",		4, OPT_CHANNEL_MICH, "mich"}),
+	    ({ "@",		1, OPT_CHANNEL_MICH, "mich"}),
+	    ({ "spieler",	1, OPT_CHANNEL_SPIELER, "spieler"}),
+	    ({ "gaeste",	6, OPT_CHANNEL_GAESTE, "gaeste"}),
+	    ({ "gast",		4, OPT_CHANNEL_GAESTE, "gast"}),
+	    ({ "t",		1, OPT_CHANNEL_GAESTE, "gast"}),
+	    ({ "monster",	1, OPT_CHANNEL_MONSTER, "monster"}),
+	    ({ "voegte",	1, OPT_CHANNEL_VOEGTE, ""}),
+	    ({ "vogt",		3, OPT_CHANNEL_VOEGTE, ""}),
+	    ({ "lords",		4, OPT_CHANNEL_LORDS, ""}),
+	    ({ "d",		1, OPT_CHANNEL_LORDS, ""}),
+	    ({ "admins",	1, OPT_CHANNEL_ADMINS, ""}),
+	    ({ "gratsfilter",	4, OPT_CHANNEL_GRATS, "grat[ulanten]"}),
+	    ({ "gratulanten",	4, OPT_CHANNEL_GRATS, "grat[ulanten]"}),
+	    ({ "f",		1, OPT_CHANNEL_GRATS, "grat[ulanten]"}),
+	    ({ "personen",	1, OPT_CHANNEL_PERSONEN, "personen +<name>"}),
+	    ({ "",		1, OPT_CHANNEL_CHANGE_NURAUSSER, "(ohne option)"}),
+	}), 
+	lambda(({'what, 'str, 'flags, 'cb}),
+	    ({#'change_channel_options, nr, info, 'what, 'str, 'flags, 'cb})),
+	"Channel.cl", ";");
+}
+
+#define OPT_EVENTS_KURI_CHANGE	1
+#define OPT_EVENTS_KURI_AN	2
+#define OPT_EVENTS_KURI_AUS	3
+#define OPT_EVENTS_KLAMMERMODUS	4
+#define OPT_EVENTS_FARBEN	5
+#define OPT_EVENTS_ECHO		6
+#define OPT_EVENTS_PUFFER	7
+#define OPT_EVENTS_ENAME	8
+#define OPT_EVENTS_VNAME	9
+#define OPT_EVENTS_ZEITSPALTE	10
+#define OPT_EVENTS_ZEIT		11
+#define OPT_EVENTS_DATUMSPALTE	12
+#define OPT_EVENTS_DATUM	13
+
+private varargs mixed change_events_options(int what, string str, int flags, closure input_to_callback)
+{
+    int an, aus, erg, val;
+    string pufferopts;
+
+    str = trim(str);
+    if(!strstr(str,"an") || !strstr(str,"ein"))
+	an = 1;
+    else if(!strstr(str,"aus") || !strstr(str,"kein") || str=="nicht")
+	aus = 1;
+
+    switch(what)
+    {
+	case OPT_EVENTS_KURI_CHANGE: // Kurier: Anschalten
+	    this_object()->set_online(erg = !this_object()->query_online());
+	    return erg
+		? "Dein Kurier liefert nun wieder Meldungen aus."
+		: "Dein Kurier schweigt nun.";
+	case OPT_EVENTS_KURI_AN:
+	    this_object()->set_online(1);
+	    return "Dein Kurier liefert Meldungen aus.";
+	case OPT_EVENTS_KURI_AUS:
+	    this_object()->set_online(0);
+	    return "Dein Kurier schweigt.";
+	case OPT_EVENTS_KLAMMERMODUS:
+	    if(!wizp(this_object()))
+	        return 0;
+	    val = ({int})this_object()->query_global_eventmode();
+	    if(erg = (an || (!aus && !(val&EVF_G_MODE_BRACKETS))))
+		this_object()->set_global_eventmode(val|EVF_G_MODE_BRACKETS);
+	    else
+		this_object()->set_global_eventmode(val&~EVF_G_MODE_BRACKETS);
+	    return erg
+		?"Klammermodus angeschaltet."
+		:"Klammermodus ausgeschaltet.";
+	case OPT_EVENTS_FARBEN:
+	    if(erg = (an || (!aus && !({int})this_object()->query_global_colourmode())))
+		this_object()->set_global_colourmode(1);
+	    else
+		this_object()->set_global_colourmode(0);
+	    return erg
+		?"Dein Kurier hebt seine Meldung nun farblich hervor."
+		:"Der Kurier hebt die Meldung nicht mehr farblich hervor.";
+	case OPT_EVENTS_ECHO: // kurier: Echomodus
+	    if(erg = (an || (!aus && !this_object()->query_echomode())))
+		this_object()->set_echomode(1);
+	    else
+		this_object()->set_echomode(0);
+	    return erg
+		?"Du erhaeltst nun ein Echo beim sagen und reden."
+		:"Du erhaeltst nun kein Echo beim sagen und reden.";
+	case OPT_EVENTS_PUFFER: // Kurier: Edpuffer
+	    if(erg = (an || (!aus && !this_object()->query_edpuffer())))
+		this_object()->set_edpuffer(1);
+	    else
+		this_object()->set_edpuffer(0);
+	    return erg
+	        ?"Dein Kurier puffert nun, wenn Du einen Text schreibst."
+		:"Dein Kurier puffert nicht mehr, wenn Du einen Text schreibst.";
+	case OPT_EVENTS_ENAME: // Puffer: Ereignis/Kanalnamen
+	    pufferopts = ({string}) this_object()->query_pufferoptionen();
+	    if(erg = (an || (!aus && member(pufferopts,'k')<0)))
+	        pufferopts+="k";
+	    else
+	        pufferopts-="k";
+	    this_object()->set_pufferoptionen(pufferopts);
+	    return erg
+		?"Die Art der Ereignisse wird nun bei den Erinnerungen angezeigt."
+		:"Die Art der Ereignisse werden nicht mehr angezeigt.";
+	case OPT_EVENTS_VNAME: // Puffer: Verursachernamen
+	    if(!wizp(this_object()))
+	        return 0;
+	    pufferopts = ({string}) this_object()->query_pufferoptionen();
+	    if(erg = (an || (!aus && member(pufferopts,'n')<0)))
+	        pufferopts+="n";
+	    else
+	        pufferopts-="n";
+	    this_object()->set_pufferoptionen(pufferopts);
+	    return erg
+		? "Der (Datei-)Name der Verursacher wird angezeigt."
+		: "Der (Datei-)Name der Verursacher wird nicht mehr angezeigt.";
+	case OPT_EVENTS_ZEITSPALTE: // Puffer: Uhrzeit - extra Spalte
+	    pufferopts = ({string}) this_object()->query_pufferoptionen();
+	    if(erg = (an || (!aus && member(pufferopts,'z')<0)))
+	        pufferopts+="z";
+	    else
+	        pufferopts-="z";
+	    this_object()->set_pufferoptionen(pufferopts);
+	    return erg
+		? "Die Uhrzeit der Ereignisse wird nun in einer extra Spalte angezeigt."
+		: "Die Uhrzeit der Ereignisse wird nicht mehr in einer extra Spalte angezeigt.";
+	case OPT_EVENTS_ZEIT: // Puffer: Uhrzeit anhaengen
+	    pufferopts = ({string}) this_object()->query_pufferoptionen();
+	    if(erg = (an || (!aus && member(pufferopts,'y')<0)))
+	        pufferopts+="y";
+	    else
+	        pufferopts-="y";
+	    this_object()->set_pufferoptionen(pufferopts);
+	    return erg
+		? "Die Uhrzeit wird nun bei Deinen Erinnerungen angehaengt."
+		: "Die Uhrzeit wird bei Deinen Erinnerungen nicht mehr angehaengt.";
+	case OPT_EVENTS_DATUMSPALTE: // Puffer: Datum - extra Spalte
+	    pufferopts = ({string}) this_object()->query_pufferoptionen();
+	    if(erg = (an || (!aus && member(pufferopts,'d')<0)))
+	        pufferopts+="d";
+	    else
+	        pufferopts-="d";
+	    this_object()->set_pufferoptionen(pufferopts);
+	    return erg
+		? "Das Datum der Ereignisse wird nun in einer extra Spalte angezeigt."
+		: "Das Datum der Ereignisse wird nicht mehr in einer extra Spalte angezeigt.";
+	case OPT_EVENTS_DATUM: // Puffer: Datum anhaengen
+	    pufferopts = ({string}) this_object()->query_pufferoptionen();
+	    if(erg = (an || (!aus && member(pufferopts,'c')<0)))
+	        pufferopts+="c";
+	    else
+	        pufferopts-="c";
+	    this_object()->set_pufferoptionen(pufferopts);
+	    return erg
+		? "Das Datum wird nun bei Deinen Erinnerungen angehaengt."
+		: "Das Datum wird bei Deinen Erinnerungen nicht mehr angehaengt.";
+    }
+}
+
+private int handle_events_options(string str)
+{
+    mapping event_liste = ({mapping}) EVENT_MASTER->query_events();
+    mixed cmd = explode(trim(str)," ")[0];
+
+    enable_commands();
+    sscanf(cmd,"%d",cmd) || (cmd = capitalize(cmd));
+    if((cmd = ({int})this_object()->get_event_index(event_liste, cmd))>=0 &&
+	this_object()->validate_event(event_liste, cmd,
+	    this_object()->query_level(), this_object()->query_gilde()))
+    {
+	print_channel_options(0, cmd, event_liste[cmd]);
+	return END_MORE;
+    }
+
+    return handle_menue_options(str,
+	([
+	    'a': OPT_EVENTS_KURI_CHANGE,
+	    'd': OPT_EVENTS_DATUMSPALTE,
+	    'e': OPT_EVENTS_ECHO,
+	    'f': OPT_EVENTS_FARBEN,
+	    'g': OPT_EVENTS_ENAME,
+	    'h': OPT_EVENTS_ZEIT,
+	    'k': OPT_EVENTS_KLAMMERMODUS,
+	    'n': OPT_EVENTS_VNAME,
+	    'p': OPT_EVENTS_PUFFER,
+	    't': OPT_EVENTS_DATUM,
+	    'u': OPT_EVENTS_ZEITSPALTE,
+	]), #'change_events_options, #'print_events_options, "Events");
+}
+
+#define OPT_CMD_KURIER	0
+#define OPT_CMD_PUFFER	1
+
+private void handle_events_actions(string str, int which)
+{
+    if(which == OPT_CMD_KURIER)
+    {
+	mapping event_liste = ({mapping}) EVENT_MASTER->query_events();
+	string *words = explode((str=trim(str)), " ");
+	mixed cmd = words[0];
+
+	if(!strlen(str))
+	{
+	    int aktiv = ({int})this_object()->query_online();
+	    string result = ({string}) this_object()->more( ({
+		"Moegliche Ereignisse:"
+		}) + get_event_liste() + 
+		explode(wrap(
+		    "Dein Kurier "+(aktiv?"ist aktiv":"schweigt")+
+		    ", hebt die Meldungen "+(aktiv?"":"normalerweise ")+
+		    (this_object()->query_global_colourmode()?"":"nicht ")+
+		    "farblich hervor und puffert seine Meldungen"+
+		    (this_object()->query_edpuffer()?"":" nicht")+
+		    ", wenn Du editierst."),"\n")[0..<2] +
+		({ this_object()->query_echomode()
+		    ?"Du erhaeltst ein Echo beim sagen und reden."
+		    :"Du erhaeltst kein Echo beim sagen und reden."
+		}), "(Zeile %d von %d) [q,<,>,/<such>] ", 0,
+		M_AUTO_END|M_THIS_OBJECT, "Options: Command Line");
+	    if(result)
+		MSG(M_ERR(result));
+	    return;
+	}
+        
+	sscanf(cmd,"%d",cmd) || (cmd = capitalize(cmd));
+	if((cmd = ({int})this_object()->get_event_index(event_liste, cmd))>=0)
+	{
+	    handle_channel_actions(implode(words[1..<1]," "), cmd, event_liste[cmd]);
+	    return;
+	}
+    }
+
+    handle_cmd_actions(str,
+        ({
+	    ({
+		({ "anschalten",	2, OPT_EVENTS_KURI_AN, "an"}),
+		({ "einschalten",	3, OPT_EVENTS_KURI_AN, "an"}),
+		({ "ausschalten",	3, OPT_EVENTS_KURI_AUS, "aus"}),
+		({ "klammermodus",	7, OPT_EVENTS_KLAMMERMODUS, "klammer[modus]"}),
+		({ "farben",		5, OPT_EVENTS_FARBEN, "farben an"}),
+		({ "echo",		4, OPT_EVENTS_ECHO, "echo an"}),
+		({ "puffer",		6, OPT_EVENTS_PUFFER, "puffer an"}),
+	    }),
+	    ({
+		({ "ereignisname",	5, OPT_EVENTS_ENAME, "ereignis[name] an"}),
+		({ "verursacher",	5, OPT_EVENTS_VNAME, "verursacher an"}),
+		({ "zeit",		4, OPT_EVENTS_ZEIT, "uhrzeit an"}),
+		({ "uhrzeit",		7, OPT_EVENTS_ZEIT, "uhrzeit an"}),
+		({ "datum",		5, OPT_EVENTS_DATUM, "datum an"}),
+	    }),
+	})[which],
+	#'change_events_options,
+	({"Events.cl","Puffer.cl"})[which], ",;");
+}
+
+
+private varargs void print_wizard_options(int quiet)
+{
+    mapping eye_options = ({mapping}) this_object()->query_eye_option();
+    int fingerflags = ({int}) this_object()->query_other_finger_flags();
+    if(!(fingerflags&FINGER_FLAG_VALID))
+	fingerflags = FINGER_FLAG_OTHER_DEFAULT;
+
+    this_object()->more(({
+" Augen:                                    Sonstiges:",
+"  ["+(eye_options["v_items"]?"*":" ")+ "] Anzeige der V-Ite(m)s                 ["+(this_object()->query_wants_to_get_attacked_by_monsters()?"*":" ")+"] (A)ggressive Monster greifen an",
+"  ["+(eye_options["file"]?"*":" ")+    "] Anzeige des Pfade(s)                  ["+(this_object()->query_no_wer()?" ":"*")+"] In der Wer-Lis(t)e erscheinen",
+"  ["+(eye_options["shadows"]?"*":" ")+ "] Anzeige von S(h)adows                 ["+(this_object()->query_show_all_fails()?"*":" ")+"] A(l)le notify_fails anzeigen",
+"  ["+(eye_options["nolist"]?"*":" ")+  "] Anzeige von N(o)List-Ausgaengen",
+"  ["+(eye_options["hidden"]?"*":" ")+  "] Anzeige von (v)ersteckten Ausgaengen ",
+"  ["+(eye_options["locked"]?"*":" ")+  "] Anzeige von g(e)sperrten Ausgaengen",
+"  ["+(eye_options["roominv"]?"*":" ")+ "] Anzeige von (u)nsichtbaren Gegenstaenden in Raeumen",
+"  ["+(eye_options["myinv"]?"*":" ")+   "] Anzeige von eige(n)en versteckten Gegenstaenden",
+"  ["+(eye_options["otherinv"]?"*":" ")+"] Anzeige von verstec(k)ten Gegenstaenden bei anderen",
+"  ["+(eye_options["dirinfo"]?"*":" ")+ "] Anzeige der .(i)nfo - Dateien beim Wechsel in ein Verzeichnis",
+"",
+" Finger: Was Du angezeigt bekommen moechtest:",
+"  ["+(fingerflags&FINGER_FLAG_OTHER_TEXT?"*":" ")+"] (F)ingertexte der Engel und Goetter",
+"  ["+(fingerflags&FINGER_FLAG_OTHER_PLAN?"*":" ")+"] (P)lan von Goettern (~/.plan)",
+"  ["+(fingerflags&FINGER_FLAG_OTHER_APPRECIATIONS?"*":" ")+"] (W)uerdigungen",
+"  ("+(fingerflags&FINGER_FLAG_OTHER_APPRECIATIONS_SORT_BY_DATE?"*":" ")+") Wuerdigungen nach (D)atum sortieren",
+"  ("+(fingerflags&FINGER_FLAG_OTHER_APPRECIATIONS_SORT_BY_DATE?" ":"*")+") Wuerdigungen nach (G)ebiet sortieren",
+"  ["+(fingerflags&FINGER_FLAG_OTHER_CURRICULUM_VITAE?"*":" ")+"] Le(b)enslauf anzeigen",
+	    }),
+	    ({ "Goettereinstellungen [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    "Options: Wizards");
+}
+
+#define OPT_WIZARD_FILE			1
+#define OPT_WIZARD_VITEMS		2
+#define OPT_WIZARD_NOLIST_EXITS		3
+#define OPT_WIZARD_HIDDEN_EXITS		4
+#define OPT_WIZARD_LOCKED_EXITS		5
+#define OPT_WIZARD_INVIS_OBJS		6
+#define OPT_WIZARD_OWN_INV		7
+#define OPT_WIZARD_OTHER_INV		8
+#define OPT_WIZARD_DIRINFO		9
+#define OPT_WIZARD_FINGERTEXT		10
+#define OPT_WIZARD_PLAN			11
+#define OPT_WIZARD_APPS			12
+#define OPT_WIZARD_APP_DATE		13
+#define OPT_WIZARD_APP_AREA		14
+#define OPT_WIZARD_CV			15
+#define OPT_WIZARD_AGGRESSIVE		16
+#define OPT_WIZARD_WER			17
+#define OPT_WIZARD_ALL_FAILS		18
+#define OPT_WIZARD_SHADOWS		19
+
+private varargs mixed change_wizard_options(int what, string str, int flags, closure input_to_callback)
+{
+    int an, aus, erg;
+    string inv;
+    int val = ({int}) this_object()->query_other_finger_flags();
+    if(!(val&FINGER_FLAG_VALID))
+	val = FINGER_FLAG_OTHER_DEFAULT;
+    
+    str = lower_case(trim(str));
+    if(!strstr(str,"an") || !strstr(str,"ein"))
+	an = 1;
+    else if(!strstr(str,"aus") || !strstr(str,"kein") || str=="nicht")
+	aus = 1;
+	
+    switch(what)
+    {
+	case OPT_WIZARD_FILE:
+	    this_object()->set_eye_option("file",
+		erg = (an || (!aus && !(this_object()->query_eye_option("file")))));
+	    return erg
+		?"Die Dateinamen werden nun mit der Objekt- oder Raumbeschreibung angezeigt."
+		:"Die Dateinamen werden nicht mehr angezeigt.";
+	case OPT_WIZARD_SHADOWS:
+	    this_object()->set_eye_option("shadows",
+		erg = (an || (!aus && !(this_object()->query_eye_option("shadows")))));
+	    return erg
+		?"Es werden nun die Shadows mit der Objekt- oder Raumbeschreibung angezeigt."
+		:"Shadows werden nicht mehr angezeigt.";
+	case OPT_WIZARD_VITEMS:
+	    this_object()->set_eye_option("v_items",
+		erg = (an || (!aus && !(this_object()->query_eye_option("v_items")))));
+	    return erg
+		?"Die V-Items werden nun mit der Beschreibung angezeigt."
+		:"Es wird keine Liste der V-Items beim Betrachten von Objekten angezeigt.";
+	case OPT_WIZARD_NOLIST_EXITS:
+	    this_object()->set_eye_option("nolist",
+		erg = (an || (!aus && !(this_object()->query_eye_option("nolist")))));
+	    return erg
+		?"Es werden ab jetzt NOLIST-Ausgaenge angezeigt."
+		:"Es werden keine NOLIST-Ausgaenge mehr angezeigt.";
+	case OPT_WIZARD_HIDDEN_EXITS:
+	    this_object()->set_eye_option("hidden",
+		erg = (an || (!aus && !(this_object()->query_eye_option("hidden")))));
+	    return erg
+		?"Es werden nun versteckte Ausgaenge angezeigt."
+		:"Es werden keine versteckten Ausgaenge anzeigt.";
+	case OPT_WIZARD_LOCKED_EXITS:
+	    this_object()->set_eye_option("locked",
+		erg = (an || (!aus && !(this_object()->query_eye_option("locked")))));
+	    return erg
+		?"Gesperrte Ausgaenge werden jetzt angezeigt."
+		:"Gesperrte Ausgaenge werden nicht mehr angezeigt.";
+	case OPT_WIZARD_INVIS_OBJS:
+	    this_object()->set_eye_option("roominv",
+		erg = (an || (!aus && !(this_object()->query_eye_option("roominv")))));
+	    return erg
+		?"Unsichtbare Gegenstaende in Raeumen werden nun angezeigt."
+		:"Unsichtbare Gegenstaende werden in Raeumen nicht mehr angezeigt.";
+	case OPT_WIZARD_OWN_INV:
+	    this_object()->set_eye_option("myinv",
+		erg = (an || (!aus && !(this_object()->query_eye_option("myinv")))));
+	    return erg
+		?"Unsichtbare Gegenstaende in Deiner Ausruestung werden angezeigt."
+		:"Unsichtbare Gegenstaende in Deiner Ausruestung werden nicht mehr angezeigt.";
+	case OPT_WIZARD_OTHER_INV:
+	    this_object()->set_eye_option("otherinv",
+		erg = (an || (!aus && !(this_object()->query_eye_option("otherinv")))));
+	    return erg
+		?"Unsichtbare Gegenstaende bei anderen werden angezeigt."
+		:"Unsichtbare Gegenstaende werden in anderen Objekten nicht mehr angezeigt.";
+	case OPT_WIZARD_DIRINFO:
+	    this_object()->set_eye_option("dirinfo",
+		erg = (an || (!aus && !(this_object()->query_eye_option("dirinfo")))));
+	    return erg
+		?"Die .info-Dateien werden nun beim Wechsel in ein Verzeichnis angezeigt."
+		:"Die .info-Dateien werden nicht mehr automatisch angezeigt.";
+	case OPT_WIZARD_FINGERTEXT: // finger: Text anzeigen
+	    if(erg = (an || (!aus && !(val&FINGER_FLAG_OTHER_TEXT))))
+		this_object()->set_other_finger_flags(val|FINGER_FLAG_OTHER_TEXT);
+	    else
+		this_object()->set_other_finger_flags(val&~FINGER_FLAG_OTHER_TEXT);
+	    return erg
+		?"Der selbstgeschriebene Fingertext wird nun angezeigt."
+		:"Der selbstgeschriebene Fingertext wird nicht mehr angezeigt.";
+	case OPT_WIZARD_PLAN:
+	    if(erg = (an || (!aus && !(val&FINGER_FLAG_OTHER_PLAN))))
+		this_object()->set_other_finger_flags(val|FINGER_FLAG_OTHER_PLAN);
+	    else
+		this_object()->set_other_finger_flags(val&~FINGER_FLAG_OTHER_PLAN);
+	    return erg
+		?"Die ~/.plan-Datei von anderen Goettern wird beim 'finger' angezeigt."
+		:"~/.plan wird nicht mehr beim finger-Befehl angezeigt.";
+	case OPT_WIZARD_APPS:
+	    if(erg = (an || (!aus && !(val&FINGER_FLAG_OTHER_APPRECIATIONS))))
+		this_object()->set_other_finger_flags(val|FINGER_FLAG_OTHER_APPRECIATIONS);
+	    else
+		this_object()->set_other_finger_flags(val&~FINGER_FLAG_OTHER_APPRECIATIONS);
+	    return erg
+		?"Wuerdigungen werden nun beim 'finger' angezeigt."
+		:"Wuerdigungen werden nicht mehr beim 'finger' angezeigt.";
+	case OPT_WIZARD_APP_DATE:
+	    if(erg = (an || !aus))
+		this_object()->set_other_finger_flags(val|FINGER_FLAG_OTHER_APPRECIATIONS_SORT_BY_DATE);
+	    else
+		this_object()->set_other_finger_flags(val&~FINGER_FLAG_OTHER_APPRECIATIONS_SORT_BY_DATE);
+	    return erg
+		?"Wuerdigungen werden nun (sofern angezeigt) nach Datum sortiert."
+		:"Wuerdigungen werden nun (sofern angezeigt) nach Gebiet sortiert.";
+	case OPT_WIZARD_APP_AREA:
+	    if(erg = (an || !aus))
+		this_object()->set_other_finger_flags(val&~FINGER_FLAG_OTHER_APPRECIATIONS_SORT_BY_DATE);
+	    else
+		this_object()->set_other_finger_flags(val|FINGER_FLAG_OTHER_APPRECIATIONS_SORT_BY_DATE);
+	    return erg
+		?"Wuerdigungen werden nun (sofern angezeigt) nach Gebiet sortiert."
+		:"Wuerdigungen werden nun (sofern angezeigt) nach Datum sortiert.";
+	case OPT_WIZARD_CV:
+	    if(erg = (an || (!aus && !(val&FINGER_FLAG_OTHER_CURRICULUM_VITAE))))
+		this_object()->set_other_finger_flags(val|FINGER_FLAG_OTHER_CURRICULUM_VITAE);
+	    else
+		this_object()->set_other_finger_flags(val&~FINGER_FLAG_OTHER_CURRICULUM_VITAE);
+	    return erg
+		?"Der Lebenslauf wird nun beim 'finger' angezeigt."
+		:"Der Lebenslauf wird nicht mehr beim Fingertext angezeigt.";
+	case OPT_WIZARD_AGGRESSIVE:
+	    this_object()->set_wants_to_get_attacked_by_monsters(
+		erg = (an || (!aus && !(this_object()->query_wants_to_get_attacked_by_monsters()))));
+	    return erg
+		?"Aggressive Monster pruegeln jetzt auf Dich ein. "
+		 "(Dies sollte nur zu Testzwecken eingeschaltet werden.)"
+		:"Aggressive Monster lassen Dich jetzt in Frieden.";
+	case OPT_WIZARD_WER:
+	    this_object()->set_no_wer(
+		erg = (!an && (aus || !(this_object()->query_no_wer()))));
+	    return erg
+		?"Du erscheinst nun nicht mehr in der 'wer'-Liste."
+		:"Du erscheinst jetzt in der 'wer'-Liste.";
+	case OPT_WIZARD_ALL_FAILS:
+	    this_object()->set_show_all_fails(
+		erg = (an || (!aus && !(this_object()->query_show_all_fails()))));
+	    return erg
+		?"Es werden Dir jetzt alle notify_fails angezeigt."
+		:"Es wird Dir jetzt nur noch die Meldung mit der hoechsten Prioritaet angezeigt.";
+    }
+}
+
+private int handle_wizard_options(string str)
+{
+    return handle_menue_options(str,
+	([
+	    'a': OPT_WIZARD_AGGRESSIVE,
+	    'b': OPT_WIZARD_CV,
+	    'd': OPT_WIZARD_APP_DATE,
+	    'e': OPT_WIZARD_LOCKED_EXITS,
+	    'f': OPT_WIZARD_FINGERTEXT,
+	    'g': OPT_WIZARD_APP_AREA,
+	    'h': OPT_WIZARD_SHADOWS,
+	    'i': OPT_WIZARD_DIRINFO,
+	    'k': OPT_WIZARD_OTHER_INV,
+	    'l': OPT_WIZARD_ALL_FAILS,
+	    'm': OPT_WIZARD_VITEMS,
+	    'n': OPT_WIZARD_OWN_INV,
+	    'o': OPT_WIZARD_NOLIST_EXITS,
+	    'p': OPT_WIZARD_PLAN,
+	    's': OPT_WIZARD_FILE,
+	    't': OPT_WIZARD_WER,
+	    'u': OPT_WIZARD_INVIS_OBJS,
+	    'v': OPT_WIZARD_HIDDEN_EXITS,
+	    'w': OPT_WIZARD_APPS,
+	]), #'change_wizard_options, #'print_wizard_options, "Wizard");
+}
+
+#define OPT_CMD_WIZFINGER	0
+#define OPT_CMD_AUGEN		1
+#define OPT_CMD_WIZOPTIONS	2
+
+private void handle_wizard_actions(string str, int which)
+{
+    handle_cmd_actions(str,
+	({ 
+	    ({
+		({ "text",		1, OPT_WIZARD_FINGERTEXT, "text" }),
+		({ "plan",		1, OPT_WIZARD_PLAN, "plan" }),
+		({ "wuerdigungen",	1, OPT_WIZARD_APPS, "wuerdigungen" }),
+		({ "datum",		1, OPT_WIZARD_APP_DATE, "datum" }),
+		({ "gebiet",		1, OPT_WIZARD_APP_AREA, "gebiet" }),
+		({ "lebenslauf",	1, OPT_WIZARD_CV, "lebenslauf" }),
+	    }),
+	    ({
+		({ "file",		1, OPT_WIZARD_FILE, "file" }),
+		({ "shadows",		1, OPT_WIZARD_SHADOWS, "shadows" }),
+		({ "dateiname",		2, OPT_WIZARD_FILE, "dateiname" }),
+		({ "vitems",		1, OPT_WIZARD_VITEMS, "vitems" }),
+		({ "v_items",		2, OPT_WIZARD_VITEMS, "v_items" }),
+		({ "nolist",		1, OPT_WIZARD_NOLIST_EXITS, "nolist" }),
+		({ "hidden",		1, OPT_WIZARD_HIDDEN_EXITS, "hidden" }),
+		({ "locked",		1, OPT_WIZARD_LOCKED_EXITS, "locked" }),
+		({ "roominv",		1, OPT_WIZARD_INVIS_OBJS, "roominv" }),
+		({ "myinv",		1, OPT_WIZARD_OWN_INV, "myinv" }),
+		({ "otherinv",		1, OPT_WIZARD_OTHER_INV, "otherinv" }),
+		({ "dirinfo",		2, OPT_WIZARD_DIRINFO, "dirinfo" }),
+	    }),
+	    ({
+		({ "angreifbar",	1, OPT_WIZARD_AGGRESSIVE, "angreifbar" }),
+		({ "werliste",		1, OPT_WIZARD_WER, "werliste" }),
+		({ "fails",		1, OPT_WIZARD_ALL_FAILS, "fails" })
+	    }),
+	})[which], #'change_wizard_options,
+	({"WizFinger.cl", "Eyes.cl", "Wizard.cl"})[which],
+	",;");
+}
+
+private nosave mapping ignore_texte =
+    ([
+	IGN_SAY: "Sagen"; "(S)agen",
+	IGN_TELL: "Reden"; "(R)eden",
+	IGN_SHOUT: "Bruellen"; "(B)ruellen",
+	IGN_SOUL: "Seele"; "S(e)ele",
+	IGN_WEAPONS: "Waffen"; "(W)affen",
+	IGN_ACTIONS: "Sonstige Aktionen"; "Sonstige (A)ktionen",
+    ]);
+
+private nosave mapping imud_ignore_texte =
+    ([
+	IGN_TELL: "Reden"; "(R)eden",
+	IGN_SHOUT: "Bruellen"; "(B)ruellen",
+	IGN_SOUL: "Seele"; "S(e)ele",
+    ]);
+
+private varargs void print_ignore_options(int quiet)
+{
+    mapping ign = ({mapping}) this_object()->query_ignored_players();
+    int i;
+
+    this_object()->more(({
+" Ignorierte Spieler:",
+"   -  (H)inzufuegen",
+	    })+(sizeof(ign)?({
+"   -  (L)oeschen",
+"",
+	    })+map(sort_array(m_indices(ign),#'>),
+		(:
+		    mapping texte = (member($1,'@')>=0)?imud_ignore_texte:ignore_texte;
+		    
+		    return sprintf("   %*d. %-11s %s", $4, ++$3, capitalize($1)+":",
+			implode(map(sort_array(m_indices(texte),#'>),
+			(: ($2&$1)?texte[$1]:0 :), $2[$1])-({0}),", "));
+		:),
+		ign, &i, strlen(to_string(sizeof(ign)+1))):({})),
+	    ({ "Einstellungen zum Ignorieren [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    "Options: Ignore");
+}
+
+private void print_ignore_player_options(int quiet, string name)
+{
+    int ign = ({int})this_object()->query_ignored_player(name);
+    mapping texte = (member(name,'@')>=0)?imud_ignore_texte:ignore_texte;
+    
+    this_object()->more(({
+	    " "+capitalize(name)+":"})+
+	    map(sort_array(m_indices(texte),#'>),
+		(: "  ["+(($2&$1)?"*":" ")+"] "+texte[$1,1] :), ign),
+	    ({ "Ignoriere: "+capitalize(name)+" [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    (["Options: Ignore-Player":1, "name":name]));
+}
+
+private varargs mixed change_ignore_player_options(string name,
+    int what, string str, int flags, closure input_to_callback)
+{
+    int ign = ({int})this_object()->query_ignored_player(name);
+
+    // Es wird angeschaltet, wenn
+    //  "an" || (!"aus" && es ist noch nicht an)
+    if((!strstr(str,"an") || !strstr(str,"ein") || str=="doch") ||
+	(strstr(str,"aus") && strstr(str,"kein") && str!="nicht" &&
+	(!(ign&what))))
+	    ign|=what;
+    else
+	    ign&=~what;
+    
+    this_object()->set_ignored_player(name, ign);
+    
+    if(ign)
+	return "Du ignorierst folgenden Aktionen von "+capitalize(name)+": "+
+	    implode(map(sort_array(m_indices(ignore_texte),#'>),
+		(: ($2&$1)?ignore_texte[$1]:0 :), ign)-({0}),", ")+".";
+    else
+	return "Du ignorierst "+capitalize(name)+" nicht mehr.";
+}
+
+private int handle_ignore_player_options(string str, string name)
+{
+    int local = member(name, '@')<0;
+
+    return handle_menue_options(str,
+	([
+	    's': IGN_SAY,
+	    'r': IGN_TELL,
+	    'b': IGN_SHOUT,
+	    'e': IGN_SOUL,
+	    'w': IGN_WEAPONS,
+	    'a': IGN_ACTIONS,
+	]) - (local?([]):(['s','w','a'])),
+	lambda(({'what, 'str, 'flags, 'cb}),
+	    ({#'change_ignore_player_options, name, 'what, 'str, 'flags, 'cb})),
+	lambda(({'quiet}), ({#'print_ignore_player_options, 'quiet, name})),
+	"Ignore-Player", #'print_ignore_options);
+}
+
+private void handle_ignore_player_actions(string str, string name)
+{
+    string *words;
+    int local = member(name, '@')<0;
+    mixed *opts = ({
+	    local && ({ "sagen",	3, IGN_SAY, "sag[en]"}),
+	    ({ "reden",		3, IGN_TELL, "red[en]"}),
+	    ({ "bruellen",	2, IGN_SHOUT, "br[uellen]"}),
+	    ({ "gebruell",	8, IGN_SHOUT, "br[uellen]"}),
+	    ({ "seele",		4, IGN_SOUL, "seele"}),
+	    local && ({ "waffen",	1, IGN_WEAPONS, "w[affen]"}),
+	    local && ({ "sonstiges",	4, IGN_ACTIONS, "sonst[iges]"}),
+	}) - ({0});
+    int ign;
+
+    
+    str = trim(str);
+    if(!strstr(str,"nicht"))
+    {
+	this_object()->set_ignored_player(name, 0);
+	MSG(wrap("Du ignorierst "+capitalize(name)+" nicht mehr."));
+	return;
+    }
+    else if(member(hilfe_cmd, str) || !strlen(str))
+    {
+	print_options_help(0, "Ignore.cl", 0, 0, 0);
+	return;
+    }
+    
+    words = regexplode(str, "[,;]")-({",",";",""});
+    foreach(string what: words)
+    {
+	string first, orig = trim(what);
+	int found;
+	what = lower_case(trim(what));
+	first = explode(what," ")[0];
+	
+	foreach(mixed opt: opts)
+	    if(!strstr(opt[0], first) && strlen(first)>=opt[1])
+	    {
+		ign |= opt[2];
+		found = 1;
+		break;
+	    }
+	
+	if(!found)
+	{
+	    MSG(wrap("Unbekannte Option '"+orig+"'."));
+	    return;
+	}
+    }
+    
+    if(member(explode(words[<1], " "),"nicht")>=0)
+    {
+	this_object()->set_ignored_player(name,
+	    ign=(({int})this_object()->query_ignored_player(name)&~ign));
+    }
+    else
+    {
+	this_object()->set_ignored_player(name,
+	    ign=(({int})this_object()->query_ignored_player(name)|ign));
+    }
+    
+    if(ign)
+	MSG(wrap("Du ignorierst folgenden Aktionen von "+capitalize(name)+": "+
+	    implode(map(sort_array(m_indices(ignore_texte),#'>),
+		(: ($2&$1)?ignore_texte[$1]:0 :), ign)-({0}),", ")+"."));
+    else
+	MSG(wrap("Du ignorierst "+capitalize(name)+" nicht mehr."));
+    
+}
+
+#define OPT_IGNORE_ADD		1	// Nur fuers Menue
+#define OPT_IGNORE_REMOVE	2	// Nur fuers Menue
+
+private varargs mixed change_ignore_options(int what, string str, int flags, closure input_to_callback)
+{
+    str = trim(str);
+    switch(what)
+    {
+	case OPT_IGNORE_ADD:
+	    if(strlen(str))
+	    {
+		string msg;
+		string pl,mud;
+		
+		str = lower_case(str);
+		
+		if(sscanf(str,"%s@%s",pl,mud)==2 && member(pl,' ')<0)
+		{
+		    string tmp;
+		    if(sizeof(mud) && !(tmp = ({string})INETD->known_mud(mud)))
+		    {
+			MSG(wrap("Das Mud "+capitalize(mud)+" ist unbekannt oder nicht eindeutig."));
+			return OPT_MESSAGE;
+		    }
+		    str = lower_case(pl)+"@"+(tmp||"");
+		}
+		else
+		{
+		    // Lokale Spieler.
+		    if(!player_exists(str))
+		    {
+			MSG(wrap("Den Spieler "+capitalize(str)+" gibt es nicht."));
+		        return OPT_MESSAGE;
+		    }
+		}
+
+		if(msg=({string})this_object()->ignore_player_allowed(str))
+		{
+		    MSG(wrap(msg));
+		    return OPT_MESSAGE;
+		}
+		
+		print_ignore_player_options(0, str);
+		return OPT_INPUT_TO_STARTED;
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2, change_ignore_options(OPT_IGNORE_ADD,
+			    $1, $3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Welchen Spieler willst Du ignorieren? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+	case OPT_IGNORE_REMOVE:
+	    if(strlen(str))
+	    {
+		mapping ign = ({mapping})this_object()->query_ignored_players();
+		mixed wer;
+		
+		if(sscanf(str, "%d", wer) && wer>0 && wer<=sizeof(ign))
+		{
+		    wer = sort_array(m_indices(ign), #'>)[wer-1];
+		    this_object()->set_ignored_player(wer, 0);
+		    return "Du ignorierst "+capitalize(wer)+" nicht mehr.";
+		}
+		else if(player_exists(wer=lower_case(str)) || member(ign,wer))
+		{
+		    
+		    this_object()->set_ignored_player(wer, 0);
+		    return "Du ignorierst "+capitalize(wer)+" nicht"+
+			(member(ign,wer)?" mehr":"")+".";
+		}
+		MSG(wrap("Den Spieler "+capitalize(str)+" gibt es nicht."));
+		return OPT_MESSAGE;
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2, change_ignore_options(OPT_IGNORE_REMOVE,
+			    $1, $3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Welchen Spieler willst Du nicht mehr ignorieren? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+    }
+}
+
+private int handle_ignore_options(string str)
+{
+    mapping ign = ({mapping}) this_object()->query_ignored_players();
+    mixed wer;
+    
+    if(sscanf(str, "%d", wer) && wer>0 && wer<=sizeof(ign))
+    {
+	wer = sort_array(m_indices(ign), #'>)[wer-1];
+	print_ignore_player_options(0, wer);
+	return END_MORE;
+    }
+    else if(player_exists(lower_case(str)) || member(ign,lower_case(str)))
+    {
+	string msg;
+	if(msg=({string})this_object()->ignore_player_allowed(str))
+	{
+	    MSG(wrap(msg));
+	    return NOTHING;
+	}
+
+	print_ignore_player_options(0, lower_case(str));
+	return END_MORE;
+    }
+    else
+	return handle_menue_options(str,
+	    ([
+		'h': OPT_IGNORE_ADD,
+		'l': OPT_IGNORE_REMOVE,
+	    ]), #'change_ignore_options, #'print_ignore_options, "Ignore");
+}
+
+private void handle_ignore_actions(string str)
+{
+    mapping ign = ({mapping}) this_object()->query_ignored_players();
+    string *words = explode(str=trim(str), " ");
+    mixed wer = words[0];
+    
+    if(!strlen(str))
+    {
+	if(!sizeof(ign))
+	    MSG("Du ignorierst niemanden.\n");
+	else
+	{
+	    string result = ({string}) this_object()->more(({
+		"Ignorierte Spieler:",
+		})+map(sort_array(m_indices(ign),#'>),
+		    (:sprintf(" - %-11s %s", capitalize($1)+":",
+			implode(map(sort_array(m_indices(ignore_texte),#'>),
+			    (: ($2&$1)?ignore_texte[$1]:0 :), $2[$1])-({0}),", ")):),ign),
+		"(Zeile %d von %d) [q,<,>,/<such>] ", 0,
+		M_AUTO_END|M_THIS_OBJECT, "Options: Command Line");
+	    if(result)
+		MSG(M_ERR(result));
+	}
+	return;
+    }
+
+    if(player_exists(lower_case(wer)) || member(ign,lower_case(wer)))
+    {
+	string msg;
+	if(msg=({string})this_object()->ignore_player_allowed(str))
+	{
+	    MSG(wrap(msg));
+	    return;
+	}
+
+	handle_ignore_player_actions(implode(words[1..<1]," "),
+	    lower_case(wer));
+	return;
+    }
+    else
+	handle_cmd_actions(str, ({}), 0, "Ignore.cl");
+}
+
+private varargs void print_seconds_options(int quiet)
+{
+    string *names;
+    string err;
+  
+    names = ({string*})PLAYER_SECOND->query_second_chars(this_object());
+    if(pointerp(names))
+        names -= ({this_object()->query_real_name()});
+    
+    err = ({string}) this_object()->more(({
+" Weitere Charaktere:                       Dieses Menue:",
+"   -  (H)inzufuegen                         ["+((option_flags&OF_SECPASS)?"*":" ")+"] Mit (P)asswort schuetzen",
+"",
+	    })+((!sizeof(names))?
+({" Du hast derzeit keine weiteren Charaktere angemeldet."}):
+({" Du hast folgende Charaktere bereits angemeldet:"})
+	    +explode(sprintf(" %-=78s\n",implode(map(names,#'capitalize),", ")),"\n")[0..<2])
+	    +({
+"",
+" Du bist nach den Spielregeln verpflichtet, alle Deine Charaktere anzumelden.",
+" Andernfalls droht der Verlust aller Charaktere.",
+" Diese Daten koennen nur von Dir und von den Admins eingesehen werden.",
+	    }),
+	    ({ "Weitere Charaktere [q,z,?] ",
+	       "----------- Einstellungen: ----------------------------------------------------",
+	       LINE, MORE_LINE, MORE_LINE
+	    }), 0,
+	    M_SECURE|M_DO_NOT_END|M_FRAME|M_THIS_OBJECT|(quiet?M_NO_FIRST_SCREEN:0),
+	    "Options: Zweities");
+
+    if(err && M_ERR_NUM(err)==M_ERR_INSECURE)
+    {
+	MSG("Du wirst gerade beobachtet. Melde die Zweitcharaktere bitte spaeter an.\n");
+	start_options_menue(1);
+    }
+}
+
+private void check_seconds_options()
+{
+    if(option_flags & OF_SECPASS)
+	this_object()->check_password(#'print_seconds_options,
+	    lambda(0,({#'start_options_menue,1})));
+    else
+	print_seconds_options();
+}
+
+#define OPT_SECONDS_ADD		1	// Nur fuers Menue
+#define OPT_SECONDS_PASSWORD	2
+
+private varargs mixed change_seconds_options(int what, string str, int flags, closure input_to_callback)
+{
+    str = trim(str);
+    switch(what)
+    {
+	case OPT_SECONDS_ADD:
+	    if(strlen(str))
+	    {
+		string msg;
+		
+		str = lower_case(str);
+		if(!player_exists(str))
+		{
+		    MSG(wrap("Den Spieler "+capitalize(str)+" gibt es nicht."));
+		    return OPT_MESSAGE;
+		}
+		
+		// Hier muss jetzt die PW-Abfragefun aufgerufen werden.
+                PLAYER_SECOND->add_second_char(this_object(), str, 
+		                   #'print_seconds_options);
+
+		return OPT_INPUT_TO_STARTED;
+	    }
+	    else if(flags&OPT_INPUT_TO)
+		return "";
+	    else
+	    {
+		input_to(
+		    (:
+			funcall($2, change_seconds_options(OPT_SECONDS_ADD,
+			    $1, $3|OPT_INPUT_TO, $2));
+		    :), INPUT_PROMPT,
+		    "Wie ist der Name des Charakters? ",
+		    input_to_callback, flags);
+		return OPT_INPUT_TO_STARTED;
+	    }
+	case OPT_SECONDS_PASSWORD:
+	    option_flags^=OF_SECPASS;
+	    return (option_flags&OF_SECPASS)
+		?"Passwortabfrage aktiviert."
+		:"Passwortabfrage deaktiviert.";
+    }
+}
+
+private int handle_seconds_options(string str)
+{
+    if(player_exists(lower_case(str)))
+	str="h "+str;
+    return handle_menue_options(str,
+	    ([
+		'h': OPT_SECONDS_ADD,
+		'p': OPT_SECONDS_PASSWORD,
+	    ]), #'change_seconds_options, #'print_seconds_options, "Seconds");
+}
+
+private void handle_seconds_actions(string str)
+{
+    str = trim(str);
+
+    if(!strlen(str))
+    {
+	string *names=({string*})PLAYER_SECOND->query_second_chars(this_object()); 
+	if(sizeof(names))
+	    MSG("Du hast folgende Charaktere bereits angemeldet:\n"+
+		wrap(liste(map(names,#'capitalize))));
+	else
+	    MSG("Du hast derzeit keine weiteren Charaktere angemeldet.\n");
+	return;
+    }
+
+    if(!player_exists(str))
+    {
+	if(strstr(str,"?")>=0)
+	    handle_cmd_actions(str, ({}), 0, "Seconds.cl");
+	else if(sizeof(regexp(({str}),"[ ;,]")))
+	    MSG("Bitte nur einen Charakter auf einmal angeben.\n");
+	else
+	    MSG(wrap("Den Spieler "+capitalize(str)+" gibt es nicht."));
+        return;
+    }
+    
+    PLAYER_SECOND->add_second_char(this_object(), str,
+	lambda(({'quiet}),({
+	(:
+	    if(!$1)
+		MSG(wrap("Der Charakter "+capitalize($2)+" wurde erfolgreich angemeldet."));
+	:), 'quiet, str})));
+}
+
+private void check_seconds_actions(string str)
+{
+    if((option_flags & OF_SECPASS) && strstr(str || "","?") < 0)
+	this_object()->check_password(
+	    lambda(0,({#'handle_seconds_actions,str})),0);
+    else
+	handle_seconds_actions(str);
+}
+
+// ----- Und noch ein paar Funktion, welche benoetigt werden -----
+nomask nosave int more_action(string str, int line, int max_line, mixed more_id)
+{
+    int nr;
+    if(!str)
+	return CONTINUE;
+    if(mappingp(more_id))
+    {
+	if(more_id["Options: Color"])
+	    return handle_color_options(str, more_id["Name"], more_id["Color"], more_id["EColor"], more_id["Beep"],
+		more_id["set"], more_id["parent"], more_id["param"]);
+	else if(more_id["Options: Extended Color"])
+	    return handle_extended_color_options(str, more_id);
+	else if(more_id["Options: Extended Beep"])
+	    return handle_extended_beep_options(str, more_id);
+	else if(more_id["Options: Channel"])
+	    return handle_channel_options(str, more_id["nr"], more_id["info"]);
+	else if(more_id["Options: Help"])
+	{
+	    nr = handle_options_help(str, more_id["filename"],
+		more_id["command"], more_id["callback"], more_id["param"]);
+	    if(nr==END_MORE)
+		more_id["callback"] = 0;
+	    return nr;
+	}
+	else if(more_id["Options: Ignore-Player"])
+	    return handle_ignore_player_options(str, more_id["name"]);
+	else if(more_id["Options: Single-Trigger"])
+	    return handle_single_trigger_options(str, more_id["trigger"]);
+    }
+    if(!stringp(more_id))
+	return CONTINUE;
+    switch(more_id)
+    {
+	case OPTIONS_ID:
+	    if(sscanf(str, "%d", nr)==1)
+	    {
+		if(nr>0 && nr<=sizeof(active_menue))
+		{
+		    nr--;
+		    if(closurep(active_menue[nr]))
+			funcall(active_menue[nr]);
+		    else if(pointerp(active_menue[nr]) && active_menue[nr][0])
+			call_other(active_menue[nr][0], active_menue[nr][1]);
+		    else
+		    {
+			MSG("Diesen Menuepunkt gibt es nicht mehr.\n");
+			start_options_menue(1);
+		    }
+		    return END_MORE;
+		}
+		MSG("Es gibt keinen solchen Menuepunkt.\n");
+		return NOTHING;
+	    }
+	    if(strlen(str)==1 || (strlen(str)>1 && str[1]==' '))
+		switch(str[0])
+		{
+		    case 'Q': case 'q':
+			return END_MORE;
+		    case 'z':
+			MSG("Weiter zurueck geht es nicht.\n");
+			return NOTHING;
+		    case '?':
+			print_options_help(0, "Main", 0,
+			    (: start_options_menue($1) :), 0);
+			return END_MORE;
+		}
+	    return CONTINUE;
+	case "Options: General":
+	    return handle_player_options(str);
+	case "Options: Twitter":
+	    return handle_twitter_options(str);
+	case "Options: Display":
+	    return handle_display_options(str);
+	case "Options: Client":
+	    return handle_client_options(str);
+	case "Options: Colors":
+	    return handle_colors_options(str);
+	case "Options: Events":
+	    return handle_events_options(str);
+	case "Options: Wizards":
+	    return handle_wizard_options(str);
+	case "Options: Ignore":
+	    return handle_ignore_options(str);
+	case "Options: Zweities":
+	    return handle_seconds_options(str);
+	case "Options: Trigger":
+	    return handle_trigger_options(str);
+    }
+}
+
+nomask nosave void more_end(string str, int line, int max_line, mixed more_id)
+{
+    if(mappingp(more_id))
+    {
+	if(more_id["Options: Help"])
+	    funcall(more_id["callback"], 1, more_id["param"]);
+    }
+}
+
+nomask nosave int more_insecure(int line, int max_line, mixed more_id)
+{
+    MSG("Du wirst beobachtet. Dieses Einstellungsmenue wird daher beendet.\n");
+    start_options_menue(1);
+    return END_MORE;
+}
+
+nomask int options_command(string str)
+{
+    if((this_interactive() && this_interactive() != this_player()) || this_player() != this_object())
+	return 0;
+    if(str)
+	handle_options_cmd(trim(str));
+    else
+	start_options_menue();
+    return 1;
+}
+
+nomask nosave void add_wizard_menues()
+{
+    if(this_object()->query_wiz_level())
+    {
+	add_options_menue("Nur fuer Goetter", #'print_wizard_options);
+	add_options_action("Fingereinstellungen II", "wfinger", 0,
+	    (: handle_wizard_actions($1, OPT_CMD_WIZFINGER) :));
+	add_options_action("Augeneinstellungen", "augen", 0,
+	    (: handle_wizard_actions($1, OPT_CMD_AUGEN) :));
+	add_options_action("Goettereinstellungen", "wizard", -3,
+	    (: handle_wizard_actions($1, OPT_CMD_WIZOPTIONS) :));
+    }
+}
+
+void create()
+{
+    menues = ([
+	"Spieler und Charakter": #'print_player_options,
+	"Anzeigen": #'print_display_options,
+	"MUD-Client und E-Mail": #'print_client_options,
+	"Farben": #'print_colors_options,
+	"Kurier und Erinnerungen": #'print_events_options,
+	"Ignorieren": #'print_ignore_options,
+	"Zweitcharaktere": #'check_seconds_options,
+    ]);
+    
+    actions = ([
+	"charakter": ({"Einstellungen zum Charakter", -4,
+			(: handle_player_actions($1, OPT_CMD_CHARACTER) :) }),
+	"spieler": ({ "Einstellungen zum Spieler", 0,
+			(: handle_player_actions($1, OPT_CMD_PLAYER) :) }),
+	"kampf": ({ "Kampfeinstellungen", 0,
+			(: handle_player_actions($1, OPT_CMD_KAMPF) :) }),
+	"ausruestung": ({ "Inventaroptionen", -4,
+			(: handle_display_actions($1, OPT_CMD_AUSRUESTUNG) :) }),
+	"finger": ({ "Fingereinstellungen", 0,
+			(: handle_display_actions($1, OPT_CMD_FINGER) :) }),
+	"apanzeige": ({ (:"Ausdauer- und "+(({string})this_object()->query_sp_name())+"anzeige" :), -4,
+			(: handle_display_actions($1, OPT_CMD_APANZEIGE) :) }),
+	"raumbeschreibung": ({ "Einstellungen zur ausgegebenen Raumbeschreibung", -4,
+			(: handle_display_actions($1, OPT_CMD_RAUM) :) }),
+	"anzeige": ({ "Einstellungen zu einzelnen Anzeigen", -3,
+			(: handle_display_actions($1, OPT_CMD_ANZEIGE) :) }),
+	"blind": ({ "Blindenfreundliche Anzeigen", -3,
+			(: handle_display_actions("blind "+$1, OPT_CMD_ANZEIGE) :) }),
+	"client": ({ "Einstellungen zum MUD-Client", -2,
+			(: handle_client_actions($1, OPT_CMD_CLIENT) :) }),
+	"email": ({ "Einstellungen zum Mailempfang", 0,
+			(: handle_client_actions($1, OPT_CMD_EMAIL) :) }),
+	"usenet": ({ "Einstellungen fuer das Usenet (InterMUD-Brett)", 0,
+			(: handle_client_actions($1, OPT_CMD_USENET) :) }),
+	"farben": ({ "Farbeinstellungen", -4, #'handle_colors_actions }),
+	"erinnerungen": ({ "Einstellungen zu Deinen Erinnerungen", -5,
+			(: handle_events_actions($1, OPT_CMD_PUFFER) :) }),
+	"kurier": ({ "Kuriereinstellungen", -4,
+			(: handle_events_actions($1, OPT_CMD_KURIER) :) }),
+	"sonst" : ({ "Sonstige Einstellungen", 0,
+			(: handle_player_actions($1, OPT_CMD_SONST) :) }),
+	"ignoriere": ({ "Ignorieren von Spielern", -5,
+			#'handle_ignore_actions }),
+	"zweities": ({ "Zweitcharaktere", -5, #'check_seconds_actions }),
+    ]);
+}
+
+/*
+------------- Goetter only: -----------------------
+ - Koerperform, Rasse, Koerpergroesse, Faehigkeiten
+ - Titel, Ptitel, Kontostand
+ - Ankommen, Verlassen, ZAnkommen, ZVerlassen, Home-Msg,
+   Clone_msg, Destruct-Msg, Prompt, fingertext
+ - Beobachten erlauben
+*/

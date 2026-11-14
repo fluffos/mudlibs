@@ -1,0 +1,215 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/achievements.c
+// Description:	Sammelt Erfolge von Spielern und leitet sie weiter
+// Author:	Gnomi
+//
+// $Log: achievements.c,v $
+// Revision 1.3  2014/03/12 15:02:31  myonara
+// Aenderungen von Sissi?
+//
+// Revision 1.2  2013/12/07 13:58:41  sorcerer
+// alte Aenderung committed
+//
+// Revision 1.1  2011-02-02 22:14:56  gnomi
+// Master, der Spielererfolge sammelt.
+//
+
+// ACHTUNG: Wurde in einem Controller ein Fehler geworfen, so wird dieser
+// bei /apps/control abgemeldet. Daher ist nach einer Fehlerbehebung
+// ein Zernen dieses Objektes (oder zc /apps/achievements->create())
+// wichtig. (Auch wenn der Fehler selbst in einem anderen Objekt stattfand.)
+
+#include <achievements.h>
+#include <apps.h>
+#include <level.h>
+#include <message.h>
+
+private functions inherit "/i/item/messages";
+
+void create()
+{
+    CONTROL->add_controller(
+	({"notify_set_quest", "notify_set_game",
+	  "notify_player_died", "notify_player_saved", "notify_monster_killed",
+	  "notify_event_level", "notify_event_gilden",
+	}), this_object());
+}
+
+void handle_achievement(int type, object player, mapping info)
+{
+    object ob;
+
+    if(extern_call() && type != AT_OTHER)
+        return;
+
+    if(player)
+        catch(player->announce_achievement(type, info); publish, reserve 16384);
+
+#ifdef TestMUD
+    if((ob = find_player("gnomi")))
+        ob->send_message_to(ob, MT_DEBUG, MA_UNKNOWN, sprintf("%O: %O\n", player, info));
+#endif
+}
+
+nosave mixed* textrepl = ({
+    ({ " ist ich ", " bin ich " }),
+    ({ "\\<(Er|Sie|Es) hat ", "Ich habe " }),
+    ({ "\\<(Er|Sie|Es) erklimmt ", "Ich erklimme " }),
+    ({ "\\<([Ii]ch) ist ", "\\1 bin " }),
+    ({ "\\<([Ii]ch) hat sich ", "\\1 habe mich " }),
+    ({ "\\<([Ii]ch) hat's", "\\1 hab's " }),
+    ({ "\\<([Ii]ch) hat ", "\\1 habe " }),
+    ({ "\\<([Ii]ch) sieht ", "\\1 sehe " }),
+    ({ "\\<([Ii]ch) faehrt ", "\\1 fahre " }),
+    ({ "\\<([Ii]ch) laesst ", "\\1 lasse " }),
+    ({ "\\<([Ii]ch) ([a-z]*)t ", "\\1 \\2e " }),
+});
+
+private void notify_mission(string name, int points, object player, int oldpoints, int maxpoints, int minsolved, object missionob, int type)
+{
+    mixed solvedmsg, solvedmsgme;
+
+    if(object_name(previous_object()) != CONTROL ||
+       oldpoints >= maxpoints || points + oldpoints < maxpoints ||
+       missionob->has_test_flag())
+        return;
+
+    solvedmsg = missionob->query_solved_msg();
+
+    if(solvedmsg)
+        solvedmsg = closure_to_string(solvedmsg, ({
+        ([
+            "name":     player->query_real_name(),
+            "cap_name": player->query_real_cap_name(),
+            "gender":   player->query_real_gender(),
+            "personal": 1,
+        ])}));
+    else if(type == AT_QUEST)
+        solvedmsg = player->query_real_cap_name()+" hat das Raetsel '"+capitalize(name)+"' geloest.";
+    else
+        solvedmsg = player->query_real_cap_name()+" hat erfolgreich '"+capitalize(name)+"' gespielt.";
+
+    if(!sizeof(solvedmsg))
+        return;
+
+    solvedmsgme = missionob->query_solved_msg_me();
+    
+    if(solvedmsgme)
+        solvedmsgme = closure_to_string(solvedmsgme, ({
+        ([
+            "name":     player->query_real_name(),
+            "cap_name": player->query_real_cap_name(),
+            "gender":   player->query_real_gender(),
+            "personal": 1,
+        ])}));
+    else if((solvedmsgme = missionob->query_solved_msg()))
+    {
+        // So, wir tricksen mal ein wenig...
+        solvedmsgme = closure_to_string(solvedmsgme, ({
+        ([
+            "name":     "ich",
+            "genitiv":  "meiner",
+            "dativ":    "mir",
+            "akkusativ":"mich",
+            "gender":   player->query_real_gender(),
+            "personal": 1,
+        ])}));
+
+        solvedmsgme = regreplace(solvedmsgme,"\n"," ",1);
+        foreach(string* repl: textrepl)
+            solvedmsgme = regreplace(solvedmsgme, repl[0], repl[1], 1);
+    }
+    else if(type == AT_QUEST)
+        solvedmsgme = "Ich habe das Raetsel '"+capitalize(name)+"' geloest.";
+    else
+        solvedmsgme = "Ich habe erfolgreich '"+capitalize(name)+"' gespielt.";
+
+    handle_achievement(type, player, ([
+        AI_TEXT_OTHER: regreplace(solvedmsg,"\n"," ",1),
+        AI_TEXT_ME: solvedmsgme,
+        AI_MISSION_OB: missionob,
+    ]));
+}
+
+void notify_set_quest(string name, int points, object player, int oldpoints, int maxpoints, int minsolved)
+{
+    notify_mission(name, points, player, oldpoints, maxpoints, minsolved, previous_object(2), AT_QUEST);
+}
+
+void notify_set_game(string name, int points, object player, int oldpoints, int maxpoints, int minsolved, object gameob)
+{
+    notify_mission(name, points, player, oldpoints, maxpoints, minsolved, previous_object(2), AT_GAME);
+}
+
+void notify_player_died(object player, string tod_andere, string tod_du)
+{
+    handle_achievement(AT_DEATH, player, ([ AI_TEXT_OTHER: tod_andere, AI_TEXT_ME: tod_du ]));
+}
+
+void notify_player_saved(object player, string rettung_andere, string tod_du)
+{
+    handle_achievement(AT_DEATH, player, ([ AI_TEXT_OTHER: rettung_andere, AI_TEXT_ME: tod_du ]));
+}
+
+void notify_monster_killed(object player, object monster)
+{
+    handle_achievement(AT_KILLED, player, ([
+        AI_TEXT_OTHER: player->query_real_cap_name() + " hat " + einen(monster) + " getoetet.",
+        AI_TEXT_ME: "Ich habe " + einen(monster) + " getoetet.",
+        AI_MONSTER: monster,
+    ]));
+}
+
+void notify_event_level(object player, string message, int flag, string wizmessage)
+{
+    string msg;
+    int level;
+
+    if(!player)
+        return;
+
+    switch(level = player->query_level())
+    {
+        case LVL_HLP:
+            msg = "Engel.";
+            break;
+
+        case LVL_WIZ:
+            msg = "Gott.";
+            break;
+
+        case LVL_GESELLE:
+            msg = "Geselle.";
+            break;
+
+        case LVL_VOGT:
+            msg = "Vogt.";
+            break;
+
+    }
+
+    if (msg)
+        handle_achievement(AT_LEVEL, player, ([
+            AI_TEXT_OTHER: player->query_real_cap_name() + " ist jetzt " + msg,
+            AI_TEXT_ME: "Ich bin jetzt " + msg,
+            AI_LEVEL: level,
+        ]));
+}
+
+void notify_event_gilden(object player, string message, int flag, string wizmessage)
+{
+    int pos;
+
+    if(!player)
+        return;
+
+    if(!strstr(message, "Info: "))
+        message = message[6..<2];
+    pos = strstr(message, " ist ");
+
+    handle_achievement(AT_GUILD, player, ([
+        AI_TEXT_OTHER: message,
+        AI_TEXT_ME: (pos>0) && ("Ich bin " + message[pos+5..]),
+    ]));
+}

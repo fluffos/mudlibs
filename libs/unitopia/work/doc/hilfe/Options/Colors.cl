@@ -1,0 +1,30 @@
+Mit 'einstellung farben <meldungstyp> <hervorhebung>' kannst Du bestimmte
+Meldungen einfaerben oder hervorheben lassen. Dies funktioniert natuerlich
+nur, wenn man an einem Terminal sitzt, welches die ANSI-Steuercodes
+unterstuetzt.
+
+   farben
+      Zeigt alle eingestellten Hervorhebungen an.
+      
+   farben an
+      Damit werden die Hervorhebungen angeschaltet.
+      
+   farben aus
+      Dies schaltet die Hervorhebungen ab. Diese Option veraendert nicht
+      die einzelnen Farbeinstellungen, sondern deaktiviert nur die
+      eingestellten Hervorhebungen.
+      
+   farben <meldungstyp> <hervorhebung>
+      Folgende Meldungstypen werden erkannt:
+          Kampf, Seele, Bewegung, Meldungen, Kommunikation und
+	  Fernkommunikation
+      Die Hervorhebung kann bestehen aus:
+          normal, invers, fett, blinkend, dunkel, unterstrichen,
+	  <Vordergrundfarbe>, <Vordergrundfarbe>:<Hintergrundfarbe> und
+	  einrueckung:<0-7>
+      Als Farben stehen zur Verfuegung:
+          schwarz, rot, gruen, gelb, blau, magenta, cyan und weiss
+     
+ Weitere Befehle:
+ 
+   ?: Diese Hilfe anzeigen.

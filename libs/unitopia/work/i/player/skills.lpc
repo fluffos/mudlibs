@@ -1,0 +1,1555 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/player/skills.c
+// Description: Skillhandling des Spielers
+// Author:	Francis
+// Modified by:	Freaky	(23.12.93)
+// 		Garthan	(15.04.96) more bei print_skill
+//                                 erf <kuerzel> abkuerzbar
+//		Freaky	(24.05.96) query_experience_promille hierher
+//              Sissi	(04.06.96) query_quest_count, compute_quest_count
+//		Garthan (05.08.96) print_skill:
+//				   alphabetisch nach letzen Pfadeintrag
+//		Garthan (07.08.96) letzteres nur noch optional
+//		Garthan (28.11.96) query_skill_structure() kopiert skill_tree
+//              Mammi   (09.02.98) EP Angleichungsfunktionen
+//		Freaky  (07.05.98) get_skill_descriptions
+//		Parsec  (24.03.99) Wissensskills
+//		Freaky  (09.06.99) copy_array_tree durch deep_copy ersetzt
+//              Sissi   (18.07.99) experimentelle Kill - Liste
+//                      (03.08.99) Kill - Liste um Level erweitert
+//              Parsec  (27.06.00) Wissen aktiviert
+//
+// $Log: skills.c,v $
+// Revision 1.62  2016/02/26 18:00:50  myonara
+// 06.01.2016: ein bisher undokumentiertes || 0.1 in 1444.
+// Ein erf getoetet mit inzwischen 5 Stellen...
+//
+// Revision 1.61  2015/01/23 18:08:07  myonara
+// Fuer alle, die nur bis 3 zaehlen koennen, gibts drueber bei erf tod
+// eine Ausgabe, wie oft man gestorben ist. *gg*
+//
+// Revision 1.60  2014/05/20 21:38:49  gnomi
+// Typen korrigiert.
+//
+// Revision 1.59  2011-02-02 22:22:29  gnomi
+// Twitter-Anbindung.
+//
+// Revision 1.58  2008/02/25 11:47:10  gnomi
+// get_one_skill-Doku aufs Message-Sytem umgestellt.
+// query_erforscht & Co. fuer UNItopia auskommentiert.
+//
+// Revision 1.57  2007/05/26 22:49:22  gnomi
+// Zu den Toden wird jetzt auch der Todeszeitpunkt gemerkt und angezeigt.
+//
+// Revision 1.56  2006/12/30 01:24:53  menaures
+// Doppelnamen richtig capitalizen (Karl-heinz -> Karl-Heinz)
+//
+// Revision 1.55  2005/11/18 21:49:45  gnomi
+// Moeglichkeit, um Skills umzubenennen oder die Punkte zu modifizieren,
+// eingebaut.
+//
+// Revision 1.54  2004/10/06 22:09:33  gnomi
+// Enzy-Doku zu query_kills* verbessert.
+//
+// Revision 1.53  2004/10/06 22:05:06  gnomi
+// Funktionen zur Abfrage der Killisten eingebaut.
+// Bei 'erf getoetet' auch die Gesamtzahl ausgeben.
+//
+// Revision 1.52  2004/08/18 22:48:39  menaures
+// 'erf tod' richtig wrappen
+//
+// Revision 1.51  2004/06/02 22:43:08  gnomi
+// update_stats fragt beim PLAYER_ANNOYER nach.
+//
+// Revision 1.50  2004/04/14 22:05:46  gnomi
+// Idle-Test bei add_sum.
+// Beliebige Skillmeldungen bei 'erf sonstiges' ermoeglichen.
+// 'erf' korrigiert, so dass es nicht mehrere more's auf einmal startet.
+//
+// Revision 1.49  2003/11/11 03:15:16  gnomi
+// erf gilden: Bei einer nicht mehr existenten Gilde kann kein Gildenname
+// angezeigt werden.
+//
+/*
+ * Every skill datum consists of a triplet:
+ *   The name of the skill (a string).
+ *   The value of the skill (number of successful uses).
+ *   Optionally an array of subskills.
+ * The skill structure is an array of skill data.
+ *
+ * Uluji:
+ *
+ *  add_skill_points       Zum Eintragen von Skill-Punkten.
+ *
+ *  delete_skill_path      Zum Loeschen von Skill-Pfaden.
+ *
+ *  get_one_skill          Gibt den Wert eines bestimmten Skill-Eintrages
+ *			   zurueck.
+ *
+ *  compute_one_skill      Gibt die Summe des gesamten Pfades von der Wurzel
+ *			   bis zum angegebenen Skill-Eintrag zurueck.
+ *
+ *  query_skill_structure  Gibt die komplette Skill-Struktur zurueck.
+ *
+ * Balou (mit Aenderungen von Freaky):
+ *
+ *  set_erforscht          Setzt diesen Raum als erforscht
+ */
+
+inherit "/i/tools/build_table";
+
+#pragma save_types
+#pragma strong_types
+
+#include <apps.h>
+#include <config.h>
+#include <game.h>
+#include <gilden.h>
+#include <level.h>
+#include <more.h>
+#include <quest.h>
+#include <stats.h>
+#include <touch.h>
+#include <math.h>
+#include <time.h>
+#include <simul_efuns.h>
+
+#define S_SIZE 3
+#define S_NAME 0
+#define S_POINTS 1
+#define S_SUBSKILL 2
+
+#define ALT_WISSEN    0
+#define WISSEN_AKTIV  1
+
+int query_age();
+int query_sum_hp();
+int query_sum_sp();
+nosave void raise_stat(int stat, float value);
+protected void add_stat(int stat, float diff);
+string query_real_name();
+
+
+private int skill_version = 0;
+private mixed *skill_structure=({});
+private int skill;
+private mixed *erforscht=({ ({}),({}),({}) });
+private mixed *reise    =({ ({}),({}),({}) });
+private mixed *gesehen  =({ ({}),({}),({}) });
+private mixed *handeln  =({ ({}),({}),({}) });
+private mapping kill_list_races = ([]);
+private mapping kill_list_name_level = m_allocate (20,2);
+private int quest_count, game_count;
+
+private int sum_comm;
+private int sum_feel;
+private int sum_move;
+private int sum_weight;
+
+private nosave int skill_update_time;
+
+private mixed *other_skills = ({ });
+#define OS_KEYWORD	0
+#define OS_TEXT		1
+#define OS_DATA		2
+
+void saving();
+
+
+/*
+FUNKTION: query_quest_count
+DEKLARATION: int query_quest_count ()
+BESCHREIBUNG:
+Liefert die Anzahl der komplett geloesten Raetsel.
+GRUPPEN: spieler
+*/
+
+nomask void compute_quest_count()
+{
+    string *quests;
+    int i, points;
+    object qobj;
+
+    quest_count = 0;
+    quests = QUEST_ROOM->query_quest_objects(Q_ALL | Q_TEST);
+    for (i = sizeof(quests); i--;)
+       if ((qobj = touch(quests[i])) &&
+	   (points = qobj->query_points(this_object())) &&
+	   (points >= (qobj->query_min_skill_solved() || qobj->query_skill())))
+	  quest_count++;
+}
+
+nomask int query_quest_count()
+{
+    if (!quest_count)
+	compute_quest_count();
+    return quest_count;
+}
+
+/*
+FUNKTION: query_game_count
+DEKLARATION: int query_game_count ()
+BESCHREIBUNG:
+Liefert die Anzahl der komplett geloesten Spiele.
+GRUPPEN: spieler
+*/
+
+nomask void compute_game_count()
+{
+    string *games;
+    int i, points;
+    object gobj;
+
+    game_count = 0;
+    games = GAME_ROOM->query_game_objects(G_ALL);
+    for (i = sizeof(games); i--;)
+       if ((gobj = touch(games[i])) &&
+	   (points = gobj->query_points(this_object())) &&
+	   (points >= (gobj->query_min_skill_solved() || gobj->query_skill())))
+	  game_count++;
+}
+
+nomask int query_game_count()
+{
+    if (!game_count)
+	compute_game_count();
+    return game_count;
+}
+
+private mixed *find_add_skill_points(mixed *node, string *path, int pos,
+				     int amount)
+{
+    int i, value, max, max_skill;
+
+    max_skill = MASTER_OB->query_max_skill( path) ;
+
+    for (max=sizeof(node); i<max; i++)
+    {
+	if (node[i][S_NAME] == path[pos])
+	{
+	    if (sizeof(path) == pos+1)
+	    {
+		/* found */
+		value=node[i][S_POINTS]+amount;
+		if ( value > max_skill )
+		    amount-=value-max_skill;
+		node[i][S_POINTS]+=amount;
+                if ( path[1] == "wissen" )
+                    skill_update_time = time() + 600 ;
+                else
+                    skill+=amount;
+		return node;
+	    }
+	    if (sizeof(node[i]) < S_SIZE)
+		node[i]+=({({({path[pos],0})})});
+	    node[i][S_SUBSKILL]=find_add_skill_points(node[i][S_SUBSKILL],path,pos+1,amount);
+	    return node;
+	}
+    }
+
+    /* Nicht gefunden */
+
+    /* Ende des Pfades */
+    if (sizeof(path) == pos+1)
+    {
+	value=amount>max_skill?max_skill:amount;
+        if ( sizeof( path) > 1 && value && path[1] == "wissen" )
+            skill_update_time = time() + 600 ;
+        else
+            skill+=value;
+	return node+({ ({ path[pos], value }) });
+    }
+
+    /* anfuegen */
+    return node+({ ({ path[pos], 0,
+	find_add_skill_points( ({}), path, pos+1, amount) }) });
+}
+
+
+nosave int query_skill_update_time()
+{
+    return skill_update_time ;
+}
+
+
+nosave void reset_skill_update_time()
+{
+    skill_update_time = 0 ;
+}
+
+
+/*
+FUNKTION: add_skill_points
+DEKLARATION: void add_skill_points(string *path, int points)
+BESCHREIBUNG:
+Addiert points Punkte im Skillpfad path. Wenn kein gueltiger Pfad angegeben
+wurde, passiert nichts. Der selbe Befehl ist in zskillad im Zauberstab
+implementiert.
+
+Beispiel:
+    player->add_skill_points( ({"skill","offensiv","haende"}), 400);
+
+    gibt dem Spieler player 400 Skillpunkte im Handkampf dazu.
+
+VERWEISE: get_one_skill
+GRUPPEN: spieler, skill
+*/
+void add_skill_points(string *path, int amount)
+{
+    if (MASTER_OB->valid_skill(path))
+    {
+	skill_structure=find_add_skill_points(skill_structure,path,0,amount);
+	if (path[1] == "raetsel")
+	{
+	    call_out("compute_quest_count",2);
+	    call_out(#'saving,4);
+	}
+	else if (path[1] == "spiel")
+	{
+	    call_out("compute_game_count",2);
+	    call_out(#'saving,4);
+	}
+    }
+}
+
+#if 0
+/**
+*FUNKTION: copy_array_tree
+DEKLARATION: private mixed *copy_array_tree(mixed *arrin)
+BESCHREIBUNG:
+Liefert eine Kopie eines Arraytrees (d.h. n-dimensionales Array) von arrin
+VERWEISE: query_skill_structure
+GRUPPEN: efun
+*/
+private mixed *copy_array_tree(mixed *arrin)
+{
+   int i;
+   mixed *arrout;
+
+   if(!pointerp(arrin))
+      arrout = arrin;
+   else
+      for(arrout = ({}) + arrin, i = sizeof(arrin); i--;)
+	  if(pointerp(arrin[i]))
+	      arrout[i] = copy_array_tree(arrin[i]);
+   return arrout;
+}
+#endif
+
+/*
+FUNKTION: query_skill_structure
+DEKLARATION: mixed *query_skill_structure()
+BESCHREIBUNG:
+Liefert ein geschachteltes Array, in dem der geamte Skillbaum eines Spielers
+steht.
+VERWEISE: get_one_skill
+GRUPPEN: spieler, skill
+*/
+#if 0
+mixed *query_skill_structure()
+{
+    // protected gegen Manipulation, nur der zauberstab darf.
+    if(previous_object() &&
+       !strstr(object_name(previous_object()), "/obj/zauberstab"))
+    return skill_structure;
+}
+#else
+mixed *query_skill_structure()
+{
+    /* Ist noetig, um die skill_structure nicht aendern zu koennen
+       Skafloc 28.11.1996 */
+    return deep_copy(skill_structure);
+}
+#endif
+
+private mixed search_one_skill(mixed *node, string *path, int pos)
+{
+    int i;
+
+    for (i=sizeof(node); i--; )
+	if (node[i][S_NAME] == path[pos])
+	{
+	    if (sizeof(path)==pos+1)
+		return node[i][S_POINTS];
+	    if (sizeof(node[i])==S_SIZE)
+		return search_one_skill(node[i][S_SUBSKILL],path,pos+1);
+	    return 0;
+	}
+}
+
+/*
+FUNKTION: get_one_skill
+DEKLARATION: int get_one_skill(string *path)
+BESCHREIBUNG:
+get_one_skill liefert die Erfahrungspunkte eines Spielers in einer ganz
+bestimmten Disziplin zurueck. Damit kann man z.b. Schwerter programmieren, die
+man erst mit einer ganz betimmten Erfahrung fuehren kann...
+
+Beispiel
+    if(this_player()->get_one_skill(({"skill","offensiv","scharf","schwert",
+	"langschwert"}))<1000)
+    {
+	this_player()->send_message_to(this_player(), MT_NOTIFY, MA_WIELD,
+	    "Dieses Schwert darfst Du nicht fuehren.\n");
+	return 0;
+    }
+
+VERWEISE: add_skill_points
+GRUPPEN: spieler, skill
+*/
+int get_one_skill(string *path)
+{
+    if (sizeof(path))
+	return search_one_skill(skill_structure,path,0);
+}
+
+private int search_sum_skill(mixed *node, string *path, int pos)
+{
+    int i, tmp;
+
+    if (pos < sizeof(path))
+    {
+	for (i=sizeof(node); i--; )
+	    if (node[i][S_NAME] == path[pos])
+	    {
+		if (pos == sizeof(path)-1)
+		    tmp = node[i][S_POINTS];
+		if (sizeof(node[i]) == S_SIZE)
+		    return tmp+search_sum_skill(node[i][S_SUBSKILL],path,pos+1);
+	    }
+    }
+    else
+    {
+	for (i=sizeof(node); i--; )
+	{
+	    tmp += node[i][S_POINTS];
+	    if (sizeof(node[i]) == S_SIZE)
+		tmp += search_sum_skill(node[i][S_SUBSKILL], path, pos+1);
+	}
+    }
+    return tmp;
+}
+
+
+int compute_one_skill(string *path)
+{
+    if (sizeof(path))
+	return search_sum_skill(skill_structure, path, 0);
+}
+
+int update_sum_skill()
+{
+    return skill=compute_one_skill(({"skill"}));
+}
+
+/*
+FUNKTION: query_sum_skill
+DEKLARATION: int query_sum_skill()
+BESCHREIBUNG:
+Liefert die gesamten Erfahrungspunkte eines Spielers zurueck.
+VERWEISE: get_one_skill
+GRUPPEN: spieler, skill
+*/
+int query_sum_skill() { return skill; }
+
+/*
+FUNKTION: query_experience_promille
+DEKLARATION: int query_experience_promille ()
+BESCHREIBUNG:
+Diese Funktion liefert zurueck, wieviel Promille der zum Engel bzw. Gott werden
+benoetigten Erfahrung ein Spieler hat.
+VERWEISE: query_sum_skill
+GRUPPEN: spieler, skill
+*/
+int query_experience_promille()
+{
+    return skill*1000/TOTAL_EXPERIENCE;
+}
+
+private mixed find_del_skill_path(mixed *node, string *path, int pos)
+{
+    int i;
+    mixed tmp;
+
+    for (i=sizeof(node); i--; )
+	if (node[i][S_NAME] == path[pos])
+	{
+	    if (sizeof(path)==pos+1)
+	    {
+		/* found */
+		skill-=search_sum_skill(node,({path[pos]}),0);
+		return arr_delete(node,i);
+	    }
+	    tmp=(sizeof(node[i])>S_SUBSKILL) &&
+		find_del_skill_path(node[i][S_SUBSKILL],path,pos+1);
+	    if (!tmp)
+		return 0;
+	    node[i][S_SUBSKILL]=tmp;
+	    return node;
+	}
+}
+
+/*
+ * Loeschen eines obsoleten Skill-Eintrages.
+ */
+int delete_skill_path(string *path)
+{
+    mixed tmp;
+
+    if (sizeof(path) && tmp=find_del_skill_path(skill_structure, path, 0))
+    {
+	skill_structure=tmp;
+	return 1;
+    }
+}
+
+/*
+FUNKTION: set_other_skill
+DEKLARATION: void set_other_skill(string keyword, string text, mixed data)
+BESCHREIBUNG:
+Mit dieser Funktion kann man einem Spieler einen Eintrag in 'erf sonstiges'
+geben. Dieser Skill hat keinerlei Einfluss auf die Zahl der Erfahrungspunkte
+oder den Stats des Spielers. Solche Skills sollten aber vorher mit dem
+jeweiligen Lord bzw. Lady abgesprochen werden.
+
+Der erste Parameter gibt ein Schluesselwort an, anhand dessen dieser
+Skilltext identifiert wird und mit welchem dieser spaeter geaendert werden
+kann. Dieses Schluesselwort sollte die Taetigkeit am Anfang beinhalten
+('erf -s' sortiert danach) und den Ort (um Eindeutigkeit zu gewaehrleisten),
+z.B. "Springen Ebenen-Palast".
+
+Der zweite Parameter gibt den auszugebenden Skilltext (ohne Zeilenumbruch)
+an. Der dritte Parameter bietet die Moeglichkeit zusaetzliche Daten
+zum Skill zu speichern, welche man spaeter benutzen kann, um diesen
+Text zu modifizieren (z.B. eine Punktzahl).
+VERWEISE: query_other_skill_data, query_other_skill_text, query_sum_skill
+GRUPPEN: spieler, skill
+*/
+void set_other_skill(string keyword, string text, mixed data)
+{
+    if(!text)
+    {
+	other_skills = filter(other_skills, (: $1[OS_KEYWORD] != $2 :), keyword);
+	return;
+    }
+    
+    foreach(mixed os: other_skills)
+    {
+	if(os[OS_KEYWORD]==keyword)
+	{
+	    os[OS_TEXT]=text;
+	    os[OS_DATA]=data;
+	    return;
+	}
+    }
+    
+    other_skills += ({ ({ keyword, text, data }) });
+}
+
+/*
+FUNKTION: query_other_skill_data
+DEKLARATION: mixed query_other_skill_data(string keyword)
+BESCHREIBUNG:
+Hiermit kann man die benutzerdefinierten Daten zu sonstigen Skills abfragen.
+Der erste Parameter ist dabei das bei set_other_skill angegebene
+Schluesselwort.
+VERWEISE: set_other_skill, query_other_skill_text, query_sum_skill
+GRUPPEN: spieler, skill
+*/
+mixed query_other_skill_data(string keyword)
+{
+    foreach(mixed os: other_skills)
+	if(os[OS_KEYWORD]==keyword)
+	    return os[OS_DATA];
+}
+
+/*
+FUNKTION: query_other_skill_text
+DEKLARATION: string query_other_skill_text(string keyword)
+BESCHREIBUNG:
+Hiermit kann man den Text eines sonstigen Skills abfragen.
+Der erste Parameter ist dabei das bei set_other_skill angegebene
+Schluesselwort.
+VERWEISE: set_other_skill, query_other_skill_data, query_sum_skill
+GRUPPEN: spieler, skill
+*/
+string query_other_skill_text(string keyword)
+{
+    foreach(mixed os: other_skills)
+	if(os[OS_KEYWORD]==keyword)
+	    return os[OS_TEXT];
+}
+
+// Nur zur Info, das Format kann sich in der Zukunft aendern.
+// (Daher nicht dokumentiert.)
+mixed* query_other_skill_structure()
+{
+    // Es gibt da sowieso keinerlei Sicherheitsbeschraenkungen...
+    return other_skills;
+}
+
+// ----------------------------------------------------------
+/*
+ * Hier folgt das Spieler-Kommando "erfahrung"
+ */
+
+
+string get_skill_string(string *path, int amount)
+{
+    string name, gender;
+    int percent, a, max;
+
+    gender = this_object()->query_real_gender();
+    if (name = MASTER_OB->get_skill_string(path,amount,gender))
+	return name;
+    /*
+    name = "";
+    for (a=1; a<sizeof(path); a++)
+	name += "-"+capitalize(path[a]);
+    name = name[1..];
+    */
+    name = path[<1];
+
+#if 0
+    if (amount >= AVERAGE_EXPERIENCE+(((MAX_SKILL-AVERAGE_EXPERIENCE)*2)/3))
+	return capitalize(name)+
+            ": Du wirst keinen finden, der dich hierin uebertrifft.";
+    percent = (amount*100)/AVERAGE_EXPERIENCE;
+#else
+    // Variable Max-Skills eingefuehrt
+    max = (MASTER_OB->query_max_skill( path) * 8 / 9) ;
+    if (!max) return "";
+    if ( amount >= max )
+	return capitalize(name)+
+            ": Du wirst keinen finden, der dich hierin uebertrifft.";
+    // Prozente jetzt auf max (normal 4000) anstatt auf 3000 beziehen
+    percent = (amount*100)/max;
+#endif
+    if ( percent <= 3 )
+    {
+	if (gender == "weiblich")
+	    return capitalize(name)+": Darin bist du absolute Anfaengerin.";
+	return capitalize(name)+": Darin bist du absoluter Anfaenger.";
+    }
+    if (percent <= 15)
+	return capitalize(name)+
+            ": Darin besitzt du Grundkenntnisse.";
+    if (percent <= 30)
+	return capitalize(name)+
+            ": Damit kannst du schon einigermassen umgehen.";
+    if (percent <= 45)
+	return capitalize(name)+": Das beherrschst du schon einigermassen.";
+    if (percent <= 60)
+	return capitalize(name)+": Das beherrschst du schon recht ordentlich.";
+    if (percent <= 75)
+	return capitalize(name)+": Das beherrschst du schon recht gut.";
+    if (percent <= 90)
+	return capitalize(name)+": Das beherrschst du ausgezeichnet.";
+    return capitalize(name)+": Hierin zaehlst du zu den Meistern des Fachs.";
+}
+
+private string **find_and_print_skill(string *path, mixed *node)
+{
+   int i;
+   mixed *result;
+   string tmp;
+
+   result = ({});
+   for(i = 0; i < sizeof(node); i++)
+      if(sizeof(node[i]) == 3 && node[i][2] && sizeof(node[i][2]))
+	 result += find_and_print_skill(path+({node[i][0]}),node[i][2]);
+      else {
+         tmp = get_skill_string(path+({node[i][0]}),node[i][1]);
+         if (tmp && tmp != "")
+	 result += ({ ({ node[i][0], tmp }) });
+      }
+   return result;
+}
+
+private mixed *search_specific_node(string *path, mixed *node)
+{
+    int a;
+    mixed *ret;
+
+    if (!sizeof(path))
+	return 0;
+
+    for (a=0; a<sizeof(node); a++)
+	if (node[a][0] == path[0])
+	{
+	    if (sizeof(path) == 1)
+	    {
+		if (sizeof(node[a]) == 3)
+		    return node[a][2];
+		return 0;
+	    }
+	    if (sizeof(node[a]) == 3)
+		return search_specific_node(path[1..],node[a][2]);
+	    return 0;
+	}
+    return 0;
+}
+
+int sort_skill(mixed *a, mixed *b)
+{
+   return a[0] > b[0];
+}
+
+string *get_skill_descriptions(string *path, int sort)
+{
+   mixed *node, *result ;
+   string *pr;
+
+   if(sizeof(path) > 0 &&
+       (node = search_specific_node(path,skill_structure)) &&
+       (sizeof(result = find_and_print_skill(path, node))))
+   {
+      pr = ({});
+      if(sort)
+	 result = sort_array(result, "sort_skill");
+      foreach(mixed res: result)
+	 pr += explode(wrap_say(res[1],"",79,4),"\n")[0..<2];
+      return pr;
+   }
+   return 0;
+}
+
+private int print_skill(string *path, int sort)
+{
+    string *pr;
+
+    pr = get_skill_descriptions(path,sort);
+    if (pr)
+    {
+	this_object()->more(pr,0,0,M_AUTO_END);
+	return 1;
+    }
+    return 0;
+}
+
+#define SKILL_ERR "erf[ahrung] [-s] "\
+		  "Raetsel | "\
+		  +(erf_zaubern_available()?"Zaubern | ":"")+\
+		  "Spiele | Kampf | Getoetet |\n"\
+		  "                 "\
+		  +(erf_gilde_available()?"Gilde " \
+		  +erf_gilde_options()+ "| ":"")+\
+	"Gilden | Sonstiges | Tod (abkuerzbar).\n"
+
+int sort_kill_by_level (string a, string b)
+{
+    return kill_list_name_level[a,1] > kill_list_name_level [b,1];
+}
+
+int sort_kill_by_count (string a, string b)
+{
+    return kill_list_name_level[a] > kill_list_name_level [b];
+}
+
+private string capitalize_all_words (string s)
+// In der Killiste werden Monsternamen in lowercase gespeichert;
+// das fuehrt bei Raeuber Hotzenplotz zu Raeuber hotzenplotz
+// und das ist suboptimal.
+{
+    return implode (map (regexplode (s,"[ -]"), #'capitalize),"");
+}
+
+mixed query_gilden_info(string was);
+
+private int erf_gilde_available ()
+{
+    object gilden_master_ob;
+    if (gilden_master_ob = query_gilden_info(FILE_NAME))
+        return gilden_master_ob->query_erf_gilde_available();
+    return 0;
+}
+
+private string erf_gilde_options ()
+{
+    object gilden_master_ob;
+    string res;
+    if (gilden_master_ob = query_gilden_info(FILE_NAME))
+        res = gilden_master_ob->query_erf_gilde_options();
+    if (res && strlen (res)) return res + " ";
+    return "";
+}
+
+private int erf_zaubern_available ()
+{
+    return (this_object()->query_gilde() != "Alchemistengilde");
+}
+
+private string* get_erf_gildeN ()
+{
+    mixed lg, s;
+    string gn, gr, *res;
+    int i, j, k, max;
+    lg = this_object()->query_letzte_gilden ();
+    if (!sizeof (lg)) {
+        if (this_object()->query_gilde()) {
+            lg = ({({0,this_object()->query_gilden_info(KUERZEL),
+                     this_object()->query_rang(),0,
+		     this_object()->query_gilden_info(ORIG_RANG)})});
+        }
+        else
+            return ({"Keine Gildenerfahrung vorhanden."});
+    }
+    s = ({({"Gilde","-"}),
+          ({"von","-"}),
+          ({"bis","-"}),
+          ({"Rang","-"})});
+    for (i = 0; i < sizeof (lg); i++) {
+        s[0] += ({gn = GILDEN_OB->query_name_from_kuerzel(lg[i][1])||""});
+        s[1] += ({lg[i][0]
+                  ? shortvtimestr(time_to_vtime(lg[i][0]),1,2)
+                  : "unbekannt"});
+        s[2] += ({lg[i][3]
+                  ? shortvtimestr(time_to_vtime(lg[i][3]),1,2)
+                  : "heute"});
+	s[3] += ({lg[i][4]});
+/*
+        if (lg [i][3]) {
+            gr = (GILDEN_OB->query_one_gilden_info (gn,"g_r")
+                [lg[i][2]])[this_object()->query_real_gender()[0..0]];
+            if (strlen (gr) > 20)
+                gr = (GILDEN_OB->query_one_gilden_info (gn,"g_r")
+                [lg[i][2]])[RANG_NAME];
+        } else {
+            gr = this_object()->query_gilden_info (RANG) || "unbekannt";
+            if (strlen (gr) > 20)
+                gr = this_object()->query_gilden_info (RANG_NAME);
+        }
+        s[3] += ({gr});
+*/
+    }
+    return build_table (s,({0,0,0," "}), ({"r","z","z","l"}));
+}
+
+private string* get_other_skill_descriptions()
+{
+    string* text = ({});
+    
+    foreach(mixed os: other_skills)
+	text += explode(wrap_say(os[OS_TEXT],"",79,4),"\n")[0..<2];
+
+    return text;
+}
+
+int skill(string str)
+{
+   int i, sort, max;
+   string *parts, *killed, *res, rest;
+
+   if(!str)
+   {
+      write(SKILL_ERR);
+      return 1;
+   }
+   for(rest = "", i = sizeof(parts = explode(lower_case(str), " ")-({""})); i--;)
+      if (parts[i][0]=='-') {
+         if(parts[i]=="-s")
+	    sort = 1;
+	 rest += parts[i]+" ";
+	 parts[i] = 0;
+      }   
+   parts -= ({0});
+   str = sizeof (parts) ? parts [0] : "";
+   rest += implode(parts[1..], " ");
+   if (str == "")
+   {
+      write(SKILL_ERR);
+      return 1;
+   }
+/*
+   if("kampf2" == str)
+   {
+      killed = sort_array (m_indices(kill_list_races),#'<);
+      for (max = 0, i = sizeof (killed); i--; )
+          if (strlen(killed[i])>max) max = strlen(killed[i]);
+      for (res = ({"Kill - Liste nach Rassen"}), i=sizeof (killed); i--; )
+          res += ({left (capitalize(killed[i]),max + 5)+kill_list_races[killed[i]]});
+      this_object()->more (res,0,0,M_AUTO_END);
+   }
+   else
+*/
+   if(!strstr("getoetet", str))
+   {
+      int killsum;
+      
+      killed = sort_array (m_indices(kill_list_name_level),
+    			    sort ? #'< : #'sort_kill_by_count);
+	
+      for (max = 0, i = sizeof (killed); i--; )
+          if (strlen(killed[i])>max) max = strlen(killed[i]);
+      if (max > 19) max = 19;
+      
+      res = ({ sort ? "Kill - Liste nach Namen sortiert" 
+    		    : "Kill - Liste nach Anzahl der Kills sortiert" });
+      for (i=sizeof (killed); i--; )
+      {
+          res += ({
+		    left (capitalize_all_words(killed[i][0..max-1]),max) +
+		    right(kill_list_name_level[killed[i]],5)
+		 });
+	  killsum += kill_list_name_level[killed[i]];
+      }
+	  
+      while (sizeof (res) % 3 != 1) res += ({""});
+      for (i = 1; i < sizeof (res)-2; i++)
+          res[i..i+2] = ({res[i] + "   "+res[i+1] + "   "+res[i+2]});
+      
+      res += ({ "-"*(max+5), left("Gesamt", max) + right(killsum,5) });
+      
+      if(!sort)
+            res += ({"Sortieren nach Namen mit \"erf getoetet -s\""});
+      this_object()->more (res,0,0,M_AUTO_END);
+   }
+/*   else if("kampf4" == str)
+   {
+      killed = sort_array (m_indices(kill_list_name_level),#'sort_kill_by_level);
+      for (max = 0, i = sizeof (killed); i--; )
+          if (strlen(killed[i])>max) max = strlen(killed[i]);
+      for (res = ({"Kill - Liste nach Lebewesenstaerke sortiert"}), i=sizeof (killed); i--; )
+          res += ({left (capitalize(killed[i]),max + 5)+kill_list_name_level[killed[i]]});
+      this_object()->more (res);
+   }
+*/
+   else if(!strstr("kampf", str))
+   {
+      string *off   = get_skill_descriptions(({"skill","offensiv"}), sort);
+      string *def   = get_skill_descriptions(({"skill","defensiv"}), sort);
+      string *kills = get_skill_descriptions(({"skill","getoetet"}), sort);
+      string *text  = ({});
+      
+      if(!off && !def)
+         text += ({"Du hast noch nicht viel gekaempft."});
+      else
+      {
+	 text += off || ({});
+	 text += def || ({});
+         if (!kills)
+	    text += ({"Du hast noch keinen Kampf bis zum Ende durchgestanden."});
+	 else
+	    text += kills;
+      }
+      this_object()->more(text,"Kampferfahrung (Zeile %d/%d) [q,<>,u,<nr>,/<such>,?] ",0,M_AUTO_END);
+   }
+   else if(!strstr("zaubern", str))
+   {
+      if (erf_zaubern_available()) {
+         if(!print_skill(({"skill","zauber"}), sort))
+	    write("Im Zaubern warst du bisher nicht sehr fleissig.\n");
+      }
+      else write ("Zaubern? Als Alchemist hast Du mit "
+          "Zaubern nichts am Hut.\n");
+   }
+   else if(!strstr("raetsel", str))
+   {
+      if(!print_skill(({"skill","raetsel"}), sort))
+	 write("Du hast noch kein Raetsel geloest.\n");
+   }
+   else if(!strstr("spiele", str))
+   {
+      if(!print_skill(({"skill","spiel"}), sort))
+	 write("Du hast ja noch gar nicht gespielt.\n");
+   }
+   else if(!strstr("sonstiges", str))
+   {
+      this_object()->more(
+	 (get_skill_descriptions(({"skill","wissen"}), sort)
+	    || ({ "Du hast Dir noch nicht viel Wissen angeeignet." })) +
+	 (get_skill_descriptions(({"skill","handwerk"}), sort) || ({})) +
+	 (get_skill_descriptions(({"skill","magie"}), sort) || ({})) +
+	 get_other_skill_descriptions(),
+         "Sonstige Erfahrung (Zeile %d/%d) [q,<>,u,<nr>,/<such>,?] ",0,M_AUTO_END);
+   }
+   else if (!strstr("tod",str))
+   {
+      mixed *tmp;
+      string tmpres;
+      int count_death;
+
+      tmp = this_player()->query_erf_gestorben();
+      count_death = sizeof(tmp);
+      if (!tmp)
+          tmpres = "Du bist doch noch nicht gestorben.\n";
+      else
+      {
+        if(sizeof(filter(tmp,#'pointerp)))
+	{
+	    tmpres = "";
+	    foreach(mixed tod: tmp)
+    		if(pointerp(tod))
+		    tmpres += wrap_say(shortvtimestr(tod[0],1,
+			TIMESTR_ONLY_DATE)+":",	tod[1]);
+		else
+		    tmpres += wrap_say("Einstmals:", tod);
+	}
+	else
+    	    // Todesmeldungen koennen laenger als 75 Zeichen sein. Neu wrappen.
+	    tmpres = wrap(implode(tmp,"\n"));
+      }
+      
+      tmp = explode(tmpres,"\n") - ({""});
+      if (count_death > 2)
+      {
+          tmp = ({ "Du bist bereits "+count_death+"-mal gestorben." }) + tmp;
+      }
+
+      this_player()->more(tmp, 0, 0, M_AUTO_END);
+   }
+   else if ((str == "gilden")
+         || (!erf_gilde_available() && (!strstr("gilden",str))))
+         this_player()->more (get_erf_gildeN(), 0, 0, M_AUTO_END);
+   else if (erf_gilde_available() && (!strstr ("gilde",str))) {
+      object gilden_master_ob;
+      if (gilden_master_ob = query_gilden_info(FILE_NAME)) {
+         this_player()->more (
+             gilden_master_ob->query_erf_gilde(this_object(),rest)
+             || ({"Keine Gildenerfahrung vorhanden."}), 0, 0, M_AUTO_END);
+      }
+   }
+   else
+      write(SKILL_ERR);
+   return 1;
+}
+
+
+
+// --- Wissen ------------------------------
+
+
+nomask nosave void delete_wissen_skill()
+{
+    erforscht=({ ({}),({}),({}) });
+    reise    =({ ({}),({}),({}) });
+    gesehen  =({ ({}),({}),({}) });
+    handeln  =({ ({}),({}),({}) });
+}
+
+private int setup_wissen_skill(
+    string bereich, int bit, int max_bit, string skill_name, mixed skill)
+{
+    int    visit_rooms, new_skill, old_skill, i, j;
+    mixed  pfad ;
+
+    i = member(skill[0],bereich);
+    /* Neue Domain */
+    if ( i < 0 )
+    {
+	i = sizeof( skill[0]);
+	skill[0] += ({ bereich });
+	skill[1] += ({ "" });
+	skill[2] += ({ 0 });
+    }
+
+    if ( test_bit( skill[1][i], bit) )
+        return 0 ;
+    else
+    {
+	skill[2][i]++ ;
+	skill[1][i] = set_bit( skill[1][i], bit);
+
+        pfad = ({ "skill","wissen",skill_name });
+
+        for ( j = sizeof( skill[2]) ; j-- ; )
+            visit_rooms += skill[2][j] ;
+
+        new_skill =
+            (visit_rooms * MASTER_OB->query_max_skill( pfad)) / max_bit ;
+
+        old_skill = get_one_skill( pfad);
+        if ( new_skill > old_skill )
+            add_skill_points( pfad, new_skill - old_skill);
+
+        return 1 ;
+    }
+}
+
+
+nomask int set_erforscht( string bereich, int bit, int max_bit)
+{
+#if ALT_WISSEN
+    mixed  * tmp;
+
+    if ( object_name( previous_object()) != WISSEN_MASTER  &&
+         !wizp( this_object()) )
+    {
+        tmp = MAP_OB->query_erforscht_bit( environment());
+        if (!tmp)
+            return -1;
+        if( !erforscht )
+            erforscht = ({ ({}),({}),({}) });
+        return setup_wissen_skill(
+            tmp[0], tmp[1], tmp[2], "erforscht", erforscht) ;
+    }
+#endif
+
+    if ( object_name( previous_object()) != WISSEN_MASTER )
+        return 0 ;
+
+    if( !erforscht )
+        erforscht = ({ ({}),({}),({}) });
+
+#if WISSEN_AKTIV
+    return setup_wissen_skill( bereich, bit, max_bit, "erforscht", erforscht) ;
+#else
+    return 0 ;
+#endif
+}
+
+
+nomask int set_reise( string bereich, int bit, int max_bit)
+{
+    if ( object_name( previous_object()) != WISSEN_MASTER )
+        return 0 ;
+
+    if( !reise )
+        reise = ({ ({}),({}),({}) });
+
+#if WISSEN_AKTIV
+    return setup_wissen_skill( bereich, bit, max_bit, "reise", reise) ;
+#else
+    return 0 ;
+#endif
+}
+
+
+// Die wirkliche Deklaration weicht von der dokumentierten Deklaration ab,
+// was beabsichtigt ist, da diese Abweichungen nur fuer den Wissensmaster
+// von Relevanz sind und so nur fuer Verwirrung sorgen wuerden.
+/*
+FUNKTION: set_gesehen
+DEKLARATION: nomask void set_gesehen()
+BESCHREIBUNG:
+Diese Funktion sollte man aufrufen, wenn der Spieler eine eventuell
+Erfahrungspunkte-wuerdige Entdeckung gemacht hat.
+(Punkte gibt es jedoch nur, wenn im Reisebuero entsprechende Eintragungen
+vorhanden sind, ansonsten macht diese Funktion einfach gar nix.)
+
+Siehe dazu /doc/funktionsweisen/wissen.
+VERWEISE: set_handeln, /doc/funktionsweisen/wissen
+GRUPPEN: spieler
+*/
+nomask int set_gesehen( string bereich, int bit, int max_bit)
+{
+    object  master ;
+
+    if ( object_name( previous_object()) == WISSEN_MASTER )
+    {
+        if( !gesehen )
+            gesehen = ({ ({}),({}),({}) });
+
+#if WISSEN_AKTIV
+        return setup_wissen_skill( bereich, bit, max_bit, "gesehen", gesehen) ;
+#else
+        return 0 ;
+#endif
+    }
+    else
+    {
+        if ( master = touch( WISSEN_MASTER, NO_LOG | NO_WRITE) )
+            master->set_gesehen() ;
+        return 0 ;
+    }
+}
+
+// Die wirkliche Deklaration weicht von der dokumentierten Deklaration ab,
+// was beabsichtigt ist, da diese Abweichungen nur fuer den Wissensmaster
+// von Relevanz sind und so nur fuer Verwirrung sorgen wuerden.
+/*
+FUNKTION: set_handeln
+DEKLARATION: nomask void set_handeln()
+BESCHREIBUNG:
+Diese Funktion sollte man aufrufen, wenn derjenige eine bestimmte Handlung
+durchgefuehrt hat, welche eventuell Erfahrungspunkte-wuerdig ist.
+(Punkte gibt es jedoch nur, wenn im Reisebuero entsprechende Eintragungen
+vorhanden sind, ansonsten macht diese Funktion einfach gar nix.)
+
+Siehe dazu /doc/funktionsweisen/wissen.
+VERWEISE: set_gesehen, /doc/funktionsweisen/wissen
+GRUPPEN: spieler
+*/
+nomask int set_handeln( string bereich, int bit, int max_bit)
+{
+    object  master ;
+
+    if ( object_name( previous_object()) == WISSEN_MASTER )
+    {
+        if( !handeln )
+            handeln = ({ ({}),({}),({}) });
+
+#if WISSEN_AKTIV
+        return setup_wissen_skill( bereich, bit, max_bit, "handeln", handeln) ;
+#else
+        return 0 ;
+#endif
+    }
+    else
+    {
+        if ( master = touch( WISSEN_MASTER, NO_LOG | NO_WRITE) )
+            master->set_handeln() ;
+        return 0 ;
+    }
+}
+
+#ifndef UNItopia
+mixed *query_erforscht()
+{
+    return deep_copy(erforscht);
+}
+
+
+mixed *query_reise()
+{
+    return deep_copy(reise);
+}
+
+
+mixed *query_gesehen()
+{
+    return deep_copy(gesehen);
+}
+
+mixed *query_handeln()
+{
+    return deep_copy(handeln);
+}
+#endif
+
+
+// ----------------------------------------------------------
+// sum_irgendwas...
+
+private int add_sum_test_okay()
+{
+    return this_interactive() &&
+	    (!extern_call() || previous_object() == this_object() ||
+	    !strstr(object_name(previous_object()),SOUL_SRC) ||
+	    GILDEN_OB->valid_autoloader(previous_object()));
+}
+
+#define ADD_SUM_TEST if (!add_sum_test_okay()) return
+
+
+/*
+FUNKTION: add_sum_comm
+DEKLARATION: void add_sum_comm(int comm)
+BESCHREIBUNG:
+Addiert zu der Anzahl aller gemachter Kommunikationskommandos comm hinzu.
+VERWEISE: query_sum_comm
+GRUPPEN: spieler, skill
+*/
+void add_sum_comm(int i) { ADD_SUM_TEST; sum_comm += i; }
+
+/*
+FUNKTION: add_sum_feel
+DEKLARATION: void add_sum_feel(int feel)
+BESCHREIBUNG:
+Addiert zu der Anzahl aller gemachter Seelekommandos feel hinzu.
+VERWEISE: query_sum_feel
+GRUPPEN: spieler, skill
+*/
+void add_sum_feel(int i) { ADD_SUM_TEST; sum_feel += i; }
+
+/*
+FUNKTION: add_sum_move
+DEKLARATION: void add_sum_move(int move)
+BESCHREIBUNG:
+Addiert zu der Anzahl aller gemachter Bewegungen move hinzu.
+VERWEISE: query_sum_move
+GRUPPEN: spieler, skill
+*/
+void add_sum_move(int i) { ADD_SUM_TEST; sum_move += i; }
+
+/*
+FUNKTION: add_sum_weight
+DEKLARATION: void add_sum_weight(int weight)
+BESCHREIBUNG:
+Addiert zu der Anzahl aller geschleppten Gewichtseinheiten weight hinzu.
+VERWEISE: query_sum_weight
+GRUPPEN: spieler, skill
+*/
+void add_sum_weight(int i) { /* ADD_SUM_TEST; */ if(!extern_call()) sum_weight += i; }
+
+
+/*
+FUNKTION: query_sum_comm
+DEKLARATION: int query_sum_comm()
+BESCHREIBUNG:
+Liefert die Anzahl aller gemachter Kommunikationskommandos.
+VERWEISE: add_sum_comm
+GRUPPEN: spieler, skill
+*/
+int query_sum_comm() { return sum_comm; }
+
+/*
+FUNKTION: query_sum_feel
+DEKLARATION: int query_sum_feel()
+BESCHREIBUNG:
+Liefert die Anzahl aller gemachter Seelekommandos.
+VERWEISE: add_sum_feel
+GRUPPEN: spieler, skill
+*/
+int query_sum_feel() { return sum_feel; }
+
+/*
+FUNKTION: query_sum_move
+DEKLARATION: int query_sum_move()
+BESCHREIBUNG:
+Liefert die Anzahl aller gemachten Bewegungen.
+VERWEISE: add_sum_move
+GRUPPEN: spieler, skill
+*/
+int query_sum_move() { return sum_move; }
+
+/*
+FUNKTION: query_sum_weight
+DEKLARATION: int query_sum_weight()
+BESCHREIBUNG:
+Liefert die Anzahl aller geschleppten Gewichtseinheiten.
+VERWEISE: add_sum_weight
+GRUPPEN: spieler, skill
+*/
+int query_sum_weight() { return sum_weight; }
+
+
+
+private int perseptimus(int per, int val, int max, int mul)
+{
+    int total;
+
+    total = max * mul / 100;
+
+    if (max <= 0 || total <= val)
+	return per * 70;
+
+    if (val <= 0)
+	return 0;
+
+    if (val <= max)
+    {
+	if (val < MAX_INT / (per * 50))
+	    return val * per * 50 / max;
+	else
+	    return to_int(to_float(val) * to_float(per) * 50.0 /to_float(max));
+    }
+    else
+    {
+	if ((val - max) < MAX_INT / (per * 20))
+	    return (per * 50) + (per * 20 * (val - max)) / (total - max);
+	else
+	    return (per * 50) + to_int((to_float(per) * 20.0 *
+		       	to_float(val - max)) / to_float(total - max));
+    }
+}
+
+private float compute_perseptimus(float per)
+{
+    if (per < 500)
+	return per * 2 / 100;
+    if (per < 3500)
+	return (per + 500) / 100;
+    if (per < 5000)
+	return ((per - 3500) * 2 / 3 + 4000) / 100;
+    return per / 100;
+}
+
+float* update_stats()
+{
+    int age, sum_weapon, sum_game, sum_quest;
+    int max_sum_quest, max_sum_game, soll_sum_wissen, sum_hp, sum_sp;
+    int sum_wissen, sum_zauber;
+    float* res = ({0,0,0,0});
+    float* diff;
+
+/* zu beruecksichtigen:
+ *
+ *	1. Summe ueber das bisher getragene Gewicht:		SUM_WEIGHT
+ *		- In heart_beat hochaddieren.
+ *	2. Summe ueber alle erfolgreichen Bewegungen:		SUM_MOVE
+ *		- in legs hochaddieren
+ *	3. Summe ueber alle says,whispers:			SUM_COMM
+ *		- in den jeweiligen Routinen hochaddieren.
+ *	4. Summe aller Waffen-skills:				SUM_WEAPON
+ *		- bezogen auf maximal moeglichem skill
+ *		- aus compute_skill o.ae.
+ *	5. Summe aller quest-skills				SUM_QUEST
+ *	6. Summe aller game-skills				SUM_GAME
+ *	7. Alter						AGE
+ *	8. Summe aller wiedergewonnenen(=verlorenen) HPs.	SUM_HP
+ *	9. Summe aller        "              "       SPs.	SUM_SP
+ *	10. Summe aller feelings:				SUM_FEEL
+ *	11. Summe aller Zauber-Skills				MAX_SUM_ZAUBER
+ *
+ */
+
+    age        = query_age();
+    sum_hp     = query_sum_hp();
+    sum_sp     = query_sum_sp();
+
+    sum_game   = compute_one_skill(({"skill","spiel"}));
+    sum_quest  = compute_one_skill(({"skill","raetsel"}));
+    sum_weapon = compute_one_skill(({"skill","offensiv"}))
+	       + compute_one_skill(({"skill","defensiv"}));
+    sum_wissen = compute_one_skill(({"skill","wissen"}));
+    sum_zauber = compute_one_skill(({"skill","zauber"}));
+
+
+    max_sum_quest = QUEST_ROOM->query_skill_quests() * 2 / 3;
+    max_sum_game  = GAME_ROOM->query_skill_games() * 2 / 3;
+    soll_sum_wissen = WISSEN_MASTER->query_soll_wissen();
+
+    raise_stat(STAT_STR,
+        res[STAT_STR] = 30 + compute_perseptimus(to_float(
+		perseptimus(30,sum_weight,MAX_SUM_WEIGHT,150) +
+		perseptimus(30,sum_weapon,MAX_SUM_WEAPON,150) +
+		perseptimus(15,sum_move  ,MAX_SUM_MOVE  ,150) +
+		perseptimus(15,sum_quest ,max_sum_quest ,150) +
+		perseptimus(10,age       ,ADULT_AGE     ,150)
+		)));
+
+    raise_stat(STAT_DEX,
+        res[STAT_DEX] = 30 + compute_perseptimus(to_float(
+		perseptimus(35,sum_weapon,MAX_SUM_WEAPON,150) +
+		perseptimus(20,sum_quest ,max_sum_quest ,150) +
+		perseptimus( 5,age       ,ADULT_AGE     ,150) +
+		perseptimus(15,sum_game  ,max_sum_game  ,150) +
+		perseptimus(15,sum_wissen,soll_sum_wissen,150) +
+		perseptimus( 5,sum_sp    ,MAX_SUM_SP    ,150) +
+		perseptimus( 5,sum_hp    ,MAX_SUM_HP    ,150)
+		)));
+
+    raise_stat(STAT_CON,
+        res[STAT_CON] = 30 + compute_perseptimus(to_float(
+		perseptimus(35,sum_hp    ,MAX_SUM_HP    ,150) +
+		perseptimus(20,sum_move  ,MAX_SUM_MOVE  ,150) +
+		perseptimus(20,sum_quest ,max_sum_quest ,150) +
+		perseptimus(15,sum_weight,MAX_SUM_WEIGHT,150) +
+		perseptimus(10,age       ,ADULT_AGE     ,150)
+		)));
+
+    raise_stat(STAT_INT,
+        res[STAT_INT] = 30 + compute_perseptimus(to_float(
+		perseptimus(15,sum_sp    ,MAX_SUM_SP     ,150) +
+		perseptimus(15,sum_game  ,max_sum_game   ,150) +
+		perseptimus(15,sum_quest ,max_sum_quest  ,150) +
+		perseptimus(15,sum_feel  ,MAX_SUM_FEEL   ,150) +
+		perseptimus(15,sum_comm  ,MAX_SUM_COMM   ,150) +
+		perseptimus(20,sum_wissen,soll_sum_wissen,150) +
+		perseptimus( 5,age       ,ADULT_AGE      ,150)
+		)));
+
+    diff = PLAYER_ANNOYER->query("Stats", this_object()->query_real_name());
+    if(diff)
+	for(int i=0;i<STAT_NUMBER;i++)
+	    if(diff[i])
+		add_stat(i,diff[i] || 0.1);
+
+    return res;
+}
+
+// Das ist fuer alte Variante und wird nur fuer alte
+// Playerfile-Versionen aufgerufen:
+nosave nomask void skill_checker_update_skill_structure()
+{
+    skill_structure =
+        SKILL_CHECKER->compute_new_skill_structure(
+            query_real_name(),skill_structure);
+}
+
+// Das ist die neue Variante, wird jedesmal aufgerufen:
+protected nomask void update_skill_structure()
+{
+    skill_structure = SKILL_CHECKER->change_skill_structure(
+	&skill_version, skill_structure);
+}
+
+nomask int add_kill (string r, string n, int level)
+{
+    if (stringp (r) && strlen (r))
+        kill_list_races [lower_case (r)]++;
+    if (level && stringp (n) && strlen (n)) {
+        n = lower_case (n);
+        if (!kill_list_name_level [n]) {
+            kill_list_name_level [n,0] = 1;
+            kill_list_name_level [n,1] = level;
+        } else {
+            kill_list_name_level [n,1]
+                = to_int((level + to_float(kill_list_name_level [n,1]) * kill_list_name_level [n,0])
+                  / (kill_list_name_level [n,0] + 1));
+            kill_list_name_level [n,0]++;
+        }
+    }
+
+    if(living(previous_object()))
+        CONTROL->notify("monster_killed", this_object(), previous_object());
+}
+
+/*
+FUNKTION: query_kills_by_name
+DEKLARATION: mapping query_kills_by_name()
+BESCHREIBUNG:
+Liefert ein Mapping der Form
+
+    ([
+	"name": Anzahl an Kills
+    ])
+    
+fuer jedes umgebrachte Lebewesen zurueck.
+VERWEISE: query_kills_of_name, query_kills_by_race, query_kills_of_race
+GRUPPEN: Kampf, Skill
+*/
+mapping query_kills_by_name()
+{
+    // Wir nehmen nur Name und Zahl (ohne Level).
+    return m_reallocate(kill_list_name_level,1);
+}
+
+/*
+FUNKTION: query_kills_by_race
+DEKLARATION: mapping query_kills_by_race()
+BESCHREIBUNG:
+Liefert ein Mapping der Form
+
+    ([
+	"rasse": Anzahl an Kills
+    ])
+    
+fuer jede Rasse, von welcher Lebewesen umgebracht wurden, zurueck.
+VERWEISE: query_kills_of_race, query_kills_by_name, query_kills_of_name
+GRUPPEN: Kampf, Skill
+*/
+mapping query_kills_by_race()
+{
+    return copy(kill_list_races);
+}
+
+/*
+FUNKTION: query_kills_of_name
+DEKLARATION: int query_kills_of_name(string name)
+BESCHREIBUNG:
+Liefert die Zahl zurueck, wie oft ein Lebewesen mit
+diesem Namen von diesem Spieler umgebracht wurde.
+VERWEISE: query_kills_by_name, query_kills_of_race, query_kills_by_race
+GRUPPEN: Kampf, Skill
+*/
+int query_kills_of_name(string name)
+{
+    return kill_list_name_level[name];
+}
+
+/*
+FUNKTION: query_kills_of_race
+DEKLARATION: int query_kills_of_race(string race)
+BESCHREIBUNG:
+Liefert die Zahl zurueck, wie oft ein Lebewesen mit
+diesem Namen von diesem Spieler umgebracht wurde.
+VERWEISE: query_kills_by_race, query_kills_of_name, query_kills_by_name
+GRUPPEN: Kampf, Skill
+*/
+int query_kills_of_race(string race)
+{
+    return kill_list_races[race];
+}

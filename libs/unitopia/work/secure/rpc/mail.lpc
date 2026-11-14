@@ -1,0 +1,75 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /secure/rpc/mail.c
+// Description: RPC-Funktionen fuers E-Mail
+// Author:      Gnomi
+//
+// $Log: mail.c,v $
+// Revision 1.2  2013/12/01 12:57:11  gnomi
+// SMTP-Authorisierung eingebaut.
+//
+// Revision 1.1  2011-12-01 17:01:02  gnomi
+// Mail-App eingebaut.
+//
+
+// Im Wesentlichen leiten wir die Aufrufe weiter an den EMAILD bzw.
+// in umgekehrter Richtung ans RPC-Interface.
+// Dieses Objekt dient daher vor allem als Sicherheitsfilter.
+
+#include <apps.h>
+#include <level.h>
+#include <mail.h>
+#include <rpc.h>
+
+private mapping ignore_header = ([ "from", "to", "cc", "subject" ]);
+
+nosave void receivemail(string player, string from_addr, string* cc,
+    string subject, int date, string text, mixed* header)
+{
+    MAILD->deliver_mail(
+        player,					/* To */
+        from_addr,				/* From */
+        cc[1..],				/* Cc */
+        subject,				/* Subject */
+        text,					/* Mail Body */
+        sizeof(cc) && cc[0],			/* real-to */
+        implode(map(header, function string(string* entry)
+        {
+            if(member(ignore_header, lower_case(entry[0])))
+                return "";
+            return implode(entry, ": ") + "\n";
+        }), "")					/* header */
+    );
+}
+
+nosave int is_allowed_sender(string realname, string sendername)
+{
+    string wiz;
+
+    if(realname == sendername)
+        return 1;
+
+    wiz = SECOND->is_special(sendername);
+    if(wiz)
+        return GROUP_MASTER->is_group_member(realname, wiz);
+
+    wiz = testplayerp(sendername);
+    if(wiz)
+        return wiz == realname;
+}
+
+void call(closure cb, mixed* args)
+{
+    if(object_name(previous_object()) != RPC_SERVER)
+	return;
+    
+    funcall(cb, apply(#'call_other, this_object(), args));
+}
+
+void outside_call(closure cb, closure cbonerr, string fun, varargs mixed* args)
+{
+    if(object_name(previous_object()) != INTERNET_MAILD)
+	return;
+    
+    apply(#'call_other, RPC_SERVER, "daemon_call2", cb, cbonerr, "mail", fun, args);
+}

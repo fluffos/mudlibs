@@ -1,0 +1,1475 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/item/v_item.c
+// Description: Virtuelle Objekte
+// Author:	Freaky (27.10.93)
+//
+// $Log: v_item.c,v $
+// Revision 1.45  2014/03/18 19:26:16  myonara
+// Bugfix zu vorherigem Patch (cr am Ende der Fehlerzeile)
+//
+// Revision 1.44  2014/03/14 17:28:08  myonara
+// auch Abkuerzungen m,w,s zugelassen.
+//
+// Revision 1.43  2014/03/09 08:36:32  myonara
+// do_error2 bei falschem gender.
+//
+// Revision 1.42  2013/12/01 12:53:20  gnomi
+// query_full_v_items() eingebaut.
+//
+// Revision 1.41  2013/06/12 22:20:55  gnomi
+// V-Items generalueberholt.
+//
+
+/* 
+FUNKTIONSWEISEN: /doc/funktionsweisen/virtuell/v_item
+*/
+#pragma save_types
+#pragma strong_types
+
+inherit "/i/tools/description";
+private functions inherit "/i/tools/adjektiv";
+private functions inherit "/i/tools/properties";
+private functions inherit "/i/tools/check_save";
+
+#include <description.h>
+#include <error.h>
+#include <invis.h>
+#include <property_master.h>
+#include <v_item.h>
+
+private nosave mapping *v_items = ({ });
+private nosave int v_item_count;
+private string *v_item_master;
+private int share_v_items;
+private nosave mapping v_item_shadows;
+
+private void add_properties(mapping props, mapping* all, mapping item, object caller);
+
+private mapping create_v_item_shadow(mapping orig)
+{
+    object master = orig[VI_MASTER];
+    mixed *path;
+    string key;
+    mapping sh;
+
+    if(master == this_object())
+        return orig;
+
+    sh = orig[VI_SHADOW];
+    if(sh)
+        return sh;
+
+    if(!v_item_shadows)
+        v_item_shadows = ([:1]);
+
+    path = orig[VI_PATH];
+    if(!path)
+        return ([]);
+
+    if(stringp(path[0]))
+        key = implode(map(path,#'to_string),",");
+    else
+        key = object_name(master) + " " + implode(map(path,#'to_string),",");
+
+    sh = v_item_shadows[key];
+    if(!sh)
+    {
+        sh = ([VI_PATH: path, VI_MASTER: master]);
+        m_add(v_item_shadows, key, sh);
+    }
+
+    return sh;
+}
+
+private void create_deleted_v_item_shadow(mapping orig)
+{
+    mixed *path;
+    string key;
+
+    if(!v_item_shadows)
+        v_item_shadows = ([:1]);
+
+    path = orig[VI_PATH];
+    if(!path)
+        return;
+
+    if(stringp(path[0]))
+        key = implode(map(path,#'to_string),",");
+    else
+        key = object_name(orig[VI_MASTER]) + " " + implode(map(path,#'to_string),",");
+
+    m_delete(v_item_shadows, key);
+    m_add(v_item_shadows, key + "#deleted", 1);
+}
+
+private mapping apply_v_item_shadow(mapping orig)
+{
+    object master;
+    mixed *path;
+    string key;
+    mapping sh;
+    mapping *subitems;
+
+    if(!v_item_shadows)
+        return orig;
+
+    master = orig[VI_MASTER];
+    if(master == this_object())
+        return orig;
+
+    m_delete(orig, VI_SHADOW);
+
+    path = orig[VI_PATH];
+    if(!path)
+        return ([]);
+
+    if(stringp(path[0]))
+        key = implode(map(path,#'to_string),",");
+    else
+        key = object_name(master) + " " + implode(map(path,#'to_string),",");
+
+    if(member(v_item_shadows, key + "#deleted"))
+        return 0;
+
+    sh = v_item_shadows[key];
+    if(!sh)
+        return orig;
+
+    orig = copy(orig);
+    orig[VI_SHADOW] = sh;
+
+    subitems = map(orig["v_item"] || ({}), #'apply_v_item_shadow) - ({0});
+    subitems += sh["v_item"] || ({});
+
+    orig += sh;
+
+    if(sizeof(subitems))
+        orig["v_item"] = subitems;
+    else
+        m_delete(orig, "v_item");
+
+    return orig;
+}
+
+nosave mapping search_v_item(mapping *v_i, mixed path, int flag)
+{
+    mapping *result;
+
+    if ((!mappingp(path) && !pointerp(path)) || (pointerp(path) && !sizeof(path)) || !sizeof(v_i))
+	return 0;
+
+    if (mappingp(path) && member(v_i, path) >= 0)
+        result = ({ path }); // Abkuerzung...
+    else if (mappingp(path))
+    {
+	// Wir haben direkt ein V-Item uebergeben bekommen.
+	// Wir koennen uns also den ganzen Spass unten sparren.
+	int *nrs;
+	mapping vitem;
+	
+	if(!path[VI_MASTER])	// Oeh, damit koennen wir gar nix anfangen.
+	    return 0;
+	
+	nrs = path[VI_PATH];
+	
+	// Und nun suchen wir...
+	foreach(mapping candidate: v_i)
+	{
+	    if(!stringp(nrs[0]))
+	    {
+	       if(candidate[VI_MASTER] == path[VI_MASTER] &&
+	          candidate[VI_PATH][<1] == nrs[0])
+	        {
+	            vitem = candidate;
+	            nrs = nrs[1..<1];
+	            break;
+	        }
+	    }
+	    else if(sizeof(nrs)>1)
+	    {
+	       if(candidate[VI_PATH][0] == nrs[0] &&
+	          candidate[VI_PATH][1] == nrs[1])
+	        {
+	            vitem = candidate;
+	            nrs = nrs[2..<1];
+	            break;
+	        }
+	    }
+	}
+	
+	if(!vitem)
+	    return 0;
+	
+	result = ({ vitem });
+	
+	for(int idx = 0; idx < sizeof(nrs); idx++)
+	{
+	    mapping* subitems = vitem["v_item"] || ({});
+	    vitem = 0;
+	
+	    foreach(mapping candidate: subitems)
+	    {
+	        if(!stringp(nrs[0]))
+	        {
+	            if(candidate[VI_PATH][<1] == nrs[idx])
+	            {
+	                vitem = candidate;
+	                break;
+	            }
+	        }
+	        else if(sizeof(nrs) > idx+1)
+	        {
+	            if(candidate[VI_PATH][<2] == nrs[idx] &&
+	               candidate[VI_PATH][<1] == nrs[idx+1])
+	            {
+	                vitem = candidate;
+	                idx++;
+	                break;
+	            }
+	        }
+	    }
+	
+	    if(!vitem)
+	        return 0;
+	
+	    result += ({vitem});
+	}
+    }
+    else
+    {
+        mapping vitem;
+
+        result = ({});
+
+	// Ansonsten heisst's danach suchen.
+	foreach(mixed args: path)
+	{
+	    mixed *subitems = map(vitem ? vitem["v_item"] || ({}) : v_i,
+	                        function mapping*(mapping m) { return ({m}); });
+	    mixed *sorted, *unsorted;
+	    mapping *partresult;
+
+	    string name, *adjs;
+	    int num, offset;
+	
+	    if(mappingp(args))
+	    {
+		name = args["name"];
+		adjs = args["adjektiv"];
+		num = args["nummer"];
+		offset = args["offset"];
+		if (num<1)
+		    num = 0;
+	    }
+	    else if(stringp(args))
+	        name = args;
+	    else
+	        return 0;
+	
+	    if(num>1000)
+	        return 0; // Soviele V-Items gibbet nich.
+	
+	    sorted = ({0}) * (num ? num+1 : 2);
+	    unsorted = ({});
+	
+	    while(sizeof(subitems))
+	    {
+	        mapping* candidateresult = subitems[0];
+	        mapping candidate = candidateresult[<1];
+	
+	        mixed ids = candidate["id"];
+	        mixed adjektive = candidate["adjektiv"];
+	        mixed n;
+	        int idp = -1;
+	        int success = 1;
+	
+	        subitems = subitems[1..<1];
+
+	        // Stack auffuellen. Das machen wir nur bei VV_QUERY (parse_com & Co.)
+	        if(flag & VV_QUERY)
+	            subitems +=  map(candidate["v_item"] || ({}),
+	                function mapping*(mapping m) { return candidateresult + ({m}); });
+	
+	
+	        if(sizeof(unsorted) > num && !member(candidate, "nummer"))
+	            continue; // Wir haben genug unsortierte V-Items.
+
+	        // Falls wir eine Closure abfragen muessen
+	        closure get_arg_v_item = function mapping() : mapping ret
+	        {
+	            if(ret)
+	                return ret;
+	
+	            foreach(mapping m: result + ({candidate}))
+	            {
+	                mapping tmp = copy(m);
+	                if(ret)
+	                    tmp[VI_ENVIRONMENT] = m_delete(ret,"v_item");
+	                else
+	                    tmp[VI_ENVIRONMENT] = this_object();
+	                tmp[VI_OBJECT] = this_object();
+	
+	                ret = tmp;
+	            }
+	
+	            return ret;
+	        };
+	
+	        // Pruefe Namen
+	        if(closurep(ids))
+	        {
+	            if(!funcall(ids, funcall(get_arg_v_item), name))
+	               continue;
+	        }
+	        else if(ids)
+	        {
+	            idp = member(ids, name);
+	            if(idp < 0)
+	                continue;
+	        }
+	        else if(lower_case(candidate["name"]) != name)
+	            continue;
+	
+	        // Pruefe Unsichtbarkeit
+	        if(!(flag & VV_INVIS))
+	        {
+	            mixed inv = candidate["invis"];
+	            if(closurep(inv))
+	                inv = funcall(inv, funcall(get_arg_v_item));
+	            if(inv&V_ATOM_INVIS)
+	                continue;
+	        }
+	
+	        // Pruefe Adjektive
+	        foreach(string adj: adjs || ({}))
+	        {
+	            if(closurep(adjektive))
+	                success = funcall(adjektive, funcall(get_arg_v_item), adj);
+	            else
+	                success = search_adjektiv(adjektive, adj);
+	            if(!success)
+	                break;
+	        }
+	
+	        if(!success)
+	            continue;
+	
+	        n = candidate["nummer"];
+	        if(pointerp(n))
+	            n = n[idp < 0 ? 0 : idp];
+	
+	        // Pruefe Nummer (nur relevant, wenn direkt gefunden oder 0 ist)
+	        if(member(candidate, "nummer") && (sizeof(candidateresult) == 1 || !n))
+	        {
+	            if(!intp(n))
+	                continue;
+	
+	            if(n >= 0 && n < sizeof(sorted) && !sorted[n])
+	                sorted[n] = candidateresult;
+	            if(n == num)
+	                break;
+	        }
+	        else
+	        {
+	            unsorted += ({ candidateresult });
+	        }
+	    }
+	
+	    partresult = sorted[num];
+	    if(!partresult && !num)
+	    {
+	       // Keine Zahl angegeben, dann nehmen wir das erste.
+	       num++;
+	       partresult = sorted[num];
+	    }
+	
+	    if(!partresult)
+	    {
+	        int missing;
+	
+	        if(!num)
+	           num++;
+	
+	        missing = sizeof(sorted[offset+1..num-1] & ([0])); // Luecken zaehlen
+	        if(missing < sizeof(unsorted))
+	            partresult = unsorted[missing];
+	        else
+	        {
+	            if(mappingp(args) && member(args, "offset"))
+	                args["offset"] = num - missing + sizeof(unsorted) - 1;
+	
+	            return 0;
+	        }
+	    }
+	
+	    vitem = partresult[<1];
+	    result += partresult;
+	}
+    }
+
+    switch(flag & VV_COMMAND_MASK)
+    {
+        case VV_CHANGE:
+        case VV_ADD:
+            return create_v_item_shadow(result[<1]);
+
+        case VV_DELETE:
+            // Fremdes V-Item bei uns loeschen?
+            if(result[<1][VI_MASTER] != this_object())
+            {
+                create_deleted_v_item_shadow(result[<1]);
+            }
+            // Eigenes V-Item an fremden V-Items
+            else if(sizeof(result) > 1 && result[<2][VI_MASTER] != this_object())
+            {
+                create_v_item_shadow(result[<2])["v_item"] -= result[<1..<1];
+            }
+            // Eigenes V-Item an eigenem V-Item
+            else
+            {
+                if(sizeof(result) == 1)
+                    v_items -= ({result[0]});
+                else
+                    result[<2]["v_item"] -= result[<1..<1];
+            }
+
+            return result[<1];
+
+        case VV_QUERY:
+        {
+            mapping ret;
+
+            foreach(mapping m: result)
+            {
+                mapping tmp = copy(m);
+                if(ret)
+                    tmp[VI_ENVIRONMENT] = m_delete(ret,"v_item");
+                else if(!(flag & VV_NO_ROOM_ENV))
+                    tmp[VI_ENVIRONMENT] = this_object();
+                tmp[VI_OBJECT] = this_object();
+
+                ret = tmp;
+            }
+
+            return ret;
+        }
+    }
+}
+
+private mixed call_desc_lambda(mixed cl, mapping vitem, object viewer)
+{
+    mapping info = get_desc_info_mapping(viewer || this_player());
+    mixed env = vitem;
+    mixed res;
+
+    // Wegen V-Item-Mastern den Raum aus dem V-Item selbst ermitteln.
+    while(mappingp(env))
+        env = env[VI_ENVIRONMENT];
+    if(env)
+    {
+        info[TI_OBJECT] = env;
+
+        while(environment(env))
+            env = environment(env);
+        info[TI_ROOM] = env;
+    }
+
+    info[TI_ITEM] = vitem;
+
+    res = funcall(cl, info);
+    if(stringp(res) && strlen(res) && res[<1]!='\n')
+	res = wrap(trim(res));
+
+    return res;
+}
+
+nosave mapping convert_mapping(mapping item)
+{
+    mixed tmp;
+    int i;
+    string *arr;
+
+    item = copy(item);	// Damit unsere Aenderungen nicht zurueckwirken,
+			// z.B. die Engelskugel will das Original-V-item
+			// abspeichern.
+    
+    tmp = item["adjektiv"];
+    if (stringp(tmp))
+	item["adjektiv"] = ({ tmp });
+
+    tmp = item["id"];
+    if (stringp(tmp))
+	item["id"] = ({ tmp });
+    
+    /* Gender anpassen */
+    tmp = item["gender"];
+    if (tmp)
+    {
+        if (strlen(tmp) > 0)
+            tmp = tmp[0..0];
+	if (tmp == "m")
+	    item["gender"] = "maennlich";
+	else if (tmp == "w")
+	    item["gender"] = "weiblich";
+	else
+	    item["gender"] = "saechlich";
+    }
+
+    /* Messages konvertieren */
+    arr = ({"look_msg","look_msg_night","read_msg","smell_msg","hear_msg",
+            "take_msg","attack_msg","feel_msg"});
+    for (i = sizeof(arr); i--; )
+	if (stringp(tmp = item[arr[i]]))
+	    item[arr[i]]=lambda(({'vitem}),string_parser(add_dot_to_msg(tmp),1));
+    
+    /* Beschreibungen wrappen */
+    arr = ({"long_night","take","attack","far"});
+    for (i = sizeof(arr); i--; )
+	if (stringp(tmp = item[arr[i]]) && strlen(tmp) && tmp[<1] != '\n')
+	    item[arr[i]] = wrap(tmp);
+
+    if((tmp = item["long"]) && pointerp(tmp))
+    {
+	mapping longtags;
+	tmp = compile_desc(tmp, &longtags);
+	
+	item["long"] = lambda(({'vitem,'viewer}),
+	    ({#'call_desc_lambda, tmp, 'vitem, 'viewer}));
+	
+	if(member(longtags, T_ATOM_TAG_DARKNESS))
+	    item["visible_in_the_dark"] = 1;
+    }
+    else if(stringp(tmp) && strlen(tmp) && tmp[<1] != '\n')
+	item["long"] = wrap(tmp);
+    
+    foreach(string elem: ({"read", "smell", "noise", "feel"}))
+	if((tmp = item[elem]) && pointerp(tmp))
+	    item[elem] = lambda(
+		(elem=="read")?({'rest,'str,'vitem,'viewer})
+			      :({'vitem}),
+		({#'call_desc_lambda, compile_desc(tmp, 0),
+		    'vitem, (elem=="read")?'viewer:0}));
+	else if(stringp(tmp) && strlen(tmp) && tmp[<1] != '\n')
+	    item[elem] = wrap(tmp);
+
+    if(pointerp(tmp = item["invis"]))
+	item["invis"] = lambda( ({'vitem}),
+	    ({#'&&, ({#'call_desc_lambda, compile_cond(tmp, 0), 'vitem, 0}),
+		V_INVIS}));
+	    
+    return item;
+}
+
+/*
+FUNKTION: add_v_item
+DEKLARATION: void add_v_item(mapping item [, mixed pfad ] )
+BESCHREIBUNG:
+Addiert ein virtuelles Objekt dazu.
+Wenn pfad angegeben ist wird das virtuelle Objekt bei einem anderen
+virtuellen Objekt addiert.
+
+Der Pfad muss folgenden Syntax haben:
+  ({"id_name1","id_name2",...})
+oder, wenn man mehrere virtuelle Objekte mit demselben Namen hat:
+  ({ ([ "name":"id_name1", "adjektiv":({"adjektiv1",...}), "nummer":2 ]), ... })
+also anstatt einem einfachen Namen kann man das virtuelle Objekt auch
+durch ein Mapping genauer beschreiben. id_name ist hierbei entweder eine
+Id oder, falls(!) beim V-Item keine Ids angegeben wurden, der Name.
+
+Alternativ kann man bei change_v_item, delete_v_item und add_v_item als Pfad
+auch einfach ein (mit query_v_item oder query_all_v_items) abgefragtes(!)
+V-Item nehmen.
+
+VERWEISE: query_v_item, delete_v_item, change_v_item, set_v_item_master
+GRUPPEN: virtuell
+*/
+varargs void add_v_item(mapping item, mixed path)
+{
+    mixed tmp;
+    mapping props;
+    mapping *all;
+
+    // Wenn es ein Clone ist, und die v-items geshared werden sollen,
+    // dann nicht addieren
+    if (!strlen(item["name"]))
+        raise_error("add_v_item: kein name\n");
+    if (!item["gender"])
+        raise_error("add_v_item: kein gender\n");
+    if (member(({"maennlich","weiblich","saechlich","m","w","s"}),
+            item["gender"])==-1)
+    {
+        do_error2("add_v_item(Name:"+item["name"]+" gender:"+item["gender"]
+                +") nicht maennlich, m, weiblich, w, saechlich, s\n",
+                __FILE__, 
+                object_name(extern_call()?previous_object():this_object()), 
+                __LINE__);
+    }
+
+
+    // ID loeschen, wenn sie mit dem Namen uebereinstimmt
+    tmp = item["id"];
+    if (stringp(tmp))
+    {
+	if (tmp == item["name"])
+	    m_delete(item,"id");
+    }
+    else if (sizeof(tmp) == 1)
+    {
+	if (tmp[0] == item["name"])
+	    m_delete(item,"id");
+    }
+    // Pruefung auf dynamische Vitems (Objekte, Closures)
+    if (this_object()->query_conservation_constraint("add_v_item")==0)
+    { // nur pruefen, wenn noch keine Pruefung fehlgeschlagen ist.
+        if (check_save(item)) // U.U. Teuere Pruefung!
+        {
+            this_object()->add_setter_conservation("add_v_item",({item}),
+                "v_item");
+        }
+        else
+        {
+            this_object()->delete_seq_conservation("v_item");
+            this_object()->set_conservation_constraint("add_v_item",
+                item["name"]||1);
+        }
+    }
+
+    props = filter(item, function int(mixed key, mixed val) { return !stringp(key) || member(key, ':') >= 0; });
+    item = convert_mapping(item - props);
+
+    /*
+    if (!member(item,"id"))
+	item["id"] = ({ item["name"] });
+    */
+
+    // item=check_shared_v_item(item,path);
+
+    if (!sizeof(path))
+    {
+	item[VI_MASTER] = this_object();
+	item[VI_PATH] = ({object_name(), v_item_count++});
+	if (!v_items)
+	    v_items = ({ item });
+	else
+	    v_items += ({ item });
+	
+	all = v_items;
+    }
+    else
+    {
+        mapping parent;
+        
+        all = this_object()->query_all_v_items();
+	parent = search_v_item(all, path, VV_ADD | VV_INVIS);
+	if (!parent)
+	{
+	    // Bei Mappings keinen Fehler werfen.
+	    // (Kann ein kuenstlich (im query_v_item) erschaffenes V-Item sein.
+	    if(!mappingp(path))
+		raise_error("add_v_item: Fehler im Pfad.\n");
+	    else
+		return;
+	}
+	item[VI_MASTER] = this_object();
+	item[VI_PATH] = parent[VI_PATH]+({object_name(), v_item_count++});
+	if (!parent["v_item"])
+	    parent["v_item"] = ({ item });
+	else
+	    parent["v_item"] += ({ item });
+    }
+    
+    add_properties(props, all, item, extern_call() ? previous_object() : this_object());
+}
+
+/*
+FUNKTION: query_all_v_items
+DEKLARATION: mapping *query_all_v_items()
+BESCHREIBUNG:
+Liefert ein Feld mit allen V-Items des Objektes.
+
+ACHTUNG: Es werden alle V-Items ungefiltert und unveraendert zurueckgegeben.
+Die Unsichtbarkeit der V-Items wird dabei also nicht beachtet, es werden
+also auch unsichtbare V-Items geliefert. Ebenso enthalten diese V-Items
+kein "environment"-Eintrag. Auch duerfen diese V-Items nicht veraendert
+werden, da das automatisch die V-Items im Raum mitaendert.
+
+Ordentliche V-Items ohne obige Einschraenkungen werden von
+query_full_v_items() geliefert.
+
+VERWEISE: query_full_v_items, query_v_item, add_v_item, set_v_item_master
+GRUPPEN: virtuell
+*/
+mapping *query_all_v_items()
+{
+    if (v_item_master)
+    {
+	mapping *ret, *tmp;
+	int i;
+
+	ret = v_items ? v_items : ({});
+	for (i = 0; i < sizeof(v_item_master); i++)
+	{
+	    tmp = v_item_master[i]->query_all_v_items();
+	    if (sizeof(tmp))
+	    {
+	        if(v_item_shadows)
+	            tmp = map(tmp, #'apply_v_item_shadow) - ({0});
+	        ret += tmp;
+	    }
+	}
+	return ret;
+    }
+    return v_items;
+}
+
+/*
+FUNKTION: delete_v_item
+DEKLARATION: void delete_v_item(mixed pfad)
+BESCHREIBUNG:
+Loescht das Mapping des virtuellen Objektes, das mit pfad gekennzeichnet ist.
+Wie der pfad aussehen muss steht unter 'add_v_item'
+VERWEISE: add_v_item, query_v_item, change_v_item
+GRUPPEN: virtuell
+*/
+void delete_v_item(mixed path)
+{
+    search_v_item(this_object()->query_all_v_items(), path, VV_DELETE|VV_INVIS);
+    this_object()->delete_seq_conservation("v_item");
+    this_object()->set_conservation_constraint("add_v_item",2);
+}
+
+/*
+FUNKTION: query_v_item
+DEKLARATION: varargs mapping query_v_item(mixed *pfad, int flag)
+BESCHREIBUNG:
+Liefert das Mapping des virtuellen Objektes, das mit pfad gekennzeichnet ist.
+
+Der Pfad ist ein Array aus V-Item-Beschreibungen. Eine V-Item-Beschreibung
+ist entweder eine einfache ID oder ein Mapping mit folgenden moeglichen
+Eintraegen (wovon einzig "name" Pflicht ist):
+ "name": Die ID des gesuchten V-Items. (Hat das V-Item einen Eintrag "id",
+         so muss dies ein Element dieses Arrays sein, ansonsten muss
+	 es mit dem V-Item-Eintrag "name" uebereinstimmen.)
+ "adjektiv": Ein Array aus den Adjektiven, die das V-Item haben soll.
+ "nummer": Die Nummer des V-Items.
+BEISPIELE:
+  ({ "tisch" })                             - Einfach eine Tisch.
+  ({ "tisch", "glas" })                     - Ein Glas auf dem Tisch.
+  ({ ([ "name": "tisch", "nummer": 2 ]) })  - Der 2. Tisch
+
+Als flag kann man folgende in /sys/v_item.h definierte Optionen, welche man 
+auch mit dem bitweisen Oder kombinieren kann, angeben:
+    VV_NO_ROOM_ENV         Es wird dem V-Item kein "environment"-Eintrag
+                           angefuegt. Dies ist vor allem fuer interne
+			   Zwecke wichtig.
+    VV_INVIS               Das V-Item soll trotz V_INVIS-Unsichtbarkeit
+                           zurueckgeliefert werden.
+VERWEISE: add_v_item, delete_v_item, change_v_item, set_v_item_master
+GRUPPEN: virtuell
+*/
+varargs mapping query_v_item(mixed path, int flag)
+{
+    mapping nret, ret, env, env2;
+    int i, nr;
+
+    flag &= ~VV_COMMAND_MASK;
+
+    return search_v_item(this_object()->query_all_v_items(), path, VV_QUERY | flag);
+}
+
+/*
+FUNKTION: query_full_v_items
+DEKLARATION: mapping *query_full_v_items(int flag)
+BESCHREIBUNG:
+Liefert ein Array mit allen V-Items des Objektes, so wie sie auch
+von query_v_item() einzeln zurueckgeliefert werden.
+
+Als flag kann man folgende in /sys/v_item.h definierte Optionen angeben:
+
+    VV_NO_ROOM_ENV         Es wird dem aeusseren V-Item kein
+                           "environment"-Eintrag angefuegt.
+
+    VV_INVIS               Es sollen auch unsichtbare V-Items
+                           mitgeliefert werden.
+
+    VV_FLAT                Auch innere V-Items werden im Array
+                           aufgefuehrt.
+
+VERWEISE: query_v_item, add_v_item, query_all_v_items
+GRUPPEN: virtuell
+*/
+varargs mapping* query_full_v_items(int flag)
+{
+    mapping *result = map(this_object()->query_all_v_items(),
+        function mapping(mapping vi)
+        {
+            mapping ret = copy(vi);
+            if(!(flag & VV_NO_ROOM_ENV))
+                ret[VI_ENVIRONMENT] = this_object();
+            ret[VI_OBJECT] = this_object();
+            return ret;
+        });
+
+    closure filter_invis;
+
+    if(!(flag & VV_INVIS))
+    {
+        filter_invis = function int(mapping m)
+        {
+            mixed inv = m["invis"];
+            if(closurep(inv))
+                inv = funcall(inv, m);
+            //printf("%d\n", !(inv&V_ATOM_INVIS));
+            return !(inv&V_ATOM_INVIS);
+        };
+
+        result = filter(result, filter_invis);
+    }
+
+    if(flag & VV_FLAT)
+    {
+        mapping *stack = result;
+        while(sizeof(stack))
+        {
+            mapping env = stack[0];
+
+            stack = stack[1..<1];
+            if(!env["v_item"])
+                continue;
+
+            foreach(mapping subitem: env["v_item"])
+            {
+                mapping m = copy(subitem);
+                m[VI_ENVIRONMENT] = m_delete(copy(env), "v_item");
+                m[VI_OBJECT] = this_object();
+
+                if(!filter_invis || funcall(filter_invis,m))
+                {
+                    result += ({m});
+                    stack += ({m});
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+/*
+FUNKTION: change_v_item
+DEKLARATION: void change_v_item(mapping new_item, mixed pfad)
+BESCHREIBUNG:
+Mit Dieser Funktion kann man ein virtuelles Objekt veraendern.
+Man uebergibt ein Mapping, in dem die Eintraege enthalten sind, die man
+aendern moechte (z.B. "long").
+Wie der pfad aussehen muss steht unter 'add_v_item'
+VERWEISE: add_v_item, delete_v_item, query_v_item
+GRUPPEN: virtuell
+*/
+void change_v_item(mapping m, mixed path)
+{
+    mapping * all = this_object()->query_all_v_items();
+    mapping tmp, props;
+    
+    if (!(tmp = search_v_item(all, path, VV_CHANGE|VV_INVIS)))
+    {
+	// Bei Mappings keinen Fehler werfen.
+	// (Kann ein kuenstlich (im query_v_item) erschaffenes V-Item sein.
+	if(!mappingp(path))
+	    raise_error("change_v_item: Fehler im Pfad.\n");
+	else
+	    return;
+    }
+    props = filter(m, function int(mixed key, mixed val) { return !stringp(key) || member(key, ':') >= 0; });
+    tmp += convert_mapping(m - props);
+    add_properties(props, all, tmp, extern_call() ? previous_object() : this_object());
+}
+
+/*
+FUNKTION: query_v_item_property
+DEKLARATION: mixed query_v_item_property(mixed path, string name [, mixed info])
+BESCHREIBUNG:
+Fragt die Eigenschaft 'name' am virtuellen Objekt (beschrieben durch 'path')
+ab. Der Name sollte dabei als Define angegeben werden (fuer die Mudlib-
+Properties dazu <properties.h> includen). 'path' hat den gleichen Aufbaue
+wie bei add_v_item(), und kann ein abgefragtes V-Item sein.
+In 'info' koennen zusaetzliche Infos uebergeben werden, diese
+wird an alle Controller und an eine ggf. gesetzte Abfragefunktion
+uebergeben.
+VERWEISE: set, add, delete
+GRUPPEN: properties
+*/
+varargs mixed query_v_item_property(mixed path, string name, mixed info)
+{
+    mapping m = search_v_item(this_object()->query_all_v_items(), path, VV_QUERY | VV_INVIS);
+    return query_property_mapping(m, PROPERTY_VITEM_POSTFIX, PU_VITEM, name, extern_call() ? previous_object() : this_object(), info, ({m}));
+}
+
+/*
+FUNKTION: set_v_item_property
+DEKLARATION: mixed set_v_item_property(mixed path, string name, mixed value)
+BESCHREIBUNG:
+Damit wird ein neuer Wert 'value' fuer die Eigenschaft 'name'
+am virtuellen Objekt 'path' gesetzt.
+VERWEISE: query, add, delete
+GRUPPEN: properties
+*/
+mixed set_v_item_property(mixed path, string name, mixed value)
+{
+    mapping * all = this_object()->query_all_v_items();
+    mapping m = search_v_item(all, path, VV_CHANGE | VV_INVIS);
+    mapping item = search_v_item(all, m, VV_QUERY | VV_INVIS);
+
+    mixed val = set_property_mapping(m, PROPERTY_VITEM_POSTFIX, PU_VITEM, name, value, extern_call() ? previous_object() : this_object(), ({item}));
+
+    if(member(m, name))
+    {
+        string sname = PROPERTY_ROOT_MASTER->shorten_property_name(name);
+        if(sname)
+            m[sname] = function mixed(mapping vitem) { return query_v_item_property(vitem, name); };
+    }
+
+    return val;
+}
+
+/*
+FUNKTION: add_v_item_property
+DEKLARATION: mixed add_v_item_property(mixed path, string name [, mixed key], value)
+BESCHREIBUNG:
+Falls die Eigenschaft 'name' ein Mapping ist, so kann man mit dieser Funktion
+einen neuen Eintrag key: value hinzufuegen. Falls sie ein Array ist, wird
+ein neues Element 'value' eingetragen. Ansonsten wird der Wert von 'value' zur
+bestehenden Eigenschaft addiert.
+VERWEISE: query, set, delete
+GRUPPEN: properties
+*/
+mixed add_v_item_property(mixed path, string name, varargs mixed* args)
+{
+    mapping * all = this_object()->query_all_v_items();
+    mapping m = search_v_item(all, path, VV_CHANGE | VV_INVIS);
+    mapping item = search_v_item(all, m, VV_QUERY | VV_INVIS);
+
+    mixed val = add_property_mapping(m, PROPERTY_VITEM_POSTFIX, PU_VITEM, name, args, extern_call() ? previous_object() : this_object(), ({item}));
+
+    if(member(m, name))
+    {
+        string sname = PROPERTY_ROOT_MASTER->shorten_property_name(name);
+        if(sname)
+            m[sname] = function mixed(mapping vitem) { return query_v_item_property(vitem, name); };
+    }
+
+    return val;
+}
+
+/*
+FUNKTION: delete
+DEKLARATION: mixed delete_v_item_property(mixed path, string name, mixed key|value)
+BESCHREIBUNG:
+Falls die Eigenschaft 'name' ein Mapping ist, so entfernt dieser Aufruf den
+Eintrag 'key'. Falls sie ein Array ist, wird ein Element 'value' entfernt.
+Bei allen anderen Datentypen liefert der Aufruf einen Fehler, sofern
+keine spezielle delete-Funktion registriert wurde.
+VERWEISE: query, set, add
+GRUPPEN: properties
+*/
+mixed delete_v_item_property(mixed path, string name, mixed key)
+{
+    mapping * all = this_object()->query_all_v_items();
+    mapping m = search_v_item(all, path, VV_CHANGE | VV_INVIS);
+    mapping item = search_v_item(all, m, VV_QUERY | VV_INVIS);
+
+    return delete_property_mapping(m, PROPERTY_VITEM_POSTFIX, PU_VITEM, name, key, extern_call() ? previous_object() : this_object(), ({item}));
+}
+
+private void add_properties(mapping props, mapping* all, mapping item, object caller)
+{
+    if(sizeof(props))
+    {
+        mapping iitem = search_v_item(all, item, VV_QUERY | VV_INVIS);
+        foreach(string key, mixed val: props)
+        {
+            set_property_mapping(item, PROPERTY_VITEM_POSTFIX, PU_VITEM, key, val, caller, ({iitem}));
+            if(member(item, key))
+            {
+                string sname = PROPERTY_ROOT_MASTER->shorten_property_name(key);
+                if(sname)
+                    item[sname] = function mixed(mapping vitem) { return query_v_item_property(vitem, key); };
+            }
+        }
+    }
+}
+
+/*
+FUNKTION: here
+DEKLARATION: string here(string str [, string name [, mapping &retob ]] )
+BESCHREIBUNG:
+Mit here() kann man abfragen, ob dieses Objekt ein virtuelles Objekt
+definiert hat, das auf den String str passt. Wenn noch 'name' angegeben
+wurde, wird ueberprueft, ob der String das virtuelle Objekt beschreibt. 
+
+Das gefundene virtuelle Objekt wird als Referenz in 'retob'
+zurueckgegeben. Der Returnwert ist 0 (fuer nicht gefunden)
+oder der Reststring wenn ein virtuelles Objekt gefunden wurde.
+
+Here() kann also zweierlei Aufgaben wahrnehmen. Zum Einen kann
+es pruefen, ob ein V-Item am Anfang eines Strings vorkommt.
+Zum anderen um zu schauen, ob und dann auch welches V-Item
+dieses Objektes gemeint wurde.
+
+BEISPIEL 1: Herausfinden, ob ein bestimmtes V-Item gemeint wurde.
+
+// Wenn der Befehl lautet 'gabruxle den krongs herum',
+// dann ist str="den krongs herum".
+
+int gabruxel_action(string str)
+{
+    string rest;
+    
+    rest = here(str, "krongs");
+    // "krongs" ist dabei einer der IDs des V-Items
+    // (alle anderen IDs werden trotzdem erkannt, es wird
+    // empfohlen hier eine Special-ID zu nutzen).
+    //
+    // Wenn in 'str' das V-Item "krongs" gefunden wurde,
+    // enthaelt 'rest' den Reststring "herum", anderenfalls 0.
+    
+    if(!rest)
+	return notify_fail("Gabruxel wen?\n");
+    
+    ...
+}
+
+BEISPIEL 2: Herausfinden, welches V-Item gemeint wurde.
+
+int gabruxel_action(string str)
+{
+    string rest;
+    mapping vitem;
+    
+    rest = here(str, 0, &vitem);
+    if(!rest)
+	return notify_fail("Gabruxel wen?\n");
+
+    // 'vitem' enthaelt nun das gefundene V-item,
+    // 'rest' den Reststring hinter dem V-Item in 'str'.
+    
+    ...
+}
+
+VERWEISE: me, parse_com, query_v_item
+GRUPPEN: virtuell
+*/
+varargs string here(string str, mixed name, mapping retob)
+{
+    string *ids;
+    string lstr;
+
+    if (!str)
+	return 0;
+
+    lstr = lower_case(str);
+
+    if (name)
+    {
+	if (retob = query_v_item(stringp(name) ? ({name}) : name))
+	{
+	    ids = retob["id"];
+	    if (ids)
+	    {
+		if (member(retob["id"], lstr) >= 0)
+		    return "";
+	    }
+	    else
+		if (lower_case(retob["name"]) == lstr)
+		    return "";
+	}
+    }
+    else
+    {
+    	if (retob = query_v_item(({lstr})))
+	    return "";
+    }
+    return its_here(str,this_object(),name,&retob);
+}
+
+// - Schneidet bei Bedarf ".lpc" ab.
+// - Vervollstaendigt Suchpfade (findet nicht sich selber).
+// - Vervollstaendigt relative Pfade.
+private string expand_v_item_master(string datei)
+{
+    if (datei[<2..] == ".lpc")
+        datei = datei[..<3];
+
+    if (datei[..0] == "%")
+    {
+        string tmp;
+	tmp = search_file(datei, 0, "v_item_master", ".lpc",
+	    ({object_name()+".lpc"}));
+        datei = tmp ? tmp[..<3] : datei;
+    }
+    else
+        datei = abs_path(datei);
+
+    return datei;
+}
+
+/*
+FUNKTION: set_v_item_master
+DEKLARATION: void set_v_item_master(string file_name | string *file_names)
+BESCHREIBUNG:
+Wenn mehrere Objekte immer dieselben V-Items haben sollen, kann man dies
+ueber den V-Item-Master machen. Danach sind alle V-Items auch in
+diesem Objekt vorhanden, allerdings kann man sie von dort aus nicht loeschen
+oder veraendern (delete_v_item, change_v_item).
+Sehr wohl kann man das allerdings im V-Item-Master machen, das heisst die
+Sache eignet sich prima, um beispielsweise Wetter-V-Items zu realisieren und
+spart darueberhinaus gerade bei solchen Sachen massenhaft Speicherplatz!
+Der V-Item-Master muss folgende Funktionen definieren:
+    mixed *query_all_v_items()
+    mapping query_v_item(mixed *path, int flag)
+Am einfachsten inherited man "/i/item/v_item" im V-Item-Master.
+
+BEISPIEL:
+  Fuer die Domain Xyz existiert eine Wetterkontrolle /d/Xyz/wizard/weather.c,
+  die gleichzeitig auch ein V-Item-Master ist. Diese haenge ich in meine
+  Raeume ein, indem ich dort im create() irgendwo set_v_item_master(
+   "/d/Xyz/wizard/weather"); reinschreibe. Vorzugsweise steht dies sogar
+  einfach im Standard-Raum-Inherit fuer die Domain.
+  Wenn ich jetzt 20 Raeume Buchenwald habe, der mit Straeuchern gespickt ist,
+  dann lohnt sich schon folgendes:
+  Ich schreibe mir einen eigenen V-Item-Master, naemlich einen, der die V-Items
+  "buchen", "straeucher", "boden", "pilze" usw. definiert.
+  Wo bleibt jetzt das Wetter? Ganz einfach: Ich setze meinem eigenen
+  V-Item-Master /d/Xyz/wizard/weather als V-Item-Master und schon hat man sich
+  eine Menge faul und unnuetz im Speicher herumliegender V-Item-Mappings
+  gespart, aber einen lebendigen Wald und relativ leicht wartbare Files
+  gewonnen.
+  Man kann in einem v-item-master auch einen weiteren v-item-master
+  setzen. Wenn man z.B. ein Gebiet hat, in dem es immer dieselben
+  v-items gibt, und zusaetzlich noch das Wetter, dann macht man einen
+  v-item-master, der als v-item-master den Wettermaster setzt.
+
+EINFACHERES BEISPIEL:
+  Im v-item Master:
+    inherit "/i/item/v_item";
+    void create() {
+      add_v_item(([
+        "name":"vitem",
+        "gender":"saechlich",
+        "long":"Ein huebsches V_item. Es ist herrlich anzusehen."
+      ]));
+    }
+
+  Und im Objekt, das diesen verwenden soll:
+    void create() {
+      [...] // Irgend ein Raum-setup
+      set_v_item_master(FILENAME_DEINES_V_ITEM_MASTERS); // Obiges Objekt.
+    }
+
+  Falls dieser V-Item-Master selten verwendet wird, so koennte er sich
+  automatisch aus dem Speicher entfernen:
+    int clean_up(int arg)
+    {
+      destruct(this_object());
+      return 0;
+    }
+
+Man kann dies auch nutzen, um speichersparrenderweise die V-Items nur im
+Blueprint zu speichern und diesen Blueprint bei allen Clones als
+V-Item-Master anzumelden:
+
+  void create()
+  {
+      ... // Verschiedene Initialisierungen des create()
+      
+      if (clonep())
+          add_v_item_master(__FILE__);
+      else
+      {
+          // Alle V-Items hier anmelden:
+          add_v_item( ([ ... ]) );
+          ...
+      }
+  }
+
+Suchpfade ("%wald") und relative Pfade ("../v_item_master/wald") sind
+zulaessig. Suchpfade suchen im Verzeichnisbaum abwaerts im Unterverzeichnis
+"v_item_master" und finden nicht das Objekt selber.
+
+VERWEISE: add_v_item, query_v_item, query_v_item_master, query_all_v_items, add_v_item_master, delete_v_item_master
+GRUPPEN: virtuell
+*/
+void set_v_item_master(mixed file)
+{
+    if (stringp(file))
+    	file = ({ file });
+
+    v_item_master = map (file, #'expand_v_item_master);
+
+    // ({}) -> 0
+    if (!sizeof(v_item_master))
+    {
+    	v_item_master = 0;
+    }
+    this_object()->add_setter_conservation("set_v_item_master",
+        ({v_item_master}));
+}
+
+/*
+FUNKTION: query_v_item_master
+DEKLARATION: string *query_v_item_master()
+BESCHREIBUNG:
+Liefert den V-Item-Master dieses Objektes.
+VERWEISE: set_v_item_master
+GRUPPEN: virtuell
+*/
+string *query_v_item_master()
+{
+    return v_item_master;
+}
+
+/*
+FUNKTION: add_v_item_master
+DEKLARATION: void add_v_item_master(mixed file)
+BESCHREIBUNG:
+Fuegt einen oder mehrere V-Item-Master dem Objekt hinzu. Weitere
+Informationen dazu siehe set_v_item_master.
+VERWEISE: set_v_item_master, delete_v_item_master
+GRUPPEN: virtuell
+*/
+void add_v_item_master(mixed file)
+{
+    if (stringp(file))
+        file = ({ file });
+
+    file = map (file, #'expand_v_item_master);
+
+    v_item_master = ( v_item_master ? v_item_master : ({}) ) - file + file;
+
+    // ({}) -> 0: add_v_item_master(({}));
+    if(!sizeof(v_item_master))
+        v_item_master = 0;
+    this_object()->add_setter_conservation("set_v_item_master",
+        ({v_item_master}));
+}
+
+/*
+FUNKTION: delete_v_item_master
+DEKLARATION: void delete_v_item_master(mixed file)
+BESCHREIBUNG:
+Entfernt einen oder mehrere V-Item-Master aus dem Objekt. Weitere
+Informationen dazu siehe set_v_item_master.
+VERWEISE: set_v_item_master, add_v_item_master
+GRUPPEN: virtuell
+*/
+void delete_v_item_master(mixed file)
+{
+    if (stringp(file))
+        file = ({ file });
+
+    v_item_master = ( v_item_master ? v_item_master : ({}) )
+		  - map (file, #'expand_v_item_master);
+
+    // ({}) -> 0
+    if(!sizeof(v_item_master))
+        v_item_master = 0;
+    this_object()->add_setter_conservation("set_v_item_master",
+        ({v_item_master}));
+}
+
+/*
+FUNKTION: set_share_v_items
+DEKLARATION: void set_share_v_items(int flag)
+BESCHREIBUNG:
+Mit dieser Funktion setzt man, ob alle nach dieser Funktion
+gesetzten v-items zwischen allen Clones dieses Objektes geshared
+werden sollen. Dies spart sehr viel Speicher, aber kann auch
+zu Problemen fuehren, denn danach kann man im Clone keine
+v-items mehr hinzufuegen bis man mit set_share_v_items(0)
+das sharen von v-items ausschaltet.
+Dasselbe Verhalten kann man uebrigens auch so erreichen:
+
+    if (clonep())
+        add_v_item_master(load_name());
+    else
+    {
+        add_v_item(...);
+        add_v_item(...);
+        add_v_item(...);
+	...
+    }
+
+VERWEISE: query_share_v_items, add_v_item, set_v_item_master
+GRUPPEN: virtuell
+*/
+void set_share_v_items(int flag)
+{
+    string file;
+    int junk;
+
+    if (flag)
+    {
+	if (!share_v_items && sscanf(object_name(),"%s#%d",file,junk) == 2)
+	    add_v_item_master(file);
+	share_v_items = 1;
+    }
+    else
+	share_v_items = 0;
+}
+
+/*
+FUNKTION: query_share_v_items
+DEKLARATION: int query_share_v_items()
+BESCHREIBUNG:
+Fragt ab, ob v-items geshared werden.
+VERWEISE: set_shared_v_item, add_v_item, set_v_item_master
+GRUPPEN: virtuell
+*/
+int query_share_v_items()
+{
+    return share_v_items;
+}
+
+/*
+FUNKTION: modify_set_v_item_property
+DEKLARATION: void modify_set_v_item_property(mixed neuer_wert, string property_name, mixed alter_wert, object aufrufer, object item, mapping vitem)
+BESCHREIBUNG:
+modify_set_v_item_property wird im Objekt 'item' selbst und den zustaendigen
+Property-Mastern aufgerufen, wenn im V-Item 'vitem' die Property
+'property_name' vom 'aufrufer' auf 'neuer_wert' gesetzt werden soll.
+'neuer_wert' wird dabei als Referenz uebergeben und kann veraendert werden.
+
+Es wird zudem auch modify_set_v_item_property_<property_name> aufgerufen.
+
+VERWEISE: set_v_item_property, forbidden_set_v_item_property, notify_set_v_item_property
+GRUPPEN: properties
+*/
+/*
+FUNKTION: forbidden_set_v_item_property
+DEKLARATION: int forbidden_set_v_item_property(string property_name, mixed neuer_wert, mixed alter_wert, object aufrufer, object item, mapping vitem)
+BESCHREIBUNG:
+forbidden_set_v_item_property wird im Objekt 'item' selbst und den zustaendigen
+Property-Mastern aufgerufen, wenn im V-Item 'vitem' die Property
+'property_name' vom 'aufrufer' auf 'neuer_wert' gesetzt werden soll.
+Liefert einer dieser Controller einen Wert != 0 zurueck, so wird diese
+Aenderung verboten.
+
+Es wird zudem auch forbidden_set_v_item_property_<property_name> aufgerufen.
+Die forbidden_set_v_item_property-Controller werden nach den
+modify_set_v_item_property-Controllern aufgerufen.
+
+VERWEISE: set_v_item_property, modify_set_v_item_property, notify_set_v_item_property
+GRUPPEN: properties
+*/
+/*
+FUNKTION: notify_set_v_item_property
+DEKLARATION: void notify_set_v_item_property(string property_name, mixed neuer_wert, mixed alter_wert, object aufrufer, object item, mapping vitem)
+BESCHREIBUNG:
+notify_set_v_item_property wird im Objekt 'item' selbst und den zustaendigen
+Property-Mastern aufgerufen, nachdem im V-Item 'vitem' die Property
+'property_name' vom 'aufrufer' auf 'neuer_wert' gesetzt wurde.
+
+Es wird zudem auch notify_set_v_item_property_<property_name> aufgerufen.
+
+VERWEISE: set_v_item_property, modify_set_v_item_property, forbidden_set_v_item_property
+GRUPPEN: properties
+*/
+/*
+FUNKTION: modify_query_v_item_property
+DEKLARATION: void modify_query_v_item_property(mixed wert, string property_name, mixed info, object aufrufer, object item, mapping vitem)
+BESCHREIBUNG:
+modify_query_v_item_property wird im Objekt 'item' selbst und den zustaendigen
+Property-Mastern aufgerufen, wenn im V-Item 'vitem' die Property
+'property_name' vom 'aufrufer' abgefragt wird. 'wert' enthaelt den
+potentiellen Rueckgabewert, wird dabei als Referenz uebergeben und kann
+veraendert werden. 'info' ist der optionale zweite Parameter vom query()-Aufruf.
+
+Es wird zudem auch modify_query_v_item_property_<property_name> aufgerufen.
+
+VERWEISE: query_v_item_property
+GRUPPEN: properties
+*/
+/*
+FUNKTION: modify_add_v_item_property
+DEKLARATION: void modify_add_v_item_property(mixed add_wert, string property_name, mixed key, mixed alter_wert, object aufrufer, object item, mapping vitem)
+BESCHREIBUNG:
+modify_add_v_item_property wird im Objekt 'item' selbst und den zustaendigen
+Property-Mastern bei einem Aufruf von add() im V-Item 'item' auf die Property
+'property_name' von 'aufrufer' aufgerufen. 'key' und 'add_wert' sind dabei die
+Parameter vom add()-Aufruf. 'key' ist dabei unter Umstaenden nicht gesetzt (0).
+'add_wert' wird per Referenz uebergeben und kann veraendert werden.
+'alter_wert' enthaelt den vollstaendigen Wert der Property (also nicht nur
+den Wert, der 'key' zugeordnet ist).
+
+Es wird zudem auch modify_add_v_item_property_<property_name> aufgerufen.
+
+VERWEISE: add_v_item_property, forbidden_add_v_item_property, notify_add_v_item_property
+GRUPPEN: properties
+*/
+/*
+FUNKTION: forbidden_add_v_item_property
+DEKLARATION: int forbidden_add_v_item_property(string property_name, mixed key, mixed add_wert, mixed alter_wert, object aufrufer, object item, mapping vitem)
+BESCHREIBUNG:
+forbidden_add_v_item_property wird im Objekt 'item' selbst und den zustaendigen
+Property-Mastern bei einem Aufruf von add() im V-Item 'item' auf die Property
+'property_name' von 'aufrufer' aufgerufen. 'key' und 'add_wert' sind dabei die
+Parameter vom add()-Aufruf. 'key' ist dabei unter Umstaenden nicht gesetzt (0).
+'alter_wert' enthaelt den vollstaendigen Wert der Property (also nicht nur
+den Wert, der 'key' zugeordnet ist). Liefert einer dieser Controller einen
+Wert != 0 zurueck, so wird diese Operation verboten.
+
+Es wird zudem auch forbidden_add_v_item_property_<property_name> aufgerufen.
+Die forbidden_add_v_item_property-Controller werden nach den
+modify_add_v_item_property-Controllern aufgerufen.
+
+VERWEISE: add_v_item_property, modify_add_v_item_property, notify_add_v_item_property
+GRUPPEN: properties
+*/
+/*
+FUNKTION: notify_add_v_item_property
+DEKLARATION: void notify_add_v_item_property(string property_name, mixed key, mixed add_wert, mixed alter_wert, object aufrufer, object item, mapping vitem)
+BESCHREIBUNG:
+notify_add_v_item_property wird im Objekt 'item' selbst und den zustaendigen
+Property-Mastern bei einem Aufruf von add() im V-Item 'item' auf die Property
+'property_name' von 'aufrufer' aufgerufen. 'key' und 'add_wert' sind dabei die
+Parameter vom add()-Aufruf. 'key' ist dabei unter Umstaenden nicht gesetzt (0).
+'alter_wert' enthaelt den vollstaendigen Wert der Property (also nicht nur
+den Wert, der 'key' zugeordnet ist).
+
+Es wird zudem auch notify_add_v_item_property_<property_name> aufgerufen.
+
+VERWEISE: add_v_item_property, modify_add_v_item_property, forbidden_add_v_item_property
+GRUPPEN: properties
+*/
+/*
+FUNKTION: forbidden_delete_v_item_property
+DEKLARATION: int forbidden_delete_v_item_property(string property_name, mixed key, mixed alter_wert, object aufrufer, object item, mapping vitem)
+BESCHREIBUNG:
+forbidden_delete_v_item_property wird im Objekt 'item' selbst und den zustaendigen
+Property-Mastern bei einem Aufruf von delete() im V-Item 'item' auf die Property
+'property_name' von 'aufrufer' aufgerufen. 'key' ist dabei der Parameter vom
+delete()-Aufruf. 'alter_wert' enthaelt den vollstaendigen Wert der Property
+(also nicht nur den Wert, der 'key' zugeordnet ist). Liefert einer dieser
+Controller einen Wert != 0 zurueck, so wird diese Operation verboten.
+
+Es wird zudem auch forbidden_delete_v_item_property_<property_name> aufgerufen.
+
+VERWEISE: delete_v_item_property, notify_delete_v_item_property
+GRUPPEN: properties
+*/
+/*
+FUNKTION: notify_delete_v_item_property
+DEKLARATION: void notify_delete_v_item_property(string property_name, mixed key, mixed alter_wert, object aufrufer, object item, mapping vitem)
+BESCHREIBUNG:
+notify_delete_v_item_property wird im Objekt 'item' selbst und den zustaendigen
+Property-Mastern bei einem Aufruf von delete() im V-Item 'item' auf die Property
+'property_name' von 'aufrufer' aufgerufen. 'key' ist dabei dre Parameter vom
+delete()-Aufruf. 'alter_wert' enthaelt den vollstaendigen Wert der Property
+(also nicht nur den Wert, der 'key' zugeordnet ist).
+
+Es wird zudem auch notify_delete_v_item_property_<property_name> aufgerufen.
+
+VERWEISE: delete_v_item_property, forbidden_delete_v_item_property
+GRUPPEN: properties
+*/

@@ -1,0 +1,2705 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/object/tuer.c
+// Description: Eine einfache Tuer
+// Author:	Freaky	(23.12.93)
+// Modified by:	Garthan	(07.01.94) messages, parse_com
+//		Garthan (27.01.94) Generalueberholung, Schluesselhandling
+//		Garthan (01.02.94) klopfen
+//              Freaky  (13.09.94) im init() die Konfiguration der anderen Tuer
+//				   uebernehmen
+//		Garthan (15.09.94) set_door_is_open, mechanism
+//		Zap     (27.09 96) query_door_messages()
+//              Zandru  (13.03.97) touchen des "Gegenueberraumes" verhindert.
+//		Freaky  (10.03.98) Auf send_message umgebaut.
+//		Sissi   (03.04.98) Schluesselbundlogik
+//              Tmm     (12.07.98) 'tritt' wird abgefangen
+//		Mammi   (19.03.00) notify/forbidden Konzept eingefuehrt
+//		Mammi   (24.03.00) Koerpergroessen werden beachtet.
+//              Mammi   (26.03.00) Koerpergroesse debuggt, Fehlermeldung beim
+//                                 Durchschreiten geschlossener Tueren setzbar.
+//                                 message-system komplettiert, Defines
+//                                 genutzt wo sinnvoll, Formatierung
+//                                 einheitlich nach parsecs lpc-mode
+//              Mammi   (27.03.00) Raumladen ueberarbeitet
+//              Sissi   (17.06.00) Tuer auf/abschliessen mit Schluesselbund
+//                                 optimiert
+//              Sissi   (28.06.00) lock_door und unlock_door ueberall
+//                                 mit den richtigen Parametern fuer
+//                                 second und key versorgt.
+//
+// $Log: tuer.c,v $
+// Revision 1.59  2015/07/26 12:28:40  myonara
+// Argl, Bugfix zu vorherigem Patch.
+//
+// Revision 1.58  2015/07/26 12:26:51  myonara
+// beim Klopfen nicht den anderen Raum laden...
+//
+// Revision 1.57  2015/05/24 12:30:57  myonara
+// klopfe an die Tuer, statt an der Tuer...
+//
+// Revision 1.56  2013-03-16 16:22:33  gnomi
+// forbidden_unlock_door erhaelt den Schluessel.
+//
+// Revision 1.55  2009-08-27 07:58:17  gnomi
+// open/close/lock/unlock_door machen nix, wenn sie bereits im gewuenschten
+// Zustand sind (damit man sie auch im reset() aufrufen kann, ohne dass
+// im gegenueberliegenden Raum etwas passiert).
+//
+// Revision 1.54  2009-03-20 07:56:56  gnomi
+// open/close_words eingebaut.
+//
+// Revision 1.53  2008-04-04 13:31:56  gnomi
+// Typo in Doku.
+//
+// Revision 1.52  2008/02/25 11:44:27  gnomi
+// Typo in Doku.
+//
+// Revision 1.51  2008/01/24 22:49:53  gnomi
+// Geisterbewegung durch Tueren.
+//
+// Revision 1.50  2008/01/21 14:08:32  gnomi
+// Korrektur zum letzten Patch.
+//
+// Revision 1.49  2008/01/16 09:20:40  gnomi
+// FAIL- und SUCCESS-Defines durch notify_fail mit Prioritaeten ersetzt.
+// Aufs neue Beschreibungssystem umgestellt.
+//
+// Revision 1.48  2006/08/03 09:48:18  gnomi
+// Doku verbessert.
+//
+// Revision 1.47  2006/06/07 20:37:47  gnomi
+// Weniger Einschraenkungen durch Dunkelheit.
+//
+// Revision 1.46  2006/01/22 01:20:50  gnomi
+// Fehlermeldung, wenn die Gegenrichtung nicht ermittelt werden konnte.
+//
+// Revision 1.45  2005/04/10 01:22:26  gnomi
+// Typo in Goettermeldung.
+//
+// Revision 1.44  2004/07/25 00:08:42  gnomi
+// Doku zu (un)lock_door: Parameter key erklaert.
+//
+// Revision 1.43  2004/02/18 22:35:01  gnomi
+// Zauberstab-Infos eingebaut.
+//
+// Revision 1.42  2003/06/19 22:40:29  gnomi
+// Doku korrigiert.
+//
+// Revision 1.41  2003/01/26 03:55:47  gnomi
+// Enzy-Doku: lock_door verweist auf unlock_door und vice versa.
+//
+// Revision 1.40  2003/01/25 04:26:41  gnomi
+// Man braucht eine freie Hand zum Oeffnen und Schliessen.
+//
+// Revision 1.39  2002/11/20 04:09:51  gnomi
+// Controller notify_knock und Lfun set_door_id ausgebaut.
+//
+// Revision 1.38  2002/10/16 01:06:30  gnomi
+// init: Abgleich mit Partnertuer ist sehr vorsichtig.
+// Doku etwas erweitert, korrigiert.
+//
+// Revision 1.37  2002/10/09 23:44:12  gnomi
+// Interface fuer eintretbare Tueren eingebaut (Funktion door_kicked).
+//
+// Revision 1.36  2002/10/09 22:17:33  gnomi
+// soul_command -> forbidden_seele
+//
+// Revision 1.35  2002/10/09 22:03:36  gnomi
+// Pulami: Abgleich mit der Partnertuer findet im move() statt dem init() statt.
+// (Damit auch Bugfix im bisherigen Code, welcher die Tuer im move schloss.)
+// Gnomi: Tueren lassen sich standardmaessig nicht auf- oder zuschliessen.
+//
+// Revision 1.34  2002/07/01 17:39:52  sissi
+// Ist in other_door kein door_exit gesetzt, so wird ein do_error gemacht
+// und 0 zurueckgeliefert.
+//
+// Revision 1.33  2002/07/01 17:01:31  sissi
+// open_door und close_door bekamen einen zweiten optionalen Parameter
+// (der erste war auch schon optional), mit dem man angeben kann, dass sich
+// die Tuere ohne oder mit Meldung oeffnen bzw. schliessen soll.
+//
+// Revision 1.32  2002/06/14 23:05:05  gnomi
+// Oeffnen/Schliessen: Meldung an den Ausfuehrenden vor Controlleraufrufen.
+//
+// Revision 1.31  2002/01/13 04:50:15  freaky
+// query_long() umgestellt.
+//
+// Revision 1.30  2002/01/13 00:55:52  gnomi
+// string query_long() -> varargs string query_long(object viewer)
+// Einige Funktionen als veraltet markiert.
+//
+// Revision 1.29  2002/01/12 07:24:25  gnomi
+// set_no_lock[_messages] eingebaut.
+//
+// Revision 1.28  2001/11/20 05:37:00  gnomi
+// Vor einem delete_exit ein unlock_exit machen, damit evntl. lock-Meldungen
+// geloescht werden.
+//
+// Revision 1.27  2001/10/03 14:56:52  sissi
+// In lock_command die notifies fuer das Tuer schliessen entfernt, da diese
+// bereits in lock_door gemacht werden und somit bisher zweimal kamen.
+//
+// Revision 1.26  2001/09/16 15:56:49  sissi
+// Fehler behoben: in der Tuer wurde nur dann forbidden_lock bzw.
+// forbidden_unlock aufgerufen, wenn der Schluessel das bereits verboten
+// hat.
+//
+// Revision 1.25  2001/07/02 01:51:06  freaky
+// PRIVATE-Define fuer dev305 vorbereitet
+//
+// Revision 1.24  2001/06/27 01:57:36  gnomi
+// Eine private Variablen wieder oeffentlich gemacht.
+//
+// Revision 1.23  2001/06/25 11:48:23  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.22  2001/05/16 19:58:35  gnomi
+// _door_notify: varargs-Parameter sollte man via. apply breitklopfen.
+// (Uralt-Bug)
+//
+// Revision 1.21  2001/05/16 19:35:04  gnomi
+// Bugfix zum vorherigen Patch.
+//
+// Revision 1.20  2001/05/16 18:52:34  gnomi
+// forbidden_moved_out geaendert, so dass kein TP mehr genutzt wird.
+//
+// Revision 1.19  2001/04/24 21:45:08  gnomi
+// Doku: Deklarationen in einer Zeile schreiben.
+//
+// Revision 1.18  2001/04/13 15:06:50  sissi
+// Die Tuer hat jetzt ne euid, da Tueren ihre Nachbarraeume laden.
+//
+// Revision 1.17  2001/04/09 20:03:59  gnomi
+// Uebergangscode rausgenommen.
+//
+// Revision 1.16  2001/04/06 20:29:15  gnomi
+// Mit lock_exit auch die lock_reason (door_is_closed_msg) setzen.
+//
+// Revision 1.15  2001/03/16 02:26:22  gnomi
+// exit_msg auch loeschen, wenn Ausgang entfernt wird.
+// (Auch deshalb wichtig, da die exit_msg eine Closure ist, welche
+// nach einer Zerstoerung der Tuer ungueltig wird und so Fehler erzeugt.)
+//
+// Revision 1.14  2001/03/16 02:14:30  gnomi
+// pass_command rausgenommen und durch Controller ersetzt.
+//
+// Revision 1.13  2001/03/10 21:45:41  gnomi
+// Doku zu set_door_height korrigiert. (Neue Standardgroesse)
+//
+// Revision 1.12  2001/03/10 01:35:48  gnomi
+// Standardhoehe 6
+//
+// Revision 1.11  2001/03/04 04:51:22  freaky
+// von sent.h auf commands.h umgestellt.
+//
+// Revision 1.10  2001/03/03 22:55:20  gnomi
+// Zahlen in add_action's durch ihre Defines ersetzt.
+//
+// Revision 1.9  2001/02/07 22:57:33  gnomi
+// Typos in Enzydoku.
+//
+// Revision 1.8  2001/01/10 16:29:05  freaky
+// Typo in der Doku repariert.
+//
+// Revision 1.7  2001/01/10 15:48:21  freaky
+// crack(): Parameter 'who' eingefuehrt.
+//
+
+#pragma save_types
+#pragma strong_types
+
+inherit "/i/install";
+inherit "/i/item";
+inherit "/i/tools/message_parser";
+
+#include <deklin.h>
+#include <parse_com.h>
+#include <invis.h>
+#include <level.h>
+#include <message.h>
+#include <move.h>
+#include <commands.h>
+#include <error.h>
+#include <description.h>
+#include <notify_fail.h>
+
+// Textersetzung:
+#define NF_LIST            this_player(),this_object(),environment()
+#define NF_OBS             ({NF_LIST})
+#define TO		   this_object()
+#define ENV		   environment()
+
+// Shortcuts fuer Funktionen aus /i/item/messages
+#define MTC mixed_to_closure
+#define CTS closure_to_string
+#define CM convert_message
+
+#define DIETRICH (["name":"dietrich",\
+		   "gender":"maennlich",\
+		   "environment":this_player()])
+
+// Mapping zur Bestimmung der 'Gegenrichtung'
+private nosave mapping dirs =
+([
+   "norden":	"sueden",
+   "sueden":	"norden",
+   "osten" :	"westen",
+   "westen":	"osten",
+   "nordwesten":"suedosten",
+   "suedosten" :"nordwesten",
+   "nordosten" :"suedwesten",
+   "suedwesten":"nordosten",
+   "rein":	"raus",
+   "raus":	"rein",
+   "ausgang":	"betrete",
+   "betrete":	"ausgang",
+   "runter":	"hoch",
+   "hoch":	"runter"
+]);
+
+
+#define OTHER_DOOR other_door()
+#define P_OTHER_DOOR present_other_door()
+object other_door();
+object present_other_door();
+
+#ifdef TestMUD
+#define PRIVATE private
+#else
+#define PRIVATE public
+#endif
+
+PRIVATE string door_exit;	/* Raum hinter der Tuere */
+PRIVATE string pass_cmd;	/* Richtung, in der die Tuer liegt */
+
+PRIVATE string open_cmd;	/* Kommando zum Oeffnen der Tuer */
+PRIVATE string close_cmd;	/* Kommando zum Schliessen der Tuer */
+PRIVATE string unlock_cmd;	/* Kommando zum Abschliessen der Tuer */
+PRIVATE string lock_cmd;	/* Kommando zum Aufschliessen der Tuer */
+PRIVATE string knock_cmd;	/* Kommando zum Klopfen an der Tuer */
+
+PRIVATE string *open_words;
+PRIVATE string *close_words;
+PRIVATE string *unlock_words;	/* schliesse Tuer AUF ... */
+PRIVATE string *lock_words;	/* schliesse Tuer AB, ZU ... */
+PRIVATE string *knock_words;
+
+PRIVATE closure door_opens_message;     /* Meldung beim Oeffnen der Tuer */
+PRIVATE closure door_opens_message_me;
+PRIVATE closure door_closes_message;	/* Meldung beim Schliessen der Tuer */
+PRIVATE closure door_closes_message_me;
+PRIVATE closure door_open_message;	/* Zustands-Meldungen der Tuer */
+PRIVATE closure door_close_message;
+PRIVATE closure door_unlocked_message;
+PRIVATE closure door_locked_message;
+PRIVATE closure door_unlock_message;  /* Meldung beim Aufschliessen der Tuer */
+PRIVATE closure door_unlock_message_me;
+PRIVATE closure door_lock_message;    /* Meldung beim Abschliessen der Tuer */
+PRIVATE closure door_lock_message_me;
+PRIVATE closure knock_message;	      /* Klopfen other, me, andere Seite. */
+PRIVATE closure knock_message_me;
+PRIVATE closure knocking_message;
+PRIVATE closure key_does_not_fit_me;  /* Meldung bei verkehrtem Schluessel */
+PRIVATE closure key_does_not_fit_open;
+PRIVATE closure key_does_not_fit_close;
+private closure no_lock_for_crack;
+private closure no_lock_for_unlock;
+private closure no_lock_for_lock;
+
+PRIVATE int no_exit_msg;             /* damit die Tuer keine eigenen exit_msgs
+                                        setzt. */
+
+PRIVATE int crack;		/* Wie leicht laesst sich die Tuer knacken
+				   (in Prozent) 0=nie, 100=immer            */
+PRIVATE int door_is_locked;     /* 0 = aufgeschlossen, 1 = abgeschlossen    */
+PRIVATE int door_is_open;       /* Zustand der Tuer, 0 = zu, 1 = offen      */
+private int no_lock;		/* 1 = Tuer hat kein Schloss (magisch?)     */
+PRIVATE string *keys;		/* Schluessel, die zur Tuer passen          */
+PRIVATE int door_height;        /* Groesse der Tuer nach
+				   Koerpergroessenkonzept*/
+PRIVATE closure door_is_too_small_msg_me;
+PRIVATE closure door_is_too_small_msg_other;
+PRIVATE closure door_is_closed_msg_me;
+PRIVATE closure door_is_closed_msg_other;
+
+/* ---------------- INTERNE FUNKTIONEN ------------------------------------ */
+
+// state == 1 oeffnen, state == 0 schliessen.
+nosave void mechanism(int state)
+{
+   door_is_open = state;
+   if(pass_cmd && door_exit && environment())
+      if(state)
+	 environment()->unlock_exit(pass_cmd);
+      else
+	 environment()->lock_exit(pass_cmd, door_is_closed_msg_me, door_is_closed_msg_other);
+}
+
+private varargs void init_mechanism(
+    string pass_cmd, string door_exit, int open)
+{
+    if(door_exit && pass_cmd && environment())
+    {
+        environment()->add_exits(({ door_exit }), ({ pass_cmd }));
+        mechanism(open);
+        if(!no_exit_msg)
+            environment()->set_exit_msg(
+                pass_cmd,
+                message_parser("$Der(OBJ_TP) geht durch $den() $dir()."),
+                message_parser("$Der(OBJ_TP) kommt durch $den(#'other_door) gelaufen."));
+    }
+    if(environment())
+        environment()->add_controller(({"notify_moved_out",
+           "forbidden_move_out", "allowed_ghost_pass"}), this_object());
+}
+
+int id(string str)
+{
+    return ::id(str) || str == pass_cmd;
+}
+
+varargs int move(mixed dest, int way, string out, string in)
+{
+    int res;
+    object door;
+
+    res = ::move(dest, way, out, in);
+
+    // Falls andere Tuere ermittelbar, deren Zustand uebernehmen:
+    door = present_other_door();
+    if(door)
+    {
+        door_is_open=door->query_door_is_open();
+        door_is_locked=door->query_door_is_locked();
+    }
+
+    init_mechanism(pass_cmd, door_exit, door_is_open);
+
+    return res;
+}
+
+/* ---------------- SET FUNKTIONEN ---------------------------------------- */
+
+/*
+FUNKTION: set_door_open_message
+DEKLARATION: void set_door_open_message(mixed str)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldung, die im long auftaucht, wenn die Tuer offen ist.
+Pseudoclosures ("$Der()") sind erlaubt. Automatisches Wrapping.
+
+Default:
+    set_door_open_message(       "$Er() ist offen.");
+
+VERWEISE: set_door_close_message, set_door_locked_message,
+set_door_unlocked_message, set_door_opens_message, set_door_closes_message,
+set_door_lock_messages, set_door_unlock_messages, set_knock_messages,
+set_key_does_not_fit_message
+GRUPPEN: tuer
+*/
+
+void set_door_open_message(mixed str)
+{
+    door_open_message     = MTC(str);
+}
+
+/*
+FUNKTION: set_door_close_message
+DEKLARATION: void set_door_close_message(mixed str)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldung, die im long auftaucht, wenn die Tuer geschlossen
+ist. Pseudoclosures ("$Der()") sind erlaubt. Automatisches Wrapping.
+
+Default:
+   set_door_close_message(      "$Er() ist zu.");
+
+VERWEISE: set_door_open_message, set_door_locked_message,
+set_door_unlocked_message, set_door_opens_message, set_door_closes_message,
+set_door_lock_messages, set_door_unlock_messages, set_knock_messages,
+set_key_does_not_fit_message
+GRUPPEN: tuer
+*/
+void set_door_close_message(mixed str)
+{
+    door_close_message    = MTC(str);
+}
+
+/*
+FUNKTION: set_door_locked_message
+DEKLARATION: void set_door_locked_message(mixed str)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldung, die im long auftaucht, wenn die Tuer
+abgeschlossen ist. Pseudoclosures ("$Der()") sind erlaubt. Automatisches
+Wrapping.
+
+Default:
+   set_door_locked_message(     "$Er() ist verschlossen.");
+
+VERWEISE: set_door_open_message, set_door_close_message,
+set_door_unlocked_message, set_door_opens_message, set_door_closes_message,
+set_door_lock_messages, set_door_unlock_messages, set_knock_messages,
+set_key_does_not_fit_message
+GRUPPEN: tuer
+*/
+void set_door_locked_message(mixed str)
+{
+    door_locked_message   = MTC(str);
+}
+
+/*
+FUNKTION: set_door_unlocked_message
+DEKLARATION: void set_door_unlocked_message(mixed str)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldung, die im long auftaucht, wenn die Tuer nicht
+abgeschlossen ist. Pseudoclosures ("$Der()") sind erlaubt. Automatisches
+Wrapping.
+
+Default:
+   set_door_unlocked_message(   "$Er() ist aufgeschlossen.");
+
+VERWEISE: set_door_open_message, set_door_close_message,
+set_door_locked_message, set_door_opens_message, set_door_closes_message,
+set_door_lock_messages, set_door_unlock_messages, set_knock_messages,
+set_key_does_not_fit_message
+GRUPPEN: tuer
+*/
+void set_door_unlocked_message(mixed str)
+{
+    door_unlocked_message = MTC(str);
+}
+
+/*
+FUNKTION: set_door_opens_message
+DEKLARATION: void set_door_opens_message(mixed for_me, mixed for_you)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldungen, die beim Oeffnen der Tuer ausgegeben werden:
+for_me ist dabei die Meldung, die an den handelnden Spieler ausgegeben wird,
+for_you wird an die Zuschauer ausgegeben.
+Pseudoclosures ("$Der()") sind erlaubt. Automatisches Wrapping.
+
+Default:
+   set_door_opens_message(      "Du oeffnest $den().",
+				"$Der(OBJ_TP) oeffnet $den().");
+
+VERWEISE: set_door_open_message, set_door_close_message,
+set_door_locked_message, set_door_unlocked_message, set_door_closes_message,
+set_door_lock_messages, set_door_unlock_messages, set_knock_messages,
+set_key_does_not_fit_message
+GRUPPEN: tuer
+*/
+void set_door_opens_message(mixed str1, mixed str2)
+{
+    door_opens_message_me  = MTC(str1);
+    door_opens_message     = MTC(CM(str2));
+}
+
+/*
+FUNKTION: set_door_closes_message
+DEKLARATION: void set_door_closes_message(mixed for_me, mixed for_you)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldungen, die beim Schliessen der Tuer ausgegeben werden:
+for_me ist dabei die Meldung, die an den handelnden Spieler ausgegeben wird,
+for_you wird an die Zuschauer ausgegeben.
+Pseudoclosures ("$Der()") sind erlaubt. Automatisches Wrapping.
+
+Default:
+   set_door_closes_message(     "Du schliesst $den().",
+				"$Der(OBJ_TP) schliesst $den().");
+
+VERWEISE: set_door_open_message, set_door_close_message,
+set_door_locked_message, set_door_unlocked_message, set_door_opens_message,
+set_door_lock_messages, set_door_unlock_messages, set_knock_messages,
+set_key_does_not_fit_message
+GRUPPEN: tuer
+*/
+void set_door_closes_message(mixed str1, mixed str2)
+{
+    door_closes_message_me = MTC(str1);
+    door_closes_message    = MTC(CM(str2));
+}
+
+/*
+FUNKTION: set_door_lock_messages
+DEKLARATION: void set_door_lock_messages(mixed for_me, mixed for_you)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldungen, die beim Abschliessen der Tuer ausgegeben
+werden:
+for_me ist dabei die Meldung, die an den handelnden Spieler ausgegeben wird,
+for_you wird an die Zuschauer ausgegeben.
+Pseudoclosures ("$Der()") sind erlaubt. Automatisches Wrapping.
+
+Default:
+   set_door_lock_messages(      "Du schliesst $den() mit $deinem('key) ab.",
+				"$Der(OBJ_TP) schliesst $den() ab.");
+
+VERWEISE:  set_door_open_message, set_door_close_message,
+set_door_locked_message, set_door_unlocked_message, set_door_opens_message,
+set_door_closes_message, set_door_unlock_messages, set_knock_messages,
+set_key_does_not_fit_message
+GRUPPEN: tuer
+*/
+void set_door_lock_messages(mixed str1, mixed str2)
+{
+    door_lock_message_me   = MTC(str1,({'key}));
+    door_lock_message      = MTC(CM(str2),({'key}));
+}
+
+/*
+FUNKTION: set_door_unlock_messages
+DEKLARATION: void set_door_unlock_messages(mixed for_me, mixed for_you)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldungen, die beim Aufschliessen der Tuer ausgegeben
+werden:
+for_me ist dabei die Meldung, die an den handelnden Spieler ausgegeben wird,
+for_you wird an die Zuschauer ausgegeben.
+Pseudoclosures ("$Der()") sind erlaubt. Automatisches Wrapping.
+
+Default:
+   set_door_unlock_messages(    "Du schliesst $den() mit $deinem('key) auf.",
+				"$Der(OBJ_TP) schliesst $den() auf.");
+
+VERWEISE: set_door_open_message, set_door_close_message,
+set_door_locked_message, set_door_unlocked_message, set_door_opens_message,
+set_door_closes_message, set_door_lock_messages, set_knock_messages,
+set_key_does_not_fit_message
+GRUPPEN: tuer
+*/
+void set_door_unlock_messages(mixed str1, mixed str2)
+{
+    door_unlock_message_me = MTC(str1,({'key}));
+    door_unlock_message    = MTC(CM(str2),({'key}));
+}
+
+/*
+FUNKTION: set_knock_messages
+DEKLARATION: void set_knock_messages(mixed for_me, mixed for_you, mixed knocking)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldungen, die beim Klopfen an der Tuer ausgegeben werden:
+for_me ist dabei die Meldung, die an den handelnden Spieler ausgegeben wird,
+for_you wird an die Zuschauer ausgegeben,
+knocking ist die Meldung, wenn an der anderen Seite geklopft wurde.
+Pseudoclosures ("$Der()") sind erlaubt. Automatisches Wrapping.
+
+Default:
+   set_knock_messages(          "Du klopfst an $der().",
+				"$Der(OBJ_TP) klopft an $der().",
+				"Jemand klopft an $der().\n");
+VERWEISE: set_door_open_message, set_door_close_message,
+set_door_locked_message, set_door_unlocked_message, set_door_opens_message,
+set_door_closes_message, set_door_lock_messages, set_door_unlock_messages,
+set_key_does_not_fit_message
+GRUPPEN: tuer
+*/
+void set_knock_messages(mixed str1, mixed str2, mixed str3)
+{
+    knock_message_me = MTC(str1);
+    knock_message    = MTC(CM(str2));
+    knocking_message = MTC(CM(str3));
+}
+
+/*
+FUNKTION: set_key_does_not_fit_message
+DEKLARATION: void set_key_does_not_fit_message(mixed for_me, mixed for_you_open, mixed for_you_closed)
+BESCHREIBUNG:
+Setzt bei Tueren die Meldungen, wenn jemand versucht hat, einen nicht passenden
+Schluesel zu verwenden:
+for_me ist dabei die Meldung, die an den handelnden Spieler ausgegeben wird,
+for_you_open ist die Meldung, die an die anderen ausgegeben wird, wenn
+versucht wurde, aufzuschliessen,
+for_you_closed ist die Meldung, die an die anderen ausgegeben wird, wenn
+versucht wurde, abzuschliessen.
+Pseudoclosures ("$Der()") sind erlaubt. Automatisches Wrapping.
+
+Default:
+    set_key_does_not_fit_message(
+	"Du hast keinen passenden Schluessel fuer das Schloss $des().",
+	"$Der(OBJ_TP) versucht $den() aufzuschliessen,"+
+	" hat aber nicht den richtigen Schluessel.",
+	"$Der(OBJ_TP) versucht $den() zuzuschliessen,"+
+	" hat aber nicht den richtigen Schluessel.");
+VERWEISE: set_door_open_message, set_door_close_message,
+set_door_locked_message, set_door_unlocked_message, set_door_opens_message,
+set_door_closes_message, set_door_lock_messages, set_door_unlock_messages,
+set_knock_messages
+GRUPPEN: tuer
+*/
+void set_key_does_not_fit_message(mixed str1, mixed str2, mixed str3)
+{
+    key_does_not_fit_me    = MTC(str1);
+    key_does_not_fit_open  = MTC(CM(str2));
+    key_does_not_fit_close = MTC(CM(str3));
+}
+
+/*
+FUNKTION: set_open_cmd
+DEKLARATION: void set_open_cmd(string command)
+BESCHREIBUNG:
+Setzt bei Tueren das Kommando, mit dem man sie oeffnen kann.
+
+Default:
+   set_open_cmd("oeffne");
+
+VERWEISE: set_close_cmd, set_unlock_cmd, set_lock_cmd, set_knock_cmd,
+	  set_open_words, set_close_words, set_unlock_words,
+	  set_lock_words, set_knock_words
+GRUPPEN: tuer
+*/
+void set_open_cmd(string str)
+{
+    open_cmd	= str;
+}
+
+/*
+FUNKTION: set_close_cmd
+DEKLARATION: void set_close_cmd(string command)
+BESCHREIBUNG:
+Setzt bei Tueren das Kommando, mit dem man sie schliessen kann.
+
+Default:
+   set_close_cmd("schliess");
+
+VERWEISE: set_open_cmd, set_unlock_cmd, set_lock_cmd, set_knock_cmd,
+	  set_open_words, set_close_words, set_unlock_words,
+	  set_lock_words, set_knock_words
+GRUPPEN: tuer
+*/
+void set_close_cmd(string str)
+{
+    close_cmd	= str;
+}
+
+/*
+FUNKTION: set_unlock_cmd
+DEKLARATION: void set_unlock_cmd(string command)
+BESCHREIBUNG:
+Setzt bei Tueren das Kommando, mit dem man sie aufschliessen kann.
+
+Default:
+   set_unlock_cmd("schliess");
+
+VERWEISE: set_open_cmd, set_close_cmd, set_lock_cmd, set_knock_cmd,
+	  set_open_words, set_close_words, set_unlock_words,
+	  set_lock_words, set_knock_words
+GRUPPEN: tuer
+*/
+void set_unlock_cmd(string str)
+{
+    unlock_cmd	= str;
+}
+
+/*
+FUNKTION: set_lock_cmd
+DEKLARATION: void set_lock_cmd(string command)
+BESCHREIBUNG:
+Setzt bei Tueren das Kommando, mit dem man sie abschliessen kann.
+
+Default:
+   set_lock_cmd("schliess");
+
+VERWEISE: set_open_cmd, set_close_cmd, set_unlock_cmd, set_knock_cmd,
+	  set_open_words, set_close_words, set_unlock_words,
+	  set_lock_words, set_knock_words
+GRUPPEN: tuer
+*/
+void set_lock_cmd(string str)
+{
+    lock_cmd	= str;
+}
+
+/*
+FUNKTION: set_knock_cmd
+DEKLARATION: void set_knock_cmd(string command)
+BESCHREIBUNG:
+Setzt bei Tueren das Kommando, mit dem man daran klopfen kann.
+
+Default:
+   set_knock_cmd("klopf");
+
+VERWEISE: set_open_cmd, set_close_cmd, set_unlock_cmd, set_lock_cmd,
+	  set_open_words, set_close_words, set_unlock_words,
+	  set_lock_words, set_knock_words
+GRUPPEN: tuer
+*/
+void set_knock_cmd(string str)
+{
+    knock_cmd	= str;
+}
+
+/*
+FUNKTION: set_open_words
+DEKLARATION: void set_open_words(string *words)
+BESCHREIBUNG:
+Setzt bei Tueren die Adverben beim Oeffne-Kommando.
+Mit der Angabe von 0 werden saemtliche Adverben erlaubt.
+
+Default:
+   set_open_words( ({""}) );
+
+VERWEISE: set_open_cmd, set_close_cmd, set_unlock_cmd, set_knock_cmd,
+	  set_lock_cmd, set_close_words, set_unlock_words,
+	  set_lock_words, set_knock_words
+GRUPPEN: tuer
+*/
+void set_open_words(string *str)
+{
+    open_words	= str;
+}
+
+
+/*
+FUNKTION: set_close_words
+DEKLARATION: void set_close_words(string *words)
+BESCHREIBUNG:
+Setzt bei Tueren die Adverben beim Schliesse-Kommando.
+Mit der Angabe von 0 werden saemtliche Adverben erlaubt.
+
+Default:
+   set_uclose_words( ({""}) );
+
+VERWEISE: set_open_cmd, set_close_cmd, set_unlock_cmd, set_knock_cmd,
+	  set_lock_cmd, set_open_words, set_unlock_words,
+	  set_lock_words, set_knock_words
+GRUPPEN: tuer
+*/
+void set_close_words(string *str)
+{
+    close_words	= str;
+}
+
+
+/*
+FUNKTION: set_unlock_words
+DEKLARATION: void set_unlock_words(string *words)
+BESCHREIBUNG:
+Setzt bei Tueren die Adverben beim Aufschliess-Kommando.
+Mit der Angabe von 0 werden saemtliche Adverben erlaubt.
+
+Default:
+   set_unlock_words( ({"auf"}) );
+
+VERWEISE: set_open_cmd, set_close_cmd, set_unlock_cmd, set_knock_cmd,
+	  set_lock_cmd, set_open_words, set_close_words,
+	  set_lock_words, set_knock_words
+GRUPPEN: tuer
+*/
+void set_unlock_words(string *str)
+{
+    unlock_words	= str;
+}
+
+/*
+FUNKTION: set_lock_words
+DEKLARATION: void set_lock_words(string *words)
+BESCHREIBUNG:
+Setzt bei Tueren die Adverben beim Abschliess-Kommando.
+Mit der Angabe von 0 werden saemtliche Adverben erlaubt.
+
+Default:
+   set_lock_words( ({"zu", "ab"}) );
+
+VERWEISE: set_open_cmd, set_close_cmd, set_unlock_cmd, set_knock_cmd,
+	  set_lock_cmd, set_open_words, set_close_words,
+	  set_unlock_words, set_knock_words
+GRUPPEN: tuer
+*/
+void set_lock_words(string *str)
+{
+    lock_words	= str;
+}
+
+/*
+FUNKTION: set_knock_words
+DEKLARATION: void set_knock_words(string *words)
+BESCHREIBUNG:
+Setzt bei Tueren die Adverben beim Klopf-Kommando.
+Mit der Angabe von 0 werden saemtliche Adverben erlaubt.
+
+Default:
+   set_knock_words( ({"an","am"}) );
+
+VERWEISE: set_open_cmd, set_close_cmd, set_unlock_cmd, set_knock_cmd,
+	  set_lock_cmd, set_open_words, set_close_words,
+	  set_unlock_words, set_lock_words
+GRUPPEN: tuer
+*/
+void set_knock_words(string *str)
+{
+    knock_words	= str;
+}
+
+/*
+FUNKTION: set_door_height
+DEKLARATION: void set_door_height(int koerpergroesse)
+BESCHREIBUNG:
+Setzt die Groesse einer Tuer in Koerpergroessenmaszen. Spieler/Objekte, die
+groesser als diese Groesse sind, koennen durch diese Tuer nicht gehen.
+-1 bedeutet, dass die Tuer "keine Groesse" hat, damit jedes Lebewesen durch
+die Tuer passt. Tueren sind standardmaessig (beim Clonen) auf Groesse 6
+(das entspricht 1,7 m - 2,2 m) gestellt. 
+VERWEISE: query_koerpergroesse, set_koerpergroesse
+GRUPPEN: tuer, monster, body
+*/
+
+void set_door_height(int koerpergroesse)
+{
+    door_height= koerpergroesse;
+}
+
+/*
+FUNKTION: set_door_is_too_small_msg
+DEKLARATION: void set_door_is_too_small_msg(mixed me,mixed other)
+BESCHREIBUNG:
+Ist die Tuer fuer ein Lebewesen zu klein, so wird dem Lebewesen die Meldung
+<me> ausgegeben, den Umstehenden die Meldung <other>.
+
+Beispiel:
+      set_door_is_too_small_msg(
+	  "Du bist viel zu gross. Vielleicht kannst Du durch $den(OBJ_TO) "
+	  "ja durchkriechen?",
+	  "$Der(OBJ_TP) ist anscheinend fuer $den(OBJ_TO) viel zu gross. "
+	  "Vielleicht geht es aber mit Kriechen?")
+VERWEISE:
+GRUPPEN: tuer,monster,body,move
+*/
+
+void set_door_is_too_small_msg(mixed str1, mixed str2)
+{
+    door_is_too_small_msg_me    = MTC(str1);
+    door_is_too_small_msg_other = MTC(CM(str2));
+}
+
+/*
+FUNKTION: set_door_is_closed_msgs
+DEKLARATION: varargs void set_door_is_closed_msgs(string msg [, string msg_other])
+BESCHREIBUNG:
+Falls eine Tuer nicht durchschritten werden kann, weil sie geschlossen ist,
+wird der Text <msg> an das aktuelle Lebewesen (this_player()) ausgegeben.
+Wird zusaetzlich <msg_other> gesetzt, so wird dieses an die Umstehenden
+gemeldet. Pseudoclosures sind in beiden Strings erlaubt.
+VERWEISE: pass_command
+GRUPPEN: tuer
+*/
+
+varargs void set_door_is_closed_msgs(string msg_me, string msg_other)
+{
+    if (msg_me)
+        door_is_closed_msg_me = message_parser(msg_me);
+    else
+        door_is_closed_msg_me = 0;
+
+    if (msg_other)
+        door_is_closed_msg_other = message_parser(CM(msg_other));
+    else
+        door_is_closed_msg_other = 0;
+}
+
+/*
+FUNKTION: set_no_exit_msg
+DEKLARATION: void set_no_exit_msg(int keine_meldung)
+BESCHREIBUNG:
+Soll die Tuer keine eigene Ausgangsmeldung setzen, so kann man das hiermit
+setzen.
+VERWEISE: set_exit_msg, /i/room.c
+GRUPPEN: tuer, raum
+*/
+
+void set_no_exit_msg(int i)
+{
+    no_exit_msg=i;
+}
+
+/*
+FUNKTION: set_door_exit
+DEKLARATION: void set_door_exit(string filename)
+BESCHREIBUNG:
+Setzt bei Tueren den Raum, in den es rausgeht. Der Ausgang darf nicht in
+der normalen Liste der Ausgaenge im Raum auftauchen, sonst macht die Tuer
+den Ausgang gar nicht zu!
+Wenn der Pfad ohne "/" beginnt, so wird der relative Pfad zu this_object()
+genommen, .. und . in filename sind erlaubt!
+VERWEISE: query_door_exit, set_pass_cmd, init_door
+GRUPPEN: tuer
+*/
+
+void set_door_exit(string str)
+{
+    string tmp;
+
+    if(door_exit && pass_cmd && environment())
+    {
+        if(!no_exit_msg)
+    	    environment()->set_exit_msg(pass_cmd,0,0);
+	environment()->unlock_exit(pass_cmd);
+        environment()->delete_exit(pass_cmd);
+    }
+    door_exit = abs_path(str, file_path(previous_object()));
+    if(tmp = domain2map(door_exit))
+        door_exit = tmp;
+
+    init_mechanism(pass_cmd, door_exit);
+}
+
+/*
+FUNKTION: set_pass_cmd
+DEKLARATION: void set_pass_cmd(string direction)
+BESCHREIBUNG:
+Setzt bei Tueren den Befehl, mit dem man die offene Tuer durschreiten kann. Im
+allgemeinen sollte das eine normale Himmelsrichtung sein.
+VERWEISE: set_door_exit, query_pass_cmd, init_door
+GRUPPEN: tuer
+*/
+void set_pass_cmd(string str)
+{
+    if(door_exit && pass_cmd && environment())
+    {
+        if(!no_exit_msg)
+	    environment()->set_exit_msg(pass_cmd,0,0);
+	environment()->unlock_exit(pass_cmd);
+        environment()->delete_exit(pass_cmd);
+    }
+    pass_cmd = str;
+    init_mechanism(pass_cmd, door_exit);
+}
+
+/*
+FUNKTION: set_keys
+DEKLARATION: void set_keys(string*|string keys)
+BESCHREIBUNG:
+Damit kann man bei Tueren die Id's der passenden Schluessel angeben. Die Tuer
+laesst sich nur von solchen Schluesseln oeffnen, bei denen eine Id mit einer
+aus der Liste *keys uebereinstimmt.
+
+set_keys(0) fuehrt dazu, dass die Tuere ohne Schluessel auf- und
+zugeschlossen werden kann. Man muss dann noch die Meldungen fuer das Auf-
+und Zuschliessen aendern, da diese sonst ob dem fehlenden Schluessel Fehler
+erzeugen.
+
+Mit set_keys("schluessel") erreicht man, dass man die Tuer mit jedem Schluessel
+auf- und zuschliessen kann.
+
+VERWEISE: query_keys, set_door_lock_messages, set_door_unlock_messages
+GRUPPEN: tuer
+*/
+void set_keys(mixed k)
+{
+    keys = stringp(k) ? ({ k }) : k;
+}
+
+/*
+FUNKTION: set_door_is_open
+DEKLARATION: void set_door_is_open(int open)
+BESCHREIBUNG:
+Damit kann man eine Tuer auf- und zumachen: bei einem Wert open!=0 ist die
+Tuer offen, bei open==0 ist sie zu.
+
+ACHTUNG: Diese Funktion aendert nicht den Zustand der Partnertuer und ruft
+auch keine Controller auf. Sie ist daher nur zur Initialisierung gedacht.
+Spaeter (nach dem 1. move) sollte man die Funktionen open_door bzw.
+close_door nutzen.
+
+VERWEISE: set_door_is_locked, open_door, close_door
+GRUPPEN: tuer
+*/
+void set_door_is_open(int i)
+{
+    mechanism(i ? 1 : 0);
+}
+
+/*
+FUNKTION: set_door_is_locked
+DEKLARATION: void set_door_is_locked(int locked)
+BESCHREIBUNG:
+Damit kann man eine Tuer auf- und zuschliessen: bei einem Wert locked!=0 ist
+die Tuer abgeschlossen, bei locked==0 ist sie nicht abgeschlossen.
+
+ACHTUNG: Diese Funktion aendert nicht den Zustand der Partnertuer und ruft
+auch keine Controller auf. Sie ist daher nur zur Initialisierung gedacht.
+Spaeter (nach dem 1. move) sollte man die Funktionen lock_door bzw.
+unlock_door nutzen.
+
+VERWEISE: set_door_is_open, lock_door, unlock_door
+GRUPPEN: tuer
+*/
+void set_door_is_locked(int i)
+{
+    door_is_locked = i;
+}
+
+
+/*
+FUNKTION: set_crack
+DEKLARATION: void set_crack(int chance)
+BESCHREIBUNG:
+Setzt bei Tueren die Wahrscheinlichkeit, mit der das Schloss geknackt werden
+kann. Je hoeher der Wert von Chance, desto leichter kann man das Schloss
+Knacken. Es sind Werte zwischenn 0 und 100 zulaessig, der Default ist 50.
+VERWEISE: query_crack
+GRUPPEN: tuer
+*/
+void set_crack(int i)
+{
+    crack = i;
+}
+
+/*
+FUNKTION: set_no_lock
+DEKLARATION: void set_no_lock(int no_lock)
+BESCHREIBUNG:
+Hiermit setzt man, ob die Tuer kein Schloss hat.
+Damit ist es unmoeglich, diese Tuer zu knacken oder aufzuschliessen.
+VERWEISE: set_no_lock_messages, query_no_lock, lock_door, unlock_door
+GRUPPEN: tuer
+*/
+void set_no_lock(int i)
+{
+    no_lock = i?1:0;
+}
+
+/*
+FUNKTION: set_no_lock_messages
+DEKLARATION: void set_no_lock_messages(mixed for_crack, mixed for_unlock, mixed for_lock)
+BESCHREIBUNG:
+Damit setzt man die Meldung bei Tueren, die jemand haelt, welcher die
+Tuer knacken, aufschliessen bzw. abschliessen will und die Tuer aber
+kein Schloss hat.
+VERWEISE: set_no_lock
+GRUPPEN: tuer
+*/
+void set_no_lock_messages(mixed for_crack, mixed for_unlock, mixed for_lock)
+{
+    no_lock_for_crack = MTC(for_crack);
+    no_lock_for_unlock = MTC(for_unlock);
+    no_lock_for_lock = MTC(for_lock);
+}
+
+/* ---------------- SET FUNKTIONEN ENDE ----------------------------------- */
+
+/*
+FUNKTION: query_no_lock
+DEKLARATION: int query_no_lock()
+BESCHREIBUNG:
+Hiermit kann man abfragen, ob die Tuer kein Schloss hat.
+VERWEISE: set_no_lock, lock_door, unlock_door
+GRUPPEN: tuer
+*/
+int query_no_lock()
+{
+    return no_lock;
+}
+
+/*
+FUNKTION: query_door_height
+DEKLARATION: int query_door_height(void)
+BESCHREIBUNG:
+Liefert die "Hoehe" der Tuer zurueck. Lebewesen, die groesser als dieser, dem
+Koerpergroessensystem angepasste Wert sind, koennen nicht durch die Tuer
+gehen. Ein Wert von -1 bedeutet, dass jedes Lebewesen durch die Tuer passt
+(Standardeinstellung).
+VERWEISE: query_koerpergroesse,set_door_height,set_koerpergroesse
+GRUPPEN: tuer,monster,body
+*/
+
+int query_door_height()
+{
+    return door_height;
+}
+
+/*
+FUNKTION: query_door_messages
+DEKLARATION: closure *query_door_messages()
+BESCHREIBUNG:
+Liefert alle Closure-Eintraege der Tuer als Array zurueck.
+VERWEISE:
+GRUPPEN: tuer
+*/
+closure *query_door_messages() {
+    return ({
+	door_opens_message,
+	door_opens_message_me,
+	door_closes_message,
+	door_closes_message_me,
+	door_open_message,
+	door_close_message,
+	door_unlocked_message,
+	door_locked_message,
+	door_unlock_message,
+	door_unlock_message_me,
+	door_lock_message,
+	door_lock_message_me,
+	knock_message,
+	knock_message_me,
+	knocking_message,
+	key_does_not_fit_me,
+	key_does_not_fit_open,
+	key_does_not_fit_close,
+        door_is_too_small_msg_me,
+        door_is_too_small_msg_other,
+        door_is_closed_msg_me,
+        door_is_closed_msg_other,
+	no_lock_for_crack,
+	no_lock_for_unlock,
+	no_lock_for_lock,
+            });
+}
+
+/*
+FUNKTION: query_door_exit
+DEKLARATION: string query_door_exit()
+BESCHREIBUNG:
+Liefert den Filenamen des Raumes zurueck, der von einer Tuer verschlossen wird.
+VERWEISE: set_door_exit, set_pass_cmd, query_pass_cmd
+GRUPPEN: tuer
+*/
+string query_door_exit()
+{
+    return door_exit;
+}
+
+/*
+FUNKTION: query_pass_cmd
+DEKLARATION: string query_pass_cmd()
+BESCHREIBUNG:
+Liefert den Befehl zurueck, mit dem man eine Tuer durschreiten kann. Normaler-
+weise ist das eine Himmelsrichtung.
+VERWEISE: set_pass_cmd, set_door_exit, query_door_exit
+GRUPPEN: tuer
+*/
+string query_pass_cmd()
+{
+    return pass_cmd;
+}
+
+
+
+/*
+FUNKTION: query_crack
+DEKLARATION: int query_crack()
+BESCHREIBUNG:
+Liefert bei einer Tuer die Wahrscheinlichkeit zurueck, mit der das Schloss
+geknackt werden kann.
+VERWEISE: set_crack
+GRUPPEN: tuer
+*/
+int query_crack()
+{
+    return crack;
+}
+
+/*
+FUNKTION: query_keys
+DEKLARATION: string *query_keys()
+BESCHREIBUNG:
+Liefert bei einer Tuer die Liste der Schluessel-Id's zurueck, mit der die
+Tuer aufgeschlossen werden kann.
+VERWEISE: set_keys
+GRUPPEN: tuer
+*/
+string *query_keys()
+{
+    return keys;
+}
+
+/*
+FUNKTION: query_door_is_open
+DEKLARATION: int query_door_is_open()
+BESCHREIBUNG:
+Liefert zurueck, ob eine Tuer offen ist: wenn die Tuer zu ist, wird 0 returnt,
+wenn sie offen ist etwas anderes.
+VERWEISE: set_door_is_open
+GRUPPEN: tuer
+*/
+int query_door_is_open()
+{
+    return door_is_open;
+}
+
+/*
+FUNKTION: query_door_is_locked
+DEKLARATION: int query_door_is_locked()
+BESCHREIBUNG:
+Liefert zurueck, ob eine Tuer abgeschlossen ist. Wenn ja, wird ein Wert != 0
+zurueckgeliefert.
+VERWEISE: set_door_is_locked
+GRUPPEN: tuer
+*/
+int query_door_is_locked()
+{
+    return door_is_locked;
+}
+
+/*
+FUNKTION: door_kicked
+DEKLARATION: int door_kicked(object wer, string wie, string adverb)
+BESCHREIBUNG:
+Diese Funktion wird sofern vorhanden in der Tuer aufgerufen,
+wenn ein Lebewesen wer auf die Tuer mit Gewalt (derzeit mit den
+Seele-Befehlen trete und stosse) einwirkt. wie ist dabei der Seele-Befehl
+(das Argument 'what' aus forbidden_seele) und adverb das dazugehoerige Adverb.
+
+Liefert diese Funktion 0, so handelt die Tuer ganz normal und gibt selber
+eine entsprechende Meldung aus. Bei 1 wird keine Meldung ausgegeben, der
+Seele-Befehl jedoch per forbidden_seele unterbunden. Diese Funktion
+bietet damit die Moeglichkeit, auf diese Gewalteinwirkung gesondert zu
+reagieren.
+VERWEISE: forbidden_seele
+GRUPPEN: tuer
+*/
+// Zum Abfangen des Seele-Kommandos "tritt" -> tritt tuer ein erzeugt
+// jetzt nicht mehr 'Du trittst die Tuer ein.'
+private int my_forbidden_seele(string forbidden_seele_text, object who,
+    mixed me, string what, string adverb, int align, int flags, int mt_who,
+    int mt_me, int mt_sbelse)
+{
+    if(me!=this_object())
+	return 0;
+
+    switch(what)
+    {
+	case "tritt":
+	    if(!this_object()->door_kicked(who, what, adverb))
+		this_object()->send_message(MT_LOOK,MA_EMOTE,
+		    wrap(Der(who)+" ueberlegt, gegen "+den()+" zu treten."),
+		    wrap("Du ueberlegst einen Moment, gegen "+den()+
+			 " zu treten, schreckst aber aus Angst vor einem "
+			 "verstauchten Fuss zurueck."), who);
+	    return 1;
+	case "stoess":
+	    if(!this_object()->door_kicked(who, what, adverb))
+		this_object()->send_message(MT_LOOK,MA_EMOTE,
+		    wrap(Der(who)+" ueberlegt, gegen "+den()+" zu stossen."),
+		    wrap("Du ueberlegst einen Moment, gegen "+den()+
+			 " zu stossen, schreckst aber aus Angst vor "
+			 "daraus hervorgehenden Verletzungen zurueck."), who);
+	    return 1;
+    }
+}
+
+/* -------------------- SETUP STANDARD DOOR ----------------------------- */
+
+void create()
+{
+    seteuid (getuid ());
+    set_name(		"tuer");
+    set_gender(		"weiblich");
+    set_id(		({"tuer","tuere"}));
+    set_material(	"holz");
+    set_invis(		V_NOLIST);
+    set_weight(		12);
+
+    set_keys(		({}));
+    set_crack(		50);
+
+    set_open_cmd(	"oeffne");
+    set_close_cmd(	"schliess");
+    set_unlock_cmd(	"schliess");
+    set_lock_cmd(	"schliess");
+    set_knock_cmd(	"klopf");
+
+    set_open_words(	({""}) );
+    set_close_words(	({""}) );
+    set_lock_words(	({"zu", "ab"}) );
+    set_unlock_words(	({"auf"}) );
+    set_knock_words(	({"an","am"}) );
+
+    set_door_opens_message(	"Du oeffnest $den().",
+				"$Der(OBJ_TP) oeffnet $den().");
+    set_door_closes_message(	"Du schliesst $den().",
+				"$Der(OBJ_TP) schliesst $den().");
+    set_door_open_message(	"$Er() ist offen.");
+    set_door_close_message(	"$Er() ist zu.");
+    set_door_locked_message(	"$Er() ist verschlossen.");
+    set_door_unlocked_message(	"$Er() ist aufgeschlossen.");
+    set_door_lock_messages(	"Du schliesst $den() mit $deinem('key) ab.",
+				"$Der(OBJ_TP) schliesst $den() ab.");
+    set_door_unlock_messages(	"Du schliesst $den() mit $deinem('key) auf.",
+				"$Der(OBJ_TP) schliesst $den() auf.");
+    set_knock_messages(		"Du klopfst an $der().",
+				"$Der(OBJ_TP) klopft an $der().",
+				"Jemand klopft an $der().");
+
+    set_key_does_not_fit_message(
+	"Du hast keinen passenden Schluessel fuer das Schloss $des().",
+	"$Der(OBJ_TP) versucht $den() aufzuschliessen,"+
+	" hat aber nicht den richtigen Schluessel.",
+	"$Der(OBJ_TP) versucht $den() zuzuschliessen,"+
+	" hat aber nicht den richtigen Schluessel.");
+    set_no_lock_messages(
+	"$Der() besitzt gar kein Schloss zum knacken.",
+	"$Der() hat aber gar kein Schloss, welches man irgendwie dazu nutzen koennte.",
+	"Du kannst keinerlei Schloss an $dem() entdecken.");
+
+   // Standardgrosse, damit Spieler i.d.R immer durchkoennen:
+    set_door_height(6);
+    set_door_is_too_small_msg(
+        "Du bist zu gross fuer $den().",
+        "$Der(OBJ_TP) rennt gegen $den(). "
+        "$Er() ist zu klein fuer $ihn(OBJ_TP).");
+    // Standardmeldung, aber keine an die Umstehenden:
+    set_door_is_closed_msgs(
+        "Willst Du durch $einen(OBJ_TO,geschlossen) laufen?");
+
+    add_controller("forbidden_seele",#'my_forbidden_seele);
+}
+
+/*
+FUNKTION: other_door
+DEKLARATION: object other_door(void)
+BESCHREIBUNG:
+Liefert die korrespondierende Tuer(haelfte) auf der anderen Seite der Tuer.
+Dient u.a. zur Synchronisierung beider Tuer(haelft)en.
+VERWEISE: present_other_door
+GRUPPEN: tuer
+*/
+
+object other_door()
+{
+    object room, o_door;
+    int tmp_door_is_open, tmp_door_is_locked;
+
+    if (!door_exit)
+    {
+        do_error ("Tuere: kein door_exit gesetzt.\n");
+        return 0;
+    }
+    if (!dirs[pass_cmd])
+    {
+	do_error(wrap("Tuere: Die Gegenrichtung zu '"+pass_cmd+
+	    "' ist unbekannt. Bitte mit add_directions setzen."));
+	return 0;
+    }
+
+    if (!room=find_object(door_exit))
+    {
+	// Der Raum wurde noch nicht geladen -> Konfiguration merken
+	// um sie zu restoren (GARGL! was ein Krampf!)
+	tmp_door_is_open = door_is_open;
+	tmp_door_is_locked = door_is_locked;
+	o_door = present(dirs[pass_cmd],touch(door_exit));
+	if (tmp_door_is_open != door_is_open)
+	{
+	    set_door_is_open(tmp_door_is_open);
+	    if (o_door)
+		o_door->set_door_is_open(door_is_open);
+	}
+	if (tmp_door_is_locked != door_is_locked)
+	{
+	    set_door_is_locked(tmp_door_is_locked);
+	    if (o_door)
+		o_door->set_door_is_locked(door_is_locked);
+	}
+    }
+    else
+	o_door = present(dirs[pass_cmd],room);
+
+    return o_door;
+}
+
+/*
+FUNKTION: present_other_door
+DEKLARATION: object present_other_door(void)
+BESCHREIBUNG:
+Liefert, aehnlich wie other_door() die korrespondierende Tuer(haelfte).
+Liefert allerdings 0, wenn der andere Raum nicht geladen ist. Auch Synchro-
+nisationen werden nicht vorgenommen.
+VERWEISE: other_door,
+GRUPPEN: tuer
+*/
+
+object present_other_door()
+{
+    object room;
+
+    if (door_exit && pass_cmd && dirs[pass_cmd] && room=find_object(door_exit))
+        return present(dirs[pass_cmd],room);
+}
+
+/*
+FUNKTION: init_door
+DEKLARATION: void init_door(string door_exit, string pass_cmd, [int open])
+BESCHREIBUNG:
+Damit eine Tuer weiss, wohin sie fuehren soll, gibt man ihr hiermit den
+Dateinamen des angrenzenden Raums (door_exit) und die Richtung (pass_cmd) an.
+Das ist also ganz genauso wie add_exit() zu verwenden :)
+Gleichzeitig laesst sich noch der Anfangszustand (open) der Tuer angeben:
+offen (1), zu (0, default) oder abgeschlossen (-1).
+VERWEISE: set_door_exit, set_pass_cmd
+GRUPPEN: tuer
+*/
+
+varargs void init_door(string fname, string dir, int open)
+{
+   string tmp;
+   object door;
+
+   if(door_exit && pass_cmd && environment())
+   {
+      if(!no_exit_msg)
+         environment()->set_exit_msg(pass_cmd,0,0);
+      environment()->unlock_exit(pass_cmd);
+      environment()->delete_exit(pass_cmd);
+   }
+
+   door_exit = abs_path(fname, file_path(previous_object()));
+   if(tmp = domain2map(door_exit))
+      door_exit = tmp;
+
+   pass_cmd = dir;
+
+   door = present_other_door(); // wenn andere Tuer da ist hat sie Vorrang.
+   door_is_open = door ? door->query_door_is_open() : (open==1);
+   door_is_locked = door ? door->query_door_is_locked() : (open==-1);
+
+   init_mechanism(pass_cmd, door_exit, door_is_open);
+}
+
+void init()
+{
+    if(knock_cmd)
+        add_action("knock_command",knock_cmd,AA_SHORT);
+
+    add_action("open_command",open_cmd,AA_SHORT);
+    add_action("close_command",close_cmd,AA_SHORT);
+    add_action("unlock_command",unlock_cmd,AA_SHORT);
+    add_action("lock_command",lock_cmd,AA_SHORT);
+    
+    {
+        object door = present_other_door();
+	if(door)
+	{
+	    int i;
+            i = door->query_door_is_locked();
+            if((i&&1)!=(this_object()->query_door_is_locked()&&1))
+                this_object()->set_door_is_locked(i);
+            i=door->query_door_is_open();
+            if((i&&1)!=(this_object()->query_door_is_open()&&1))
+                this_object()->set_door_is_open(i);
+	}
+    }
+}
+
+/*
+FUNKTION: add_directions
+DEKLARATION: void add_directions(string dir, string back_dir)
+BESCHREIBUNG:
+Setzt die Richtungen, in die eine Tuer weist.
+Standardmaessig sind alle Himmelsrichtungen vorhanden, aber mit dieser
+Funktion kann man weitere Richtungen einbauen (z.B. 'rauf' <-> 'runter')
+GRUPPEN: tuer
+*/
+void add_directions(string str1, string str2)
+{
+    dirs[str1] = str2;
+    dirs[str2] = str1;
+}
+
+// interne Funktion:
+nomask int _door_forbidden(string msg,object wer,object tuer, object env, varargs mixed data)
+{
+    if (!data[<1] && wer)
+	if (apply(#'call_other,wer,"forbidden",msg,wer,tuer,env,data))
+	    return 1;
+
+    if (apply(#'forbidden,msg,wer,tuer,env,data))
+	return 1;
+
+    if (apply(#'call_other,environment(),"forbidden",msg,wer,tuer,env,data))
+	return 1;
+}
+
+// interne Funktion:
+nomask void _door_notify(string msg, object wer, object tuer, object env, varargs mixed data)
+{
+    object door;
+
+    if (!data[<1] && wer)
+	apply(#'call_other,wer,"notify",msg,wer,tuer,env,data);
+
+    apply(#'notify,msg,wer,tuer,env,data);
+    apply(#'call_other,environment(),"notify",msg,wer,tuer,env,data);
+
+    if (!data[<1] && door = P_OTHER_DOOR)
+    {
+	data[<1] = 1;
+	apply(#'call_other,door,"_door_notify",msg,wer,tuer,env,data);
+    }
+}
+
+/*
+FUNKTION: open_door
+DEKLARATION: varargs void open_door([int second [,int silent]])
+BESCHREIBUNG:
+Oeffnet die Tuer (mit Meldungen an Umgebung - nicht aber an this_player()
+(falls nicht silent gesetzt ist), sowie mit entsprechenden Notify's u.a.).
+Um Startzustaende von Tueren zu setzen, benutze man die set_door_* Funktionen.
+
+<second> ist optional und wird ueblicherweise nur von der Mudlib selber mit
+anderem Wert als 0 belegt. Wenn second==1, heisst das, dass die Tuer von der
+korrespondierenden Tuer aus geoeffnet wird (die aktuelle Tuer ist also gerade
+die Rueckseite der eigentlich geschlossenen Tuer(haelfte)).
+
+Auch <silent> ist optional, ist es angegeben, wird die Tuere meldungslos
+geoeffnet. Achtung, ist silent angegeben, so wird auch im zugehoerigen
+Nachbarraum keine Meldung erzeugt!
+VERWEISE: open_command
+GRUPPEN: tuer
+*/
+
+varargs void open_door(int second, int silent)
+{
+    object tuer;
+
+    if(door_is_open)
+        return;
+
+    if(!silent && this_player())
+    {
+        if (second)
+            this_object()->send_message(MT_LOOK,MA_UNKNOWN,
+                                        wrap(CTS(door_opens_message)));
+        else
+            this_player()->send_message(MT_LOOK,MA_UNKNOWN,
+                                        wrap(CTS(door_opens_message)));
+    }
+    door_is_locked = 0;
+    mechanism(1);
+
+    if (!second)
+    {
+	if (tuer = P_OTHER_DOOR)
+	    tuer->open_door(1, silent);
+	_door_notify("open_door",NF_LIST,second);
+    }
+}
+
+/*
+FUNKTION: close_door
+DEKLARATION: varargs void close_door([int second [,int silent]])
+BESCHREIBUNG:
+Schliesst die Tuer (mit Meldungen an Umgebung - nicht aber an this_player(),
+mit entsprechenden Notify's u.a.). Um Startzustaende von Tueren zu setzen,
+benutze man die set_door_* Funktionen.
+
+<second> ist optional und wird ueblicherweise nur von der Mudlib selber mit
+anderem Wert als 0 belegt. Wenn second==1, heisst das, dass die Tuer von der
+korrespondierenden Tuer aus geschlossen wird (die aktuelle Tuer ist also gerade
+die Rueckseite der eigentlich geoeffneten Tuer(haelfte)).
+
+Auch <silent> ist optional, ist silent ungleich 0, so wird die Tuere ohne
+Meldungen geschlossen; Achtung, auch im Nachbarraum wird dann keine
+Meldung erzeugt!
+VERWEISE: open_command
+GRUPPEN: tuer
+*/
+
+varargs void close_door(int second, int silent)
+{
+    object tuer;
+
+    if(!door_is_open)
+        return;
+
+    if(!silent && this_player())
+    {
+        if (second)
+            this_object()->send_message(MT_LOOK,MA_UNKNOWN,
+                                        wrap(CTS(door_closes_message)));
+        else
+            this_player()->send_message(MT_LOOK,MA_UNKNOWN,
+                                        wrap(CTS(door_closes_message)));
+    }
+
+    door_is_locked = 0;
+    mechanism(0);
+
+    if (!second)
+    {
+	if (tuer = P_OTHER_DOOR)
+	    tuer->close_door(1, silent);
+	_door_notify("close_door",NF_LIST,second);
+    }
+}
+
+/*
+FUNKTION: unlock_door
+DEKLARATION: varargs void unlock_door([int second [, object key])
+BESCHREIBUNG:
+Schliesst die Tuer (mit entsprechenden Notify's u.a.) auf.
+Um Startzustaende von Tueren zu setzen, benutze man die set_door_*
+Funktionen.
+
+<second> ist optional und wird ueblicherweise nur von der Mudlib selber mit
+anderem Wert als 0 belegt. Wenn second==1, heisst das, dass die Tuer von der
+korrespondierenden Tuer aus aufgeschlossen wird (die aktuelle Tuer ist
+also gerade die Rueckseite der eigentlich verschlossenen Tuer(haelfte)).
+
+<key> gibt an, welcher Schluessel zum Aufschliessen benutzt wurde.
+VERWEISE: open_command, lock_door
+GRUPPEN: tuer
+*/
+
+varargs void unlock_door(int second,object key)
+{
+    object tuer;
+
+    if(!door_is_locked)
+        return;
+
+    door_is_locked = 0;
+    mechanism(0);
+
+    if (!second)
+    {
+	if (tuer = P_OTHER_DOOR)
+	    tuer->unlock_door(1,key);
+
+	map_objects(({this_player(),key,this_object(),environment()}),
+		    "notify","unlock_door",NF_LIST,key,0);
+	if (tuer)
+	    map_objects(({tuer,environment(tuer)}),
+			"notify","unlock_door",NF_LIST,key,1);
+    }
+}
+
+/*
+FUNKTION: lock_door
+DEKLARATION: varargs void lock_door([int second [, object key])
+BESCHREIBUNG:
+Schliesst die Tuer ab (mit entsprechenden Notify's u.a.). Um Startzustaende
+von Tueren zu setzen, benutze man die set_door_* Funktionen.
+
+<second> ist optional und wird ueblicherweise nur von der Mudlib selber mit
+anderem Wert als 0 belegt. Wenn second==1, heisst das, dass die Tuer von der
+korrespondierenden Tuer aus abgeschlossen wird (die aktuelle Tuer ist
+also gerade die Rueckseite der eigentlich aufgeschlossenen Tuer(haelfte)).
+
+<key> gibt an, welcher Schluessel zum Abschliessen benutzt wurde.
+VERWEISE: open_command, unlock_door
+GRUPPEN: tuer
+*/
+
+varargs void lock_door(int second, object key)
+{
+    object tuer;
+
+    if(door_is_locked)
+        return;
+
+    door_is_locked = 1;
+    mechanism(0);
+
+    if (!second)
+    {
+	if (tuer = P_OTHER_DOOR)
+	    tuer->lock_door(1,key);
+
+	map_objects(({this_player(),key,this_object(),environment()}),
+		    "notify","lock_door",NF_LIST,key,0);
+	if (tuer)
+	    map_objects(({tuer,environment(tuer)}),
+			"notify","lock_door",NF_LIST,key,1);
+    }
+}
+
+/*
+FUNKTION: crack_door
+DEKLARATION: varargs void crack_door(object who [, int second [, mixed dietrich]])
+BESCHREIBUNG:
+Bricht eine Tuer mit entsprechenden Notify's auf.
+
+<second> ist optional und wird ueblicherweise nur von der Mudlib selber mit
+anderem Wert als 0 belegt. Wenn second==1, so bedeutet das, dass die Tuer
+in Wirklichkeit von der anderen Seite aus aufgebrochen wird.
+
+Falls Dietrich angegeben wird, kann dieser in Meldungen genutzt werden.
+VERWEISE: crack
+GRUPPEN: tuer
+*/
+
+// Analogon zu unlock_door, nur mit anderer notify-message:
+varargs void crack_door(object who, int second,mixed dietrich)
+{
+    object tuer;
+
+    door_is_locked = 0;
+    mechanism(0);
+
+    if (!second)
+    {
+        if (tuer = P_OTHER_DOOR)
+            tuer->crack_door(who,1,dietrich);
+
+        map_objects(({
+            who,objectp(dietrich) ? dietrich : 0,
+                this_object(),environment()}),
+                    "notify","crack_door",who,TO,ENV,dietrich,second);
+        if (tuer)
+            map_objects(({tuer,environment(tuer)}),
+                        "notify","crack_door",who,TO,ENV,dietrich,1);
+    }
+}
+
+/*
+FUNKTION: forbidden_crack_door
+DEKLARATION: int forbidden_crack_door(object wer,object tuer,object raum,mixed dietrich,int second)
+BESCHREIBUNG:
+Versucht das Lebewesen <wer> die Tuer <tuer> (mit dem Objekt/Mapping
+<dietrich>) aufzubrechen, so checkt die Tuer, nachdem getestet wurde, ob sie
+verschlossen ist, ob <wer> die Tuer <tuer> aufbrechen darf.
+Genutzt wird dazu forbidden("crack_door",wer,tuer,raum,dietrich,second)
+in folgender Reihenfolge:
+Zunaechst wird im Lebewesen <wer> geguckt (wer->forbidden(...))
+Dann wird der eventuell vorhandene Dietrich gefragt (dietrich->forbidden(..))
+Dann fragt die Tuer seine eigenen Controller (tuer->forbidden(...))
+Danach fragt die Tuer den umgebenden Raum (raum->forbidden(...))
+
+Es laesst sich also das Knacken
+- einer einzelnen Tuer durch
+      tuer->add_controller("forbidden_crack_door")
+- durch ein einzelnes Lebewesen durch
+      wer->add_controller("forbidden_crack_door")
+- mit einem bestimmten Brecheisen (dietrich) durch
+      dietrich->add_controller("forbidden_crack_door")
+- in einem Raum bzw. von einem Raum aus durch
+      raum->add_controller("forbidden_crack_door")
+
+beobachten bzw. verhindern.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,crack
+GRUPPEN: tuer
+*/
+
+/*
+FUNKTION: notify_crack_door
+DEKLARATION: void notify_crack_door(object wer,object tuer,object raum, mixed dietrich, int second)
+BESCHREIBUNG:
+Wenn das Lebewesen <wer> die Tuer <tuer> aufgebrochen hat, meldet die Tuer
+<tuer> dass sie aufgebrochen wurde mittels
+notify("crack_door",wer,tuer,raum,dietrich,second).
+Das geschieht in folgender Reihenfolge:
+Zunaechst benachrichtigt die Tuer den Spieler
+wer->notify("crack_door",...)
+Danach sich selbst (tuer->notify("crack_door",...)).
+Danach einen eventuell vorhandenen Dietrich,
+Danach den sie umgebenden Raum (raum->notify("crack_door",...)).
+Danach die Controller der korrespondierenden Tuer,
+danach die Controller des korrespondierenden Raums auf der anderen Seite.
+
+Es laesst sich also das Knacken
+- einer einzelnen Tuer durch
+     tuer->add_controller("notify_crack_door")
+- welches von einem bestimmten Lebewesen ausgefuehrt wird durch
+     wer->add_controller("notify_crack_door")
+- von Tueren in einem Raum durch
+     raum->add_controller("notify_crack_door")
+- mit einem bestimmten Dietrich durch
+     dietrich->add_controller("notify_crack_door")
+
+beobachten bzw. verhindern.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,crack
+GRUPPEN: tuer
+*/
+
+/*
+FUNKTION: crack
+DEKLARATION: varargs int crack(object who [, mixed dietrich])
+BESCHREIBUNG:
+Soll eine Tuer aufgebrochen werden, so wird diese Funktion in der Tuer
+aufgerufen. Mit dem optionalen Parameter <dietrich> kann man den
+beobachtenden Controllern sagen, womit die Tuer aufgebrochen wird.
+VERWEISE: crack_door
+GRUPPEN: tuer
+*/
+
+varargs int crack(object who, mixed dietrich)
+{
+    object tuer;
+
+    if (!door_is_locked)
+    {
+	who->notify_message(wrap(CTS(door_unlocked_message)),MA_LOOK);
+        return 0;
+    }
+
+    if (no_lock)
+    {
+        who->send_message_to(who, MT_LOOK, MA_UNKNOWN,
+	    wrap(CTS(no_lock_for_crack)));
+	return 0;
+    }
+    
+    if (!dietrich)
+	dietrich = DIETRICH;
+
+    if (_door_forbidden("crack_door",who,TO,ENV,dietrich,0))
+	return 1;
+
+    if (tuer = OTHER_DOOR)
+	if (tuer->_door_forbidden("crack_door",who,TO,ENV,dietrich,1))
+	    return 1;
+
+    crack_door(who,0,dietrich);
+
+    who->send_message(
+	    MT_LOOK, MA_UNKNOWN,
+	    wrap(CTS(door_unlock_message,({dietrich}))),
+	    wrap(CTS(door_unlock_message_me,({dietrich}))),
+	    who);
+    return 1;
+}
+
+/*
+FUNKTION: forbidden_open_door
+DEKLARATION: int forbidden_open_door(object wer,object tuer,object raum,int second)
+BESCHREIBUNG:
+Versucht das Lebewesen <wer> die Tuer <tuer> zu oeffnen, so checkt die Tuer,
+nachdem getestet wurde, ob sie geschlossen, verschlossen oder es zu dunkel
+ist, ob <wer> die Tuer oeffnen darf. Dazu ruft sie forbidden("open_door",tuer,
+wer,second) und zwar in folgender Reihenfolge:
+Zuerst wird der Spieler gefragt (wer->forbidden("open_door",...))
+Danach schaut die Tuer bei ihren eigenen Controllern nach (tuer->...)
+Danach sucht sie im Raum (environment()->forbidden...).
+Danach fragt sie die korrespondierende Tuer auf der anderen Seite,
+danach den Raum auf der anderen Seite.
+Returnt eines der in einem dieser Objekte fuer forbidden_open_door
+angemeldeten Controller eine 1, so wird die Tuer nicht geoeffnet.
+
+Es laesst sich also das Oeffnen
+- einer bestimmten Tuer mittels
+     tuer->add_controller("forbidden_open_door")
+- von Tueren durch ein bestimmtes Lebewesen mittels
+     wer->add_controller("forbidden_open_door")
+- von Tueren in einem Raum mittels
+     raum->add_controller("forbidden_open_door")
+
+beobachten bzw. verhindern.
+<second> kann 1 oder 0 sein. Ist second==1, so wurde die Funktion von der
+korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden
+GRUPPEN: tuer
+*/
+
+/*
+FUNKTION: notify_open_door
+DEKLARATION: void notify_open_door(object wer,object tuer,object raum,int second)
+BESCHREIBUNG:
+Wenn das Lebewesen <wer> die Tuer <tuer> geoeffnet hat, meldet die Tuer
+<tuer> dass sie geoeffnet wurde. Dabei meldet die Tuer in folgender
+Reihenfolge:
+Zuerst allen Controllern, die sich bei <wer> angemeldet haben.
+Danach allen bei sich selbst angemeldeten.
+Danach bei allen im Raum
+Danach bei allen in der korrespondierenden Tuer.
+Danach im Raum der korrespondierenden Tuer.
+
+Es laesst sich also das Oeffnen
+- einer einzelnen Tuer mittels
+     tuer->add_controller("notify_open_door")
+- von Tueren durch ein bestimmtes Lebewesen mittels
+     wer->add_controller("notify_open_door")
+- von Tueren in einem Raum mittels
+     raum->add_controller("notify_open_door")
+
+beobachten.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,crack
+GRUPPEN: tuer
+*/
+
+int open_command(string str)
+{
+    string res;
+    object tuer;
+
+    if(!(res = me(str)))
+        return notify_fail(capitalize(query_verb())+" was?\n", FAIL_NOT_OBJ);
+
+    if(sizeof(open_words) && member(open_words, res) < 0)
+        return notify_fail(capitalize(query_verb())+" "+strip("was "+open_words[0])+"?\n",FAIL_WRONG_ARG);
+
+    if(door_is_locked)
+        return notify_fail(wrap(CTS(door_locked_message)), FAIL_INTERNAL);
+
+    if(door_is_open)
+        return notify_fail(wrap(CTS(door_open_message)), FAIL_INTERNAL);
+
+    if(this_player()->free_hand()<0)
+	return notify_fail("Du hast dafuer keine Hand frei.\n", FAIL_INTERNAL);
+
+    if (_door_forbidden("open_door",NF_LIST,0))
+	return 1;
+
+    if (tuer = OTHER_DOOR)
+	if (tuer->_door_forbidden("open_door",NF_LIST,1))
+	    return 1;
+
+   this_player()->send_message_to(this_player(), MT_NOTIFY|MT_LOOK|MT_FEEL, MA_USE,
+           wrap(CTS(door_opens_message_me)));
+
+    open_door();
+
+    return 1;
+}
+
+/*
+FUNKTION: forbidden_close_door
+DEKLARATION: int forbidden_close_door(object wer,object tuer,object raum,int second)
+BESCHREIBUNG:
+Versucht das Lebewesen <wer> die Tuer <tuer> zu schliessen, so checkt die Tuer,
+nachdem getestet wurde, ob sie geoeffnet, geschlossen, verschlossen oder es
+zu dunkel ist, ob <wer> die Tuer schliessen darf. Dazu ruft sie
+forbidden("close_door",wer,tuer,raum,second) auf und zwar mit folgender
+Reihenfolge:
+Zuerst werden die Controller im Lebewesen ueberprueft.
+Dann ueberprueft die Tuer die eigenen Controller.
+Dann ueberprueft die Tuer die Controller des umgebenden Raums.
+Dann ueberprueft die Tuer die Controller der korrespondierenden Tuer auf der
+anderen Seite.
+Abschliessend ueberprueft sie die Controller im Raum auf der anderen Seite.
+Liefert einer dieser fuer forbidden_close_door angemeldeten Controller eine
+1, so wird die Tuer nicht geschlossen.
+
+Es laesst sich also das Schliessen
+- einer bestimmten Tuer durch
+     tuer->add_controller("forbidden_close_door")
+- von Tueren durch ein Lebewesen mittels
+     wer->add_controller("forbidden_close_door")
+- von Tueren in einem Raum mittels
+     raum->add_controller("forbidden_close_door")
+
+beobachten bzw. verhindern.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: open_door,open_command,close_command,notify,forbidden
+GRUPPEN: tuer
+*/
+
+/*
+FUNKTION: notify_close_door
+DEKLARATION: void notify_close_door(object wer,object tuer,object raum,int second)
+BESCHREIBUNG:
+Wenn das Lebewesen <wer> die Tuer <tuer> geschlossen hat, meldet die Tuer
+<tuer> dass sie geschlossen wurde mit folgender Reihenfolge:
+Zuerst meldet sie es den Controllern des Lebewesens.
+Dann den eigenen Controllern.
+Dann den Controllern im Raum.
+Dann den Controllern der korrespondierenden Tuer auf der anderen Seite.
+Dann den Controllern des korrespondierenden Raums.
+
+Man kann also das Schliessen
+- einer bestimmten Tuer durch
+     tuer->add_controller("notify_close_door")
+- von Tueren durch ein bestimmtes Lebewesen mittels
+     wer->add_controller("notify_close_door")
+- von Tueren in einem Raum mittels
+     raum->add_controller("notify_close_door")
+
+beobachten.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,crack
+GRUPPEN: tuer
+*/
+
+int close_command(string str)
+{
+    string res;
+    object tuer;
+
+    if(!(res = me(str)))
+        return notify_fail(capitalize(query_verb())+" was?\n", FAIL_NOT_OBJ);
+
+    if(sizeof(close_words) && member(close_words, res) < 0)
+        return notify_fail(capitalize(query_verb())+" "+strip("was "+close_words[0])+"?\n",FAIL_WRONG_ARG);
+
+    if(!door_is_open)
+        return notify_fail(wrap(CTS(door_close_message)), FAIL_INTERNAL);
+
+    if(this_player()->free_hand()<0)
+	return notify_fail("Du hast dafuer keine Hand frei.\n", FAIL_INTERNAL);
+
+    if (_door_forbidden("close_door",NF_LIST,0))
+	return 1;
+
+    if (tuer = OTHER_DOOR)
+	if (tuer->_door_forbidden("close_door",NF_LIST,1))
+	    return 1;
+
+   this_player()->send_message_to(this_player(), MT_NOTIFY|MT_LOOK|MT_FEEL, MA_USE,
+           wrap(CTS(door_closes_message_me)));
+
+    close_door();
+    
+    return 1;
+}
+
+/*
+FUNKTION: forbidden_pass_door
+DEKLARATION: int forbidden_pass_door(object wer,object tuer,object room,int second)
+BESCHREIBUNG:
+Versucht das Lebewesen <wer> durch die Tuer <tuer> zu gehen, so checkt die
+Tuer, nachdem geprueft wurde, ob sie geoeffnet, geschlossen oder verschlossen
+ist, ob <wer> durch die Tuer gehen darf. Dazu ruft sie
+forbidden("pass_door",wer,tuer,raum,second) mit folgender Reihenfolge auf:
+Zuerst werden die Controller im Lebwesen <wer> geprueft.
+Danach prueft es die eigenen Controller.
+Danach die Controller im Raum.
+Danach die Controller der korrespondierenden Tuer auf der anderen Seite.
+Danach die Controller des korrespondierenden Raums.
+
+Returnt eines dieser forbidden_pass_door angemeldeten Controller eine 1, so
+kann das Lebwesen nicht durch die Tuer gehen.
+
+Es laesst sich also das Durchschreiten
+- einer bestimmten Tuer durch
+     tuer->add_controller("forbidden_pass_door")
+- von Tueren durch ein bestimmtes Lebewesen mittels
+     wer->add_controller("forbidden_pass_door")
+- von Tueren eines Raumes mittels
+     raum->add_controller("forbidden_pass_door")
+
+beobachten bzw. verhindern.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+Bei goetterunsichtbaren Goettern wird diese Funktionalitaet zwar ausgefuehrt,
+die Goetter werden dadurch aber nicht aufgehalten sondern  bekommen
+stattdessen eine Meldung, dass sie eigentlich aufgehalten worden waeren.
+
+VERWEISE: open_door,open_command,close_command,notify,forbidden
+GRUPPEN: tuer
+*/
+
+/*
+FUNKTION: notify_pass_door
+DEKLARATION: void notify_pass_door(object wer,object tuer,object raum,int second)
+BESCHREIBUNG:
+Wenn das Lebewesen <wer> durch die Tuer <tuer> gegangen ist, meldet die Tuer
+<tuer> das den Controllern mit folgender Reihenfolge:
+Zuerst werden die Controller des Lebewesens benachrichtigt,
+danach die eigenen Controller.
+Danach die Controller des umgebenden Raums.
+Danach die Controller der korrespondierenden Tuer auf der anderen Seite.
+Danach die Controller des korrespondierenden Raums.
+
+Es laesst sich also das Durchschreiten
+- einer bestimmten Tuer mittels
+     tuer->add_controller("notify_pass_door")
+- von Tueren durch ein bestimmtes Lebewesen mittels
+     wer->add_controller("notify_pass_door")
+- von Tueren eines Raumes mittels
+    raum->add_controller("notify_pass_door")
+
+beobachten.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,crack
+GRUPPEN: tuer
+*/
+int forbidden_move_out(object wer, object wohin, string dir, int wie)
+{
+    object tuer;
+    int forbid, height;
+    string *msg;
+
+    if(!pass_cmd || dir !=  pass_cmd)
+	return 0;
+
+    if (!(wie & MOVE_ATOM_GHOST) && 
+	(height = this_object()->query_door_height()) >= 0 &&
+         wer->query_koerpergroesse() > height)
+    {
+        if (wizp(wer) && wer->query_invis()==V_INVIS)
+        {
+            wer->send_message_to(this_player(), MT_NOTIFY, MA_MOVE,
+                wrap(CTS(door_is_too_small_msg_me)+
+                " Aber unsichtbare Goetter rennen auch mit dem Kopf durch "
+                "die Wand..."));
+        }
+        else
+        {
+            wer->set_not_moved_reason(CTS(door_is_too_small_msg_me));
+//        this_player()->send_message_to(this_player(), MT_NOTIFY, MA_MOVE,
+//                wrap(CTS(door_is_too_small_msg_me)));
+            return 1;
+        }
+    }
+
+    // Etwas Gekroesel fuer Debugausgaben an Goetter:
+    msg = ({});
+    if (forbid = _door_forbidden("pass_door",wer,this_object(),environment(),0))
+	if (wizp(wer) && wer->query_invis()==V_INVIS)
+	{
+	    forbid = 0;
+	    msg += ({"dieser"});
+	}
+
+    if (!forbid && (tuer = OTHER_DOOR))
+	if (forbid = tuer->_door_forbidden("pass_door",wer,this_object(),environment(),1))
+	    if (wer && wizp(wer) &&
+		 wer->query_invis() == V_INVIS)
+	    {
+		forbid = 0;
+		msg += ({"der anderen"});
+	    }
+
+    if (sizeof(msg))
+	wer->notify_message(
+	    wrap("Als unsichtbarer Gott stoert "
+		 +"Dich die Behinderung auf "+liste(msg)+" Seite "
+		 +des()+" nicht..."),MA_MOVE);
+
+    if (forbid)
+	return forbid;
+
+    if(door_is_open ||
+	(wizp(wer) && wer->query_invis()==V_INVIS) ||
+	(wie & MOVE_ATOM_GHOST))
+	    return 0;
+
+   if (door_is_closed_msg_other)
+       wer->send_message(
+           MT_LOOK,MA_MOVE,
+           wrap(CTS(door_is_closed_msg_other)));
+
+   if (door_is_closed_msg_me)
+       wer->set_not_moved_reason(CTS(door_is_closed_msg_me));
+//       wer->send_message_to(wer, MT_NOTIFY, MA_MOVE,
+//	   wrap(CTS(door_is_closed_msg_me)));
+
+   return 1;
+}
+
+void notify_moved_out(object wer, object wohin, string dir, int wie)
+{
+    if(pass_cmd && dir == pass_cmd)
+	_door_notify("pass_door",wer,this_object(),environment(),0);
+}
+
+int allowed_ghost_pass(object wer, string dir, string dest, mapping info)
+{
+    if(dir != pass_cmd)
+	return 0;
+
+    if(random(100) >= query_crack())
+	return 0;
+	
+    info[MOVE_MSG_OUT] = "$Der(OBJ_TP) schwebt durch "+den()+" $dir().";
+    info[MOVE_MSG_IN] = "$Der(OBJ_TP) kommt durch "+den(other_door())+" geschwebt.";
+    
+    return 1;
+}
+
+private object fitting_key()
+{
+   object *pkeys,*schluesselbuende;
+   int i,j;
+
+   for(i = sizeof(pkeys = all_inventory(this_player())); i--;)
+       if(pkeys[i]->fit(this_object()))
+           return pkeys[i];
+   schluesselbuende = filter_objects(pkeys,"query_schluesselbund");
+   for(j = sizeof(schluesselbuende); j--;)
+       for(i = sizeof(pkeys = all_inventory(schluesselbuende[j])); i--;)
+               if(pkeys[i]->fit(this_object()))
+                   return pkeys[i];
+}
+
+/*
+FUNKTION: forbidden_lock_door
+DEKLARATION: int forbidden_lock_door(object wer,object tuer,object raum,object key,int second)
+BESCHREIBUNG:
+Versucht das Lebewesen <wer> die Tuer <tuer> zu abzuschliessen, so checkt
+die Tuer, nachdem getestet wurde, ob sie geschlossen, verschlossen oder es zu
+dunkel ist, ob <wer> die Tuer (mit dem Schluessel <key>) abschliessen darf.
+
+Dazu ruft sie forbidden("lock_door",wer,tuer,raum,key,second) in dieser
+Reihenfolge auf:
+1. Die Controller des Lebewesens <wer> werden gefragt.
+2. Die Controller des unter Umstaenden gefundenen Schluessels werden gefragt.
+3. Die Controller von <tuer> werden gefragt.
+4. Die Controller des Raums, in dem die Tuer steht, wird gefragt.
+5. Die Controller der korrespondierenden Tuer auf der anderen Seite werden
+   gefragt.
+6. Die Controller des korrespondierenden Raums werden gefragt.
+
+Returnt eines dieser fuer forbidden_lock_door angemeldeten Controller
+eine 1, so wird die Tuer nicht abgeschlossen.
+
+Es laesst sich also das Abschliessen
+- einer bestimmten Tuer durch
+     tuer->add_controller("forbidden_lock_door")
+- von Tueren durch ein bestimmtes Lebewesen mittels
+     wer->add_controller("forbidden_lock_door")
+- von Tueren mit einem bestimmten Schluessel mittels
+     key->add_controller("forbidden_lock_door")
+- von Tueren eines bestimmten Raumes mittels
+     raum->add_controller("forbidden_lock_door")
+
+beobachten bzw. verhindern.
+
+<second> kann 1 oder 0 sein. Ist second==1, so wurde die Funktion von der
+korrespondierenden Tuer auf der anderen Seite aufgerufen.
+<key> kann 0 oder ein Objekt sein. Ist key==0, so wurde kein passender
+Schluessel gefunden, die Tuer koennte also ohne Schluessel abschliessbar
+sein.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,unlock_door,
+	  unlock_command
+GRUPPEN: tuer
+*/
+
+/*
+FUNKTION: notify_lock_door
+DEKLARATION: void notify_lock_door(object wer,object tuer,object raum,object key,int second)
+BESCHREIBUNG:
+Wenn das Lebewesen <wer> die Tuer <tuer> abgeschlossen hat, meldet die Tuer
+<tuer> dass sie abgeschlossen wurde. Es laesst sich also das Abschliessen einer
+Tuer durch
+     tuer->add_controller("notify_lock_door")
+
+beobachten.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,crack
+GRUPPEN: tuer
+*/
+
+int lock_command(string str)
+{
+    string rest, tmp;
+    object key;
+    object tuer;
+
+    if(!(rest = me(str)))
+        return 0;
+
+    if(sizeof(lock_words) && member(lock_words, rest) < 0)
+        return notify_fail(capitalize(query_verb())+" was "+lock_words[0]+"?\n",FAIL_WRONG_ARG);
+
+    if (door_is_open)
+        return notify_fail(wrap(CTS(door_open_message)), FAIL_INTERNAL);
+
+    if (no_lock)
+    {
+        this_player()->send_message_to(this_player(), MT_LOOK,MA_UNKNOWN,
+            wrap(CTS(no_lock_for_lock)));
+	return 1;
+    }
+    
+    if (this_player()->free_hand() == -1)
+        return notify_fail("Du hast keine Hand mehr frei.\n", FAIL_INTERNAL);
+
+    if(keys && !(key = fitting_key()))
+    {
+        this_player()->send_message(
+            MT_LOOK,MA_UNKNOWN,
+            wrap(CTS(key_does_not_fit_close)),
+            wrap(CTS(key_does_not_fit_me)),
+            this_player());
+        return 1;
+    }
+
+    if(door_is_locked)
+    {
+        this_player()->notify_message(
+            wrap(CTS(door_locked_message)),MA_UNKNOWN);
+        return 1;
+    }
+
+    if (key && key->forbidden("lock_door",NF_LIST,key,0))
+        return 1;
+    if (key && _door_forbidden("lock_door",NF_LIST,key,0))
+        return 1;
+
+    if (tuer = OTHER_DOOR)
+        if (tuer->_door_forbidden("lock_door",NF_LIST,key,1))
+            return 1;
+
+    lock_door(0,key);
+
+    this_player()->send_message(
+        MT_UNKNOWN,MA_UNKNOWN,
+        wrap(CTS(door_lock_message,({key}))),
+        wrap(CTS(door_lock_message_me,({key}))),
+        this_player());
+
+    return 1;
+}
+
+/*
+FUNKTION: forbidden_unlock_door
+DEKLARATION: int forbidden_unlock_door(object wer,object tuer,object raum,object key,int second)
+BESCHREIBUNG:
+Versucht das Lebewesen <wer> die Tuer <tuer> aufzuschliessen, so checkt
+die Tuer, nachdem getestet wurde, ob sie geschlossen, verschlossen oder es
+zu dunkel ist, ob <wer> die Tuer (mit dem Schluessel <key>) aufschliessen
+darf. Dazu ruft sie forbidden("unlock_door",wer,tuer,raum,key,second) mit
+dieser Reihenfolge auf:
+1. Die Controller vom Lebewesen <wer> werden geprueft.
+2. Die Controller vom unter Umstaenden gefundenen Schluessel <key>.
+3. Die Controller der bei der Tuer <tuer> angemeldeten werden geprueft.
+4. Die Controller des die Tuer umgebenden Raumes werden geprueft.
+5. Die Controller der korrespondierenden Tuer auf der anderen Seite.
+6. Die Controller des korrespondierenden Raumes auf der anderen Seite.
+
+Returnt eines dieser fuer forbidden_unlock_door angemeldeten Controller
+eine 1, so wird die Tuer nicht aufgeschlossen.
+
+Es laesst sich also das Aufschliessen
+- einer bestimmten Tuer durch
+     tuer->add_controller("forbidden_unlock_door")
+- von Tueren durch ein bestimmtes Lebewesen mittels
+     wer->add_controller("forbidden_unlock_door")
+- von Tueren mit einem bestimmten Schluessel mittels
+     key->add_controller("forbidden_unlock_door")
+- von Tueren eines Raumes mittels
+     raum->add_controller("forbidden_unlock_door")
+
+beobachten bzw. verhindern.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion von der
+korrespondierenden Tuer auf der anderen Seite aufgerufen.
+<key> kann 0 oder ein Objekt sein. Ist key == 0 so gab es keinen Schluessel,
+die Tuer koennte ohne Hilfsmittel aufschliessbar sein.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,lock_door,
+	  lock_command,unlock_command
+GRUPPEN: tuer
+*/
+
+/*
+FUNKTION: notify_unlock_door
+DEKLARATION: void notify_unlock_door(object wer,object tuer,object raum,object key,int second)
+BESCHREIBUNG:
+Wenn das Lebewesen <wer> die Tuer <tuer> aufgeschlossen hat, meldet die Tuer
+<tuer> dass sie aufgeschlossen wurde. Das geschieht mit folgender Reihenfolge:
+1. Die Controller vom Lebewesen <wer> werden benachrichtigt.
+2. Die Controller des u.U. gefundenen Schluessels <key> werden benachrichtigt.
+3. Die Controller der Tuer werden benachrichtigt.
+4. Die Controller des Raumes, in dem die Tuer steht.
+5. Die Controller der korrespondierenden Tuer auf der anderen Seite.
+6. Die Controller des korrespondierenden Raumes auf der anderen Seite.
+
+Es laesst sich also das Aufschliessen
+- einer bestimmten Tuer durch
+     tuer->add_controller("notify_unlock_door")
+- von Tueren durch ein bestimmtes Lebewesen mittels
+     wer->add_controller("notify_unlock_door")
+- von Tueren mit einem bestimmten Schluessel mittels
+     key->add_controller("notify_unlock_door")
+- von Tueren eines Raumes mittels
+     raum->add_controller("notify_unlock_door")
+
+beobachten.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+<key> kann 0 oder ein Objekt sein. Ist key == 0, so wurde kein Schluessel
+beim Aufschliessen genutzt.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,crack
+GRUPPEN: tuer
+*/
+int unlock_command(string str)
+{
+    string  rest, tmp;
+    object key;
+    object tuer;
+
+    if(!(rest = me(str)))
+      return 0;
+
+    if(sizeof(unlock_words) && member(unlock_words, rest) < 0)
+        return notify_fail(capitalize(query_verb())+" was "+unlock_words[0]+ "?\n",FAIL_WRONG_ARG);
+
+    if (no_lock)
+    {
+        this_player()->send_message_to(this_player(), MT_LOOK,MA_UNKNOWN,
+            wrap(CTS(no_lock_for_unlock)));
+	return 1;
+    }
+    
+    if (this_player()->free_hand() == -1)
+        return notify_fail("Du hast keine Hand mehr frei.\n", FAIL_INTERNAL);
+
+    if(keys && !(key = fitting_key()))
+    {
+        this_player()->send_message(
+            MT_LOOK,MA_UNKNOWN,
+            wrap(CTS(key_does_not_fit_open)),
+            wrap(CTS(key_does_not_fit_me)),
+            this_player());
+        return 1;
+    }
+
+    if(!door_is_locked)
+        return notify_fail(wrap(CTS(door_unlocked_message)), FAIL_INTERNAL);
+
+    if (key && key->forbidden("unlock_door",NF_LIST,key,0))
+        return 1;
+    if (key && _door_forbidden("unlock_door",NF_LIST,key,0))
+        return 1;
+
+    if (tuer = OTHER_DOOR)
+        if (tuer->_door_forbidden("unlock_door",NF_LIST,key,1))
+            return 1;
+
+    unlock_door(0,key);
+    this_player()->send_message(
+        MT_UNKNOWN,MA_UNKNOWN,
+        wrap(CTS(door_unlock_message,({key}))),
+        wrap(CTS(door_unlock_message_me,({key}))),
+        this_player());
+
+    return 1;
+}
+
+/*
+FUNKTION: forbidden_knock_door
+DEKLARATION: int forbidden_knock_door(object wer,object tuer,object raum,int second)
+BESCHREIBUNG:
+Versucht das Lebewesen <wer> an die Tuer <tuer> zu klopfen, so checkt die
+Tuer, ob <wer> das darf. Dazu ruft sie
+forbidden("knock_door",wer,tuer,raum,second) mit folgender Reihenfolge auf:
+1. Die Controller des Lebewesens werden geprueft.
+2. Die Controller der Tuer werden geprueft.
+3. Die Controller des Raumes werden geprueft.
+4. Die Controller der korrespondierenden Tuer auf der anderen Seite.
+5. Die Controller des korrespondierenden Raums auf der anderen Seite.
+
+Returnt einer dieser fuer forbidden_knock_door angemeldeten Controller
+eine 1, so wird nicht an die Tuer geklopft.
+
+Es laesst sich also das Anklopfen
+- an bestimmte Tueren mittels
+     tuer->add_controller("forbidden_knock_door")
+- an Tueren durch bestimmte Lebewesen mittels
+     wer->add_controller("forbidden_knock_door")
+- an Tueren eines Raumes mittels
+     raum->add_controller("forbidden_knock_door")
+
+beobachten bzw. verhindern.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion von der
+korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: close_door, open_command, close_command, notify, forbidden
+GRUPPEN: tuer
+*/
+
+/*
+FUNKTION: notify_knock_door
+DEKLARATION: void notify_knock_door(object wer,object tuer,object raum,int second)
+BESCHREIBUNG:
+Wenn das Lebewesen <wer> an die Tuer <tuer> geklopft hat, meldet die Tuer
+<tuer> dieses an Controller in folgender Reihenfolge:
+1. die Controller des Lebewesens werden benachrichtigt.
+2. die Controller der Tuer werden benachrichtigt.
+3. die Controller des Raumes, int dem die Tuer steht, werden benachrichtigt.
+4. die Controller der korrespondierenden Tuer auf der anderen Seite.
+5. die Controller des korrespondierenden Raumes auf der anderen Seite.
+
+Es laesst sich also das Anklopfen
+- an eine bestimmte Tuer mittels
+      tuer->add_controller("notify_knock_door")
+- an Tueren durch ein bestimmtes Lebewesen mittels
+      wer->add_controller("notify_knock_door")
+- an Tueren eines Raumes mittels
+      raum->add_controller("notify_knock_door")
+
+beobachten.
+
+<second> kann 0 oder 1 sein. Ist second==1, so wurde die Funktion
+von der korrespondierenden Tuer auf der anderen Seite aufgerufen.
+
+VERWEISE: close_door,open_command,close_command,notify,forbidden,crack
+GRUPPEN: tuer
+*/
+
+private int knock_error()
+{
+    if(sizeof(knock_words))
+        notify_fail(capitalize(query_verb())+" "+knock_words[0]+" was?\n");
+    else
+        notify_fail(capitalize(query_verb())+" was?\n");
+}
+
+int knock_command(string str)
+{
+    object tuer;
+    string what;
+    int i;
+
+    if(!str)
+      return knock_error();
+
+    for(i = 0; i < sizeof(knock_words); i++)
+        if(sscanf(str, knock_words[i]+" %s", what))
+            break;
+
+    if(!what)
+        what = str;
+
+    if(!me(what))
+        return knock_error();
+
+    if (_door_forbidden("knock_door",NF_LIST,0))
+	return 1;
+
+    if (tuer = P_OTHER_DOOR)
+	if (tuer->_door_forbidden("knock_door",NF_LIST,1))
+	    return 1;
+
+    this_player()->send_message(
+        MT_LOOK | MT_NOISE,MA_UNKNOWN,
+        wrap(CTS(knock_message)),
+        wrap(CTS(knock_message_me)),
+        this_player());
+
+    if(tuer)
+      tuer->knocking();
+
+    _door_notify("knock_door",NF_LIST,0);
+    return 1;
+}
+
+// Veraltete Funktion:
+void knocking()
+{
+    this_object()->send_message(MT_NOISE,MA_UNKNOWN,
+                                wrap(CTS(knocking_message)));
+}
+
+protected mixed desc_condition(string name, mixed info, mixed* par)
+{
+    switch(name)
+    {
+	case T_ATOM_DOOR_LOCKED:
+	    return door_is_locked;
+
+	case T_ATOM_DOOR_CLOSED:
+	    return !door_is_open;
+    }
+    
+    return ::desc_condition(name, info, par);
+}
+
+protected mixed desc_text(string name, mixed info, mixed* par)
+{
+    switch(name)
+    {
+	case T_ATOM_DOOR_STATUS_TEXT:
+	    if(door_is_locked)
+    		return CTS(door_locked_message);
+	    else if(door_is_open)
+    		return CTS(door_open_message);
+	    else
+		return CTS(door_close_message);
+    }
+    
+    return ::desc_condition(name, info, par);
+}
+
+protected string query_long_exec(mapping info)
+{
+    return ::query_long_exec(info) || "";
+}
+
+protected string query_long_postprocess(string msg, mapping info)
+{
+    if(sizeof(msg))
+	msg = ::query_long_postprocess(msg, info);
+    else
+	msg = wrap(Ein()+".");
+    
+    if(!query_long_has_tag(T_ATOM_TAG_DOOR_STATUS))
+	msg += wrap(desc_text(T_ATOM_DOOR_STATUS_TEXT, info, ({})));
+
+    return msg;
+}
+
+/*
+FUNKTION: T_LISTE
+DEKLARATION: Liste der T-Defines fuer Tueren
+BESCHREIBUNG:
+
+Vordefinierte Bedingungen:
+ - T_DOOR_LOCKED	Die Tuer ist verschlossen.
+ - T_DOOR_CLOSED	Die Tuer ist geschlossen.
+
+Vordefinierte Texte:
+ - T_DOOR_STATUS_TEXT	"Die Tuer ist verschlossen/geschlossen/offen."
+
+Hinweise fuer die Meldungsgeneration:
+ - T_HAS_DOOR_STATUS	Keine Meldung darueber, ob die Tuer offen ist.
+
+GRUPPEN: tuer
+*/
+
+// putze laesst dieses Objekt stehen
+int no_remove()
+{
+    return 1;
+}
+
+int remove()
+{
+   if(pass_cmd && door_exit && environment())
+   {
+      if(!no_exit_msg)
+          environment()->set_exit_msg(pass_cmd,0,0);
+      environment()->unlock_exit(pass_cmd);
+      environment()->delete_exit(pass_cmd);
+   }
+   return ::remove();
+}
+
+
+/*
+FUNKTION: query_door
+DEKLARATION: int query_door(void)
+BESCHREIBUNG:
+Liefert 1, wenn es sich um eine Tuer handelt.
+VERWEISE:
+GRUPPEN: tuer
+*/
+
+int query_door()
+{
+    return 1;
+}
+
+// Fuer den Zauberstab:
+string query_info()
+{
+    return sprintf("Tuerhoehe:  %d\n"
+		   "Schluessel: %-=64s\n"
+		   "Zustand:    %s",
+	query_door_height(),
+	(!query_keys())?"alle Schluessel":
+	sizeof(query_keys())?implode(query_keys(),", "):
+	"keine Schluessel",
+	(query_door_is_locked()?"abgeschlossen":
+	query_door_is_open()?"geoeffnet":"geschlossen")+
+	(query_no_lock()?" (kein Schloss vorhanden)":""));
+}

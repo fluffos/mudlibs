@@ -1,0 +1,436 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/rathaus/register
+// Description: Raum von dem aus das Goetterregister gesteuert wird.
+// Author:	Garthan
+//
+// $Log: register.c,v $
+// Revision 1.14  2010-08-28 19:22:25  sorcerer
+// Includepfad aktualisiert
+//
+// Revision 1.13  2009-03-20 08:11:39  gnomi
+// Restlichen nosave-Funktionen private gemacht.
+//
+// Revision 1.12  2008/02/29 14:34:50  gnomi
+// Kein seteuid.
+//
+// Revision 1.11  2008/02/29 13:45:27  gnomi
+// nosave add_actions raus.
+//
+// Revision 1.10  2002/09/09 20:31:25  sissi
+// Aktion unser Rathaus soll schoener werden:
+// Ueberall ne Pflanze eingebaut.
+//
+// Revision 1.9  2002/04/10 05:24:09  gnomi
+// Test auf Funktionsergebnis wegen Typcheck mit stringp anstatt != -1 gemacht.
+//
+// Revision 1.8  2001/04/07 00:23:55  gnomi
+// Header und/oder CVS-Log eingebaut.
+//
+
+#include <apps.h>
+#include <level.h>
+#include <more.h>
+
+#include <goetter_register.h>
+
+inherit "/i/room";
+inherit "/i/tools/security";
+
+#define SECURE (wizp(this_player()) && check_security())
+
+void reset()
+{
+   if(!present("second"))
+      SECOND->move(this_object());
+    "/room/rathaus/div/lager"->get_moebel(this_object());
+    "/room/rathaus/div/lager"->get_pflanze(this_object());
+}
+
+void create()
+{
+   init_security_for_actions();
+   set_own_light(1);
+   add_type("kunstlicht", 1);
+   add_type("teleport_rein_verboten", 1);
+   set_short("In der Registerkammer");
+   set_long(
+      "Du befindest Dich in der Registerkammer. Hier wird das uralte, "
+      "staubige Goetterregister, das Register der Zweitcharaktere sowie "
+      "die Mitgliedseintraege des Spielerrates verwaltet und aufbewahrt. "
+      "Mitglieder des Kreises der Goetter koennen hier in die Akten einsehen.\n"+
+      "      Kommandos fuer das Goetterregister\n"
+      "              liste\n"
+      "              liste <name>\n"
+      "              liste Ausbilder\n"
+      "              stammbaum\n"
+      "              setze <name> <meister> {1|2|3}\n"
+      "              setze <name> <meister> [, <meister>[, <meister>]]\n"
+      "              lehr[erlaubnis] <name>\n"
+      "      Kommandos fuer die Spielerratsverwaltung:\n"
+      "              spielerrat (listet alle Mitglieder auf)\n"
+      "              neurat <name> (nimmt ein neues Mitglied auf)\n"
+      "              wegrat <name> (entfernt ein Mitglied)");
+   set_exits( ({ "forum" }), ({ "forum" }) );
+   set_room_domain("Pantheon");
+   reset();
+}
+
+void init()
+{
+   if(wizp(this_player()))
+   {
+      add_action("setze", "setze", -4);
+      add_action("liste", "liste", -4);
+      add_action("liste", "info");
+      add_action("gen_liste", "generiere", -3);
+      add_action("gen_liste", "stammbaum", -5);
+      add_action("gen_liste", "baum");
+      add_action("lehrerlaubnis", "lehrerlaubnis", -4);
+      add_action("spielerrat","spielerrat");
+      add_action("new_spielerrat","neurat");
+      add_action("remove_spielerrat","wegrat");
+   }
+   else
+      call_out("raus", 3);
+}
+
+void raus()
+{
+   if(this_player())
+      write("Du fragst Dich, was Du hier suchst.\n");
+}
+
+private string *lehrlinge(string str)
+{
+   mapping register;
+   string *idxs, *ret;
+   int i, j;
+
+   register = GOETTER_REGISTER->query_goetter_register();
+   idxs = m_indices(register);
+   ret = ({});
+   for(i = sizeof(idxs); i--;)
+      for(j = 3; j--;)
+	 if(register[idxs[i],j] == str)
+	 {
+	    ret += ({ idxs[i] });
+	    break;
+	 }
+   return sort_array(ret,#'>);
+}
+
+
+int setze(string str)
+{
+   string wiz, meister, rest;
+   string *meisters;
+   int i;
+   
+   if(!SECURE)
+      return 0;
+
+   notify_fail("setze <name> <meister> {1|2|3}\n"
+	       "setze <name> <meister> [, <meister>[, <meister>]]\n");
+   if(!str)
+      return 0;
+   if(!this_player() || this_player() != this_interactive() || 
+      !present(this_player()) || !adminp(this_player()))
+   {
+      notify_fail("Du darfst das nicht.\n");
+      return 0;
+   }
+   str = lower_case(str);
+   if(sscanf(str, "%s %s %d", wiz, meister, i) == 3 && i >= 1 && i <= 3)
+   {
+      GOETTER_REGISTER->set_lehrmeister(wiz, meister, i-1);
+      write(capitalize(wiz)+": "+i+". Lehrmeister "+capitalize(meister)+".\n");
+      return 1;
+   }
+   if(sscanf(str, "%s %s", wiz, rest) == 2)
+   {
+      meisters = map(explode(rest,","), #'trim);
+      for(i = 0; i < 3 && i < sizeof(meisters); i++)
+      {
+	 if(meisters[i] == "0")
+	    meisters[i] = 0;
+	 GOETTER_REGISTER->set_lehrmeister(wiz,
+				(meisters[i] == "-" ? "leo" : meisters[i]), i);
+	 write(capitalize(wiz)+": "+(i+1)+". Lehrmeister "+
+	       capitalize(meisters[i]||"")+".\n");
+      }
+      return 1;
+   }
+}
+
+
+string goetter_liste()
+{
+   mapping register;
+   string *idxs, ret, *lehrmeister, le;
+   int i, j;
+
+   register = GOETTER_REGISTER->query_goetter_register();
+   for(ret = "",i = sizeof(idxs = sort_array(m_indices(register),#'<)); i--;)
+   {
+      for(lehrmeister = ({}), j = 0; j < 3; j++)
+	  lehrmeister += ({ register[idxs[i],j] });
+      lehrmeister = map(lehrmeister-({0}),
+	  lambda(({'a}), ({#'?,({#'==,'a,"leo"}), "-", ({#'capitalize, 'a})})));
+
+      ret += left(capitalize(idxs[i]),10)+": "+implode(lehrmeister,", ")+
+	     ((le = register[idxs[i],LEHRERLAUBNIS]) ? ", L:"+
+	     capitalize(le) : "")+
+             "\n";
+   }
+   return ret;
+}
+
+
+string lehrerlaubnis_liste()
+{
+   mapping register;
+   string *idxs, ret, le;
+   int i;
+
+   register = GOETTER_REGISTER->query_goetter_register();
+   for(ret = "",i = sizeof(idxs = sort_array(m_indices(register),#'<)); i--;)
+   {
+      if (le = register[idxs[i],LEHRERLAUBNIS])
+      ret += left(capitalize(idxs[i]),10)+": "+capitalize(le)+"\n";
+   }
+   return ret;
+}
+
+
+int liste(string str)
+{
+   string le, *lehrmeister;
+   int i; 
+
+   if(!SECURE)
+      return 0;
+
+   if(!str)
+   {
+      this_player()->more(explode(goetter_liste(),"\n"), 0, 0, M_AUTO_END);
+      return 1;
+   }
+   str = lower_case(str);
+   if(!strstr(str,"ausbilder"))
+   {
+      this_player()->more(explode(lehrerlaubnis_liste(),"\n"),0,0,M_AUTO_END);
+      return 1;
+   }
+
+   for(lehrmeister = ({}), i = 0; i < 3; i++)
+       lehrmeister += ({ GOETTER_REGISTER->query_lehrmeister(str, i) });
+   lehrmeister = map(lehrmeister-({0}),
+       lambda(({'a}), ({#'?,({#'==,'a,"leo"}), "-", ({#'capitalize, 'a})})));
+
+   le = GOETTER_REGISTER->query_lehrerlaubnis(str);
+   write(capitalize(str)+
+	    (le ? " (hat Lehrerlaubnis von "+capitalize(le)+"):": ":")+
+         "\n"+
+	 "   Lehrmeister: "+implode(lehrmeister,", ")+"\n");
+   write(sprintf("%-15s %=-63s\n", "   Lehrlinge  :", 
+	 implode(map(lehrlinge(str),#'capitalize),", ")));
+   return 1;
+}
+
+int lehrerlaubnis(string str)
+{
+   string le;
+
+   if(!SECURE)
+      return 0;
+
+   notify_fail("lehrerlaubnis <name>\n");
+   if(!str)
+      return 0;
+   if(!this_player() || this_player() != this_interactive() ||
+      !present(this_player()) || !lordp(this_player()))
+   {
+      notify_fail("Nur Lords duerfen das.\n");
+      return 0;
+   }
+   str = lower_case(str);
+
+   if(!GOETTER_REGISTER->is_wiz(str))
+   {
+      notify_fail(capitalize(str)+" ist kein eingetragener Gott.\n");
+      return 0;
+   }
+
+   if(GOETTER_REGISTER->query_lehrerlaubnis(str))
+      if(GOETTER_REGISTER->set_lehrerlaubnis(str, 0) != -1)
+	 write(capitalize(str)+" hat nun keine Lehrerlaubnis mehr.\n");
+      else
+         write("Das hat wohl nicht geklappt!\n");
+   else
+      if(stringp(le = GOETTER_REGISTER->set_lehrerlaubnis(str, 1)))
+	 write(capitalize(str)+" hat nun Lehrerlaubnis von "+
+	       capitalize(le)+".\n");
+      else
+         write("Das hat wohl nicht geklappt!\n");
+   return 1;
+}
+
+////////////// Genealogie Code folgt
+#define FINGER_URL "/cgi-bin/fing?name=%s"
+
+private string prev(mapping register, string name)
+{
+   int i; 
+   string ahne, prev;
+
+   for(i = 0; i < 3; i++)
+      if((ahne = register[name,i]) != "leo" && !prev)
+	 prev = ahne;
+   return prev;
+}
+
+private string *root(mapping register)
+{
+   string *idxs, ret, *root, ahne;
+   int i, j, nils;
+
+   idxs = m_indices(register);
+   root = ({});
+   for(i = sizeof(idxs); i--;)
+      if(!(ahne = prev(register, idxs[i])))
+	 root += ({ idxs[i] });
+      else if(!member(register, ahne))
+      {
+	 root -= ({ ahne });
+	 root += ({ ahne });
+      }
+   return root;
+}
+
+int kill_banned_leaves(mapping reg, mapping banned, string name)
+{
+   int  i, s;
+   string *idxs;
+   string *killed;
+
+   if(s = sizeof(idxs = reg[name]))
+   {
+      killed = ({ 0 });
+      for(i = s; i--;)
+	 if(kill_banned_leaves(reg, banned, idxs[i]))
+	    killed += idxs[i..i];
+      reg[name] -= killed;
+   }
+   if(!sizeof(reg[name]) && member(banned, name))
+   {
+      m_delete(reg, name);
+      return 1;
+   }
+}
+
+private string gen_step(mapping reg, mapping banned, string name,
+		       string prefix, int last, int html)
+{
+   string ret, *idxs;
+   int i, ban;
+
+   ban = member(banned, name);
+   ret = prefix +
+	 (last ? " \\-" : " |-") +
+	 (html && !ban ? "<A href="+sprintf(FINGER_URL,name)+">" : "")+
+	 (ban && !html ? "(" : "") +
+	 capitalize(name) +
+	 (ban && !html ? ")" : "") +
+	 (html && !ban ? "</A>": "")+
+	 "\n";
+   for(i = sizeof(idxs = sort_array(reg[name]||({}),#'<)); i--;)
+      ret += gen_step(reg, banned, idxs[i], prefix+(last?"   ":" | "), !i,html);
+   return ret;
+}
+
+varargs string genealogy(int html)
+{
+   mapping register, banned, my_reg;
+   string ahne, genealogy, *rt, *idxs;
+   int i;
+
+   my_reg = ([]);
+   register = GOETTER_REGISTER->query_goetter_register() +
+	      (banned = GOETTER_REGISTER->query_banished_wizzes());
+   for(i = sizeof(idxs = m_indices(register)-({0})); i--;)
+      if(sizeof(my_reg[ahne = prev(register, idxs[i])]))
+	 my_reg[ahne] += ({ idxs[i] });
+      else
+	 my_reg[ahne] = ({ idxs[i] });
+   for(i = sizeof(rt = root(register)); i--;)
+      kill_banned_leaves(my_reg, banned, rt[i]);
+   genealogy = "";
+   for(i = sizeof(rt = sort_array(root(register),#'<)); i--;)
+      genealogy += gen_step(my_reg, banned, rt[i], "", !i, html);
+   return genealogy;
+}
+
+int gen_liste()
+{
+   if(!SECURE)
+      return 0;
+
+   this_player()->more(explode(genealogy(),"\n"),0,0,M_AUTO_END);
+   return 1;
+}
+
+////////////// Ende Genealogie Code
+
+////////////// Spielerrat
+
+int spielerrat ()
+{
+    string *sr;
+
+    if(!SECURE)
+        return 0;
+
+    if ((!sr = SPIELERRAT->query_spielerrat()) || !sizeof (sr))
+        write ("Es gibt noch keinen Spielerrat.\n");
+    else
+        write(wrap(implode(map(sr,#'capitalize),", ")+"."));
+    return 1;
+}
+
+int new_spielerrat (string s)
+{
+    if(!SECURE)
+        return 0;
+
+   notify_fail ("Wer soll neues Spielerratsmitglied werden?\n");
+   if(!s)
+      return 0;
+   if(!this_player() || this_player() != this_interactive() || 
+      !present(this_player()) || !adminp(this_player()))
+   {
+      notify_fail("Du darfst das nicht.\n");
+      return 0;
+   }
+   SPIELERRAT->new_member (s);
+   return 1;
+}
+
+int remove_spielerrat (string s)
+{
+    if(!SECURE)
+        return 0;
+
+   notify_fail ("Wer soll aus dem Spielerrat ausscheiden?\n");
+   if(!s)
+      return 0;
+   if(!this_player() || this_player() != this_interactive() || 
+      !present(this_player()) || !adminp(this_player()))
+   {
+      notify_fail("Du darfst das nicht.\n");
+      return 0;
+   }
+   SPIELERRAT->remove_member (s);
+   return 1;
+}
+

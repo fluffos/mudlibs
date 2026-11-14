@@ -1,0 +1,529 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/monster_master
+// Description:	Steuerung der Stats und Werte von Monstern
+// Author:	Freaky (11.11.97)
+// Modified by:	Freaky (09.12.97) abgeleitet von /apps/npc_master
+//		Freaky (06.10.1998) neues File-Format
+//
+// $Log: monster_master.c,v $
+// Revision 1.9  2009-03-20 07:44:23  gnomi
+// Logging aller initialize-Aufrufe ohne echte Rassen.
+//
+// Revision 1.8  2007/12/05 10:47:58  gnomi
+// Gewicht je nach Koerpergroesse setzen.
+//
+// Revision 1.7  2005/05/24 17:51:54  gnomi
+// Stringindizierung korrigiert.
+// Faehigkeiten beim Einlesen der Monsterinfos ordentlich initialisieren.
+//
+// Revision 1.6  2004/04/18 18:09:45  sissi
+// MONSTER_DEFS umgezogen.
+//
+// Revision 1.5  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.4  2001/04/29 14:21:40  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.3  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+// Dieser Master ist dazu da, die Werte von Monsern zu setzen.
+// Dabei initialisiert der Master abhaengig von der Rasse des
+// Monsters die Werte auf x%
+
+#include <stats.h>
+
+#define STAT_FILE "/nosave/adm/MONSTER_DEFS"
+
+#define ERR(x) write(x)
+#define BLOCK_ERR(x,y) ERR((x) + " in Block Zeile " + (old_i + 1) + " bis " + i + (y))
+
+
+mapping stats;
+mapping alias;
+mapping hands;
+
+/* private */ int valid_koerperform(string str)
+/* Nicht private, da sonst der Aufruf von /i/living/body aus nicht klappt (Sissi) */
+{
+    return member(MD_KOERPERFORMEN,str) >= 0;
+}
+
+/*
+  Koerpergroesse               Tierartbeispiel          Gewicht
+
+  1:   0 cm bis   5 cm         Fliege                   2
+  2:   5 cm bis  30 cm         Maus, Ratte              3
+  3:  30 cm bis  70 cm         Katze                    6
+  4:  70 cm bis 1,2 m          Hund                     12
+  5: 1,2 m  bis 1,7 m          Wolf                     20
+  6: 1,7 m  bis 2,2 m          Mensch                   30
+  7: 2,2 m  bis 3,7 m          Baer                     80
+  8: 3,7 m  bis   7 m          Elefant                  200
+  9:   7 m  bis  15 m          kleiner Drache           500
+ 10: groesser 15 m             grosser Drache           1000
+
+*/
+private nosave int* gewichte = ({2,2,3,6,12,20,30,80,200,500,1000});
+private int koerpergroesse2gewicht(int gr)
+{
+    if(gr<1)
+	return 2;
+
+    if(gr>10)
+	return 200*gr;
+
+    return gewichte[gr];
+}
+
+private mapping read_block(string *lines, int i)
+{
+    string line, *tmp;
+    mapping block;
+
+    for (i; i < sizeof(lines); i++)
+    {
+	if (sizeof(lines[i]) && lines[i][0] == '#')
+	    continue;
+	line = space(lines[i]);
+	if (!strlen(line))
+	{
+	    if (!block)
+		continue;
+	    else
+		return block;
+	}
+	else if (line[0] == '[')
+	    return block;
+	else
+	{
+	    if (!block)
+		block = ([]);
+	    tmp = explode(line,": ");
+	    if (sizeof(tmp) != 2)
+		ERR("Fehler in Zeile " + (i + 1) + ": Kein key: value Paar.\n");
+	    else
+	    {
+		block[tmp[0]] = tmp[1];
+	    }
+	}
+    }
+    return block;
+}
+
+private int read_haende(string *lines, int i)
+{
+    string name;
+    int plural, old_i;
+    mapping block;
+
+    old_i = i;
+    while (block = read_block(lines,&i))
+    {
+	if (name = block["Name"])
+	{
+	    hands[name,MD_HAND_GENDER] = block["Geschlecht"];
+	    hands[name,MD_HAND_PLURAL] = block["Plural"] == "1";
+	}
+	else if (lines[i][0] == '[')
+	    return i;
+    	else
+	{
+	    BLOCK_ERR("Fehler",": Kein Name angegeben.\n");
+	}
+    }
+    return i;
+}
+
+private int read_rassen(string *lines, int i)
+{
+    int old_i, a, b, min, max;
+    string name, clone, val, *keys, *tmp;
+    mapping block;
+
+    old_i = i;
+    while (block = read_block(lines,&i))
+    {
+	if (name = block["Name"])
+	{
+	    // Wenn es ein Clone ist, alle Werte kopieren
+	    if (clone = block["Clone"])
+		for (a = 0; a < MD_SIZE_RASSE; a++)
+		    stats[name,a] = stats[clone,a];
+	    keys = m_indices(block);
+	    for (a = sizeof(keys); a--; )
+	    {
+		val = block[keys[a]];
+		switch(keys[a])
+		{
+		    case "Clone":
+		    case "Name":
+		    	continue;
+		    case "Rasse":
+			stats[name,MD_RASSE] = val;
+		    	break;
+		    case "Koerperform":
+			if (valid_koerperform(val))
+			    stats[name,MD_KOERPERFORM] = val;
+		    	else
+			    BLOCK_ERR("Falsche Koerperform","\n");
+		        break;
+		    case "Koerpergroesse":
+			stats[name,MD_KOERPERGROESSE] = to_int(val);
+		    	break;
+		    case "Geschlecht":
+			stats[name,MD_GESCHLECHT] = val;
+		  	break;
+		    case "Staerke":
+			if (sscanf(val,"%d-%d",min,max) == 2)
+			{
+			    stats[name,MD_STR_MIN] = min;
+			    stats[name,MD_STR_MAX] = max;
+			}
+		    	else
+			    BLOCK_ERR("Falsche Staerkenangebe","\n");
+			break;
+		    case "Intelligenz":
+			if (sscanf(val,"%d-%d",min,max) == 2)
+			{
+			    stats[name,MD_INT_MIN] = min;
+			    stats[name,MD_INT_MAX] = max;
+			}
+		    	else
+			    BLOCK_ERR("Falsche Intelligenzangabe","\n");
+			break;
+		    case "Ausdauer":
+			if (sscanf(val,"%d-%d",min,max) == 2)
+			{
+			    stats[name,MD_CON_MIN] = min;
+			    stats[name,MD_CON_MAX] = max;
+			}
+		    	else
+			    BLOCK_ERR("Falsche Ausdauerangabe","\n");
+			break;
+		    case "Geschicklichkeit":
+			if (sscanf(val,"%d-%d",min,max) == 2)
+			{
+			    stats[name,MD_DEX_MIN] = min;
+			    stats[name,MD_DEX_MAX] = max;
+			}
+		    	else
+			    BLOCK_ERR("Falsche Geschicklichkeitsangabe","\n");
+			break;
+		    case "Haende":
+			stats[name,MD_NUM_HANDS] = to_int(val);
+		    	break;
+		    case "Handnamen":
+			if (val != "-")
+			{
+			    tmp = explode(val,", ");
+			    for (b = 0; b < sizeof(tmp); b++)
+			    {
+				if (!member(hands,tmp[b]))
+			       	{
+				    BLOCK_ERR("Unbekannter Handname",": " +
+					    tmp[b] + ".\n");
+				    tmp[b] = 0;
+				}
+			    }
+			    tmp -= ({ 0 });
+			    if (sizeof(tmp) == 1)
+				stats[name,MD_HAND_NAME] = tmp[0];
+			    else if (sizeof(tmp) > 1)
+				stats[name,MD_HAND_NAME] = tmp;
+			}
+		    	break;
+		    case "Waffenklasse":
+			if (sscanf(val,"%d-%d",min,max) == 2)
+			{
+			    stats[name,MD_WC_MIN] = min;
+			    stats[name,MD_WC_MAX] = max;
+			}
+		    	else if (val != "-")
+			    BLOCK_ERR("Falsche Waffenklassenangabe","\n");
+			break;
+		    case "Ruestungsklasse":
+			if (sscanf(val,"%d-%d",min,max) == 2)
+			{
+			    stats[name,MD_AC_MIN] = min;
+			    stats[name,MD_AC_MAX] = max;
+			}
+		    	else if (val != "-")
+			    BLOCK_ERR("Falsche Ruestungsklassenangabe","\n");
+			break;
+		    case "AP":
+			if (sscanf(val,"%d-%d",min,max) == 2)
+			{
+			    stats[name,MD_HP_MIN] = min;
+			    stats[name,MD_HP_MAX] = max;
+			}
+		    	else if (val != "-")
+			    BLOCK_ERR("Falsche AP-Angabe","\n");
+			break;
+		    case "ZP":
+			if (sscanf(val,"%d-%d",min,max) == 2)
+			{
+			    stats[name,MD_SP_MIN] = min;
+			    stats[name,MD_SP_MAX] = max;
+			}
+		    	else if (val != "-")
+			    BLOCK_ERR("Falsche ZP-Angabe","\n");
+			break;
+		    case "Kann":
+			stats[name,MD_ABILITIES] = 0;
+			tmp = explode(val,", ");
+		        for (b = 0; b < sizeof(tmp); b++)
+			{
+			    switch(tmp[b])
+			    {
+				case "laufen":
+				    stats[name,MD_ABILITIES] |= MD_AB_WALK;
+				    break;
+				case "schwimmen":
+				    stats[name,MD_ABILITIES] |= MD_AB_SWIM;
+				    break;
+				case "fliegen":
+				    stats[name,MD_ABILITIES] |= MD_AB_FLY;
+				    break;
+				default:
+				    BLOCK_ERR("Falsche Angabe bei 'Kann'",
+					    ": " + tmp[b] + ".\n");
+			    }
+			}
+			break;
+		    default:
+		    	BLOCK_ERR("Unbekannter Schluessel",": " + keys[a] +
+			       ".\n");
+		}
+	    }
+	}
+	else if (lines[i][0] == '[')
+	    return i;
+	else
+	{
+	    ERR("Fehler in Block Zeile " + (old_i + 1) + " bis " + i +
+		    ": Kein Name angegeben.\n");
+	}
+    }
+    return i;
+}
+
+private int read_aliases(string *lines, int i)
+{
+    string line, *tmp;
+
+    for (i; i < sizeof(lines); i++)
+    {
+	if (sizeof(lines[i]) && lines[i][0] == '#')
+	    continue;
+	line = space(lines[i]);
+	if (!strlen(line))
+	    continue;
+	// Wenn eine neue Region anfaengt, returnen
+	if (line[0] == '[')
+	    return i;
+	
+	tmp = explode(line,": ");
+	if (sizeof(tmp) == 2)
+	{
+	    if (!member(stats,tmp[1]))
+		ERR("Aliases Zeile " + (i + 1 ) + ": Rasse gibt es nicht.\n");
+	    else
+		alias[tmp[0]] = tmp[1];
+	}
+	else
+	{
+	    ERR("Fehler bei Aliases in Zeile: " + (i + 1) + "\n");
+	}
+    }
+    return i;
+}
+
+void create()
+{
+    string *lines, line, rasse, tmp, wc, ac, hand_name;
+    int i, str_min, str_max, int_min, int_max,
+	con_min, con_max, dex_min, dex_max, num_hands,
+       	min, max, plural;
+
+    stats = m_allocate(20,MD_SIZE_RASSE);
+    hands = m_allocate(5,MD_SIZE_HAND);
+    alias = ([]);
+
+    stats[MD_DEF_RASSE,MD_RASSE] = MD_DEF_RASSE;
+    stats[MD_DEF_RASSE,MD_KOERPERFORM] = "humanoid";
+    stats[MD_DEF_RASSE,MD_KOERPERGROESSE] = 6;
+    stats[MD_DEF_RASSE,MD_GESCHLECHT] = "maennlich";
+    stats[MD_DEF_RASSE,MD_STR_MIN] = 30;
+    stats[MD_DEF_RASSE,MD_STR_MAX] = 80;
+    stats[MD_DEF_RASSE,MD_INT_MIN] = 30;
+    stats[MD_DEF_RASSE,MD_INT_MAX] = 80;
+    stats[MD_DEF_RASSE,MD_CON_MIN] = 30;
+    stats[MD_DEF_RASSE,MD_CON_MAX] = 80;
+    stats[MD_DEF_RASSE,MD_DEX_MIN] = 30;
+    stats[MD_DEF_RASSE,MD_DEX_MAX] = 80;
+    stats[MD_DEF_RASSE,MD_NUM_HANDS] = 2;
+    stats[MD_DEF_RASSE,MD_HAND_NAME] = 0;
+    stats[MD_DEF_RASSE,MD_WC_MIN] = 0;
+    stats[MD_DEF_RASSE,MD_WC_MAX] = 10;
+    stats[MD_DEF_RASSE,MD_AC_MIN] = 0;
+    stats[MD_DEF_RASSE,MD_AC_MAX] = 0;
+    stats[MD_DEF_RASSE,MD_HP_MIN] = 0;
+    stats[MD_DEF_RASSE,MD_HP_MAX] = 0;
+    stats[MD_DEF_RASSE,MD_SP_MIN] = 0;
+    stats[MD_DEF_RASSE,MD_SP_MAX] = 0;
+    stats[MD_DEF_RASSE,MD_ABILITIES] = MD_AB_WALK;
+
+    if (file_size(STAT_FILE) <= 0)
+	return;
+
+    lines = explode(read_file(STAT_FILE), "\n");
+
+    for (i = 0; i < sizeof(lines); i++)
+    {
+	if (sizeof(lines[i]) && lines[i][0] == '#')
+	    continue;
+	line = space(lines[i]);
+	if (!strlen(line))
+	    continue;
+
+	if (line == "[Rassen]")
+	    i = read_rassen(lines,i + 1) - 1;
+	else if (line == "[Haende]")
+	    i = read_haende(lines,i + 1) - 1;
+	else if (line == "[Aliases]")
+	    i = read_aliases(lines,i + 1) - 1;
+	else
+	    ERR("Fehler in Zeile " + (i + 1) + ": Unbekannte Region.\n");
+    }
+}
+
+private string get_rasse(string rasse)
+{
+    if (member(stats,rasse))
+	return rasse;
+    return alias[rasse] || MD_DEF_RASSE;
+}
+
+string query_race(string rasse)
+{
+    return stats[get_rasse(rasse),MD_RASSE];
+}
+
+int compute_stat(int min, int max, int level)
+{
+    return min + ((max - min) * level / 100);
+}
+
+int get_one_stat(string rasse, int stat_num, int level)
+{
+    string r;
+
+    r = get_rasse(rasse);
+    switch (stat_num)
+    {
+	case STAT_STR:
+	    return compute_stat(stats[r,MD_STR_MIN],stats[r,MD_STR_MAX],level);
+	case STAT_INT:
+	    return compute_stat(stats[r,MD_INT_MIN],stats[r,MD_INT_MAX],level);
+	case STAT_CON:
+	    return compute_stat(stats[r,MD_CON_MIN],stats[r,MD_CON_MAX],level);
+	case STAT_DEX:
+	    return compute_stat(stats[r,MD_DEX_MIN],stats[r,MD_DEX_MAX],level);
+	default:
+	    return 0;
+    }
+}
+
+int init_monster(object npc, string rasse, int level)
+{
+    string r, hand;
+    int i;
+
+    r = get_rasse(rasse);
+
+    npc->set_race(stats[r,MD_RASSE]);
+    
+    if (level < 1)
+	level = 1;
+    else if (level > 100)
+	level = 100;
+
+    npc->set_gender(stats[r,MD_GESCHLECHT]);
+    npc->set_one_stat(STAT_STR,
+	compute_stat(stats[r,MD_STR_MIN],stats[r,MD_STR_MAX],level));
+    npc->set_one_stat(STAT_INT,
+	compute_stat(stats[r,MD_INT_MIN],stats[r,MD_INT_MAX],level));
+    npc->set_one_stat(STAT_CON,
+	compute_stat(stats[r,MD_CON_MIN],stats[r,MD_CON_MAX],level));
+    npc->set_one_stat(STAT_DEX,
+	compute_stat(stats[r,MD_DEX_MIN],stats[r,MD_DEX_MAX],level));
+    npc->give_hands(stats[r,MD_NUM_HANDS]);
+    if (stats[r,MD_WC_MIN])
+	npc->give_weapon_level(
+	    compute_stat(stats[r,MD_WC_MIN],stats[r,MD_WC_MAX],level));
+    if (stats[r,MD_AC_MIN])
+	npc->give_armour_level(
+	    compute_stat(stats[r,MD_AC_MIN],stats[r,MD_AC_MAX],level));
+    if (stats[r,MD_HP_MIN])
+	npc->set_max_hp(
+	    compute_stat(stats[r,MD_HP_MIN],stats[r,MD_HP_MAX],level));
+    else
+	npc->update_max_hp();
+    npc->set_hp(npc->query_max_hp());
+    if (stats[r,MD_SP_MIN])
+	npc->set_max_sp(
+	    compute_stat(stats[r,MD_SP_MIN],stats[r,MD_SP_MAX],level));
+    else
+	npc->update_max_sp();
+    npc->set_sp(npc->query_max_sp());
+#if 0
+    if (hand = stats[r,MD_HAND_NAME])
+    {
+	for (i = stats[r,MD_NUM_HANDS]; i--; )
+	    npc->add_v_item((["name":hand,"id":({"natural#weapon",hand}),
+		"gender":hands[hand,MD_HAND_GENDER],
+		"plural":hands[hand,MD_HAND_PLURAL] ]));
+    }
+#endif
+    npc->set_koerperform(stats[r,MD_KOERPERFORM]);
+    npc->set_koerpergroesse(stats[r,MD_KOERPERGROESSE]);
+    if(npc->query_weight()==30)
+	npc->set_weight(koerpergroesse2gewicht(stats[r,MD_KOERPERGROESSE]));
+    npc->set_abilities(stats[r,MD_ABILITIES]);
+
+    npc->update_max_encumbrance();
+
+    if(!member(stats,rasse) && !member(alias,rasse))
+	sys_log("KEINE_RASSE", sprintf("%Q: %Q von %s\n", rasse,
+	    npc, npc->query_creator() || ""));
+}
+
+int get_living_name(string name)
+{
+    return !member(stats,name) && !member(alias,name);
+}
+
+mapping query_rassen()
+{
+    return copy(stats);
+}
+
+mapping query_alias()
+{
+    return copy(alias);
+}
+
+mapping query_hands()
+{
+    return copy(hands);
+}
+
+mixed query_rassen_def(string rasse, int what)
+{
+    return stats[get_rasse(rasse),what];
+}

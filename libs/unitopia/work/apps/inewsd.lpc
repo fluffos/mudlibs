@@ -1,0 +1,474 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /apps/inewsd.c
+// Description: Intermud-News
+// Author:      Gnomi
+
+// UID: Apps
+
+// $Log: inewsd.c,v $
+// Revision 1.6  2012-01-22 08:46:42  gnomi
+// do_backfeed: Auch einzelne Artikel nochmal schicken koennen.
+//
+// Revision 1.5  2009-07-30 16:45:22  gnomi
+// md5 -> hash
+//
+// Revision 1.4  2009-04-16 21:48:05  gnomi
+// Wenn SQLite verfuegbar ist, die MID-Mappings in eine Datenbank speichern.
+//
+// Revision 1.3  2008-09-26 09:59:06  gnomi
+// Interdomain-Brett fuer NNTP freigegeben.
+//
+// Revision 1.2  2008-04-02 07:50:42  gnomi
+// Alle Bretter in der unitopia-Hierarchie anbieten.
+// Loeschen von Artikeln eingebaut.
+//
+// Revision 1.1  2008/02/28 08:47:57  gnomi
+// InterMUD-News-Daemon.
+//
+
+#include <config.h>
+#include <files.h>
+#include <level.h>
+#include <news.h>
+#include <rtlimits.h>
+#include <time.h>
+#include <tls.h>
+
+#ifdef __SQLITE__
+#define USE_SQLITE
+#endif
+
+#define INTERMUD_NAME	"InterMUD"
+
+#define MID_DB		"/var/spool/news/mids.db"
+#define MID_SAVEFILE	"/var/spool/news/mids"
+
+#define ESECURE	(object_name(previous_object()) == "/secure/rpc/news")
+#define ISECURE	(object_name(previous_object()) == NEWSD)
+
+#ifndef USE_SQLITE
+mapping gruppen = ([:2]); // "de.alt.mud": mid-nr-Mapping; nr-mid+ref-Mapping
+
+void load()
+{
+    restore_object(MID_SAVEFILE);
+}
+
+void save()
+{
+    save_object(MID_SAVEFILE);
+}
+
+#ifdef __SQLITE__
+void convert_to_db()
+{
+    sl_open(MID_DB);
+    
+    sl_exec("BEGIN");
+    sl_exec("CREATE TABLE mids (gruppe TEXT NOT NULL, nr INTEGER NOT NULL, mid TEXT NOT NULL, PRIMARY KEY (gruppe, mid))");
+    sl_exec("CREATE TABLE nrs (gruppe TEXT NOT NULL, nr INTEGER NOT NULL, mid TEXT NOT NULL, refs TEXT, PRIMARY KEY (gruppe, nr))");
+    foreach(string gruppe, mapping midnr, mapping nrmid: gruppen)
+    {
+	foreach(string mid, int nr: midnr)
+	    sl_exec("INSERT INTO mids (gruppe,mid,nr) VALUES (?,?,?)", gruppe, mid, nr);
+	foreach(int nr, string mid, string* ref: nrmid)
+	    sl_exec("INSERT INTO nrs (gruppe,nr,mid,refs) VALUES (?,?,?,nullif(?,0))", gruppe, nr, mid, ref && save_value(ref));
+    }
+    sl_exec("COMMIT");
+    
+    sl_close();
+}
+#endif
+
+nosave string query_mid(string grp, int nr)
+{
+    if(member(gruppen, grp))
+	return gruppen[grp,1][nr,0];
+}
+
+nosave string* query_ref(string grp, int nr)
+{
+    if(member(gruppen, grp))
+	return gruppen[grp,1][nr,1];
+    else
+	return ({});
+}
+
+nosave int query_nr(string grp, string mid)
+{
+    if(member(gruppen, grp))
+	return gruppen[grp,0][mid];
+}
+
+nosave void add_mid(string grp, string mid, string* ref, int nr)
+{
+    if(!member(gruppen, grp))
+	m_add(gruppen, grp, ([mid: nr]), ([nr: mid; ref]));
+    else
+    {
+	m_add(gruppen[grp, 0], mid, nr);
+	m_add(gruppen[grp, 1], nr, mid, ref);
+    }
+    
+    save();
+}
+
+nosave void remove_mid(string grp, string mid, int nr)
+{
+    if(member(gruppen, grp))
+    {
+	m_delete(gruppen[grp, 0], mid);
+	m_delete(gruppen[grp, 1], nr);
+    }
+    
+    save();
+}
+#else /* USE_SQLITE */
+private void close_db()
+{
+    sl_close();
+}
+
+private void open_db()
+{
+    if(find_call_out(#'close_db)<0)
+	catch(sl_open(MID_DB);publish);
+    else
+	remove_call_out(#'close_db);
+
+    call_out(#'close_db, 10);
+}
+
+void load()
+{
+    open_db();
+    sl_exec("CREATE TABLE IF NOT EXISTS mids (gruppe TEXT NOT NULL, nr INTEGER NOT NULL, mid TEXT NOT NULL, PRIMARY KEY (gruppe, mid))");
+    sl_exec("CREATE TABLE IF NOT EXISTS nrs (gruppe TEXT NOT NULL, nr INTEGER NOT NULL, mid TEXT NOT NULL, refs TEXT, PRIMARY KEY (gruppe, nr))");
+}
+
+void save()
+{
+}
+
+nosave string query_mid(string grp, int nr)
+{
+    mixed res;
+    
+    open_db();
+    
+    res = sl_exec("SELECT mid FROM nrs WHERE gruppe=? AND nr=?", grp, nr);
+    return sizeof(res) && res[0][0];
+}
+
+nosave string* query_ref(string grp, int nr)
+{
+    mixed res;
+    
+    open_db();
+    
+    res = sl_exec("SELECT refs FROM nrs WHERE gruppe=? AND nr=?", grp, nr);
+    return (sizeof(res) && res[0][0])?restore_value(res[0][0]):({});
+}
+
+nosave int query_nr(string grp, string mid)
+{
+    mixed res;
+    
+    open_db();
+    
+    res = sl_exec("SELECT nr FROM mids WHERE gruppe=? AND mid=?", grp, mid);
+    return sizeof(res) && res[0][0];
+}
+
+nosave void add_mid(string grp, string mid, string* ref, int nr)
+{
+    open_db();
+
+    sl_exec("INSERT OR REPLACE INTO mids (gruppe,mid,nr) VALUES (?,?,?)", grp, mid, nr);
+    sl_exec("INSERT OR REPLACE INTO nrs (gruppe,nr,mid,refs) VALUES (?,?,?,nullif(?,0))", grp, nr, mid, sizeof(ref) && save_value(ref));
+}
+
+nosave void remove_mid(string grp, string mid, int nr)
+{
+    open_db(),
+    
+    sl_exec("DELETE FROM mids WHERE gruppe=? AND nr=?", grp, nr);
+    sl_exec("DELETE FROM nrs WHERE gruppe=? AND mid=?", grp, mid);
+}
+#endif
+
+nosave string brett2usenet(string brett, string gruppe)
+{
+    if(brett == INTERMUD_NAME)
+	return gruppe;
+
+    return lower_case(implode(({"unitopia",brett,gruppe}),"."));
+}
+
+string* usenet2brett(string gruppe)
+{
+    string *res;
+
+    if(!strstr(gruppe,"unitopia.") && gruppe != "unitopia.test")    
+    {
+	res = explode(gruppe,".")[1..];
+	if(sizeof(res)!=2)
+	    return 0;
+	
+	foreach(string dir: get_dir("/var/spool/news/."))
+	    if(lower_case(dir)==res[0])
+	    {
+		res[0] = dir;
+		break;
+	    }
+	foreach(string dir: get_dir(sprintf("/var/spool/news/%s/.",res[0])))
+	    if(lower_case(dir)==res[1])
+	    {
+		res[1] = dir;
+		break;
+	    }
+    }
+    else
+	res = ({ INTERMUD_NAME, gruppe });
+    
+    if(file_size(sprintf("/var/spool/news/%s/%s", res[0], res[1])) != FSIZE_DIR)
+	return 0;
+
+    return res;
+}
+
+private string make_email(string autor)
+{
+    mixed* t= timearray(time());
+    string stamp = sprintf("%02d%02d", t[TM_MON], t[TM_YEAR]%100);
+    return sprintf("%s-%s%s@%s", autor, 
+	stamp, hash(TLS_HASH_MD5, lower_case(autor)+stamp+(read_file("/var/adm/TIMESTAMP_SECRET")||""))[11..14],
+	HOST_NAME);
+}
+
+// Aufrufe von /apps/newsd.c
+void exportnews(string brett, string gruppe, int bezug, int nr,
+    string autor, string subject, int date, string text, int source)
+{
+    string usenet, mid, *ref, addr;
+    
+    if(extern_call() && !ISECURE)
+	return;
+
+    if(source == SOURCE_NNTP)
+	return;
+
+    usenet = brett2usenet(brett, gruppe);
+    if(!usenet)
+	return;
+	
+    if(bezug)
+    {
+	string refmid = query_mid(usenet, bezug);
+	if(refmid)
+	    ref = (query_ref(usenet, bezug) || ({})) + ({ refmid });
+    }
+    
+#ifdef UNItopia
+    mid = sprintf("<uni.%s@%s>", regreplace(get_unique_string(),"#",".",1), "unitopia.de");
+#else
+    mid = sprintf("<mud.%s@%s>", regreplace(get_unique_string(),"#",".",1), HOST_NAME);
+#endif
+
+    add_mid(usenet, mid, ref, nr);
+    
+    addr = PLAYER_READER->query_usenet_email(lower_case(autor));
+    if(!addr)
+    {
+#ifdef UNItopia
+	if(strstr(usenet,"unitopia."))
+	    addr = make_email(autor);
+	else
+#endif
+	    addr = sprintf("%s@%s", autor, HOST_NAME);
+    }
+
+    "/secure/rpc/news"->outside_call(0, "exportnews",
+	usenet, autor, addr, subject, date, mid, ref, text);
+}
+
+void deletenews(string brett, string gruppe, int nr)
+{
+    string usenet, mid;
+    if(!ISECURE)
+	return;
+
+    usenet = brett2usenet(brett, gruppe);
+    if(!usenet)
+	return;
+
+    mid = query_mid(usenet, nr);
+    if(!mid)
+	return;
+    
+    remove_mid(usenet, mid, nr);
+    
+    "/secure/rpc/news"->outside_call(0, "deletenews", mid);
+}
+
+// Aufrufe von /secure/rpc/news.c
+void importnews(string* ngruppen, string autor, string subject, int date,
+    string mid, string* refs, string text)
+{
+    if(!ESECURE)
+	return;
+
+    foreach(string gruppe: ngruppen)
+    {
+	string *brett = usenet2brett(gruppe);
+	
+	if(brett)
+	{
+	    int bezug = 0;
+	    int nr;
+	    
+	    foreach(string ref: reverse(refs))
+	    {
+		bezug = query_nr(gruppe, ref);
+		if(bezug)
+		    break;
+	    }
+	    
+	    if(!NEWSD->post_artikel(brett[0], brett[1],
+		subject[0..71], autor, bezug, date, text, SOURCE_NNTP, &nr))
+		    add_mid(gruppe, mid, refs, nr);
+	}
+    }
+}
+
+void cancelnews(string *ngruppen, string autor, string mid)
+{
+    if(!ESECURE)
+	return;
+
+    foreach(string gruppe: ngruppen)
+    {
+	string *brett = usenet2brett(gruppe);
+	int nr;
+	
+	if(!brett)
+	    continue;
+	    
+	nr = query_nr(gruppe, mid);
+	if(!nr)
+	    continue;
+		
+	NEWSD->entferne_artikel(brett[0], brett[1], lower_case(autor), ({nr}));
+    }
+}
+
+mixed* get_newsgroups(string name)
+{
+    int ishlp;
+    
+    if(!ESECURE)
+	return 0;
+
+    ishlp = NEWSD->is_hlp(find_player(name)||name);
+    
+    return map(NEWSD->query_all_bretter(name),
+	(:
+	    map($1, (: ($2 || $1[0]!="Engel") && brett2usenet($1[0],$1[1]) :), $2)-({0})
+	:), ishlp);
+}
+
+// Hilfsfunktionen fuer Admins
+// Achtung: artcutoff muss entsprechend hochgesetzt werden.
+private void backfeed(string brett, string gruppe, mixed* stack)
+{
+    int num = 50000;
+
+    while(sizeof(stack) && num>0)
+    {
+	int bezug = stack[0][0];
+	mixed art = stack[0][1];
+	
+	string file = NEWSD->query_file_name(brett, gruppe, art[N_NUMBER]);
+	int bytes = query_limits()[LIMIT_BYTE];
+	int anz = 0, tl;
+	string neu, text = "";
+	
+	do
+	{
+	    neu=read_bytes(file, anz, bytes);
+	    if(neu)
+	    	text += neu;
+	    anz += bytes;
+	}while(neu);
+	
+	anz = strstr(text, "\n-------------------------------------------------------------------------------\n")+1;
+	if(anz)
+	    anz+=80;
+	
+	tl = strstr(text, "\n", 87);
+		
+	exportnews(brett, gruppe, bezug, art[N_NUMBER],
+	    art[N_AUTHOR], text[87..tl-1], art[N_DATE],
+	    text[anz..], SOURCE_MUD);
+	num-=sizeof(text);
+
+	stack[0..0] = map(art[N_SUBTREE], (: ({ $2, $1 }) :), art[N_NUMBER]);
+    }
+    
+    if(sizeof(stack))
+	call_out(#'backfeed, 1, brett, gruppe, stack);
+    else
+	printf("Backfeed fertig.\n");
+}
+
+void do_backfeed(string brett, string gruppe, int nr)
+{
+    string usenet;
+    
+    if(!adminp(this_interactive()) ||
+	this_player() != this_interactive() ||
+	getuid(previous_object()) != this_player()->query_real_name())
+	    return;
+
+    usenet = brett2usenet(brett, gruppe);
+    if(!usenet)
+	return;
+    
+    if(nr)
+    {
+        mixed *stack = map(NEWSD->query_artikel_baum(brett, gruppe), (: ({ 0, $1 }) :));
+        while(sizeof(stack))
+        {
+            mixed art = stack[0][1];
+            if(art[N_NUMBER] == nr)
+                break;
+
+            stack[0..0] = map(art[N_SUBTREE], (: ({ $2, $1 }) :), art[N_NUMBER]);
+        }
+        if(sizeof(stack))
+        {
+            stack = deep_copy(stack[0..0]);
+            stack[0][1][N_SUBTREE] = ({});
+            backfeed(brett, gruppe, stack);
+        }
+    }
+    else
+        backfeed(brett, gruppe, 
+            map(NEWSD->query_artikel_baum(brett, gruppe), (: ({ 0, $1 }) :)));
+}
+
+void create()
+{
+    load();
+}
+
+void remove()
+{
+    save();
+}
+
+void prepare_renewal() { save(); }
+void finish_renewal(object neu) {}
+void abort_renewal() {}
+

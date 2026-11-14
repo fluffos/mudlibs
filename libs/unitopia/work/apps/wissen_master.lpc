@@ -1,0 +1,2081 @@
+// ----------------------------------------------------------------
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/wissen_master.c
+// Description:	Setzen der Wissen-Skills
+// Author:	Parsec (3/99)
+
+// UID: Apps
+
+//
+// $Log: wissen_master.c,v $
+// Revision 1.26  2013-05-05 18:07:59  myonara
+// typo ROOT_PATHS statt ROOT_PATHES
+//
+// Revision 1.25  2013-05-05 10:00:24  myonara
+// ROOT_PATHES eingefuehrt fuer P/Root im set_objekte/aender_pfad_objekte
+//
+// Revision 1.24  2013-04-15 16:27:30  sorcerer
+// Anin uebernimmt fuer Parsec
+//
+// Revision 1.23  2008-04-26 18:16:03  gnomi
+// P-Lords sind auch fuer Root zustaendig.
+//
+// Revision 1.22  2008/01/28 13:15:45  gnomi
+// Typo.
+//
+// Revision 1.21  2005/05/26 00:56:16  gnomi
+// Nur einfache Sicherheitschecks fuer unkritische Dinge (z.B. die Anzeige
+// der Befehle im Raum).
+//
+// Revision 1.20  2004/07/19 21:09:53  gnomi
+// Domain-Infos sind vom Master nach /apps/domain gezogen.
+//
+// Revision 1.19  2003/07/02 02:32:17  gnomi
+// Sicherheitsluecke (Vertrauen auf TI/TP) behoben.
+//
+// Revision 1.18  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.17  2001/12/24 07:43:50  gnomi
+// Wissenszustaendigen wieder eingetragen.
+//
+// Revision 1.16  2001/12/13 00:14:58  gnomi
+// Alle Lords duerfen nun ihre Eintraege aktivieren.
+//
+// Revision 1.15  2001/09/12 15:32:48  sissi
+// query soll sum wissen muss nicht das liefern, was ein Spieler, der
+// 100er Stats hat, haben soll, sondern das, was er mit 80er Stats
+// haben soll. Daher muss nicht durch 2 sondern durch 3 geteilt werden.
+//
+// Revision 1.14  2001/07/26 15:56:26  freaky
+// Doppelte Defines entfernt.
+//
+// Revision 1.13  2001/04/11 21:51:59  gnomi
+// DHs koennen auch wie DLs die Eintraege bearbeiten.
+//
+// Revision 1.12  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.11  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+
+#pragma strong_types
+
+
+inherit "/i/tools/getopt" ;
+inherit "/i/tools/security";
+
+#include <config.h>
+#include <level.h>
+#include <more.h>
+#include <touch.h>
+#include <apps.h>
+#include <security.h>
+
+/* prototypes */
+void create();
+private int wissen_admin( object ob);
+private int wissen_lord( object ob);
+varargs int valid_caller( int i, int sloppy);
+int query_aktiv();
+int aktivieren( string str);
+int query_max_sum_wissen();
+int query_soll_wissen();
+int informiere( string str);
+int informiere_vergabe( string str);
+mixed query_infos();
+mixed query_infos_vergabe();
+int query_prevent_shadow( object shadow);
+int remove();
+varargs void save( int sofort_sichern);
+int save_data();
+private int spielerp( object who);
+private object get_room( object ob);
+private string pfad_format( string pfad);
+private string get_program_name( object ob);
+private int get_bereich( string bereich);
+private int get_skill( string skill);
+private varargs string * query_domains_of( object ob);
+private int ausgenutzte_kontingente( int skill);
+private string get_flags( int typ);
+mixed query_skill_obs();
+int list_skill( string str);
+int list_bereich( string str);
+int new_bereich( string str);
+int list_kontingente( string str);
+private int eintrag_vorhanden( mixed eintrag);
+private int aktive_eintraege( mixed eintrage);
+private int aktive_und_getestete_eintraege( mixed eintrage);
+int *query_benutzte_kontingente();
+int *query_benutzte_kontingente_bereiche();
+int set_kontingent( string str);
+int set_kontingent_bereich( string str);
+int list_objekte( string str);
+private string print_bereich( int iskill, int ibereich, int lang);
+private varargs mixed print_eintrag(
+    int b, int s, int e, int lang, int keine_ausgabe);
+int set_objekte( string str, int doppelt);
+string query_bit_info( string bit);
+int setze_sicherheitsbits( string str);
+int aktiviere_objekte( string str);
+int aender_pfad_objekte( string str);
+int aendere_komentar_objekte( string str);
+int loesche_objekte( string str);
+int check_objekte( string str);
+nosave void check_o( int ib, int is, int nr, string * ber);
+private varargs void send_info_vergabe( object wen, mixed m);
+mixed query_info( string str);
+nosave varargs void send_info_vergabe2( string wiz, string txt);
+int moved_in_room( object who);
+void set_gesehen();
+void set_handeln();
+private object wer_hat_gesehen( object ob);
+private void set_wissen( int skill);
+private varargs void send_info( object wen, mixed m, int flag, mixed data);
+/* end prototypes */
+
+
+#define TP               this_player()
+#define TP_RN            this_player()->query_real_name()
+#define TO               this_object()
+#define PO               previous_object()
+#define PO1              previous_object( 1)
+#define PO2              previous_object( 2)
+#define TI               this_interactive()
+
+#define RN( ob)          ((ob)->query_real_name() || (ob)->query_name())
+#define CAP(x)           capitalize( x)
+#define LOW(x)           lower_case( x)
+#define WRET(x)          { write( wrap( x)); return 1; }
+#define wwrite(x)        write( wrap( x))
+
+#define ROOT_PATHS ({ "p","room","map","obj","i" })
+
+
+#define G_LORD   1
+#define G_ADMIN  2
+#define V_LONG   G_LORD
+#define V_INIT   G_LORD
+
+#define V_AKTIV  G_ADMIN
+#define V_MSG    G_ADMIN
+#define V_INFO   G_LORD
+#define V_INFO_V G_ADMIN
+#define V_SLIST  G_LORD
+#define V_DLIST  G_LORD
+#define V_DNEU   G_ADMIN
+#define V_KLIST  G_LORD
+#define V_KLISTK G_ADMIN
+#define V_KADD   G_ADMIN
+#define V_KBADD  G_ADMIN
+#define V_OLIST  G_LORD
+#define V_OSET   G_LORD
+#define V_OSETB  G_LORD
+#define V_OAKT   G_LORD
+#define V_OCHC   G_LORD
+#define V_OCHP   G_LORD
+#define V_ODEL   G_LORD
+#define V_CHECK  G_LORD
+
+
+// Indices eines Objektes
+#define E_PFAD      0
+#define E_AKTIV     1
+#define E_OK        2
+#define E_FLAGS     3
+#define E_ANZ_CALL  4
+#define E_LAST_CALL 5
+#define E_CALL_WHO  6
+#define E_ANZ_SET   7
+#define E_LAST_SET  8
+#define E_SET_WHO   9
+#define E_WHO       10
+#define E_WHO_TIME  11
+#define E_COMMENT   12
+
+
+// Indices von  skills
+#define ERFORSCHT   0
+#define REISE       1
+#define GESEHEN     2
+#define HANDELN     3
+
+// Indices von  pfade
+#define P_BEREICH   0
+#define P_SKILL     1
+#define P_NUMMER    2
+
+
+
+// Fuer E_FLAGS:
+
+// Durchzufuehrende Sicherheitstest vor Skillvergabe
+#define T_TI           1
+#define T_TP           2
+#define T_ENV          4
+#define T_GESEHEN_PO2  8
+#define T_ALLE         (T_TI | T_TP | T_ENV)
+#define T_ALLE_GESEHEN (T_TI | T_TP | T_ENV | T_GESEHEN_PO2)
+
+#define T_IDLE         32
+#define F_DOPPELT      64
+
+
+
+// Bei Aenderungen wird in dieem Zeitintervall gespeichert
+// (wichtige werden sofort gespeichert)
+#define SAVE_INTERVAL   600
+
+
+
+#define SAVE_FILE    "/var/adm/wissen_master"
+
+
+nosave int     speichern_notwendig = 0 ;
+nosave string  * skills = ({ "erforscht", "reise", "gesehen", "handeln" }) ;
+nosave mixed   info = ({}) ;
+
+private int      aktiv, skill_wissen ;
+private string   * infos = ({}) ;
+private string   * infosv = ({}) ;
+
+private int      * kontingente                   = ({ 0, 0, 0, 0 }) ;
+private int      * benutzte_kontingente          = ({ 0, 0, 0, 0 }) ;
+
+private mixed    benutzte_kontingente_bereiche = ({ }) ;
+private string   * bereiche    = ({}) ;
+private mixed    skill_obs     = ({}) ;
+private mapping  pfade         = ([]) ;
+
+
+#define EINTRAG      skill_obs[ibereich][iskill][nummer]
+#define EINTRAG2     skill_obs[ibereich][iskill][nummer+1]
+
+
+void create()
+{
+    restore_object( SAVE_FILE) ;
+
+    skill_wissen =
+        MASTER_OB->query_max_skill( ({"skill","wissen","navigation"})) +
+        MASTER_OB->query_max_skill( ({"skill","wissen","erforscht"})) +
+        MASTER_OB->query_max_skill( ({"skill","wissen","reise"})) +
+        MASTER_OB->query_max_skill( ({"skill","wissen","gesehen"})) +
+        MASTER_OB->query_max_skill( ({"skill","wissen","handeln"})) ;
+
+    add_security_condition(#'sc_euid_as_tp);
+    add_security_condition("/room/rathaus/reisebuero");
+}
+
+
+private int wissen_admin( object ob)
+{
+     return
+         ob && wizp( ob) &&
+         (adminp( ob) || member( ({ "anin" }), RN( ob)) != -1) ;
+}
+
+
+private int wissen_lord( object ob)
+{
+    return sizeof( query_domains_of( ob)) > 0 ;
+}
+
+
+varargs int valid_caller( int i, int sloppy)
+{
+    if ( !check_security(sloppy?CHECK_LAST_OBJECT:0) || (!TI && i != V_INIT))
+        return notify_fail( "Das darfst du nicht.\n") ;
+
+    if ( wissen_admin( TP) )
+        return G_ADMIN ;
+    else if ( i == G_LORD  &&  wissen_lord( TP) )
+        return G_LORD ;
+    else
+        return notify_fail( "Das darfst du nicht.\n") ;
+}
+
+
+int query_aktiv()
+{
+    return aktiv ;
+}
+
+
+int aktivieren( string str)
+{
+    if ( !valid_caller( V_AKTIV) )
+        return 0 ;
+
+    aktiv = !aktiv ;
+
+    if ( aktiv )
+        wwrite( "Das Reisebuero ist jetzt geoeffnet. Skills werden vergeben.");
+    else
+        wwrite( "Das Reisebuero ist jetzt geschlossen. "
+                "Es werden keine Skills vergeben.");
+
+    return 1;
+}
+
+
+int query_max_sum_wissen()
+{
+    return skill_wissen ;
+}
+
+
+int query_soll_wissen()
+{
+    return skill_wissen / 3;
+}
+
+
+int informiere( string str)
+{
+    if ( !valid_caller( V_INFO) )
+        return 0 ;
+
+    if ( member( infos, TP_RN) == -1 )
+    {
+        infos += ({ TP_RN }) ;
+        wwrite( "Du wirst jetzt informiert, falls du Wissen-Skills "
+                "bekommen wuerdest.");
+    }
+    else
+    {
+        infos -= ({ TP_RN }) ;
+        wwrite( "Du wirst jetzt nicht mehr informiert, falls du Wissen-Skills "
+                "bekommen wuerdest.");
+    }
+
+    return 1;
+}
+
+
+int informiere_vergabe( string str)
+{
+    if ( !valid_caller( V_INFO_V) )
+        return 0 ;
+
+    if ( member( infosv, TP_RN) == -1 )
+    {
+        infosv += ({ TP_RN }) ;
+        wwrite( "Du wirst jetzt informiert, falls Wissen-Skills "
+                "vergeben werden.");
+    }
+    else
+    {
+        infosv -= ({ TP_RN }) ;
+        wwrite( "Du wirst jetzt nicht mehr informiert, falls Wissen-Skills "
+                "vergeben werden.");
+    }
+
+    return 1;
+}
+
+
+mixed query_infos()
+{
+    if ( valid_caller( G_ADMIN) )
+        return infos ;
+    else
+        return 0 ;
+}
+
+
+mixed query_infos_vergabe()
+{
+    if ( valid_caller( G_ADMIN) )
+        return infosv ;
+    else
+        return 0 ;
+}
+
+
+int query_prevent_shadow( object shadow)
+{
+    return 1 ;
+}
+
+
+int remove()
+{
+    save_data() ;
+
+    destruct( this_object()) ;
+    return 1 ;
+}
+
+void prepare_renewal()	      {save_data();}
+void abort_renewal()          {}
+void finish_renewal(object n) {}
+
+// Verwaltung des Speicherns. Entweder sofort speichen oder bei Veraenderungen
+// (nur dann wird diese Funktion aufgerufen) verzoegert speichern.
+// Verzoegerung sammelt dann mehrere Verzoegerung auf.
+varargs void save( int sofort_sichern)
+{
+    if ( sofort_sichern )
+    {
+        if ( speichern_notwendig )
+            remove_call_out( "save_data") ;
+        save_data() ;
+    }
+    else if ( !speichern_notwendig )
+    {
+        speichern_notwendig = 1 ;
+        call_out( "save_data", SAVE_INTERVAL) ;
+    }
+}
+
+
+//  eigentliches speichern
+int save_data()
+{
+    save_object( SAVE_FILE) ;
+    speichern_notwendig = 0 ;
+}
+
+
+
+
+// Hilfszeug -------------------------------------------------
+
+
+private int spielerp( object who)
+{
+    return who && playerp( who) && !wizp( who) && !testplayerp( who) ;
+}
+
+
+private object get_room( object ob)
+{
+    object  tmp ;
+
+    while ( ob && (tmp = query_shadowing( ob)) )
+        ob = tmp ;
+
+    while( ob && !ob->query_room() )
+        ob = environment( ob);
+
+    return ob ;
+}
+
+
+private string pfad_format( string pfad)
+{
+    string  tmp ;
+
+    pfad = explode( pfad, "#")[0] ;
+    if ( tmp = map2domain( pfad, 1) )
+        pfad = tmp ;
+    if ( pfad[<2..] == ".lpc" )
+        pfad = pfad[0..<3] ;
+    return pfad ;
+}
+
+
+// Bestimmung der Datei, in der ausfuehrbarer Code zu dem Objekt ist.
+// (Also nicht modifizierende Dateien wie map.c, oder Raeume die ob->set_bla()
+//  machen)
+private string get_program_name( object ob)
+{
+    string name ;
+
+    if ( (name = map2domain( object_name( ob),1)) && file_size( name) > 0 )
+        return name ;
+    else if ( (name = program_name( ob)) && file_size( name) > 0 )
+        return name ;
+    else
+        return 0 ;
+}
+
+
+private int get_bereich( string bereich)
+{
+    mixed  m;
+
+    if ( sizeof( m = regexp( bereiche, "^"+CAP( LOW( bereich)))) != 1 )
+        return -1 ;
+    else
+        return member( bereiche, m[0]) ;
+}
+
+
+private int get_skill( string skill)
+{
+    mixed  m;
+
+    if ( sizeof( m = regexp( skills, "^"+LOW( skill))) != 1 )
+        return -1 ;
+    else
+        return member( skills, m[0]) ;
+}
+
+
+private varargs string * query_domains_of( object ob)
+{
+    if ( !ob )
+        ob = TP ;
+    if ( !ob )
+        return ({}) ;
+
+    return DOMAIN_INFOS->query_domains_of( RN( ob)) +
+           DOMAIN_INFOS->query_domainhelfer_of( RN(ob))+
+	   (member(FILED->query_auth("p"), RN(ob))>=0 ? ({"Root"}):({}));
+}
+
+
+private int ausgenutzte_kontingente( int skill)
+{
+    int  i, count ;
+
+    for ( i = count = 0 ; i < sizeof( bereiche) ; i++ )
+        count += sizeof( skill_obs[i][skill]) ;
+
+    return count ;
+}
+
+
+private string get_flags( int typ)
+{
+    return sprintf( "%s%s%s%s%s",
+                    ((typ & T_TI)  ?          "I" : "-"),
+                    ((typ & T_TP)  ?          "T" : "-"),
+                    ((typ & T_ENV) ?          "E" : "-"),
+                    ((typ & T_GESEHEN_PO2) ?  "G" : "-"),
+                    ((typ & F_DOPPELT) ?      "2" : " ")) ;
+}
+
+
+mixed query_skill_obs()
+{
+    if ( valid_caller( G_ADMIN) )
+        return skill_obs ;
+    else
+        return 0 ;
+}
+
+
+// Skills  ---------------------------------------
+
+int list_skill( string str)
+{
+    if ( !valid_caller( V_SLIST) )
+        return 0 ;
+
+    write(
+        "Folgende Skills koennen vergeben werden:\n  "+
+        implode( skills, "\n  ")+"\n") ;
+    return 1 ;
+}
+
+
+// Bereichsverwaltung  ---------------------------------------
+
+int list_bereich( string str)
+{
+    if ( !valid_caller( V_DLIST) )
+        return 0 ;
+
+    write(
+        "Fuer folgende Bereiche koennen Skills vergeben werden:\n  "+
+        implode( bereiche, "\n  ")+"\n") ;
+    return 1 ;
+}
+
+
+int new_bereich( string str)
+{
+    if ( !valid_caller( V_DNEU) )
+        return 0 ;
+
+    if ( !str )
+        WRET( "Bitte Skill-Bereich angeben.") ;
+
+    str = CAP( LOW( str)) ;
+
+    if ( member( DOMAIN_INFOS->query_domains() + ({ "Root" }), str) == -1 )
+        wwrite( "Es koennen nur existierende Domains oder Root "
+                "als Skill-Bereich angegeben werden.");
+    else if ( member( bereiche, str) != -1 )
+        wwrite( str + " ist schon als Skill-Bereich eingetragen.");
+    else
+    {
+        bereiche                      += ({ str }) ;
+        skill_obs                     += ({ ({ ({}), ({}), ({}), ({}) }) }) ;
+        benutzte_kontingente_bereiche += ({ ({ 0, 0, 0, 0 }) }) ;
+        save( 1) ;
+        wwrite( "Ok. "+str+" als Skill-Bereich eingetragen.");
+    }
+    return 1 ;
+}
+
+
+// Kontingente -------------------------------------------------
+
+
+int list_kontingente( string str)
+{
+    int  recht, i, j, t1, t2, t3, t4, count ;
+    int  *sum, *sum_ein, *sum_akt, *sum_akt_test, max_skill ;
+
+    sum          = ({ 0, 0, 0, 0 }) ;
+    sum_ein      = ({ 0, 0, 0, 0 }) ;
+    sum_akt      = ({ 0, 0, 0, 0 }) ;
+    sum_akt_test = ({ 0, 0, 0, 0 }) ;
+
+    if ( !(recht = valid_caller( V_KLIST)) )
+        return 0 ;
+
+    printf( "Kontingente fuer Skills:     "
+            // Reisebuero zu: nur Test-Flag zeigen
+            "(Kontingent|Eintraege|Aktiv|%sGetestet)",
+            ( aktiv ? "Aktiv+" : "")) ;
+
+    printf( "\n%11.11s", "") ;
+    for ( j = 0 ; j < sizeof( skills) ; j++ )
+        printf( "    %13.13s", CAP( skills[j])) ;
+    printf( "\n") ;
+
+    for ( i = 0 ; i < sizeof( bereiche) ; i++ )
+        if ( recht == G_ADMIN ||
+             member( query_domains_of(), bereiche[i]) != -1 )
+        {
+            count++ ;
+            printf( "%-12.12s", bereiche[i]) ;
+            for ( j = 0 ; j < sizeof( skills) ; j++ )
+            {
+                printf( "%s  %2d| %2d| %2d| %2d",
+                        (( j == 0 ) ? "" : " "),
+                        t1 = sizeof( skill_obs[i][j]),
+                        t2 = sizeof( filter(
+                            skill_obs[i][j], #'eintrag_vorhanden //'
+                            )),
+                        t3 = aktive_eintraege( skill_obs[i][j]),
+                        t4 = aktive_und_getestete_eintraege( skill_obs[i][j])
+                            ) ;
+                sum[j] += t1 ;
+                sum_ein[j] += t2 ;
+                sum_akt[j] += t3 ;
+                sum_akt_test[j] += t4 ;
+            }
+            printf( "\n") ;
+        }
+    if ( count > 1 )
+    {
+        printf( "%11.11s", "Genutzt") ;
+        for ( j = 0 ; j < sizeof( skills) ; j++ )
+            printf( "  %3d|%3d|%3d|%3d",
+                    sum[j], sum_ein[j], sum_akt[j], sum_akt_test[j]) ;
+        printf( "\n") ;
+    }
+    if ( recht == G_ADMIN )
+    {
+        printf( "%11.11s", "Gesamtkont.") ;
+        for ( j = 0 ; j < sizeof( skills) ; j++ )
+            printf( "  %3d|%3d|%3d|%3d",
+                    kontingente[j], sum_ein[j], sum_akt[j], sum_akt_test[j]) ;
+        printf( "\n") ;
+
+        printf( "%11.11s", "EP/Eintr.") ;
+        for ( j = 0 ; j < sizeof( skills) ; j++ )
+        {
+            max_skill = MASTER_OB->query_max_skill(
+                ({"skill","wissen",skills[j]})) ;
+
+            printf( "%17s",
+                    max_skill+"/"+kontingente[j]+" = "+
+                    ((  kontingente[j] ) ?
+                     (max_skill / kontingente[j]) : 0)) ;
+        }
+        printf( "\n") ;
+
+        printf( "%11.11s", "erreich. EP") ;
+        for ( j = 0 ; j < sizeof( skills) ; j++ )
+        {
+            max_skill = MASTER_OB->query_max_skill(
+                ({"skill","wissen",skills[j]})) ;
+
+            printf( "%17s",
+                    sum_akt[j]+"/"+kontingente[j]+"="+
+                    ((  kontingente[j] ) ?
+                     ((sum_akt[j] * max_skill) / kontingente[j]+
+                      sprintf(
+                          "%3.0f%%", 100.0 / kontingente[j] * sum_akt[j])) :
+                     "0%"));
+        }
+        printf( "\n") ;
+
+        printf( "%11.11s", "g/e/a/a+t") ;
+        for ( j = 0 ; j < sizeof( skills) ; j++ )
+        {
+            max_skill = MASTER_OB->query_max_skill(
+                ({"skill","wissen",skills[j]})) ;
+
+            printf( "%17s",
+                    ((  kontingente[j] ) ?
+                     sprintf(
+                          "%3.0f%%%3.0f%%%3.0f%%%3.0f%%",
+                          100.0 / kontingente[j] * sum[j],
+                          100.0 / kontingente[j] * sum_ein[j],
+                          100.0 / kontingente[j] * sum_akt[j],
+                          100.0 / kontingente[j] * sum_akt_test[j]
+                          ) : "-"));
+        }
+        printf( "\n") ;
+    }
+
+    return 1 ;
+}
+
+
+private int eintrag_vorhanden( mixed eintrag)
+{
+    return eintrag && 1;
+}
+
+
+private int aktive_eintraege( mixed eintrage)
+{
+    int  i, res ;
+
+    for ( i = res = 0 ; i < sizeof( eintrage) ; i++ )
+        if ( pointerp( eintrage[i]) && eintrage[i][E_AKTIV] )
+        {
+            if ( eintrage[i][E_FLAGS] & F_DOPPELT )
+                res += 2 ;
+            else
+                res++ ;
+        }
+    return res ;
+}
+
+
+private int aktive_und_getestete_eintraege( mixed eintrage)
+{
+    int  i, res ;
+
+    for ( i = res = 0 ; i < sizeof( eintrage) ; i++ )
+        if ( pointerp( eintrage[i])             &&
+             (!aktiv || eintrage[i][E_AKTIV])   &&  // Reisebuero zu: nur Test-Flag zeigen
+             eintrage[i][E_OK] )
+        {
+            if ( eintrage[i][E_FLAGS] & F_DOPPELT )
+                res += 2 ;
+            else
+                res++ ;
+        }
+    return res ;
+}
+
+
+int *query_benutzte_kontingente()
+{
+    if ( valid_caller( V_KLISTK) )
+        return benutzte_kontingente ;
+    else
+        return 0 ;
+}
+
+
+int *query_benutzte_kontingente_bereiche()
+{
+    if ( valid_caller( V_KLISTK) )
+        return benutzte_kontingente_bereiche ;
+    else
+        return 0 ;
+}
+
+
+int set_kontingent( string str)
+{
+    string  skill ;
+    int     iskill, i, count, tmp ;
+
+    if ( !valid_caller( V_KADD) )
+        return 0 ;
+
+    if ( !str || sscanf( space( str), "%s %d", skill, count) != 2 )
+        WRET( "kset <Skill> <Sum>");
+
+    if ( (iskill = get_skill( skill)) < 0 )
+        WRET( CAP( skill)+" ist kein eingetragener eindeutiger Skillprefix.");
+    skill = CAP( skills[iskill]) ;
+
+    if ( count == kontingente[iskill] )
+        WRET( "Gesamtkontingent von Skill "+skill+" ist schon auf "+count+".");
+
+    if ( count < benutzte_kontingente[iskill]  )
+        WRET( "Das Kontingente fuer "+skill+" liegt bei "+kontingente[iskill]+
+              " und wurde schon bis "+benutzte_kontingente[iskill]+
+              " verwendet. Unter diese Grenze darf es nie zurueckgesetzt "
+              "werden!") ;
+
+   if ( (tmp = ausgenutzte_kontingente( iskill)) > count )
+       WRET( "Fuer die einzelnen Bereiche des Skills "+skill+
+             " sind schon Einzelkontingente mit der Summe "+tmp+
+             " vergeben. Unter diese Grenze kann das Gesamtkontingent "
+             "nicht heruntergesetzt werden.") ;
+
+    tmp = kontingente[iskill] ;
+    kontingente[iskill] = count ;
+
+    save( 1) ;
+    wwrite( "Das Kontingent fuer Skill "+skill+" wurde von "+tmp+
+            " auf "+kontingente[iskill]+" geaendert.") ;
+    return 1 ;
+}
+
+
+int set_kontingent_bereich( string str)
+{
+    string  bereich, skill ;
+    int     ibereich, iskill, i, count, tmp, asize, nummer ;
+
+    if ( !valid_caller( V_KBADD) )
+        return 0 ;
+
+    if ( !str || sscanf( space( str), "%s %s %d", skill, bereich, count) != 3 )
+        WRET( "kbset <Skill> <Bereich> <Sum>");
+
+    if ( (iskill = get_skill( skill)) < 0 )
+        WRET( CAP( skill)+" ist kein eingetragener eindeutiger Skillprefix.");
+    skill = CAP( skills[iskill]) ;
+
+    if ( (ibereich = get_bereich( bereich)) < 0 )
+        WRET( CAP( bereich)+" ist kein eingetragener "
+              "eindeutiger Bereichsprefix.") ;
+    bereich = bereiche[ibereich] ;
+
+    asize = sizeof( skill_obs[ibereich][iskill]) ;
+
+    if ( count == asize )
+        WRET( "Kontingente fuer Skill "+bereich+"-"+skill+
+              " ist schon auf "+count+".") ;
+
+    if ( count < benutzte_kontingente_bereiche[ibereich][iskill]  )
+        WRET( "Das Kontingente fuer "+bereich+"-"+skill+" liegt bei "+
+              asize+" und wurde schon bis "+
+              benutzte_kontingente_bereiche[ibereich][iskill]+
+              " verwendet. Unter diese Grenze darf es nie zurueckgesetzt "
+              "werden!") ;
+
+    // Sonst versagen die Bit-Operationen!
+    if ( count > 64 )
+        WRET( "Kein Bereichskontingent kann auf ueber 64 gesetzt werden!") ;
+
+    if ( (tmp = ausgenutzte_kontingente( iskill))
+         + count - asize > kontingente[iskill] )
+        WRET( "Das Gesamtkontingent fuer Skill "+skill+" liegt bei "+
+              kontingente[iskill]+".\n"
+              "Davon sind schon "+(tmp-asize)+" Eintraege in anderen "
+              "Bereichen vergeben.\n"
+              "Skill "+bereich+"-"+skill+" kann also maximal auf "+
+              (kontingente[iskill]-tmp+asize)+" gesetzt werden.") ;
+
+    if ( count > asize )
+        for ( i = 0 ; i < count-asize ; i++ )
+            skill_obs[ibereich][iskill] += ({ 0 }) ;
+    else
+    {
+        for ( nummer = count ; nummer < asize ; nummer++ )
+            if ( pointerp( EINTRAG) )
+                pfade -= ([ EINTRAG[E_PFAD] ]) ;
+
+        skill_obs[ibereich][iskill] = skill_obs[ibereich][iskill][0..count-1] ;
+        if ( count-1 >= 0 && pointerp( skill_obs[ibereich][iskill][count-1]) )
+            skill_obs[ibereich][iskill][count-1][E_FLAGS] &= ~F_DOPPELT ;
+    }
+
+    save( 1) ;
+    wwrite( "Das Kontingent von "+bereich+" im Skill "+skill+
+            " wurde von "+asize+" auf "+
+            sizeof( skill_obs[ibereich][iskill])+
+            " geaendert.") ;
+    return 1 ;
+}
+
+
+// Objekte -------------------------------------------------
+
+
+int list_objekte( string str)
+{
+    string   bereich, out, skill ;
+    int      ibereich, iskill, i, j, recht, lang, c ;
+    mapping  opt;
+
+    if ( !(recht = valid_caller( V_OLIST)) )
+        return 0 ;
+
+    opt = getopt( str, ([ "a":0, "d":0, "l":0 ])) ;
+
+    if ( opt["errors"] )
+        WRET( opt["errors"][0]) ;
+
+    if ( opt["args"] )
+        opt["args"] = explode( implode( opt["args"], " "), " ") ;
+    if (  opt["a"] && member( ({ 0, 1}), sizeof( opt["args"])) == -1  ||
+         !opt["a"] && member( ({ 1, 2}), sizeof( opt["args"])) == -1 )
+        WRET( "olist [-dl] <Skill>|-a [<Bereich>]   "
+              "(d: detail, l:lang, a:alle Skills)");
+    if ( !opt["a"] )
+        skill = opt["args"][c++] ;
+    if ( sizeof( opt["args"]) == c+1 )
+        bereich = opt["args"][c] ;
+    lang = opt["d"] ;
+    if ( opt["l"] )
+        lang = 2 ;
+
+    if ( skill )
+    {
+        if ( (iskill = get_skill( skill)) < 0 )
+            WRET( CAP( skill)+
+                  " ist kein eingetragener eindeutiger Skillprefix.") ;
+        skill = CAP( skills[iskill]) ;
+    }
+
+    out = "" ;
+    if ( bereich )
+    {
+        if ( (ibereich = get_bereich( bereich)) < 0 )
+            WRET( CAP( bereich)+" ist kein eingetragener "
+                  "eindeutiger Bereichsprefix.") ;
+        bereich = bereiche[ibereich] ;
+
+        if ( recht == G_LORD  &&
+             member( query_domains_of(), bereich) == -1 )
+            WRET( "Fuer "+bereich+" bist du nicht zustaendig.") ;
+
+        if ( skill )
+            out += print_bereich( iskill, ibereich, lang) ;
+        else
+            for ( i = 0 ; i < sizeof( skills) ; i++ )
+                out += print_bereich( i, ibereich, lang) ;
+    }
+    else
+        for ( i = 0 ; i < sizeof( bereiche) ; i++ )
+            if ( recht == G_ADMIN ||
+                 member( query_domains_of(), bereiche[i]) != -1 )
+            {
+                if ( skill )
+                    out += print_bereich( iskill, i, lang) ;
+                else
+                    for ( j = 0 ; j < sizeof( skills) ; j++ )
+                        out += print_bereich( j, i, lang) ;
+            }
+
+
+    TP->more( explode( out, "\n"), 0, 0, M_AUTO_END) ;
+    return 1 ;
+}
+
+
+private string print_bereich( int iskill, int ibereich, int lang)
+{
+    int     i, sume, suma, sumt, sumat ;
+    mixed   m;
+    string  out ;
+
+    out = sprintf( "\n%s: %s\n", bereiche[ibereich], CAP( skills[iskill])) ;
+    for ( i = suma = sumt = 0 ;
+          i < sizeof( skill_obs[ibereich][iskill]) ; i++ )
+    {
+        m = print_eintrag( ibereich, iskill, i, lang, 1) ;
+        sume  += m[0] ;
+        sumt  += m[1] ;
+        suma  += m[2] ;
+        sumat += m[3] ;
+        out   += m[4] ;
+    }
+
+    out +=
+        sprintf( "    Eintraege: %d/%d   Getestet: %d/%d   "
+                 "Aktiv: %d/%d   Aktiv & getestet: %d/%d\n",
+                 sume, i, sumt, i, suma, i, sumat, i) ;
+
+    return out ;
+}
+
+
+private varargs mixed print_eintrag(
+    int b, int s, int e, int lang, int keine_ausgabe)
+{
+    mixed   m, res;
+    string  tmp ;
+    int     pos, l ;
+
+    res = ({ 0, 0, 0, 0, "" }) ;
+    m   = skill_obs[b][s][e] ;
+
+    if ( pointerp( m) && sizeof( m) )
+    {
+        if ( lang )
+        {
+            tmp = sprintf(
+                " %2d: %s %s %5s %-=64s\n",
+                e,
+                ( m[E_AKTIV] ? "A" : "-"),
+                ( m[E_OK]    ? "+" : "-"),
+                get_flags( m[E_FLAGS]),
+                m[E_PFAD]+", "+m[E_COMMENT]
+                ) ;
+            // Rechtsjustierung des Komentars
+            if ( (pos = strstr( tmp, "\n")) < 79 )
+                tmp = regreplace( tmp, ",", ","+left( "", 79-pos), 0) ;
+            res[4] += tmp ;
+            if ( lang > 1 )
+                res[4] += sprintf(
+                    "     C: #%-3d l:%8s-%-8s S: #%-3d l:%8s-%-8s "
+                    "(%s:%s)\n",
+                    m[E_ANZ_CALL],
+                    (m[E_LAST_CALL] ? shorttimestr(m[E_LAST_CALL])[0..7] : ""),
+                    CAP( m[E_CALL_WHO]),
+                    m[E_ANZ_SET],
+                    (m[E_LAST_SET] ? shorttimestr( m[E_LAST_SET])[0..7] : ""),
+                    CAP( m[E_SET_WHO]),
+                    CAP( m[E_WHO]), shorttimestr( m[E_WHO_TIME])[0..7]
+                    ) ;
+        }
+        else
+        {
+            if ( (l=68-strlen(m[E_PFAD])) < 0 )
+                l = 0 ;
+
+            res[4] += sprintf(
+                " %2d: %s %s %s, %*s\n",
+                e,
+                ( m[E_AKTIV] ? "A" : "-"),
+                ( m[E_OK]    ? "+" : "-"),
+                m[E_PFAD],
+                l, trim( sprintf( "%*.*s", l, l, m[E_COMMENT]))
+                ) ;
+        }
+
+        res[0] = 1 ;
+        res[1] = m[E_OK] ? 1 : 0 ;
+        res[2] = m[E_AKTIV] ? 1 : 0 ;
+        res[3] = (m[E_AKTIV] && m[E_OK]) ? 1 : 0 ;
+
+        if ( m[E_FLAGS] & F_DOPPELT )
+        {
+            if ( lang )
+                res[4] += sprintf(
+                    " %2d:           *** Doppelskill mit #%d ***\n", e+1, e);
+            else
+                res[4] += sprintf(
+                    " %2d:     *** Doppelskill mit #%d ***\n", e+1, e) ;
+            res[0] *= 2 ;
+            res[1] *= 2 ;
+            res[2] *= 2 ;
+            res[3] *= 2 ;
+        }
+    }
+    else if ( !m )
+    {
+        if ( lang )
+            res[4] += sprintf( " %2d:           -\n", e) ;
+        else
+            res[4] += sprintf( " %2d:     -\n", e) ;
+    }
+
+    if ( !keine_ausgabe )
+        printf( res[4]) ;
+
+    return res ;
+}
+
+
+int set_objekte( string str, int doppelt)
+{
+    string  bereich, skill, pfad, *p, kommentar ;
+    int     ibereich, iskill, i, nummer, recht, flags;
+    mixed   tmp ;
+
+
+    if ( !(recht = valid_caller( V_OSET)) )
+        return 0 ;
+
+    if ( !str ||
+         sscanf( space( str), "%s %s %d %s %s",
+                 skill, bereich, nummer, pfad, kommentar) != 5 )
+        WRET( "oset <Skill> <Bereich> <Nummer> <Pfad> <Kommentar>");
+
+    if ( (iskill = get_skill( skill)) < 0 )
+        WRET( CAP( skill)+" ist kein eingetragener eindeutiger Skillprefix.") ;
+    skill = CAP( skills[iskill]) ;
+
+    if ( doppelt && iskill != HANDELN )
+        WRET( "Doppelte Skills sind nur im Skill Handeln moeglich.") ;
+
+    if ( (ibereich = get_bereich( bereich)) < 0 )
+        WRET( CAP( bereich)+" ist kein eingetragener "
+              "eindeutiger Bereichsprefix.") ;
+    bereich = bereiche[ibereich] ;
+
+    if ( recht == G_LORD  &&
+         member( query_domains_of(), bereich) == -1 )
+        WRET( "Fuer "+bereich+" bist du nicht zustaendig.") ;
+
+    if ( nummer < 0 ||
+         nummer >= (tmp = sizeof( skill_obs[ibereich][iskill])) )
+        WRET( bereich+"-"+CAP( skill)+
+              " hat nur ein Kontingent von 0 bis "+(tmp-1)+".") ;
+    if ( doppelt && nummer >= tmp-1 )
+        WRET( bereich+"-"+CAP( skill)+
+              "  hat nur ein Kontingent bis "+(tmp-1)+". "
+              "Es ist kein Platz mehr fuer einen Doppelskill.") ;
+
+    if ( EINTRAG )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+" ist schon besetzt.");
+    if ( doppelt && EINTRAG2 )
+        WRET( "Fuer einen Doppelskill werden zwei aufeinander folgende freie "
+              "Plaetze benoetigt. "+
+              bereich+"-"+CAP( skill)+" Nummer "+(nummer+1)+
+              " ist aber schon besetzt.");
+
+    if ( strstr( pfad, "#") != -1 )
+        WRET( "Der Pfad darf kein # enthalten.") ;
+
+    pfad = pfad_format( pfad) ;
+
+    if ( recht == G_LORD )
+    {
+        p = explode( pfad, "/") ;
+        if ( !(p[0] == ""  &&
+               (p[1] == "d" && p[2] == bereich  ||
+                p[1] == "z" && p[4] == "d" && p[5] == bereich ||
+                bereich == "Root" && member(ROOT_PATHS,p[1]) > -1 )) )
+            WRET( "Fuer "+pfad+" bist du nicht zustaendig.") ;
+    }
+
+    if ( member( pfade, pfad) )
+        WRET( pfad+" ist schon bei "+bereiche[pfade[pfad][0]]+"-"+
+              CAP( skills[pfade[pfad][1]])+" eingetragen.") ;
+
+    if ( !touch( pfad, NO_LOG | NO_WRITE) )
+        WRET( pfad+" kann nicht geladen werden!") ;
+
+    flags = (( iskill == GESEHEN ) ? T_ALLE_GESEHEN : T_ALLE) ;
+    if ( doppelt )
+        flags |= F_DOPPELT ;
+
+    EINTRAG =
+        // pfad, aktiv, funktioniert, art des Tests?
+        // #bes, #vergeben, zuletzt-b, zuletzt-v, name, name
+        ({ pfad, 0, 0,   flags,
+           0, 0, "",  0, 0, "",
+           TP_RN, time(), kommentar });
+    pfade[pfad] = ({ ibereich, iskill, nummer }) ;
+    if ( doppelt )
+        EINTRAG2 = 1 ;
+
+    save( 1) ;
+
+    printf( "\n%s: %s\n", bereich, CAP( skill)) ;
+    print_eintrag( ibereich, iskill, nummer, 1) ;
+
+    return 1 ;
+}
+
+
+string query_bit_info( string bit)
+{
+    string  text ;
+
+    text =
+        "Ist das "+CAP( bit)+"-Bit gesetzt, so wird der Skill nur vergeben, "
+        "wenn der Spieler, der den Skill bekommen soll, ";
+    switch ( LOW( bit) )
+    {
+        case "i" :
+            text +=
+                "die Aktion direkt ausgeloest hat, also\nspieler == TI gilt.\n"
+                "Skillvergabe nach Call-Outs ist damit nicht moeglich.";
+            break ;
+        case "t" :
+            text +=
+                "die Aktion ausgeloest hat, also\nspieler == TP gilt." ;
+            break ;
+        case "e" :
+            text +=
+                "sich im selben deep-inv des umgebenden Raumes "
+                "wie das den skillvergebende Objekte befindet.\n"
+                "Wird es weggelassen so sollte getestet werden, ob der "
+                "Spieler sich auch an einem Ort befindet wo er den Skill "
+                "bekommen soll." ;
+            break ;
+        case "g" :
+            text +=
+                "beim Skill 'Gesehen' auch wirklich das Ding gesehen hat. "
+                "Und es nicht etwa nur hergezeigt hat.\n"
+                "Also Test ob spieler = previous_object(2) gilt.\n"
+                "Ist es ausgeschaltet so sollte auf keinen Fall "
+                "TP->set_gesehen() verwendet werden, sondern statt TP "
+                "genau der/die Spieler, die es sicher sehen hat/haben "
+                "(z.B. PO(1), players_present(), ...)!";
+            break ;
+        default :
+            return "" ;
+            break ;
+    }
+    return text ;
+}
+
+
+int setze_sicherheitsbits( string str)
+{
+    string  bereich, skill, pfad, bit, text ;
+    int     ibereich, iskill, nummer, recht, b ;
+    mixed   tmp ;
+
+
+    if ( !(recht = valid_caller( V_OSETB)) )
+        return 0 ;
+
+    if ( !str ||
+         sscanf( space( str), "%s %s %d %s",
+                 skill, bereich, nummer, bit) != 4 )
+        WRET( "osetbit <Skill> <Bereich> <Nummer> <Bit>  (Bit= I,T,E,G)");
+
+    if ( (iskill = get_skill( skill)) < 0 )
+        WRET( CAP( skill)+" ist kein eingetragener eindeutiger Skillprefix.") ;
+    skill = CAP( skills[iskill]) ;
+
+    if ( (ibereich = get_bereich( bereich)) < 0 )
+        WRET( CAP( bereich)+" ist kein eingetragener "
+              "eindeutiger Bereichsprefix.") ;
+    bereich = bereiche[ibereich] ;
+
+    if ( recht == G_LORD  &&
+         member( query_domains_of(), bereich) == -1 )
+        WRET( "Fuer "+bereich+" bist du nicht zustaendig.") ;
+
+    if ( nummer < 0 ||
+         nummer >= (tmp = sizeof( skill_obs[ibereich][iskill])) )
+        WRET( bereich+"-"+CAP( skill)+
+              " hat nur ein Kontingent von 0 bis "+(tmp-1)+".") ;
+
+    if ( !EINTRAG )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+" ist nicht besetzt.");
+    if ( EINTRAG && !pointerp( EINTRAG) )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+
+              " ist zweiter Teil eines Doppelskills. "
+              "Bitte Aenderungen am Haupteintrag vornehmen.");
+
+    if ( !touch( EINTRAG[E_PFAD], NO_LOG | NO_WRITE) )
+    {
+        EINTRAG[E_AKTIV] = 0 ;
+        EINTRAG[E_OK] = 0 ;
+
+        save( 1) ;
+
+        wwrite( EINTRAG[E_PFAD]+" kann nicht geladen werden!") ;
+        return 1;
+    }
+
+    text = query_bit_info( bit) ;
+    switch ( LOW( bit) )
+    {
+        case "i" :
+            b = T_TI ;
+            break ;
+        case "t" :
+            b = T_TP ;
+            break ;
+        case "e" :
+            b = T_ENV ;
+            break ;
+        case "g" :
+            b = T_GESEHEN_PO2 ;
+            break ;
+    }
+     if ( b == 0 )
+        WRET( "Als Sicherheitstestbits sind nur I, T, E oder G erlaubt.") ;
+
+    if ( b == T_GESEHEN_PO2 && iskill != GESEHEN )
+        WRET( "G ist nur im Skill 'Gesehen' sinnvoll.") ;
+
+    if ( b == T_TP &&
+         (EINTRAG[E_FLAGS] & T_TP)  &&
+         (EINTRAG[E_FLAGS] & T_TI) )
+        WRET( "T auszuschalten, solange I noch aktiv ist macht keinen Sinn.") ;
+
+    if ( EINTRAG[E_FLAGS] & b )
+        EINTRAG[E_FLAGS] &= ~b ;
+    else
+        EINTRAG[E_FLAGS] |= b ;
+
+    // Wenn TI-Test dann auch TP-Test
+    if ( EINTRAG[E_FLAGS] & T_TI )
+        EINTRAG[E_FLAGS] |= T_TP ;
+
+    // Kein TP-Test -> Kein TI-Test sinnvoll
+    if ( !(EINTRAG[E_FLAGS] & T_TP) )
+        EINTRAG[E_FLAGS] &= ~T_TI ;
+
+    EINTRAG[E_OK]       = 0 ;
+    EINTRAG[E_WHO]      = TP_RN ;
+    EINTRAG[E_WHO_TIME] = time() ;
+    save( 1) ;
+
+    printf( "\n%s-%s: Sicherheitstestbit %s %s\n\n%s\n",
+            bereich, CAP( skill), CAP( bit),
+            ((EINTRAG[E_FLAGS] & b) ? "gesetzt." : "deaktiviert!!"),
+            wrap( text)) ;
+    print_eintrag( ibereich, iskill, nummer, 1) ;
+
+    if ( (EINTRAG[E_FLAGS] & ((iskill == GESEHEN) ? T_ALLE_GESEHEN :T_ALLE)) !=
+         ((iskill == GESEHEN) ? T_ALLE_GESEHEN :T_ALLE) )
+         wwrite(
+             "\n*** VORSICHT. Da nicht mehr alle Sicherheitstestbit gesetzt "
+             "sind, sollte im Objekt darauf geachtet werden, dass der Skill "
+             "wirklich nur an die richtigen Spieler vergeben wird!") ;
+    if ( !EINTRAG[E_FLAGS] )
+         wwrite(
+             "\n*** VORSICHT. Kein Sicherheitstestbit mehr gesetzt! "
+             "Der Skill wird jetzt ohne jegliche Sicherheitsabfrage "
+             "vergeben!") ;
+
+    return 1 ;
+}
+
+
+int aktiviere_objekte( string str)
+{
+    string  bereich, skill, pfad, *p, kommentar ;
+    int     ibereich, iskill, i, nummer, recht;
+    mixed   tmp ;
+
+
+    if ( !(recht = valid_caller( V_OAKT)) )
+        return 0 ;
+
+    if ( !str ||
+         sscanf( space( str), "%s %s %d",
+                 skill, bereich, nummer) != 3 )
+        WRET( "oakt <Skill> <Bereich> <Nummer>");
+
+    if ( (iskill = get_skill( skill)) < 0 )
+        WRET( CAP( skill)+" ist kein eingetragener eindeutiger Skillprefix.") ;
+    skill = CAP( skills[iskill]) ;
+
+    if ( (ibereich = get_bereich( bereich)) < 0 )
+        WRET( CAP( bereich)+" ist kein eingetragener "
+              "eindeutiger Bereichsprefix.") ;
+    bereich = bereiche[ibereich] ;
+
+    if ( recht == G_LORD  &&
+         member( query_domains_of(), bereich) == -1 )
+        WRET( "Fuer "+bereich+" bist du nicht zustaendig.") ;
+
+    if ( nummer < 0 ||
+         nummer >= (tmp = sizeof( skill_obs[ibereich][iskill])) )
+        WRET( bereich+"-"+CAP( skill)+
+              " hat nur ein Kontingent von 0 bis "+(tmp-1)+".") ;
+
+    if ( !EINTRAG )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+" ist nicht besetzt.");
+    if ( EINTRAG && !pointerp( EINTRAG) )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+
+              " ist zweiter Teil eines Doppelskills. "
+              "Bitte Aenderungen am Haupteintrag vornehmen.");
+
+    if ( !touch( EINTRAG[E_PFAD], NO_LOG | NO_WRITE) )
+    {
+        EINTRAG[E_AKTIV] = 0 ;
+        EINTRAG[E_OK] = 0 ;
+
+        save( 1) ;
+
+        wwrite( EINTRAG[E_PFAD]+" kann nicht geladen werden!") ;
+        return 1;
+    }
+
+    EINTRAG[E_AKTIV]    = !EINTRAG[E_AKTIV] ;
+    EINTRAG[E_OK]       = 0 ;
+    EINTRAG[E_WHO]      = TP_RN ;
+    EINTRAG[E_WHO_TIME] = time() ;
+    save( 1) ;
+
+    printf( "\n%s-%s  %s:\n",
+            bereich, CAP( skill),
+            (EINTRAG[E_AKTIV] ? "jetzt aktiv" : "deaktiviert")) ;
+    print_eintrag( ibereich, iskill, nummer, 1) ;
+
+    return 1 ;
+}
+
+
+int aender_pfad_objekte( string str)
+{
+    string  bereich, skill, pfad, *p, kommentar ;
+    int     ibereich, iskill, i, nummer, recht;
+    mixed   tmp ;
+
+
+    if ( !(recht = valid_caller( V_OCHP)) )
+        return 0 ;
+
+    if ( !str ||
+         sscanf( space( str), "%s %s %d %s",
+                 skill, bereich, nummer, pfad) != 4 )
+        WRET( "ochpfad <Skill> <Bereich> <Nummer> <Pfad>");
+
+    if ( (iskill = get_skill( skill)) < 0 )
+        WRET( CAP( skill)+" ist kein eingetragener eindeutiger Skillprefix.") ;
+    skill = CAP( skills[iskill]) ;
+
+    if ( (ibereich = get_bereich( bereich)) < 0 )
+        WRET( CAP( bereich)+" ist kein eingetragener "
+              "eindeutiger Bereichsprefix.") ;
+    bereich = bereiche[ibereich] ;
+
+    if ( recht == G_LORD  &&
+         member( query_domains_of(), bereich) == -1 )
+        WRET( "Fuer "+bereich+" bist du nicht zustaendig.") ;
+
+    if ( nummer < 0 ||
+         nummer >= (tmp = sizeof( skill_obs[ibereich][iskill])) )
+        WRET( bereich+"-"+CAP( skill)+
+              " hat nur ein Kontingent von 0 bis "+(tmp-1)+".") ;
+
+    if ( !EINTRAG )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+" ist nicht besetzt.");
+    if ( EINTRAG && !pointerp( EINTRAG) )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+
+              " ist zweiter Teil eines Doppelskills. "
+              "Bitte Aenderungen am Haupteintrag vornehmen.");
+
+    if ( strstr( pfad, "#") != -1 )
+        WRET( "Der Pfad darf kein # enthalten.") ;
+
+    pfad = pfad_format( pfad) ;
+
+    if ( recht == G_LORD )
+    {
+        p = explode( pfad, "/") ;
+        if ( !(p[0] == ""  &&
+               (p[1] == "d" && p[2] == bereich  ||
+                p[1] == "z" && p[4] == "d" && p[5] == bereich ||
+                bereich == "Root" && member(ROOT_PATHS,p[1]) > -1 )) )
+            WRET( "Fuer "+pfad+" bist du nicht zustaendig.") ;
+    }
+
+    if ( member( pfade, pfad) )
+        WRET( pfad+" ist schon bei "+bereiche[pfade[pfad][0]]+"-"+
+              CAP( skills[pfade[pfad][1]])+" eingetragen.") ;
+
+    if ( !touch( pfad, NO_LOG | NO_WRITE) )
+        WRET( pfad+" kann nicht geladen werden!") ;
+
+    printf( "\n%s-%s  Pfad aendern und deaktivieren:\n",
+            bereich, CAP( skill)) ;
+    print_eintrag( ibereich, iskill, nummer, 1) ;
+
+    pfade -= ([ EINTRAG[E_PFAD] ]) ;
+    EINTRAG[E_PFAD]  = pfad ;
+    EINTRAG[E_AKTIV] = 0 ;
+    EINTRAG[E_OK]    = 0 ;
+    EINTRAG[E_FLAGS] |= (iskill == GESEHEN) ? T_ALLE_GESEHEN : T_ALLE ;
+    EINTRAG[E_WHO]      = TP_RN ;
+    EINTRAG[E_WHO_TIME] = time() ;
+    pfade[pfad] = ({ ibereich, iskill, nummer }) ;
+
+    save( 1) ;
+
+    print_eintrag( ibereich, iskill, nummer, 1) ;
+
+    wwrite( "\nWichtig: Pfadaendern soll NUR verwendet werden, wenn das "
+            "Objekt dasselbe geblieben ist und nur der Pfad geaendert "
+            "werden soll.\n"
+            "Soll ein anderes Objekt eingetragen werden bitte den Eintrag "
+            "zuerst loeschen!") ;
+
+    return 1 ;
+}
+
+
+int aendere_komentar_objekte( string str)
+{
+    string  bereich, skill, pfad, *p, kommentar ;
+    int     ibereich, iskill, i, nummer, recht;
+    mixed   tmp ;
+
+
+    if ( !(recht = valid_caller( V_OCHC)) )
+        return 0 ;
+
+    if ( !str ||
+         sscanf( space( str), "%s %s %d %s",
+                 skill, bereich, nummer, kommentar) != 4 )
+        WRET( "ockkomm <Skill> <Bereich> <Nummer> <Kommentar>");
+
+    if ( (iskill = get_skill( skill)) < 0 )
+        WRET( CAP( skill)+" ist kein eingetragener eindeutiger Skillprefix.") ;
+    skill = CAP( skills[iskill]) ;
+
+    if ( (ibereich = get_bereich( bereich)) < 0 )
+        WRET( CAP( bereich)+" ist kein eingetragener "
+              "eindeutiger Bereichsprefix.") ;
+    bereich = bereiche[ibereich] ;
+
+    if ( recht == G_LORD  &&
+         member( query_domains_of(), bereich) == -1 )
+        WRET( "Fuer "+bereich+" bist du nicht zustaendig.") ;
+
+    if ( nummer < 0 ||
+         nummer >= (tmp = sizeof( skill_obs[ibereich][iskill])) )
+        WRET( bereich+"-"+CAP( skill)+
+              " hat nur ein Kontingent von 0 bis "+(tmp-1)+".") ;
+
+    if ( !EINTRAG )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+" ist nicht besetzt.");
+    if ( EINTRAG && !pointerp( EINTRAG) )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+
+              " ist zweiter Teil eines Doppelskills. "
+              "Bitte Aenderungen am Haupteintrag vornehmen.");
+
+    if ( !touch( EINTRAG[E_PFAD], NO_LOG | NO_WRITE) )
+    {
+        EINTRAG[E_AKTIV] = 0 ;
+        EINTRAG[E_OK] = 0 ;
+
+        save( 1) ;
+
+        wwrite( EINTRAG[E_PFAD]+" kann nicht geladen werden!") ;
+        return 1;
+    }
+
+    printf( "\n%s-%s  aendere Komentar:\n",
+            bereich, CAP( skill)) ;
+    print_eintrag( ibereich, iskill, nummer, 1) ;
+
+    EINTRAG[E_COMMENT]  = kommentar ;
+    EINTRAG[E_WHO]      = TP_RN ;
+    EINTRAG[E_WHO_TIME] = time() ;
+
+    save( 1) ;
+
+    print_eintrag( ibereich, iskill, nummer, 1) ;
+
+    return 1 ;
+}
+
+
+int loesche_objekte( string str)
+{
+    string  bereich, skill, pfad, *p, kommentar ;
+    int     ibereich, iskill, i, nummer, recht, dop;
+    mixed   tmp ;
+
+
+    if ( !(recht = valid_caller( V_ODEL)) )
+        return 0 ;
+
+    if ( !str ||
+         sscanf( space( str), "%s %s %d",
+                 skill, bereich, nummer) != 3 )
+        WRET( "odel <Skill> <Bereich> <Nummer>");
+
+    if ( (iskill = get_skill( skill)) < 0 )
+        WRET( CAP( skill)+" ist kein eingetragener eindeutiger Skillprefix.") ;
+    skill = CAP( skills[iskill]) ;
+
+    if ( (ibereich = get_bereich( bereich)) < 0 )
+        WRET( CAP( bereich)+" ist kein eingetragener "
+              "eindeutiger Bereichsprefix.") ;
+    bereich = bereiche[ibereich] ;
+
+    if ( recht == G_LORD  &&
+         member( query_domains_of(), bereich) == -1 )
+        WRET( "Fuer "+bereich+" bist du nicht zustaendig.") ;
+
+    if ( nummer < 0 ||
+         nummer >= (tmp = sizeof( skill_obs[ibereich][iskill])) )
+        WRET( bereich+"-"+CAP( skill)+
+              " hat nur ein Kontingent von 0 bis "+(tmp-1)+".") ;
+
+    if ( !EINTRAG )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+" ist nicht besetzt.");
+    if ( EINTRAG && !pointerp( EINTRAG) )
+        WRET( bereich+"-"+CAP( skill)+" Nummer "+nummer+
+              " ist zweiter Teil eines Doppelskills. "
+              "Bitte Aenderungen am Haupteintrag vornehmen.");
+
+    printf( "\n%s-%s  loesche:\n", bereich, CAP( skill)) ;
+    print_eintrag( ibereich, iskill, nummer, 1) ;
+
+    if ( EINTRAG[E_FLAGS] & F_DOPPELT )
+    {
+        dop = 1 ;
+        EINTRAG2 = 0 ;
+    }
+    pfade -= ([ EINTRAG[E_PFAD] ]) ;
+    EINTRAG = 0 ;
+
+    save( 1) ;
+
+    print_eintrag( ibereich, iskill, nummer) ;
+    if ( dop )
+        print_eintrag( ibereich, iskill, nummer+1) ;
+
+    wwrite( "\nWichtig: Loeschen soll NICHT dazu verwendet werden Objekte "
+            "in den Objektlisten zu verschieben!\n"
+            "Soll dieses Objekt weiterhin verwendet werden, "
+            "dass soll es auf dieser Position bleiben!") ;
+
+    return 1 ;
+}
+
+
+int check_objekte( string str)
+{
+    int     recht;
+
+    if ( !(recht = valid_caller( V_ODEL)) )
+        return 0 ;
+
+    printf( "Teste eingetragene Objekte...\n") ;
+    if ( recht == G_ADMIN )
+        check_o( 0, 0, 0, bereiche) ;
+    else if ( recht == G_LORD )
+        check_o( 0, 0, 0, query_domains_of()) ;
+    return 1;
+}
+
+
+#define SN_ID    " ("+skills[iskill][0..1]+","+nummer+")"
+nosave void check_o( int ib, int is, int nr, string * ber)
+{
+    int     ibereich, iskill, nummer ;
+    object  ob ;
+    string  pname ;
+
+    for ( ibereich = ib, ib = 0 ; ibereich < sizeof( skill_obs) ; ibereich++ )
+        if ( member( ber, bereiche[ibereich]) != -1 )
+        {
+            if ( is == 0 && nr == 0 )
+                printf( "  "+bereiche[ibereich]+"...\n") ;
+
+            for ( iskill = is, is = 0 ;
+                  iskill < sizeof( skill_obs[ibereich]) ; iskill++ )
+                for ( nummer = nr, nr = 0 ;
+                      nummer < sizeof( skill_obs[ibereich][iskill]) ;
+                      nummer++ )
+                {
+                    if ( get_eval_cost() < 150000 )
+                    {
+                        call_out( "check_o", 2,
+                                  ibereich, iskill, nummer, ber) ;
+                        return ;
+                    }
+
+                    if ( pointerp( EINTRAG) )
+                    {
+                         if ( ob = touch( EINTRAG[E_PFAD], NO_LOG | NO_WRITE) )
+                         {
+                             if ( (pname = get_program_name( ob))  &&
+                                  EINTRAG[E_OK]                    &&
+                                  file_time( pname) > EINTRAG[E_OK] )
+                             {
+                                 printf(
+                                     "    %-=75s\n",
+                                     pname+SN_ID+" veraendert. "
+                                     "Testflag + entfernt.") ;
+                                 EINTRAG[E_OK]    = 0 ;
+                             }
+                             else if ( !pname )
+                             {
+                                 printf(
+                                     "    %-=75s\n",
+                                     "Zu "+EINTRAG[E_PFAD]+SN_ID" keine Datei "
+                                     "gefunden!"+
+                                     ((EINTRAG[E_AKTIV]) ?
+                                      "  Deaktiviert!" : ""));
+                                 EINTRAG[E_AKTIV] = 0 ;
+                                 EINTRAG[E_OK]    = 0 ;
+                             }
+                         }
+                         else
+                         {
+                             printf(
+                                 "    %-=75s\n",
+                                 EINTRAG[E_PFAD]+SN_ID+
+                                 " kann nicht geladen werden!"+
+                                 ((EINTRAG[E_AKTIV]) ?
+                                  "  Deaktiviert!" : "")) ;
+                             EINTRAG[E_AKTIV] = 0 ;
+                             EINTRAG[E_OK]    = 0 ;
+                         }
+                    }
+                }
+        }
+    printf( "Test beendet.\n") ;
+}
+
+#undef EINTRAG
+
+
+private varargs void send_info_vergabe( object wen, mixed m)
+{
+    string  msg ;
+
+    msg = sprintf( "Info: %-=73s\n",
+                   CAP( RN( wen))+": Skill "+
+                   bereiche[m[P_BEREICH]]+":"+CAP( skills[m[P_SKILL]])+
+                   " Nr. "+m[P_NUMMER]+" vergeben.") ;
+    info = (({ ({ time() , msg }) }) + info)[0..199] ;
+
+    map( infosv, #'send_info_vergabe2, msg) ;
+}
+
+
+
+mixed query_info( string str)
+{
+    if ( !valid_caller( V_MSG) )
+        return 0 ;
+    return info ;
+}
+
+
+nosave varargs void send_info_vergabe2( string wiz, string txt)
+{
+    object  wiz_ob ;
+    if ( member( infos, wiz) != -1    &&
+         (wiz_ob = find_player( wiz)) &&
+         wissen_admin( wiz_ob) )
+        tell_object( wiz_ob, txt) ;
+}
+
+
+// --- Calls von Aussen -------------------------------------------
+
+#define EINTRAG  skill_obs[m[P_BEREICH]][m[P_SKILL]][m[P_NUMMER]]
+
+
+// Test auf Erforscht-/Reiseraum
+int moved_in_room( object who)
+{
+    string  pfad, tmp ;
+    mixed   m;
+    int     skill, do_save ;
+
+    if ( !PO || !PO->query_room() )
+        return 1 ;
+
+    pfad = pfad_format( object_name( PO)) ;
+
+    if ( !(m = pfade[pfad])  ||
+         m[P_SKILL] != ERFORSCHT && m[P_SKILL] != REISE )
+        return 1 ;
+
+    // who muss Spieler sein
+    if ( !who || !playerp( who) || !interactive( who) )
+        return 0 ;
+
+    //
+    // Hat der der das macht das auch verdient?
+    //
+
+    // Idler und Statuen
+    if ( query_idle( who) >= 60 )
+    {
+        send_info( who, m, T_IDLE) ;
+        return 0 ;
+    }
+    // Derjenige der Skill bekommen soll hat Aktion direkt ausgeloest
+    // (keine call_outs etc..)
+    if ( (EINTRAG[E_FLAGS] & T_TI)  &&  (TI != TP || TI != who) )
+    {
+        send_info( who, m, T_TI, TI) ;
+        return 0 ;
+    }
+    // Derjenige der Skill bekommen soll hat Aktion ausgeloest
+    if ( (EINTRAG[E_FLAGS] & T_TP)  &&  TP != who )
+    {
+        send_info( who, m, T_TP, TP) ;
+        return 0 ;
+    }
+    // Spieler ist im Raum
+    if ( (EINTRAG[E_FLAGS] & T_ENV) &&  (environment( who) != PO) )
+    {
+        send_info( who, m, T_ENV, ({ environment( who), PO, PO })) ;
+        return 0 ;
+    }
+
+    // Ok, Skill arbeitet
+    EINTRAG[E_OK] = time() ;
+
+    send_info( who, m) ;
+
+    // Verzoegert speichern (1. sofort ist nicht wichtig
+    //                       2. Aenderungen unten werden auch erwischt
+    save() ;
+
+    if ( !EINTRAG[E_AKTIV] )
+        return 0 ;
+
+    if ( spielerp( who) )
+    {
+        EINTRAG[E_ANZ_CALL]++ ;
+        EINTRAG[E_CALL_WHO] = RN( who) ;
+        EINTRAG[E_LAST_CALL] = time() ;
+    }
+
+    if ( !aktiv )
+        return 0 ;
+
+    skill = m[P_SKILL] ;
+    if ( skill == ERFORSCHT &&
+         who->set_erforscht(
+             bereiche[m[P_BEREICH]], m[P_NUMMER], kontingente[ERFORSCHT]) > 0
+         ||
+         skill == REISE     &&
+         who->set_reise(
+             bereiche[m[P_BEREICH]], m[P_NUMMER], kontingente[REISE]) > 0 )
+    {
+        send_info_vergabe( who, m) ;
+
+        if ( spielerp( who) )
+        {
+            EINTRAG[E_ANZ_SET]++ ;
+            EINTRAG[E_SET_WHO] = RN( who) ;
+            EINTRAG[E_LAST_SET] = time() ;
+        }
+
+        if ( benutzte_kontingente[skill] < kontingente[skill])
+        {
+            do_save = 1 ;
+            benutzte_kontingente[skill] = kontingente[skill] ;
+        }
+        if ( benutzte_kontingente_bereiche[m[P_BEREICH]][skill]
+             < m[P_NUMMER]+1 )
+        {
+            do_save = 1 ;
+            benutzte_kontingente_bereiche[m[P_BEREICH]][skill]
+                = m[P_NUMMER]+1 ;
+        }
+        if ( do_save )
+            save( 1) ;
+    }
+
+    return 0 ;
+}
+
+
+// Test auf Gesehen
+void set_gesehen()
+{
+    set_wissen( GESEHEN) ;
+}
+
+
+// Test auf Gesehen
+void set_handeln()
+{
+    set_wissen( HANDELN) ;
+}
+
+
+private object wer_hat_gesehen( object ob)
+{
+    mixed   stack ;
+    int     i ;
+
+    stack = caller_stack( 1) ;
+
+    if ( ob != stack[1] )
+        return 0 ;
+
+    // ab hier muss nach dem Objekt, dass die meldung bekommen
+    // hat gesucht werden
+    i = 2 ;
+
+    // ist das objekt, dass gesehen werden soll ein Schatten
+    // so ist stack[2] das verschattete Objekt -> das wird uebersprungen
+    if ( query_shadowing( ob) )
+        i++ ;
+
+    while ( i < sizeof( stack) )
+    {
+        if ( stack[i] && !query_shadowing( stack[i]) )
+            return stack[i] ;
+        i++ ;
+    }
+    return 0 ;
+}
+
+private void set_wissen( int skill)
+{
+    string  pfad, tmp ;
+    object  tob ;
+    mixed   m, mtmp;
+    int     do_save;
+
+    if ( skill != HANDELN && skill != GESEHEN )
+        return ;
+
+    if ( !PO  || !playerp( PO) || !interactive( PO) || !PO1 )
+        return ;
+
+    pfad = pfad_format( object_name( PO1)) ;
+
+    if ( !(m = pfade[pfad])  ||  m[P_SKILL] != skill )
+        return ;
+
+    // bei gesehen muss der Spieler der den Skill bekommt auch
+    // das Objekt geshen haben
+    if ( skill == GESEHEN &&
+         (EINTRAG[E_FLAGS] & T_GESEHEN_PO2) &&
+         PO != (mtmp = wer_hat_gesehen( PO1)) )
+    {
+        send_info( PO, m, T_GESEHEN_PO2, ({ mtmp, PO1 })) ;
+        return ;
+    }
+
+    //
+    // Hat der der das macht das auch verdient?
+    //
+
+    // Idler und Statuen
+    if ( query_idle( PO) >= 60 )
+    {
+        send_info( PO, m, T_IDLE) ;
+        return ;
+    }
+    // Derjenige der Skill bekommen soll hat Aktion direkt ausgeloest
+    // (keine call_outs etc..)
+    if ( (EINTRAG[E_FLAGS] & T_TI)  &&  (TI != TP || TI != PO) )
+    {
+        send_info( PO, m, T_TI, TI) ;
+        return ;
+    }
+    // Derjenige der Skill bekommen soll hat Aktion ausgeloest
+    if ( (EINTRAG[E_FLAGS] & T_TP)  &&  TP != PO )
+    {
+        send_info( PO, m, T_TP, TP) ;
+        return ;
+    }
+    // Spieler ist im selben Raum wie PO1
+    if ( (EINTRAG[E_FLAGS] & T_ENV) &&
+         (!(tob = get_room( PO)) || tob != (mtmp = get_room( PO1))) )
+    {
+        send_info( PO, m, T_ENV, ({ tob, PO1, mtmp })) ;
+        return ;
+    }
+
+    // Ok, Skill arbeitet
+    EINTRAG[E_OK] = time() ;
+
+    send_info( PO, m) ;
+
+    // Verzoegert speichern (1. sofort ist nicht wichtig
+    //                       2. Aenderungen unten werden auch erwischt
+    save() ;
+
+    if ( !EINTRAG[E_AKTIV] )
+        return ;
+
+    if ( spielerp( PO) )
+    {
+        EINTRAG[E_ANZ_CALL]++ ;
+        EINTRAG[E_CALL_WHO] = RN( PO) ;
+        EINTRAG[E_LAST_CALL] = time() ;
+    }
+
+    if ( !aktiv )
+        return ;
+
+    // 2. aus Doppelskill setzen
+    if ( skill == HANDELN && (EINTRAG[E_FLAGS] & F_DOPPELT) )
+         PO->set_handeln(
+             bereiche[m[P_BEREICH]], m[P_NUMMER]+1, kontingente[skill]) ;
+
+    if ( skill == GESEHEN &&
+         PO->set_gesehen(
+             bereiche[m[P_BEREICH]], m[P_NUMMER], kontingente[skill]) > 0
+         ||
+         skill == HANDELN   &&
+         PO->set_handeln(
+             bereiche[m[P_BEREICH]], m[P_NUMMER], kontingente[skill]) > 0 )
+    {
+        send_info_vergabe( PO, m) ;
+
+        if ( spielerp( PO) )
+        {
+            EINTRAG[E_ANZ_SET]++ ;
+            EINTRAG[E_SET_WHO] = RN( PO) ;
+            EINTRAG[E_LAST_SET] = time() ;
+        }
+
+        if ( benutzte_kontingente[skill] < kontingente[skill])
+        {
+            do_save = 1 ;
+            benutzte_kontingente[skill] = kontingente[skill] ;
+        }
+        if ( benutzte_kontingente_bereiche[m[P_BEREICH]][skill]
+             < m[P_NUMMER]+1 )
+        {
+            do_save = 1 ;
+            benutzte_kontingente_bereiche[m[P_BEREICH]][skill]
+                = m[P_NUMMER]+1 ;
+        }
+        if ( do_save )
+            save( 1);
+    }
+}
+
+
+private varargs void send_info( object wen, mixed m, int flag, mixed data)
+{
+    string  msg ;
+
+    if ( wizp( wen) &&
+         member( infos, RN( wen)) != -1 &&
+         (wissen_admin( wen) ||
+          wissen_lord( wen) &&
+          member( query_domains_of( wen), bereiche[m[P_BEREICH]]) != -1) )
+    {
+        msg = "-Bit-Sicherheitstest fehlgeschlagen.\n" ;
+        switch ( flag )
+        {
+            case 0 :
+                msg = " funktioniert" ;
+                break ;
+            case T_TI :
+                msg = sprintf( ": I"+msg+"TI %O != spieler %O", data, wen) ;
+                break ;
+            case T_TP :
+                msg = sprintf( ": T"+msg+"TP %O != spieler %O", data, wen) ;
+                break ;
+            case T_ENV :
+                msg = sprintf(
+                    ": E"+msg+"spieler %O und %O sind nicht im selben Raum. "
+                    "%O != %O", wen, data[1], data[0], data[2]) ;
+                break ;
+            case T_GESEHEN_PO2 :
+                msg = sprintf(
+                    ": G"+msg+"%O hat %O gesehen. Nicht spieler %O",
+                    data[0], data[1], wen) ;
+                break ;
+            case T_IDLE :
+                msg = sprintf( ": Idle-Sicherheitstest fehlgeschlagen.\n"
+                               "spieler %O war zu lange idle", wen) ;
+                break ;
+            default :
+                msg = " buggt! Bitte bei Parsec beschweren" ;
+        }
+
+        tell_object( wen, sprintf( "Info: %-=73s\n",
+            "Skill "+bereiche[m[P_BEREICH]]+":"+CAP( skills[m[P_SKILL]])+
+            " Nr. "+m[P_NUMMER]+msg+".")) ;
+    }
+}

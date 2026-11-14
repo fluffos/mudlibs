@@ -1,0 +1,524 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/item/description.c
+// Description:
+//
+// $Log: description.c,v $
+// Revision 1.33  2015/06/01 19:32:59  gnomi
+// Test fuer Orbit: Beschreibung nicht hier umbrechen.
+//
+// Revision 1.32  2013/06/29 16:01:00  sorcerer
+// Leerstellen fuer add_long
+//
+// Revision 1.31  2012-01-22 08:48:44  gnomi
+// Via add_long laesst sich jetzt an den bestehenden Text etwas anhaengen.
+//
+// Revision 1.30  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.29  2008/02/25 11:33:23  gnomi
+// Doku zu query_long_postprocess: Erwaehnt, dass das Ergebnis umgebrochen sein
+// muss.
+//
+// Revision 1.28  2008/01/24 22:49:03  gnomi
+// add/delete_long_tag eingebaut.
+//
+// Revision 1.27  2007/08/09 22:20:55  gnomi
+// Long-Strings nur am Ende trimmen.
+// set_long_night als veraltet deklariert (T_NIGHT ist Ersatz).
+//
+// Revision 1.26  2007/06/25 22:15:24  gnomi
+// query_long_exec auch dann aufrufen, wenn longcl==0 (weil query_long_exec
+// evntl. andere Beschreibungsquellen hat).
+//
+// Revision 1.25  2007/05/26 22:26:16  gnomi
+// Ein paar Funktionen dokumentiert,
+//
+// Revision 1.24  2007/02/14 18:36:14  gnomi
+// Klammerfehler im set_long.
+//
+// Revision 1.23  2006/06/25 00:08:44  gnomi
+// Etliche Korrekturen zu den neuen Beschreibungen.
+//
+// Revision 1.22  2006/06/07 20:31:52  gnomi
+// Erweiterte Beschreibungsmoeglichkeiten.
+//
+// Revision 1.21  2006/01/22 21:46:41  gnomi
+// query_debug_info: Auch zu Shadows den Creator liefern. Zusaetzlich den
+// eigenen Objektnamen liefern, falls es Shadows gibt. (Der Fehler koennte
+// in einem Shadow aufgetreten sein, das ueberlagerte Objekt waere dann
+// unbekannt.)
+//
+
+#pragma save_types
+#pragma strong_types
+
+inherit "/i/tools/description";
+
+#include <description.h>
+#include <properties.h>
+#include <strings.h>
+
+private string short;
+private string long;
+private string long_night;
+private nosave closure longcl;
+private nosave mapping longtags;
+
+/*
+FUNKTION: set_short
+DEKLARATION: void set_short(string short)
+BESCHREIBUNG:
+Hiermit wird die Kurzbeschreibung eines Objektes gesetzt.
+Naehres siehe bei query_short.
+VERWEISE: query_short
+GRUPPEN: grundlegendes
+*/
+void set_short(string str)
+{
+    short = str;
+    
+    this_object()->add_setter_conservation("set_short",({short}) );
+}
+
+
+/*
+FUNKTION: query_short
+DEKLARATION: string query_short(object betrachter)
+BESCHREIBUNG:
+Diese Funktion liefert die Kurzbeschreibung eines Objektes zurueck.
+Diese wird angezeigt, wenn das Lebewesen betrachter sich den Raum anschaut,
+in dem das Objekt liegt oder auch beim "ausruestung"-Kommando.
+betrachter kann (aus Kompatibilitaetsgruenden) 0 sein, dann sollte PL
+(definiert in misc.h) genommen werden.
+
+Die Kurzbeschreibung darf keine Satzendezeichen wie .!? etc am Ende aufweisen
+und auch keinen Zeilenumbruch "\n" !
+VERWEISE: set_short
+GRUPPEN: grundlegendes
+*/
+string query_short(object betrachter)
+{
+    if (!short)
+	return Ein();
+    return short;
+}
+
+/*
+FUNKTION: set_long
+DEKLARATION: void set_long(mixed long)
+BESCHREIBUNG:
+Hiermit wird die Langbeschreibung eines Objektes gesetzt. Wird am Ende ein
+"\n" angegeben, so findet kein automatischer Umbruch statt, sonst wird der
+in set_long angegebene String auf eine Breite von 75 Zeichen automatisch
+umgebrochen und ein "\n" angehaengt. Wenn ein Absatz im long gewunescht wird,
+kann das selbstverstaendlch durch ein "\n" eingefuegt werden! (halt nur nicht
+am Schluss)
+
+Statt eines Strings kann auch eine komplexere Beschreibung mit Bedingungen
+angegeben werden. Siehe dazu /doc/funktionsweisen/beschreibungen.
+
+VERWEISE: query_long, query_short, set_long_night, query_long_night, wrap,
+	  query_look_msg, query_look_night, add_long, T_LISTE
+GRUPPEN: grundlegendes
+*/
+void set_long(mixed text)
+{
+    // Damit query_long_string funktioniert.
+    long = stringp(text) && (strlen(text) && text[<1] != '\n' ? wrap(text) : text);
+
+    longtags = 0;
+    longcl = compile_desc(text, &longtags);
+    if (!stringp(text))
+    {
+        this_object()->add_setter_conservation("set_long",0);
+        this_object()->set_conservation_constraint("set_long",1);
+    }
+    else
+    {
+        this_object()->add_setter_conservation("set_long",({long}));
+    }
+}
+
+/*
+FUNKTION: add_long
+DEKLARATION: void add_long(mixed long)
+BESCHREIBUNG:
+Hiermit wird der Langbeschreibung eines Objektes ein Text angehaengt.
+Als Text kann wie bei set_long auch eine komplexere Beschreibung
+uebergeben werden.
+VERWEISE: set_long, query_long, T_LISTE
+GRUPPEN: grundlegendes
+*/
+void add_long(mixed text)
+{
+    if(stringp(long) && stringp(text))
+        long += wrap(text);
+
+    longcl = compile_desc(
+                 ({T_FILTER_CL((: (strlen($2) && $2[<1]!='\n')?
+                                  trim($2,TRIM_RIGHT)+" ":$2 :)),
+                   longcl, text}), &longtags);
+    if (!stringp(text))
+    {
+        this_object()->add_setter_conservation("set_long",0);
+        this_object()->set_conservation_constraint("set_long",1);
+    }
+    else
+    {
+        this_object()->add_setter_conservation("set_long",({long}));
+    }
+}
+
+/*
+FUNKTION: query_long
+DEKLARATION: string query_long(object betrachter)
+BESCHREIBUNG:
+Diese Funktion liefert die ausfuehrliche Beschreibung eines Objektes zurueck.
+Hierbei muss im Gegensatz zur Kurzbeschreibung ein "\n" am Ende vorhanden
+sein. Bei einer mit set_long gesetzten Meldung wird dies notfalls
+auch automatisch angehaengt. (Siehe set_long.)
+Fuer eine extra Meldung in der Nacht siehe query_long_night.
+betrachter ist dasjenige Objekt, welches dieses Objekt betrachtet.
+Ist es 0 (aufgrund von Kompatibilitaetsproblemen), so sollte man PL (aus
+misc.h) als diesen annehmen.
+VERWEISE: set_long, query_short, set_long_night, query_long_night,
+	  query_look_msg, query_look_night, wrap,
+	  query_long_exec, query_long_postprocess
+GRUPPEN: grundlegendes
+*/
+
+/*
+FUNKTION: query_long_exec
+DEKLARATION: protected string query_long_exec(mapping info)
+BESCHREIBUNG:
+Diese Funktion wird aus query_long heraus aufgerufen und berechnet
+die Langbeschreibung aufgrund der Daten in 'info'. 'info' enthaelt
+folgende Eintraege:
+    TI_VIEWER		Der Betrachter
+    TI_ITEM		Der betrachtete Gegenstand, also this_object()
+			(nicht vorhanden, wenn der Raum betrachtet wird.)
+    TI_ROOM		Der betrachtete Raum bzw. der Raum, in dem sich der
+			betrachtete Gegenstand befinden.
+    TI_DARK		!=0, wenn es dunkel ist.
+    
+Diese Funktion kann vom Gegenstand/Raum ueberlagert werden, um dem
+Mapping weitere Eintraege hinzuzufuegen, oder einen gaenzlich anderen
+Beschreibungsmechanismus zu waehlen. Fuer nachtraegliche Behandlungen
+am Text selbst sollte man query_long_postprocess ueberlagern.
+    
+VERWEISE: query_long, query_long_postprocess
+GRUPPEN: beschreibung
+*/
+// Zum Ueberlagern fuer Rauminherits
+protected string query_long_exec(mapping info)
+{
+    return funcall(longcl || long, info);
+}
+
+/*
+FUNKTION: query_long_postprocess
+DEKLARATION: protected string query_long_postprocess(string msg, mapping info)
+BESCHREIBUNG:
+Diese Funktion erhaelt die Grundbeschreibung 'msg' und das Mapping 'info'
+(mit den bei query_long_exec beschriebenen Eintraegen) und verarbeitet
+dieses. Die urspruengliche Funktion bricht die Meldung via wrap um
+und haengt bei Raeumen noch eine Tageszeitmeldung an, sofern sie
+angebracht ist.
+
+Inherits koennen diese Funktion ueberlagern, um den Text zu verarbeiten,
+zum Beispiel, um weitere Meldungen an den Text anzuhaengen.
+
+Achtung: Die zurueckgelieferte Meldung sollte korrekt umgebrochen sein,
+der Aufruf von ::query_long_postprocess mit der Meldung erledigt
+dies normalerweise.
+
+VERWEISE: query_long, query_long_exec, query_long_tags,
+	  query_long_has_tag, query_long_tag_val
+GRUPPEN: beschreibung
+*/
+// Zum Ueberlagern fuer Rauminherits
+protected string query_long_postprocess(string msg, mapping info)
+{
+    string ldesc;
+
+#ifdef TestMUD
+    if(strlen(msg) && msg[<1]!='\n') msg = trim(msg, TRIM_RIGHT)+"\r";
+
+    if (this_object()->query_room() && 
+	(!longtags || !member(longtags, T_ATOM_TAG_DAYTIME)) &&
+	!this_object()->query_type("kunstlicht"))
+	msg += (strlen(ldesc=query_light_description(this_object()->local_vclock() || vclock()))?ldesc+"\r":"");
+#else
+    if(strlen(msg) && msg[<1]!='\n') msg = wrap(trim(msg, TRIM_RIGHT));
+
+    if (this_object()->query_room() && 
+	(!longtags || !member(longtags, T_ATOM_TAG_DAYTIME)) &&
+	!this_object()->query_type("kunstlicht"))
+	msg += (strlen(ldesc=query_light_description(this_object()->local_vclock() || vclock()))?wrap(ldesc):"");
+#endif
+
+    return msg;
+}
+
+/*
+FUNKTION: query_long_shadow
+DEKLARATION: string query_long_shadow(string msg, mapping info)
+BESCHREIBUNG:
+Diese Funktion erhaelt die Grundbeschreibung 'msg' und das Mapping 'info',
+aehnlich wie query_long_postprocess. Diese Funktion koennen Shadows
+zur Verfuegung stellen, um die Kernbeschreibung zu veraendern,
+bevor Zusatztexte (z.B. die Tageszeitmeldungen) von
+query_long_postprocess hinzugefuegt werden.
+VERWEISE: query_long, query_long_exec, query_long_postprocess
+GRUPPEN: beschreibung
+*/
+
+
+// Gemeinsame Funktion fuer query_long und query_long_dark.
+private string exec_long(object viewer, int dark)
+{
+    mapping info = get_desc_info_mapping(viewer || this_player());
+    mixed text;
+    
+    if(this_object()->query_room())
+	info[TI_DARK] = dark;
+    
+    text = query_long_exec(info);
+    if(!stringp(text))
+	return 0;
+	
+
+    text = this_object()->query_long_shadow(text) || text;
+
+    return query_long_postprocess(text, info);
+}
+
+// Varargs aufgrund von Kompatibilitaet
+string query_long(object viewer)
+{
+    return exec_long(viewer, 0);
+}
+
+
+// Fuer Gegenstaende
+int query_visible_in_the_dark()
+{
+    return longtags && member(longtags, T_ATOM_TAG_DARKNESS);
+}
+
+// Fuer Raeume
+string query_long_dark(object viewer)
+{
+    if(!longtags || !member(longtags, T_ATOM_TAG_DARKNESS))
+	// Dunkelheit wird nicht von der Meldung behandelt.
+	return 0;
+
+    return exec_long(viewer, 1);
+}
+
+/*
+FUNKTION: query_long_tags
+DEKLARATION: mapping query_long_tags()
+BESCHREIBUNG:
+Liefert alle in einer Long-Meldung genutzten T_TAG- bzw. T_TAGVAL-Schliessel
+mitsamt ihrer Werte in einem Mapping zurueck.
+VERWEISE: set_long, T_TAG, T_TAGVAL, query_long_has_tag, query_long_tag_val
+GRUPPEN: beschreibung
+*/
+mapping query_long_tags()
+{
+    return longtags || ([:1]);
+}
+
+/*
+FUNKTION: query_long_has_tag
+DEKLARATION: int query_long_has_tag(string tag)
+BESCHREIBUNG:
+Liefert einen Wert != 0, wenn in der Long-Meldung ein T_TAG-Eintrag
+mit dem Schluessel 'tag' vorkommt.
+VERWEISE: set_long, T_TAG, query_long_tags, query_long_tag_val
+GRUPPEN: beschreibung
+*/
+int query_long_has_tag(string tag)
+{
+    return longtags && member(longtags, tag);
+}
+
+/*
+FUNKTION: query_long_tag_val
+DEKLARATION: mixed query_long_tag_val(string tag)
+BESCHREIBUNG:
+Liefert den Wert, der in der Long-Meldung in einem T_TAGVAL-Eintrag
+mit dem Schluessel 'tag' angegeben wurde, oder 0, falls
+kein solcher Eintrag existiert.
+VERWEISE: set_long, T_TAGVAL, query_long_tags, query_long_tag_val.
+GRUPPEN: beschreibung
+*/
+mixed query_long_tag_val(string tag)
+{
+    return longtags && longtags[tag];
+}
+
+/*
+FUNKTION: add_long_tag
+DEKLARATION: void add_long_tag(string tag [, mixed val])
+BESCHREIBUNG:
+Fuegt einen Eintrag zur Liste aller T_TAGs der Long-Beschreibung hinzu.
+Achtung: Dieser Liste wird mit dem naechsten set_long ueberschrieben.
+VERWEISE: set_long, T_TAG, query_long_tags, query_long_has_tag.
+GRUPPEN: beschreibung
+*/
+varargs void add_long_tag(string tag, mixed val)
+{
+    if(!longtags)
+	longtags = ([:1]);
+    m_add(longtags, tag, val);
+}
+
+/*
+FUNKTION: delete_long_tag
+DEKLARATION: void delete_long_tag(string tag)
+BESCHREIBUNG:
+Entfernt einen Eintrag aus der Liste aller T_TAGs.
+VERWEISE: set_long, T_TAG, query_long_tags, query_long_has_tag.
+GRUPPEN: beschreibung
+*/
+void delete_long_tag(string tag)
+{
+    if(longtags)
+	m_delete(longtags, tag);
+}
+
+/*
+FUNKTION: set_long_night
+DEKLARATION: deprecated void set_long_night(string long)
+BESCHREIBUNG:
+Hiermit wird die Langbeschreibung eines Objektes bei Nacht gesetzt.
+
+Es wird empfohlen, diese Funktion nicht mehr einzusetzen und
+stattdessen die Nachtbeschreibung mit Hilfe von T_NIGHT in die
+normale Raumbeschreibung zu integrieren.
+
+VERWEISE: query_long, set_long, wrap, T_LISTE
+GRUPPEN: grundlegendes
+*/
+void set_long_night(string str)
+{
+   long_night = strlen(str) && str[<1] != '\n' ? wrap(str) : str;
+   this_object()->add_setter_conservation("set_long_night",({long_night}));
+}
+
+/*
+FUNKTION: query_long_night
+DEKLARATION: deprecated string query_long_night(object betrachter)
+BESCHREIBUNG:
+Diese Funktion liefert die ausfuehrliche Beschreibung eines Objektes bei
+Nacht zurueck.
+VERWEISE: set_long_night, query_long, set_long, query_short, wrap
+GRUPPEN: grundlegendes
+*/
+string query_long_night(object viewer)
+{
+    return long_night;
+}
+
+/*
+FUNKTION: query_short_string
+DEKLARATION: string query_short_string()
+BESCHREIBUNG:
+Diese Funktion liefert den genauen mit set_short gesetzten Text zurueck.
+Im Gegensatz zu query_short liefert diese Funktion nur dann einen Text,
+wenn einer mit set_short gesetzt wurde und fuegt dem auch keine weiteren
+Informationen (z.B. Ansehen) hinzu.
+VERWEISE: query_short, set_short
+GRUPPEN: grundlegendes
+*/
+string query_short_string() { return short; }
+
+/*
+FUNKTION: query_long_string
+DEKLARATION: string query_long_string()
+BESCHREIBUNG:
+Diese Funktion liefert den mit set_long gesetzten Text zurueck.
+Im Gegensatz zu query_long werden diesem keine Informationen ueber
+Ausdauer, Tageszeit oder aehnlichem angehaengt.
+
+ACHTUNG: Wenn die komplexeren Beschreibungsmoeglichkeiten genutzt
+werden (d.h. ein Array als Beschreibung angegeben wurde), dann
+liefert diese Funktion 0 zurueck. Es wird daher empfohlen, sie
+nicht mehr einzusetzen. Ueberlagerungen von query_long, die darauf
+angewiesen sind, sollten eine Ueberlagerung von query_long_postprocess
+stattdessen erwaegen.
+
+VERWEISE: query_long, set_long, query_short, query_long_postprocess
+GRUPPEN: grundlegendes
+*/
+string query_long_string() { return long; }
+
+/*
+FUNKTION: query_long_night_string
+DEKLARATION: deprecated string query_long_night_string()
+BESCHREIBUNG:
+Diese Funktion liefert den mit set_long_night gesetzten Text zurueck.
+Im Gegensatz zu query_long_night werden diesem keine Informationen ueber
+Ausdauer, Tageszeit oder aehnlichem angehaengt.
+VERWEISE: query_long_night, set_long_night, query_long_string
+GRUPPEN: grundlegendes
+*/
+deprecated string query_long_night_string() { return long_night; }
+
+/*
+FUNKTION: query_debug_info
+DEKLARATION: mapping query_debug_info()
+BESCHREIBUNG:
+Diese Funktion kann man ueberlagern, um im Falle eines Fehlers
+wichtige Informationen in der FDB zu speichern. Das zurueckgelieferte
+Mapping sollte nur Strings als Schluessel und Strings oder Zahlen als
+Werte beinhalten.
+VERWEISE: do_error, do_warning
+GRUPPEN: master
+*/
+mapping query_debug_info()
+{
+    object ob, *shadows = ({});
+    mapping info = ([]);
+    string str;
+    mixed tmp;
+    ob = this_object();
+    while(ob)
+	if(ob=shadow(ob,0))
+	    shadows+=({ob});
+    if(sizeof(shadows))
+    {
+	info["Shadows"] = implode(map(shadows,
+	    (:
+		string shcr = $1->query_shadow_creator($1);
+		if(stringp(shcr))
+		    return sprintf("%s\nCreator: %-=57s\n",object_name($1),shcr)[0..<2];
+		else
+		    return object_name($1);
+	    :)), ",\n");
+	info["Objekt"] = object_name();
+    }
+    if(environment())
+	info["Umgebung"] = implode(map(all_environment(),(:sprintf("%O",$1):)), ",\n");
+    if(str=this_object()->query_creator())
+	info["Creator"] = str;
+    tmp = this_object()->query(P_ORIGIN);
+    if (sizeof(tmp))
+    {
+        info["Origin"] = mixed2str(tmp);
+    }
+    tmp = this_object()->query_conservation_constraints();
+    if (sizeof(tmp))
+    {
+        info["Conservation_Constraints"] = mixed2str(tmp);
+    }
+    tmp = this_object()->query(P_CONSERVATION);
+    if (sizeof(tmp))
+    {
+        info["Conservation"] = mixed2str(tmp);
+    }
+    return info;
+}

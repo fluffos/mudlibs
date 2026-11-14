@@ -1,0 +1,684 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        brunnen.c
+// Description: Ein Brunnen zum Trinken und Auffuellen von Flaschen.
+// Author:      Jafar & Yellow
+// Modified by: Jafar, 21.6.96
+//              drink_action kann geshadowed werden.
+//
+//		Jafar, 21.8.96
+//              Im Aufruf von set_design_function kann jetzt optional das
+//              Objekt, indem die Funktion gesucht werden soll, angegeben
+//              werden. 
+//    
+//              Jafar, 16.01.96
+//              query_failure_message und query_other_failure_message
+//              gaben die success_message und success_other_message des
+//              Brunnens zurueck, wenn welche gesetzt waren.
+//
+//              Jafar, 26.02.97
+//              Geister koennen nicht trinken.
+//
+//              Jafar, 23.11.99
+//              Aenderung in drink_command, da trim nicht laenger eine 0
+//              als Argument annimmt.
+//
+// $Log: brunnen.c,v $
+// Revision 1.14  2010-12-18 12:47:35  sorcerer
+// fail-Prioritaeten fuer drink_action
+//
+// Revision 1.13  2003/09/20 02:07:51  gnomi
+// forbidden_drink_water: Man kann nun auch 0 als Meldung fuer alle anderen
+// angeben.
+//
+// Revision 1.12  2003/01/25 04:24:52  gnomi
+// No-List-Leute geben wieder Meldungen von sich.
+//
+// Revision 1.11  2003/01/24 01:23:01  gnomi
+// Doku zu drink_action korrigiert.
+//
+// Revision 1.10  2002/11/20 04:03:36  gnomi
+// forbidden_drink_water-Controller eingebaut.
+//
+// Revision 1.9  2002/10/21 01:02:55  gnomi
+// set_design_function: Wenn obj==0 und !extern_call, wird this_object
+// genommen.
+//
+// Revision 1.8  2002/10/17 12:48:32  freaky
+// functio nach func wegen ldmud-3.3
+//
+// Revision 1.7  2002/06/15 15:42:44  gnomi
+// Hinweis auf /p/jafar/doc entfernt.
+//
+// Revision 1.6  2001/06/25 11:48:33  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.5  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strong_types
+#pragma verbose_errors
+
+#include <deklin.h>
+#include <move.h>
+#include <wasser.h>
+#include <message.h>
+#include <notify_fail.h>
+#include <simul_efuns.h>
+#include <invis.h>
+
+inherit "/i/item";
+inherit "/i/move";
+inherit "/i/contain";
+
+
+private closure success_message,       // die Meldungen beim Trinken
+                other_success_message,
+                failure_message,
+                other_failure_message,
+                fill_message,          // und beim Fuellen von Flaschen
+                other_fill_message;
+
+private object water;         // das Wasser im Brunnen
+
+private string design_object, // Funktion um das Wasser nach dem 
+       design_function,       // Klonen zu aendern 
+       water_file;            // Datei, welche als Wasser geklont wird
+
+
+/*
+FUNKTION: set_success_message
+DEKLARATION: void set_success_message(mixed s)
+BESCHREIBUNG:
+Nachdem ein Spieler aus dem Brunnen getrunken hat, erhaelt er eine Meldung,
+die aus einem Teil von dem Brunnen und einem Teil vom Wasser-Objekt
+zusammengesetzt wird. set_success_message legt den Teil fest, welcher
+den Brunnen betrifft. Der Teil vom Wasser wird daran angehaengt, weshalb sie
+mit einem Leerzeichen enden sollte. Die Meldung kann eine Pseudoclosure oder
+Closure sein, in denen zu den ueblichen Symbolen noch 'water fuer das Wasser
+hinzukommt.
+VERWEISE: set_other_success_message, set_failure_message,
+set_other_failure_message, query_success_message, query_other_success_message,
+query_failure_message, query_other_failure_message, drink_action
+GRUPPEN: wasser
+*/
+void set_success_message(mixed s)
+{
+   success_message = mixed_to_closure(s, ({'water}));
+}
+
+
+/*
+FUNKTION: set_other_success_message
+DEKLARATION: void set_other_success_message(mixed s)
+BESCHREIBUNG:
+Nachdem ein Spieler aus dem Brunnen getrunken hat, erhalten die Umstehenden
+eine Meldung, die aus einem Teil von dem Brunnen und einem Teil vom
+Wasser-Objekt zusammengesetzt wird. set_other_success_message legt den Teil
+fest, welcher den Brunnen betrifft. Der Teil vom Wasser wird daran angehaengt,
+weshalb sie mit einem Leerzeichen enden sollte. Die Meldung kann eine
+Pseudoclosure oder Closure sein, in denen zu den ueblichen Symbolen noch
+'water fuer das Wasser hinzukommt.
+VERWEISE: set_success_message, set_failure_message, set_other_failure_message,
+query_success_message, query_other_success_message, query_failure_message,
+query_other_failure_message, drink_action
+GRUPPEN: wasser
+*/
+void set_other_success_message(mixed s)
+{
+   other_success_message = mixed_to_closure(s, ({'water}));
+}
+
+
+/*
+FUNKTION: set_failure_message
+DEKLARATION: void set_failure_message(mixed s)
+BESCHREIBUNG:
+Wenn ein Spieler nicht aus dem Brunnen trinken kann (zuviele Wasserpunkte,
+zuviele Alkoholpunkte oder aehnliches), erhaelt er eine Meldung die aus einem
+Teil von dem Brunnen und einem Teil vom Wasser-Objekt zusammengesetzt wird.
+set_failure_message legt den Teil fest, welcher den Brunnen betrifft. Der Teil
+vom Wasser wird daran angehaengt, weshalb sie mit einem Leerzeichen enden
+sollte. Die Meldung kann eine Pseudoclosure oder Closure sein, in denen zu den
+ueblichen Symbolen noch 'water fuer das Wasser hinzukommt.
+VERWEISE: set_success_message, set_other_success_message,
+set_other_failure_message, query_success_message, query_other_success_message,
+query_failure_message, query_other_failure_message, drink_action
+GRUPPEN: wasser
+*/
+void set_failure_message(mixed s)
+{
+   failure_message = mixed_to_closure(s, ({'water}));
+}
+
+
+/*
+FUNKTION: set_other_failure_message
+DEKLARATION: void set_other_failure_message(mixed s)
+BESCHREIBUNG:
+Wenn ein Spieler nicht aus dem Brunnen trinken kann (zuviele Wasserpunkte,
+zuviele Alkoholpunkte oder aehnliches), erhaelt er eine Meldung die aus einem
+Teil von dem Brunnen und einem Teil vom Wasser-Objekt zusammengesetzt wird.
+set_failure_message legt den Teil fest, welcher den Brunnen betrifft. Der Teil
+vom Wasser wird daran angehaengt, weshalb sie mit einem Leerzeichen enden
+sollte. Die Meldung kann eine Pseudoclosure oder Closure sein, in denen zu den
+ueblichen Symbolen noch 'water fuer das Wasser hinzukommt.
+VERWEISE: set_success_message, set_other_success_message,
+set_failure_message, query_success_message, query_other_success_message,
+query_failure_message, query_other_failure_message, drink_action
+GRUPPEN: wasser
+*/
+void set_other_failure_message(mixed s)
+{
+   other_failure_message = mixed_to_closure(s, ({'water}));
+}
+
+
+/*
+FUNKTION: set_fill_message
+DEKLARATION: void set_fill_message(mixed s)
+BESCHREIBUNG:
+set_fill_message setzt die Meldung welche der Spieler beim Fuellen von 
+Flaschen am Brunnen erhaelt. Die Meldung kann eine Pseudoclosure oder Closure 
+sein, in denen zu den ueblichen Symbolen noch 'water fuer das Wasser und 
+'bottle fuer die Flasche hinzukommen.
+VERWEISE: set_other_fill_message, query_fill_message, query_other_fill_message
+GRUPPEN: wasser
+*/
+void set_fill_message(mixed s)
+{
+   fill_message = mixed_to_closure(s, ({'bottle, 'water}));
+}
+
+
+/*
+FUNKTION: set_other_fill_message
+DEKLARATION: void set_other_fill_message(mixed s)
+BESCHREIBUNG:
+set_other_fill_message setzt die Meldung welche die Umstehenden erhalten, wenn
+ein Spieler eine Flasche am Brunnen fuellt. Die Meldung kann eine 
+Pseudoclosure oder Closure sein, in denen zu den ueblichen Symbolen noch 
+'water fuer das Wasser und 'bottle fuer die Flasche hinzukommen.
+VERWEISE: set_fill_message, query_fill_message, query_other_fill_message
+GRUPPEN: wasser
+*/
+void set_other_fill_message(mixed s)
+{
+   other_fill_message = mixed_to_closure(s, ({'bottle, 'water}));
+}
+
+
+/*
+FUNKTION: query_success_message
+DEKLARATION: string query_success_message()
+BESCHREIBUNG:
+Nachdem ein Spieler aus dem Brunnen getrunken hat, erhaelt er eine Meldung,
+die aus einem Teil von dem Brunnen und einem Teil vom Wasser-Objekt
+zusammengesetzt wird. query_success_message setzt diese beiden Teile zusammen
+und liefert die vollstaendige Meldung zurueck. Ist keine Meldung fuer den
+Brunnen angegeben, wird fuer diesen Teil eine Default-Meldung verwendet.
+VERWEISE: set_success_message, set_other_success_message, set_failure_message,
+set_other_failure_message, query_other_success_message, query_failure_message,
+query_other_failure_message, drink_action
+GRUPPEN: wasser
+*/
+string query_success_message() 
+{
+   if (success_message)
+     return closure_to_string(success_message, ({water})) + 
+         water->query_success_message();
+   else
+     return "Du trinkst einen kraeftigen Schluck " + wen(water, ART_KEINS) +
+         " aus " + deinem() + ". " + water->query_success_message();
+}
+
+
+/*
+FUNKTION: query_other_success_message
+DEKLARATION: string query_other_success_message()
+BESCHREIBUNG:
+Nachdem ein Spieler aus dem Brunnen getrunken hat, erhalten die Umstehenden
+eine Meldung, die aus einem Teil von dem Brunnen und einem Teil vom
+Wasser-Objekt zusammengesetzt wird. query_other_success_message setzt diese
+beiden Teile zusammen und liefert die vollstaendige Meldung zurueck. Ist keine
+Meldung fuer die Flasche angegeben, wird fuer diesen Teil eine Default-Meldung
+verwendet.
+VERWEISE: set_success_message, set_other_success_message, set_failure_message,
+set_other_failure_message, query_success_message, query_failure_message,
+query_other_failure_message, drink_action
+GRUPPEN: wasser
+*/
+string query_other_success_message() 
+{
+   if (other_success_message) 
+     return closure_to_string(other_success_message, ({water})) + 
+         water->query_other_success_message();
+   else
+     return Der(OBJ_TP) + " trinkt einen kraeftigen Schluck " +
+         wen(water, ART_KEINS) + " aus " + seinem() + ". " + 
+         water->query_other_success_message();
+}
+
+
+/*
+FUNKTION: query_failure_message
+DEKLARATION: string query_failure_message()
+BESCHREIBUNG:
+Wenn ein Spieler nicht aus dem Brunnen trinken kann (zuviele Wasserpunkte,
+zuviele Alkoholpunkte oder aehnliches), erhaelt er eine Meldung die aus einem
+Teil vom Brunnen und einem Teil vom Wasser-Objekt zusammengesetzt wird. 
+query_failure_message setzt diese beiden Teile zusammen und liefert die
+vollstaendige Meldung zurueck. Standardmaessig ist der Teil des Brunnens 
+ein Leerstring.
+VERWEISE: set_success_message, set_other_success_message, set_failure_message,
+set_other_failure_message, query_success_message, query_other_success_message,
+query_other_failure_message, drink_action
+GRUPPEN: wasser
+*/
+string query_failure_message() 
+{
+   if (failure_message)
+     return closure_to_string(failure_message, ({water})) + 
+         water->query_failure_message();
+   else
+     return water->query_failure_message();
+}
+
+
+/*
+FUNKTION: query_other_failure_message
+DEKLARATION: string query_other_failure_message()
+BESCHREIBUNG:
+Wenn ein Spieler nicht aus dem Brunnen trinken kann (zuviele Wasserpunkte,
+zuviele Alkoholpunkte oder aehnliches), erhalten die Umstehenden eine Meldung
+die aus einem Teil vom Brunnen und einem Teil vom Wasser-Objekt
+zusammengesetzt wird. query_other_failure_message setzt diese beiden Teile
+zusammen und liefert die vollstaendige Meldung zurueck. Standardmaessig ist
+der Teil des Brunnens ein Leerstring.
+VERWEISE: set_success_message, set_other_success_message, set_failure_message,
+set_other_failure_message, query_success_message, query_other_success_message,
+query_failure_message, drink_action
+GRUPPEN: wasser
+*/
+string query_other_failure_message() 
+{
+   if (other_failure_message) 
+     return closure_to_string(other_failure_message, ({water})) + 
+         water->query_other_failure_message();
+   else
+     return water->query_other_failure_message();
+}
+
+
+/*
+FUNKTION: query_fill_message
+DEKLARATION: string query_fill_message(object bottle, object water)
+BESCHREIBUNG:
+query_fill_message liefert die Meldung fuer den Spieler zurueck, wenn er eine
+Flasche am Brunnen fuellt.
+VERWEISE: set_fill_message, set_other_fill_message, query_other_fill_message
+GRUPPEN: wasser
+*/ 
+string query_fill_message(object bottle, object water)
+{
+   if (fill_message)
+     return closure_to_string(fill_message, ({bottle, water}));
+   else
+     return "Du fuellst " + deinen(bottle) + " mit " + wem(water, ART_KEINS) + 
+	   " aus " + deinem() + ".";
+}
+
+
+/*
+FUNKTION: query_other_fill_message
+DEKLARATION: string query_other_fill_message(object bottle, object water)
+BESCHREIBUNG:
+query_fill_message liefert die Meldung fuer die Umstehenden zurueck, wenn ein 
+Spieler eine Flasche am Brunnen fuellt.
+VERWEISE: set_fill_message, set_other_fill_message, query_fill_message
+GRUPPEN: wasser
+*/ 
+string query_other_fill_message(object bottle, object water)
+{
+   if (other_fill_message)
+     return closure_to_string(other_fill_message, ({bottle, water}));
+   else
+     return Der(OBJ_TP) + " fuellt " + seinen(bottle) + " mit " + 
+           wem(water, ART_KEINS) + " aus " + seinem() + ".";
+}
+
+
+/*
+FUNKTION: message
+DEKLARATION: void message(string player, string others)
+BESCHREIBUNG:
+message nimmt die Meldungen fuer den Spieler und fuer die Umstehenden,
+bricht sie um und gibt sie aus. Ist der Spieler unsichtbar oder die Meldung
+fuer die Umstehenden leer, so wird sie unterdrueckt.
+VERWEISE:
+GRUPPEN: wasser
+*/
+void message(string player, string others)
+{
+   if (!this_player()) return;
+   
+   if (player != "")
+     this_player()->send_message_to(this_player(), MT_LOOK|MT_NOTIFY, MA_DRINK,
+       wrap(player));
+
+   if (!IS_INVIS(this_player()) && others != "")
+     this_player()->send_message(MT_LOOK, MA_DRINK, wrap(others));
+}
+
+
+/*
+FUNKTION: set_water_file
+DEKLARATION: void set_water_file(string file_name)
+BESCHREIBUNG:
+set_water_file setzt den Dateinamen des Wasser-Objekts, welches der Brunnen
+klonen soll. Ist kein Dateinamen angegeben, wird normales Wasser verwendet.
+VERWEISE: set_design_function, clone_water, get_water
+GRUPPEN: wasser
+*/
+void set_water_file(string file_name) { water_file = file_name; }
+
+
+/*
+FUNKTION: set_design_function
+DEKLARATION: varargs void set_design_function(string func[, mixed obj]) 
+BESCHREIBUNG:
+set_design_function bestimmt eine Funktion vom Typ void foo(object water),
+die fuer jedes vom Brunnen geklonte Wasser-Objekt aufgerufen wird. Damit hat 
+sie die Moeglichkeit, die Eigenschaften des Wassers zu aendern. Ist nichts 
+weiter angegeben, wird die Funktion im aufrufenden Objekt, ansonsten im direkt
+oder per Dateinamen angegebenen Objekt gesucht.
+VERWEISE: set_water_file, clone_water, get_water
+GRUPPEN: wasser
+*/
+varargs void set_design_function(string func, mixed obj) 
+{ 
+   design_function = func;
+
+   // Objekt bestimmen, in dem die Funktion aufgerufen werden soll
+
+   if (!obj) 
+     design_object = object_name(extern_call()?previous_object():this_object());
+   else if (objectp(obj)) 
+     design_object = object_name(obj);
+   else
+     design_object = obj;
+}
+
+
+/*
+FUNKTION: clone_water
+DEKLARATION: object clone_water()
+BESCHREIBUNG:
+Wurde der Dateiname eines speziellen Wasser-Objekts angegeben, klont 
+clone_water dieses Objekt, ansonsten normales Wasser. Wurde mit 
+set_design_function eine Funktion angemeldet, so wird sie mit dem geklonten
+Objekt aufgerufen und schliesslich wird das Wasser zurueckgegeben.
+VERWEISE: set_water_file, set_design_function, get_water
+GRUPPEN: wasser
+*/
+object clone_water()
+{
+   object water;
+
+
+   if (water_file) 
+     water = clone_object(water_file);
+   else
+     water = clone_object(WASSER_OBJ);
+
+   if (design_object && design_function) 
+     call_other(design_object, design_function, water);
+
+   return water;
+}
+     
+
+/*
+FUNKTION: query_water
+DEKLARATION: object query_water()
+BESCHREIBUNG:
+Liefert das Wasser-Objekt im Brunnen zurueck oder 0, wenn keines vorhanden ist.
+Das Objekt sollte nicht aus dem Brunnen bewegt werden.
+VERWEISE: water_me, set_water_file, set_design_function, clone_water,
+get_water, setup_well
+GRUPPEN: wasser
+*/
+object query_water() { return water; }
+
+
+/*
+FUNKTION: water_me
+DEKLARATION: string water_me(string s)
+BESCHREIBUNG:
+water_me ist ein abgesicherter Aufruf der Funktion me im Wasser-Objekt im 
+Brunnen. Ist kein Wasser-Objekt vorhanden, oder ist es mit dem String nicht 
+gemeint, dann liefert water_me 0, ansonsten einen String mit dem Rest des 
+Kommandos.
+VERWEISE: me, query_water
+GRUPPEN: wasser
+*/
+string water_me(string s) 
+{
+   if (water)
+     return water->me(s);
+   else
+     return 0;
+}
+
+
+/*
+FUNKTION: get_water
+DEKLARATION: int get_water(object water, int amount, int max_amount)
+BESCHREIBUNG:
+Mit der Funktion get_water kann eine Flasche Wasser aus dem Brunnen entnehmen.
+Dazu uebergibt sie in max_amount die maximale Menge in Schlucken, die sie 
+aufnehmen kann. Kann und will der Brunnen die Anforderung erfuellen, liefert
+er einen Wert ungleich 0 zurueck und in den Parametern amount und water
+die wirkliche Abgabemenge (amount <= max_amount) und ein Wasser-Objekt ueber
+das die Flasche frei verfuegen kann. Dazu muessen water und amount Referenz-
+parameter sein. Soll die Anforderung nicht erfuellt werden, liefert der 
+Brunnen 0 zurueck. In einem solchen Fall ueberlaesst die Flasche jegliche
+Meldung dem Brunnen.
+VERWEISE: set_water_file, set_design_function, clone_water, query_water
+GRUPPEN: wasser
+*/
+int get_water(object water, int amount, int max_amount)
+{
+   water = clone_water();
+   amount = max_amount;
+   return 1;
+}
+
+
+/*
+FUNKTION: drink_action
+DEKLARATION: int drink_action()
+BESCHREIBUNG:
+drink_action enthaelt die eigentliche Funktionalitaet fuer das Trinken. Zuerst
+wird ueberprueft ob der Brunnen etwas enthaelt, wenn ja, dann wird
+drink_action im Wasser-Objekt aufgerufen. 
+Diese Funktion liefert 1 zurueck, wenn sie sich fuer zustaendig befand und
+entsprechende (Erfolgs- oder auch Misserfolgs-)Meldungen ausgegeben hat.
+Ansonsten (im notify_fail-Falle) wird 0 zurueckgeliefert.
+VERWEISE: drink_command, drink_action (wasser), set_success_message,
+set_other_success_message, set_failure_message, set_other_failure_message,
+query_success_message, query_other_success_message, query_failure_message,
+query_other_failure_message
+GRUPPEN: wasser
+*/
+int drink_action()
+{
+   mixed fail;
+   // hat der Brunnen ueberhaupt Wasser?
+
+   if (!water) {
+     notify_fail(wrap(Dein()+ist(this_object(),IST_SPACE_BEFORE)+" leer."),
+                 FAIL_INTERNAL);
+     return 0;
+   }
+
+   // Geister koennen nicht trinken
+
+   if (this_player()->query_ghost()) {
+     notify_fail("In deinem vergeistigten Zustand ist das nicht moeglich.\n",
+                 FAIL_INTERNAL);
+     return 0;
+   }
+
+   fail = this_player()->forbidden("drink_water", water, this_object(), this_player())
+       || this_object()->forbidden("drink_water_well", water, this_object(), this_player())
+       || water->forbidden("drink_water_self", water, this_object(), this_player());
+   if(fail)
+   {
+      if(stringp(fail))
+         fail = ({fail});
+      if(pointerp(fail))
+      {
+         if(sizeof(fail)>1)
+	    this_player()->send_message(MT_LOOK, MA_DRINK, fail[1] && wrap(fail[1]),
+	       wrap(fail[0]), this_player());
+	 else if(sizeof(fail)==1)
+            this_player()->send_message_to(this_player(), MT_LOOK|MT_FEEL,
+	       MA_DRINK, wrap(fail[0]));
+      }
+      else
+      {
+         this_player()->send_message_to(this_player(), MT_LOOK|MT_FEEL, MA_DRINK,
+	    wrap(Dein()+ist(this_object(),IST_SPACE_BEFORE)+" leer."));
+      }
+   }
+   else if (water->drink_action())
+   {
+     message(query_success_message(), query_other_success_message());
+     this_player()->notify("drink_water",water,this_object(),this_player());
+     this_object()->notify("drink_water_well",water,this_object(),this_player());
+     if(water) water->notify("drink_water_self",water,this_object(),this_player());
+   }
+   else 
+     message(query_failure_message(), query_other_failure_message());
+
+   return 1;
+}
+
+
+/*
+FUNKTION: drink_command
+DEKLARATION: int drink_command(string s)
+BESCHREIBUNG:
+drink_command ist der Parser fuer die Trinkbefehle. Er akzeptiert
+
+   trinke wasser
+   trinke aus brunnen
+   trinke wasser aus brunnen
+
+Wird einer davon erkannt, wird drink_action aufgerufen, wo das eigentliche
+Trinken behandelt wird.
+VERWEISE: drink_action
+GRUPPEN: wasser
+*/
+int drink_command(string s)
+{
+   string rest;
+
+   if (s) {
+     rest = water_me(lower_case(space(s)));
+     if (rest && (rest == "" ||
+                  sscanf(rest, "aus %s", rest) == 1 && me(rest) == "") ||
+         sscanf(s, "aus %s", rest) == 1 && me(rest) == "") {
+       return this_object()->drink_action();
+     }
+   }
+
+   notify_fail("Was oder woraus moechtest du trinken?\n");
+   return 0;
+}
+
+
+/*
+FUNKTION: setup_well
+DEKLARATION: void setup_well()
+BESCHREIBUNG:
+Der Brunnen enthaelt ein Wasser-Objekt fuer das Trinken direkt am Brunnen.
+setup_well erzeugt dieses erste Wasser-Objekt und bewegt es in den Brunnen.
+Die Funktion wird von init aus aufgerufen.
+VERWEISE: clone_water
+GRUPPEN: wasser
+*/
+void setup_well()
+{
+   if (!water) {
+     water = clone_water();
+     if (water->move(this_object()) != MOVE_OK)
+       water->remove();
+   }
+}
+
+
+/*
+FUNKTION: is_well
+DEKLARATION: int is_well()
+BESCHREIBUNG:
+Brunnen antworten darauf mit 1.
+VERWEISE: is_water (wasser), is_bottle (flasche)
+GRUPPEN: wasser
+*/
+int is_well() { return 1; }
+
+
+// in den Brunnen darf nur Wasser
+
+int let_not_in(object obj, object from, string direction)
+{
+   if (!obj->is_water()) {
+     obj->set_not_moved_reason("Willst du " + deinen(OBJ_TO) + " mit deinem "
+         "Unrat verschmutzen?");
+     return 1;
+   } else
+     return 0;
+}
+
+
+void create()
+{
+   if (!clonep())      // den Blueprint nicht initialisieren
+     return;
+
+   seteuid(getuid());
+   set_name("brunnen");
+   set_id("brunnen");
+   set_gender("maennlich");
+   set_long("Ein steinerner, mit Wasser gefuellter Brunnen.");
+   set_material("stein");
+   set_weight(1000);
+}
+
+
+int remove()
+{
+   object *objs;
+
+
+   // mit dem Brunnen auch seinen Inhalt entfernen
+
+   objs = all_inventory();
+   map_objects(objs, "remove");
+
+   return ::remove();
+}
+ 
+
+void init() 
+{ 
+   // Brunnen einrichten und Befehl zum Trinken anmelden
+
+   setup_well();
+   add_action("drink_command", "trinke", -5); 
+}

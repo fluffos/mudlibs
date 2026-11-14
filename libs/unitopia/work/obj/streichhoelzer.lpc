@@ -1,0 +1,579 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------------------
+// File:        /obj/streichhoelzer.c
+// Description: Zuendhoelzer
+// Autoren:     Basierend auf einer Version von Kurdel, die von Zandru, Onit
+//                und Jackie (Aug 96 bis Jan 99) weiterentwickelt wurde.
+//              Neu ueberarbeitet von Anin, mit Hilfe von Gnomi, Sin und Croft
+//                Januar 2001
+//
+// $Log: streichhoelzer.c,v $
+// Revision 1.14  2010-12-04 22:46:27  sorcerer
+// Typo
+//
+// Revision 1.13  2008-05-19 14:30:08  gnomi
+// notify_unshadow statt shadow_remove_action verwenden.
+//
+// Revision 1.12  2008/01/16 09:44:26  gnomi
+// notify_fails mit Prioritaeten versehen.
+// Besserer Zeilenumbruch und Pluralbestimmung.
+//
+// Revision 1.11  2006/01/22 01:22:08  gnomi
+// vitem["far"] beachten.
+//
+// Revision 1.10  2003/12/20 23:41:23  gnomi
+// Leder ist brennbar...
+//
+// Revision 1.9  2001/08/28 19:54:24  freaky
+// veraltete funktionen ersetzt
+//
+// Revision 1.8  2001/08/28 17:43:21  freaky
+// deprecated funktionen rausgenommen.
+//
+// Revision 1.7  2001/06/24 22:08:38  gnomi
+// ID Feuerholz
+//
+// Revision 1.6  2001/04/19 12:57:07  freaky
+// Typo gefixed.
+//
+// Revision 1.5  2001/02/22 22:30:44  gnomi
+// Anin (19.01.01) Doku zu query_anzuender ergaenzt.
+//                 IDs fuer zuendholz /-hoelzer
+// Anin (21.01.01) streichholz_verbraucht allgeimein in
+//                 strike_done umbenannt, prepare_strike hinzu
+// Anin (23.01.01) anzuzuendendes konsequent mixed statt object
+// Anin (22.02.01) leder als brennbar rausgenommen
+//                 "zuend",1    -> "zuendele",-5
+//                 "entzuend",1 -> "entzuende",-8
+//
+
+
+// ----------------------------------------------------------------------------
+// TODO - Streichhoelzer zusamenfuehren ueberpruefen obs klappt
+//        (hat man noch mehrere einzelne abgebrannte/brennende bis zum 1. move)
+//      - klaeren warum virtuelles nicht geteste wird ob's schon brennt
+//      - kurzzeitiger Licht-Effekt bim Zuenden einbauen?
+//        query_own_light in /obj/feuer_shadow bewirkt leider obwohl das
+//        streichholz im inv dann leuchtet keinerlei erleuchtung des raumes
+//
+// ----------------------------------------------------------------------------
+
+inherit "/i/object/multiob";
+inherit "/i/value";
+
+#define BRENNMATERIAL ({ "holz","papier","textil","kunststoff","oel","leder" })
+#define FEUER_SHADOW  "/obj/feuer_shadow"
+#define TP this_player()
+#define TO this_object()
+
+#include <parse_com.h>
+#include <move.h>
+#include <shadow.h>
+#include <message.h>
+#include <landschaft.h>
+#include <notify_fail.h>
+#include <simul_efuns.h>
+
+// ----------------------------------------------------------------------------
+/*
+FUNKTION: query_streichholz
+DEKLARATION: int query_streichholz()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn das Objekt ein Streichholz ist
+VERWEISE: query_burning, query_burned_out, query_anzuender
+GRUPPEN: feuer
+*/
+int query_streichholz()
+{
+    return 1;
+}
+/*
+FUNKTION: query_burning
+DEKLARATION: int query_burning()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn das Objekt brennt.
+(offenes Feuer, was potentiell Dinge entzuenden kann)
+VERWEISE: query_streichholz, query_burned_out, query_anzuender
+GRUPPEN: feuer
+*/
+int query_burning()
+{
+    return strstr(query_count_type(),"#brennend") != -1;
+}
+
+/*
+FUNKTION: query_burned_out
+DEKLARATION: int query_burned_out()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn das Objekt schonmal gebrannt hatte und vor der totalen
+Vernichtung geloescht wurde.
+Fuer Streichhoelzer bedeutet dies, dass sie nicht mehr selbst zuenden, sonden
+nur noch mit Fremdeinwirkung brennen koennen.
+VERWEISE: query_streichholz, query_burning, query_anzuender
+GRUPPEN: feuer
+*/
+int query_burned_out()
+{
+    return strstr(query_count_type(),"#abgebrannt") != -1;
+}
+
+/*
+FUNKTION: query_anzuender
+DEKLARATION: int query_anzuender()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn das Objekt noch zum Anzuenden von etwas anderem taugt.
+Auch dafuer gedacht, dass man testen kann, ob Jemand einen Anzuender
+parat hat, mit dem evtl. auch 'zuende bla' direkt (OHNE 'mit blubb') geht.
+Bei Streichhoelzern: entweder es brennt gerade, oder es kann noch von selbst
+                     entzuendet werden.
+VERWEISE: query_streichholz, query_burning, query_burned_out
+GRUPPEN: feuer
+*/
+int query_anzuender()
+{
+    return (query_burning() || !query_burned_out());
+}
+// ----------------------------------------------------------------------------
+
+void create()
+{
+    ::create();
+    seteuid(getuid());
+    set_id(({"streichholz","holz","zuendholz","feuerholz"}));
+    set_plural_id(({"streichhoelzer","hoelzer","zuendhoelzer","feuerhoelzer"}));
+    set_singular_name("streichholz");
+    set_plural_name("streichhoelzer");
+    set_gender("saechlich");
+    set_plural(1);
+    set_material(({"holz"}));
+    set_count(10);
+    set_count_type("streichhoelzer");
+    set_singular_value(1);
+    add_controller(({"concerned_strike","notify_unshadow"}),this_object());
+}
+
+object split_object(int i)
+{
+    object ob;
+    if((ob = multiob::split_object(i)) && TO->query_burning())
+          clone_object(FEUER_SHADOW)->init_shadow(ob);
+    return ob;
+}
+
+void init()
+{
+    add_action("zuendele","zuendele",-5);
+    add_action("zuendele","entzuende",-8);
+}
+// ----------------------------------------------------------------------------
+
+/*
+FUNKTION: brennbar
+DEKLARATION: int brennbar(mixed ob)
+BESCHREIBUNG:
+Funktion, die testet ob etwas angezuendet werden kann / brennt
+Liefert 0 wenn ob nicht brennen koennen soll / nicht brennen kann
+  (kein Objekt, no_move, invis oder kein brennbares Material)
+Liefert 1 wenn ob brennen kann
+  (Streichholz, Holz, Papier, Textil, Kunststoff, Oel)
+Hinweis: hier erwaehnt, da es per "/obj/streichhoelzer"->brennbar(ob)
+         von einigem genutzt wird.
+VERWEISE: notify_strike, do_strike, concerned_strike
+GRUPPEN: feuer
+*/
+int brennbar(mixed ob)
+{
+    string *stoffe;
+    int a;
+    if (!objectp(ob) || ob->query_no_move() || ob->query_invis())
+        return 0;
+    if (ob->query_streichholz())
+        return 1;
+    stoffe=BRENNMATERIAL;
+    if (!stoffe || !sizeof(stoffe))
+        return 0;
+    for (a=0; a<sizeof(stoffe); a++)
+        if (ob->material(stoffe[a]))
+            return 1;
+    return 0;
+}
+// ----------------------------------------------------------------------------
+
+/*
+FUNKTION: prepare_strike
+DEKLARATION: int prepare_strike()
+BESCHREIBUNG:
+Diese Funktion ist als Meldungs-Vorgeplaenkel fuer ein erfolgreiches
+Zuenden gedacht und kann natuerlich auch von Objekten, die sich selbst um ihr
+Anzuenden kuemmern mitverwendet werden.
+Es wird 1 returnt, damit man weiss, dass es die Funktion gab und was passierte.
+Beispiel: (in einer Bombe:)
+  void do_strike(object womit, mixed was, mixed melder)
+  {
+    womit->prepare_strike();
+    send_message(MT_LOOK,MA_USE,
+      wrap(Der(TP)+" haelt "+seinen(melder)+
+           " an die Zuendschnur die sofort Feuer faengt."),
+      wrap("Du haeltst "+deinen(melder)+
+           " an die Zuendschnur die sofort Feuer faengt."),
+                 TP);
+    womit->strike_done();
+
+    send_message(MT_LOOK|MT_NOISE|MT_FEEL,MA_UNKNOWN, "KRAWUMM!\n");
+    remove();
+  }
+VERWEISE: add_controller, concerned, notify_strike, do_strike, concerned_strike
+GRUPPEN: feuer
+*/
+int prepare_strike()
+{
+
+    send_message_to(TP,MT_LOOK,MA_USE,
+                    wrap("Du kramst "+einen((["name":query_singular_name(),
+                         "gender":query_gender()]),"passend")+" hervor."));
+    return 1;
+}
+// ----------------------------------------------------------------------------
+/*
+FUNKTION: strike_done
+DEKLARATION: int strike_done()
+BESCHREIBUNG:
+Diese Funktion gibt eine Meldung 'Dein Streichholz erlischt.' aus und
+vernichtet ein Streichholz. Sie ist als Abschluss fuer ein erfolgreiches
+Zuenden gedacht und kann natuerlich auch von Objekten, die sich selbst um ihr
+Anzuenden kuemmern mitverwendet werden.
+Es wird 1 returnt, damit man weiss, dass es die Funktion gab und was passierte.
+Beispiel: (in einer Bombe:)
+  void do_strike(object womit, mixed was, mixed melder)
+  {
+    send_message(MT_LOOK,MA_USE,
+      wrap(Der(TP)+" entzuendet sich "+ein(melder)+" und haelt "
+           +es(melder)+" an die Zuendschnur die sofort Feuer faengt."),
+      wrap("Du entzuendest dir "+ein(melder)+" und haeltst "
+           +es(melder)+" an die Zuendschnur die sofort Feuer faengt."),
+                 TP);
+    womit->strike_done();
+
+    send_message(MT_LOOK|MT_NOISE|MT_FEEL,MA_UNKNOWN, "KRAWUMM!\n");
+    remove();
+  }
+VERWEISE: add_controller, concerned, notify_strike, do_strike, concerned_strike
+GRUPPEN: feuer
+*/
+int strike_done()
+{
+
+    send_message(MT_LOOK,
+                 MA_USE,
+                 wrap(Der((["name":query_singular_name(),
+                            "gender":query_gender()]))+" erlischt."));
+    add_count(-1);
+    return 1;
+}
+// ----------------------------------------------------------------------------
+
+/*
+FUNKTION: do_notifying
+DEKLARATION: void do_notifying(mixed what, object player, mixed test_ob)
+BESCHREIBUNG:
+Funktion, die das Verteilen der ueblichen notifys uebernimmt.
+Dabei ist 'what' das was angezuendet wurde, 'player' der Anzuendende und
+'test_ob' what["environment"] falls 'what' ein v_item ist.
+VERWEISE: add_controller, concerned, notify_strike, do_strike, concerned_strike
+GRUPPEN: feuer
+*/
+void do_notifying(mixed what, object player, mixed test_ob)
+{
+    object *n_obs;
+    n_obs=({});
+
+    notify("strike",what,player); // TO wird autom. angehaengt
+
+    //Sicherheitshalber mal ueber ein Feld, damit auch garantiert keine
+    //Doppelaufrufe kommen (Idee von Parsec)
+
+    n_obs=n_obs-({player})+({player});
+    n_obs=n_obs-({environment(player)})+({environment(player)});
+    if(objectp(what))
+        n_obs=n_obs-({what})+({what});
+    else
+        if(objectp(test_ob))
+            n_obs=n_obs-({test_ob})+({test_ob});
+    map_objects(n_obs,"notify","strike",what,player,TO);
+
+}
+// ----------------------------------------------------------------------------
+/*
+FUNKTION: concerned_strike
+DEKLARATION: int concerned_strike(object womit, mixed was)
+BESCHREIBUNG:
+Wenn ein Objekt 'was' angezuendet werden soll, wird zuvor
+was->concerned("strike",this_object()) aufgerufen. Die Returnwerte von 'was'
+und per controller bei 'was' angemeldeten Objekten werden als Prioritaten
+angesehen, wobei das Objekt 'ob' mit der hoechsten Prioritaet den Zuschlag
+erhaelt und per ob->do_strike(streichholz,was,melder); dazu aufgefordert wird
+sich um das entzuenden von 'was' zu kuemmern.
+Hinweis: Wenn 'was' ein v_item ist mit eintrag "einvironment" : env_ob,
+         so wird env_ob->concerned("strike",this_object(),was) aufgerufen
+VERWEISE: add_controller, concerned, notify_strike, do_strike
+GRUPPEN: feuer, grundlegendes
+*/
+int concerned_strike(object womit, mixed was)
+{
+    // ist dieses Objekt wirklich das richtige?
+    if ((was == TO) || (mappingp(was) && here(was["name"]))) {
+
+        // kann das noch selbst zuenden?
+        // wenn nicht kuemmert es sich garantiert nicht selbst ums Anzuenden
+        if (was->query_burned_out())
+            return 0;
+        else
+
+            // ist der Anzuender ein Streichholz, dann mit hoher Prioritaet
+            // selbstzuenden ebenso wenn nix fremdes mit beim Zuenden beteiligt
+            if (!womit || womit->query_streichholz())
+                return 100;
+            else
+
+                // niedrige Prioritaet, da wohl in den seltensten Faellen von
+                // anderem nur ein Streichholz gezielt angezuendet wird, es
+                // aber trotzdem moeglich sein soll.
+                return 10;
+    }
+}
+
+/*
+FUNKTION: do_strike
+DEKLARATION: int do_strike(object womit, mixed was, mixed melder)
+BESCHREIBUNG:
+Diese Funktion wird in dem Objekt aufgerufen, welches ueber concerned_strike
+die hoechste Prioritaet zurueckgeliefert hat und sich somit dafuer zustaendigst
+erklaert hat sich um das Anzuenden von was zu kuemmern.
+( Dabei kann was auch ein v_item sein )
+Es sollte innerhalb der Funktion was wenn moeglich irgendwie angezuendet werden
+und im Erfolgsfall 1 sowie im Misserfolgsfall 0 returnt werden.
+Dieser Returnwert wird im zuenden der Streichhoelzer uebernommen,
+also return 0 nur wenn wirklich aus einem triftigen Grund nix geht
+( sonst waere man ja lieber nicht zustaendig ;)
+'melder' ist dabei das womit angezuendet wird, in einer Form, die zur Erzeugung
+von Meldungen sinnig ist, (Bei Streichholz ein mapping mit einzelnem Holz und
+nicht alle auf einmal, bei Gildenzaubern waere das ein mapping mit dem Namen
+fuer den Zauber, damit nicht das gilden_ob oder so kommt)
+VERWEISE: add_controller, notify_strike, concerned_strike
+GRUPPEN: feuer, grundlegendes
+*/
+int do_strike(object womit, mixed was, mixed melder)
+{
+    object countob;
+
+    if ((was == TO) || (mappingp(was) && here(was["name"])))
+    {
+        countob = TO->split_object(1);
+        if (!countob) // sollte nicht vorkommen
+            return notify_fail("Sehr merkwuerdig. Das geht nicht!\n", FAIL_INTERNAL);
+        countob->set_count_type(countob->query_count_type()+"#brennend");
+        clone_object(FEUER_SHADOW)->init_shadow(countob);
+
+      // kein Platz fuer brennendes Holz -> weg damit & nichtbrennendes zurueck
+        if (!environment(countob) && countob->move(environment(TO)) != MOVE_OK)
+        {
+            countob->remove();
+            if (TO)
+                TO->add_count(1);
+            return notify_fail("Du hast schon alle Haende voll mit Deinem "
+                        "vielen Gepaeck.\n", FAIL_INTERNAL);
+        }
+        send_message(MT_LOOK,
+                     MA_USE,
+                     wrap(Der(TP)+" entzuendet "
+                          +einen((["name":query_singular_name(),
+                                   "gender":query_gender()])) + "."),
+                     wrap("Du entzuendest "
+                          +einen((["name":query_singular_name(),
+                                   "gender":query_gender()])) + "."),
+                     TP);
+        return 1;
+    }
+}
+// ----------------------------------------------------------------------------
+
+/*
+FUNKTION: notify_strike
+DEKLARATION: void notify_strike(mixed what, object player, object with)
+BESCHREIBUNG:
+Wenn ein Objekt angezuendet wurde, d.h. entweder die Streichhoelzer haben es
+angezuendet (feuer-shadow wurde uebergeworfen) oder das Objekt was sich um das
+Anzuenden kuemmert hat do_notifying in den streichhoelzern aufgerufen,
+
+dann wird notify("strike",what,player,with) in
+den Streichhoelzern, this_player(), in environment(this_player()) und
+falls 'what' ein Objekt ist, in 'what' und, falls 'what' ein v_item mit
+v_item["environment"] ist, in v_item["environment"]
+aufgerufen.
+'what' ist dabei das angezuendete Objekt (resp. v_item), 'with' sind die
+Streichhoelzer und 'player' ist this_player().
+VERWEISE: add_controller, concerned_strike, do_strike
+GRUPPEN: feuer, grundlegendes
+*/
+// ----------------------------------------------------------------------------
+
+int zuendele(string str)
+{
+    mixed ob, zustaendig, *parsed, *obs, test_ob;
+    object env;
+    int pos;
+
+
+    str = lower_case(space(str));
+
+  // testen ob nicht jemand anderes gemeint war ( 'zuende bla mit fackel' )
+
+    if((pos = strstr(str," mit ")) !=-1)
+    {
+
+        if(!me(str[pos+4..]))
+            return notify_fail("Zuende was womit? "
+                        "Bist Du sicher, dass das geht?\n",
+			FAIL_NOT_OBJ);
+    }
+
+  // erstmal testen ob das Streichholz da wo es ist ueberhaupt brennen darf
+  // wenn nicht geht natuerlich auch kein Zuenden ;)
+
+    env=environment();
+    while(env)
+    {
+        if(env->allowed("burn",TO))
+            break;
+        else if(env->forbidden("burn",TO))
+            return notify_fail(wrap("Du kannst "+den()+" hier nicht anzuenden."),
+		FAIL_INTERNAL);
+        else if(env->query_room()&&(env->query_type(LANDSCHAFT)&L_UNTERWASSER))
+            return notify_fail(wrap("Du kannst "+den()+" unter Wasser nicht "
+                             "anzuenden."), FAIL_INTERNAL);
+        env=environment(env);
+    }
+
+  // Nehmen vor dem Zuenden
+
+    if(environment(TO) != TP)
+        return notify_fail("Erst nehmen, dann zuenden!\n", FAIL_INTERNAL);
+    if(query_burned_out())
+        return notify_fail(wrap(Der(TO)+" entzuendet sich nicht mehr."),
+	    FAIL_INTERNAL);
+  // bis hier geht es alleine um das Streichholz, das anzuenden soll
+
+
+    if (!sizeof(parsed = parse_com(str,0,0,PARSE_ALL_MATCHES)[PARSE_OBS]))
+        return notify_fail("Was moechtest Du anzuenden?\n", FAIL_WRONG_ARG);
+    if(!sizeof(obs = filter(parsed,#'objectp)))
+        ob = parsed[0]; // dann eben eines der virtuellen Objekte
+
+  // TODO hmm virtuelle objekte werden nicht getestet ob sie schon brennen!?
+
+    else
+        if (sizeof(parsed = filter(obs,
+                                (: return ((!$1->query_burning()) &&
+                                           (!$1->query_is_lighted())); :) )))
+
+                ob = parsed[0]; // das erste nicht brennende Objekt
+        else
+            return notify_fail(wrap(Der(obs[0],({}))+
+		    plural(" brennt"," brennen", obs[0])+
+                    " doch schon!"), FAIL_INTERNAL);
+  // ok, parsen soweit ok...
+
+    if (objectp(ob))
+    {
+      // wenn ein Streichholz im Raum liegt wird das beim Parsen gefunden
+      // ist aber bloed mit Fehlermeldung abzubrechen, weil man ja ganausogut
+      // das Streichholz was man bei sich hat anzuenden kann -> kleiner Hack:
+
+        if ((ob->query_streichholz()) && (environment(ob) != TP) && me(str))
+        {
+            if (TO->query_burning())
+                return notify_fail(wrap(Dein(TO)+
+		    plural(" brennt", " brennen", TO)+" doch schon!"),
+		    FAIL_INTERNAL);
+
+            ob = TO;
+        }
+    }
+    else if(QUERY("far",ob))
+	return notify_fail(wrap(Dein(ob)+ist(ob, IST_SPACE_BEFORE)+" viel zu weit "
+            "weg, um "+ihn(ob)+" anzuzuenden."), FAIL_WRONG_ARG);
+
+  // Ab hier Controller eingebaut:
+
+    if (objectp(ob))
+        zustaendig = ob->concerned("strike", TO); //ob wird autom. angehaengt
+    else
+    {
+        test_ob = ob;
+        while(mappingp(test_ob = test_ob["environment"]));
+        zustaendig = ( objectp(test_ob) ?
+                       test_ob->concerned("strike",TO,ob) :
+                       environment(TP)->concerned("strike",TO,ob) );
+    }
+
+
+    if (zustaendig)
+    {
+      // das ganze Anzuenden und evtl Aufruf von strike_done() und
+      // do_notifying(...) wird dem Zustaendigen in do_strike ueberlassen
+
+        if(closurep(zustaendig))
+            return funcall(zustaendig,"do_strike",TO,ob,
+                           (["name":query_singular_name(),
+                             "gender":query_gender()]));
+        else
+            return zustaendig->do_strike(TO,ob,(["name":query_singular_name(),
+                                                 "gender":query_gender()]));
+    }
+
+  // Ende Controller
+
+    prepare_strike();
+
+    send_message(MT_LOOK,
+                 MA_USE,
+                 wrap(Der(TP)+" versucht, mit "
+                      +einem((["name":query_singular_name(),
+                               "gender":query_gender()]))+
+                      " "+den(ob)+" anzuzuenden."),
+                 wrap("Du versuchst, mit "
+                      +einem((["name":query_singular_name(),
+                               "gender":query_gender()]))+
+                      " "+den(ob)+" anzuzuenden."),
+                 TP);
+
+    if (brennbar(ob))
+    {
+        clone_object(FEUER_SHADOW)->init_shadow(ob);
+        send_message(MT_LOOK,
+                     MA_USE,
+                     wrap(Der(ob,({}))+ plural(" faengt", " fangen", ob)+
+                          " an zu brennen."));
+        do_notifying(ob,TP,test_ob);
+    }
+    else
+        send_message(MT_LOOK,
+                     MA_USE,
+                     "Jedoch ohne den gewuenschten Erfolg.\n");
+
+    return strike_done();
+}
+
+// ----------------------------------------------------------------------------
+// Brennende Streichhoelzer nicht mit anderen vermischen, nach Loeschen
+// aber ruecksetzen
+
+void notify_unshadow(object shadow, object owner)
+{
+    if(load_name(shadow) == FEUER_SHADOW)
+    {
+        set_count_type(explode(query_count_type(),"#")[0]+"#abgebrannt");
+        set_adjektiv("abgebrannt");
+    }
+}
+// ----------------------------------------------------------------------------

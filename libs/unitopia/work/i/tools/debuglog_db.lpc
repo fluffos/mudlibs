@@ -1,0 +1,1716 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/tools/debuglog_db.c
+// Description: Template fuer Log- und Debugdatenbanken
+//              Benutzt database fuer die Datenablage 
+//              (? init_debuglog und ? debuglog)
+//              und dynamic_browser zur Anzeige.(? start_debuglog_menue)
+// Author:      Myonara (18.Jan.2014)
+// Modified by:
+//
+// $Log: debuglog_db.c,v $
+// Revision 1.6  2016/05/26 09:19:06  myonara
+// init_debuglog: Fehler aus init_database durchgereicht und dokumentiert.
+//
+// Revision 1.5  2016/05/13 19:04:49  myonara
+// Komplettueberarbeitung Menu und Co.
+//
+// Revision 1.4  2015/09/12 20:06:27  myonara
+// Bugfix zu vorherigem Patch
+//
+// Revision 1.3  2015/09/11 04:49:49  myonara
+// neue Funktionen update_debugger,check_debuggers,send_to_debuggers
+// und deren Verwendung.
+//
+// Revision 1.2  2015/09/10 18:44:00  myonara
+// foreign keys standard maessig an, parameter in init_debuglog durchgereicht
+//
+// Revision 1.1  2014/01/21 00:48:34  myonara
+// Neue Datei debuglog_db.c
+//
+//
+
+#pragma save_types
+
+private inherit "/i/tools/security";
+inherit "/i/tools/database";
+inherit "/i/tools/dynamic_browser";
+
+
+#include <database.h>
+#include <dynamic_browser.h>
+#include <message.h>
+#include <misc.h>
+
+#define EXPORT_MIN_RESTEVALS 200000
+
+#define SECURE (TP && check_security() && validate_debugger(RNAME(TP)))
+
+private nosave int last_log_time, last_log_seq, period;
+
+/*
+FUNKTION: init_debuglog
+DEKLARATION: protected varargs int init_debuglog(string file, int retention_period, int disable_foreign_keys)
+BESCHREIBUNG:
+Initialisiert die Datenbankdatei fuers debugloh. 
+Falls die Datenbank geoeffnet ist, wird sie erst geschlossen, 
+bevor die neue Datei zugewiesen wird. Das erbende Objekt braucht 
+Schreibrechte auf Datenbankdatei. Zusaetzlich zu init_database wird die 
+Tabellen debug_log, debug_conf, debug_conf_param angelegt, 
+falls diese noch nicht existieren.
+Die retention_period gibt die Aufbewahrungszeit in Tagen an, -1 fuer immer.
+Bei disable_foreign_keys 0 werden bei jedem Oeffnen foreign keys aktiviert,
+bei 1 nicht.
+Rueckgabewert:
+* 0 wenn kein gueltiger neuer Name angegeben wurde oder Datenbank nich oeffnen
+    kann. Bei diesem Rueckgabewert braucht gar nicht mehr auf die DB 
+    zugegriffen werden.
+* 1 wenn die Datenbank mit gueltigem Namen das erste Mal aufgerufen wurde.
+* -1 wenn init_debuglog schonmal mit gueltigem Namen aufgerufen wurde.
+VERWEISE: init_database, db_open
+GRUPPEN: database
+*/
+protected varargs int init_debuglog(string file, int retention_period, 
+        int disable_foreign_keys)
+{
+    if (retention_period == 0)
+        period = 30*24*60*60;
+    else if (period < 0)
+        period = -1;
+    else
+        period = retention_period *24*60*60;
+    int flag = init_database(file,disable_foreign_keys);
+    if (flag == 0)
+    {
+        return 0; // DB konnte nicht geoffnet werden oder Datei falsch.
+    }
+    if (flag == 1) // erster Aufruf
+    {
+        init_security_for_actions();
+        add_security_condition("/w/myonara/public/db/obj/dbbuch#");
+    }
+    if (flag && db_check_table("debug_log")==-1)
+    {
+        db_query("CREATE TABLE IF NOT EXISTS debug_log ("
+            "timestamp INTEGER, seq INTEGER, "
+            "message TEXT, severity INTEGER, user TEXT, category TEXT)");
+        if (query_db_error()) {
+            raise_error("Tabelle debug_log konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+        last_log_time = time();
+        last_log_seq = 0;
+    }
+    if (flag && db_check_table("debug_conf")==-1)
+    {
+        db_query("CREATE TABLE IF NOT EXISTS debug_conf ("
+            "id INTEGER CONTRAINT pk_debug_conf PRIMARY KEY, "
+            "shorttext TEXT CONTRAINT uq_debug_conf UNIQUE )");
+        if (query_db_error()) {
+            raise_error("Tabelle debug_conf konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+    }
+    if (flag && db_check_table("debug_conf_param")==-1)
+    {
+        db_query("CREATE TABLE IF NOT EXISTS debug_conf_param ("
+            "line INTEGER PRIMARY KEY AUTOINCREMENT, id INT, "
+            "key TEXT, value TEXT)");
+        if (query_db_error()) {
+            raise_error("Tabelle debug_conf_param konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+    }
+    return flag;
+}
+
+/*
+FUNKTION: debuglog
+DEKLARATION: varargs int debuglog(string msg, int severity, string user, string category)
+BESCHREIBUNG:
+Es werden die Logmeldung msg mit severity, user und category 
+in der Datenbank gespeichert.
+Folgende defines aus database.h werden fuer severity unterstuetzt:
+DB_DBGLVL_DEBUG, DB_DBGLVL_INFO, DB_DBGLVL_WARNING, DB_DBGLVL_ERROR
+Rueckgabewert 0 bei Fehlern, 1 wenn ok.
+VERWEISE: init_debuglog
+GRUPPEN: database
+*/
+varargs int debuglog(string msg, int severity, string user, string category)
+{
+    if (!stringp(msg) || space(msg)=="")
+        return 0;
+    if (time() > last_log_time)
+    {
+        last_log_time = time();    
+        last_log_seq = 0;
+    }
+    send_to_debuggers(
+            sprintf("debuglog(%d,%s,%s):\n%s",severity,
+                user||"", category||"",msg),DB_DBG_ACL_DEBUGLOG);
+    db_query("INSERT INTO debug_log "
+        "(timestamp,seq,message,severity,user, category) "
+        "VALUES (?,?,?,?,?,?)",time(),++last_log_seq,msg,severity,
+            user||"", category||"");
+    if (query_db_error()) 
+        return 0;
+    if (period < 0)
+        return 1;
+    db_query("DELETE FROM debug_log WHERE timestamp < ?",time()-period);
+    return 1;
+}
+
+//------------------------------------------------------------------------
+#define MONATSERSTER ({ 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,\
+                        365 })
+
+protected int dblog_shorttimestr2time(string datstring)
+{
+  int n,tag,mon,jahr,h,m,s;
+  if(!stringp(datstring) ||
+     (sscanf(datstring,"%d.%d.%d %d:%d:%d",tag,mon,jahr,h,m,s) < 3))
+  {
+      return 0;
+  }
+  jahr=jahr % 100;
+  jahr += (jahr<70?30:-70);        // Jahre seit 1970
+  n +=  jahr*365 + (jahr+2)/4;     // Tage und Schalttage. Das erste Schaltjahr
+                                   // ist 1972, also jahr==2
+  if (!((jahr+2)%4) && mon<3) n-=1;// dann kommt der Schalttag dieses Jahres
+                                   // erst noch
+  //gegen RTEs:
+  if(mon<1)
+      mon=1;
+  n += (tag+MONATSERSTER[mon-1]-1);
+  n *= 24; n+=h;
+  n -= 1;                          // 1 Stunde abziehen! Es wurde am 1.1.70
+                                   // um 1 Uhr angefangen zu zaehlen!
+  if (mon>3 && mon<11) n-=1;       // Sommerzeit
+  n *= 60; n+=m;
+  n *= 60; n+=s;
+  return n;
+}
+
+//------------------------------------------------------------------------
+
+#define DEBUGLOG_M_HAUPTMENUE    "debuglog_hauptmenue"
+#define DEBUGLOG_M_SUCHMASKE     "debuglog_suchmaske"
+#define DEBUGLOG_M_BENUTZER      "debuglog_benutzer"
+#define DEBUGLOG_M_KATEGORIEN    "debuglog_kategorien"
+#define DEBUGLOG_M_ANZEIGE       "debuglog_anzeige"
+#define DEBUGLOG_M_EINZELANZEIGE "debuglog_einzelanzeige"
+#define DEBUGLOG_M_MARKPRIO      "debuglog_mark_prio_query"
+
+/*
+FUNKTION: get_debuglog_menue
+DEKLARATION: public mapping get_debuglog_menue()
+BESCHREIBUNG:
+Gibt den Menueintrag der debuglog_db zurueck.
+VERWEISE: debuglog, dynamic_browse, start_debuglog_menue
+GRUPPEN: database
+*/
+public mapping get_debuglog_menue()
+{
+    return ([ 
+        B_TYPE : DEBUGLOG_M_HAUPTMENUE,
+        B_OB : this_object(),
+        B_START_LINE : 0 ]);
+}
+
+/*
+FUNKTION: start_debuglog_menue
+DEKLARATION: protected varargs int start_debuglog_menue(mixed * menues)
+BESCHREIBUNG:
+Fuegt zu den menues, falls vorhanden, das eigene Hauptmenue hinzu
+und startet dieses.
+VERWEISE: debuglog, dynamic_browse, get_debuglog_menue
+GRUPPEN: database
+*/
+protected varargs int start_debuglog_menue(mixed * menues)
+{
+    menues ||= ({});
+    menues += ({ get_debuglog_menue() });
+    return dynamic_browse( menues );
+}
+
+/*
+NOENZY: debuglog_filter_search_parameter
+DEKLARATION: private mapping debuglog_filter_search_parameter(mapping menue)
+BESCHREIBUNG:
+Filtert die Dateneintraege aus den menue-Mapping heraus. Dient u.a. zum
+Erben des Datenmappings an die Untermenues.
+VERWEISE: debuglog
+GRUPPEN: database
+*/
+private mapping debuglog_filter_search_parameter(mapping menue)
+{
+    return (menue||([])) & ([ DEBUGLOG_ZEITBEREICH, 
+                              DEBUGLOG_BENUTZER,
+                              DEBUGLOG_KATEGORIEN,
+                              DEBUGLOG_LEVEL,
+                              DEBUGLOG_MASKE,
+                              DEBUGLOG_SORTIERUNG,
+                              DEBUGLOG_MARKPRIO,
+                              ]);
+}
+
+private mapping filter_non_default_parameter(mapping menue)
+{
+    return debuglog_filter_search_parameter(menue) 
+        - ([ DEBUGLOG_ZEITBEREICH, DEBUGLOG_SORTIERUNG, DEBUGLOG_MARKPRIO ]);
+}
+
+private int check_default_search(mapping menue)
+{
+    mapping s = filter_non_default_parameter(menue);
+    if (s[DEBUGLOG_LEVEL] != "/") // alle debuglevel
+    {
+        return 0;
+    }
+    return sizeof(s)==1; // keine sonstigen Suchparameter.
+}
+
+/*
+NOENZY: load_search_configuration
+DEKLARATION: private varargs mapping load_search_configuration(int id, string name)
+BESCHREIBUNG:
+Laedt dei Konfiguration ueber id oder name (id<=0) und gibt die Parameter
+als gueltiges Mapping zurueck.
+VERWEISE: delete_search_configuration, save_search_configuration
+GRUPPEN: database
+*/
+private varargs mapping load_search_configuration(int id, string name)
+{
+    string q,*split;
+    mixed *r;
+    mapping result = ([]);
+    name = space(name);
+    if (id <= 0)
+    {
+        q = "SELECT id FROM debug_conf WHERE shorttext = '"+name+"' ";
+        r = db_query(q);
+        if (query_db_error()) return 0;
+        if (sizeof(r))
+        {
+            id = get_one_int(r);
+        }
+        else
+        {
+            return 0; // Fehler.
+        }
+    }
+    else
+    {
+        q = "SELECT shorttext FROM debug_conf WHERE id = "+id+" ";
+        r = db_query(q);
+        if (query_db_error()) return 0;
+        if (sizeof(r))
+        {
+            name = get_one_string(r);
+        }
+        else
+        {
+            return 0; // Fehler.
+        }
+    }
+    q = "SELECT key,value FROM debug_conf_param WHERE id = "+id+" ";
+    r = db_query(q);
+    if (query_db_error()) return 0;
+    result[DEBUGLOG_NAME] = name;
+    foreach (mixed * pair : r)
+    {
+        switch(pair[0])
+        {
+        case DEBUGLOG_ZEITBEREICH:
+            split = explode(pair[1],",");
+            if (sizeof(split)==2)
+            {
+                result[DEBUGLOG_ZEITBEREICH] = 
+                    ({ to_int(split[0]), to_int(split[1]) });
+            }
+            continue;
+        case DEBUGLOG_BENUTZER:
+            split = explode(pair[1],",");
+            if (sizeof(split))
+            {
+                result[DEBUGLOG_BENUTZER] = split;
+            }
+            continue;
+        case DEBUGLOG_KATEGORIEN:
+            split = explode(pair[1],",");
+            if (sizeof(split))
+            {
+                result[DEBUGLOG_KATEGORIEN] = split;
+            }
+            continue;
+        case DEBUGLOG_LEVEL:
+            result[DEBUGLOG_LEVEL] = pair[1];
+            continue;
+        case DEBUGLOG_MASKE:
+            result[DEBUGLOG_MASKE] = pair[1];
+            continue;
+        case DEBUGLOG_SORTIERUNG:
+            result[DEBUGLOG_SORTIERUNG] = 1;
+            continue;
+        case DEBUGLOG_MARKPRIO:
+            result[DEBUGLOG_MARKPRIO] = to_int(pair[1]);
+        }
+    }
+    return result;
+}
+
+/*
+NOENZY: delete_search_configuration
+DEKLARATION: private varargs string delete_search_configuration(int id, string name)
+BESCHREIBUNG:
+Loescht dei Konfiguration ueber id oder name (id<=0) und gibt die Fehler-
+oder Erfolgsmeldung als String zurueck.
+VERWEISE: load_search_configuration, save_search_configuration
+GRUPPEN: database
+*/
+private varargs string delete_search_configuration(int id, string name)
+{
+    string q;
+    mixed *r;
+    name = space(name);
+    if (id <= 0)
+    {
+        q = "SELECT id FROM debug_conf WHERE shorttext = '"+name+"' ";
+        r = db_query(q);
+        if (query_db_error()) return "Interner Datenbankfehler";
+        if (sizeof(r))
+        {
+            id = get_one_int(r);
+        }
+        else
+        {
+            return "Interner Datenbankfehler"; // Fehler.
+        }
+    }
+    while (1)
+    {
+        db_begin();
+        if (query_db_error()) break;
+        db_query("DELETE FROM debug_conf_param WHERE id = "+id+" ");
+        if (query_db_error()) break;
+        db_query("DELETE FROM debug_conf WHERE id = "+id+" ");
+        if (query_db_error()) break;
+        db_commit();
+        if (query_db_error()) break;
+        return "Konfiguration geloescht";
+    }
+    db_rollback();
+    return "Interner Datenbankfehler";
+}
+
+/*
+NOENZY: save_search_configuration
+DEKLARATION: private string save_search_configuration(string name, mapping param)
+BESCHREIBUNG:
+Speichert die Konfiguration ueber den unique namen und gibt Fehler- bzw 
+Erfolgsmeldungen als String zurueck.
+VERWEISE: load_search_configuration, delete_search_configuration
+GRUPPEN: database
+*/
+private string save_search_configuration(string name, mapping param)
+{
+    string q;
+    mixed *r;
+    int ix;
+    name = space(name);
+    if (name=="" || strstr(name,"'")!=-1) return "Ungueltiger Name.";
+    param = debuglog_filter_search_parameter(param);
+    q = "SELECT id FROM debug_conf WHERE shorttext = '"+name+"' ";
+    r = db_query(q);
+    if (query_db_error()) return "Interner Datenbankfehler.";
+    if (sizeof(r))
+    {
+        ix = get_one_int(r);
+        q = "DELETE FROM debug_conf_param WHERE id = "+ix+" ";
+        db_query(q);
+    }
+    else
+    {
+        r = db_query("SELECT MAX(id) FROM debug_conf");
+        ix = get_one_int(r) + 1;
+        q = "INSERT INTO debug_conf (id,shorttext) VALUES (?,?) ";
+        db_query(q, ix, name);
+        if (query_db_error()) return "Interner Datenbankfehler.";
+    }
+    q = "INSERT INTO debug_conf_param (id, key, value) VALUES (?,?,?) ";
+    foreach (string key, mixed value : param)
+    {
+        if (key == DEBUGLOG_MARKPRIO && intp(value) && value >= 0)
+        {
+            db_query(q, ix, key, sprintf("%07d",value));
+            if (query_db_error()) return "Interner Datenbankfehler.";
+        }
+        else if (pointerp(value))
+        {
+            db_query(q, ix, key, 
+                implode(map(value, (:to_string($1):)),","));
+            if (query_db_error()) return "Interner Datenbankfehler.";
+        }
+        else if (stringp(value) || intp(value))
+        {
+            db_query(q, ix, key, to_string(value));
+            if (query_db_error()) return "Interner Datenbankfehler.";
+        }
+        else
+        {
+            return sprintf("Unbekannter Datentyp %s=%Q",key, value);
+        }
+    }
+    return "Suchparameter gesichert.";
+}
+
+/*
+NOENZY: change_debuglevel
+DEKLARATION: private string change_debuglevel(string alt, string pm, string *lev)
+BESCHREIBUNG:
+Setzt (pm=="+") oder Loescht (pm=="-") die in lev angebenen Strings
+als DEbuglevel im bitfeld alt und gibt das Ergebnislevel als String(Bitfeld) 
+zurueck.
+VERWEISE: change_benutzer, change_kategorie, debuglog_get_level
+GRUPPEN: database
+*/
+private string change_debuglevel(string alt, string pm, string *lev)
+{
+    string l,erg = alt;
+    int i;
+    foreach(l : lev||({}) )
+    {
+        switch (lower_case(l))
+        {
+        case "d":
+        case "debug": i = DB_DBGLVL_DEBUG; break;
+        case "i":
+        case "info":  i = DB_DBGLVL_INFO;  break;
+        case "w":
+        case "warn":  
+        case "warning":i=DB_DBGLVL_WARNING;break;
+        case "e":
+        case "error":  i=DB_DBGLVL_ERROR;break;
+        default: continue;
+        }
+        switch (pm)
+        {
+        case "+": erg = set_bit(erg, i);   continue;
+        case "-": erg = clear_bit(erg, i); continue;
+        }
+    }
+    if (erg ==" "|| erg=="") return "/";
+    return erg;
+}
+
+/*
+NOENZY: debuglog_merge_query
+DEKLARATION: private string debuglog_merge_query(mapping menue, int countflag)
+BESCHREIBUNG:
+Setzt fuer die verschiedenen Menues die query zusammen.
+VERWEISE: 
+GRUPPEN: database
+*/
+private string debuglog_merge_query(mapping menue, int countflag)
+{
+    string q,qo="",*qgrp = ({});
+    int whereflag = 0;
+    if (!mappingp(menue)) 
+        return 0;
+    switch (menue[B_TYPE])
+    {
+    case DEBUGLOG_M_HAUPTMENUE:
+        if (countflag) 
+        {
+            q = "SELECT COUNT(*) FROM debug_conf ";
+            return q;
+        }
+        else
+        {
+            q = "SELECT id,shorttext FROM debug_conf ";
+            q+= "ORDER BY id ";
+            return q;
+        }
+    case DEBUGLOG_M_MARKPRIO:
+        if (countflag) 
+        {
+            q = "SELECT COUNT(*) FROM debug_conf dc,debug_conf_param dcp ";
+        }
+        else
+        {
+            q = "SELECT dc.id,dc.shorttext,dcp.value ";
+            q+= "FROM debug_conf dc,debug_conf_param dcp ";
+        }
+        q += "WHERE dcp.key ='"+DEBUGLOG_MARKPRIO+"' AND dcp.id = dc.id ";
+        q += "ORDER BY dcp.value,dc.shorttext,dc.id ";
+        return q;
+    case DEBUGLOG_M_BENUTZER:
+        if (countflag) 
+        {
+            q = "SELECT COUNT(DISTINCT user) FROM debug_log ";
+            return q;
+        }
+        else
+        {
+            q = "SELECT DISTINCT user FROM debug_log ";
+            q+= "ORDER BY user ";
+            return q;
+        }
+    case DEBUGLOG_M_KATEGORIEN:
+        if (countflag) 
+        {
+            q = "SELECT COUNT(DISTINCT category) FROM debug_log ";
+        }
+        else
+        {
+            q = "SELECT DISTINCT category FROM debug_log ";
+            q+= "ORDER BY category ";
+        }
+        if (member(menue,DEBUGLOG_ZEITBEREICH))
+        {
+            int * vonbis = menue[DEBUGLOG_ZEITBEREICH];
+            q += (whereflag++?"AND ":"WHERE ");
+            q += "timestamp >= "+vonbis[0]+" AND timestamp <= "+vonbis[1]+" ";
+        }
+        return q;
+    case DEBUGLOG_M_ANZEIGE:
+        if (countflag)
+        {
+            q = "SELECT COUNT(*) FROM debug_log ";
+            break;
+        }
+        q = "SELECT timestamp,seq,message,severity,user, category "
+            "FROM debug_log ";
+        qo = "ORDER BY "+ (menue[DEBUGLOG_SORTIERUNG]?
+                    "timestamp ASC,seq ASC ":
+                    "timestamp DESC,seq DESC ");
+        break;
+    default:
+        return 0;
+    }
+    if (member(menue,DEBUGLOG_ZEITBEREICH))
+    {
+        int * vonbis = menue[DEBUGLOG_ZEITBEREICH];
+        q += (whereflag++?"AND ":"WHERE ");
+        q += "timestamp >= "+vonbis[0]+" AND timestamp <= "+vonbis[1]+" ";
+    }
+    if (member(menue,DEBUGLOG_BENUTZER))
+    {
+        string * ben = menue[DEBUGLOG_BENUTZER];
+        q += (whereflag++?"AND ":"WHERE ");
+        q += "user IN ("+liste(map(ben,(:"'"+$1+"'":)),", ")+") ";
+        if (sizeof(qgrp)) qgrp = qgrp - ({ "user" }) + ({ "user" });
+    }
+    if (member(menue,DEBUGLOG_KATEGORIEN))
+    {
+        string * kat = menue[DEBUGLOG_KATEGORIEN];
+        q += (whereflag++?"AND ":"WHERE ");
+        q += "category IN ("+liste(map(kat,(:"'"+$1+"'":)),", ")+") ";
+        if (sizeof(qgrp)) qgrp = qgrp - ({ "category" }) 
+                                      + ({ "category" });
+    }
+    if (member(menue,DEBUGLOG_LEVEL) 
+            && menue[DEBUGLOG_LEVEL] != ""
+            && menue[DEBUGLOG_LEVEL] != "/")
+    {
+        int cflag = 0;
+        q += (whereflag++?"AND ":"WHERE ");
+        q += "severity IN (";
+        if (test_bit(menue[DEBUGLOG_LEVEL],DB_DBGLVL_DEBUG))
+        {
+            q+=(cflag++?",":"");
+            q+= DB_DBGLVL_DEBUG;
+        }
+        if (test_bit(menue[DEBUGLOG_LEVEL],DB_DBGLVL_INFO))
+        {
+            q+=(cflag++?",":"");
+            q+= DB_DBGLVL_INFO;
+        }
+        if (test_bit(menue[DEBUGLOG_LEVEL],DB_DBGLVL_WARNING))
+        {
+            q+=(cflag++?",":"");
+            q+= DB_DBGLVL_WARNING;
+        }
+        if (test_bit(menue[DEBUGLOG_LEVEL],DB_DBGLVL_ERROR))
+        {
+            q+=(cflag++?",":"");
+            q+= DB_DBGLVL_ERROR;
+        }
+        q+= ") ";
+        if (sizeof(qgrp)) qgrp = qgrp - ({ "severity" }) 
+                                      + ({ "severity" });    }
+    if (member(menue,DEBUGLOG_MASKE) 
+            && menue[DEBUGLOG_MASKE] != ""
+            && menue[DEBUGLOG_MASKE] != "%")
+    {
+        q += (whereflag++?"AND ":"WHERE ");
+        q += "message LIKE '"+menue[DEBUGLOG_MASKE]+"' ";
+    }
+    if (member(menue,DEBUGLOG_MASKE) 
+            && menue[DEBUGLOG_MASKE] != ""
+            && menue[DEBUGLOG_MASKE] != "%")
+    {
+        q += (whereflag++?"AND ":"WHERE ");
+        q += "message LIKE '"+menue[DEBUGLOG_MASKE]+"' ";
+    }
+    if (sizeof(qgrp))
+    {
+        return q + "GROUP BY "+liste(qgrp,", ")+" "+qo;
+    }
+    return q+qo;
+}
+
+/*
+FUNKTION: debuglog_get_kategorien
+DEKLARATION: protected string * debuglog_get_kategorien(mapping filter)
+BESCHREIBUNG:
+Liefert alle Kategorien. Optional kann ueber 
+filter = ([DEBUGLOG_ZEITBEREICH : ({ von, bis }) ]) der Zeitbereich
+eingegrenzt werden. (von bis sind integer im time()-Zaehlung)
+VERWEISE: debuglog_get_filtered_messages
+GRUPPEN: database
+*/
+protected string * debuglog_get_kategorien(mapping filter)
+{
+    string q = debuglog_merge_query( (filter||([]))
+             + ([B_TYPE : DEBUGLOG_M_KATEGORIEN ]), 0);
+    mixed result = db_query(q);
+    if (query_db_error() || sizeof(result)==0) return ({});
+    return map(result, (: $1[0] :) );
+}
+
+/*
+FUNKTION: debuglog_get_filtered_messages
+DEKLARATION: protected mixed debuglog_get_filtered_messages(mapping filter, int countflag)
+BESCHREIBUNG:
+Liefert eine Sammlung von Meldungen, die dem Filter entsprechen.
+Bei countflag !=0 wird nur die Anzahl als Integer zurueckgegeben.
+Sonst gelten folgende Filteroptionen als Teil des filter-Mappings:
+DB_DBG_LIMIT: Anzahl Zeilen begrenzen
+DB_DBG_OFFSET: beginnend bei 0 anfangen zu zaehlen.
+DEBUGLOG_SORTIERUNG: !=0: es wird aufsteigend nach Zeitstempel sortiert,
+    sonst absteigend.
+DEBUGLOG_ZEITBEREICH: ein Array ({ von, bis }) um den Zeitbereich einzugrenzen.
+DEBUGLOG_BENUTZER: ein Array von Realnamen, nach der gefiltert werden soll.
+DEBUGLOG_KATEGORIEN: ein Array von Kategorien zum Filtern.
+DEBUGLOG_LEVEL: Bitflags zum Debuggen: siehe ? set_bit mit DB_DBGLVL_DEBUG(0),
+    DB_DBGLVL_INFO(1), DB_DBGLVL_WARNING(2), DB_DBGLVL_ERROR(3).
+DEBUGLOG_MASKE: Hier kann ein String mit sql-Wildcards z.B. %Fehler% 
+    zur Auswahl bestimmter Debugmeldunginhalte herangezogen werden.
+Zurueckgegeben werden folgende Felder
+({ ({ timestamp,seq,message,severity,user, category }), ... })
+VERWEISE: debuglog_get_kategorien
+GRUPPEN: database
+*/
+protected mixed debuglog_get_filtered_messages(mapping filter, int countflag)
+{
+    string q = debuglog_merge_query( (filter||([]))
+             + ([B_TYPE : DEBUGLOG_M_ANZEIGE ]), countflag);
+    mixed result;
+    if (!countflag && member(filter,DB_DBG_LIMIT))
+    {
+        q+= "LIMIT "+filter[DB_DBG_LIMIT]+" OFFSET "+filter[DB_DBG_OFFSET];
+    }
+    result = db_query(q);
+    if (query_db_error() || sizeof(result)==0) return 0;
+    if (countflag) return get_one_int(result);
+    return result;
+}
+
+
+/*
+NOENZY: dbglog_get_next_filter
+DEKLARATION: public string dbglog_get_next_filter(string oldfilter)
+BESCHREIBUNG:
+Gibt den naechsten Filter zurueck, falls priorisiert.
+Ist zur Ueberwachung vom Applikationslog gedacht.
+VERWEISE: dbglog_get_messages
+GRUPPEN: database
+*/
+public string dbglog_get_next_filter(string oldfilter)
+{
+    mapping ofm;
+    string q,mprio;
+    mixed *r;
+    if (!this_interactive() && member(DB_DBG_VALID_PO, 
+        program_name(previous_object()))!=-1)
+    {
+        // nichts tun.
+    }
+    else if (!this_interactive() 
+            || !validate_debugger(this_interactive()->query_real_name())) 
+    {
+        return 0;
+    }
+    q = "SELECT dc.shorttext ";
+    q+= "FROM debug_conf dc,debug_conf_param dcp ";
+    q+= "WHERE dcp.key ='"+DEBUGLOG_MARKPRIO+"' AND dcp.id = dc.id ";
+    q+= "AND dcp.value >'0000000' ";
+    if (stringp(oldfilter))
+    {
+        ofm = load_search_configuration(0,oldfilter);
+        if (ofm == 0) return 0;
+        mprio = sprintf("'%07d'",ofm[DEBUGLOG_MARKPRIO]);
+        
+        q+= "AND ((dcp.value ="+mprio+" AND dc.shorttext > '"+oldfilter+"') ";
+        q+= "OR (dcp.value >"+mprio+")) ";
+    }
+    q+= "ORDER BY dcp.value,dc.shorttext,dc.id ";
+    q+= "LIMIT 1 ";
+    r = db_query(q);
+    if (query_db_error() || sizeof(r)==0)
+    {
+        return 0;
+    }
+    return get_one_string(r);
+}
+
+/*
+NOENZY: dbglog_get_messages
+DEKLARATION: public string * dbglog_get_messages(mapping options)
+BESCHREIBUNG:
+Gibt die Meldungen abhaengig vom Filter, Startzeit und anderen Optionen
+Ist zur Ueberwachung vom Applikationslog gedacht.
+VERWEISE: dbglog_get_next_filter
+GRUPPEN: database
+*/
+public string * dbglog_get_messages(mapping options)
+{
+    string q;
+    mapping such;
+    mixed *r;
+    if (!this_interactive() && member(DB_DBG_VALID_PO, 
+        program_name(previous_object()))!=-1)
+    {
+        // nichts tun.
+    }
+    else if (!this_interactive() 
+            || !validate_debugger(this_interactive()->query_real_name())) 
+    {
+        return 0;
+    }
+    such = load_search_configuration(0,options[DB_DBG_FILTER]);
+    if (such == 0) return 0;
+    such[DEBUGLOG_ZEITBEREICH] = ({ options[DB_DBG_START_TIME], time() });
+    such[B_TYPE] = DEBUGLOG_M_ANZEIGE;
+    q = debuglog_merge_query(such,0);
+    q+= "LIMIT "+options[DB_DBG_LIMIT]+" OFFSET "+options[DB_DBG_OFFSET];
+    r = db_query(q);
+    if (query_db_error() || !pointerp(r))
+    {
+        return 0;
+    }
+    string * lines = map(r, (: sprintf(
+        "%s,%03d:%s",
+        shorttimestr($1[0]),$1[1], // timestamp 16z+seq5z
+        implode(explode(left($1[2],50),"\n")," ")) :));
+    return lines;
+}
+   
+
+/*
+NOENZY: debuglog_get_level
+DEKLARATION: private string debuglog_get_level(int i)
+BESCHREIBUNG:
+Gibt zu den Integerwerten den Debuglevel als Text zur Anzeige zurueck.
+VERWEISE: change_debuglevel
+GRUPPEN: database
+*/
+private string debuglog_get_level(int i)
+{
+    switch (i)
+    {
+    case DB_DBGLVL_DEBUG:   return "Debug";
+    case DB_DBGLVL_INFO:    return "Info";
+    case DB_DBGLVL_WARNING: return "Warning";
+    case DB_DBGLVL_ERROR:   return "Error";
+    default: return "-";
+    }
+}
+
+/*
+NOENZY: debuglog_get_einzelanzeige
+DEKLARATION: private string * debuglog_get_einzelanzeige(mapping menue)
+BESCHREIBUNG:
+Gibt abhaengig von den Suchparameters in menue ein einzelnen Debugeintrag
+vollstaendig zurueck. B_TYPE sollte DEBUGLOG_M_ANZEIGE sein.
+VERWEISE: change_debuglevel
+GRUPPEN: database
+*/
+private string * debuglog_get_einzelanzeige(mapping menue)
+{
+    string q =  debuglog_merge_query(menue, 0);
+    q += "LIMIT 1 OFFSET "+menue[B_CURRENT_LINE]+" ";
+    mixed r = db_query(q);
+    if (query_db_error() || sizeof(r)==0)
+    {
+        return ({});
+    }
+    string * lines = map(r, (: sprintf(
+        "%s,%03d (%7s): %s/%s\n%s",
+        shorttimestr($1[0]),$1[1], // timestamp 16z+seq5z
+        debuglog_get_level($1[3]),$1[4],$1[5],
+        $1[2]
+        ) :));
+    return explode(implode(lines,"\n"),"\n");
+}
+
+private int debuglog_get_einzelzeit(mapping menue)
+{
+    string q =  debuglog_merge_query(menue, 0);
+    q += "LIMIT 1 OFFSET "+menue[B_CURRENT_LINE]+" ";
+    mixed r = db_query(q);
+    if (query_db_error() || sizeof(r)==0)
+    {
+        return time();
+    }
+    return r[0][0];
+}
+
+/*
+NOENZY: do_export
+DEKLARATION: nosave void do_export(menue filter, string file, object pl)
+BESCHREIBUNG:
+Evalschleife/Callout, die den Export gemaess filter in die Datei file schreibt.
+An pl wird dann die Fertigmeldung geschickt, falls verfuegbar.
+VERWEISE: start_export
+GRUPPEN: database
+*/
+nosave void do_export(mapping filter, string file, object pl)
+{
+    string * lines;
+    while(get_eval_cost()>EXPORT_MIN_RESTEVALS)
+    {
+        lines = debuglog_get_einzelanzeige(filter);
+        if (!sizeof(lines))
+        {
+            if (pl) 
+                pl->send_message_to(pl, MT_NOTIFY, MA_UNKNOWN, wrap(
+                    "Export abgeschlossen."));
+            return;
+        }
+        if (!write_file(file,implode(lines,"\n")+"\n"))
+        {
+            if (pl) 
+                pl->send_message_to(pl, MT_NOTIFY, MA_UNKNOWN, wrap(
+                    "Export abgebrochen(write_File)."));
+            return;
+        }
+        filter[B_CURRENT_LINE]++;
+    }
+    call_out("do_export",1,filter,file,pl);
+}
+
+/*
+NOENZY: start_export
+DEKLARATION: private int start_export(mapping filter, string file, object pl)
+BESCHREIBUNG:
+startet do_export nach Parameteraufbereitung.
+VERWEISE: do_export
+GRUPPEN: database
+*/
+private int start_export(mapping filter, string file, object pl)
+{
+    if (!playerp(pl)) return 0;
+    if (!write_file(file, sprintf("%s: Export durch %s\n",
+            shorttimestr(time()),pl->query_real_name())))
+    {
+        return 0; // Fehlschlag schreiben.
+    }
+    filter = debuglog_filter_search_parameter(filter);
+    filter += ([ B_OB : TO, B_TYPE : DEBUGLOG_M_ANZEIGE,
+                 B_CURRENT_LINE : 0 ]);
+    call_out("do_export",1,filter,file,pl);
+    pl->send_message_to(pl, MT_NOTIFY, MA_UNKNOWN, wrap(
+        "Export gestartet."));
+    return 1;
+}
+
+//------------------------------------------------------------------------
+// Hauptmenu gespeicherte Suchen: init
+mixed debuglog_hauptmenue_init(mapping old)
+{
+    if (!SECURE) return 0;
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_OB : TO, B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zum Applikationslog-Hauptmenue [q,z]",
+            B_DATA : ({
+"Das Hauptmenue zeigt die gespeicherten Suchen an, sofern vorhanden.",
+"Mit id=<nr> kann man die entsprechende Suche in die Suchmaske laden, ",
+"mit l=<id> kann man eine vorhandene Suchkonfiguration loeschen, ",
+"mit (n) kann man eine neue Suche beginnen.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+// Endeanzahl
+int debuglog_hauptmenue_total(mapping menue)
+{
+    if (!SECURE) return 0;
+    string q = debuglog_merge_query(menue,1);
+    mixed * result = db_query(q);
+    if (query_db_error()) 
+        return 0;
+    return get_one_int(result);
+}
+
+// Anzeige
+string * debuglog_hauptmenue_display(mapping menue)
+{
+    if (!SECURE) return 0;
+    string q = debuglog_merge_query(menue, 0);
+    q += "LIMIT "+menue[B_NUM_LINES] + " OFFSET "+menue[B_CURRENT_LINE]+" ";
+    mixed * r = db_query(q);
+    if (r == 0 || query_db_error()) return 0;
+    return map(r,(:sprintf("id=%3d:%s",$1[0],left($1[1],70)):));
+}
+
+// 
+string debuglog_hauptmenue_prompt(mapping menue)
+{
+    if (!SECURE) 
+    {
+        send_to_debuggers(
+            sprintf("debuglog_hauptmenue_prompt(%Q,%d,%d,%Q,%Q)",
+                TP,check_security(),validate_debugger(RNAME(TP)),
+                caller_stack(),menue), DB_DBG_ACL_DEBUGLOG);
+        return "Kein Zugriff auf das Applikationslog.";
+    }
+    return sprintf("Applikationslog-Hauptmenue %d/%d[id=<nr>,l=<id>,n,?,q]",
+        menue[B_CURRENT_LINE]+1,debuglog_hauptmenue_total(menue));
+}
+
+mixed debuglog_hauptmenue_action(string str, mapping * menues)
+{
+    if (!SECURE) return B_QUIT;
+    mapping neumen;
+    int index;
+    if (!str || str == "") return B_NOTHING;
+    if (strstr(lower_case(space(str)),"id=")==0)
+    {
+        index = to_int(space(str)[3..]);
+        neumen = load_search_configuration(index);
+        if (neumen == 0)
+        {
+            browse_write_line("id nicht gefunden.");
+            return B_DONE;
+        }
+        neumen += ([ B_TYPE : DEBUGLOG_M_SUCHMASKE,B_OB : TO,
+                B_START_LINE : 0,
+                ]);
+        return menues + ({ neumen });
+    }
+    if (strstr(lower_case(space(str)),"l=")==0)
+    {
+        index = to_int(space(str)[2..]);
+        browse_write_line(delete_search_configuration(index));
+        return B_DONE;
+    }
+    if (lower_case(space(str))=="n")
+    {
+        neumen = ([ B_TYPE : DEBUGLOG_M_SUCHMASKE,B_OB : TO,
+                B_START_LINE : 0,
+                ]);
+        return menues + ({ neumen });
+    }
+    return B_NOTHING; // der Rest macht der dynamic_browser selbst.
+}
+
+//------------------------------------------------------------------------
+// menu Suchmaske
+mixed debuglog_suchmaske_init(mapping old)
+{
+    if (!SECURE) return 0;
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,B_OB : TO,
+            B_PROMPT : "Hilfe zur Applikationslog-Suchmaske [q,z]",
+            B_DATA : ({
+"Die Suchmaske schraenkt die Suche entsprechend den Angaben ein, bevor diese",
+"ausgefuehrt wird. Mit der Angabe \"\" als Suchparameter wird der",
+"entsprechende Parameter wieder auf Default zurueckgesetzt.",
+"b <bis> im Format dd.mm.jj [hh:mm:ss] zeigt die Daten bis zu diesem ",
+"Zeitstempel an. Bei Rueckwaertsortierung sehr sinnvoll.",
+"b <von> <bis> beide im gleiche Format wie oben.",
+"Ben(u)tzer und (K)ategorien verzweigen in ein eigenes Menu zur Auswahl ",
+"der entsprechenden Kriterien. Debug(l)evel kann mit l+ und l- ",
+"ein- bzw. ausgeblendet werden.",
+"Die (M)aske filtert die Debugmeldungen mittels Datenbankpattern, "
+"z.B. liefert %Error% alle Meldungen, welche Error enthalten.",
+"(S)ortierung laesst vorwaerts oder rueckwaerts sortieren. ",
+"Fuehrt man die Suche (a)us, so verzweigt man zur Applikationslog-Anzeige.",
+"Man kann das Ergebnis auch als Datei (e)xportieren.",
+"Die (P)riotaet gibt bei einer Ueberwachung die Reihenfolge vor, ",
+"0 bedeutet keine Ueberwachung und ab 1 wird sortiert:",
+"Aufsteigend nach Prioritaet und dann nach Name.",
+"Mit (w) speichert man unter Angabe eines Namens die Suche."
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+string * debuglog_suchmaske_display(mapping menue)
+{
+    if (!SECURE) return 0;
+    string name,zb, ben, kat, lev, *plev, mas, sor,markprio;
+    int mp;
+    if (member(menue,DEBUGLOG_NAME))
+    {
+        name = " Suchmaskenname: \""+menue[DEBUGLOG_NAME]+"\"";
+    }
+    if (member(menue,DEBUGLOG_ZEITBEREICH) 
+            && sizeof(menue[DEBUGLOG_ZEITBEREICH])==2)
+    {
+        zb = shorttimestr(menue[DEBUGLOG_ZEITBEREICH][0])+"-"+
+             shorttimestr(menue[DEBUGLOG_ZEITBEREICH][1]);
+    }
+    else
+    {
+        zb = "(Gesamter Zeitbereich)";
+    }
+    if (member(menue,DEBUGLOG_BENUTZER))
+    {
+        ben = liste(menue[DEBUGLOG_BENUTZER], ", ");
+    }
+    else
+    {
+        ben = "(Alle Benutzer)";
+    }
+    if (member(menue,DEBUGLOG_KATEGORIEN))
+    {
+        kat = liste(menue[DEBUGLOG_KATEGORIEN],", ");
+    }
+    else
+    {
+        kat = "(Alle Kategorien)";
+    }
+    if (!member(menue,DEBUGLOG_LEVEL) || menue[DEBUGLOG_LEVEL] == "")
+        menue[DEBUGLOG_LEVEL] = "/"; // bits 0 bis 3 gesetzt
+    plev = ({});
+    if (test_bit(menue[DEBUGLOG_LEVEL], DB_DBGLVL_DEBUG))
+    {
+        plev += ({ "Debug" });
+    }
+    if (test_bit(menue[DEBUGLOG_LEVEL], DB_DBGLVL_INFO))
+    {
+        plev += ({ "Info" });
+    }
+    if (test_bit(menue[DEBUGLOG_LEVEL], DB_DBGLVL_WARNING))
+    {
+        plev += ({ "Warning" });
+    }
+    if (test_bit(menue[DEBUGLOG_LEVEL], DB_DBGLVL_ERROR))
+    {
+        plev += ({ "Error" });
+    }
+    lev = liste(plev,", ");
+    mas = menue[DEBUGLOG_MASKE];
+    if (!mas || mas == "")
+    {
+        mas = "%";
+        menue[DEBUGLOG_MASKE] = mas;
+    }
+    if (menue[DEBUGLOG_SORTIERUNG])
+    {
+        sor = "Vorwaertssortierung";
+    }
+    else
+    {
+        sor = "Rueckwaertssortierung";
+    }
+    if (mp=menue[DEBUGLOG_MARKPRIO])
+    {
+        markprio = to_string(mp);
+    }
+    else
+    {
+        markprio = "0==Aus";
+    }
+    return ({
+"Suchmaske fuer das DebugLog:",
+name,
+"",
+"Zeit(b)ereich: "+zb,
+"Ben(u)tzer   : "+ben,
+"(K)ategorien : "+kat,
+"Debug(l)evel : "+lev,
+"(M)aske      : "+mas,
+"(S)ortierung : "+sor,
+"Suche (a)usfuehren, Gefundene Elemente (e)xportieren",
+"(P)rioritaet fuer die Ueberwachung: "+markprio,
+"Suchmaske speichern (w)",
+    }) - ({0});
+}
+
+string debuglog_suchmaske_prompt(mapping menue)
+{
+    if (!SECURE) return 0;
+    return "Applikationslog-Suchmaske [b,u,k,l,m,s,a,e,p,w,?,z,q]";
+}
+
+mixed debuglog_suchmaske_action(string str, mapping * menues)
+{
+    if (!SECURE) return B_QUIT;
+    string *split,neustr;
+    mapping neumen;
+    if (!str || str == "") return B_NOTHING;
+    split = explode(str," ");
+    if (!sizeof(split)) return B_NOTHING;
+    switch (lower_case(split[0])[0..0])
+    {
+    case "b": // Zeitbereich
+        if (sizeof(split)<=1)
+        {
+            browse_write_line("b \"\"  oder b <bis> oder b <von>-<bis>");
+            return B_DONE;
+        }
+        split = explode(str[2..],"-");
+        if (split[0]=="\"\"")
+        {
+            m_delete(menues[<1],DEBUGLOG_ZEITBEREICH);
+            return menues[<1];
+        }
+        else
+        {
+            int von = dblog_shorttimestr2time(split[0]);
+            int bis;
+            if (sizeof(split)>=2)
+            {
+                bis = dblog_shorttimestr2time(split[1]);
+            }
+            else
+            {
+                bis = von;
+                von = 0;
+            }
+            menues[<1][DEBUGLOG_ZEITBEREICH] = ({ von,bis });
+            return menues;
+        }
+    case "u": // Benutzer
+        neumen = debuglog_filter_search_parameter(menues[<1]);
+        neumen += ([ B_TYPE : DEBUGLOG_M_BENUTZER,B_OB : TO,
+                     B_START_LINE : 0 ]);
+        return menues + ({ neumen });
+    case "k": // Kategorien
+        neumen = debuglog_filter_search_parameter(menues[<1]);
+        neumen += ([ B_TYPE : DEBUGLOG_M_KATEGORIEN,B_OB : TO,
+                     B_START_LINE : 0 ]);
+        return menues + ({ neumen });
+    case "l": // Debuglevel
+        if (sizeof(str)<3 || (str[1] != '+' && str[1] !='-'))
+        {
+            browse_write_line(
+"l-<level1>,<level2>... um einen oder mehrere Level zu entfernen.");
+            browse_write_line(
+"l+<level1>,<level2>... um einen oder mehrere Level hinzuzufuegen.");
+            browse_write_line(
+"Wobei <level> Debug, Info, Warning oder Error ist.");
+            return B_DONE;
+        }
+        split = explode(str[2..],",");
+        menues[<1][DEBUGLOG_LEVEL] = change_debuglevel(
+            menues[<1][DEBUGLOG_LEVEL],str[1..1],split);
+        return menues;
+    case "m": // Suchmaske
+        if (sizeof(split)<2)
+        {
+            browse_write_line("m "" oder m % fuer Suchmaske loeschen.");
+            browse_write_line("m %<text>%  fuer einen Suchtext.");
+            return B_DONE;
+        }
+        neustr = implode(split[1..]," ");
+        if (neustr == "\"\"" || neustr == "%")
+        {
+            m_delete(menues[<1],DEBUGLOG_MASKE);
+            return menues;
+        }
+        menues[<1][DEBUGLOG_MASKE] = neustr;
+        return menues;
+    case "s": // Sortierung
+        if (member(menues[<1],DEBUGLOG_SORTIERUNG))
+        {
+            m_delete(menues[<1],DEBUGLOG_SORTIERUNG);
+        }
+        else
+        {
+            menues[<1][DEBUGLOG_SORTIERUNG] = 1;
+        }
+        return menues;
+    case "a": // Suche ausfuehren
+        neumen = debuglog_filter_search_parameter(menues[<1]);
+        neumen += ([ B_OB : TO, B_TYPE : DEBUGLOG_M_ANZEIGE,
+                     B_START_LINE : 0 ]);
+        return menues + ({ neumen });
+    case "w": //Suche speichern
+        if (sizeof(space(str))<= 1)
+        {
+            browse_write_line(
+                "Bitte einen eindeutigen Namen zum Speichern angeben.");
+            return B_DONE;
+        }
+        browse_write_line(save_search_configuration(str[1..], menues[<1]));
+        return B_DONE;
+    case "e": //exportieren
+        if (sizeof(space(str))<=1)
+        {
+            browse_write_line(
+                "Bitte einen gueltigen Pfad zum Schreiben angeben.");
+            return B_DONE;
+        }
+        start_export(menues[<1], space(str[1..]), this_player());
+        return B_DONE;
+    case "p": // priotaet fuer Ueberwachung....
+        if (sizeof(split)<2 || to_int(split[1])<0)
+        {
+            browse_write_line("p 0 fuer Prioritaet/Ueberwachung ausschalten.");
+            browse_write_line("p N mit N groesser 0 fuer eine Prioritaet.");
+            return B_DONE;
+        }
+        menues[<1][DEBUGLOG_MARKPRIO] = to_int(split[1]);
+        return menues;
+    default:
+        return B_NOTHING;
+    }
+}
+
+//------------------------------------------------------------------------
+// Anzeige
+mixed debuglog_anzeige_init(mapping old)
+{
+    if (!SECURE) return 0;
+    send_to_debuggers(sprintf("debuglog_anzeige_init:\n%Q",old),
+            DB_DBG_ACL_DEBUGLOG);
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_OB : TO, B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur Applikationslog-Anzeige [q,z]",
+            B_DATA : ({
+"Die Applikationslog-Anzeige zeigt nur eine Uebersicht ueber die Fehler an, ",
+"jede Seite bekommt eine temporaere id hintenangestellt, die ueber ",
+"id=<nr> zur Einzelanzeige identifiziert wird. mit d kann man eine Seite ",
+"vor, mit u eine Seite zurueckblaettern. mit z kommt man zur Suchmaske ",
+"zurueck, mit q verlaesst man das Menue ganz.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+int debuglog_anzeige_total(mapping menue)
+{
+    if (!SECURE) return 0;
+    string q = debuglog_merge_query(menue,1);
+    mixed * result = db_query(q);
+    if (query_db_error()) 
+        return 0;
+    return get_one_int(result);
+}
+string * debuglog_anzeige_display(mapping menue)
+{
+    if (!SECURE) return 0;
+    string q = debuglog_merge_query(menue, 0);
+    q += "LIMIT "+menue[B_NUM_LINES] + " OFFSET "+menue[B_CURRENT_LINE]+" ";
+    mixed * r = db_query(q);
+    int i = 0;
+    if (r == 0 || query_db_error()) return 0;
+    string * lines = map(r, (: sprintf(
+        "%s,%03d:%s (id=%02d)",
+        shorttimestr($1[0]),$1[1], // timestamp 16z+seq5z
+        implode(explode(left($1[2],50),"\n")," "), ++$2
+        ) :), &i);
+    return lines;
+}
+
+string debuglog_anzeige_prompt(mapping menue)
+{
+    if (!SECURE) return 0;
+    return sprintf("Applikationslog-Anzeige %d/%d[id=,?,u,d,z,q]",
+        menue[B_CURRENT_LINE]+1,debuglog_anzeige_total(menue));
+}
+
+mixed debuglog_anzeige_action(string str, mapping * menues)
+{
+    if (!SECURE) return B_QUIT;
+    mapping neumen;
+    int index;
+    if (!str || str == "") return B_NOTHING;
+    if (strstr(lower_case(space(str)),"id=")==0)
+    {
+        index = to_int(space(str)[3..]);
+        if (index <= 0 || index >debuglog_anzeige_total(menues[<1]))
+        {
+            browse_write_line("Eine lokale id startet bei 1");
+            return B_DONE;
+        }
+        index -= 1;
+        menues[<1][B_CURRENT_LINE] += index;
+        neumen = debuglog_filter_search_parameter(menues[<1]);
+        neumen += ([ B_OB : TO, B_TYPE : DEBUGLOG_M_EINZELANZEIGE,
+                B_DATA : debuglog_get_einzelanzeige(menues[<1]),
+                B_START_LINE : 0,
+                ]);
+        return menues + ({ neumen });
+    }
+    return B_NOTHING;
+}
+
+//------------------------------------------------------------------------
+// EinzelAnzeige
+mixed debuglog_einzelanzeige_init(mapping old)
+{
+    int flag = !check_default_search(old);
+    if (!SECURE) return 0;
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_OB : TO, B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur Applikationslog-Einzelanzeige [q,z]",
+            B_DATA : (flag ?
+            ({ 
+"Mit b kann man eine Bereichsanzeige fuer den aktuellen Fehler aufrufen:",
+"Ein Zeitbereich von -1 Stunde bis plus 5 Minuten wird dann ausgewaehlt",
+"und alle Debugmeldungen ohne Filter angezeigt.",
+"Mit + und - kann man vor- bzw. zurueck navigieren.",
+"z fuer eine Menueebene hoeher und q fuer Menue verlassen."
+            })
+            :
+            ({ 
+"Mit + und - kann man vor- bzw. zurueck navigieren.",
+"z fuer eine Menueebene hoeher und q fuer Menue verlassen."
+            }) ),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+int debuglog_einzelanzeige_total(mapping menue)
+{
+    if (!SECURE) return 0;
+    return sizeof(menue[B_DATA]);
+}
+
+string * debuglog_einzelanzeige_display(mapping menue)
+{
+    if (!SECURE) return 0;
+     return staticmore_display(menue);
+}
+
+string debuglog_einzelanzeige_prompt(mapping menue)
+{
+    if (!SECURE) return 0;
+    int flag = !check_default_search(menue);
+    return sprintf("Applikationslog-Einzelanzeige %d/%d[+,-,?,%sz,q]",
+        menue[B_CURRENT_LINE]+1,debuglog_einzelanzeige_total(menue),
+        flag?"b,":"");
+}
+
+mixed debuglog_einzelanzeige_action(string str, mapping * menues)
+{
+    if (!SECURE) return B_QUIT;
+    mapping neumen,altmen;
+    int index;
+    if (!str || str == "") return B_NOTHING;
+    if (sizeof(menues)>1)
+    {
+        altmen = menues[<2];
+    }
+    else
+    {
+        return B_NOTHING;
+    }
+    switch (space(str))
+    {
+    case "+":
+        index =altmen[B_CURRENT_LINE];
+        if (index >= debuglog_anzeige_total(altmen))
+        {
+            browse_write_line("Ende der Daten erreicht.");
+            return B_DONE;
+        }
+        altmen[B_CURRENT_LINE]++;
+        break;
+    case "-":
+        index =altmen[B_CURRENT_LINE];
+        if (index <= 0)
+        {
+            browse_write_line("Anfang der Daten erreicht.");
+            return B_DONE;
+        }
+        altmen[B_CURRENT_LINE]--;
+        break;
+    case "b":
+        neumen = filter_non_default_parameter(menues[<1]);
+        index = debuglog_get_einzelzeit(menues[<1]);
+        if (!check_default_search(neumen)) 
+        {
+            browse_write_line("Die Daten werden schon ohne Einschraenkung "
+                "gezeigt.");
+            return B_DONE;
+        }
+        neumen += ([ B_OB : TO, B_TYPE : DEBUGLOG_M_ANZEIGE,
+                DEBUGLOG_ZEITBEREICH : ({index-60*60*1,index+60*5 }),
+                B_START_LINE : 0,
+                ]);
+        return menues + ({ neumen });
+    default:
+        return staticmore_action(str,menues);
+    }
+    neumen = debuglog_filter_search_parameter(altmen);
+    neumen += ([ B_OB : TO, B_TYPE : DEBUGLOG_M_EINZELANZEIGE,
+                B_DATA : debuglog_get_einzelanzeige(altmen),
+                B_START_LINE : 0,
+                ]);
+    return menues[..<2]+({neumen});
+}
+
+//------------------------------------------------------------------------
+// debuglog_benutzer
+mixed debuglog_benutzer_init(mapping old)
+{
+    if (!SECURE) return 0;
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_OB : TO, B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur Applikationslog-Benutzerauswahl [q,z]",
+            B_DATA : ({
+"Die Anzeige der Benutzer dient dazu, diese mit b+ der Suche hinzuzufuegen,",
+"b- von der Suche zu entfernen oder mit b= zu setzen. ",
+"b=\"\" entfernt alle Benutzer.",
+"z fuer eine Menueebene hoeher und q fuer Menue verlassen."
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+int debuglog_benutzer_total(mapping menue)
+{
+    if (!SECURE) return 0;
+    string q = debuglog_merge_query(menue,1);
+    mixed * result = db_query(q);
+    if (query_db_error()) 
+        return 0;
+    return get_one_int(result);
+}
+
+string * debuglog_benutzer_display(mapping menue)
+{
+    if (!SECURE) return 0;
+    string q = debuglog_merge_query(menue, 0);
+    q += "LIMIT "+menue[B_NUM_LINES] + " OFFSET "+menue[B_CURRENT_LINE]+" ";
+    mixed * r = db_query(q);
+    if (r == 0 || query_db_error()) return 0;
+    string * lines = map(r, (: $1[0] :));
+    return lines;
+}
+
+string debuglog_benutzer_prompt(mapping menue)
+{
+    if (!SECURE) return 0;
+    return sprintf("Applikationslog-Benutzerauswahl [b+,b-b=,?,z,q]",
+        menue[B_CURRENT_LINE]+1,debuglog_benutzer_total(menue));
+}
+
+private string * change_benutzer(string * alt,string pm, string *neu)
+{
+     alt ||= ({});
+     neu ||= ({});
+     string q,ben;
+     mixed * r;
+     if (pm == "=") alt = ({});
+     foreach(ben : neu)
+     {
+        switch (pm)
+        {
+        case "=":
+            if (ben=="\"\"") return 0;
+        case "+":
+            q = "SELECT COUNT(*) FROM debug_log WHERE user ='"+ben+"' ";
+            r = db_query(q);
+            if (!get_one_int(r))
+            {
+                continue;
+            }
+            alt = alt - ({ ben }) + ({ ben }) ;
+            continue;
+        case "-":
+            alt -= ({ ben });
+            continue;
+        }
+     }
+     return alt;
+}
+
+mixed debuglog_benutzer_action(string str, mapping * menues)
+{
+    if (!SECURE) return B_QUIT;
+    string * split;
+    str = space(str);
+    if (str == "") return B_NOTHING;
+    switch (lower_case(str[0..0]))
+    {
+    case "b":
+        if (sizeof(str)<2 || (str[1] != '+' && str[1] != '-' && str[1]!='='))
+        {
+            browse_write_line(
+"b+<benutzer1>,<benutzer2>... um einen oder mehrere Benutzer hinzuzufuegen.");
+            browse_write_line(
+"b-<benutzer1>,<benutzer2>... um einen oder mehrere Benutzer entfernen.");
+            browse_write_line(
+"b=<benutzer1>,<benutzer2>... auf einen oder mehrere Benutzer setzen.");
+            browse_write_line(
+"Wobei <benutzer> ein in der DB existierender Benutzer sein muss.");
+            return B_DONE;
+        }
+        split = explode(str[2..],",");
+        menues[<1][DEBUGLOG_BENUTZER] = change_benutzer(
+            menues[<1][DEBUGLOG_BENUTZER],str[1..1],split);
+        browse_write_line(wrap_say("Eingetragene Benutzer: ",
+            liste(menues[<1][DEBUGLOG_BENUTZER]||({}),", ")));
+        return B_DONE;
+    case "z":
+        if (sizeof(menues)>1)
+        {
+            if (pointerp(menues[<1][DEBUGLOG_BENUTZER]) 
+                    && sizeof(menues[<1][DEBUGLOG_BENUTZER]))
+                menues[<2][DEBUGLOG_BENUTZER] = menues[<1][DEBUGLOG_BENUTZER];
+            else
+                m_delete(menues[<2], DEBUGLOG_BENUTZER);
+            return menues[..<2];
+        }
+        return B_NOTHING;
+    default:
+        return B_NOTHING;
+    }
+}
+
+//------------------------------------------------------------------------
+// debuglog_kategorien
+mixed debuglog_kategorien_init(mapping old)
+{
+    if (!SECURE) return 0;
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_OB : TO, B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur Applikationslog-Kategorienauswahl [q,z]",
+            B_DATA : ({
+"Die Anzeige der Kategorien dient dazu, diese mit k+ der Suche ",
+"hinzuzufuegen, k- von derSuche zu entfernen oder mit k= zu setzen.",
+"k=\"\" entfernt alle Kategorien.",
+"z fuer eine Menueebene hoeher und q fuer Menue verlassen."
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+int debuglog_kategorien_total(mapping menue)
+{
+    if (!SECURE) return 0;
+    string q = debuglog_merge_query(menue,1);
+    mixed * result = db_query(q);
+    if (query_db_error()) 
+        return 0;
+    return get_one_int(result);
+}
+
+string * debuglog_kategorien_display(mapping menue)
+{
+    if (!SECURE) return 0;
+    string q = debuglog_merge_query(menue, 0);
+    q += "LIMIT "+menue[B_NUM_LINES] + " OFFSET "+menue[B_CURRENT_LINE]+" ";
+    mixed * r = db_query(q);
+    if (r == 0 || query_db_error()) return 0;
+    string * lines = map(r, (: $1[0] :));
+    return lines;
+}
+
+string debuglog_kategorien_prompt(mapping menue)
+{
+    if (!SECURE) return 0;
+    return sprintf("Applikationslog-Kategorienauswahl [k+,k-,k=,?,z,q]",
+        menue[B_CURRENT_LINE]+1,debuglog_kategorien_total(menue));
+}
+
+private string * change_kategorie(string * alt,string pm, string *neu)
+{
+     alt ||= ({});
+     neu ||= ({});
+     string q,kat;
+     mixed * r;
+     if (pm == "=") alt = ({});
+     foreach(kat : neu)
+     {
+        switch (pm)
+        {
+        case "=":
+            if (kat=="\"\"") return 0;
+        case "+":
+            q = "SELECT COUNT(*) FROM debug_log WHERE category='"+kat+"' ";
+            r = db_query(q);
+            if (!get_one_int(r))
+            {
+                continue;
+            }
+            alt = alt - ({ kat }) + ({ kat }) ;
+            continue;
+        case "-":
+            alt -= ({ kat });
+            continue;
+        }
+     }
+     return alt;
+}
+
+mixed debuglog_kategorien_action(string str, mapping * menues)
+{
+    if (!SECURE) return B_QUIT;
+    string * split;
+    str = space(str);
+    if (str == "") return B_NOTHING;
+    switch (lower_case(str[0..0]))
+    {
+    case "k":
+        if (sizeof(str)<2 || (str[1] != '+' && str[1] != '-' && str[1]!='='))
+        {
+            browse_write_line(
+"k+<kategorie1>,<kategorie2>... um einen oder mehrere Kategorien hinzuzufuegen.");
+            browse_write_line(
+"k-<kategorie1>,<kategorie2>... um einen oder mehrere Kategorien entfernen.");
+            browse_write_line(
+"k=<kategorie1>,<kategorie2>... um einen oder mehrere Kategorien setzen.");
+            browse_write_line(
+"Wobei <kategorie> eine in der DB existierende Kategorie sein muss.");
+            return B_DONE;
+        }
+        split = explode(str[2..],",");
+        menues[<1][DEBUGLOG_KATEGORIEN] = change_kategorie(
+            menues[<1][DEBUGLOG_KATEGORIEN],str[1..1],split);
+        browse_write_line(wrap_say("Eingetragene Kategorien: ",
+            liste(menues[<1][DEBUGLOG_KATEGORIEN]||({}),", ")));
+        return B_DONE;
+    case "z":
+        if (sizeof(menues)>1)
+        {
+            if (pointerp(menues[<1][DEBUGLOG_KATEGORIEN]) 
+                    && sizeof(menues[<1][DEBUGLOG_KATEGORIEN]))
+                menues[<2][DEBUGLOG_KATEGORIEN] = 
+                          menues[<1][DEBUGLOG_KATEGORIEN];
+            else
+                m_delete(menues[<2], DEBUGLOG_KATEGORIEN);
+            return menues[..<2];
+        }
+        return B_NOTHING;
+    default:
+        return B_NOTHING;
+    }
+}

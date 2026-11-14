@@ -1,0 +1,431 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/domain/domain_map.c
+// Description:
+// Modified by: Parsec (27.06.2000) alles mit visit raus
+//
+// $Log: domain_map.c,v $
+// Revision 1.10  2013-03-16 15:40:13  gnomi
+// Eigene Submap-Definitionen fuer Orbit.
+//
+// Revision 1.9  2008-05-19 14:08:59  gnomi
+// query_room_file erhaelt auch die Koordinaten innerhalb der Domain.
+//
+// Revision 1.8  2005/05/24 17:51:00  gnomi
+// Stringindizierung korrigiert.
+//
+// Revision 1.7  2004/07/04 00:08:52  gnomi
+// seteuid(getuid()) entfent, da es nicht mehr benoetigt wird.
+//
+// Revision 1.6  2003/02/18 01:26:53  gnomi
+// query_karten eingebaut.
+//
+// Revision 1.5  2001/06/25 11:48:15  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.4  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strict_types
+
+/* Map-Handling der Domain.
+ *
+ * Dieser File muss von jedem Domain - map.c - File inherited werden !
+ *
+ *	    Er ruft fuer jeden Domain-Map-Raum, der
+ *	    NICHT explizit als
+ *
+ *		/d/Domain/mX_Y.c            oder
+ *		/d/Domain/member/mX_Y.c     oder
+ *              /d/Domain/member/sub/mX_Y.c
+ *
+ *	    vorhanden ist, innerhalb von
+ *
+ *		/d/Domain/map
+ *
+ *	    oder wenn der Raum im Bereich eines Domain-Mitglieds
+ *	    liegt (wird im MEMBERS-File gesetzt)
+ *
+ *		/d/Domain/member/map      oder
+ *              /d/Domain/member/sub/map
+ *
+ *	    die Routine
+ *
+ *          int setup_room(object room, int x, int y)
+ *
+ *	    auf. Der Nullpunkt der Koordinaten X und Y liegt jeweils
+ *	    in der linken unteren Ecke der Domain bzw des Domain-Bereiches,
+ *	    der fuer das Domain-Mitglied im MEMBERS-File eingetragen ist.
+ *
+ *          Gibt die Member-Map 0 zurueck, so wird setup_room der Domain-Map
+ *          aufgerufen, gibt diese ebenfalls 0 zurueck, so werden die Defaults
+ *          der /map/map genommen ("Ozean").
+ *
+ */
+
+private string myself;
+private string *members, *mem_locations;
+private mixed *karte_filenames=({});
+private mixed *karte_files=({});
+private mixed *karte_y=({});
+private int *mem_x_pos, *mem_y_pos, *mem_length, *mem_height,
+	    *mem_x_max, *mem_y_max;
+private int *karte_x=({});
+
+/*
+FUNKTION: setup_room
+DEKLARATION: int setup_room(object room, int x, int y)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, wenn ein Map-Raum geladen wird, fuer
+den es kein File auf Platte gibt.
+Uebergeben wird der Objekt-Pointer auf den Raum und die LOKALEN Koordinaten
+innerhalb der Domain.
+Hierin kann man das Aussehen des Raumes setzen.
+Beispiel:
+int setup_room(object room, int x, int y) {
+    room->set_short("Neue Domain");
+    room->set_long("Du bist in einer neuen Domain.\n");
+    return 1;
+}
+
+Wenn 1 returned wird, bedeutet dieses, dass das Aussehen des
+Raumes veraendert wurde.
+Wenn 0 returned wird, setzt die uebergeordnete Map das Aussehen.
+
+Bei einer Submap werden zusaetlich zu den lokalen Koordinaten auch
+noch die Koordinaten innerhalb der Domain uebergeben:
+
+int setup_room(object room, int x, int y, int domain_x, int domain_y)
+
+VERWEISE:
+GRUPPEN: map, domain
+*/
+int setup_room(object room, int x, int y) {
+    room->set_short("Neue Domain");
+    room->set_long("Du bist in einer neuen Domain.\n");
+    return 1;
+}
+
+/*
+FUNKTION: query_room_file
+DEKLARATION: string query_room_file(int x, int y)
+BESCHREIBUNG:
+Diese Funktion wird von MAP_OB aufgerufen, um den Filenamen zu ermitteln,
+der gecloned werden soll.
+Das Objekt MUSS /i/domain/map_room inheriten.
+Uebergeben werden die LOKALEN Koordinaten innerhalb der Domain.
+
+Wenn 0 returned wird, berechnet die uebergeordnete Map den Filenamen.
+
+Bei einer Submap werden zusaetlich zu den lokalen Koordinaten auch
+noch die Koordinaten innerhalb der Domain uebergeben:
+
+string query_room_file(int x, int y, int domain_x, int domain_y)
+
+VERWEISE:
+GRUPPEN: map, domain
+*/
+string query_room_file(int x, int y)
+{
+    return 0;
+}
+
+private void get_members() {
+    string file, *lines, line, name, loc;
+    int x, y, len, hei, i, res;
+
+    members = ({});
+    mem_x_pos = ({});
+    mem_y_pos = ({});
+    mem_x_max = ({});
+    mem_y_max = ({});
+    mem_length =({});
+    mem_height = ({});
+    mem_locations = ({});
+    if (!myself)
+	return;
+
+#ifdef Orbit
+    file=read_file("/d/"+myself+"/SUBMAPS.Orbit");
+    if(!file)
+#endif
+    file=read_file("/d/"+myself+"/SUBMAPS");
+    if (!file || file=="")
+	return;
+    lines = explode(file,"\n");
+    for (i=0; i<sizeof(lines); i++)
+	if (sizeof(lines[i]) && lines[i][0] != '#' &&
+	    (line=trim(space(lines[i])))!="")
+	{
+	    if (sscanf(line,"%s %d %d %d %d %s",name,x,y,len,hei,loc)!=6)
+	    {
+		write("Defekte Zeile "+(i+1)+" in /d/"+myself+"/SUBMAPS.\n");
+		continue;
+	    }
+	    members      += ({ name });
+	    mem_x_pos    += ({ x });
+	    mem_y_pos    += ({ y });
+	    mem_x_max    += ({ x+len });
+	    mem_y_max    += ({ y+hei });
+	    mem_length   += ({ len });
+	    mem_height   += ({ hei });
+	    mem_locations += ({ loc });
+	}
+}
+
+
+void create() {
+    sscanf(object_name(),"/d/%s/map",myself);
+    get_members();
+}
+
+/*
+FUNKTION: query_member
+DEKLARATION: int query_member(int x, int y)
+BESCHREIBUNG:
+Liefert fuer die lokalen Koordinaten x und y den zugehoerigen Zaehler zum
+Sub-Domain-Bereich.
+Dieser Zaehler wird dann z.B. fuer 'query_member_info' benoetigt.
+VERWEISE: query_member_info,
+GRUPPEN: map, domain
+*/
+int query_member(int x, int y) {
+    int i, siz;
+
+    for (i=0,siz=sizeof(members); i<siz; i++) {
+	if (x >= mem_x_pos[i] && x < mem_x_max[i] &&
+	    y >= mem_y_pos[i] && y < mem_y_max[i])
+	    return i;
+	}
+    return -1;
+}
+
+/*
+FUNKTION: add_karte
+DEKLARATION: void add_karte(string file [, int x, int y ])
+BESCHREIBUNG:
+Mit dieser Funktion kann man einfach eine Karte in die Map einbinden.
+Beispiele siehe /d/Doerrland/map.c
+VERWEISE: query_room_icon
+GRUPPEN: map, domain
+*/
+varargs void add_karte(string file, int x, int y) {
+    if (file_size(file)<0)
+	return;
+    karte_filenames+=({file});
+    karte_files+=({explode(read_file(file),"\n")[0..<2]});
+    karte_x+=({x});
+    karte_y+=({({y,y+sizeof(karte_files[<1])-1})});
+}
+
+/*
+FUNKTION: query_karten
+DEKLARATION: mixed *query_karten()
+BESCHREIBUNG:
+Diese Funktion liefert alle mit add_karte eingebundenen Karten
+in einem Array der Form
+    ({ ({ file, x, y }),
+       ({ file, x, y }),
+       ...
+    })
+zurueck.
+VERWEISE: add_karte, query_room_icon
+GRUPPEN: map, domain
+*/
+mixed *query_karten()
+{
+    return transpose_array(({ karte_filenames, karte_x, karte_y}));
+}
+
+/*
+FUNKTION: query_room_icon
+DEKLARATION: string query_room_icon(int x, int y)
+BESCHREIBUNG:
+Liefert das 'Room-Icon' aus der Karte zu den Koordinaten x und y
+VERWEISE: add_karte
+GRUPPEN: map, domain
+*/
+string query_room_icon(int x, int y) {
+    int i;
+    string tmp;
+
+    for(i=0; i<sizeof(karte_files); i++)
+	if (y>=karte_y[i][0] && y<=karte_y[i][1] && x>=karte_x[i] &&
+		((tmp=karte_files[i][karte_y[i][1]-y][x-karte_x[i]..x-karte_x[i]])!=""))
+	    return tmp;
+}
+
+/* flag: 0: wenn die Member-Map nicht existiert oder nichts liefert,
+ *          returne Map-Icon
+ *       1: wenn die Member-Map nicht existiert, returne Nummer
+ *       2: wenn die Member-Map nicht existiert oder nichts liefert,
+ *          returne Nummer
+ *       3: wenn die Member-Map existiert, returne Nummer
+ *       4: wenn es eine Member-Map ist, returne Nummer
+ */
+string query_map_icon(int x, int y, int flag) {
+    int pos;
+    string tmp, mem_map;
+
+    /* Nun nachschauen, ob wir uns im allgemeinen Teil der Domain oder	*/
+    /* bei einem Domain-Mitglied befinden.				*/
+    /* Wenn ja, dann dort mit lokalen Koordinaten (!) nachfragen.	*/
+
+    pos=query_member(x,y);
+    if (pos>=0) {
+	if (flag==4)
+	    return to_string(({pos+65}));
+	mem_map="/d/"+myself+"/"+members[pos]+"/"+mem_locations[pos]+"/map.lpc";
+	if (file_size(mem_map)>0) {
+	    if (flag==3)
+		return to_string(({pos+65}));
+	    tmp = ({string})mem_map->query_room_icon(x-mem_x_pos[pos],
+						     y-mem_y_pos[pos]);
+	    if (tmp)
+		return tmp;
+	    if (flag==2)
+		return to_string(({pos+65}));
+	    }
+	else if (flag>0)
+	    return to_string(({pos+65}));
+	}
+
+    tmp=query_room_icon(x,y);
+    if (!tmp)
+	return " ";
+    return tmp;
+}
+
+/*
+FUNKTION: query_member_info
+DEKLARATION: mixed *query_member_info(int zaehler)
+BESCHREIBUNG:
+Liefert ein Array mit folgendem Inhalt:
+({ Name des Members, X-Offset des Sub-Domain-Bereiches,
+   Y-Offset des Sub-Domain-Bereiches, Breite, Hoehe, Unterverzeichnis })
+Als Zaehler uebergibt man die Zahl, die man von 'query_member' bekommen hat.
+VERWEISE: query_member
+GRUPPEN: map, domain
+*/
+mixed *query_member_info(int i) {
+    if (i>=0 && i<sizeof(members))
+        return ({ members[i], mem_x_pos[i], mem_y_pos[i], mem_length[i],
+		  mem_height[i], mem_locations[i] });
+}
+
+/*
+FUNKTION: query_member_map
+DEKLARATION: string query_member_map(int zaehler)
+BESCHREIBUNG:
+Liefert den File-Namen der Sub-Domain-Map (Member-Map).
+Den Zaehler erhaelt man mit der Funktion query_member
+VERWEISE: query_member
+GRUPPEN: map, domain
+*/
+string query_member_map(int i) {
+    string map;
+
+    if (i<0 || i>=sizeof(members))
+	return 0;
+    map="/d/"+myself+"/"+members[i]+"/"+mem_locations[i]+"/map.lpc";
+    if (file_size(map)>0)
+	return map;
+}
+
+/*
+ * Der neue Map-Raum fragt hier nach seinem Aussehen und Inhalt.
+ * Wird von /map/map aufgerufen.
+ */
+int setup_map_room(object room,int x,int y) {
+    int pos, res;
+    string mem_map;
+    object ob;
+
+    /* Nun nachschauen, ob wir uns im allgemeinen Teil der Domain oder	*/
+    /* bei einem Domain-Mitglied befinden.				*/
+    /* Wenn ja, dann dort mit lokalen Koordinaten (!) nachfragen.	*/
+
+    pos = query_member(x,y);
+    if (pos >= 0) {
+	mem_map="/d/"+myself+"/"+members[pos]+"/"+mem_locations[pos]+"/map.lpc";
+	if (ob=find_object(mem_map))
+	    res=({int})ob->setup_room(room,x-mem_x_pos[pos],y-mem_y_pos[pos],x,y);
+	else if (file_size(mem_map) > 0)
+	    res = ({int})mem_map->setup_room(room,x-mem_x_pos[pos],y-mem_y_pos[pos],x,y);
+	}
+    if (!res)
+	res = setup_room(room, x, y);
+    return res;
+}
+
+// MAP_OB fragt hier nach dem Filenamen des zu clonenden Raumes
+string get_room_file(int x, int y)
+{
+    int pos;
+    string mem_map, room_file;
+    object ob;
+
+    /* Nun nachschauen, ob wir uns im allgemeinen Teil der Domain oder	*/
+    /* bei einem Domain-Mitglied befinden.				*/
+    /* Wenn ja, dann dort mit lokalen Koordinaten (!) nachfragen.	*/
+
+    pos = query_member(x,y);
+    if (pos >= 0)
+    {
+	mem_map="/d/"+myself+"/"+members[pos]+"/"+mem_locations[pos]+"/map.lpc";
+	if (ob=find_object(mem_map))
+	    room_file=({string})ob->query_room_file(x-mem_x_pos[pos],y-mem_y_pos[pos],x,y);
+	else if (file_size(mem_map) > 0)
+	    room_file=({string})mem_map->query_room_file(x-mem_x_pos[pos],y-mem_y_pos[pos],x,y);
+    }
+    if (!room_file)
+	room_file = query_room_file(x, y);
+    return room_file;
+}
+
+/*
+ * Das MAP_OB fragt hier nach dem Filenamen des Map-Raumes
+ * mit den Koordinaten x und y, den es auf /map kopieren
+ * und laden soll.
+ *
+ * Wird von /map/map aufgerufen.
+ */
+string query_map_file_name(int x, int y) {
+    int pos;
+
+    pos = query_member(x,y);
+    if (pos < 0)
+	return "/d/"+myself+"/m"+x+"_"+y+".lpc";
+
+    return "/d/"+myself+"/"+members[pos]+"/"+mem_locations[pos]+"/m"+
+	   (x-mem_x_pos[pos])+"_"+(y-mem_y_pos[pos])+".lpc";
+}
+
+int *query_room_coordinates(string str) {
+    string wiz, bereich, *pfad;
+    int x, y, a, siz;
+
+    if (sscanf(str,"m%d_%d",x,y) == 2)
+	return ({ x, y });
+
+    if (sizeof(pfad = explode(str,"/")) < 3)
+	return 0;
+
+    if (sscanf(pfad[<1],"m%d_%d",x,y) != 2)
+	return 0;
+
+    wiz = pfad[0];
+    bereich = implode(pfad[1..<2],"/");
+
+    for (a=0, siz=sizeof(members); a<siz; a++)
+	if (members[a] == wiz && mem_locations[a] == bereich)
+	    return ({ x+mem_x_pos[a], y+mem_y_pos[a] });
+}
+
+
+string *query_members() {
+    return ({})+members;
+}

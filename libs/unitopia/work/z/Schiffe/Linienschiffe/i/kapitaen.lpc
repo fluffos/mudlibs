@@ -1,0 +1,468 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:    /z/Schiffe/Linienschiffe/i/kapitaen.c
+// Description:
+// Author:      Francis
+// Modified by: 
+//  Freaky      (10.03.1998)    message auf send_message umgebaut.
+//  Tmm         (19.04.2001)    forbidden_wield
+//  Menaures    (20.04.2001)    wrap_say fuer die message's
+//  Menaures    (28.03.2002)    integerueberlauf
+//  Menaures    (12.12.2002)    Ueberschneidende Routen erlauben
+//  Menaures    (19.12.2002)    Aenderung rueckgaengig machen, die Routen
+//                                  richtigherum abarbeiten liess
+//                                  Doku anpassen... argl *loesch*
+//  Menaures    (02.05.2005)    Haefen-Position ueberpruefen
+//  Menaures    (16.06.2005)    Nochmal Haefen-Position Bugfix
+//  Wyvern      (18.02.2012)    do_notifies beim Ankommen und Ablegen rein
+//  Wyvern      (10.03.2012)    Umstellung auf hafenname-" #" auf Grund von 
+//                              Anpassung auf neue Kurstafel
+//
+
+#ifdef Orbit
+// #define DEBUGGER "menaures"
+#endif
+
+#include <debug.h>
+#include <message.h>
+
+/*
+ * /z/Schiffe/Linienschiffe/i/kapitaen.c
+ *
+ * Dies ist ein auf /z/Schiffe/Linienschiffe/i/skipper.c aufgebautes Monster
+ * speziell fuer die die Domains verbindenden Faehren.
+ *
+ * Er faehrt automatisch eine ihm mit
+ *
+ *    set_route(mixed *route)
+ *
+ * mitgeteilte Route zwischen beliebigen und beliebig vielen Haefen ab.
+ * Format fuer das Argument route:
+ *
+ *        ({ ({ string hafen, int pause }),    // Pause in Spiel-Minuten
+ *                       .............
+ *                         })
+ * Beispiel:
+ *
+ *        ({ ({ "hafen1", 20 }),
+ *           ({ "hafen2", 20 }),
+ *           ({ "hafen3", 20 }),
+ *           ({ "hafen2", 20 })  })
+ *
+ * Hier faehrt der Kapitaen immer zwischen Hafen 1 und Hafen 3 hin- und her
+ * mit einem Zwischenstopp in Hafen 2 und macht in jedem Hafen 20 Spiel-
+ * minuten Pause.
+ * Damit der Kapitaen seinen Weg findet, muessen allerdings die dafuer
+ * notwendigen Routen-Files vorhanden sein, in unserem Beispiel:
+ *
+ *    hafen1-hafen2, hafen2-hafen3, hafen3-hafen2 und hafen2-hafen1
+ *
+ * Naeheres zu den Routen-Files findet man im Header von
+ * /z/Schiffe/Linienschiffe/i/skipper.c
+ *
+ * Der Kapitaen schreibt seine Abfahrtszeiten auf die (eventuell) im
+ * Hafen stehende Kurstafel (/obj/kurstafel.c), es sei denn, man ruft
+ *
+ *    set_write_depart(0)
+ *
+ * auf.
+ *
+ * ACHTUNG:
+ *
+ *    Falls uU die Faehre einmal stehenbleibt, weil call_outs untergehen
+ *    (nicht zu verhindern), wird hier im reset() der skipper mitsamt seinem
+ *    Schiff in seinen Heimathafen zurueckversetzt !
+ *
+ */
+
+#pragma save_types
+
+inherit "/z/Schiffe/Linienschiffe/i/skipper";
+inherit "/p/Misc/i/array";
+
+#include <time.h>
+#include <message.h>
+#include <control.h>
+
+string *haefen = ({});
+string *haefen_lc = ({});    // lower_case-version
+int *pausen = ({});
+int *fahrzeiten = ({});    // fahrzeiten[p] = zeit( haefen[p-1] -> haefen[p] )
+int write_depart;
+int call_count;
+int abfahrts_zeit = time();
+string abfahrts_hafen;
+int position;
+int first_depart;
+
+
+void reset() {
+    if (object_name() != "/z/Schiffe/Linienschiffe/i/kapitaen" && object_name() != "/obj/kapitaen")
+    //    if (problem())
+    //    bis mir was besseres einfaellt, mit Gewalt korrigieren.
+    //                                                               Sissi.
+    korrektur(0);
+}
+
+int padd(int p) {
+    //fixed Garthan Sonntag 24. Juli 1994 11:45:40
+    return (p+1) % sizeof(haefen);
+}
+
+int psub(int p) {
+    //fixed Garthan Sonntag 24. Juli 1994 11:45:40
+    return (p-1+sizeof(haefen)) % sizeof(haefen);
+}
+
+int compute_wiederkehr(string hafen, string zielhafen, int pause) {
+    DEBUG(sprintf("%#Q::compute_wiederkehr(%#Q,%#Q,%#Q)",
+          this_object(), hafen, zielhafen, pause));
+
+    int sum, a, p;
+
+    if (member(haefen_lc, hafen = lower_case(hafen-" ")) < 0)
+    {
+        DEBUG(sprintf("%#Q==compute_wiederkehr !! Nicht auf Strecke", this_object()));
+    return -2;    /* Wir sind nicht auf der Strecke*/
+    }
+
+    if (haefen_lc[p = psub(position)] != hafen) /* Wir sind nicht im Fahrplan*/
+    {
+        DEBUG(sprintf("%#Q==compute_wiederkehr !! Nicht im Fahrplan", this_object()));
+    return -1;
+    }
+
+    sum = pause;
+
+    a = psub(position);
+
+    for (p = padd(p); p != a; p = padd(p))
+    {
+    if (fahrzeiten[p] <= 0)
+        return -1;
+
+    sum += ((fahrzeiten[p] * TIMEWARP) / 60);    /* Umrechnung in Spielminuten*/
+    sum += pausen[p];
+    }
+
+    DEBUG(sprintf("%#Q==compute_wiederkehr => %#Q", this_object(), sum));
+
+    return sum;
+}
+
+void do_write_depart(object schiff, string hafen,string zielhafen, int pause) {
+
+    DEBUG(sprintf("%#Q::do_write_depart(%#Q,%#Q,%#Q,%#Q)",
+          this_object(), schiff, hafen, zielhafen, pause));
+
+    object tafel;
+    string j1, j2, abfahrt1, abfahrt2;
+    int i1, i2, h, m, s, nh, nm, fahrminuten;
+
+    if (sizeof(haefen) <= 0)
+        return;
+
+    if (!(tafel = present("kurstafel",environment(schiff))))
+        return;
+    
+    sscanf(vtimestr(vtime()),"%s %d. %s %d %d:%d:%d",j1,i1,j2,i2,h,m,s);
+    m += pause;
+    while (m >= 60) {
+        m -= 60;
+        h += 1;
+    }
+    while (h >= 24)
+        h -= 24;
+
+    abfahrt1 = sprintf("%'0'2d Uhr %'0'2d", h, m);
+
+    fahrminuten = compute_wiederkehr(hafen,zielhafen,pause);
+
+    if (fahrminuten > 0) {
+        nm = m + fahrminuten;
+        nh = h;
+        while (nm >= 60) {
+            nm -= 60;
+            nh += 1;
+        }
+        while (nh >= 24)
+            nh -= 24;
+
+        abfahrt2 = sprintf("%'0'2d Uhr %'0'2d", nh, nm);
+    }
+    else if (fahrminuten < -1)
+        abfahrt2 = "keine";
+    else
+        abfahrt2 = "ungewiss";
+
+    tafel->add_ship(schiff->query_cap_name(),zielhafen,abfahrt1,abfahrt2);
+}
+
+varargs nosave void route(int first) {
+    object env, schiff, hafen;
+    string hafenname, lc_hafenname;
+    int tmp, pause, p;
+
+    if( !(env = environment(this_object())) ||
+        !(schiff = (object)env->query_type("mein_schiff")) ||
+        !(hafen = environment(schiff)) ) 
+    {
+        if (first)                      /* falls das Schiff*/
+        {   call_count++;               /* erst spaeter von Hand*/
+            if (call_count > 50)        /* gestartet wird.*/
+                return;
+            call_out("route",20,1);
+        }
+        return;
+    }
+
+    if (sizeof(haefen)<=0)
+        return;
+
+    if (!(hafenname = (string)hafen->query_type("hafen")) || hafenname == "")
+        return;
+
+    if (find_call_out("fahr_los") != -1)    /* Wir fahren schon*/
+        return;
+
+    lc_hafenname = lower_case(hafenname-" ");
+
+    if (first || lower_case(lc_hafenname) != haefen_lc[position]) {
+        position = member(haefen_lc, lc_hafenname); // Unser Hafen.
+        position = padd(position);            /* Der naechste Hafen*/
+        pause = first_depart;
+    }
+
+    else {
+        pause = pausen[position];    /* Wir sind im Zielhafen*/
+        position = padd(position);
+    }
+
+    if (write_depart)
+        do_write_depart(schiff,hafenname,haefen[position], pause );
+
+    call_out("fahr_los",(pause*60)/TIMEWARP,haefen[position]);
+}
+
+void arrival_message (string zielhafen) {
+    mess_to_all(wrap_say(Der()+" verkuendet:","Wir sind soeben im Hafen von "+
+    capitalize(zielhafen)+" eingelaufen."),MT_NOISE,MA_COMM);
+}
+
+void arrival_action(string zielhafen) {
+    int dauer;
+    object env, schiffsob, hafenob;
+
+    env = environment(this_object());
+    schiffsob = env->query_type("mein_schiff");
+    hafenob = environment(schiffsob);
+
+    do_notifies(C_RESORT, "ship_arrive", ({ "", "_here"}), ({ schiffsob, hafenob}) );
+
+    arrival_message (zielhafen);
+    if (sizeof(haefen) > 0) {
+        if ((dauer = time() - abfahrts_zeit) > 0 &&
+            lower_case(zielhafen) == haefen_lc[position] &&
+            abfahrts_hafen = haefen[psub(position)] )
+            fahrzeiten[position] = dauer;
+
+        route();
+    }
+}
+
+void command_action() {
+    if (random(100) < 20)
+    call_out("kompass",2);
+    if (random(100) < 18)
+    call_out("logge",5);
+    if (random(100) < 16)
+    call_out("ausschau",8);
+    this_object()->send_message(MT_LOOK,MA_USE,Der()+" bewegt das Steuerrad.\n");
+}
+
+void depart_message (string hafen, string zielhafen) {
+    mess_to_all(wrap_say(Der()+" verkuendet:",
+    "Wir verlassen nun den Hafen von "+capitalize(hafen)+" und werden "
+    "in Kuerze im Hafen von "+capitalize(zielhafen)+" einlaufen."),MT_NOISE,MA_COMM);
+}
+
+void depart_action(string hafen, string zielhafen) {
+    object env, schiffsob, hafenob;
+
+    depart_message (hafen, zielhafen);
+    abfahrts_zeit = time();
+    abfahrts_hafen  = hafen;
+
+    env = environment(this_object());
+    schiffsob = env->query_type("mein_schiff");
+    hafenob = environment(schiffsob);
+
+    do_notifies(C_RESORT, "ship_depart", ({ "", "_here"}), ({ schiffsob, hafenob}) );
+}
+
+void create() {
+    "*"::create();
+    add_controller("forbidden_wield", this_object());
+    first_depart = 4;
+    first_depart += random(6);
+    write_depart = 1;
+    
+    if (object_name() != "/z/Schiffe/Linienschiffe/i/kapitaen" && object_name() != "/obj/kapitaen")
+        call_out("route",0,1);
+}
+
+void kompass() {
+    do_command("schau auf kompass");
+}
+
+void logge() {
+    do_command("schau auf logge");
+}
+
+void ausschau() {
+    do_command("halte ausschau");
+}
+
+/*
+ * pausen in Minuten Spielzeit....
+ */
+
+/*
+FUNKTION: set_route
+DEKLARATION: void set_route(mixed *route)
+BESCHREIBUNG:
+Mit set_route kann man dem Kapitaen eines Schiffe mitteielen, welche Route er
+automatisch abfahren soll.
+Format fuer das Argument route:
+
+         ({ ({ string hafen, int pause }),    // Pause in Spiel-Minuten
+              .............
+                          })
+Beispiel:
+
+         ({ ({ "hafen1", 20 }),
+        ({ "hafen2", 20 }),
+        ({ "hafen3", 20 }),
+        ({ "hafen2", 20 })  })
+
+Hier faehrt der Kapitaen immer zwischen Hafen 1 und Hafen 3 hin- und her
+mit einem Zwischenstopp in Hafen 2 und macht in jedem Hafen 20 Spiel-
+minuten Pause.
+Damit der Kapitaen seinen Weg findet, muessen allerdings die dafuer
+notwendigen Routen-Files vorhanden sein, in unserem Beispiel:
+
+     hafen1-hafen2, hafen2-hafen3, hafen3-hafen2 und hafen2-hafen1
+
+Soll ein Hafen als "nicht offiziell" gelten, wie zum Beispiel die Haefen
+"suedpol_1" und "suedpol_2", muss das praefix # gesetzt werden. Die Routenfiles
+selber bleiben ohne Praefix.
+
+Beispiel:
+         ({ ({ "#hafen4", 20 }), ...
+     
+Naeheres zu den Routen-Files findet man im Header von
+/z/Schiffe/Linienschiffe/i/skipper.c
+
+ACHTUNG: Die Route wird rueckwaerts abgefahren (historisch)
+VERWEISE: query_route
+GRUPPEN: schiff
+*/
+void set_route(mixed *route) {
+
+    route = transpose_array(route);
+
+    haefen = reverse_array(route[0]);
+    pausen = reverse_array(route[1]);
+
+    if(sizeof(haefen) != sizeof(pausen)){
+        raise_error("set_route: Parameter hat falsches Format\n");
+    }
+
+    // Wie lange er zum Fahren braucht findet er erst mit der Zeit raus...
+    fahrzeiten = allocate(sizeof(haefen), -1);
+
+//    haefen_lc = map(haefen, #'lower_case);
+    haefen_lc = map(haefen, function string(string str) 
+                            {
+                                return lower_case(str-" "); 
+                            } );
+
+            // Zaehler zuruecksetzen:
+    position = 0;
+    first_depart = 5 + random(5);
+    abfahrts_zeit = time();
+    abfahrts_hafen = 0;
+}
+
+/*
+ *  set_write_depart    Ob er die Abfahrtszeiten auf der
+ *            Kurstafel eintragen soll
+ */
+
+/*
+FUNKTION: set_write_depart
+DEKLARATION: void set_write_depart(int flag)
+BESCHREIBUNG:
+Mit set_write_depart kann man dem Kapitaen eines Schiffes angeben, ob er
+auf den Kurstafeln die Abfahrtszeit eintragen soll oder nicht. Bei flag=1
+tut er das, bei flag=0 eben nicht. Defaultmaessig schreibt er.
+VERWEISE:
+GRUPPEN: schiff
+*/
+void set_write_depart(int flag) {
+    write_depart = flag ? 1 : 0;
+}
+
+void debug() {
+    write("----- haefen -----\n"+
+      mixed2str(haefen)+
+      "\n----- position -----\n"+
+      position+
+      "\n----- fahrzeiten -----\n"+
+      mixed2str(fahrzeiten)+
+      "\n----- abfahrts_zeit -----\n"+
+      abfahrts_zeit+
+      "\n----- abfahrts_hafen -----\n"+
+      abfahrts_hafen+
+      "\n");
+}
+
+void recover_action() {
+    if (find_call_out("route") == -1 && sizeof(haefen) > 0)
+    call_out("route",2);
+}
+
+/*
+FUNKTION: query_route
+DEKLARATION:  mixed *query_route()
+BESCHREIBUNG:
+Mit query_route kann man einen Kapitaen abfragen, welche Route er
+verfolgt. Das Array, das er zuruckliefert, entspricht dem Array, das man
+fuer die Funktion set_route verwendet
+VERWEISE: set_route
+GRUPPEN: schiff
+*/
+mixed *query_route() {
+    mixed *ret;
+    int a;
+
+    return transpose_array( ({ haefen, pausen }) );
+}
+
+int forbidden_wield(object was, object hand, object lebewesen)
+{
+    if (lebewesen==this_object())
+    {
+        send_message(MT_NOISE, MA_COMM, wrap(Der()+" betrachtet "+den(was)+
+            ", denkt einen Moment nach und wirft "+
+            den(was)+" dann kopfschuettelnd ueber "+
+            "Bord."));
+        was->remove();
+        exec_command("denke", "ich brauche doch beide Haende zum Steuern...");
+        return 1;
+    }
+}
+
+int query_write_depart(){
+    return write_depart;
+}

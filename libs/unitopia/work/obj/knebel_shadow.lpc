@@ -1,0 +1,247 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/obj/knebel_shadow.c
+// Description:
+//
+// $Log: knebel_shadow.c,v $
+// Revision 1.6  2005/02/02 22:23:47  gnomi
+// Seele-Befehle kann man auch verhindern.
+//
+// Revision 1.5  2003/11/18 06:35:02  gnomi
+// /i/shadow bis zur Ueberarbeitung nur privat inheriten (quasi als Alibi).
+//
+// Revision 1.4  2003/11/04 03:20:34  gnomi
+// Ist nun ein Autoloader.
+// Kann auch Kurierkanaele sperren.
+//
+// Revision 1.3  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+   Hier weitere Optionen eintragen. Auf Konsistenz der #defines
+   und des options-Array achten! Fuer zu untersagende Aktivitaeten
+   muss die entsprechende Funktion in /i/player/player.c hier
+   redefiniert werden.
+
+   Die Grossbuchstaben in *options sind die Zeichen, auf die geprueft
+   wird/werden sollte, das volle Wort dient der Dokumentation. Also
+   auf Eindeutigkeit des grossgeschriebenen Optionsbeginns achten!
+
+
+   Es gibt folgende von aussen aufrufbare Funktionen:
+
+   int query_knebel_exists() - liefert 1 zurueck. Damit kann
+       geprueft werden, ob eine Person bereits einen Knebel hat.
+
+   string query_option(int i) - liefert den string options[i] zurueck
+       oder 0, wenn i zu gross. Damit lassen sich verfuegbare Optionen
+       feststellen und parsen.
+
+   void attach(object ob) - heftet den Knebel dem Objekt ob an.
+
+   void set_forbid(int i,string msg,string by) - verbietet die Aktion
+        entsprechend options[i]. msg = Meldung an den Spieler bei
+        versuchter Ausfuehrung (oder 0 -> Default-Meldung).
+        by = Name des Verursachenden. 
+
+   void clear_forbid(int i) - gibt Aktion wieder frei
+
+   string query_forbid(int i) - liefert die Fehlversuchsmeldung
+        und den Namen des Verursachers zurueck, wenn Aktion i gesperrt.
+        Ansonsten wird 0 zurueckgegeben
+*/
+
+#define SAY 0
+#define SHOUT 1
+#define TELL 2
+#define WHISPER 3
+#define TAKE 4
+#define PUT 5
+#define GO 6
+#define LOOK 7
+#define KILL 8
+#define SOUL 9
+
+#include <move.h>
+#include <config.h>
+
+private inherit "/i/shadow"; // Nur fuer den Autoloader-Mechanismus...
+
+private string *options = ({"SAge","Bruelle","Rede","Fluestere",
+                            "Nehme","Lege","Gehe","SChaue","Toete", "SEele"});
+
+#define F_MESSAGE	0
+#define	F_BY_WHOM	1
+
+#define F_KURIER(x)	100+x
+mapping forbidden = ([:2]);
+
+#define check(x) if (forbidden[x]) {\
+                     write(forbidden[x]+"\n");\
+                     return 1;\
+                     }
+
+object real;
+
+
+int say_command(string s)
+{
+    check(SAY);
+    return (int)real->say_command(s);
+}
+
+int shout_command(string s)
+{
+    check(SHOUT);
+    return (int)real->shout_command(s);
+}
+
+int channel(string s)
+{
+    check(SHOUT);
+    return (int)real->channel(s);
+}
+
+int tell_command(string s)
+{
+    check(TELL);
+    return (int)real->tell_command(s);
+}
+
+int whisper_command(string s)
+{
+    check(WHISPER);
+    return (int)real->whisper_command(s);
+}
+
+int take_command(string s)
+{
+    check(TAKE);
+    return (int)real->take_command(s);
+}
+
+int put_command(string s)
+{
+    check(PUT);
+    return (int)real->put_command(s);
+}
+
+varargs int move(mixed dest, int way, string out, string in)
+{
+    if (forbidden[GO])
+    {
+        tell_object(real, forbidden[GO,F_MESSAGE]+"\n");
+        if (this_interactive() && (real != this_interactive()))
+            tell_object(this_interactive(),
+                Der(real)+" kann sich gerade nicht bewegen!\n");
+	return MOVE_NOT_ALLOWED;
+    }
+    return real->move(dest,way,out,in);
+}
+
+
+int look(string s)
+{
+    check(LOOK);
+    return (int)real->look(s);
+}
+
+int attackiere_command(string s)
+{
+    check(KILL);
+    return (int)real->attackiere_command(s);
+}
+
+string no_kurier(int nr)
+{
+    return forbidden[F_KURIER(nr)];
+}
+
+private int knebel_forbidden_seele(string controller, object wer, mixed wen,
+    string what, string adverb, int align, int flags, int msg_typ_wer,
+    int msg_typ_wen, int msg_typ_andere)
+{
+    if(wer==real)
+	check(SOUL);
+}
+
+int knebel_emote_verboten()
+{
+    check(SOUL);
+}
+
+/* ab hier sollte keine Anpassung mehr noetig sein... */
+
+int query_knebel_exists()
+{
+    return 1;
+}
+
+string query_option(int i)
+{
+    if (i>=100)
+    {
+	mapping info = EVENT_MASTER->query_events()[i-100];
+	if(info)
+	    return info["name"];
+    }
+    if (i>=sizeof(options)) return 0;
+    return options[i];
+}
+
+void attach(object player)
+{
+    if (!player) destruct(this_object());
+    shadow(player,1);
+    real = player;
+
+    player->add_controller("forbidden_seele", #'knebel_forbidden_seele);
+}
+
+void create()
+{
+}
+
+void set_forbid(int option_number,string msg,string by)
+{
+    if (!msg) msg="Ein Gott hat Dir das verboten.";
+    m_add(forbidden, option_number, msg, by);
+}
+
+void clear_forbid(int option_number)
+{
+    m_delete(forbidden, option_number);
+    if(!sizeof(forbidden))
+	destruct(this_object());
+}
+
+string query_forbid(int option_number)
+{
+    if (!forbidden[option_number]) return 0;
+    return forbidden[option_number,F_MESSAGE]+" ("
+          +forbidden[option_number,F_BY_WHOM]+")";
+}
+
+int* query_forbids()
+{
+    return sort_array(m_indices(forbidden),#'>);
+}
+
+mixed query_auto_load_shadow(object sh)
+{
+    if(sh!=this_object())
+	return real->query_auto_load_shadow(sh);
+
+    return forbidden;
+}
+
+void init_arg_shadow(object spieler, mixed autoload)
+{
+    if(!mappingp(autoload))
+	return;
+
+    forbidden=autoload;
+    attach(spieler);
+}

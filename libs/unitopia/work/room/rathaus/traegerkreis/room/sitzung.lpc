@@ -1,0 +1,198 @@
+/* File: /d/Vaniorh/fizban/sitzung.c
+   Autor: urspruenglich Monty
+          uebernommen von Fizban
+   Datum: 09.05. 1996
+   Bemerkung: Der Sitzungssaal des Traegerkreises UNItopia
+*/
+
+//  Tmm    10.05.03 - map_array durch map ersetzt
+//  Tiberian, 01.06.2008 - Umzug nach Root
+
+inherit "%room";
+
+#include <verein.h>
+#include <level.h>
+#include <move.h>
+#include <landschaft.h>
+
+int laeuft;
+
+
+int query_logging() { return laeuft; }
+
+
+int vorstandp(object player) {
+    if(!player || !playerp(player))
+        return 0;
+
+    if (member(VORSTAND,player->query_real_name())!=-1)
+        return 1;
+}
+
+
+int befugter(object ob) {
+    return (vorstandp(ob) || adminp(ob));
+}
+
+
+string proto_read() {
+    if (file_size("/log/sys/"+LOGFILE)>0) {
+        tail("/log/sys/"+LOGFILE);
+        return "";
+    }
+    return "Es ist nichts auf dem Streifen ausser einiger Fettspritzer.\n";
+}
+
+
+string protokollant_long() {
+    return wrap("Eine uralte, fetttriefende Maschine mit einem "
+      "Magie-Dampf-Hybridantrieb. Bei einer Sitzung schiebt die mit "
+      "jedem gesprochenen Wort einen langen Streifen Papier, das "
+      "Protokoll eben, ein Stueck weiter hervor. Dabei entweichen "
+      "kleine Dampfwoelkchen und gelegentlich auch ein magisches Funkeln. "+
+      (laeuft?"Eine leuchtende Lampe zeigt an, dass sich der Protokollant "
+        "in Betrieb befindet und alles aufzeichnet.":"Der Protokollant ist "
+        "gerade ausser Betrieb, noch ist hier keine Sitzung im Gange."));
+}
+
+
+string liste() {
+    string *inv;
+    inv = map(all_inventory(this_object()), #'Name);
+    return (sizeof(inv)>1)?(implode(inv[0..<2], ", ")+" und "+inv[<1]):
+    inv[0];
+}
+
+
+void init() {
+    add_action("start","starte");
+    add_action("stop","stoppe");
+    add_action("say_command","sag",1);
+    add_action("say_command","'",2);
+}
+
+
+void create() {
+    ::create();
+
+    set_own_light(1);
+    add_type("kunstlicht",1);
+    add_type(LANDSCHAFT,L_DRINNEN|L_HAUS|L_SIEDLUNG);
+    add_type("kaempfen_verboten",1);
+    add_type("stehlen_verboten","Willst Du etwa wirklich HIER stehlen???\n");
+    add_type("keine_magie","Die magische Aura dieses Raumes verhindert jede Magie!\n");
+    add_type("graben_verboten",1);
+
+    set_short("Der Sitzungsraum");
+    set_long("Der Sitzungsraum des Vorstandes des Tragerkreises. "+
+      "Ein automatischer Protokollant steht in der Ecke, er schreibt die "+
+      "Protokolle der Vorstandssitzungen (eigentlich widersinnig, wieso "+
+      "halten VorSTAENDE SITZungen ab?). Ein langes Protokoll haengt aus "+
+      "dem Protokollanten heraus.\n"+
+      "        starte     Eroeffnet eine Vorstanddsitzung und startet den\n"+
+      "                   Protokollanten.\n"+
+      "        stoppe     Beendet eine Sitzung und stoppt den Protokollanten.\n"+
+      "Der Protokollant Protokolliert nur, was gesagt wird und haelt fest, wenn "+
+      "jemand den Sitzungsraum betritt oder verlaesst. Den letzten Abschnitt des "+
+      "Protokolls kann man mit 'lese protokoll' einsehen. Wem das Stueckchen nicht "+
+      "reicht, der muss das Protokoll unter /log/sys/SITZUNG ansehen.");
+
+    add_v_item(([
+        "name":"protokollant",
+        "gender":"maennlich",
+        "adjektiv":"automatisch",
+        "long":#'protokollant_long
+      ]));
+
+    add_v_item(([
+        "name":"protokoll",
+        "gender":"saechlich",
+        "id":({"protokoll","papier","papierstreifen"}),
+        "long":"Ein langer Streifen Papier schlaengelt sich aus dem "
+        "Protokollanten. Ab und zu sind einige Fettspritzer von der "
+        "undichten Schmierung darauf. Man kann das Protokoll lesen "
+        "(allerdings nur das letzte Stueck jeweils).",
+        "read":#'proto_read
+      ]));
+
+    set_exit("verein", "sueden");
+}
+
+
+int let_not_in(object move_objekt, object ursprung, string dir) {
+    if(befugter(move_objekt)) {
+        if(query_logging())
+            LOG("*** "+shorttimestr(time())+": "+
+              Name(move_objekt)+" erscheint zur Sitzung.\n");
+        return 0;
+    }
+
+    tell_object(move_objekt, "Du hast hier leider keinen Zutritt!\n");
+    return 1;
+}
+
+
+int let_not_out(object move_objekt, object ziel, string dir) {
+    if(query_logging()) {
+        if(sizeof(all_inventory())==1) {
+            tell_object(move_objekt, wrap("Bitte beende die Sitzung zuerst "
+                "mit 'stoppe', bevor Du den Sitzungssaal verlaesst!"));
+            return 1;
+        }
+
+        LOG("*** "+shorttimestr(time())+": "+
+          Name(move_objekt)+" verlaesst die Sitzung.\n");
+    }
+
+    return 0;
+}
+
+
+int start() {
+    if(!TP || !playerp(TP) || !befugter(TP)) {
+        FAIL("DU darfst das nicht!\n")
+    }
+
+    if(query_logging()) {
+        write("Logging laeuft bereits!\n");
+        return 1;
+    }
+
+    say(wrap(Der(this_player())+" schwingt eine Glocke: Die Sitzung ist eroeffet."));
+    write("Du schwingst eine Glocke: Die Sitzung ist eroeffet.\n");
+    LOG(center(" Sitzung "+timestr(time())+" ", 79, "*")+
+      "\nAnwesend:\n"+wrap(liste())+"\n");
+    laeuft=1;
+    return 1;
+}
+
+
+int stop() {
+    if(!TP || !playerp(TP) || !befugter(TP)) {
+        FAIL("DU darfst das nicht!\n")
+    }
+
+    if (!query_logging()) {
+        write("Es ist gar keine Sitzung eroeffnet!\n");
+        return 1;
+    }
+
+    say(wrap(Der(this_player())+" schwingt eine Glocke: Die Sitzung ist beendet."));
+    write("Du schwingst eine Glocke: Die Sitzung ist beendet.\n");
+    LOG("\nEnde der Sitzung: "+timestr(time())+"\nAnwesend:\n"+
+      wrap(liste())+"\n");
+    laeuft=0;
+    return 1;
+}
+
+
+// Liefert immer 0 zurueck, denn gesprochen soll ja auch noch werden.
+int say_command(string str) {
+    if(!query_logging())
+        return 0;
+
+    if(str && str[0..0]==" ")
+        str=str[1..<1];
+    LOG(sprintf("%s %=-63s\n",left(Name(TP),10)+":",str));
+    return 0;
+}

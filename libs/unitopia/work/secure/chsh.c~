@@ -1,0 +1,177 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/chsh.c
+// Description: Priviligiertes Playerswitching object
+// Author:	Garthan, Freaky
+// Mofified by:	Garthan
+//		Freaky (20.05.97) update_player
+//
+// $Log: chsh.c,v $
+// Revision 1.5  2001/04/27 20:01:35  gnomi
+// Meldungspuffer uebertragen.
+//
+// Revision 1.4  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma strong_types
+#pragma no_inherit
+
+#include <move.h>
+#include <config.h>
+#include <level.h>
+#include <uids.h>
+
+#define UPDATE_TIME 300
+
+
+#if 0
+queue inkonsistent
+
+object relogin()
+{
+   object old;
+   object new;
+
+   if(this_player() != this_interactive() || !this_interactive())
+      return 0;
+
+   old = this_player();
+   old->do_save();
+   seteuid(ROOT_UID);
+   new = clone_object(LOGIN_OB);
+   if(exec(new, old))
+   {
+      new->logon();
+      destruct(old);
+   }
+   else
+      destruct(new); 
+   seteuid(0);
+   return new;
+}
+#endif
+
+
+int secure()
+{
+#ifdef STATUE_ROOM
+    if (object_name(previous_object()) == STATUE_ROOM)
+    	return 1;
+#endif
+    if (adminp(this_player()) &&
+	    geteuid(previous_object()) == geteuid(this_player()))
+	return 1;
+}
+
+string real_name;
+string query_real_name() {return real_name;}
+
+static int do_update_player(object pl, int flag, string shell)
+{
+    object new, *inv, room;
+    int i;
+    string stat;
+
+    if (flag == 0)
+    {
+    	if (interactive(pl))
+	    return -11;
+    }
+    if (!shell)
+    	shell = "/obj/player";
+    pl->do_notify("quit",2);
+    pl->do_save();
+    seteuid(geteuid(pl));
+    new = clone_object(shell);
+    seteuid(0);
+    if (interactive(pl))
+    {
+	if (exec(new, pl))
+	{
+	    if (wizp(new))
+		tell_object(new,"Deine alte Huelle war OBJ("+object_name(pl)+").\n");
+	}
+	else
+	{
+	    if (wizp(new))
+		tell_object(pl,"Eine Reinkarnation war leider nicht moeglich.\n");
+	    destruct(new); 
+	    return -12;
+	}
+    }
+    real_name = pl->query_real_name();
+    new->set_meldungspuffer(pl->query_meldungspuffer());
+    new->setup_player();
+    real_name = 0;
+    room = environment(pl);
+    inv = all_inventory(pl);
+    for(i = 0; i < sizeof(inv); i++)
+    {
+    	if (!inv[i])
+	    continue;
+	if (inv[i]->query_worn())
+	    stat = "worn";
+	else if (inv[i]->query_wield())
+	    stat = "wield";
+	else
+	    stat = 0;
+	if (inv[i]->move(new) != MOVE_OK && inv[i])
+	    destruct(inv[i]);
+	else if (inv[i])
+	{
+	    switch(stat)
+	    {
+	      case "worn":
+	      	inv[i]->do_wear();
+		break;
+	      case "wield":
+	        inv[i]->do_wield();
+		break;
+	    }
+	}
+    }
+    destruct(pl);
+    new->move(room, MOVE_SECRET);
+    new->do_notify("login",2);
+    if (interactive(new) && wizp(new))
+	tell_object(new,"Neugeborener, Du bist jetzt OBJ("+object_name(new)+").\n");
+    return 1;
+}
+
+int update_player(object pl, int flag)
+{
+    object ob;
+
+    if (!secure())
+    	return -1;
+
+    if (flag == 0 || flag == 1)
+    {
+        ob = find_object("/obj/player");
+	if (ob && program_time(ob) <= program_time(pl))
+	    return -2;
+	if (flag == 1)
+	    return do_update_player(pl,1,0);
+	call_out("do_update_player",UPDATE_TIME,pl,0,0);
+	return 1;
+    }
+    return do_update_player(pl,2,0);
+}
+
+int chsh(string shell)
+{
+   int ret;
+
+   if(this_interactive() &&
+      this_player() == this_interactive() &&
+      adminp(this_player()) &&
+      member(MASTER_OB->query_valid_shells(), shell) >= 0)
+   {
+      ret = do_update_player(this_player(),2,shell);
+      if (ret != 1)
+      	printf("RET:%O\n");
+      return ret;
+   }
+}

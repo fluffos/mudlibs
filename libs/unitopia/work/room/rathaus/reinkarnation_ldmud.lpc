@@ -1,0 +1,586 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /room/rathaus/reinkarnation.c
+// Description:
+// Modified by:   Croft   (23.12.98): Inschriften ausgelagert
+//                Copper  (18.10.99): Wwahlmaschine angeworfen
+//                Nethar  (16.09.01): Anstatt vieler Tafeln nur noch 2
+//                                    (Wahl- / Pflichtraetsel)
+//
+// $Log: reinkarnation.c,v $
+// Revision 1.30  2014/11/11 16:42:31  myonara
+// Treppennische eingebaut.
+//
+// Revision 1.29  2014/10/05 12:46:57  myonara
+//  und noch ein Bugfix, waah, ich brauch Urlaub...
+//
+// Revision 1.26  2014/10/04 16:27:37  myonara
+// Einbau vom Umfrage- und Inddenkobold, kurz uiko.
+//
+// Revision 1.25  2008-04-04 12:39:25  gnomi
+// Details von Firestar.
+//
+// Revision 1.24  2007/12/05 11:08:01  gnomi
+// Im Dezember die ausliegende Kandidatenliste zerstoeren.
+//
+// Revision 1.23  2007/02/04 22:05:52  gnomi
+// Typos.
+//
+// Revision 1.22  2006/10/02 20:15:50  gnomi
+// Rangwahlurne ausgebaut.
+//
+// Revision 1.21  2006/06/25 00:17:42  gnomi
+// SRW-Kandidatenliste nur im November anzeigen.
+//
+// Revision 1.20  2005/08/28 21:20:05  gnomi
+// Rangurne eingebaut.
+//
+// Revision 1.19  2004/11/27 21:32:00  gnomi
+// Automatische Spielerratswahl korrigiert.
+//
+// Revision 1.18  2003/11/28 19:10:46  sissi
+// Wahlurne fuer die Spielerratswahl taucht automatisch im Dezember
+// und Januar auf, die Liste fuer die zur Wahl stehenden Spieler im
+// November und Dezember.
+//
+// Revision 1.17  2003/02/14 03:47:12  gnomi
+// SRW-Urne entfernt.
+//
+// Revision 1.16  2003/01/25 17:11:39  sissi
+// Spielerratswahlsende
+//
+// Revision 1.14  2002/10/28 03:02:09  gnomi
+// *** empty log message ***
+//
+// Revision 1.13  2002/09/09 20:31:25  sissi
+// Aktion unser Rathaus soll schoener werden:
+// Ueberall ne Pflanze eingebaut.
+//
+// Revision 1.12  2002/02/27 22:53:45  sissi
+// Spielerratswahlkrams deaktiviert
+//
+// Revision 1.11  2002/01/13 04:50:23  freaky
+// query_long() umgestellt.
+//
+// Revision 1.10  2001/11/30 23:18:08  sissi
+// Wahlurne fuer die Spielerratswahl
+//
+// Revision 1.9  2001/11/27 22:53:13  sissi
+// Spielerratswahlurnendateinamen angepasst
+//
+// Revision 1.8  2001/09/16 19:33:47  sissi
+// Wahl-Pflicht-Raetsel eingefuehrt (Nethar)
+//
+// Revision 1.7  2001/04/07 00:23:55  gnomi
+// Header und/oder CVS-Log eingebaut.
+//
+
+inherit "/i/room";
+
+#include <quest.h>
+#include <invis.h>
+#include <more.h>
+#include <move.h>
+#include <level.h>
+#include <time.h>
+#include <umfragen.h>
+#ifdef UNItopia
+#include "/d/Levitanis/sys/levitanis.h"
+#endif
+
+//Die Fun holt die Wahlurne und Liste
+
+#define SRWAHL
+
+#ifdef SRWAHL
+
+// Im Dezember und Januar laden wir die Wahlurne
+
+
+void get_urnen()
+{
+   object urne,liste;
+   int* now;
+   
+   now = timearray(time());
+
+   if (now[TM_MON]==12 || now[TM_MON]==1)
+   {
+	if(!present(urne = touch("/room/wahlen/srwurne.lpc")))
+	    urne->move(this_object());
+	liste = find_object("/apps/spielerrat_kandidatenliste");
+	if(liste && present(liste))
+	    liste->remove();
+   }
+     
+   // Nur im November anzeigen, ab Dezember gibt es die srwurne.
+   if (//now[TM_MON]>11 || 
+	(now[TM_MON]==11 && now[TM_MDAY]>=15))
+	    if(!present(liste = touch("/apps/spielerrat_kandidatenliste")))
+		liste->move(this_object());
+
+}
+#endif
+
+
+void get_leo()
+{
+   object leo;
+
+   if(!present(leo = touch(abs_path("div/leo"))))
+      leo->move(this_object());
+}
+
+
+void get_inschriften()
+{
+   object inschriften;
+
+   if(!present(inschriften = touch(abs_path("div/inschriften"))))
+      inschriften->move(this_object());
+}
+
+
+void reset()
+{
+    get_leo();
+#ifdef SRWAHL
+    get_urnen();
+#endif
+    get_inschriften();
+}
+
+void init()
+{
+    reset ();
+}
+
+string show_pflichtraetsel()
+{
+    string text, *raetsel;
+    int i;
+
+    raetsel = QUEST_ROOM->query_quests(Q_NECESSARY);
+    text  = "\n Pflichtabenteuer\n ----------------\n\n";
+    text += " Diese Abenteuer musst Du bestehen, um Engel werden zu "
+            "koennen:\n\n";
+    for(i=0; i < sizeof(raetsel); ++i)
+        text += "-----\n"+QUEST_ROOM->query_quest_info(raetsel[i]);
+    text += "-----\n";
+    this_player()->more(explode(text,"\n"), 0, 0, M_AUTO_END);    
+    return "";
+}
+
+string show_wahlraetsel()
+{
+    string text, *raetsel;
+    int i;
+
+    raetsel = QUEST_ROOM->query_quests(Q_WAHL);
+    text  = "\n Wahlabenteuer\n -------------\n\n";
+    text += "Waehle aus dieser Liste "+NEEDED_CHOICE_QUESTS+
+            " Abenteuer aus:\n\n";
+    for(i=0; i < sizeof(raetsel); ++i)
+        text += "-----\n"+QUEST_ROOM->query_quest_info(raetsel[i]);
+    text += "-----\n";
+    this_player()->more(explode(text,"\n"), 0, 0, M_AUTO_END);    
+    return "";
+}
+
+//-----------------------------------------------------Anfang uiko
+private int hat_uiko(object pl)
+{
+    if (!living(pl))
+    {
+        return 0;
+    }
+    object * ua = filter(all_inventory(pl), (: $1->id("uiko") :) );
+    return sizeof(ua) > 0;
+}
+
+string ecke_long(mapping vitem, object wer)
+{
+    if (hat_uiko(wer))
+    {
+        return wrap("Die Ecke ist leer, der UIKO sitzt Dir schon auf der "
+                "Schulter.");
+    }
+    else if (guestp(wer))
+    {
+        return wrap("Die Ecke ist leer, "
+            "Gaesten ist der Uiko nicht zu Diensten.");
+    }
+    else if (touch(UMFRAGE_MASTER)->ist_uiko_aktiv())
+    {
+        return wrap("Der Umfrage- und Ideenkobold bemerkt und erwidert Deinen "
+                "Blick und moechte von Dir aufgenommen werden.");
+    }
+    else
+    {
+        return wrap("Leider ist kein Umfrage- und Ideenkobold mehr da, "
+            "versuch es bitte spaeter nochmal.");
+    }
+}
+
+int invis_uiko(mapping vitem)
+{
+    object who = this_player();
+    return (hat_uiko(who)
+        ||!touch(UMFRAGE_MASTER)->ist_uiko_aktiv()) ? V_INVIS : V_VIS;
+}
+
+private void secure_ghost(object pl)
+{
+    if (objectp(pl))
+    {
+        pl->close_con();
+    }
+}
+
+string nimm_uiko(mapping was)
+{
+    object ob;
+    if(this_player() && (this_player()==previous_object()))
+    {
+        if (hat_uiko(this_player()))
+        {
+            return wrap("Du hast bereits einen Umfrage- und Ideenkobold.");
+        }
+        if (!touch(UMFRAGE_MASTER)->ist_uiko_aktiv())
+        {
+            return wrap("Leider ist kein Umfrage- und Ideenkobold mehr da, "
+                "versuch es bitte spaeter nochmal.");
+        }
+        if (guestp(this_player()))
+        {
+            return wrap("Gaesten ist der Uiko nicht zu Diensten.");
+        }
+        ob = clone_object(UMFRAGE_AUTOLOAD);
+        if (this_player()->query_ghost())
+        {
+            this_player()->open_con();
+            call_out(#'secure_ghost,0,this_player());
+        }
+        ob->move(this_player(), MOVE_ERR_REMOVE);
+        if (this_player()->query_ghost())
+        {
+            secure_ghost(this_player());
+            remove_call_out(#'secure_ghost);
+        }
+        
+        if (!objectp(ob)) {
+            return wrap("Du kannst den UIKO nicht nehmen, "
+                    "evtl. zuviel dabei?");
+        }
+        return wrap("Du nimmst "+einen(ob)+".");
+    }
+    else
+    {
+        return wrap("Abfrage durch ein Tool zum Nehmen des UIKO.");
+    }
+}
+
+//-----------------------------------------------------Ende uiko
+
+void create()
+{
+   set_own_light(1);
+   add_type("kunstlicht",1);
+   add_type("kaempfen_verboten",1);
+   add_type("landeplatz","treppe");
+   set_short("Halle der Reinkarnation");
+   set_long(
+      "Du bist in der Halle der Reinkarnation. Sie hat einen "
+      "quadratischen Grundriss von etwa 20 Metern Kantenlaenge; ihr "
+      "Boden ist mit einem Mosaik aus verschiedenfarbigen "
+      "Marmorplatten ausgelegt. Eine stattliche Anzahl von an den "
+      "Waenden befestigten Fackeln taucht die Halle in ein unruhiges "
+      "Daemmerlicht und die Decke verliert sich in einem Gewirr von "
+      "russgeschwaerzten Balken.\n"
+      "Rechts und links neben dem Torbogen befindet sich jeweils eine "
+      "mannshohe Tafel. In der Mitte des Raumes steht auf einer grossen "
+      "schwarzen Platte die Saeule der Weisheit. Vor den beiden "
+      "Tafeln und rund um die Platte ist der Boden beachtlich "
+      "abgenutzt.\n"
+      "An der oestlichen Seite der Halle fuehrt eine alte, "
+      "ausgetretene Treppe nach oben.");
+   set_exits( ({"foyer","forum"}), ({"sueden","hoch"}) );
+   set_exit_msg("hoch",
+       "$Der(OBJ_TP) geht die Treppe hinauf",
+       "$Ein(OBJ_TP) kommt von unten herauf");
+    add_v_item(([
+      "name":"boden",
+      "gender": "maennlich",
+      "id":({"boden","platten","mosaik"}),
+      "long":"Die Marmorplatten bilden ein geometrisches Muster aus "
+        "ineinander ver-\nschlungenen, aus einer roten und einer schwarzen "
+        "Linie auf weissem Grund\ngebildeten Doppelspiralen. In der Mitte "
+        "der Halle ist eine grosse schwarze\nPlatte eingelassen, auf deren "
+        "Zentrum die Saeule der Weisheit steht.\n",
+      "look_msg":"$Der() mustert den Boden der Halle",
+      "feel":  "Der Boden fuehlt sich glatt und sauber an. Offenbar wird "
+               "hier regelmaessig gereinigt.",
+      "smeel": "Marmor stinkt nicht!",
+      "noise": "Ab und zu hoerst du jemanden leise ueber den Boden laufen. "
+               "Sonst ist es verdaechtig still.",
+       ]));
+
+    add_v_item(([
+      "name":"platte",
+      "gender": "weiblich",
+      "long":"Die Platte ist kreisrund und eine Inschrift ist spiralfoermig "+
+        "von aussen nach\ninnen eingemeisselt:\n\n"
+        "                        Folge dem EINEN Weg\n"
+        "                        und Du wirst es nicht bereuen,\n"
+        "                        denn es ist der Weg der Goetter.\n\n"
+        "Etliche weitere Inschriften folgen.\n",
+      "read": "                        Folge dem EINEN Weg\n"
+        "                        und Du wirst es nicht bereuen,\n"
+        "                        denn es ist der Weg der Goetter.\n"
+        "Etliche weitere Inschriften folgen.\n",
+      "look_msg":"$Der() schaut sich die Platte unter der Saeule der Weisheit "+
+        "an" ]));
+
+    add_v_item(([
+      "name":	"treppe",
+      "gender":	"weiblich",
+      "id":	({"treppe","holztreppe"}),
+      "long":	"Die Treppe ist wohl uralt, die Stufen schon ziemlich "
+                "mitgenommen, sie fuehrt nach oben. Unter der Treppe "
+                "befindet sich eine Nische.",
+      "noise":	"Die Treppe gibt leider kein Geraeusch von sich. Nur, "
+                "wenn jemand gerade hinaufgeht oder herunterfaellt, "
+		"kannst du dort welche vernehmen.",
+    ]));
+    
+    add_v_item( ([
+      "name" : "treppennische",
+      "gender" : "weiblich",
+      "id" : ({ "treppennische", "nische" }),
+      "long" : "Die Nische unter der Treppe kann man betreten.",
+      "enter_room" : "/room/rathaus/treppennische",
+    ]) );
+
+    add_v_item(([
+      "name":"decke",
+      "gender": "weiblich",
+      "id":({"decke","balken"}),
+      "long":"Bei naeherem Hinsehen erkennst du in dem Gewirr ein "+
+        "dreidimensionales\nFachwerk aus einer Unmenge an verschiedenen "+
+        "Vielecken.\n",
+      "look_msg":"$Der() wirft einen Blick zur Decke" ]));
+
+    add_v_item(([
+      "name":"saeule",
+      "gender": "weiblich",
+      "long":"Du siehst eine fuenf Meter hohe und ein Meter durchmessende "+
+        "Saeule aus\nweissem Marmor, die mit mehreren eingemeisselten "+
+        "Inschriften versehen ist.\nSie steht auf einer schwarzen, aus dem "+
+        "Boden herausragenden Platte, die\nebenfalls mit Schriftzeichen "+
+        "versehen ist.\n",
+      "smell":"Der Marmor ist absolut geruchsneutral! Ehrlich!",
+      "feel":"Der Marmor fuehlt sich glatt und etwas kuehl an - "
+             "ausser natuerlich an den Stellen mit den Inschriften.",
+      "noise":"Nein, die Saeule spricht nicht mit dir! Nur die "
+              "Inschriften sind interessant, und die musst du lesen - "
+	      "so du denn des Lesens maechtig bist.",
+	]));
+
+    add_v_item(([
+      "name":"schriftzeichen",
+      "id":({"schriftzeichen","zeichen","schrift"}),
+      "gender":"saechlich",
+      "plural":1,
+      "long":"Zeichen eben, man kann sie lesen, wenn man kann.",
+      "read":"$B)hs0-*(k/ZDFInisoTndzxfQSDJH!\n"
+        "Dir kommt das reichlich spanisch vor..."]));
+
+    add_v_item(([
+      "name":"marmor",
+      "gender":"maennlich",
+      "long":"Marmor... Da Du keine Ahnung von Steinen hast, findest Du ihn "
+        "eher langweilig."]));
+
+    add_v_item(([
+      "name":"marmorsaeule",
+      "gender":"weiblich",
+      "id":({"saeule","marmorsaeule"}),
+      "long":"Eine Saeule aus Marmor. Sie ist mehr hoch als breit, und wenn "
+        "sie nicht da waere, wuerde Dir wohl die Decke auf den Kopf fallen. "
+        "Oder auch nicht."]));
+
+    add_v_item(([
+      "name":"tafel",
+      "gender":"weiblich",
+      "adjektiv":"recht",
+      "id":({"tafel", "granittafel", "granit"}),
+      "read":#'show_pflichtraetsel,
+      "long":"Es sind zwei aus Granit gehauene Tafeln, die sich rechts "
+             "und links neben dem Torbogen befinden. Du solltest "
+             "sie lesen (lies rechte/linke Tafel)."]));
+
+    add_v_item(([
+      "name":"tafel",
+      "gender":"weiblich",
+      "adjektiv":"link",
+      "id":({"tafel", "granittafel", "granit"}),
+      "read":#'show_wahlraetsel,
+      "long":"Es sind zwei aus Granit gehauene Tafeln, die sich rechts "
+             "und links neben dem Torbogen befinden. Du solltest "
+             "sie lesen (lies rechte/linke Tafel)."]));
+    add_v_item (([
+	"name":"waende",
+	"gender":"weiblich",
+	"plural":1,
+	"id":({"wand","waende"}),
+	"long":"Ein Meer von Fackeln siehst Du an den Waenden. "
+	       "Sie geben dieser Halle eine besondere Atmosphaere. "
+           "Eine Ecke faellt dir auf." // Hinweis auf uiko- myonara.
+#ifdef UNItopia
+	       " Ein kleines Bild hingegen fuehrt an der hinteren Wand ein "
+	       "Schattendasein."
+    ]));
+    add_v_item (([
+        "name":"bild",
+        "gender":"saechlich",
+        "adjektiv":"belanglos",
+        "id":({"bild"}),
+        "long":(: wrap("Ein wunderschoen gemaltes Bild. Es ist so gut gemalt als "
+              "koennte man hindurchsteigen und die gemalte Szene betreten. "
+              "Du betrachtest die Szene genauer: "+
+              LEVITANIS_MASTER->query_anknuepfhinweis(LEVITANIS_MASTER->query_anknuepfpunkt())) :),
+        "feel":"Es fuehlt sich an wie eine bemalte Leinwand.",
+        "smell":"Es riecht ganz leicht nach Farbe.",
+        "take":"Das Bild ist so fest mit der Wand verbunden das du es "
+    	       "einfach nicht davon loskriegst."
+#endif
+    ]));
+
+    add_v_item( ([
+            "name" : "ecke",
+            "id" : ({ "ecke" }),
+            "gender" : "weiblich",
+            "long" : #'ecke_long,
+            ]) );
+    add_v_item( ([
+            "name" : "uiko",
+            "id" : ({ "uiko","kobold","umfragekobold","ideenkobold" }),
+            "gender" : "maennlich",
+            "long" : #'ecke_long,
+            "take" : #'nimm_uiko,
+            "take_msg" : "$der() fummelt in der Ecke herum.",
+            "invis": #'invis_uiko,
+            ]) );   
+
+    
+    add_v_item(([
+	"name": "fackeln",
+	"gender": "weiblich",
+	"plural": 1,
+	"long": 
+	    "Viele, viele Fackeln sind an den Waenden angebracht und sorgen "
+	    "dafuer, dass diese Halle staendig in ein unruhiges Daemmerlicht "
+	    "getaucht wird. Die daraus resultierenden Schatten scheinen sich "
+	    "staendig zu bewegen.",
+	"feel":
+	    "Alle Fackeln auf einmal kannst du nicht befuehlen, also "
+	    "entscheidest du dich fuer eine und verbrennst dir furchtbar "
+	    "die Finger. Die sind doch angezuendet!",
+	"noise":
+	    "Das Feuer der Fackeln knistert ab und zu leise.",
+	"smell":
+	    "Die Fackeln riechen harzig und leicht verbrannt.",
+    ]));
+
+    reset();
+}
+
+/*
+varargs mapping query_v_item(mixed *path, int flag)
+{
+    int nr;
+    string long, name, read, *raetsel, *spiele;
+    string look_msg, read_msg;
+
+    if (sizeof(path)!=1)
+        return room::query_v_item(path,flag);
+    if (stringp(path[0]))
+        name=path[0];
+    else
+        name=path[0]["name"];
+
+    if (!name || name=="")
+        return 0;
+
+    nr=mappingp(path[0])?path[0]["nummer"]:0;
+
+    if (!nr)
+    {
+        if (name == "tafeln" || name == "tafel")
+        {
+            raetsel = QUEST_ROOM->query_quest_objects();
+            name="tafeln";
+            if (sizeof(raetsel) <= 0)
+            {
+                long="Es sind genau sieben aus Granit gehauene und "+
+                     "unbeschriftete Tafeln.\n";
+                read="Es steht nichts auf den Tafeln.\n";
+            }
+            else
+            {
+                long="Es sind genau "+sizeof(raetsel)+
+                     " aus Granit gehauene und beschriftete Tafeln.\n";
+                read="Welche Tafel genau willst Du lesen?\n"
+                     "Versuch es mit z.B. 'lies 3. Tafel'.\n";
+            }
+            read_msg = Der(this_player())+" schaut sich die Tafeln an.";
+        }
+    }
+    else
+    {
+        if (name == "tafel")
+        {
+            raetsel = QUEST_ROOM->query_quests();
+            if (nr <= sizeof(raetsel) && nr > 0)
+            {
+                look_msg = Der(this_player())+" schaut sich die "+nr+
+                        ". Tafel an.";
+                read_msg = Der(this_player())+" liest die "+nr+". Tafel.";
+                long=read=QUEST_ROOM->query_quest_info(raetsel[nr-1]);
+            }
+        }
+    }
+    if (long)
+        return (["name":name,
+                 "plural":1,
+                 "look_msg":look_msg,
+                 "read_msg":read_msg,
+                 "long":long,
+                 "read":read
+               ]);
+    else
+        return room::query_v_item(path,flag);
+}
+*/
+
+int filter_hoch(object who)
+{
+   if(!wizp(who))
+      {
+        tell_object(who, wrap(
+            "Du betrittst die Treppe, die nach oben fuehrt; doch bereits "
+            "nach der dritten Stufe verwandelt sie sich unter Deinen Fuessen "
+            "in eine glatte Rutschbahn, die Du auch prompt runterrutschst. "
+            "Sofort verwandelt sich die Rutsche wieder zurueck in eine "
+            "Treppe und tut so, als ob nichts gewesen waere."));
+        tell_room(this_object(), wrap(
+            Der(who)+" betritt die Treppe, die nach oben fuehrt; doch bereits "
+            "nach der dritten Stufe verwandelt sich diese unter den Fuessen "+
+            des(who)+" in eine glatte Rutschbahn, die "+
+            der(who)+" auch prompt runterrutscht. "
+            "Sofort verwandelt sich die Rutsche wieder zurueck in eine "
+            "Treppe und tut so, als ob nichts gewesen waere."),
+            ({who}));
+        return 1;
+    }
+}

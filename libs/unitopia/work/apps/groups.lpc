@@ -1,0 +1,1346 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /apps/groups.c
+// Description: Gruppenverwaltung fuer ganz UNItopia
+// Author:      Tucita (Mai-Juni '98)
+
+// UID: Apps
+
+// Modified:    Sissi  (Oktober - November '98):
+//                - Kommentare
+//                - Trennung zwischen Group und Subgroup sowie zwischen
+//                  Admin und Subadmin aufgehoben
+//                - statt Mengen von Mappings werden nun Mengen von Strings
+//                  verwaltet; ist zwar ein bisschen langsamer, aber viel, viel
+//                  weniger speicherhungrig.
+//                - sehr aehnliche Funktionalitaeten aus den einzelnen Funktionen
+//                  in eine universelle change_group - Funktion verlagert.
+//                - collect Memberships musste gestrichen werden, da Gruppen
+//                  auch Gruppen beinhalten koennen. Stattdessen:
+//                - die Gruppenmitgliedschaften werden on demand berechnet,
+//                  d.h. Gruppen werden nur dann berechnet, wenn sie
+//                  benoetigt werden und werden dann gespeichert.
+//                - Gruppen fuer Root, Lords usw. werden nicht mehr
+//                  ueber Pseudo-Variablen angesprochen sondern ueber
+//                  "standard_groups", die mit "compute_standard_groups"
+//                  berechnet werden und READ ONLY sind. Hierfuer die
+//                  Gruppenflags hinzugefuegt.
+//		Freaky (10.01.1999) Sicherheitscheck in create()
+//		    changedflag wird nicht initialisiert, damit __INIT()
+//		    nicht benutzt wird. #pragma strong_types rein und
+//		    #pragma save_types raus. changed() ist jetzt private
+//              Sissi (16.01.1999) changed() darf nicht private sein,
+//                  da es von einigen Sachen in /room aus aufgerufen wird.
+//                  Jetzt mach ich einen Test, ob das previous object
+//                  aus /room oder /apps ist.
+//              Sissi (06.02.1999) Gruppen umbenennen
+//              Sissi (13.02.1999) Fuer die Fehlerdatenbank wird eine
+//                  Liste aller Gruppen, in denen ein Gott ist,
+//                  benoetigt. Diese wird "on demand" berechnet und
+//                  zwischengespeichert. Das Gleiche gilt fuer eine Info,
+//                  die ausgibt, welcher Gott in welchen Gruppen ist.
+//                  Besonderheit: Fuer die Fehlerdatenbank wird fuer einen
+//                  DH der Domain X auch diese Domain mitgeliefert, obwohl
+//                  er nicht in dieser Gruppe enthalten ist.
+//              Sissi (bis zum 03.04.1999) query_fdb_groups und query_wiz_infos
+//                  um den Faktor 20 optimiert, was evals betrifft (sprich,
+//                  sie brauchen nur noch ein 20stel der evals).
+//              Sissi (22.11.1999) Bug bei _compute_groupcomp behoben, der
+//                  sich auswirkte, wenn man nur in einer Obergruppe einer
+//                  Gruppe war, die Mitglied in einer anderen Gruppe, die
+//                  Mitglied in einer anderen Gruppe war.
+//
+//
+// $Log: groups.c,v $
+// Revision 1.32  2016/03/21 12:34:57  gnomi
+// strlen -> sizeof
+//
+// Revision 1.31  2013/06/22 10:51:27  myonara
+// Vertauschung in DAEMMERUNG.acls behoben.
+//
+// Revision 1.30  2013-05-03 16:35:44  myonara
+// query_all_membership_of durch protokollarchiv aufrufbar gemacht.
+//
+// Revision 1.29  2009-06-17 07:42:26  gnomi
+// Hilfsfunktionen fuer die Goetterdaemmerung.
+//
+// Revision 1.28  2008-05-19 14:07:51  gnomi
+// query_subgroups eingebaut.
+//
+// Revision 1.27  2008-04-26 18:15:21  gnomi
+// Die meisten Auflistungen sortiert ausgeben.
+//
+// Revision 1.26  2008/02/25 11:28:35  gnomi
+// Check aktualisiert.
+//
+// Revision 1.25  2008/01/28 13:15:35  gnomi
+// Typos in Doku.
+//
+// Revision 1.24  2007/05/26 22:58:02  gnomi
+// Typo.
+//
+// Revision 1.23  2007/02/04 22:03:31  gnomi
+// Dem Master erlauben, Gruppenaenderungen vorzunehmen.
+//
+// Revision 1.22  2006/01/31 21:37:35  gnomi
+// DLs + DHs -> Domain
+// DLs       -> Domain:DL
+//
+// Revision 1.21  2005/05/26 00:55:26  gnomi
+// Goetter auf Urlaub beachten.
+//
+// Revision 1.20  2004/07/19 21:09:53  gnomi
+// Domain-Infos sind vom Master nach /apps/domain gezogen.
+//
+// Revision 1.19  2003/06/20 02:50:07  gnomi
+// query_maingroups eingebaut.
+//
+// Revision 1.18  2003/05/07 04:45:02  gnomi
+// Admins duerfen changed() aufrufen.
+//
+// Revision 1.17  2003/04/30 01:22:45  gnomi
+// Konsistenzcheck eingebaut.
+// Funktion, um einen Gott aus allen Gruppen rauszuschmeissen, eingebaut.
+// (Admins only)
+//
+// Revision 1.16  2002/11/09 02:52:53  gnomi
+// Kleine Schoenheitskorrektur
+//
+// Revision 1.15  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.14  2002/03/02 12:01:18  gnomi
+// Eine Funktion, um alle Mitgliedschaften in einem Array zu erhalten.
+//
+// Revision 1.13  2002/02/24 03:15:17  gnomi
+// Funktionen fuers 'zern -t' eingebaut.
+//
+// Revision 1.12  2002/01/13 06:48:22  gnomi
+// Also das vorherige Patch war keine query_long-Umstellung, sondern eine
+// weitere Funktion adjust_group_case, mit welcher die Gross-/Kleinschreibung
+// eines Gruppennamens korrigieren kann.
+// Dieses Patch ist eine Erweiterung des expand_groups, um Gruppen mit falscher
+// Gross-/Kleinschreibung und Punkt statt Doppelpunkt zu erkennen.
+//
+// Revision 1.11  2002/01/13 04:49:58  freaky
+// query_long() umgestellt.
+//
+// Revision 1.10  2001/06/11 21:33:51  gnomi
+// Bei Gruppenumbennungen auch die Fehler in der FDB entsprechend
+// aktualisieren.
+//
+// Revision 1.9  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.8  2001/03/14 17:30:51  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.7  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+// #pragma strict_types
+// Sissi: lieber nicht, das fuehrt nur zu circa 1000 Typcasts,
+// die den Code total unlesbar machen.
+
+#pragma strong_types
+
+// Freaky: Das braucht man nur fuer Inherit-Files.
+// #pragma save_types
+
+#include <acl.h>
+#include <apps.h>
+#include <config.h>
+#include <error.h>
+#include <error_db.h>
+#include <lpctypes.h>
+#include <level.h>
+#include <uids.h>
+
+#define SAVE_FILE "/var/groups"
+#define MAILGROUPS_FILE "/var/MAILGROUPS"
+
+// Die Defines fuer die Eintraege in groupdefs:
+
+#define GROUPNAME 0
+#define GROUPADMINS 1
+#define GROUPMEMBERS 2
+#define SUBGROUPS 3
+#define GROUPFLAGS 4
+
+// Jetzt die Flags fuer die Gruppen. Bisher gibts nur eine:
+
+#define GROUPFLAGS_READ_ONLY 1
+#define GROUPFLAGS_DONT_INHERIT 2 // A:B enthaelt nicht A
+
+// Jetzt die Defines fuer die Aktionen mit Gruppen:
+
+#define ADD_GROUP 1
+#define DELETE_GROUP 2
+#define ADD_ADMIN 3
+#define DELETE_ADMIN 4
+#define ADD_MEMBER 5
+#define DELETE_MEMBER 6
+#define RENAME_GROUP 7
+
+// intern benoetigte Flag fuer die query_xxx_memberships_of - Funktionen
+
+#define MEMBERSHIPS_INFO 1
+#define MEMBERSHIPS_FDB 2
+
+// alt: (["Name" : ({ ([Admins]), ([SubAdmins]), ([Members]), ([SubGroups]) }) ])
+// neu: ({({"Name", ({Admins}), ({Members}), ({SubGroups})})
+
+mixed groupdefs;
+    // Gruppendefinitionen.
+    // Ein Array.
+    // Das erste Element ist der Name der Gruppe, das zweite ein Array mit
+    // den Namen der Gruppenadmins, im dritten Element sind die Gruppenmitglieder
+    // abgelegt. Im vierten Element befindet sich ein Array der Untergruppen
+    // dieser Gruppe nach genau demselben Schema.
+    
+mapping groupcomps;
+    // Sobald eine Gruppe aus ihrer Definition heraus berechnet worden ist
+    // wird sie hier eingetragen. Dadurch werden immer nur die benoetigten
+    // Gruppen berechnet und gleichzeitig auch garantiert nur einmal.
+    // Die Daten sind ganz einfach wie folgt abgelegt:
+    // (["vollstaendiger Gruppenname":({Gruppenmitglieder})
+
+mapping wiz_infos;
+    // (["wizname":"Text mit Infos",({alle Gruppenmitgliedschaften})])
+
+mapping fdb_groups;
+    // hier werden fuer einen Gott die Gruppen aufgelistet, fuer die
+    // er in der Fehlerdatenbank (fdb) zustaendig ist
+    // und auch eine "allgemeine Info" abgelegt wird.
+
+nosave int changedflag;
+    // Variable wird gesetzt, wenn sich etwas aendert.
+    // Dadurch wird nur abgespeichert, wenn es sich lohnt.
+
+
+//
+// Prototypes:
+//
+
+private void _compute_standardgroups ();
+int is_group_member (string wiz, string groupname);
+
+
+void create()
+{
+    // Sicherheitsabfrage, damit nicht jemand create() aufrufen kann
+    if (groupdefs)
+	return;
+
+    fdb_groups = ([]);
+    wiz_infos = m_allocate(0,2);
+    if (file_size(SAVE_FILE+".o") > 0)
+        restore_object(SAVE_FILE);
+    else {
+        groupdefs = ({});
+        groupcomps = ([]);
+    }
+    _compute_standardgroups();
+}
+
+
+private void _do_save()
+{
+    if (changedflag) {
+        save_object(SAVE_FILE);
+        changedflag = 0;
+    }
+}
+
+
+void reset()
+{
+    _do_save ();
+}
+
+
+int remove()
+{
+    _do_save();
+    destruct(this_object());
+    return 1;
+}
+
+void prepare_renewal()
+{
+    _do_save();
+}
+
+void abort_renewal() {}
+void finish_renewal(object neu) {}
+
+private int _secure()
+{
+   return this_player() &&
+          this_player()==this_interactive() &&
+          previous_object() &&
+          geteuid(previous_object())==geteuid(this_player());
+}
+
+
+private mixed _get_group(string groupname)
+// holt zu einem Gruppennamen die zugehoerigen Gruppendaten
+{
+    string *groupnameparts;
+    mixed res;
+    int i, j, gefunden;
+
+    groupnameparts = explode(groupname,":");
+    res = groupdefs;
+    for (i = 0; i < sizeof (groupnameparts); i++) {
+        gefunden = 0;
+        if (res != groupdefs) res = res [SUBGROUPS];
+        for (j = 0; j < sizeof (res); j++)
+            if (res[j][GROUPNAME] == groupnameparts[i]) {
+                res = res[j];
+                gefunden = 1;
+                break;
+            }
+        if (!gefunden) return 0;
+    }
+    return res;
+}
+
+
+private int _is_valid_user(string user)
+{
+   if (!stringp(user))
+      return 0;
+
+   return ({int})GOETTER_REGISTER->is_wiz(user);
+}
+
+
+private int _is_valid_group_name_part(string group_name)
+{
+   int i;
+
+   if (!stringp(group_name)
+    || capitalize(group_name)!=group_name)
+      return 0;   // muss mit Grossbuchstaben beginnen
+
+   group_name = lower_case(group_name);
+   for (i = sizeof(group_name); i--;)  // wie domain names
+      switch(group_name[i])
+      {
+      case 'a'..'z':
+      case '0'..'9':
+      case '_': case '.':
+      case '-': case '+':
+      case '=':
+         break;
+      default:
+         return 0;
+   }
+
+   return 1;
+}
+
+
+private mixed _ensure_standard_groupdef (mixed *gruppe, string groupname,
+    string *admins, string *members, int addflags)
+{
+    mixed g;
+    int i;
+    for (i=sizeof (gruppe)-1; i>=0; i--)
+        if (gruppe[i][GROUPNAME] == groupname) {
+            g = gruppe[i];
+            g [GROUPADMINS] = admins;
+            g [GROUPMEMBERS] = members;
+            g [GROUPFLAGS] = GROUPFLAGS_READ_ONLY | addflags;
+            return g;
+        }
+    g = ({groupname, admins, members, ({}), GROUPFLAGS_READ_ONLY | addflags});
+    gruppe += ({g});
+    return g;
+}
+
+
+private void _compute_standardgroups ()
+{
+    mixed g;
+    string file, *types, *domains;
+    int i;
+    if (!groupdefs) groupdefs = ({});
+    types = FILED->query_types();
+    for (i = 0; i < sizeof(types); i++)
+        _ensure_standard_groupdef (&groupdefs,capitalize(types[i]),
+            FILED->query_auth(types[i]),
+            FILED->query_auth(types[i]),0);
+    domains = DOMAIN_INFOS->query_domains();
+    for (i = 0; i < sizeof (domains); i++) {
+        g = _ensure_standard_groupdef (&groupdefs,domains[i],
+            DOMAIN_INFOS->query_domain_lords(domains[i]),
+            DOMAIN_INFOS->query_domain_lords(domains[i]) +
+	    DOMAIN_INFOS->query_domain_helfer(domains[i]), 0);
+        _ensure_standard_groupdef (&(g[SUBGROUPS]), "DL",
+            DOMAIN_INFOS->query_domain_lords(domains[i]),
+            DOMAIN_INFOS->query_domain_lords(domains[i]),
+	    GROUPFLAGS_DONT_INHERIT);
+        // they are already member of Domain, so they don't need to
+        // be explicitly members of Domain:DH.
+        _ensure_standard_groupdef (&(g[SUBGROUPS]), "DH",({}), ({}), 0);
+        _ensure_standard_groupdef (&(g[SUBGROUPS]), "DM",({}),
+            DOMAIN_INFOS->query_domain_members(domains[i]), 0);
+    }
+#ifdef ADMINS
+    _ensure_standard_groupdef (&groupdefs,"Root",({}),ADMINS,0);
+#endif
+}
+
+
+private void _changed()
+{
+    changedflag = 1;
+    if (find_call_out("do_save")==-1)
+        call_out("do_save",60);
+    _compute_standardgroups ();
+    groupcomps = ([]);
+    fdb_groups = ([]);
+    wiz_infos = m_allocate(0,2);
+}
+
+void changed ()
+{
+    string fn;
+    // darf nur von Sachen aus /room und Sachen aus /apps aufgerufen werden.
+    if (!previous_object() || !(fn = object_name(previous_object()))
+        || ((fn[1..4] != "room") && (fn[1..4] != "apps") &&
+	    (!this_interactive() || !adminp(this_interactive()) ||
+	    this_interactive()->query_real_name()!=geteuid(previous_object()))))
+        return;
+    _changed();
+}
+
+
+int group_exists (string groupname)
+{
+    // Wenn wir bereits wissen, welche Mitglieder die Gruppe hat,
+    // dann existiert sie auch...
+    if (member (groupcomps,groupname)) return 1;
+
+    if (_get_group (groupname)) return 1;
+    return 0;
+}
+
+private string _caplow (string s)
+{
+    return capitalize (lower_case (s));
+}
+
+private void _dump_groupnames_for_mail()
+{
+    mixed groups;
+            
+    rm(MAILGROUPS_FILE);
+    
+    groups = groupdefs; // Die muessen wir durcharbeiten (Keine Kopie, da bei
+    		// Vergroesserung des Arrays automatisch eine erstellt wird)
+
+    while (sizeof (groups)) {
+        write_file (MAILGROUPS_FILE, groups[0][GROUPNAME] + "\n");
+        if(groups[0][SUBGROUPS])
+            groups = map(groups[0][SUBGROUPS],
+                           (:({$2+$1[GROUPNAME]})+$1[GROUPNAME+1..<1]:),
+			   groups[0][GROUPNAME]+".")
+                   +groups[1..<1];
+        else
+            groups=groups[1..<1];
+    }
+}
+
+private string _change_group (string sub, string groupname, int todo)
+{
+    mixed g, mother, save4mother; // LPC kennt nunmal keine Arrays aus Arrays...
+    string *groupnameparts;
+    string tp_real_name, tmp;
+    int i, j, childindex, allowed;
+
+    if(object_name(previous_object()) == __MASTER_OBJECT__ ||
+       object_name(previous_object()) == GOETTER_REGISTER)
+	allowed = 1;
+    else
+    {
+	if (!sub || !groupname || !_secure()) return "Du darfst das nicht.";
+	allowed = adminp (this_interactive());
+    }
+    
+    groupnameparts = filter(explode(groupname,":"),#'_caplow);
+    g = groupdefs;
+    tp_real_name = !allowed && this_player()->query_real_name();
+    for (i=0; i<sizeof(groupnameparts); i++) {
+        save4mother = g;
+        if (g != groupdefs) g = g[SUBGROUPS];
+        for (j = sizeof(g); (j--) && (g[j][GROUPNAME] != groupnameparts[i]); )
+	    ;
+	if (j < 0) {
+	    if ((todo != ADD_GROUP) || (i != sizeof(groupnameparts)-1))
+		return "Keine solche Gruppe vorhanden.";
+	} else {
+	    if ((todo == ADD_GROUP) && (i == sizeof(groupnameparts)-1))
+		return "Eine solche Gruppe ist bereits vorhanden.";
+	    g = g[j];
+	    mother = save4mother;
+	    childindex = j;
+	    if (!allowed) 
+	        for (j = sizeof(g[GROUPADMINS])-1; j>=0; j--)
+                   if ((tp_real_name == g[GROUPADMINS][j]) ||
+                       is_group_member (tp_real_name, g[GROUPADMINS][j]))
+	            	{ allowed = 1; break; }
+	}
+    }
+    if (!allowed)
+    	return "Du bist weder Admin dieser noch einer uebergeordneten Gruppe.";
+    if (todo != ADD_GROUP)
+        if (g[GROUPFLAGS] & GROUPFLAGS_READ_ONLY)
+            return "Diese Gruppe ist READ ONLY.";
+    switch (todo) {
+        case RENAME_GROUP:
+            g[GROUPNAME] = sub;
+            tmp = implode(explode(groupname,":")[0..<2],":")+":"+sub;
+            MASTER_OB->rename_group (groupname, tmp);
+            ERROR_DB->rename_group (groupname, tmp);
+            _changed();
+	    _dump_groupnames_for_mail();
+            return groupname+" umbenannt in "+tmp+".";
+	case DELETE_ADMIN:
+	    if (member(g[GROUPADMINS],sub) == -1)
+	    	return "Aber "+sub+" ist gar nicht Admin von "+groupname+".";
+	    g[GROUPADMINS] -= ({sub});
+	    _changed();
+	    return "Gruppenadmin "+sub+" aus Gruppe "+groupname+" ausgetragen.";
+	case ADD_ADMIN:
+	    if (member(g[GROUPADMINS],sub) != -1)
+	    	return "Aber "+sub+" ist bereits Admin von "+groupname+".";
+	    g[GROUPADMINS] += ({sub});
+	    _changed();
+	    return "Gruppenadmin "+sub+" fuer Gruppe "+groupname+" eingetragen.";
+	case DELETE_MEMBER:
+	    if (member(g[GROUPMEMBERS],sub) == -1)
+	    	return "Aber "+sub+" ist gar nicht Mitglied von "+groupname+".";
+	    g[GROUPMEMBERS] -= ({sub});
+	    _changed();
+	    return "Mitglied "+sub+" aus Gruppe "+groupname+" entfernt.";
+	case ADD_MEMBER:
+	    if (member(g[GROUPMEMBERS],sub) != -1)
+	    	return "Aber "+sub+" ist bereits Mitglied von "+groupname+".";
+	    g[GROUPMEMBERS] += ({sub});
+	    _changed();
+	    return "Mitglied "+sub+" in Gruppe "+groupname+" aufgenommen.";
+	case ADD_GROUP:
+	    if (!mother)
+	        groupdefs += ({({groupname,({}),({}),({}),0})});
+	    else if (mother == groupdefs)
+	        groupdefs[childindex][SUBGROUPS]
+	            += ({({groupnameparts[sizeof(groupnameparts)-1],({}),({}),({}),0})});
+            else
+	        mother[SUBGROUPS][childindex][SUBGROUPS]
+	            += ({({groupnameparts[sizeof(groupnameparts)-1],({}),({}),({}),0})});
+	    _changed();
+	    write_file(MAILGROUPS_FILE, regreplace(groupname, ":", ".", 1)+"\n");
+	    return "Gruppe "+groupname+" erstellt.";
+	case DELETE_GROUP:
+	    if (sizeof(g[SUBGROUPS]))
+	    	return "Aber die Gruppe "+groupname+" hat noch Untergruppen.";
+	    if (sizeof(g[GROUPMEMBERS]))
+	    	return "Aber die Gruppe "+groupname+" hat noch Mitglieder.";
+	    // Admins darf die Gruppe haben, wer sollte sie denn sonst loeschen?
+	    if (mother == groupdefs)
+	        groupdefs = groupdefs[0..childindex-1]+groupdefs[childindex+1..];
+	    else // Achtung, nicht "optimieren", sonst gehts nicht mehr,
+	         // da sonst nur "mother" geaendert wird, aber nicht das,
+	         // auf nicht die richtige Gruppendefinition.
+	        mother[SUBGROUPS] = mother[SUBGROUPS][0..childindex-1]
+	            +mother[SUBGROUPS][childindex+1..];
+	    _changed();
+	    _dump_groupnames_for_mail();
+	    return "Gruppe "+groupname+" geloescht.";
+    }
+    return "In der Funktion _change_group in /apps/groups ist was total schiefgelaufen.";
+}	    
+
+
+/*
+FUNKTION: add_group_member
+DEKLARATION: string add_group_member(string sub, string groupname)
+BESCHREIBUNG:
+Fuegt der Gruppe <groupname> ein neues Mitglied <sub> hinzu.
+<groupname> muss der Name einer existierenden Gruppe sein,
+<sub> muss ein existierender Spieler oder eine existierende Gruppe sein,
+this_player muss Admin der Gruppe <groupname> oder einer uebergeordneten
+sein.
+Rueckgabewert: Fehler- oder Erfolgsmeldung.
+GRUPPEN: acl
+*/
+string add_group_member(string sub, string groupname)
+{
+    if (GOETTER_REGISTER->is_wiz(sub)) sub = lower_case(sub);
+    else if (!group_exists(sub))
+	return sub+" ist weder Gott noch existierende Gruppe.";
+    return _change_group (sub, groupname, ADD_MEMBER);
+}
+
+/*
+FUNKTION: delete_group_member
+DEKLARATION: int delete_group_member(string sub, string groupname)
+BESCHREIBUNG:
+Loescht <sub> aus der Gruppe <groupname>, wobei <groupname>
+eine existierende Gruppe ist und <sub> ein Mitglied dieser Gruppe
+ist und this_player das darf.
+GRUPPEN: acl
+*/
+string delete_group_member(string sub, string groupname)
+{
+    return _change_group (sub, groupname, DELETE_MEMBER);
+}
+
+/*
+FUNKTION: add_group
+DEKLARATION: int add_group(string groupname)
+BESCHREIBUNG:
+Fuegt eine neue Untergruppe <groupname> hinzu, sofern der
+Eintragende dazu berechtigt ist.
+Fuer den Namen der Gruppe gelten dieselben Regeln wie fuer Domainnamen.
+GRUPPEN: acl
+*/
+string add_group(string groupname)
+{
+    string *t;
+    t = explode(groupname,":");
+    if (!_is_valid_group_name_part(t[<1]))
+        return "Der Name "+t[<1]+" ist kein zulaessiger Name.";
+    return _change_group ("",groupname,ADD_GROUP);
+}
+
+/*
+FUNKTION: rename_group
+DEKLARATION: int rename_group(string full_groupname, string new_grouprest)
+BESCHREIBUNG:
+rename_group ("A:B:C","X") benennt die Gruppe "A:B:C" um in "A:B:X".
+Alle Untergruppen, zum Beispiel "A:B:C:D", werden auch entsprechend
+umbenannt; so wird aus "A:B:C:D" eben auch "A:B:X:D".
+GRUPPEN: acl
+*/
+string rename_group(string full_groupname, string new)
+{
+    if (!_is_valid_group_name_part(new))
+        return "Der Name "+new+" ist kein zulaessiger Name.";
+    return _change_group (new,full_groupname,RENAME_GROUP);
+}
+
+/*
+FUNKTION: delete_group
+DEKLARATION: int delete_group(string groupname)
+BESCHREIBUNG:
+Loescht die Gruppe <groupname>, sofern die Gruppe weder Mitglieder
+noch Untergruppen besitzt und der ausfuehrende das darf.
+GRUPPEN: acl
+*/
+string delete_group(string groupname)
+{
+    return _change_group ("",groupname,DELETE_GROUP);
+}
+
+/*
+FUNKTION: add_group_admin
+DEKLARATION: int add_group_admin(string sub, string groupname)
+BESCHREIBUNG:
+Fuegt der Gruppe <groupname> den Gott oder die Gruppe <sub> als
+Gruppenadmin hinzu.
+GRUPPEN: acl
+*/
+string add_group_admin(string sub, string groupname)
+{
+    return _change_group (sub,groupname,ADD_ADMIN);
+}
+
+/*
+FUNKTION: delete_group_admin
+DEKLARATION: string delete_group_admin(string wiz, string group_str)
+BESCHREIBUNG:
+Loescht in der Gruppe <group_str> den  Admin <wiz>, sofern der Ausfuehrende
+dazu berechtigt ist, d.h. selber Admin dieser oder einer uebergeordneten
+Gruppe ist.
+Rueckgabewert ist die Fehlermeldung, falls es nicht klappt, 0 sonst.
+GRUPPEN: acl
+*/
+string delete_group_admin(string wiz, string group_str)
+{
+    return _change_group (wiz, group_str, DELETE_ADMIN);
+}
+
+/*
+FUNKTION: is_group_member
+DEKLARATION: varargs int is_group_member(string wiz, string groupname)
+BESCHREIBUNG:
+Testet, ob <wiz> Mitglied der Gruppe <groupname> ist.
+GRUPPEN: acl
+*/
+
+private void _compute_group (string groupname)
+{
+    string *x, temp;
+    mixed g;
+    int i;
+    if (!groupname) return;
+    if (groupcomps[groupname]) return; // don't compute a computed group
+    g = _get_group (groupname);
+    if (!g) return;
+    groupcomps[groupname] = ({});
+    // diese Initialisierung erlaubt bereits die Behandlung rekursiver
+    // Gruppendefinitionen.
+    // erst Hauptgruppen berechnen und hinzufuegen
+    x = explode (groupname,":");
+    if (sizeof (x) > 1 && !(g[GROUPFLAGS] & GROUPFLAGS_DONT_INHERIT)) {
+        temp = implode (x[0..<2],":");
+        _compute_group (temp);
+	groupcomps[groupname] = groupcomps[temp];
+    }
+    for (i = sizeof(g[GROUPMEMBERS])-1; i>=0; i--) {
+        if (GOETTER_REGISTER->is_wiz(g[GROUPMEMBERS][i]))
+            groupcomps[groupname] += ({g[GROUPMEMBERS][i]});
+        else {
+            _compute_group (g[GROUPMEMBERS][i]);
+            if (groupcomps[g[GROUPMEMBERS][i]] && pointerp (groupcomps[g[GROUPMEMBERS][i]])
+                && sizeof (groupcomps[g[GROUPMEMBERS][i]]))
+                groupcomps[groupname] += groupcomps[g[GROUPMEMBERS][i]];
+        }
+    }
+}
+
+
+private int _is_immediate_group_member (string wiz, string groupname)
+{
+    mixed g;
+    if (g = groupcomps [groupname])
+        if (member(g,wiz) != -1)
+            return 1;
+        else
+            return 0;
+    _compute_group (groupname);
+    if (g = groupcomps [groupname])
+        if (member(g,wiz) != -1)
+            return 1;
+    return 0;
+}
+
+
+int is_group_member (string wiz, string groupname)
+{
+    string *x;
+    int i;
+    x = explode (groupname,":");
+    if (sizeof(x)==2 && x[1]=="DL")  // Laengerer Weg bei Domain:DL (wegen GF_DONT_INHERIT)
+	return _is_immediate_group_member (wiz, groupname);
+    for (i=0; i < sizeof (x); i++)
+        if (_is_immediate_group_member (wiz, implode (x[0..i],":")))
+            return 1;
+    return 0;
+}
+
+
+/*
+FUNKTION: query_group_info
+DEKLARATION: string query_group_info(string groupname)
+BESCHREIBUNG:
+Diese Funktion liefert einen mehrzeiligen String mit Infodaten ueber eine
+Gruppe. Hierzu gehoeren Gruppenadmins, Mitglieder und direkte
+Untergruppen sowie das Read Only Flag.
+GRUPPEN: acl
+*/
+
+/* Durch liefern eines Strings anstatt kopieren eines Arrays
+   oder Mappings erreicht man Sicherheit und Effizienz; auch
+   braucht man keine drei einzelne Funktionen, die Gruppenadmins,
+   Gruppenmitglieder und Untergruppen liefert, sondern eine einzige
+   genuegt.
+*/
+   
+string query_group_info(string groupname)
+{
+    mixed group;
+    string s;
+
+    if (!group = _get_group(groupname))
+        return "Keine solche Gruppe vorhanden.\n";
+
+    if (group[SUBGROUPS] && sizeof(group[SUBGROUPS]))
+	s = implode(sort_array(map(group[SUBGROUPS],#'[, GROUPNAME),#'>),", ");
+    else
+	s = "keine";
+
+    return wrap_say ("Gruppenadmins:",
+               (sizeof (group[GROUPADMINS])
+                   ? implode(sort_array(group[GROUPADMINS],#'>),", ")
+                   : "keine")
+               +".") +
+           wrap_say ("Mitglieder:",
+               (sizeof (group[GROUPMEMBERS])
+                   ? implode(sort_array(group[GROUPMEMBERS],#'>),", ")
+                   : "keine")
+               +".") +
+           wrap_say ("Direkte Untergruppen:",s+".") +
+          ((group[GROUPFLAGS] & GROUPFLAGS_READ_ONLY)
+           ?"Diese Gruppe ist Read Only.\n":"") +
+          ((group[GROUPFLAGS] & GROUPFLAGS_DONT_INHERIT)
+           ?"Diese Gruppe enthaelt nicht die uebergeordneten Gruppenmitglieder.\n":"");
+}
+
+/*
+FUNKTION: query_subgroups
+DEKLARATION: string *query_subgroups(string groupname)
+BESCHREIBUNG:
+Diese Funktion liefert zu einer Gruppe die Namen aller
+direkten Untergruppen. Existiert die Gruppe nicht, liefert sie 0.
+GRUPPEN: acl
+*/
+string *query_subgroups(string groupname)
+{
+    mixed group;
+
+    if (!group = _get_group(groupname))
+        return 0;
+
+    if(sizeof(group[SUBGROUPS]))
+	return map(group[SUBGROUPS],#'[, GROUPNAME);
+    else
+	return ({});
+}
+
+string query_maingroup_info()
+{
+    string s;
+
+    if(sizeof(groupdefs))
+	s = implode(sort_array(map(groupdefs,#'[,GROUPNAME),#'>),", ");
+    else
+	s = "keine";
+
+    return wrap_say ("Hauptgruppen:",s);
+}
+
+/*
+FUNKTION: query_full_group_info
+DEKLARATION: string query_full_group_info(string groupname)
+BESCHREIBUNG:
+Diese Funktion liefert einen mehrzeiligen String mit Infodaten ueber eine
+alle Untergruppen einer Gruppe. Hierzu gehoeren die Untergruppen, die
+Gruppenadmins und die Mitglieder, welcher in einer Tabelle ausgegeben werden.
+GRUPPEN: acl
+*/
+string query_full_group_info(string groupname)
+{
+    mixed group;
+    string s;
+    if (!group = _get_group(groupname))
+        return "Keine solche Gruppe vorhanden.\n";
+    group=({({groupname,group})});
+    s = "Gruppen                        Admins          Mitglieder\n"
+        "------------------------------ --------------- -----------------------------\n";
+    while(sizeof(group))
+    {
+      s+=sprintf("%-30=s %-15=s %-29=s\n",
+          group[0][0],
+	  sizeof(group[0][1][GROUPADMINS])
+	      ?implode(sort_array(group[0][1][GROUPADMINS],#'>),", ")
+	      :" -",
+	  sizeof(group[0][1][GROUPMEMBERS])
+	      ?implode(sort_array(group[0][1][GROUPMEMBERS],#'>),", ")
+	      :" -");
+      if(group[0][1][SUBGROUPS])
+          group=sort_array(map(group[0][1][SUBGROUPS],
+	       (:({$2+":"+$1[GROUPNAME],$1}):),group[0][0]),
+	       (:$1[0]>$2[0]:))+group[1..<1];
+      else
+          group=group[1..<1];
+    }
+    return s;
+}
+
+/*
+FUNKTION: query_wiz_infos
+DEKLARATION: string query_wiz_infos(string wiz)
+BESCHREIBUNG:
+Liefert fuer einen Wizard eine Info ueber die Gruppenmitgliedschaften
+in Form eines Textstrings.
+GRUPPEN: acl
+*/
+
+/*
+FUNKTION: query_fdb_groups
+DEKLARATION: string *query_fdb_groups(string wiz)
+BESCHREIBUNG:
+Liefert alle Gruppen, die fuer einen Gott in der Fehlerdatenbank
+aufgelistet werden sollen.
+Also sowohl die Gruppen, in denen ein Wiz auf Grund seiner Mitgliedschaft
+in einer anderen Gruppe Mitglied ist. DHs, die nicht in der Domaingruppe
+Mitglied sind, tut die Funktion so, als ob sie Mitglieder in der
+Domaingruppe (in der noralerweise nur DLs sind) enthalten waeren.
+Aus Sicherheitsgruenden laesst sich diese Funktion nur von
+/apps/error_db und dem Zauberstab aufrufen.
+GRUPPEN: acl
+*/
+
+private string *_query_all_subgroups (mixed startgruppe, string startgruppennamen)
+{
+    string *res, nam;
+    int i;
+    res = ({});
+    for (i = sizeof (startgruppe); i--; )
+	if (!(startgruppe[i][GROUPFLAGS] & GROUPFLAGS_DONT_INHERIT)) {
+    	    nam = startgruppennamen+":"+startgruppe[i][GROUPNAME];
+	    res += ({nam}) + _query_all_subgroups (startgruppe[i][SUBGROUPS], nam);
+	}
+    return res;
+}
+
+
+private string *_query_immediate_group_memberships_of_wiz
+    (string wiz, mixed startgruppe, string startgruppennamen)
+{
+    string *res;
+    int i;
+    res = ({});
+    
+    for (i = sizeof (startgruppe); i--; )
+    	if (member(startgruppe[i][GROUPMEMBERS],wiz) != -1) {
+    	    res += ({(startgruppennamen?startgruppennamen+":":"")
+    	        + startgruppe[i][GROUPNAME]});
+	
+	    // Zusatzbehandlung von :DL
+	    if(!sizeof(startgruppennamen))
+    		res += _query_immediate_group_memberships_of_wiz (wiz, 
+		    filter(startgruppe[i][SUBGROUPS],
+			(: $1[GROUPFLAGS] & GROUPFLAGS_DONT_INHERIT :)),
+    	    	    startgruppe[i][GROUPNAME]);
+	}
+    	else 
+    	    res += _query_immediate_group_memberships_of_wiz (
+    	        wiz, startgruppe[i][SUBGROUPS],
+    	        (startgruppennamen?startgruppennamen+":":"")
+    	        +startgruppe[i][GROUPNAME]);
+    return res;
+}
+
+private string *_compute_immediate_group_memberships_of_groups
+    (string *groups, mixed startgruppe, string startgruppennamen)
+{
+    string newname, *tempp;
+    int i;
+    for (i = sizeof (startgruppe); i--; ) {
+        newname = (startgruppennamen?startgruppennamen+":":"")
+    	        + startgruppe[i][GROUPNAME];
+    	if (member(groups,newname)!=-1)
+    	    continue;
+        tempp = startgruppe[i][GROUPMEMBERS];
+        if (sizeof (tempp-groups) != sizeof(tempp)) {
+    	    groups += ({newname});
+            tempp = _query_all_subgroups (_get_group(newname)[SUBGROUPS],newname);
+            groups += (tempp - groups);
+        } else {
+    	    groups = _compute_immediate_group_memberships_of_groups (
+    	            groups, startgruppe[i][SUBGROUPS], newname);
+    	}
+    }
+    return groups;
+}
+
+private string *_query_immediate_group_adminships_of_wiz
+    (string wiz, mixed startgruppe, string startgruppennamen)
+{
+    string *res;
+    int i;
+    res = ({});
+    
+    for (i = sizeof (startgruppe); i--; )
+    	if (member(startgruppe[i][GROUPADMINS],wiz) != -1)
+	{
+    	    res += ({(startgruppennamen?startgruppennamen+":":"")
+    	        + startgruppe[i][GROUPNAME]});
+	
+	    // Zusatzbehandlung von :DL
+	    if(!sizeof(startgruppennamen))
+    		res += _query_immediate_group_adminships_of_wiz (wiz, 
+		    filter(startgruppe[i][SUBGROUPS],
+			(: $1[GROUPFLAGS] & GROUPFLAGS_DONT_INHERIT :)),
+    	    	    startgruppe[i][GROUPNAME]);
+	}
+    	else 
+    	    res += _query_immediate_group_adminships_of_wiz (
+    	        wiz, startgruppe[i][SUBGROUPS],
+    	        (startgruppennamen?startgruppennamen+":":"")
+    	        +startgruppe[i][GROUPNAME]);
+    return res;
+}
+
+private void _compute_group_memberships_of (string wiz, int mode)
+// Die folgenden Funktion berechnen fuer einen Wiz oder Gruppe alle Gruppen,
+// in welchen er bzw. sie unmittelbares Mitglied ist
+{
+    string *res, *immediate;
+    int i, oldsize;
+    mixed gr0;
+//    write("_compute_group_memberships_of / 1: "+get_eval_cost()+"\n");
+    res = ({wiz}) + sort_array(_query_immediate_group_memberships_of_wiz (wiz, groupdefs, 0),#'>);
+    if (mode == MEMBERSHIPS_INFO) {
+        immediate = res;
+        wiz_infos[wiz] = "Unmittelbare Gruppenmitgliedschaften von "+capitalize(wiz)+":\n"
+        + wrap (implode (res,", ")+".");
+	wiz_infos[wiz,1] = res;
+    }
+//    write("_compute_group_memberships_of / 2: "+get_eval_cost()+"\n");
+/* Braucht es nicht
+    if (mode == MEMBERSHIPS_FDB) {
+        for (i=sizeof(res); i--; )
+            if (res[i][<3..]==":DH")
+                res[i] = res[i][0..<4];
+    }
+*/
+//    write("_compute_group_memberships_of / 3: "+get_eval_cost()+"\n");
+
+    // Achtung, obwohl im Folgenden res wachsen wird, darf die Schleife
+    // nicht ueber die neuen Eintraege laufen, daher muss sie rueckwaerts laufen.
+    // den 0-ten Eintrag darf sie dabei nicht erreichen.
+    for (i=sizeof (res)-1; i>0; i--)
+        res += (_query_all_subgroups (_get_group(res[i])[SUBGROUPS],res[i]) - res);
+    if (gr0 = _get_group(wiz))
+        res += (_query_all_subgroups (gr0[SUBGROUPS],wiz) - res);
+
+//    write("_compute_group_memberships_of / 3b: "+get_eval_cost()+"\n");
+        
+    do {
+        oldsize = sizeof (res);
+        res = _compute_immediate_group_memberships_of_groups (res, groupdefs, 0);
+//        write("_compute_group_memberships_of / 4: "+get_eval_cost()+"\n");
+    } while (sizeof (res) != oldsize);
+
+    if (mode == MEMBERSHIPS_INFO) {
+        if (sizeof (res-immediate))
+	{
+            wiz_infos [wiz] += 
+                "\nSich daraus ergebende Gruppenmitgliedschaften:\n"
+                + wrap (implode(sort_array(res-immediate,#'>),", ")+".");
+	    wiz_infos [wiz,1] += (res-immediate);
+	}
+        else
+            wiz_infos [wiz] += 
+                "\nDaraus ergeben sich keine weiteren Gruppenmitgliedschaften.\n";
+    } else if (mode == MEMBERSHIPS_FDB) {
+        fdb_groups[wiz] = res;
+    }
+//    write("_compute_group_memberships_of / 5: "+get_eval_cost()+"\n");
+}
+
+string query_wiz_infos (string wiz)
+{
+    if (strstr(object_name(previous_object()),"/obj/zauberstab"))
+        return 0;
+    if (!wiz_infos[wiz])
+        _compute_group_memberships_of (wiz,MEMBERSHIPS_INFO);
+    return wiz_infos [wiz];
+}
+
+string *query_fdb_groups (string wiz)
+{
+    string *res, *temp;
+    int i;
+    if ((object_name(previous_object()) != "/apps/error_db") &&
+        strstr(object_name(previous_object()),"/obj/zauberstab")&&
+        strstr(object_name(previous_object()),
+                "/w/myonara/public/db/apps/mudlogdb")&&
+        strstr(object_name(previous_object()),
+                "/w/myonara/public/db/apps/erledigungslisten"))
+        return 0;
+    if (!fdb_groups [wiz])
+        _compute_group_memberships_of (wiz, MEMBERSHIPS_FDB);
+    for (temp=fdb_groups[wiz],i=sizeof(temp),res=({}); i--;)
+        res += ({temp[i]});
+    return res;
+}
+
+string *query_immediate_fdb_groups (string wiz)
+{
+    string *res;
+    int i;
+    res = _query_immediate_group_memberships_of_wiz (wiz, groupdefs, 0);
+/*
+    for (i=sizeof(res); i--; )
+        if (res[i][<3..]==":DH")
+            res[i] = res[i][0..<4];
+*/
+    return res + ({wiz});
+}
+
+string query_immediate_memberships_info_of (string wiz)
+{
+    string *res;
+    res = _query_immediate_group_memberships_of_wiz (wiz, groupdefs, 0);
+    return "Unmittelbare Gruppenmitgliedschaften von "+capitalize(wiz)+":\n"
+        + (sizeof (res) ? wrap (implode (sort_array(res,#'>),", ")+".") : "keine.\n");
+}
+
+string *query_all_memberships_of(string wiz)
+{
+    if (strstr(object_name(previous_object()),"/obj/enzyclopedia")
+     && strstr(object_name(previous_object()),"/apps/protokollarchiv"))
+        return 0;
+    if (!wiz_infos[wiz])
+        _compute_group_memberships_of (wiz,MEMBERSHIPS_INFO);
+    return wiz_infos [wiz,1];
+}
+
+/*
+FUNKTION: query_all_wiz_group_members_of
+DEKLARATION: string *query_all_wiz_group_members_of(string groupname)
+BESCHREIBUNG:
+Liefert fuer eine Gruppe alle Wizards, die in ihr Mitglied sind.
+Ist in einer Gruppe eine Gruppe Mitglied, so werden auch die Wizards,
+die in dieser Gruppe Mitglied sind, geliefert. Im Ergebnis dieser
+Methode sind also alle Wizards, die unmittelbar oder mittelbar in
+der Gruppe Mitglied sind.
+Dabei ist, wie bei allen Gruppenmethoden, auf korrekte Gross -
+Kleinschreibung bei Grupennamen zu achten.
+GRUPPEN: acl
+*/
+
+string* query_all_wiz_group_members_of(string groupname)
+{
+    if (!groupname) return 0;
+    if (!groupcomps[groupname])
+        _compute_group (groupname);
+    return copy (groupcomps[groupname]);
+}
+
+/*
+FUNKTION: adjust_group_case
+DEKLARATION: string adjust_group_case(string groupname)
+BESCHREIBUNG:
+Schaut ohne Beachtung von Gross-/Kleinschreibung nach, ob die
+angegebene Gruppe existiert und liefert dann den Gruppenname mit
+richtiger Gross-/Kleinschreibung zurueck oder 0, falls sie nicht existiert.
+VERWEISE: group_exists
+GRUPPEN: acl
+*/
+string adjust_group_case(string groupname)
+{
+    string *groupnameparts;
+    string rightname;
+    mixed res;
+    int j, gefunden;
+
+    groupnameparts = explode(groupname,":");
+    res = groupdefs;
+    rightname = "";
+    
+    foreach(mixed part:groupnameparts) {
+        gefunden = 0;
+	part = lower_case(part);
+        if (res != groupdefs) {
+	    res = res [SUBGROUPS];
+	    rightname += ":";
+	}
+        for (j = 0; j < sizeof (res); j++)
+            if (lower_case(res[j][GROUPNAME]) == part) {
+		rightname += res[j][GROUPNAME];
+                res = res[j];
+                gefunden = 1;
+                break;
+            }
+        if (!gefunden) return 0;
+    }
+    return rightname;
+    
+}
+
+/*
+FUNKTION: query_maingroups
+DEKLARATION: string *query_maingroups()
+BESCHREIBUNG:
+Liefert die Namen der Hauptgruppen
+GRUPPEN: acl
+*/
+string *query_maingroups()
+{
+    return map(groupdefs,#'[, GROUPNAME);
+}
+
+/*
+FUNKTION: expand_groups
+DEKLARATION: string *expand_groups(string *groups, int flags)
+BESCHREIBUNG:
+Liefert die Liste der Goetter, welche Mitglieder der Gruppen in <groups>
+sind. <groups> kann auch direkt Goetternamen enthalten, welche dann
+uebernommen werden.
+Hat der zweite Parameter das 0. Bit gesetzt, so werden Elemente, die nicht
+aufgeloest werden koennen, behalten, andernfalls weggworfen.
+Hat er das 1. Bit gesetzt, so spielt Gross-/Kleinschreibung keine Rolle.
+Hat er das 2. Bit gesetzt, so kann auch ein Punkt als Trenner anstatt dem
+Doppelpunkt vorkommen.
+GRUPPEN: acl
+*/
+string *expand_groups(string *groups, int leave_crap)
+{
+     mapping wiz=([]); //Damit werden doppelte Namen ganz einfach vermieden.
+     foreach(string g:groups)
+     {
+         string gr;
+         if(GOETTER_REGISTER->is_wiz(g))
+             wiz+=([lower_case(g)]);
+         else
+         {
+	     if(leave_crap&2)
+	         g = adjust_group_case(leave_crap&4?regreplace(g,"\\.",":",1):g)||g;
+             _compute_group(g);
+             wiz += mkmapping(groupcomps[g] ||
+                       ((leave_crap&1) ? ({g}) : ({}) ) );
+         }
+     }
+     return m_indices(wiz);
+}
+
+private string *check_group(string root, mixed def, mapping groupnames)
+{
+    string *ret = ({});
+    string name = root;
+    if(sizeof(def)<=GROUPNAME || !stringp(def[GROUPNAME]))
+    {
+	ret += ({"Definition einer Untergruppe von '"+root+"' hat keinen Namen."});
+	name += sizeof(name)?":<Unbekannt>":"<Unbekannt>";
+    }
+    else
+    {
+	name += (sizeof(name)?":":"")+def[GROUPNAME];
+	if(!_is_valid_group_name_part(def[GROUPNAME]))
+	    ret += ({"Untergruppe '"+name+"' hat ungueltigen Namen."});
+    }
+    if(sizeof(def) != GROUPFLAGS+1) // Letztes Element
+	return ret + ({"Definition der Gruppe '"+name+"' hat nicht "+(GROUPFLAGS+1)+" Elemente."});
+    if(def[GROUPFLAGS] & ~(GROUPFLAGS_READ_ONLY|GROUPFLAGS_DONT_INHERIT))
+	ret += ({"Gruppe '"+name+"' hat unbekannte Flags."});
+    if(!pointerp(def[GROUPADMINS]))
+	ret += ({"Gruppe '"+name+"' hat kein Array als GROUPADMIN-Eintrag."});
+    else
+	foreach(string mem: def[GROUPADMINS])
+	    if(!stringp(mem))
+		ret += ({"Gruppe '"+name+"' hat einen ungueltigen Admineintrag."});
+	    else if(lower_case(mem)==mem)
+	    {
+		if(!GOETTER_REGISTER->is_wiz(mem) &&
+		    !GOETTER_REGISTER->is_wiz_on_vacation(mem))
+		    ret += ({"Gruppe '"+name+"': Gruppenadmin '"+capitalize(mem)+"' ist kein Gott."});
+	    }
+	    else if(!group_exists(mem))
+		ret += ({"Gruppe '"+name+"' hat nicht existente Gruppe '"+mem+"' als Admin eingetragen."});
+    if(!pointerp(def[GROUPMEMBERS]))
+	ret += ({"Gruppe '"+name+"' hat kein Array als GROUPMEMBERS-Eintrag."});
+    else
+	foreach(string mem: def[GROUPMEMBERS])
+	    if(!stringp(mem))
+		ret += ({"Gruppe '"+name+"' hat einen ungueltigen Mitgliedseintrag."});
+	    else if(lower_case(mem)==mem)
+	    {
+		if(!GOETTER_REGISTER->is_wiz(mem) &&
+		    !GOETTER_REGISTER->is_wiz_on_vacation(mem))
+		    ret += ({"Gruppe '"+name+"': Mitglied '"+capitalize(mem)+"' ist kein Gott."});
+	    }
+	    else if(!member(groupnames, mem))
+		ret += ({"Gruppe '"+name+"' hat nicht existente Gruppe '"+mem+"' als Mitglied eingetragen."});
+    foreach(mixed subdef: def[SUBGROUPS])
+	ret += check_group(name, subdef, groupnames);
+    return ret;	
+}
+
+mapping get_group_list()
+{
+    mapping groupnames = ([:1]);
+    mixed groups = groupdefs;
+
+    if(extern_call() && previous_object() != find_object(__MASTER_OBJECT__))
+	return 0;
+
+    while (sizeof (groups))
+    {
+	m_add(groupnames, groups[0][GROUPNAME]);
+        if(groups[0][SUBGROUPS])
+            groups = map(groups[0][SUBGROUPS],
+                           (:({$2+$1[GROUPNAME]})+$1[GROUPNAME+1..<1]:),
+			   groups[0][GROUPNAME]+":")
+                   +groups[1..<1];
+        else
+            groups=groups[1..<1];
+    }
+    return groupnames;
+}
+
+string *consistency_check()
+{
+    string *ret = ({});
+    mapping groupnames = get_group_list();
+    foreach(mixed def: groupdefs)
+	ret += check_group("", def, groupnames);
+    return sizeof(ret) && ret;
+}
+
+void check()
+{
+    string *ret = consistency_check();
+    if(!ret)
+	write("Alles okay.\n");
+    else
+    {
+	string *str = ({});
+	foreach(string err: ret)
+	    str+=explode(wrap_say(err,""),"\n")[0..<2];
+	this_player()->more(str);
+    }
+}
+
+void delete_group_memberships_of(string wiz)
+{
+    if((!_secure() || !adminp(this_interactive())) && geteuid(previous_object()) != ROOT_UID)
+	return;
+    foreach(string group: _query_immediate_group_memberships_of_wiz(wiz, groupdefs, 0))
+    {
+	string res = delete_group_member(wiz, group);
+	
+	if(adminp(this_interactive()) && geteuid(previous_object()) != ROOT_UID)
+	    write(res+"\n");
+	else
+	{
+	    sys_log("DAEMMERUNG", "                    "+res+"\n");
+	    sys_log("DAEMMERUNG.acls",sprintf("zgruppe %s + %s\n", group, wiz));
+	}
+    }
+
+    foreach(string group: _query_immediate_group_adminships_of_wiz(wiz, groupdefs, 0))
+    {
+	string res = delete_group_admin(wiz, group);
+	
+	if(adminp(this_interactive()) && geteuid(previous_object()) != ROOT_UID)
+	    write(res+"\n");
+	else
+	{
+	    sys_log("DAEMMERUNG", "                    "+res+"\n");
+	    sys_log("DAEMMERUNG.acls",sprintf("zgruppe %s +A %s\n", group, wiz));
+	}
+    }
+}
+
+/*
+mixed query_groupdefs()
+{
+   return groupdefs;
+}
+
+mapping query_groupcomps()
+{
+   return groupcomps;
+}
+*/

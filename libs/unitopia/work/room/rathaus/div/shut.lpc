@@ -1,0 +1,377 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/rathaus/div/shut.c
+// Description: Armageddon faehrt das Mud langsam und gesichert runter.
+// Modified by: Freaky (29.09.96)
+//		Freaky (06.01.1999) Move geht nur noch in VALID_ROOMS,
+//			da die Spieler Armageddon sonst durch Tadmor ziehen.
+//              Tmm    (11.06.2000) - an Neue Bank angepasst
+//
+// $Log: shut.c,v $
+// Revision 1.23  2015/08/26 21:40:29  gnomi
+// Anpassungen an LDMud 3.5.0
+//
+// Revision 1.22  2015/07/28 16:41:42  myonara
+// bugfix.
+//
+// Revision 1.21  2015/07/28 16:37:56  myonara
+// wraps bei manchen bruellern, Remove Loggen.
+//
+// Revision 1.20  2013/11/01 17:57:32  myonara
+// query_noise eingebaut und SHUTDOWN_ROOM anstatt /room/church verwendet.
+//
+// Revision 1.19  2013-05-02 17:03:54  sorcerer
+// Neue Zeitangabe fuer Spieler >2 Wochen
+//
+// Revision 1.18  2010-06-22 20:51:03  sorcerer
+// WEEK_SHUT raus, grobe Zeitangaben fuer Spieler
+//
+// Revision 1.17  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.16  2005/05/06 22:59:59  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.15  2004/11/27 21:32:59  gnomi
+// add_hp-Aenderung: Ueberlagerung angepasst.
+//
+// Revision 1.14  2003/12/15 00:03:25  gnomi
+// cont_shutting privatisiert.
+//
+// Revision 1.13  2003/11/11 00:02:18  sissi
+// Grammatikfehler bei der Ruferei umgangen.
+//
+// Revision 1.12  2003/05/07 04:43:01  gnomi
+// Die Leute zum richten Laden von Tadmor teleportieren.
+//
+// Revision 1.11  2002/01/13 04:50:25  freaky
+// query_long() umgestellt.
+//
+// Revision 1.10  2002/01/13 01:00:28  gnomi
+// FUnktion fuer den queued rausgenommen.
+//
+// Revision 1.9  2002/01/06 15:55:01  sissi
+// Resistenter gegen Probleme mit /room/rathaus/reserv gemacht.
+//
+// Revision 1.8  2001/03/24 01:36:33  gnomi
+// Im Finger anzeigen, wann das letzte Armageddon war.
+// Exportdefine aus Vaniorh fuer die Bank nutzen.
+//
+// Revision 1.7  2001/02/21 18:58:12  gnomi
+// add_hp angepasst.
+//
+
+/*
+ * This is a shut down deamon, that will take care of shutting down
+ * the game.
+ * Call the function "shut" with a number of minutes as an argument.
+ *
+ * 12/7/91: Enhanced by Olorin for Deep Trouble to include an optional view
+ *          of how much time is before reboot (Wizards) or less than 1/2
+ *          hour (players)
+ *          Wizard level >= reboot may reboot the game using 'fastshut [mins]'
+ */
+
+#include <time.h>
+#include <config.h>
+#include <move.h>
+#include <level.h>
+#include <stats.h>
+#include <debug_info.h>
+#include <driver_info.h>
+#include <message.h>
+
+#ifdef UNItopia
+#include "/d/Vaniorh/sys/vaniorh_exports.h"
+#endif
+
+inherit "/i/monster/monster";
+
+#include "rollen_weg.inc"
+
+#define CAN_REBOOT(x) lordp(x)
+
+#define INITIAL_ROOM "/room/rathaus/reserv"
+#define SHUTDOWN_ROOM "/room/church"
+#define VALID_ROOMS ({ INITIAL_ROOM, SHUTDOWN_ROOM, "/room/void" })
+
+int initial_c_time;
+int shut_c_time;
+int transport_offer;
+
+
+private void cont_shutting(int seconds);
+
+int query_prevent_shadow(object sh)
+{
+    return 1;
+}
+
+void create()
+{
+    int i;
+
+    monster::create();
+
+    initialize("mensch",100);
+    set_name("armageddon");
+    set_npc_name("armageddon");
+    give_hands(4);
+    give_sp(666);
+    give_hp(666);
+    give_weapon_level(666);
+    give_armour_level(666);
+    for (i = 0; i < STAT_NUMBER; i++)
+	set_one_stat(i,1272);
+    set_id(({"armageddon","shut"}));
+    set_short("Armageddon");
+    set_gender("maennlich");
+    set_smell("Er riecht nach Pech und Schwefel.\n");
+    set_personal(1);
+    set_prevent_cleanup();
+    
+    call_out ("move_to_initial_room",2);
+
+    initial_c_time = 0;
+    shut_c_time = 0;
+}
+
+void move_to_initial_room ()
+{
+    if (touch (INITIAL_ROOM))
+       move(INITIAL_ROOM,MOVE_MAGIC);
+}
+
+void init()
+{
+    if (CAN_REBOOT(this_player()))
+	add_action("heart_shut","abschuss");
+}
+
+string query_noise()
+{
+    if (!shut_c_time)
+    {
+        return "Armageddon zaehlt gerade nicht, also hoerst du nichts.\n";
+    }
+    return wrap("Armageddon zaehlt leise und du kannst raushoeren, "
+            "wann er damit fertig sein will: "
+            +timestr(shut_c_time + initial_c_time));
+       
+}
+
+string query_long(object who)
+{
+    int how_c_long;
+    string desc;
+
+    desc = "Das Terminieren von Spielen macht ihm besonderen Spass.\n";
+
+    if (!shut_c_time) 
+    {
+        if (wizp(who))
+            desc += "Einleitung eines Shutdowns mit 'abschuss <minuten>'.\n";
+        return desc;
+    }
+
+    how_c_long = (shut_c_time + initial_c_time) - time();
+
+    if (wizp(who))
+    {
+        desc += "Derzeitiger Shutdown : "+format_seconds(how_c_long)+".\n";
+    }
+    else
+    {
+	desc += "Er ist wohl gerade mit Zaehlen beschaeftigt.\n";
+
+	/* Inform lower-level creatures roughly about time until reboot */
+
+        switch (how_c_long) 
+        {
+            case 0..3599 : // 0 - 1h
+	        desc += "Du bist Dir fast sicher, dass er in weniger als "
+                        "einer Stunde aufwacht und das\n"
+                        "Spiel terminiert.\n";
+                break;
+            case 3600..43199 : // 1h - 12h
+                desc += "Du hast das Gefuehl, dass er innerhalb des "
+                        "naechsten halben Tages erwachen\n"
+                        "und das Spiel terminieren wird.\n";
+                break;
+            case 43200..172799 : // 12h - 2d 
+                desc += "Es wird wohl keine zwei Tage mehr dauern, bis er "
+                        "mit dem Zaehlen fertig ist\n"
+                        "und das Spiel terminiert.\n";
+                break;
+            case 172800..604799 : // 2d - 7d
+                desc += "Einige Tage wird er mit dem Zaehlen sicher noch "
+                        "beschaeftigt sein, bevor er\n"
+                        "das Spiel dann terminieren wird.\n";
+                break;
+            case 604800..1209599 : // 7d - 14d
+                desc += "Bis es soweit ist und er das Spiel terminieren "
+                        "wird, zaehlt er sicher noch\n"
+                        "viele Tage vor sich hin.\n";
+                break;
+            default : // > 2 Wochen
+                desc += "So entspannt, wie er zaehlt, ist er sicher "
+                        "noch einige Wochen beschaeftigt,\n"
+                        "bevor er erwacht, um das Spiel zu terminieren.\n";
+        }
+    }
+
+    return desc;
+}
+
+/* Wird vom Driver aufgerufen, wenn der Hauptspeicher knapp wird. */
+void shut(int minutes)
+{
+    if (object_name(previous_object())!=MASTER_OB &&
+	previous_object()!=this_object())
+	return;
+
+    if (minutes < 0)
+	minutes = 0;
+
+    shut_c_time = minutes * 60;
+    initial_c_time = time();
+    
+    move(SHUTDOWN_ROOM,MOVE_MAGIC);
+
+    call_out(#'cont_shutting, 0, shut_c_time);
+}
+
+private void bruelle(string str)
+{
+    filter(efun::users(),#'tell_object,str);
+    sys_log("SHOUTS",str);
+}
+
+private void cont_shutting(int seconds)
+{
+    int new_delay;
+
+    if (seconds <= 0)
+    {
+	bruelle("\nArmageddon bruellt: Und Tschuess!\n");
+#ifdef LOG_SHUTDOWN
+	sys_log("SHUT","Shutdown: "+timestr(time())+"   "+__VERSION__+"\n"+
+			"   "+mixed2str(rusage())+"\n"+
+			"   Uptime: "+format_seconds(query_up_time())+"\n");
+#endif
+#if __EFUN_DEFINED__(dump_driver_info)
+	efun::dump_driver_info(DDI_OBJECTS);
+#else
+	efun::debug_info(DINFO_DUMP,"objects");
+#endif
+	efun::garbage_collection();
+	call_out(#'efun::shutdown, __ALARM_TIME__); // Ein Zyklus spaeter wg. GC
+	return;
+    }
+
+    new_delay = seconds * 3 / 4 - 10;
+    call_out(#'cont_shutting, seconds - new_delay, new_delay);
+
+    bruelle("\n"+wrap("Armageddon bruellt: Noch " +
+    	format_seconds(seconds)+" bis zum Neustart.")+"\n");
+
+    if (seconds <= 300)
+    {
+	bruelle(wrap("Armageddon bruellt: 'Redet' zu mir, wenn ihr zum Laden "
+		"oder zur Bank wollt!")+"\n");
+	transport_offer = 1;
+    }
+}
+
+void receive_message(int msg_type, int msg_action, object wer, string msg)
+{
+    string who, what;
+
+    if (!transport_offer)
+	return;
+    if (sscanf(msg, "%s redet zu dir: %s", who, what) != 2)
+	return;
+#ifdef UNItopia
+    if (strstr(what,"bank") >= 0)
+	wer->move(TADMOR_BANK_SCHALTERHALLE, MOVE_MAGIC);
+    else
+	wer->move(TADMOR_ANKAUFSLADEN, MOVE_MAGIC);
+#else	
+    wer->move("/room/laden/verkaufsraum", MOVE_MAGIC);
+#endif
+}
+
+nosave int heart_shut(string str)
+{
+    int minutes;
+
+    if (!str)
+    {
+	notify_fail("In wieviel Minuten ?\n");
+	return 0;
+    }
+    if (!sscanf(str, "%d", minutes))
+    {
+	notify_fail("Das soll ne Zahl sein ???\n");
+	return 0;
+    }
+#ifdef LOG_SHUTDOWN
+    sys_log("SHUT","Shutdown per Armageddon gestartet von "+
+	this_interactive()->query_real_name()+" in "+minutes+" Minuten am "+
+	timestr(time())+".\n");
+#endif
+    if (minutes < 1)
+    {
+	if (adminp(this_player()) && this_player()==this_interactive())
+	    cont_shutting(0);
+	notify_fail("Bisschen knapp die Zeit!\n");
+	return 0;
+    }
+
+    shut_c_time = minutes * 60;
+    initial_c_time = time();
+    move(SHUTDOWN_ROOM,MOVE_MAGIC);
+    call_out(#'cont_shutting, 0, shut_c_time);
+
+    write("Ok.\n");
+    return 1;
+}
+
+int remove()
+{
+    if (shut_c_time)
+    {
+        sys_log("SHUT",timestr(time())+" Armageddon gestoppt "+
+             (this_interactive()?this_interactive()->query_real_name():"-"));
+    }
+    remove_call_out("shut");
+    remove_call_out(#'cont_shutting);
+    return monster::remove();
+}
+
+varargs int add_hp(int i, mapping infos)
+{
+    if (i < 0)
+	return -1;
+    return ::add_hp(i,infos);
+}
+
+varargs int move(mixed ziel, int wie, string verlassen, string ankommen)
+{
+    string room;
+
+    if (objectp(ziel))
+	room = object_name(ziel);
+    else if (stringp(ziel))
+	room = ziel;
+    if (member(VALID_ROOMS,room) < 0)
+	return MOVE_NOT_ALLOWED;
+    return ::move(ziel,wie,verlassen,ankommen);
+}
+
+string query_finger_info_text()
+{
+    return "Armageddon macht es Spass, UNItopia zu terminieren\n"
+           "und danach wieder neu zu erschaffen.\n"
+	   "Zuletzt war er am "+timestr(time()-query_up_time())+" aktiv.";
+}

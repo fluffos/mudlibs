@@ -1,0 +1,1277 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/weapon/weapon_logic.c
+// Description: Standard-Inherit fuer Waffen
+// Modified by:	Freaky	(06.11.95) query_value() lieferte Werte < 0
+// 		Garthan	(27.02.96) kaputte Waffen->no_store && min_val/2
+//              Sissi   (06.03.96) Reparatur aus Schmieden in Waffen verlegt
+//		Zap     (27.09 96) query_extended_short, query_used_stats
+//		Monty   (07.02 97) compute_damage verwendet jetzt
+//			query_XXX_damage, um den Schaden zu berechnen
+//			-> Schaden ist ueberlagerbar!
+//		Tucita  (04.08.1998) forbidden/notify_unwield in move()
+//		Freaky  (06.05.2000) do_wield: set_adjektiv->add_adjektiv
+//
+// $Log: weapon_logic.c,v $
+// Revision 1.31  2015/07/28 17:20:53  myonara
+// Neue Waffenlogik MONSTER_SCHIESSEN_IM_HEARTBEAT
+//
+// Revision 1.30  2013-03-16 16:25:33  gnomi
+// Description-Logik prueft, ob das Item ein Objekt ist.
+//
+// Revision 1.29  2009-09-07 21:50:37  gnomi
+// set/query_extended_short() ausgebaut.
+//
+// Revision 1.28  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.27  2008-04-02 08:29:24  gnomi
+// Aufpassen, dass sie im move() nicht zerstoert wurde.
+//
+// Revision 1.26  2007/12/05 11:02:23  gnomi
+// do_wield/do_remove: Dokumentiert, dass die Funktionen nur fuer den internen
+// Gebrauch gedacht sind.
+//
+// Revision 1.25  2007/08/09 22:19:37  gnomi
+// An neue Beschreibungen angepasst.
+//
+// Revision 1.24  2007/06/25 22:19:55  gnomi
+// Bei Bewegung in den Player-Container kein forbidden_unwield aufrufen.
+//
+// Revision 1.23  2005/05/26 01:03:03  gnomi
+// Ueberfluessige Variable rausgenommen.
+//
+// Revision 1.22  2004/11/27 21:25:03  gnomi
+// forbidden_unwield_me wird auch beim move() abgefragt.
+// Ebenso wird dort notify_unwield_me aufgerufen.
+// query/set_damage_type eingefuehrt.
+//
+// Revision 1.21  2003/12/23 02:27:57  gnomi
+// query_stat mit gesetzten Float-Flag aufrufen und daher auch
+// Fliesskommazahlen erwarten.
+//
+// Revision 1.20  2003/04/29 03:32:05  gnomi
+// Typo.
+//
+// Revision 1.19  2003/04/05 21:28:00  gnomi
+// Zeug virtual inheritet.
+//
+// Revision 1.18  2003/01/26 03:53:40  gnomi
+// Kaputtmeldung umbrerchen.
+//
+// Revision 1.17  2002/12/14 03:14:33  gnomi
+// Long-Beschaedigt-Beschreibung korrigiert.
+//
+// Revision 1.16  2002/11/20 04:07:29  gnomi
+// query_learning_type ausgebaut.
+// set_learning_type macht nun gar nix mehr.
+//
+// Revision 1.15  2002/10/16 00:56:55  gnomi
+// Im Long anzeigen, dass sie kaputt ist.
+//
+// Revision 1.14  2002/07/20 02:36:42  gnomi
+// Kaputte Waffen verhindern kein cleanup mehr.
+//
+// Revision 1.13  2002/06/14 23:06:39  gnomi
+// broken_message umbrechen.
+//
+// Revision 1.12  2002/01/15 03:38:29  gnomi
+// query_short umgestellt.
+//
+// Revision 1.11  2002/01/12 03:59:05  gnomi
+// Typos in Doku zu query_repair_cost.
+//
+// Revision 1.10  2001/07/12 21:16:04  gnomi
+// Doku zu do_break korrigiert.
+//
+// Revision 1.9  2001/06/25 11:48:34  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.8  2001/05/27 21:21:59  sissi
+// Learning Types Handling geaendert.
+// Jede Waffe weiss jetzt selber, was sie ist, und vergibt selber ihre Skills.
+//
+// Revision 1.7  2001/02/25 05:12:48  gnomi
+// init_weapon
+//
+// Revision 1.6  2001/01/16 19:16:52  gnomi
+// set/quuery_(un)wield_msg(_other) eingebaut.
+//
+// Revision 1.5  2001/01/13 14:42:00  sissi
+// Statt MAX_REPAIR REPAIR_MAX genommen, ist konsistenter mit anderen
+// Konstanten.
+//
+// Revision 1.4  2001/01/13 14:39:08  sissi
+// do_repair und query_repair_cost achten jetzt darauf, dass der Maximalwert
+// von MAX_REPAIR = 90% nicht ueberschritten wird; auch wird bei negativen
+// Prozentwerten 0% eingesetzt.
+//
+// Revision 1.3  2001/01/07 03:06:14  gnomi
+// Ein paar Funktionen dokumentiert.
+//
+
+#pragma save_types
+
+virtual inherit "/i/item";
+virtual inherit "/i/value";
+virtual inherit "/i/move";
+
+#include <config.h>
+#include <move.h>
+#include <stats.h>
+#include <object_stats.h>
+#include <apps.h>
+#include <message.h>
+#include <deklin.h>
+#include <description.h>
+#include <simul_efuns.h>
+
+#define REPAIR_RATE 75
+#define REPAIR_MAX 90
+#define CONSERVATION_HANDLE_XYZ(s,x) \
+    if (stringp(x) || !x) \
+        this_object()->add_setter_conservation((s),({x})); \
+    else \
+        this_object()->set_conservation_constraint((s),1);
+
+
+private int max_damage_beginner = 3;
+private int max_damage_expert = 10;
+private string *skill_definition = ({ "skill","offensiv","haende" });
+private int *used_stats = ({ STAT_STR, STAT_STR, STAT_DEX, STAT_CON });
+private string *damage_type;
+private int life = 300;
+private int max_life = 300;
+private int weapon_min_val;
+private int weapon_max_val;
+private string short;
+private string weapon_class;
+private string broken_message = "PLING!!!!\n";
+
+private string broken_adjektiv = "beschaedigt";
+private string wield_adjektiv = "gefuehrt";
+private closure wield_msg, wield_msg_other, unwield_msg, unwield_msg_other;
+
+/*
+FUNKTION: set_wield_msg
+DEKLARATION: void set_wield_msg(mixed wield_msg)
+BESCHREIBUNG:
+Setzt die Meldung, die derjenige erhaelt, der die Waffe fuehrt.
+Die Meldung wird automatisch umgebrochen und kann auch eine Pseudeclosure
+sein. Weitere Informationen dazu gibt es in /doc/funktionsweisen/messages
+VERWEISE: query_wield_msg,
+          set_wield_msg_other, set_unwield_msg, set_unwield_msg_other
+GRUPPEN: waffen
+*/
+void set_wield_msg(mixed msg)
+{
+    CONSERVATION_HANDLE_XYZ("set_wield_msg",msg);
+    wield_msg=msg?mixed_to_closure(msg):0;
+}
+
+/*
+FUNKTION: query_wield_msg
+DEKLARATION: string query_wield_msg()
+BESCHREIBUNG:
+Liefert die Meldung, die derjenige erhaelt, der die Waffe fuehrt.
+VERWEISE: set_wield_msg,
+          query_wield_msg_other, query_unwield_msg, query_unwield_msg_other
+GRUPPEN: waffen
+*/
+string query_wield_msg()
+{
+  return wield_msg?closure_to_string(wield_msg):0;
+}
+
+/*
+FUNKTION: set_wield_msg_other
+DEKLARATION: void set_wield_msg_other(mixed wield_msg_other)
+BESCHREIBUNG:
+Setzt die Meldung, die alle anderen Anwesenden im Raum erhalten, 
+wenn jemand die Waffe fuehrt. Die Meldung wird automatisch umgebrochen
+und kann auch eine Pseudeclosure sein.
+Weitere Informationen dazu gibt es in /doc/funktionsweisen/messages
+VERWEISE: query_wield_msg_other,
+          set_wield_msg, set_unwield_msg, set_unwield_msg_other
+GRUPPEN: waffen
+*/
+void set_wield_msg_other(mixed msg)
+{
+    CONSERVATION_HANDLE_XYZ("set_wield_msg_other",msg);
+    wield_msg_other=msg?mixed_to_closure(msg):0;
+}
+
+/*
+FUNKTION: query_wield_msg_other
+DEKLARATION: string query_wield_msg_other()
+BESCHREIBUNG:
+Liefert die Meldung, die alle anderen Anwesenden im Raum erhalten, 
+wenn jemand die Waffe fuehrt.
+VERWEISE: set_wield_msg_other,
+          query_wield_msg, query_unwield_msg, query_unwield_msg_other
+GRUPPEN: waffen
+*/
+string query_wield_msg_other()
+{
+  return wield_msg_other?closure_to_string(wield_msg_other):0;
+}
+
+/*
+FUNKTION: set_unwield_msg
+DEKLARATION: void set_unwield_msg(mixed unwield_msg)
+BESCHREIBUNG:
+Setzt die Meldung, die derjenige erhaelt, der die Waffe senkt.
+Die Meldung wird automatisch umgebrochen und kann auch eine Pseudeclosure
+sein. Weitere Informationen dazu gibt es in /doc/funktionsweisen/messages
+VERWEISE: query_unwield_msg,
+          set_wield_msg, set_wield_msg_other, set_unwield_msg_other
+GRUPPEN: waffen
+*/
+void set_unwield_msg(mixed msg)
+{
+    CONSERVATION_HANDLE_XYZ("set_unwield_msg",msg);
+    unwield_msg=msg?mixed_to_closure(msg):0;
+}
+
+/*
+FUNKTION: query_unwield_msg
+DEKLARATION: string query_unwield_msg()
+BESCHREIBUNG:
+Liefert die Meldung, die derjenige erhaelt, der die Waffe senkt.
+VERWEISE: set_unwield_msg,
+          query_wield_msg, query_wield_msg_other, query_unwield_msg_other
+GRUPPEN: waffen
+*/
+string query_unwield_msg()
+{
+  return unwield_msg?closure_to_string(unwield_msg):0;
+}
+
+/*
+FUNKTION: set_unwield_msg_other
+DEKLARATION: void set_unwield_msg_other(mixed unwield_msg_other)
+BESCHREIBUNG:
+Setzt die Meldung, die alle anderen Anwesenden im Raum erhalten, 
+wenn jemand die Waffe senkt. Die Meldung wird automatisch umgebrochen und
+kann auch eine Pseudeclosure sein.
+Weitere Informationen dazu gibt es in /doc/funktionsweisen/messages
+VERWEISE: query_unwield_msg_other,
+          set_wield_msg, set_wield_msg_other, set_unwield_msg
+GRUPPEN: waffen
+*/
+void set_unwield_msg_other(mixed msg)
+{
+    CONSERVATION_HANDLE_XYZ("set_unwield_msg_other",msg);
+    unwield_msg_other=msg?mixed_to_closure(msg):0;
+}
+
+/*
+FUNKTION: query_unwield_msg_other
+DEKLARATION: string query_unwield_msg_other()
+BESCHREIBUNG:
+Liefert die Meldung, die alle anderen Anwesenden im Raum erhalten, 
+wenn jemand die Waffe senkt.
+VERWEISE: set_unwield_msg_other,
+          query_wield_msg, query_wield_msg_other, query_unwield_msg
+GRUPPEN: waffen
+*/
+string query_unwield_msg_other()
+{
+  return unwield_msg_other?closure_to_string(unwield_msg_other):0;
+}
+
+/*
+FUNKTION: set_broken_adjektiv
+DEKLARATION: void set_broken_adjektiv(string broken_adjektiv)
+BESCHREIBUNG:
+Dieses Adjektiv wird gesetzt, wenn die Waffe oder Ruestung beschaedigt wird.
+Standardmaessig wird "beschaedigt" gesetzt.
+VERWEISE: query_broken_adjektiv, query_broken, do_break,
+          set_broken_message, query_broken_message
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+mixed set_broken_adjektiv(mixed str)
+{
+    this_object()->add_setter_conservation("set_broken_adjektiv",({str}));
+    return broken_adjektiv = str;
+}
+
+/*
+FUNKTION: set_wield_adjektiv
+DEKLARATION: void set_wield_adjektiv(string wield_adjektiv)
+BESCHREIBUNG:
+Dieses Adjektiv wird gesetzt, wenn die Waffe gefuehrt wird.
+Standardmaessig wird "gefuehrt" gesetzt.
+VERWEISE: query_wield_adjektiv, query_wield, do_wield
+GRUPPEN: waffen, kampf
+*/
+mixed set_wield_adjektiv(mixed str)
+{
+    this_object()->add_setter_conservation("set_wield_adjektiv",({str}));
+    return wield_adjektiv = str;
+}
+
+/*
+FUNKTION: query_broken_adjektiv
+DEKLARATION: string query_broken_adjektiv()
+BESCHREIBUNG:
+Liefert das Adjektiv, welches gesetzt wird, wenn die Waffe oder Ruestung
+beschaedigt wird.
+VERWEISE: query_broken_adjektiv, query_broken, do_break,
+          set_broken_message, query_broken_message
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+mixed query_broken_adjektiv() { return broken_adjektiv; }
+
+/*
+FUNKTION: query_wield_adjektiv
+DEKLARATION: mixed query_wield_adjektiv()
+BESCHREIBUNG:
+Liefert das Adjektiv, das gesetzt wird, wenn die Waffe gefuehrt wird.
+VERWEISE: set_wield_adjektiv, query_wield, do_wield
+GRUPPEN: waffen, kampf
+*/
+mixed query_wield_adjektiv() { return wield_adjektiv; }
+
+/*
+FUNKTION: query_used_stats
+DEKLARATION: int *query_used_stats()
+BESCHREIBUNG:
+Liefert die Faehigkeiten (Staerke, Intelligenz, Ausdauer, Geschicklichkeit),
+die zur Benutzung dieser Waffe verwendet werden.
+VERWEISE: set_used_stats
+GRUPPEN: waffen, kampf
+*/
+int *query_used_stats() { return used_stats; }
+
+#ifdef FIGHT_DEBUG
+void fight_debug(object owner, int damage, int extra_damage, int applied_damage)
+{
+   object debugger;
+   if(owner && (debugger = (object)owner->query_debugger()))
+      tell_object(debugger, "WEAP: COMPUTED_DAM: "+damage+
+		     (extra_damage?" EXTRA_DAM: "+extra_damage:"")+
+		     " APPLIED_DAM: "+applied_damage+
+		     " ("+(string)owner->query_name()+":"+
+			  (string)this_object()->query_name()+")\n");
+}
+#endif
+
+/*
+FUNKTION: set_weapon_class
+DEKLARATION: void set_weapon_class(string str)
+BESCHREIBUNG:
+Damit wird die Waffenklasse einer Waffe gesetzt.
+Von der Waffenklasse haengt die Behandlung der Waffe und deren Funktionalitaet
+ab. Erlaubte Werte sind: "nahkampf", "wurf", "schuss" und "defensiv".
+VERWEISE: query_weapon_class
+GRUPPEN: waffen, kampf
+*/
+void set_weapon_class(string str)
+{
+    weapon_class = str;
+    this_object()->add_setter_conservation("set_weapon_class",({str}));
+}
+
+/*
+FUNKTION: query_weapon_class
+DEKLARATION: string query_weapon_class([string weapon_class])
+BESCHREIBUNG:
+Liefert die Waffenklasse einer Waffe zurueck, oder 0, wenn das Objekt keine
+Waffe ist. Wird weapon_class als optionale Parameter mit angegeben, dann
+wird 0 zurueckgeliefert, wenn die Waffe nicht zur angegebenen Waffenklasse
+gehoert, sonst die Waffenklasse.
+VERWEISE: 
+GRUPPEN: waffen, kampf
+*/
+varargs string query_weapon_class(string str)
+{
+    if (str && lower_case(str) != weapon_class)
+	return 0;
+    return weapon_class;
+}
+
+/*
+FUNKTION: query_wield
+DEKLARATION: int query_wield()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn die Waffe gefuehrt wird, sonst 0.
+VERWEISE: wield, do_wield
+GRUPPEN: waffen, kampf
+*/
+int query_wield()
+{
+    object env;
+
+    env = environment();
+    if (env && living(env))
+	return env->query_wielded_object(this_object());
+}
+
+/*
+FUNKTION: do_wield
+DEKLARATION: void do_wield()
+BESCHREIBUNG:
+Diese Funktion wird von wield() aufgerufen, wenn die Waffe gefuehrt wird.
+
+Diese Funktion ist nur zur mudlibinternen Verwendung gedacht. Damit ein
+Lebewesen eine Waffe fuehrt, muss lebewesen->wield(...) aufgerufen werden.
+
+VERWEISE: wield, query_wield
+GRUPPEN: waffen, kampf
+*/
+void do_wield()
+{
+    if (wield_adjektiv && !this_object()->adjektiv(wield_adjektiv))
+	this_object()->add_adjektiv(wield_adjektiv,1);
+}
+
+/*
+FUNKTION: do_remove
+DEKLARATION: void do_remove()
+BESCHREIBUNG:
+Diese Funktion wird von unwield() (und einige anderen Funktionen des
+Lebewesens) aufgerufen, wenn die Waffe gesenkt wird.
+
+Diese Funktion ist nur zur mudlibinternen Verwendung gedacht. Damit ein
+Lebewesen eine Waffe senkt, muss lebewesen->unwield(...) aufgerufen werden.
+
+VERWEISE: unwield, query_wield
+GRUPPEN: waffen, kampf
+*/
+void do_remove()
+{
+    if (wield_adjektiv && this_object())
+	this_object()->delete_adjektiv(wield_adjektiv);
+}
+
+/*
+FUNKTION: do_break
+DEKLARATION: void do_break()
+BESCHREIBUNG:
+Diese Funktion wird von add_life aufgerufen, wenn eine Waffe beschaedigt
+wurde. Sie sollte nicht von ausserhalb der Waffe aufgerufen werden. Wenn
+man eine Waffe zerstoeren will, dann sollte dies ueber add_life geschehen.
+Diese Funktion kann man ueberlagern, um noch irgendwelche Dinge bei der
+Zerstoerung der Waffe zu erledigen.
+VERWEISE: query_broken, set_broken_adjektiv, query_broken_adjektiv,
+          set_broken_message, query_broken_message, 
+	  notify_weapon_fail, notify_armour_fail, add_life
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+void do_break()
+{
+    if(broken_adjektiv && !this_object()->adjektiv(broken_adjektiv))
+	this_object()->add_adjektiv(broken_adjektiv,1);
+    this_object()->notify("weapon_fail", this_object(), "broken");
+    if (environment())
+	environment()->notify("weapon_fail", this_object(), "broken");
+}
+
+/*
+FUNKTION: notify_weapon_fail
+DEKLARATION: void notify_weapon_fail(object weapon, string how)
+BESCHREIBUNG:
+Wenn die Waffe unbrauchbar wird, dann wird sowowhl in der Waffe selber als
+auch im environment ob der Waffe (also meistens im Lebewesen)
+weapon->notify("weapon_fail", weapon, how) bzw.
+ob->notify("weapon_fail", weapon, how) aufgerufen.
+
+Die Funktion notify ruft dann in allen mit ob->add_controller(
+"notify_weapon_fail", other) angemeldeten Objekten other die Funktion
+other->notify_weapon_fail(weapon, how) auf. Sowohl ob als auch other haben
+dann die Moeglichkeit darauf zu reagieren.
+
+Folgende Werte werden zur Zeit fuer how genutzt:
+ "broken": Die Waffe wurde beschaedigt (siehe do_break und set_life).
+ 
+VERWEISE: do_break
+GRUPPEN: waffen
+*/
+
+/*
+FUNKTION: query_repairable
+DEKLARATION: int query_repairable()
+BESCHREIBUNG:
+Testet, ob eine Waffe oder eine Ruestung repariert werden kann.
+VERWEISE: query_broken, query_repair_cost, do_repair
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+
+int query_repairable()
+{
+    return max_life > 10;
+}
+
+/*
+FUNKTION: do_repair
+DEKLARATION: void do_repair(int percent)
+BESCHREIBUNG:
+Repariert eine Waffe oder eine Ruestung.
+Das maximale Leben wird auf 'percent' Prozent des bisherigen gesetzt.
+Das maximale Leben der Waffe wird reduziert, ihr Wert ist hinterher
+hoeher als der Wert der kaputten Waffe, aber niedriger als der Wert
+einer neuen Waffe.
+Erlaubte Werte fuer percent und die Kosten der Reparatur stehen in
+/doc/richtlinien/waffen/reparatur bzw. /doc/richtlinien/ruestungen/reparatur
+Zur Berechnung der Kosten sollte query_repair_cost genommen werden.
+VERWEISE: query_broken, query_repairable, query_repair_cost
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+void do_repair(int percent)
+{
+    if (query_repairable())
+    {
+        if (!percent)
+	    percent = REPAIR_RATE;
+        else if (percent > REPAIR_MAX)
+            percent = REPAIR_MAX;
+        else if (percent < 0)
+            percent = 0;
+        max_life = max_life * percent / 100;
+        life = max_life;
+        if (broken_adjektiv)
+            this_object()->delete_adjektiv(broken_adjektiv);
+        weapon_max_val = weapon_max_val * percent / 100;
+        weapon_min_val = weapon_min_val * percent / 100;
+        if (weapon_min_val < 1)
+            weapon_min_val = 1;
+        if (weapon_max_val < weapon_min_val)
+            weapon_max_val = weapon_min_val;
+        this_object()->delete_seq_conservation("life");
+        this_object()->add_setter_conservation("set_life",({max_life}),"life");
+        this_object()->add_setter_conservation("set_value",
+            ({weapon_min_val,weapon_max_val}));
+   }
+}
+
+/*
+FUNKTION: query_repair_cost
+DEKLARATION: int query_repair_cost(int percent)
+BESCHREIBUNG:
+Lierfert zurueck, wieviel die Reparatur dieser Waffe kosten soll.
+Der zurueckgegebene Wert ist in der Standardwaehrung (Taler) angegeben,
+es muss daher noch eine Umrechnung in die "eigene" Waehrung erfolgen.
+percent gibt an, wieviel Prozent der Waffe repariert werden sollen.
+VERWEISE: query_broken, query_repairable, do_repair
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+int query_repair_cost(int percent)
+{
+    int tmp;
+
+    if (!percent)
+	percent = REPAIR_RATE;
+    else if (percent > REPAIR_MAX)
+        percent = REPAIR_MAX;
+    else if (percent < 0)
+        percent = 0;
+    tmp = (weapon_max_val * percent / 100 - query_value()) * 2;
+    if (tmp <= 0)
+	return 10;
+    return tmp;
+}
+
+/*
+FUNKTION: set_damage
+DEKLARATION: void set_damage(int max_damage_beginner, int max_damage_expert)
+BESCHREIBUNG:
+Setzt den Schaden, den eine Waffe anrichten kann. Der Schaden berechnet sich
+aus einem Wert zwischen max_damage_beginner und max_damage_expert (je nach
+Erfahrung mit der entsprechenden Waffe) minus der Ruestung des Angegriffenen.
+Richtlinien zum Schaden (einschliesslich dem extra_damage) sind in
+/doc/richtlinien/waffen
+VERWEISE: 
+GRUPPEN: waffen, kampf
+*/
+void set_damage(int a, int b)
+{
+    if (a > 0)
+        max_damage_beginner = a;
+
+    if (b < max_damage_beginner)
+        max_damage_expert = max_damage_beginner;
+    else
+        max_damage_expert = b;
+    this_object()->add_setter_conservation("set_damage",
+            ({max_damage_beginner,max_damage_expert}));
+}
+
+/*
+FUNKTION: set_learning_type
+DEKLARATION: VERALTET void set_learning_type(int learning_type)
+BESCHREIBUNG:
+
+    VERALTET
+
+    Diese Funktion wird nicht mehr benoetigt.
+
+Hier die alte Beschreibung:
+
+Setzt die Erlernbarkeit einer Waffe, d.h. die Geschwindigkeit mit der man eine 
+Waffe erlernen kann. Dazu sind in config.h die folgenden Konstanten definiert:
+
+#define LEARNING_1              1       
+#define LEARNING_2              5      
+#define LEARNING_3              20    
+#define LEARNING_4              50   
+#define LEARNING_5              100 
+#define LEARNING_6              1000
+
+Fuer die Verwendung des learning_type siehe Richtlinien/Waffen, uebliche Nahkampfwaffen 
+haben LEARNING_1, uebliche Schuss- und Wurfwaffen haben LEARNING_3. Diese Werte werden
+defaultmaessig gesetzt, mussen also nicht explizit gesetzt werden.
+VERWEISE: 
+GRUPPEN: waffen, kampf
+*/
+void set_learning_type(int a) { }
+
+/*
+FUNKTION: set_skill_path
+DEKLARATION: void set_skill_path(string *skillpath)
+BESCHREIBUNG:
+Damit setzt man den Skillpfad, in dem der Skill fuer die Waffe gesetzt wird.
+Erlaubte Pfade siehe /doc/richtlinien/erlaubte_skills.
+VERWEISE: 
+GRUPPEN: waffen, kampf
+*/
+void set_skill_path(string *skill)
+{
+    skill_definition = skill;
+    this_object()->add_setter_conservation("set_skill_path",({skill}));
+}
+
+/*
+FUNKTION: set_used_stats
+DEKLARATION: void set_used_stats(int *stats)
+BESCHREIBUNG:
+Damit setzt man die Faehigkeiten (Staerke, Intelligenz, Ausdauer,
+Geschicklichkeit), die zur Benutzung dieser Waffe verwendet werden. Fuer
+stats kann man die in stats.h definierten Konstanten verwenden.
+VERWEISE: query_used_stats
+GRUPPEN: waffen, kampf
+*/
+void set_used_stats(int *stats)
+{
+    used_stats = stats;
+    this_object()->add_setter_conservation("set_used_stats",({stats}));
+}
+
+/*
+FUNKTION: set_broken_message
+DEKLARATION: void set_broken_message(string broken_message)
+BESCHREIBUNG:
+Setzt die Meldung, die ein Spieler bekommt, wenn seine Waffe oder Ruestung
+ihr Leben aushaucht (life faellt auf <= 0...).
+Diese Meldung wird automatisch umgebrochen.
+VERWEISE: query_broken_message
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+void set_broken_message(string str)
+{
+    broken_message = str;
+    this_object()->add_setter_conservation("set_broken_message",({str}));
+}
+
+/*
+FUNKTION: query_broken_message
+DEKLARATION: string query_broken_message()
+BESCHREIBUNG:
+Liefert die Meldung, die ein Spieler bekommt, wenn seine Waffe oder
+Ruestung ihr Leben aushaucht (life faellt auf <= 0...).
+VERWEISE: set_broken_message
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+string query_broken_message() { return broken_message; }
+
+/*
+FUNKTION: set_life
+DEKLARATION: void set_life(int life)
+BESCHREIBUNG:
+Mit set_life kann man die Anzahl der Schlaege(Schuesse, Wuerfe) festlegen,
+die man  mit einer Waffe ausfuehren kann, bevor sie kaputtgeht. Fuer
+erlaubte Werte ->/doc/richtlinien/waffen/leben 
+VERWEISE: add_life, query_life, query_max_life 
+GRUPPEN: waffen, kampf
+*/
+void set_life(int i)
+{
+    if (i > 0)
+    {
+        if (life <= 0)
+            do_repair(0);
+        life = i;
+        max_life = i;
+        this_object()->delete_seq_conservation("life");
+        this_object()->add_setter_conservation("set_life",({max_life}),"life");
+    }
+}
+
+/*
+FUNKTION: add_life
+DEKLARATION: int add_life(int life)
+BESCHREIBUNG:
+Mit add_life kann man die Anzahl der Schlaege(Schuesse, Wuerfe) erhoehen oder 
+verringern (bei negativem life), die man mit einer Waffe ausfuehren kann, bevor
+sie kaputtgeht. Fuer erlaubte Werte ->/doc/richtlinien/waffen/leben
+VERWEISE: set_life, query_life, query_max_life
+GRUPPEN: waffen, kampf
+*/
+int add_life(int a)
+{
+    if (life <= 0 && life+a > 0)
+	do_repair(0);
+    if (life > 0 && life+a <= 0)
+    {
+	do_break();
+	if (environment() && living(environment()))
+	    this_object()->send_message_to(environment(),
+		MT_LOOK|MT_NOISE,MA_FIGHT,wrap(query_broken_message()));
+    }
+    life += a;
+  this_object()->delete_seq_conservation("life");
+  this_object()->add_setter_conservation("set_life",({max_life}),"life");
+  this_object()->add_setter_conservation("add_life",({life-max_life}),"life");
+    return life; 
+}
+
+/*
+FUNKTION: query_skill_path
+DEKLARATION: string *query_skill_path()
+BESCHREIBUNG:
+Liefert den Skill-Pfad einer Waffe zurueck.
+VERWEISE: set_skill_path
+GRUPPEN: waffen, kampf
+*/
+string *query_skill_path() { return skill_definition; }
+
+/*
+FUNKTION: query_max_damage
+DEKLARATION: int query_max_damage()
+BESCHREIBUNG:
+Liefert den Schaden, den diese Waffe bei einem Experten anrichten kann.
+VERWEISE: set_damage, query_min_damage
+GRUPPEN: waffen, kampf
+*/
+int query_max_damage() { return max_damage_expert; }
+
+/*
+FUNKTION: query_min_damage
+DEKLARATION: int query_min_damage()
+BESCHREIBUNG:
+Liefert den Schaden, den diese Waffe bei einem Anfaenger anrichten kann.
+VERWEISE: set_damage, query_max_damage
+GRUPPEN: waffen, kampf
+*/
+int query_min_damage() { return max_damage_beginner; }
+
+/*
+FUNKTION: query_life
+DEKLARATION: int query_life()
+BESCHREIBUNG:
+Liefert die Anzahl Schlaege(Wuerfe, Schuesse), die man mit einer Waffe noch
+machen kann, bevor sie kaputtgeht.
+VERWEISE: set_life, query_max_life
+GRUPPEN: waffen, kampf
+*/
+int query_life() { return life; }
+
+/*
+FUNKTION: query_max_life
+DEKLARATION: int query_max_life()
+BESCHREIBUNG:
+Liefert die Anzahl Schlaege, die eine Waffe nach dem create() hatte.
+VERWEISE: query_life, set_life
+GRUPPEN: waffen, kampf
+*/
+int query_max_life() { return max_life; }
+
+/*
+FUNKTION: query_broken
+DEKLARATION: int query_broken()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn die Waffe oder Ruestung beschaedigt ist, sonst 0.
+VERWEISE: query_life
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+int query_broken() { return life <= 0; }
+
+int query_enable_cleanup()
+{
+    if(this_object()->query_prevent_cleanup())
+	return 0;
+    if(this_object()->query_broken())
+	return 1;
+    return ::query_enable_cleanup();
+}
+
+/*
+ * Uluji:
+ *
+ * Die Erfahrung mit der jeweiligen Waffe (total_skill: 0-100) und
+ * die fuer die Waffe noetigen stats (total_stat: 0-100) werden jeweils
+ * zur Haelfte beruecksichtigt.
+ */ 
+
+#ifdef MONSTER_SCHIESSEN_IM_HEARTBEAT
+/*
+FUNKTION: compute_damage
+DEKLARATION: varargs int compute_damage(int critical, object wer)
+BESCHREIBUNG:
+Berechnet unter Beruecksichtigung der Faehigkeiten query_used_stats() und des
+Waffenskills den maximalen Schaden, den wer mit der Waffe anrichten kann.
+
+Ist wer nicht angegebene, so wird ENV(Waffe) genommen, sofern es ein
+Lebewesen ist.
+
+Ist critical angegeben, so wird ein kritischer Schlag berechnet.
+VERWEISE: query_max_damage, query_min_damage
+GRUPPEN: spieler, monster, kampf
+*/
+varargs int compute_damage(int critical, object wer)
+{
+    int skill, beginner, expert, i;
+    float stat;
+    object owner;
+
+    beginner = this_object()->query_min_damage();
+    expert = this_object()->query_max_damage();
+
+    owner = wer ? wer : environment();
+    if (!owner || !living(owner))
+	return 0;
+    if(intp(critical) && critical)
+       return random (expert*2/3)+expert*2/3;
+    if(i = sizeof(used_stats))
+    {
+	while (i--)
+	    stat += owner->query_stat(used_stats[i],1);
+	stat /= sizeof(used_stats);
+    }
+
+    skill=owner->get_one_skill(skill_definition);
+    return (((expert-beginner)*
+	    (EXP_TO_PERCENT(skill)+to_int(stat)))/2 + (beginner * 100)) / 100;
+}
+#else // MONSTER_SCHIESSEN_IM_HEARTBEAT
+varargs int compute_damage(int critical)
+{
+    int skill, beginner, expert, i;
+    float stat;
+    object owner;
+
+    beginner = this_object()->query_min_damage();
+    expert = this_object()->query_max_damage();
+
+    owner = environment();
+    if (!owner || !living(owner))
+	return 0;
+    if(intp(critical) && critical)
+       return random (expert*2/3)+expert*2/3;
+    if(i = sizeof(used_stats))
+    {
+	while (i--)
+	    stat += owner->query_stat(used_stats[i],1);
+	stat /= sizeof(used_stats);
+    }
+
+    skill=owner->get_one_skill(skill_definition);
+    return (((expert-beginner)*
+	    (EXP_TO_PERCENT(skill)+to_int(stat)))/2 + (beginner * 100)) / 100;
+}
+#endif // MONSTER_SCHIESSEN_IM_HEARTBEAT
+
+string query_short(object viewer)
+{
+    int pos;
+    string zus;
+    mixed adjektiv;
+
+    zus = "";
+    if (query_wield())
+    {
+	pos += 1;
+	if(!wield_adjektiv || query_short_string())
+	   if(wield_adjektiv)
+	   {
+	      if(pointerp(wield_adjektiv))
+		 adjektiv = wield_adjektiv[0];
+	      else
+		 adjektiv = wield_adjektiv;
+	      zus += " ("+adjektiv+")";
+	   }
+	   else
+	      zus += " (gefuehrt)";
+    }
+    if (query_broken())
+    {
+	pos += 2;
+	if (!broken_adjektiv || query_short_string())
+	   if(broken_adjektiv)
+	   {
+	      if(pointerp(broken_adjektiv))
+		 adjektiv = broken_adjektiv[0];
+	      else
+		 adjektiv = broken_adjektiv;
+	      zus += " ("+adjektiv+")";
+	   }
+	   else
+	      zus += " (beschaedigt)";
+    }
+    return item::query_short(viewer)+zus;
+}
+
+protected string query_long_postprocess(string msg, mapping info)
+{
+    msg = ::query_long_postprocess(msg, info);
+    
+    if(query_broken() && !query_long_has_tag(T_ATOM_TAG_BROKEN_TEXT))
+        msg += wrap(desc_text(T_ATOM_BROKEN_TEXT, info, ({})));
+
+    return msg;
+}
+    
+protected mixed desc_condition(string name, mixed info, mixed* par)
+{
+    object ob = info[TI_OBJECT] || (objectp(info[TI_ITEM]) && info[TI_ITEM]) || this_object();
+
+    switch(name)
+    {
+        case T_ATOM_WIELD:
+            return ob && ob->query_wield();
+	
+	case T_ATOM_BROKEN:
+	    return ob && ob->query_broken();
+    }
+    
+    return ::desc_condition(name, info, par);
+}
+
+protected mixed desc_text(string name, mixed info, mixed* par)
+{
+    object ob = info[TI_OBJECT] || (objectp(info[TI_ITEM]) && info[TI_ITEM]) || this_object();
+
+    switch(name)
+    {
+        case T_ATOM_WIELD_TEXT:
+            if(ob)
+            {
+                string adj = ob->query_wield_adjektiv();
+                return Er(ob) + ist(ob,IST_SPACE_BEFORE|IST_SPACE_AFTER) +
+                    (pointerp(adj)?adj[0]:adj) + ".";
+            }
+            break;
+	
+	case T_ATOM_BROKEN_TEXT:
+	    if(ob)
+	    {
+	        mixed adj = ob->query_broken_adjektiv() || "beschaedigt";
+	        string *radjs = ob->query_adjektiv() - ({adj});
+    	        string str;
+	
+	        switch(random(4))
+	        {
+		    case 0:
+		        str = Er(ob)+plural(" sieht "," sehen ",ob)+adj+" aus.";
+		        break;
+		    case 1:
+		        str = Der(ob,radjs)+plural(" ist "," sind ",ob)+adj+".";
+		        break;
+	            case 2:
+		        str = "Du glaubst, dass "+er(ob)+" "+adj+plural(" ist."," sind.",ob);
+		        break;
+		    case 3:
+		        if(!random(100))
+			    str = query_deklin(ob,ART_NUR_NOMEN|ART_BLANK,FALL_NOM,radjs)+" kaputt.";
+		        else
+			    str = "Man sieht "+dem(ob,radjs)+" sofort an, dass "+er(ob)+" "+adj+
+			        plural(" ist."," sind.",ob);
+		        break;
+	        }
+	        return str;
+	    }
+	    break;
+    }
+    
+    return ::desc_text(name, info, par);
+}
+
+protected int desc_number(string name, mixed info, mixed* par)
+{
+    mixed tmp;
+    
+    switch(name)
+    {
+        case TN_LIFE:
+	    return query_life();
+    }
+    
+    return ::desc_number(name, info, par);
+}
+
+/*
+FUNKTION: T_LISTE
+DEKLARATION: Liste der T-Defines fuer Waffen und Ruestungen
+BESCHREIBUNG:
+
+Vordefinierte Bedingungen:
+ - T_WIELD		Die Waffe ist gefuehrt.
+ - T_BROKEN		Die Waffe bzw. Ruestung ist kaputt.
+
+Vordefinierte Texte:
+ - T_WIELD_TEXT		"Die Waffe ist gefuehrt." oder so.
+ - T_BROKEN_TEXT	"Die Waffe sieht kaputt aus." oder so.
+ 
+Hinweise fuer die Meldungsgeneration:
+ - T_HAS_WIELD_TEXT	Wird derzeit ignoriert.
+ - T_HAS_BROKEN_TEXT	Hinweis, dass die Beschreibung bereits die kaputte
+			Waffe bzw. Ruestung erwaehnt.
+
+Vordefinierte Eigenschaften zum Vergleich mit T_GREATER & Co.:
+ - T_LIFE		Die verbleibende Lebensdauer der Waffe bzw. Ruestung.
+
+GRUPPEN: waffen, ruestung, kampf
+SOURCE: /i/armour/armour.c
+*/
+
+/*
+FUNKTION: set_value
+DEKLARATION: varargs void set_value(int min, int max)
+BESCHREIBUNG:
+Damit setzt man den Mindest- und Maximalwert der intakten Waffe.
+Erlaubte Werte ->/doc/richtlinien/waffen/wert
+VERWEISE: query_value, query_min_value, query_max_value
+GRUPPEN: waffen
+*/
+varargs void set_value(int min, int max)
+{
+    if (min<1)
+	weapon_min_val = 1;
+    else
+	weapon_min_val = min;
+    if (max<1) 
+    {
+	weapon_max_val = weapon_min_val;
+	weapon_min_val /= 3 ;
+    }
+    else
+	weapon_max_val = max;
+    this_object()->add_setter_conservation("set_value",
+            ({weapon_min_val,weapon_max_val}));
+}
+
+int query_value()
+{
+    if ((max_life > 0) && (life > 0))    /* Division durch Null !! */
+	return weapon_min_val+life*(weapon_max_val-weapon_min_val)/max_life;
+    else
+	return weapon_min_val / 2;
+}
+
+void just_sold()
+{
+    ::just_sold();
+    if (query_broken() && this_object())
+	this_object()->remove();
+}
+
+/*
+FUNKTION: query_max_value
+DEKLARATION: int query_max_value()
+BESCHREIBUNG:
+Liefert den Maximalwert der funktionierenden Waffe (also den Wert der Waffe
+im nagelneuen Zustand).
+VERWEISE: query_min_value, query_value, set_life
+GRUPPEN: waffen
+*/
+int query_max_value() { return weapon_max_val; }
+
+/*
+FUNKTION: query_min_value
+DEKLARATION: int query_min_value()
+BESCHREIBUNG:
+Liefert den Mindestwert der funktionierenden Waffe (also den Wert, den die
+Waffe besitzt, wenn man mit ihr noch einen Schlag ausfuehren kann).
+VERWEISE: query_max_value, query_value, set_life
+GRUPPEN: waffen
+*/
+int query_min_value() { return weapon_min_val ; }
+
+int check_life()
+{
+    object owner, env;
+
+    if (!this_object())
+	return 0;
+
+    owner = environment();
+    if (life >= 0 && playerp(owner))
+    {
+        life--;
+        this_object()->delete_seq_conservation("life");
+        this_object()->add_setter_conservation("set_life",({max_life}),"life");
+        this_object()->add_setter_conservation("add_life",({life-max_life}),
+            "life");
+    }
+    if (life > 0)
+        return 1;
+    if (life == 0)
+    {
+        string tmp;
+
+        do_break();
+        if (owner && living(owner) && (tmp=query_broken_message()))
+            this_object()->send_message_to(owner,
+            MT_LOOK|MT_NOISE,MA_FIGHT,wrap(tmp));
+    }
+    return 0;
+}
+
+/*
+FUNKTION: query_weapon
+DEKLARATION: int query_weapon()
+BESCHREIBUNG:
+Liefert bei Waffen 1.
+VERWEISE: query_armour
+GRUPPEN: waffen
+*/
+int query_weapon() { return 1; }
+
+varargs int move(mixed dest, int way, string out, string in)
+{
+    int res, do_rem, hand;
+    object pl;
+
+    if (query_wield() && touch(dest) != (pl=environment()))
+    {
+	hand = member(pl->query_hand_objects(), this_object());
+
+        if((!objectp(dest) ||
+	    strstr(object_name(dest),PLAYER_INVENTORY_CONTAINER)) &&
+           pl->forbidden("unwield", this_object(), hand) ||
+           this_object()->forbidden("unwield_me", pl, hand))
+	    return MOVE_NOT_ALLOWED;
+
+	do_rem = 1;
+    }
+
+    res = ::move(dest,way,out,in);
+
+    if (res == MOVE_OK && do_rem && this_object())
+    {
+	do_remove();
+	if (pl)
+	{
+            pl->delete_hand_object(this_object());
+	    pl->notify("unwield", this_object(), hand);
+            this_object()->notify("unwield_me", pl, hand);
+        }
+    }
+
+    return res;
+}
+
+
+// so auch in /i/living/hands fuer handangriff
+int critical_hit()
+{
+    return random(100) >= 96;  // 96,97,98,99:  4 % Chance
+}
+
+
+#ifdef LOG_OBJECT_STATS
+void log_object_stats()
+{
+   OBJECT_STATS->add_object_stats(OS_WEAPON, this_object(), 
+      ({
+	 query_name(),
+	 query_weight(),
+	 query_min_value(),
+	 query_max_value(),
+	 query_min_damage(),
+	 query_max_damage(),
+	 query_life(),
+	 query_weapon_class()
+      }));
+}
+#endif
+
+/*
+FUNKTION: query_extra_damage
+DEKLARATION: int query_extra_damage(object feind, object besitzer)
+BESCHREIBUNG:
+Wird fuer jeden Schlag in der Waffe aufgerufen, damit man den Schaden
+auch in Abhaengigkeit vom Opfer festlegen kann. Oder Waffengifte
+verteilen. Oder ...
+Was immer diese Funktion zurueck liefert, wird auf den Schaden oder
+Schutzwert aufaddiert. Positive Werte bedeuten verbesserung,
+negative Verschlechterung.
+Gilt nicht fuer Defensiv-Waffen.
+
+Der extra_damage muss zusammen mit dem normalen Schaden den Richtlinien
+in /doc/richtlinien/waffen entsprechen!
+VERWEISE: set_damage
+GRUPPEN: waffen, kampf
+*/
+
+protected int calc_percent(int percent, int rl, int grenze)
+{
+    if(percent<=100)
+        return rl * percent / 100;
+    else if(percent<=200)
+        return rl + (grenze - rl) * (percent-100) / 100;
+    else
+        return grenze;
+}
+
+/*
+FUNKTION: query_damage_type
+DEKLARATION: string* query_damage_type()
+BESCHREIBUNG:
+Liefert die Schadensart der Waffe zurueck.
+Diese wird beim AP-Abzug durch add_hp als AH_DAMAGE_TYPE uebergeben.
+VERWEISE: set_damage_type, set_damage
+GRUPPEN: waffen, kampf
+*/
+string* query_damage_type()
+{
+    return damage_type;
+}
+
+/*
+FUNKTION: set_damage_type
+DEKLARATION: void set_damage_type(string* damage_type)
+BESCHREIBUNG:
+Damit wird die Schadensart der Waffe festgelegt.
+Diese wird dann beim AP-Abzug durch add_hp als AH_DAMAGE_TYPE uebergeben.
+VERWEISE: query_damage_type, set_damage
+GRUPPEN: waffen, kampf
+*/
+void set_damage_type(string* dtype)
+{
+    damage_type = dtype;
+    this_object()->add_setter_conservation("set_damage_type",({dtype}));
+}
+
+/*
+FUNKTION: query_num_free_hands_to_wield
+DEKLARATION: int query_num_free_hands_to_wield()
+BESCHREIBUNG:
+Liefert die Anzahl freier Haende, die man braucht, um die Waffe zu fuehren.
+VERWEISE: query_num_free_hands
+GRUPPEN: kampf, haende, waffen
+*/
+int query_num_free_hands_to_wield()
+{
+    return 1;  
+    // Kam aus Pulami's Vorschlag, kann wohl ueberlagert werden. -Myonara.
+}

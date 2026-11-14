@@ -1,0 +1,160 @@
+// This file is part of the UNItopia MUDLIB
+// ========================================
+// file:   /i/udl/udl_base,c
+// author: Jesaia
+// date:   25.04.00
+// description:
+// udl steht fuer UNItopiaDescriptionLanguage, eine HTML aehnliche Sprache um
+// Raeume und Objekte zu beschreiben. udl_base ist das Basis objekt. Hier sind
+// alle TAG Handler Funktionalitaeten drin.
+//
+//
+// $Log: udl_base.c,v $
+// Revision 1.5  2001/06/25 11:48:31  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.4  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#include <error.h>
+
+private mapping udl_handler=([]);
+
+int check_content(string content)
+{
+    if (content =="")
+	return 0;
+    return 1;
+}
+
+string udl_build_string(string udl_desc)
+{
+    mixed *lines;
+    int counter;
+    string RC;
+
+    lines = explode(udl_desc,"\n");
+    for (counter=sizeof(lines);counter--;)
+    {
+        lines[counter]=trim(lines[counter]);
+    }
+    lines = filter(lines,#'check_content); 
+    RC = implode(lines," ");
+    RC = regreplace(RC,"<BR>","\n",1);
+    return RC;
+}
+
+mixed *udl_build_array(string udl_desc)
+{
+    mixed *RC;
+    int counter;
+    string dummy;
+    dummy = regreplace(udl_desc,"\n",",",1);    
+    RC=explode(dummy,",");
+    for(counter=sizeof(RC);counter--;)
+    {
+       RC[counter]=trim(RC[counter]);
+    }
+    RC = filter(RC,#'check_content); 
+    return ({})+RC;
+}    
+int check_udl_tag(string tag)
+{
+    return member(udl_handler,tag);
+}
+
+int add_udl_tag(string tag, string function)
+{
+    if (check_udl_tag(tag))
+	return 0;
+    udl_handler=udl_handler +([tag:function]);
+    return 1;
+}
+
+mapping query_udl_handler()
+{
+    return ([])+udl_handler;
+}
+
+string get_tag_content(string tag,string udl_desc)
+{
+    int StartPoint,EndPoint;
+
+    StartPoint = strstr(udl_desc,"<<"+tag+">>");
+    EndPoint = strstr(udl_desc,"<</"+tag+">>");
+
+    if (StartPoint == -1)
+    {
+//	do_error("Tag: "+tag+" nicht gefunden.");
+	return "";
+    }
+    if (EndPoint == -1)
+    {
+	do_error("Tag: "+tag+" hat keinen EndTag.");
+        return "";
+    }
+    if (EndPoint < StartPoint)
+    {  
+       do_error("Tag: "+tag+" hat den Endtag vor dem StartTag.");
+      return ""; 
+    }
+    return udl_desc[StartPoint+strlen("<<"+tag+">>")..EndPoint-1];
+}
+int get_tag(string udl_desc)
+{
+    string tag;
+    string desc;
+    int StartPoint, EndPoint;
+    StartPoint = strstr(udl_desc,"<<",0);
+    if (StartPoint == -1)
+	return strlen(udl_desc);
+    EndPoint = strstr(udl_desc[StartPoint..],">>");
+    tag=udl_desc[StartPoint+2..StartPoint+EndPoint-1];
+    if (member(udl_handler,tag)==1)
+    {
+	StartPoint=StartPoint+EndPoint+2;
+	EndPoint=strstr(udl_desc[StartPoint..],"<</"+tag+">>");
+	if (EndPoint == -1)
+	{
+	    do_error("Keinen EndTag zu "+tag+" gefunden.");
+	    return strlen(udl_desc);
+	}
+	call_other(this_object(),udl_handler[tag],
+		udl_desc[StartPoint..EndPoint-1+StartPoint]);
+	return StartPoint+EndPoint+strlen("<</"+tag+">>");
+    }
+    do_error("Keine gueltiger definition: "+tag);
+    return strlen(udl_desc);
+}
+
+int process_udl(string udl_desc)
+{
+    int index;
+    int totalChars;
+
+    totalChars = strlen(udl_desc);
+    index = 0;
+    do
+    {
+         index=index+get_tag(udl_desc[index..totalChars]);
+    }
+    while (index < totalChars);
+    return 1;
+}
+
+int read_udl_file(string filename)
+{
+    string fullfilepath, udl_desc;
+
+    fullfilepath = abs_path(filename) + ".udl";
+    udl_desc = read_file(fullfilepath);
+    if (!udl_desc || udl_desc == "")
+    {
+	do_error("Kein Inhalt im File: " + fullfilepath + "\n");
+	return 0;
+    }
+    return process_udl(udl_desc);
+}

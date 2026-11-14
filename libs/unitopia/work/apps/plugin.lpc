@@ -1,0 +1,198 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/plugin.c
+// Description:	Ein Plugin-Manager
+// Author:	Freaky (12.01.2000)
+
+// UID: Apps
+
+//
+// $Log: plugin.c,v $
+// Revision 1.11  2009-09-07 21:24:46  gnomi
+// Plugins: Beim Laden erhalten sie volle PL_LOAD_EVALS.
+//
+// Revision 1.10  2009-01-07 15:25:26  gnomi
+// Plugin-Ersatz-Mechanismus von Sorcerer eingebaut.
+//
+// Revision 1.9  2003/04/05 21:26:52  gnomi
+// Automatischer Check, ob ein Plugin noch existiert.
+//
+// Revision 1.8  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.7  2001/11/16 21:19:47  freaky
+// output der evals eingebaut.
+//
+// Revision 1.6  2001/08/21 11:22:22  freaky
+// todo eingebaut
+//
+// Revision 1.5  2001/04/30 21:14:20  freaky
+// Plugins werden beim Starten geladen.
+//
+// Revision 1.4  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.3  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#include <apps.h>
+#include <error.h>
+#include <rtlimits.h>
+
+#define SAVE_FILE "/var/plugins"
+#define PL_REG_DATE 0
+#define PL_LAST_DATE 1
+#define PL_SIZE 2
+
+#define PL_LOAD_EVALS 500000
+
+mapping plugins;
+
+private void do_load_plugin(string pl)
+{
+    string msg;
+    int ev;
+
+    ev = get_eval_cost();
+    if (msg = catch(load_object(pl)))
+    {
+	do_error2("Error loading plugin " + pl + ": " + msg,
+		__FILE__, pl, __LINE__);
+    }
+    debug_message(sprintf("\n  Plugin: %-50s %8d",pl,ev-get_eval_cost()));
+}
+
+private void load_plugins(string pl)
+{
+    // Umweg ueber LIMIT_UNLIMITED gehen, da
+    // PL_LOAD_EVALS kleiner als normale Evals ist.
+
+    limited( (:
+        limited(#'do_load_plugin,({ PL_LOAD_EVALS }), $1)
+    :), ({ LIMIT_UNLIMITED }), pl);
+
+}
+
+void create()
+{
+    restore_object(SAVE_FILE);
+    if (plugins)
+	map(plugins,#'load_plugins);
+    else
+	plugins = m_allocate(0,PL_SIZE);
+    debug_message("\n    ");
+}
+
+void save_plugins()
+{
+    save_object(SAVE_FILE);
+}
+
+void prepare_renewal()          {}
+void abort_renewal()            {}
+void finish_renewal(object neu) {}
+
+string invalid_plugin(object plugin)
+{
+    if (member(inherit_list(plugin),"/i/tools/plugin.lpc") < 0)
+	return "Ein Plugin muss '/i/tools/plugin' inheriten.\n";
+    if (clonep(plugin))
+	return "Ein Plugin darf kein Clone sein.\n";
+    return 0;
+}
+
+int plugin_registered(string plugin)
+{
+    return member(plugins,plugin);
+}
+
+int plugin_register_date(string plugin)
+{
+    if (plugin_registered(plugin))
+	return plugins[plugin,PL_REG_DATE];
+    return -1;
+}
+
+int plugin_last_date(string plugin)
+{
+    if (plugin_registered(plugin))
+	return plugins[plugin,PL_LAST_DATE];
+    return -1;
+}
+
+int register_plugin()
+{
+    string plugin;
+
+    if (invalid_plugin(previous_object()))
+	return -1;
+    
+    plugin = object_name(previous_object());
+
+    if (plugin_registered(plugin))
+    {
+	plugins[plugin,PL_LAST_DATE] = time();
+	save_plugins();
+	return 1;
+    }
+    
+    plugins[plugin,PL_REG_DATE]  = time();
+    plugins[plugin,PL_LAST_DATE] = time();
+    save_plugins();
+    return 2;
+}
+
+private void check_plugin(string plugin, int reg_date, int last_date)
+{
+    object ob;
+    string err, tmp;
+
+    ob = find_object(plugin);
+    err = "";
+    if (!ob)
+    {
+	if (file_size(plugin + ".lpc") <= 0)
+	    err = "Plugin (File) ist nicht vorhanden.\n";
+	else
+	{
+	    err = catch(ob = touch(plugin));
+	    if (!ob && !err)
+		err = "Plugin konnte nicht geladen werden.\n";
+	}
+    }
+    if (ob)
+    {
+	tmp = invalid_plugin(ob);
+	if (tmp)
+	    err += tmp;
+    }
+    if (strlen(err))
+    {
+	m_delete(plugins,plugin);
+	do_error2("Plugin wurde ausgetragen.\nGrund: "+err,
+	    __FILE__, plugin, __LINE__);
+    }
+}
+
+int clean_plugins()
+{
+    walk_mapping(plugins,#'check_plugin);
+    save_plugins();
+    return 1;
+}
+
+nosave int last_check;
+
+mapping query_plugins()
+{
+    if(last_check<time()) // Hoechstens einmal pro Backend-Zyklus suchen
+	clean_plugins();
+    return deep_copy(plugins);
+}
+
+string query_plugin_replacement(string oldfile)
+{
+    return FILED->query_plugin_replacement(oldfile);
+}

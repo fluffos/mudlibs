@@ -1,0 +1,592 @@
+// This file is part of UNItopia mudlib.
+// -------------------------------------------------------------------
+// File:        /room/bank/obj/armatester.c
+// Description: Armatester fuer Objekte
+// Author:      Myonara (24.Apr.2016)
+// Modified by:
+//  Myonara 24.Apr.2016  Neuanlage.
+//
+// $Log: armatester.c,v $
+// Revision 1.6  2016/09/15 17:34:38  myonara
+// Debugger ergaenzt. Diskretion beim anschauen und lesen.
+//
+// Revision 1.3  2016/09/11 02:38:21  myonara
+//  Vorbereitung fuer die Spielertestphase.
+//
+// Revision 1.2  2016/09/03 15:30:43  myonara
+// Header angepasst
+//
+
+
+inherit "/i/tools/security";
+inherit "/i/item";
+inherit "/i/move";
+
+#include <config.h>
+#include <database.h>
+#include <editor.h>
+#include <invis.h>
+#include <level.h>
+#include <message.h>
+#include <more.h>
+#include <move.h>
+#include <notify_fail.h>
+#include <parse_com.h>
+#include <shadow.h>
+
+#ifdef UNItopia
+#include "/z/Gilden/Alchemistengilde/sys/alch.h"
+#define ALCH_METALL ([ "blei":  BLEI,"zinn": ZINN, "eisen": EISEN, \
+                       "kupfer": KUPFER,"quecksilber": QUECKSILBER, \
+                       "silber": SILBER, "gold": GOLD ])
+#define ARMA_ALCH_OBJ_VEREDELUNG   \
+    "/z/Gilden/Alchemistengilde/obj/veredeln/veredel_sh"
+#endif
+#include <misc.h>
+#include <properties.h>
+
+
+#include <money.h>
+
+private object last_ob;
+private string last_msg,last_data;
+
+
+nosave void teilen(object woher, object wohin)
+{
+    object ob;
+    if (wohin && woher)
+    {
+        ob = present(ZB_ARMATESTER_ID,wohin);
+        if (ob)
+        {
+            send_message_to(({woher}),MT_FEEL,MA_MOVE,wrap(
+                Der(wohin)+" hat bereits "+einen(TO)+". "
+                "Das blauschimmernde Leuchten erlischt."
+            ));
+            return;
+        }
+        ob = clone_object(__FILE__);
+        if (MOVE_OK == ob->move(wohin,MOVE_ERR_REMOVE))
+        {
+            send_message_to(({wohin}),MT_FEEL,MA_MOVE,wrap(
+                Der(woher)+" gibt Dir einen Stab in die Hand, der "
+                "bei deiner Beruehrung blauschimmernd aufleuchtet "
+                "und sich zu teilen beginnt."
+            ));
+            send_message_to(({woher,wohin}),MT_FEEL,MA_MOVE,wrap(
+                Der(TO)+" hat sich erfolgreich geteilt. "
+                "Das blauschimmernde Leuchten erlischt."
+            ));
+            ZB_DEBUGLOG(wohin->query_real_name(),DB_DBGLVL_INFO,
+                        woher->query_real_name(),"armatester");
+        }
+        else
+        {
+            send_message_to(({woher}),MT_FEEL,MA_MOVE,wrap(
+                Der(TO)+" hat sich nicht geteilt, vielleicht fehlte Platz "
+                "beim Empfaenger. Das blauschimmernde Leuchten erlischt."
+            ));
+        }
+        return;
+    }
+    else
+    {
+        send_message_to(({woher}),MT_FEEL,MA_MOVE,wrap(
+            Der(TO)+" hat sich nicht geteilt, der Empfaenger ist "
+            "verschwunden. Das blauschimmernde Leuchten erlischt."
+        ));
+    }
+    
+}
+
+private void abbruch_erneuern(object pl, object old, object new)
+{
+    send_message_to(({pl}), MT_LOOK, MA_LOOK, wrap(
+            "Der Armatester konnte sich nicht selbst erneuern, "
+            "Du wirst Dir einen neuen besorgen muessen."));
+    if (old)
+    {
+        destruct(old);
+    }
+    if (new)
+    {
+        destruct(new);
+    }
+}
+
+public varargs void check_erneuern(object pl,object old)
+{
+    if (clonep() && playerp(pl))
+    {
+        __FILE__->check_erneuern(pl,TO);
+        return;
+    }
+    if (!playerp(pl) || pl->query_ghost() || !objectp(old) || !clonep(old) 
+        || ENV(old)!=pl || program_name(old) != __FILE__ 
+        || object_time(old) >= program_time())
+    {
+        return;
+    }
+    send_message_to(pl, MT_LOOK, MA_LOOK, wrap(
+        "Der Armatester bereitet sich blauschimmernd auf eine "
+        "Erneuerung vor und verschwindet erstmal."));
+    closure cl = #'abbruch_erneuern;
+    call_out(cl ,0, pl, old, 0);
+    old->remove();
+    if (old)
+        destruct(old);
+    object new = clone_object(__FILE__);
+    remove_call_out(cl);
+    call_out(cl ,0, pl, old, new);
+    int mr = new->move(pl, MOVE_ERR_REMOVE);
+    switch (mr)
+    {
+    case MOVE_OK:
+        send_message_to(pl, MT_LOOK, MA_LOOK, wrap(
+            "Der Armatester erscheint wieder."));
+        break;
+    default:
+        send_message_to(pl, MT_LOOK, MA_LOOK, wrap(
+            "Der Armatester bleibt in den weitlaeufigen Strukturen des "
+            "Raum-Zeit-Kontinuums verloren. Du wirst Dir einen "
+            "Neuen holen muessen."));
+        break;
+    }
+    remove_call_out(cl);
+}
+
+int forbidden_move(object wer, object woher, object wohin, string dir, 
+        int wie, string verlassen, string ankommen)
+{
+    if (!wohin) 
+        return 1;
+    if (wer != TO || wohin->query_player_container() || !woher)
+        return 0;
+    if (woher->query_player_container() && playerp(wohin))
+    {
+        call_out("check_erneuern",10,wohin);
+        return 0;
+    }
+    if (playerp(woher) && woher == ENV_TO && woher == TP && playerp(wohin))
+    {
+        call_out("teilen",1,TP,wohin);
+        set_not_moved_reason(wrap(
+            Der(TO)+" leuchtet blauschimmernd auf und beginnt sich zu teilen."
+            ));
+        return 1;
+    }
+    set_not_moved_reason(wrap(
+        Der(TO)+" laesst sich nicht bewegen."));
+    return 1;
+}
+
+private string get_program_name(object ob)
+{
+    string fn = ob->query_file_name();
+    if (fn) return fn;
+    string *name = explode(object_name(ob),"#");
+    return (sizeof(name)==2)?name[0]:0;
+}
+
+string precheck_conservation()
+{
+    return 
+    "Das ist nur ein temporaeres Werkzeug, das nicht aufbewahrt werden kann.";
+} 
+
+int cmd_pruefen(string str)
+{
+    object ob;
+    if (!check_security()) return 0;
+    if (wizp(TP))
+        ob = search_object(space(str));
+    else
+    {
+        mixed parsed = parse_com(str,TP,0,PARSE_NO_V_ITEMS);
+        if(parse_com_error(parsed, "Was willst Du apruefen?\n", 1))
+            return 0;
+        ob = parsed[PARSE_OBS][0];
+    }
+    if (!objectp(ob))
+    {
+        FAILWP("Objektangabe fehlt.",FAIL_NOT_OBJ);
+    }
+    <string|int> istr = ZENTRALBANK->check_conservation(ob);
+    if (stringp(istr))
+    {
+        last_ob = ob;
+        last_msg = istr;
+        mixed mud_data,m_constraints;
+        m_constraints = ob->query_conservation_constraints();
+        mud_data = ob->query_conservation_data();
+        last_data = "contraints: "+mixed2str(m_constraints)
+                  + "muddata: "+mixed2str(mud_data);
+        set(P_DEBUG_GROUP,MASTER_OB->query_debugger(
+                get_program_name(ob)+".lpc"));
+        if (adminp(TP))
+            send_message_to(TP,MT_DEBUG,MA_UNKNOWN,
+                wrap(mixed2str(TO->query_debug_info())));
+        FAILWP("Test fehlgeschlagen:\n"+istr,FAIL_INTERNAL);
+    }
+    last_ob = 0;
+    last_msg = last_data = "";
+    set(P_DEBUG_GROUP,({}));
+    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN,
+            "Test erfolgreich, "+der(ob)+" ist einlagerbar.");
+    return 1;
+}
+
+private void input_reason(mixed str,object tp, object ob)
+{
+    if (!tp || !ob) return;
+    if (pointerp(str) && sizeof(str))
+    {
+        str = implode(str,"\n");
+    }
+    else
+    {
+        send_message_to(tp,MT_NOTIFY, MA_UNKNOWN, wrap(
+            "Der Antrag wurde verworfen."));
+        return;
+    }
+    string factory = ob->query(P_CONSERVATION,P_CONSERVATION_FACTORY);
+    string factory_id = ob->query(P_CONSERVATION,P_CONSERVATION_IDENTIFIER);
+    string first_room = ob->query_first_room();
+    mapping* sh_data = ({}); // ob->query_conservation_arg_sh();
+    int count;
+    object sh;
+    for (count=0,sh=ob;sh=shadow(sh,0);count++)
+    {
+        mixed m = sh->query_conservation_arg_sh(sh);
+        string pn = get_program_name(sh);
+        if (m && pn)
+        {
+            sh_data += ({ ([ pn : m ]) });
+        }
+    }
+    str = "First_Room: "+first_room+"\nmsg:"+last_msg+"\n"+str;
+    if (ZENTRALBANK->request_bank_factory_file ( 
+            factory,factory_id,
+            ({get_program_name(ob)}) + map(sh_data,(: m_indices($1)[0] :) ),
+            ZB_BANK_ACTIVE,RNAME(tp),str)>0)
+    {
+        send_message_to(tp,MT_NOTIFY, MA_UNKNOWN, wrap(
+            "Der Antrag wurde erstellt."));
+        last_ob = 0;
+        return;
+    }
+    send_message_to(tp,MT_NOTIFY, MA_UNKNOWN, wrap(
+            "Der Antrag wurde aufgrund eines internen Fehlers nicht erstellt."));
+    return;
+}
+
+int cmd_beantragen(string str)
+{
+    if (!check_security()) return 0;
+    object ob = search_object(space(str));
+    string intro;
+    if (!adminp(TP)) return 0; // gesperrt
+    if (!objectp(ob))
+    {
+        FAILWP("Objektangabe fehlt.",FAIL_NOT_OBJ);
+    }
+    if (last_ob != ob)
+    {
+        FAILWP("Nur fuer ein unmittelbar vorher geprueftes Objekt mit Fehlschlag "
+            "kann ein Antrag gestellt werden.",FAIL_INTERNAL);
+    }
+    intro = "Bitte gebe eine Begruendung fuer das Einlagern des Objektes an.";
+    intro += "\nAbschluss der Eingabe mit . am Anfang.";
+    TP->mini_ed(function void(mixed text)
+                     { return input_reason(text,TP,ob); },
+                     0, 0,
+                     ([ MINI_ED_START_TEXT:  wrap(intro),
+                        MINI_ED_PLAYER_INFO: "",
+                        MINI_ED_WIZ_INFO:    "",]),
+                     ([ MINI_ED_WRAP_LEN:    79 ]));
+    return 1;
+}
+
+int cmd_zerbrechen(string str)
+{
+    if (!check_security()) return 0;
+    if (!me(str))
+        FAILWP("zerbreche armatester?",FAIL_NOT_OBJ);
+    send_message_to(({TP}),MT_FEEL,MA_MOVE,wrap(
+        Der(TO)+" leuchtet blauschimmernd auf und verschwindet."));
+    remove();
+    return 1;
+}
+
+int cmd_anmelden(string str)
+{
+    if (!check_security()) return 0;
+    if (!wizp(TP) && !testplayerp(TP)) return 0;
+    if (TP_RN != "myonara") return 0; // Gesperrt!!!
+    string * split = explode(space(str)," "),ret;
+    if (sizeof(split)<1 || split[0] == "?")
+    {
+        // TODO Hilfe ausgeben.
+        return 1;
+    }
+    object ob = search_object(split[0]);
+    if (!objectp(ob))
+    {
+        FAILWP("Objektangabe fehlt.",FAIL_NOT_OBJ);
+    }
+    string * inhlist = inherit_list(ob);
+    //write(mixed2str(inhlist));
+    if (ob->query_room())
+    {
+        
+        if (member(inhlist,"/i/money/schliessfachaddon.lpc")!=-1)
+        {
+            if (sizeof(split)>1)
+            {
+                ret = ZENTRALBANK->register_bank_room(
+                    split[1],object_name(ob),ZB_BANK_SAFEROOM);
+                if (ret > 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "Raum wurde als Bank mit Schliessfach registriert."));
+                    return 1;
+                }
+                else if (ret < 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "Raum war schon registriert."));
+                    return 1;
+                }
+            }
+            send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                "Raum wurde als Schlieesfachraum erkannt, aber Bankid fehlt."));
+            return 1;
+        }
+        else if (member(inhlist,"/i/money/bank.lpc")!=-1)
+        {
+            if (sizeof(split)>1)
+            {
+                ret = ZENTRALBANK->register_bank_room(
+                    split[1],object_name(ob),ZB_BANK_CLASSIC);
+                if (ret > 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "Raum wurde als klassische Bank registriert."));
+                    return 1;
+                }
+                else if (ret < 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "Raum war schon registriert."));
+                    return 1;
+                }
+            }
+            send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                "Raum wurde als Bank erkannt, aber nicht registriert."));
+            return 1;
+        }
+        else
+        {
+            if (sizeof(split)>1)
+            {
+                ret = ZENTRALBANK->register_bank_room(
+                    split[1],object_name(ob),ZB_BANK_ENVIRONMENT);
+                if (ret > 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "Raum wurde als Umgebung fuer Bank-NPCs registriert."));
+                    return 1;
+                }
+                else if (ret < 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "Raum war schon registriert."));
+                    return 1;
+                }
+            }
+            send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                "Raum wurde nicht als Bank erkannt, "
+                    "aber auch nicht registriert."));
+            return 1;
+        }
+    }
+    else if (living(ob))
+    {        
+        if (member(inhlist, "/p/Room/Bank/i/bankier_geldwechsler_pur.lpc")!=-1)
+        {
+            if (sizeof(split)>1)
+            {
+                ret = ZENTRALBANK->register_bank_npc(
+                    split[1],object_name(ob),ZB_NPC_BANKIER_WECHSLER);
+                if (ret > 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "NPC wuerde als Bankier|Wechsler registriert."));
+                    return 1;
+                }
+                else if (ret < 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "NPC war schon registriert."));
+                    return 1;
+                }
+            }
+            send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                "NPC wurde als Bankier|Wechsler erkannt, "
+                    "aber nicht registriert."));
+            return 1;
+        }
+        else if ( (member(inhlist, "/p/Room/Bank/i/bankier_pur.lpc")!=-1)
+             || (member(inhlist, "/p/Room/Bank/i/bankier_pur_loggend.lpc")!=-1))
+        {
+            if (sizeof(split)>1)
+            {
+                ret = ZENTRALBANK->register_bank_npc(
+                    split[1],object_name(ob),ZB_NPC_BANKIER);
+                if (ret > 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "NPC wuerde als Bankier registriert."));
+                    return 1;
+                }
+                else if (ret < 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "NPC war schon registriert."));
+                    return 1;
+                }
+            }
+            send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                "NPC wurde als Bankier erkannt, "
+                    "aber nicht registriert."));
+            return 1;
+        }
+        else if (member(inhlist, "/p/Room/Bank/i/geldwechsler_pur.lpc")!=-1)
+        {
+            if (sizeof(split)>1)
+            {
+                ret = ZENTRALBANK->register_bank_npc(
+                    split[1],object_name(ob),ZB_NPC_GELD_WECHSLER);
+                if (ret > 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "NPC wuerde als Wechsler registriert."));
+                    return 1;
+                }
+                else if (ret < 0)
+                {
+                    send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                        "NPC war schon registriert."));
+                    return 1;
+                }
+            }
+            send_message_to(TP, MT_NOTIFY,MA_UNKNOWN, wrap(
+                "NPC wurde als Wechsler erkannt, "
+                    "aber nicht registriert."));
+            return 1;
+        }
+        else
+        {
+            FAILWP("Unbekannter NPC: "+mixed2str(ob),FAIL_INTERNAL);
+        }
+    }
+    FAILWP("Unbekanntes Objekt: "+mixed2str(ob),FAIL_INTERNAL);
+}
+
+#ifdef UNItopia
+int cmd_veredeln(string str)
+{
+    if (!check_security()) return 0;
+    if (!wizp(TP) && !testplayerp(TP)) return 0;
+    if (TP_RN != "myonara") return 0; // Gesperrt!!!
+    string *split = explode(space(str)," ");
+    if (sizeof(split)!=2)
+    {
+        FAILWP("zalch <objekt> <metall>",FAIL_NOT_OBJ);
+    }
+    object ob = search_object(split[0]);
+    if (!objectp(ob))
+    {
+        FAILWP("Objektangabe fehlt.",FAIL_NOT_OBJ);
+    }
+    int alch_mat = ALCH_METALL[lower_case(split[1])];
+    if (!alch_mat)
+        FAILWP("blei, zinn, eisen, kupfer, quecksilber, silber, gold",
+                FAIL_WRONG_ARG);
+    object sh = clone_object(ARMA_ALCH_OBJ_VEREDELUNG);
+    int ret = sh->setup_shadow(ob, alch_mat);
+    if (ret == SHADOWING_OK) 
+    {
+        send_message_to(TP, MT_NOTIFY,MA_UNKNOWN,
+            "Veredelung erfolgreich uebergelegt.");
+        return 1;
+    }
+    FAILWP("Veredelung fehlgeschlagen ("+ret+").", FAIL_INTERNAL);
+}
+#endif
+
+void init()
+{
+    add_action("cmd_pruefen","apruefe",-6);
+    add_action("cmd_beantragen","amelde",-5);
+    add_action("cmd_anmelden","zmelde",-5);
+    add_action("cmd_zerbrechen","zerbreche",-8);
+#ifdef UNItopia
+    add_action("cmd_veredeln","zalch");
+#endif
+}
+
+string read_kriterien(string parse_rest, string str, 
+        mapping was, object leser)
+{
+    leser->more(ZB_KRITERIEN,0,0,M_AUTO_END);
+    return "";
+}
+
+void create() 
+{
+    set_name("armatester");
+    set_id(({"armatester","tester","stab",ZB_ARMATESTER_ID}));
+    set_gender("maennlich");
+    set_weight(0);
+    set_long("Ein Armatester mit dem Befehl: "
+        "apruefe <objekt> (Test). Bei fehlgeschlagenem Test kann man direkt "
+        "danach eine Idee zum Armatester absetzen, um das <objekt> "
+        "mit Begruendung einlagerbar machen zu lassen. "
+        "Eine Liste von Kriterien ist angeheftet. Wenn Du den Armatester "
+        "nicht mehr brauchst, kannst Du ihn zerbrechen. ");
+    set(P_LOOK_MSG,"");
+    set_invis(V_HIDDEN);
+    add_v_item(([
+        "name" : "kriterien",
+        "id" : ({"kriterien","kriterium"}),
+        "plural": 1,
+        "gender": "saechlich",
+        "long": "Eine lesbare Liste von Kriterien, die bei der Auswahl von "
+                "Gegenstaenden fuer das Einlagern helfen soll.",
+        "look_msg": "",
+        "read": #'read_kriterien,
+        "read_msg": "",
+    ]));
+    if (clonep()) add_controller("forbidden_move",TO);
+    init_security_for_actions();
+}
+
+mapping query_debug_info()
+{
+    mapping dbg = "/i/item"::query_debug_info();
+    if (objectp(last_ob))
+    {
+        dbg["armatester:first_room"] = last_ob->query_first_room();
+        dbg["armatester:object_info"] = mixed2str(last_ob->query_debug_info());
+        dbg["armatester:last_ob"] = mixed2str(last_ob);
+        dbg["armatester:last_msg"] = last_msg;
+        dbg["armatester:last_data"] = last_data;
+    }
+    return dbg;
+}
+
+void prepare_renewal() {}
+void abort_renewal() {}
+void finish_renewal(object neu) {}

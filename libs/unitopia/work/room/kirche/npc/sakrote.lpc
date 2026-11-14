@@ -1,0 +1,343 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:            /room/kirche/npc/sakrote.c
+// Description:     Der Waechter der Glocken, Sakrote
+//                  aus /room/kirche/uhr.c und so extrahiert.
+// Author:          Myonara
+// Modified by:
+//
+// $Log: sakrote.c,v $
+// Revision 1.2  2014/09/08 19:01:28  myonara
+// Bugfixes...
+//
+//
+
+inherit "/i/monster/monster";
+
+#include <message.h>
+#include <misc.h>
+#include <move.h>
+#include <soul.h>
+#include <stats.h>
+
+#define GLOCKEN_RAUM "/room/kirche/glocken"
+#define UHREN_RAUM   "/room/kirche/uhr"
+
+int questioned;
+
+int wo_bin_ich()
+{
+    switch (object_name(environment())) 
+    {
+    case GLOCKEN_RAUM: return 2;
+    case UHREN_RAUM: return 1;
+    default : return 0;
+    }
+}
+
+void heim()
+{
+    switch (wo_bin_ich())
+    {
+    case 1: return;
+    case 2: do_command("runter");
+    default: move(UHREN_RAUM,MOVE_NORMAL, 
+        "$Der() stapft davon.","$Der() stapft heran"); return;
+    }
+}
+
+void zu_den_glocken()
+{
+    switch (wo_bin_ich())
+    {
+    case 1: do_command("hoch"); return;
+    case 2: return;
+    default: move(GLOCKEN_RAUM,MOVE_NORMAL, 
+        "$Der() stapft davon.","$Der() stapft heran"); return;
+    }
+}
+
+int bin_in_der_uhr()
+{
+    return wo_bin_ich() == 1;
+}
+
+int bin_bei_den_glocken()
+{
+    return wo_bin_ich() == 2;
+}
+
+void reset()
+{
+    heim();
+}
+
+void create()
+{
+    "*"::create();
+    initialize("mensch", 32);
+    set_name("sakrote");
+    set_id(({"sakrote"}));
+    set_npc_name("sakrote");
+    set_one_stat(STAT_STR, 75);
+    set_one_stat(STAT_CON, 80);
+    set_one_stat(STAT_INT, 30);
+    give_armour_level(12);
+
+    set_align(25);
+    set_gender("maennlich");
+    set_personal(1);
+    set_title(", der Gloeckner der Kathedrale");
+    set_long(
+         "Sakrote ist hier fuer das Uhrwerk und den Glockenstuhl "
+         "zustaendig. Er laeutet Tag ein, Tag aus die schweren Glocken, "
+         "zieht das Uhrwerk auf und verscheucht das Getier aus den Tuermen. "
+         "Ausserdem kuemmert er sich besonders um die Verdombde im Nachbar"
+         "turm.");
+    load_chat(4, ({"$Der() sagt: Ticke Tacke, Sakrote hat ne Macke.",
+                  "$Der() sagt: Dong Dong Dong, dicke Berta, ich hoer Dich.",
+                  "$Der() sagt: Pang Pang, schwarzer Konrad, das bist Du!",
+                  "$Der() sagt: Wer bist Du, wie bist Du hierher gekommen?"}));
+    load_a_chat(30,({"$Der() sagt: DOOOOOOOONNNNG!!!!",
+                                "$Der() sagt: "
+                   "Bald laeutet die Verdombde fuer mich!",
+                                "$Der() sagt: "
+                   "Mein letztes Stuendchen hat geschlagen!",
+                                "$Der() sagt: Konrad, Berta, Lutzie,"
+                   " so helft!" }));
+    set_parse_conversation(this_object(),({
+        "hi:  sagt && hi || sagt && hallo || sagt && [tag] || sagt && [moin]",
+        "yes: sagt && ja || sagt && klar || sagt && sicher "
+           " antwortet && ja ",
+        "no:  sagt && nein || sagt && noe || antwortet && nein "}));
+    clone_object("/obj/soul")->move(TO);
+    add_controller( "notify_seele",this_object() );
+}
+
+void init()
+{
+   if(bin_in_der_uhr() && 
+      find_call_out("question") < 0 && find_call_out("answer") < 0 &&
+      find_call_out("dont_init") < 0)
+      call_out("question", 12, this_player());
+}
+
+void question(object player)
+{
+  if(bin_in_der_uhr() && objectp(player) && present(player, environment())
+        && !player->query_invis())
+  {
+     exec_command("sage zu ",player," Soll ich Dir die Glocken zeigen?\n");
+     questioned = 1;
+     call_out("answer", 60, player);
+  }
+}
+
+void answer(object player)
+{
+   do_command("sage Dann halt nicht.\n");
+   questioned = 0;
+}
+
+void hi()
+{
+   string anrede;
+
+    if (this_player()->query_invis())
+    {
+        send_message(MT_LOOK,MA_EMOTE,
+            Der()+" schaut sich verwirrt um.\n");
+        do_command("sage Wer ist da ?\n");
+        return;
+    }
+    switch(this_player()->query_gender())
+    {
+    case "maennlich":
+        anrede = "junger Mann"; break;
+    case "weiblich":
+        anrede = "schoene Frau"; break;
+    default:
+        anrede = "edles Wesen"; break;
+    }
+    do_command("sage Einen schoenen Tag, "+anrede+"!");
+    send_message(MT_NOISE,MA_EMOTE,Der()+" kichert irre.\n");
+
+    if(bin_in_der_uhr() && this_player() 
+        && present(this_player(), environment()) 
+        && find_call_out("question") < 0 && find_call_out("answer") < 0)
+    {
+        call_out("question", 12, this_player());
+    }
+}
+
+
+void no()
+{
+   if(questioned)
+   {
+      do_command("sage Dann halt nicht.\n");
+      remove_call_out("answer");
+      questioned = 0;
+   }
+}
+
+void yes()
+{
+   if(questioned)
+   {
+      do_command("sage Gut dann komm mit!");
+      call_out("leave_uhr", 5, this_player());
+      remove_call_out("answer");
+      questioned = 0;
+   }
+}
+
+void leave_uhr(object player)
+{
+   if(bin_in_der_uhr() && objectp(player) && present(player, environment()))
+   {
+      do_command("hoch");
+      call_out("await_follower", 10, player);
+   }
+}
+
+void await_follower(object player)
+{
+   if(objectp(player) && present(player, environment()))
+   {
+        call_out("zeige_glocken",5, player);
+        return;
+   }
+   else if (objectp(player))
+   {
+      exec_command("rede zu "+player->query_real_name()+
+        " Kommst Du? Ich dachte Du wolltest meine schoenen Drei bewundern.");
+   }
+   call_out("zurueck_fail", 5, player);
+}
+
+void zurueck_fail(object player)
+{
+   if(objectp(player) && present(player, environment()))
+   {
+        do_command("sage Schoen, dass Du doch noch hochgekommen "
+                    "bist!");
+        call_out("zeige_glocken",5, player);
+   }
+   else
+   {
+        call_out("dont_init", 10);
+        heim();
+        do_command("sage Laesst mich hier glatt umsonst "
+                    "raufklettern. Mist!");
+        call_out("check_besitz", 5);
+   }
+}
+
+void zurueck(int flag)
+{
+      call_out("dont_init", 10);
+      heim();
+      if(flag)
+          do_command("sage Ich war doch noch gar nicht fertig!");
+      call_out("check_besitz", 5);
+}
+
+void check_besitz()
+{
+   object kasten;
+   if(!bin_in_der_uhr())
+      return;
+   if(kasten = present("kasten", environment()))
+   {
+      send_message(MT_LOOK,MA_LOOK,
+            Der()+" untersucht den Werkzeugkasten.\n");
+      if(sizeof(all_inventory(kasten))!=3)
+      {
+        send_message(MT_NOISE,MA_EMOTE,Der()+
+            " stampft wuetend mit dem Fuss auf!\n");
+        do_command("sage Hast Du mir meine Sachen geklaut?");
+        send_message(MT_NOISE,MA_EMOTE,Der()+" jammert herum.\n");
+      }
+   }
+   else
+   {
+      do_command("sage Wo ist mein Kasten hin?");
+      send_message(MT_NOISE,MA_EMOTE,Der()+" jammert herum.\n");
+   }
+}
+
+void zeige_glocken(object player)
+{
+    if(bin_bei_den_glocken() 
+        && objectp(player) && present(player, environment()))
+    {
+        do_command("sage Das ist die dicke Berta!");
+        exec_command("zeige ",player," berta");
+        call_out("zeige_g2", 15, player);
+    }
+    else
+    {
+        call_out("zurueck", 5, 1);
+    }
+}
+void zeige_g2(object player)
+{
+    if(bin_bei_den_glocken() 
+        && objectp(player) && present(player, environment()))
+    {
+        do_command("sage Und das ist der schwarze Konrad!");
+        exec_command("zeige ", player, " konrad");
+        call_out("zeige_g3", 15, player);
+    }
+    else
+    {
+        call_out("zurueck", 5, 1);
+    }
+}
+
+void zeige_g3(object player)
+{
+    if(bin_bei_den_glocken() 
+        && objectp(player) && present(player, environment()))
+    {
+        do_command("sage Und mein Liebling, die kleine Lutzie.");
+        exec_command("zeige ",player," lutzie");
+        call_out("gehen_wir", 5);
+    }
+    else
+    {
+        call_out("zurueck", 5, 1);
+    }
+}
+
+void gehen_wir()
+{
+   do_command("sage Die anderen sind nicht so interessant. Gehen wir!");
+   call_out("zurueck", 5, 0);
+}
+
+void notify_seele(object wer, mixed wen, string what, string
+                 adverb, int align, int flags, int msg_typ_wer, int
+                 msg_typ_wen, int msg_typ_andere)
+                 
+{
+ if(wen != this_object() ) return; 
+
+  switch (align)
+  {
+   case NETT:
+     call_out("exec_command", 1,
+            "emote laechelt $dem("+RN(wer)+") zu.");
+         break;
+       
+   case NEUTRAL:
+     call_out("exec_command", 1,
+            "emote zieht eine Augenbraue hoch.");
+         break;
+    case MIES:
+     call_out("exec_command", 1,
+            "emote trittst $dem("+RN(wer)+") ans Bein.");
+         break;
+  }
+}

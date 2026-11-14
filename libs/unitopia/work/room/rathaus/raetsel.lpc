@@ -1,0 +1,1294 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/rathaus/raetsel.c
+// Description: Raetsel/Spieleraum
+// Modified by: Garthan (18.11.94)
+//   Spiele und Raetsel mit testflag koennen nur von Wizzes und
+//   Zweitcharakteren geloest werden.
+//   Spiele und Raetsel mit Testflag erscheinen nicht auf den Tafeln, etc...
+// Modified by: Freaky, Garthan (16.10.96) {game,quest}_index optimiert
+// Modified by: Skafloc (28.04.97) getopt (2. Versuch)
+// Modified by: Skafloc (06.05.97) user interface
+//		Freaky (22.11.1999) limited() fuer load_ob
+//              Mammi (27.06.00) query_cap_name fuer Raetsel/Spiele-Objekte
+//              Nethar (16.09.01) Anpassungen fuer Wahlraetsel
+//
+// $Log: raetsel.c,v $
+// Revision 1.19  2015/09/12 19:41:27  myonara
+// Raetsel bzw. Spiele, deren Datei inkl.Verzeichnisse fehlen
+// nicht laden. Debugmeldung kommt trotzdem weil ob == 0
+//
+// Revision 1.18  2010-03-31 18:47:48  sorcerer
+// return-types korrigiert
+//
+// Revision 1.17  2005/12/18 21:41:14  gnomi
+// Zusaetzlicher Hinweis zu den Umbenennungen.
+//
+// Revision 1.16  2005/11/18 21:49:43  gnomi
+// Moeglichkeit, um Skills umzubenennen oder die Punkte zu modifizieren,
+// eingebaut.
+//
+// Revision 1.15  2005/02/02 23:51:42  gnomi
+// quest/game_min_solved einefuehrt (Test auf min_skill_solved).
+//
+// Revision 1.14  2002/09/09 20:31:25  sissi
+// Aktion unser Rathaus soll schoener werden:
+// Ueberall ne Pflanze eingebaut.
+//
+// Revision 1.13  2001/09/16 19:33:47  sissi
+// Wahl-Pflicht-Raetsel eingefuehrt (Nethar)
+//
+// Revision 1.12  2001/08/21 11:24:37  freaky
+// debug-evals undefiniert
+//
+// Revision 1.11  2001/08/21 11:22:50  freaky
+// limited verbessert
+//
+// Revision 1.10  2001/04/07 00:23:55  gnomi
+// Header und/oder CVS-Log eingebaut.
+//
+
+#pragma strong_types
+
+#undef DEBUG_EVAL
+
+inherit "/i/room";
+inherit "/i/tools/getopt";
+inherit "/i/tools/security";
+
+#include <filed.h>
+#include <touch.h>
+#include <apps.h>
+
+#include <quest.h>
+#include <game.h>
+#include <skill.h>
+
+#include <level.h>
+#include <files.h>
+#include <more.h>
+#include <rtlimits.h>
+
+#include <simul_efuns.h>
+#include <more.h>
+
+#define MAX_LOAD_EVALS (query_limits(1)[LIMIT_EVAL] / 5)
+#define RAETSEL 1
+#define SPIEL 2
+#define BEIDES 3
+#define MYDATA admdata[this_player()->query_real_name()]
+#define ADMDATAENTRY ({time(),quests,games})
+#define SECURE if(!check_security() || !securep(this_player())) {\
+	    notify_fail("Diese Funktion ist nicht fuer Dich gedacht.\n");\
+	    return 0;}
+
+mapping admdata=([]);
+mixed *quests, *games;
+int skill_quests, skill_games;
+
+// Die Werte der Routinen query_skill_... werden von
+// update_stats in /i/player/skills.c zur Berechnung der Stats benoetigt.
+//
+int query_skill_quests() { return skill_quests; }
+int query_skill_games() { return skill_games; }
+
+// Sind die wichtig, die das versuchen?
+private int securep(object obj)
+{
+    return (adminp(obj)
+      || (member(FILED->query_auth("raetsel"),obj->query_real_name())>-1)
+      || (member(FILED->query_auth("spiele"),obj->query_real_name())>-1)
+    );
+}
+
+private int quest_flag(mixed *entry, int flag)
+{
+   return sizeof(entry[Q_PARAMETERS]) > QP_FLAGS &&
+      entry[Q_PARAMETERS][QP_FLAGS] & flag;
+}
+
+private int game_flag(mixed *entry, int flag)
+{
+   return sizeof(entry[G_PARAMETERS]) > GP_FLAGS &&
+      entry[G_PARAMETERS][GP_FLAGS] & flag;
+}
+
+private int compute_sum_skill_quests(mixed *arr)
+{
+   int i, ret;
+
+   for(i = sizeof(arr); i--;)
+      if(!quest_flag(arr[i],QF_TEST))
+	     ret += arr[i][Q_OBJ]->query_skill();
+   return ret;
+}
+
+private int compute_sum_skill_games(mixed *arr)
+{
+   int i, ret;
+
+   for(i = sizeof(arr); i--;)
+      if(!game_flag(arr[i],GF_TEST))
+	 ret += arr[i][G_OBJ]->query_skill();
+   return ret;
+}
+
+private object load_ob(string file)
+{
+    object ob;
+    int load_flag = 1;
+    string msg;
+#ifdef DEBUG_EVAL
+    int eval;
+
+    eval = get_eval_cost();
+#endif
+    if (file_size(file[<2..]==".lpc"?file:file+".lpc")==FSIZE_NOFILE) 
+    {
+        string * path = explode(file,"/");
+        int i;
+        for (i = sizeof(path)-1;i>=0;i--)
+        {
+            if (file_size(implode(path[0..i],"/"))==FSIZE_DIR)
+            {
+                break;
+            }
+        }
+        if (i < (sizeof(path)-1))
+        {
+            load_flag = 0; // es fehlen ganze Verzeichnisse, also nicht laden
+        }
+    }
+    if (load_flag)
+    {
+        ob = touch(file);
+#ifdef DEBUG_EVAL
+        msg = sprintf("    Load: Evals: %8d  %s\n",eval - get_eval_cost(),file);
+        if (this_player())
+            write(msg);
+        else
+            debug_message(msg);
+#endif
+    }
+
+    return ob;
+}
+
+// Das hier ist notwendig, da limited nur funktioniert, wenn man mehr als
+// die standard-evals vergibt.
+private object load_ob_limited(string file)
+{
+    return limited( (: limited(#'load_ob,({MAX_LOAD_EVALS}),$1) :),
+	    ({LIMIT_UNLIMITED}),file);
+}
+
+//
+// reload quests/game entries on demand from filed
+//
+void reload(string type)
+{
+   mixed *list;
+   string err, file;
+   object ob;
+   int i;
+
+   for(i = sizeof(list = ({}) + FILED->query_entries(type)); i--;)
+   {
+#ifdef DEBUG_EVAL
+      debug_message("   Evals: " + get_eval_cost() + "\n");
+#endif
+      file = list[i][FD_FILE];
+      if(err = catch(ob = load_ob_limited(file)))
+      {
+	 err = " " + file + ": " + err + "\n";
+	 write(err);
+	 debug_message(err);
+	 list[i] = 0;
+      }
+      else if(!ob)
+      {
+	 err = " " + file + ": File laesst sich nicht laden.\n";
+	 write(err);
+	 debug_message(err);
+	 list[i] = 0;
+      }
+      else
+      {
+	 list[i] = ({ ob->query_name() }) + list[i]
+             + ({ ob->query_cap_name() });
+	 switch(type)
+	 {
+	    case "spiele":
+	       if(!game_flag(list[i],GF_REQUIRED))
+		  ob->set_not_necessary();
+	       break;
+	    case "raetsel":
+	       if(!quest_flag(list[i],QF_REQUIRED))
+		  ob->set_not_necessary();
+	       break;
+	 }
+      }
+   }
+   switch(type)
+   {
+      case "spiele"  :
+	 games =  list - ({ 0 });
+	 skill_games = compute_sum_skill_games(games);
+	 break;
+      case "raetsel" :
+	 quests = list - ({ 0 });
+	 skill_quests = compute_sum_skill_quests(quests);
+	 break;
+   }
+}
+
+void moved_in(object obj,object woher,string dir, int way)
+{
+    mixed *data;
+
+    if(securep(obj))
+    {
+	if(!admdata[obj->query_real_name()])
+	{
+	    data=ADMDATAENTRY;
+	    admdata+=([obj->query_real_name():data]);
+	}
+    }
+    ::moved_in(obj,woher,dir,way);
+}
+
+void reset()
+{
+    "/room/rathaus/div/lager"->get_moebel(this_object());
+    "/room/rathaus/div/lager"->get_pflanze(this_object());
+}
+
+void create()
+{
+    "*"::create();
+    init_security_for_actions();
+    set_short("Raum der Raetsel und Spiele");
+    set_long(
+      "Dies ist der Raum der Raetsel und Spiele. "
+      "Jeder Gott kann ein oder mehrere "
+      "Raetsel oder Spiele machen und diese dann "
+      "von den Raetselkundigen genehmigen lassen."
+      " Diese installieren dann ein Objekt das bei "
+      "jedem Startup geladen wird. "
+      "Alles weitere zur Raetsel/Spielprogrammierung siehe: "
+      "/doc/funktionsweisen/raetsel und spiele.\n"
+      "   Kommandos: nanu\n"
+      "              raetsel\n"
+      "              spiele\n"
+      "              liste\n"
+      "              info <name>\n"
+      "              bearbeite\n"
+      "              skill");
+    set_exit("forum","forum");
+    set_own_light(1);
+    add_type("kunstlicht", 1);
+    add_type("nocleanup", 1);
+    add_type("kaempfen_verboten", 1);
+    add_type("teleport_rein_verboten", 1);
+    reload("raetsel");
+    reload("spiele");
+    set_room_domain("Pantheon");
+    reset();
+}
+
+mixed *query_quest_values(int a, int idx)
+{
+   string *ret;
+   int i;
+
+   ret=({});
+   if(!a)
+      a = Q_NECESSARY;
+
+   for(i = 0; i < sizeof(quests); i++)
+      if(   (a & Q_ALL ||
+             a & Q_NOT_NECESSARY  && !quest_flag(quests[i], QF_REQUIRED) ||
+             a & Q_NECESSARY &&       quest_flag(quests[i], QF_REQUIRED) ||
+             a & Q_WAHL &&            quest_flag(quests[i], QF_WAHL))
+         &&
+            (a & Q_TEST || !quest_flag(quests[i], QF_TEST)) )
+         ret += ({quests[i][idx]});
+   return ret;
+}
+
+string *query_quests(int a) { return query_quest_values(a, Q_NAME); }
+string *query_quest_objects(int a) { return query_quest_values(a, Q_OBJ); }
+string *query_quest_cap_names(int a)
+{
+    return query_quest_values(a,Q_CAP_NAME);
+}
+
+mixed *query_game_values(int a, int idx)
+{
+   string *ret;
+   int i;
+
+   if(!a)
+      a = G_NECESSARY;
+
+   // Spielepatch: auskommentierte FDF_REQUIRED statements
+   // sonst kommt gar nichts, wenn man query_games()
+   // ohne parameter aufruft, aber solang es keine
+   // required games gibt, braucht man auch kein R Flag setzen
+
+   ret=({});
+
+   for(i = 0; i < sizeof(games); i++)
+      if(   (a & G_ALL ||
+	     a & G_NOT_NECESSARY  && ! 1/*game_flag(games[i], GF_REQUIRED)*/ ||
+	     a & G_NECESSARY &&        1/*game_flag(games[i], GF_REQUIRED)*/ )
+	 &&
+	    (a & G_TEST || !game_flag(games[i], GF_TEST))  )
+	 ret += ({games[i][idx]});
+   return ret;
+}
+
+string *query_games(int a) { return query_game_values(a, G_NAME); }
+string *query_game_objects(int a) { return query_game_values(a, G_OBJ); }
+string *query_game_cap_names(int a)
+{
+    return query_game_values(a,G_CAP_NAME);
+}
+
+
+//
+// Funktionen zum Setzen und Abfragen der Spiel und Raetselpunkte
+//
+private varargs int quest_index(string quest, object ob)
+{
+   int i;
+
+   for (i = sizeof(quests); i--; )
+	if (quests[i][Q_NAME] == quest)
+	{
+	    if (objectp(ob) && !wizp(ob) && !testplayerp(ob) &&
+		quest_flag(quests[i], QF_TEST))
+		return -1;
+	    return i;
+	}
+    return -1;
+}
+
+private varargs int game_index(string game, object ob)
+{
+   int i;
+
+   for (i = sizeof(games); i--; )
+	if (games[i][G_NAME] == game)
+	{
+	    if (objectp(ob) && !wizp(ob) && !testplayerp(ob) &&
+		game_flag(games[i], GF_TEST))
+		return -1;
+	    return i;
+	}
+    return -1;
+}
+
+int set_quest(string quest, int points, object ob)
+{
+    int i;
+    i=quest_index(quest, ob);
+    if (i<0)
+	return Q_NOT_INSTALLED;
+    return quests[i][Q_OBJ]->set_quest(points,ob);
+}
+
+int set_game(string game, int points, object ob)
+{
+    int i;
+    i=game_index(game, ob);
+    if (i<0)
+	return G_NOT_INSTALLED;
+    return games[i][G_OBJ]->set_game(points,ob);
+}
+
+int query_quest_points(string str, object ob)
+{
+    int i;
+    i=quest_index(str, ob);
+    if (i<0)
+	return Q_NOT_INSTALLED;
+    return quests[i][Q_OBJ]->query_points(ob);
+}
+
+int query_game_points(string str, object ob)
+{
+    int i;
+    i=game_index(str, ob);
+    if (i<0)
+	return G_NOT_INSTALLED;
+    return games[i][G_OBJ]->query_points(ob);
+}
+
+int *query_quest_parameters(string str)
+{
+    int i;
+    i=quest_index(str);
+    if (i<0)
+	return 0;
+    return quests[i][Q_PARAMETERS];
+}
+
+int query_quest_flags(string str)
+{
+    int *parms;
+
+    if(!(parms = query_quest_parameters(str)))
+       return 0;
+    if(sizeof(parms) <= QP_FLAGS)
+       parms = ({ 0 });
+    return parms[QP_FLAGS];
+}
+
+int *query_game_parameters(string str)
+{
+    int i;
+    i=game_index(str);
+    if (i<0)
+	return 0;
+    return games[i][G_PARAMETERS];
+}
+
+int query_game_flags(string str)
+{
+    int *parms;
+
+    if(!(parms = query_game_parameters(str)))
+       return 0;
+    if(sizeof(parms) <= GP_FLAGS)
+       parms = ({ 0 });
+    return parms[GP_FLAGS];
+}
+
+string query_quest_info(string str)
+{
+    int i;
+    i=quest_index(str);
+    if (i<0)
+	return 0;
+    return quests[i][Q_OBJ]->query_long();
+}
+
+string query_game_info(string str)
+{
+    int i;
+    i=game_index(str);
+    if (i<0)
+	return 0;
+    return games[i][G_OBJ]->query_long();
+}
+
+string query_quest_cap_name(string str)
+{
+    int i;
+    i=quest_index(str);
+    if (i<0)
+	return 0;
+    return quests[i][Q_OBJ]->query_cap_name();
+}
+
+string query_game_cap_name(string str)
+{
+    int i;
+    i=game_index(str);
+    if (i<0)
+	return 0;
+    return games[i][G_OBJ]->query_cap_name();
+}
+
+object query_quest_object(string str)
+{
+    int i;
+    i = quest_index(str);
+    if (i<0)
+	return 0;
+    return touch(quests[i][Q_OBJ]);
+}
+
+object query_game_object(string str)
+{
+    int i;
+    i = game_index(str);
+    if (i<0)
+	return 0;
+    return touch(games[i][G_OBJ]);
+}
+
+int raetsel_exists(string str)
+{
+    return quest_index(str) != -1;
+}
+
+int spiele_exists(string str)
+{
+    return game_index(str) != -1;
+}
+
+int quest_solved(string str, object ob)
+{
+    int i;
+    i=quest_index(str, ob);
+    if (i<0)
+	return Q_NOT_INSTALLED;
+    return quests[i][Q_OBJ]->query_points()==quests[i][Q_OBJ]->query_points(ob);
+}
+
+int quest_min_solved(string str, object ob)
+{
+    int i;
+    i=quest_index(str, ob);
+    if (i<0)
+	return Q_NOT_INSTALLED;
+    return quests[i][Q_OBJ]->query_min_skill_solved()<=quests[i][Q_OBJ]->query_points(ob);
+}
+
+int game_solved(string str, object ob)
+{
+    int i;
+    i=game_index(str, ob);
+    if (i<0)
+	return G_NOT_INSTALLED;
+    return games[i][G_OBJ]->query_points()==games[i][G_OBJ]->query_points(ob);
+}
+
+int game_min_solved(string str, object ob)
+{
+    int i;
+    i=game_index(str, ob);
+    if (i<0)
+	return G_NOT_INSTALLED;
+    return games[i][G_OBJ]->query_min_skill_solved()<=games[i][G_OBJ]->query_points(ob);
+}
+
+//
+// Welche Raetsel/Spiele(namen) hat 'who' programmiert?
+//
+string *query_programmed_quests(string who)
+{
+    int i;
+    string *temp;
+    temp = ({});
+    for (i = 0; i < sizeof(quests); i++)
+	if (!quest_flag(quests[i], QF_TEST) &&
+	    member(quests[i][Q_PROGRAMMERS], who)!=-1)
+            if ( quests[i][Q_CAP_NAME] )
+                temp += ({quests[i][Q_CAP_NAME]});
+            else
+                temp += ({quests[i][Q_NAME]});
+    return temp;
+}
+
+string *query_programmed_games(string who)
+{
+    int i;
+    string *temp;
+    temp = ({});
+    for (i = 0; i < sizeof(games); i++)
+	if (!game_flag(games[i], GF_TEST) &&
+	    member(games[i][G_PROGRAMMERS], who)!=-1)
+            if ( games[i][G_CAP_NAME] )
+                temp += ({games[i][G_CAP_NAME]});
+            else
+                temp += ({games[i][G_NAME]});
+    return temp;
+}
+
+string *query_programmers_of(string what)
+{
+    int i;
+
+    what = lower_case(what);
+
+    for (i = 0; i < sizeof(quests); i++)
+	if (lower_case(quests[i][Q_NAME]) == what)
+	    return ({})+quests[i][Q_PROGRAMMERS];
+
+    for (i = 0; i < sizeof(games); i++)
+	if (lower_case(games[i][G_NAME]) == what)
+	    return ({})+games[i][G_PROGRAMMERS];
+
+    return ({});
+}
+
+/////////////////////////////////////////////////
+// Ab hier folgt userinterface
+/////////////////////////////////////////////////
+
+void init()
+{
+   add_action("help_hier", "nanu");
+   add_action("show_list_quests", "raetsel");
+   add_action("show_list_games",  "spiele");
+   add_action("liste", "liste");
+   add_action("info", "info");
+   add_action("set_work","bearbeite",-5);
+   add_action("rwahl", "rwahl");
+   add_action("rtest", "rtest");
+   add_action("raendern", "raendern");
+   add_action("rpflicht", "rpflicht");
+   add_action("stest", "stest");
+   add_action("saendern", "saendern");
+   add_action("skill", "skills", -5);
+}
+
+int help_hier(string str)
+{
+    this_player()->more(({
+	"*** Der Raetsel- und Spieleraum ***",
+	"liste",
+	"  -r: zeige Raetsel",
+	"  -s: zeige Spiele   (nix und -r -s zeige beides)",
+	//	" -S: Sortieroptioneni (n/a)",
+	//	" -f: format-string zur Anzeige (n/a)",
+	"  -n: Suche bestimmten Namen des Programmierers",
+	"  -m: zeige Miniquests",
+	"  -t: zeige Sachen in Testphase",
+	"  -a: in Aenderung(z.B. ist offen, wird aber ueberarbeitet)",
+	"  -o: zeige nur freigegebene",
+	"  -p: zeige Pflichtraetsel",
+	"",
+	"raetsel",
+	"  wie liste -r",
+	"",
+	"spiele",
+	"  wie liste -s",
+	"",
+	"info <Raetsel-/Spielname>",
+	"  Liefert eine genauere Beschreibung des Raetsel, bzw. Spiels",
+	"",
+	"bearbeite",
+	"  Parameter wie liste. Markiert ein Objekt zum setzen der Werte.",
+        "  -z setzt die Auswahl zurueck.",
+	"",
+	"skill",
+	"  Listet alle Skillaenderung auf.",
+	"skill name <alterpfad> <neuername>",
+	"  Benennt den Skill um (<neuername> ist nur der letzte Teil des Skills).",
+	"skill wert <pfad> <alter wert> <neuer wert>",
+	"  Aendert (bei neu einloggenden Spielern) den Wert.",
+	"ACHTUNG: Einmal eingetragene Skillaenderungen koennen nicht zurueckgenommen",
+	"werden. Zurueckumbenennungen als weitere Aenderung sind z.B. aber moeglich.",
+	}), 0, 0, M_AUTO_END);
+    return 1;
+}
+
+int choice_check(int what,string str)
+{
+    string fail;
+    int rsize,ssize;
+
+    switch(what)
+    {
+	case RAETSEL:
+	    fail=query_verb()+" <raetsel>\n";
+	    break;
+	case SPIEL:
+	    fail=query_verb()+" <spiel>\n";
+	    break;
+	case BEIDES:
+	    fail=query_verb()+" <raetsel|spiel>\n";
+	    break;
+    }
+    if(!str || str=="")
+    {
+	if(!securep(this_player()))
+	{
+	    notify_fail(fail);
+	    return 0;
+	}
+	else
+	{
+	    rsize=sizeof(MYDATA[RAETSEL]);
+	    ssize=sizeof(MYDATA[SPIEL]);
+	    notify_fail(fail+"oder waehle es ueber 'bearbeiten' aus\n");
+	    switch(what)
+	    {
+		case RAETSEL:
+		    if (rsize!=1)
+			return 0;
+		    break;
+		case SPIEL:
+		    if (ssize!=1)
+			return 0;
+		    break;
+		case BEIDES:
+		    if ((rsize+ssize)!=1)
+			return 0;
+		    break;
+	    }
+	    return 2;
+	}
+    }
+    return 1;
+}
+
+int info(string str)
+{
+    string ret,name;
+
+    switch(choice_check(BEIDES,str))
+    {
+	case 0:
+	    return 0;
+	case 1:
+	    name=str;
+	    break;
+	case 2:
+	    if (sizeof(MYDATA[RAETSEL])==1)
+		name=MYDATA[RAETSEL][0][Q_NAME];
+	    else
+		name=MYDATA[SPIEL][0][G_NAME];
+	    break;
+    }
+    if(name &&
+      ((ret = query_quest_info(name)) ||
+       (ret = query_game_info(name))))
+    {
+	write(copies("-",79)+"\n"+
+	    str+
+	    " ("+(string)(query_quest_object(name) || query_game_object(name))+
+	    ") "+
+	    "\n"+copies("-",79)+"\n"+ret+copies("-",79)+"\n");
+	return 1;
+    }
+}
+
+private int toggle_quest_flag(string raetsel, int flag)
+{
+   int i, res;
+   mixed *parms;
+
+   for(i = sizeof(quests); i--;)
+      if(quests[i][Q_NAME] == raetsel)
+      {
+	 parms = ({}) + (quests[i][Q_PARAMETERS]||({}));
+	 if(sizeof(parms) <= QP_FLAGS)
+	    parms = ({0});
+	 parms[QP_FLAGS] ^= flag;
+	 if(!(res = FILED->set_parameters("raetsel",quests[i][Q_OBJ],parms)))
+	    quests[i][Q_PARAMETERS] = parms;
+	 return res;
+      }
+   return -1;
+}
+
+private int toggle_game_flag(string spiel, int flag)
+{
+   int i, res;
+   mixed *parms;
+
+   for(i = sizeof(games); i--;)
+      if(games[i][G_NAME] == spiel)
+      {
+	 parms = ({}) + (games[i][G_PARAMETERS]||({}));
+	 if(sizeof(parms) <= GP_FLAGS)
+	    parms = ({0});
+	 parms[GP_FLAGS] ^= flag;
+	 if(!(res = FILED->set_parameters("spiele",games[i][G_OBJ],parms)))
+	    games[i][G_PARAMETERS] = parms;
+	 return res;
+      }
+   return -1;
+}
+
+private string error(int err)
+{
+   switch(err)
+   {
+      case -1 : return "Raetsel/Spiel existiert nicht.\n";
+      case FDR_OK: return "Ok.\n";
+      case FDR_ILLEGAL_TYPE: return "Unbekannter Typ.\n";
+      case FDR_NO_AUTH: return "Du darfst das leider nicht.\n";
+      case FDR_NO_FILE: return "Uebergebener Filename ist ungueltig.\n";
+      case FDR_NO_CODERS: return "Keine Programmierer angegeben.\n";
+      case FDR_ENTRY_EXISTS: return "Eintrag existiert bereits.\n";
+      case FDR_ENTRY_NOT_EXISTANT: return "Eintrag existiert nicht.\n";
+      case FDR_NO_TESTER: return "Keine Tester eingetragen.\n";
+      case FDR_FILE_NOT_FOUND: return "Importfile nicht gefunden.\n";
+      default: return "Unbekannter Fehler von "+FILED+".\n";
+   }
+}
+
+int rwahl(string str)
+{
+    SECURE;
+    switch(choice_check(RAETSEL,str))
+    {
+	case 1:
+	{
+	    write(error(toggle_quest_flag(str, QF_WAHL)));
+	    return 1;
+	}
+	case 2 :
+	{
+	    write(error(toggle_quest_flag(MYDATA[RAETSEL][0][Q_NAME],QF_WAHL)));
+	    return 1;
+	}
+    }
+}
+
+int rtest(string str)
+{
+    SECURE;
+    switch(choice_check(RAETSEL,str))
+    {
+	case 1:
+	{
+	    write(error(toggle_quest_flag(str, QF_TEST)));
+	    return 1;
+	}
+	case 2 :
+	{
+	    write(error(toggle_quest_flag(MYDATA[RAETSEL][0][Q_NAME],QF_TEST)));
+	    return 1;
+	}
+    }
+}
+
+int raendern(string str)
+{
+    SECURE;
+    switch(choice_check(RAETSEL,str))
+    {
+	case 1:
+	{
+	    write(error(toggle_quest_flag(str, QF_RENOVATE)));
+	    return 1;
+	}
+	case 2 :
+	{
+	    write(error(toggle_quest_flag(MYDATA[RAETSEL][0][Q_NAME], QF_RENOVATE)));
+	    return 1;
+	}
+    }
+}
+
+int rpflicht(string str)
+{
+    SECURE;
+    switch(choice_check(RAETSEL,str))
+    {
+	case 1:
+	{
+	    write(error(toggle_quest_flag(str, QF_REQUIRED)));
+	    return 1;
+	}
+	case 2 :
+	{
+	    write(error(toggle_quest_flag(MYDATA[RAETSEL][0][Q_NAME], QF_REQUIRED)));
+	    return 1;
+	}
+    }
+}
+
+int stest(string str)
+{
+    SECURE;
+    switch(choice_check(SPIEL,str))
+    {
+	case 1:
+	{
+	    write(error(toggle_game_flag(str, GF_TEST)));
+	    return 1;
+	}
+	case 2 :
+	{
+	    write(error(toggle_game_flag(MYDATA[SPIEL][0][G_NAME], GF_TEST)));
+	    return 1;
+	}
+    }
+}
+
+int saendern(string str)
+{
+    SECURE;
+    switch(choice_check(SPIEL,str))
+    {
+	case 1:
+	{
+	    write(error(toggle_game_flag(str, GF_RENOVATE)));
+	    return 1;
+	}
+	case 2 :
+	{
+	    write(error(toggle_game_flag(MYDATA[SPIEL][0][G_NAME], GF_RENOVATE)));
+	    return 1;
+	}
+    }
+}
+
+/*********************************************
+    Das neue von Skafloc
+*********************************************/
+
+mixed *get_quest_data(mapping opt,mixed *data)
+{
+    mixed *ret;
+    int i;
+    string name, *names;
+
+    ret=({});
+    if(!opt["args"] || sizeof(opt["args"])==0)
+	name="";
+    else {
+	names=(explode(opt["args"][0]," ")-({}));
+	if(names)
+	    name=names[0];
+	else
+	    name="";}
+    for (i=sizeof(data);i--;)
+    {
+	if( (!strlen(name)) ||
+	  (name==substr(data[i][Q_NAME],1,strlen(name))) )
+	    if(!opt["n"] || sizeof(opt["n"])==0 ||
+	      member(data[i][Q_PROGRAMMERS],opt["n"][0])>-1)
+		if((!opt["o"] || !quest_flag(data[i],QF_TEST))
+		  && (!opt["t"] || quest_flag(data[i],QF_TEST))
+		  && (!opt["p"] || quest_flag(data[i],QF_REQUIRED))
+		  && (!opt["w"] || quest_flag(data[i],QF_WAHL))
+		  && (!opt["m"])
+		  /* Miniquest nicht implementiert also,
+	     wenn Anzeige gewuenscht nix anzeigen
+		  && (!opt["m"] || quest_flag(data[i],QF_MINI))
+	  */
+		  && (!opt["a"] || quest_flag(data[i],QF_RENOVATE))
+		)
+		    ret+=({data[i]});
+    }
+    return ret;
+}
+
+mixed *get_game_data(mapping opt,mixed *data)
+{
+    mixed *ret;
+    int i;
+    string name, *names;
+
+    ret=({});
+    if(!opt["args"] || sizeof(opt["args"])==0)
+	name="";
+    else {
+	names=(explode(opt["args"][0]," ")-({}));
+	if(names)
+	    name=names[0];
+	else
+	    name="";}
+    for (i=sizeof(data);i--;)
+    {
+	if( (!strlen(name)) ||
+	  (name==substr(data[i][G_NAME],1,strlen(name))) )
+	    if(!opt["n"] || sizeof(opt["n"])==0 ||
+	      member(data[i][G_PROGRAMMERS],opt["n"][0])>-1)
+		if((!opt["o"] || !game_flag(data[i],GF_TEST))
+		  && (!opt["t"] || game_flag(data[i],GF_TEST))
+		  && (!opt["m"])
+		  && (!opt["p"])
+		  /*
+		  && (!opt["p"] || game_flag(data[i],GF_REQUIRED))
+*/
+		  && (!opt["a"] || game_flag(data[i],GF_RENOVATE))
+		)
+		    ret+=({data[i]});
+    }
+    return ret;
+}
+
+// opt-Auswertung kommt noch
+string *list_quests(mixed *data, mapping opt)
+{
+    int i, anz, sum_ep;
+    string out, *outs;
+
+    mixed *s_quests;
+
+    s_quests = sort_array(data||({}), lambda(({'a,'b}),
+	({ #'< , ({ #'[, 'a, G_NAME }), ({ #'[, 'b, G_NAME }) })));
+
+    outs = ({ "Raetselname      Kreation von  Exp",
+      "---------------- ------------ ----" });
+    out = "";
+    sum_ep=0;
+    for(i = anz =  sizeof(s_quests); i--;)
+    {
+	out += left(s_quests[i][Q_NAME] ,16)+" "+
+	left(implode(map(s_quests[i][Q_PROGRAMMERS],#'capitalize),
+	    ", "), 12)+" "+
+	right(""+touch(s_quests[i][Q_OBJ])->query_skill(), 4)+
+    (quest_flag(s_quests[i], QF_RENOVATE) ? "A" : " ")+
+	(quest_flag(s_quests[i], QF_TEST) ? "T" :
+	 quest_flag(s_quests[i], QF_WAHL) ? "W" : 
+	  quest_flag(s_quests[i], QF_REQUIRED) ? "*": " ")+" \n";
+	sum_ep+=s_quests[i][G_OBJ]->query_skill();
+    }
+    outs += explode(sprintf("%-79#s\n", out), "\n")-({""});
+    if(anz==1)
+	outs += ({"Das Raetsel gibt "+(string)sum_ep+" EP."});
+    else
+	outs += ({""+anz+" Raetsel geben zusammen "+(string)sum_ep+" EP."});
+    return outs;
+}
+
+varargs string *list_games(mixed *data, mapping opt)
+{
+    int i, anz, sum_ep;
+    string out, *outs, *opts;
+
+    mixed *s_games;
+
+    s_games = sort_array(data||({}), lambda(({'a,'b}),
+	({ #'< , ({ #'[, 'a, G_NAME }), ({ #'[, 'b, G_NAME }) })));
+
+    outs = ({ "Spielname        Kreation von  Exp",
+      "---------------- ------------ ----" });
+    out = "";
+    sum_ep=0;
+    for(i = anz = sizeof(s_games); i--;)
+    {
+	out += left(s_games[i][G_NAME] ,16)+" "+
+	left(implode(map(s_games[i][G_PROGRAMMERS],#'capitalize),
+	    ", "), 12)+" "+
+	right(""+touch(s_games[i][G_OBJ])->query_skill(), 4)+
+    (game_flag(s_games[i], GF_RENOVATE) ? "A" : " ")+
+	(game_flag(s_games[i], GF_TEST) ? "T" : " ")+" \n";
+	sum_ep+=s_games[i][G_OBJ]->query_points();
+    }
+    outs += explode(sprintf("%-79#s\n", out), "\n")-({""});
+    if(anz==1)
+	outs += ({"Das Spiel gibt "+(string)sum_ep+" EP."});
+    else
+	outs += ({""+anz+" Spiele geben zusammen "+(string)sum_ep+" EP."});
+
+    return outs;
+}
+
+int liste(string str)
+{
+    string *outs, *opts;
+    mapping opt;
+    mixed *data;
+
+    /**************************************************
+       r: zeige Raetsel
+       s: zeige Spiele   (nix und r s zeige beides)
+       S: Sortieroptionen
+       f: format-string zur Anzeige
+       n: Suche bestimmten Namen des Programmierers
+       m: zeige Miniquests
+       t: zeige Sachen in Testphase
+       o: zeige nur freigegebene (dh sie sind OK)
+       p: zeige Pflichtraetsel
+       w: zeige Wahlraetsel
+       a: in Aenderung
+    **************************************************/
+    opt=getopt(str,([
+	"r":0,
+	"s":0,
+	"S":"%s",
+	"f":"\"%s\"",
+	"n":"%s",
+	"m":0,
+	"t":0,
+	"o":0,
+	"p":0,
+	"w":0,
+	"a":0
+      ]) );
+    if (opt["r"])
+    {
+	data=get_quest_data(opt,quests);
+	outs=list_quests(data,opt);
+    }
+    else if (opt["s"])
+    {
+	data=get_game_data(opt,games);
+	outs=list_games(data,opt);
+    }
+    else
+    {
+	data=get_quest_data(opt,quests);
+	outs=list_quests(data,opt);
+	data=get_game_data(opt,games);
+	outs+=list_games(data,opt);
+    }
+    this_player()->more(outs, 0, 0, M_AUTO_END);
+    return 1;
+}
+
+int show_list_quests(string str)
+{
+    if(str)
+	return liste("-r "+str);
+    else
+	return liste("-r");
+}
+
+int show_list_games(string str)
+{
+    if(str)
+	return liste("-s "+str);
+    else
+	return liste("-s");
+}
+
+int set_work(string str)
+{
+    string *outs, *opts;
+    mapping opt;
+    mixed *data;
+
+    if(!securep(this_player()))
+    {
+	notify_fail("Diese Funktion ist nicht fuer Dich gedacht.\n");
+	return 0;
+    }
+    /**************************************************
+       r: zeige Raetsel
+       s: zeige Spiele   (nix und r s zeige beides)
+       S: Sortieroptionen
+       f: format-string zur Anzeige
+       n: Suche bestimmten Namen des Programmierers
+       m: zeige Miniquests
+       t: zeige Sachen in Testphase
+       o: zeige nur freigegebene (dh sie sind OK)
+       p: zeige Pflichtraetsel
+       a: in Aenderung
+       z: zuruecksetzen der Auswahl
+    **************************************************/
+    opt=getopt(str,([
+	"r":0,
+	"s":0,
+	"S":"%s",
+	"f":"\"%s\"",
+	"n":"%s",
+	"m":0,
+	"t":0,
+	"o":0,
+	"p":0,
+	"a":0,
+	"z":0
+      ]) );
+    if (!data=admdata[this_player()->query_real_name()])
+    {
+	data=ADMDATAENTRY;
+	admdata+=([this_player()->query_real_name():data]);
+    }
+    if (opt["z"])
+    {
+	data=admdata[this_player()->query_real_name()]=ADMDATAENTRY;
+    }
+    if (opt["r"])
+    {
+    data[SPIEL]=0;
+	data[RAETSEL]=get_quest_data(opt,data[RAETSEL]);
+	outs=list_quests(data[RAETSEL],opt);
+    }
+    else if (opt["s"])
+    {
+    data[RAETSEL]=0;
+	data[SPIEL]=get_game_data(opt,data[SPIEL]);
+	outs=list_games(data[SPIEL],opt);
+    }
+    else
+    {
+	data[RAETSEL]=get_quest_data(opt,data[RAETSEL]);
+	outs=list_quests(data[RAETSEL],opt);
+	data[SPIEL]=get_game_data(opt,data[SPIEL]);
+	outs+=list_games(data[SPIEL],opt);
+    }
+    this_player()->more(outs, 0, 0, M_AUTO_END);
+    return 1;
+}
+/*********************************************
+    Das neue von Skafloc Ende
+*********************************************/
+
+int skill(string str)
+{
+    string *words;
+    string path, err;
+    mixed args;
+    int type;
+    
+    if(!sizeof(str))
+    {
+	mixed *ch = SKILL_CHECKER->query_skill_changes();
+	if(!sizeof(ch))
+	    write("Es gibt keine Aenderungen.\n");
+	else
+	{
+	    string* lines = ({});
+	    foreach(mixed change: ch)
+	    {
+		string line;
+		
+		switch(change[SC_TYPE])
+		{
+		    case SCT_RENAME:
+			line = sprintf("%s %s -> %s",
+			    shorttimestr(change[SC_TIME],0,TIMESTR_ONLY_DATE),
+			    change[SC_PATH], change[SC_ARGS]);
+			break;
+		    case SCT_CHANGE:
+			line = sprintf("%s %s: %d -> %d",
+			    shorttimestr(change[SC_TIME],0,TIMESTR_ONLY_DATE),
+			    change[SC_PATH], change[SC_ARGS][0],
+			    change[SC_ARGS][1]);
+			break;
+		    default:
+			continue;
+		}
+		lines += ({ line });
+	    }
+	
+	    this_player()->more(lines, 0, 0, M_AUTO_END);
+	}
+	return 1;
+    }
+    
+    SECURE;
+    
+    words = explode(space(str)," ");
+#define CHECK_NUM(nr) \
+	    if(sizeof(words)<nr)	\
+		return notify_fail("Zuwenig Argumente.\n");	\
+	    if(sizeof(words)>nr)	\
+		return notify_fail("Zuviele Argumente.\n");
+
+    switch(words[0])
+    {
+	case "name":
+	    CHECK_NUM(3);
+	    type = SCT_RENAME;
+	    path = words[1];
+	    args = words[2];
+	    break;
+	case "wert":
+	    CHECK_NUM(4);
+	    type = SCT_CHANGE;
+	    path = words[1];
+	    args = ({0, 0});
+	    if(str2int(words[2], &(args[0])))
+		return notify_fail("Fehler beim ersten Wert.\n");
+	    if(str2int(words[3], &(args[1])))
+		return notify_fail("Fehler beim zweiten Wert.\n");
+	    break;
+	default:
+	    return notify_fail("Unbekannter Wunsch.\n");
+    }
+    
+    err = SKILL_CHECKER->add_skill_change(type, path, args);
+    if(err)
+	write(wrap(err));
+    else
+	write("Unbekannter Fehler.\n");
+    return 1;
+}
+
+/////////////////////////////////////////////////
+// end of userinterface
+/////////////////////////////////////////////////

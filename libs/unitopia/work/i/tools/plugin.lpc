@@ -1,0 +1,667 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/tools/plugin.c
+// Description:	Das Inherit fuer Plugins fuer den Zauberstab
+// Author:	Freaky (10.01.2000)
+// Modified by:	Freaky (10.02.2000) plugin_remove/initialize eingebaut
+//		Freaky (11.02.2000) query_plugin_help() eingebaut
+//		Freaky (02.04.2000) PL_FUN_CONV(x) eingebaut
+//
+// $Log: plugin.c,v $
+// Revision 1.10  2013-03-16 15:49:48  gnomi
+// 'nomask private' ergibt keinen Sinn.
+//
+// Revision 1.9  2008-04-26 18:20:57  gnomi
+// Einstellungsmenue eingebaut.
+//
+// Revision 1.8  2001/10/05 20:55:08  freaky
+// Sichtbarkeit von Redefinitionen korrigiert.
+//
+// Revision 1.7  2001/08/26 12:50:31  freaky
+// todos entfernt
+//
+// Revision 1.6  2001/06/26 00:49:28  gnomi
+// Admins duerfen alle Befehle ausfuehren.
+//
+// Revision 1.5  2001/06/25 11:47:41  freaky
+// output-Funktionen eingebaut
+//
+// Revision 1.4  2001/03/15 17:22:35  gnomi
+// vor geteuid(TI) testen, ob TI != 0.
+//
+// Revision 1.3  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+inherit "/i/tools/pipe";
+
+#include <apps.h>
+#include <more.h>
+#include <level.h>
+
+private mixed *plugin_commands;
+private mixed *messages;
+private object commander;
+
+#define PL_VERB    0
+#define PL_FLAG    1
+#define PL_LEVEL   2
+#define PL_NO_PIPE 3
+#define PL_FUN_CONV(x)	(regreplace(x,"[^a-zA-Z0-9]","_",1))
+#define PL_PARSE_FUN(x) ("plugin_parse_" + PL_FUN_CONV(x))
+#define PL_EXEC_FUN(x)  ("plugin_exec_" + PL_FUN_CONV(x))
+#define PL_HELP_FUN(x)  ("plugin_help_" + PL_FUN_CONV(x))
+
+#define FAIL(x) return notify_fail(x)
+
+public void create()
+{
+    if (!plugin_commands)
+    {
+	seteuid(getuid());
+	plugin_commands = ({});
+	if ((object_name() + ".lpc") != __FILE__)
+	    PLUGIN_MASTER->register_plugin();
+    }
+}
+
+// Damit Plugins nicht geshadowed werden koennen.
+// Ist aber ueberlagerbar, damit es Programmierer aendern koennen.
+public int query_prevent_shadow(object shadow)
+{
+    return 1;
+}
+
+/*
+FUNKTION: query_plugin_commands
+DEKLARATION: nomask mixed *query_plugin_commands()
+BESCHREIBUNG:
+Liefert die Liste der Befehle, die das Plugin definiert.
+VERWEISE: add_plugin_command
+GRUPPEN: plugin
+*/
+nomask public mixed *query_plugin_commands()
+{
+    mixed *ret;
+    int level, adm;
+
+    ret = ({});
+
+    if (playerp(this_player()) && (this_interactive() == this_player()) &&
+	    geteuid(previous_object()) == geteuid(this_interactive()))
+	level = this_player()->query_level();
+    else
+	return ret;
+
+    adm = adminp(this_player());
+    
+    foreach(mixed *com : plugin_commands)
+	if (com[PL_LEVEL] <= level || adm)
+	    ret += ({ ({ com[PL_VERB], com[PL_FLAG] }) });
+
+    return ret;
+}
+
+/*
+FUNKTION: add_plugin_command
+DEKLARATION: nomask protected varargs int add_plugin_command(string verb, int flag, int level, int no_pipe)
+BESCHREIBUNG:
+Hiermit kann man ein Plugin-Kommando definieren.
+Plugins werden vom Zauberstab verwendet, um weitere Kommandos
+zu definieren (siehe 'zplugin ?')
+
+verb ist das Kommandoverb.
+flag das Flag, das add_action uebergeben wird.
+level kann man angeben, wenn man das Kommando erst ab einem bestimmten
+Level zugaenglich machen moechte.
+Wenn no_pipe gesetzt wird, wird die Kommandozeile nicht auf Pipes untersucht.
+
+Um im Plugin dann die Funktion zu definieren muss man zwei Funktionen
+definieren:
+protected mixed plugin_parse_VERB(string str) und
+protected string plugin_exec_VERB(Parameterliste)
+protected string plugin_help_VERB()
+wobei VERB durch das 'verb' ersetzt werden muss.
+
+plugin_parse_VERB() muss die Kommandozeile parsen und die Parameter fuer
+plugin_exec_VERB() als Feld liefern, oder einen String, der dann als
+Fehlermeldung ausgegeben wird.
+
+plugin_exec_VERB() wird dann mit den einzelnen Parametern, die im Feld sind,
+aufgerufen und muss das Kommando ausfuehren, wobei Ausgaben an den Spieler
+oder andere Spieler per W(), Msg() und Msg_To() gemacht werden koennen.
+Falls plugin_exec_VERB() einen String liefert, wird dieser als Fehlermeldung
+ausgegeben, bei 0 als Rueckgabewert werden die Ausgaben an die Spieler
+gemacht.
+Die Ausgaben, die per W() gemacht werden, koennen dabei gepiped werden.
+
+Wenn VERB Zeichen enthaelt, die keine Buchstaben oder Zahlen sind, werden
+diese Zeichen fuer die Funktionen durch '_' ersetzt.
+Also z.B. VERB == "g:" -> Funktionen: plugin_parse_g_()
+
+plugin_help_VERB() sollte eine ausfuehrliche Hilfe liefern.
+BEISPIEL:
+inherit "/i/tools/plugin";
+
+void create()
+{
+    // Das ::create() ist notwendig
+    plugin::create();
+    add_plugin_command("test");
+}
+
+protected mixed plugin_parse_test(string str)
+{
+    return ({ "Test:", str });
+}
+
+protected string plugin_exec_test(string prefix, string str)
+{
+    W(prefix + " " + str);
+    return 0;
+}
+
+protected string plugin_help_test()
+{
+    return read_file("/doc/hilfe/test");
+}
+
+VERWEISE: query_plugin_commands, set_plugin_vars, query_plugin_vars, W, WLN, Msg, Msg_To, query_plugin_commander
+GRUPPEN: plugin
+*/
+nomask protected varargs int add_plugin_command(string verb, int flag, int level,
+	int no_pipe)
+{
+    for (int i = sizeof(plugin_commands); i--; )
+	if (plugin_commands[i][PL_VERB] == verb)
+	{
+	    raise_error("plugin: verb existiert schon.\n");
+	    return 1;
+	}
+
+    if (!symbol_function(PL_PARSE_FUN(verb),this_object()))
+    {
+	raise_error("plugin: Funktion '" + PL_PARSE_FUN(verb) +
+	       	"' existiert nicht.\n");
+	return 2;
+    }
+    if (!symbol_function(PL_EXEC_FUN(verb),this_object()))
+    {
+	raise_error("plugin: Funktion '" + PL_EXEC_FUN(verb) +
+	       	"' existiert nicht.\n");
+	return 3;
+    }
+    if (!symbol_function(PL_HELP_FUN(verb),this_object()))
+    {
+	raise_error("plugin: Funktion '" + PL_HELP_FUN(verb) +
+	       	"' existiert nicht.\n");
+	return 4;
+    }
+
+    plugin_commands += ({ ({ verb, flag, level, no_pipe }) });
+    return 0;
+}
+
+private mixed check_plugin_command(string verb)
+{
+    if (!(this_player() == this_interactive() &&
+	    playerp(this_interactive()) &&
+	    geteuid(previous_object()) == geteuid(this_interactive())))
+	return "Illegaler Aufruf.\n";
+
+    for (int i = 0; i < sizeof(plugin_commands); i++)
+	if (plugin_commands[i][PL_VERB] == verb)
+	{
+	    if (plugin_commands[i][PL_LEVEL] >
+		    this_interactive()->query_level() &&
+                !adminp(this_interactive()))
+		return "Kommando nicht verfuegbar.\n";
+	    return plugin_commands[i][PL_NO_PIPE];
+	}
+
+    return "Unbekanntes Kommando.\n";
+}
+
+private mixed plugin_output()
+{
+    int mesg;
+
+    foreach(mixed *msg : messages)
+    {
+	if (sizeof(msg) == 5)
+	{
+	    commander->send_message(msg[0],msg[1],msg[2],msg[3],msg[4]);
+	    mesg = 1;
+	}
+	else
+	    commander->send_message_to(msg[0],msg[1],msg[2],msg[3]);
+    }
+    messages = 0;
+    if (mesg && !strlen(query_output()))
+	mesg = 0;
+
+    if (!end_output())
+	return 0;
+
+    if (mesg)
+	return "W() und Msg() duerfen nicht gleichzeitig verwendet werden.\n";
+    return 1;
+}
+
+nomask public int execute_plugin_fun(string verb, string str)
+{
+    mixed ret;
+
+    ret = check_plugin_command(verb);
+    if (stringp(ret))
+	FAIL(ret);
+
+    commander = this_interactive();
+    messages = ({});
+    if (str == "?")
+    {
+	set_output("");
+	commander->more(explode(funcall(
+			symbol_function(PL_HELP_FUN(verb),this_object())),
+		    "\n")[0..<2],0,0,M_AUTO_END|M_HEADER_LINE);
+	commander = 0;
+	return 1;
+    }
+
+    if (ret)
+	set_output("");
+    else if (!begin_output(&str))
+       	return 0;
+
+    ret = funcall(symbol_function(PL_PARSE_FUN(verb),this_object()),str);
+    if (!commander)
+	return 0;
+    if (stringp(ret))
+	FAIL(ret);
+    if (!pointerp(ret))
+	FAIL("Falscher Returnwert von '" + PL_PARSE_FUN(verb) + "'\n");
+    
+    ret = apply(symbol_function(PL_EXEC_FUN(verb),this_object()),ret);
+    if (!commander)
+	return 0;
+    if (stringp(ret))
+	FAIL(ret);
+    if (ret)
+	FAIL("Falscher Returnwert von '" + PL_EXEC_FUN(verb) + "'\n");
+    
+    ret = plugin_output();
+    if (stringp(ret))
+	FAIL(ret);
+    commander = 0;
+    return ret;
+}
+
+/*
+FUNKTION: Msg
+DEKLARATION: varargs protected void Msg(int type, int action, string msg, string msg_whom, mixed whom)
+BESCHREIBUNG:
+Nach Beendigung des Befehls wird send_message() mit diesen Parametern
+aufgerufen
+VERWEISE: add_plugin_command, W, WLN, Msg_To, send_message
+GRUPPEN: plugin
+*/
+varargs protected void Msg(int type, int action, string msg, string msg_whom,
+	mixed whom)
+{
+    messages += ({ ({ type, action, msg, msg_whom, whom }) });
+}
+
+/*
+FUNKTION: Msg_To
+DEKLARATION: protected void Msg_To(object who, int type, int action, string msg)
+BESCHREIBUNG:
+Nach Beendigung des Befehls wird send_message_to() mit diesen Parametern
+aufgerufen
+VERWEISE: add_plugin_command, W, WLN, Msg, send_message_to
+GRUPPEN: plugin
+*/
+protected void Msg_To(object who, int type, int action, string msg)
+{
+    messages += ({ ({ who, type, action, msg }) });
+}
+
+/*
+FUNKTION: W
+DEKLARATION: protected void W(string str)
+BESCHREIBUNG:
+Gibt den String str spaeter ueber die Pipe aus.
+VERWEISE: add_plugin_command, WLN, Msg, Msg_To
+GRUPPEN: plugin
+*/
+protected void W(string str)
+{
+    add_output(str);
+}
+
+/*
+FUNKTION: WLN
+DEKLARATION: protected void WLN(string str)
+BESCHREIBUNG:
+Gibt den String str spaeter ueber die Pipe aus, wobei an str noch ein
+Newline ("\n") angehaengt wird.
+VERWEISE: add_plugin_command, W, Msg, Msg_To
+GRUPPEN: plugin
+*/
+protected void WLN(string str)
+{
+    add_output(str + "\n");
+}
+
+/*
+FUNKTION: query_plugin_commander
+DEKLARATION: nomask protected object query_plugin_commander()
+BESCHREIBUNG:
+Liefert den Spieler, der gerade das Plugin-Kommando ausfuehrt.
+VERWEISE: add_plugin_command
+GRUPPEN: plugin
+*/
+nomask protected object query_plugin_commander()
+{
+    return commander;
+}
+
+private object query_plugin_zauberstab()
+{
+    string cuid = geteuid(query_plugin_commander());
+    foreach(int i: caller_stack_depth())
+	if(previous_object(i) == this_object())
+	    continue;
+	else if(geteuid(previous_object(i)) == cuid)
+	    return previous_object(i);
+	else
+	    return 0;
+}
+
+/*
+FUNKTION: query_plugin_vars
+DEKLARATION: nomask protected mixed query_plugin_vars()
+BESCHREIBUNG:
+Liefert die Variablen des Spielers fuer dieses Plugin.
+VERWEISE: add_plugin_command, set_plugin_vars
+GRUPPEN: plugin
+*/
+nomask protected mixed query_plugin_vars()
+{
+    object stab = query_plugin_zauberstab();
+    if(stab)
+	return stab->query_plugin_vars();
+}
+
+/*
+FUNKTION: set_plugin_vars
+DEKLARATION: nomask protected void set_plugin_vars(mixed vars)
+BESCHREIBUNG:
+Setzt die Variablen des Spielers fuer dieses Plugin.
+VERWEISE: add_plugin_command, query_plugin_vars
+GRUPPEN: plugin
+*/
+nomask protected void set_plugin_vars(mixed vars)
+{
+    object stab = query_plugin_zauberstab();
+    if(stab)
+	stab->set_plugin_vars(vars);
+}
+
+/*
+FUNKTION: query_plugin_info
+DEKLARATION: string query_plugin_info()
+BESCHREIBUNG:
+Die Funktion sollte eine Beschreibung des Plugins liefern.
+Dies wird von 'zplugin -h <plugin>' abgefragt.
+VERWEISE: add_plugin_command
+GRUPPEN: plugin
+*/
+public string query_plugin_info()
+{
+}
+
+/*
+FUNKTION: query_plugin_help
+DEKLARATION: string query_plugin_help(string verb)
+BESCHREIBUNG:
+Die Funktion liefert die Hilfe zum Kommando 'verb'.
+Dies wird von 'zplugin -H <plugin>' abgefragt.
+VERWEISE: add_plugin_command
+GRUPPEN: plugin
+*/
+public string query_plugin_help(string verb)
+{
+    return funcall(symbol_function(PL_HELP_FUN(verb),this_object()));
+}
+
+/*
+FUNKTION: plugin_initialize
+DEKLARATION: protected void plugin_initialize(object who)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, wenn ein Gott ein Plugin initialisiert,
+z.B. durch ein zplugin -a oder durch Einloggen.
+VERWEISE: add_plugin_command, plugin_remove
+GRUPPEN: plugin
+*/
+protected void plugin_initialize(object who)
+{
+}
+
+/*
+FUNKTION: plugin_remove
+DEKLARATION: protected void plugin_remove(object who)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, wenn ein Gott ein Plugin beendet,
+z.B. durch ein zplugin -d oder durch Ausloggen.
+VERWEISE: add_plugin_command, plugin_initialize
+GRUPPEN: plugin
+*/
+protected void plugin_remove(object who)
+{
+}
+
+private int plugin_secure()
+{
+    // Beim Einloggen ist TI das login-objekt :(
+    if (playerp(this_player()) && ((this_interactive() == this_player()) ||
+		(geteuid(this_interactive()) == geteuid(this_player()))) &&
+	    geteuid(previous_object()) == geteuid(this_interactive()))
+	return 1;
+    return 0;
+}
+
+public void do_plugin_remove()
+{
+    if (strstr(object_name(previous_object()),"/obj/zauberstab#") == 0)
+	plugin_remove(environment(previous_object()));
+}
+
+public void do_plugin_initialize()
+{
+    // Beim Einloggen ist TI das login-objekt :(
+    if (playerp(this_player()) && ((this_interactive() == this_player()) ||
+		(geteuid(this_interactive()) == geteuid(this_player()))) &&
+	    geteuid(previous_object()) == geteuid(this_interactive()))
+	plugin_initialize(this_player());
+}
+
+protected string more(mixed text, mixed status_line, int begin, int flags, mixed more_id)
+{
+    object stab = query_plugin_zauberstab();
+    if(!stab)
+	return 0;
+
+    return stab->do_plugin_more(text, status_line, begin, flags, more_id);
+}
+
+nomask public int do_plugin_more_action(string eingabe, int line, int max_line, mixed more_id)
+{
+    int ret;
+    
+    if (!(this_player() == this_interactive() &&
+	    playerp(this_interactive()) &&
+	    geteuid(previous_object()) == geteuid(this_interactive())))
+    {
+	write("Illegaler Aufruf.\n");
+	return NOTHING;
+    }
+    
+    commander = this_interactive();
+    
+    ret = this_object()->plugin_more_action(eingabe, line, max_line, more_id);
+    
+    commander = 0;
+    
+    return ret;
+}
+
+nomask public void do_plugin_more_end(string eingabe, int line, int max_line, mixed more_id)
+{
+    object old_commander = commander;
+    int ret;
+    
+    if (!(this_player() == this_interactive() &&
+	    playerp(this_interactive()) &&
+	    geteuid(previous_object()) == geteuid(this_interactive())) ||
+
+	(commander && commander != this_interactive()))
+    {
+	write("Illegaler Aufruf.\n");
+	return;
+    }
+    
+    commander = this_interactive();
+    this_object()->plugin_more_end(eingabe, line, max_line, more_id);
+    commander = old_commander;
+}
+
+/*
+FUNKTION: print_plugin_options
+DEKLARATION: nosave void print_plugin_options(int quiet, closure callback)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, wenn ein Gott im Einstellungsmenue
+dieses Plugin konfigurieren will, und sollte via more() ein solches
+anzeigen.
+
+Um eine korrekte Zuordnung zum jeweiligen Gott zu gewaehrleisten,
+sollte more() nicht direkt im plugin_commander aufgerufen werden,
+sondern ueber die Plugin-eigene more()-Funktion. Ueber
+plugin_more_action erhaelt man (aequivalent zu more_action)
+die Eingaben.
+
+Fuer einen Ruecksprung muss die uebergebene Closure callback
+aufgerufen. (Waehrend des more() sollte man sie in der more-ID
+zwischenspeichern.)
+
+Der Parameter quiet gibt an, dass das Menue nicht sofort ausgegeben
+werden soll (more-Flag M_NO_FIRST_SCREEN). Der Parameter wird vom
+Zauberstab nicht verwendet (und ist daher immer 0) und ist zur
+einfacheren Nutzung von print_options_help gedacht.
+
+VERWEISE: add_plugin_command, more
+GRUPPEN: plugin
+*/
+
+nomask public int has_plugin_options()
+{
+    if(function_exists("print_plugin_options"))
+	return 1;
+}
+
+nomask public void do_plugin_options(closure callback)
+{
+    if (!(this_player() == this_interactive() &&
+	    playerp(this_interactive()) &&
+	    geteuid(previous_object()) == geteuid(this_interactive())))
+    {
+	write("Illegaler Aufruf.\n");
+	return;
+    }
+    
+    commander = this_interactive();
+    
+    this_object()->print_plugin_options(0, callback);
+    
+    commander = 0;
+}
+
+protected void input_to(mixed fun, int flags, varargs mixed* pars)
+{
+    object stab = query_plugin_zauberstab();
+    if(!stab)
+	return 0;
+	
+    stab->do_plugin_input_to(fun, flags, pars);
+}
+
+nomask public void do_input_to(string str, mixed fun, mixed* pars)
+{
+    int ret;
+    
+    if (!(this_player() == this_interactive() &&
+	    playerp(this_interactive()) &&
+	    geteuid(previous_object()) == geteuid(this_interactive())))
+    {
+	write("Illegaler Aufruf.\n");
+	return;
+    }
+    
+    commander = this_interactive();
+    
+    if(stringp(fun))
+	apply(#'call_other, this_object(), fun, str, pars);
+    else
+	apply(fun, str, pars);
+
+    commander = 0;
+}
+
+/*
+FUNKTION: create_plugin_callback
+DEKLARATION: protected closure create_plugin_callback(closure fun|string fun)
+BESCHREIBUNG:
+Im Plugin koennen Funktionen nicht einfach via call_out oder auf anderem
+Wege verzoegert aufgerufen werden, da die Zuordnung zum jeweiligen Gott
+verloren gehen kann. Diese Funktion erlaubt es, diese Zuordnung beizubehalten.
+
+Verwendung: call_out(create_plugin_callback("fun"), 1);
+
+Wenn man die Funktion als String statt als Closure angibt, so ueberlebt
+es sogar ein Erneuern des Plugins.
+
+VERWEISE:
+GRUPPEN: plugin
+*/
+protected closure create_plugin_callback(mixed fun)
+{
+    object stab = query_plugin_zauberstab();
+    if(!stab)
+	return 0;
+	
+    return stab->do_create_callback(fun);
+}
+
+nomask public void do_plugin_callback(mixed fun, mixed* parameter)
+{
+    int ret;
+    
+    if (!((!this_interactive() || this_player() == this_interactive()) &&
+	    playerp(this_player()) &&
+	    geteuid(previous_object()) == geteuid(this_player())))
+    {
+	write("Illegaler Aufruf.\n");
+	return;
+    }
+    
+    commander = this_player();
+    
+    if(stringp(fun))
+	apply(#'call_other, this_object(), fun, parameter);
+    else
+	apply(fun, parameter);
+
+    commander = 0;
+}

@@ -1,0 +1,376 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:    /z/Schiffe/Linienschiffe/i/command_room.c
+// Description:
+//
+// ACHTUNG: Aenderungen beim Peilen auch in /obj/kompass machen
+//
+// Modified by:     
+//  Freaky      11.03.1998  query_room_domain()
+//  Parsec      08.02.1999  Raumtyp "kompass" und "kompass_defekt"
+//                          eingebaut, Ebenen+Campus beruecksichtigt
+//  Milf        21.07.2000  make_items() nicht mehr private, damit man die
+//                          Teile auch wegwerfen kann (z.B. bei nem Ruderboot)
+//  Menaures    06.04.2001  send_message, typos, aehnliches kleinzeug
+//  Wyvern      29.09.2012  add_action "halte" mit Parameter -4
+//  Gnomi       21.02.2014  Typ von set_long korrigiert.
+
+/*
+ * /z/Schiffe/Linienschiffe/i/command_room.c
+ *
+ * Dieser File ist fuer den Raum gedacht, von dem aus das Schiff gesteuert
+ * werden kann. 
+ *
+ * Funktionen:
+ *
+ *    set_ship(string schiffsname)    ist unbedingt anzugeben.
+ *
+ *    set_leave(1)            um die Ausgangs-Kommandos zu
+ *                    erhalten.
+ *
+ *
+ * Kommandos:
+ *
+ *    steuere <himmelsrichtung>    Bewegt das Schiff in den benachbarten
+ *                    Raum.
+ *
+ *    steuere x sm y grad        Bewegung im Kreuz-Modus.
+ *                    Bewegt das Schiif um x Raeume in der
+ *                    Kompass-Richtung y, wobei y von 0 bis
+ *                    360 Grad ganzzahlig angegeben werden
+ *                    kann.
+ *    stoppe                Bricht den Kreuz-Modus ab.
+ *
+ *
+ *    halte ausschau <nach himmelsrichtung>    Zeigt die Raumbeschreibung
+ *                        der Umgebung bzw der Nachbar-
+ *                        Raeume des Schiffes an.
+ *
+ *    schau auf kompass        Zeigt Richtung und Abstand
+ *                    vom Raum /map/m0_0.
+ *
+ *    schau auf logge            Zeigt die Anzahl der zurueckgelegten
+ *                    Seemeilen( = Raeume) an.
+ *
+ *    ausgang                Kommandos zum
+ *    verlasse            Verlassen
+ *    spring                des Schiffes.
+ *
+ *    passagiere            Zeigt alle Livings innerhalb
+ *                    des Schiffes an.
+ *
+ * Routinen die gegebenenfalls mit :: weitergereicht werden muessen:
+ *
+ *    init()
+ *    id()
+ *    query_long()
+ *
+ *
+ */ 
+
+#pragma save_types
+
+inherit "/i/room";
+inherit "/z/Schiffe/Linienschiffe/i/compass_logic";
+inherit "/z/Schiffe/Linienschiffe/i/ausschau";
+inherit "/z/Schiffe/Linienschiffe/i/ship_leave";
+
+private string schiff;
+
+#include <apps.h>
+#include <level.h>
+#include <move.h>
+
+#include <message.h>
+
+#define F_LOG
+#define Q_LOG
+
+#ifdef Q_LOG
+
+void q_log(object who, int flag)
+{
+  log_file("/log/Schiff_Q", sprintf("%Q %Q %Q\n", this_object(), who, shorttimestr(time())));
+}
+
+void notify_quit(object who, int flag)
+{
+     if(!playerp(who) || strstr(object_name(), who->query_real_name()+"_") != -1) return;
+     q_log(who, flag);
+}
+
+#endif
+
+#ifdef F_LOG
+
+void f_log(object who, object * ziele)
+{
+  log_file("/log/Schiff_F", sprintf("%Q %Q %Q %Q\n", this_object(), who, mixed2str(ziele->query_real_name()), shorttimestr(time())));
+}
+
+void notify_moved_in(object wer, object woher, string dir, int way)
+{
+   if(!playerp(wer) || strstr(object_name(), wer->query_real_name()+"_") != -1) return;
+    if(load_name(woher) == "/obj/flugraum")
+    f_log(wer, filter(all_inventory(), (: playerp($1) :) ) - ({wer}) );
+}
+
+#endif
+/*
+FUNKTION: query_command_room
+DEKLARATION: int query_command_room()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn es auf den Steuerraum eines Schiffes angewandt wird.
+VERWEISE: query_ship
+GRUPPEN: schiff
+*/
+int query_command_room() { 
+
+  return 1; 
+}
+
+/*
+FUNKTION: query_ship
+DEKLARATION: string query_ship
+BESCHREIBUNG:
+Liefert den Filenamen des Schiffes zurueck, zu dem der Schiffsraum gehoert, 
+oder 0, wenn diese Funktion auf keinen Schiffsraum angewandt wird.
+VERWEISE: set_ship
+GRUPPEN: schiff
+*/
+string query_ship() { 
+
+  return schiff; 
+}
+
+/*
+FUNKTION: set_ship
+DEKLARATION: void set_ship(string filename)
+BESCHREIBUNG:
+Sagt einem Schiffsraum, zu welchem Schiff er gehoert. Muss bei allen Raeumen 
+eines Schiffes angegeben werden.
+VERWEISE: query_ship
+GRUPPEN: schiff
+*/
+varargs void set_ship(string str,string name) {
+  
+  (schiff = str)->set_command_room(name ? name : object_name());
+}
+
+mixed query_type(string str)
+{
+   object ob_schiff;
+
+   if(schiff)
+      ob_schiff = touch(schiff);
+
+   switch(str)
+   {
+      case "repraesentant" :
+      case "mein_schiff" :
+         if(ob_schiff)
+            return ob_schiff;
+         break;
+      case "temperatur" :
+         if(ob_schiff && environment(ob_schiff))
+            return environment(ob_schiff)->query_type("temperatur");
+         break;
+   }
+   return room::query_type(str);
+}
+
+mapping query_types()
+{
+   return (room::query_types() || ([])) +
+   ([ "mein_schiff" :  query_type("mein_schiff"),
+      "repraesentant" : query_type("repraesentant"),
+      "temperatur"  :  query_type("temperatur") ]);
+}
+
+
+void init() {
+
+  add_action("look_out","halte",-4);
+  add_action("steer_ship","steuer",1);
+  add_action("stop_kreuz","stop",1);
+  if (query_real_player_level(this_player()) >= LVL_VOGT) {
+    add_action("versenke", "versenk",1);
+    add_action("passagiere","passa",1);
+  }
+  call_out("register_room", 0);
+  if (query_leave()) {
+    add_action("leave", "verlass",1);
+    add_action("leave", "ausgang");
+    add_action("leave", "spring",1);
+  }
+}
+
+void register_room()
+{
+  if (schiff)
+    schiff->set_command_room(object_name());
+}
+
+int steer_ship(string str) {
+    if (schiff)
+    return (int)schiff->steer_ship(str);
+    send_message_to(this_player(),MT_NOTIFY,MA_USE,wrap("Ohne Schiff?"));
+    return 1;
+}
+
+int stop_kreuz(string str) {
+    if (schiff)
+    return (int)schiff->stop_kreuz(str);
+    send_message_to(this_player(),MT_NOTIFY,MA_USE,wrap("Ohne Schiff?"));
+    return 1;
+}
+
+int versenke(string str) {
+    if (schiff) {
+    schiff->set_command_room(object_name());
+    return (int)schiff->versenke(str);
+    }
+    send_message_to(this_player(),MT_NOTIFY,MA_USE,wrap("Ohne Schiff?"));
+    return 1;
+}
+
+string peil()
+{
+    int     *position;
+    string  domain, msg ;
+    mixed   tmp ;
+    object  env ;
+
+    if (!schiff)
+    {
+    return notify_fail("Ohne Schiff?\n"),0;
+    }
+
+    position = peile(touch(schiff));
+
+    if (position[0] < 0)
+    {
+    if (position[0] == -2)
+        return wrap("Das Schiff befindet sich gerade im absoluten Nichts!");
+    else
+        return wrap("Die Kompassnadel ruehrt sich nicht.\n"
+          "Augenscheinlich bist Du in zu grosser Entfernung vom "
+          "Mittelpunkt der Welt!");
+    }
+
+    env = environment( touch(schiff) );
+    domain = query_room_domain() ;
+    
+    if ( (tmp = env->query_type( "kompass")) &&
+         (pointerp( tmp) && sizeof( tmp) > 1 || stringp( tmp)) )
+    {
+        if ( pointerp( tmp) )
+            msg = tmp[0] ;
+        else
+            msg = tmp ;
+
+        msg = regreplace( msg, "%g",  (string) position[0], 1) ;
+        msg = regreplace( msg, "%sm", (string) position[1], 1) ;
+        return wrap( apply( CLOSURE_CONTAINER->do_bind(
+            mixed_to_closure( msg, ({ 'kompass //'
+                   })), ({})), (["name":"kompass","gender":"maennlich"]))) ;
+    }
+    else if ( env->query_type( "kompass_defekt") )
+    return wrap("Die Kompassnadel dreht sich wie verrueckt.");
+    else if ( domain == "Campus" )
+    return wrap( "Du peilst mit "+deinem()+" den Nordpol an.\n"
+                     "Die Kompassnadel zeigt nach Norden.");
+    else if ( domain == "Ebenen" &&
+              !env->query_type( "schiff_erlaubt")
+              // damit der vom Ozean aus zugaengliche Teil der Ebenen normal
+              // behandelt wird
+        )
+    return wrap( "Die Kompassnadel erzittert stark und pendelt immer "
+                     "wieder hin und her.\n"
+                     "Anscheinend befindet sich der Mittelpunkt der Welt "
+                     "nicht in dieser Dimension.");
+    else if ( position[1] <= 0 )
+    return wrap(
+            "Die Kompassnadel dreht sich wie verrueckt.\n"
+            "Anscheinend bist du dicht "+
+            "am Mittelpunkt der Welt.\n");
+    else
+        return
+            "Die Kompassnadel pendelt sich auf "+position[0]+" Grad ein.\n"+
+            "Die zweite Nadel zeigt "+position[1]+" sm an.\n";
+}
+
+string logge_look() {
+    if (!schiff)
+    return "Ohne Schiff?\n";
+    return wrap("Auf der Logge steht: "+(int)schiff->query_logge());
+}
+
+void make_items() {
+    if (!query_v_item(({"logge"}))) {
+    add_v_item(([
+        "name":"logge",
+        "gender":"weiblich",
+        "long":#'logge_look,
+        "look_msg":"$Der() wirft einen Blick auf die Logge",
+        "command_room":1
+        ])); }
+        
+     if (!query_v_item(({"kompass"}))) {
+    add_v_item(([
+        "name":"kompass",
+        "gender":"maennlich",
+        "long":#'peil,
+        "command_room":1
+        ]));
+    }
+}
+
+void set_long(mixed str) {
+    ::set_long(str);
+    make_items();
+}
+
+void create() {
+#ifdef Q_LOG
+  add_controller("notify_quit", this_object());
+#endif
+#ifdef F_LOG
+  add_controller("notify_moved_in", this_object());
+#endif
+    ::create();
+    add_type("graben_verboten", 1);
+    make_items();
+}
+
+int passagiere(string str) {
+    object *passengers;
+    int a;
+
+    if (!schiff) {
+    return notify_fail("Ohne Schiff?\n");
+    }
+    passengers = (object *)schiff->query_passagiere(str);
+    if (sizeof(passengers) <= 0) {
+    send_message_to(this_player(),MT_NOTIFY|MT_LOOK,MA_SENSE,
+      "Es ist niemand an Bord.\n");
+    return 1;
+    }
+    for (a=0; a<sizeof(passengers); a++)
+     send_message_to(this_player(),MT_NOTIFY|MT_LOOK,MA_SENSE,
+          wrap(Der(passengers[a])+"."));
+    return 1;
+}
+
+string query_room_domain()
+{
+    object ob_schiff;
+
+    if (schiff)
+    ob_schiff = touch(schiff);
+
+    if (ob_schiff && environment(ob_schiff))
+    return environment(ob_schiff)->query_room_domain();
+    return ::query_room_domain();
+}
+

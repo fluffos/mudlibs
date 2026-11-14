@@ -1,0 +1,155 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:            /obj/klausur_raum.c
+// Description:     Ein Klausurraum pro Spieler(VC ueber realname)
+// Author:          Myonara.
+//
+// $Log: klausur_raum.c,v $
+// Revision 1.3  2013-05-25 08:30:27  myonara
+// Typos behoben und riegel_long ergaenzt.
+//
+// Revision 1.1  2013-05-03 17:06:40  myonara
+// Erstellung.
+//
+
+inherit "/i/room";
+
+#include <message.h>
+#include <misc.h>
+#include <move.h>
+#include <notify_fail.h>
+#include <parse_com.h>
+#include <protokoll.h>
+
+#define PDBG_GROUP "Protokoll"
+#include <p/debugger.h>
+
+private string owner;
+private int sperre;
+
+void setup_renamed_object(object vc, string old_name)
+{
+    string str,rn;
+    object pl;
+    str = ON(TO);
+    PDBG("newname: "+str);
+    if (sscanf(str, PROTOKOLL_VC+"klausur_%s", rn) && player_exists(rn)) {
+        owner = rn;
+        PDBG("owner: "+rn);
+    }
+}
+
+// ist keine add_action sondern wird ueber notify_seele aufgerufen.
+void cmd_druecke(mapping vitem, object player)
+{
+    if (!mappingp(vitem) || vitem["name"] != "rufknopf") {
+        send_message_to(player, MT_NOTIFY, MA_CRAFT, wrap(
+                        "druecke rufknopf?"));
+        return;
+    }
+    if (RN(player) != owner) {
+        send_message_to(player, MT_NOTIFY, MA_CRAFT, wrap(
+                        "Nur beim Eigentuemer funktioniert der Rufknopf."));
+        return;
+    }
+    object proto = touch(PROTOKOLL_VC+"protokollant_"+owner);
+    if (objectp(proto)) {
+        proto->move(TO,MOVE_NORMAL,
+            "$Ein() verschwindet.","$Der() kommt heran.");
+    }
+}
+
+void notify_seele(object wer, mixed wen, string what, string
+                 adverb, int align, int flags, int msg_typ_wer, int
+                 msg_typ_wen, int msg_typ_andere)
+{
+    if (mappingp(wen) && wen["name"] == "rufknopf" && what == "drueck") {
+        call_out("cmd_druecke",0,wen, wer);
+    }
+}
+
+int forbidden_move_in(object wer, object woher, string dir, int wie)
+{
+    if (!sperre) return 0; // Ohne Sperre nix pruefen.
+    if (playerp(wer) && RN(wer) == owner)
+        return 0; // Der Eigentuemer kann nicht ausgesperrt werden.
+    wer->set_not_moved_reason("Der Zugang zu dem Raum wurde gesperrt, "
+        "frage "+capitalize(owner)+", um Zugang zu erlangen.");
+    return 1;
+}
+
+int cmd_schiebe(string str)
+{
+    mixed * parsed;
+    int ret;
+    object sitz;
+    str = lower_case(space(str));
+    parsed = parse_com(str,TO, 0, 0);
+    if(parse_com_error(parsed, "Was willst Du schieben?\n", 1)) {
+        return 0;
+    }
+    if (parsed[PARSE_ID] != "riegel") {
+        FAILWP("schiebe riegel auf/zu?", FAIL_WRONG_ARG);
+    }
+    switch (parsed[PARSE_REST]) {
+    case "auf":
+    case "zurueck":
+        sperre = 0;
+        send_message_to(TP, MT_NOTIFY, MA_CRAFT, wrap(
+                        "Der Riegel wurde zurueckgeschoben, der Raum kann "
+                        "wieder betreten werden."));
+        return 1;
+    case "vor":
+    case "zu":
+        sperre = 1;
+        send_message_to(TP, MT_NOTIFY, MA_CRAFT, wrap(
+                        "Der Riegel wurde vorgeschoben, der Raum kann "
+                        "nicht betreten werden."));
+        return 1;
+    default:
+        FAILWP("schiebe riegel auf/zu?", FAIL_WRONG_ARG);
+    }
+}
+
+void init()
+{
+    add_action("cmd_schiebe","schiebe",-6);
+}
+
+string long_riegel(mapping vitem, object viewer)
+{
+    return wrap("Ein Riegel zum auf oder zu schieben. Bei vorgeschobenem "
+                    "Riegel kann niemand den Raum betreten. "
+                    "Der Riegel ist "
+                    +(sperre?"vorgeschoben.":"zurueckgeschoben."));
+}
+
+void create() {
+    set_short("In Klausur (bitte nicht stoeren)");
+    set_long("Du bist in einem Klausurraum. Fuer Aussenstehende heisst das, "
+            "dass die Anwesenden nicht gestoert werden wollen.");
+    // IDEE Eigentuemer im Langtext erwaehnen
+    // IDEE Ruheraum an und abschaltbar und im Langtext anzeigen.
+    set_exit("/room/church", "runter");
+    set_own_light(1);
+    add_type("kunstlicht", 1);
+    set_room_domain("Pantheon");
+    add_v_item( ([
+            "name" : "rufknopf",
+            "id" : ({ "rufknopf" }),
+            "gender" : "maennlich",
+            "long": "Ein Rufknopf fuer den Protokollanten, nur fuer den "
+                    "Eigentuemer des Klausurraums.",
+        ]) );
+    add_v_item( ([
+            "name" : "riegel",
+            "id" : ({ "riegel" }),
+            "gender" : "maennlich",
+            "long": #'long_riegel,
+        ]) );
+    add_controller( ({"notify_seele","forbidden_move_in" }), TO);
+}
+
+void abort_renewal() {}
+void finish_renewal(object neu) {}
+void prepare_renewal() {}

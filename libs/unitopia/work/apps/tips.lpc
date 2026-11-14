@@ -1,0 +1,320 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/tips.c
+// Description: Gibt Spielern, Engeln, Goettern Tips
+// Author:	Sissi (14.01.2000)
+
+// UID: Apps
+
+//
+// $Log: tips.c,v $
+// Revision 1.9  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.8  2002/04/10 05:18:33  gnomi
+// Einige Variableninitialisierungen wegen Typcheck getrennt.
+//
+// Revision 1.7  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.6  2001/03/15 14:59:30  freaky
+// deprecated funktionen rausgenommen.
+//
+// Revision 1.5  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+// Revision 1.4  2001/01/27 03:45:26  sissi
+// Wahnsinn, ich hatte da noch nen Bug drin...
+//
+// Revision 1.3  2001/01/26 14:57:17  sissi
+// Ersetzungsmoeglichkeit eingebaut.
+//
+// Revision 1.2  2001/01/26 01:02:40  sissi
+// Ein "space" eingefuegt. Das macht cut and paste einfacher.
+//
+// Revision 1.1  2001/01/25 15:42:36  sissi
+// Angelegt.
+//
+
+
+#include <level.h>
+#include <more.h>
+#include <browser.h>
+#include <tips.h>
+
+#define SAVE_FILE "/var/tips"
+#define SECURE if (!secure()) return;
+
+#define MORE_FLAGS_MENUE M_LINE_NUMBERS | M_DO_NOT_END | M_FRAME
+#define MORE_FLAGS_EINZELN M_DO_NOT_END | M_FRAME
+
+mapping tips; // das Mapping mit den Tips
+int max_tip;  // jeder Tip hat ne Nummer; hier wird das Maximum gespeichert
+nosave mapping tip_for_translate;
+
+void create()
+{
+    tips=m_allocate(0,4);
+    restore_object(SAVE_FILE);
+    tip_for_translate
+        = (["n":"Newbies","s":"Spieler","e":"Engel","g":"Goetter",
+        "":"egal wen"]);
+}
+
+private int secure()
+{
+    return this_player() &&
+	   this_player()==this_interactive() &&
+	   previous_object() &&
+	   adminp(this_player()) &&
+	   !strstr(object_name(previous_object()),TIPS_TOOL);
+}
+
+private void save()
+{
+    save_object(SAVE_FILE);
+}
+
+int remove()
+{
+    save();
+    destruct(this_object());
+    return 1;
+}
+
+private int get_free_number ()
+{
+    int i = 0;
+    do i++; while (member (tips, i));
+    return i;
+}
+        
+int add_tip (string tip_text, string tip_for)
+{
+    if (tip_text && tip_for && this_player()
+       && this_player() == this_interactive()
+       && previous_object()
+       && (!strstr(object_name(previous_object()),TIPS_TOOL)
+          || !strstr(object_name(previous_object()),TIPS_FORMBLATT))) {
+        int number;
+        number = get_free_number ();
+        if (number > max_tip)
+            max_tip = number;
+        tips [number,TIP_TEXT] = tip_text;
+        tips [number,TIP_FOR] = lower_case (tip_for);
+        tips [number,TIP_AUTHOR] = this_interactive()->query_real_name ();
+	save();
+	return 1;
+    }
+    return 0;
+}
+
+
+mixed get_menue_more_info(mixed *m, int nr)
+{
+    string *newsubmenu, tip_for, newsubmenutitle;
+    int *newsubmenu_idx, i, active;
+    if (strstr(object_name (previous_object()),TIPS_TOOL))
+        return 0;
+    if (sizeof (m) == 1) {
+        // wurde aus dem Hauptmenue aus aufgerufen
+        active = (nr < 6);
+        switch (nr) {
+            case 1: case 6: tip_for = "n"; break;
+            case 2: case 7: tip_for = "s"; break;
+            case 3: case 8: tip_for = "e"; break;
+            case 4: case 9: tip_for = "g"; break;
+            case 5: case 10: tip_for = ""; break;
+        }
+        if (strlen (tip_for))
+            newsubmenutitle = capitalize(
+                "inaktive Tips fuer "[active<<active..])
+                + tip_for_translate[tip_for];
+        else
+            newsubmenutitle = "Alle " + 
+                ("inaktiven Tips"[active<<active..]);
+        for (i = 1, newsubmenu = ({}), newsubmenu_idx = ({}); i <= max_tip; i++)
+          if (member (tips,i))
+            if ((strstr (tips [i,TIP_FOR], tip_for)+1)
+                && (tips[i,TIP_ACTIVE] == active)) {
+                if (strlen (tips[i,TIP_TEXT]) > 65)
+                    newsubmenu += ({tips[i,TIP_TEXT][0..65]+"..."});
+                else
+                    newsubmenu += ({tips[i,TIP_TEXT]});
+                newsubmenu_idx += ({i});
+            }
+        if (!sizeof (newsubmenu))
+           return "Dieses Untermenue ist leer.\n";
+        return m + ({({
+                newsubmenu,
+                newsubmenutitle+" [z,q,<nr>,r,?]: ",
+                1, MORE_FLAGS_MENUE, nr,
+                newsubmenu_idx
+            })});
+    }
+    // untermenuepunkt in einem untermenue wurde angewaehlt
+    if (sizeof (m) == 3)
+        return "Da gehts nicht mehr tiefer rein ins Menue.\n";
+    i = m[<1][BR_USER][nr-1];
+    if (!member (tips,i))
+        return wrap ("Der Tip ist verschwunden, vermutlich hat ein "
+            +adminp(this_player())?"anderer ":""+
+            "Admin ihn gerade geloescht.");
+    return m + ({({({
+       left("Nummer:",10)+nr+"\n"
+      +left("Author:",10)+capitalize(tips[i,TIP_AUTHOR])+"\n"
+      +left("Status:",10)+capitalize("inaktiv\n"[tips[i,TIP_ACTIVE]<<1..])
+      +left("Tip fuer:",10)
+      +(tips[i,TIP_FOR]==""?"Niemanden":
+          liste( map (explode (tips[i,TIP_FOR],""), tip_for_translate)
+                -({})," und "))+"\n"
+      +wrap_say (left("Text:",9),tips[i,TIP_TEXT],0,10)[0..<2]}),
+       "Tip "+nr+" [+,-,r,c<txt>,a,i,l,n,e,s,z,q,?] ", 1, MORE_FLAGS_EINZELN, nr, ({i})})});
+}
+
+nosave mixed get_new_menu (mixed m)
+{
+    mixed mh;
+    int moldsel;
+    save ();
+    moldsel = m[2][BR_PATH];
+    mh = previous_object()->get_menue_more_info (
+        ({m[0]}),m[1][BR_PATH]);
+    if (stringp(mh)||(sizeof(mh)==1)||!mh[1][BR_MENUE]
+        ||!sizeof(mh[1][BR_MENUE])) {
+        m[0][BR_BEGIN_LINE]=1;
+        return ({m[0]});
+    }
+    if (sizeof (mh[1][BR_MENUE]) > moldsel)
+        return previous_object()->get_menue_more_info (
+            mh, moldsel);
+    return mh;
+}
+
+mixed browse_action(string str, mixed *m)
+{
+    if (!str || str == "") return 0;
+    if (str == "?") {
+        if (sizeof (m) == 1)
+            return "Folgende Befehle sind hier verfuegbar:\n"
+                "    r: nochmnal anzeigen\n"
+                "    <nr>: Auswahl Menuepunkt <nr>\n"
+                "    q: raus hier\n";
+        if (sizeof (m) == 2)
+            return "Folgende Befehle sind hier verfuegbar:\n"
+                "    r: nochmnal anzeigen\n"
+                "    <nr>: Auswahl Tip <nr>\n"
+                "    z: eine Menueebene zurueck\n"
+                "    q: ganz raus hier\n"
+                "    +: zum naechsten Menuepunkt\n"
+                "    -: zum vorhergehenden Menuepunkt\n";
+        if ((sizeof (m) == 3) && !adminp (this_player()))
+            return "Folgende Befehle sind hier verfuegbar:\n"
+                "    r: nochmnal anzeigen\n"
+                "    z: eine Menueebene zurueck\n"
+                "    q: ganz raus hier\n"
+                "    +: zum naechsten Tip\n"
+                "    -: zum vorhergehenden Tip\n";
+    }
+    // alles, was "jetzt" kommt, ist Adminkrams.
+    if (!secure ()) return 0;
+    if (sizeof (m) == 3) {
+        // ein einzelner Tip ist bereits ausgewaehlt. Naemlich:
+        int tipnr, i;
+        tipnr = m[<1][BR_USER][0];
+        if (!member (tips,tipnr)) {
+            write ("Dieser Tip wurde inzwischen geloescht.\n");
+            return m[0..1];
+        }
+        switch (str) {
+            case "?":
+                return "Folgende Befehle sind hier verfuegbar:\n"
+                "    +: zum naechsten Tip\n"
+                "    -: zum vorangehenden Tip\n"
+                "    r: nochmnal anzeigen\n"
+                "    c <kompletter neuer Text>: kompletten Text aendern\n"
+                "    s-<alt>-<neu>: Text ersetzen (regreplace), statt - geht auch was anderes\n"
+                "    S-<alt>-<neu>: wie s, es werden aber alle Vorkommnisse ersetzt\n"
+                "    l: Tip loeschen\n"
+                "    a: Tip aktiv setzen\n"
+                "    i: Tip inaktiv setzen\n"
+                "    n: Eignung fuer Newbies aendern\n"
+                "    s: Eignung fuer Spieler aendern\n"
+                "    e: Eignung fuer Engel aendern\n"
+                "    g: Eignung fuer Goetter aendern\n"
+                "    z: eine Menueebene zurueck\n"
+                "    q: ganz raus hier\n";
+            case "a":
+                if (tips[tipnr,TIP_ACTIVE]) {
+                    write ("Tip ist bereits aktiv.\n");
+                    return 0;
+                }
+                write ("Tip wurde aktiviert.\n");
+                tips[tipnr,TIP_ACTIVE] = 1;
+                return get_new_menu (m);
+            case "i":
+                write ("Tip wurde inaktiviert\n");
+                tips[tipnr,TIP_ACTIVE] = 0;
+                return get_new_menu (m);
+            case "l":
+                tips = m_delete (tips, tipnr);
+                write ("Tip wurde geloescht\n");
+                return get_new_menu (m);
+            case "n":
+            case "s":
+            case "e":
+            case "g":
+                if (strstr (tips[tipnr,TIP_FOR], str) + 1)
+                    tips[tipnr,TIP_FOR] -= str;
+                else
+                    tips[tipnr,TIP_FOR] += str;
+                if (!strlen (tips[tipnr,TIP_FOR])) {
+                    write (wrap ("Damit waere der Tip fuer niemanden mehr "
+                           "geeignet. Das geht nicht. Wenn Du das haben "
+                           "willst, dann loesch den Tip einfach."));
+                    tips[tipnr,TIP_FOR] = str;
+                    return 0;
+                }
+                return get_new_menu (m);
+        }
+        if ((strlen (str) > 2) && (str[0] == 'c')) {
+            write ("Tip - Text wird geaendert.\n");
+            tips[tipnr,TIP_TEXT] = space (str[((str[1] == ' ')?2:1)..]);
+            return get_new_menu (m);
+        }
+        if ((strlen (str) > 2) && ((str[0] == 's') || (str[0] == 'S'))) {
+            int trennposition;
+            trennposition = strstr (str, str[1..1], 2);
+            if (trennposition == -1)
+                write ("Das zweite Trennzeichen fehlt.\n");
+            else {
+                write ("Es wird "+((str[0]=='S')?"mehrfach ":"")+"ersetzt: \""+str[2..trennposition-1]
+                +"\" durch \""+str[trennposition+1..]+"\"\n");
+                tips[tipnr,TIP_TEXT] = regreplace (tips[tipnr,TIP_TEXT],
+                    str[2..trennposition-1],str[trennposition+1..],
+                    (str[0] == 'S') ? 1 : 0);
+                return get_new_menu (m);
+            }
+        }            
+        return 0;
+    }
+    return 0;
+}
+
+string get_suiting_tip_for (object ob)
+{
+    string for_whom;
+    int i, n;
+    if (newbiep (ob)) for_whom = "n";
+    else if (wizp (ob)) for_whom = "g";
+    else if (hlpp (ob)) for_whom = "e";
+    else for_whom = "s";
+    for (i = 0; i < 1000; i++) {
+        n = random (max_tip);
+        if (member (tips,n) && (tips[n,TIP_ACTIVE])
+            && (strstr (tips[n,TIP_FOR], for_whom) != -1))
+            return tips[n,TIP_TEXT];
+    }
+    return 0;
+}

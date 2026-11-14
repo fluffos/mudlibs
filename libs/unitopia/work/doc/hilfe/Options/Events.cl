@@ -1,0 +1,36 @@
+Mit 'einstellungen kurier <optionen>' kannst Du Deinem Kurier mitteilen,
+wie er sich verhalten soll.
+
+   an
+   aus
+      Damit kann man den Kurier voruebergehend gaenzlich zum Schweigen
+      bringen bzw. ihn von seinem Redeverbot erloesen.
+      Es werden dabei aber alle anderen Einstellungen beibehalten.
+
+   farben an
+   farben aus   
+      Damit werden farbliche Hervorhebungen fuer bestimmte Meldungen
+      des Kuriers aktiviert bzw. wieder deaktiviert.
+      
+   echo an
+   echo aus
+      Damit kannst Du einstellen, ob Du statt einen einfachen 'Ok.'
+      die tatsaechliche Meldung, welche Du zu jemanden redest oder etwas
+      sagst, erhalten willst.
+      
+   puffer an
+   puffer aus
+      Falls Du einen Text editierst (z.B. einen Newsartikel oder einen Brief),
+      liefert Der Kurier keine Meldungen aus. Stattdessen merkt er sie sich,
+      und sagt sie Dir, wenn Du entweder nicht mehr editierst oder sich
+      zuviele Meldungen angesammelt haben.
+
+   <ereignis> <weitere optionen>
+   <ereignis> ?
+      Damit kannst Du Einstellungen zu bestimmten Ereignissen taetigen.
+      Alle verfuegbaren Ereignisse erhaeltst Du mit
+      'einstellungen kurier' aufgelistet.
+
+ Weitere Befehle:
+ 
+   ?: Diese Hilfe anzeigen.

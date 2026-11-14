@@ -1,0 +1,574 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/tools/properties.c
+// Description: Dynamische Eigenschaften
+// Author:      Gnomi
+//
+// $Log: properties.c,v $
+// Revision 1.4  2013-04-02 22:10:25  gnomi
+// Unterstuetzung fuer V-Item-Properties.
+//
+// Revision 1.3  2013-03-18 21:42:10  gnomi
+// Controllernamen geaendert.
+// delete() subtrahiert nicht mehr.
+//
+// Revision 1.2  2013-03-16 18:03:58  gnomi
+// Doku der Property-Controller.
+//
+// Revision 1.1  2013-03-16 15:15:25  gnomi
+// Property-Implementation.
+//
+
+#include <error.h>
+#include <property_master.h>
+#include <properties.h>
+
+varargs nomask mixed query_property_mapping(mapping properties, string postfix, int use, string name, object caller, mixed info, mixed* extra_args)
+{
+    mapping prop;
+    mixed value;
+    int flags;
+
+    name = PROPERTY_ROOT_MASTER->expand_property_name(name);
+
+    if(member(properties, name))
+        prop = properties[name];
+    else
+        prop = PROPERTY_ROOT_MASTER->query_property_info(name);
+
+    if(!prop)
+        return 0;
+
+    if(!((prop[PI_USES] || PU_DEFAULT) & use))
+        return 0;
+
+    flags = prop[PI_FLAGS];
+    if((flags & PF_LOCAL) && caller != this_object())
+        return 0;
+
+    if(prop[PI_GET_FUN + postfix])
+        value = call_other(prop[PI_MASTER][0], prop[PI_GET_FUN + postfix], prop, info, caller, this_object(), extra_args...);
+    else
+    {
+        value = prop[PI_VALUE];
+        if(!(flags & PF_NO_CLOSURE) && closurep(value))
+            value = funcall(value, info);
+    }
+
+    if(!(flags & (PF_GET_NOMASK | PF_LOCAL)))
+    {
+        string shortname = prop[PI_SHORTNAME];
+        foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+        {
+            catch(master->modify("query" + postfix,
+                &value, name, info, caller, this_object(), extra_args...); publish, reserve 10);
+            catch(master->modify("query" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+                &value, name, info, caller, this_object(), extra_args...); publish, reserve 10);
+        }
+    }
+
+    return value;
+}
+
+varargs nomask mixed set_property_mapping(mapping properties, string postfix, int use, string name, mixed value, object caller, mixed* extra_args)
+{
+    int flags, new, types;
+    mixed oldval;
+    mapping prop;
+
+    name = PROPERTY_ROOT_MASTER->expand_property_name(name);
+
+    if(member(properties, name))
+        prop = properties[name];
+    else
+    {
+        prop = PROPERTY_ROOT_MASTER->query_property_info(name);
+        if(!prop)
+            prop = ([
+                PI_VALUE: 0,
+                PI_MASTER: ({}),
+                PI_USES: use,
+            ]);
+
+        new = 1;
+    }
+
+    if(!((prop[PI_USES] || PU_DEFAULT) & use))
+        return 0;
+
+    oldval = prop[PI_VALUE];
+    flags = prop[PI_FLAGS];
+
+    if((flags & (PF_SET_LOCAL | PF_LOCAL)) && caller != this_object())
+        return (flags & PF_LOCAL) ? 0 : prop[PI_VALUE];
+
+    if((flags & PF_SINGLE_SHOT) && !new)
+        return prop[PI_VALUE];
+
+    types = prop[PI_TYPES];
+    if(types && !(types & PT_MIXED))
+    {
+        if(!(flags & PF_NO_CLOSURE))
+            types |= PT_CLOSURE;
+
+        if(!(types & (1 << typeof(value))))
+            raise_error("Illegal type for property '" + name + "'.\n");
+    }
+
+    if(!(flags & (PF_SET_NOMASK | PF_SET_LOCAL | PF_LOCAL)))
+    {
+        foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+        {
+            catch(master->modify("set" + postfix,
+                &value, name, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+            catch(master->modify("set" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+                &value, name, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        }
+    }
+
+    foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+    {
+        int res;
+
+        catch(res = master->forbidden("set" + postfix,
+            name, value, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        if(res)
+            return prop[PI_VALUE];
+
+        catch(res = master->forbidden("set" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+            name, value, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        if(res)
+            return prop[PI_VALUE];
+    }
+
+    if(prop[PI_SET_FUN + postfix])
+    {
+        oldval = copy(oldval);
+        value = call_other(prop[PI_MASTER][0], prop[PI_SET_FUN + postfix], prop, value, caller, this_object(), extra_args...);
+    }
+    else
+        prop[PI_VALUE] = value;
+
+    if(new)
+        m_add(properties, name, prop);
+
+    if(!(flags & PF_LOCAL))
+    {
+        foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+        {
+            catch(master->notify("set" + postfix,
+                name, value, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+            catch(master->notify("set" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+                name, value, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        }
+    }
+
+    return value;
+}
+
+varargs nomask mixed add_property_mapping(mapping properties, string postfix, int use, string name, mixed *args, object caller, mixed* extra_args)
+{
+    int flags, new;
+    mixed oldval, value, key;
+    mapping prop;
+
+    if(sizeof(args) == 1)
+    {
+        value = args[0];
+    }
+    else if(sizeof(args) == 2)
+    {
+        key = args[0];
+        value = args[1];
+    }
+    else
+        raise_error("Wrong number of arguments to add_property.");
+
+    name = PROPERTY_ROOT_MASTER->expand_property_name(name);
+
+    if(member(properties, name))
+        prop = properties[name];
+    else
+    {
+        prop = PROPERTY_ROOT_MASTER->query_property_info(name);
+        if(!prop)
+        {
+            if(sizeof(args) == 1)
+                return set_property_mapping(properties, postfix, use, name, args[0], caller);
+            else
+                prop = ([
+                    PI_VALUE: 0,
+                    PI_MASTER: ({}),
+                    PI_USES: use,
+                ]);
+        }
+
+        new = 1;
+    }
+
+    if(!((prop[PI_USES] || PU_DEFAULT) & use))
+        return 0;
+
+    oldval = prop[PI_VALUE];
+    flags = prop[PI_FLAGS];
+
+    if((flags & (PF_SET_LOCAL | PF_LOCAL)) && caller != this_object())
+        return (flags & PF_LOCAL) ? 0 : prop[PI_VALUE];
+
+    if(flags & PF_SINGLE_SHOT)
+        return prop[PI_VALUE];
+
+    if(!(flags & (PF_SET_NOMASK | PF_SET_LOCAL | PF_LOCAL)))
+    {
+        foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+        {
+            catch(master->modify("add" + postfix,
+                &value, name, key, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+            catch(master->modify("add" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+                &value, name, key, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        }
+    }
+
+    foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+    {
+        int res;
+
+        catch(res = master->forbidden("add" + postfix,
+            name, key, value, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        if(res)
+            return prop[PI_VALUE];
+
+        catch(res = master->forbidden("add" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+            name, key, value, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        if(res)
+            return prop[PI_VALUE];
+    }
+
+    if(prop[PI_ADD_FUN + postfix])
+    {
+        oldval = copy(oldval);
+        call_other(prop[PI_MASTER][0], prop[PI_ADD_FUN + postfix], prop, key, value, caller, this_object(), extra_args...);
+    }
+    else if(mappingp(oldval))
+    {
+        if(sizeof(args) != 2)
+            raise_error("Wrong number of arguments to add_property: Expected key and value.\n");
+
+        oldval = copy(oldval);
+        m_add(prop[PI_VALUE], key, value);
+    }
+    else if(pointerp(oldval))
+    {
+        if(sizeof(args) != 1)
+            raise_error("Wrong number of arguments to add_property: Did not expect a key.\n");
+        prop[PI_VALUE] += ({value});
+    }
+    else
+        prop[PI_VALUE] += value;
+
+    if(new)
+        m_add(properties, name, prop);
+
+    if(!(flags & PF_LOCAL))
+    {
+        foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+        {
+            catch(master->notify("add" + postfix,
+                name, key, value, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+            catch(master->notify("add" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+                name, key, value, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        }
+    }
+
+    return prop[PI_VALUE];
+}
+
+varargs nomask mixed delete_property_mapping(mapping properties, string postfix, int use, string name, mixed key, object caller, mixed* extra_args)
+{
+    int flags;
+    mixed oldval;
+    mapping prop;
+
+    name = PROPERTY_ROOT_MASTER->expand_property_name(name);
+
+    if(member(properties, name))
+        prop = properties[name];
+    else
+        return 0;
+
+    if(!((prop[PI_USES] || PU_DEFAULT) & use))
+        return 0;
+
+    oldval = prop[PI_VALUE];
+    flags = prop[PI_FLAGS];
+
+    if((flags & (PF_SET_LOCAL | PF_LOCAL)) && caller != this_object())
+        return (flags & PF_LOCAL) ? 0 : prop[PI_VALUE];
+
+    if(flags & PF_SINGLE_SHOT)
+        return prop[PI_VALUE];
+
+    foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+    {
+        int res;
+
+        catch(res = master->forbidden("delete" + postfix,
+            name, key, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        if(res)
+            return prop[PI_VALUE];
+
+        catch(res = master->forbidden("delete" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+            name, key, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        if(res)
+            return prop[PI_VALUE];
+    }
+
+    if(prop[PI_DEL_FUN + postfix])
+    {
+        oldval = copy(oldval);
+        call_other(prop[PI_MASTER][0], prop[PI_DEL_FUN + postfix], prop, key, caller, this_object(), extra_args...);
+    }
+    else if(mappingp(oldval))
+    {
+        oldval = copy(oldval);
+        m_delete(prop[PI_VALUE], key);
+    }
+    else if(pointerp(oldval))
+    {
+        int idx = rmember(prop[PI_VALUE], key);
+        if(idx >= 0)
+            prop[PI_VALUE][idx..idx] = ({});
+    }
+    else if(prop[PI_VALUE]) // Nicht meckern, wenn uninitialisiert.
+        raise_error("delete() is not supported for this data type.\n");
+
+    if(!(flags & PF_LOCAL))
+    {
+        foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+        {
+            catch(master->notify("delete" + postfix,
+                name, key, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+            catch(master->notify("delete" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+                name, key, oldval, caller, this_object(), extra_args...); publish, reserve 10);
+        }
+    }
+
+    return prop[PI_VALUE];
+}
+
+protected mapping save_property_mapping(mapping properties, string postfix, mixed* extra_args)
+{
+    mapping result = ([:1]);
+    foreach(string name, mapping prop: properties)
+        if(prop[PI_FLAGS] & PF_PERSISTANT)
+        {
+            mapping saved;
+            if(prop[PI_SAVE_FUN + postfix])
+                saved = call_other(prop[PI_MASTER][0], prop[PI_SAVE_FUN + postfix], prop, this_object(), extra_args...);
+            else
+                saved = ([ PI_VALUE: prop[PI_VALUE] ]);
+
+            m_add(result, name, saved);
+        }
+
+    return result;
+}
+
+protected mapping restore_property_mapping(mapping saved_properties, string postfix, mixed* extra_args)
+{
+    mapping result = ([:1]);
+    foreach(string name, mapping saved: saved_properties || ([]))
+    {
+        mapping prop = PROPERTY_ROOT_MASTER->query_property_info(name);
+        if(!prop)
+            prop = ([
+                PI_VALUE: 0,
+                PI_MASTER: ({}),
+            ]);
+
+        if(prop[PI_RESTORE_FUN + postfix])
+            call_other(prop[PI_MASTER][0], prop[PI_RESTORE_FUN + postfix], prop, saved, this_object(), extra_args...);
+        else
+            m_add(prop, PI_VALUE, saved[PI_VALUE]);
+
+        m_add(result, name, prop);
+
+        if(!(prop[PI_FLAGS] & PF_LOCAL))
+            foreach(mixed master: prop[PI_MASTER] + ({this_object()}))
+            {
+                catch(master->notify("restore" + postfix,
+                    name, prop[PI_VALUE], this_object(), extra_args...); publish, reserve 10);
+                catch(master->notify("restore" + postfix + "_" + CONTROLLER_PROPERTY_NAME(name),
+                    name, prop[PI_VALUE], this_object(), extra_args...); publish, reserve 10);
+            }
+    }
+
+    return result;
+}
+
+mapping query_property_info_mapping(mapping properties, string name, object caller)
+{
+    mapping prop = properties[PROPERTY_ROOT_MASTER->expand_property_name(name)];
+    if(prop && (prop[PI_FLAGS] & PF_LOCAL) && caller != this_object())
+        return 0;
+
+    return deep_copy(prop);
+}
+
+string* query_property_names_mapping(mapping properties, object caller)
+{
+    if(caller == this_object())
+        return m_indices(properties);
+
+    return m_indices(filter(properties, function int(string name, mapping prop) { return !(prop[PI_FLAGS] & PF_LOCAL); }));
+}
+
+mapping query_property_infos_mapping(mapping properties, object caller)
+{
+    if(caller == this_object())
+        return deep_copy(properties);
+
+    return deep_copy(filter(properties, function int(string name, mapping prop) { return !(prop[PI_FLAGS] & PF_LOCAL); }));
+}
+
+/*
+FUNKTION: modify_set
+DEKLARATION: void modify_set(mixed neuer_wert, string property_name, mixed alter_wert, object aufrufer, object item)
+BESCHREIBUNG:
+modify_set wird im Objekt selbst und den zustaendigen Property-Mastern
+aufgerufen, wenn im Item 'item' die Property 'property_name' vom 'aufrufer'
+auf 'neuer_wert' gesetzt werden soll. 'neuer_wert' wird dabei als Referenz
+uebergeben und kann veraendert werden.
+
+Es wird zudem auch modify_set_<property_name> aufgerufen.
+
+VERWEISE: set, forbidden_set, notify_set
+GRUPPEN: properties
+*/
+/*
+FUNKTION: forbidden_set
+DEKLARATION: int forbidden_set(string property_name, mixed neuer_wert, mixed alter_wert, object aufrufer, object item)
+BESCHREIBUNG:
+forbidden_set wird im Objekt selbst und den zustaendigen Property-Mastern
+aufgerufen, wenn im Item 'item' die Property 'property_name' vom 'aufrufer'
+auf 'neuer_wert' gesetzt werden soll. Liefert einer dieser Controller
+einen Wert != 0 zurueck, so wird diese Aenderung verboten.
+
+Es wird zudem auch forbidden_set_<property_name> aufgerufen.
+Die forbidden_set-Controller werden nach den modify_set-Controllern
+aufgerufen.
+
+VERWEISE: set, modify_set, notify_set
+GRUPPEN: properties
+*/
+/*
+FUNKTION: notify_set
+DEKLARATION: void notify_set(string property_name, mixed neuer_wert, mixed alter_wert, object aufrufer, object item)
+BESCHREIBUNG:
+notify_set wird im Objekt selbst und den zustaendigen Property-Mastern
+aufgerufen, nachdem im Item 'item' die Property 'property_name' vom
+'aufrufer' auf 'neuer_wert' gesetzt wurde.
+
+Es wird zudem auch notify_set_<property_name> aufgerufen.
+
+VERWEISE: set, modify_set, forbidden_set
+GRUPPEN: properties
+*/
+/*
+FUNKTION: modify_query
+DEKLARATION: void modify_query(mixed wert, string property_name, mixed info, object aufrufer, object item)
+BESCHREIBUNG:
+modify_query wird im Objekt selbst und den zustaendigen Property-Mastern
+aufgerufen, wenn im Item 'item' die Property 'property_name' vom 'aufrufer'
+abgefragt wird. 'wert' enthaelt den potentiellen Rueckgabewert, wird dabei
+als Referenz uebergeben und kann veraendert werden. 'info' ist der optionale
+zweite Parameter vom query()-Aufruf.
+
+Es wird zudem auch modify_query_<property_name> aufgerufen.
+
+VERWEISE: query
+GRUPPEN: properties
+*/
+/*
+FUNKTION: modify_add
+DEKLARATION: void modify_add(mixed add_wert, string property_name, mixed key, mixed alter_wert, object aufrufer, object item)
+BESCHREIBUNG:
+modify_add wird im Objekt selbst und den zustaendigen Property-Mastern
+bei einem Aufruf von add() im Item 'item' auf die Property 'property_name'
+von 'aufrufer' aufgerufen. 'key' und 'add_wert' sind dabei die Parameter
+vom add()-Aufruf. 'key' ist dabei unter Umstaenden nicht gesetzt (0).
+'add_wert' wird per Referenz uebergeben und kann veraendert werden.
+'alter_wert' enthaelt den vollstaendigen Wert der Property (also nicht nur
+den Wert, der 'key' zugeordnet ist).
+
+Es wird zudem auch modify_add_<property_name> aufgerufen.
+
+VERWEISE: add, forbidden_add, notify_add
+GRUPPEN: properties
+*/
+/*
+FUNKTION: forbidden_add
+DEKLARATION: int forbidden_add(string property_name, mixed key, mixed add_wert, mixed alter_wert, object aufrufer, object item)
+BESCHREIBUNG:
+forbidden_add wird im Objekt selbst und den zustaendigen Property-Mastern
+bei einem Aufruf von add() im Item 'item' auf die Property 'property_name'
+von 'aufrufer' aufgerufen. 'key' und 'add_wert' sind dabei die Parameter
+vom add()-Aufruf. 'key' ist dabei unter Umstaenden nicht gesetzt (0).
+'alter_wert' enthaelt den vollstaendigen Wert der Property (also nicht nur
+den Wert, der 'key' zugeordnet ist). Liefert einer dieser Controller einen
+Wert != 0 zurueck, so wird diese Operation verboten.
+
+Es wird zudem auch forbidden_add_<property_name> aufgerufen.
+Die forbidden_add-Controller werden nach den modify_add-Controllern
+aufgerufen.
+
+VERWEISE: add, modify_add, notify_add
+GRUPPEN: properties
+*/
+/*
+FUNKTION: notify_add
+DEKLARATION: void notify_add(string property_name, mixed key, mixed add_wert, mixed alter_wert, object aufrufer, object item)
+BESCHREIBUNG:
+notify_add wird im Objekt selbst und den zustaendigen Property-Mastern
+bei einem Aufruf von add() im Item 'item' auf die Property 'property_name'
+von 'aufrufer' aufgerufen. 'key' und 'add_wert' sind dabei die Parameter
+vom add()-Aufruf. 'key' ist dabei unter Umstaenden nicht gesetzt (0).
+'alter_wert' enthaelt den vollstaendigen Wert der Property (also nicht nur
+den Wert, der 'key' zugeordnet ist).
+
+Es wird zudem auch notify_add_<property_name> aufgerufen.
+
+VERWEISE: add, modify_add, forbidden_add
+GRUPPEN: properties
+*/
+/*
+FUNKTION: forbidden_delete
+DEKLARATION: int forbidden_delete(string property_name, mixed key, mixed alter_wert, object aufrufer, object item)
+BESCHREIBUNG:
+forbidden_delete wird im Objekt selbst und den zustaendigen Property-Mastern
+bei einem Aufruf von delete() im Item 'item' auf die Property 'property_name'
+von 'aufrufer' aufgerufen. 'key' ist dabei der Parameter vom delete()-Aufruf.
+'alter_wert' enthaelt den vollstaendigen Wert der Property (also nicht nur
+den Wert, der 'key' zugeordnet ist). Liefert einer dieser Controller einen
+Wert != 0 zurueck, so wird diese Operation verboten.
+
+Es wird zudem auch forbidden_delete_<property_name> aufgerufen.
+
+VERWEISE: delete, notify_delete
+GRUPPEN: properties
+*/
+/*
+FUNKTION: notify_delete
+DEKLARATION: void notify_delete(string property_name, mixed key, mixed alter_wert, object aufrufer, object item)
+BESCHREIBUNG:
+notify_delete wird im Objekt selbst und den zustaendigen Property-Mastern
+bei einem Aufruf von delete() im Item 'item' auf die Property 'property_name'
+von 'aufrufer' aufgerufen. 'key' ist dabei dre Parameter vom delete()-Aufruf.
+'alter_wert' enthaelt den vollstaendigen Wert der Property (also nicht nur
+den Wert, der 'key' zugeordnet ist).
+
+Es wird zudem auch notify_delete_<property_name> aufgerufen.
+
+VERWEISE: delete, forbidden_delete
+GRUPPEN: properties
+*/

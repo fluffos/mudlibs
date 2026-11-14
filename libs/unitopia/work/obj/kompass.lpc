@@ -1,0 +1,269 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/obj/kompass.c
+// Description: Ein Kompass zum Anpeilen des Mittelpunkts von UNItopia
+// Author:	Francis
+//
+//   Parsec   08.02.99   Raumtyp "kompass" eingebaut,
+//                       Ebenen+Campus beruecksichtigt
+//
+// $Log: kompass.c,v $
+// Revision 1.14  2014/03/18 22:43:10  sorcerer
+// Inherits: compass_logic raus, room_types rein
+//
+// Revision 1.13  2014/01/01 07:08:09  sorcerer
+// Neuer Pfad fuer compass_logic; Altlasten raus
+//
+// Revision 1.12  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.11  2003/02/26 03:59:42  gnomi
+// Zusaetzliche IDs.
+//
+// Revision 1.10  2003/01/25 04:41:45  gnomi
+// Typo.
+//
+// Revision 1.9  2002/01/13 04:50:18  freaky
+// query_long() umgestellt.
+//
+// Revision 1.8  2001/03/08 21:57:19  gnomi
+// Umgebungshandling in compass_logic ausgelagert.
+//
+// Revision 1.7  2001/01/23 13:15:17  anin
+// v_items bei clones ueber v_item-master, symbollongs mit ins create
+//
+// Revision 1.6  2001/01/13 01:39:27  gnomi
+// Typen "repraesentant" und "umgebung" beachten.
+//
+// Revision 1.5  2000/10/07 14:39:08  sissi
+// Kompass komplett erneuert; Long und ein paar v-Items von Torin,
+// Rest von mir.
+//
+// Revision 1.4  2000/09/10 13:34:27  freaky
+// add_actions(): 3. Parameter geaendert.
+//
+// Revision 1.3  2000/08/18 17:35:45  freaky
+// fuer Schiffe auf query_ship() umgestellt.
+//
+
+inherit "/i/item";
+inherit "/i/move";
+inherit "/i/value";
+inherit "/i/tools/room_types";
+
+#include <apps.h>
+#include <config.h>
+#include <deklin.h>
+#include <level.h>
+#include <invis.h>
+
+
+string nadellong ()
+{
+    int     *karts, level, grad;
+    int     *position;
+    object  schiff, env, ob;
+    string  domain, msg, msg_other ;
+    mixed   tmp ;
+
+    level = (int)previous_object()->query_level();
+    ob = this_player();
+    env = get_environment(ob);
+
+    if (!env)
+        return wrap ("Die Nadeln sind nur noch schemenhaft zu "
+            "erkennen, anscheinend befindest Du Dich im Nichts.");
+
+    position = KOORDINATEN_MASTER->get_polar_coordinates(ob);
+    if ( position[0] < 0 )
+        return wrap ("Die Nadeln haengen total schlapp und muede "
+            "in ihrer Halterung; anscheinend befindest Du Dich weit, "
+            "weit weg vom Mittelpunkt der Welt.");
+
+    domain = env->query_room_domain() ;
+
+    if ((tmp = env->query_type("kompass")) &&
+         (stringp(tmp)))
+    {
+        msg = tmp ;
+        msg = regreplace( msg, "%g",  (string) position[0], 1);
+        msg = regreplace( msg, "%sm", (string) position[1], 1);
+        return wrap(apply(CLOSURE_CONTAINER->do_bind(
+            mixed_to_closure( msg, ({ 'kompass //'
+                                   })), ({})), this_object()));
+
+    }
+    else if ( env->query_type( "kompass_defekt") )
+	return ( "Die Kompassnadeln drehen sich wie verrueckt.\n");
+    else if ( domain == "Campus" )
+    {
+        this_player()->set_handeln();
+        return wrap ("Die rote Nadel zeigt genau nach Norden zum Nordpol. "
+           "Die gruene Nadel... welche gruene Nadel? Die gruene Nadel hat "
+           "sich in Luft aufgeloest.");
+    }
+    else if ( domain == "Ebenen" &&
+              !env->query_type( "schiff_erlaubt")
+              // damit der vom Ozean aus zugaengliche Teil der Ebenen normal
+              // behandelt wird
+        )
+    {
+        this_player()->set_handeln();
+	return wrap("Die Kompassnadeln zittern stark und pendeln immer "
+                    "wieder hin und her. "
+                    "Anscheinend befindet sich der Mittelpunkt der Welt "
+                    "nicht in dieser Dimension.");
+    }
+    else if (position[1] <= 0)
+	return wrap ("Die rote Kompassnadel dreht sich wie verrueckt, "
+	    "die gruene steht auf 0 sm. Anscheinend bist du in "
+            "unmittelbarer Naehe des Mittelpunktes der Welt.");
+    else
+    {
+	tmp = "Die rote Kompassnadel hat sich auf "+
+              (string)position[0]+" Grad eingependelt.\n"
+              "Die gruene Nadel zeigt auf "+(string)position[1]+" sm.\n";
+	if (level >= LVL_WIZ)
+        {
+	    grad = (position[0] + 180) % 360;
+	    karts = pol2xy( grad, position[1] );
+	    return tmp + 
+	        "\nDaraus berechneter Standort:  m"+
+                karts[0]+"_"+karts[1]+".\n";
+        }
+        return tmp;
+    }
+
+}
+
+string query_long(object who)
+{
+    // wenn man den Kompass selber in der Hand hat dreht man ihn
+    // um und sieht die Gravur; bekommt man ihn gezeigt, so dreht
+    // man ihn logischerweise nicht um.
+    string long;
+    long = wrap (
+        "Du hast ein kleines, kreisrundes Messinggehaeuse vor Dir, "
+        "es ist mit einigen magischen und seemaennischen Symbolen verziert. "
+        "Es sieht fast aus wie eine Taschenuhr, unter einem glaesernen "
+        "Deckel hat es naemlich auch zwei Zeiger, oder besser gesagt, "
+        "zwei Nadeln. Die beide Nadeln sind unterschiedlich lang und zeigen "
+        "auf unterschiedliche Skalen.");
+    if (previous_object() == environment())
+        return long + wrap (
+            "Beim Umdrehen "+des()+" entdeckst Du auf der Unterseite "
+            "eine Gravur.");
+    return long;
+}
+
+
+void create()
+{
+    int i;
+    set_gender("maennlich");
+    set_id(({"kompass", "magnetkompass","marinekompass"}));
+    set_name("kompass");
+    set_material( ({"metall"}) );
+    set_value(50);
+    set_weight(1);
+    set_smell ("Salziger Meeresgeruch haftet an dem Gehaeuse.");
+    set_feel ("Das Glas auf der Oberseite ist Glasglatt, die "
+        "Gravur an der Unterseite ist rauh, im Messinggehaeuse "
+        "fuehlst Du einige Kratzer.");
+
+    if (clonep())
+    {
+        add_v_item (([
+            "name":"nadeln","gender":"weiblich","plural":1,
+            "id":({"nadel","nadeln","zeiger","kompassnadel","kompassnadeln"}),
+            "long":#'nadellong
+        ]));
+        add_v_item_master(load_name());
+        clear_initial_conservation_data();
+    }
+    else
+    {
+       string* symbollongs = ({
+    	    "Dieses Symbol ist ein Anker, leicht zu erkennen.",
+    	    "Dieses Symbol laesst sich mit etwas gutem "
+    		"Willen als ein Leuchtturm erkennen.",
+    	    "Dieses Symbol zeigt drei unterschiedlich grosse, in einander "
+    		"liegende Ringe.",
+    	    "Dieses Symbol identifizierst Du als einen Schwimmring.",
+    	    "Dieses Symbol zeigt einen eifoermigen Gegenstand, allerdings "
+    		"ist der Rand nicht glatt wie bei einem "
+    		"Ei sondern stark gewellt und gezackt.",
+    	    "Dieses Symbol koennte eine Haifischflosse darstellen.",
+    	    "Dieses Symbol zeigt ein Fast-Quadrat; eine "
+    		"der vier Ecken ist naemlich abgerundet.",
+    	    "Dieses Symbol scheint einen Seestern darzustellen.",
+    	    "Dieses Symbol ist ein ungleichseitiges Dreieck "
+    		"mit einem eingeschlossenen Kreis.",
+    	    "Dieses Symbol sieht aus wie eine Gangway."
+    	});
+    	add_v_item (([
+    	    "name":"skalen","gender":"weiblich","plural":1,
+    	    "long":"Zwei Skalen sind in dem Messinggehaeuse angebracht. "
+    		"Jede der beiden Nadeln zeigt auf eine andere. Die aeussere "
+    		"Skala in gruener Farbe zeigt Seemeilen, die innere Skala "
+    		"in roter Farbe zeigt Gradangaben."
+    	]));
+    	add_v_item (([
+    	    "name":"skala","gender":"weiblich","adjektiv":({"aeusser"}),
+    	    "long":"Die aeussere Skala in gruener Farbe zeigt Seemeilen."
+    	]));
+    	add_v_item (([
+    	    "name":"skala","gender":"weiblich","adjektiv":({"inner"}),
+    	    "long":"Die innere Skala in roter Farbe zeigt Gradangaben."
+    	]));
+    	add_v_item (([
+    	    "name":"deckel","gender":"maennlich",
+    	    "id":({"deckel","glas"}),"adjektiv":"glaesern",
+    	    "long":"Das Glas des Deckels ist schon etwas milchig geworden."
+    	]));
+    	add_v_item (([
+    	    "name":"symbole","gender":"saechlich","plural":1,
+    	    "id":({"symbole"}),
+    	    "long":"Du siehst einige magische und einige seemaennische "
+    		"Symbole, zehn Stueck, um genau zu sein. "
+    		"Schau sie Dir doch ruhig einzeln der Reihe nach an."
+    	]));
+    	for (i = 0; i < sizeof (symbollongs); i++)
+    	    add_v_item (([
+    		"name":"symbol","gender":"saechlich",
+    		"id":({"symbol"}),
+    		"long":symbollongs[i]
+    	    ]));
+    	add_v_item (([
+    	    "name":"messinggehaeuse","gender":"saechlich",
+    	    "id":({"gehaeusse","messinggehaeusse","gehaeuse",
+                   "messinggehaeuse"}),
+    	    "long":"Das Messinggehaeuse ist mit Symbolen verziert; "
+    		"es hat schon einige Kratzer abbekommen.",
+    	    "feel":"Du spuerst einige Kratzer im einst glatten "
+    		"Messinggehaeuse."
+    	]));
+    	add_v_item (([
+    	    "name":"kratzer","gender":"maennlich","plural":1,
+    	    "long":"Langweilige Kratzer, wie sie entstehen, wenn man "
+    		"einen Gegenstand nicht staendig in Watte einhuellt.",
+    	    "smell":"Kaum zu glauben, Du riechst an den Kratzern. "
+    		"Aber Deine Muehe wird belohnt: Du riechst den "
+    		"Geruch des grossen, weiten Magyras.",
+    	    "feel":"Die Kratzer fuehlen sich an duenne, lange, nach innen "
+    		"gerichtete Unregelmaessigkeiten im Messinggehaeuse."
+    	]));
+    	add_v_item (([
+    	    "name":"gravur","gender":"weiblich",
+    	    "id":({"gravur","buchstaben"}),
+    	    "long":"Auf dem Boden des Messinggehaeuses sind einige "
+    		"recht kleine Buchstaben, nicht allzu leicht zu lesen, "
+    		"eingraviert. Was sie wohl bedeuten moegen, wenn man "
+    		"sie liest?",
+    	    "read":"Die Gravur ist schwer zu lesen; "
+    		"mit viel Muehe entzifferst Du:\n"
+    		"Rote Nadel   -> Richtung Tadmor\n"
+    		"Gruene Nadel -> Entfernung Tadmor\n"
+    	]));
+    }
+}

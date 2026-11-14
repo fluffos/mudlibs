@@ -1,0 +1,134 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /apps/autoloader.c
+// Description: Autoloaderverwaltung
+// Author:      Sissi
+// Modified by:	Freaky (13.10.95) Abfragen, ob AL-File ueberhaupt existiert
+// 		Freaky (27.10.95) check_liste()
+// 		Garthan (23.04.96) filed controlled 
+//		Freaky (06.01.2000) Autoloader werden im create() alle geladen
+//		Freaky (12.01.2000) ALs nicht mehr im create() laden
+//
+// $Log: autoloader.c,v $
+// Revision 1.7  2003/05/30 12:21:44  freaky
+// laden aller Autoloader rausgenommen, da die vom Master geladen werden.
+//
+// Revision 1.6  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.5  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+
+#include <level.h>
+#include <gilden.h>
+#include <touch.h>
+#include <apps.h>
+#include <filed.h>
+#include <rtlimits.h>
+
+// Muss groesser als query_limits(1)[LIMIT_EVAL] sein!
+#define MAX_LOAD_EVALS (query_limits(1)[LIMIT_EVAL] + 10)
+
+int query_genehmigt(string s)
+{
+    object gob;
+
+    if ((gob = touch(GILDEN_OB, NO_LOG | NO_WRITE)) &&
+	    gob->valid_autoloader(s))
+        return 1;
+    if (wizp(previous_object()) ||
+	    testplayerp(previous_object()) ||
+	    FILED->query("autoloader", s, FD_FILE))
+        return 1;
+    sys_log("autoloader_remove","AL: " + s + "\nTP: " +
+	    previous_object()->query_name() + "\n\n");
+    return 0;
+}
+
+string query_autoloader_replacement (string oldfile)
+{
+    return FILED->query_autoloader_replacement (oldfile);
+}
+
+private string index_entries(mixed a)
+{
+    return a[FD_FILE];
+}
+
+string *query_liste()
+{
+    return map(FILED->query_entries("autoloader"), #'index_entries);
+}
+
+void debug()
+{
+    this_player()->more(query_liste());
+}
+
+void check_liste()
+{
+    int i;
+    object ob;
+    string *liste;
+
+    liste = query_liste();
+
+    for (i = sizeof(liste); i--; )
+    {
+	if (file_size(liste[i] + ".lpc") <= 0)
+       	{
+	    write(liste[i]+" gibt es nicht.\n");
+	}
+	else
+	{
+	    ob = touch(liste[i]);
+	    if (!ob)
+	    {
+		write(liste[i]+" laesst sich nicht Laden.\n");
+	    }
+	    else if (!function_exists("query_auto_load",ob))
+	    {
+		write(liste[i]+" hat keine query_auto_load-Funktion.\n");
+	    }
+	}
+    }
+}
+
+#if 0
+// Fri May 30 14:13:25 CEST 2003  --  Freaky
+// Bitte nicht hier machen, da Autoloader beim Start vom Master geladen werden
+void create()
+{
+    int i;
+    string *liste, err;
+    object ob;
+
+    liste = query_liste();
+
+    for (i = sizeof(liste); i--; )
+    {
+	debug_message("Loading autoloader: " + liste[i] + " ");
+	if (err = catch(ob = limited(lambda(0,({#'touch, liste[i]})),
+		    LIMIT_EVAL,MAX_LOAD_EVALS)))
+	{
+	    err = " " + liste[i] + ": " + err + "\n";
+	    write(err);
+	    debug_message(err);
+	}
+	else if (!ob)
+	{
+	    err = " " + liste[i] + ": File laesst sich nicht laden.\n";
+	    write(err);
+	    debug_message(err);
+	}
+	debug_message(" " + get_eval_cost() + " evals left.\n");
+    }
+}
+#else
+void create()
+{
+}
+#endif

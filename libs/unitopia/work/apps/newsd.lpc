@@ -1,0 +1,1875 @@
+// This file is part of UNItopia Mudlib.
+// Copyright 1993 by Francis, Freaky, Garthan. All rights reserved.
+// ----------------------------------------------------------------
+// File:        /apps/newsd.c
+// Description: Newsserver
+// Author:      Freaky (16.01.93)
+
+// UID: Apps
+
+// Modified by: Freaky (26.04.95) valid_* und query_dates() ueberarbeitet
+//			(Man kann jetzt auch Bretter nur fuer DL's machen)
+// Modified by: Freaky (05.12.95) nach /apps geschoben News sind jetzt
+//                      unter /var/spool/news
+// Modified by:	Freaky (14.06.96) artikel_nr ist jetzt im GRP_SAVE_FILE
+// 		Garthan	(27.08.96) Gildenbrettnamen liefert nun die Gilde.
+//              Kurdel (05.02.97) in query_times gruppe=="" beruecksichtigt
+//                                (/room/rathaus/news ruft es so auf)
+//              Copperhead(22.07.97) Abfragen fuer Spielerratsbrett eingebaut.
+//		Freaky (16.08.97) Kleinere Bugfixes bei valid_read/write
+//			und den Funktionen zum Abfragen der Bretter
+//		Freaky (16.12.97) Rats-Gruppe in query_dates()
+//		Freaky (20.11.1999) Cache verbessert.
+//		Freaky (20.11.1999) Cache repariert.
+//
+// $Log: newsd.c,v $
+// Revision 1.62  2016/01/25 19:10:19  gnomi
+// TK- und Programmierung-News beim Login anzeigen.
+//
+// Revision 1.61  2011-12-01 16:50:36  gnomi
+// Typ korrigiert.
+//
+// Revision 1.60  2010-07-13 18:25:21  gnomi
+// Ratsmitglieder/Raetsel gibt's schon lange nicht mehr.
+//
+// Revision 1.59  2009-06-17 07:43:40  gnomi
+// add_master: Man kann jetzt auch Flags angeben.
+//
+// Revision 1.58  2009-04-16 21:48:26  gnomi
+// JUNK_SPOOL um MID-Datenbank erweitert.
+//
+// Revision 1.57  2009-04-15 13:35:23  gnomi
+// Nicht-Artikel-Dateien besser rausfiltern.
+//
+// Revision 1.56  2009-03-20 07:44:49  gnomi
+// Abspeichern bei Gruppenaenderungen.
+//
+// Revision 1.55  2008-04-02 07:53:07  gnomi
+// Offline-Zugriff ermoeglichen.
+// Optimierungen bei der Gruppenauswertung.
+// Hilfsfunktionen fuer den inewsd.
+//
+// Revision 1.54  2008/02/28 08:47:43  gnomi
+// Notwendige Schnittstellen fuers InterMUD eingebaut.
+//
+// Revision 1.53  2005/12/18 21:39:38  gnomi
+// Kleiner Patch, um gerade geloeschte Gruppen zu beachten.
+//
+// Revision 1.52  2005/03/15 18:45:28  gnomi
+// make_shared_string raus.
+// Kaputte Artikel werden jetzt nach /var/adm/news verschoben.
+//
+// Revision 1.51  2004/07/04 00:17:11  gnomi
+// BRETT-syslog durch do_error2 ersetzt bzw. an einigen Stellen ganz
+// abgeschafft. 'zern -t'-Funktionalitaet hinzugefuegt.
+//
+// Revision 1.50  2003/07/02 02:32:18  gnomi
+// Sicherheitsluecke (Vertrauen auf TI/TP) behoben.
+//
+// Revision 1.49  2002/04/15 04:05:47  gnomi
+// query_artikel_numbers robuster gemacht.
+//
+// Revision 1.48  2002/04/10 05:18:33  gnomi
+// Einige Variableninitialisierungen wegen Typcheck getrennt.
+//
+// Revision 1.47  2002/03/28 09:10:40  gnomi
+// news_index benachrichtigen.
+//
+// Revision 1.46  2002/02/04 02:51:22  gnomi
+// Noch ein Bugfix in move_thread.
+//
+// Revision 1.45  2002/02/04 02:08:31  gnomi
+// Bugfix beim Verschieben von Artikeln behoben.
+//
+// Revision 1.44  2002/01/23 09:21:00  gnomi
+// Die Arrays mit den Berechtigten werden jetzt sortiert.
+//
+// Revision 1.43  2001/12/02 17:00:58  sissi
+// Irgendwer hat hier die MAX_CACHE_SIZE von 4 auf 5 erhoeht.
+//
+// Revision 1.42  2001/11/25 23:58:13  gnomi
+// Cache fuer die Rechteverwaltung eingefuehrt.
+//
+// Revision 1.41  2001/11/25 09:58:19  gnomi
+// Cache-Groesse verringert (war ich auch nicht)
+// Cache fuers Rechtesystem eingefuehrt.
+//
+// Revision 1.40  2001/11/21 21:19:20  gnomi
+// Admins duerfen alles. (Und nun auch wieder wahllos Artikel loeschen.)
+//
+ 
+#pragma strong_types
+
+
+#include <level.h>
+#include <news.h>
+#include <config.h>
+#include <gilden.h>
+#include <apps.h>
+#include <math.h>
+#include <files.h>
+#include <error.h>
+#include <touch.h>
+
+inherit "/i/tools/security";
+
+// Fehler, die wirklich fuer uns und nicht fuer previous_object() sind.
+#define ERROR(x) do_warning2(x,__FILE__,object_name(),__LINE__)
+
+#define BRETT_PATH "/var/spool/news/"
+#define BRETT_FEHLER "/var/adm/news/"
+#define OWNERSD "/apps/news_ownersd"
+#define OWNER_MANAGER "/room/rathaus/news"
+#define TITEL_LINE 2
+#define TEXT_LINE 6
+#define NAME_LINE 4
+#define LINE "-------------------------------------------------------------------------------\n"
+
+#define INGAME_BRETTER ({"Engel","Gilden","Schiffe","Spieler"})
+#define GEHEIME_BRETTER ({"Interdomain","Ratsmitglieder/Intern"})
+#define UNDELETABLE ({"InterMUD"})
+#define GRP_SAVE_FILE "artikel"
+#define JUNK_GRP ({GRP_SAVE_FILE".o"})
+#define JUNK_BRT ({"DATES" })
+#define JUNK_SPOOL ({ "mids.o", "mids.db" })
+
+#define MAX_CACHE_SIZE 5
+
+#define OWN_MASTERS (["Alle","Spielerrat","Engel","Goetter","Lords","Gildenmitglieder","Vorstand"])
+#define RESP_OBJECT (this_player()||previous_object())
+
+nosave mapping owners;		// Newsadministratoren
+				//  2. Index: Recht(PERM_OWNER, PERM_READ,
+				//            oder PERM_WRITE)
+nosave mapping masters;		// Master, welche bestimmte Bretter regeln
+				// "Name": Datei, Funktionsname
+				//   -> Fun(object player, int erlaubnis,
+				//          string brett, string gruppe)
+				// liefert 0 fuer verboten, !=0 fuer erlaubt
+nosave mapping perm_cache;	// Speichert zu jedem Objekt zwei Mappings ab:
+				// ([ "/Brett/Gruppe:"+permision ])
+				// Ersteres beinhaltet alle Gruppen, fuer die
+				// derjenige die Rechte besitzt, und zweiteres,
+				// wo er die rechte nicht hat.
+				
+int artikel_nr;			// Nummer des letzten Artikels
+mixed *eintrag;			// Artikel-Uebersicht
+mixed *artikel_baum;            // Neue Baumstruktur
+
+nosave string cache;		// Brett/Gruppe von 'eintrag'
+nosave mapping caches;		// Cache
+
+nosave int hit, fault, fast, hit2;	// Statistik
+nosave mapping gets = ([]);		// Statistik (auch zur Cache-Berechnung)
+
+int query_hit() { return hit; }
+int query_hit2() { return hit2; }
+int query_fault() { return fault; }
+int query_fast() { return fast; }
+mapping query_gets() { return gets; }
+
+string *query_caches()
+{
+    return m_indices(caches);
+}
+
+void create()
+{
+    mapping *data;
+
+    if (!perm_cache)
+	perm_cache = m_allocate(0,2);
+    data = OWNERSD->query_owners();
+    owners = data[0];
+    masters = data[1];
+    if (widthof(owners)<3)
+	owners = m_reallocate(owners,3);
+    if (widthof(masters)<3)
+	masters = m_reallocate(masters,3);
+    masters+=([
+        "Alle":NEWSD;"is_one_of_all";GRP_ALLOW_NAME|GRP_ALL_BOARDS,
+	"Spielerrat":SPIELERRAT;"is_spielerrat";GRP_ALLOW_NAME|GRP_ALL_BOARDS,
+	"Engel":NEWSD;"is_hlp";GRP_ALLOW_NAME|GRP_ALL_BOARDS,
+	"Goetter":NEWSD;"is_wiz";GRP_ALLOW_NAME|GRP_ALL_BOARDS,
+	"Lords":NEWSD;"is_lord";GRP_ALLOW_NAME|GRP_ALL_BOARDS,
+	"Gildenmitglieder":NEWSD;"is_gildenmitglied";GRP_ALLOW_NAME,
+	"Vorstand":NEWSD;"is_vorstand";GRP_ALLOW_NAME|GRP_ALL_BOARDS,
+	     ]);
+    if (!caches)
+	caches = m_allocate(0,3);
+
+    add_security_condition(#'sc_euid_as_tp);
+    add_security_condition("/obj/newsreader#");
+}
+
+private int secure()
+{
+    return this_interactive() &&
+	   check_security();
+}
+
+private void save_owners()
+{
+    OWNERSD->save_owners(owners,masters-OWN_MASTERS);
+}
+
+private string make_key(string brett, string gruppe)
+{
+    string key;
+
+    key = "/";
+    if(brett)
+    {
+	key += brett;
+	if (gruppe)
+	    key += "/"+gruppe;
+    }
+    return key;
+}
+
+private int validate_owner_call()
+{
+    return previous_object() && object_name(previous_object()) == OWNER_MANAGER;
+}
+
+varargs int is_one_of_all(mixed player)
+{
+    return 1;
+}
+
+varargs int is_hlp(mixed player)
+{
+    if(stringp(player))
+	return PLAYER_READER->query(player, "level")>= LVL_HLP;
+
+    return hlpp(player) || wizp(player) ||
+	    (load_name(player)==LOGIN_OB && player->query_level()>=LVL_HLP);
+	
+}
+
+varargs int is_wiz(mixed player)
+{
+    if(stringp(player))
+	return PLAYER_READER->query(player, "level")>= LVL_WIZ;
+
+    return wizp(player) ||
+	(load_name(player)==LOGIN_OB && player->query_level()>=LVL_WIZ);
+}
+
+varargs int is_lord(mixed player)
+{
+    if(stringp(player))
+	return PLAYER_READER->query(player, "level")>= LVL_VOGT &&
+	    (sizeof(DOMAIN_INFOS->query_domains_of(player)) ||
+	    member(FILED->query_all_auth(), player)>=0 ||
+	    member(ADMINS, player)>=0);
+	      
+    return lordp(player);
+}
+
+varargs int is_gildenmitglied(mixed player, int perm, string brett, string gruppe)
+{
+    if(!gruppe)
+	return 0;
+
+    if(stringp(player))
+	return member(GILDEN_OB->query_one_gilden_info(
+	    PLAYER_READER->query(player, "gilde"),
+	    GILDEN_BRETTER)||({}), gruppe)>=0;
+	
+    return member(player->query_gilden_info(GILDEN_BRETTER)||({}),gruppe)>=0;
+}
+
+varargs int is_vorstand(mixed player, int perm, string brett, string gruppe)
+{
+    if(stringp(player))
+	return member(VORSTAND||({}),player)>=0;
+    
+    return member(VORSTAND||({}),player->query_real_name())>=0;
+}
+
+// Liefert 1, wenn fuer denjenigen bereits ein Eintrag existiert.
+int add_to_cache(mixed wer)
+{
+    if(member(perm_cache,wer))
+	return 1;
+    m_delete(perm_cache,0);
+    perm_cache[wer,0] = ([:0]);
+    perm_cache[wer,1] = ([:0]);
+    return 0;
+}
+
+// Liefert 1, wenn kein Eintrag fuer denjenigen existierte
+int delete_from_cache(mixed wer)
+{
+    if(!member(perm_cache,wer))
+	return 1;
+    m_delete(perm_cache,wer);
+    m_delete(perm_cache,0);
+    return 0;
+}
+
+mapping query_perm_cache() {if(adminp(this_interactive()) && this_player()==this_interactive()) return perm_cache;}
+
+varargs string add_perm(int perm, mixed names, string brett, string gruppe)
+{
+    string key, *data;
+
+    if (!validate_owner_call())
+	return "Das darfst Du nicht.";
+    if (stringp(names))
+	names = ({ names });
+    if (!pointerp(names))
+	return "Ungueltiger 2. Parameter.";
+    foreach(string str:names)
+    {
+	if(!player_exists(str) && !member(masters,str) &&
+	    !GROUP_MASTER->group_exists(str))
+	{
+	    if(lower_case(str) == str)
+		return "Unbekannter Spieler '"+str+"'.";
+	    else
+		return "Unbekannte Gruppe '"+str+"'.";
+	}
+    }
+    key = make_key(brett, gruppe);
+    if (!owners[key,perm])
+	owners[key,perm] = ({});
+
+    owners[key,perm] = sort_array((owners[key,perm]-names)+names,#'>);
+
+    if (!sizeof(owners[key,perm]))
+	owners[key,perm] = 0;
+
+    if (!owners[key,PERM_OWNER] &&
+	!owners[key,PERM_READ]  &&
+	!owners[key,PERM_WRITE])
+	m_delete(owners, key);
+    save_owners();
+    return 0;
+}
+
+varargs string delete_perm(int perm, mixed names, string brett, string gruppe)
+{
+    string key, *data;
+
+    if (!validate_owner_call())
+	return "Das darfst Du nicht.";
+    if (stringp(names))
+	names = ({ names });
+    if (!pointerp(names))
+	return "Falscher Typ des 2. Parametern.";
+    key = make_key(brett, gruppe);
+    if (!pointerp(owners[key,perm]))
+	return "Es sind keinerlei Rechte fuer "+
+	(brett?(gruppe?("die Gruppe "+brett+":"+gruppe):("das Brett "+brett)):"alle Bretter")+
+	" eingetragen.";
+    owners[key,perm] -= names;
+    if (!sizeof(owners[key,perm]))
+	owners[key,perm] = 0;
+    if (!owners[key,PERM_OWNER] &&
+	!owners[key,PERM_READ]  &&
+	!owners[key,PERM_WRITE])
+	m_delete(owners, key);
+    save_owners();
+    return 0;
+}
+
+string delete_from_all(int perm, mixed names)
+{
+    string *idxs;
+    int i;
+
+    if (!validate_owner_call())
+	return "Das darfst Du nicht.";
+    if (stringp(names))
+	names = ({ names });
+    if (!pointerp(names))
+	return "Ungueltiger 2. Parameter.";
+
+    for(i = sizeof(idxs = m_indices(owners)); i--;)
+    {
+	if(pointerp(owners[idxs[i],perm]))
+	{
+	    owners[idxs[i],perm] -= names;
+	    if (!sizeof(owners[idxs[i],perm]))
+		owners[idxs[i],perm] = 0;
+	}
+        if (!owners[idxs[i],PERM_OWNER] &&
+	    !owners[idxs[i],PERM_READ]  &&
+	    !owners[idxs[i],PERM_WRITE])
+	    m_delete(owners, idxs[i]);
+    }
+    save_owners();
+    return 0;
+}
+
+private int eval_perms(int perm, mixed pl, string *data, string brett, string gruppe, int non_recursive)
+{
+    string name = playerp(pl)?pl->query_real_name():stringp(pl)?pl:0;
+    
+    if(!data) return 0;
+    
+    foreach(string str:data)
+    {
+        if (str == name)
+	    return 1;
+
+	if (str=="Root")
+	    non_recursive = 1;
+
+	if(member(perm_cache,pl))
+	{
+	    if(member(perm_cache[pl,0],str))
+		return 1;
+	    else if(member(perm_cache[pl,1],str))
+		continue;
+	}
+
+	if(member(masters,str))
+	{
+	    if(objectp(pl) || (masters[str, MASTER_FLAGS]&GRP_ALLOW_NAME))
+	    {
+		object master;
+	    
+	        master = touch(masters[str, MASTER_FILE], NO_WRITE);
+		if(!master)
+		    do_warning2("Master fuer die News-Gruppe '"+str+"' existiert nicht mehr.\n",
+			__FILE__, masters[str, MASTER_FILE], __LINE__);
+	        else
+		{
+		    string err;
+		    int crerr,res;
+		    
+		    if(masters[str, MASTER_FLAGS]&GRP_ALL_BOARDS)
+			err=catch(crerr=call_resolved(&res, masters[str, MASTER_FILE],masters[str, MASTER_FUN],pl));
+		    else
+			err=catch(crerr=call_resolved(&res, masters[str, MASTER_FILE],masters[str, MASTER_FUN],pl,perm,brett,gruppe));
+			
+		    if(err)
+			do_warning2(err,__FILE__,masters[str, MASTER_FILE],__LINE__);
+		    else if(!crerr)
+			do_warning2("Funktion '"+masters[str, MASTER_FUN]+"' fuer News-Gruppe '"+str+"' existiert nicht mehr.\n",
+			    __FILE__, masters[str, MASTER_FILE], __LINE__);
+		    else
+		    {
+			if((masters[str, MASTER_FLAGS]&GRP_ALL_BOARDS) && member(perm_cache,pl))
+			    m_add(perm_cache[pl, res?0:1], str);
+			
+			if(res)
+			    return 1;
+			else
+			    continue;
+		    }
+		}
+	    }
+	}
+	
+	if(GROUP_MASTER->is_group_member(name, str))
+	{
+	    if(member(perm_cache,pl))
+	        m_add(perm_cache[pl, 0], str);
+	    
+    	    return 1;
+	}
+
+	if(member(perm_cache,pl))
+	    m_add(perm_cache[pl, 1], str);
+
+    }
+    return 0;
+}
+
+varargs int has_perm_uncached(int perm, mixed pl, string brett, string gruppe, int non_recursive)
+{
+    string *data;
+    
+    return eval_perms(perm, pl,owners[make_key(brett, gruppe), perm],brett,gruppe,&non_recursive) ||
+	(!non_recursive && brett && gruppe &&
+	   eval_perms(perm, pl,owners[make_key(brett, 0), perm],brett,gruppe,&non_recursive)) ||
+	(!non_recursive && brett &&
+	   eval_perms(perm, pl,owners[make_key(0, 0), perm],brett,gruppe,&non_recursive)) ||
+	(!non_recursive && PERM_STANDARD[perm]);
+}
+
+varargs int has_perm(int perm, mixed pl, string brett, string gruppe, int non_recursive)
+{
+    if(member(perm_cache,pl))
+    {
+	int result;
+	string key = "/"+brett+"/"+gruppe+":"+perm+","+non_recursive;
+	if(member(perm_cache[pl,0],key))
+	    return 1;
+	else if(member(perm_cache[pl,1],key))
+	    return 0;
+	result = has_perm_uncached(perm, pl, brett, gruppe, non_recursive);
+	m_add(perm_cache[pl, result?0:1], key);
+	return result;
+    }
+    return has_perm_uncached(perm, pl, brett, gruppe, non_recursive);
+}
+
+varargs void add_owner(mixed names, string brett, string gruppe)
+{
+    add_perm(PERM_OWNER, names, brett, gruppe);
+}
+
+varargs void delete_owner(mixed names, string brett, string gruppe)
+{
+    delete_perm(PERM_OWNER, names, brett, gruppe);
+}
+
+varargs void add_reader(mixed names, string brett, string gruppe)
+{
+    add_perm(PERM_READ, names, brett, gruppe);
+}
+
+varargs void delete_reader(mixed names, string brett, string gruppe)
+{
+    delete_perm(PERM_READ, names, brett, gruppe);
+}
+
+varargs void add_writer(mixed names, string brett, string gruppe)
+{
+    add_perm(PERM_WRITE, names, brett, gruppe);
+}
+
+varargs void delete_writer(mixed names, string brett, string gruppe)
+{
+    delete_perm(PERM_WRITE, names, brett, gruppe);
+}
+
+void delete_owner_from_all(mixed names)
+{
+    delete_from_all(PERM_OWNER, names);
+}
+
+varargs int is_owner(mixed name, string brett, string gruppe, int non_recursive)
+{
+    return has_perm(PERM_OWNER, stringp(name)?(find_player(name)||name):name, brett, gruppe, non_recursive);
+}
+
+string add_master(string name, string file, string fun, int flags)
+{
+    if (!validate_owner_call())
+	return "So geht's nicht!";
+    if(member(OWN_MASTERS, name))
+	return "Vordefinierte Gruppen koennen nicht geaendert werden.";
+    if(!strlen(name) || !strlen(file) || !strlen(fun))
+	return "Ungueltige Angaben.";
+    masters+=([name:file;fun;flags]);
+    save_owners();
+    return 0;
+}
+
+string delete_master(string name)
+{
+    if (!validate_owner_call())
+	return "So geht's nicht!";
+    if(member(OWN_MASTERS, name))
+	return "Vordefinierte Gruppen koennen nicht entfernt werden.";
+    if(!strlen(name))
+	return "Ungueltige Angaben.";
+    if(!member(masters, name))
+	return "Die Gruppe '"+name+"' existiert nicht.";
+    masters-=([name]);
+    save_owners();
+    return 0;
+}
+
+mapping query_owners()
+{
+    return deep_copy(owners);
+}
+
+mapping query_masters()
+{
+    return deep_copy(masters);
+}
+
+string *consistency_check()
+{
+    string *back=({});
+    foreach(int perm:({PERM_OWNER,PERM_READ,PERM_WRITE}))
+    {
+	foreach(string key:owners)
+	{
+	    if(!owners[key,perm])
+		continue;
+	    foreach(string str:owners[key,perm])
+	    {
+		if(!player_exists(str) && !member(masters,str) &&
+		    !GROUP_MASTER->group_exists(str))
+		{
+		    string *brett = explode(key,"/")[1..<1];
+		    string name;
+		    if(!sizeof(brett))
+			name = "Alle Bretter";
+		    else if(sizeof(brett)==1)
+			name = "Brett "+brett[0];
+		    else
+			name = "Gruppe "+brett[0]+":"+brett[1];
+		    if(lower_case(str) == str)
+			back+=({ name + ": " +
+			    ({"Moderator","Leser","Autor"})[perm] +
+			    " '"+str+"' existiert nicht mehr." });
+		    else
+			back+=({ name + ": " +
+			    ({"Moderatorgruppe","Lesergruppe","Autorengruppe"})[perm] +
+			    " '"+str+"' existiert nicht mehr." });
+		}
+	    }
+	}
+    }
+    return sort_array(back,#'>);
+}
+
+// Hier fragt man ab, ob der Spieler <player> die Gruppe <gruppe>
+// am Brett <brett> lesen darf
+varargs int valid_read(mixed player, string brett, string gruppe)
+{
+    if(!brett)
+	return 1;
+    else if(!gruppe)
+    {
+	string *groups = get_dir(BRETT_PATH+brett+"/");
+	if(!groups)
+	    return 0;
+	
+	groups -= JUNK_BRT;
+	
+	foreach(string grp:groups)
+	    if(has_perm(PERM_READ,player,brett,grp))
+		return 1;
+	return 0;
+    }
+    else
+	return has_perm(PERM_READ,player,brett,gruppe);
+}
+
+// Hier fragt man ab, ob der Spieler <player> einen Artikel
+// an die Gruppe <gruppe> am Brett <brett> schreiben darf
+varargs int valid_write(mixed player, string brett, string gruppe)
+{
+    if(adminp(player))
+	return 1;
+	
+    if(!brett || !gruppe)
+	return 0;
+    else
+	return has_perm(PERM_WRITE,player,brett,gruppe);
+}
+
+// Hiermit fragt man den Titel des Artikel Nummer <nr> in der Gruppe
+// <gruppe> am Brett <brett> ab
+string query_titel(string brett, string gruppe, int nr)
+{
+    string tmp;
+
+    if (stringp(brett) && stringp(gruppe) && intp(nr) && nr>0)
+	if (tmp=read_file(BRETT_PATH + brett + "/"+gruppe+"/"+nr,TITEL_LINE,1))
+	    return tmp[7..<2];
+}
+
+// Hiermit kann man den Re-Titel eines zu beantwortenden Artikels abfragen
+string query_re_titel(string brett, string gruppe, int nr)
+{
+    string titel;
+
+    if (titel = query_titel(brett,gruppe,nr))
+    {
+	if (titel[0..3] == "Re: ")
+	    return titel;
+	return ("Re: " + titel)[0..MAX_TITLE_LENGTH-1];
+    }
+}
+
+// Hiermit fragt man den Filenamen des Artikels ab
+string query_file_name(string brett, string gruppe, int nr)
+{
+    if (stringp(brett) && stringp(gruppe) && intp(nr))
+	return BRETT_PATH + brett + "/" + gruppe + "/" + nr;
+}
+
+private string artikel_eintrag(int nr, string titel, string schreiber,
+				string datum)
+{
+    return sprintf("%5d  %-:43s  %-:10s %s",nr,titel,schreiber,datum[0..13]);
+    /*
+    return right(nr,5)+"  "+left(titel,42)+"  "+left(schreiber,10)+"  "+
+		datum[0..13];
+    */
+}
+
+private void save_gruppe_info()
+{
+    // Cache muss man updaten
+    if (member(caches,cache))
+    {
+	caches[cache,0] = eintrag;
+	caches[cache,1] = artikel_nr;
+        caches[cache,2] = artikel_baum;
+    }
+    save_object(BRETT_PATH + cache + "/" + GRP_SAVE_FILE);
+}
+
+private void reorganize_artikel()
+{
+    mixed *tree, *tree_new, tim;
+    string *tmps, tmp, path, titel, schreiber, datum, art_nr_string;
+    int i, art_nr, bezug, art_nr2;
+    mapping hash;
+
+    artikel_nr = 0;
+    eintrag = ({});
+    artikel_baum = ({});
+    path = BRETT_PATH + cache + "/";
+    tmps = get_dir(path + ".");
+    // Ein verkehrtes Directory
+    if (!tmps)
+    {
+	save_gruppe_info();
+	return;
+    }
+    tmps -= JUNK_GRP;
+    if (!sizeof(tmps))
+    {
+	save_gruppe_info();
+	return;
+    }
+
+    tmps = sort_array(tmps,
+	lambda(({'a,'b}), ({#'<, ({#'to_int,'a}),({#'to_int,'b}) })));
+    hash = m_allocate(1,3);
+    for(i = sizeof(tmps); i--; )
+    {
+	if (!sscanf(tmps[i],"%d",art_nr))
+	    tmp = 0;
+	else
+	    tmp = read_file(path+tmps[i],TITEL_LINE,3);
+
+	if (!tmp || sscanf(tmp,"Titel: %s\nArtikel: %d%!s Bezug: %d\nVerfasser: %s Datum: %s\n",
+			    titel,art_nr2,bezug,schreiber,datum) != 5)
+	{
+	    ERROR("Fehler im File '"+path+tmps[i]+"' (fehlerhafter Header)\n");
+	    if (rename(path+tmps[i],BRETT_FEHLER + tmps[i] + "_" +
+		    implode(explode(cache,"/"),"_")))
+		rm(path + tmps[i]);
+	    continue;
+	}
+	if (art_nr != art_nr2)
+	{
+	    ERROR("Fehler im File '" + path + tmps[i] + "' (falsche Nummer)\n");
+	    if (rename(path + tmps[i],BRETT_FEHLER + tmps[i] + "_" +
+		    implode(explode(cache,"/"),"_")))
+		rm(path + tmps[i]);
+	    continue;
+	}
+        tim=get_dir(path+tmps[i],GETDIR_DATES);
+        if(sizeof(tim)!=1)
+        {
+            ERROR("Fehler in Artikel "+path+tmps[i]+": Datei fehlt!\n");
+            tim=({0});
+        }
+                                                                                    
+        tree=hash[bezug,1];
+        if(!tree)
+        {
+            eintrag+=({ ({ artikel_eintrag(art_nr,(hash[bezug,0]||"")+titel,
+                    schreiber,datum), ({}), art_nr}) });
+            artikel_baum+=({ ({ art_nr, tim[0], strip(schreiber), 
+                    (hash[bezug,0]||"")+titel, 
+                    strlen((read_file(path+tmps[i],TEXT_LINE)||"") & "\n"),
+                    ({}) }) });
+            tree=eintrag[<1];
+            tree_new=artikel_baum[<1];
+
+        }
+        else
+        {
+            tree_new=hash[bezug,2];
+            tree[SUBTREE]+=({ ({ artikel_eintrag(art_nr,(hash[bezug,0]||"")+titel,
+                    schreiber,datum), ({}), art_nr}) });
+            tree_new[N_SUBTREE]+=({ ({ art_nr, tim[0], strip(schreiber), 
+                    (hash[bezug,0]||"")+titel, 
+                    strlen((read_file(path+tmps[i],TEXT_LINE)||"") & "\n"),
+                    ({}) }) });
+            tree=tree[SUBTREE][<1];
+            tree_new=tree_new[N_SUBTREE][<1];
+        }
+        hash+=([art_nr: hash[bezug,0]?("--"+hash[bezug,0]):"> ";
+                        tree;tree_new ]);
+
+	if (artikel_nr < art_nr)
+	    artikel_nr = art_nr;
+    }
+
+    save_gruppe_info();
+}
+
+private void delete_cache(string brett, string gruppe)
+{
+    string tmp;
+
+    tmp = brett + "/" + gruppe;
+    if (tmp == cache)
+    {
+	eintrag = 0;
+	cache = 0;
+	artikel_nr = 0;
+	artikel_baum = 0;
+    }
+    m_delete(caches,tmp);
+}
+
+private string compute_min_cache()
+{
+    string *tmp, min_cache;
+    int i, min, tmp_min;
+
+    tmp = m_indices(caches);
+    min = MAX_INT;
+    for (i = sizeof(tmp); i--; )
+	if (min > (tmp_min = gets[tmp[i]]))
+	{
+	    min = tmp_min;
+	    min_cache = tmp[i];
+	}
+    return min_cache;
+}
+
+// Weiter unten, zum konvertieren der Datenstruktur
+private mixed *convert_tree(mixed tree, string path);
+
+private mixed *get_gruppe_info(string brett, string gruppe, int neu)
+{
+    string tmp, min_cache;
+    mixed *tmp_eintrag;
+
+    tmp = brett + "/" + gruppe;
+    if (tmp == cache)
+    {
+	hit++;
+	gets[cache]++;
+        return neu?artikel_baum:eintrag;
+    }
+    else if (tmp_eintrag = caches[tmp,0])
+    {
+	hit2++;
+	cache = tmp;
+	eintrag = tmp_eintrag;
+	artikel_nr = caches[tmp,1];
+        artikel_baum = caches[tmp,2];
+	gets[cache]++;
+        return neu?artikel_baum:eintrag;
+    }
+    
+    if(file_size(BRETT_PATH + brett + "/" + gruppe)!=FSIZE_DIR)
+        return 0;
+        
+    fault++;
+    delete_cache(brett,gruppe);
+    cache = tmp;
+    gets[cache]++;
+
+    artikel_baum = 0;
+    if (!restore_object(BRETT_PATH + brett + "/" + gruppe +"/" + GRP_SAVE_FILE)
+    		|| !eintrag)
+	reorganize_artikel();
+
+    if(!artikel_baum)
+    {
+        artikel_baum = convert_tree(eintrag, BRETT_PATH + brett + "/"+ gruppe + "/");
+        save_gruppe_info();
+    }
+    
+    min_cache = compute_min_cache();
+    if (gets[min_cache] <= gets[cache])
+    {
+	if (sizeof(caches) >= MAX_CACHE_SIZE)
+	    m_delete(caches,min_cache);
+	caches[cache,0] = eintrag;
+	caches[cache,1] = artikel_nr;
+        caches[cache,2] = artikel_baum;
+    }
+    return neu?artikel_baum:eintrag;
+}
+
+// Hiermit kann man die Artikel-Uebersicht der <gruppe> am <brett> abfragen
+mixed *query_artikel(string brett, string gruppe)
+{
+    string file;
+
+    if(!valid_read(RESP_OBJECT,brett,gruppe))
+	return 0;
+    if (stringp(brett) && stringp(gruppe))
+    {
+	file = object_name(previous_object());
+	if (strstr(file,"/obj/newsreader#") == 0 ||
+		strstr(file,LOGIN_OB + "#") == 0 ||
+		file == "/secure/udp/news")
+	    return get_gruppe_info(brett,gruppe,0);
+
+	// Dieser Fall sollte wegen dem deep_copy nicht zur Normalitaet
+	// werden. Daher nix zurueckliefern...
+
+	//else
+	//    return deep_copy(get_gruppe_info(brett,gruppe,0));
+    }
+}
+
+// Hiermit kann man die neue Artikel-Uebersicht der <gruppe> am <brett> abfragen
+mixed *query_artikel_baum(string brett, string gruppe)
+{
+    string file;
+
+    if(!valid_read(RESP_OBJECT,brett,gruppe))
+	return 0;
+    if (stringp(brett) && stringp(gruppe))
+    {
+	file = object_name(previous_object());
+	if (strstr(file,"/obj/newsreader#") == 0 ||
+		strstr(file,LOGIN_OB + "#") == 0 ||
+		file == "/secure/udp/news" ||
+		file == INEWSD)
+	    return get_gruppe_info(brett,gruppe,1);
+
+	// Dieser Fall sollte wegen dem deep_copy nicht zur Normalitaet
+	// werden. Daher nix zurueckliefern.
+
+	//else
+	//    return deep_copy(get_gruppe_info(brett,gruppe,1));
+    }
+}
+
+private int get_next_artikel()
+{
+    string path, *tmps;
+    int i, n;
+
+    artikel_nr++;
+    path = BRETT_PATH + cache + "/";
+    if (file_size(path + artikel_nr) <= 0)
+	return artikel_nr;
+    tmps = get_dir(path + ".") - JUNK_GRP;
+    artikel_nr = 0;
+    for (i = sizeof(tmps); i--; )
+    {
+	n = to_int(tmps[i]);
+	if (n > artikel_nr)
+	    artikel_nr = n;
+    }
+    artikel_nr++;
+    return artikel_nr;
+}
+
+private int insert_artikel(mixed *tr, mixed *ntr, int nr, int bezug, 
+                           string titel, string schreiber, int tim, int len)
+{
+    int i;
+
+    for (i = sizeof(tr); i--; )
+    {
+	if (bezug == tr[i][NUMMER])
+	{
+	    tr[i][SUBTREE] += ({ ({ artikel_eintrag(nr,titel,schreiber,
+					shorttimestr(tim)), ({}), nr }) });
+            ntr[i][N_SUBTREE] += ({ ({ nr, tim, schreiber, titel, len, ({}) }) });
+	    return 1;
+	}
+	if (sizeof(tr[i][SUBTREE]) &&
+	    insert_artikel(&(tr[i][SUBTREE]),&(ntr[i][N_SUBTREE]),nr,bezug,"--"+titel,schreiber,tim,len))
+	    return 1;
+    }
+}
+
+// Hiermit kann man fragen, ob ein gewuenschter Titel anerkannt wird
+string invalid_titel(string str)
+{
+    if (!stringp(str) || str=="")
+	return "Ohne Titel gehts natuerlich nicht.\n";
+    if (strlen(str) > MAX_TITLE_LENGTH)
+	return "Titel ist zu lang.\n";
+    if (str[0] == '-' || str[0] == '>')
+	return "Der Titel darf nicht mit einem '-' oder '>' anfangen.\n";
+    if (strstr(str,"\n") != -1)
+	return "Der Titel darf kein Line-Feed enthalten.\n";
+    return 0;
+}
+
+private void update_dates(string brett, string gruppe, int tim)
+{
+    // Date-Update
+    string tmp = read_file(BRETT_PATH + brett + "/DATES");
+    string tmp1, tmp2;
+    if (tmp)
+    {
+	if (sscanf(tmp,"%s\n" + gruppe + " %~d\n%s",tmp1,tmp2) != 3)
+	    if (sscanf(tmp,gruppe + " %~d\n%s",tmp1) != 2)
+		if (sscanf(tmp,"%s\n" + gruppe + " %~d\n",tmp1) != 2)
+		    tmp += gruppe + " " + tim + "\n";
+		else
+		    tmp = tmp1 + "\n" + gruppe + " " + tim + "\n";
+	    else
+		tmp = gruppe + " " + tim + "\n" + tmp1;
+	else
+	    tmp = tmp1 + "\n" + gruppe + " " + tim + "\n" + tmp2;
+	rm(BRETT_PATH + brett + "/DATES");
+	write_file(BRETT_PATH + brett + "/DATES",tmp);
+    }
+}
+
+string post_artikel(string brett, string gruppe, string titel, string schreiber,
+    int bezug_nr, int tim, string st, int source, int neue_nr)
+{
+    string tmp, path;
+
+    if(extern_call() && object_name(previous_object()) != INEWSD)
+	return "So geht das aber nicht!\n";
+
+    // Freaky damit VORHER ein reorganize_artikel() gemacht wird
+    get_gruppe_info(brett, gruppe,0);
+
+    get_next_artikel();
+    if (bezug_nr >= artikel_nr)
+	bezug_nr = 0;
+
+    tmp = LINE;
+    tmp += "Titel: " + titel + "\n";
+    tmp += "Artikel: " + left(to_string(artikel_nr),45);
+    tmp += " Bezug: " + bezug_nr + "\n";
+    tmp += "Verfasser: " + left(schreiber,43);
+    tmp += " Datum: " + shorttimestr(tim) + "\n";
+    tmp += LINE;
+
+    path = BRETT_PATH + brett + "/" + gruppe + "/";
+    if (!write_file(path + artikel_nr,tmp + st))
+    {
+	ERROR("Fehler beim Abspeichern des Artikels '" + path+"'\n");
+	write_file(BRETT_FEHLER + "FB_" + tim,path + artikel_nr + "\n"+tmp+st);
+	delete_cache(brett,gruppe);
+	return "Fehler beim Abspeichern des Artikels.\n";
+    }
+
+    if (bezug_nr == 0 ||
+	    !insert_artikel(&eintrag,&artikel_baum,artikel_nr,bezug_nr,"> " + titel,schreiber,tim,strlen(st & "\n")))
+    {
+	eintrag += ({ ({ artikel_eintrag(artikel_nr,titel,schreiber,
+			shorttimestr(tim)), ({}), artikel_nr }) });
+        artikel_baum += ({ ({artikel_nr, tim, schreiber, titel,
+                           strlen(st & "\n"), ({}) }) });
+    }
+    save_gruppe_info();
+    
+    NEWS_INDEX->add_artikel(brett, gruppe, artikel_nr);
+    neue_nr = artikel_nr;
+
+    // Keine Meldung bei Interdomain oder Ratsmitglieder/Internes
+    if (member(GEHEIME_BRETTER,brett)==-1 &&
+	member(GEHEIME_BRETTER,brett+"/"+gruppe)==-1)
+        EVENT_MASTER->event("News",lower_case(brett),
+            wrap("Info: Neuer Artikel von "+schreiber+" an "
+                 +brett+"/"+gruppe+"."), 0);
+
+    update_dates(brett, gruppe, time());
+
+#ifdef UNItopia
+    INEWSD->exportnews(brett, gruppe, bezug_nr, artikel_nr, schreiber, titel,
+	tim, st, source);
+#endif
+}
+
+// Mit dieser Funktion kann man einen Artikel an das Brett haengen
+string write_artikel(string brett, string gruppe, string titel,
+							int bezug_nr, string st)
+{
+    string tmp; 
+    
+    if (!stringp(brett))
+	return "Kein Brett gewaehlt.\n";
+    if (!stringp(gruppe))
+	return "Keine Gruppe gewaehlt.\n";
+    if (tmp = invalid_titel(titel))
+	return tmp;
+    if (!stringp(st))
+	return "Kein Artikel-Text gegeben.\n";
+    if (!intp(bezug_nr))
+	return "Falschen Bezug angegeben.\n";
+    if (!secure())
+	return "So geht das aber nicht!\n";
+    if (!valid_write(this_player(),brett,gruppe))
+	return "In diese Gruppe darfst Du nicht schreiben.\n";
+
+    return post_artikel(brett, gruppe, titel, 
+	capitalize(this_player()->query_real_name()),
+	bezug_nr, time(), st, SOURCE_MUD, 0);
+}
+
+int query_brett_owner(string brett, string gruppe, mixed who)
+{
+    return adminp(who) || member(ADMINS, who)>=0 || is_owner(who, brett, gruppe);
+}
+
+// Hiermit eroeffnet man eine Gruppe an einem Brett
+string eroeffne_gruppe(string brett, string str)
+{
+    string tmp;
+    int i;
+
+    if (!stringp(brett))
+	return "Du bist an keinem Brett.\n";
+    if (!stringp(str))
+	return "Bitte Gruppennamen angeben.\n";
+
+    if (strlen(str) < 1)
+	return "Der Gruppenname muss mindestens 1 Zeichen lang sein.\n";
+    if (strlen(str) > 20)
+	return "Der Gruppenname darf maximal 20 Zeichen lang sein.\n";
+
+    tmp = lower_case(str);
+    for (i = 0; i < strlen(tmp); i++)
+	if ((tmp[i] < 'a' || tmp[i] > 'z') && (tmp[i] < '0' || tmp[i] > '9') &&
+		member("-_=+.",tmp[i]) == -1)
+	    return "Der Gruppenname darf nur Buchstaben und Ziffern "
+		"enthalten.\n";
+
+    if (file_size(BRETT_PATH + brett + "/" + str) == -2)
+	return "Es gibt schon eine Gruppe mit diesem Namen.\n";
+
+    if (!secure())
+	return "So geht das aber nicht!\n";
+    if (!query_brett_owner(brett,0,this_player()))
+	return "Du darfst das nicht.\n";
+
+    if (!mkdir(BRETT_PATH + brett + "/" + str))
+	return "Konnte Gruppe nicht anlegen.\n";
+    rm(BRETT_PATH + brett + "/DATES");
+    return 0;
+}
+
+// Hiermit loescht man eine Gruppe an einem Brett
+string loesche_gruppe(string brett, string gruppe)
+{
+    string tmp;
+    int i;
+
+    if (!stringp(brett))
+	return "Du bist an keinem Brett.\n";
+    if (!stringp(gruppe))
+	return "Bitte Gruppennamen angeben.\n";
+
+    if (file_size(BRETT_PATH + brett + "/" + gruppe) != -2)
+	return "Es gibt keine Gruppe mit diesem Namen.\n";
+
+    if (!secure())
+	return "So geht das aber nicht!\n";
+    if (!query_brett_owner(brett,0,this_player()))
+	return "Du darfst das nicht.\n";
+
+    for (i = sizeof(JUNK_GRP); i--; )
+	rm(BRETT_PATH + brett + "/" + gruppe + "/" + JUNK_GRP[i]);
+
+    if (!rmdir(BRETT_PATH + brett + "/" + gruppe))
+	return "Konnte Gruppe nicht loeschen.\n";
+
+    for (i = sizeof(JUNK_BRT); i--; )
+	rm(BRETT_PATH + brett + "/" + JUNK_BRT[i]);
+
+    m_delete(owners, make_key(brett, gruppe));
+    delete_cache(brett,gruppe);
+    save_owners();
+    return 0;
+}
+
+// Hiermit eroeffnet man ein neues Brett
+string eroeffne_brett(string str)
+{
+    string tmp;
+    int i;
+
+    if (!stringp(str))
+	return "Bitte Brettnamen angeben.\n";
+
+    if (strlen(str) < 1)
+	return "Der Brettname muss mindestens 1 Zeichen lang sein.\n";
+    if (strlen(str) > 20)
+	return "Der Brettname darf maximal 20 Zeichen lang sein.\n";
+
+    tmp = lower_case(str);
+    for (i = 0; i < strlen(tmp); i++)
+	if ((tmp[i] < 'a' || tmp[i] > 'z') && member("-_=+",tmp[i])== -1)
+	    return "Der Brettname darf nur Buchstaben enthalten.\n";
+
+    if (file_size(BRETT_PATH + str) == -2)
+	return "Es gibt schon ein Brett mit diesem Namen.\n";
+
+    if (!secure())
+	return "So geht das aber nicht!\n";
+    if (!query_brett_owner(0,0,this_player()))
+	return "Du darfst das nicht.\n";
+
+    if (!mkdir(BRETT_PATH + str))
+	return "Konnte Brett nicht anlegen.\n";
+    return 0;
+}
+
+// Hiermit kann man eine eventuell kaputte Gruppe reparieren
+void repariere_brett(string brett, string gruppe)
+{
+    int i;
+
+    if (stringp(brett) && stringp(gruppe))
+    {
+	for (i = sizeof(JUNK_GRP); i--; )
+	    rm(BRETT_PATH + brett + "/" + gruppe + "/" + JUNK_GRP[i]);
+	for (i = sizeof(JUNK_BRT); i--; )
+	    rm(BRETT_PATH + brett + "/" + JUNK_BRT[i]);
+	delete_cache(brett,gruppe);
+    }
+}
+
+string entferne_artikel(string brett, string gruppe, mixed player, int *nr)
+{
+    string file, ret;
+    int allowed;
+
+    if(extern_call() && object_name(previous_object()) != INEWSD)
+	return "So geht das aber nicht!\n";
+
+    allowed = query_brett_owner(brett,gruppe,player);
+    if (!allowed && sizeof(nr) > 1)
+	return "Bitte immer einen Artikel nach dem anderen angeben.\n";
+
+    file = BRETT_PATH + brett + "/" + gruppe + "/";
+    
+    if (!allowed)
+    {
+	string tmp, name, plname, junk;
+        plname = playerp(player)?player->query_real_name():player;
+	
+	if (!intp(nr[0]))
+	    return "Fehler in Artikel-Nummer.\n";
+	if (file_size(file + nr[0]) < 0)
+	    return "Einen Artikel mit dieser Nummer gibt es nicht.\n";
+	tmp=read_file(file + nr[0],NAME_LINE,1);
+	if (sscanf(tmp,"Verfasser: %s Datum: %s\n",name,junk) == 2)
+	    if ( plname != lower_case(trim(name)))
+		return "Du hast diesen Artikel aber nicht geschrieben.\n";
+    }
+
+    ret = "";
+    foreach (int n: nr)
+    {
+	if (!intp(n))
+	    continue;
+	if (file_size(file + n) < 0)
+	    ret += " " + n;
+	else
+	    rm(file + n);
+
+#ifdef UNItopia
+	INEWSD->deletenews(brett, gruppe, n);
+#endif
+	NEWS_INDEX->delete_artikel(brett, gruppe, n);
+    }
+
+    rm(BRETT_PATH + brett + "/" + gruppe + "/" + GRP_SAVE_FILE + ".o");
+    delete_cache(brett,gruppe);
+    if (ret != "")
+	return "Folgende Artikel gibt es nicht:" + ret + "\n";
+    return 0;
+}
+
+
+// Hiermit kann man Artikel loeschen
+string loesche_artikel(string brett, string gruppe, int *nr)
+{
+    if (!stringp(brett))
+	return "Kein Brett angegeben.\n";
+    if (!stringp(gruppe))
+	return "Keine Gruppe angegeben.\n";
+    if (!pointerp(nr))
+	return "Fehler in Artikel-Nummern.\n";
+    if (!secure())
+	return "So geht das aber nicht!\n";
+    if(member(UNDELETABLE, brett)>=0 && gruppe != "unitopia.test" && !adminp(this_player()))
+	return "An diesem Brett kannst Du keine Artikel loeschen.";
+
+    return entferne_artikel(brett, gruppe, this_player(), nr);
+}
+
+// Die Rekursion fuer move_thread
+// source_path: "Brett/Gruppe"
+// source_tree: Die Artikelstruktur des ersten Artikels im Brett
+// dest_tree: Eine Referenz auf das Subtree-Array, zu welchem dieser Thread
+//            hinzugefuegt werden soll.
+// d_eintrag: Eine Referenz auf das Subtree-Array der alten Datenstruktur (eintrag)
+// bezug: Die Nummer des Bezugsartikels (Der Artikel, zu dem der dest_tree gehoert)
+// index: Wieweit tiefer die Artikel damit verschachtelt sind.
+private void move_article(string source_path, mixed source_tree, mixed dest_tree, mixed d_eintrag, int bezug, int indent)
+{
+    string *text, titel;
+    int src_nr, dest_nr;
+    
+    // -> Naechste freie Artikelnummer.
+    dest_nr = get_next_artikel();
+    
+    src_nr = source_tree[N_NUMBER];
+    
+    text = explode(read_file(BRETT_PATH+source_path+"/"+src_nr)||"","\n");
+
+    if(!sizeof(text))
+    {
+        foreach(mixed thread:source_tree[N_SUBTREE])
+            move_article(source_path, thread, &dest_tree,
+                &d_eintrag, bezug, indent);
+        return;
+    }
+    
+    text[2] = "Artikel: " + left(to_string(dest_nr),45)
+            + " Bezug: " + bezug;
+
+    if(!write_file(BRETT_PATH + cache +  "/" + dest_nr, implode(text,"\n")))
+    {
+	ERROR("Fehler beim Abspeichern des Artikels '" + cache +  "/" + dest_nr +"'\n");
+	write_file(BRETT_FEHLER + "FB_" + time(),
+            BRETT_PATH + cache +  "/" + dest_nr + "\n"+implode(text,"\n"));
+        rename(BRETT_PATH+source_path+"/"+src_nr, BRETT_PATH + cache +  "/" + dest_nr);
+	apply(#'call_other, NEWS_INDEX, "delete_artikel", explode(source_path,"/")+({src_nr}));
+	apply(#'call_other, NEWS_INDEX, "add_artikel", explode(cache,"/")+({dest_nr}));
+    }
+    else
+        rm(BRETT_PATH+source_path+"/"+src_nr);
+
+    titel = source_tree[N_TITLE];
+
+    if(indent<0)
+        titel = titel[-2*indent..<1];
+    else if(indent>0)
+    {
+        if(titel[0]=='-' || titel[0]=='>')
+            titel = "--"*indent + titel;
+        else
+            titel = "--"*(indent-1) + "> " + titel;
+    }
+
+    d_eintrag += ({ ({ artikel_eintrag(dest_nr, titel,
+        source_tree[N_AUTHOR], shorttimestr(source_tree[N_DATE])), ({}),
+        dest_nr }) });
+    dest_tree += ({ ({dest_nr, source_tree[N_DATE], source_tree[N_AUTHOR],
+        titel, source_tree[N_LINES], ({}) }) });
+
+    foreach(mixed thread:source_tree[N_SUBTREE])
+        move_article(source_path, thread, &(dest_tree[<1][N_SUBTREE]),
+            &(d_eintrag[<1][SUBTREE]), dest_nr, indent);
+}
+
+// Verschiebt einen Thread an ein anderes Brett
+// Die Threads werden als Folge der uebergeordneten Artikel angeben.
+// (Also so, wie man im Artikelbaum absteigen muss.)
+// Ist d_thread leer, so werden die Threads als neue Threads angelegt und
+// keinem anderen Thread untergeordnet.
+string move_thread(string s_brett, string s_gruppe, int *s_thread, string d_brett, string d_gruppe, int *d_thread)
+{
+    mixed old_tree;
+    string tmp;
+    
+    if(!stringp(s_brett))
+        return "Kein Ursprungsbrett angegeben.\n";
+    if(!stringp(s_gruppe))
+        return "Keine Ursprungsgruppe angegeben.\n";
+    if(!stringp(d_brett))
+        return "Kein Zielbrett angegeben.\n";
+    if(!stringp(d_gruppe))
+        return "Keine Zielgruppe angegeben.\n";
+    if(!pointerp(s_thread) || !sizeof(s_thread))
+        return "Keinen Ursprungsthread angegeben.\n";
+    if(!pointerp(d_thread))
+        return "Keinen Zielthread angegeben.\n";
+    if (!secure())
+	return "So geht das aber nicht!\n";
+    if(!query_brett_owner(s_brett,s_gruppe,this_player()) ||
+       !query_brett_owner(d_brett,d_gruppe,this_player()))
+        return "Du musst Moderator der Ursprungs- und Zielgruppe sein.\n";
+
+    // Artikelstruktur in Cache laden
+    old_tree=get_gruppe_info(s_brett, s_gruppe,1);
+
+    if(!old_tree)
+        return "Diese Gruppe existiert nicht.\n";
+
+    // Damit sieht das wie ein Artikeleintrag aus, unter welchem
+    // alle Threads untergeordnet sind.
+    old_tree=({0})*N_SUBTREE+({old_tree});
+
+    // Dort den richtigen Thread suchen.
+    foreach(int nr:s_thread)
+    {
+        int i, numtrees;
+	numtrees = sizeof(old_tree[N_SUBTREE]);
+        for(i=0;i<numtrees;i++)
+            if(old_tree[N_SUBTREE][i][N_NUMBER]==nr)
+            {
+                old_tree=old_tree[N_SUBTREE][i];
+                break;
+            }
+        if(i==numtrees)
+            return "Diesen Thread gibt es nicht.\n";
+    }
+    
+    // Zielgruppe laden
+    if(!get_gruppe_info(d_brett, d_gruppe, 1))
+        return "Die Zielgruppe existiert nicht.\n";
+
+    if(!sizeof(d_thread))
+        move_article(s_brett+"/"+s_gruppe, old_tree, &artikel_baum,
+            &eintrag, 0, -sizeof(s_thread)+1);
+    else
+    {
+        mixed new_eintrag = ({0})*SUBTREE + ({eintrag});
+        mixed new_tree=({0})*N_SUBTREE+({artikel_baum});
+
+        foreach(int nr:d_thread)
+        {
+            int i, numtrees;
+	    numtrees = sizeof(new_tree[N_SUBTREE]);
+            for(i=0;i<numtrees;i++)
+                if(new_tree[N_SUBTREE][i][N_NUMBER]==nr)
+                {
+                    new_tree=new_tree[N_SUBTREE][i];
+                    new_eintrag = new_eintrag[SUBTREE][i]; // Sollten synchron sein
+                    break;
+                }
+            if(i==numtrees)
+                return "Den Zielthread gibt es nicht.\n";
+        }
+
+        move_article(s_brett+"/"+s_gruppe, old_tree, &(new_tree[N_SUBTREE]),
+            &(new_eintrag[SUBTREE]), d_thread[<1], 
+            sizeof(d_thread)-sizeof(s_thread)+1);
+    }
+    
+    save_gruppe_info();
+    
+    update_dates(s_brett, s_gruppe, time());
+
+    // Nun noch die alten Artikel loeschen.
+    old_tree=get_gruppe_info(s_brett, s_gruppe,1);
+
+    if(old_tree)
+    {
+        int index;
+        mixed old_eintrag;
+        
+        for(index=0;index<sizeof(artikel_baum);index++)
+            if(artikel_baum[index][N_NUMBER]==s_thread[0])
+                break;
+        
+        if(index==sizeof(artikel_baum))
+            return 0;
+        
+	if(sizeof(s_thread)==1)
+	{
+	    artikel_baum[index..index]=({});
+	    eintrag[index..index]=({});
+	}
+	else
+	{
+    	    old_tree=({0})*N_SUBTREE+({old_tree});
+            old_eintrag=({0})*SUBTREE+({eintrag});
+
+    	    foreach(int nr:s_thread[1..<1])
+    	    {
+        	int i;
+        	for(i=0;i<sizeof(old_tree[N_SUBTREE][index][N_SUBTREE]);i++)
+            	    if(old_tree[N_SUBTREE][index][N_SUBTREE][i][N_NUMBER]==nr)
+            	    {
+                	old_tree=old_tree[N_SUBTREE][index];
+                	old_eintrag=old_eintrag[SUBTREE][index];
+                	index = i;
+            	        i=-1;
+                	break;
+            	    }
+    	        if(i>0)
+        	    return 0;
+	    }
+            old_tree[N_SUBTREE][index..index]=({});
+	    old_eintrag[SUBTREE][index..index]=({});
+    	}
+    }
+
+    save_gruppe_info();
+    
+    update_dates(d_brett, d_gruppe, time());
+}
+
+varargs mixed *query_dates(string brett)
+{
+    string tmp;
+    string *dir;
+    
+    if(!brett)
+    {
+	dir = get_dir(BRETT_PATH+".",GETDIR_NAMES|GETDIR_DATES);
+	for(int i=0;i<sizeof(dir);i+=2)
+	    if(!valid_read(RESP_OBJECT, dir[i], 0))
+	    {
+		dir[i..i+1]=({});
+		i-=2;
+	    }
+	return dir;
+    }
+    else if(!stringp(brett))
+	return 0;
+
+    tmp = read_file(BRETT_PATH + brett + "/DATES");
+    if (!tmp)
+    {
+	rm(BRETT_PATH + brett + "/DATES");
+	dir = get_dir(BRETT_PATH + brett + "/.",GETDIR_NAMES|GETDIR_DATES);
+	tmp = "";
+	if (!sizeof(dir))
+	    return 0;
+	for (int i=0; i<sizeof(dir); i+=2)
+	    tmp += dir[i] + " " + dir[i + 1] + "\n";
+	write_file(BRETT_PATH + brett + "/DATES",tmp);
+    }
+    else
+    {
+	string *tmps = explode(tmp,"\n") - ({""});
+	dir = ({});
+	for (int i=0; i<sizeof(tmps); i++)
+	{
+	    int tim;
+	    sscanf(tmps[i],"%s %d",tmp,tim);
+	    dir += ({tmp,tim});
+	}
+    }
+    for(int i=0;i<sizeof(dir);i+=2)
+	if(!valid_read(RESP_OBJECT, brett, dir[i]))
+        {
+	    dir[i..i+1]=({});
+	    i-=2;
+	}
+    return dir;
+}
+
+// Hiermit kann man die Schreibdaten der Artikel einer Gruppe abfragen
+mixed *query_times(string brett, string gruppe)
+{
+    if (stringp(brett) && stringp(gruppe))
+    {
+         if (gruppe != "")
+             gruppe += "/";
+	return get_dir(BRETT_PATH + brett + "/" + gruppe + ".",5);
+    }
+}
+
+// Hiermit kann man alle Bretter abfragen
+string *query_bretter()
+{
+    return filter(get_dir(BRETT_PATH+".") - JUNK_SPOOL,
+	(:valid_read($2, $1, 0):), RESP_OBJECT);
+}
+
+// Hiermit kann man die Gruppen eines Brettes abfragen
+string *query_gruppen(string brett)
+{
+    return stringp(brett) && filter(get_dir(BRETT_PATH+brett+"/.")-JUNK_BRT,
+	(:valid_read($3, $2, $1):),brett, RESP_OBJECT);
+}
+
+// Hiermit kann man die Artikelnummern einer Gruppe abfragen
+int *query_artikel_numbers(string brett, string gruppe)
+{
+    string file;
+
+    if(!valid_read(RESP_OBJECT,brett,gruppe))
+	return 0;
+    if (stringp(brett) && stringp(gruppe))
+    {
+         if (gruppe != "")
+             gruppe += "/";
+	return map((get_dir(BRETT_PATH + brett + "/" + gruppe + ".",1)||({}))-({"artikel.o"}),
+	    #'to_int) - ({0});
+    }
+}
+
+mixed query_read_artikel(object ob)
+{
+    mixed struc;
+
+    if (!objectp(ob))
+    	return 0;
+    
+   struc = ob->query_read_artikel();
+   if (mappingp(struc) || !struc)
+            return struc;
+    
+    // Ich entschuldige mich fuer die nachfolgenden, komplizierten Zeilen.
+    return
+        //Brett: Arrays -> Mapping
+        mkmapping(struc[0],
+	    map(transpose_array(({struc[1],struc[2]})),(:$1[1]?$1[0]:-1 :)), 
+	    // Die Gruppen muessen auch entsprechend konvertiert werden
+	    map(struc[2],
+	    (:       // Wieder Arrays -> Mapping
+               $1 && mkmapping($1[0],$1[1],
+		    // Und die Artikelnummern auch konvertieren.
+		    map(transpose_array( ({$1[1],$1[2]}) ),
+                        (:$1[0]>=0 && (($1[1] && mkmapping($1[1])) || ([])) :)),
+		    // Und noch 3 weitere Eintraege hinzufuegen.
+                    // Je nachdem, ob Gruppe abbonniert ist, ein Mapping oder
+                    // 0 hinzufuegen.
+                    $2 = map($1[1], (: $1>=0 && ([]) :)),
+                    deep_copy($2),
+                    deep_copy($2) )
+            :)));
+}
+
+void set_read_artikel(mixed struc, object ob)
+{
+    if (objectp(ob) && (pointerp(struc) || mappingp(struc)))
+	ob->set_read_artikel(struc);
+}
+
+string tree2str2(mixed *tree, int zeit, mapping ungelesen, mapping gelesen)
+{
+    string str="",tmp;
+    foreach(mixed thread:tree||({}))
+    {
+        int neu, nr = thread[N_NUMBER];
+        if(member(gelesen,nr))
+            neu = ' ';
+        else if(member(ungelesen,nr))
+            neu = 'A';
+        else if(thread[N_DATE]>=zeit)
+            neu = 'N';
+        else
+            neu = ' ';
+            
+        tmp = tree2str2(thread[N_SUBTREE],zeit,ungelesen,gelesen);
+        if(strlen(tmp) || neu!=' ')
+            str+=sprintf("%c %5d  %:-37s %5s %:-10s %s\n", neu,
+                thread[N_NUMBER], thread[N_TITLE], "("+thread[N_LINES]+")",
+                thread[N_AUTHOR], shorttimestr(thread[N_DATE])[0..<4])
+               + tmp;
+    }
+    return str;
+}
+
+private string query_all_news2(object ob, string brett, string group)
+{
+    mapping stru;
+    int *times;
+    string ret;
+
+    if (!objectp(ob))
+	return 0;
+
+    stru = query_read_artikel(ob);
+
+    if(!mappingp(stru))
+        return 0;
+
+    if(!member(stru,brett)              // Brett nicht gekannt
+    || stru[brett,0]<0                 // oder nicht abonniert
+    || !member(stru[brett,1],group) // oder die Gruppe
+    || stru[brett,1][group,0]<0)
+        return tree2str2(query_artikel_baum(brett,group),time() - 92*24*3600,([]),([]));
+        // Wenn nicht abonniert, dann nur die letzten 92 Tage anzeigen.
+
+    /* Fast Check !!! */
+    times = get_dir(BRETT_PATH + brett + "/"+group,4);
+    if ((!sizeof(times) || stru[brett,1][group,0]>times[0]) &&
+        !sizeof(stru[brett,1][group,1]))
+    {
+	fast++;
+	return 0;
+    }
+
+    ret = tree2str2(query_artikel_baum(brett,group),
+        stru[brett,1][group,0],stru[brett,1][group,1],
+        stru[brett,1][group,2]);
+    if(strlen(ret))
+        return ret;
+
+    stru[brett,1][group,0]=time();
+    stru[brett,1][group,1]=([]);
+    set_read_artikel(stru, ob);
+}
+
+private string tree2str(mixed *tree)
+{
+    int i;
+    string st, ret;
+
+    if (!pointerp(tree))
+	return 0;
+    st = "";
+    for (i = 0; i < sizeof(tree); i++)
+    {
+	st += tree[i][TITEL] + "\n";
+	if (ret = tree2str(tree[i][SUBTREE]))
+	    st += ret;
+    }
+    return strlen(st) ? st : 0;
+}
+
+varargs private string query_all_news(object ob, string brett, string group)
+{
+    mixed *stru, *tmp;
+    int a, i, j, ti, nr, *times;
+    string ret;
+
+    if (!objectp(ob))
+	return 0;
+
+    group ||= "+Neues+";
+    stru = query_read_artikel(ob);
+
+    if(mappingp(stru))
+        return query_all_news2(ob,brett,group);
+
+    // first login newbies haben keine neue news, per gesetz, garthan 21.12.98
+    if (!pointerp(stru))
+       return 0;
+
+    if (sizeof(stru) != 3)
+	return tree2str(query_artikel(brett,group));
+
+    if (!pointerp(stru[0]) || (i = member(stru[0],brett)) < 0)
+	return tree2str(query_artikel(brett,group));
+
+    if (!pointerp(stru[2]) || !pointerp(stru[2][i]) ||
+	    sizeof(stru[2][i]) != 3 || !pointerp(stru[2][i][0]) ||
+	    (j = member(stru[2][i][0],group)) < 0)
+	return tree2str(query_artikel(brett,group));
+
+    if (!pointerp(stru[2][i][1]) || sizeof(stru[2][i][1]) < (j + 1))
+	return tree2str(query_artikel(brett,group));
+
+    ti = stru[2][i][1][j];
+    if (ti == -1)
+	return tree2str(query_artikel(brett,group));
+    /* Fast Check !!! */
+    times = get_dir(BRETT_PATH + brett + "/"+group,4);
+    if (!sizeof(times) || ti > times[0])
+    {
+	fast++;
+	return 0;
+    }
+
+    times = query_times(brett,group);
+    if (!sizeof(times))
+	return 0;
+
+    if (!pointerp(stru[2][i][2]) || sizeof(stru[2][i][2]) < (j + 1))
+	return tree2str(query_artikel(brett,group));
+
+    tmp = query_artikel(brett,group);
+    if (!sizeof(tmp))
+	return 0;
+    ret = "";
+    for (a = 0; a < sizeof(tmp); a++)
+    {
+	nr = tmp[a][2];
+	if (member(stru[2][i][2][j],nr) >= 0)
+	    ret += tmp[a][0] + "\n";
+	else if (ti <= times[member(times,to_string(nr)) + 1])
+	    ret += tmp[a][0] + "\n";
+    }
+    if (strlen(ret))
+	return ret;
+
+    stru[2][i][1][j] = time();
+    stru[2][i][2][j] = ({});
+    set_read_artikel(stru,ob);
+}
+
+string query_news(object ob)
+{
+    return query_all_news(ob,"Spieler");
+}
+
+string query_wiznews(object ob)
+{
+    return query_all_news(ob,"Goetter");
+}
+
+string query_prognews(object ob)
+{
+    return query_all_news(ob,"Programmierung");
+}
+
+string query_hlpnews(object ob)
+{
+    return query_all_news(ob,"Engel");
+}
+
+string query_tknews(object ob)
+{
+    return query_all_news(ob,"Traegerkreis", "+Verlautbarungen+");
+}
+
+int is_ingame_brett(string brett)
+{
+    return member(INGAME_BRETTER,brett)>=0;
+}
+
+private mixed *convert_tree(mixed tree, string path)
+{
+    mixed back=({});
+    foreach(mixed art: tree)
+    {
+        mixed a=({art[NUMMER]}),tmp;
+        if(to_int(art[TITEL][0..4])!=art[NUMMER])
+            ERROR("Fehler in Artikel "+art[NUMMER]+": Falsche Nummer im Titel!\n");
+        tmp=get_dir(path+to_string(art[NUMMER]),GETDIR_DATES);
+        if(sizeof(tmp)!=1)
+        {
+            ERROR("Fehler in Artikel "+art[2]+": Datei fehlt!\n");
+            a+=({0});
+        }
+        else
+            a+=tmp;
+        a+=({ strip(art[TITEL][52..61]), strip(art[TITEL][7..49]) });
+        tmp=read_file(path+to_string(art[NUMMER]));
+        if(!tmp)
+        {
+            ERROR("Fehler in Artikel "+art[NUMMER]+": Datei fehlt!\n");
+            a+=({0});
+        }
+        else
+            a+=({strlen((({string})tmp) & "\n")-5});
+        a+=({convert_tree(art[SUBTREE],path)});
+        back+=({a});
+    }
+    return back;
+}
+
+mixed* query_all_bretter(string name)
+{
+    mixed *lesen = ({}), *schreiben = ({});
+    mixed player = find_player(name) || name;
+    
+    add_to_cache(player);
+    call_out(#'delete_from_cache, 0, player); // Just to make sure.
+    
+    foreach(string brett: get_dir(BRETT_PATH+".") - JUNK_SPOOL)
+	foreach(string gruppe: get_dir(BRETT_PATH+brett+"/.")-JUNK_BRT)
+	{
+	    if(has_perm(PERM_READ,player,brett,gruppe))
+		lesen += ({ ({brett, gruppe}) });
+	    if(has_perm(PERM_WRITE,player,brett,gruppe))
+		schreiben += ({ ({brett, gruppe}) });
+	}
+    
+    delete_from_cache(player);
+    
+    return ({ lesen, schreiben });
+}
+
+void prepare_renewal() {}
+void finish_renewal(object neu) {}
+void abort_renewal() {}

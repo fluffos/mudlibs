@@ -1,0 +1,190 @@
+// This file is part of UNItopia Mudlib.
+// ---------------------------------------------------------------------
+// File:	/secure/player_modifier.c
+// Description:	Handelt Wuerdigungen fuer Goetter, die nicht eingeloggt sind.
+// Author:	Sissi (16.02.2001)
+// Modified by:	
+//
+// $Log: player_modifier.c,v $
+// Revision 1.8  2014/12/19 18:22:50  myonara
+// neue Funktion set_rang, abgesichert ueber MUDLIB_PRIVI
+//
+// Revision 1.7  2007/07/27 15:08:08  gnomi
+// SuS-Unterstuetzung: Geldbetraege offline einzahlen.
+//
+// Revision 1.6  2003/07/16 02:18:10  gnomi
+// Moeglichkeit fuer den Player, seine Aggressionsdaten mit einem ausgeloggten
+// Spieler abzugleichen, eingebaut.
+//
+// Revision 1.5  2002/06/24 22:51:21  gnomi
+// seteuid(getuid()) entfernt; EUID wird vom Master aus gesetzt.
+//
+// Revision 1.4  2001/07/14 22:58:24  gnomi
+// Nicht auf inheritete Variablen zugreifen.
+//
+// Revision 1.3  2001/03/15 18:35:30  gnomi
+// Filenamen im Header korrigiert.
+//
+// Revision 1.2  2001/03/13 23:10:34  freaky
+// Description: Filename umbenannt.
+//
+// Revision 1.1  2001/02/21 04:45:34  gnomi
+// Von /apps/offline_appreciations.c hierher verschoben
+// und um die Moeglichkeit von Offline-(M)-Eintragung erweitert.
+//
+// Revision 1.1  2001/02/16 23:57:41  sissi
+// Offline Wuerdigungen eintragen.
+//
+
+// UID: Root
+
+#pragma strong_types
+
+inherit "/i/player/appreciations";
+
+#define APPRECIATION_CONTROLLER  "/room/rathaus/filed"
+#include <apps.h>
+#include <message.h>
+#include <level.h>
+
+private nosave string real_name;
+
+// Eine Liste mit: ({"name","Begruendung."})
+private mixed *offline_opfer;
+private mapping opponents;
+
+void create ()
+{
+}
+
+mixed load_wiz_appreciations(string player_name)
+{
+    if (!player_name) return;
+    player_name = lower_case (player_name);
+    if ((object_name (previous_object()) != APPRECIATION_CONTROLLER) ||
+        (!this_interactive() || this_interactive() != this_player()))
+        return "Das geht nur vom Gouverneursbuero aus.\n";
+    if (find_player (player_name))
+        return wrap (capitalize(player_name)+" ist eingeloggt. Trotzdem wurde "
+            __FILE__ " aufgerufen. Schnapp Dir nen Admin, "
+            "da ist was falsch.");
+    if (!player_exists (player_name))
+        return "Es gibt niemanden mit diesem Namen.\n";
+    clear_wiz_appreciations();
+    restore_object ("/var/players/"+player_name[0..0]+"/"+player_name);
+    real_name = player_name;
+    return 1;
+}
+
+mixed save_wiz_appreciations(string player_name)
+{
+    if (!player_name) return;
+    player_name = lower_case (player_name);
+    if ((object_name (previous_object()) != APPRECIATION_CONTROLLER) ||
+        (!this_interactive() || this_interactive() != this_player()))
+        return "Das geht nur vom Gouverneursbuero aus.\n";
+    if (find_player (player_name))
+        return wrap (capitalize(player_name)+" ist eingeloggt. Trotzdem wurde "
+            "/apps/offline_appreciations aufgerufen. Schnapp Dir nen Admin, "
+            "da ist was falsch.");
+    if (player_name != real_name)
+        return wrap ("Beim Abspeichern der offline wizard appreciation ist "
+            "der falsche Name uebergeben worden; schnapp Dir nen Admin, "
+            "da ist was falsch gelaufen.");
+    if (write_file ("/var/players/"+player_name[0..0]+"/"+player_name+".o",
+        "wizard_appreciations "
+        +explode (save_value (query_wiz_appreciations(0)),"\n")[1]+"\n")
+        != 1)
+        return "Beim Abspeichern der Wuerdigung ist ein Fehler aufgetreten.\n";
+    return 1;
+}
+
+void add_opfer(string moerder, object opfer, string text)
+{
+    object pl;
+    string oname;
+    if(!playerp(previous_object()) || !playerp(opfer)) return;
+    moerder=lower_case(moerder);
+    oname=opfer->query_real_cap_name();
+    if(moerder == oname) return;
+    if(pl=(find_player(moerder) || find_player("STATUE "+moerder)))
+    {
+        if(pl==opfer) return;
+        opfer->send_message_to(pl,MT_NOTIFY,MA_UNKNOWN,
+	    wrap("Du hast " + den(opfer) +
+            (text?" durch "+text:"") + " umgebracht."));
+	pl->add_opfer(opfer);
+        return;
+    }
+    else if(pl=find_player("login:"+moerder))
+	pl->add_offline_opfer( ({({oname,text})}) );
+    // Kein Return, da auch dieses Login abgebrochen werden kann.
+    // (Falls es nicht abgebrochen wird, dann wird das Playerfile sowieso
+    // ueberschrieben.)
+    if (!player_exists(moerder)) return;
+    offline_opfer = 0;
+    restore_object(PLAYER_FILE(moerder));
+    if(!offline_opfer) offline_opfer=({({oname,text})});
+    else offline_opfer+=({({oname,text})});
+    write_file (PLAYER_FILE(moerder)+".o",
+        "offline_opfer "
+        +explode (save_value (offline_opfer),"\n")[1]+"\n");
+}
+
+void accept_aggression_data(string enemy, int timeout, int flags)
+{
+    if(!playerp(previous_object()))
+	return;
+
+    opponents = ([:2]);
+    restore_object(PLAYER_FILE(enemy));
+    
+    if(timeout<0)
+	m_delete(opponents, previous_object()->query_real_name());
+    else
+	m_add(opponents, previous_object()->query_real_name(), timeout, flags);
+	
+    write_file (PLAYER_FILE(enemy)+".o",
+	"opponents "+explode(save_value(opponents),"\n")[1]+"\n");
+}
+
+void add_konto(string spieler, int value)
+{
+    object pl;
+    
+    if(!MASTER_OB->mudlib_privilege_violation("offline_add_konto",
+	previous_object(), spieler, value))
+	    return;
+
+    if(pl = find_player(spieler))
+	pl->add_konto(value);
+    else
+    {
+	value += PLAYER_READER->query(spieler, "konto");
+	write_file(PLAYER_FILE(spieler)+".o",
+	    "konto "+value+"\n");
+    }
+}
+
+int set_rang(string spieler, int value)
+{
+    object pl;
+    
+    if(!MASTER_OB->mudlib_privilege_violation("offline_set_rang",
+            previous_object(), spieler, value))
+    {
+        return 0;
+    }
+
+    if(pl = find_player(spieler))
+    {
+        pl->set_rang(value);
+        return 1;
+    }
+    else
+    {
+        write_file(PLAYER_FILE(spieler)+".o",
+            "rang "+value+"\n");
+        return 1;
+    }
+}

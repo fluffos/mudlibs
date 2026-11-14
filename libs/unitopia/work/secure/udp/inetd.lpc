@@ -1,0 +1,983 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/udp/inetd.c
+// Description:	INETD fuer die Intermud-Kommunikation
+// Author:	Zebedee
+// Modified by:	Freaky (06.10.94)
+//		Garthan (22.02.96) news added to COMMANDS
+//		Freaky (02.03.96) Fehler in receive_udp verbessert
+//		Freaky (19.11.97) Security-Fix von Mubo und Police in send_udp
+//
+// $Log: inetd.c,v $
+// Revision 1.27  2013-03-16 16:04:04  gnomi
+// Cap-Namen als Empfaenger akzeptieren.
+//
+// Revision 1.26  2012-11-26 22:26:37  gnomi
+// query_host() eingebaut.
+//
+// Revision 1.25  2012-11-16 18:03:40  gnomi
+// Auf IPv6 umgestellt.
+//
+// Revision 1.24  2009-01-15 09:27:02  gnomi
+// Beim Reply-Timeout den Down-Zeitpunkt nicht aktualisieren.
+//
+// Revision 1.23  2008-04-26 18:11:42  gnomi
+// Sicherheitsabfrage, falls INETD-Datei nicht gelesen werden konnte.
+//
+// Revision 1.22  2006-05-01 00:44:47  gnomi
+// Indexing past string end...
+//
+// Revision 1.21  2005/11/12 18:44:07  gnomi
+// Beachten, dass die HOSTS-Liste laenger als 50.000 Bytes sein kann...
+//
+// Revision 1.20  2005/10/20 19:33:54  gnomi
+// Indexing past string end.
+//
+// Revision 1.19  2005/02/21 22:22:12  gnomi
+// Noch ein Bugfix hinterher.
+//
+// Revision 1.18  2005/02/21 21:56:28  gnomi
+// MUD-Liste automatisch erweitern, saeubern und abspeichern.
+//
+// Revision 1.17  2005/02/06 03:25:29  gnomi
+// Emote-Erlaubnis erteilt.
+//
+// Revision 1.16  2002/07/04 23:07:57  gnomi
+// seteuid(getuid()) entfernt; EUID wird vom Master aus gesetzt.
+//
+// Revision 1.15  2001/12/27 16:12:01  freaky
+// an neue FTP-Struktur angepasst.
+//
+// Revision 1.14  2001/12/14 11:04:26  gnomi
+// UDP-Signale eingebaut zum Ausloesen von Ereignissen im MUD.
+//
+// Revision 1.13  2001/06/09 02:18:22  gnomi
+// Mud-Namen auf 32 Zeichen beschraenken.
+//
+// Revision 1.12  2001/05/30 16:19:39  freaky
+// w-Abhaengigkeit rausgenommen.
+//
+// Revision 1.11  2001/05/30 16:03:11  freaky
+// Versionabhaengigkeiten rausgeworfen.
+//
+// Revision 1.10  2001/04/29 14:21:55  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.9  2001/03/25 13:57:02  sissi
+// known_mud liefert einen string und ist daher jetzt nicht mehr "int".
+//
+// Revision 1.8  2001/03/14 17:31:08  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.7  2001/02/24 15:20:13  freaky
+// send_udp bzw. send_imp repariert.
+//
+// Revision 1.6  2001/02/24 15:09:12  freaky
+// send_imp nach send_udp umbenannt.
+//
+// Revision 1.5  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+ * UDP port handling code. Version 0.61
+ * Written by Nostradamus for Zebedee.
+ * Developed from an original concept by Alvin@Sushi.
+ */
+#include <rtlimits.h>
+#include <level.h>
+
+#pragma strict_types
+#include <udp.h>
+
+// Freaky: Lokale Einstellungen fuer UNItopia
+#ifdef UNItopia
+#define LOCAL_UDP_HANDLER(x)  (x[0]=='+')
+private mapping locals;
+#endif
+#define EXTERN_UDP_HANDLER(x) (x=="extern")
+private string extern_udp_handler_host;
+private int extern_udp_handler_port, extern_udp_accesses;
+// End Freaky
+
+/* --- Configurable definitions. --- */
+
+/* CD muds will probably need these include file. */
+/* #include <std.h> */
+/* #include "/config/sys/local.h" */
+
+/* Public commands which will be accessible to any unlisted muds.
+ * PING, QUERY and REPLY are included by default. */
+// Freaky: Eigene Commands
+// ({ "channel", "finger", "ftp", "locate", "man", "tell", "who" })
+#define COMMANDS \
+({ "channel", "finger", "tell", "locate", "who", "mail", "news", "portal" })
+// End Freaky
+
+/* Define this to the object that receives incoming packets and passes
+ * them to the inetd. Undefine for no receive_udp() security.
+ * NOTE: The string must be of the format that object_name() returns. */
+#define UDP_MASTER	__MASTER_OBJECT__
+/* #define UDP_MASTER	SECURITY	// CD */
+/* #define UDP_MASTER	"/secure/master" */
+/* #define UDP_MASTER	"obj/master" */
+
+/* How to set the euid for this object if using native mode.
+ * Ensure that it can read the INETD_HOSTS file. */
+/* #define SET_EUID		seteuid("root") */
+//#define SET_EUID		seteuid(getuid())
+#define SET_EUID
+
+/* Define these as appropriate if you do not have the relevant efuns. */
+/* #define to_int(x)		atoi(x)			// MudOS & CD */
+/* #define to_string(x)		("" + x)		// CD */
+/* #define copy_mapping(x)	copy(x)			// MudOS */
+/* #define copy_mapping(x)	(x + ([ ]))		// CD */
+/* #define send_udp(host, port, data) \
+		SECURITY->send_udp_message(host, port, data)	// CD */
+
+/* Define if casts can only be used on unknown or mixed types. (CD) */
+#undef RESTRICTED_CASTS
+
+/* Define if your system does not support the a[n..] indexing notation. (CD) */
+#undef USE_EXTRACT
+
+/* Define this if you are running another intermud package concurrently. */
+/* #define RECEIVE_UDP_COMPAT(sender, packet) \
+		UDP_MANAGER->incoming_udp(sender, packet)	// CD */
+
+/* Define this if you are running another intermud package concurrently and
+ * have a compatability module for it. */
+/* #define SEND_UDP_COMPAT(mudname, data, expect_reply) \
+		"/secure/udp_compat"->send_udp(mudname, data, expect_reply) */
+
+/* The maximum number of characters we can send in one packet.
+ * You may need to reduce this, but 512 should be safe. */
+#define MAX_PACKET_LEN	1024
+
+/* You shouldn't need to change anything below. */
+
+#ifdef ZEBEDEE
+#include <defs.h>
+#endif
+
+#ifndef DATE
+#define DATE		shorttimestr(time())
+#endif
+
+/* --- End of Config. Do not alter anything below. --- */
+
+#define UNKNOWN		0
+#define UP		time()
+#define DOWN(x)		(-abs(x))
+
+#define DELIMITER	"|"
+#define RETRY		"_RETRY"
+
+private mapping hosts, pending_data, incoming_packets;
+private int packet_id;
+
+void set_host_list();
+varargs string send_udp(string mudname, mapping data, int expect_reply);
+
+#define DEBUG(msg)	if (find_player("nostradamus"))\
+			tell_object(find_player("nostradamus"), msg)
+
+#if !defined(COMPAT_FLAG) || defined(ZEBEDEE)
+void create() {
+#ifndef COMPAT_FLAG
+    SET_EUID;
+#endif
+#else
+void reset(mixed arg) {
+    if (arg)
+	return;
+#endif
+    packet_id = 0;
+    pending_data = ([ ]);
+    incoming_packets = ([ ]);
+    hosts = ([ ]);
+    // Freaky: Mafad
+#ifdef LOCAL_UDP_HANDLER
+    locals = ([ ]);
+#endif
+    // End Freaky
+    set_host_list();
+    if (!this_player())
+	call_out("startup", 1);
+}
+
+string* ping_queue = ({});
+void send_ping(string name)
+{
+    if(!name)
+    {
+	if(sizeof(ping_queue))
+	{
+	    foreach(string pname: ping_queue[0..PINGS_AT_ONCE-1])
+		send_udp(pname, ([ REQUEST: PING ]), 1);
+	    ping_queue = ping_queue[PINGS_AT_ONCE..<1];
+	    if(sizeof(ping_queue))
+		call_out(#'send_ping, 2);
+	}
+    }
+    else if(member(ping_queue, name)<0)
+    {
+	ping_queue += ({name});
+	if(sizeof(ping_queue)==1)
+	    call_out(#'send_ping, 2);
+    }
+}
+
+void parse_host_line(mixed line, int remote)
+{
+    int stat;
+    string *local_cmds;
+    string name;
+    mixed tmp;
+    if (extern_call() &&
+	strstr(object_name(previous_object()),"/secure/udp/"))
+	    return;
+
+    if (line == "" || line[0] == '#')
+	return;
+
+    line = explode(line, "\t");
+    if(sizeof(line)==1)
+        line = explode(line[0], ":");
+
+    if (sizeof(line) < 5 ||
+	(remote && strlen(line[HL_HOST_IP] & ".")!=3) ||
+	strlen(line[HL_HOST_IP]-"0123456789abcdef.:") ||
+	strlen(line[HL_HOST_UDP_PORT]-"0123456789"))
+    {
+	if(!remote)
+	    sys_log(INETD_LOG_FILE, "*Parse error in hosts file: line '" +
+		 implode(line, "\t") + "'\n");
+	return;
+    }
+    name = lower_case(line[HL_HOST_NAME]);
+
+    if(remote && name==lower_case(MUD_NAME))
+	return;
+    
+    if(remote)
+	local_cmds = COMMANDS;
+    else if (member(local_cmds = explode(line[HL_LOCAL_COMMANDS], ","),
+		"*") != -1)
+	local_cmds = local_cmds - ({ "*" }) + COMMANDS;
+
+    if(sizeof(line)>HL_HOST_STATUS)
+	stat = to_int(line[HL_HOST_STATUS]);
+    else
+	stat = UNKNOWN;
+
+    // Freaky: Locals einlesen
+#ifdef LOCAL_UDP_HANDLER
+    if (LOCAL_UDP_HANDLER(name))
+    {
+	if (tmp = locals[name])
+	    stat = tmp[HL_HOST_STATUS];
+
+	name=name[1..];
+	locals[name] = ({
+	    capitalize(line[HL_HOST_NAME]),
+	    line[HL_HOST_IP],
+	    to_int(line[HL_HOST_UDP_PORT]),
+	    local_cmds,
+	    explode(line[HL_HOST_COMMANDS], ","),
+	    stat
+	});
+	return;
+    }
+#endif
+    // End Freaky
+
+    if(tmp = hosts[name])
+    {
+	local_cmds = tmp[HL_LOCAL_COMMANDS];
+
+	mixed* new_entry = ({
+	    capitalize(line[HL_HOST_NAME]),
+	    line[HL_HOST_IP],
+	    to_int(line[HL_HOST_UDP_PORT]),
+	    local_cmds,
+	    explode(line[HL_HOST_COMMANDS], ","),
+	    tmp[HL_HOST_STATUS]
+	});
+	stat = tmp[HL_HOST_STATUS];
+	
+	if(remote)
+	{
+	    if(stat<=0 && 
+		(line[HL_HOST_IP]!=tmp[HL_HOST_IP] ||
+		to_int(line[HL_HOST_UDP_PORT])!=tmp[HL_HOST_UDP_PORT]))
+	    {
+		hosts[name] = new_entry;
+		send_ping(name);
+	    }
+	}
+	else if(stat==UNKNOWN)
+	{
+	    send_ping(name);
+	}
+    }
+    else
+    {
+	hosts[name] = ({
+	    capitalize(line[HL_HOST_NAME]),
+	    line[HL_HOST_IP],
+	    to_int(line[HL_HOST_UDP_PORT]),
+	    local_cmds,
+	    explode(line[HL_HOST_COMMANDS], ","),
+	    stat
+	});
+	if(stat==UNKNOWN && remote)
+	{
+	    // Our local database gets pinged by startup().
+	    send_ping(name);
+	}
+    }
+}
+
+string read_host_file(string file)
+{
+    int limit, pos;
+    string text,add;
+    
+    limit = query_limits()[LIMIT_BYTE];
+    if(!limit)
+	return read_file(file);
+
+    text = "";
+    
+    while(add = read_bytes(file, pos, limit))
+    {
+	text += add;
+	pos += limit;
+    }
+    
+    return sizeof(text) && text;
+}
+
+void set_host_list()
+{
+    mixed data;
+    
+    data = read_host_file(HOST_SAVE_FILE);
+    if (!data)
+	data = read_host_file(HOST_FILE);
+    if (data)
+	for(int i = sizeof(data = explode(data, "\n")); i--; )
+	    parse_host_line(data[i], 0);
+}
+
+void save_host_file()
+{
+    hosts = filter(hosts,
+	(: $2[HL_HOST_STATUS]>=0 ||
+	    time()+$2[HL_HOST_STATUS]<DOWN_TIME_FOR_REMOVAL :));
+
+    rm(HOST_SAVE_FILE);  
+
+    foreach(string host: sort_array(m_indices(hosts),#'>))
+    {
+	mixed data = hosts[host];
+
+	write_file(HOST_SAVE_FILE,
+	    data[HL_HOST_NAME]+"\t"+
+	    data[HL_HOST_IP]+"\t"+
+	    data[HL_HOST_UDP_PORT]+"\t"+
+	    implode(data[HL_LOCAL_COMMANDS],",")+"\t"+
+	    implode(data[HL_HOST_COMMANDS],",")+"\t"+
+	    data[HL_HOST_STATUS]+"\n");
+    }
+}
+
+#ifndef COMPAT_FLAG
+void reset()
+{
+    save_host_file();
+}
+#endif
+
+int remove()
+{
+    save_host_file();
+    destruct(this_object());
+    return 1;
+}
+
+void prepare_renewal() {save_host_file();}
+void finish_renewal(object neu) {}
+void abort_renewal() {}
+
+void startup() {
+    foreach(string mud: hosts)
+	send_ping(mud);
+}
+
+mixed decode(string arg) {
+    if (sizeof(arg) && arg[0] == '$')
+#ifdef USE_EXTRACT
+	return extract(arg, 1);
+#else
+	return arg[1..];
+#endif
+#ifdef RESTRICTED_CASTS
+    if (to_string(to_int(arg)) == arg)
+	return to_int(arg);
+#else
+    if ((string)((int)arg) == arg)
+	return (int)arg;
+#endif
+    return arg;
+}
+
+mixed decode_packet(string packet) {
+    string *data;
+    mapping ret;
+    string info, tmp;
+    mixed class;
+    int i;
+
+    data = explode(packet, DELIMITER);
+    /* If this packet has been split, handle buffering. */
+    if (data[0][0..strlen(PACKET)] == PACKET + ":") {
+	int id, n;
+
+	if (sscanf(
+#ifdef USE_EXTRACT
+	extract(data[0], strlen(PACKET)+1)
+#else
+	data[0][strlen(PACKET)+1..]
+#endif
+	, "%s:%d:%d/%d", class, id, i, n) != 4)
+	    return 0;
+	class = lower_case(class) + ":" + id;
+	if (pointerp(incoming_packets[class])) {
+	    incoming_packets[class][i-1] =
+#ifdef USE_EXTRACT
+	    extract(packet, strlen(data[0])+1);
+#else
+	    packet[strlen(data[0])+1..];
+#endif
+	    if (member(incoming_packets[class], 0) == -1) {
+		ret = decode_packet(implode(incoming_packets[class], ""));
+		incoming_packets = m_delete(incoming_packets, class);
+		return ret;
+	    }
+	} else {
+	    incoming_packets[class] = allocate(n);
+	    incoming_packets[class][i-1] =
+#ifdef USE_EXTRACT
+	    extract(packet, strlen(data[0])+1);
+#else
+	    packet[strlen(data[0])+1..];
+#endif
+	    /* If no timeout is running then start one. */
+	    if (!pending_data[class])
+		call_out("incoming_time_out", REPLY_TIME_OUT, class);
+	}
+	return 1;
+    }
+    ret = ([ ]);
+    for(i = 0; i < sizeof(data); i++) {
+	if (sscanf(data[i], "%s:%s", tmp, info) != 2)
+	    return 0;
+	switch((string)(class = decode(tmp))) {
+	    case DATA:
+		return ret + ([ DATA: decode(
+#ifdef USE_EXTRACT
+		    extract(implode(data[i..sizeof(data)-1], DELIMITER)
+		    , strlen(DATA)+1)
+#else
+		    implode(data[i..], DELIMITER)[strlen(DATA)+1..]
+#endif
+		    )
+		]);
+            case NAME:
+                ret[NAME] = decode(info)[0..31];
+                continue;
+	    default:
+		ret[class] = decode(info);
+		continue;
+	}
+    }
+    return ret;
+}
+
+private int valid_request(mapping data) {
+    mixed host_data;
+    string req;
+    
+    if (!data[NAME] || !data[UDP_PORT] || !(req = data[REQUEST])) {
+	sys_log(INETD_LOG_FILE, DATE + ": Illegal packet.\n");
+	return 0;
+    }
+    // Freaky: Externer Zugang
+#ifdef EXTERN_UDP_HANDLER
+    if (EXTERN_UDP_HANDLER(data[NAME])) {
+	extern_udp_accesses++;
+	if (req=="who" || req=="finger" || req=="news") {
+	    extern_udp_handler_host=data[HOST];
+	    extern_udp_handler_port=data[UDP_PORT];
+	    return 1;
+	}
+	if (req=="email" && member(({"127.0.0.1", "::1", "::ffff:127.0.0.1"}), data[HOST]) >= 0)
+	    return 1;
+	if (req=="signal" && member(({"127.0.0.1", "::1", "::ffff:127.0.0.1"}), data[HOST]) >= 0)
+	{
+	    extern_udp_handler_host=data[HOST];
+	    extern_udp_handler_port=data[UDP_PORT];
+	    return 1;
+	}
+	return 0;
+    }
+#endif
+    // End Freaky
+    if ((host_data = hosts[lower_case(data[NAME])])
+    // Freaky: Mafad
+#ifdef LOCAL_UDP_HANDLER
+	|| (host_data = locals[lower_case(data[NAME])])
+#endif
+    // End Freaky
+	) {
+#if 0
+	if (data[HOST] != host_data[HL_HOST_IP]) {
+	    sys_log(INETD_LOG_FILE, DATE + ": Host mismatch.\n");
+	    return 0;
+	}
+	if (data[UDP_PORT] != host_data[HL_HOST_UDP_PORT]) {
+	    sys_log(INETD_LOG_FILE, DATE + ": Port mismatch.\n");
+	    return 0;
+#else
+	if (data[HOST] != host_data[HL_HOST_IP]) {
+	    sys_log(INETD_LOG_FILE, DATE + ": Host change:\n" +
+	    host_data[HL_HOST_NAME] + ": " + host_data[HL_HOST_IP] + " -> " +
+	    data[HOST] + "\n\n");
+	    host_data[HL_HOST_IP] = data[HOST];
+	}
+	if (data[UDP_PORT] != host_data[HL_HOST_UDP_PORT]) {
+	    sys_log(INETD_LOG_FILE, DATE + ": Port change:\n" +
+	    host_data[HL_HOST_NAME] + " (" + host_data[HL_HOST_IP] + "): " +
+	    host_data[HL_HOST_UDP_PORT] + " -> " + data[UDP_PORT] + "\n\n");
+	    host_data[HL_HOST_UDP_PORT] = data[UDP_PORT];
+	}
+#endif
+    } else {
+	host_data = hosts[lower_case(data[NAME])] = ({
+	    data[NAME],
+	    data[HOST],
+	    data[UDP_PORT],
+	    COMMANDS,
+	    ({ "*" }),
+	    UP
+	});
+	sys_log(INETD_LOG_FILE, DATE + ": New mud.\n" + data[NAME] + ":" +
+	data[HOST] + ":" + data[UDP_PORT] + "\n\n");
+    }
+
+
+    if (req != PING && req != UDP_QUERY && req != REPLY &&
+    member(host_data[HL_LOCAL_COMMANDS], data[REQUEST]) == -1) {
+	/* This should probably send a system message too. */
+	send_udp(host_data[HL_HOST_NAME], ([
+	    REQUEST: REPLY,
+	    RECIPIENT: data[SENDER],
+	    ID: data[ID],
+	    DATA: "Invalid request @" + LOCAL_NAME + ": " +
+		capitalize(data[REQUEST]) + "\n"
+	]) );
+	sys_log(INETD_LOG_FILE, DATE + ": Invalid request.\n");
+	return 0;
+    }
+    return 1;
+}
+
+void receive_udp(string sender, string packet) {
+    mapping data;
+    string req, err;
+
+#ifdef UDP_MASTER
+    if (!previous_object() ||
+    object_name(previous_object()) != UDP_MASTER) {
+	sys_log(INETD_LOG_FILE, DATE + ": Illegal call of receive_udp() by " +
+	object_name(previous_object()) + "\n\n");
+	return;
+    }
+#endif
+    if (!mappingp(data = decode_packet(packet))) {
+	if (!data)
+#ifdef RECEIVE_UDP_COMPAT
+	    RECEIVE_UDP_COMPAT(sender, packet);
+#else
+	    sys_log(INETD_LOG_FILE, 
+                sprintf("%s: Received invalid packet.\nSender: %s\nPacket:\n%#Q\n\n",
+                        DATE, sender, packet));
+#endif
+	return;
+    }
+    
+    data[HOST] = sender;
+    if (!valid_request(data)) {
+	sys_log(INETD_LOG_FILE, "Invalid Request:\nSender: " + sender + 
+	"\nPacket:\n" + packet + "\n\n");
+	return;
+    }
+    // Freaky: Mafad
+#ifdef LOCAL_UDP_HANDLER
+    if (locals[lower_case(data[NAME])])
+	locals[lower_case(data[NAME])][HL_HOST_STATUS] = UP;
+    else
+#endif
+#ifdef EXTERN_UDP_HANDLER
+    if (!EXTERN_UDP_HANDLER(data[NAME]))
+#endif
+    // End Freaky
+    hosts[lower_case(data[NAME])][HL_HOST_STATUS] = UP;
+    req = data[REQUEST];
+    if (req == REPLY) {
+    	mapping pending;
+
+	/* If we can't find the reply in the pending list then bin it. */
+	if (!(pending = pending_data[lower_case(data[NAME]) + ":" + data[ID]]))
+	    return;
+	data[REQUEST] = pending[REQUEST];
+#ifdef INETD_DIAGNOSTICS
+	data[PACKET_LOSS] = pending[PACKET_LOSS];
+	data[RESPONSE_TIME] = time() - pending[RESPONSE_TIME];
+#endif
+	pending_data =
+	m_delete(pending_data, lower_case(data[NAME]) + ":" + data[ID]);
+    }
+    // Freaky: No catch
+#if 0
+    // End Freaky
+    if (err = catch(
+    call_other(UDP_CMD_DIR + req, "udp_" + req, copy(data)))) {
+	send_udp(data[NAME], ([
+	    REQUEST: REPLY,
+	    RECIPIENT: data[SENDER],
+	    ID: data[ID],
+	    DATA: capitalize(req)+ " request failed @" + LOCAL_NAME + ".\n"
+	]) );
+	sys_log(INETD_LOG_FILE, DATE + ": " + data[REQUEST] + " from " +
+	data[NAME] + " failed.\n" + err + packet + "\n\n");
+    }
+    // Freaky: No catch
+#else
+    call_other(UDP_CMD_DIR + req, "udp_" + req, copy(data));
+#endif
+    // End Freaky
+}
+
+string expand_mud(string mudname)
+{
+    string *names;
+
+    mudname = lower_case(mudname);
+
+    if (hosts[mudname])
+	return mudname;
+
+    names = filter(m_indices(hosts),
+	(: !strstr($1, $2) :), mudname);
+
+    if (sizeof(names) == 1)
+	return names[0];
+
+    names = filter(names,
+	(: hosts[$1][HL_HOST_STATUS] > 0 :));
+
+    if (sizeof(names) == 1)
+	return names[0];
+
+    return 0;
+}
+
+string encode(mixed arg) {
+    if (objectp(arg))
+	return object_name(arg);
+    if (stringp(arg) && sizeof(arg) && (arg[0] == '$' ||
+#ifdef RESTRICTED_CASTS
+    to_string(to_int(arg)) == (string)arg))
+#else
+    (string)to_int(arg) == (string)arg))
+#endif
+	return "$" + arg;
+    return to_string(arg);
+}
+
+string encode_packet(mapping data) {
+    int i;
+    mixed indices;
+    string header, body, t1, t2, ret;
+    status data_flag;
+
+    for(i = sizeof(indices = m_indices(data)); i--; ) {
+	if (indices[i] == DATA) {
+	    data_flag = 1;
+	    continue;
+	}
+	header = encode(indices[i]);
+	body = encode(data[indices[i]]);
+	if (sscanf(header, "%s" + DELIMITER + "%s", t1, t2) ||
+	sscanf(body, "%s" + DELIMITER + "%s", t1, t2))
+	    return 0;
+	if (ret)
+	    ret +=
+	    DELIMITER + header + ":" + body;
+	else
+	    ret = header + ":" + body;
+    }
+    if (ret) {
+	if (data_flag)
+	    ret += DELIMITER + DATA + ":" + encode(data[DATA]);
+	return ret;
+    }
+}
+
+string *explode_packet(string packet, int len) {
+    string* exploded = ({});
+    int pos;
+
+    for(pos = 0; pos < sizeof(packet); pos+=len)
+	exploded += ({ packet[pos..pos+len-1] });
+
+    return exploded;
+}
+
+varargs string send_udp(string mudname, mapping data, int expect_reply) {
+    mixed host_data;
+    string *packet_arr;
+    string packet;
+    int i;
+
+    if (extern_call() && !adminp(this_interactive()) &&
+	strstr(object_name(previous_object()),"/secure/udp/") &&
+	strstr(object_name(previous_object()),"/room/serv/") &&
+#ifdef UNItopia
+        strstr(object_name(previous_object()),"/p/Item/Toy/obj/stoffdrache#") &&
+#endif
+		// member(ALLOWEDSENDER,object_name(previous_object())) < 0 &&
+	(playerp(previous_object()) ?
+	 (lower_case(data[SENDER]) != ({string})previous_object()->query_real_name()) : 1
+	)
+       )
+    {
+      sys_log(INETD_LOG_FILE, DATE + ": Illegaler Aufruf von send_udp()\n"
+	"Objekt: "+ object_name(previous_object()) +
+	(playerp(previous_object()) ?
+	    "\""+previous_object()->query_real_name()+"\"" : "") +
+	(this_interactive() ?
+	    "\nInteraktiv: "+ this_interactive()->query_real_name() : "") +
+	"\n\n"
+      );
+      return "inetd: illegaler Aufruf!\n";
+    }
+
+    mudname = lower_case(mudname);
+    // Freaky: Externer Zugang
+#ifdef EXTERN_UDP_HANDLER
+    if (EXTERN_UDP_HANDLER(mudname)) {
+	if (extern_udp_handler_host)
+	{
+	    //tell_object(find_player("freaky") || this_object(),sprintf("UDP-EXT: %O %O %O\n",extern_udp_handler_host,extern_udp_handler_port,data[DATA]));
+	    if (!efun::send_udp(extern_udp_handler_host,
+			extern_udp_handler_port, data[DATA]));
+		return "inetd: Error in sending packet.\n";
+	}
+	return 0;
+    }
+#endif
+    // End Freaky
+    if (!(host_data = hosts[mudname])
+    // Freaky: Mafad
+#ifdef LOCAL_UDP_HANDLER
+	&& !(host_data = locals[mudname])
+#endif
+    // End Freaky
+	) {
+	string expanded = expand_mud(mudname);
+	    
+	if(expanded)
+		host_data = hosts[mudname = expanded];
+	else
+#ifdef SEND_UDP_COMPAT
+	    return (string)SEND_UDP_COMPAT(mudname, data, expect_reply);
+#else
+	    return "Unknown mud: " + capitalize(mudname) + "\n";
+#endif
+    }
+    if (data[REQUEST] != PING &&
+    data[REQUEST] != UDP_QUERY &&
+    data[REQUEST] != REPLY &&
+    member(host_data[HL_HOST_COMMANDS],"*") == -1 &&
+    member(host_data[HL_HOST_COMMANDS],data[REQUEST]) == -1)
+	return capitalize(data[REQUEST]) + ": Command unavailable @" +
+	host_data[HL_HOST_NAME] + "\n";
+    data += ([ NAME: LOCAL_NAME, UDP_PORT: LOCAL_UDP_PORT ]);
+    if (expect_reply) {
+	/* Don't use zero. */
+	data[ID] = ++packet_id;
+	/* Don't need copy_mapping() as we are changing the mapping size. */
+	pending_data[mudname + ":" + packet_id] =
+#ifdef INETD_DIAGNOSTICS
+	data + ([ NAME: host_data[HL_HOST_NAME], RESPONSE_TIME: time() ]);
+#else
+	data + ([ NAME: host_data[HL_HOST_NAME] ]);
+#endif
+	// Freaky: Mafad
+#ifdef LOCAL_UDP_HANDLER
+	if (expect_reply<0)
+	    call_out("reply_time_out", -expect_reply, mudname+":"+packet_id);
+	else
+#endif
+	// End Freaky
+	call_out("reply_time_out", REPLY_TIME_OUT, mudname + ":" + packet_id);
+    }
+    if (!(packet = encode_packet(data))) {
+	if (expect_reply)
+	    pending_data = m_delete(pending_data, mudname + ":" + packet_id);
+	sys_log(INETD_LOG_FILE, DATE + ": Illegal packet sent by " +
+	object_name(previous_object()) + "\n\n");
+	return "inetd: Illegal packet.\n";
+    }
+    if (strlen(packet) <= MAX_PACKET_LEN)
+	packet_arr = ({ packet });
+    else {
+	string header;
+	int max;
+
+	header = PACKET + ":" + lower_case(LOCAL_NAME) + ":" +
+	(expect_reply ? packet_id : ++packet_id) + ":";
+	packet_arr = explode_packet(packet,
+	/* Allow 8 extra chars: 3 digits + "/" + 3 digits + DELIMITER */
+	MAX_PACKET_LEN - (strlen(header) + 8));
+	for(i = max = sizeof(packet_arr); i--; )
+	    packet_arr[i] =
+	    header + (i+1) + "/" + max + DELIMITER + packet_arr[i];
+    }
+    for(i = sizeof(packet_arr); i--; ) {
+	//tell_object(find_player("freaky") || this_object(),sprintf("UDP: %O\n",packet_arr[i]));
+	if (!efun::send_udp(host_data[HL_HOST_IP],
+		    host_data[HL_HOST_UDP_PORT], packet_arr[i]))
+	    return "inetd: Error in sending packet.\n";
+    }
+    return 0;
+}
+
+void incoming_time_out(string id) {
+    incoming_packets = m_delete(incoming_packets, id);
+}
+
+void reply_time_out(mixed id) {
+    mapping data;
+
+    if (data = pending_data[id]) {
+	object ob;
+
+#ifdef INETD_DIAGNOSTICS
+	data[PACKET_LOSS]++;
+#endif
+	if (data[RETRY] < RETRIES) {
+	    mapping send;
+
+	    data[RETRY]++;
+	    /* We must use a copy so the NAME field in pending_data[id]
+	     * isn't corrupted by send_udp(). */
+	    send = copy(data);
+	    send = m_delete(send, RETRY);
+#ifdef INETD_DIAGNOSTICS
+	    send = m_delete(send, PACKET_LOSS);
+	    send = m_delete(send, RESPONSE_TIME);
+#endif
+	    call_out("reply_time_out", REPLY_TIME_OUT, id);
+	    send_udp(data[NAME], send);
+	    return;
+	}
+	data = m_delete(data, RETRY);
+#ifdef INETD_DIAGNOSTICS
+	data = m_delete(data, RESPONSE_TIME);
+#endif
+	// Freaky: No catch
+#if 0
+	// End Freaky
+	catch(call_other(UDP_CMD_DIR + REPLY, "udp_" + REPLY,
+	data + ([ SYSTEM: TIME_OUT ])));
+	// Freaky: No catch
+#else
+	call_other(UDP_CMD_DIR + REPLY, "udp_" + REPLY,
+	data + ([ SYSTEM: TIME_OUT ]));
+#endif
+	// End Freaky
+	/* It's just possible this was removed from the host list. */
+	if (hosts[lower_case(data[NAME])])
+	    hosts[lower_case(data[NAME])][HL_HOST_STATUS] = DOWN(hosts[lower_case(data[NAME])][HL_HOST_STATUS]);
+	// Freaky: Mafad
+#ifdef LOCAL_UDP_HANDLER
+	else if (locals[lower_case(data[NAME])])
+	    locals[lower_case(data[NAME])][HL_HOST_STATUS] = DOWN(locals[lower_case(data[NAME])][HL_HOST_STATUS]);
+#endif
+	// End Freaky
+	incoming_time_out(lower_case(data[NAME]) + ":" + id);
+    }
+    pending_data = m_delete(pending_data, id);
+}
+
+varargs mixed query(string what) {
+    switch(what) {
+	case "commands":
+	    return COMMANDS;
+	case "hosts":
+	    return copy(hosts);
+	case "pending":
+	    return copy(pending_data);
+	case "incoming":
+	    return copy(incoming_packets);
+	// Freaky: Extern und local
+#ifdef EXTERN_UDP_HANDLER
+	case "extern":
+	    return extern_udp_accesses;
+#endif
+#ifdef LOCAL_UDP_HANDLER
+	case "local":
+	    return copy(locals);
+#endif
+	// End Freaky
+    }
+}
+
+// Freaky: Funktion fuer UNItopia-Mudlib
+string known_mud(string mudname)
+{
+    string expanded = expand_mud(mudname);
+    
+    return expanded && hosts[expanded][HL_HOST_NAME];
+}
+// End Freaky
+
+string delete_host(string name)
+{
+    if(extern_call() && !adminp(this_interactive()))
+        return 0;
+
+    name = expand_mud(name);
+
+    if(member(hosts, name))
+    {
+        send_ping(name);
+        send_ping(0);
+        m_delete(hosts, name);
+        return name;
+    }
+
+    return 0;
+}
+
+mixed* query_host(string mudname)
+{
+    return copy(hosts[lower_case(mudname)]);
+}

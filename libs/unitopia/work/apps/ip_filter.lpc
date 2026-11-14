@@ -1,0 +1,158 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/ip_filter
+// Description:	Regelt Zugang von Spielern aus bestimmten Domains
+// Author:	Freaky (12.01.96)
+// Modified by:	
+//
+// $Log: ip_filter.c,v $
+// Revision 1.8  2013/12/01 12:44:01  gnomi
+// Zugriffsbeschraenkung fuer Gaeste eingebaut.
+//
+// Revision 1.7  2010-07-09 20:43:30  sorcerer
+// Typen von [old]ip_filter korrigiert
+//
+// Revision 1.6  2002/10/19 00:48:06  gnomi
+// IP-Adresse/Bits wird nun auch akzeptiert.
+//
+// Revision 1.5  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.4  2001/04/29 14:21:40  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.3  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#include <config.h>
+
+#define IP_FILTER_FILE "/nosave/adm/IP_FILTER"
+
+private nosave mapping filters;
+private nosave mapping subnets;
+private nosave mapping ipmasken;
+
+void create()
+{
+    string file, *lines, lastline, names, msg, ips;
+    int i;
+
+    filters=m_allocate(1,2);
+    subnets=([]);
+    ipmasken=([]);
+    
+    i=-1;
+    for(int j=32;j--;)
+    {
+	if(j==31)
+	    i&=~1;
+	else
+	    i&=~(1<<(31-j));
+	ipmasken[j]=i;
+    }
+    ipmasken[32]=-1;
+    ipmasken[0]=0;
+
+    file=read_file(IP_FILTER_FILE);
+    if (!file)
+	return;
+    lines=explode(file,"\n");
+
+    for (i=sizeof(lines); i--; )
+	if (strlen(lines[i]) && lines[i][0] != '#')
+	{
+	    if (sscanf(lines[i],"%s:%s:%s",ips,names,msg) != 3)
+	    {
+		write("Fehler in '"+IP_FILTER_FILE+"' in Zeile "+i+"\n");
+		continue;
+	    }
+	    
+	    foreach(string ip: explode(ips,","))
+	    {
+		string *teile = explode(ip=trim(ip),"/");
+		string *bytes;
+		int ipnr,ipmask;
+		if(sizeof(teile)>2)
+		{
+		    write("Fehler in '"+IP_FILTER_FILE+"' in Zeile "+i+"\n");
+		    continue;
+		}
+		
+		bytes = explode(teile[0],".");
+		foreach(string b:bytes)
+		    ipnr=(ipnr<<8)+to_int(b);
+		if(sizeof(bytes)<4)
+		    ipnr<<=(8*(4-sizeof(bytes)));
+		if(sizeof(teile)==2)
+		    ipmask=to_int(teile[1]);
+		else
+		    ipmask=8*sizeof(bytes);
+		if(!subnets[ipmask])
+		    subnets[ipmask]=([:2]);
+		ipnr&=ipmasken[ipmask];
+		subnets[ipmask][ipnr,0]=explode(names,",");
+		subnets[ipmask][ipnr,1]=msg;
+		
+	        filters[ip,0]=explode(names,",");
+	        filters[ip,1]=msg;
+	    }
+	}
+}
+
+string oldip_filter(string ip, string name)
+{
+    string *bytes, ok_ip, *names;
+
+    bytes = explode(ip,".");
+
+    names = filters[ok_ip=ip]  ||
+	    filters[ok_ip=implode(bytes[0..2],".")] ||
+	    filters[ok_ip=implode(bytes[0..1],".")] ||
+	    filters[ok_ip=bytes[0]];
+    if (names && member(names,name) < 0 && names[0] != "*")
+	return filters[ok_ip,1];
+}
+
+string ip_filter(string ip, string name)
+{
+    int ipnr;
+
+    foreach(string b:explode(ip,"."))
+        ipnr=(ipnr<<8)+to_int(b);
+
+    foreach(int ipmask: sort_array(m_indices(subnets),#'<))
+    {
+	int ok_ip;
+	mixed names = subnets[ipmask][ok_ip = (ipnr&ipmasken[ipmask])];
+	if(names)
+	{
+	    if(names[0] == "*")
+	        return 0;
+	    if(names[0] == "!gast" && name != "gast" && member(GUEST_NAMES, name)<0)
+	        return 0;
+	    if(member(names,name)>=0)
+	        return 0;
+	    // Darf nicht.
+	    return subnets[ipmask][ok_ip,1];
+	}
+    }
+}
+
+#if 0
+// schlecht, da im Mapping ein Array ist, das nicht kopiert wird ;(
+// debug only
+mapping query_filters()
+{
+   return deep_copy(filters);
+}
+mapping query_subnets()
+{
+   return deep_copy(subnets);
+}
+mapping query_ipmasken()
+{
+   return deep_copy(ipmasken);
+}
+#endif

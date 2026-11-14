@@ -1,0 +1,380 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/item/adjektiv.c
+// Description: Adjektive fuer /i/item Objekte
+// Author:	Garthan
+// Modified by:	Garthan	(12.08.94) set_adjektiv(0) loescht die Adjektive
+//
+// $Log: adjektiv.c,v $
+// Revision 1.15  2013-04-02 22:07:18  gnomi
+// search_adjektiv() in Inherit ausgelagert.
+//
+// Revision 1.14  2011-12-18 21:07:34  sorcerer
+// Doku zu set_adjektiv veraendert
+//
+// Revision 1.13  2009-09-07 21:41:26  gnomi
+// Leere Adjektive abfangen.
+//
+// Revision 1.12  2009-04-28 09:43:21  gnomi
+// Enzy-Doku korrigiert (lila ist unveraenderlich).
+// Adjektivstammberechnung durch die Grammatik erledigen lassen.
+//
+// Revision 1.11  2009-01-07 15:26:22  gnomi
+// Nicht-deklinierbare Adjektive ermoeglicht.
+//
+// Revision 1.10  2007/12/20 08:38:00  gnomi
+// Beispiele fuer Nicht-Adjektive aus der Doku genommen.
+//
+// Revision 1.9  2005/05/26 00:58:16  gnomi
+// Doku zu adjektiv korrigiert.
+// adjektiv() fragt die Adjektive via TO-> ab, um Shadows zu ermoeglichen.
+//
+// Revision 1.8  2003/11/25 00:04:52  gnomi
+// Doku zu delete_adjektiv korrigiert.
+//
+// Revision 1.7  2002/01/23 10:02:51  gnomi
+// Enzy-Doku zu add_adjektiv um einen Verweis erweitert.
+//
+// Revision 1.6  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strong_types
+
+private functions inherit "/i/tools/adjektiv";
+
+#include <error.h>
+
+private mixed *adjektiv;
+
+#define CLEAR_ADJEKTIV_FROM_CONS this_object()->delete_seq_conservation( \
+    "adjektiv")
+#define SAVE_ADJEKTIV_TO_CONS this_object()->add_setter_conservation( \
+    "set_adjektiv",({adjektiv}),"adjektiv" )
+
+
+/*
+-------------------------------------------------------------------
+			       Adjektive
+			  created by Garthan
+-------------------------------------------------------------------
+*/
+
+/*
+ *   Function Prototypes - Hier definierte Funktionen
+ */
+void           set_adjektiv(mixed new_adj);
+void           add_adjektiv(mixed add_adj, int front);
+void           delete_adjektiv(mixed del_adj);
+int            adjektiv(string str);
+mixed  *       query_adjektiv();
+string *       query_adjektiv_grundform();
+string *       query_adjektiv_stamm();
+
+/*
+FUNKTION: set_adjektiv
+DEKLARATION: void set_adjektiv(mixed new_adj)
+BESCHREIBUNG:
+set_adjektiv setzt die Adjektiv-Liste eines Objekts.
+
+In diese Liste gehoeren ADJEKTIVE, die die Moeglichkeit geben, ein
+Objekt anhand dieser Adjektive von anderen Objekten gleicher ID zu
+unterscheiden.
+(Beispiele: "rot", "blau", "voll", "leer", "kaputt", "ganz",...)
+
+SYNTAX:
+   set_adjektiv(new_adj);
+   new_adj ist ein mixed FELD mit folgenden ELEMENTEN:
+
+      string    Grundform eines Adjektivs  ("gruen", "blau",...)
+      string *  Ein zweielementiges Feld:
+		({ grundform, unregelmaessiger_wortstamm })
+      mixed *   Ein zweielementiges Feld:
+                ({ grundform, art }),
+		wobei art eine Kombination aus folgenden flags ist:
+		  ADJ_NICHT_DEKLIN: Das Adjektiv wird nicht dekliniert.
+
+   ODER ein einfacher String, wenn man nur ein Adjektiv haben will
+
+BEISPIELE:
+   set_adjektiv("offen");
+     
+     Das Objekt hat nun das Adjektiv offen.
+
+   set_adjektiv( ({"offen", ({"lila", "lilan"}), "kaputt"}) );
+
+     Das Objekt hat nun die Adjektive offen, lila und kaputt.
+     Wobei lila unregelmaessig ist:
+       Ein offenes, lilaNes, kaputtes Auto.
+
+ANMERKUNG:
+   Objekte sollten nicht mehr als ein oder zwei aussagekraeftige
+   Adjektive haben. Sie MUESSEN keine Adjektive haben!
+
+VERWEISE: query_adjektiv, adjektiv, add_adjektiv, delete_adjektiv,
+	  set_id, query_id, id, add_id, delete_id,
+	  query_deklin_adjektiv, query_deklin, wer, der
+GRUPPEN: grammatik
+*/
+#include <level.h>
+#define LOG if(query_once_interactive(this_object()) && this_interactive() &&\
+   this_interactive()!=this_object() && !wizp(this_object()) && \
+   !testplayerp(this_object()) && wizp(this_interactive()))\
+   touch("/secure/log_adjektiv")->log_adjektiv(temp,adjektiv)
+void set_adjektiv(mixed new_adj)
+{
+   string *temp;
+   temp = adjektiv;
+   if (!new_adj || pointerp(new_adj))
+   {
+      if(new_adj && member(new_adj, "")>=0)
+      {
+          do_warning("Leeres Adjektiv gesetzt.\n");
+          new_adj -= ({""});
+      }
+      adjektiv = new_adj;
+   }
+   else if (stringp(new_adj))
+   {
+      if(new_adj == "")
+          do_warning("Leeres Adjektiv gesetzt.\n");
+      else
+          adjektiv = ({ new_adj });
+   }
+   CLEAR_ADJEKTIV_FROM_CONS;
+   SAVE_ADJEKTIV_TO_CONS;
+   LOG;
+}
+
+/*
+FUNKTION: add_adjektiv
+DEKLARATION: varargs void add_adjektiv(mixed add_adj, int front)
+BESCHREIBUNG:
+add_adjektiv fuegt neue, ZUSAETZLICHE Adjektive dem Objekt hinzu.
+Siehe set_adjektiv.
+Wenn front == 1 ist, wird das Adjektiv vorne in die Liste eingetragen.
+VERWEISE: set_adjektiv, delete_adjektiv, add_temporal_adjektiv
+GRUPPEN: grammatik
+*/
+varargs void add_adjektiv(mixed add_adj, int front)
+{
+    string *temp;
+
+    temp = adjektiv;
+    if (!adjektiv)
+	adjektiv = ({});
+    if (pointerp(add_adj))
+    {
+        if(member(add_adj, "")>=0)
+        {
+            do_warning("Leeres Adjektiv hinzugefuegt.\n");
+            add_adj -= ({""});
+        }
+
+	if (front)
+	    adjektiv = add_adj + adjektiv;
+	else
+	    adjektiv += add_adj;
+    }
+    else if (stringp(add_adj))
+    {
+        if(add_adj == "")
+            do_warning("Leeres Adjektiv hinzugefuegt.\n");
+        else if (front)
+	    adjektiv = ({ add_adj }) + adjektiv;
+	else
+	    adjektiv += ({ add_adj });
+    }
+    SAVE_ADJEKTIV_TO_CONS;
+    LOG;
+}
+
+/*
+FUNKTION: query_adjektiv
+DEKLARATION: mixed * query_adjektiv()
+BESCHREIBUNG:
+query_adjektiv liefert ein Feld (Format siehe set_adjektiv) zurueck,
+das die Adjektive des Objekts enthaelt.
+BEISPIEL:
+   Das Objekt habe folgende Adjektivliste mit set_adjektiv definiert.
+   set_adjektiv( ({"offen", ({ teuer", "teur" }), "voll"}) );
+   Dann gibt
+      query_adjektiv()
+   folgendes Mixedfeld zurueck
+      ({"offen", ({ "teuer", "teur" }), "voll"})
+   (query_adjektiv liefert also das was set_adjektiv setzt.)
+VERWEISE: set_adjektiv, query_adjektiv_grundform, query_adjektiv_stamm,
+	  adjektiv, add_temporal_adjektiv
+GRUPPEN: grammatik
+*/
+mixed * query_adjektiv()
+{
+   return adjektiv || ({});
+}
+
+/*
+FUNKTION: query_adjektiv_grundform
+DEKLARATION: string * query_adjektiv_grundform()
+BESCHREIBUNG:
+query_adjektiv_grundform liefert ein Feld bestehend aus strings,
+das die Grundformen der Adjektive des Objekts enthaelt.
+(Bei unregelmaessigen Adjektiven ist das dann der erste Eintrag
+ aus dem Element der Adjektivliste.)
+BEISPIEL:
+   Das Objekt habe folgende Adjektivliste mit set_adjektiv definiert.
+   set_adjektiv( ({"offen", ({ teuer", "teur" }), "voll"}) );
+   Dann gibt
+      query_adjektiv_grundform()
+   folgendes Stringfeld zurueck
+      ({"offen", "teuer", "voll"})
+VERWEISE: set_adjektiv, query_adjektiv, query_adjektiv_stamm, adjektiv
+GRUPPEN: grammatik
+*/
+string * query_adjektiv_grundform()
+{
+   string * grundformen;
+   int i;
+   mixed *tmp_adjektiv;
+   tmp_adjektiv = query_adjektiv();
+   if(!sizeof(tmp_adjektiv))
+      return 0;
+   grundformen = allocate(sizeof(tmp_adjektiv));
+   for(i = 0; i < sizeof(tmp_adjektiv); i++)
+      grundformen[i] = pointerp(tmp_adjektiv[i]) ? 
+	  tmp_adjektiv[i][0] : tmp_adjektiv[i];
+   return grundformen;
+}
+
+/*
+FUNKTION: query_adjektiv_stamm
+DEKLARATION: string * query_adjektiv_stamm()
+BESCHREIBUNG:
+query_adjektiv_stamm liefert ein Feld bestehend aus strings,
+das die Wortstaemme der Adjektive des Objekts enthaelt.
+(Bei unregelmaessigen Adjektiven ist das dann der zweite Eintrag
+ aus dem Element der Adjektivliste.)
+BEISPIEL:
+   Das Objekt habe folgende Adjektivliste mit set_adjektiv definiert.
+   set_adjektiv( ({"offen", ({ teuer", "teur" }), "voll"}) );
+   Dann gibt
+      query_adjektiv_stamm()
+   folgendes Stringfeld zurueck
+      ({"offen", "teur", "voll"})
+VERWEISE: set_adjektiv, query_adjektiv_grundform, query_adjektiv, adjektiv
+GRUPPEN: grammatik
+*/
+string * query_adjektiv_stamm()
+{
+   mixed *tmp_adjektiv;
+#if 1
+    tmp_adjektiv = query_adjektiv();
+    return tmp_adjektiv && map(tmp_adjektiv,
+	#'query_deklin_ein_adjektiv, -1);
+#else
+   string * staemme;
+   int i;
+   tmp_adjektiv = query_adjektiv();
+
+   if(!sizeof(tmp_adjektiv))
+      return 0;
+   staemme = allocate(sizeof(tmp_adjektiv));
+   for(i = 0; i < sizeof(tmp_adjektiv); i++)
+      staemme[i] = pointerp(tmp_adjektiv[i])
+        ? (intp(tmp_adjektiv[i][1])?tmp_adjektiv[i][0]:tmp_adjektiv[i][1])
+	: tmp_adjektiv[i];
+   return staemme;
+#endif
+}
+
+/*
+FUNKTION: adjektiv
+DEKLARATION: int adjektiv(string str)
+BESCHREIBUNG:
+adjektiv liefert die Position+1 des Adjektiv str im Feld der Adjektive
+des Objekts.
+Ist str kein Adjektiv des Objekts, so wird 0 geliefert.
+
+Die Funktion macht einen Adjektivstamm-Vergleich.
+Das heisst auch deklinierte Formen der Adjektive werden damit gefunden.
+Auch ein Komma wird als letztes Zeichen toleriert.
+
+BEISPIEL:
+   Das Objekt habe folgende Adjektivliste mit set_adjektiv definiert:
+   set_adjektiv( ({"offen", ({ teuer", "teur" })}) );
+
+   dann liefert:
+
+   adjektiv("offen")         1 (x beliebig, y beliebig ausser ',')
+   adjektiv("offene")        1
+   adjektiv("offenes")       1
+   adjektiv("offenxx")       1
+   adjektiv("offenxx,")      1
+   adjektiv("offenxxy")      0
+   adjektiv("offe")          0
+   adjektiv("teuer")         2
+   adjektiv("teur")          2
+   adjektiv("teure")         2
+   adjektiv("teuere")        2
+   adjektiv("teueren")       2
+   adjektiv("teuerxx")       2
+   adjektiv("teuerxx,")      2
+   adjektiv("teuerxxy")      0
+   adjektiv("teu")           0
+   adjektiv("")              0
+   adjektiv(0)               0
+   adjektiv()                0
+
+VERWEISE: set_adjektiv
+GRUPPEN: grammatik
+*/
+int adjektiv(string str)
+{
+    return search_adjektiv(this_object()->query_adjektiv(), str);
+}
+
+/*
+FUNKTION: delete_adjektiv
+DEKLARATION: void delete_adjektiv(mixed del_adj)
+BESCHREIBUNG:
+delete_adjektiv loescht Adjektive eines Objekts.
+
+del_adj
+   Feld von Strings.
+   enthaelt die Adjektive, die geloescht werden sollen,
+   (bzw. deren Wortstamm)
+
+BEISPIEL:
+   Das Objekt habe folgende Adjektivliste mit set_adjektiv definiert:
+   set_adjektiv( ({"offen", ({ "teuer", "teur" }), "bizar"}) );
+
+   Nach
+      delete_adjektiv( ({ "bizar", "teuer" }));
+   bleibt folgendes uebrig:
+      ({"offen"})
+
+VERWEISE: set_adjektiv, query_adjektiv, add_adjektiv, adjektiv,
+	  add_temporal_adjektiv
+GRUPPEN: grammatik
+*/
+void delete_adjektiv(mixed del_adj)
+{
+   int i, found;
+   if(pointerp(del_adj)) {
+      for(i = 0; i < sizeof(del_adj); i++)
+	 if(found = search_adjektiv(adjektiv, del_adj[i]))
+	 {
+	    adjektiv[found-1] = 0;
+	    adjektiv -= ({0});
+	 }
+   }
+   else if (stringp(del_adj)) {
+       if (found = search_adjektiv(adjektiv, del_adj))
+       {
+	   adjektiv[found-1] = 0;
+	   adjektiv -= ({0});
+       }
+   }
+   SAVE_ADJEKTIV_TO_CONS;
+}

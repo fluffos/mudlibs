@@ -1,0 +1,881 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/player/magen.c
+// Description: Der Magen (Essen, Trinken, Heilen)
+// Modified by:	Freaky (25.01.1995) kleine Aenderung der Heilung
+//              Sissi  (13.02.1996) Dick / duenn - werden
+//              Kurdel (29.01.1997) Bugfix in healing, ifs zu switch/case
+//		Freaky (10.03.1998) send_message umbau
+//		Freaky (01.12.1999) query_max_alc() eingebaut
+//              Sissi  (25.04.2000) Temperaturmeldungen
+//              Sissi  (08.05.2000) set_alc setzt nur maximal query_max_alc,
+//                                  add_alc macht bei negativen Werten, wenn
+//                                  man nicht besoffen ist, keine Meldung.
+//
+// $Log: magen.c,v $
+// Revision 1.29  2016/04/24 12:19:10  myonara
+// Einfuehrung headache_meldung_string, headache_meldung_sp
+// Anpassung headache_meldung
+//
+// Revision 1.28  2015/01/05 18:28:05  myonara
+// round in der Zuweisung von last_heal (soll int* sein)
+//
+// Revision 1.27  2011-12-29 16:19:20  sorcerer
+// einige say/write durch send_message mit wrap ersetzt
+//
+// Revision 1.26  2010-11-27 11:55:34  sorcerer
+// has_enough_fp/alc wie schon wp shadowbar
+//
+// Revision 1.25  2010-11-27 11:47:56  sorcerer
+// add_alc/wp/fp-Meldungen in call_outs reduziert
+//
+// Revision 1.24  2005/05/06 22:59:54  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.23  2004/11/27 21:20:10  gnomi
+// add_hp-Aenderung: add_hp-Aufrufe angepasst.
+//
+// Revision 1.22  2004/05/12 20:42:53  gnomi
+// config.h includen.
+//
+// Revision 1.21  2003/09/20 02:08:19  gnomi
+// Regenerierung fuer bestimmte Spieler einschraenken.
+//
+// Revision 1.20  2002/12/01 03:33:10  gnomi
+// Handling des vollen Bauches geaendert.
+//
+// Revision 1.19  2002/07/03 23:55:36  gnomi
+// healing: Beim Rumlaufen ohne Verbrauch nicht werten.
+//
+// Revision 1.18  2002/06/18 01:11:58  gnomi
+// query_ghost() -> this_player()->query_ghost()
+//
+// Revision 1.17  2002/04/22 15:29:45  sissi
+// query_fp und query_wp (sinnvoll) shadowbar gemacht.
+//
+// Revision 1.16  2001/10/12 20:22:55  freaky
+// fp_meldung(): Meldung fuer Bereich < -999 korrigiert.
+//
+// Revision 1.15  2001/10/05 20:55:37  freaky
+// Sichtbarkeit von Redefinitionen korrigiert.
+//
+// Revision 1.14  2001/06/25 11:48:26  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.13  2001/06/23 21:10:54  gnomi
+// Ein paar this_object()-> eingebaut.
+//
+// Revision 1.12  2001/05/27 16:06:06  sissi
+// Temperaturmeldungen nach "oben" geschifftet.
+//
+// Revision 1.11  2001/05/07 21:27:41  gnomi
+// Typo.
+//
+// Revision 1.10  2001/05/01 14:54:03  freaky
+// Typo gefixed.
+//
+// Revision 1.9  2001/04/24 00:07:04  gnomi
+// Typo: Hitzefrei -> klein schreiben.
+//
+// Revision 1.8  2001/04/20 23:20:50  gnomi
+// Temperaturmeldung eingebaut.
+//
+// Revision 1.7  2001/03/22 01:41:56  gnomi
+// stolpern/ruelpsen in alc_meldung ueber forbidden_msg_soul_notify_action oder
+// so aehnlich.
+//
+// Revision 1.6  2001/03/03 22:46:37  sissi
+// Verdursten.
+//
+// Revision 1.5  2001/03/03 22:44:44  sissi
+// Man verdurstet jetzt frueher und verhungert spaeter.
+//
+// Revision 1.4  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strong_types
+
+#include <stats.h>
+#include <hlp.h>
+#include <config.h>
+#include <add_hp.h>
+#include <message.h>
+#include <soul.h>
+
+// Prototypes:
+int query_sum_move();
+int query_sum_hp();
+int query_ghost();
+int query_sp();
+nomask int query_wiz_level();
+nomask string query_real_name();
+
+private nosave int last_sum_move, last_sum_hp, temperatur_schutz;
+private int headache, wp, fp, besoffen;
+private nosave int sums_initialized;
+private nosave int log_verbrauch, *last_heal;
+private int kein_verbrauch;
+
+void melde(string str)
+{
+    this_object()->send_message_to(this_object(),MT_NOTIFY,MA_UNKNOWN,str);
+}
+
+void melde_alc(string str)
+{
+    this_object()->send_message_to(this_object(),MT_NOTIFY,MA_DRINK,str);
+}
+
+void melde_wp(string str)
+{
+    this_object()->send_message_to(this_object(),MT_NOTIFY,MA_DRINK,str);
+}
+
+void melde_fp(string str)
+{
+    this_object()->send_message_to(this_object(),MT_NOTIFY,MA_EAT,str);
+}
+
+/*
+FUNKTION: set_kein_verbrauch
+DEKLARATION: void set_kein_verbrauch(int Flag)
+BESCHREIBUNG:
+Schaltet den Nahrungs- und Wasserverbrauch eines Spielers an oder aus. Bei
+Flag 0 wird der Verbrauch angeschaltete, bei allem anderen aus.
+VERWEISE: query_kein_verbrauch
+GRUPPEN: spieler, nahrung
+*/	
+void set_kein_verbrauch(int a) { kein_verbrauch = a != 0 ? 1 : 0; }
+
+/*
+FUNKTION: query_kein_verbrauch
+DEKLARATION: int query_kein_verbrauch()
+BESCHREIBUNG:
+Liefert 1, wenn der Verbrauch des Spielers abgeschaltet ist, sonst 0.
+VERWEISE: set_kein_verbrauch
+GRUPPEN: spieler, nahrung
+*/
+int query_kein_verbrauch() { return kein_verbrauch; }
+
+void set_log_verbrauch(int a) { log_verbrauch = a ? 1 : 0; }
+int query_log_verbrauch() { return log_verbrauch; }
+
+int *query_last_heal() { return last_heal; }
+
+#if 0
+void DEBUG(string str) {
+	object francis;
+
+    if ((francis = find_player("francis")) &&
+	(this_object() == francis || this_player() == francis) )
+	tell_object(francis,str);
+}
+#endif
+
+/*
+FUNKTION: query_headache
+DEKLARATION: int query_headache()
+BESCHREIBUNG:
+Liefert den Kopfschmerzfaktor des Spielers. :-)
+VERWEISE: query_headache, add_alc
+GRUPPEN: spieler, nahrung
+*/
+int query_headache() { return headache; }
+
+string headache_meldung_string()
+{
+    int l_headache;
+    l_headache = this_object()->query_headache();
+    if (l_headache < 0) l_headache = 0;
+    else switch (l_headache) {
+      case 0 :          return ""; // Keine Meldung
+      case  1..4 :      return "Du hast leichte Kopfschmerzen.\n";
+      case  5..9 :      return "Du hast maessige Kopfschmerzen.\n";
+      case  10..14 :    return "Du hast starke Kopfschmerzen.\n";
+      case  15..19 :    return "Du hast pochende Kopfschmerzen.\n";
+      default         : return "Du hast unertraegliche Kopfschmerzen.\n";
+    }
+}
+
+/*
+FUNKTION: add_headache
+DEKLARATION: void add_headache(int Schmerzfaktor)
+BESCHREIBUNG:
+Verschafft einem Spieler fuer eine gewisse Zeit gewaltige Kopfschmerzen.
+Werte ueber 10 sind nicht nett...
+Geister kriegen keine Kopfschmerzen.
+VERWEISE: query_headache, add_alc
+GRUPPEN: spieler, nahrung
+*/
+void add_headache(int a) {
+    if (!a || this_object()->query_ghost())
+	return;
+
+    if (a < 0 && headache == 0)
+	return;
+
+    if (a > 0 && headache == 0)
+	melde("Du verspuerst ploetzlich furchtbare Kopfschmerzen.\n");
+
+    headache += a;
+    if (headache < 0)
+	headache = 0;
+	
+    if (a < 0 && headache == 0)
+	melde("Deine Kopfschmerzen verschwinden.\n");
+    // Freaky: Dies updated die Spell-Points
+    query_sp();
+}
+
+void headache_meldung() 
+{
+    string str = headache_meldung_string();
+    if (str!="") melde(str);
+}
+
+void headache_meldung_sp()
+{
+    string str = headache_meldung_string();
+    if (str!="") write(str);
+}
+
+/*
+FUNKTION: query_alc
+DEKLARATION: int query_alc()
+BESCHREIBUNG:
+Diese Funktion liefert, wie betrunken ein Spieler ist.
+VERWEISE: query_wp, query_fp, add_alc, has_enough_alc
+GRUPPEN: spieler, nahrung
+*/
+int query_alc() { return besoffen; }
+
+
+
+/*
+FUNKTION: query_max_alc
+DEKLARATION: int query_max_alc()
+BESCHREIBUNG:
+Liefert, wieviel Alkokol der Spieler maximal vertraegt.
+VERWEISE: query_alc, add_alc, has_enough_alc
+GRUPPEN: spieler, nahrung
+*/
+int query_max_alc()
+{
+    return this_object()->query_stat(STAT_CON) / 5 + 3;
+}
+
+/*
+FUNKTION: has_enough_alc
+DEKLARATION: int has_enough_alc(int alc)
+BESCHREIBUNG:
+Mit dieser Funktion kann man abfragen, ob der Spieler noch in der Lage ist,
+die Menge <alc> Alkohol zu sich zu nehmen.
+Wenn sie 1 returned, kann der Spieler diese Menge nicht mehr trinken.
+VERWEISE: query_alc, add_alc, query_max_alc, has_enough_wp, has_enough_fp
+GRUPPEN: spieler, nahrung
+*/
+int has_enough_alc(int alc)
+{
+    if (alc > 0 &&
+	(this_object()->query_alc() + alc) > this_object()->query_max_alc())
+	return 1;
+    return 0;
+}
+
+/*
+FUNKTION: add_alc
+DEKLARATION: int add_alc(int alc)
+BESCHREIBUNG:
+Diese Funktion addiert den Alkoholpegel hoch, oder runter.
+Es wird 1 returned, wenn der Spieler die Menge <alc> noch trinken konnte.
+Geister koennen nicht betrunken werden.
+VERWEISE: query_alc, query_max_alc, has_enough_alc, add_wp, add_fp
+GRUPPEN: spieler, nahrung
+*/
+int add_alc(int alc)
+{
+    string meldung;
+
+    if (!alc || this_object()->query_ghost())
+	return 0;
+
+    if (besoffen < 0)
+	besoffen = 0;
+	
+    if ((!besoffen) && (alc < 0))
+        return 1;
+
+    if (this_object()->has_enough_alc(alc))
+    {
+	call_out("melde",0,"Du kriegst nichts mehr in dich rein!\n");
+	return 0;
+    }
+
+    if (besoffen == 0 && alc > 0)
+    {
+	if (alc > headache)
+	    this_object()->add_headache(-headache);
+    	else
+	    this_object()->add_headache(alc - headache);
+    }
+
+    besoffen += alc;
+    if (besoffen < 0)
+	besoffen = 0;
+
+    if (besoffen == 0 && alc < 0)
+    {
+	this_object()->add_headache(8 - headache);
+        while (remove_call_out("melde_alc") != -1);
+	call_out("melde_alc",4,"Du bist wieder nuechtern.\n");
+	return 1;
+    }
+    switch (besoffen)
+    {
+      case  0.. 1 : break;
+      case  2     : meldung = "Du bist angeheitert.\n"; break;
+      case  3.. 5 : meldung = "Du hast einen Schwips.\n"; break;
+      case  6..10 : meldung = "Du bist betrunken.\n"; break;
+      case 11..15 : meldung = "Du hast einen maechtigen Rausch.\n"; break;
+      case 16..20 : meldung = "Du bist sternhagelvoll.\n"; break;
+      default     : meldung = "Die Welt dreht sich um dich.\n";
+    }
+    if (meldung)
+        while (remove_call_out("melde_alc") != -1);
+	call_out("melde_alc",4,meldung);
+    return 1;
+}
+
+protected void set_sums_initialized(int flag)
+{
+    sums_initialized = flag;
+}
+
+/* Wird von heart_beat aufgerufen */
+void healing()
+{
+    object env;
+    int bekommt_hp, temperatur;
+    int this_sum_move, this_sum_hp, l_fp, l_wp;
+    float wp_verbrauch, fp_verbrauch, hp_faktor, move_faktor, belastung;
+    
+    int max_reg = PLAYER_ANNOYER->query("Regenerationsbeschraenkung",
+	this_player()->query_real_name());
+
+    if (this_object()->query_ghost())
+    {
+	this_object()->add_sp(min(max_reg,4));
+    	return;
+    }
+
+    env = environment();
+
+    if (env && !env->query_type("kein_verbrauch") && !kein_verbrauch) {
+	wp_verbrauch = 1.0;
+	fp_verbrauch = 1.0;
+
+	temperatur = env->query_type("temperatur") + temperatur_schutz;
+	if (temperatur > 25)
+	    wp_verbrauch += to_float(temperatur-25)/5.0;
+	else if (temperatur < 10)
+	    fp_verbrauch += to_float(temperatur-10)/-5.0;
+  
+	if (!sums_initialized) {
+	    sums_initialized = 1;
+	    last_sum_move = query_sum_move();
+	    last_sum_hp   = query_sum_hp();
+	    }
+
+	/*
+	 * Viele hp-verloren = viel gekaempft = viel verbraucht.
+	 * 40 hp verloren = faktor 2.0 
+	 */
+	this_sum_hp = query_sum_hp();
+	belastung = 1.0 + to_float(this_sum_hp-last_sum_hp)/40.0;
+	last_sum_hp = this_sum_hp;
+
+	wp_verbrauch *= belastung;
+	fp_verbrauch *= belastung;
+
+	/*
+	 * Viel rumgelaufen = viel verbraucht.
+	 * 20 Raeume gewechselt = faktor 2.0
+	 */
+	this_sum_move = query_sum_move();
+	belastung = 1.0 + to_float(this_sum_move-last_sum_move)/20.0;
+	last_sum_move = this_sum_move;
+
+	wp_verbrauch *= belastung;
+	fp_verbrauch *= belastung;
+
+	/*
+	 * Der Raum darf auch noch mal.
+	 */
+
+	belastung = (float)env->query_type("wasserverbrauch");
+	if (belastung && belastung > 0.0)
+	    wp_verbrauch *= belastung;
+
+	belastung = (float)env->query_type("nahrungsverbrauch");
+	if (belastung && belastung > 0.0)
+	    fp_verbrauch *= belastung;
+  
+	/*
+	 * Und nun abziehen ....
+	 */
+	this_object()->add_wp( -round(wp_verbrauch));
+	this_object()->add_fp( -round(fp_verbrauch));
+
+	}
+    else	// kein Verbrauch
+	sums_initialized = 0;
+    
+
+    l_fp = this_object()->query_fp();
+    l_wp = this_object()->query_wp();
+    if ( l_fp > -80 )
+	bekommt_hp++;
+    else if ( l_fp < -120)
+	bekommt_hp--;
+    if ( l_fp > 80 )
+	bekommt_hp++;
+
+    if ( l_wp > -40 )
+	bekommt_hp++;
+    else if ( l_wp < -60)
+	bekommt_hp--;
+    if ( l_wp > 40 )
+	bekommt_hp++;
+
+    if(GABE(this_object(),"sg"))
+       bekommt_hp *= 2;
+
+    if (besoffen > 0) {
+	add_alc(-1);
+	bekommt_hp += 3;
+	}
+
+    if (headache > 0)
+	add_headache(-1);
+
+    if (bekommt_hp < 0)
+	bekommt_hp=0;
+
+    if (log_verbrauch)
+	sys_log("verbrauch",Der()+":"+
+	     " wp: "+l_wp+
+	     " fp: "+l_fp+
+	     " Vwp: "+round(wp_verbrauch)+
+	     " Vfp: "+round(fp_verbrauch)+
+	     " Bhp: "+bekommt_hp+".\n");
+
+    last_heal=({bekommt_hp,round(wp_verbrauch),round(fp_verbrauch)});
+
+    this_object()->add_hp(min(max_reg,bekommt_hp),
+	([ AH_HEAL_TYPE: AH_HEAL_NORMAL ]));
+    this_object()->add_sp(min(max_reg,bekommt_hp));
+
+    if (besoffen > 0)
+	if (random(100) >= 70)
+	    call_out("alc_meldung",5);
+
+    if (headache > 0)
+	if (random(100) >= 70)
+	    call_out("headache_meldung",5);
+
+    if (kein_verbrauch)
+	return;
+
+    if (random(100) > 97)
+	call_out("fp_meldung",10);
+    if (random(100) > 97)
+	call_out("wp_meldung",20);
+    if (random(100) > 97)
+        call_out("temperatur_meldung",30,1);
+}
+
+void alc_meldung() {
+    switch(random(4)) 
+    {
+      case 0: 
+        this_object()->send_message(MT_NOISE, MA_EMOTE, 
+            wrap(Der()+" hat einen Schluckauf."));
+        melde_alc("Du hast einen Schluckauf.\n");
+        break;
+      case 1: 
+        this_object()->forbidden_msg_soul_action_notify("stolper",
+	    0, NEUTRAL, PSEUDO_MOVE, 
+	    "Du stolperst.\n",
+	    wrap(Der()+" stolpert, kann sich aber gerade noch fangen."),
+	    MA_EMOTE, MT_LOOK | MT_NOTIFY, MT_LOOK);
+        break;
+      case 2: 
+        this_object()->send_message(MT_LOOK, MA_EMOTE,
+            wrap(Der()+" sieht betrunken aus."));
+        melde_alc("Du fuehlst dich betrunken.\n");
+        break;
+      case 3: 
+        this_object()->forbidden_msg_soul_action_notify("ruelps",
+	    0, MIES, 0, 
+	    "Du ruelpst.\n",
+	    wrap(Der()+" ruelpst."),
+	    MA_EMOTE, MT_NOISE | MT_NOTIFY, MT_LOOK | MT_NOISE);
+        break;
+    }
+}
+
+void fp_meldung()
+{
+    int l_fp;
+    l_fp = this_object()->query_fp();
+    if (l_fp<=-1500) {
+        write ("Du bist kurz vor dem Verhungern... Gleich knabberst du "
+               "dich selber an...\n");
+        if (random (100) == 87) call_out ("verhungern",60);
+    }
+    else switch (l_fp) {
+      case -1499..-100 : write("Wenn du jetzt nicht bald was zwischen die "
+                              "Zaehne bekommst...\n"); break;
+      case  -99.. -60 : write("Dir wird fast schlecht vor Hunger.\n"); break;
+      case  -59.. -20 : write("Du verspuerst Hunger.\n"); break;
+      case  -19..  -1 : write("Dein Magen knurrt.\n"); break;
+      case    0.. 200 : break;
+      default         : write("Du hast ein unangenehmes Voellegefuehl.\n");
+    }
+}
+
+void wp_meldung()
+{
+    int l_wp;
+    l_wp = this_object()->query_wp();
+    if (l_wp <= -400)
+    {
+        write ("Durst Durst Durst... Du kannst nur noch an eines denken: "
+               "Wasser!\nVerdursten ist kein schoener Tod...\n");
+	// Doppelte Chance zu verdursten bei wp <= -800
+        if (((l_wp <= -800) && (random(100) == 87)) || random(100) == 87)
+	    call_out("verdursten",60);
+    }
+    else switch (l_wp)
+    {
+      case -399..-80 : write("Wenn du dir jetzt nicht bald was zwischen die "
+                             "Kiemen kippst...\n"); break;
+      case  -79..-50 : write("Du kannst vor Durst kaum noch klar denken.\n");
+                       break;
+      case  -49..-30 : write("Deine Zunge klebt dir am Gaumen.\n"); break;
+      case  -29..-10 : write("Du bist durstig.\n"); break;
+      case   -9.. -1 : write("Du hast ein trockenes Gefuehl in der Kehle.\n");
+                       break;
+      case    0..130 : break;
+      default        : write("Es schwappt und gluckert in deinem Bauch.\n");
+    }
+}
+
+#define VOLLERBAUCH  (GABE2(this_object(),"vb") && \
+		      present("hlp#tool",this_object())->vollerbauch())
+
+/*
+FUNKTION: query_fp
+DEKLARATION: int query_fp()
+BESCHREIBUNG:
+Diese Funktion liefert die Food-Points, d.h. wie hungrig der Spieler ist.
+VERWEISE: query_wp, query_alc, add_fp, has_enough_fp
+GRUPPEN: spieler, nahrung
+*/
+int query_fp() { return fp; }
+
+/*
+FUNKTION: query_wp
+DEKLARATION: int query_wp()
+BESCHREIBUNG:
+Diese Funktion liefert die Water-Points, d.h. wie durstig der Spieler ist.
+VERWEISE: query_fp, query_alc, add_wp, has_enough_wp
+GRUPPEN: spieler, nahrung
+*/
+int query_wp() { return wp; }
+
+
+/*
+FUNKTION: has_enough_wp
+DEKLARATION: int has_enough_wp(int wp)
+BESCHREIBUNG:
+Mit dieser Funktion kann man abfragen, ob der Spieler noch in der lage ist,
+die Menge <wp> Wasser zu sich zu nehmen.
+Wenn sie 1 returned, kann der Spieler diese Menge nicht mehr trinken.
+VERWEISE: query_wp, add_wp, has_enough_alc, has_enough_fp
+GRUPPEN: spieler, nahrung
+*/
+int has_enough_wp(int lit)
+{
+    if (this_object()->query_wp()
+         > (80+this_object()->query_stat(STAT_CON)) && lit > 0)
+	return 1;
+    return 0;
+}
+
+/*
+FUNKTION: add_wp
+DEKLARATION: int add_wp(int wp)
+BESCHREIBUNG:
+Diese Funktion addiert den Wasserpegel hoch, oder runter.
+Es wird 1 returned, wenn der Spieler die Menge <wp> noch trinken konnte.
+Bei Geistern aendert sich der Durst nicht.
+VERWEISE: query_wp, has_enough_wp, add_alc, add_fp
+GRUPPEN: spieler, nahrung
+*/
+int add_wp(int lit)
+{
+    string meldung;
+    int l_wp;
+
+    if (kein_verbrauch || this_object()->query_ghost())
+	return 0;
+    if (this_object()->has_enough_wp(lit)) {
+	call_out("melde",0,"Du kriegst nichts mehr in dich rein!\n");
+	return 0;
+    }
+    wp += lit;
+    if(lit > 0)
+    {
+        l_wp = this_object()->query_wp();
+        if (l_wp <= -70)
+            meldung = "Das rettet dich gerade so vor dem Verdursten.\n";
+        else switch (l_wp) {
+          case -69..-40 : meldung = "Wenn du dies nicht getrunken "
+                                    "haettest, wer weiss...\n"; break;
+          case -39..-20 : meldung = "Das war jetzt aber noetig.\n"; break;
+          case -19..  0 : meldung = "Ahhh, tut das gut.\n"; break;
+          case   1.. 50 : meldung = "Du hast ein feuchtes Gefuehl in der "
+                                    "Kehle.\n"; break;
+          case  51.. 80 : meldung = "Naja, warum nicht.\n"; break;
+          case  81..150 : meldung = "Eigentlich hast du genug.\n"; break;
+          default       : meldung = "Du bist kurz vor dem Ueberlaufen.\n";
+        }
+	if (meldung)
+            while (remove_call_out("melde_wp") != -1);
+	    call_out("melde_wp",4,meldung);
+    }
+    else if(VOLLERBAUCH && wp<0)
+	wp = 0;
+    return 1;
+}
+
+/*
+FUNKTION: has_enough_fp
+DEKLARATION: int has_enough_fp(int fp)
+BESCHREIBUNG:
+Mit dieser Funktion kann man abfragen, ob der Spieler noch in der lage ist,
+die Menge <fp> Essen zu sich zu nehmen.
+Wenn sie 1 returned, kann der Spieler diese Menge nicht mehr essen.
+VERWEISE: query_fp, add_fp, has_enough_alc, has_enough_wp
+GRUPPEN: spieler, nahrung
+*/
+int has_enough_fp(int cal) {
+    if (this_object()->query_fp()
+         > (160+this_object()->query_stat(STAT_CON)*2) && cal > 0)
+	return 1;
+    return 0;
+}
+
+/*
+FUNKTION: add_fp
+DEKLARATION: int add_fp(int fp)
+BESCHREIBUNG:
+Diese Funktion addiert den Essenspegel hoch, oder runter.
+Es wird 1 returned, wenn der Spieler die Menge <fp> noch essen konnte.
+Geister werden nicht satt.
+VERWEISE: query_fp, has_enough_fp, add_alc, add_wp
+GRUPPEN: spieler, nahrung
+*/
+int add_fp(int cal)
+{
+    string meldung;
+    int l_fp;
+
+    if (kein_verbrauch || this_object()->query_ghost())
+	return 0;
+    if (this_object()->has_enough_fp(cal)) {
+	call_out("melde",0,"Du kriegst nichts mehr in dich rein!\n");
+	return 0;
+	}
+    fp += cal;
+    if(cal > 0)
+    {
+        l_fp = this_object()->query_fp();
+        if (l_fp <= -150)
+            meldung = "Das rettet dich gerade so vor dem Hungertod.\n";
+        else switch (l_fp) {
+          case -149..-80 : meldung = "Wenn du dies nicht zu dir genommen "
+                                     "haettest, wer weiss...\n"; break;
+          case  -79..-40 : meldung = "Das war jetzt aber noetig.\n"; break;
+          case  -39..  0 : meldung = "Ahhh, tut das gut.\n"; break;
+          case    1..100 : meldung = "Du verspuerst ein angenehmes Gefuehl "
+                                     "in der Magengegend.\n"; break;
+          case  101..150 : meldung = "Du fuehlst dich gesaettigt.\n"; break;
+          case  151..300 : meldung = "Du bist randvoll.\n"; break;
+          default        : meldung = "Du bist kurz vor dem Platzen.\n";
+        }
+	if (meldung)
+            while (remove_call_out("melde_fp") != -1);
+	    call_out("melde_fp",4,meldung);
+    }
+    else if(VOLLERBAUCH && fp<0)
+	fp = 0;
+    return 1;
+}
+
+/*
+FUNKTION: add_temperatur_schutz
+DEKLARATION: void add_temperatur_schutz(int a)
+BESCHREIBUNG:
+Mit dieser Funktion kann man den Schutz gegen Temperaturen aendern.
+VERWEISE: query_temperatur_schutz
+GRUPPEN: spieler, kleidung
+*/
+void add_temperatur_schutz(int a) { temperatur_schutz += a; }
+
+/*
+FUNKTION: query_temperatur_schutz
+DEKLARATION: int query_temperatur_schutz()
+BESCHREIBUNG:
+Mit dieser Funktion kann man den Schutz gegen Temperaturen abfragen.
+VERWEISE: add_temperatur_schutz
+GRUPPEN: spieler, kleidung
+*/
+int query_temperatur_schutz() { return temperatur_schutz; }
+
+
+/*
+FUNKTION: set_fp
+DEKLARATION: void set_fp(int fp)
+BESCHREIBUNG:
+Setzt die Food-Points eines Spielers auf fp.
+VERWEISE: query_fp, add_fp, has_enough_fp
+GRUPPEN: spieler, nahrung
+*/
+void set_fp(int a) { fp = VOLLERBAUCH?max(a,0):a; }
+
+/*
+FUNKTION: set_wp
+DEKLARATION: void set_wp(int wp)
+BESCHREIBUNG:
+Setzt die Water-Points eines Spielers auf wp.
+VERWEISE: query_wp, add_wp, has_enough_wp
+GRUPPEN: spieler, nahrung
+*/
+void set_wp(int a) { wp = VOLLERBAUCH?max(a,0):a; }
+
+/*
+FUNKTION: set_alc
+DEKLARATION: void set_alc(int alc)
+BESCHREIBUNG:
+Setzt die Alc-Points eines Spielers auf alc, sofern alc unter query_max_alc
+liegt, andernfalls auf query_max_alc.
+VERWEISE: query_alc, add_alc, has_enough_alc, query_max_alc
+GRUPPEN: spieler, nahrung
+*/
+void set_alc(int a)
+{
+    int max;
+    max = this_object()->query_max_alc();
+    besoffen = (a > max ? max : a);
+}
+
+/*
+FUNKTION: set_headache
+DEKLARATION: void set_headache(int Schmerzfaktor)
+BESCHREIBUNG:
+Setzt die Headache-Points eines Spielers auf Schmerzfaktor.
+VERWEISE: query_headache, add_headache
+GRUPPEN: spieler, nahrung
+*/	
+void set_headache(int a) { headache = (a >= 0)?a:0; }
+
+
+void verhungern()
+{
+    if ((this_object()->query_fp() > -1500) || (this_object()->query_hp() < 0)
+	    || !interactive(this_object()))
+	return 0;
+    melde("Das ist zuviel fuer Dich.\n"
+        "Du kippst um.\n"
+        "Du bist verhungert.\n");
+    this_object()->send_message(MT_LOOK,MA_UNKNOWN,
+        wrap(Der()+" kippt total erschoepft um. "+Er()+" ist verhungert."));
+    this_object()->add_hp(-1000 - this_object()->query_hp(), ([
+	    AH_ERF_TOD: "Du bist verhungert.",
+	]));
+    this_object()->set_fp(0); // Damit in dem Fall ein Schutzengel auch hilft
+    if (!query_wiz_level())
+	sys_log("magen",
+	    capitalize(query_real_name())
+	    +" ist verhungert "+timestr(time())+"\n");
+}
+
+void verdursten()
+{
+    if ((this_object()->query_wp() > -400) || (this_object()->query_hp() < 0)
+	    || !interactive(this_object()))
+	return 0;
+    melde("Das ist zuviel fuer Dich.\n"
+        "Du kippst um.\n"
+        "Du bist verdurstet.\n");
+    this_object()->send_message(MT_LOOK,MA_UNKNOWN,
+        wrap(Der()+" kippt total erschoepft um. "+Er()+" ist verdurstet."));
+    this_object()->add_hp(-1000 - this_object()->query_hp(), ([
+	    AH_ERF_TOD: "Du bist verdurstet.",
+	]));
+    this_object()->set_wp(0);
+    if (!query_wiz_level())
+	sys_log("magen",
+	    capitalize(query_real_name())
+	    +" ist verdurstet "+timestr(time())+"\n");
+}
+
+void temperatur_meldung(int nur_unbequeme)
+{
+    int temperatur;
+    if (!environment()) return;
+    temperatur = environment()->query_type("temperatur") + temperatur_schutz;
+    if (nur_unbequeme && temperatur <=40 && temperatur > 5)
+        return;
+    if (temperatur > 100)
+        melde ("Diese Hitze wird Dich umbringen, und zwar bald.\n");
+    else if (temperatur > 90)
+        melde ("Die Hitze ist unertraeglich.\n");
+    else if (temperatur > 80)
+        melde ("Die Hitze ist fast unertraeglich.\n");
+    else if (temperatur > 70)
+        melde ("Du schwitzt Dir die Seele aus dem Leib.\n");
+    else if (temperatur > 60)
+        melde ("Dir ist verdammt heiss.\n");
+    else if (temperatur > 50)
+        melde ("Dir ist ganz unschoen warm.\n");
+    else if (temperatur > 40)
+        melde ("Eigentlich muesstest Du jetzt hitzefrei bekommen.\n");
+    else if (temperatur > 30)
+        melde ("Langsam wird die Waerme unangenehm.\n");
+    else if (temperatur > 25)
+        melde ("Dir ist angenehm warm.\n");
+    else if (temperatur > 20)
+        melde ("Bei der Temperatur kann mans ganz gut aushalten.\n");
+    else if (temperatur > 15)
+        melde ("Dir ist etwas kuehl.\n");
+    else if (temperatur > 10)
+        melde ("Du hast eine Gaensehaut.\n");
+    else if (temperatur > 5)
+        melde ("Dir ist es recht kalt.\n");
+    else if (temperatur > -5)
+        melde ("Dir ist ziemlich kalt.\n");
+    else if (temperatur > -15)
+        melde ("Dir ist verdammt kalt. Du moechtest ein Eisbaer sein.\n");
+    else if (temperatur > -25)
+        melde ("Du bist kurz vor dem Erfrieren.\n");
+    else if (temperatur > -35)
+        melde ("Du bist Dir nicht sicher, ob Du schon erfroren bist.\n");
+    else melde ("Gleich wirst Du erfrieren.\n");
+//    melde("Temperatur: "+temperatur+" Grad\n");
+}

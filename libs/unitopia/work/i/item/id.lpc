@@ -1,0 +1,398 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/item/id.c
+// Description:
+//
+// $Log: id.c,v $
+// Revision 1.13  2008/01/16 09:09:33  gnomi
+// plural_id: Umlautung (rucksack -> rucksaecke) beachten.
+//
+// Revision 1.12  2005/05/26 00:59:11  gnomi
+// Doku um ein paar Verweise erweitert.
+//
+// Revision 1.11  2004/08/27 12:57:00  menaures
+// Typo
+//
+// Revision 1.10  2004/01/28 23:26:25  gnomi
+// plural_id: Variablen korrekt zuruecksetzen.
+//
+// Revision 1.9  2003/07/02 02:33:16  gnomi
+// Typo.
+//
+// Revision 1.8  2003/04/16 03:29:20  gnomi
+// Typo.
+//
+// Revision 1.7  2002/02/16 07:49:03  gnomi
+// add_plural_id von Pulami eingebaut.
+// delete_plural_id eingebaut.
+//
+// Revision 1.6  2001/06/12 22:50:09  gnomi
+// gestetzt -> gesetzt
+//
+// Revision 1.5  2001/03/14 17:30:56  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.4  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strong_types
+
+#include <parse_com.h>
+
+private string *ids, *plural_ids, *class_ids;
+
+/************************* PLURAL ****************************/
+
+/*
+FUNKTION: set_plural_id
+DEKLARATION: void set_plural_id(string plural_id | string *plural_ids)
+BESCHREIBUNG:
+Hiermit koennen die Plurale der Ids angegeben werden, falls der Plural-
+Generator in plural_id versagt. 
+VERWEISE: id, me, add_id, delete_id, query_id, set_class_id,
+          query_plural_id, add_plural_id, delete_plural_id
+GRUPPEN: grundlegendes
+*/
+void set_plural_id(mixed new_ids)
+{
+    if (pointerp(new_ids))
+        plural_ids = new_ids;
+    else if (stringp(new_ids))
+        plural_ids = ({ new_ids });
+    this_object()->add_setter_conservation("set_plural_id",({plural_ids}) );
+}
+
+/*
+FUNKTION: query_plural_id
+DEKLARATION: string *query_plural_id()
+BESCHREIBUNG:
+Hiermit kann man die Plurale der Ids abfragen. (wenn diese gesetzt sind)
+VERWEISE: id, me, add_id, delete_id, query_id, set_plural_id, set_class_id
+GRUPPEN: grundlegendes
+*/
+string *query_plural_id() { return plural_ids || ({}); }
+
+/*
+FUNKTION: add_plural_id
+DEKLARATION: void add_plural_id(string plural_id | string *plural_ids)
+BESCHREIBUNG:
+Hiermit koennen zu bereits vorhandenen Ids die Plurale von Ids hinzugefuegt
+werden, falls der Plural-Generator in plural_id versagt. 
+VERWEISE: id, me, add_id, delete_id, query_id, set_class_id,
+	  set_plural_id, query_plural_id, delete_plural_id
+GRUPPEN: grundlegendes
+*/
+void add_plural_id(mixed new_ids)
+{
+    if (!(pointerp(new_ids) && sizeof(new_ids)) &&
+        !stringp(new_ids))
+	return;
+
+    if (!plural_ids)
+        plural_ids = ({});
+
+    if (pointerp(new_ids))
+        plural_ids += new_ids;
+    else if (stringp(new_ids))
+        plural_ids += ({ new_ids });
+    this_object()->add_setter_conservation("set_plural_id",({plural_ids}) );
+}
+
+/*
+FUNKTION: delete_plural_id
+DEKLARATION: void delete_plural_id(string plural_id | string *plural_ids)
+BESCHREIBUNG:
+Hiermit koennen bereits existierende Plurale von Ids eines Objektes
+geloescht werden. delete_id ist das Pendant zu add_plural_id.
+VERWEISE: id, me, set_id, add_id, query_id, set_class_id,
+	  set_plural_id, query_plural_id, add_plural_id
+GRUPPEN: grundlegendes
+*/
+void delete_plural_id(mixed strs)
+{
+    if (plural_ids)
+    {
+	if (pointerp(strs))
+	   plural_ids -= strs;
+	else if (stringp(strs))
+	   plural_ids -= ({ strs });
+
+	if(!sizeof(plural_ids))
+	   plural_ids = 0;
+    }
+    this_object()->add_setter_conservation("set_plural_id",({plural_ids}) );
+}
+
+/*
+FUNKTION: plural_id
+DEKLARATION: int plural_id(string id)
+BESCHREIBUNG:
+Gibt 1 zurueck, wenn der uebergebene String id die Plural-Form einer
+der mit set_id, add_id oder set_class_id gestzten Ids entspricht, ansonsten 0.
+
+VERWEISE: id, me, set_id, add_id, delete_id, query_id
+GRUPPEN: grundlegendes
+*/
+int plural_id(string str)
+{
+    string geschlecht;
+    string *to_check;
+
+    if (pointerp(plural_ids))
+	return member(plural_ids,str) >= 0;
+
+    to_check = ({});
+
+    if (pointerp(ids))
+	to_check += ids;
+    if (pointerp(class_ids))
+	to_check += class_ids;
+
+    geschlecht = this_object()->query_gender();
+    for (int a=0; a<sizeof(to_check); a++)
+    {
+	string endung, testid;
+	int trunc, last;
+	
+	last = to_check[a][<1];
+	if (member("bdfghmnstz",last) > -1)
+	{
+	    if (geschlecht == "maennlich")
+		endung = "e";
+	    else if (geschlecht == "weiblich")
+		endung = "en";
+	    else
+		endung = "er";
+	}
+	else if (member("cijopquvwxy",last) > -1)
+	    endung = "s";
+	else if (last == 'a')
+	{
+	    if (geschlecht == "weiblich")
+	    {
+		trunc = 1;
+		endung = "en";
+	    }
+	    else
+		endung = "s";
+	}
+	else if (last == 'e')
+	    endung = "n";
+	else if (last == 'k')
+	{
+	    if (geschlecht == "weiblich")
+		endung = "en";
+	    else
+		endung = "e";
+	}
+	else if (last == 'r')
+	{
+	    if (geschlecht == "maennlich")
+		endung = "en";
+	    else
+		endung = "e";
+	}
+	else if (last == 'l')
+	{
+	    if (geschlecht == "maennlich")
+		endung = "";
+	    else if (geschlecht == "weiblich")
+		endung = "n";
+	    else
+		endung = "e";
+	}
+	else /* Zahlen,Sonderzeichen */
+	    endung = "s";
+
+	if (trunc)
+	   testid = to_check[a][0..<2]+endung;
+	else
+	   testid = to_check[a]+endung;
+	if (testid == str ||
+	    regreplace(testid, "([aou])(([aeiou]|)[^aeiouy]*(e|e[nr]))$","\\1e\\2",0) == str)
+	    return 1;
+    }
+}
+
+
+/************************* ID ****************************/
+
+/*
+FUNKTION: set_id
+DEKLARATION: void set_id(string id | string *ids)
+BESCHREIBUNG:
+Hiermit werden die Ids eines Objektes gesetzt, bereits gesetzte Ids werden
+ueberschrieben.
+
+Ids sind die Namen eines Objektes, anhand derer es eindeutig identifiziert
+werden kann. Die angegebenen Namen sollten NUR Kleinbuchstaben enthalten.
+
+Die Mehrzahlform kann man mit set_plural_id setzen und die Klasse eines
+Objektes (z.B. getraenk) mit set_class_id
+
+Beispiel:   set_id( ({  "flasche", "bier", "bierflasche" }) );
+VERWEISE: id, add_id, delete_id, query_id, me
+GRUPPEN: grundlegendes
+*/
+void set_id(mixed new_ids)
+{
+    if (pointerp(new_ids))
+        ids = new_ids;
+    else if (stringp(new_ids))
+        ids = ({ new_ids });
+    this_object()->add_setter_conservation("set_id",({ids}) );
+}
+
+/*
+FUNKTION: add_id
+DEKLARATION: void add_id(string id | string *ids)
+BESCHREIBUNG:
+Hiermit koennen zu bereits existierenden Ids eines Objektes weitere
+hinzugefuegt werden. Das Pendant hierzu ist delete_id. Naeheres siehe id.
+VERWEISE: id, me, set_id, delete_id, query_id
+GRUPPEN: grundlegendes
+*/
+void add_id(mixed str)
+{
+    if (!pointerp(str) && !stringp(str))
+        return;
+    if (!ids)
+        ids = ({});
+    if (stringp(str))
+        ids += ({ str });
+    else
+        ids += str;
+    this_object()->add_setter_conservation("set_id",({ids}) );
+}
+
+/*
+FUNKTION: query_id
+DEKLARATION: string *query_id()
+BESCHREIBUNG:
+Gibt ein Feld mit allen Ids des Objektes zurueck.
+Naeheres siehe id.
+VERWEISE: id, me, set_id, add_id, delete_id
+GRUPPEN: grundlegendes
+*/
+string *query_id() { return ids || ({}); }
+
+/*
+FUNKTION: delete_id
+DEKLARATION: void delete_id(string id | string *ids)
+BESCHREIBUNG:
+Hiermit koennen bereits existierende Ids eines Objektes geloescht werden.
+delete_id ist das Pendant zu add_id. Naeheres siehe id.
+VERWEISE: id, me, set_id, add_id, query_id
+GRUPPEN: grundlegendes
+*/
+void delete_id(mixed strs)
+{
+    if (ids)
+    {
+        if (pointerp(strs))
+           ids -= strs;
+        else if (stringp(strs))
+           ids -= ({ strs });
+        this_object()->add_setter_conservation("set_id",({ids}) );
+    }
+}
+
+/*
+FUNKTION: id
+DEKLARATION: int id(string id)
+BESCHREIBUNG:
+Gibt 1 zurueck, wenn die angegebene id mit einer der gesetzten Ids oder
+Klassen-IDs uebereinstimmt, ansonsten 0.
+VERWEISE: me, set_id, add_id, delete_id, query_id, set_plural_id
+GRUPPEN: grundlegendes
+*/
+int id(string str)
+{
+    if (pointerp(ids) && member(ids, str) >= 0)
+	return 1;
+    if (pointerp(class_ids) && member(class_ids, str) >= 0)
+	return 1;
+}
+
+/**************************** CLASS ***********************/
+
+/*
+FUNKTION: set_class_id
+DEKLARATION: void set_class_id(string class_id | string *class_ids)
+BESCHREIBUNG:
+Hiermit werden Klassen-Ids eines Objektes gesetzt, zB "waffe", "ruestung",...
+Diese werden auch bei id() zur Ueberpruefung herangezogen.
+VERWEISE: id, me, add_id, delete_id, query_id, set_id, query_class_id
+GRUPPEN: grundlegendes
+*/
+void set_class_id(mixed new_ids)
+{
+    if (pointerp(new_ids))
+        class_ids = new_ids;
+    else if (stringp(new_ids))
+        class_ids = ({ new_ids });
+    this_object()->add_setter_conservation("set_class_id",({class_ids}) );
+}
+
+/*
+FUNKTION: query_class_id
+DEKLARATION: string *query_class_id()
+BESCHREIBUNG:
+Hiermit kann man die Klassen-Ids eines Objektes abfragen.
+VERWEISE: id, me, add_id, delete_id, query_id, set_id, set_class_id
+GRUPPEN: grundlegendes
+*/
+string *query_class_id() { return class_ids || ({}); }
+
+/******************************* ME ***********************/
+
+/*
+FUNKTION: me
+DEKLARATION: string me(string command)
+BESCHREIBUNG:
+Definiert ein Objekt eine add_action, zB eine Fackel 'zuende', so war es
+praktisch unmoeglich, Kommandos wie zB 'zuende meine 2. fackel an' zu parsen;
+hier fuer muesste ein umfangreicher parse_com(..) - Aufruf programmiert werden.
+Dieser Aufruf ist jetzt in me(..) realisiert. me ruft intern parse_com auf und
+gibt 0 zurueck, wenn nicht dieses Objekt gemeint ist, andernfalls einen String
+mit dem Rest des Kommandos.
+
+Fuer v_items gibt es die entsprechende Funktion here().
+
+Beispiel:
+
+   void init() {
+       add_action("mach_licht","mache",-4);
+   }
+
+   int mach_licht(string str) {
+	   string rest;
+
+       if ( !(rest = me(str)) ) {
+	   notify_fail("Mach was?\n");
+	   return 0;
+	   }
+       switch(lower_case(rest)) {
+	   case "an":
+	       mach_licht_an();
+	       break;
+	   case "aus":
+	       mach_licht_aus();
+	       break;
+	   default:
+	       send_message_to(TP, MT_NOTIFY, MA_UNKNOWN, "Mache das licht an"
+                                                          " oder aus?\n");
+	   }
+       return 1;
+   }
+
+VERWEISE: id, parse_com, set_id, set_plural_id, set_class_id, here
+GRUPPEN: grundlegendes
+*/
+string me(string str)
+{
+    return id(str) ? "" : its_me(str,this_object());
+}

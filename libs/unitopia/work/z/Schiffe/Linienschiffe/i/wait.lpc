@@ -1,0 +1,676 @@
+// This file is part of UNItopia Schiffe.
+// ----------------------------------------------------------------
+// File:    /z/Schiffe/Linienschiffe/i/wait.c
+// Description: 
+//
+// Changes:
+// ANIN         14.02.2012  touch in schiffsob = touch(ENV_TP->query_ship())
+// wyvern       03.03.2012  doppelte haefen im notify_fail per 
+//                              m_indices(mkmapping(arr)) filtern
+// wyvern       11.03.2012  find_living statt find_player, damit auch NPCs wie
+//                          Muck warten und reisen koennen
+// wyvern       28.08.2012  loging rein
+// ANIN         26.03.2013  find_living(wer)-> abgesichert
+//                          warten auf spielerschiffen abgefangen (check_faehre)
+//                          my_parse_filter fuer 0 return ({}); rein
+//                          TP_RN ersetzt fuer muck etc
+// ANIN         05.10.2013  typo passede passende
+// ANIN         28.03.2016  reise / wart Status-Meldung
+
+inherit "/p/Misc/i/array";
+
+#define PDBG_GROUP "Schiffe:Kurstafel"
+#define PDBG_LEVEL -1
+#include <p/debugger.h>  // PDBG_XXX
+
+#include <message.h>     // MT_XXX, MA_XXX
+#include <regexp.h>      // RE_MATCH_SUBS
+#include <notify_fail.h> // FAIL_XXX
+#include <level.h>       // wizp
+#include <misc.h>        // CAP, LOW, TP_RN, ON
+
+#define SCHIFF 0
+#define HAFEN  1
+
+#define SCHIFFAHRT "/room/rathaus/schiffahrt"
+
+#define REISE_NACH_HAFEN           1
+#define REISE_MIT_WARTE_AUF_FAEHRE 2
+#define REISE_NACH_WARTE_AUF_HAFEN 3
+#define REISE_EINSTEIGEN           4
+
+mapping wartende = ([:2]); 
+// ([ "wyvern" : "Thyr"; "aremorica", "anin" : "Wikingerschiff Seeteufel"; 0, ])
+
+int hafen_version;
+
+void set_hafen_version(int flag){
+    hafen_version = flag ? 1 : 0;
+}
+
+int query_hafen_version(){
+    return hafen_version;
+}
+
+mapping query_wartende(){
+    return wartende;
+}
+
+
+int add_wartende(string wer, string faehre, string zielhafen){
+    if(wer && faehre && find_living(wer)){
+        wartende += ([ wer : faehre; zielhafen ]);
+        find_living(wer)->add_controller("notify_move", TO);
+        return 1;
+    }
+    return 0;
+}
+
+int delete_wartende(string wer){
+    object ob;
+    if(wer && member(wartende, wer)){
+        wartende = m_delete(wartende, wer);
+        ob = find_living(wer);
+        if(objectp(ob))
+        {
+            ob->delete_controller("notify_move", TO);
+        }
+        return 1;
+    }
+    return 0;
+}
+
+
+mapping filter_faehren(string pat)
+{
+    object faehrbuero;
+    mapping ret = ([]);
+
+    if(!faehrbuero=touch(SCHIFFAHRT)){
+        return ([]);
+    }
+    foreach(string pfad : faehrbuero->query_faehren()){
+        object schiff, commander;
+        string schiffsname;
+        mixed *route;
+
+//  statt (!schiff->id(pat)) && 
+//  wuerde auch        
+//      (!sizeof(filter(schiff->query_id(),(: pat + LOW(schiffsname) :)))) &&
+//  gehen, wenn man als special-ID zum Beispiel "#eisberg" haben wollen wuerde
+//  das pruefen auf eine bestimmte, feste ID geht aber einfacher, schneller
+//  und verbraucht auch deutlich weniger Evals
+        
+        if((schiff = touch(pfad)) &&
+           (schiffsname = schiff->query_cap_name()) &&
+           (!schiff->id(pat)) &&
+           (commander = schiff->query_commander()) &&
+           (route = commander->query_route())){
+            ret += ([ schiffsname : transpose_array(route)[0] ]);
+        }
+    }
+    return ret;
+}
+
+private int check_faehre(string pfad)
+{
+    object faehrbuero;
+    string *faehren;
+    
+    if(!faehrbuero=touch(SCHIFFAHRT)){
+        return 0;
+    }
+    faehren = faehrbuero->query_faehren();
+    return pointerp(faehren) && (member(faehren,pfad) != -1);
+}
+
+/*
+FUNKTION: query_faehren
+DEKLARATION: mapping query_faehren()
+BESCHREIBUNG:
+Alle Faehren, die nicht als offizielle Faehren gefuehrt werden sollen,
+brauchen die special-ID "#no_ferry#". Damit werden Faehren, wie zum
+Beispiel "Eisberg" nicht mit aufgefuehrt.
+
+VERWEISE: query_haefen
+GRUPPEN: schiff
+*/
+mapping query_faehren(){
+    return filter_faehren("#no_ferry#");
+}
+
+mapping filter_faehren_zu_hafen(mapping faehren, string hafen)
+{
+    mapping ret = ([]);
+    if(mappingp(faehren) && stringp(hafen))
+    {
+        ret = filter(faehren,
+                     function int(string faehre, string *haefen)
+                     {
+                         return (member(haefen, hafen) != -1);
+                     } );
+    }
+    return ret;
+}
+
+
+varargs string *filter_haefen(mapping faehren, string pat){
+    return filter(
+            unify_array(foldl(m_values(faehren), ({}),
+                             function string*(string *startwert, string* entry)
+                             {  
+                                 return startwert - entry + entry;
+                             } ))
+                ,(:left($1,strlen(pat)) != pat:));
+}
+
+/*
+FUNKTION: query_haefen
+DEKLARATION: string *query_haefen(mapping faehren)
+BESCHREIBUNG:
+Ob ein Hafen als offiziell gilt, wird dadurch bestimmt, ob es einen Kapitaen
+gibt, der diesen Hafen anlaeuft. Alle Haefen, die nicht als offizielle Haefen
+gefuehrt werden sollen, brauchen daher das Praefix # in ihrer
+Routenbeschreibung, die per set_route gesetzt wird.
+
+Damit werden Haefen, wie zum Beispiel "suedpol_1" und "suedpol_2" nicht mit
+aufgefuehrt. Der skipper filtert Leer- und das Sonderzeichen fuer die eigene
+Routenbestimmung wieder aus.
+
+Der Parameter faehren wird ueblicherweise mit dem Ergebnis aus query_faehren()
+gefuettert.
+
+VERWEISE: set_route, query_faehren
+GRUPPEN: schiff
+*/
+string *query_haefen(mapping faehren){
+    return filter_haefen(faehren, "#");
+/*
+    return unify_array(foldl(m_values(faehren), ({}),
+                             function string*(string *startwert, string* entry)
+                             {
+                                 return startwert - entry + entry;
+                             } ));
+*/
+}
+
+
+int reisedaten_aendern(object wer, string faehre, string zielhafen, int flag,
+                       mapping faehrdaten){
+    string oldschiff, oldhafen, tmp;
+    object schiffsob;
+    
+    oldschiff = wartende[RN(wer),SCHIFF];
+    oldhafen = wartende[RN(wer),HAFEN];
+    switch(flag){
+        case REISE_NACH_HAFEN:
+        // reise nach <hafen>
+            wer->send_message_to(wer,MT_NOTIFY,MA_SENSE,
+                     wrap("OK. Du "+
+                          ((zielhafen == oldhafen)
+                           ? "bleibst bei "+CAP(zielhafen)+" als "
+                           : "waehlst "+CAP(zielhafen)+" als "
+                             +(oldhafen ? "neues " : ""))+
+                          "Reiseziel und wartest "
+                          +((oldschiff == faehre) ? "weiterhin " : "")+
+                          "auf die Faehre "+faehre+"."));
+            break;
+        case REISE_MIT_WARTE_AUF_FAEHRE:
+        // reise mit <faehre> / warte auf <faehre>
+            tmp = ".";
+            // checken ob ein zuvor gestzter Zielhafen noch passt:
+            if(oldhafen){
+                if(member(faehrdaten[faehre], oldhafen) != -1){
+                    tmp = ", um weiterhin nach "+CAP(oldhafen)+" zu gelangen.";
+                    zielhafen = oldhafen;
+                } else {
+                    tmp = ", was dich nicht mehr nach "+CAP(oldhafen)+
+                          " fuehren wird.";
+                }
+            }
+            if(query_verb(1) == "warte"){
+                TO->send_message_to(wer,MT_NOTIFY,MA_SENSE,
+                        wrap("OK. Du wartest "
+                             +((faehre == oldschiff)
+                               ? "weiterhin "
+                               : "jetzt "
+                                 +(oldschiff
+                                   ? "nicht mehr auf die Faehre "+oldschiff+
+                                     " sondern " 
+                                   : ""))
+                             +"auf die Faehre "+faehre+tmp));
+            } else {
+                TO->send_message_to(wer,MT_NOTIFY,MA_SENSE,
+                        wrap("OK. Du reist "
+                             +((faehre == oldschiff)
+                               ? "weiterhin "
+                               : "jetzt "
+                                 +(oldschiff
+                                   ? "nicht mehr mit der Faehre "+oldschiff+
+                                     " sondern " 
+                                   : ""))
+                             +"mit der Faehre "+faehre+tmp));
+            }
+            break;
+        case REISE_NACH_WARTE_AUF_HAFEN:
+        // reise nach <hafen> / warte auf <hafen>
+            if(query_verb(1) == "warte"){
+                TO->send_message_to(wer,MT_NOTIFY,MA_SENSE,
+                        wrap("OK. Du wartest "
+                             +((zielhafen == oldhafen)
+                               ? "weiterhin "
+                               : "jetzt "
+                                 +(oldhafen
+                                   ? "nicht mehr auf den Hafen "+CAP(oldhafen)+
+                                     " sondern " 
+                                   : ""))
+                             +"auf den Hafen "+CAP(zielhafen)+"."));
+            } else {
+                TO->send_message_to(wer,MT_NOTIFY,MA_SENSE,
+                        wrap("OK. Du reist "
+                             +((zielhafen == oldhafen)
+                               ? "weiterhin "
+                               : "jetzt "
+                                 +(oldhafen
+                                   ? "nicht mehr nach "+CAP(oldhafen)+
+                                     " sondern " 
+                                   : ""))
+                             +"nach "+CAP(zielhafen)+"."));
+            }
+            break;
+        case REISE_EINSTEIGEN:  //silent-flag
+            break;
+    }
+    add_wartende(RN(wer), faehre, zielhafen);
+    if(schiffsob = cond_present("schiff", ENV(wer),
+                                function int(object ob)
+                                {
+                                    return (ob->query_cap_name() == faehre);
+                                } ))
+    {
+        TO->send_message_to(wer,MT_NOTIFY,MA_LOOK,
+                             wrap(Der(schiffsob)+" "+ist(schiffsob)+" ja "
+                                  "gerade da! Also nichts wie an Bord!"));
+        // TODO: Handeln!
+    }
+    return 1;
+}
+
+private string *my_parse_filter(string matchstr, string* quelle){
+    if(!pointerp(quelle) || !sizeof(quelle))
+    {
+        return ({});
+    }
+    matchstr = " "+LOW(matchstr);
+    return filter(quelle,
+                  function int(string str)
+                  {
+                      // argl Schiffnamen in Anfuehrungszeichen
+                      // nur Wortanfaenge, daher " " davor
+                      str = regreplace(" "+LOW(str),"\"","",1);
+                      return (strstr(str, matchstr) != -1);
+                  } );
+}
+
+
+// immer am Hafen auf Schiff parsen (ausser: hafenflag == 1)
+// und auf dem Schiff auf Hafen parsen
+mixed do_warten(string matchstr, int hafenflag){
+    string starthafen, zielhafen, faehre, *alle_haefen, *haefen, *faehren;
+    string oldschiff, oldhafen;
+    mapping faehrdaten, faehrdaten_hier;
+    object schiffsob;
+    int anz;
+
+    // mal alle Faehren raussuchen:
+    if(!sizeof(faehrdaten = query_faehren())){
+        return notify_fail(wrap("Der Schiffsverkehr wurde zur Zeit "
+                                "vorlaeufig eingestellt."),FAIL_INTERNAL);
+    }
+    alle_haefen = query_haefen(faehrdaten);
+    if(query_hafen_version()){
+        // OK wir sind am Hafen:
+        starthafen = ENV_TP->query_type("hafen");
+        // kurz alle bekannten Haefen durchchecken, ob der hier dabei ist:
+        if(member(alle_haefen, starthafen) == -1)
+        {
+            return notify_fail(wrap("Dieser Hafen wird von keiner offiziellen "
+                                    "Faehre angelaufen! Hier kannst du lange "
+                                    "warten!"),
+                               FAIL_INTERNAL);
+        }
+        // alle Faehren die hier vorbeikommen raussuchen:
+        faehrdaten_hier = filter_faehren_zu_hafen(faehrdaten, starthafen);
+        // die Namen dieser Faehren:
+        faehren = m_indices(faehrdaten_hier);
+        // die Namen aller Haefen, die mit diesen Faehren erreicht werden:
+        haefen = query_haefen(faehrdaten_hier);
+        
+        // nun gucken, ob der Spieler was passendes dazu eingegeben hat:
+        if(hafenflag){
+// reise nach <hafen>
+            if(matchstr != "hafen") // bei hafen nehmen wir alle
+                haefen = my_parse_filter(matchstr, haefen);
+            switch(sizeof(haefen)){
+              case 0: // vielleicht wuerde es ja woanders klappen:
+                haefen = query_haefen(faehrdaten);
+                haefen = my_parse_filter(matchstr, haefen);
+                if(anz = sizeof(haefen))
+                {
+                    haefen = m_indices(mkmapping(haefen));    // doppelte raus
+                    return notify_fail(wrap((anz > 1
+                                             ? "Die Haefen"
+                                             : "Der Hafen")+" "
+                                            +liste(map(haefen,#'capitalize),
+                                                   " sowie ")+
+                                            (anz > 1 ? " werden" : " wird")+
+                                            " von hier aus nicht angefahren!"),
+                                       FAIL_WRONG_ARG);
+                }
+                return notify_fail(wrap("Es gibt keinen passenden Hafen!"),
+                                   FAIL_WRONG_ARG);
+                break;
+              // war die Wahl eindeutig?
+              case 1:
+                zielhafen = haefen[0];
+                // ein Treffer => Wahl eindeutig
+                break;
+              // wenn nicht, dann weiter mit Wahl nicht eindeutig:
+              default:
+                  haefen = m_indices(mkmapping(haefen));    // doppelte raus
+                  return notify_fail(wrap("Wohin moechtest du reisen? "
+                                          +liste(map(haefen,#'capitalize),
+                                                 " oder ")+"?"), FAIL_INTERNAL);
+            }
+            if(zielhafen == starthafen){
+                return notify_fail(wrap("Du bist doch bereits in "
+                                        +CAP(zielhafen)+"!"), FAIL_INTERNAL);
+            }
+            // passende Faehre suchen:
+            foreach(string schiffsname, string* schiffshaefen :faehrdaten_hier){
+                if(member(schiffshaefen, zielhafen) != -1){
+                    faehre = schiffsname;
+                    break;
+                }
+            }
+            // es muss eine Faehre passen, sonst waere zielhafen nicht in haefen
+            return reisedaten_aendern(TP, faehre, zielhafen, REISE_NACH_HAFEN,
+                                      faehrdaten_hier);
+        } else {
+// reise mit <faehre> / warte auf <faehre>
+            // bei faehre / schiff nehmen wir alle
+            if(member(({"faehre","schiff"}),matchstr) == -1)
+                faehren = my_parse_filter(matchstr, faehren);
+            switch(sizeof(faehren)){
+              case 0: // vielleicht wuerde es ja woanders klappen:
+                faehren = m_indices(faehrdaten);
+                faehren = my_parse_filter(matchstr, faehren);
+                if(anz = sizeof(faehren))
+                {
+                    return notify_fail(wrap("Die Faehre"+(anz > 1 ? "n " : " ")
+                                            +liste(faehren," sowie ")+" komm"
+                                            +(anz > 1 ? "en" : "t")+
+                                            " hier leider nicht vorbei!"),
+                                       FAIL_WRONG_ARG);
+                }
+                return notify_fail(wrap("Es gibt keine passende Faehre!"),
+                                   FAIL_WRONG_ARG);
+                break;
+              // war die Wahl eindeutig?
+              case 1:
+                faehre = faehren[0];
+                // ein Treffer => Wahl eindeutig
+                break;
+              // wenn nicht, dann weiter mit Wahl nicht eindeutig:
+              default: 
+                return notify_fail(wrap(((query_verb(1) == "warte")
+                                        ? "Worauf willst du warten? "
+                                        : "Womit moechtest du reisen? ")
+                                        +liste(faehren," oder ")+"?"),
+                                   FAIL_INTERNAL);
+            }
+        }
+        return reisedaten_aendern(TP, faehre, 0, REISE_MIT_WARTE_AUF_FAEHRE,
+                                  faehrdaten_hier);
+    } else {
+        // wir sind auf dem Schiff:
+// reise nach <hafen> / warte auf <hafen>
+        // argl, Spielerschiffe koennen ja auch wie Linienschiffe heissen... 
+        if( !(schiffsob = touch(ENV_TP->query_ship())) ||
+            !check_faehre(ON(schiffsob)) ||
+            !(faehre = schiffsob->query_cap_name()) ||
+            // alle angefahrenen Haefen:
+            !(haefen = faehrdaten[faehre]))
+        {
+            return notify_fail(wrap("Du befindest dich auf keiner offiziellen "
+                                    "Faehre! Hier kannst du lange warten!"),
+                               FAIL_INTERNAL);
+        }
+        // nun gucken, ob der Spieler was passendes dazu eingegeben hat:
+        if(matchstr != "hafen") // bei hafen nehmen wir alle
+             haefen = my_parse_filter(matchstr, haefen);
+        switch(sizeof(haefen)){
+          case 0: // vielleicht wuerde es ja woanders klappen:
+            haefen = query_haefen(faehrdaten);
+            haefen = my_parse_filter(matchstr, haefen);
+            if(anz = sizeof(haefen))
+            {
+                haefen = m_indices(mkmapping(haefen));    // doppelte raus
+                return notify_fail(wrap((anz > 1
+                                         ? "Die Haefen"
+                                         : "Der Hafen")+" "
+                                        +liste(map(haefen,#'capitalize),
+                                               " sowie ")+
+                                        (anz > 1 ? " werden" : " wird")+
+                                        " von dieser Faehre nicht angefahren!"),
+                                       FAIL_WRONG_ARG);
+            }
+            return notify_fail(wrap("Es gibt keinen passenden Hafen"),
+                               FAIL_WRONG_ARG);
+            break;
+        // war die Wahl eindeutig?
+        case 1:
+            zielhafen = haefen[0];
+            // ein Treffer => Wahl eindeutig
+            break;
+            // wenn nicht, dann weiter mit Wahl nicht eindeutig:
+        default:
+            haefen = m_indices(mkmapping(haefen));    // doppelte raus
+            return notify_fail(wrap(((query_verb(1) == "warte")
+                                     ? "Worauf willst du warten? "
+                                     : "Wohin moechtest du reisen? ")
+                                    +liste(map(haefen,#'capitalize),
+                                           " oder ")+"?"), FAIL_INTERNAL);
+        }
+        return reisedaten_aendern(TP, faehre, zielhafen,
+                                  REISE_NACH_WARTE_AUF_HAFEN,
+                                  ([ faehre : haefen]));
+    }
+}
+
+//an der tafel:
+//  warte auf schiffsname
+//  warte nicht 
+
+//an bord
+//  warte auf hafenname
+//  warte nicht 
+
+int cmd_warte(string str){
+    mixed match;
+    string name, matchstr, oldschiff, rest;
+
+    log_file("ship_wait",sprintf("warte: %s %s %s\n", shorttimestr(time()),
+                                 TP_RN||(query_living_name(TP)+"("+ON(TP)+")"),
+                                 str||""));
+    
+    str = LOW(strip(str));
+    name = TP_RN||query_living_name(TP);
+
+    if(!name)
+    {
+        return notify_fail(wrap("Das ist dir leider nicht moeglich."));
+    }
+    
+    // aufs schiff argo  -> aufs argo
+    // auf die seeteufel -> auf seeteufel
+    // auf das schiff    -> auf schiff
+    if(query_hafen_version())
+        rest = regreplace(str,"(die |das |den |schiff |faehre )","",1);
+    else
+        rest = regreplace(str,"(die |das |den |hafen )","",1);
+    match = regmatch(rest,"(aufs* (.+)|nicht)", RE_MATCH_SUBS);
+    // "bla"          -> 0
+    // "nicht"        -> ({"nicht","nicht",5})
+    // "auf argo"     -> ({"auf argo","auf argo","argo",8})
+    // "aufs schiff"  -> ({"aufs schiff","aufs schiff","schiff",11})
+    if(!match)
+    {
+        if(!member(wartende,name))
+        {
+          return notify_fail(wrap("Warte? Auf was denn?")); //Auf Godot...
+        }
+        // gewuenscht war eine Status-Info wenn man nur 'warte' eingibt:
+        oldschiff = wartende[name,SCHIFF];
+        return notify_fail(wrap("Du wartest momentan auf "
+                                +(oldschiff ? "die Faehre "+oldschiff
+                                : "eine Reise nach "+wartende[name,HAFEN])
+                                +", kannst dies aber jederzeit aendern oder mit "
+                                 "'warte nicht mehr' abbrechen."),
+                           FAIL_INTERNAL);
+    }
+    matchstr = strip(match[<2]);
+    // warte nicht / warte auf nichts
+    if((matchstr == "nicht") || (matchstr == "nichts")){
+        if(!member(wartende,name))
+           return notify_fail(wrap("Du wartest doch gar nicht!"),FAIL_INTERNAL);
+        else{
+            oldschiff = wartende[name,SCHIFF];
+            TP->send_message_to(TP, MT_NOTIFY, MA_CRAFT,
+                wrap("Ok, du wartest nun nicht mehr auf "+
+                     (oldschiff ? "die Faehre "+oldschiff
+                                : "eine Reise nach "+wartende[name,HAFEN])
+                     +"."));
+            delete_wartende(name);
+            return 1;
+        }
+    }
+    if(matchstr == "godot"){
+        TO->send_message_in(ENV_TO||TO,MT_LOOK|MT_NOISE,MA_MOVE_IN,
+                wrap("Ein angstlicher Junge naehert sich."));
+        TO->send_message_in(ENV_TO||TO,MT_NOISE,MA_COMM,
+                wrap("Der aengstliche Junge sagt etwas zu "+dem(TP)+"."),
+                wrap_say("Der Junge sagt zu dir:","Entschuldigen Sie bitte, "
+                        "aber mein Herr laesst Ihnen ausrichten, dass er "
+                        "sich etwas verspaetet, aber noch ganz bestimmt "
+                        "herkommt!"),TP);
+        TO->send_message_in(ENV_TO||TO,MT_LOOK|MT_NOISE,MA_MOVE_OUT,
+                wrap("Der angstliche Junge rennt weg."));
+
+        return 1;
+    }
+    return do_warten(matchstr, 0);
+}
+
+//an der tafel:
+//  reise nach hafenname 
+//  reise mit schiffsname
+//  reise nicht
+
+//an bord
+//  reise nach hafenname 
+//  reise nicht
+int cmd_reise(string str){
+    mixed match;
+    string matchstr, oldhafen, oldschiff, rest, name;
+    int hafenflag;
+
+    log_file("ship_wait",sprintf("reise: %s %s %s\n", shorttimestr(time()),
+                                 TP_RN||(query_living_name(TP)+"("+ON(TP)+")"),
+                                 str||""));
+    
+    name = TP_RN||query_living_name(TP);
+    if(!name)
+    {
+        return notify_fail(wrap("Das ist dir leider nicht moeglich."));
+    }
+    str = LOW(strip(str));
+    // mit schiff             -> mit schiff
+    // mit schiff argo        -> mit argo
+    // zur rhone              -> zur rhone
+    // zu der rhone           -> zu rhone
+    // zum hafen phexcaer     -> zum phexcaer
+    if(query_hafen_version() && (strstr(" "+str, " mit ") != -1)){
+        rest = regreplace(str,"(der |dem |den |schiff |faehre )","",1);
+    } else {
+        rest = regreplace(str,"(der |dem |den |hafen )","",1);
+    }
+    if(query_hafen_version()){
+        match = regmatch(rest, "((nach|mit|zu|zum) (.+)|nicht)",
+                         RE_MATCH_SUBS);
+    } else {
+        match = regmatch(rest, "((nach|zu|zum) (.+)|nicht)", RE_MATCH_SUBS);
+    }
+   // "bla"          -> 0
+   // "nicht"        -> ({"nicht","nicht",5})
+   // "nach phexcaer"-> ({"nach phexcaer","nach phexcaer","nach","phexcaer",13})
+   // "mit argo"     -> ({"mit argo","mit argo","mit","argo",8})
+   // "mit schiff"   -> ({"mit schiff","mit schiff","mit","schiff",10})
+   // "zu anfurten"  -> ({"zu anfurten","zu anfurten","zu","anfurten",11})
+    if(!match)
+    {
+        // gewuenscht war eine Status-Info wenn man nur 'reise' eingibt:
+        oldhafen = wartende[name,HAFEN];
+        oldschiff = wartende[name,SCHIFF];
+        if(oldhafen || oldschiff)
+        {
+          return notify_fail(wrap("Du reist momentan "
+                                  +(oldschiff ? " mit der Faehre "+oldschiff : "")
+                                  +(oldhafen ? " nach "+CAP(oldhafen) : "")+
+                                  " kannst dies aber jederzeit aendern oder mit "
+                                  "'reise nicht mehr' abbrechen."),
+                             FAIL_INTERNAL);
+        }
+        return notify_fail(wrap("Reise? Wohin "
+                                +(query_hafen_version() ? "oder womit " : "")+
+                                "denn?")); //Auf Godot...
+    }
+    matchstr = match[<2];
+    if(matchstr == "nicht"){
+        if(!member(wartende,name))
+            return notify_fail(wrap("Du bist doch auf gar keiner Reise!"),
+                               FAIL_INTERNAL);
+        else{
+            oldhafen = wartende[name,HAFEN];
+            oldschiff = wartende[name,SCHIFF];
+            TP->send_message_to(TP, MT_NOTIFY, MA_CRAFT,
+                wrap("Ok, du reist nun nicht mehr"
+                     +(oldschiff ? " mit der Faehre "+oldschiff : "")
+                     +(oldhafen ? " nach "+CAP(oldhafen) : "")+"."));
+            delete_wartende(name);
+            return 1;
+        }
+    }
+    // am Hafen auf Hafen statt Faehre parsen, wenn kein "mit" im Kommando 
+    hafenflag = (member(match,"mit") == -1);
+    return do_warten(matchstr, hafenflag);
+}
+
+//  in add_wartende() wird zusaetzlich zum Eintrag im wartende-Mapping an den
+//  wartenden Spieler ein Controller (notify_move) angemeldet, der dafuer sorgt,
+//  dass der Eintrag, als auch der Controller ueber die Funktion delete_wartende
+//  entfernt, bzw abgemeldet wird 
+void notify_move(object wer, object woher, object wohin, string dir, int wie,
+                 string verlassen, string ankommen)
+{
+    if( ((woher == ENV_TO) && (wohin != ENV_TO)) ||         //wait_kurstafel
+        ((woher == TO) && (wohin != TO)))                   //wait_ship_room
+    {
+        delete_wartende(RN(wer)||query_living_name(wer));
+    }
+}
+
+void init(){
+    add_action("cmd_warte","warte");
+    add_action("cmd_reise","reise");
+}

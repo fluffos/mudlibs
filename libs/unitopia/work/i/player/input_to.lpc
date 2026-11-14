@@ -1,0 +1,97 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/player/input_to.c
+// Author:      Gnomi (15.11.2012)
+// Description: Eigenes input_to
+//
+// $Log: input_to.c,v $
+// Revision 1.1  2012-11-26 22:20:22  gnomi
+// Unterstuetzung fuer InterMUD-Portale eingebaut.
+//
+
+#include <commands.h>
+#include <config.h>
+#include <files.h>
+#include <input_to.h>
+#include <invis.h>
+#include <message.h>
+#include <telnet.h>
+#include <term.h>
+#include <time.h>
+
+#include "player.h"
+
+nosave mixed* input_tos=({});  // Fuer jeden laufenden input_to:
+                               // ({ Closure, Prompt })
+                               // input_tos[<1] ist der aktuelle.
+nosave int input_to_set;       // Index+1 des input_tos, der in diesem Zyklus
+                               // hinzugefuegt wurde.
+
+// H_RRINT_PROMPT-Hook
+void print_prompt(mixed prompt);
+
+protected int clean_input_tos()
+{
+    int old_size = sizeof(input_tos);
+    input_tos = filter(input_tos, #'[, 0);
+    return old_size != sizeof(input_tos);
+}
+
+protected void clear_input_tos()
+{
+    input_tos = ({});
+}
+
+// Wird von sefun::input_to aufgerufen.
+int start_input_to(closure callback, mixed prompt, int flags)
+{
+    if(input_to_set>0 && !(flags & INPUT_APPEND))
+        return 1;
+
+    if(input_to_set>0)
+        input_tos[input_to_set-1..input_to_set-2] = 
+            ({ ({ callback, prompt }) });
+    else
+    {
+        input_tos += ({ ({ callback, prompt }) });
+        input_to_set = sizeof(input_tos);
+        call_out(function void() { input_to_set = 0; }, 0);
+    }
+
+    print_prompt(prompt);
+
+    return 1;
+}
+
+// Wird von sefun::query_input_pending aufgerufen
+nomask object query_pending_input_to()
+{
+    clean_input_tos();
+    return sizeof(input_tos) && to_object(input_tos[<1][0]);
+}
+
+protected mixed query_pending_input_to_prompt()
+{
+    clean_input_tos();
+    if(!sizeof(input_tos))
+        return 0;
+    else
+        return input_tos[<1][1] || "";
+}
+
+protected int execute_input_to(string cmd)
+{
+    input_to_set = 0;
+
+    clean_input_tos();
+
+    if(!sizeof(input_tos))
+        return 0;
+    else
+    {
+        closure cl = input_tos[<1][0];
+        input_tos = input_tos[0..<2];
+        funcall(cl, cmd);
+        return 1;
+    }
+}

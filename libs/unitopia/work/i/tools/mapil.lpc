@@ -1,0 +1,377 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/tools/mapil.c
+// Description:	Magic Application Programming Interface Light
+// Author:	Freaky (27.08.2001)
+//
+// $Log: mapil.c,v $
+// Revision 1.9  2016/07/16 07:44:54  myonara
+// Fenchurch: Doku zu mapil_forbidden und mapil_notify und M_F_TEST umgesetzt.
+// Myonara: M_F_NO_MESSAGE eingefuehrt und Dokugruppe mapil ergaenzt.
+//
+// Revision 1.8  2003/09/03 17:37:18  menaures
+// Enzy-Doku fuer Magie- und Handwerk-Controller hinzugefuegt. (spartanisch)
+//
+// Revision 1.7  2001/08/31 12:40:47  freaky
+// auch v-items als victim zulassen.
+//
+// Revision 1.6  2001/08/30 08:27:10  freaky
+// room-types werde nicht nur ausgewertet, sondern auch beachtet.
+//
+// Revision 1.5  2001/08/28 17:43:10  freaky
+// bugfix bei victim als array
+//
+// Revision 1.4  2001/08/27 22:16:16  freaky
+// Room-Types beachten bei forbidden
+// victim kann auch ein Objekt-Array sein.
+//
+// Revision 1.3  2001/08/27 17:15:34  freaky
+// Doku fixes
+//
+// Revision 1.2  2001/08/27 17:13:12  freaky
+// Doku eingebaut
+//
+// Revision 1.1  2001/08/27 14:10:49  freaky
+// added
+//
+
+#include <mapil.h>
+#include <message.h>
+
+/*
+FUNKTION: mapil_forbidden
+DEKLARATION: varargs int mapil_forbidden(string base_type, int magic_type, int flag, string name, object caster, mixed victim, int chance, mapping extra)
+BESCHREIBUNG:
+Hiermit kann man pruefen, ob der Einsatz des Magiespruchs bzw. des
+Handwerks erlaubt ist.
+
+Die Funktion kennt folgende Parameter:
+
+    string base_type
+        Der Basis-Typ ist entweger M_B_MAGIE oder M_B_HANDWERK
+
+    int magic_type
+        Typ der Magie / des Handwerks (Dies sind Defines in /sys/mapil.h)
+
+        - Kampf                       M_T_FIGHT
+        - Schutz                      M_T_PROTECT
+        - Heilung                     M_T_HEAL
+        - Information                 M_T_INFO
+        - Teleport                    M_T_TELEPORT
+        - Versand eines Gegenstandes  M_T_TRANSPORT
+        - Nahrungsaufnahme            M_T_NUTRITION
+        - Manipulation                M_T_MANIPULATION (oder kurz: M_T_MP)
+        - Gedankenmanipulation        M_T_MINDCONTROL (oder kurz: M_T_MC)
+        - Tarnung                     M_T_HIDE
+        - Kommunikation               M_T_COMM
+
+    int flag
+        (Dies sind Defines in /sys/mapil.h)
+        - M_F_FAR           fern (Fuer Fernzauber)
+        - M_F_OFFENSIVE     offensiv (Fuer Sprueche, die Schaden verursachen)
+        - M_F_AREA          flaeche (Fuer Flaechenzauber bzw. Flaechenwirkungen)
+        - M_F_POSITIVE      positiv (Auswirkung auf das Opfer ist positiv)
+        - M_F_NEGATIVE      negativ (Auswirkung auf das Opfer ist negativ)
+        - M_F_TEST          test (Es soll nur getestet werden, ob es klappen
+                            wuerde oder nicht. Der Rueckgabewert sollte ein
+                            Integer sein, an dem man ablesen kann, warum es
+                            nicht ging) Es darf keine Meldung erzeugt werden
+                            und sonst nichts veraendert werden.
+        - M_F_NO_MESSAGE    Soll jegliche Meldung unterdruecken.
+    string name
+        Genauer Name des  Spells (Magiespruchs oder des Handwerks) als String
+
+    object caster
+        Spieler- oder NPC-Objekt, das den Spell wirkt.
+
+    mixed victim
+        Ziel, auf das der Spell einwirkt, sofern anwendbar.
+
+    int chance
+        Einen Wert von 1 bis 100, wie gut es geklappt hat.
+
+        Fuer Aktionen, bei denen es (noch) keine Information gibt, wie gut
+        die Aktion geklappt hat, uebergibt man einfach 50, damit man dies
+        spaeter, falls man so einen Wert einbauen will, auch hoeher und
+        niedriger uebergeben kann.
+
+        Fuer Fehlschlaege muss forbidden nur aufgerufen werden, wenn
+        der Fehlschlag eine Aktion ausfuehrt, die nicht auf den Magier
+        zielt (z.B. es faengt an zu regnen oder so) Dann wird forbidden
+        neu aufgerufen mit positivem Wert im Opfer des Regens und Env
+        des Opfers.
+
+    mapping extra
+        Ein optionales Mapping mit weiteren Infos
+
+        Das Mapping ist fuer erweiterte Daten da, die jede Gilde fuer sich
+        uebergeben kann. Es ist optional und kann also auch 0 sein.
+        Das schoene ist, dass sich durch das Mapping auch Sprueche modifizieren
+        lassen, indem die Werte des Mappings veraendert werden.
+        Falls ein Objekt dies tut, muss es auf jeden Fall
+        'extra["modified"] = 1' setzen, damit der Spruch die Aenderungen
+        mitbekommt. WICHTIG: das Mapping darf nur durch Zuweisungen veraendert
+        werden, und nicht durch Addition.
+        Beispiel:
+            extra["chance"] = 10;      Korrekt
+            extra += (["chance":10]);  FALSCH
+
+        Moegliche Eintraege des Mapping:
+        - stufe:      Stufe des Zaubers von 1 bis 10
+        - ZP:         Wieviele ZPs dafuer notwendig sind
+        - modified:   Dies muss auf 1 gesetzt werden, wenn ein Controller
+                    das Mapping veraendert hat.
+        - gegenstand: Der Gegenstand, der gestohlen werden soll, der manipuliert
+                    werden soll usw.
+        - ...
+
+Genaueres ueber die Parameter und den Einsatz findet man unter:
+/doc/funktionsweisen/MAPI-Light
+VERWEISE: mapil_notify, add_controller
+GRUPPEN: grundlegendes,mapil
+*/
+varargs int mapil_forbidden(string base_type, int magic_type, int flag,
+       	string name, object caster, mixed victim, int chance, mapping extra)
+{
+    int ret;
+    mixed mret;
+    object *done;
+    string type;
+
+#   define M_FORBIDDEN forbidden(base_type,magic_type,flag,name,caster,victim,chance,extra)
+    if (ret = caster->M_FORBIDDEN)
+        return ret;
+    if (ret = environment(caster)->M_FORBIDDEN)
+        return ret;
+
+    done = ({0, caster, environment(caster)});
+    if (!pointerp(victim))
+        victim = ({victim});
+
+    foreach(object ob: victim)
+    {
+        if (objectp(ob) && member(done,ob) == -1)
+        {
+            if (ret = ob->M_FORBIDDEN)
+                return ret;
+            done += ({ob});
+            if (member(done,environment(ob)) == -1)
+            {
+                if (ret = environment(ob)->M_FORBIDDEN)
+                    return ret;
+                done += ({environment(ob)});
+            }
+        }
+    }
+
+    // Check auf Roomtypes
+    if (base_type == M_B_MAGIE)
+        type = "keine_magie";
+    else if (base_type == M_B_HANDWERK)
+        type = "kein_handwerk";
+    else
+        type = base_type;
+    if (mret = environment(caster)->query_type(type))
+    {
+        if(!(flag & M_F_TEST) && !(flag & M_F_NO_MESSAGE))
+        {
+            if (stringp(mret))
+                caster->send_message_to(caster,MT_NOTIFY,MA_UNKNOWN,wrap(mret));
+            else if (closurep(mret))
+                funcall(mret);
+            else
+            {
+                if (base_type == M_B_MAGIE)
+                caster->send_message_to(caster,MT_NOTIFY,MA_UNKNOWN,
+                    "Hier kannst du keine Magie wirken.\n");
+                else
+                caster->send_message_to(caster,MT_NOTIFY,MA_UNKNOWN,
+                    "Hier kannst du diese Fertigkeit nicht anwenden.\n");
+            }
+        }
+        return 1;
+    }
+    done = ({0, caster});
+    foreach(object ob: victim)
+    {
+        if (objectp(ob) && member(done,ob) == -1)
+        {
+            if (environment(ob) && mret = environment(ob)->query_type(type))
+            {
+                if(!(flag & M_F_TEST) && !(flag & M_F_NO_MESSAGE))
+                {
+                    if (stringp(mret))
+                        caster->send_message_to(caster,MT_NOTIFY,MA_UNKNOWN,
+                            wrap(mret));
+                    else if (closurep(mret))
+                        funcall(mret);
+                    else
+                    {
+                        if (base_type == M_B_MAGIE)
+                        caster->send_message_to(caster,MT_NOTIFY,MA_UNKNOWN,
+                            "Dort kannst du keine Magie wirken.\n");
+                        else
+                        caster->send_message_to(caster,MT_NOTIFY,MA_UNKNOWN,
+                            "Dort kannst du diese Fertigkeit nicht "
+                            "anwenden.\n");
+                    }
+                }
+                return 1;
+            }
+            done += ({ob});
+        }
+    }
+}
+
+/*
+FUNKTION: mapil_notify
+DEKLARATION: varargs void mapil_notify(string base_type, int magic_type, int flag, string name, object caster, mixed victim, int chance, mapping extra)
+BESCHREIBUNG:
+Hiermit benachrichtigt man alle controller, dass ein Magiespruch bzw.
+ein Handwerk durchgefuehrt wuerde.
+
+Die Funktion kennt folgende Parameter:
+
+    string base_type
+        Der Basis-Typ ist entweger M_B_MAGIE oder M_B_HANDWERK
+
+    int magic_type
+        Typ der Magie / des Handwerks (Dies sind Defines in /sys/mapil.h)
+
+        - Kampf                       M_T_FIGHT
+        - Schutz                      M_T_PROTECT
+        - Heilung                     M_T_HEAL
+        - Information                 M_T_INFO
+        - Teleport                    M_T_TELEPORT
+        - Versand eines Gegenstandes  M_T_TRANSPORT
+        - Nahrungsaufnahme            M_T_NUTRITION
+        - Manipulation                M_T_MANIPULATION (oder kurz: M_T_MP)
+        - Gedankenmanipulation        M_T_MINDCONTROL (oder kurz: M_T_MC)
+        - Tarnung                     M_T_HIDE
+        - Kommunikation               M_T_COMM
+
+    int flag
+        (Dies sind Defines in /sys/mapil.h)
+        - M_F_FAR           fern (Fuer Fernzauber)
+        - M_F_OFFENSIVE     offensiv (Fuer Sprueche, die Schaden verursachen)
+        - M_F_AREA          flaeche (Fuer Flaechenzauber bzw. Flaechenwirkungen)
+        - M_F_POSITIVE      positiv (Auswirkung auf das Opfer ist positiv)
+        - M_F_NEGATIVE      negativ (Auswirkung auf das Opfer ist negativ)
+        - M_F_TEST          test (Es soll nur getestet werden, ob es klappen
+                            wuerde oder nicht. Der Rueckgabewert sollte ein
+                            Integer sein, an dem man ablesen kann, warum es
+                            nicht ging) Es darf keine Meldung erzeugt werden
+                            und sonst nichts veraendert werden.
+        - M_F_NO_MESSAGE    Soll jegliche Meldung unterdruecken.
+    string name
+        Genauer Name des  Spells (Magiespruchs oder des Handwerks) als String
+
+    object caster
+        Spieler- oder NPC-Objekt, das den Spell wirkt.
+
+    mixed victim
+        Ziel, auf das der Spell einwirkt, sofern anwendbar.
+
+    int chance
+        Einen Wert von -100 bis +100, wie gut es geklappt hat
+        (0 heisst nicht geklappt, negativ heisst Fehlschlag -100 ist dann
+        der uebelste Fehlschlag)
+
+    mapping extra
+        Ein optionales Mapping mit weiteren Infos (siehe mapil_forbidden)
+
+Genaueres ueber die Parameter und den Einsatz findet man unter:
+/doc/funktionsweisen/MAPI-Light
+VERWEISE: mapil_forbidden, add_controller
+GRUPPEN: grundlegendes,mapil
+*/
+varargs void mapil_notify(string base_type, int magic_type, int flag,
+	string name, object caster, mixed victim, int chance, mapping extra)
+{
+    object *done;
+
+#   define M_NOTIFY notify(base_type,magic_type,flag,name,caster,victim,chance,extra)
+    caster->M_NOTIFY;
+    environment(caster)->M_NOTIFY;
+
+    done = ({0, caster, environment(caster)});
+    if (!pointerp(victim))
+	victim = ({victim});
+
+    foreach(object ob: victim)
+    {
+	if (objectp(ob) && member(done,ob) == -1)
+	{
+	    ob->M_NOTIFY;
+	    done += ({ob});
+	    if (member(done,environment(ob)) == -1)
+	    {
+		environment(ob)->M_NOTIFY;
+		done += ({environment(ob)});
+	    }
+	}
+    }
+}
+
+/* --- Dokumentation: --- */
+
+/*
+FUNKTION: notify_magie
+DEKLARATION: void notify_magie(int magic_type, int flag, string name, object caster, mixed victim, int chance, mapping extra)
+BESCHREIBUNG:
+Beim Ausfuehren von Magie (z.B. einem Zauberspruch) wird, sofern die Magie auf
+MAPI Light basiert, notify_magie in Caster, Victim sowie in deren Umgebungen 
+aufgerufen. Ausnahmen sind moeglich, muessen aber dokumentiert werden.
+
+Die Parameter sind identisch mit denen von mapil_notify.
+Diese sind unter /doc/funktionsweisen/MAPI-Light naeher dokumentiert.
+VERWEISE: forbidden_magie, notify_handwerk, forbidden_handwerk
+GRUPPEN: grundlegendes,mapil
+*/
+
+/*
+FUNKTION: forbidden_magie
+DEKLARATION: int forbidden_magie(int magic_type, int flag, string name, object caster, mixed victim, int chance, mapping extra)
+BESCHREIBUNG:
+Vor dem Ausfuehren von Magie (z.B. einem Zauberspruch) wird, sofern sie auf
+MAPI Light basiert, forbidden_magie in Caster, Victim sowie in deren Umgebungen 
+aufgerufen. Ausnahmen sind moeglich, muessen aber dokumentiert werden.
+
+Wenn forbidden_magie einen Wert ungleich 0 liefert, wird die Magie verhindert.
+
+Die Parameter sind identisch mit denen von mapil_forbidden.
+Diese sind unter /doc/funktionsweisen/MAPI-Light naeher dokumentiert.
+VERWEISE: notify_magie, forbidden_handwerk, notify_handwerk
+GRUPPEN: grundlegendes,mapil
+*/
+
+/*
+FUNKTION: notify_handwerk
+DEKLARATION: void notify_handwerk(int magic_type, int flag, string name, object caster, mixed victim, int chance, mapping extra)
+BESCHREIBUNG:
+Beim Ausfuehren von Handwerk (z.B. Gildenfaehigkeit) wird, sofern es auf
+MAPI Light basiert, notify_handwerk in Caster, Victim und deren Umgebungen 
+aufgerufen. Ausnahmen sind moeglich, muessen aber dokumentiert werden.
+
+Die Parameter sind identisch mit denen von mapil_notify.
+Diese sind unter /doc/funktionsweisen/MAPI-Light naeher dokumentiert.
+VERWEISE: forbidden_handwerk, notify_magie, forbidden_magie
+GRUPPEN: grundlegendes,mapil
+*/
+
+/*
+FUNKTION: forbidden_handwerk
+DEKLARATION: int forbidden_handwerk(int magic_type, int flag, string name, object caster, mixed victim, int chance, mapping extra)
+BESCHREIBUNG:
+Beim Ausfuehren von Handwerk (z.B. Gildenfaehigkeit)  wird, sofern es auf
+MAPI Light basiert, notify_handwerk in Caster, Victim und deren Umgebungen 
+aufgerufen. Ausnahmen sind moeglich, muessen aber dokumentiert werden.
+
+Die Parameter sind identisch mit denen von mapil_forbidden.
+Diese sind unter /doc/funktionsweisen/MAPI-Light naeher dokumentiert.
+VERWEISE: notify_handwerk, forbidden_magie, notify_magie
+GRUPPEN: grundlegendes,mapil
+*/
+
+/* --- End of file. --- */
+

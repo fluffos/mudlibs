@@ -1,0 +1,994 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/object/leuchte.c
+// Description: Eine Standardfackel/Laterne/bla.
+//              Sollte dringend ueberarbeitet werden.
+// Modified:    Monty (27.11 96): Fackeln gehen jetzt stillschweigend aus, wenn
+//                      man sie in einen nicht-living, nicht-raum bewegt.
+//              Freaky (10.03.1998) message auf send_message umgebaut.
+//              Freaky (07.12.1999) aus und an besser gemacht
+//
+// $Log: leuchte.c,v $
+// Revision 1.34  2016/03/11 18:38:39  myonara
+// Es wird hell, nur noch, wenn TP und TO im gleichen Raum...
+//
+// Revision 1.33  2015/09/20 17:53:18  myonara
+// chope-call_out abgesichert.
+//
+// Revision 1.32  2013/08/06 09:22:16  sorcerer
+// Typo in Doku
+//
+// Revision 1.31  2010-10-23 15:05:31  sorcerer
+// do_strike kam auch mit v_items noch nicht klar
+//
+// Revision 1.30  2010-10-23 14:49:52  sorcerer
+// concerned_strike kann mapping als 2. Arg erhalten
+//
+// Revision 1.29  2009-09-07 21:42:54  gnomi
+// set/query_extended_short() ausgebaut.
+//
+// Revision 1.28  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.27  2008/01/16 09:18:10  gnomi
+// T_IS_LIGHTED und TN_FUEL_PERCENT eingebaut.
+//
+// Revision 1.26  2006/06/25 00:11:56  gnomi
+// Typo in Enzy-Doku.
+//
+// Revision 1.25  2005/10/20 19:32:59  gnomi
+// Keine 0er call_outs starten. ;-)
+//
+// Revision 1.24  2005/08/26 22:18:50  gnomi
+// Ein paar Tests, ob es this_player() ueberhaupt (noch) gibt.
+//
+// Revision 1.23  2005/04/10 01:22:06  gnomi
+// Leuchte ist auch beim Betrachten sichtbar, wenn sie leuchtet.
+//
+// Revision 1.22  2004/07/19 21:17:33  menaures
+// Call-Out-Hack call_out("burn",0) entfernt, da das in LDMud 3.3 Endlos-
+// schleifen erzeugt. query_is_lighted() benutzt nun query_own_light().
+//
+// Revision 1.21  2004/04/17 02:17:32  gnomi
+// allowed_burn: Enzy-Deklaration korrigiert.
+//
+// Revision 1.20  2003/07/30 22:45:02  menaures
+// Typo in Doku
+//
+// Revision 1.19  2003/06/19 22:40:29  gnomi
+// Doku korrigiert.
+//
+// Revision 1.18  2003/05/28 01:05:15  gnomi
+// notify_move statt Follower nutzen.
+//
+// Revision 1.17  2003/01/26 03:56:50  gnomi
+// Eine Eval-Abfrage eingebaut.
+//
+// Revision 1.16  2003/01/25 04:27:43  gnomi
+// Die Meldung von query_not_extinguishable nutzen, falls gesetzt.
+//
+// Revision 1.15  2002/10/28 03:05:03  gnomi
+// Controller notify/forbidden/allowed_burn dokumentiert.
+//
+// Revision 1.14  2002/01/15 03:38:28  gnomi
+// query_short umgestellt.
+//
+// Revision 1.13  2002/01/13 00:56:14  gnomi
+// Einige Funktionen als veraltet markiert.
+//
+// Revision 1.12  2002/01/10 08:24:40  gnomi
+// Aenderung rueckgaengig gemacht, da eigentlich sinnlos.
+//
+// Revision 1.11  2002/01/10 07:53:04  gnomi
+// item, move virtuell inheriten.
+//
+// Revision 1.10  2001/08/26 12:50:28  freaky
+// todos entfernt
+//
+// Revision 1.9  2001/03/14 20:10:51  freaky
+// Bugfix
+//
+// Revision 1.8  2001/03/14 18:22:28  freaky
+// set-light nach set-own-light
+//
+// Revision 1.7  2001/03/05 21:32:30  gnomi
+// query_light_verbs korrigiert.
+//
+// Revision 1.6  2001/02/22 22:20:12  mudadm
+// Anin:  concerned_strike und do_strike rein
+//        may_burn um abfrage ergaenzt / choke geaendert
+//        in light/extinguish ueberzaehlige variablen raus
+//
+// Revision 1.5  2001/01/11 00:46:31  gnomi
+// Funktionsdoku; auf send_message umgestellt; auf plural achten
+//
+
+/*
+ * Dieser File ist fuer Objekte wie Fackeln, Lampen etc vorgesehen.
+ *
+ *   void set_destruct_at_out_of_fuel(int flag)    Soll sich die leere Fackel
+ *                                                 selbst zerstoeren ?
+ *
+ *   void set_fuel(int brenndauer)                 Setzt die Brenndauer in
+ *                                                 Realzeit-Sekunden.
+ *
+ *   void add_fuel(int nachfuellmenge)             Zum Regenerieren. Ueber den
+ *                                                 bei set_fuel() angegebenen
+ *                                                 Wert kommt man allerdings
+ *                                                 nicht hinaus.
+ *
+ *   void set_power(int lux)                       Um wieviel soll das Licht
+ *                                                 geschaltet werden ?
+ *                                                 (Bei normalen Fackeln 1)
+ *                                                 Man kann hier auch negative
+ *                                                 Werte angeben, zB fuer
+ *                                                 Schwarzlampen.....
+ *
+ * void set_value(int max, int min)              Der Wert der Leuchte im vollen
+ *                                               und leeren Zustand.
+ *
+ *
+ * void an()                                    Zum diretken An- oder Ausmachen
+ * void aus()                                   der Leuchte OHNE Meldungen,
+ *                                              zB beim kreieren.
+ * int query_is_lighted()                       1, wenn die Fackel brennt,
+ *                                              sonst 0.
+ *
+ * void set_burn_under_water                    Leuchtet die Leuchte auch
+ * int query_burn_under_water                   Unterwasser?
+ *
+ * Folgende Routinen werden, sofern sie existieren, aufgerufen:
+ *
+ *       wenn die Leuchte sich innerhalb eines Lebewesens befindet:
+ *                 void player_message(int Prozent, object Spieler)
+ *                 void other_message(int Prozent, object Spieler)
+ *
+ *       wenn die Leuchte sich im Raum herumliegt:
+ *                 void room_message(int Prozent)
+ *
+ *  Beispiele fuer obige Routinen findet man in /obj/fackel.c.
+ *
+ * Erlischt die Leuchte infolge Brennstoffmangels, so wird im environment
+ * die Funktion:
+ *                      void leuchte_leer()
+ *
+ * aufgerufen. Dies kann man zB dazu benutzen, eine neue zu clonen.
+ *
+ */
+
+#pragma save_types
+
+inherit "/i/item";
+inherit "/i/move";
+inherit "/i/value";
+
+#include <deklin.h>
+#include <description.h>
+#include <landschaft.h>
+#include <message.h>
+#include <misc.h>
+
+private int fuel, max_fuel;
+private int power;
+private int destruct_at_out_of_fuel;
+private mixed not_extinguishable;
+private int max_value, min_value;
+private int last_percent;
+private int burn_under_water;
+private mixed light_string = "brennend";
+private object owner;
+private string *light_verbs = ({"brennt","brennen"}),
+               *ext_verbs=({"erlischt","erloeschen"});
+
+#define LIGHT_VERB plural(light_verbs[0],light_verbs[1])
+#define EXT_VERB plural(ext_verbs[0],ext_verbs[1])
+#define MIN_EVALS 100000
+
+/*
+FUNKTION: query_not_extinguishable
+DEKLARATION: mixed query_not_extinguishable()
+BESCHREIBUNG:
+Liefert einen Wert != 0, wenn diese Leuchte nicht ausgeht.
+Wird ein String geliefert, so ist dies die Erklaerung dafuer.
+VERWEISE: set_not_extinguishable
+GRUPPEN: leuchte
+*/
+mixed query_not_extinguishable() { return not_extinguishable; }
+
+/*
+FUNKTION: set_not_extinguishable
+DEKLARATION: void set_not_extinguishable(mixed why)
+BESCHREIBUNG:
+Damit setzt man, ob die Leuchte wieder ausgehen kann.
+Ist why ein String, so ist dies die Begruendung fuer den Spieler.
+VERWEISE: query_not_extinguishable
+GRUPPEN: leuchte
+*/
+void set_not_extinguishable(mixed why)
+{
+    not_extinguishable = why;
+}
+
+/*
+FUNKTION: query_destruct_at_out_of_fuel
+DEKLARATION: int query_destruct_at_out_of_fuel()
+BESCHREIBUNG:
+Liefert einen Wert != 0, wenn sich die Leuchte zerstoert, wenn sie leer ist.
+VERWEISE: set_destruct_at_out_of_fuel,
+          set_fuel, add_fuel, query_fuel, query_max_fuel
+GRUPPEN: leuchte
+*/
+int query_destruct_at_out_of_fuel() { return destruct_at_out_of_fuel; }
+
+/*
+FUNKTION: set_destruct_at_out_of_fuel
+DEKLARATION: void set_destruct_at_out_of_fuel(int a)
+BESCHREIBUNG:
+Mit einem Wert != 0 zerstoert sich die Leuchte, wenn sie leer ist.
+VERWEISE: query_destruct_at_out_of_fuel,
+          set_fuel, add_fuel, query_fuel, query_max_fuel
+GRUPPEN: leuchte
+*/
+void set_destruct_at_out_of_fuel(int a)
+{
+    destruct_at_out_of_fuel = a != 0;
+}
+
+/*
+FUNKTION: set_fuel
+DEKLARATION: void set_fuel(int brenndauer)
+BESCHREIBUNG:
+Damit wird die Brenndauer in Sekunden gesetzt.
+VERWEISE: add_fuel, query_fuel, query_max_fuel,
+          set_destruct_at_out_of_fuel, query_destruct_at_out_of_fuel
+GRUPPEN: leuchte
+*/
+void set_fuel(int f)
+{
+    max_fuel = f;
+    fuel = f;
+}
+
+/*
+FUNKTION: add_fuel
+DEKLARATION: void add_fuel(int brenndauer)
+BESCHREIBUNG:
+Diese Brenndauer wird zur vorhandenen dazu addiert. Ueber den mit set_fuel
+gesetzten Wert kommt man aber nicht hinaus.
+VERWEISE: set_fuel, query_fuel, query_max_fuel,
+          set_destruct_at_out_of_fuel, query_destruct_at_out_of_fuel
+GRUPPEN: leuchte
+*/
+
+void add_fuel(int a)
+{
+   fuel += a;
+   if (fuel > max_fuel)
+        fuel = max_fuel;
+}
+
+/*
+FUNKTION: query_max_fuel
+DEKLARATION: int query_max_fuel()
+BESCHREIBUNG:
+Liefert die maximale Brenndauer der Leuchte. Dies ist die Brenndauer,
+die mit dem letzten set_fuel gesetzt wurde.
+VERWEISE: set_fuel, add_fuel, query_fuel,
+          set_destruct_at_out_of_fuel, query_destruct_at_out_of_fuel
+GRUPPEN: leuchte
+*/
+int query_max_fuel() { return max_fuel; }
+
+/*
+FUNKTION: set_power
+DEKLARATION: void set_power(int power)
+BESCHREIBUNG:
+Damit wird die Leuchtstaerke gesetzt. Auch negative Werte sind moeglich.
+VERWEISE: query_power, set_fuel
+GRUPPEN: leuchte
+*/
+void set_power(int a) { power = a; }
+
+/*
+FUNKTION: query_power
+DEKLARATION: int query_power()
+BESCHREIBUNG:
+Liefert die Leuchtstaerke zurueck.
+VERWEISE: set_power, query_fuel
+GRUPPEN: leuchte
+*/
+int query_power() { return power; }
+
+/*
+FUNKTION: set_light_adjektiv
+DEKLARATION: void set_light_adjektiv(mixed str)
+BESCHREIBUNG:
+Damit wird das Adjektiv gesetzt, welches die Leuchte bekommt, wenn sie
+brennt. Standardmaessig ist "brennend" gesetzt.
+VERWEISE: query_light_adjektiv, query_is_lighted, set_adjektiv
+GRUPPEN: leuchte
+*/
+void set_light_adjektiv(mixed str) { light_string = str; }
+
+/*
+FUNKTION: query_light_adjektiv
+DEKLARATION: mixed query_light_adjektiv()
+BESCHREIBUNG:
+Liefert das Adjektiv, welches die Leuchte bekommt, wenn sie brennt.
+Standardmaessig ist "brennend" gesetzt.
+VERWEISE: set_light_adjektiv, query_is_lighted, query_adjektiv
+GRUPPEN: leuchte
+*/
+mixed query_light_adjektiv() { return light_string; }
+
+/*
+FUNKTION: set_light_verb
+DEKLARATION: void set_light_verb(string singular, string plural)
+BESCHREIBUNG:
+Damit wird das Verb (jeweils fuer Einzahl und Mehrzahl) gesetzt, welches zur
+Ausgabe der Meldungen der Leuchte genommen wird. Standardmaessig ist
+"brennt" und "brennen" gesetzt.
+VERWEISE: set_own_light
+GRUPPEN: leuchte
+*/
+void set_light_verb(string singular, string plural)
+{
+  light_verbs=({singular, plural});
+}
+
+/*
+FUNKTION: query_light_verb
+DEKLARATION: string *query_light_verb()
+BESCHREIBUNG:
+Liefert das Verb, welches zur Ausgabe der Meldungen zum Brennen der Leuchte
+genommen wird. Standardmaessig ist "brennt" und "brennen" gesetzt.
+Das zurueckgelieferte Array hat die Form ({string singular, string plural}).
+VERWEISE: set_own_light
+GRUPPEN: leuchte
+*/
+string *query_light_verb()
+{
+  return copy(light_verbs);
+}
+
+/*
+FUNKTION: set_extinguish_verb
+DEKLARATION: void set_extinguish_verb(string singular, string plural)
+BESCHREIBUNG:
+Damit wird das Verb (jeweils fuer Einzahl und Mehrzahl) gesetzt, welches zur
+Ausgabe der Meldungen beim Erloeschen der Leuchte genommen wird.
+Standardmaessig ist "erlischt" und "erloeschen" gesetzt.
+VERWEISE: set_own_light
+GRUPPEN: leuchte
+*/
+void set_extinguish_verb(string singular, string plural)
+{
+  ext_verbs=({singular, plural});
+}
+/*
+FUNKTION: query_extinguish_verb
+DEKLARATION: string *query_extinguish_verb()
+BESCHREIBUNG:
+Liefert das Verb, welches zur Ausgabe der Meldungen beim Erloeschen der
+Leuchte genommen wird. Standardmaessig ist "erlischt" und "erloeschen"
+gesetzt. Das zurueckgelieferte Array hat die Form
+({string singular, string plural}).
+VERWEISE: set_own_light
+GRUPPEN: leuchte
+*/
+string *query_extinguish_verb()
+{
+  return ext_verbs;
+}
+
+/*
+FUNKTION: set_burn_under_water
+DEKLARATION: void set_burn_under_water(int buw)
+BESCHREIBUNG:
+Damit wird gesetzt, ob die Leuchte unter Wasser weiterbrennt (buw != 0).
+VERWEISE: query_burn_under_water, query_is_lighted
+GRUPPEN: leuchte
+*/
+void set_burn_under_water(int x) { burn_under_water = x != 0; }
+
+/*
+FUNKTION: query_burn_under_water
+DEKLARATION: int query_burn_under_water()
+BESCHREIBUNG:
+Falls != 0, brennt die Leuchte unter Wasser weiter.
+VERWEISE: set_burn_under_water, query_is_lighted
+GRUPPEN: leuchte
+*/
+int query_burn_under_water() { return burn_under_water; }
+
+/*
+FUNKTION: query_is_lighted
+DEKLARATION: int query_is_lighted()
+BESCHREIBUNG:
+Liefert einen Wert != 0, wenn diese Leuchte brennt.
+VERWEISE: query_light_adjektiv, an, aus, light_on, light_off, query_fuel
+GRUPPEN: leuchte
+*/
+int query_is_lighted()
+{
+    return query_own_light() != 0;
+}
+
+string query_short(object betrachter)
+{
+    string adjektiv;
+
+    if (query_is_lighted() && (!light_string || query_short_string()))
+    {
+        if (light_string)
+        {
+            if (pointerp(light_string))
+                adjektiv = light_string[0];
+            else
+                adjektiv = light_string;
+            return item::query_short(betrachter) + " (" + adjektiv + ")";
+        }
+        else
+            return item::query_short(betrachter) + " (brennend)";
+    }
+    return item::query_short(betrachter);
+}
+
+void init()
+{
+    add_action("light", "entzuende");
+    add_action("light", "zuende",-5);
+    add_action("extinguish", "loesche",-6);
+}
+
+// Testen, ob die Leuchte brennen darf
+
+
+int may_burn()
+{
+    object env;
+
+    env = environment();
+
+    // Das elektrische Licht ist noch nicht erfunden.
+    if(!env) return 0;
+
+    while(env)
+    {
+        if (env->allowed("burn",this_object()))
+            return 1;
+        else if (env->forbidden("burn",this_object()))
+            return 0;
+        else if ((!burn_under_water) && env->query_room() &&
+                 (env->query_type(LANDSCHAFT)&L_UNTERWASSER))
+            return 0;
+        env = environment(env);
+    }
+    // zum Brennen in anderer Umgebung als Living oder Raum brauchts allowed...
+    if(!living(environment()) && !environment()->query_room())
+        return 0;
+    return 1;
+}
+/*
+FUNKTION: forbidden_burn
+DEKLARATION: int forbidden_burn(object leuchte)
+BESCHREIBUNG:
+Immer wenn getestet wird, ob eine Leuchte brennen darf, werden alle Umgebungen
+durchgegangen und sofern das Leuchten mit allowed_burn nicht erlaubt wurde,
+env->forbidden("burn", leuchte) aufgerufen. Liefert diese Funktion einen
+Wert != 0 zurueck, so kann die Leuchte nicht (mehr) brennen.
+
+Die Funktion forbidden ruft dann in allen mit env->add_controller(
+"forbidden_burn", other) angemeldeten Objekten other die Funktion
+other->forbidden_burn(leuchte) auf. Liefert auch nur eine dieser Funktionen
+einen Wert != 0, so wird dieser zurueckgeliefert und die Leuchte kann nicht
+brennen.
+
+Fuer die Ausgabe einer Meldung an environment(leuchte) (falls es ein Lebewesen
+oder Raum ist), muss der Programmierer im forbidden_burn selber sorgen.
+VERWEISE: forbidden, notify_burn, allowed_burn, notify_light, notify_extinguish
+GRUPPEN: leuchte
+*/
+
+/*
+FUNKTION: allowed_burn
+DEKLARATION: int allowed_burn(object leuchte)
+BESCHREIBUNG:
+Immer wenn getest wird, ob eine Leuchte brennen darf, werden alle Umgebungen
+durchgegangen und es wird env->allowed_burn(leuchte) aufgerufen.
+Liefert diese Funktion einen Wert != 0 zurueck, so wird der Test abgebrochen
+und die Leuchte kann brennen.
+
+Die Funktion allowed ruft dann in allen mit env->add_controller(
+"allowed_burn", other) angemeldeten Objekten other die Funktion
+other->allowed_burn(leuchte) auf. Ist mindestens ein Objekt angemeldet und
+liefern alle angemeldeten Objekte einen Wert != 0 zurueck, so liefert auch
+allowed einen Wert != 0 und die Leuchte darf brennen.
+VERWEISE: allowed, notify_burn, forbidden_burn, notify_light, notify_extinguish
+GRUPPEN: leuchte
+*/
+
+/*
+FUNKTION: an
+DEKLARATION: void an()
+BESCHREIBUNG:
+Damit wird die Leuchte ohne eine Meldung entzuendet. Es findet dabei keine
+Ueberpruefung statt, ob die Leuchte ueberhaupt brennen darf.
+VERWEISE: aus, light_on, light_off, query_is_lighted, query_fuel
+GRUPPEN: leuchte
+*/
+void an()
+{
+    mixed adjs;
+    object env;
+
+    if (!query_is_lighted())
+    {
+        call_out("burn",1);
+        set_own_light(power);
+        if (light_string && !this_object()->adjektiv(light_string))
+            this_object()->add_adjektiv(light_string,1);
+        this_object()->notify("light",this_object());
+        for (env=environment(); env; env = environment(env))
+            env->notify("light",this_object());
+    }
+}
+
+/*
+FUNKTION: notify_light
+DEKLARATION: void notify_light(object leuchte)
+BESCHREIBUNG:
+Wenn die Leuchte leuchte entzuendet wird, so wird in der Leuchte selber und
+in allen Umgebungen env der Leuchte leuchte->notify("light",leuchte) bzw.
+env->notify("light",leuchte) aufgerufen.
+
+Die Funktion notify ruft dann in allen mit leuchte-> bzw. env->add_controller(
+"notify_light", other) angemeldeten Objekten other die Funktion
+other->notify_light("leuchte") auf. Sowohl leuchte bzw. env als auch other
+haben dann die Moeglichkeit darauf zu reagieren.
+VERWEISE: an, light_on, query_is_lighted, query_own_light
+GRUPPEN: leuchte, licht
+*/
+
+// Hilfsfunktion um den Lichtlevel im Raum zu berechnen
+// TODO: schauen, ob die Umgebung Lichtdurchlaessig ist. Wenn nein, diese
+// Umgebung als Root-Umgebung nehmen... (Dazu muss query_light() in den
+// Container rein)
+nosave int query_room_light()
+{
+    object env;
+
+    if (env = environment())
+	return env->query_light();
+}
+
+/*
+FUNKTION: light_on
+DEKLARATION: void light_on()
+BESCHREIBUNG:
+Damit wird die Leuchte mit einer Meldung entzuendet. Es wird this_player()
+als Verursacher vorausgesetzt. (Falls this_player()==0 gibt es keine
+Meldungen.) Dabei findet keine Ueberpruefung der Brenndauer statt.
+VERWEISE: an, aus, light_off, query_is_lighted, query_fuel
+GRUPPEN: leuchte
+*/
+void light_on()
+{
+    int old_light, new_light;
+    object env;
+
+    if (query_is_lighted())
+    {
+	if(this_player())
+    	    this_object()->send_message_to(this_player(), MT_LOOK|MT_FEEL, MA_USE,
+        	wrap(Der() + " " + LIGHT_VERB + " schon.\n"));
+        return;
+    }
+    if (!may_burn())
+    {
+	if(this_player())
+    	    this_object()->send_message_to(this_player(),
+		MT_LOOK|MT_FEEL, MA_USE,
+        	wrap(Der() + plural(" laesst"," lassen") +
+            	    " sich hier nicht anzuenden.\n"));
+        return;
+    }
+
+    old_light = query_room_light();
+    new_light = old_light + power;
+
+    if (this_player() && ENVR(TP) == ENVR(TO))
+    {
+        if (old_light <= 0)
+        {
+            if (new_light <= 0)
+                this_player()->send_message(MT_LOOK,MA_USE,
+                    wrap(Der(OBJ_TP)+" werkelt an "+seinem()+" herum."),
+                    "Es bleibt dunkel.\n",this_player());
+            else
+                this_player()->send_message(MT_LOOK,MA_USE,
+                    wrap(Der(OBJ_TP)+" entzuendet "+seinen()+".\n"+
+                    "Es wird hell."),
+                    "Es wird hell.\n",this_player());
+        }
+        else
+        {
+            if (new_light <= 0)
+                this_player()->send_message(MT_LOOK,MA_USE,
+                    wrap(Der(OBJ_TP)+" entzuendet "+seinen()+".\n"+
+                    "Es wird dunkel."),
+                    "Es wird dunkel.\n",this_player());
+            else
+                this_player()->send_message(MT_LOOK,MA_USE,
+                    wrap(Der(OBJ_TP)+" entzuendet "+seinen()+"."),
+                    wrap("Du entzuendest "+deinen()+"."),this_player());
+        }
+    }
+    an();
+}
+
+int light(string str)
+{
+    string rest;
+
+    rest = me(str);
+    if (rest != "an" && rest != "")
+        return notify_fail("Zuende was an?\n");
+    if (query_is_lighted())
+        return notify_fail(Er() + plural(" ist"," sind") +
+            " bereits angezuendet.\n");
+    if (fuel <= 0)
+        return notify_fail("Da gibt es nichts mehr zum Anzuenden.\n");
+    light_on();
+    return 1;
+}
+
+/*
+FUNKTION: aus
+DEKLARATION: void aus()
+BESCHREIBUNG:
+Damit wird die Leuchte ohne eine Meldung ausgeknippst.
+VERWEISE: an, light_on, light_off, query_is_lighted, query_fuel
+GRUPPEN: leuchte
+*/
+void aus()
+{
+    object env;
+
+    if (query_is_lighted())
+    {
+        remove_call_out("burn");
+        set_own_light(0);
+        if (light_string)
+            this_object()->delete_adjektiv(light_string);
+        this_object()->notify("extinguish",this_object());
+        for (env=environment(); env; env=environment(env))
+            env->notify("extinguish",this_object());
+    }
+}
+/*
+FUNKTION: notify_extinguish
+DEKLARATION: void notify_extinguish(object leuchte)
+BESCHREIBUNG:
+Wenn die Leuchte leuchte erlischt, so wird in der Leuchte selber und in
+allen Umgebungen env der Leuchte leuchte->notify("extinguish",leuchte) bzw.
+env->notify("extinguish",leuchte) aufgerufen.
+
+Die Funktion notify ruft dann in allen mit leuchte-> bzw. env->add_controller(
+"notify_extinguish", other) angemeldeten Objekten other die Funktion
+other->notify_extinguish("leuchte") auf. Sowohl leuchte bzw. env als auch
+other haben dann die Moeglichkeit darauf zu reagieren.
+VERWEISE: aus, light_off, query_is_lighted, query_own_light
+GRUPPEN: leuchte, licht
+*/
+
+/*
+FUNKTION: light_off
+DEKLARATION: void light_off()
+BESCHREIBUNG:
+Damit wird die Leuchte mit einer Meldung ausgeknippst.
+VERWEISE: an, aus, light_on, query_is_lighted, query_fuel
+GRUPPEN: leuchte
+*/
+void light_off()
+{
+    int old_light, new_light;
+
+    if (!query_is_lighted())
+    {
+        send_message_to(this_player(), MT_LOOK|MT_FEEL, MA_USE,
+            wrap(Dein() + " " + LIGHT_VERB + " nicht."));
+        return;
+    }
+    old_light = query_room_light();
+    new_light = old_light - query_own_light();
+    if (!environment())
+        return;
+    if (!living(environment()))
+    {
+        if (old_light <= 0)
+        {
+            if (new_light > 0)
+                this_object()->send_message(MT_LOOK, MA_UNKNOWN,
+                    wrap(Wer(0, ART_AAA, "") + " " + EXT_VERB +
+                    " und es wird hell."));
+        }
+        else
+        {
+            if (new_light > 0)
+                this_object()->send_message(MT_LOOK, MA_UNKNOWN,
+                    wrap(Wer(0, ART_AAA, "") + " " + EXT_VERB + "."));
+            else
+                this_object()->send_message(MT_LOOK, MA_UNKNOWN,
+                    wrap(Wer(0, ART_AAA, "") + " " + EXT_VERB +
+                    " und es wird dunkel."));
+        }
+    }
+    else if (old_light <= 0)
+    {
+        if (new_light <= 0)
+            this_object()->send_message(MT_LOOK, MA_UNKNOWN,
+                wrap(Ihr(0,"") + " " + EXT_VERB + "."),
+                wrap(Dein(0,"") + " " + EXT_VERB + "."), environment());
+        else
+            this_object()->send_message(MT_LOOK, MA_UNKNOWN,
+                wrap(Ihr(0,"") + " " + EXT_VERB + " und es wird hell."),
+                wrap(Dein(0,"") + " " + EXT_VERB + " und es wird hell."),
+                environment());
+    }
+    else
+    {
+        if (new_light <= 0)
+            this_object()->send_message(MT_LOOK, MA_UNKNOWN,
+                wrap(Ihr(0,"") + " " + EXT_VERB + " und es wird dunkel."),
+                wrap(Dein(0,"") + " " + EXT_VERB + " und es wird dunkel."),
+                environment());
+        else
+            this_object()->send_message(MT_LOOK, MA_UNKNOWN,
+                wrap(Ihr(0,"") + " " + EXT_VERB + "."),
+                wrap(Dein(0,"") + " " + EXT_VERB + "."),environment());
+    }
+    aus();
+}
+
+void burn()
+{
+    int percent, step;
+    object env;
+
+    if (find_call_out("burn") > -1)
+        return;
+    if (get_eval_cost() < MIN_EVALS)
+    {
+	call_out("burn", 2);
+	return;
+    }
+    if (!may_burn())
+    {
+        light_off();
+        return;
+    }
+    if (max_fuel <= 0 || fuel <= 0)
+    {
+        light_off();
+        if (environment())
+            environment()->leuchte_leer();
+        if (destruct_at_out_of_fuel)
+            remove();
+        return;
+    }
+    for (env = environment(); env; env = environment(env))
+        environment()->notify("burn",this_object());
+    if (fuel >= max_fuel)
+        fuel = max_fuel;
+    percent = (fuel * 100) / max_fuel;
+    if (percent <= 0)
+    {
+        call_out("burn",fuel);
+        fuel = 0;
+        return;
+    }
+    step = max_fuel / 100;
+    if (step <= 0)
+        fuel -= 1;
+    else
+        fuel -= step;
+    call_out("burn", step || 1);
+    if (percent == last_percent)
+        return;
+    last_percent = percent;
+    if (env = environment())
+    {
+        if (living(env))
+        {
+            this_object()->player_message(percent,env);
+            if (env && environment(env))
+                this_object()->other_message(percent,env);
+        }
+        else
+            this_object()->room_message(percent);
+    }
+}
+
+/*
+FUNKTION: notify_burn
+DEKLARATION: void notify_burn(object leuchte)
+BESCHREIBUNG:
+Wenn eine Leuchte (z.B Fackel) brennt, wird ab und zu in allen Umgebungen
+all_environment()->notify("burn", leuchte) aufgerufen. Danach wird auch
+die verbleibende Brenndauer reduziert und es werden Meldungen ausgegeben.
+
+Die Funktion notify ruft dann in allen mit env->add_controller("notify_burn",
+other) angemeldeten Objekten other die Funktion other->notify_burn(leuchte)
+auf. Sowohl env als auch other haben dann die Moeglichkeit, noch ein paar
+zusaetzliche Aktionen auszufuehren.
+VERWEISE: notify, forbidden_burn, allowed_burn, notify_light, notify_extinguish
+GRUPPEN: leuchte
+*/
+
+int extinguish(string str)
+{
+    string rest;
+
+    rest = me(str);
+    if (rest != "" && rest != "aus")
+        return notify_fail("Loesche was?\n");
+    if (!query_is_lighted())
+        return notify_fail(Dein() + " ist nicht angezuendet.\n");
+    rest = this_object()->query_not_extinguishable();
+    if (rest)
+        return notify_fail(stringp(rest)?wrap(rest):
+	    wrap(Dein() + " laesst sich nicht loeschen."));
+    light_off();
+    return 1;
+}
+
+/*
+FUNKTION: query_fuel
+DEKLARATION: int query_fuel()
+BESCHREIBUNG:
+Liefert die Brenndauer in Sekunden zurueck.
+VERWEISE: set_fuel, add_fuel, query_max_fuel
+          set_destruct_at_out_of_fuel, query_destruct_at_out_of_fuel
+GRUPPEN: leuchte
+*/
+int query_fuel()
+{
+    int tc;
+
+    if ((tc = find_call_out("burn")) >= 0)
+        return fuel + tc;
+    return fuel;
+}
+
+/*
+FUNKTION: set_value
+DEKLARATION: varargs void set_value(int max, int min)
+BESCHREIBUNG:
+Damit wird der Wert der Leuchte im vollen und leeren Zustand gesetzt.
+VERWEISE: set_fuel, set_power
+GRUPPEN: leuchte
+*/
+varargs void set_value(int max, int min)
+{
+    max_value = max;
+    min_value = min;
+}
+
+int query_value()
+{
+    if (max_fuel <= 0)
+        return min_value;
+    return min_value + ((query_fuel() * (max_value-min_value)) / max_fuel);
+}
+
+private void light_moved(string controller, object wer, object woher,
+    object wohin, string dir, int wie, string ver, string an)
+{
+    if (query_is_lighted() && !may_burn())
+        light_off();
+}
+
+void just_moved()
+{
+    if (query_is_lighted() && !may_burn())
+        light_off();
+    if (owner)
+	owner->delete_controller("notify_move", #'light_moved);
+    owner = auto_owner_search(this_object());
+    if (owner)
+	owner->add_controller("notify_move", #'light_moved);
+}
+
+
+varargs int move(mixed ziel, int wie, string verlassen, string ankommen)
+{
+    if (find_call_out("choke")==-1) call_out("choke",1);
+    return ::move(ziel, wie, verlassen, ankommen);
+}
+
+void choke()
+{
+    // Fackeln brennen in Livings und in Raeumen weiter oder per allowed_burn
+    // forbidden_burn und unter Wasser leuchten wird auch noch gecheckt
+    if (query_is_lighted() && !may_burn())
+        light_off();
+}
+
+void create()
+{
+    ::create();
+    add_controller("concerned_strike",this_object());
+}
+
+int concerned_strike(object womit, mixed was)
+{
+    if (was == this_object() || (mappingp(was) && here(was["name"])))
+        return 80;
+}
+
+int do_strike(object womit, mixed was, mixed melder)
+{
+    if (was == this_object() || (mappingp(was) && here(was["name"]))) {
+        if (query_is_lighted())
+        {
+	    if(this_player())
+		send_message_to(this_player(),MT_NOTIFY,MA_USE,
+            	    wrap(Er()+plural(" ist"," sind")+" bereits angezuendet."));
+            return 1;
+        }
+        if (fuel <= 0)
+        {
+            notify_fail("Da gibt es nichts mehr zum Anzuenden.\n");
+            return 0;
+        }
+        if (melder && this_player())
+        {
+            send_message_to(this_player(),MT_NOTIFY,MA_USE,
+                wrap("Du stellst fest, dass Du "+den(melder)+" ueberhaupt "
+                     "nicht zum Anzuenden "+des(this_object())+" brauchst."));
+        }
+        light_on();
+        return 1;
+    }
+}
+
+int query_obvious()
+{
+    return query_is_lighted();
+}
+
+protected mixed desc_condition(string name, mixed info, mixed* par)
+{
+    switch(name)
+    {
+	case T_ATOM_IS_LIGHTED:
+	    return query_is_lighted();
+    }
+    
+    return ::desc_condition(name, info, par);
+}
+
+protected mixed desc_number(string name, mixed info, mixed* par)
+{
+    switch(name)
+    {
+	case TN_FUEL_PERCENT:
+	    return (query_fuel()*100)/query_max_fuel();
+    }
+    
+    return ::desc_number(name, info, par);
+}
+/*
+FUNKTION: T_LISTE
+DEKLARATION: Liste der T-Defines fuer Leuchten
+BESCHREIBUNG:
+
+Vordefinierte Bedingungen:
+ - T_IS_LIGHTED		Die Leuchte ist an.
+
+Vordefinierte Werte zum Vergleich mit T_GREATER & Co.:
+ - TN_FUEL_PERCENT	Der Fuellstand in Prozent
+
+GRUPPEN: leuchte
+*/

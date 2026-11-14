@@ -1,0 +1,778 @@
+// This file is part of Avalon Mudlib
+// ----------------------------------------------------------------
+// File:        /i/wizard_shell/wizard_shell.c
+// Author:      Avatar (10/96)
+// Description: Eine Wizard-Shell
+// Modified:    Jones & Sissi: (18.6.97ff): Anpassung an UniLib
+//		Freaky (25.06.97) Bugfix in let_not_in()
+//              Sissi  (02.07.97) Newsreader und Mailreader bekommen jetzt
+//                                die Autoload - Parameter gesetzt, dafuer
+//                                sind die ueberfluessigen "catch"
+//                                rausgeflogen.
+//              Sissi  (07.08.97) more_chunk des Gottes wird uebernommen,
+//                                remove nach MAX_IDLE (3 Stunden) idlezeit
+//		Freaky (12.12.1999) set_{path_}aliases() eingebaut.
+//
+// $Log: wizard_shell.c,v $
+// Revision 1.34  2016/04/06 07:17:12  sissi
+// Aufruf von set_is_wizard entfernt: Gnomi hat am 22.8.2015diese efun
+// und die eingebauten driver actions status, malloc, dumpallobj
+// und opcdump entfernt, fuer die man diesen Status brauchte.
+//
+// Revision 1.33  2015/10/15 18:38:06  gnomi
+// add_plugin() fuer zetup implementiert.
+//
+// Revision 1.32  2015/06/01 19:39:05  gnomi
+// Rueckgabetypen korrigiert.
+//
+// Revision 1.31  2014/02/18 19:55:03  myonara
+// Fuer neuen zfe vorbereitet und in Orbit getestet.
+//
+// Revision 1.30  2013-03-18 19:48:59  gnomi
+// VT100-Zeile repariert.
+//
+// Revision 1.29  2009-03-20 08:03:49  gnomi
+// Beobachte-Befehl freigeschaltet.
+//
+// Revision 1.28  2008-05-28 07:32:10  gnomi
+// Vertraue-Befehl aus der Wiz-Shell rausgenommen, da man ihn dort nicht
+// braucht (keine Tools).
+//
+// Revision 1.27  2008-05-26 09:07:58  gnomi
+// Getrennete VT100-Eingabezeile in der Wiz-Shell.
+//
+// Revision 1.26  2008-05-19 14:25:03  gnomi
+// Telnet-Ping eingebaut.
+//
+// Revision 1.25  2008-04-02 08:29:41  gnomi
+// receive_message_low eingebaut.
+//
+// Revision 1.24  2008/02/25 11:48:42  gnomi
+// Ein paar Includes, die notwedig geworden sind, nachgeholt.
+//
+// Revision 1.23  2007/08/11 23:30:51  gnomi
+// Telnet Negotiations.
+//
+// Revision 1.22  2005/06/03 19:59:21  menaures
+// Logout nur aufrufen, wenn auch jemand eingeloggt ist (Inherit, Blueprint)
+//
+// Revision 1.21  2004/11/27 21:41:23  gnomi
+// Find verfuegbar gemacht.
+//
+// Revision 1.20  2004/02/19 21:40:06  gnomi
+// Typo.
+//
+// Revision 1.19  2004/01/18 12:17:49  menaures
+// Nur noch Clones automatisch removen
+//
+// Revision 1.18  2003/11/05 01:52:25  gnomi
+// Nicht irgendeinen Newsreader suchen, sondern /obj/newsreader-Clones.
+//
+// Revision 1.17  2003/10/01 00:41:39  gnomi
+// /i/tools/security inheriten (die Zauberstab-Inherits brauchen das)
+//
+// Revision 1.16  2003/08/15 03:17:00  gnomi
+// Unnoetige Castings entfernt.
+//
+// Revision 1.15  2002/11/09 02:48:30  gnomi
+// zacl und zgruppe in der WizShell zulassen.
+//
+// Revision 1.14  2002/01/21 02:03:45  gnomi
+// query_new_wiz_errors: Falls Player nicht mehr eingeloggt, trotzdem einen
+// gueltigen Wert liefern.
+//
+// Revision 1.13  2002/01/14 04:15:52  gnomi
+// Bei query_read wird der Betrachter angegeben.
+//
+// Revision 1.12  2001/11/19 23:17:31  freaky
+// Prototype gefixed.
+//
+// Revision 1.11  2001/09/21 15:47:02  sissi
+// Statt "wer" geht jetzt auch "volk".
+//
+// Revision 1.10  2001/08/31 00:26:59  gnomi
+// Notify_fail-Meldungen empfangen.
+//
+// Revision 1.9  2001/08/11 23:08:55  freaky
+// WIZARD_SHELL_OB raus, da es in config.h definiert ist.
+//
+// Revision 1.8  2001/07/18 20:26:18  gnomi
+// query/set_new_wiz_errors von wizard_shell.c nach vplayer.inc verschoben und
+// Sicherheitstest auf vorhandenen Master eingebaut.
+//
+// Revision 1.7  2001/06/03 02:43:58  gnomi
+// Hat der Gott den neuen Newsreader, so bekommt er ihn auch hier.
+//
+// Revision 1.6  2001/04/28 03:41:08  gnomi
+// Nach einem Clone von /obj/newsreader suchen, um die Autoloadparameter zu
+// ermitteln.
+//
+// Revision 1.5  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+//
+
+#pragma save_types
+#pragma strong_types
+
+inherit "/i/item";
+inherit "/i/contain";
+inherit "/i/tools/pipe";
+inherit "/i/tools/getopt";
+inherit "/i/tools/browser";
+inherit "/i/tools/dynamic_browser";
+inherit "/i/player/wiz_soul";
+inherit "/i/player/files";
+inherit "/i/player/more";
+inherit "/i/player/tippse";
+inherit "/i/player/telnet_neg";
+inherit "/i/player/input_to";
+inherit "/i/player/vt100client";
+inherit "/i/xeditor/xeditor";
+protected functions inherit "/i/tools/security";
+
+#define MAX_IDLE 10800
+#define NEWS "\nEs gibt Probleme, wenn waehrend des Lesens der Post mit der\n" \
+     "Wiz - Shell neue Post eintrifft. Bis diese Probleme behoben\n" \
+     "sind, geht daher das Lesen der Post mit der Wiz - Shell nicht.\n" \
+     "Sissi.\n\n"
+
+#include <config.h>
+#include <quest.h>
+#include <gilden.h>
+#include <game.h>
+#include <error.h>
+#include <more.h>
+#include <move.h>
+#include <level.h>
+#include <invis.h>
+#include <apps.h>
+#include <erq.h>
+#include <getopt.h>
+#include <parse_com.h>
+#include <error_db.h>
+#include <browser.h>
+#include <dynamic_browser.h>
+#include <files.h>
+#include <mail.h>
+#include <pipe.h>
+#include <message.h>
+#include <math.h>
+#include <simul_efuns.h>
+#include <regexp.h>
+#include <input_to.h>
+
+#include "/i/player/player.h"
+
+#define WIZARD_SHELL_VERSION "1.1 fuer UNItopia"
+#define ME (object_name(this_object()) == MY_NAME)
+#define XEDITOR "/obj/xeditor"
+#define XEDITOR_SHADOW "/obj/editor_shadow"
+
+#define DEFAULT_WIZSHRC "/i/wizard_shell/.wizshrc"
+
+#undef LOW
+
+// this_object()
+private object owner;
+// private object xeditor;
+
+// Objekt-Pointer auf den eingeloggten Programmierer.
+// Kann sich aendern, wenn sich derdiedasjenige zwischendurch neu einloggt.
+private object master;
+
+// Real-Name des Programmierers
+private string master_name;
+
+// Wann wurde die Shell gestartet?
+private int login_time;
+
+// Shell-Command-Mode aktiviert?
+private int shell_command_mode;
+private int without_cr;
+
+// Ist != '0', wenn der Container Objekte aufnehmen darf.
+// Sollte nur in init_wizard_shell() verwendung finden
+private int container_open;
+
+// Wenn dieses Objekt ein Blueprint ist, steht hier der Inhalt der Manpage
+private nosave mixed cmd_manpage;
+
+// Telnet-Pings...
+private int telnet_ping;
+private nosave int telnet_ping_counter;
+private int client_options;
+
+nosave nomask int query_client_option(int opt)
+{
+    switch(opt)
+    {
+	case CLIENT_VT100:
+	    return client_options & CLIENT_VT100_WIZSHELL;
+	
+	case CLIENT_NO_EOR:
+	    return client_options & opt;
+    }
+    
+    return 0;
+}
+
+void receive_message_low(string str)
+{
+    if(!sizeof(str))
+	return;
+
+    if(query_client_option(CLIENT_VT100))
+        vt100client::receive_message_low(str);
+    else if(interactive())
+        efun::tell_object(this_object(),str);
+}
+
+void receive_message(int msg_type, int msg_action, object who, string msg)
+{
+    if (stringp(msg))
+	receive_message_low(msg);
+}
+
+void print_prompt(mixed prompt)
+{
+    if(!query_client_option(CLIENT_VT100) ||
+       !vt100client::print_prompt(prompt))
+	telnet_neg::print_prompt(prompt);
+}
+
+nomask int start_input_to(closure callback, mixed prompt, int flags)
+{
+    if(this_player()!=this_object())
+        return 0;
+
+    if(query_client_option(CLIENT_VT100) && uses_vt100client())
+        return input_to::start_input_to(callback, prompt, flags);
+}
+
+protected string calc_trenner_info()
+{
+    return sprintf("_____%s___(Wiz-Shell)___",
+        this_object()->query_real_cap_name() ||
+	capitalize(this_object()->query_real_name()));
+}
+
+void receive_notify_fail(string msg, object msgobj, object orig_cmd_giver)
+{
+    this_object()->receive_message(MT_NOTIFY,MA_UNKNOWN,
+        msgobj || this_object(),msg);
+}
+		
+int query_prevent_shadow(object shadow)
+{
+   return !strstr(object_name(shadow),XEDITOR_SHADOW);
+}
+
+
+// Eine Abfrage nach "wizardshellp()" ist sicherer
+int query_wizard_shell()               { return 1; }
+
+// Wann hat sich der User eingeloggt?
+int query_login_time()                 { return login_time; }
+
+// Objekt-Pointer auf den Master (Vorsicht: wenn er sich zwischendurch
+// ausgeloggt hat, ist 'master' solange Null, bis update_master()
+// aufgerufen wurde
+object query_master()                  { return master; }
+
+// Name des Masters
+string query_master_name()             { return master_name; }
+
+
+// Predefines
+private void define_basic_commands(int flag);
+// private void read_wizshrc();
+
+#include "/i/wizard_shell/shell.inc"
+#include "/i/wizard_shell/vplayer.inc"
+#include "/i/wizard_shell/commands.inc"
+
+// Liefert im Blueprint die Manpage zurueck
+string query_cmd_manpage() { return (string)cmd_manpage; }
+ 
+private void begin_cmd_manpage()
+{
+   cmd_manpage=([]);
+}
+ 
+private void end_cmd_manpage()
+{
+   int i;
+   string mp, *ind;
+   
+   for(mp="",i=sizeof(ind=sort_array(m_indices(cmd_manpage),#'<));i--;)
+      mp+="\n"+ind[i]+"\n"+copies("~",strlen(ind[i]))+"\n"+
+         implode(sort_array(cmd_manpage[ind[i]],#'>),"\n")+"\n";
+ 
+   cmd_manpage=LINE+"\n"+
+      "Eine Liste aller Kommandos der Wizard-Shell.\n\n"+
+      mp+"\n"+
+      "Hilfe zum Kommando gibt es immer mit '<Befehl> ?'.\n"+LINE[0..<2];
+}
+
+// zetup plugins-Befehl
+private string add_plugin(string file, mixed args)
+{
+    return "Plugins sind auf der Wiz-Shell nicht verfuegbar.\n";
+}
+
+
+private varargs void add_cmd(string fun, string action, int flag,
+   string key, string cmd, string desc)
+{
+   if( ME ) // Avatar: Manpage liegt lediglich im Blueprint!
+   {
+      if( key && cmd && desc )
+         cmd_manpage[key]=(cmd_manpage[key]||({}))+
+            ({ sprintf("%:-15s %s",cmd,desc) });
+   }
+   else
+      if (fun != "dummy")
+         add_action(fun,action,flag);
+}
+ 
+
+// Kommandos definieren
+private void define_basic_commands(int flag) 
+{
+   if( !flag )
+      begin_cmd_manpage();
+
+   add_cmd("who_command",       "wer", 0, "Basisbefehle",  "wer",
+      "wie \"volk\"");
+   add_cmd("who_command",       "volk", 0, "Basisbefehle", "volk",
+      "Zeigt an, wer gerade eine Wizard-Shell benutzt");
+   add_cmd("kill_command",      "kill",0, "Basisbefehle",  "kill",
+      "Hiermit 'killt' man eigene Shells");
+   add_cmd("quit_wizard_shell", "exit",0, "Basisbefehle",  "exit",
+         "Verlaesst die Wizard-Shell");
+   add_cmd("quit_wizard_shell", "quit");
+   add_cmd("alias",       "alias",     1, "Basisbefehle",  "kuerzel",
+      "Kuerzelelei (Aliase)");
+   add_cmd("history",	  "puffer",    1, "Basisbefehle",  "puffer",
+      "Historyfunktion");
+#if 0
+   add_cmd("trust_command","vertrau",  1, "Basisbefehle",  "vertrau[e]",
+      "Einem Tool vertrauen schenken");
+#endif
+   add_cmd("pk",          "pk",        0, "Basisbefehle", "Files", "pk",
+      "Pfadkuerzel");
+   add_cmd("cd",          "cd",        0, "Files",         "cd",
+      "Verzeichnis wechseln");
+   add_cmd("pwd",         "pwd",       0, "Files",         "pwd",
+      "Aktuelles Verzeichnis anzeigen");
+   add_cmd("f_tail",      "tail",      0, "Files",         "tail",
+      "Liefert die letzten Zeilen eines Files.");
+   add_cmd("f_cat",        "cat",       0, "Files",         "cat",
+      "Liefert dem kompletten Inhalt eines Files.");
+   add_cmd("f_more",       "more",      0, "Files",         "more",
+      "Gibt den Inhalt eines Files aus.");
+   add_cmd("edit",         "ed",        0, "Files",         "ed",
+      "Editieren eines Files.");
+   add_cmd("f_mkdir",      "mkdir",     0, "Files",
+"mkdir",
+      "Verzeichnis erstellen.");
+   add_cmd("f_rmdir",      "rmdir",     0, "Files",         "rmdir",
+      "Verzeichnis loeschen.");
+   add_cmd("f_ls",         "ls",        0, "Files",         "ls",
+      "Liefert den Inhalt des akt. Verz.");
+   add_cmd("f_rm",         "rm",        0, "Files",         "rm",
+      "Datei loeschen.");
+   add_cmd("f_cp",          "cp",        0, "Files",         "cp",
+      "Datei kopieren.");
+   add_cmd("f_mv",          "mv",        0, "Files",         "mv",
+      "Datei verschieben.");
+   add_cmd("f_grep",        "grep",      0, "Files",         "grep",
+      "Fileinhalt untersuchen.");
+   add_cmd("f_find",        "find",      0, "Files",         "find",
+      "Sucht nach Dateien in einem Verzeichnis.");
+   //add_cmd("dummy",      "xed",         1, "Files",        "xed[it]",
+    //  "Komfortabler Bildschirmeditor.");
+   add_cmd("f_xed",      "xed",         1, "Files",        "xed[it]",
+      "Komfortabler Bildschirmeditor.");
+   add_cmd("z_fehler",    "zfe",       1, "Sonstiges",     "zfe[hler]",
+      "Fehlermeldungen ansehen.");
+   add_cmd("z_acl",	  "zacl",      0, "Sonstiges",	   "zacl",
+      "ACLs verwalten.");
+   add_cmd("z_gruppe",	  "zgruppe",   0, "Sonstiges",	   "zgruppe",
+      "Gruppen verwalten.");
+   add_cmd("dummy",       "news",      0, "Sonstiges",     "lies news",
+      "Blubberblaettle lesen.");
+   add_cmd("dummy",       "mail",      0, "Sonstiges",     "lies mail",
+      "Post lesen.");
+   add_cmd("snoop_on",    "beobachte", 0, "Sonstiges",     "beobachte",
+      "Spieler beobachten.");
+   add_cmd("dummy",       "menue",     0, "Dokumentation", "menue",
+      "Enzyclopedia - Menue.");
+   add_cmd("dummy",       "?",         0, "Dokumentation", "? <funktion>",
+      "Infos ueber eine Funktion abfragen.");
+   add_cmd("dummy",       "dek",       1,   "Dokumentation", "dek[laration]",
+      "Deklaration abfragen, nach Fun. suchen.");
+
+
+   if( !flag )
+      end_cmd_manpage();
+   else
+   {
+      // "aliases"
+      add_action("manpage", "hilfe");
+      add_action("manpage", "help");
+      add_action("who_command", "who");
+      add_action("quit_wizard_shell", "ende");
+      add_action("quit_wizard_shell", "ende");
+      add_action("alias", "kuerzel",-4);
+#if 0 // Wozu auch?
+      add_action("trust_command", "vertraue",-7);
+      add_action("trust_command", "trust");
+#endif
+ 
+      // fuer "lies news" und "lies mail"... jaja, diese Gewohnheitstiere
+      add_action("reading","lies");
+      add_action("reading","lese",-3);
+   }
+}
+
+void create() 
+{
+   if( owner )
+      return;
+   owner = this_object();
+   set_name("wizard-shell");
+   set_cap_name("Wizard-Shell");
+   set_id( ({"shell", "wizard", "wizardshell", "wizard-shell" }) );
+   set_gender("weiblich");
+   seteuid(getuid());
+   if( ME )
+      define_basic_commands(0);
+   init_security_for_actions();
+   "*"::create();
+}
+
+int remove()
+{
+   if(query_master_name())
+       PLAYER_SECOND->logout(query_master_name(), this_object());
+
+   if(interactive() && query_client_option(CLIENT_VT100))
+       stop_mudclient();
+
+   destruct(this_object());
+   return 1;
+}
+
+void setup_wizard_shell(object master)
+{
+   object eigener, goettlicher;
+   if( explode(object_name(previous_object()),"#")[0] != LOGIN_OB )
+   {
+      write("Illegal Call.\n");
+      remove();
+      return;
+   }
+
+   if( !playerp(master) || 
+       !gesellep(master) ||
+       !(master_name=master->query_real_name()) )
+   {
+      write("Eigentuemer nicht (mehr) eingeloggt, oder kein Geselle.\n");
+      remove();
+      return;
+   }
+
+   update_master();
+   set_name(get_genitiv(master_name)+" wizard-shell");
+   set_cap_name(get_genitiv(master_name)+" Wizard-Shell");
+   set_personal(1);
+   enable_commands();
+   init_current_path();
+   init_aliases();
+   set_prompt(lambda(({}), ({ #'+,
+        ({symbol_function("query_current_path",this_object())}), "> "})),
+        this_object());
+
+   define_basic_commands(1);
+   init_command_shell();
+
+   set_aliases(master->query_aliases());
+   set_path_aliases(master->query_path_aliases());
+   login_time=time();
+   set_more_chunk(master->query_more_chunk());
+
+   // Hier werden zusaetzliche Tools eingefuegt
+   container_open=1;
+   goettlicher = present_clone("/obj/newsreader",master);
+   if(goettlicher && strstr(load_name(goettlicher),"/obj/newsreader"))
+       goettlicher = 0;
+   (eigener=clone_object(goettlicher?load_name(goettlicher):"/obj/newsreader"))->move(this_object());
+   if (eigener && goettlicher)
+      eigener->init_arg(goettlicher->query_auto_load());
+/*
+   (eigener=clone_object("/obj/mailreader"))->move(this_object());
+   if (eigener && goettlicher=present("mailreader",master))
+      eigener->init_arg(goettlicher->query_auto_load());
+*/
+   clone_object("/obj/enzyclopedia")->move(this_object());
+   /*
+   catch( xeditor = clone_object(XEDITOR) );
+   if (xeditor)
+   {
+       xeditor->move(this_object());
+       xeditor->init_xeditor(owner);
+   }
+   */
+   xeditor::init_xeditor(owner);
+   container_open=0;
+   params=master->query_zauberstab_info()||([]);
+
+
+   telnet_ping = master->query_telnet_ping();
+   if(telnet_ping)
+      set_heart_beat(1);
+   client_options = master->query_client_options();
+   if(query_client_option(CLIENT_VT100))
+      start_mudclient();                                                                                                                                                   
+   telnet_neg::set_eor_protokoll(!query_client_option(CLIENT_NO_EOR));
+}
+
+void heart_beat()
+{
+    if(query_client_option(CLIENT_VT100) && interactive())
+        vt100client::heart_beat();
+
+    telnet_ping_counter+=2;
+    
+    if(telnet_ping_counter>=telnet_ping)
+    {
+	telnet_ping_counter=0;
+	send_telopt_tm();
+    }
+}
+
+void start_wizard_shell()
+{
+   int i, all_users, my_users;
+   object *usrs;
+   
+   if( explode(object_name(previous_object()),"#")[0] != LOGIN_OB )
+   {
+      write("Illegal Call.\n");
+      remove();
+      return;
+   }
+
+   write("\n\nWizard Shell Version "+WIZARD_SHELL_VERSION+"\n"+
+      MUD_NAME+"#"+__VERSION__+"\n");
+   write (NEWS);
+
+   for(all_users=my_users=0,i=sizeof(usrs=efun::users());i--;)
+      if( !strstr(object_name(usrs[i]),WIZARD_SHELL_OB) )
+      {
+         ++all_users;
+         if( usrs[i]->query_master_name() == master_name )
+            ++my_users;
+      }
+
+   write("Es "+(all_users == 1 ? "ist" : "sind")+" insgesamt "+
+      all_users+" Benutzer eingeloggt.\n");
+   if( my_users > 1 )
+      write("Dies ist Deine "+my_users+". Wizard-Shell.\n");
+   // read_wizshrc();
+
+}
+
+int quit_wizard_shell()
+{
+   write("Wizard-Shell verlassen.\n");
+   return remove();
+}
+
+void reset ()
+{
+   if(clonep(this_object()) && 
+      (!interactive(this_object()) || (query_idle(this_object()) > MAX_IDLE)))
+   {
+       remove();
+   }
+}
+
+// Security... verhindert, dass die Adeligen ihre Shells mit "illegalen"
+// Tools ausstatten
+int let_not_in(object what, object who, string dir)
+{
+   if( what && !strstr(object_name(what),XEDITOR "#") )
+      return 0;
+   if( !container_open )
+      return 1;
+}
+int let_not_out(object what, object who, string dir)
+{
+   if( !container_open )
+      return 1;
+}
+
+int manpage(string str)
+{
+   BEGIN_PIPE(str);
+
+   if( !strlen(str=lower_case(str||"")) )
+   {
+      if( !(str=(string)MY_NAME->query_cmd_manpage()) &&
+          !MY_NAME->define_basic_commands(0) &&
+          !(str=(string)MY_NAME->query_cmd_manpage()) )
+      {
+         write("Seite nicht verfuegbar.\n");
+         return 1;
+      }
+      W(str);
+   }
+   else
+      if( OWN->more(HILFE_PFAD+str,0,0,M_AUTO_END) ) {
+         notify_fail("Zu "+str+" gibt's keine Hilfe.\n");
+         return 0;
+      }
+   PRINT;
+   return 1;
+}
+
+// Avatar: Damit "lies news" und "lies mails" funktioniert
+int reading(string str)
+{
+   string text, name, desc;
+   mixed *parsed, ob;
+
+   parsed = parse_com(str);
+   if( parse_com_error(parsed,"Lies was?\n",1) )
+      return 0;
+
+   ob=parsed[PARSE_OBS][0];
+
+   if( mappingp(ob) )
+   {
+      if( closurep(ob["read"]) )
+         text=funcall(ob["read"],parsed[PARSE_REST],str);
+      else
+         text=ob["read"];
+   }
+   else
+      text=ob->query_read(parsed[PARSE_REST],str,this_object());
+
+   if( !text )
+   {
+      write("Da gibt es nichts zu lesen.\n");
+      return 1;
+   }
+
+   if( strlen(text) )
+       receive_message(MT_UNKNOWN,MA_UNKNOWN,this_object(),text);
+
+   return 1;
+}
+
+#if 0
+    // brauchen wir in UNItopia wohl nicht;
+    // aber fuer die Zukunft mal aufheben.
+
+private string strip_string_type(string str)
+{
+   
+   str=trim(str);
+   if( str[0..0] == "\"" )
+      str=str[1..];
+   if( str[<1..<1] == "\"" )
+      str=str[0..<2];
+   return str;
+}
+
+private void read_wizshrc()
+{
+   int i;
+   string fname, file, *lines;
+   string key;
+   mixed value;
+
+   fname="/w/"+geteuid()+"/.wizshrc";
+   if( !file=read_file(fname) )
+   {
+      write("File '"+fname+"' nicht gefunden, benutze Default-Settings.\n");
+      fname=DEFAULT_WIZSHRC;
+      file=read_file(fname)||"";
+   }
+   lines=explode(file,"\n");
+   if( !sizeof(lines) )
+   {
+      write("Das File '"+fname+"' besitzt keinen Inhalt.");
+      return;
+   }
+   write("Lade '"+fname+"'.\n");
+
+   for(i=0;i<sizeof(lines);++i)
+   {
+      if( lines[i][0..0] == "#" || !strlen(lines[i]=trim(lines[i])) )
+         continue;
+      if( sscanf(lines[i],"%s %s",key,value) != 2 )
+      {
+         write("'"+fname+"': Syntaxfehler in Zeile "+(i+1)+".\n");
+         continue;
+      }
+      switch( lower_case(key) )
+      {
+         case "prompt":
+            value=strip_string_type(value);
+            set_prompt_string(value == "0" 
+               ? (string)master->query_prompt_string() : value);
+            break;
+
+         case "term":
+            write ("Warnung: \"term\" - Eintrag ignoriert.\n");
+            break;
+
+         case "lines":
+            value=to_int(strip_string_type(value));
+            set_more_chunk(value ? value : 23);
+            break;
+ 
+         case "tab_completion":
+            shell_command_mode=strip_string_type(value) == "0" ? 0 : 1;
+            break;
+         case "without_cr":
+            without_cr=strip_string_type(value) == "0" ? 0 : 1;
+            break;
+         default:
+            write("'"+fname+"': Unbekanntes Kommando '"+key+"' in "+
+               "Zeile "+(i+1)+".\n");
+      }
+   }
+}
+
+#endif
+
+nosave int edit(string str)
+{
+    SECURE;
+    HELP("ed");
+    if (!str) {
+        /* request for file with last error */
+        mixed *error;
+        error=get_error_file((string)OWN->query_real_name());
+        if (!error || error[3]) {
+            write("Kein Fehler.\n");
+            return 1;
+            }
+        str=error[0];
+        write(str+" Zeile "+error[1]+": "+error[2]+"\n");
+        }
+    else
+        str=ADD_PATH(str);
+
+    if (file_size(str)!=-2)
+        own_ed(str);
+    else
+        write("Ein Verzeichnis darf man nicht Editieren!\n");
+    return 1;
+}

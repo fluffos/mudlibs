@@ -1,0 +1,2855 @@
+// This file is part of UNItopia Mudlib.
+// -----------------------------------------------------------------------
+//  Datei:  /apps/object_db.c
+//  Autor:  Myonara 02.07.2015 
+// -----------------------------------------------------------------------
+// Beschreibung: Der Master fuer Objekt-Statistiken (1mal taeglich)
+// -----------------------------------------------------------------------
+
+// Userid fuer  /apps/object_db setzen:
+// UID: Apps
+
+// Aenderungen:
+//  $Log: object_db.c,v $
+//  Revision 1.7  2016/03/22 04:59:26  myonara
+//  Objektlisten-Wrap Around aus zmsg von Gnomi uebernommen
+//
+//  Revision 1.6  2015/12/19 20:11:02  myonara
+//  Von db_debug (DB-Log) auf debuglog (Applikationslog) umgestellt.
+//
+//  Revision 1.5  2015/12/18 15:55:07  myonara
+//  query_database_description() und ein paar Bugfixes.
+//
+//  Revision 1.4  2015/08/26 21:40:27  gnomi
+//  Anpassungen an LDMud 3.5.0
+//
+//  Revision 1.3  2015/07/28 16:19:33  myonara
+//  Bugfix inherits total, Ergaenzung stacks_table und loop_inherits+Co
+//
+//  Revision 1.2  2015/07/18 10:20:44  myonara
+//  Alle Auswertungen, viele Bugfixes. Kommando zobst.
+//
+//  Revision 1.1  2015/07/04 05:32:50  myonara
+//  Initiale Version, es fehlen noch weitere Auswertungen
+//
+//
+// 
+
+inherit "/i/tools/security";
+inherit "/i/tools/build_table";
+inherit "/i/tools/debuglog_db";
+inherit "/i/item/message";
+
+#include <config.h>
+#include <database.h>
+#include <dynamic_browser.h>
+#include <debug_info.h>
+#include <error.h>
+#include <inherit_list.h>
+#include <level.h>
+#include <message.h>
+#include <misc.h>
+#include <objectinfo.h>
+#include <object_info.h>
+#include <room_types.h>
+#include <security.h>
+#include <time.h>
+
+#define OBJECT_DBFILE "/var/OBJECT_STATISTICS.db"
+#define RETENTION_DAYS 30
+#define DUMP_EVALS 500000
+#define OBJECTS_PER_LOOP 100
+#define PDBG(x) send_message_to( ({find_player("myonara") }), \
+                    MT_DEBUG, MA_UNKNOWN, wrap(x))
+#define LINE      "-------------------------------------------------------------------------------"
+#define MORE_LINE "...--------------------------------------------------------------------- (MORE)"
+#define ADD_HEADER_LINES(x) \
+    if (!TP->query_no_ascii_art() && !member(old, B_HEADER_LINES)) \
+            old[B_HEADER_LINES] = ({ (x), LINE, MORE_LINE, MORE_LINE });
+
+public string query_database_description()
+{
+    return "Diese Datenbanken dienen zur Erstellung und Auswertung von "
+    "Objektstatistiken. Zum Anschauen stellt der Zaubertab das Kommando "
+    "zobst zur Verfuegung. Fuer Admins gibt es speziell die Lfuns sql und "
+    "tablelist.";
+}
+
+public int query_dump_is_running()
+{
+   return (find_call_out("do_dump")!=-1);
+}
+
+public void start_menu()
+{
+    dynamic_browse( ([B_TYPE:"ostatistik_hauptmenue"]) );
+}
+
+private void schedule_dump()
+{
+    // alte loeschen.
+    while (remove_call_out("execute_dump")!=-1);
+    // Um 1 Uhr morgens:
+    mixed t = timearray(time()+23*60*60); 
+    t[TM_MIN] = t[TM_SEC] = 0; 
+    t[TM_HOUR] = 1; 
+    call_out("execute_dump", array_to_time(t)-time());
+}
+
+public void schedule()
+{
+    schedule_dump();
+}
+
+int query_all_access(object pl)
+{
+    return adminp(pl); // || MAY_WRITE(load_name(), pl);
+}
+
+private void send_to_admins(string msg)
+{
+    send_message_to(map(ADMINS,(: find_player($1) :))- ({0}),
+        MT_DEBUG, MA_UNKNOWN, msg);
+}
+
+varargs public int get_day_start(int now)
+{
+    if (now == 0) now = time();
+    mixed t = timearray(now); 
+    t[TM_MIN] = t[TM_SEC] = t[TM_HOUR] = 0; 
+    return array_to_time(t);
+}
+
+private void add_objects_tables(string table, int flag)
+{
+    string dbg;
+    if (db_check_table(table) == -1)
+    {
+        db_debug("Tabelle "+table+" anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS "+table+" ("
+            "obname TEXT CONSTRAINT pk_objects_1 PRIMARY KEY, " // unique name
+            "obtime INTEGER, " // object time
+            "blueprint TEXT, " // program_name
+            "obsize INTEGER, " // memory size
+            "progsize INTEGER, " // total size
+            "inhcount INTEGER, " // count of inherits
+            "inhdirectcount INTEGER, " // count of direct inherits
+            "evalr REAL, "     // evals  in real, passt besser zu den Groessen.
+            "vitems INTEGER, " // count vitems.
+            "count_ob INTEGER, " // 1:fun exists query_count
+            "content INTEGER, " // content of container 
+            "env INTEGER, " // 0=noenv, 1=room,2 maproom, 3 withenv, 4 in map
+            "room TEXT, " // map2domain(ob||env)||ob||env
+            "first_room TEXT, "// first_room, if applicable.
+            "domain TEXT, " // domain of first_room||obname
+            "subdomain TEXT " // subdomain, if applicable.
+            ")");
+        if (stringp(dbg = query_db_error()))
+        {
+            db_debug("Tabelle "+table+" anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle "+table+" konnte nicht "
+                    "erstellt werden:"+dbg);
+        }
+    }
+    if (db_check_table("inherits_of_"+table) == -1)
+    {
+        db_debug("Tabelle inherits_of_"+table+" anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS inherits_of_"+table+" ("
+            "inherit TEXT, " 
+            "used_by TEXT, " 
+            "virtual INTEGER, "
+            "CONSTRAINT pk_inherits_of_"+table
+              +" PRIMARY KEY ( inherit, used_by ) "
+            ")");
+        if (stringp(dbg = query_db_error()))
+        {
+            db_debug("Tabelle inherits_of_"+table+" anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle inherits_of_"+table+" konnte nicht "
+                    "erstellt werden:"+dbg);
+        }
+    }
+}
+
+private void init_db()
+{
+    int flag = 0;
+    string dbg = "";
+    init_debuglog(OBJECT_DBFILE, RETENTION_DAYS);
+    db_debug("Start Initialisierung Object-Master", DB_DBGLVL_INFO, 
+        DB_DBG_BUFFER_MSG);
+    db_debug("debuglog initialisiert", DB_DBGLVL_INFO, 
+        DB_DBG_CREATE|DB_DBG_BUFFER_MSG);
+    // 2 identische Sets von Tabellen:
+    add_objects_tables("objects_1",&flag);
+    add_objects_tables("objects_2",&flag);
+    if (db_check_table("daily_stats") == -1)
+    {
+        db_debug("Tabelle daily_stats anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS daily_stats ("
+            "day INTEGER CONSTRAINT pk_daily_stats PRIMARY KEY, " // unique time
+            "obcount INTEGER, " // object count
+            "blcount INTEGER, " // count of different blueprints
+            "sumsize INTEGER " // total size by objects
+            ")");
+        if (stringp(dbg = query_db_error()))
+        {
+            db_debug("Tabelle daily_stats anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle daily_stats konnte nicht "
+                    "erstellt werden:"+dbg);
+        }
+    }
+    if (db_check_table("stack_table") == -1)
+    {
+        db_debug("Tabelle stack_table anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS stack_table ("
+            "seq INTEGER CONSTRAINT pk_stack_table PRIMARY KEY, " //unique seq
+            "filename TEXT " // filename to process
+            ")");
+        if (stringp(dbg = query_db_error()))
+        {
+            db_debug("Tabelle stack_table anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle stack_table konnte nicht "
+                    "erstellt werden:"+dbg);
+        }
+        setup_counter("seq_stack",1);
+    }
+    if (flag)
+        db_debug(sprintf("Initialisierung %d beendet.",flag),DB_DBGLVL_INFO, 
+            DB_DBG_FLUSH_BUFFER);
+    else
+        db_debug(0,0, DB_DBG_DELETE_BUFFER);
+}
+
+// -----------------------------------------------------------------
+#define OSTAT_FILTER_PATH "ostatistik:filter:path"
+#define OSTAT_TABLE       "ostatistik:table"
+#define OSTAT_DOMAIN      "ostatistik:domain"
+#define OSTAT_SUBDOMAIN   "ostatistik:subdomain"
+#define OSTAT_COUNT_ALL   "ostatistik:count:all"
+#define OSTAT_SORTING     "ostatistik:sorting"
+#define OSTAT_OBNAME      "ostatistik:obname"
+#define OSTAT_BLUEPRINT   "ostatistik:blueprint"
+#define OSTAT_INHERIT     "ostatistik:inherit"
+#define OSTAT_FLAG_INHERIT "ostatistik:flag:inherit"
+
+// DB Zugriffsmethoden
+
+private string get_path_query(mapping menue, int whereflag)
+{
+    if (stringp(menue[OSTAT_FILTER_PATH]))
+    {
+        string fpath = menue[OSTAT_FILTER_PATH];
+        string q = whereflag?" AND":" WHERE";
+        if (strstr(fpath,"%")==-1)
+        {
+            fpath = "%"+fpath+"%";
+        }
+        q+= " (first_room LIKE '"+fpath+"' OR obname LIKE '"+fpath+"')";
+        whereflag++;
+        return q;
+    }
+    return "";
+}
+
+private mixed get_domains_vs_subdomains(mapping menue)
+{
+    string q;
+    mixed *r;
+    int whereflag = 0;
+    
+    if (member(menue, OSTAT_COUNT_ALL) && member(menue,OSTAT_DOMAIN))
+    {
+        q = "SELECT COUNT(subdomain) FROM ";
+    }
+    else if (member(menue, OSTAT_COUNT_ALL))
+    {
+        q = "SELECT COUNT(domain) FROM ";
+    }
+    else if (member(menue,OSTAT_DOMAIN))
+    {
+        q = "SELECT subdomain,COUNT(obname),SUM(obsize),SUM(evalr) FROM ";
+    }
+    else
+    {
+        q = "SELECT domain,COUNT(obname),SUM(obsize),SUM(evalr) FROM ";
+    }
+    q+= menue[OSTAT_TABLE];
+    q+= get_path_query(menue, &whereflag);
+    if (!member(menue, OSTAT_COUNT_ALL))
+    {
+        if (member(menue,OSTAT_DOMAIN))
+        {
+            q+= (whereflag?" AND domain = '":" WHERE domain = '");
+            q+= menue[OSTAT_DOMAIN] + "'";
+            q+= " GROUP BY domain,subdomain";
+            q+= " ORDER BY subdomain";
+        }
+        else
+        {
+            q+= " GROUP BY domain";
+            q+= " ORDER BY domain";
+        }
+        q+= " LIMIT "+menue[B_NUM_LINES];
+        q+= " OFFSET "+menue[B_CURRENT_LINE];
+    }
+    else
+    {
+        if (member(menue,OSTAT_DOMAIN))
+        {
+            q+= (whereflag?" AND domain = '":" WHERE domain = '");
+            q+= menue[OSTAT_DOMAIN] + "'";
+        }
+        q+= " GROUP BY domain";
+        q+= " HAVING COUNT(obname) > 0";
+    }
+    r = db_query(q);
+    //PDBG(sprintf("%s => %Q",q,r));
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return (member(menue, OSTAT_COUNT_ALL)?0:({}));
+    }
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        return sizeof(r);
+    }
+    return r;
+}
+
+private mixed get_speicherevals_liste(mapping menue)
+{
+    string q;
+    mixed * r;
+    int whereflag = 0;
+    
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        q = "SELECT COUNT(obname) FROM ";
+    }
+    else
+    {
+        q = "SELECT obname,obsize,evalr FROM ";
+    }
+    q+= menue[OSTAT_TABLE];
+    q+= get_path_query(menue, &whereflag);
+    if (member(menue,OSTAT_BLUEPRINT))
+    {
+        q+= (whereflag++?" AND blueprint = '":" WHERE blueprint = '");
+        q+= menue[OSTAT_BLUEPRINT] + "'";
+    }
+    if (member(menue,OSTAT_DOMAIN))
+    {
+        q+= (whereflag++?" AND domain = '":" WHERE domain = '");
+        q+= menue[OSTAT_DOMAIN] + "'";
+    }
+    if (member(menue,OSTAT_SUBDOMAIN))
+    {
+        q+= (whereflag++?" AND subdomain = '":" WHERE subdomain = '");
+        q+= menue[OSTAT_SUBDOMAIN] + "'";
+    }
+    if (!member(menue, OSTAT_COUNT_ALL))
+    {
+        switch (menue[OSTAT_SORTING])
+        {
+        case 0:
+        case "n": // sort by name
+            q+= " ORDER BY obname ASC";
+            break;
+        case "s": // sort by storage size
+            q+= " ORDER BY obsize DESC";
+            break;
+        case "e": // sort by evals
+            q+= " ORDER BY evalr DESC";
+            break;
+        }
+        q+= " LIMIT "+menue[B_NUM_LINES];
+        q+= " OFFSET "+menue[B_CURRENT_LINE];
+    }
+    r = db_query(q);
+    //PDBG(sprintf("%s => %Q",q,r));
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        return get_one_int(r);
+    }
+    return r;
+}
+
+private mixed get_container_liste(mapping menue)
+{
+    string q;
+    mixed * r;
+    int whereflag = 0;
+    
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        q = "SELECT COUNT(obname) FROM ";
+    }
+    else
+    {
+        q = "SELECT obname,content FROM ";
+    }
+    q+= menue[OSTAT_TABLE];
+    q+= get_path_query(menue, &whereflag);
+    q+= (whereflag++?" AND content > -1":" WHERE content > -1");
+    if (!member(menue, OSTAT_COUNT_ALL))
+    {
+        q+= " ORDER BY content DESC";
+        q+= " LIMIT "+menue[B_NUM_LINES];
+        q+= " OFFSET "+menue[B_CURRENT_LINE];
+    }
+    r = db_query(q);
+    //PDBG(sprintf("%s => %Q",q,r));
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        return get_one_int(r);
+    }
+    return r;
+}
+
+private mixed get_vitems_liste(mapping menue)
+{
+    string q;
+    mixed * r;
+    int whereflag = 0;
+    
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        q = "SELECT COUNT(obname) FROM ";
+    }
+    else
+    {
+        q = "SELECT obname,vitems FROM ";
+    }
+    q+= menue[OSTAT_TABLE];
+    q+= get_path_query(menue, &whereflag);
+    q+= (whereflag++?" AND vitems > 0":" WHERE vitems > 0");
+    if (!member(menue, OSTAT_COUNT_ALL))
+    {
+        q+= " ORDER BY vitems DESC";
+        q+= " LIMIT "+menue[B_NUM_LINES];
+        q+= " OFFSET "+menue[B_CURRENT_LINE];
+    }
+    r = db_query(q);
+    //PDBG(sprintf("%s => %Q",q,r));
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        return get_one_int(r);
+    }
+    return r;
+}
+
+private mixed get_zeit_liste(mapping menue)
+{
+    string q;
+    mixed * r;
+    int whereflag = 0;
+    
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        q = "SELECT COUNT(obname) FROM ";
+    }
+    else
+    {
+        q = "SELECT obname,obtime FROM ";
+    }
+    q+= menue[OSTAT_TABLE];
+    q+= get_path_query(menue, &whereflag);
+    if (!member(menue, OSTAT_COUNT_ALL))
+    {
+        q+= " ORDER BY obtime ASC";
+        q+= " LIMIT "+menue[B_NUM_LINES];
+        q+= " OFFSET "+menue[B_CURRENT_LINE];
+    }
+    r = db_query(q);
+    //PDBG(sprintf("%s => %Q",q,r));
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        return get_one_int(r);
+    }
+    return r;
+}
+
+private mixed get_kummulierte_liste(mapping menue)
+{
+    string q;
+    mixed * r;
+    int whereflag = 0;
+    
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        q = "SELECT COUNT(DISTINCT blueprint) FROM ";
+    }
+    else
+    {
+        q = "SELECT blueprint, COUNT(obname) AS c_obname, "
+            "SUM(obsize)+MAX(progsize) AS s_obsize, "
+            "SUM(evalr) AS s_evals FROM ";
+    }
+    q+= menue[OSTAT_TABLE];
+    q+= get_path_query(menue, &whereflag);
+    if (!member(menue, OSTAT_COUNT_ALL))
+    {
+        q+= " GROUP BY blueprint";
+        switch (menue[OSTAT_SORTING])
+        {
+        case 0:
+        case "n": // sort by name
+            q+= " ORDER BY c_obname DESC";
+            break;
+        case "s": // sort by storage size
+            q+= " ORDER BY s_obsize DESC";
+            break;
+        case "e": // sort by evals
+            q+= " ORDER BY s_evals DESC";
+            break;
+        case "c": // sort by clones
+            q+= " HAVING c_obname > 1";
+            q+= " ORDER BY c_obname DESC";
+        }
+        q+= " LIMIT "+menue[B_NUM_LINES];
+        q+= " OFFSET "+menue[B_CURRENT_LINE];
+    }
+    else
+    {
+        // q+= " GROUP BY blueprint";
+        // q+= " HAVING COUNT(obname) > 0";
+    }
+    r = db_query(q);
+    //PDBG(sprintf("%s => %Q",q,r));
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return (member(menue, OSTAT_COUNT_ALL)?0:({}));
+    }
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        return get_one_int(r);
+    }
+    return r;
+}
+
+private mixed get_inherits_liste(mapping menue)
+{
+    string q;
+    mixed * r;
+    int whereflag = 0;
+    
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        q = "SELECT COUNT(DISTINCT inherit) FROM inherits_of_";
+    }
+    else
+    {
+        q = "SELECT inherit,COUNT(used_by) as c_used FROM inherits_of_";
+    }
+    q+= menue[OSTAT_TABLE];
+    if (stringp(menue[OSTAT_FILTER_PATH]))
+    {
+        string fpath = menue[OSTAT_FILTER_PATH];
+        q+= whereflag?" AND":" WHERE";
+        if (strstr(fpath,"%")==-1)
+        {
+            fpath = "%"+fpath+"%";
+        }
+        q+= " (inherit LIKE '"+fpath+"' OR used_by LIKE '"+fpath+"')";
+        whereflag++;
+    }
+    if (!member(menue, OSTAT_COUNT_ALL))
+    {
+        q+= " GROUP by inherit ";
+        q+= " ORDER BY c_used DESC ";
+        q+= " LIMIT "+menue[B_NUM_LINES];
+        q+= " OFFSET "+menue[B_CURRENT_LINE];
+    }
+    r = db_query(q,menue[OSTAT_INHERIT]);
+    //PDBG(sprintf("%s => %Q",q,r));
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        return get_one_int(r);
+    }
+    return r;
+}
+
+private mixed get_inherit_liste(mapping menue)
+{
+    string q;
+    mixed * r;
+    int whereflag = 0;
+    
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        q = "SELECT COUNT(used_by) FROM inherits_of_";
+    }
+    else
+    {
+        q = "SELECT used_by,virtual FROM inherits_of_";
+    }
+    q+= menue[OSTAT_TABLE];
+    q+= (whereflag++?" AND inherit = ?":" WHERE inherit = ?");
+    if (!member(menue, OSTAT_COUNT_ALL))
+    {
+        q+= " ORDER BY used_by ";
+        q+= " LIMIT "+menue[B_NUM_LINES];
+        q+= " OFFSET "+menue[B_CURRENT_LINE];
+    }
+    r = db_query(q,menue[OSTAT_INHERIT]);
+    //PDBG(sprintf("%s => %Q",q,r));
+    if (member(menue, OSTAT_COUNT_ALL))
+    {
+        return get_one_int(r);
+    }
+    return r;
+}
+
+// -----------------------------------------------------------------
+
+// Oberste Menuebene:
+//  (F)ilter: (kein)
+//  1) current_stat   Start End Anzahl Eintraege
+//  2) previous_stat  Start End Anzahl Eintraege
+//  3) Delta_stat
+
+nosave mixed ostatistik_hauptmenue_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Hauptmenue der OBjektSTatistik ------------------------------------"
+    );
+    old[B_CURRENT_LINE] = 1;
+    old[B_START_LINE] = 1;
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zum Objektstatistik-Hauptmenue [q,z]",
+            B_DATA : ({
+"Das Hauptmenue zeigt die verfuegbaren Statistik-Kategorien an.",
+"Mit a oder v waehlt man jeweils einen Satz an Statistiken, wenn verfuegbar.",
+"Mit p kann ein Suchpfad eingegeben werden, nach dem in allen Statistiken",
+"gefiltert wird.",
+"Mit q wird das Menu verlassen, ? zeigt dieses Menu.",
+            }),
+            ]);
+        return old;
+    }
+    return old;
+}
+
+private string get_one_table_overview(string table)
+{
+    mixed *r = db_query("SELECT COUNT(*) FROM "+table);
+    return sprintf(" %s %s %d",
+        get_db_info(table+"_start"),
+        get_db_info(table+"_end"),
+        get_one_int(r));
+}
+
+nosave string * ostatistik_hauptmenue_display(mapping menue)
+{
+    string * result = ({});
+    string cur_table = get_db_info("current_objects_table");
+    string old_table = get_db_info("old_objects_table");
+    int flag = 0;
+    menue[B_CURRENT_LINE] = 1;
+    if (member(menue, OSTAT_FILTER_PATH))
+    {
+        result += ({ "(P)fad: \""+menue[OSTAT_FILTER_PATH]+"\"" });
+    }
+    else
+    {
+        result += ({ "(P)fad: (kein)" });
+    }
+    if (cur_table && get_db_info(cur_table+"_end")!=0)
+    {
+        result += ({ "(A)ktuell   :"+get_one_table_overview(cur_table) });
+        flag++;
+    }
+    else
+    {
+    	result += ({ "Aktuell     : (keine vollstaendige Statistik vorhanden)"});
+    }
+    if (old_table && get_db_info(old_table+"_end")!=0)
+    {
+        result += ({ "(V)orgaenger:"+get_one_table_overview(old_table) });
+        flag++;
+    }
+    else if (query_dump_is_running())
+    {
+        result += ({ "Vorgaenger  : (Statistik wird erstellt, keine Anzeige)"});
+    }
+    else
+    {
+    	result += ({ "Vorgaenger  : (keine vollstaendige Statistik vorhanden)"});
+    }
+    if (flag == 2)
+    {
+        // result += ({ "(D)elta     : Differenzstatistiken verfuegbar" });
+    }
+    else
+    {
+        // result += ({ "Delta       : Differenzstatistiken nicht verfuegbar" });
+    }
+    return result;
+}
+
+nosave int ostatistik_hauptmenue_total(mapping menue)
+{
+    return 3;
+}
+
+nosave string ostatistik_hauptmenue_prompt(mapping menue)
+{
+    return "Objektstatistik-Hauptmenue [?,p,a,v,q]";
+}
+
+nosave mixed ostatistik_hauptmenue_action(string str, mapping * menues)
+{
+    mapping menue;
+    string table;
+    menue = menues[<1];
+    str = space(str);
+    if (str == "") return B_NOTHING;
+    switch (str[0..0])
+    {
+    case "p":
+    case "P":
+        if (sizeof(str)>1)
+        {
+            str = space(str[1..]);
+        }
+        else
+        {
+            str = "";
+        }
+        if (str != "")
+        {
+            menue[OSTAT_FILTER_PATH] = str;
+            browse_write_line("Pfad gesetzt: "+str);
+        }
+        else
+        {
+            m_delete(menue,OSTAT_FILTER_PATH);
+            browse_write_line("Pfad geloescht.");
+        }
+        // menue[B_FLAGS] |= BF_DIRTY;
+        menues[<1] = menue;
+        return menues;
+    case "a":
+    case "A":
+        table = get_db_info("current_objects_table");
+        if (table && get_db_info(table+"_end")!=0)
+        {
+            return menues + ({([
+                B_TYPE : "os_statistik_menue",
+                OSTAT_TABLE : table,
+                OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+                B_START_LINE: 0,
+                B_CURRENT_LINE: 0,
+            ])});
+        }
+        else
+        {
+            browse_write_line("a-Statistik steht nicht zur Verfuegung.");
+            return B_DONE;
+        }
+    case "v":
+    case "V":
+        table = get_db_info("old_objects_table");
+        if (table && get_db_info(table+"_end")!=0)
+        {
+            return menues + ({([
+                B_TYPE : "os_statistik_menue",
+                OSTAT_TABLE : table,
+                OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+                B_START_LINE: 0,
+                B_CURRENT_LINE: 0,
+            ])});
+        }
+        else
+        {
+            browse_write_line("v-Statistik steht nicht zur Verfuegung.");
+            return B_DONE;
+        }
+    }
+    return B_NOTHING; // der Rest macht der dynamic_browser selbst.
+}
+
+nosave mixed os_statistik_menue_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Auswahl der verschiedenen Statistiken -----------------------------"
+    );
+    string * result = ({});
+    result += ({
+        " 1. Statistik nach Domains/Subdomains.",
+        " 2. Speicherhungrigste Einzelobjekte.",
+        " 3. Speicherhungrigste Objekte nach Prgrammname aufsummiert.",
+        " 4. Evalhungrigste Einzelobjekte.",
+        " 5. Evalhungrigste Objekte nach Programmname aufsummiert.",
+        " 6. Blueprints mit den meisten Clones.",
+        " 7. Raeume/Container mit dem meisten Inhalt.",
+        " 8. Objekte mit den meisten Vitems.",
+        " 9. Aelteste Objekte zuerst.",
+        "10. Verwendungsnachweis fuer Inherits.",
+    });
+    old[B_DATA] = result;
+    old[B_START_LINE] = 0;
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zum Statistik-Menue [q,z]",
+            B_DATA : ({
+"Das Statistikmenue zeigt die verfuegbaren Statistiken an.",
+            }),
+            ]);
+        return old;
+    }
+    return old;
+}
+
+nosave int os_statistik_menue_total(mapping menue)
+{
+    return sizeof(menue[B_DATA]);
+}
+
+nosave string * os_statistik_menue_display(mapping menue)
+{
+    menue[B_CURRENT_LINE] = 0;
+    return staticmore_display(menue);
+}
+
+nosave string os_statistik_menue_prompt(mapping menue)
+{
+    return sprintf("Statistikauswahlmenue [?,<nummer>,z,q]");
+}
+
+
+nosave mixed os_statistik_menue_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (fx != 0)
+    {
+        return B_NOTHING;
+    }
+    switch (ix)
+    {
+        case 1:
+          return menues + ({([
+                B_TYPE : "os_domains",
+                OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+                OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+                B_START_LINE: 0,
+                B_CURRENT_LINE: 0,
+            ])});
+        case 2:
+          return menues + ({ ([ 
+              B_TYPE : "os_sort_by_mem",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_SORTING : "s",
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+        case 3:
+          return menues + ({ ([ 
+              B_TYPE : "os_kummuliert_by_mem",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_SORTING : "s",
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+        case 4:
+          return menues + ({ ([ 
+              B_TYPE : "os_sort_by_eval",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_SORTING : "e",
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+        case 5:
+          return menues + ({ ([ 
+              B_TYPE : "os_kummuliert_by_eval",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_SORTING : "e",
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+        case 6:
+          return menues + ({ ([ 
+              B_TYPE : "os_kummuliert_by_clones",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_SORTING : "c",
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+        case 7:
+          return menues + ({ ([ 
+              B_TYPE : "os_container",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+        case 8:
+          return menues + ({ ([ 
+              B_TYPE : "os_vitems",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+        case 9:
+          return menues + ({ ([ 
+              B_TYPE : "os_zeit",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+        case 10:
+          return menues + ({ ([ 
+              B_TYPE : "os_inherits",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+        default: break;
+    }
+    
+    return B_NOTHING;
+}
+
+nosave mixed os_domains_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Uebersicht der Domains --------------------------------------------"
+    );
+    //PDBG(sprintf("1:%Q",old));
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zum Domains-Menue [q,z]",
+            B_DATA : ({
+"Das Domainmenue zeigt die verfuegbaren Domains zum Filtern an.",
+"Die Eingabe (Grosskleinschreibung!) der Domain verzweigt zu den Subdomains."
+            }),
+            ]);
+        return old;
+    }
+    return old;
+}
+
+nosave int os_domains_total(mapping menue)
+{
+    return (int) get_domains_vs_subdomains(
+                        menue + ([ OSTAT_COUNT_ALL : 1]) );
+}
+
+
+nosave string * os_domains_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    r = get_domains_vs_subdomains(menue);
+    if (r == 0)
+    {
+        return ({});
+    }
+    foreach (l:r)
+    {
+        result += ({ sprintf("%-12s Anzahl: %5d Speicher: %7d Evals: %E",
+                  l[0]==""?"(Sonstige)":l[0],l[1],l[2],l[3] ) });
+    }
+    return result;
+}
+
+nosave string os_domains_prompt(mapping menue)
+{
+    return sprintf("Domainauswahlmenue %d/%d [?,<domain>,z,q]",
+            menue[B_CURRENT_LINE]+1,os_domains_total(menue));
+}
+
+nosave mixed os_domains_action(string str, mapping * menues)
+{
+    mixed *r;
+    switch (str=space(str))
+    {
+    case "":  
+    case "?":
+    case "u":
+    case "d":
+    case "z":
+    case "q": return B_NOTHING; // das Inherit kuemmert sich drum.
+    case "<":
+    case ">": // TODO an anfang und ende springen...
+    }
+    if (lower_case(str)=="(sonstige)")
+    {
+        str = "";
+    }
+    r = db_query("SELECT COUNT(obname) FROM "+menues[<1][OSTAT_TABLE]
+      + " WHERE domain = ?",str);
+    if (get_one_int(r) > 0)
+    {
+        return menues + ({ ([ 
+              B_TYPE : "os_subdomains",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              OSTAT_DOMAIN : str,
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+    }
+    browse_write_line("Ungueltige Domain \""+str+"\"");
+    return B_DONE;
+}
+
+nosave mixed os_subdomains_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Uebersicht der Subdomains -----------------------------------------"
+    );
+
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zum Domains-Menue [q,z]",
+            B_DATA : ({
+"Das Subdomainmenue zeigt die verfuegbaren Subdomains zum Filtern an.",
+"Die Eingabe (Grosskleinschreibung!) der SubDomain zeigt dann die sortierten ",
+"Listen mit Speicher und Evals an.",
+}),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_subdomains_total(mapping menue)
+{
+    return ({int}) get_domains_vs_subdomains(
+                        menue + ([ OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_subdomains_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    r = get_domains_vs_subdomains(menue);
+    if (r == 0)
+    {
+        return ({});
+    }
+    foreach (l:r)
+    {
+        result += ({ sprintf("%-20s Anzahl: %5d Speicher: %7d Evals: %E",
+                  l[0]==""?"(Sonstige)":l[0],l[1],l[2],l[3] ) });
+    }
+    return result;
+}
+
+nosave string os_subdomains_prompt(mapping menue)
+{
+    return sprintf("Subdomainauswahlmenue %d/%d [?,<subdomain>,z,q]",
+            menue[B_CURRENT_LINE]+1,os_subdomains_total(menue));
+}
+
+nosave mixed os_subdomains_action(string str, mapping * menues)
+{
+    mixed *r;
+    switch (str=space(str))
+    {
+    case "":  
+    case "?":
+    case "u":
+    case "d":
+    case "z":
+    case "q": return B_NOTHING; // das Inherit kuemmert sich drum.
+    case "<":
+    case ">": // TODO an anfang und ende springen...
+    }
+    if (lower_case(str)=="(sonstige)")
+    {
+        str = "";
+    }
+    r = db_query("SELECT COUNT(obname) FROM "+menues[<1][OSTAT_TABLE]
+      + " WHERE domain = ? AND subdomain = ?",
+          menues[<1][OSTAT_DOMAIN],str);
+    if (get_one_int(r) > 0)
+    {
+        return menues + ({ ([ 
+              B_TYPE : "os_sort_by_mem",
+              OSTAT_TABLE : menues[<1][OSTAT_TABLE],
+              OSTAT_DOMAIN : menues[<1][OSTAT_DOMAIN],
+              OSTAT_SUBDOMAIN : str,
+              OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+              B_START_LINE: 0,
+              B_CURRENT_LINE: 0,
+            ])});
+    }
+    browse_write_line("Ungueltige Subdomain \""+str+"\"");
+    return B_DONE;
+}
+
+nosave mixed os_speicherevals_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Anzeige von Speicher / Evals ------------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur SpeicherEvals-Anzeige [q,z]",
+            B_DATA : ({
+"Die SpeicherEvals-Anzeige die Objekte zusammen mit (Speicher,Eval) an.",
+"Die Sortierung kann nach (N)ame, (S)peicher oder (E)vals erfolgen.",
+"Mit Angabe der Nummer kann in die Einzeilanzeige verzweigt werden.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_speicherevals_total(mapping menue)
+{
+    return get_speicherevals_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_speicherevals_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_speicherevals_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d:%s (%d,%E)",
+                  ++ix,l[0],l[1],l[2] ) });
+    }
+    return result;
+}
+
+nosave string os_speicherevals_prompt(mapping menue)
+{
+    return sprintf("Einzelliste (nach Name) %d/%d [?,<nummer>,n,e,s,z,q]",
+            menue[B_CURRENT_LINE]+1,os_speicherevals_total(menue));
+}
+
+nosave mixed os_speicherevals_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_speicherevals_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : "os_einzelanzeige",
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_OBNAME : r[0][0],
+            ])});
+        }
+        return B_DONE;
+    }
+    switch(str)
+    {
+        case "n":
+            browse_write_line("Anzeige nach Name schon aktiv.");
+            return B_DONE;
+            menue[B_TYPE] = "os_speicherevals";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Name");
+            return menues[..<2]+({ menue });
+        case "s":
+            menue[B_TYPE] = "os_sort_by_mem";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Speicher");
+            return menues[..<2]+({ menue });
+        case "e":
+            menue[B_TYPE] = "os_sort_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Eval");
+            return menues[..<2]+({ menue });
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_sort_by_mem_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Anzeige von Speicherverbrauch -------------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur SpeicherEvals-Anzeige [q,z]",
+            B_DATA : ({
+"Die SpeicherEvals-Anzeige die Objekte zusammen mit (Speicher,Eval) an.",
+"Die Sortierung kann nach (N)ame, (S)peicher oder (E)vals erfolgen.",
+"Mit Angabe der Nummer kann in die Einzeilanzeige verzweigt werden.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_sort_by_mem_total(mapping menue)
+{
+    return get_speicherevals_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_sort_by_mem_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_speicherevals_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d: %8d %s", ++ix,l[1],l[0] ) });
+    }
+    return result;
+}
+
+nosave string os_sort_by_mem_prompt(mapping menue)
+{
+    return sprintf("Einzelliste (nach Speicher) %d/%d [?,<nummer>,n,e,s,z,q]",
+            menue[B_CURRENT_LINE]+1,os_sort_by_mem_total(menue));
+}
+
+nosave mixed os_sort_by_mem_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_speicherevals_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : "os_einzelanzeige",
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_OBNAME : r[0][0],
+            ])});
+        }
+        return B_DONE;
+    }
+    switch(str)
+    {
+        case "n":
+            menue[B_TYPE] = "os_speicherevals";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Name");
+            return menues[..<2]+({ menue });
+        case "s":
+            browse_write_line("Anzeige nach Speicher schon aktiv.");
+            return B_DONE;
+            menue[B_TYPE] = "os_sort_by_mem";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Speicher");
+            return menues[..<2]+({ menue });
+        case "e":
+            menue[B_TYPE] = "os_sort_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Eval");
+            return menues[..<2]+({ menue });
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_sort_by_eval_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Anzeige von Evalverbrauch -----------------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur SpeicherEvals-Anzeige [q,z]",
+            B_DATA : ({
+"Die SpeicherEvals-Anzeige die Objekte zusammen mit (Speicher,Eval) an.",
+"Die Sortierung kann nach (N)ame, (S)peicher oder (E)vals erfolgen.",
+"Mit Angabe der Nummer kann in die Einzeilanzeige verzweigt werden.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_sort_by_eval_total(mapping menue)
+{
+    return get_speicherevals_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_sort_by_eval_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_speicherevals_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d: %8E %s", ++ix,l[2],l[0] ) });
+    }
+    return result;
+}
+
+nosave string os_sort_by_eval_prompt(mapping menue)
+{
+    return sprintf("Einzelliste (nach Evals) %d/%d [?,<nummer>,n,e,s,z,q]",
+            menue[B_CURRENT_LINE]+1,os_sort_by_eval_total(menue));
+}
+
+nosave mixed os_sort_by_eval_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_speicherevals_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : "os_einzelanzeige",
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_OBNAME : r[0][0],
+            ])});
+        }
+        return B_DONE;
+    }
+    switch(str)
+    {
+        case "n":
+            menue[B_TYPE] = "os_speicherevals";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Name");
+            return menues[..<2]+({ menue });
+        case "s":
+            menue[B_TYPE] = "os_sort_by_mem";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Speicher");
+            return menues[..<2]+({ menue });
+        case "e":
+            browse_write_line("Anzeige nach Eval schon aktiv.");
+            return B_DONE;
+            menue[B_TYPE] = "os_sort_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Eval");
+            return menues[..<2]+({ menue });
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_kummuliert_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Kumlierte Ansicht nach Blueprints ---------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur kummulierten Anzeige [q,z]",
+            B_DATA : ({
+"Die kummulierte Anzeige zeigt die Speicherevals bzgl der Programmnamen an.",
+"Mit Auswahl der Nummer wird in die SpeicherEvals Anzeige der Blueprints",
+"verzweigt. Die Sortierung kann nach (N)ame, (S)peicher, (E)val oder Anzahl",
+"(C)lones erfolgen.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_kummuliert_total(mapping menue)
+{
+    return get_kummulierte_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_kummuliert_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_kummulierte_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d:%s #%d(%d,%E)",
+                  ++ix,l[0],l[1],l[2],l[3] ) });
+    }
+    return result;
+}
+
+nosave string os_kummuliert_prompt(mapping menue)
+{
+    string sort;
+    switch (menue[OSTAT_SORTING])
+    {
+    case 0:
+    case "n": // sort by name
+        sort = "(nach Name)";
+        break;
+    case "s": // sort by storage size
+        sort = "(nach Speicherbedarf)";
+        break;
+    case "e": // sort by evals
+        sort = "(nach Evals)";
+        break;
+    case "c": // sort by Clones
+        sort = "(nach #Clones)";
+        break;
+    }
+
+    return sprintf("Kumulierte Liste %s %d/%d [?,<nummer>,n,e,s,c,z,q]",
+            sort,menue[B_CURRENT_LINE]+1,os_kummuliert_total(menue));
+}
+
+nosave mixed os_kummuliert_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_kummulierte_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : OSTAT_SORTING=="s"?"os_sort_by_mem" : 
+                         (OSTAT_SORTING=="e"?"os_sort_by_eval" : 
+                         "os_speicherevals"),
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_BLUEPRINT : r[0][0],
+                OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+                OSTAT_SORTING : menues[<1][OSTAT_SORTING],
+                B_START_LINE: 0,
+                B_CURRENT_LINE: 0,
+            ])});
+        }
+        return B_DONE;
+    }
+    switch(str)
+    {
+        case "n":
+            browse_write_line("Anzeige nach Name schon aktiv.");
+            return B_DONE;
+            menue[B_TYPE] = "os_kummuliert";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Name");
+            return menues[..<2]+({ menue });
+        case "s":
+            menue[B_TYPE] = "os_kummuliert_by_mem";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Speicher");
+            return menues[..<2]+({ menue });
+        case "e":
+            menue[B_TYPE] = "os_kummuliert_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Eval");
+            return menues[..<2]+({ menue });
+        case "c":
+            menue[B_TYPE] = "os_kummuliert_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Clones");
+            return menues[..<2]+({ menue });
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_kummuliert_by_mem_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Speicher Kumuliert nach Blueprints --------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur kummulierten Anzeige [q,z]",
+            B_DATA : ({
+"Die kummulierte Anzeige zeigt die Speicherevals bzgl der Programmnamen an.",
+"Mit Auswahl der Nummer wird in die SpeicherEvals Anzeige der Blueprints",
+"verzweigt. Die Sortierung kann nach (N)ame, (S)peicher, (E)val oder Anzahl",
+"(C)lones erfolgen.",
+            }),
+            ]);
+        return old;
+    }
+    return old;
+}
+
+nosave int os_kummuliert_by_mem_total(mapping menue)
+{
+    return get_kummulierte_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_kummuliert_by_mem_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_kummulierte_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d:%8d %s", ++ix, l[2], l[0] ) });
+    }
+    return result;
+}
+
+nosave string os_kummuliert_by_mem_prompt(mapping menue)
+{
+    return sprintf(
+    "Kumulierte Liste (nach Speicherbedarf) %d/%d [?,<nummer>,n,e,s,c,z,q]",
+            menue[B_CURRENT_LINE]+1,
+            os_kummuliert_by_mem_total(menue));
+}
+
+nosave mixed os_kummuliert_by_mem_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_kummulierte_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : "os_sort_by_mem",
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_BLUEPRINT : r[0][0],
+                OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+                OSTAT_SORTING : menues[<1][OSTAT_SORTING],
+                B_START_LINE: 0,
+                B_CURRENT_LINE: 0,
+            ])});
+        }
+        return B_DONE;
+    }
+    switch(str)
+    {
+        case "n":
+            menue[B_TYPE] = "os_kummuliert";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Name");
+            return menues[..<2]+({ menue });
+        case "s":
+            browse_write_line("Anzeige nach Speicher schon aktiv.");
+            return B_DONE;
+            menue[B_TYPE] = "os_kummuliert_by_mem";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Speicher");
+            return menues[..<2]+({ menue });
+        case "e":
+            menue[B_TYPE] = "os_kummuliert_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Eval");
+            return menues[..<2]+({ menue });
+        case "c":
+            menue[B_TYPE] = "os_kummuliert_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Clones");
+            return menues[..<2]+({ menue });
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_kummuliert_by_eval_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Evals kumuliert nach Blueprints -----------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur kummulierten Anzeige [q,z]",
+            B_DATA : ({
+"Die kummulierte Anzeige zeigt die Speicherevals bzgl der Programmnamen an.",
+"Mit Auswahl der Nummer wird in die SpeicherEvals Anzeige der Blueprints",
+"verzweigt. Die Sortierung kann nach (N)ame, (S)peicher, (E)val oder Anzahl",
+"(C)lones erfolgen.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_kummuliert_by_eval_total(mapping menue)
+{
+    return get_kummulierte_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_kummuliert_by_eval_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_kummulierte_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d: %8E %s",
+                  ++ix,l[3],l[0] ) });
+    }
+    return result;
+}
+
+nosave string os_kummuliert_by_eval_prompt(mapping menue)
+{
+    string sort;
+    switch (menue[OSTAT_SORTING])
+    {
+    case 0:
+    case "n": // sort by name
+        sort = "(nach Name)";
+        break;
+    case "s": // sort by storage size
+        sort = "(nach Speicherbedarf)";
+        break;
+    case "e": // sort by evals
+        sort = "(nach Evals)";
+        break;
+    case "c": // sort by Clones
+        sort = "(nach #Clones)";
+        break;
+    }
+
+    return sprintf("Kumulierte Liste %s %d/%d [?,<nummer>,n,e,s,c,z,q]",
+            sort,menue[B_CURRENT_LINE]+1,
+            os_kummuliert_by_eval_total(menue));
+}
+
+nosave mixed os_kummuliert_by_eval_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_kummulierte_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : OSTAT_SORTING=="s"?"os_sort_by_mem" : 
+                         (OSTAT_SORTING=="e"?"os_sort_by_eval" : 
+                         "os_speicherevals"),
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_BLUEPRINT : r[0][0],
+                OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+                OSTAT_SORTING : menues[<1][OSTAT_SORTING],
+                B_START_LINE: 0,
+                B_CURRENT_LINE: 0,
+            ])});
+        }
+        return B_DONE;
+    }
+    switch(str)
+    {
+        case "n":
+            menue[B_TYPE] = "os_kummuliert";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Name");
+            return menues[..<2]+({ menue });
+        case "s":
+            menue[B_TYPE] = "os_kummuliert_by_mem";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Speicher");
+            return menues[..<2]+({ menue });
+        case "e":
+            browse_write_line("Anzeige nach Eval schon aktiv.");
+            return B_DONE;
+            menue[B_TYPE] = "os_kummuliert_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Eval");
+            return menues[..<2]+({ menue });
+        case "c":
+            menue[B_TYPE] = "os_kummuliert_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Clones");
+            return menues[..<2]+({ menue });
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_kummuliert_by_clones_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Anzahl Clones je Blueprint ----------------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur kummulierten Anzeige [q,z]",
+            B_DATA : ({
+"Die kummulierte Anzeige zeigt die Speicherevals bzgl der Programmnamen an.",
+"Mit Auswahl der Nummer wird in die SpeicherEvals Anzeige der Blueprints",
+"verzweigt. Die Sortierung kann nach (N)ame, (S)peicher, (E)val oder Anzahl",
+"(C)lones erfolgen.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_kummuliert_by_clones_total(mapping menue)
+{
+    return get_kummulierte_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_kummuliert_by_clones_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_kummulierte_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d: #%5d %s",
+                  ++ix,l[1],l[0] ) });
+    }
+    return result;
+}
+
+nosave string os_kummuliert_by_clones_prompt(mapping menue)
+{
+    string sort;
+    switch (menue[OSTAT_SORTING])
+    {
+    case 0:
+    case "n": // sort by name
+        sort = "(nach Name)";
+        break;
+    case "s": // sort by storage size
+        sort = "(nach Speicherbedarf)";
+        break;
+    case "e": // sort by evals
+        sort = "(nach Evals)";
+        break;
+    case "c": // sort by Clones
+        sort = "(nach #Clones)";
+        break;
+    }
+
+    return sprintf("Kumulierte Liste %s %d/%d [?,<nummer>,n,e,s,c,z,q]",
+            sort,menue[B_CURRENT_LINE]+1,
+            os_kummuliert_by_clones_total(menue));
+}
+
+nosave mixed os_kummuliert_by_clones_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_kummulierte_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : OSTAT_SORTING=="s"?"os_sort_by_mem" : 
+                         (OSTAT_SORTING=="e"?"os_sort_by_eval" : 
+                         "os_speicherevals"),
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_BLUEPRINT : r[0][0],
+                OSTAT_FILTER_PATH : menues[<1][OSTAT_FILTER_PATH],
+                OSTAT_SORTING : menues[<1][OSTAT_SORTING],
+                B_START_LINE: 0,
+                B_CURRENT_LINE: 0,
+            ])});
+        }
+        return B_DONE;
+    }
+    switch(str)
+    {
+        case "n":
+            menue[B_TYPE] = "os_kummuliert";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Name");
+            return menues[..<2]+({ menue });
+        case "s":
+            menue[B_TYPE] = "os_kummuliert_by_mem";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Speicher");
+            return menues[..<2]+({ menue });
+        case "e":
+            menue[B_TYPE] = "os_kummuliert_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Eval");
+            return menues[..<2]+({ menue });
+        case "c":
+            browse_write_line("Anzeige nach Clones schon aktiv.");
+            return B_DONE;
+            menue[B_TYPE] = "os_kummuliert_by_eval";
+            menue[OSTAT_SORTING] = str;
+            menue[B_START_LINE] = 0;
+            menue[B_CURRENT_LINE] = 0;
+            browse_write_line("Anzeige nach Clones");
+            return menues[..<2]+({ menue });
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_container_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Containernanzeige -------------------------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur kummulierten Anzeige [q,z]",
+            B_DATA : ({
+"Die Containeranzeige zeigt die Raeume und Container sortiert nach",
+"Anzahl Elmente absteigend. Unter Angabe der Nummer kann in die",
+"einzelanzeige verzweigt werden.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_container_total(mapping menue)
+{
+    return get_container_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_container_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_container_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d:%s #%d",
+                  ++ix,l[0],l[1] ) });
+    }
+    return result;
+}
+
+nosave string os_container_prompt(mapping menue)
+{
+
+    return sprintf("Container Liste %d/%d [?,<nummer>,z,q]",
+            menue[B_CURRENT_LINE]+1,os_container_total(menue));
+}
+
+nosave mixed os_container_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_container_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : "os_einzelanzeige",
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_OBNAME : r[0][0],
+            ])});
+        }
+        return B_DONE;
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_vitems_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- VitemAnzeige ------------------------------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur kummulierten Anzeige [q,z]",
+            B_DATA : ({
+"Die Vitems-Anzeige zeigt die Anzahl Vitems pro Objekt an.",
+"Unter Eingabe der Nummer wird die Einzelanzeige gezeigt.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_vitems_total(mapping menue)
+{
+    return get_vitems_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_vitems_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_vitems_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d: #%3d %s ",
+                  ++ix,l[1],l[0] ) });
+    }
+    return result;
+}
+
+nosave string os_vitems_prompt(mapping menue)
+{
+
+    return sprintf("Vitems Liste %d/%d [?,<nummer>,n,e,s,c,z,q]",
+            menue[B_CURRENT_LINE]+1,os_vitems_total(menue));
+}
+
+nosave mixed os_vitems_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_vitems_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : "os_einzelanzeige",
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_OBNAME : r[0][0],
+            ])});
+        }
+        return B_DONE;
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_inherits_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Wie oft wird welches Inherit verwendet? ---------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur kummulierten Anzeige [q,z]",
+            B_DATA : ({
+"Die Inherit-Anzeige zeigt die Anzahl Verwendung pro Objekt an.",
+"Unter Eingabe der Nummer wird die Inheritanzeige gezeigt.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_inherits_total(mapping menue)
+{
+    return get_inherits_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_inherits_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_inherits_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d: %4d %s ",
+                  ++ix,l[1],l[0] ) });
+    }
+    return result;
+}
+
+nosave string os_inherits_prompt(mapping menue)
+{
+
+    return sprintf("Inherit Verwendungsliste %d/%d [?,<nummer>,n,e,s,c,z,q]",
+            menue[B_CURRENT_LINE]+1,os_inherits_total(menue));
+}
+
+nosave mixed os_inherits_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_inherits_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : "os_einzelanzeige",
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_OBNAME : r[0][0][..<3],
+            ])});
+        }
+        return B_DONE;
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_inherit_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Wo wird das Inherit verwendet? ------------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur kummulierten Anzeige [q,z]",
+            B_DATA : ({
+"Die Vitems-Anzeige zeigt die Anzahl Vitems pro Objekt an.",
+"Unter Eingabe der Nummer wird die Einzelanzeige gezeigt.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_inherit_total(mapping menue)
+{
+    return get_inherit_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_inherit_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_inherit_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d: %s %s ",
+                  ++ix,l[1]?"v":" ",l[0] ) });
+    }
+    return result;
+}
+
+nosave string os_inherit_prompt(mapping menue)
+{
+
+    return sprintf("Inherit Verwendungsliste %d/%d [?,<nummer>,n,e,s,c,z,q]",
+            menue[B_CURRENT_LINE]+1,os_inherit_total(menue));
+}
+
+nosave mixed os_inherit_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_inherit_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : "os_einzelanzeige",
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_OBNAME : r[0][0][..<3],
+            ])});
+        }
+        return B_DONE;
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_zeit_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Aeltestes Objekt zuerst -------------------------------------------"
+    );
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur Zeit-Anzeige [q,z]",
+            B_DATA : ({
+"Die Zeit-Anzeige zeigt die Erstellungszeit pro Objekt an.",
+"Unter Eingabe der Nummer wird die Einzelanzeige gezeigt.",
+            }),
+            ]);
+        return old;
+    }
+    return B_NOTHING;
+}
+
+nosave int os_zeit_total(mapping menue)
+{
+    return get_zeit_liste(menue+([OSTAT_COUNT_ALL : 1]) );
+}
+
+nosave string * os_zeit_display(mapping menue)
+{
+    string * result = ({});
+    mixed *r,*l;
+    int ix;
+    r = get_zeit_liste(menue);
+    if (query_db_error() || r == 0)
+    {
+        browse_write_line("Interner Fehler:"+query_db_error());
+        return ({});
+    }
+    ix = menue[B_CURRENT_LINE];
+    foreach (l:r)
+    {
+        result += ({ sprintf("%3d: %s %s ",
+                  ++ix,shorttimestr(l[1]),l[0] ) });
+    }
+    return result;
+}
+
+nosave string os_zeit_prompt(mapping menue)
+{
+
+    return sprintf("Objektliste nach Alter %d/%d [?,<nummer>,n,e,s,c,z,q]",
+            menue[B_CURRENT_LINE]+1,os_zeit_total(menue));
+}
+
+nosave mixed os_zeit_action(string str, mapping * menues)
+{
+    int ix,fx = str2int(str, &ix);
+    mapping menue = menues[<1];
+    if (ix > 0 && fx == 0)
+    {
+        mixed *r = get_zeit_liste(
+                menue + ([ B_CURRENT_LINE : (ix-1) ]));
+        if (sizeof(r))
+        {
+            return menues + ({([ 
+                B_TYPE : "os_einzelanzeige",
+                OSTAT_TABLE : menue[OSTAT_TABLE],
+                OSTAT_OBNAME : r[0][0],
+            ])});
+        }
+        return B_DONE;
+    }
+    return B_NOTHING;
+}
+
+nosave mixed os_einzelanzeige_init(mapping old)
+{
+    ADD_HEADER_LINES(
+"----------- Einzelanzeige -----------------------------------------------------"
+    );
+    string * result = ({}), envstr;
+    mixed *r,*l;
+    r = db_query("SELECT obname,blueprint,obsize,progsize,evalr,vitems, "
+                 "count_ob,content,env,room,first_room,domain,subdomain, "
+                 "obtime,inhcount,inhdirectcount "
+                 "FROM "+old[OSTAT_TABLE]+" WHERE obname = ?",
+                 old[OSTAT_OBNAME] );
+    if (r==0 || sizeof(r)==0)
+    {
+        browse_write_line("Objekt "+old[OSTAT_OBNAME]+" nicht gefunden.");
+        return B_QUIT;
+    }
+    foreach (l:r)
+    {
+        switch (l[8]) // 0=noenv, 1=room,2 maproom, 3 withenv, 4 in map
+        {
+            case 0: envstr = "noenv";   break;
+            case 1: envstr = "room";    break;
+            case 2: envstr = "maproom"; break;
+            case 3: envstr = "inroom";  break;
+            case 4: envstr = "inmap";   break;
+            default: envstr = "?";
+        }
+        result += ({
+            "Objekt: "+l[0],//obname
+            "Programm: "+l[1],//blueprint
+            "Speicher Daten: "+l[2], //obsize
+            "Speicher Programm: "+l[3], //progsize
+            "gesammelte Evals: "+sprintf("%E",l[4]), // evals
+            "Anzahl vitems: "+l[5], // vitems
+            "Ein count_ob?: "+(l[6]?"Ja":"Nein"), // count_ob
+            "Anzahl Inhalt: "+l[7], // content
+            "Umgebung: "+envstr, // env
+            "Raum: "+l[9], // room
+            "First_Room: "+l[10],
+            "Domain: "+l[11],
+            "Subdomain: "+l[12],
+            "Erstellungszeit: "+shorttimestr(l[13]),
+            "Anzahl Inherits: "+l[14],
+            "Anzahl direkter Inherits: "+l[15],
+        });
+        if (strstr(l[0],"/i/")!=-1)
+        {
+            old[OSTAT_FLAG_INHERIT] = 1;
+            old[OSTAT_INHERIT] = l[0]+".lpc";
+            result += ({"(V)erwendung von diesem Inherit."});
+        }
+        else
+        {
+            m_delete(old,OSTAT_FLAG_INHERIT);
+        }
+    }
+    old[B_DATA] = result;
+    old[B_START_LINE] = 0;
+    if (!member(old, B_HELP)) {
+        old[B_HELP] = ([
+            B_TYPE : B_STATICMORE,
+            B_PROMPT : "Hilfe zur Einzelanzeige [q,z]",
+            B_DATA : ({
+"Die Einzelanzeige zeigt einen Objekteintrag an.",
+            }),
+            ]);
+        return old;
+    }
+    return old;
+}
+
+nosave string os_einzelanzeige_prompt(mapping menue)
+{
+    if (member(menue,OSTAT_FLAG_INHERIT))
+    {
+        return "Einzelanzeige Inherit [v,z,q]";
+    }
+    else
+    {
+        return "Einzelanzeige Objekt [z,q]";
+    }
+}
+
+nosave int os_einzelanzeige_total(mapping menue)
+{
+    return sizeof(menue[B_DATA]);
+}
+
+nosave string * os_einzelanzeige_display(mapping menue)
+{
+    return staticmore_display(menue);
+}
+
+nosave mixed os_einzelanzeige_action(string str, mapping * menues)
+{
+    mapping menue = menues[<1]+([]); // Kopie.
+    if (member(menue,OSTAT_FLAG_INHERIT) && lower_case(space(str))=="v")
+    {
+        menue[B_TYPE] = "os_inherit";
+        // menue[OSTAT_INHERIT] ist gesetzt.
+        menue[OSTAT_FILTER_PATH] = menues[<2][OSTAT_FILTER_PATH];
+        menue[B_START_LINE] = 0;
+        menue[B_CURRENT_LINE] = 0;
+        return menues+({ menue });
+    }
+    return B_NOTHING;
+}
+
+// -----------------------------------------------------------------
+
+private void do_zern_ob(string obn)
+{
+    object ob = find_object(obn);
+    if (objectp(ob))
+    {
+        if (function_exists("prepare_renewal",ob))
+        {
+            send_to_admins("zern -t "+obn);
+            return;
+        }
+        ob->remove();
+        if (ob) destruct(ob);
+        touch(ob);
+    }
+}
+
+private void push_to_fifo(string file)
+{
+    int seq = increment_counter("seq_stack");
+    db_query("INSERT INTO stack_table (seq,filename) VALUES (?,?)",
+        seq,file);
+}
+
+private string pull_from_fifo()
+{
+    mixed r = db_query("SELECT filename,seq FROM stack_table ORDER BY seq ASC "
+            "LIMIT 1");
+    if (query_db_error() || sizeof(r)==0)
+    {
+        return 0;
+    }
+    db_query("DELETE FROM stack_table WHERE seq = ?",r[0][1]);
+    return r[0][0];
+}
+
+nosave void do_loop_inherits(string inh, int offset)
+{
+    string q, new_inh, used, err;
+    mixed * r;
+    if (offset == -1)
+    {
+        offset = 0;
+    }
+    while(offset != -1 && get_eval_cost() > DUMP_EVALS)
+    {
+        q = "SELECT used_by FROM inherits_of_"
+                +get_db_info("current_objects_table");
+        q+= " WHERE inherit = ? AND inherit <> used_by LIMIT 1 OFFSET "+offset;
+        r = db_query(q, inh);
+        if (query_db_error())
+        {
+            offset = -1;
+            continue;
+        }
+        if (sizeof(r) == 0)
+        {
+            new_inh = pull_from_fifo();
+            if (new_inh)
+            {
+                offset = 0;
+                inh = new_inh;
+                continue;
+            }
+            offset = -1;
+            continue;
+        }
+        else
+        {
+            used = r[0][0];
+            err = 0;
+            if (strstr(used,"/i/")!=-1)
+            {
+                push_to_fifo(used);
+                err = catch(do_zern_ob(used);publish);
+            }
+            else if (strstr(used,"/obj/")!=-1)
+            {
+                err = catch(do_zern_ob(used);publish);
+            }
+            if (err)
+            {
+                debuglog("Dump-ob-Fehler:"+err+" "+used,
+                    DB_DBGLVL_INFO, "do_loop_inherits");
+            }
+        }
+        offset++;
+    }
+    if (offset >= 0)
+    {
+        call_out("do_loop_inherits",1,inh, offset);
+    }
+    else
+    {
+        debuglog("LoopInh beendet.",
+                DB_DBGLVL_INFO, "do_loop_inherits");
+        send_to_admins("LoopInh beendet.");
+    }
+}
+
+public int loop_inherits(string inh)
+{
+    if (!check_security(CHECK_ERROR)) {
+        return 0;
+    }
+    if (find_call_out("do_dump")!=-1)
+    {
+        return -1;
+    }
+    if (find_call_out("do_loop_inherits")!=-1)
+    {
+        return -2;
+    }
+    send_to_admins("loop_inherits to object_db gestartet.");
+    debuglog("loop_inherits gestartet.",DB_DBGLVL_INFO, "loop_inherits");
+    db_query("DELETE FROM stack_table");
+    setup_counter("seq_stack",1); // zuruecksetzen
+    call_out("do_loop_inherits",1,inh, 0);
+    return 1;
+}
+
+// -----------------------------------------------------------------
+
+private void insert_one_inh(string used_by, string inh, int virt, string table)
+{
+    db_query("INSERT OR REPLACE INTO inherits_of_"+table+" "
+    "(inherit, used_by, virtual) VALUES (?,?,?) ",
+    inh, used_by, virt);
+}
+
+// sammle Abhaengigkeiten der Inherits
+private int check_one_inh(object ob, string table)
+{
+    mixed * inhlist = inherit_list(ob, 3); // TODO Defines nutzen
+    mixed one; 
+    string used_by = inhlist[0];
+    if (sizeof(inhlist) > 1)
+    {
+        foreach(one : inhlist[1..])
+        {
+            if (stringp(one))
+            {
+                insert_one_inh(used_by[2..],one[2..],one[0..0]=="v",table);
+            }
+            else
+            {
+                insert_one_inh(used_by[2..],one[0][2..],one[0][0..0]=="v",table);
+            }
+        }
+    }
+    return (sizeof(inhlist)-1);
+}
+
+// sammle Infos ueber ein Objekt und schreibe es in die DB
+private void check_one_ob(object ob, string table)
+{
+    if (!objectp(ob)) return;
+    int inhp = inheritp(ob);
+    string obname = object_name(ob);
+    int obtime = object_time(ob);
+    string blueprint = program_name(ob);
+    string *inhlist = inherit_list(ob);
+    int inh_direct_count = clonep(ob)?-1:check_one_inh(ob, table);
+#if __EFUN_DEFINED__(driver_info)
+    int obsize = efun::object_info(ob,OI_DATA_SIZE);
+    int progsize = efun::object_info(ob, OI_PROG_SIZE_TOTAL);
+    float evalr = 1000000000.0*
+                   to_float(efun::object_info(ob, OI_GIGATICKS))
+                  +to_float(efun::object_info(ob, OI_TICKS));
+#else
+    int obsize = efun::object_info(ob,OINFO_MEMORY,OIM_DATA_SIZE)||0;
+    int progsize = efun::object_info(ob, OINFO_MEMORY,OIM_TOTAL_SIZE)||0;
+    float evalr = 1000000000.0*
+                  to_float(efun::object_info(ob, OINFO_BASIC,OIB_GIGATICKS)||0)
+                  +to_float(efun::object_info(ob, OINFO_BASIC,OIB_TICKS)||0);
+#endif
+    int vitems = inhp?-1:sizeof(({mapping *})ob->query_all_v_items());
+    int count_ob = (!inhp && function_exists("query_count",ob)!=0)?1:0;
+    int content = -1; // -1: no container, >= 0 sizeof...
+    int env; // 0=noenv, 1=room,2 maproom, 3 withenv, 4 in map
+    string room; // map2domain(ob||env)||ob||env
+    string first_room = "", domain = "",subdomain = "";
+    string * dom;
+    
+    if (function_exists("query_container",ob)!=0)
+    {
+        content = sizeof(all_inventory(ob));
+    }
+    if (!inhp && function_exists("query_room",ob)!=0)
+    {
+        if (strstr(obname,"/map/")>-1)
+        {
+            room = map2domain(obname,1);
+            env = 2;
+        }
+        else
+        {
+            room = obname;
+            env = 1;
+        }
+    }
+    else if (!inhp)
+    {
+        object envob = environment(ob);
+        if (objectp(envob))
+        {
+            room = object_name(envob);
+            if (strstr(room,"/map/")!=-1)
+            {
+                room = map2domain(room,1);
+                env = 4;
+            }
+            else
+            {
+                env = 3;
+            }
+            first_room = (!inhp && function_exists("query_first_room",ob)!=0)
+                       ? ob->query_first_room()||"" : "";
+        }
+        else
+        {
+            room = "";
+            first_room = "";
+            env = 0;
+        }
+    }
+    if (first_room != "")
+    {
+        if (strstr(first_room,"/map/")==0)
+        {
+            first_room = map2domain(first_room, 1);
+        }
+        dom = explode(first_room,"/");
+    }
+    else
+    {
+        dom = explode(obname,"/");
+    }
+    
+    switch(dom[1])
+    {
+        case "d":
+        case "z":
+            if (sizeof(dom)>2)
+            {
+                domain = dom[2];
+            }
+            if (sizeof(dom)>4)
+            {
+                subdomain = dom[3];
+            }
+            break;
+        case "p":
+        case "w":
+            domain = dom[1];
+            if (sizeof(dom)>2)
+            {
+                subdomain = dom[2];
+            }
+            break;
+    }
+    db_query("INSERT OR REPLACE INTO "+table+" "
+            "(obname,obtime,blueprint,obsize,progsize,evalr,vitems,count_ob,"
+            "content,env,room,first_room,domain,subdomain,inhcount,"
+            "inhdirectcount) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ",
+            obname,obtime,blueprint,obsize,progsize,evalr,vitems,count_ob,
+            content,env,room,first_room,domain,subdomain,
+            sizeof(inhlist),inh_direct_count);
+}
+
+// holt die naechsten Objekte aus der Objekt-Liste
+private object *get_next_obs(object *obs)
+{
+    int i;
+    object ob;
+
+    if (member(obs = obs[1..],0) >= 0)
+    {
+        debuglog("Es waren Nuller dabei.",DB_DBGLVL_INFO, "get_next_obs");
+        obs -= ({0});
+    }
+    if (!(i = sizeof(obs)))
+        return 0;
+
+#if __EFUN_DEFINED__(objects)
+    object *next = efun::objects(obs[<1], 30-i);
+    if (sizeof(next) < 30-i) /* wrap around */
+        next += efun::objects(0, 30-i-sizeof(next));
+
+    i = member(next, this_object());
+    if (i>=0)
+        next = next[0..i-1];
+    obs += next;
+#else
+    ob = obs[<1];
+    for (; i<30; i++)
+    {
+        if (!(ob = efun::debug_info(DINFO_OBJLIST,ob)))
+           ob = efun::debug_info(DINFO_OBJLIST,0);
+        if(ob == this_object())
+            break;
+        obs += ({ob});
+    }
+#endif
+    return obs;
+}
+
+
+nosave void do_dump(object *obs, int count, string table)
+{
+    string err;
+#ifdef OBJECTS_PER_LOOP
+    int num;
+#endif
+    while((obs = get_next_obs(obs)) && get_eval_cost() > DUMP_EVALS)
+    {
+
+#ifdef OBJECTS_PER_LOOP
+        if(num++ > OBJECTS_PER_LOOP)
+            break;
+#endif
+
+        err = catch(check_one_ob(obs[0], table);publish);
+        if (err)
+        {
+            debuglog("Dump-ob-Fehler:"+err+" "+object_name(obs[0]),
+                DB_DBGLVL_INFO, "do_dump");
+        }
+        count++;
+    }
+    if (obs)
+    {
+        call_out("do_dump",1,obs,count,table);
+    }
+    else
+    {
+        set_db_info(table+"_end",shorttimestr(time()));
+        set_db_info("current_objects_table",table);
+        db_query("INSERT OR REPLACE INTO daily_stats "
+                "(day,obcount,blcount,sumsize) "
+                "SELECT "+get_day_start()+", COUNT(obname), "
+                        "COUNT(DISTINCT blueprint), "
+                        "SUM (obsize) FROM "+table);
+        debuglog("Dump beendet:"+count+" "+table,
+                DB_DBGLVL_INFO, "do_dump");
+        send_to_admins("Dump to "+table+" beendet: "+count);
+        switch (table)
+        {
+        case "objects_1":
+            set_db_info("old_objects_table","objects_2");
+            break;
+        case "objects_2":
+            set_db_info("old_objects_table","objects_1");
+            break;
+        }
+        schedule_dump();
+    }
+}
+
+nosave void execute_dump()
+{
+    string table;
+    if (find_call_out("do_dump")!=-1)
+    {
+        schedule_dump();
+        return;
+    }
+    if (find_call_out("do_loop_inherits")!=-1)
+    {
+        return;
+    }
+    send_to_admins("Dump to object_db gestartet.");
+    debuglog("Dump gestartet.",DB_DBGLVL_INFO, "execute_dump");
+
+    table = get_db_info("old_objects_table");
+    switch (table)
+    {
+    default:
+    case 0:
+        table="objects_1";
+        set_db_info("old_objects_table", table);
+        break;
+    case "objects_1":
+    case "objects_2": 
+        break;
+    }
+    set_db_info(table+"_start",shorttimestr(time()));
+    set_db_info(table+"_end",0);
+    db_query("DELETE FROM "+table);
+    db_query("DELETE FROM inherits_of_"+table);
+    do_dump(({0,this_object()}),0,table);
+}
+
+public int dump()
+{
+    if (!check_security(CHECK_ERROR)) {
+        return 0;
+    }
+    if (find_call_out("do_dump")!=-1)
+    {
+        return -1;
+    }
+    if (find_call_out("do_loop_inherits")!=-1)
+    {
+        return -2;
+    }
+    execute_dump();
+    return 1;
+}
+
+// -----------------------------------------------------------------
+
+int sql(string sql)
+{
+    mixed * m;
+    if (!check_security(CHECK_ERROR)) {
+        //META_D_WARN("sql() security2 failed.",0,"statistik");
+        return 0;
+    }
+    if (!TI || !wizp(TI) || !query_all_access(TI)) {
+        //META_D_WARN("sql() security1 failed.",TI,"statistik");
+        return 0;
+    }
+
+    m = db_query(sql||"");
+    
+    if(!m) send_message_to(TP,MT_NOTIFY,MA_USE,
+       wrap("Es gab keine Rueckgabe."));
+    else if(!pointerp(m)) send_message_to(TP,MT_NOTIFY,MA_USE,
+       wrap(sprintf("Der Rueckgabewert war: '%O'",m)));
+    else if(sizeof(m)==0) send_message_to(TP,MT_NOTIFY,MA_USE,
+       wrap("Die Tabelle ist (noch) leer."));
+    else 
+       TP->more (map(
+  build_table ( transpose_array(map(m,(: map($1,(: to_string($1) :)) :))),
+                      ({"|","-"})
+                ), (: space($1) :))
+       );
+    if(query_db_error()) 
+       send_message_to(TP,MT_NOTIFY,MA_USE,
+          wrap("Es gab folgenden Fehler: "+ query_db_error()));
+    return 1;
+}
+
+int tablelist(string str)
+{
+    check_security(CHECK_ERROR);
+    string tb = space(str);
+    if (tb == "") {
+        return sql("SELECT name FROM sqlite_master WHERE type = 'table'");
+    } else {
+        return sql("SELECT sql FROM sqlite_master WHERE NAME = '"+tb+"'");
+    }
+}
+
+// -----------------------------------------------------------------
+
+string * dbglog()
+{
+    db_debug(0,0,DB_DBG_FLUSH_BUFFER);
+    return query_all_dbg_messages(DB_DBG_FLUSH_BUFFER);
+}
+
+void create()
+{
+    init_security_trust_mudlib();
+    init_security_for_actions();
+    add_security_condition((: return adminp($1); :));
+    
+    init_db();
+    schedule_dump();
+}
+
+void abort_renewal() {}
+void finish_renewal(object neu) {}
+void prepare_renewal() 
+{
+    db_close();
+}

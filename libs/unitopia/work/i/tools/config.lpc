@@ -1,0 +1,118 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/tools/config.c
+// Description: Zum Einlesen von Konfigurationsdateien im ini-Style.
+// Author:      Gnomi (04.05.2003)
+// Modified by: 
+//
+// $Log: config.c,v $
+// Revision 1.1  2005/02/13 17:32:13  gnomi
+// Inherit um Konfigurationsdateien zu lesen.
+//
+
+/*
+FUNKTION: read_config
+DEKLARATION: varargs mapping read_config(string configfile[, mapping filters])
+BESCHREIBUNG:
+Liest die Konfigurationsdatei 'configfile' ein und liefert das Ergebnis als
+Mapping zurueck. Die Konfigurationsdatei sollte dazu folgenden Aufbau haben:
+
+    [Sektion1]
+    Label1: Daten1
+    Label2: Daten2
+    
+    [Sektion2]
+    DatenOhneLabel1
+    DatenOhneLabel2
+    
+Das zurueckgelieferte Ergebnis ist ein Mapping der Form:
+
+    ([
+	"Sektion1":
+	    ([
+		"Label1":"Daten1",
+		"Label2":"Daten2",
+	    ]),
+	"Sektion2":
+	    ([
+		"DatenOhneLabel1",
+		"DatenOhneLabel2",
+	    ]),
+    ])
+
+Im Mapping 'filters' kann man Closures fuer bestimmte Label angeben, welche
+die Daten vorher veraendern. Beispielsweise:
+
+    ([
+	"Sektion1:Label1": (: to_int($3) :),	// Konvertiert das Datum in
+						// eine Zahl
+	"Sektion2:": (: explode($2," ") :),	// Die Zeilen in Woerter
+						// zerstueckeln
+	"Label2": #'just_another_fun,		// Gilt fuer "Label2" in allen
+						// Sektionen
+    ])
+    
+Als Index fuer 'filters' gilt also "Sektion:Label", "Sektion:" oder "Label".
+Die Closure erhaelt den Sektionsnamen, Label (sofern vorhanden) und die
+Daten als Parameter. 
+
+VERWEISE:
+GRUPPEN: Parser
+*/
+varargs mapping read_config(string configfile, mapping filters)
+{
+    string file = read_file(configfile);
+    mapping section = ([:0]);
+    string sectionname;
+    mapping result = ([]);
+
+    if(!filters)
+	filters = ([]);
+    
+    if(!file)
+	return 0;
+    
+    foreach(string line: explode(file,"\n"))
+    {
+	line = trim(line);
+	if(!strlen(line) || line[0]=='#')
+	    continue;
+	if(line[0]=='[' && line[<1]==']')
+	{
+	    if(sectionname || sizeof(section))
+		result[sectionname||""] = section;
+	    section = ([]);
+	    sectionname = line[1..<2];
+	}
+	else
+	{
+	    int i = strstr(line,":");
+	    if(i<0)
+	    {
+		mixed data = line;
+		if(member(filters, sectionname+":"))
+		    data = funcall(filters[sectionname+":"], sectionname, data);
+		else if(member(filters, ""))
+		    data = funcall(filters[""], sectionname, data);
+		m_add(section, data);
+	    }
+	    else
+	    {
+		string label = trim(line[0..i-1]);
+		mixed rest = trim(line[i+1..<1]);
+		if(member(filters, sectionname+":"+label))
+		    rest = funcall(filters[sectionname+":"+label], sectionname, label, rest);
+		else if(member(filters, sectionname+":"))
+		    rest = funcall(filters[sectionname+":"], sectionname, label, rest);
+		else if(member(filters, label))
+		    rest = funcall(filters[label], sectionname, label, rest);
+		if(!widthof(section))
+		    section = m_reallocate(section, 1);
+		section[label] = rest;
+	    }
+	}
+    }
+    if(sectionname || sizeof(section))
+	result[sectionname||""] = section;
+    return result;
+}

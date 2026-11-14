@@ -1,0 +1,525 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/map/map.c
+// Description: Die Map
+// Author:	Francis
+// Modified by: Freaky (23.12.93)
+//		Freaky (16.06.1998) rename_allowed eingebaut.
+//		Freaky (30.03.1999) da __INIT() jetzt protected ist, muss man
+//			init_room() aufrufen.
+//		Parsec (27.06.2000) alles mit visit raus
+//
+// $Log: map.c,v $
+// Revision 1.16  2013-03-16 15:52:09  gnomi
+// Ozean-Domain eingebunden.
+//
+// Revision 1.15  2009-04-15 13:40:42  gnomi
+// Sicherstellen, dass es wirklich ein korrekter Dateiname ist, der da
+// angefordert wird.
+//
+// Revision 1.14  2008/02/25 11:49:15  gnomi
+// Typo in Doku.
+//
+// Revision 1.13  2008/01/16 09:40:30  gnomi
+// Unterschiedliche Meldungen, je nachdem, ob man im Raum ist oder nicht.
+//
+// Revision 1.12  2003/05/06 02:45:05  gnomi
+// Holt sich seine Infos aus /apps/domains.
+//
+// Revision 1.11  2002/08/12 23:53:00  gnomi
+// Es reicht aus, wenn map_create existiert. (Anstatt i/i/domain/map als
+// Inherit zu verlangen.)
+//
+// Revision 1.10  2001/05/10 18:12:34  gnomi
+// Erweiterter Check des Dateinamens.
+//
+// Revision 1.9  2001/03/15 14:59:55  freaky
+// geshadowte Variablen rausgenommen.
+//
+// Revision 1.8  2001/03/02 19:31:00  freaky
+// Tweak im Kommentar.
+//
+// Revision 1.7  2001/03/02 19:29:36  freaky
+// todo eingebaut.
+//
+// Revision 1.6  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma strong_types
+#pragma no_inherit
+
+#include <config.h>
+#include <uids.h>
+#include <landschaft.h>
+#include <error.h>
+#include <apps.h>
+#include <description.h>
+
+#ifdef UNItopia
+#include "/d/Ozean/Inseln/sys/exports.h"
+#define CHECK_INSELN(x,y) (abs(x) > 800 || abs(y) > 2400)
+#endif
+
+private string *domains, *no_map_domains;
+private int *x_pos, *y_pos, *length, *height, *x_end, *y_end ;
+
+
+int query_prevent_shadow(object ob)
+{
+    return 1;
+}
+
+
+/*
+ * Funktion zum einlesen des Domain-Files /nosave/adm/DOMAINS
+ */
+private void get_domains()
+{
+    int i, x, y, len, hei, res, typ;
+    string file, *lines, name;
+
+    domains = ({});
+    no_map_domains = ({});
+    x_pos = ({});
+    y_pos = ({});
+    x_end = ({});
+    y_end = ({});
+    length =({});
+    height = ({});
+    
+    lines = DOMAIN_INFOS->query_domains();
+    if(lines)
+	foreach(string domain: lines)
+	{
+	    if(DOMAIN_INFOS->query_domain_entry(domain, "NotInMap"))
+		no_map_domains += ({ domain });
+	    else
+	    {
+		mixed pos = DOMAIN_INFOS->query_domain_entry(domain, "Position");
+		mixed dim = DOMAIN_INFOS->query_domain_entry(domain, "Dimension");
+		
+		if(!pos || !dim)
+		{
+		    do_error("Unzureichende Informationen ueber '"+domain+"'!\n");
+		    continue;
+		}
+		
+		domains += ({ domain });
+		x_pos   += pos[0..0];
+		y_pos   += pos[1..1];
+		length  += dim[0..0];
+		height  += dim[1..1];
+		x_end   += ({ pos[0]+dim[0] });
+		y_end   += ({ pos[1]+dim[1] });
+	    }
+	}
+    else if (!(file = read_file("/nosave/adm/DOMAINS")))
+	return;
+    else
+    {
+	lines = explode(file,"\n");
+	for (i = 0; i < sizeof(lines); i++)
+	    if (lines[i] != "" && lines[i][0] != '#')
+	    {
+		res = sscanf(space(trim(lines[i])),"%s %d %d %d %d %d",
+			 name,x,y,len,hei,typ);
+		if (res != 6)
+		    write("map: Defekte Zeile " + (i + 1) +
+			  " in /nosave/adm/DOMAINS:  sscanf = " + res + ".\n");
+		else if (typ == 1)
+		{
+		    domains += ({ name });
+		    x_pos   += ({ x });
+		    y_pos   += ({ y });
+		    length  += ({ len });
+		    height  += ({ hei });
+		    x_end   += ({ x+len });
+		    y_end   += ({ y+hei });
+		}
+		else if (typ == 0)
+		{
+		    no_map_domains += ({ name });
+		}
+		else
+		    write("map: Defekte Zeile " + (i + 1) +
+			  " in /nosave/adm/DOMAINS: Typ der Domain (" + typ +
+		          ") unbekannt.\n");
+	    }
+    }
+}
+
+void update_domains()
+{
+    if(object_name(previous_object())!=DOMAIN_INFOS)
+	return;
+    get_domains();
+}
+
+void create()
+{
+    seteuid(MAP_UID);
+    get_domains();
+}
+
+/*
+FUNKTION: query_domain
+DEKLARATION: int query_domain(int x, int y)
+BESCHREIBUNG:
+Mit dieser Funktion kann man den Zaehler innerhalb des Domain-Arrays anhand
+der globalen Koordinaten x und y abfragen.
+Den Zaehler braucht man z.B. um ihn an query_domain_info(zaehler) zu
+uebergeben.
+Wenn -1 returned wird, ist die Koordinate x,y nicht in einer Domain.
+VERWEISE: query_domain_info
+GRUPPEN: map
+*/
+int query_domain(int x, int y)
+{
+    int i, siz;
+
+    for (i = 0, siz = sizeof(domains); i < siz; i++)
+	if (x >= x_pos[i] && x < x_end[i] &&
+	    y >= y_pos[i] && y < y_end[i])
+	    return i;
+    return -1;
+}
+
+/*
+FUNKTION: query_domain_info
+DEKLARATION: mixed *query_domain_info( {int zaehler|string Domain} )
+BESCHREIBUNG:
+Mit dieser Funktion bekommt man alle Informationen ueber eine Domain.
+Returned wird ein Array mit folgenden Eintraegen:
+({ Domain-Name, X-Offset, Y-Offset, Breite, Hoehe })
+VERWEISE: query_domain, query_domain_coords
+GRUPPEN: map
+*/
+mixed *query_domain_info(mixed i)
+{
+    int a;
+
+    if (intp(i))
+	a = i;
+    else
+	a = member(domains,i);
+
+    if (a >= 0 && a < sizeof(domains))
+	return ({ domains[a],x_pos[a],y_pos[a],length[a],height[a] });
+}
+
+/*
+FUNKTION: query_domain_coords
+DEKLARATION: int *query_domain_coords(string domain)
+BESCHREIBUNG:
+Liefert ein Array der Form ({ X-Offset, Y-Offset })
+Die Koordinaten sind die linke untere Ecke der Domain <domain>
+es wird 0 returned, wenn die Domain nicht vorhanden ist
+VERWEISE: query_domain_center, query_domain_info
+GRUPPEN: map
+*/
+int *query_domain_coords(string domain)
+{
+    int pos;
+
+    pos = member(domains,domain);
+    if (pos >= 0)
+	return ({ x_pos[pos], y_pos[pos] });
+}
+
+/*
+FUNKTION: query_domain_center
+DEKLARATION: int *query_domain_center(string domain)
+BESCHREIBUNG:
+Liefert die Koordinaten der Mitte der Domain <domain> in der Form ({ x, y })
+Wenn die Domain nicht existiert, wird 0 returned.
+VERWEISE: query_domain_coords, query_domain_info
+GRUPPEN: map
+*/
+int *query_domain_center(string domain)
+{
+    int pos;
+
+    pos = member(domains,domain);
+    if (pos >= 0)
+	return ({ x_pos[pos] + length[pos] / 2,
+		  y_pos[pos] + height[pos] / 2 });
+}
+
+/*
+ * Der neue Map-Raum fragt hier nach seinem Aussehen und Inhalt.
+ *
+ */
+void get_description(object room,int x,int y)
+{
+    int pos, res;
+    string map_domain_map;
+    object ob;
+
+    /* Nun nachschauen, ob wir uns im allgemeinen Teil der Map oder	*/
+    /* in einer Domain befinden.					*/
+    /* Wenn ja, dann dort mit lokalen Koordinaten (!) nachfragen.	*/
+
+    pos = query_domain(x,y);
+    if (pos >= 0)
+    {
+	map_domain_map = "/d/" + domains[pos] + "/map.lpc";
+	if (ob = find_object(map_domain_map))
+	    res = ob->setup_map_room(room,x - x_pos[pos],y - y_pos[pos]);
+	else if (file_size(map_domain_map) > 0)
+	    res = map_domain_map->setup_map_room(room,x - x_pos[pos],
+						      y - y_pos[pos]);
+    }
+#ifdef CHECK_INSELN
+    else if(CHECK_INSELN(x,y))
+	catch(res = OZEAN_ROOM_MASTER->setup_map_room(room,x,y); publish);
+#endif
+
+    if (!res)
+    {
+	room->set_short("Ozean");
+	room->set_long(({
+	    T_FAR, "Du siehst den weiten Ozean Magyras.",
+	    T_ELSE, "Du schwimmst im offenen Ozean."
+	    }));
+	room->add_type("schiff_erlaubt",1);
+	room->add_type(LANDSCHAFT,L_WASSER);
+	room->add_type("graben_verboten",1);
+	room->set_msg("$Der(OBJ_TP) schwimmt $dir()",
+		      "$Der(OBJ_TP) kommt $dir() herangeschwommen");
+	"/map/fish"->get_fish(room,x,y);
+	room->add_v_item_master("/map/ocean_water");
+    }
+}
+
+// Sucht Filename des zu clonenden Raumes
+string get_room_file(int x, int y)
+{
+    int pos;
+    string map_domain_map, room_name;
+    object ob;
+
+    /* Nun nachschauen, ob wir uns im allgemeinen Teil der Map oder	*/
+    /* in einer Domain befinden.					*/
+    /* Wenn ja, dann dort mit lokalen Koordinaten (!) nachfragen.	*/
+
+    pos = query_domain(x,y);
+    if (pos >= 0)
+    {
+	map_domain_map = "/d/" + domains[pos] + "/map.lpc";
+	if (ob=find_object(map_domain_map))
+	    room_name = ob->get_room_file(x - x_pos[pos],y - y_pos[pos]);
+	else if (file_size(map_domain_map) > 0)
+	    room_name = map_domain_map->get_room_file(x - x_pos[pos],
+						      y - y_pos[pos]);
+	return room_name;
+    }
+#ifdef CHECK_INSELN
+    else if(CHECK_INSELN(x,y))
+    {
+	catch(room_name = OZEAN_ROOM_MASTER->get_room_file(x,y); publish);
+	return room_name || "/obj/ocean_room";
+    }
+#endif
+    else
+	return "/obj/ocean_room";
+}
+
+/*
+FUNKTION: query_map_file_name
+DEKLARATION: string query_map_file_name(int x, int y)
+BESCHREIBUNG:
+Liefert anhand der globalen Koordinaten x,y den lokalen Pfad
+des Map-Raumes.
+z.B.: query_map_file_name(8,0) liefert "/d/Vaniorh/uluji/passage/m1_0.lpc"
+      query_map_file_name(13,0) liefert "/d/Vaniorh/m28_15.lpc"
+VERWEISE: get_map_file_name
+GRUPPEN: map
+*/
+string query_map_file_name(int x, int y)
+{
+    int pos;
+    string tmp, map_domain_map;
+    object ob;
+
+    pos = query_domain(x,y);
+
+    if (pos < 0)
+	return "/map/m" + x + "_" + y + ".lpc";
+
+    map_domain_map = "/d/" + domains[pos] + "/map.lpc";
+    if (ob = find_object(map_domain_map))
+	tmp = ob->query_map_file_name(x - x_pos[pos],y - y_pos[pos]);
+    else if (file_size(map_domain_map) > 0)
+	tmp = map_domain_map->query_map_file_name(x - x_pos[pos],
+						  y - y_pos[pos]);
+    return tmp || "/map/m" + x + "_" + y + ".lpc";
+}
+
+/*
+FUNKTION: get_map_file_name
+DEKLARATION: string get_map_file_name(string file_name)
+BESCHREIBUNG:
+Liefert Aufgrund eines lokalen Map-Filenamens den globalen Map-Filenamen
+der Form /map/mX_Y
+z.B. get_map_file_name("/d/Vaniorh/m28_15") 		 -> "/map/m13_0.lpc"
+     get_map_file_name("/d/Vaniorh/uluji/passage/m1_0") -> "/map/m8_0.lpc"
+     get_map_file_name("/d/Vaniorh/m23_15") 		 -> "/map/m8_0.lpc"
+VERWEISE: query_map_file_name
+GRUPPEN: map
+*/
+string get_map_file_name(string file_name)
+{
+    string domain, rest, map_domain_map;
+    int pos, x, y, *coords;
+    object ob;
+
+    if (!file_name)
+	return 0;
+
+    if (sscanf(file_name,"/map/m%d_%d",x,y) == 2)
+	return "/map/m" + x + "_" + y + ".lpc";
+
+    if (sscanf(file_name,"/d/%s/%s",domain,rest) != 2)
+	return 0;
+
+    if ((pos = member(domains,domain)) < 0)
+	return 0;
+
+    /* Filename der Form: /d/<domain>/mX_Y */
+    if (sscanf(rest,"m%d_%d",x,y) == 2)
+	return "/map/m" + (x_pos[pos] + x) + "_" + (y_pos[pos] + y) + ".lpc";
+
+    /* Lokale Koordinaten von der Domain-Map umwandeln lassen */
+    map_domain_map = "/d/" + domain + "/map.lpc";
+    if (ob = find_object(map_domain_map))
+	coords = ob->query_room_coordinates(rest);
+    else if (file_size(map_domain_map) > 0)
+	coords = map_domain_map->query_room_coordinates(rest);
+
+    if (coords)
+	return "/map/m" + (x_pos[pos] + coords[0]) + "_"
+			+ (y_pos[pos] + coords[1]) + ".lpc";
+}
+
+/*
+ * We have a map room as argument. Create it, and return it as argument.
+ */
+object create_map_object(string name)
+{
+    int x, y, *pos;
+    object ob;
+    string source_name, *pfad, tmp, uid, room_file;
+
+    /* Sicher ist sicher :) */
+    seteuid(MAP_UID);
+
+#if 0
+    if (find_player("freaky"))
+	tell_object(find_player("freaky"),sprintf("MAP:%s, TP:%O\n",
+		name, this_player()));
+#endif
+
+    if (name[<2..] != ".lpc")
+	name += ".lpc";
+
+    pfad = explode(name,"/") - ({""});
+
+    if (sizeof(pfad) < 2 || (pfad[0] != "d" && pfad[0] != "map") ||
+		 sscanf(pfad[<1],"m%d_%d%s",x,y,tmp) != 3 || tmp != ".lpc")
+	return 0;
+
+    if (pfad[0] == "d")
+    {
+	tmp = get_map_file_name(name);
+	if (!tmp)
+	{
+	    do_error2("Ungueltiger Map-Raum: " + name + ".\n", name, name, 0);
+	    return 0;
+	}
+	name = tmp;
+	sscanf(name,"/map/m%d_%d.lpc",x,y);
+    }
+    else if(pfad[0] == "map" && sizeof(pfad)>2)
+    {
+	do_error2("Ungueltiger Map-Raum: " + name + ".\n", name, name, 0);
+	return 0;
+    }
+
+    if (ob = find_object(name))
+	return ob;
+
+    source_name = query_map_file_name(x,y);
+
+    if (source_name[0..2] == "/d/")
+    {
+	uid = MASTER_OB->get_load_uid(source_name[1..]);
+	if (uid == BACKBONE_UID)
+	    uid = MAP_UID;
+    }
+    else
+    {
+	uid = MAP_UID;
+	source_name = 0;
+    }
+
+    // TODO: einfach auf rename_object() umschreiben, dann muss man
+    // das File nicht kopieren, und sich nicht um die UID Gedanken machen
+    // Nachteil: man muss aufpassen, dass das Laden klappt, sonst hat man
+    // ein Objekt mit dem falschen Namen.
+    if (source_name && (tmp = read_file(source_name)))
+    {
+	seteuid(ROOT_UID);
+	rm(name);
+	if (!write_file(name,tmp))
+	{
+	    seteuid(MAP_UID);
+	    do_error2("Failed to create file !\n",name,object_name(),__LINE__);
+	    return 0;
+	}
+	seteuid(uid);
+	ob = load_object(name);
+	seteuid(ROOT_UID);
+	rm(name);
+	seteuid(MAP_UID);
+	return ob;
+    }
+    else
+    {
+	room_file = get_room_file(x,y);
+	if (!room_file || room_file == "/obj/room")
+	{
+	    seteuid(uid);
+	    ob = clone_object("/obj/room");
+	    seteuid(MAP_UID);
+	}
+	else
+	{
+	    ob = clone_object(room_file);
+//	    if (member(inherit_list(ob),"/i/domain/map_room.lpc"))
+	    if (!function_exists("map_create",ob))
+	    {
+		string rname;
+		rname = object_name(ob);
+		destruct(ob);
+		raise_error("Illegal map-room '" + rname +
+			"': must inherit '/i/domain/map_room'\n");
+		return 0;
+	    }
+	    funcall(bind_lambda(unbound_lambda(({}),({#'seteuid, 0 })), ob));
+	    seteuid(uid);
+	    export_uid(ob);
+	    seteuid(MAP_UID);
+	    funcall(bind_lambda(unbound_lambda(({}),({#'seteuid, uid })), ob));
+	}
+	if (MASTER_OB->rename_allowed(ob,name,1))
+	{
+	    rename_object(ob,name);
+	    ob->init_room();
+	    ob->map_create();
+	    get_description(ob,x,y);
+	}
+	return ob;
+    }
+}

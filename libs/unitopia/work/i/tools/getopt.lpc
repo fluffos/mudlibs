@@ -1,0 +1,254 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/tools/getopt.c
+// Description: Parsen von Commandline Options
+// Author:      Garthan (13.02.94)
+//
+// $Log: getopt.c,v $
+// Revision 1.6  2014/01/21 00:46:09  myonara
+// am 23.Nov.2009 23:02:18 geaendert:
+//
+// Revision 1.5  2001/02/26 20:31:33  gnomi
+// Bugfix zum vorherigen Patch.
+//
+// Revision 1.4  2001/02/25 23:13:50  gnomi
+// Bei komplexen Operationen aufpassen, dass str nur den letzten Wert erhaelt,
+// wenn dieses auch ein String ist. (Und so das sscanf zu Ende abgearbeitet
+// wurde.)
+//
+// Revision 1.3  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+#include <getopt.h>
+
+// Wenn MAX_SCANS_PER_OPTION geaendert wird, muss auch die sscanf Zeile
+// angepasst werden!!! Einen scan verbraet der getopt fuer sich pro
+// complex option, bei sscanf muessen also (MAX_SCANS_PER_OPTION + 1)
+// Argumente stehen. (*)
+#define MAX_SCANS_PER_OPTION 5
+
+// End of Input Pattern, kann bei Bedarf in was anderes Eindeutiges geaendert
+// werden, jedoch erscheint Newline ganz praktisch bei Inputlineparsing.
+#define EOL_PATTERN "\n"
+
+/*
+FUNKTION: getopt
+DEKLARATION: mapping getopt(string command, mapping options [, int flag])
+BESCHREIBUNG:
+getopt ist eine Toolfunktion aus dem Inheritfile /i/tools/getopt.c
+getopt parst einen vom Spieler eingegeben Befehl 'command' auf Optionen,
+und liefert, entsprechend den Spezifikationen aus dem mapping options,
+ein Mapping mit dem Ergebnis der Parserei zurueck.
+
+Erklaerung an einem Beispiel:
+-----------------------------
+
+Der Spieler gibt ein:
+
+   volk ...1...  -gq -f"N l t" ...2... -S lt -l20 30  ...3...
+
+Das Volkbefehl ruft die getopt Funktion so auf:
+
+   volk(string command)
+   {
+      mapping opt;
+      opt =  getopt(command,(["f": "\"%s\"",
+			      "S": "%s",
+			      "l": "%d %d",
+			      "h": 0,
+			      "g": 0 ]));
+   }
+
+Das bedeutet getopt aktzeptiert damit die Optionen:
+   -f mit gefolgtem String in Anfuehrungszeichen
+   -S mit gefolgtem String (bis zum naechsten Space)
+   -l mit zwei folgden Integern
+   -h ohne weitere Angaben
+   -g ohne weitere Angaben
+
+Alle anderen werden als fehlerhafte Optionen erkannt.
+
+Auf die obige Eingabe des Spieler erhaelt man nun in der Variablen opt:
+   ([ 
+      "args": ({ "...1...", "...2...", "...3..." }),
+      "errors": ({ "Unbekannte Option -q\n" }),
+      "g" : 1,
+      "f" : ({ "N l t" }),
+      "S" : ({ "lt" }),
+      "l" : ({ 20, 30 })
+   ])
+
+getopt akzeptiert auch sogennante compound options, also wird hier
+-gq als -g -q gelesen, und -q wird als unbekannte Option bemaengelt.
+
+Komplexe Optionen (also solche die noch einen Wert erwarten) koennen 
+auch in einer Gruppe von compound options erscheinen, jedoch nur als
+letzte, sie schliessen eine Gruppe von Optionen ab.
+Auch ein einfaches Leerzeichen beendet eine Gruppe von compound options.
+Man haette statt -gq -f"N l t" also auch schreiben koennen: -gqf"N l t".
+
+Leerzeichen zwischen komplexen Optionen und ihren Werten werden 
+herausgefiltert. Also: -f"N l t"   ist das gleiche wie  -f  "N l t"
+
+Alles was weder als Option, noch als Wert zu einer komplexen Option
+interpretiert werden kann, wird als einfaches Argument fuer den Befehl
+(hier also volk) interpretiert und unter dem Index "args" im Ergebnis-
+mapping als Feld abgelegt. (hier: ({ "...1...", "...2...", "...3..." }) )
+Sind keine Arguemnte gefunden worden, so wird auch der Index "args" nicht
+im Ergebnismapping angelegt.
+[Mit implode(opt["args"]," ") kann man sich dann einen einfachen 
+ Argumentstring zusammen bauen, in dem die Optionen selbst fehlen.]
+Nach einer dem String -- in 'command' werden keine Optionen mehr erkannt.
+
+Wird der Funktion getopt eine 0 uebergeben anstatt eines String fuer 'command',
+so wird (im Defaultfall, ohne flag (s.u.)) eine leeres Mapping returned.
+
+Einfache, gefundene Optionen werden im Ergebnismapping einfach mit ihrem
+Buchstaben als Index und dem Wert 1 abgelegt. (hier: "g" : 1)
+[Achtung definieren in 'options' muss man sie (beispielsweise) mit "g":0]
+
+Komplexe, gefundene Optionen werden im Ergebnismapping mit ihrem 
+Buchstaben als Index und einem Feld bestehend aus den gefunden Werten 
+abgelegt. (hier: "f" : ({ "N l t" }) )
+Es sind maximal 5 Werte pro komplexe Option erlaubt. Das kann ihm
+source code von getopt geaendert werden.
+
+Nicht gefundene, aber in 'options' definierte Optionen erscheinen gar nicht
+im Ergebnismapping.
+
+Gefundene aber nicht definierte Optionen erhalten einen Eintrag im einem Feld,
+das unter dem Index "errors" abgelegt wird.
+(hier: "errors": ({ "Unbekannte Option -q\n" }) )
+Tritt kein Fehler auf, existiert auch der Index "errors" nicht.
+
+
+Flags fuer den getopt Befehl:
+-----------------------------
+Der dritte optionale Parameter fuer den getopt Befehl ist ein Flag
+mit dem die Arbeitsweise des getopt beeinflusst werden kann.
+
+Es stehen dafuer die Konstanten aus <getopt.h> zur Verfuegung:
+
+GO_ERRS    Der getopt Befehl gibt die angesammelten Fehlermeldungen
+           aus dem Feld "errors" selbst mit Hilfe der efun 'write'
+           aus. Er stellt, wenn moeglich, das Verb (hier: "volk: ")
+           vor die Fehlermeldungen.
+           Der Returnwert von getopt bleibt unveraendert.
+
+GO_FAILS   Der getopt Befehl gibt die angesammelten Fehlermeldungen
+           mit Hilfe der efun notify_fail aus, und returned 0, statt
+           des Mappings.
+
+Im Erfolgsfalle wird bei beiden Varianten nichts ausgegeben und 
+das Mapping returned.
+
+GO_SLOPPY  Unbekannte Optionen werden nicht als Fehler bemaengelt,
+           sondern einfach ignoriert.
+           Damit erspart man sich die Definition der 'einfachen'
+           Optionen, man muss nur noch die komplexen Optionen 
+           definieren.
+
+GO_FAILS und GO_SLOPPY, bzw. GO_ERRS und GO_SLOPPY koennen mit 
+Hilfe des Operators | kombiniert werden:
+   opt = getopt(command, ...., GO_SLOPPY | GO_FAILS);
+
+VERWEISE:
+GRUPPEN: tool
+*/
+
+
+varargs mapping getopt(string str, mapping want, int flag)
+{
+   int i, j, in_option, more_options, anz_scans;
+   string rest, format, *errors, *reste, *parsed, errs, verb;
+   mapping ret;
+   mixed scans;
+
+   ret = ([]);
+   if(!stringp(str) || !want)
+      return flag & GO_FAILS ? 0 : ret;
+   str += " " EOL_PATTERN ;  // End of Input Pattern.
+   rest = "";
+   reste = errors = ({});
+   scans = allocate(MAX_SCANS_PER_OPTION+1);
+   more_options = 1;
+
+   // parse 
+
+   for(i = 0; i < strlen(str)-strlen(EOL_PATTERN)-1; i++) 
+      if(in_option && in_option++) // innerhalb einer Option(sgruppe)
+         if(str[i] == ' ')    // End of in_option Mode?
+            in_option = 0;    // (space ends optiongroup)
+	 else if(str[i] == '-')
+	 {
+	    if(in_option==2)  // Nur beachten, wenn's gleich hinterm - kommt.
+	        in_option = more_options = 0;
+	 }
+	 else if(!member(want,str[i..i]) && !(flag & GO_ATOM_SLOPPY))
+            errors += ({"Unbekannte Option -"+str[i..i]+"\n"});
+         else if(format = want[str[i..i]])  // complex option?
+	    if((anz_scans = sscanf(trim(str[(i+1)..]), format+" %s", 
+				  scans[0], scans[1], scans[2], 
+				  scans[3], scans[4], scans[5])) >1 )  // (*)
+	    {
+	       for(parsed = ({}), j = 0; j < anz_scans-1; j++)
+		  parsed += scans[j..j];
+               if(!stringp(scans[anz_scans-1]))
+               {
+                  parsed += scans[anz_scans-1..anz_scans-1];
+	          ret[str[i..i]] = parsed;
+                  str = "";
+               }
+               else
+               {
+	          ret[str[i..i]] = parsed;
+                  str = scans[anz_scans-1];
+               }
+	       i = -1;
+	       in_option = 0;  // complex options end optiongroup
+	    }
+	    else
+	       errors += ({"Syntax Fehler bei Option -"+str[i..i]+"\n"});
+	 else                  // simple option
+	    ret[str[i..i]] = 1;
+      else                     // nicht innerhalb einer Option(sgruppe)
+	 if(more_options && str[i] == '-' && (!i || str[i-1] == ' '))
+	 {                     // start einer Option(sgruppe)?
+	    in_option = 1;
+	    if((rest = trim(rest)) != "")
+	       reste += ({ rest });
+	    rest = "";
+	 }
+	 else                  // args mitfuehren
+	    rest += str[i..i];
+
+   // End of parse
+
+   if(sizeof(errors))          // Errors exist?
+   {
+      if(flag & GO_ATOM_ERRS)  // should getopt report errors?
+      {
+	 verb = (verb = query_verb()) ? verb : "";
+         for(i = 0, errs = ""; i < sizeof(errors); i++)
+            errs += verb+": "+errors[i];
+         if(flag & GO_ATOM_FAILS)
+         {		       // should getopt fail on errors?
+            notify_fail(errs);
+            return 0;
+         }
+         else
+            write(errs);
+      }
+      ret["errors"] = errors;  // move errors into return mapping
+   }
+   if((rest = trim(rest)) != "") // Ends last arg
+      reste += ({ rest });
+   reste -= ({EOL_PATTERN});   // subtract EOL_PATTERN from args
+   if(sizeof(reste))           // move args into return mapping
+      ret["args"] = reste;
+   return ret;		       // return result mapping
+}

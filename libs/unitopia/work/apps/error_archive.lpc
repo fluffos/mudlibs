@@ -1,0 +1,532 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /apps/error_archive.c
+// Description: Offline Archiv aller Fehler zur Volltextsuche
+// Author:      Myonara (05.Aug.2013)
+
+// Userid fuer  /apps/error_archive setzen:
+// UID: Apps
+//
+// $Log: error_archive.c,v $
+// Revision 1.5  2016/05/23 03:30:56  myonara
+// Fehler beim Oeffnen der Datenbank abfangen, um in diesem wenn auch
+// unwahrscheinlichem Fall das Errorlog nicht volllaeuft.
+//
+// Revision 1.4  2015/12/18 16:05:06  myonara
+// query_database_description
+//
+// Revision 1.3  2015/12/07 17:38:11  myonara
+// debugausgaben veraendert, Aufruf create_db verschoben.
+//
+// Revision 1.2  2015/01/21 20:32:22  myonara
+// Bugfix in UPDATE earchive_1 (add_error)
+//
+// Revision 1.1  2014/03/12 19:48:43  myonara
+// CVS fuer neues error_archive, kam mit rewrite von error_db
+//
+//
+//
+
+#pragma no_shadow
+#pragma no_inherit
+#pragma save_types
+
+inherit "/i/tools/database";
+inherit "/i/tools/security";
+
+// HomeMud Umgehung:
+
+#include <config.h>
+#include <error_db.h>
+#include <database.h>
+#include <error.h>
+#include <files.h>
+#include <level.h>
+#include <misc.h>
+#include <more.h>
+#include <rtlimits.h>
+#include <security.h>
+
+//#define DEBUGGER "myonara"
+//#include <debug.h>
+#undef DEBUG
+#define DEBUG(x) ERROR_DB->debug_msg(x)
+
+// Die Version History dient dazu, bei Version Unterschieden
+// ein schrittweises Update durchzufuehren. Feld 0 ist die aktuelle Version
+// Feld n-1 die aelteste Version. 
+#define DB_VERSION_HISTORY  ({ \
+    "1.0" /* initale Version */ \
+    })
+
+#define LINE      "-------------------------------------------------------------------------------"
+#define MORE_LINE "...--------------------------------------------------------------------- (MORE)"
+
+public string query_database_description()
+{
+    return "Diese Datenbank dient zur Archivierung der Fehlerdatenbank. "
+    "Zum Anschauen stellt der Zaubertab das zfe-Option -A\"<suchmuster>\" "
+    "zur Verfuegung. Fuer Admins gibt es speziell die Lfuns sql und "
+    "db_get_table.";
+}
+
+/*
+NOENZY: flatten_array
+DEKLARATION: private mixed flatten_array(mixed arr)
+BESCHREIBUNG:
+Aus /p/Misc/i/array kopiert: verflacht ein Array.
+VERWEISE: 
+GRUPPEN: protokoll
+*/
+private mixed flatten_array(mixed arr)
+{
+    mixed tmp, erg;
+    int i, size;
+
+    if (!pointerp(arr)) {
+        do_error("flatten_array: Parameter 1 muss ein Array sein.\n");
+        return 0;
+    }
+
+    tmp = ({}) + arr;
+    erg = ({});
+    while (sizeof(tmp)) {
+        if (pointerp(tmp[0])) {
+            tmp[0..0] = tmp[0];
+        } else {
+            i = 1;
+            size = sizeof(tmp);
+            while (i<size && !pointerp(tmp[i])) {
+                i++;
+            }
+            erg += tmp[0..(i-1)];
+            tmp = tmp[i..<1];
+        }
+    }
+    return erg;
+}
+
+// ------------------------------------------------------------------------
+
+/*
+NOENZY: add_error
+DEKLARATION: public int add_error(int errnum, string errtext, int time_started, int time_changed)
+BESCHREIBUNG:
+Fuegt einen Fehler inkl seinem Fehlertext und start und change-Zeitstempel
+der Datenbank hinzu.
+VERWEISE: get_errtext
+GRUPPEN: protokoll
+*/
+public int add_error(int errnum, string errtext, 
+                     int time_started, int time_changed, int flagvis)
+{
+    mixed * result;
+    if (object_name(PO) != ERROR_DB) return 0;
+    if (errnum <= 0 || !stringp(errtext) || time_started <= 0
+            || time_started > time_changed)
+        return 0;
+    result = db_query("SELECT errnum FROM earchive_1 WHERE errnum = ?",
+                      errnum);
+    if (query_db_error() || sizeof(result)==0) 
+    {
+        db_query("INSERT INTO earchive_1 "
+                 "(errnum, opened, changed, errtext, flagvis)"
+                 " VALUES (?, ?, ?, ?, ?)",
+                 errnum,time_started,time_changed,errtext,flagvis);
+        return query_db_error() == 0;
+    }
+    else
+    {
+        db_query("UPDATE earchive_1 "
+                 "SET opened = ?,changed = ?, errtext = ?, flagvis = ? "
+                 "WHERE errnum = ? ",
+                 time_started,time_changed,errtext, flagvis,errnum);
+        return query_db_error() == 0;
+    }
+}
+
+/*
+NOENZY: get_errtext
+DEKLARATION: public string get_errtext(int errnum)
+BESCHREIBUNG:
+Liefert den Fehlertext zur Fehlernummer, sofern vorhanden.
+VERWEISE: add_error
+GRUPPEN: protokoll
+*/
+public string get_errtext(int errnum)
+{
+    mixed * result;
+    if (!check_security() || errnum <= 0) return 0;
+    if (adminp(TP))
+    {
+        result = db_query("SELECT errtext FROM earchive_1 WHERE errnum = ?",
+                      errnum);
+    }
+    else
+    {
+        result = db_query("SELECT errtext FROM earchive_1 "
+                      "WHERE flagvis = 0 AND errnum = ?",
+                      errnum);
+    }
+    if (pointerp(result) && sizeof(result)==1)
+    {
+        return get_one_string(result);
+    }
+    return 0; // nicht gefunden.
+}
+
+
+/*
+NOENZY: get_timestamp
+DEKLARATION: public int get_timestamps(int type)
+BESCHREIBUNG:
+Liefert die Zeitstenpel zur Fehlernummer, sofern vorhanden. 0 sonst.
+({ open,last_changed,closed})
+VERWEISE: add_error
+GRUPPEN: protokoll
+*/
+public int * get_timestamps(int errnum)
+{
+    mixed * result;
+    if (!check_security() || errnum <= 0) return 0;
+    if (adminp(TP))
+    {
+        result = db_query("SELECT opened, changed, closed "
+                      "FROM earchive_1 WHERE errnum = ?",
+                      errnum);
+    }
+    else 
+    {
+        result = db_query("SELECT opened, changed, closed "
+                      "FROM earchive_1 WHERE errnum = ? and flagvis = 0",
+                      errnum);
+    }
+    if (pointerp(result) && sizeof(result)==1)
+    {
+        return result[0];
+    }
+    return 0; // nicht gefunden.
+}
+
+/*
+NOENZY: get_errorlist
+DEKLARATION: public mixed * get_errorlist(int start, int lines, mapping options)
+BESCHREIBUNG:
+Liefert ab Zeile "start" nur Anzahl "lines" Zeilen abhaengig von den 
+Optionen. Folgende Optionen haben Einfluss auf das Ergebnis:
+EDB_OPT_ARCHIVE_PATTERN: Das Datenbank/Volltext-Suchpattern mit den 
+                         Wildcards _(ein beliebiges Zeichen
+                         und % (null bis beliebig viele beliebige Zeichen).
+EDB_OPT_CREATED_SINCE:   Nur Fehler die an oder nach diesen Zeitstempel
+                         erstellt wurden.
+EDB_OPT_CREATED_BEFORE:  Nur Fehler die an oder vor diesen Zeitstempel
+                         erstellt wurden.
+EDB_OPT_NEWER_SINCE:     Nur Fehler die an oder nach diesen Zeitstempel
+                         geaendert wurden.
+EDB_OPT_NEWER_BEFORE:    Nur Fehler die an oder vor diesen Zeitstempel
+                         geaendert wurden.
+EDB_OPT_ARCHIVE_INVIS:   Nur unsichtbare Archivfehler anzeigen (Admin-Only)
+EDB_OPT_SORT_OPEN_ASC:   Die Ausgabe nach Erstelldatum aufsteigend sortieren
+EDB_OPT_SORT_OPEN_DESC:  Die Ausgabe nach Erstelldatum absteigend sortieren
+EDB_OPT_SORT_CHANGE_ASC: Die Ausgabe nach Aenderungsdatum aufsteigend 
+                         sortieren
+EDB_OPT_SORT_CHANGE_DESC:Die Ausgabe nach Aenderungsdatum absteigend 
+                         sortieren
+Die zurueckgegebenen Zeilen haben im Erfolgsfall das Format
+({ ({ errnum0, opened0, changed0 }), ({ errnum1, opened1, changed1 }), ...})
+VERWEISE: add_error
+GRUPPEN: protokoll
+*/
+public mixed get_errorlist(int start, int lines, mapping options)
+{
+    mixed * result;
+    string q, pattern;
+    int flag_where = 0;
+    options ||= ([]);
+    if (!check_security()) return 0;
+    if (lines <= 0)
+        q = "SELECT COUNT(errnum) FROM earchive_1 ";
+    else
+        q = "SELECT errnum, opened, changed FROM earchive_1 ";
+    pattern = options[EDB_OPT_ARCHIVE_PATTERN];
+    if (stringp(pattern) && sizeof(pattern)>0 )
+    {
+        if (pattern[0] != '%') pattern = "%" + pattern;
+        if (pattern[<1] != '%') pattern += "%";
+        flag_where = 1;
+        // TODO pattern = regreplace ' => ''
+        q+= "WHERE errtext LIKE '"+pattern+"' ";
+    }
+    if (member(options,EDB_OPT_CREATED_SINCE))
+    {
+        q+= ( flag_where ? "AND " : "WHERE " );
+        flag_where = 1;
+        q+= "opened >= "+options[EDB_OPT_CREATED_SINCE]+" ";
+    }
+    if (member(options,EDB_OPT_CREATED_BEFORE))
+    {
+        q+= ( flag_where ? "AND " : "WHERE " );
+        flag_where = 1;
+        q+= "opened <= "+options[EDB_OPT_CREATED_BEFORE]+" ";
+    }
+    if (member(options,EDB_OPT_NEWER_SINCE))
+    {
+        q+= ( flag_where ? "AND " : "WHERE " );
+        flag_where = 1;
+        q+= "changed >= "+options[EDB_OPT_NEWER_SINCE]+" ";
+    }
+    if (member(options,EDB_OPT_NEWER_BEFORE))
+    {
+        q+= ( flag_where ? "AND " : "WHERE " );
+        flag_where = 1;
+        q+= "changed <= "+options[EDB_OPT_NEWER_BEFORE]+" ";
+    }
+    if (member(options,EDB_OPT_ARCHIVE_INVIS) && adminp(TP))
+    {
+        q+= ( flag_where ? "AND " : "WHERE " );
+        flag_where = 1;
+        q+= "flagvis = 1 ";
+    }
+    else
+    {
+        q+= ( flag_where ? "AND " : "WHERE " );
+        flag_where = 1;
+        q+= "flagvis = 0 ";
+    }
+    if (member(options,EDB_OPT_SORT_OPEN_ASC))
+    {
+        q+= "ORDER BY opened ASC, errnum ASC ";
+    }
+    else if (member(options,EDB_OPT_SORT_OPEN_DESC))
+    {
+        q+= "ORDER BY opened DESC, errnum DESC ";
+    }
+    else if (member(options,EDB_OPT_SORT_CHANGE_ASC))
+    {
+        q+= "ORDER BY changed ASC, errnum ASC ";
+    }
+    else if (member(options,EDB_OPT_SORT_CHANGE_DESC))
+    {
+        q+= "ORDER BY changed DESC, errnum DESC ";
+    }
+    if (lines > 0)
+    {
+        q += "LIMIT "+lines+" OFFSET "+start;
+        result = db_query(q);
+    }
+    else
+    {
+        result = db_query(q);
+        return get_one_int(result);
+    }
+    DEBUG(sprintf("%d,%d: %Q\n%Q\n%Q",start,lines,options,q,result));
+    return result;
+}
+
+// ------------------------------------------------------------------------
+
+/*
+NOENZY: create_all
+DEKLARATION: nosave void create_all(string version)
+BESCHREIBUNG:
+Erzeugt die Datenbank in der Version <version>. Zur Zeit wird nur
+Version 1.0 unterstuetzt.
+VERWEISE: create_or_update_db
+GRUPPEN: protokoll
+*/
+nosave void create_all(string version)
+{
+    mixed result;
+    int ix; 
+    string str;
+    if (!db_open()) {
+        raise_error("Datenbank konnte nicht geoeffnet werden: "+ERROR_ARCHIVE_DB);
+    }
+    
+    switch (version) { 
+    case "1.0": // Initiale Version
+        db_debug("create_all 1.0 vs "+version,DB_DBGLVL_INFO,
+            DB_DBG_BUFFER_MSG,"ERROR_ARCHIVE");
+        if (query_db_error()) break;
+        // Pruefe, ob Tabelle "earchive_1" existiert.------------------------
+        db_debug("if exists earchive_1...",DB_DBGLVL_DEBUG,
+            DB_DBG_BUFFER_MSG,"ERROR_ARCHIVE");
+        result = db_query("SELECT MAX(errnum) FROM earchive_1");
+        if (query_db_error()) {
+            ix = 0;
+            db_debug("no: create earchive_1",DB_DBGLVL_DEBUG,
+            DB_DBG_BUFFER_MSG,"ERROR_ARCHIVE");
+            // Ersetze bei gleicher ID aber unterschiedlichem Namen (REPLAYE)
+            // Rollback ein INSERT NEW, dass den gleichen Namen bringt.
+            db_query("CREATE TABLE IF NOT EXISTS earchive_1 ("
+                "errnum INTEGER CONSTRAINT pk_earchive_1 "
+                "PRIMARY KEY , opened INTEGER, changed INTEGER,"
+                "errtext TEXT, flagvis INTEGER )");
+            if (query_db_error()) break;
+        } else {
+            db_debug("yes: keine Aktion",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"ERROR_ARCHIVE");
+        }
+        //----------------------------------------------------------
+        db_debug("Aktuelle db_version setzen 1.0",DB_DBGLVL_DEBUG,
+            DB_DBG_BUFFER_MSG,"ERROR_ARCHIVE");
+        set_db_info("db_version","1.0");
+        db_debug("create_all 1.0: Erfolgreich",DB_DBGLVL_DEBUG,
+            DB_DBG_FLUSH_BUFFER,"ERROR_ARCHIVE");
+        db_close();
+        return; // ERFOLG
+    default:
+    }
+    // Hier kommt man nur im Fehlerfall hin...
+    db_debug("create_all "+version+" abgebrochen!",DB_DBGLVL_ERROR,
+            DB_DBG_FLUSH_BUFFER,"ERROR_ARCHIVE");
+    db_close();
+}
+
+/*
+NOENZY: create_or_update_db
+DEKLARATION: private void create_or_update_db()
+BESCHREIBUNG:
+Prueft die verfuegbare Datenbank und aktualisiert diese, falls noetig.
+VERWEISE: create_all
+GRUPPEN: protokoll
+*/
+private void create_or_update_db()
+{
+    mixed result;
+    int ix; 
+    string str;
+    
+    if (!db_open()) {
+        raise_error("Datenbank konnte nicht geoeffnet werden: "+ERROR_ARCHIVE_DB);
+    }
+    // Pruefe ob Datenbank existiert und welche DB Version sie hat.
+    str = get_db_info("db_version");
+    if (str == 0) { 
+        // Der Eintrag existiert nicht, also gehen wir davon aus,
+        // dass die Datenbank nicht existiert.
+        create_all(DB_VERSION_HISTORY[<1]);
+    } else {
+        ix=member(DB_VERSION_HISTORY,str||"");
+        if (ix==-1) {
+            raise_error("Inkonsistente Datenbankversion");
+        }
+        if (ix > 0) {
+            // bei der naechst neuren Version einsteigen.
+            create_all(DB_VERSION_HISTORY[<1]);
+        }
+    }
+}
+
+// ------------------------------------------------------------------------
+
+/*
+NOENZY: db_flush
+DEKLARATION: public void db_flush()
+BESCHREIBUNG:
+Hiermit kann der Debugpuffer in die Datenbank geschrieben werden
+und die Datenbank geschlossen werden.
+VERWEISE: show_debug
+GRUPPEN: protokoll
+*/
+public void db_flush()
+{
+    db_debug(0,0,DB_DBG_FLUSH_BUFFER,"PROTOKOLLARCHIV");
+    db_close();
+}
+
+/*
+NOENZY: show_debug
+DEKLARATION: public void show_debug()
+BESCHREIBUNG:
+Es wird der Debugpuffer an TP ausgegeben.
+VERWEISE: sql
+GRUPPEN: protokoll
+*/
+public void show_debug()
+{
+    if (!check_security() || !adminp(TP))
+        return;
+    db_debug(0,0,DB_DBG_FLUSH_BUFFER,"PROTOKOLLARCHIV");
+    string * result = query_all_dbg_messages(DB_DBG_FLUSH_BUFFER);
+    if (result == 0) return;
+    result = flatten_array(map(result,(: explode(wrap($1),"\n")[..<2] :)));
+    TP->more(result,({ "Debuglog [?,w,q,z] ",
+           "----------- Debuglog: --------------------------------------------------------",
+           LINE, MORE_LINE, MORE_LINE
+        }), 0,
+        M_DO_NOT_END|M_FRAME|M_THIS_OBJECT,
+        "Root:Protokollarchiv:DebugLog");
+}
+
+/*
+NOENZY: sql
+DEKLARATION: public mixed sql(string q)
+BESCHREIBUNG:
+Hiermit koennen direkte Abfragen und Manipulationen an der Datenbank
+durchgefuehrt werden. Nur fuer Admins.
+VERWEISE: show_debug
+GRUPPEN: protokoll
+*/
+public mixed sql(string q)
+{
+    if (!check_security() || !adminp(TP))
+        return -1;
+    if (!db_open()) return -1;
+    return db_query(q) || query_db_error();
+}
+
+/*
+NOENZY: db_get_table
+DEKLARATION: public varargs mixed db_get_table(string tb)
+BESCHREIBUNG:
+Ohne Parameter oder mit tb==0 wird eine Liste aller Tabellen ausgegeben,
+mit Parameter die Definition dieser speziellen Tabelle, sofern vorhanden.
+VERWEISE: 
+GRUPPEN: protokoll
+*/
+public varargs mixed db_get_table(string tb)
+{
+    tb = space(tb);
+    if (tb == "") {
+        return sql("SELECT name FROM sqlite_master WHERE type = 'table'");
+    } else {
+        return sql("SELECT sql FROM sqlite_master WHERE NAME = '"+tb+"'");
+    }
+}
+
+void abort_renewal()
+{
+}
+
+void finish_renewal(object neu)
+{
+}
+
+void prepare_renewal()
+{
+    db_flush();
+}
+
+int remove()
+{
+    db_flush();
+    destruct( TO );
+    return 1;
+}
+
+void reset()
+{
+    db_flush();
+}
+
+void create()
+{
+    init_security_for_actions();
+    add_security_condition(ERROR_DB);
+    if (!init_database(ERROR_ARCHIVE_DB))
+        raise_error(ERROR_ARCHIVE_DB+" konnte nicht geoeffnet werden.");
+    create_or_update_db();
+    db_debug("error_archive started:"+ERROR_ARCHIVE_DB,DB_DBGLVL_INFO,
+            DB_DBG_CREATE,"ERROR_ARCHIVE");
+}

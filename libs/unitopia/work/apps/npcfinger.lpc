@@ -1,0 +1,235 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /apps/npcfinger.c
+// Description: Diese Objekt regelt die Ausgabe der Fingertexte von NPCs
+// Author:      Jesaia (04.12.97)
+
+// UID: Apps
+
+// Modified by: Sissi (30.11.98): Admins duerfen das auch (auth_check)
+//
+// $Log: npcfinger.c,v $
+// Revision 1.12  2013/05/30 17:00:18  sorcerer
+// Auch DHs duerfen NPC-Finger aendern
+//
+// Revision 1.11  2009-03-20 07:45:26  gnomi
+// zern-t-Funktionen. Gildengoetter duerfen auch NPCs registrieren.
+//
+// Revision 1.10  2004/07/19 21:09:53  gnomi
+// Domain-Infos sind vom Master nach /apps/domain gezogen.
+//
+// Revision 1.9  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.8  2002/06/18 01:50:59  gnomi
+// Loeschen vom PTitel zulassen.
+//
+// Revision 1.7  2001/04/29 14:21:40  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.6  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.5  2001/04/06 23:31:18  gnomi
+// Header verschoenert.
+//
+// Revision 1.4  2001/03/24 03:29:15  gnomi
+// Bei der Domain "Pantheon" ist jeder Pfadname erlaubt.
+//
+// Revision 1.3  2001/01/13 03:48:47  gnomi
+// Allen Lords erlauben, NPC-Finger einzutragen. (Die Gilden benoetigen
+// es vor allem fuer Brettzweities.)
+//
+
+#include <level.h>
+#include <apps.h>
+#include <gilden.h>
+
+#define SAVE_FILE "/var/npcfinger"
+#define CAP(x) capitalize(x)
+
+mapping npc_finger =([]);
+
+void create()
+{
+    restore_object(SAVE_FILE);
+}
+
+void save()
+{
+    save_object(SAVE_FILE);
+}
+
+void remove()
+{
+     save();
+     destruct(this_object());
+}
+
+void abort_renewal() {}
+void finish_renewal(object neu) {}
+void prepare_renewal() { save(); }
+
+int secure_check()
+{
+    // Lords, Gildengoetter, DHs und Admins.
+      return playerp(this_player()) && this_player() == this_interactive() &&
+    	    (((lordp(this_player()) || 
+               GILDEN_OB->query_programmed_gilden(this_player()->query_real_name()) ||
+               sizeof(DOMAIN_INFOS->query_domainhelfer_of(this_player()->query_real_name()))) &&
+		(object_name(previous_object()) == "/room/rathaus/npcfinger")) || 
+	      adminp(this_player()));
+}
+
+int auth_check(string domain)
+{
+     return ( DOMAIN_INFOS->domain_lord(domain,
+                this_player()->query_real_name()) 
+             || DOMAIN_INFOS->domain_helfer(domain,
+                this_player()->query_real_name())
+	     || member(FILED->query_auth(lower_case(domain)),
+	        this_player()->query_real_name())>=0
+             || adminp (this_player()) );
+}
+
+int name_check(string name)
+{
+      return member(npc_finger,name);
+}
+
+string add_npc_name(string name, string domain)
+{
+       name = lower_case(name);
+       if (!secure_check())
+           return "Dazu hast du nicht die Berechtigung.";
+       if(name_check(name) > 0)
+          return "Dieser Name ist schon belegt.";
+       if (!auth_check(domain))
+           return "In dieser Domain bist du nicht zustaendig.";
+       if (sizeof(explode(name," "))>1)
+          return "Der Name darf keine Leerzeichen (SPACE) haben";
+       npc_finger += ([ lower_case(name): 
+                     ([ 
+                       "domain":domain,
+                       "file":"",
+                       "short":"",
+                       "only_default":1,
+                       "default":"",
+                       "ptitle":""]) 
+                     ]);
+       save();
+       return "Name: " + CAP(lower_case(name))+" gesetzt.";
+}
+string del_npc_name(string name)
+{
+       name = lower_case(name);
+       if (!secure_check())
+           return "Da zu hast du nicht die Berechtigung.";
+       if(name_check(name) == 0)
+          return "Diesen Namen gibts gar nicht.";
+       if (!auth_check(npc_finger[name]["domain"]))
+           return "In dieser Domain bist du nicht zustaendig.";
+       if (sizeof(explode(name," "))>1)
+          return "Der Name darf keine Leerzeichen (SPACE) haben";
+       m_delete(npc_finger,name);
+       save();
+       return "Name: " + CAP(lower_case(name))+" geloescht.";
+}
+
+
+string set_npc_short(string name, string short)
+{
+       name = lower_case(name);
+       if (!secure_check())
+           return "Da zu hast du nicht die Berechtigung";
+       if(name_check(name) == 0)
+          return "Diesen Namen gibts nicht.";
+       if (!auth_check(npc_finger[name]["domain"]))
+           return "In dieser Domain bist du nicht zustaendig.";
+       npc_finger[name]["short"]=short;
+       save();
+       return "Titel: "+short+" wurde fuer Name: " +name+" gesetzt.";
+}
+
+string set_npc_ptitle(string name, string ptitle)
+{
+       name = lower_case(name);
+       if (!secure_check())
+           return "Da zu hast du nicht die Berechtigung";
+       if(name_check(name) == 0)
+          return "Diesen Namen gibts nicht.";
+       if (!auth_check(npc_finger[name]["domain"]))
+           return "In dieser Domain bist du nicht zustaendig.";
+       if (member(npc_finger[name],"ptitle"))
+              npc_finger[name]["ptitle"]=ptitle;
+          else
+	    npc_finger[name]+= (["ptitle":ptitle]);
+       save();
+       return strlen(ptitle)
+           ?("Ptitle: "+ptitle+" wurde fuer Name: " +name+" gesetzt.")
+	   :("Ptitle wurde fuer Name: "+name+" geloescht.");
+}
+
+string set_npc_default(string name, string defa)
+{
+       int RowC;
+       name = lower_case(name);
+       if (!secure_check())
+           return "Da zu hast du nicht die Berechtigung";
+       if(name_check(name) == 0)
+          return "Diesen Namen gibts nicht.";
+       if (!auth_check(npc_finger[name]["domain"]))
+           return "In dieser Domain bist du nicht zustaendig.";
+       npc_finger[name]["default"]=defa;
+       save();
+       return "default: "+defa+" wurde fuer Name: " +name+" gesetzt.";
+}
+
+string set_npc_only_default(string name, int odefa)
+{
+       name = lower_case(name);
+       if (!secure_check())
+           return "Da zu hast du nicht die Berechtigung";
+       if(name_check(name) == 0)
+          return "Diesen Namen gibts nicht.";
+       if (!auth_check(npc_finger[name]["domain"]))
+           return "In dieser Domain bist du nicht zustaendig.";
+       npc_finger[name]["only_default"]=odefa;
+       save();
+       return "Only_default: "+odefa+" wurde fuer Name: " +name+" gesetzt.";
+}
+string set_npc_filename(string name, string file)
+{
+       name = lower_case(name);
+       if (!secure_check())
+           return "Da zu hast du nicht die Berechtigung";
+       if(name_check(name) == 0)
+          return "Diesen Namen gibts nicht.";
+       if (!auth_check(npc_finger[name]["domain"]))
+           return "In dieser Domain bist du nicht zustaendig.";
+       if (npc_finger[name]["domain"]!="Pantheon" &&
+           strstr(file,"/"+npc_finger[name]["domain"]+"/") == -1)
+           return "Das File liegt nicht in der Domain des Namens";
+       npc_finger[name]["file"]=file;
+       if (file_size(file) < 1)
+           return file +" nicht gefunden.";
+       save();
+       return "File: "+file+" wurde fuer Name: " +name+" gesetzt.";
+}
+
+mapping query_finger_npc()
+{
+    return deep_copy(npc_finger);
+}
+mixed *query_npc_names()
+{
+     return m_indices(npc_finger);
+}
+
+mixed query_info_of_npc(string name)
+{
+       name = lower_case(name);
+       if(name_check(name) == 0)
+          return -1;
+       return copy(npc_finger[name]);
+}

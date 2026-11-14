@@ -1,0 +1,825 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/goetter_register.c
+// Description: Goetterregister (Hier werden alle Goetter mit Lehrmeister
+//		eingetragen)
+// Author:	Freaky (01.05.94)
+//              Garthan (22.01.97) Lehrerlaubnis
+
+// UID: Root
+
+//
+// $Log: goetter_register.c,v $
+// Revision 1.17  2013/07/08 16:40:11  myonara
+// Verbesserungen am automatischen Rechteentzug fuer Voegte, laeuft jetzt :)
+//
+// Revision 1.16  2013/06/25 17:14:13  myonara
+// reset-Timer fuer 9:00Uhr am naechsten Monatsersten fuer inaktive Voegte
+//
+// Revision 1.15  2013/06/22 14:34:35  myonara
+// Weitere Vorbereitungen um banish_light und check_inactive_voegte
+//
+// Revision 1.14  2013/06/21 21:20:17  myonara
+// banish_wiz_light, check_inactive_wiz erweitert
+// check_inactive_vogte(s) vorbereitet fuer autom.banish_light
+//
+// Revision 1.13  2010-08-28 17:42:47  sorcerer
+// Neue HTML-Formatierung und neue Headerlocation
+//
+// Revision 1.12  2009-06-17 07:41:46  gnomi
+// Daemmerung eingebaut.
+//
+// Revision 1.11  2009-04-15 13:34:55  gnomi
+// Funktion fuer Gottdaemmerungslisten eingebaut.
+//
+// Revision 1.10  2005/05/26 00:55:06  gnomi
+// Urlaubsgoetter ermoeglichen.
+//
+// Revision 1.9  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.8  2001/09/07 16:45:33  freaky
+// query_lehrmeisters: auch volles Array liefern, wenn verlangt.
+//
+// Revision 1.7  2001/04/29 14:21:40  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.6  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.5  2001/03/19 02:46:27  gnomi
+// An neues Levelsystem angepasst.
+//
+// Revision 1.4  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#include <level.h>
+#include <config.h>
+#include <apps.h>
+#include <uids.h>
+#include <time.h>
+#include <rpc.h>
+#include <error_db.h>
+#include <simul_efuns.h>
+#include <message.h>
+#include <rtlimits.h>
+
+#include <goetter_register.h>
+
+#define SAVE_FILE "/var/goetter_register"
+#define GENEALOGY "/var/GENEALOGY"
+#define REGISTER  "/room/rathaus/register"
+
+#define SECURE if (!secure()) return;
+
+mapping register;
+mapping banished_wizzes;
+mapping wizzes_on_vacation;
+int level; // Level des Players wird fuer das restore_object() gebraucht
+
+#undef EXTEND_TO_4
+
+void reset()
+{
+    if (find_call_out("check_inactive_voegte") == -1) {
+        // auf 9 Uhr vom naechsten Monatsersten stellen.
+        int * arr1 = timearray(time());
+        int * arr2 = timearray(time());
+        int result;
+        arr2[TM_SEC] = arr2[TM_MIN] = arr2[TM_WDAY] = arr2[TM_YDAY] = 0;
+        arr2[TM_HOUR] = 9;
+        arr2[TM_MDAY] = 1;
+        if (arr1[TM_MDAY] < arr2[TM_MDAY]) 
+        {
+            arr2[TM_MON] = arr1[TM_MON];
+            arr2[TM_YEAR] = arr1[TM_YEAR];
+        }
+        else if (arr1[TM_MON] >= 12) 
+        {
+            arr2[TM_MON] = 1;
+            arr2[TM_YEAR] = arr1[TM_YEAR] + 1;
+        } 
+        else 
+        {
+            arr2[TM_MON] = arr1[TM_MON] + 1;
+            arr2[TM_YEAR] = arr1[TM_YEAR];
+        }
+        result = array_to_time(arr2);
+        call_out("check_inactive_voegte",result - time());
+    }
+}
+
+void create()
+{
+#ifdef EXTEND_TO_4
+    int i, j;
+    string *idxs;
+    mapping a, b;
+#endif
+
+    register=m_allocate(0,4);
+    banished_wizzes=m_allocate(0,4);
+    wizzes_on_vacation=m_allocate(0,4);
+    restore_object(SAVE_FILE);
+
+#ifdef EXTEND_TO_4
+    a = m_allocate(0,4);
+    b = m_allocate(0,4);
+
+    for(i = sizeof(idxs = m_indices(register)); i--;)
+       for(j = 3; j--;)
+	  a[idxs[i],j] = register[idxs[i],j];
+
+    for(i = sizeof(idxs = m_indices(banished_wizzes)); i--;)
+       for(j = 3; j--;)
+	  b[idxs[i],j] = banished_wizzes[idxs[i],j];
+    register = a;
+    banished_wizzes = b;
+#endif
+    reset();
+}
+
+int secure()
+{
+    return this_player() &&
+	   this_player()==this_interactive() &&
+	   previous_object() &&
+	   adminp(this_player()) &&
+	   (geteuid(previous_object())==geteuid(this_player())
+	    || (object_name(previous_object()) == "/room/rathaus/register"));
+}
+
+void dump_genealogy()
+{
+   rm(GENEALOGY);
+   write_file(GENEALOGY,"<DIV id=\"text_only\">\n"
+                        "<TITLE>UNItopias G&ouml;tterstammbaum</TITLE>\n"
+			"<H1>UNItopias G&ouml;tterstammbaum</H1><HR>\n"
+			"erstellt am "+shorttimestr(time())+"\n"
+			"<PRE>\n"+
+			REGISTER->genealogy(1)+
+			"</PRE>\n"
+                        "</DIV>\n");
+}
+
+void save()
+{
+   save_object(SAVE_FILE);
+   dump_genealogy();
+}
+
+int remove()
+{
+   save();
+   destruct(this_object());
+   return 1;
+}
+
+int add_lehrmeister(string wiz, string meister)
+{
+    if (previous_object() &&
+	object_name(previous_object())=="/room/rathaus/div/leo")
+    {
+
+	if (register[wiz,LEHRMEISTER_1])
+	{
+	    if (register[wiz,LEHRMEISTER_2])
+	    {
+		if (!register[wiz,LEHRMEISTER_3])
+		    register[wiz,LEHRMEISTER_3]=meister;
+	    }
+	    else
+		register[wiz,LEHRMEISTER_2]=meister;
+	}
+	else
+	    register[wiz,LEHRMEISTER_1]=meister;
+	    
+	save();
+    }
+}
+
+varargs string query_lehrmeister(string wiz, int num)
+{
+    return register[wiz,num];
+}
+
+varargs string *query_lehrmeisters(string wiz, int full)
+{
+   int i;
+   string *lehrmeisters;
+
+   for(lehrmeisters = ({0, 0, 0}), i = sizeof(lehrmeisters); i--;)
+      lehrmeisters[i] = register[wiz,i];
+   if (!full)
+       lehrmeisters -= ({ 0, DEF_MEISTER });
+   return lehrmeisters;
+}
+
+string *query_banished_wiz(string wiz)
+{
+   int i;
+   string *lehrmeisters;
+
+   for(lehrmeisters = ({0, 0, 0}), i = sizeof(lehrmeisters); i--;)
+      lehrmeisters[i] = banished_wizzes[wiz,i];
+   lehrmeisters -= ({ 0, DEF_MEISTER });
+   return sizeof(lehrmeisters) ? lehrmeisters : 0;
+}
+
+mapping query_goetter_register()
+{
+    return copy(register);
+}
+
+mapping query_banished_wizzes()
+{
+    return copy(banished_wizzes);
+}
+
+void set_lehrmeister(string wiz, string lehr, int num)
+{
+    SECURE;
+
+    register[wiz,num]=lehr;
+    remove_call_out("save");
+    call_out("save",0);
+}
+
+void delete_lehrling(string wiz)
+{
+    SECURE;
+
+    m_delete(register,wiz);
+    save();
+}
+
+string query_lehrerlaubnis(string wiz)
+{
+    if(wiz)
+       wiz = lower_case(wiz);
+    return register[wiz, LEHRERLAUBNIS];
+}
+
+mixed set_lehrerlaubnis(string wiz, int set)
+{
+   string giver; 
+
+   if(geteuid(previous_object()) == ROOT_UID ||
+     (this_player() &&
+      this_player()==this_interactive() &&
+      previous_object() &&
+      lordp(this_player()) &&
+      (geteuid(previous_object())==geteuid(this_player())
+       || (object_name(previous_object()) == "/room/rathaus/register"))))
+   {
+      giver = set ? this_player()->query_real_name() : 0;
+      if(wiz)
+	 wiz = lower_case(wiz);
+      if(member(register, wiz) && (member(register, giver) || !giver)) {
+	 register[wiz, LEHRERLAUBNIS] = giver;
+         save();
+         if(giver != 0)
+          write_file("/log/sys/LEHRERLAUBNIS", timestr(time())+": "+
+                     capitalize(giver)+" hat "
+                    +capitalize(wiz)+" die Lehrerlaubnis gegeben.\n");
+         else
+          write_file("/log/sys/LEHRERLAUBNIS", timestr(time())+": "+
+                     (playerp(this_player())?
+                      capitalize(this_player()->query_real_name())
+                      :"(niemand)")+" hat "
+                     +capitalize(wiz)+" die Lehrerlaubnis entzogen.\n");
+                     
+         return giver;
+      }
+   }
+   return -1;
+}
+
+void set_banished_wiz(string wiz, string lehr, int i)
+{
+    SECURE;
+
+    banished_wizzes[wiz,i]=lehr;
+    save();
+}
+
+void delete_banished_wiz(string wiz)
+{
+    SECURE;
+
+    m_delete(banished_wizzes,wiz);
+    save();
+}
+
+void banish_wiz(string wiz)
+{
+    if (secure() || geteuid(previous_object()) == ROOT_UID)
+	if (member(register,wiz))
+	{
+	    banished_wizzes[wiz,LEHRMEISTER_1]=register[wiz,LEHRMEISTER_1];
+	    banished_wizzes[wiz,LEHRMEISTER_2]=register[wiz,LEHRMEISTER_2];
+	    banished_wizzes[wiz,LEHRMEISTER_3]=register[wiz,LEHRMEISTER_3];
+	    banished_wizzes[wiz,LEHRERLAUBNIS]=register[wiz,LEHRERLAUBNIS];
+	    m_delete(register,wiz);
+	    save();
+	}
+}
+
+void unbanish_wiz(string wiz)
+{
+    if (secure() || playerp(previous_object()))
+	if (member(banished_wizzes,wiz))
+	{
+	    register[wiz,LEHRMEISTER_1]=banished_wizzes[wiz,LEHRMEISTER_1];
+	    register[wiz,LEHRMEISTER_2]=banished_wizzes[wiz,LEHRMEISTER_2];
+	    register[wiz,LEHRMEISTER_3]=banished_wizzes[wiz,LEHRMEISTER_3];
+	    register[wiz,LEHRERLAUBNIS]=banished_wizzes[wiz,LEHRERLAUBNIS];
+	    m_delete(banished_wizzes,wiz);
+	    save();
+	}
+}
+
+void wiz_goes_on_vacation(string wiz)
+{
+    SECURE;
+    
+    wiz = lower_case(wiz);
+    if(member(register,wiz))
+    {
+	apply(#'m_add, wizzes_on_vacation, wiz, m_entry(register, wiz));
+	m_delete(register, wiz);
+    }
+}
+
+void wiz_returns_from_vacation(string wiz)
+{
+    SECURE;
+
+    wiz = lower_case(wiz);
+    if(member(wizzes_on_vacation,wiz))
+    {
+	apply(#'m_add, register, wiz, m_entry(wizzes_on_vacation, wiz));
+	m_delete(wizzes_on_vacation, wiz);
+    }
+}
+
+int is_wiz_on_vacation(string wiz)
+{
+    return stringp(wiz) && member(wizzes_on_vacation, lower_case(wiz));
+}
+
+int is_wiz(string name)
+{
+   return name && (name = lower_case(name)) && member(register, name);
+}
+
+void check_consistency(int verbose)
+{
+    string *wizzes, wiz, meister;
+    int i, lvl, expected_level;
+
+    wizzes=m_indices(register);
+    for (i=sizeof(wizzes); i--; )
+    {
+	wiz=wizzes[i];
+	expected_level=-999999;
+	if (!(meister=register[wiz,LEHRMEISTER_1]))
+	    printf("FATAL: %-10s hat keinen 1. Lehrmeister.\n",wiz);
+	else
+	{
+	    expected_level=LVL_LEARNER;
+	    if (meister!=DEF_MEISTER && !register[meister])
+		if (verbose)
+		    printf("%-11s 1. Lehmeister ist nicht im Register: %s\n",
+			    get_genitiv(wiz),meister);
+	}
+	if (meister=register[wiz,LEHRMEISTER_2])
+	{
+	    expected_level=LVL_GESELLE;
+	    if (meister!=DEF_MEISTER && !register[meister])
+		if (verbose)
+		    printf("%-11s 2. Lehmeister ist nicht im Register: %s\n",
+			    get_genitiv(wiz),meister);
+	}
+	else if (register[wiz,LEHRMEISTER_3])
+	    printf("FATAL: %-10s kat einen 3. Lehmeister aber keinen 2.\n",
+		    wiz);
+	if (meister=register[wiz,LEHRMEISTER_3])
+	{
+	    expected_level=LVL_VOGT;
+	    if (meister!=DEF_MEISTER && !register[meister])
+		if (verbose)
+		    printf("%-11s 3. Lehmeister ist nicht im Register: %s\n",
+			    get_genitiv(wiz),meister);
+	}
+	if (file_size("/w/"+wiz)!=-2)
+	    printf("%-10s hat kein /w-Dir.\n",wiz);
+	if (!player_exists(wiz))
+	    printf("%-10s hat kein Player-File.\n",wiz);
+	if (member(banished_wizzes,wiz))
+	    printf("%-10s ist in der Banish-Liste.\n",wiz);
+	level=-9999999;
+	if (!restore_object(PLAYER_FILE(wiz)))
+	    printf("FATAL: %-10s laesst sich nicht restoren.\n",wiz);
+	else
+	{
+	    if (level==-9999999)
+		printf("FATAL: %-10s hat keinen Level.\n",wiz);
+	    if (level<LVL_WIZ)
+		printf("FATAL: %-10s ist kein Gott\n",wiz);
+	    if (level!=expected_level)
+	    {
+		if (level < expected_level || expected_level!=LVL_VOGT)
+		    printf("%-10s hat Level %2d sollte aber Level %2d haben.\n",
+			    wiz,level,expected_level);
+		if (level > LVL_MAX_LEVEL)
+		    printf("FATAL: %-10s hat Level > %d\n",wiz,LVL_MAX_LEVEL);
+	    }
+	}
+	if ((lvl=BANISHD->query_banished(wiz))<=LVL_MAX_LEVEL)
+	    printf("%-10s ist gebanished auf Level %d (hat Level %d)\n",
+	    	wiz,lvl,level);
+    }
+
+    wizzes=m_indices(banished_wizzes);
+    for (i=sizeof(wizzes); i--; )
+    {
+	wiz=wizzes[i];
+	lvl=BANISHD->query_banished(wiz);
+	if (member(register,wiz))
+	    printf("%-10s (BANISHED) ist im Goetterregister.\n",wiz);
+	if (!player_exists(wiz))
+	{
+	    if (verbose)
+		printf("%-10s (BANISHED) hat kein Player-File.\n",wiz);
+	    if (lvl != 0)
+		printf("FATAL: %-10s (BANISHED) hat kein Player-File und ist "
+		       "nicht auf Level 0 gebannt, sondern auf Level %d\n",
+		       wiz,lvl);
+	}
+	else
+	{
+	    level=-9999999;
+	    if (!restore_object(PLAYER_FILE(wiz)))
+		printf("FATAL: %-10s laesst sich nicht restoren.\n",wiz);
+	    else
+	    {
+		if (level==-9999999)
+		    printf("FATAL: %-10s hat keinen Level.\n",wiz);
+		if (level>LVL_HLP)
+		    printf("FATAL: %-10s ist Gott\n",wiz);
+	    }
+	}
+	if (lvl > LVL_WIZ)
+	    printf("FATAL: %-10s (BANISHED) ist nicht gebanished.\n",wiz);
+	if (verbose)
+	    printf("%-10s (BANISHED) ist gebanished auf Level %d\n",
+		wiz,lvl);
+    }
+
+    foreach(wiz: wizzes_on_vacation)
+    {
+	if (member(register,wiz))
+	    printf("%-10s (AUF URLAUB) ist nochmal im Goetterregister.\n",wiz);
+	if (!player_exists(wiz))
+	{
+	    printf("%-10s (AUF URLAUB) hat kein Player-File.\n",wiz);
+	}
+	else
+	{
+	    level=-9999999;
+	    if (!restore_object(PLAYER_FILE(wiz)))
+		printf("FATAL: %-10s laesst sich nicht restoren.\n",wiz);
+	    else
+	    {
+		if (level==-9999999)
+		    printf("FATAL: %-10s hat keinen Level.\n",wiz);
+		if (level>LVL_HLP)
+		    printf("FATAL: %-10s (AUF URLAUB) ist Gott\n",wiz);
+	    }
+	}
+    }
+
+    wizzes=get_dir("/w/.");
+    if (!sizeof(wizzes))
+	write("Kann /w/. nicht lesen (benoetige Root-UID)\n");
+    for (i=sizeof(wizzes); i--; )
+    {
+	wiz=wizzes[i];
+	if (file_size("/w/"+wiz)!=-2)
+	    printf("/w/%-10s ist kein Directory.\n",wiz);
+	else if (! member(register,wiz))
+	    printf("%-10s ist nicht im Goetterregister, hat aber ein /w-Dir.\n"
+		,wiz);
+    }
+}
+
+// Die Bedingungen
+#define LEHRLING_1	1	// Ein RL-Monat lang Lehrling
+#define GESELLE_1	2	// 6 Monate nicht mehr eingeloggt
+#define GESELLE_2	3	// Seit 6 Monaten Geselle
+#define VOGT_1		4	// 2 Jahre abwesend
+
+private int check_inactive_wiz(string wiz, mixed data)
+{
+    int last_login;
+    mixed level_dates;
+    int level_time;
+    
+    if(register[wiz, LEHRMEISTER_1] == "gastgott")
+	return 0;
+
+    if(find_player(wiz))
+	last_login = time();
+    else
+	last_login = PLAYER_READER->query(wiz, "last_login");
+
+    level_dates = PLAYER_READER->query(wiz, "level_dates");
+    
+    if(pointerp(level_dates) && sizeof(level_dates))
+	level_time = level_dates[<1][1];
+    else if(mappingp(level_dates))
+	level_time = level_dates[PLAYER_READER->query(wiz, "level")];
+
+    if(!register[wiz, LEHRMEISTER_2])
+    {
+	// Ein Lehrling
+	
+	if(level_time + 31*DAY < time())
+	{
+	    data = level_time;
+	    return LEHRLING_1;
+	}
+    }
+    else if(!register[wiz, LEHRMEISTER_3])
+    {
+	// Ein Geselle:
+	if(last_login + 183*DAY < time())
+	{
+	    data = last_login;
+	    return GESELLE_1;
+	}
+
+	if(level_time + 183*DAY < time())
+	{
+	    data = level_time;
+	    return GESELLE_2;
+	}
+    }
+    else
+    {
+	// Ein Vogt:
+	if(last_login + 731*DAY > time())
+	    return 0;
+	
+	// Schauen wir mal, ob er ueberhaupt noch Rechte hat.
+	if(register[wiz, LEHRERLAUBNIS] ||
+	    sizeof(DOMAIN_INFOS->query_domains_of(wiz)) || // DL
+	    sizeof(DOMAIN_INFOS->query_domainhelfer_of(wiz)) || // DH
+	    member(FILED->query_all_auth(), wiz)>=0 ||  // Administrative Lords
+	    sizeof(GROUP_MASTER->query_immediate_fdb_groups(wiz) - ({wiz, "Root"})
+		- map(DOMAIN_INFOS->query_memberships_of(wiz),#'+,":DM")) || 
+	    MASTER_OB->group_has_entries(wiz)) // acl Direkteintraege
+	{
+	    data = last_login;
+	    return VOGT_1;
+	}
+    }
+}
+
+private void print_result(mapping result)
+{
+    mapping* ergebnis = map(({([:0])})*5,#'copy);
+    string *texte, *liste;
+    
+    if(!this_player())
+	return;
+	
+    foreach(string wiz, int cond: result)
+	m_add(ergebnis[cond], capitalize(wiz));
+	
+    texte = ({"",
+        "1. Lehrlinge, die seit ueber einem Monat in diesem Level verweilen:",
+        "2. Gesellen, die seit einem halben Jahr nicht einloggten:",
+	"3. Gesellen, die seit ueber einem halben Jahr diesen Level haben:",
+	"4. Voegte, die seit mehr als zwei Jahren nicht mehr einloggten:",
+	});
+
+    liste = ({
+	"Goetterdaemmerungskandidaten:",
+	"-----------------------------",
+	""
+	});
+
+    for(int i=1; i<sizeof(texte); i++)
+    {
+	liste += texte[i..i];
+	liste += explode(sizeof(ergebnis[i])
+	    ?sprintf("    %-=75s\n", implode(sort_array(m_indices(ergebnis[i]),#'>),", "))
+	    :"    - ", "\n");
+    }
+
+    liste += ({
+	"","",
+	"Ausfuehrlichere Liste:",
+	"----------------------",
+	});
+
+    for(int i=1; i<sizeof(texte); i++)
+    {
+	liste += ({"",}) + texte[i..i];
+	
+	foreach(string wiz: sort_array(m_indices(ergebnis[i]),#'>))
+	    liste += ({
+		sprintf("    %-=11s Lehrmeister %s", wiz+":", implode(map(query_lehrmeisters(lower_case(wiz)),#'capitalize),", ")),
+		sprintf("                Seit %s %s.", shorttimestr(result[lower_case(wiz),1],1,TIMESTR_ONLY_DATE),
+		    (i==2 || i==4)?"nicht mehr eingeloggt":"in diesem Level"),
+		""
+		    });
+    }
+    this_player()->more(liste);
+}
+
+private void check_inactive_wizzes(string *wizzes, mapping result)
+{
+    int count;
+
+    for(count=0; sizeof(wizzes) && count<20 && count < sizeof(wizzes) && get_eval_cost()>400000; count++)
+    {
+	mixed data;
+	int res = check_inactive_wiz(wizzes[count], &data);
+	if(res)
+	    m_add(result, wizzes[count], res, data);
+    }
+    
+    wizzes = wizzes[count..];
+    if(sizeof(wizzes))
+	call_out(#'check_inactive_wizzes, 1, wizzes, result);
+    else
+	call_out(#'print_result, 1, result);
+}
+
+// Goetterdaemmerung irgendjemand?
+void check_inactive()
+{
+    check_inactive_wizzes(m_indices(register), ([:2]));
+}
+
+void prepare_renewal() {save();}
+void abort_renewal() {}
+void finish_renewal(object neu) {}
+
+// ------------------------ RPC-Schnittstelle ------------------------
+int start_banishing_wiz(string wizname)
+{
+    object ob;
+    mixed *nodes;
+
+    if(object_name(previous_object()) != "/secure/rpc/app")
+        return 0;
+
+    limited(function void(): string wiz = wizname
+    {
+        sys_log("DAEMMERUNG", sprintf("[%s] %s:\n",
+	    shorttimestr(time()), capitalize(wiz)));
+
+        ob = find_player(wiz);
+        if(ob)
+	    ob->quit();
+
+        this_object()->banish_wiz(wiz);
+        BANISHD->banish(wiz, 20, "Leo", "Goetterdaemmerung");
+    
+        foreach(string domain: DOMAIN_INFOS->query_domains_of(wiz))
+	    if(DOMAIN_INFOS->delete_domain_lord(domain, wiz))
+	        sys_log("DAEMMERUNG", "                    Als DL von "+domain+" ausgetragen.\n");
+        foreach(string domain: DOMAIN_INFOS->query_domainhelfer_of(wiz))
+	    if(DOMAIN_INFOS->delete_domain_helfer(domain, wiz))
+	        sys_log("DAEMMERUNG", "                    Als DH von "+domain+" ausgetragen.\n");
+        foreach(string domain: DOMAIN_INFOS->query_memberships_of(wiz))
+	    if(DOMAIN_INFOS->delete_domain_member(domain, wiz))
+	        sys_log("DAEMMERUNG", "                    Als DM von "+domain+" ausgetragen.\n");
+    
+        GROUP_MASTER->changed();
+        GROUP_MASTER->delete_group_memberships_of(wiz);
+        foreach(mixed node: MASTER_OB->query_entries_for_a_group("/", wiz) || ({}))
+        {
+	    string res = MASTER_OB->delete_acl_entry(node[0], wiz, node[1]);
+	    if(res)
+	        sys_log("DAEMMERUNG", "                    ACL fuer "+node[0]+": "+res+"\n");
+            sys_log("DAEMMERUNG.acls", "zacl "+node[0]+" "+MASTER_OB->ACLmask2cmd(node[1])+" "+wiz+"\n");
+        }
+        ERROR_DB->delete_wiz(wiz);
+    
+        ob = find_object(PLAYER_INVENTORY_CONTAINER+wiz);
+        if(ob)
+	    destruct(ob);
+	
+        foreach(string testie: SECOND->query_testplayers_of(wiz) || ({}))
+        {
+            PLAYER_DELETER->delete_player(testie);
+            sys_log("DAEMMERUNG", "                    Testie "+capitalize(testie)+" geloescht.\n");
+        }
+
+        sys_log("DAEMMERUNG", "                    "+capitalize(wiz)+" gedaemmert.\n");
+    }, LIMIT_EVAL, 3*__MAX_EVAL_COST__);
+
+    return 1;
+}
+
+// bei flag_dm != 0 wird die Domainmitgliedschaft nach dem Loeschen 
+// wiederhergestellt.
+private void _banish_wiz_light(string wizname, int flag_dm)
+{
+    limited(function void(): string wiz = wizname; int flag = flag_dm
+    {
+        string * dom_memberships;
+        sys_log("DAEMMERUNG", sprintf("[%s] %s (Rechteaufhebung):\n",
+	    shorttimestr(time()), capitalize(wiz)));
+
+        foreach(string domain: DOMAIN_INFOS->query_domains_of(wiz))
+	    if(DOMAIN_INFOS->delete_domain_lord(domain, wiz))
+	        sys_log("DAEMMERUNG", "                    Als DL von "+domain+" ausgetragen.\n");
+        foreach(string domain: DOMAIN_INFOS->query_domainhelfer_of(wiz))
+	    if(DOMAIN_INFOS->delete_domain_helfer(domain, wiz))
+	        sys_log("DAEMMERUNG", "                    Als DH von "+domain+" ausgetragen.\n");
+
+        dom_memberships = DOMAIN_INFOS->query_memberships_of(wiz);
+        foreach(string domain: dom_memberships)
+            if(DOMAIN_INFOS->delete_domain_member(domain, wiz))
+                sys_log("DAEMMERUNG", "                    Als DM von "+domain+" ausgetragen.\n");
+    
+        GROUP_MASTER->changed(); // Defaultgruppen :DL,:DH,:DM neu fuellen.
+        GROUP_MASTER->delete_group_memberships_of(wiz);
+        foreach(mixed node: MASTER_OB->query_entries_for_a_group("/", wiz) || ({}))
+        {
+	    string res = MASTER_OB->delete_acl_entry(node[0], wiz, node[1]);
+	    if(res)
+	        sys_log("DAEMMERUNG", "                    ACL fuer "+node[0]+": "+res+"\n");
+            sys_log("DAEMMERUNG.acls", "zacl "+node[0]+" "+MASTER_OB->ACLmask2cmd(node[1])+" "+wiz+"\n");
+        }
+
+        if(query_lehrerlaubnis(wiz))
+        {
+	    sys_log("DAEMMERUNG", "                    Lehrerlaubnis entzogen.\n");
+	    this_object()->set_lehrerlaubnis(wiz, 0);
+        }
+        if (flag) {
+          foreach(string domain: dom_memberships)
+            if(DOMAIN_INFOS->add_domain_member(domain, wiz))
+                sys_log("DAEMMERUNG", "                    Als DM von "+domain+" wieder eingetragen.\n");
+          GROUP_MASTER->changed(); // Defaultgruppen :DL,:DH,:DM neu fuellen.
+        }
+    }, LIMIT_EVAL, 3*__MAX_EVAL_COST__);
+}
+
+varargs void banish_wiz_light(string wizname, int flag_dm)
+{
+    SECURE;
+    
+    if (!stringp(wizname) || !player_exists(wizname)) {
+        return;
+    }
+    _banish_wiz_light(wizname,flag_dm);
+}
+// Automatische Funktion: 2 Jahre inaktive Voegte acls entziehen.
+private void check_inactive_vogte(string *wizzes, mapping result)
+{
+    int count;
+    string wiz;
+
+    for(count=0; sizeof(wizzes) && count<20 && count < sizeof(wizzes) && get_eval_cost()>400000; count++)
+    {
+        mixed data;
+        wiz=wizzes[count];
+        if (sizeof(DOMAIN_INFOS->query_domains_of(wiz)) || // DL
+                sizeof(DOMAIN_INFOS->query_domainhelfer_of(wiz))) { // DH
+            continue; // Aus Sicherheitsgruenden keine Pruefung.
+        }
+        int res = check_inactive_wiz(wiz, &data);
+        if(res == VOGT_1) {
+            _banish_wiz_light(wiz,1);
+            m_add(result, wiz, res, data);
+        }
+    }
+    
+    wizzes = wizzes[count..];
+    if(sizeof(wizzes)) {
+        call_out(#'check_inactive_vogte, 1, wizzes, result);
+    } else {
+        sys_log("DAEMMERUNG", sprintf(
+            "[%s] (autom.Rechteaufhebung-Ende $d):\n",
+	    shorttimestr(time()),sizeof(result) ));
+    }
+}
+
+nosave void check_inactive_voegte()
+{
+    sys_log("DAEMMERUNG", sprintf("[%s] (autom.Rechteaufhebung-Start):\n",
+	    shorttimestr(time()) ));
+    // Hier sind Admins und Adm.Lords die Ausnahmen
+    check_inactive_vogte(m_indices(register)-ADMINS
+            -FILED->query_all_auth(), ([:2]));
+}

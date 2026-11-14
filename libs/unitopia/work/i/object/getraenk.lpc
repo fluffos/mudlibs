@@ -1,0 +1,577 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/object/getraenk.c
+// Description:
+// Modified by: Garthan	(27.05.96) Ohne freie Hand geht's nicht.
+//		Garthan	(27.05.96) Man muss es erst nehmen wie beim Essen auch
+//		Monty   (28.10.96) Fuer Zap query_getraenk_messages() 
+//				   eingepatcht
+// $Log: getraenk.c,v $
+// Revision 1.14  2009-01-15 08:49:39  gnomi
+// query_failure_remove eingebaut.
+//
+// Revision 1.13  2007/12/05 10:53:32  gnomi
+// Doku verallgemeinert, so dass sie auch fuer Nahrung gilt.
+//
+// Revision 1.12  2005/05/06 22:59:53  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.11  2005/04/10 01:21:39  gnomi
+// Typo in der Doku.
+//
+// Revision 1.10  2004/11/27 21:15:55  gnomi
+// add_hp-Aenderung: add_hp-Aufruf angepasst.
+//
+// Revision 1.9  2003/08/15 03:17:20  gnomi
+// Typo.
+//
+// Revision 1.8  2002/10/19 00:39:20  gnomi
+// notify_drink_failure(_self) eingebaut.
+// Negatives healing moeglich.
+//
+// Revision 1.7  2002/01/12 07:46:54  gnomi
+// notify/forbidden_drink_me eingebaut.
+// Doku zu Controllern aus /i/item/control hierher bewegt.
+//
+// Revision 1.6  2001/12/10 21:11:53  sissi
+// deinen statt Deinen
+//
+// Revision 1.5  2001/11/09 22:46:46  gnomi
+// Den notify_fails Prioritaeten zugewiesen.
+//
+// Revision 1.4  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+ * Standard-Getraenk.
+ * set_success_message(mixed str)
+ * set_other_success_message(mixed str)
+ * set_failure_message(mixed str)
+ * set_other_failure_message(mixed str)
+ * set_healing(int i)
+ * set_strength(int i)
+ * set_amount(int a)
+ * set_failure_remove(int a)
+ * set_stay_in_pub()
+ */
+
+inherit "/i/item";
+inherit "/i/move";
+inherit "/i/value";
+
+#include <deklin.h>
+#include <config.h>
+#include <apps.h>
+#include <object_stats.h>
+#include <message.h>
+#include <notify_fail.h>
+#include <add_hp.h>
+#pragma save_types
+
+#define Write(x) write(wrap(x))
+#define Say(x) say(wrap(x))
+
+private int stay_in_pub, healing, strength, amount, failure_remove;
+private closure success_message, other_success_message, failure_message;
+private closure other_failure_message;
+
+
+void create()
+{
+    set_name("getraenk");
+    set_gender("saechlich");
+    set_long("Ein Getraenk. Man kann es trinken!\n");
+    set_material( ({"glas","wasser"}) );
+    set_value(10);
+    set_weight(1);
+    set_id(({"getraenk"}));
+    set_class_id(({"getraenk"}));
+    failure_remove = 1;
+}
+
+int query_sellable() { return 0; }
+
+void init() {
+    add_action("drink","trinke",-5);
+}
+
+/*
+FUNKTION: set_success_message
+DEKLARATION: void set_success_message(mixed success_message)
+BESCHREIBUNG:
+Setzt bei Nahrung und Getraenken die Meldung, die der Spieler am
+Ende des Essens oder Trinkens bekommt. Pseudoclosures und Closures
+sind erlaubt. Die Meldung wird automatisch umgebrochen.
+VERWEISE: set_other_success_message, query_success_message,
+          set_failure_message, set_other_failure_message,
+	  set_chew_message, set_other_chew_message
+	  set_start_chew_message, set_other_start_chew_message,
+	  set_dauer, set_failure_remove
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+void set_success_message(mixed str) {
+  success_message = mixed_to_closure(str);
+}
+
+/*
+FUNKTION: set_other_success_message
+DEKLARATION: void set_other_success_message(mixed other_success_message)
+BESCHREIBUNG:
+Setzt bei Nahrung und Getraenken die Meldung, die die anderen im Raum
+bekommen, wenn ein Spieler die Nahrung aufgegessen bzw. das Getraenk
+ausgetrunken hat. Pseudoclosures und Closures sind erlaubt. Die Meldung
+wird automatisch umgebrochen.
+VERWEISE: set_success_message, query_other_success_message,
+	  set_failure_message, set_other_failure_message,
+	  set_chew_message, set_other_chew_message
+	  set_start_chew_message, set_other_start_chew_message,
+	  set_dauer, set_failure_remove
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+void set_other_success_message(mixed str) {
+  other_success_message = mixed_to_closure(convert_message(str));
+}
+
+/*
+FUNKTION: set_failure_message
+DEKLARATION: int set_failure_message(mixed failure_message)
+BESCHREIBUNG:
+Setzt bei Nahrung und Getraenken die Meldung, die der Spieler bekommt, wenn
+er nicht mehr essen oder trinken kann (zu viel wp, fp oder alc).
+Pseudoclosures und Closures sind erlaubt. Die Meldung wird automatisch
+umgebrochen.
+
+Wenn diese Meldung geaendert wird, sollte man mit set_failure_remove
+angeben, ob die Nahrung oder das Getraenk danach vernichtet wird.
+
+VERWEISE: set_other_failure_message, query_failure_message,
+	  set_success_message, set_other_success_message, 
+	  set_chew_message, set_other_chew_message,
+	  set_start_chew_message, set_other_start_chew_message,
+	  set_dauer, set_failure_remove
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+void set_failure_message(mixed str) {
+  failure_message = mixed_to_closure(str);
+}
+
+/*
+FUNKTION: set_other_failure_message
+DEKLARATION: void set_other_failure_message(mixed other_failure_message)
+BESCHREIBUNG:
+Setzt bei Nahrung und Getraenken die Meldung, die die anderen im Raum
+bekommen, wenn ein Spieler nicht mehr essen oder trinken kann.
+Pseudoclosures und Closures sind erlaubt. Die Meldung wird automatisch
+umgebrochen.
+VERWEISE: set_failure_message, query_other_failure_message,
+	  set_success_message, set_other_success_message, 
+	  set_chew_message, set_other_chew_message,
+	  set_start_chew_message, set_other_start_chew_message,
+	  set_dauer, set_failure_remove
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+void set_other_failure_message(mixed str) {
+  other_failure_message = mixed_to_closure(convert_message(str));
+}
+
+/*
+FUNKTION: set_healing
+DEKLARATION: void set_healing(int healing)
+BESCHREIBUNG:
+Setzt bei Nahrung und Getraenken die Anzahl APs, die ein Spieler beim Genuss
+gutgeschrieben bekommt.
+VERWEISE: query_healing, set_amount, query_amount, set_strength, query_strength, set_dauer, query_dauer
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+void set_healing(int i) { healing = i; }
+
+/*
+FUNKTION: set_strength
+DEKLARATION: void set_strength(int strength)
+BESCHREIBUNG:
+Setzt bei Getraenken den Alkoholgehalt.
+VERWEISE: set_healing, query_healing, set_amount, query_amount, query_strength 
+GRUPPEN: getraenke
+*/
+void set_strength(int i) { strength = i; }
+
+/*
+FUNKTION: set_amount
+DEKLARATION: void set_amount(int amount)
+BESCHREIBUNG:
+Setzt bei Nahrung die fp, bei Getraenken die wp, die ein Spieler beim Genuss 
+bekommt.
+VERWEISE: set_healing, query_healing, query_amount, set_strength, query_strength
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+void set_amount(int a) { amount = a; }
+
+/*
+FUNKTION: query_healing
+DEKLARATION: int query_healing()
+BESCHREIBUNG:
+Liefert Zurueck, wieviele AP ein Spieler bei Genuss einer Speise oder 
+eines Getraenks bekommt.
+VERWEISE: set_healing, set_amount, query_amount, set_strength, query_strength
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+int query_healing() { return healing; }
+
+/*
+FUNKTION: query_strength
+DEKLARATION: int query_strength()
+BESCHREIBUNG:
+Liefert bei Getraenken den Alkoholgehalt zurueck.
+VERWEISE: set_healing, query_healing, set_amount, query_amount, set_strength
+GRUPPEN: nahrung, getraenke
+*/
+int query_strength() { return strength; }
+
+/*
+FUNKTION: query_amount
+DEKLARATION: int query_amount()
+BESCHREIBUNG:
+Liefert bei Nahrung die fp und bei Getraenken die wp, die ein Spieler beim 
+Genuss bekommt, zurueck.
+VERWEISE: set_healing, query_healing, set_amount, set_strength, query_strength
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+int query_amount() { return amount; }
+
+/*
+FUNKTION: set_failure_remove
+DEKLARATION: void set_failure_remove(int flag)
+BESCHREIBUNG:
+Setzt bei Nahrung und Getraenken, ob sie zerstoert werden sollen, wenn man 
+sie nicht essen/trinken kann.
+Bei flag==1 bekommt der Spieler bei Misserfolg die failure_message, die anderen
+die other_failure_message und das Essen/Getraenk wird zerstoert. Bei flag==0 
+bleibt es im Gepaeck des Spielers.
+VERWEISE: set_failure_message, set_other_failure_message
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+void set_failure_remove(int a) { failure_remove = a ? 1 : 0; }
+
+/*
+FUNKTION: query_failure_remove
+DEKLARATION: int query_failure_remove()
+BESCHREIBUNG:
+Liefert, ob die Nahrung oder das Getraenk removed wird, falls der Spieler,
+der diese Nahrung bzw. das Getraenk essen wollte, bereits satt ist.
+VERWEISE: set_failure_remove, set_failure_message
+GRUPPEN: nahrung, getraenke
+SOURCE: /i/object/nahrung.c
+*/
+int query_failure_remove() { return failure_remove; }
+
+void failure() {
+
+    if (failure_message)
+	Write(closure_to_string(failure_message));
+    else
+    	Write("Du spuckst das Zeugs wieder aus.\n");
+
+    if (other_failure_message)
+	Say(closure_to_string(other_failure_message));
+    else
+	Say(Der(OBJ_TP)+" spuckt "+seinen()+" wieder aus.\n");
+
+    this_player()->notify("drink_failure",this_object());
+    notify("drink_failure_self",this_player());
+
+    if (failure_remove)
+	remove();
+}
+
+void success() {
+
+    if (success_message)
+	Write(closure_to_string(success_message));
+    else
+	Write("Du trinkst "+deinen()+".");
+
+    if (other_success_message)
+	Say(closure_to_string(other_success_message));
+    else
+	Say(Der(OBJ_TP)+" trinkt "+seinen()+".");
+
+    remove();
+}
+
+private void heal_self(int amount)
+{
+    int hp_get, sp_get;
+
+    if (amount < 0)
+    {
+        int hp_available = this_player()->query_hp();
+        if(amount+hp_available < 0)
+        {
+            hp_get = -hp_available;
+            sp_get = amount + hp_available;
+        }
+        else
+        {
+            hp_get = amount;
+            sp_get = 0;
+        }
+    }
+    else
+    {
+        int hp_needed = this_player()->query_max_hp() - this_player()->query_hp();
+        if (amount > hp_needed)
+        {
+            hp_get = hp_needed;
+            sp_get = amount - hp_needed;
+        }
+        else
+        {
+            hp_get = amount;
+            sp_get = 0;
+        }
+    }
+    if (hp_get)
+        this_player()->add_hp(hp_get, ([ AH_HEAL_TYPE: AH_HEAL_MEDIC]));
+    if (sp_get)
+        this_player()->add_sp(sp_get);
+}
+
+int drink(string str) {
+    string reason;
+
+    if (!me(str)) {
+        notify_fail("Trinke was?\n", FAIL_NOT_OBJ);
+        return 0;
+	}
+
+    if (environment() != this_player()) {
+	notify_fail("Du musst "+den()+" erst nehmen.\n", FAIL_INTERNAL);
+	return 0;
+        }
+
+    if (this_player()->free_hand() < 0 )
+        return notify_fail("Ohne eine freie Hand ist das nicht moeglich.\n",
+	    FAIL_INTERNAL);
+
+    if (this_player()->forbidden("drink",this_object()) ||
+        this_object()->forbidden("drink_me",this_player()))
+        return 1;
+    if (this_player()->has_enough_wp(amount) ||
+	(strength > 0 && this_player()->has_enough_alc(strength))) {
+	this_object()->failure();
+	return 1;
+	}
+
+    this_player()->add_wp(amount);
+
+    if (strength != 0)
+	this_player()->add_alc(strength);
+
+    if (healing)
+	heal_self(healing);
+
+    this_player()->notify("drink",this_object());
+    this_object()->notify("drink_me",this_player());
+    this_object()->success();
+    return 1;
+}
+
+/*
+FUNKTION: set_stay_in_pub
+DEKLARATION: void set_stay_in_pub(int flag)
+BESCHREIBUNG:
+Wird set_stay_in_pub(1) in einem Getraenk aufgerufen, wird ein Wirt den Spieler
+daran hindern, eine Kneipe mit dem Getraenk zu verlassen. Wird es mit flag==0
+aufgerufen, reagiert er nicht.
+VERWEISE: query_stay_in_pub
+GRUPPEN: getraenke
+*/
+void set_stay_in_pub(int a) { stay_in_pub = (a!=0); }
+
+/*
+FUNKTION: query_stay_in_pub
+DEKLARATION: int query_stay_in_pub()
+BESCHREIBUNG:
+Ein Getraenk, das in der Kneipe getrunken werden sollte, antwortet darauf mit
+1, die anderen nicht. Wenn Du einen Filter in einen Kneipenausgang baust, dann
+sollte er jedes Getraenk im Gepaeck des Spielers danach fragen.
+VERWEISE: set_stay_in_pub
+GRUPPEN: getraenke
+*/
+int query_stay_in_pub() { return stay_in_pub; }
+
+/*
+FUNKTION: query_getraenk
+DEKLARATION: int query_getraenk()
+BESCHREIBUNG:
+Getraenke antworten darauf mit 1.
+VERWEISE: 
+GRUPPEN: getraenke
+*/
+int query_getraenk() { return 1; }
+
+/*
+FUNKTION: query_getraenk_messages
+DEKLARATION: closure *query_getraenk_messages()
+BESCHREIBUNG:
+Liefert alle Closure-Eintraege des Getraenks als Array zurueck.
+VERWEISE: 
+GRUPPEN: getraenke
+*/
+closure *query_getraenk_messages() {
+    return ({
+        success_message,
+        other_success_message,
+        failure_message,
+        other_failure_message });
+}
+
+// schieben von getraenken unterbinden
+int no_push(object wer, object wohin)
+{
+   if(query_stay_in_pub())
+   {
+      send_message_to(wer,MT_LOOK|MT_NOTIFY,MA_UNKNOWN,
+            wrap(Der()+" ist zu zerbrechlich, "
+	    "um ueber den Boden geschoben zu werden."));
+      return 1;
+   }
+}
+
+#ifdef LOG_OBJECT_STATS
+void log_object_stats()
+{
+   OBJECT_STATS->add_object_stats(OS_GETRAENK, this_object(),
+      ({
+         query_name(),
+         query_weight(),
+         query_value(),
+         query_amount(),
+	 query_strength(),
+	 query_healing(),
+	 query_stay_in_pub(),
+      }));
+}
+#endif
+
+/*
+FUNKTION: forbidden_drink
+DEKLARATION: int forbidden_drink(object ob, object who)
+BESCHREIBUNG:
+Bevor ein Lebewesen who das Getraenk ob trinken darf, wird who->forbidden(
+"drink", ob) aufgerufen, liefert dieser Aufruf einen Wert ungleich 0
+zurueck, wird ob nicht getrunken.
+
+Die Funktion forbidden ruft in allen mit who->add_controller(
+"forbidden_drink", other) angemeldeten Objekten other die Funktionen
+other->forbidden_drink(ob, who) auf. Liefert auch nur eine dieser Funktionen
+einen Wert ungleich 0, dann returnt forbidden diesen und das Objekt ob kann
+nicht getrunken werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who und ggf. an den Raum muss
+der Programmierer in forbidden_drink oder forbidden, falls er diese Funktion
+ueberlagern will, sorgen.
+Zum Beispiel kann ein Wirt den Genuss mitgebrachter Getraenke in seinem
+Gasthof untersagen, oder es hat ein NPC etwas gegen Alkohol-Saeufer.
+Diese koennen sich z.B. im moved_in anmelden und im moved_out abmelden.
+VERWEISE: forbidden, notify, forbidden_drink_me, notify_drink
+GRUPPEN: getraenke
+*/
+
+/*
+FUNKTION: forbidden_drink_me
+DEKLARATION: int forbidden_drink_me(object who, object on)
+BESCHREIBUNG:
+Bevor ein Lebewesen who das Getraenk ob trinken darf, wird ob->forbidden(
+"drink_me", who) aufgerufen, liefert dieser Aufruf einen Wert ungleich 0
+zurueck, wird ob nicht getrunken.
+
+Die Funktion forbidden ruft in allen mit ob->add_controller(
+"forbidden_drink_me", other) angemeldeten Objekten other die Funktionen
+other->forbidden_drink_me(who, ob) auf. Liefert auch nur eine dieser Funktionen
+einen Wert ungleich 0, dann returnt forbidden diesen und das Objekt ob kann
+nicht getrunken werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who und ggf. an den Raum muss
+der Programmierer in forbidden_drink_me oder forbidden, falls er diese Funktion
+ueberlagern will, sorgen.
+VERWEISE: forbidden, notify, forbidden_drink, notify_drink_me
+GRUPPEN: getraenke
+*/
+
+/*
+FUNKTION: notify_drink
+DEKLARATION: void notify_drink(object ob, object who)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who das Getraenk ob hintergekippt hat, wird
+who->notify("drink", ob) aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller("notify_drink",
+other) angemeldeten Objekten other die Funktionen other->notify_drink(ob, who)
+auf. Sowohl who als auch other haben dann eine Moeglichkeit, auf den Genuss
+des Getraenks ob durch das Lebewesen who zu reagieren.
+Zum Beispiel wird ein durstiger Mann nicht nur wortlos zuschauen, wie sich
+ein Spieler vollaufen laesst.
+VERWEISE: forbidden, notify, notify_drink_me, forbidden_drink
+GRUPPEN: getraenke
+*/
+
+/*
+FUNKTION: notify_drink_me
+DEKLARATION: void notify_drink_me(object who, object ob)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who das Getraenk ob hintergekippt hat, wird
+ob->notify("drink_me", who) aufgerufen.
+
+Die Funktion notify ruft in allen mit ob->add_controller("notify_drink_me",
+other) angemeldeten Objekten other die Funktionen other->notify_drink_me(
+who, ob) auf.
+Sowohl ob als auch other haben dann eine Moeglichkeit, auf den Genuss
+des Getraenks ob durch das Lebewesen who zu reagieren.
+VERWEISE: forbidden, notify, notify_drink_me, forbidden_drink
+GRUPPEN: getraenke
+*/
+
+/*
+FUNKTION: notify_drink_failure
+DEKLARATION: void notify_drink_failure(object getraenk, object who)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who das Getraenk getraenk nicht trinken konnte, weil
+er bereits voll war, wird who->notify("drink_failure", getraenk) aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller(
+"notify_drink_failure", other) angemeldeten Objekten other die Funktionen
+other->notify_drink_failure(getraenk, who) auf. Sowohl who als auch other
+haben dann eine Moeglichkeit, darauf zu reagieren.
+VERWEISE: forbidden, notify, notify_drink_failure_self, notify_drink,
+	  notify_drink_me, forbidden_drink, forbidden_drink_me
+GRUPPEN: getraenke
+*/
+
+/*
+FUNKTION: notify_drink_failure_self
+DEKLARATION: void notify_drink_failure_self(object who, object getraenk)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who das Getraenk getraenk nicht trinken konnte, weil
+er bereits voll war, wird getraenk->notify("drink_failure_self", who)
+aufgerufen.
+
+Die Funktion notify ruft in allen mit getraenk->add_controller(
+"notify_drink_failure_self", other) angemeldeten Objekten other die Funktionen
+other->notify_drink_failure_self(who, getraenk) auf. Sowohl getraenk als auch
+other haben dann eine Moeglichkeit, darauf zu reagieren.
+VERWEISE: forbidden, notify, notify_drink_failure, notify_drink,
+          notify_drink_me, forbidden_drink, forbidden_drink_me
+GRUPPEN: getraenke
+*/

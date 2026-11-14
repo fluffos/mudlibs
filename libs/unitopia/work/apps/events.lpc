@@ -1,0 +1,187 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/events.c
+// Description:	Speichert Ereignisse
+// Author:	Gnomi
+
+// UID: Apps
+
+// $Log$
+
+#include <achievements.h>
+
+#define EVENTS_DATABASE "/var/spool/events/events.db"
+
+struct event
+{
+    int id;
+    int date;
+    string player;
+    string type;
+    int classification;
+    string msg_me;
+    string msg_other;
+    mixed data;
+};
+
+/* Defines fuer classification */
+#define EVC_PRIVATE  0
+#define EVC_CIRCLE   1
+#define EVC_PUBLIC   2
+
+private void init_database()
+{
+    sl_open(EVENTS_DATABASE);
+    switch(sl_exec("PRAGMA user_version")[0][0])
+    {
+        case 0: // Neue Datenbank
+            sl_exec("CREATE TABLE events ("
+                        "id        INTEGER PRIMARY KEY, "   // Rowid, zum direkten Zugriff
+                        "date      INTEGER, "               // Timestamp
+                        "player    TEXT, "                  // Spielername (real_name), "" bei administrativen Events
+                        "type      TEXT, "                  // Typ des Ereignisses
+                        "class     INTEGER, "               // 0: privat, 1: Freunde, 2: Oeffentlich
+                        "msg_me    TEXT, "                  // Text fuer den Spieler
+                        "msg_other TEXT, "                  // Text fuer alle anderen
+                        "data      TEXT)");                 // save_value() von Zusatzinfos
+            sl_exec("CREATE INDEX date_index ON events(date, id)");
+            sl_exec("CREATE INDEX player_index ON events(player)");
+            break;
+
+        case 1: // Aktuelle Version
+            sl_exec("ANALYZE");
+            sl_close();
+            return;
+    }
+    sl_exec("PRAGMA user_version=1");
+    sl_close();
+}
+
+private void add_entry(struct event ev)
+{
+    sl_open(EVENTS_DATABASE);
+    sl_exec("INSERT INTO events (date,player,type,class,msg_me,msg_other,data) "
+           "VALUES (?, ?, ?, ?, ?, ?, ?)",
+           ev->date, ev->player || "", ev->type, ev->classification, ev->msg_me, ev->msg_other, save_value(ev->data));
+
+    ev->id = sl_exec("SELECT last_insert_rowid()")[0][0];
+    sl_close();
+}
+
+private int filter_entry(struct event ev, string player)
+{
+    return 1;
+}
+
+private string* get_event_circle(string player)
+{
+#ifdef UNItopia
+    return ({player}) + "/d/Maerchenland/Schnuller/apps/master"->query_friends_of(player);
+#else
+    return ({player});
+#endif
+}
+
+mapping achievements = ([
+     AT_OTHER:  "sonstiges",
+     AT_QUEST:  "raetsel",
+     AT_GAME:   "spiel",
+     AT_DEATH:  "tod",
+     AT_KILLED: "monster",
+     AT_LEVEL:  "level",
+     AT_GUILD:  "gilde",
+]);
+
+void announce_achievement(int type, object player, mapping info)
+{
+    if(!info[AI_TEXT_ME] || !info[AI_TEXT_OTHER])
+        return;
+
+    mapping data = copy(info);
+    m_delete(data, AI_TEXT_ME);
+    m_delete(data, AI_TEXT_OTHER);
+
+    add_entry((<event>
+        date:           time(),
+        player:         player->query_real_name(),
+        type:           achievements[type] || "sonstiges",
+        classification: EVC_CIRCLE,
+        msg_me:         info[AI_TEXT_ME],
+        msg_other:      info[AI_TEXT_OTHER],
+        data:           data));
+}
+
+void add_global_event(string type, string msg, mixed data)
+{
+    add_entry((<event>
+        date:           time(),
+        player:         0,
+        type:           type,
+        classification: EVC_PUBLIC,
+        msg_me:         msg,
+        msg_other:      msg,
+        data:           data));
+}
+
+struct event* query_entries(string player, int last_time, int last_id, int count)
+{
+    struct event* result = ({});
+    string *names = get_event_circle(player);
+    string wildcards = "";
+
+    for(int i=0; i<sizeof(names); i++)
+        wildcards += sprintf(",?%03d", i+4);
+
+    sl_open(EVENTS_DATABASE);
+
+    while(sizeof(result) < count)
+    {
+        // Beim ersten Mal doppelt soviele Eintraege auslesen
+        int sql_limit = sizeof(result) ? count : (2*count);
+        struct event* sql_result = map(
+            sl_exec("SELECT id,date,player,type,class,msg_me,msg_other,data FROM events "
+                "WHERE player in (''" + wildcards + ") " +
+               (last_time 
+                   ? "AND date < ?001 OR (date = ?001 AND id < ?002) "
+                   : ""
+               ) + "ORDER BY date, id LIMIT ?003",
+               last_time, last_id, sql_limit, names...),
+            function struct event(mixed* cols)
+            {
+                return (<event>
+                    id:             cols[0],
+                    date:           cols[1],
+                    player:         sizeof(cols[2]) && cols[2],
+                    type:           cols[3],
+                    classification: cols[4],
+                    msg_me:         cols[5],
+                    msg_other:      cols[6],
+                    data:           restore_value(cols[7]));
+            });
+
+        result += filter(sql_result, #'filter_entry, player);
+
+        if(sizeof(sql_result) < sql_limit)
+            break;
+
+
+        last_time = sql_result[<1]->date;
+        last_id = sql_result[<1]->id;
+    }
+
+    sl_close();
+
+    return result[0..count-1];
+}
+
+void create()
+{
+    init_database();
+}
+
+void reset()
+{
+    sl_open(EVENTS_DATABASE);
+    sl_exec("ANALYZE");
+    sl_close();
+}

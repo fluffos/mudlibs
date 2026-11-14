@@ -1,0 +1,173 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/portal.c
+// Description:	Aufbewahrungsraum fuer Reisende
+// Author:	Gnomi
+//
+// $Log: portal.c,v $
+// Revision 1.1  2012-11-27 22:15:39  gnomi
+// Aufbewahrungsort fuer InterMUD-Reisende.
+//
+
+inherit "%room";
+
+#include <config.h>
+#include <commands.h>
+#include <description.h>
+#include <input_to.h>
+#include <invis.h>
+#include <move.h>
+#include <portal.h>
+#include <room_types.h>
+
+mapping travellers = ([:2]);
+
+void add_traveller(object pl, mapping info)
+{
+    if(playerp(pl))
+        m_add(travellers, pl, info, object_name(environment(pl)));
+}
+
+void move_traveller(object pl, mapping info)
+{
+    if(!member(travellers, pl))
+        add_traveller(pl, info);
+    else
+        travellers[pl,0] = info;
+}
+
+mapping get_traveller_info(object pl)
+{
+    return travellers[pl,0];
+}
+
+int let_not_in(object wer, object woher, string dir)
+{
+    if(!member(travellers, wer))
+        return 1;
+    return ::let_not_in(wer, woher, dir);
+}
+
+void moved_in(object wer, object woher, string dir, int wie)
+{
+    if(!member(travellers, wer))
+    {
+        this_player()->move(DEFAULT_NIRVANA_EXIT, MOVE_MAGIC);
+        return;
+    }
+
+    wer->set_invis(V_NOLIST);
+    PORTAL_SERVER->enter_portal(wer, travellers[wer,0]);
+
+    if(wer)
+        ::moved_in(wer, woher, dir, wie);
+}
+
+void moved_out(object wer, object wohin, string dir, int wie)
+{
+    wer->set_invis(V_VIS);
+    ::moved_out(wer, wohin, dir, wie);
+}
+
+int cmd(string msg)
+{
+    if(!member(travellers, this_player()))
+    {
+        remove_input_to(this_player());
+        this_player()->move(DEFAULT_NIRVANA_EXIT, MOVE_MAGIC);
+        return 1;
+    }
+
+    PORTAL_SERVER->send_command(this_player(), travellers[this_player(),0], msg);
+    return 1;
+}
+
+void cmd_loop(string str)
+{
+    if(present(this_player()))
+        input_to("cmd_loop", INPUT_IGNORE_BANG);
+    cmd(str || "");
+}
+
+void leave(object pl, mapping info)
+{
+    if(!member(travellers, pl))
+    {
+        if(present(pl))
+            this_player()->move(DEFAULT_NIRVANA_EXIT, MOVE_MAGIC);
+    }
+    else if(info)
+    {
+        object room = touch(info[P_CONF_ROOM]), portal;
+        mixed msg;
+
+        if(!room)
+            room = touch(DEFAULT_START_ROOM);
+        portal = present(ID_PORTAL(info[P_CONF_SRC_PORTAL_NAME]), room);
+        if(portal)
+        {
+            msg = portal->query_enter_messages(pl);
+            msg = pointerp(msg) && msg[1];
+        }
+        pl->move(room, MOVE_NORMAL, 0, msg);
+    }
+    else
+        pl->move(travellers[pl,1], MOVE_NORMAL, "", "$Der() kommt aus dem Portal.");
+
+    m_delete(travellers, pl);
+    if(!pl->uses_vt100client())
+        remove_input_to(pl);
+}
+
+void rescue(string mud)
+{
+    mud = lower_case(mud);
+    foreach(object pl, mapping info, string room: travellers)
+        if(lower_case(info[P_CONF_DEST_MUD]) == mud)
+            leave(pl, 0);
+}
+
+int has_travellers(string mud)
+{
+    mud = lower_case(mud);
+    foreach(object pl, mapping info, string room: travellers)
+        if(lower_case(info[P_CONF_DEST_MUD]) == mud)
+            return 1;
+}
+
+void create()
+{
+    "*"::create();
+    set_long(({T_DARK, "", T_ELSE, ""}));
+    add_type(({RT_MAGIE_VERBOTEN, RT_HANDWERK_VERBOTEN, RT_KAEMPFEN_VERBOTEN, RT_STEHLEN_VERBOTEN,
+               RT_TELEPORT_REIN_VERBOTEN, RT_TELEPORT_RAUS_VERBOTEN,
+               RT_VERSAND_REIN_VERBOTEN, RT_VERSAND_RAUS_VERBOTEN,
+               RT_KEIN_VERBRAUCH, RT_KUNSTLICHT}), 1);
+}
+
+void init()
+{
+    "*"::init();
+    if(!this_player()->uses_vt100client())
+    {
+        add_action("cmd", "", AA_NOSPACE);
+        input_to("cmd_loop", INPUT_IGNORE_BANG);
+    }
+}
+
+void abort_renewal() {}
+
+void init_from_renewal(mapping old_travellers)
+{
+    if(strstr(object_name(previous_object()), "/room/"))
+        return;
+
+    travellers = old_travellers || ([:2]);
+}
+
+void finish_renewal(object neu)
+{
+    neu->init_from_renewal(travellers);
+}
+
+void prepare_renewal() {}

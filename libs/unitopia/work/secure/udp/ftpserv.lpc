@@ -1,0 +1,416 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/udp/ftpserv
+// Description: Access Code for external ftpd
+// Author:	Garthan	(21.09.94) based on Morgengrauen Code.
+// Modified by: Garthan (19.01.95) fixed minor security hole.
+
+// this object is privileged to use send_udp.
+//
+// $Log: ftpserv.c,v $
+// Revision 1.16  2015/06/01 19:46:30  gnomi
+// Typen korrigiert.
+//
+// Revision 1.15  2005-06-13 22:24:50  gnomi
+// Ausgelagerten Check vom Login-Ob hier nutzen.
+//
+// Revision 1.14  2003/11/11 03:12:45  gnomi
+// Ein paar Sicherheitsluecken geschlossen.
+//
+// Revision 1.13  2003/11/06 23:02:05  menaures
+// CHECK_PASS -> PASSWD_CHECK (Makro nach passwd.h umgezogen)
+//
+// Revision 1.12  2003/11/05 21:08:25  menaures
+// CHECK_PASS zur Passwortpruefung verwenden.
+//
+// Revision 1.11  2003/11/05 01:43:09  gnomi
+// Nur ein Kommentar, damit ich weiss, welcher Teil des Codes genutzt wird.
+//
+// Revision 1.10  2003/07/28 02:52:41  gnomi
+// Unnoetigen Cast entfernt.
+//
+// Revision 1.9  2002/10/21 01:00:24  gnomi
+// Kleiner Bugfix.
+//
+// Revision 1.8  2002/07/04 23:07:57  gnomi
+// seteuid(getuid()) entfernt; EUID wird vom Master aus gesetzt.
+//
+// Revision 1.7  2002/04/10 05:21:53  gnomi
+// Einige Variableninitialisierungen wegen Typcheck getrennt.
+//
+// Revision 1.6  2001/12/27 16:12:01  freaky
+// an neue FTP-Struktur angepasst.
+//
+// Revision 1.5  2001/05/30 16:03:11  freaky
+// Versionabhaengigkeiten rausgeworfen.
+//
+// Revision 1.4  2001/03/31 22:51:47  sissi & gnomi
+// Goetter haben keinen FTP-Zugang mehr.
+//
+// Revision 1.3  2001/02/24 15:09:12  freaky
+// send_imp nach send_udp umbenannt.
+//
+// Revision 1.2  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+inherit "/secure/i/sperre";
+
+#include <config.h>
+#include <level.h>
+#include <passwd.h>
+
+int level; // used to restore level of player via restore_object
+mixed log_commands;
+
+nosave mapping level_cache = ([]);
+nosave mapping lc_cache = ([:0]);
+
+void create()
+{
+}
+
+void reset()
+{
+   // empty cache
+   level_cache = ([]);
+   lc_cache = ([]);
+}
+
+void clear_vars()
+{
+    "*"::clear_vars();
+    level = log_commands = 0;
+}
+
+private string ls_time(int tim)
+{
+   string ct;
+   ct = ctime(tim);
+   if(time()-tim > 15552000)
+      return ct[4..10]+ct[19..];
+   else
+      return ct[4..15];
+}
+
+private string show_dir(string path, string user)
+{
+
+   int size, is_read, is_write, is_exec, is_dir, i;
+   string *uid, *dir, res, group, name;
+
+#if 0
+   if(find_player("freaky"))
+      tell_object(find_player("freaky"), sprintf("%O %O\n", path, user));
+#endif
+
+   if(!path)
+      return 0;
+   if (path[<1] == '/')
+      path += "*";
+   else if (path[<2..]=="/.")
+      path[<1] = '*';
+   else if (file_size(path) == -2)
+      path += "/*";
+
+   dir = get_dir(path, 7);
+
+   path = implode(explode(path,"/")[0..<2],"/");
+
+   res = "";
+   for(i = 0; i < sizeof(dir); i+=3)
+      if(dir[i] != ".message")
+      {
+	 size = (int)dir[i+1];
+	 is_dir = size == -2;
+	 name = abs_path(dir[i], path) + (is_dir ? "/" : "");
+	 is_exec = !is_dir && name[<2..] == ".lpc" && find_object(name) && 1;
+	 is_read = MASTER_OB->valid_read(name, user, "read_file", 0);
+	 is_write = MASTER_OB->valid_write(name, user, "write_test", 0);
+	 uid = explode(MASTER_OB->get_load_uid(is_exec ? name[1..<3] : name[1..]) || "nobody",":");
+	 if(sizeof(uid) < 2)
+	    if(strstr(name,"/w/"))
+	       group = "mudlib";
+            else
+	       group = "privat";
+	 else
+	    group = uid[0];
+
+         res +=
+	    sprintf("%c%c%c%c------   0 %-10s %-10s %10d %12s %s\n",
+	       is_dir ? 'd':'-',
+	       is_read? 'r':'-',
+	       is_write?'w':'-',
+	       is_exec ?'x':'-',
+	       capitalize(uid[<1]),
+	       group,
+	       (is_dir ? 0 : size),
+	       ls_time((int)dir[i+2]),
+	       dir[i] /* +((int)dir[i+1] == -2?"/":"") */ );
+      }
+   return res;
+}
+
+private varargs int test_passwd(string name, string entered_pw)
+{
+   string file_pw;
+
+   clear_vars();
+
+   if(!restore_object(PLAYER_FILE(name)))
+      return 0;
+
+#ifdef PLAYER_DAY
+   if(PLAYER_DAY)
+      level = 1;  
+#endif
+
+   level_cache[name] = level;
+   if(log_commands)
+      m_add(lc_cache, name);
+
+   file_pw = password;
+
+   if(!stringp(entered_pw))
+   {
+      clear_vars();
+      return 0;
+   }
+      
+   if(!check_password(entered_pw, name, 0))
+   {
+      clear_vars();
+      LEVEL_LISTER->check_me(name);
+      return 1;
+   }
+   else
+   {
+      clear_vars();
+      return 0;
+   }
+}
+
+private int get_level(string name)
+{
+   int lvl;
+
+   if(!stringp(name))
+      return 0;
+   if(lvl = level_cache[name])
+      return lvl;
+   test_passwd(name); // update_cache
+   return level_cache[name];
+}
+
+// called by master:receive_udp
+//
+void ftp_server(string host, string message, int port)
+{
+   int i;
+   string *comp, repl, *dir;
+
+   if(object_name(previous_object())!=MASTER_OB)
+      return;
+      
+   if(message[<1..] == "\n")
+      message = message[0..<2];
+
+   comp = explode(message, " ");
+
+   repl = "INVALID";
+
+   if(sizeof(comp) > 2)
+   {
+      /*
+      if(comp[1] != "TESTPWD")
+         if(find_player("garthan")) 
+	    tell_object(find_player("garthan"),sprintf("%O\n", message));
+      */
+      comp[2] = lower_case(comp[2]);
+      switch(comp[1])
+      {
+	 case "TESTPWD":
+	    if(sizeof(comp) < 4 || !test_passwd(comp[2], comp[3]))
+            {
+	       sys_log("MUDFTP", shorttimestr(time())+" "+comp[2]+" FAILED\n");
+	       break;
+	    }
+	    repl = "PWDTESTED " + comp[2] + " " +
+	           (get_level(comp[2]) >= LVL_WIZ ? "OK" : "PLOK");
+            sys_log("MUDFTP", shorttimestr(time())+" "+repl[10..]+"\n");
+	    break;
+	 case "HOMEDIR":
+	    repl = "HOMEDIR " + comp[2] + " /w/" + comp[2];
+	    break;
+	 case "READABLE":
+	    comp[3] = comp[3]=="/" ? "/"+comp[4] : comp[3]+"/"+comp[4];
+	    repl = "READABLETESTED " + comp[2] +
+	       ((get_level(comp[2]) >= LVL_WIZ || comp[3][0..3] == "/pub") &&
+		MASTER_OB->valid_read(comp[3], comp[2], "read_file", 0) ?
+	         " OK" : " NOTOK");
+	    break;
+	 case "WRITABLE":
+	    comp[3] = comp[3]=="/" ? "/"+comp[4] : comp[3]+"/"+comp[4];
+	    repl = "WRITABLETESTED " + comp[2] +
+	       (get_level(comp[2]) >= LVL_GESELLE &&
+	       MASTER_OB->valid_write(comp[3], comp[2], "write_file", 0) ?
+		 " OK" : " NOTOK");
+	    break;
+	 case "LIST":
+	    if(!sizeof(dir = explode(show_dir(comp[3],comp[2]),"\n")-({""})))
+	        send_udp(host, port,
+		   sprintf("%s DIRLINE No such file or directory\n", comp[0]));
+	    else
+	    {
+		send_udp(host, port, sprintf("%s DIRLINE total 4\n", comp[0]));
+		for(i = 0; i < sizeof(dir); i++)
+		   send_udp(host, port,
+		      sprintf("%s DIRLINE %s\n", comp[0], dir[i]));
+	    }
+	    break;
+      }
+   }
+   repl = sprintf("%s %s\n", comp[0], repl);
+   send_udp(host,port,repl);
+}
+
+
+/////////////// NASE FTPD
+
+#define FTP_ID   0
+#define FTP_SEQ  1
+#define FTP_TAG  2
+#define FTP_CMD  3
+#define FTP_ARG1 4
+#define FTP_ARG2 5
+#define FTP_ARG3 6
+
+private string get_path(string name, string pathname, string cwdname)
+{
+   // kann nocch kein ~ expansion!
+   return abs_path(pathname, cwdname);
+}
+
+// Wird direkt vom Master aufgerufen.
+// Dies wird vom proftpd genutzt.
+void naseftpd_request(string host, string message, int port)
+{
+   string *command, *dir, reply, head;
+   string name, file, pathname, cwdname;
+   int i;
+
+   if(object_name(previous_object())!=MASTER_OB)
+      return;
+
+#if 0
+   if (find_player("freaky"))
+       tell_object(find_player("freaky"), sprintf("NFTP:%O\n", message));
+#endif
+   command = explode(message, "\t");
+
+   if(sizeof(command) <= FTP_CMD ||
+      lower_case(command[FTP_ID])  != "nftpd" ||
+      lower_case(command[FTP_TAG]) != "req")
+   {
+      sys_log("NASEFTPD", shorttimestr(time())+" "+
+	      "Host: "+host+":"+port+" - "+message+"\n");
+   }
+
+   reply = "INVALID";
+   head  = sprintf("%s\t%s\tRPLY\t%s\t",
+                   command[FTP_ID],
+		   command[FTP_SEQ],
+		   command[FTP_CMD]);
+   switch(lower_case(command[FTP_CMD]))
+   {
+      case "ping":
+         if(sizeof(command) <= FTP_CMD)
+	    break;
+	 reply = "OK";
+	 break;
+      case "user":
+         if(sizeof(command) <= FTP_ARG1)
+	    break;
+	 name = lower_case(command[FTP_ARG1]);
+	 if(!player_exists(name))
+	    reply = "NONE";
+	 else if(get_level(name) >= LVL_WIZ)
+	    reply = "/w/"+name+"/";
+	 else
+	    //reply = "/pub";
+	    reply = "NONE";
+	 break;
+      case "pass":
+         if(sizeof(command) <= FTP_ARG2)
+	    break;
+	 name = lower_case(command[FTP_ARG1]);
+	 if(test_passwd(name, command[FTP_ARG2]))
+	    reply = "OK";
+	 else
+	    reply = "FAIL";
+	 break;
+      case "resv":
+         if(sizeof(command) <= FTP_ARG3)
+	    break;
+	 name = lower_case(command[FTP_ARG1]);
+	 pathname = command[FTP_ARG2];
+	 cwdname = command[FTP_ARG3];
+	 reply = get_path(name, pathname, cwdname);
+	 break;
+      case "read":
+         if(sizeof(command) <= FTP_ARG2)
+	    break;
+	 name = lower_case(command[FTP_ARG1]);
+	 file = command[FTP_ARG2];
+	 reply = (get_level(name) >= LVL_WIZ || file == "/pub") &&
+	         MASTER_OB->valid_read(file, name, "read_file", 0) ?
+		 "OK" : "FAIL";
+	 if(reply == "OK" && member(lc_cache, name))
+	    MASTER_OB->log_command("FTP: read "+file, name);
+         break;
+      case "writ":
+         if(sizeof(command) <= FTP_ARG2)
+	    break;
+	 name = lower_case(command[FTP_ARG1]);
+	 file = command[FTP_ARG2];
+	 reply = get_level(name) >= LVL_GESELLE &&
+	         MASTER_OB->valid_write(file, name, "write_file", 0) ?
+		 "OK" : "FAIL";
+	 if(reply == "OK" && member(lc_cache, name))
+	    MASTER_OB->log_command("FTP: write "+file, name);
+         break;
+      case "list":
+         if(sizeof(command) <= FTP_ARG2)
+	    break;
+         name = lower_case(command[FTP_ARG1]);
+	 pathname = command[FTP_ARG2];
+#if 0
+	 dir = explode(show_dir(pathname, name),"\n")-({""});
+	 for(i = 0; i < sizeof(dir); i++)
+	    send_udp(host, port,
+	       sprintf("%sLINE\t%s\n", head, dir[i]));
+         reply = "OK";
+#else
+	 if (strlen(pathname) > 1)
+	     pathname += "/";
+	 if (pathname[0] == '/' &&
+		 MASTER_OB->valid_read(pathname+"*",name,"get_dir",0))
+	     reply = "OK";
+	 else
+	     reply = "FAIL";
+#endif
+	 if(reply == "OK" && member(lc_cache, name))
+	    MASTER_OB->log_command("FTP: list "+pathname, name);
+	 break;
+
+      default:
+	 sys_log("NASEFTPD", shorttimestr(time())+" "+
+		 "Host: "+host+":"+port+" - "+message+"\n");
+   }
+#if 0
+   if (find_player("freaky"))
+       tell_object(find_player("freaky"), sprintf("NFTP-Re:%O\n", head+reply));
+#endif
+   send_udp(host, port, head+reply);
+}

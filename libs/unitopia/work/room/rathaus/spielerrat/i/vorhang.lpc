@@ -1,0 +1,303 @@
+//
+
+/* --- Includes & Defines: --- */
+#include <level.h>
+#include <message.h>
+#include <notify_fail.h>
+#include <parse_com.h>
+#include <simul_efuns.h>
+#include <misc.h>
+#include <input_to.h>
+
+#define AUSGANG "/room/rathaus/foyer"
+#define SRSEC (TI && TP == TI && (spielerratp(TI) || adminp(TI)))
+
+
+/* --- Globale Variablen: --- */
+int vorhang_geschlossen;
+
+/* --- Funktionen: --- */
+
+void check_vorhang()
+{
+    if(!player_present(TO, PPRESENT_STATUES))
+    {
+        // Keine Spieler mehr da, Vorhang ist per default offen:
+        vorhang_geschlossen = 0;
+    }
+}
+
+int vorhang_spy()
+{
+    if(vorhang_geschlossen) return 1;
+}
+
+int vorhang_f_move_in(string message, object wer, object woher, string dir, int way)
+{
+    check_vorhang();
+
+    if(!objectp(wer) || !living(wer) || ENVR(wer) == this_object() ||
+       spielerratp(wer) || adminp(wer))
+    {
+        return 0;
+    }
+
+    if(vorhang_geschlossen)
+    {
+        TO->send_message_to(wer, MT_NOTIFY, MA_SENSE, 
+            wrap("Dieser Raum ist momentan geschlossen. Er kann momentan nicht "
+                 "betreten werden. Bitte notfalls einen Admin oder einen Spielerrat "
+                 "um Einlass."));
+        wer->set_not_moved_reason("Ein grosser, schwerer Vorhang versperrt den Weg.");
+        return 1;
+    }
+
+    if(sizeof(filter(all_inventory(), (: spielerratp($1) || adminp($1) :))) == 0)
+    {
+        TO->send_message_to(wer, MT_NOTIFY, MA_SENSE,
+            wrap("Dieser Raum kann nur betreten werden, wenn sich darin gerade "
+                 "ein Mitglied des Spielerrates oder ein Admin aufhaelt."));
+        wer->set_not_moved_reason("Eine unsichtbare Kraft versperrt den Weg.");
+        return 1;
+    }
+}
+
+//
+// Vorhang-Action zum Oeffnen und Schliessen
+//
+
+int vorhang_auf(string str)
+{
+    if(!SRSEC)
+    {
+        return 0;
+    }
+
+    if(TO->here(str, "vorhang"))
+    {
+        if(vorhang_geschlossen)
+        {
+            vorhang_geschlossen = 0;
+            TO->send_message(MT_LOOK, MA_CRAFT,
+                wrap(Der(TP)+" oeffnet den Vorhang, so dass der Raum wieder frei "
+                     "betreten werden darf."),
+                wrap("Du oeffnest den Vorhang, so dass der Raum wieder frei "
+                     "betreten werden darf."),
+                TP);
+            return 1;
+        }
+
+        else
+        {
+            return notify_fail(wrap("Der Vorhang ist doch bereits offen!\n"), FAIL_INTERNAL);
+        }
+    }
+
+    return notify_fail("oeffne was?\n", FAIL_NOT_OBJ);
+}
+
+int vorhang_zu(string str)
+{
+    if(!SRSEC)
+    {
+        return 0;
+    }
+
+    if(TO->here(str, "vorhang"))
+    {
+        if(!vorhang_geschlossen)
+        {
+            vorhang_geschlossen = 1;
+            TO->send_message(MT_LOOK, MA_CRAFT,
+                wrap(Der(TP)+" schliesst den Vorhang. Der Raum kann nun nicht "
+                     "mehr betreten werden."),
+                wrap("Du schliesst den Vorhang. Der Raum kann nun nicht "
+                     "mehr betreten werden."),
+                TP);
+            return 1;
+        }
+
+        else 
+        {
+            return notify_fail(wrap("Der Vorhang ist doch bereits zu!\n"), FAIL_INTERNAL);
+        }
+    }
+
+    return notify_fail("schliesse was?\n", FAIL_NOT_OBJ);
+}
+
+int vorhang(string str)
+{
+    if(!SRSEC)
+    {
+        return 0;
+    }
+
+    if(strstr(str, "auf") != -1)
+    {
+        return vorhang_auf(str);
+    }
+
+    else if(strstr(str, "zu") != -1)
+    {
+        return vorhang_zu(str);
+    }
+
+    else if(TO->here(str, "vorhang"))
+    {
+        return notify_fail("ziehe vorhang auf oder zu?\n", FAIL_WRONG_ARG);
+    }
+
+    return notify_fail("ziehe was auf oder zu?\n", FAIL_NOT_OBJ);
+}
+
+//
+// Rauswurf-Action um Unbefugte des Raumes zu verweisen
+//
+
+int rauswurf(string str)
+{
+    mixed * parse;
+    object ob;
+
+    if(!SRSEC)
+    {
+        return 0;
+    }
+
+    parse = parse_com(str, TO, 0, PARSE_NO_V_ITEMS);
+
+    if(parse_com_error(parse, "rauswurf <name>\n", 
+           "Du kannst nur einen auf einmal rauswerfen.\n"))
+    {
+        return 0;
+    }
+
+    ob = parse[PARSE_OBS][0];
+
+    if(spielerratp(ob) || adminp(ob))
+    {
+        return notify_fail(wrap("Es macht ueberhaupt keinen Sinn, "
+            "Spielerraete oder Admins rauszuwerfen, die kommen eh "
+            "wieder."), FAIL_INTERNAL);
+    }
+
+    else if(living(ob))
+    {
+        sys_log("SR_RAUSWURF", sprintf("%s | %10-s rauswurf %#Q\n",
+            shorttimestr(time()), TI->query_real_name(), 
+            ob->query_real_name() || 
+            ({ob, ob->query_name(), ob->query_short()})));
+
+        ob->force_move(AUSGANG);
+
+        TO->send_message(MT_NOTIFY, MA_MOVE_OUT,
+            wrap(Der(ob)+" wurde aus dem Raum geworfen."),
+            "Du wurdest aus dem Raum geworfen.\n",
+            ob);
+
+        return 1;
+    }
+
+    else
+    {
+        TO->send_message_to(TI, MT_NOTIFY, MA_SENSE,
+            wrap(Der(ob)+" ist nicht lebendig! "+Er(ob)+" kann "
+            "nicht rausgeworfen, sondern hoechstens zerstoert werden.\n"
+            "Bist du wirklich SICHER, dass du dieses Objekt SAMT INHALT zerstoeren willst? "
+            "Dies darf nur in besonders begruendeten Faellen geschehen und wird "
+            "geloggt!"));
+        input_to("rauswurf_remove", INPUT_PROMPT,
+            "Antworte deutlich mit 'ja' oder 'nein' > ",
+	    ob);
+        return 1;
+    }
+
+    return notify_fail("rauswurf <wer oder was>\n");
+}
+
+void rauswurf_remove(string str, object ob)
+{
+    if(!SRSEC)
+    {
+        return 0;
+    }
+
+    if(str != "ja")
+    {
+        TO->send_message_to(TI, MT_NOTIFY, MA_SENSE,
+            wrap(sprintf("Deine Antwort lautete '%s' und nicht 'ja'. Abbruch.",
+                         str)));
+    }
+
+    else if(objectp(ob) && environment(ob) == TO)
+    {
+        str = sprintf("%#Q (%#Q %#Q)", ob, ob->query_name(), ob->query_short());
+
+        catch(ob->close_con(), ob->remove(), destruct(ob); publish);
+
+        if(ob)
+        {
+            TO->send_message_to(TI, MT_NOTIFY, MA_SENSE,
+                "ACHTUNG! Objekt liess sich nicht zerstoeren. Abbruch.\n");
+        }
+
+        else
+        {
+            sys_log("SR_RAUSWURF", sprintf("%s | %10-s remove %s\n",
+                shorttimestr(time()), TI->query_real_name(), str));
+
+            TO->send_message_to(TI, MT_NOTIFY, MA_SENSE,
+                "Das Objekt wurde zerstoert. Der Vorgang wurde geloggt.\n");
+        }
+    }
+
+    else
+    {
+        TO->send_message_to(TI, MT_NOTIFY, MA_SENSE,
+            wrap("ACHTUNG! Objekt befindet sich nicht mehr im Raum oder "
+                 "existiert nicht mehr. Abbruch."));
+    }
+}
+
+//
+// Applied LFuns
+//
+
+void create()
+{
+    TO->add_controller("forbidden_move_in", #'vorhang_f_move_in);
+    TO->add_controller("notify_moved_out", #'check_vorhang);
+    TO->add_controller("forbidden_spy_here", #'vorhang_spy);
+
+    TO->add_v_item(
+    ([
+        "name"   : "vorhang",
+        "gender" : "maennlich",
+        "id"     : ({"vorhang", "wandvorhang", "tuervorhang"}),
+        "long"   : "Ein grosser, schwerer Vorhang. Er kann vor die Tuer "
+                   "gezogen werden. Dadurch kann man den Raum zwar noch "
+                   "verlassen, aber keinesfalls mehr betreten. Auch die "
+                   "Sicht in den Raum wird durch ihn eingeschraenkt.\n"
+                   "Er kann nur von Mitgliedern des Spielerrats und von "
+                   "Admins geoeffnet oder geschlossen werden.",
+    ]) );
+}
+
+void init()
+{
+    add_action("vorhang", "ziehe");
+    add_action("vorhang_zu", "schliesse", -3);
+    add_action("vorhang_auf", "oeffne", -3);
+
+    add_action("rauswurf", "rauswurf", -4);
+    add_action("rauswurf", "werfe", -4);
+    add_action("rauswurf", "rausschmiss", -4);
+}
+
+void reset()
+{
+    check_vorhang();
+}
+
+/* --- End of file. --- */

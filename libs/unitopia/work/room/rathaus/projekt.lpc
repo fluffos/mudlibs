@@ -1,0 +1,331 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /room/rathaus/projekt.c
+// Description: Projektverwaltung
+// Author:
+// Modified by: 
+//
+// $Log: projekt.c,v $
+// Revision 1.10  2016/09/03 14:16:45  myonara
+// Jemand hat es ein wenig ueberarbeitet...
+//
+// Revision 1.9  2013-03-16 16:28:04  gnomi
+// Mittelerde -> Midgard.
+//
+// Revision 1.8  2008/01/21 14:27:14  gnomi
+// Typo.
+//
+// Revision 1.7  2002/09/09 20:31:25  sissi
+// Aktion unser Rathaus soll schoener werden:
+// Ueberall ne Pflanze eingebaut.
+//
+// Revision 1.6  2001/04/07 00:23:55  gnomi
+// Header und/oder CVS-Log eingebaut.
+//
+// Gnomi & Skript (01.07.2010) Midgard-Umbenennungen
+
+nosave variables inherit "/i/room";
+ 
+#include <level.h>	    /* Irgendwo kommt mal was mit Leveln vor, 
+			       also includen wir level.h */
+ 
+#define WO "/save/projekte" /* Da wird alles gespeichert */
+#define MAX sizeof(liste)   /* Die aktuelle Groesse der Liste */
+ 
+mixed *liste=({});    /* Das ist die Liste selbst */
+ 
+nosave string id,weit,wo,was;  /* Zwischenspeicher beim Eingeben von */
+nosave object sema;	       /* Namen, Verz, Beschreibung, Fortschr*/	
+ 
+/* Hier kommt der uebliche Krams, den man sowieso kennen muss.
+   restore_object laedt die alte Liste wieder ein. */
+ 
+void reset()
+{
+    "/room/rathaus/div/lager"->get_moebel(this_object());
+    "/room/rathaus/div/lager"->get_pflanze(this_object());
+}
+
+void create() {
+    seteuid(getuid());   /* Der Raum muss auch speichern und laden */
+    restore_object(WO);
+    add_type("kunstlicht",1);
+    add_type("teleport_rein_verboten", 1);
+    set_own_light(1);
+    set_exits(({"forum"}),({"forum"}));
+    set_long( wrap (
+      "Dieser Ort dient zur Eintragung aller geplanten und in Arbeit "
+      "befindlichen Projekte und kurzfristig auch der fertig gestellten "
+      "Projekte. Folgende Befehle stehen zur Verfuegung:")+
+      "        liste             zeigt alle Projekte\n"
+      "        liste   <person>  zeigt alle Projekte der Person.\n"
+      "        aendere <nummer>  Aendert etwas am Projekt, siehe nanu.\n"
+      "        loesche <nummer>  loescht Eintrag Nummer <nummer>\n"
+      "        eintrag <titel>   traegt ein neues Projekt mit Namen Titel ein\n"
+      "        nanu              Was soll das und was mach ich jetzt?\n\n"
+      + wrap (
+      "Tragt alles bitte sorgfaeltig ein und vergewissert euch vor neuen "
+      "Programmieraufgaben, dass euch nicht schon einer zuvor gekommen ist."));
+    set_short("Im Projektregistrationszimmer");
+    set_room_domain("Pantheon");
+    reset();
+}
+ 
+ 
+/* Sicherheitsueberpruefung beim loeschen und aendern. Nur der Projektleiter,
+   ein 50er oder ich duerfen das... man goennt sich ja sonst nix */
+   
+ 
+nosave int lsecure(string str) {
+    if (str==this_player()->query_real_name())
+        return 1;
+    if (adminp(this_player()))
+        return 1;
+    if ("pimpf"==this_player()->query_real_name())
+        return 1;
+    return 0;
+}
+ 
+/* Hier wird die gesamte Liste gespeichert. Save_object speichert alle
+   Variablen, die nicht nosave sind. Mit Hilfe von nosave variables
+   inherit wurden alle geerbten Variablen auf nosave gesetzt, ebenso 
+   wie in diesem Programm, bis auf die Liste selbst -> nur die Liste
+   wird gespeichert. */
+ 
+nosave void in_liste() {
+    string wann,name;
+    name=sema->query_real_name();
+    wann=ctime();
+    liste+=({({name,wann,id,weit,wo,was})});
+    save_object(WO);
+}
+ 
+void init() {
+    if(wizp(this_player()))
+    {
+	add_action("eingabe","eintrag");
+	add_action("change1","aendere",-6);
+	add_action("anzeige","liste",-4);
+	add_action("loesche","loesche",-6);
+	add_action("inf1","nanu");
+    }
+}
+ 
+/* sema enthaelt, falls ungleich 0, den Spieler der gerade eintraegt.
+   Sonst koennten sich zwei Spieler beim Eintragen ueberlappen. 
+   Sollte der aktuelle Spieler das Spiel verlassen oder sonstwie unsauber
+   abbrechen hilft nur ein zern, um weiter eintragen zu koennen.
+   Das wird wohl bei V1.2 behoben ;) */
+ 
+nosave int eingabe(string str) {
+    if (!str)
+        write("Bitte einen Namen mit angeben, z.B. \"eintrag Baeckerei\"\n");
+    else {
+        if (!sema) {
+            sema=this_player();        
+ 
+            id=trim(str);
+            write("Bitte eingeben wie Weit sie sind (1-4) :\n"
+              "1. Planungsphase\n"
+              "2. Kleiner Teil fertiggestellt, zum Reinschnuppern\n"
+              "3. Fertig, zum Testen freigegeben\n"
+              "4. Eingegliedert in Unitopia.\n"
+              "Ihre Wahl:");
+            input_to("eing2");
+        }
+        else
+            write("Da ist schon "+capitalize(sema->query_real_name())+
+              " am Eintragen.\n");
+    }
+    return 1;
+}
+ 
+nosave void eing2(string str) {
+   int z;
+   if (str!="~q") {
+    z=to_int(str);
+    if(z<=0 || z>=5) {
+        write("Zwischen 1 und 4, pass doch auf ;).\n");
+        input_to("eing2");
+    }
+    else {
+        weit=str; 
+        write("\nBitte das Verzeichnis angeben, wo das alles stehen wird:\n");
+        input_to("eing3");
+    }
+   }
+   else sema=0;
+}
+ 
+/* Diese Fkt bekommt als Parameter das Verzeichnis */
+ 
+nosave void eing3(string str) {
+    if (str!="~q") {    
+     wo=trim(str);
+     write("\nEine Beschreibung, worum es geht, Eingabe in "
+     "einer Zeile, die spaeter umgebrochen werden wird:\n");
+     input_to("eing4");
+    }
+    else sema=0;
+}
+ 
+ /* Hier kommt der Satz an, um was es geht */
+ 
+nosave void eing4(string str) {
+   if (str!="~q") { 
+    was=trim(str);
+    in_liste();
+    write("\nEin INFO-File im angegebenen Verzeichnis waere Sahne.\n"
+          "Danke fuer ihre Kooperation.\n");
+    write("Die Projektnummer ist "+to_string(MAX-1)+".\n");
+   }
+   sema=0;
+}
+ 
+int anzeige(string str) {
+    int i,max,min,z,u,sl,st;
+    string *element,*x;
+    string *darstellung, *fs, lort, wernur;
+ 
+    min =   0;   /* Die Liste wird von Element min bis */
+    max = MAX;   /* Element max dursucht	       */	
+    z   =0;	 /* Anzahl der gefundenen Elemente     */	
+    u   =0;	 /* enthaelt 1..4 entspr. gesuchter Fertigstellung */
+    sl  =0;      /* =1 falls Kurzliste erwuenscht      */
+    st  =0;      /* falls nur ein Element gewuenscht ent. st die Nummer */
+    lort=0;	 /* falls nur bestimmte Verzeichnisse gewuenscht werden */
+ 
+    darstellung=({});
+    fs=({" *in Planung*"," *begonnen*"," *in der Testphase*",
+         " *eingegliedert*"});
+    
+    if (str)
+        x=explode(str," ");
+    for(i=0; i<sizeof(x); i++) {
+       switch (x[i][0]) { 
+	case '1': u   = 1;   break;   /* Zum Einstellen der Fertistellung */
+	case '2': u   = 2;   break;       
+	case '3': u   = 3;   break;
+	case '4': u   = 4;   break;
+	case '/': lort= x[i];break;   /* Der Ort, falls String mit / beg. */
+	case '!': sl  = 1;   break;   /* ein ! kennzeichnet die Kurzliste */	
+        case '<': max = to_int(x[i][1..]);break; /* Einstellen der */
+        case '>': min = to_int(x[i][1..]);break; /* Suchbereiche   */
+	case '=': st  = to_int(x[i][1..]);break; /* ein einziges Element ? */
+	default : wernur=x[i];break;  /* Sonst wird nach Namen gesucht */
+       }
+    }
+    if (st) {min=st;max=st+1;}
+    if (min<0)   min=0;
+    if (max>MAX) max=MAX;
+ 
+/* Jetzt werden alle Elemente von min bis max durchlaufen. 
+   Zuerst wird das Verzeichnis, dann die Fertigstellung, dann 
+   der gewuenschte Spieler ueberprueft. In einem Element der Liste
+   steht normalerweise an erster Stelle der Projektleiter. Falls
+   das Projekt geloescht wurde ist dies ersetzt durch ein "-", und 
+   das Element wird ebenfalls nicht gezeigt. */
+ 
+    for(i=min; i<max; i++) {
+        element=liste[i];
+        if(!lort || strstr(element[4],lort,0)>=0) {
+            if(!u || to_int(element[3])==u) {
+                if(!wernur || element[0]==wernur)
+ 
+                    if (left(element[0],1)!="-") {
+			if (sl) darstellung+=({to_string(i)+".: "+
+			left(capitalize(element[0]),11)+" : "+
+                          left(element[2],30)+fs[to_int(element[3])-1]});
+			else {
+                        darstellung+=({(copies("-",75))});
+                        darstellung+=({to_string(i)+".: "+
+                          capitalize(element[0])+" : "+
+                          left(element[2],30)+fs[to_int(element[3])-1]});
+                        darstellung+=({"-> "+element[1]+"      "+element[4]});
+                        darstellung+=({wrap_say("->",element[5])});
+                        }
+		        z+=1;
+                    }
+            }
+        }
+    }
+    if (!z)   /* z bezeichnet die Treffer */
+        write("Keine gefunden.\n");
+    else {
+	darstellung+=({copies("-",32)+left(" Treffer:"+to_string(z),13)+
+	 copies("-",30)});
+        this_player()->more(darstellung); 
+		/* more ergibt die huebsche Ausgabe */
+    }
+    return 1;
+}
+ 
+nosave int loesche(string str) {
+    int i;
+    string *element;
+    i=to_int(str);
+    if (i>=0 && i<MAX) {
+        element=liste[i];
+        if (lsecure(element[0])) {   /* Sicherheitsueberpruefung	*/
+            liste[i][0]="-";	     /* Nur der Name wird auf - gesetzt */
+            write("Ok.\n");
+            save_object(WO);
+        }
+	else write("Das darfst du nicht.\n");    
+    }
+    return 1;
+}
+ 
+/* Die Fkt. dient zum aendern bestehender Elemente: Abpruefen auf
+	Syntax, Sicherheit, das erste Argument:
+	+,-,o,b  und jeweiliges aendern  			*/
+ 
+nosave int change1(string str) {
+    string *x,who;
+    int t,p;
+    if (str) {
+        x=explode(str," ");
+        if (sizeof(x)>=2) {
+            t=to_int(x[0]);
+            if (t>=0 && t<MAX) {
+                who=liste[t][0];
+                if (lsecure(who)) {
+                    p=to_int(liste[t][3]);
+                    switch (x[1][0]) {
+		    case '+': p+=1;
+                               if (p>4) p=4;
+                    	      break;			
+                    case '-': p-=1;
+                               if (p<1) p=1;
+                              break;
+                    case 'o': if (sizeof(x)==3) liste[t][4]=x[2];
+                              break;
+		    case 'b': if (sizeof(x)>=3) liste[t][5]=implode(x[2..]," ");
+			      break;
+                    default : write("Falsche Syntax.\n");
+			      return 1;	
+                            }
+                        
+                    liste[t][3]=to_string(p);
+                    save_object(WO);
+                    write("Ok.\n");
+                }
+                else
+                    write("Das darfst DU nicht.\n");
+            }
+            else
+                write("Welche Nummer ???\n");
+        }
+        else 
+            write("aendere <Nummer> [+|-]\n");
+    }
+    else
+        write("Pardon?\n");
+    return 1;       
+}
+ 
+int inf1(string str) {
+    this_player()->more("/room/rathaus/projekt.hilfe");
+    return 1;
+}
+

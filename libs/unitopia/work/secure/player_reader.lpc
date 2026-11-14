@@ -1,0 +1,664 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/player_reader.c
+// Description:	Offline Variablen aus Spielern auszulesen
+// Author:	Gnomi (24.12.2001)
+//
+// $Log: player_reader.c,v $
+// Revision 1.22  2015/01/10 15:06:55  myonara
+// define GUILD_FILE eingebaut, einmal laufen lassen und auskommentiert.
+//
+// Revision 1.21  2014/12/19 16:24:36  myonara
+// neue fun query_wiz_level
+//
+// Revision 1.20  2014/02/08 11:47:19  myonara
+// Karteileichen loesche aktiv geschaltet inkl Test und Bugfixes.
+//
+// Revision 1.19  2014/01/05 18:48:55  myonara
+// Bugfixes zu vorherigen Patch *gg*
+//
+// Revision 1.18  2014/01/05 15:22:27  myonara
+// Spielerloeschungen als Statistik erst mal eingefuehrt.
+//
+// Revision 1.17  2012-11-15 21:39:44  sorcerer
+// letzte_gilden auch abfragbar
+//
+// Revision 1.16  2010-07-04 12:05:40  sorcerer
+// aliases typ mixed fuer alte Savefiles
+//
+// Revision 1.15  2009-01-15 09:17:58  gnomi
+// Plugin-Statistik anlegen.
+//
+// Revision 1.14  2008-05-19 14:34:17  gnomi
+// wizard_appreciations -> wiz_appreciations (so heisst auch die Lfun).
+//
+// Revision 1.13  2008-04-02 08:36:38  gnomi
+// Usenet-E-Mail-Adresse vom INEWSD auslesbar gemacht.
+//
+// Revision 1.12  2007/07/27 15:08:49  gnomi
+// Konto abfragbar gemacht.
+// Nicht nur file_time, sondern auch file_size wird gemerkt, um Aenderungen in
+// der gleichen Sekunde zu bemerken.
+//
+// Revision 1.11  2006/10/02 20:17:05  gnomi
+// cap_name generieren, wenn nicht vorhanden.
+//
+// Revision 1.10  2006/08/29 22:35:24  gnomi
+// (real_)cap_name automatisch vervollstaendigen.
+//
+// Revision 1.9  2004/12/20 23:27:08  sissi
+// Description hinzugefuegt.
+//
+// Revision 1.8  2004/04/02 10:42:05  menaures
+// Offline-Abfrage von Moerder-Opfern
+//
+// Revision 1.7  2004/02/18 22:47:09  gnomi
+// Funktion, um auf die Existenz von Kuerzeln zu pruefen.
+//
+// Revision 1.6  2003/01/26 04:08:02  gnomi
+// erf_gestorben darf man abfragen.
+//
+// Revision 1.5  2002/10/31 23:02:16  gnomi
+// 'level' ist abfragbar.
+// Man kann mehrere Anfragen auf einmal einreichen.
+//
+// Revision 1.4  2002/10/17 12:49:54  freaky
+// lokale Blockvariable: Namensraumueberlagerung aufgehoben
+//
+// Revision 1.3  2002/02/09 10:42:45  gnomi
+// Weniger Dateien pro Backend-Zyklus verarbeiten.
+//
+// Revision 1.2  2002/01/10 06:31:20  gnomi
+// Test, ob Playerfile ueberhaupt existiert.
+//
+// Revision 1.1  2001/12/24 07:42:57  gnomi
+// Fuer Offline-Playerzugriff.
+//
+
+#pragma strong_types
+#pragma no_clone
+#pragma no_shadow
+#pragma no_inherit
+
+#include <misc.h>
+#include <config.h>
+#include <apps.h>
+#include <files.h>
+#include <level.h>
+#include <news.h>
+#include <simul_efuns.h>
+
+nosave string real_name;
+nosave int restore_time;
+nosave int restore_size;
+
+// So, einfach alle Variablen reintun, die man lesen koennen duerfen soll,
+// und diese dann auch ins Mapping 'conversion' eintragen.
+// Will man den Zugriff einschraenken, so sollte man noch eine zusaetzliche
+// Funktion private mixed read_<tatsaechlicher variablenname>() schreiben,
+// welche dann zusaetzliche Checks durchfuehren kann und den Wert
+// zurueckliefern sollte.
+nosave mapping conversion = ([
+    // Abgefragter Name: Tatsaechlicher Name
+    // Der abgefragte Name sollte dergleiche wie bei query_<name> des
+    // Players sein.
+    "real_name":      "real_name", // Dies waer zwar eine sinnlose Anfrage...
+    "age":            "player_age",
+    "level_dates":    "level_dates",
+    "last_login":     "last_login",
+    "last_room":      "last_room",
+    "start_room":     "start_room",
+    "align":          "alignment",
+    "adjektiv":       "adjektiv",
+    "name":           "name",
+    "cap_name":       "cap_name",
+    "real_cap_name":  "real_cap_name",
+    "personal_title": "personal_title",
+    "gender":         "gender",
+    "title":          "title",
+    "description":    "descr",
+    "konto":          "konto",
+    "gilde":          "gilde",
+    "rang":           "rang",
+    "letzte_gilden":  "letzte_gilden2",
+    "wiz_appreciations":"wizard_appreciations",
+    "level":          "level",
+    "erf_gestorben":  "erf_gestorben",
+    "opfer":          "opfer",
+    ]);
+
+int player_age;
+mixed level_dates;
+int last_login;
+string last_room;
+mixed start_room;
+int alignment;
+
+mixed *adjektiv;
+string name;
+string cap_name;
+string real_cap_name;
+string personal_title;
+string gender;
+string title;
+string descr;
+
+int konto;
+
+string gilde;
+int rang;
+mixed *letzte_gilden2;
+mixed *wizard_appreciations;
+int level;
+< <int|string>*|string > *erf_gestorben;
+
+string * opfer;
+
+// Diese sind nicht oeffentlich verfuegbar
+string *auto_load_files;
+mixed aliases;
+string usenet_email;
+mapping zauberstab_info;
+int sum_comm;
+int skill;
+int pid;
+
+private mixed get_var(string var, int excall)
+{
+    closure cl;
+    if(!member(conversion, var) && excall)
+	return 0;
+    var = conversion[var] || var;
+    if((cl=symbol_function("read_"+var, this_object())))
+	return funcall(cl);
+    return funcall(symbol_variable(var));
+}
+
+/*
+FUNKTION: query
+DEKLARATION: mixed query(string name, string var | mapping vars | string *vars)
+BESCHREIBUNG:
+Mit dieser Funktion des PLAYER_READER's (definiert in config.h) kann man
+auf Variablen des Players auslesen, waehrend dieser ausgeloggt ist.
+Zugriff ist aber nur auf wenige Variablen, wie 'age', 'last_login',
+'name', 'adjektiv', 'gilde' und aehnliches moeglich. Welche Variablen
+genau zur Verfuegung stehen, steht in dieser Datei am Anfang in einem Mapping.
+
+var kann entweder ein String sein, dann wird der Wert dieser Variablen
+zurueckgeliefert. Ist vars ein mapping, so stellen die Schluessel die
+Variablennamen dar und das Ergebnis wird im zugehoerigen Wert gespeichert.
+Ist vars ein Array, so wird ein Array mit den Werten zurueckgeliefert.
+VERWEISE:
+GRUPPEN: spieler
+*/
+mixed query(string plname, mixed var)
+{
+    object pl;
+
+    if((pl=find_player(plname)) && extern_call())
+    {
+	if(stringp(var))
+	    return call_other(pl,"query_"+var);
+	else if(mappingp(var))
+	    return map(var,(:call_other($3,"query_"+$1):),pl);
+	else if(pointerp(var))
+	    return map(var,(:call_other($2,"query_"+$1):),pl);
+    }
+
+    if(!player_exists(plname))
+	return 0;
+
+    if(!real_name || real_name != plname ||
+       restore_time < file_time(PLAYER_FILE(plname)+".o") ||
+       restore_size != file_size(PLAYER_FILE(plname)+".o"))
+    {
+	if(real_name)
+	{
+	    // Alle Variablen loeschen
+	    foreach(string vname: m_values(conversion))
+		funcall(lambda(0, ({#'=, ({symbol_variable(vname)}), 0})));
+	}
+	if(!restore_object(PLAYER_FILE(plname)))
+	    return 0;
+	real_name = plname;
+	if(!cap_name)
+	    cap_name = capitalize(name || real_name);
+	if(!real_cap_name)
+	    real_cap_name = capitalize(real_name);
+	    
+	restore_time = time();
+	restore_size = file_size(PLAYER_FILE(plname)+".o");
+    }
+
+    if(stringp(var))
+        return get_var(var, extern_call());
+    else if(mappingp(var))
+        return map(var,(:get_var($1,$3):),extern_call());
+    else if(pointerp(var))
+        return map(var,(:get_var($1,$2):),extern_call());
+}
+
+// fuer wizplayerp(string|object pl)
+int query_wiz_level(mixed pl)
+{
+    int lvl = 0;
+    if (stringp(pl))
+    {
+        if (find_player(pl)) 
+        {
+            pl = find_player(pl);
+        }
+        else if (player_exists(pl))
+        {
+            lvl = query(pl,"level");
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    if (objectp(pl))
+    {
+        if (playerp(pl))
+        {
+            lvl = pl->query_wiz_level();
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    return (lvl >= LVL_WIZ) ? lvl : 0;
+}
+
+int alias_exists(string player, string alias)
+{
+    object pl;
+    mixed al;
+
+    if(pl=find_player(player))
+	return pl->alias_exists(alias);
+
+    al = query(player,"aliases");
+
+    // Konvertierung fuer alte Savefiles
+    if (pointerp(al))
+        al = mkmapping(al[0],al[1]);
+
+    return mappingp(al) && member(al, alias);
+}
+
+string query_usenet_email(string player)
+{
+    object pl;
+
+    if(object_name(previous_object()) != INEWSD)
+	return 0;
+    
+    if(pl=find_player(player))
+	return pl->query_usenet_email();
+
+    return query(player, "usenet_email");
+}
+
+public void reinit_callout()
+{
+    string tstr = ctime(time()-14000); // Gegen 03:53
+    int co;
+    
+    if(!( (extern_call() == 0) ||
+            (PO && TP == TI && adminp(TP) && geteuid(PO) == geteuid(TP)) ))
+    {
+        return;
+    }
+    
+    co = 6 - member( ({ "Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri" }),
+	tstr[0..2]);
+    co = 24*co + 23 - to_int(tstr[11..12]);
+    co = 60*co + 59 - to_int(tstr[14..15]);
+    co = 60*co + 60 - to_int(tstr[17..18]);
+    
+    while (remove_call_out("gooverallthefiles")!=-1);
+    call_out("gooverallthefiles", co);
+}
+
+void create()
+{
+    reinit_callout();
+}
+
+//------------------------------------------------------------------------
+// Variablen und Funktionen zur Bereinigung der Karteileichen
+#define KL_LOGFILE "/var/adm/KARTEILEICHEN"
+#define KL_AUSNAHMEN ({ "mateese" })
+#define KL_LOG(x)  write_file(KL_LOGFILE, sprintf("[%s]: %s\n", \
+                                shorttimestr(time()), x))
+#define KL_STATISTIK_LOG "/var/adm/KL_STATISTIK_LOG"
+#define KL_STATISTIK_MEM "/var/adm/KL_STATISTIK_MEM"
+#define KL_MIN_RESTEVALS   500000
+#define KL_MAX_FILES_PER_CYCLE 10
+#define KL_PIDS_AKTIV1 0x0001
+#define KL_PIDS_IS_WIZ 0x0002
+#define KL_PIDS_AKTIV2 0x0004
+#define KL_PIDS_GROSS  0x0008
+#define KL_PIDS_SHORT  0x0100
+#define KL_PIDS_LONG   0x0200
+#define KL_PIDS_NO_GO  0x000f
+// Kriterium 1: mehr als 1 Jahr inaktiv:
+#define KL_SHORT_TIME 60*60*24*365
+#define KL_SHORT_EP   5000
+#define KL_SHORT_COMM 500
+#define KL_SHORT_AGE  3600*24*1
+// Kriterium 2: Inaktiv seit mehr als 5 Jahren
+#define KL_LONG_TIME  3600*24*366*5
+#define KL_LONG_EP    10000
+#define KL_LONG_AGE   3600*24*5
+private nosave mapping pid_status;
+private nosave mapping pid_names;
+private nosave mapping pr_statistik;
+private nosave mapping kl_remove_pl;
+
+private void kl_init()
+{
+    pid_status = ([]);
+    pid_names  = ([]);
+    pr_statistik = ([]);
+    kl_remove_pl = ([]);
+    KL_LOG("Initialisierung.");
+    if (file_size(KL_STATISTIK_MEM) > 0)
+    {
+        pr_statistik = restore_value(read_file(KL_STATISTIK_MEM));
+        if (!mappingp(pr_statistik))
+        {
+            pr_statistik = ([]);
+        }
+    }
+    if (file_size(KL_STATISTIK_LOG) >= 0)
+    {
+        rm(KL_STATISTIK_LOG);
+    }
+}
+
+nosave void kl_delete(string * players)
+{
+    int anz;
+    
+    if (!pointerp(players) || !sizeof(players))
+    {
+        KL_LOG("Abschluss Loeschen.");
+        return;
+    }
+    while(get_eval_cost()>KL_MIN_RESTEVALS 
+        && anz<KL_MAX_FILES_PER_CYCLE && sizeof(players) )
+    {
+        string pl = players[0];
+        players = players[1..];
+        anz++;
+        "/secure/player_deleter"->delete_player(pl);
+    }
+    if (!pointerp(players) || !sizeof(players))
+    {
+        KL_LOG("Abschluss Loeschen.");
+        return;
+    }
+    call_out("kl_delete",3,players);
+}
+
+private void kl_check(string rn)
+{
+    if (rn != real_name) return;
+    pr_statistik["001 ALLE"]++;
+    if (member(KL_AUSNAHMEN,rn)!=-1)
+    {
+        return;
+    }
+    pid = abs(pid); // Verflixte Updates...
+    if (pid)
+    {
+        if (member(pid_names,pid)==0)
+        {
+            pid_names[pid] = ({ rn });
+        }
+        else
+        {
+            pid_names[pid] += ({ rn });
+        }
+    }
+    // Testies ausnehmen
+    if ("/apps/second"->is_testplayer_or_special(rn))
+    {
+        pr_statistik["100 Testie insgesamt"]++;
+        return;
+    }
+    if ("/apps/goetter_register"->is_wiz(rn))
+    {
+        if (pid)
+            pid_status[pid] |= KL_PIDS_IS_WIZ;
+        pr_statistik["101 Gottchar insgesamt"]++;
+        return;
+    }
+    if ("/apps/goetter_register"->is_wiz_on_vacation(rn))
+    {
+        if (pid)
+            pid_status[pid] |= KL_PIDS_IS_WIZ;
+        pr_statistik["102 Gottchar on Vacation"]++;
+        return;
+    }
+    // Aktiv1: d.h. in den letzten 12 Monaten eingeloggt.
+    if (find_player(rn) || last_login >= (time()-KL_SHORT_TIME))
+    {
+        pr_statistik["002 Aktiv in den letzten 12 Monate"]++;
+        if (pid)
+        {
+            pid_status[pid] |= KL_PIDS_AKTIV1;
+            pr_statistik["004 Zweitie: Aktiv in den letzten 12 Monate"]++;
+        }
+        else
+        {
+            pr_statistik["003 Erstie: Aktiv in den letzten 12 Monate"]++;
+        }
+        return;
+    }
+    // Kriterium 1 erfuellt (bei laenger als 1 Jahr offline): 
+    if (skill < KL_SHORT_EP && player_age < KL_SHORT_AGE && 
+             sum_comm < KL_SHORT_COMM)
+    {
+        if (pid)
+        {
+            pid_status[pid] |= KL_PIDS_SHORT;
+            //KL_LOG("Zweitie \""+rn+"\" vorgemerkt (1).");
+            pr_statistik["006 Zweitie: Kriterium 1 erfuellt"]++;
+        }
+        else
+        {
+            // Erstie zur Loeschung merken
+            kl_remove_pl[rn] = 1;
+            pr_statistik["005 Erstie: Kriterium 1 erfuellt, also LOESCHEN"]++;
+            KL_LOG("Erstie (K1) LOESCHEN: "+rn);
+        }
+        return;
+    }
+    if (last_login >= (time()-KL_LONG_TIME))
+    {
+        pr_statistik["007 Aktiv in den letzten 5 Jahren"]++;
+        if (pid)
+        {
+            pid_status[pid] |= KL_PIDS_AKTIV2;
+            pr_statistik["009 Zweitie: Aktiv in den letzten 5 Jahren"]++;
+        }
+        else
+        {
+            pr_statistik["008 Erstie: Aktiv in den letzten 5 Jahren"]++;
+        }
+        return;
+    }
+    // Kriterium 2 erfuellt (bei laenger als 5 Jahre offline): 
+    if (skill < KL_LONG_EP && player_age < KL_LONG_AGE)
+    {
+        if (pid)
+        {
+            pid_status[pid] |= KL_PIDS_LONG;
+            pr_statistik["011 Zweitie: Kriterium 2 erfuellt"]++;
+            //KL_LOG("Zweitie \""+rn+"\" vorgemerkt (2).");
+        }
+        else
+        {
+            // Erstie zur Loeschung merken
+            kl_remove_pl[rn] = 2;
+            pr_statistik["010 Erstie: Kriterium 2 erfuellt, ALSO LOESCHEN"]++;
+            KL_LOG("Erstie (K2) LOESCHEN: "+rn);
+        }
+        return;
+    }
+    if (pid)
+    {
+        pid_status[pid] |= KL_PIDS_GROSS;
+        pr_statistik["103 Zweitie: Gross genug"]++;
+    }
+    else
+    {
+        pr_statistik["103 Erstie: Gross genug"]++;
+    }
+}
+
+nosave void kl_finish()
+{
+    pr_statistik["800 Gesamtanzahl PID's"] = sizeof(pid_status);
+    pid_status = filter(pid_status, (: ($2 & KL_PIDS_NO_GO)== 0 :));
+    pr_statistik["801 Anzahl loeschender PID's"] = sizeof(pid_status);
+    KL_LOG(sprintf("Loeschen(1ties %d):",sizeof(kl_remove_pl)));
+    
+    foreach(string key : sort_array(m_indices(pr_statistik),#'>))
+    {
+        write_file(KL_STATISTIK_LOG, 
+            sprintf("%s: %d\n", key, pr_statistik[key]));
+    }
+    pid_names = filter(pid_names,(: member($3,$1) :), pid_status);
+    if (sizeof(pid_names))
+    {
+        string * erg = ({});
+        foreach (int a,mixed b : pid_names) erg += b;
+        // map(pid_names, (: $3+=$2; :),&erg);
+        // erg = foldl(m_values(pid_names), ({}), #'+);
+        KL_LOG(sprintf("Loeschen(2ties %d):%Q",sizeof(erg), erg));
+        kl_remove_pl += mkmapping(erg,erg);
+    }
+                       
+    pid_status = ([]);
+    pid_names = ([]);
+    KL_LOG("Abschluss Vorcheck, Start Loeschen.");
+    call_out("kl_delete",3,m_indices(kl_remove_pl));
+    kl_remove_pl = ([]);
+}
+
+//------------------------------------------------------------------------
+// Braucht dann ca. eine Viertelstunde
+#define MAX_FILES_PER_CYCLE	20
+#define MIN_RESTEVALS		100000
+#define AUTOLOADER_FILE		"/var/AUTOLOADER"
+#define APPRECIATIONS_FILE	"/var/WIZARD_APPRECIATIONS"
+#define PLUGINS_FILE		"/var/PLUGINS"
+// Folgendes Define auskommentieren deaktiviert das Schreiben dorthin...
+// #define GUILD_FILE          "/var/GUILD_PER_PLAYER"
+
+nosave mapping all_autoloader;
+nosave mapping all_appreciations;
+nosave mapping all_plugins;
+nosave int last_pass;
+
+nosave void gooverallthefiles(string char, string *files)
+{
+    int anz = 0;
+    if(!char)
+    {
+	all_autoloader = ([]);
+	all_appreciations = ([]);
+	all_plugins = ([]);
+	last_pass = time();
+	char = "a";
+	remove_call_out("gooverallthefiles");
+#ifdef GUILD_FILE
+    rm(GUILD_FILE);
+#endif
+	kl_init();
+    }
+    while(get_eval_cost()>MIN_RESTEVALS && anz<MAX_FILES_PER_CYCLE)
+    {
+	string fname;
+	
+	if(!sizeof(files))
+	{
+	    if(char[0]>'z')
+	    {
+		string *str = ({});
+		call_out("kl_finish",2); // Entkoppeln.
+		rm(AUTOLOADER_FILE);
+		foreach(string fn, int anz2: all_autoloader)
+		    str+=({sprintf("%-=60s %4d\n", fn, anz2)});
+		write_file(AUTOLOADER_FILE, implode(sort_array(str,#'>),""));
+
+		str = ({});
+		rm(PLUGINS_FILE);
+		foreach(string fn, int anz2: all_plugins)
+		    str+=({sprintf("%-=60s %4d\n", fn, anz2)});
+		write_file(PLUGINS_FILE, implode(sort_array(str,#'>),""));
+		
+		rm(APPRECIATIONS_FILE);
+		foreach(string gebiet: sort_array(m_indices(all_appreciations),#'>))
+		{
+		    write_file(APPRECIATIONS_FILE,
+			sprintf("%s:\n",capitalize(gebiet))+
+			implode(map(sort_array(all_appreciations[gebiet],
+			(:$1[0]>$2[0]:)),
+			(: sprintf("%-11s %-=65s\n", capitalize($1[0])+":",$1[3]
+			// +"\n["+capitalize($1[2])+": "+timestr($1[1], TIMESTR_ONLY_DATE)+"]"
+			   ):)),"")+"\n");
+		}
+		call_out("gooverallthefiles",604800+last_pass-time());
+		return;
+	    }
+	    files = get_dir("/var/players/"+char+"/*.o");
+	    char[0]++;
+	}
+	if(!sizeof(files))
+	    continue;
+
+	auto_load_files = 0;
+	fname = files[0][0..<3];
+	foreach(string str: query(fname, "auto_load_files")||({}))
+	    if(str[1]!='w')
+		all_autoloader[str]++;
+#ifdef GUILD_FILE        
+    write_file(GUILD_FILE,sprintf("%s,%s,%s,%d,%d,%d\n",
+            fname, query(fname,"gender")||"", query(fname,"gilde")||"KeineGilde", 
+            query(fname,"rang"),query(fname,"level"), 
+            query(fname,"last_login")
+            ));
+#endif
+	foreach(mixed app: query(fname, "wizard_appreciations")||({}))
+	{
+	    if(!all_appreciations[app[0]])
+		all_appreciations[app[0]] = ({});
+	    all_appreciations[app[0]] += ({ ({ files[0][0..<3] }) + app[1..<1] });
+	}
+	
+	if(query(fname, "level")>=20)
+	    foreach(string plugin: (query(fname, "zauberstab_info")||([]))["plugins"] || ([]) )
+		all_plugins[plugin]++;
+
+        kl_check(real_name);
+	files = files[1..<1];
+	anz++;
+    }
+    call_out("gooverallthefiles", 2, char, files);
+}
+
+public void start_go_over()
+{
+    if(!(PO && TP == TI && adminp(TP) && geteuid(PO) == geteuid(TP)) )
+    {
+        write ("No Access.\n");
+        return;
+    }    
+    gooverallthefiles(0,0);
+}

@@ -1,0 +1,2038 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/zauberstab/zfehler.inc
+// Description: Ein Fehlerbrowser fuer die neue Fehler-Datenbank
+// Author:      Monty (22.07.95)
+// Modified:    Monty : go-Option verbessert, wenn das file nicht 
+//                      gefunden wird, dann kanns ja immer noch ein
+//			v_comp sein. Jetzt uebernimmt das der catch()
+//		Monty (21.02.96): "v" wieder eingebaut, "a" und "c"
+//			implementiert.
+//              Zap (02.04.97): Regexp-Filter "f", Bereichsfilter "s"
+//                      und Objekt-Suche "o" eingebaut
+//		Freaky (17.12.97) Es werden jetzt auch die einzelnen Gilden,
+//			Spiele und Raetsel angezeigt
+//		Freaky (03.01.98) Fix bei Gilden, Spiele und Raetsel
+//		Freaky (11.01.98) Fix bei Gilden, Spiele und Raetsel
+//              Raimar (15.12.98): Unterstuetzung von "v" fuer die Filterung 
+//                       nach Verursachern
+//		Freaky (22.02.1999) print_trace(): verbessert.
+//		Parsec (17.04.1999) "a" nicmmt auch Objeke oder Dateinamen
+//              Rompler (16.08.1999) Lob/Typo eingefuehrt
+//              Rompler (18.08.1999) Man kann nun auch nur Typos etc. ansehen
+//              Zap (25.01.2000) Anzeige von neuen Fehlern/Kommentaren "n"
+//		Freaky (28.01.2000) Speedup der neuen Fehler
+//		Freaky (10.02.2000) Optionen -t,-m,-l,-i verbessert
+//
+// $Log: zfehler.inc,v $
+// Revision 1.80  2006/01/11 23:38:39  gnomi
+// Fehler beim Zurueckgehen von der Fehlernummernansicht behoben.
+//
+// Revision 1.79  2005/10/20 19:33:57  gnomi
+// Indexing past string end.
+//
+// Revision 1.78  2005/06/03 20:00:23  menaures
+// Weniger Panik bei verschwundenen/geloeschten Fehlern.
+//
+// Revision 1.77  2005/03/12 17:36:59  menaures
+// Neuer Fehlertyp Detail
+//
+// Revision 1.76  2005/01/09 17:31:25  sissi
+// An Goetter darf man "feedbacks" geben, aber keine Rueckfragen.
+//
+// Revision 1.75  2004/07/19 21:15:35  gnomi
+// Domain-Infos vom Master nach /apps/domains umgezogen.
+//
+// Revision 1.74  2004/07/04 00:05:09  gnomi
+// zfehler-Syslog durch do_warning2 ersetzt.
+//
+// Revision 1.73  2004/06/17 22:07:35  gnomi
+// 'a': Den von valid_debugger zurueckgelieferten String nehmen...
+//
+// Revision 1.72  2004/05/12 20:50:36  gnomi
+// initial_more_info: Korrigiert, so dass es wiederholte Aufrufe verkraftet.
+//
+// Revision 1.71  2004/04/14 22:04:10  gnomi
+// zfe: Man kann zusaetzliche Gruppen anmelden, die man beobachtet.
+//
+// Revision 1.70  2004/01/02 01:02:03  gnomi
+// Fehler behoben, wenn der letzte Fehler bei erneutem 'zfe' nicht mehr zur
+// Auswahl steht.
+//
+// Revision 1.69  2003/12/31 15:21:16  menaures
+// Problem mit limited() bei 'z' behoben.
+// Neue Option -g und -G
+//
+// Revision 1.68  2003/12/27 03:56:38  gnomi
+// Bei 'q' oder 'Q' merkt er sich jetzt, wo man zuletzt war.
+//
+
+#define OPT        m[0][BR_USER]["Opt"]
+#define ERRORS     m[0][BR_USER]["Errors"]
+#define ERROR_NUMS m[1][BR_USER]["Error_Numbers"]
+#define ERROR_LINES m[1][BR_USER]["Error Lines"]
+#define WIZ        m[0][BR_USER]["Opt"]["args"][m[1][BR_PATH]-1]
+
+#define OSTATUS        (member(OPT,"o")?\
+                        "Objekt:\""+OPT["o"]+"\" ":\
+                        (OPT["f"]?\
+                         "File:\""+OPT["f"]+"\" "+\
+                         (OPT["v"]?\
+                          "Verursacher:\""+OPT["v"]+"\" ":""):\
+                         (OPT["v"]?\
+                          "Verursacher:\""+OPT["v"]+"\" ":"")))
+#define RSTATUS         OSTATUS + "[<,>,q,<nr>,?] "
+#define SSTATUS         lambda(({'more_line,'max_line}),({#'sstatus,'more_line,'max_line,quote(m)}))
+#define MSTATUS 	OSTATUS + WIZ + " [+-<>/lmvq?] "
+
+#define CLIPIT(x) 	x=trim(x[1..]);
+#define MFLAGS  	M_LINE_NUMBERS | M_DO_NOT_END | M_FRAME
+#define MFLAGS2  	M_DO_NOT_END | M_FRAME
+#define BHELP(x) 	return read_file(HILFE_PFAD+"fbrowser"+x);
+#define ERROR_NAMES 	([EDB_FEHLER    : "FEHLER",			\
+	 		  EDB_IDEE      : "IDEE",	        	\
+           		  EDB_RUNTIME   : "RUNTIME ERROR",		\
+	 		  EDB_COMPILE   : "COMPILE ERROR",              \
+                          EDB_LOB       : "WUERDIGUNG",                 \
+                          EDB_TYPO      : "TYPO",			\
+			  EDB_DETAIL    : "DETAIL"])
+
+
+#include <editor.h>
+#include <error_db.h>
+#include <files.h>
+#include <more.h>
+#include <rtlimits.h>
+
+nosave mixed last_zfe;
+
+// Fuer /secure/master/log_error.inc:
+nomask int get_own_rtes() { return params["own-rtes"]; }
+
+static mixed get_menue_more_info(mixed m, int nr);
+
+//Der Prompt fuer die Detailanzeige
+private string sstatus(int more_line, int max_line, mixed *m)
+{
+  int chunk;
+  return (((chunk=this_player()->query_more_chunk())<more_line
+         || more_line<max_line)
+        ?"(Zeilen "+((chunk>more_line)?1:(more_line-(more_line-1)%chunk))
+                  +"-"+more_line+" von "+max_line+") "
+        :"")
+        + OSTATUS + WIZ + " [+-tlvegq?] ";
+}
+
+// Das Datum einer Fehlermeldung finden
+private int get_date(mixed er)
+{
+    mixed date;
+
+    if (intp(date = er[EDB_DATE]))
+	return date;
+    return date[<1];
+}
+
+// Der Filename des Fehlers err
+// Wenn real_file, dann die Datei auf welche sich die Zeilenangabe
+// bezieht, liefern. Ansonsten den objekt-namen (ohne Endung)
+private string get_file_name(int err, mixed *m, int real_file)
+{
+    string tmp,main;
+
+    tmp=ERRORS[ERROR_NUMS[err]][EDB_FILE];
+
+    if(!tmp) return 0;
+    if(real_file && sscanf(tmp,"%s (%s)",main,tmp) == 2)
+    {
+        main = MASTER_OB->include_file(tmp,main,0);
+        if (stringp(main)) return main;
+    }
+
+    // wenn kein . am ende des filenamens vorkommt, dann einen dranhaengen!
+    tmp = explode(tmp, " ")[0];
+    tmp = explode(tmp, "#")[0];
+    if (strstr(tmp,".",0) < strlen(tmp)-5 && real_file)
+    {
+        if(file_size(tmp+".c")>=0)
+            tmp += ".c";
+        else if(file_size(tmp+".udl")>=0)
+            tmp += ".udl";
+        else if(file_size(tmp)<0)
+            tmp += ".c";
+    }
+    
+    if(!sizeof(tmp))
+	return tmp;
+	
+    tmp = (tmp[0] == '/') ? tmp : "/" + tmp;
+    if(real_file) tmp = map2domain(tmp,1)||tmp;
+    return tmp;
+}
+
+private int is_existing_error(int num, mapping pro)
+{
+    mixed error;
+
+    error = ERROR_DB->query_error(num);
+    if (!error)
+        return 0;
+    if (!pro) //Admin
+        return 1;
+    error=mkmapping(error[EDB_DEBUGGER]);
+    if (sizeof(({mapping})error & pro)) //Er ist zustaendig
+        return 1;
+    else
+        return 0;
+}
+
+// liefert 1 zurueck, wenn der Wiz diesen Fehler noch nicht gelesen hat
+private int is_new_wiz_error(int num, int *new)
+{
+    return member(new,num) != -1;
+}
+
+/*
+Diese Funktion holt die Fehler aus der Fehlerdatenbank. Der Parameter
+"-n" wird hier (und nicht in ERROR_DB) ausgewertet, da dazu Informationen 
+direkt aus dem Player geholt werden muessen.
+*/
+private int *query_wiz_errors(string who, mixed *m)
+{
+    int *nums;
+    mixed *new;
+
+    nums = (ERROR_DB->query_wiz_errors(who,
+              OPT["f"],OPT["v"],OPT["EDB_TYPE"])||({}))-OPT["Exclude"];
+    if (sizeof(nums) && OPT["n"])
+    {
+	new = this_player()->query_new_wiz_errors();
+	nums &= new[EDB_NEW_WIZ_ERRORS];
+    }
+    return nums;
+}
+
+//Neue Fehler im this_player aktualisieren
+private varargs void update_new_wiz_errors(int *exclude, int *include, string *only_domains)
+{
+   mixed *new = this_player()->query_new_wiz_errors();
+
+   if(new[EDB_LAST_READ] < time())
+   // Doppeltes Ausfuehren in einem Thread vermeiden
+   {
+      mapping to_add=m_allocate(500,0);
+      string *domains = ERROR_DB->query_wiz_projects(
+         this_player()->query_real_name(),0,0,0,0);
+	 
+      domains += unmkmapping(params["zfe-groups"])[0]-domains;
+
+      if(only_domains) domains&=only_domains;
+
+      // Wir holen uns alle Fehlernummern und speichern sie zu einfachen
+      // Vermeidung von doppelten Fehlern in einem Mapping ab
+      foreach(string wiz:domains)
+         to_add+=mkmapping(ERROR_DB->query_wiz_errors(wiz,0,0,0)||({}));
+      to_add -= mkmapping(new[EDB_NEW_WIZ_ERRORS]);
+      // Dann Mapping nach neuen Fehlern durchsuchen.
+      new[EDB_NEW_WIZ_ERRORS] += unmkmapping(filter(to_add,
+         (: ERROR_DB->query_error($1)[EDB_LAST_CHANGE]>$3 :),
+         new[EDB_LAST_READ]))[0];
+   }
+
+   new[EDB_NEW_WIZ_ERRORS]=new[EDB_NEW_WIZ_ERRORS]-exclude-include+include;
+   if(!only_domains) new[EDB_LAST_READ] = time();
+   this_player()->set_new_wiz_errors(new);
+}
+
+#define WILDCARD2REGEXP(w) ("^"+regreplace(regreplace((w),"([.^$\\\\<>|()[\\]])", \
+				    "\\\\\\1",1),"\\*",".*",1)+"$")
+#define WILDCARDARR2REGEXP(w) ("^("+		\
+    implode(map((w), 				\
+	(:					\
+	    regreplace(regreplace($1,"([.^$\\\\<>|()[\\]])", "\\\\\\1",1), \
+		"\\*",".*",1)			\
+	:)),"|")				\
+    ")$")
+
+private int kill_error(int err, string flag, string *zust, mixed *m)
+{
+    if (flag == "v")
+    {
+	if (pointerp(zust) && sizeof(zust))
+	{
+	    mixed debs=ERROR_DB->query_error(ERROR_NUMS[err-1]);
+	    if(debs) debs=debs[EDB_DEBUGGER];
+	    else return 0;
+	    foreach(string w:zust)
+	    //Also nun den String in eine regexp umwandeln und auf die
+	    //Debugger anwenden. Dabei besonderen Zeichen ein \ voranstellen.
+	        foreach(string ew: regexp(debs,WILDCARD2REGEXP(w)))
+			ERROR_DB->hide_error(ERROR_NUMS[err-1], ew);
+	}
+	else
+	    ERROR_DB->hide_error(ERROR_NUMS[err-1], WIZ);
+    }
+    else
+	ERROR_DB->delete_error(ERROR_NUMS[err-1]);
+    return 1;
+}
+
+private int kill_errors(int berr, int eerr, string flag, string zust, mixed *m)
+{
+    int i, ret;
+    string* del_wiz;
+
+    if (berr < 1 || berr > sizeof(ERROR_NUMS) || 
+	eerr < 1 || eerr > sizeof(ERROR_NUMS) ||
+	berr > eerr)
+	return 0;
+
+    if(flag == "l")
+    {
+	ERROR_DB->delete_error(ERROR_NUMS[err-1]);
+	return 1;
+    }
+
+    if(zust)
+    {
+	string *z,*nz;
+	mixed debs;
+	
+        z=regexplode(zust,"[ ,;]")-({""," ",",",";"});
+
+	nz = map(z, (: !strstr($1,"!") && $1[1..<1] :)) - ({0});
+	z = filter(z, #'strstr, "!");
+
+	debs=ERROR_DB->query_error(ERROR_NUMS[err-1]);
+	if(debs)
+	    debs=debs[EDB_DEBUGGER];
+	else
+	    return 0;
+	
+	del_wiz = regexp(debs, WILDCARDARR2REGEXP(z));
+	del_wiz -= regexp(del_wiz, WILDCARDARR2REGEXP(nz));
+    }
+    else
+	del_wiz = ({ WIZ });
+
+    foreach (string w: del_wiz)
+        ERROR_DB->hide_error(ERROR_NUMS[err-1], w);
+
+    return 1;
+}
+
+/* Liefert Zeit in TT.MM. HH:MM (12 Zeichen) */
+private string ultra_kurz_datum(int time)
+{
+    string tmp;
+
+    tmp = shorttimestr(time);
+    return tmp[0..4] + " " + tmp[9..13];
+}
+
+private string normalize_filename(string file)
+{
+    string path, inc;
+
+    if (!file || file == "")
+	return file;
+    file = MASTER_OB->add_slash(file);
+    if (sscanf(file, "%s (%s)", path, inc) == 2)
+    {
+	path = MASTER_OB->include_file(inc,path,0);
+	if (stringp(path))
+	    file = path;
+    }
+    else
+        file=map2domain(file,1)||file;
+    if (file[<2..] == ".c")
+	file = file[0..<3];
+    return file;
+}
+
+// Diese Funktion erzeugt die Strings fuer die Uebersicht
+private string *get_msg(mixed *m)
+{
+    string *out, tmp, errformat;
+    int lineno, err_n, i;
+    int *new;
+    mixed *err;
+    
+    new = this_player()->query_new_wiz_errors()[EDB_NEW_WIZ_ERRORS];
+
+    out = ({});
+    err_n = strlen(to_string(sizeof(ERROR_NUMS)));
+    errformat = " %"+err_n+"d: %s %c %c %-10s %-="+(49-err_n)+"s\n";
+
+    ERROR_LINES=({});
+
+    foreach(err_n:ERROR_NUMS)
+    {
+	err = ERRORS[err_n]
+	    ||ERRORS[err_n]=ERROR_DB->query_error(err_n);
+	if (!sizeof(err))
+	{
+	    do_warning2("ZFE-Uebersichtsanzeige: Fehler " + err_n + 
+		" ist in der Fehlerliste\nenthalten aber existiert nicht mehr!",
+		__FILE__, object_name(), __LINE__);
+	    continue;
+	}
+
+	i++;
+	ERROR_LINES+=({sizeof(out)});
+
+	switch (err[EDB_TYPE])
+	{
+	    case EDB_FEHLER:
+	    case EDB_IDEE:
+            case EDB_LOB:
+            case EDB_TYPO:
+            case EDB_DETAIL:
+		tmp = err[EDB_F_WHO];
+	       	break;
+	    case EDB_RUNTIME:
+		tmp = sprintf("%10d", err[EDB_R_LINE]);
+	       	break;
+	    case EDB_COMPILE:
+		if (sscanf(err[EDB_C_ERROR],"%!s line %d :",lineno))
+		    tmp = sprintf("%10d",lineno);
+		else
+		    tmp = "";
+	}
+    
+	out += explode(sprintf(errformat,i,ultra_kurz_datum(get_date(err)),
+		is_new_wiz_error(err_n,new) ? '+' : ' ',
+		ERROR_NAMES[err[EDB_TYPE]][0],tmp,
+		normalize_filename(err[EDB_FILE])||"-"),"\n")[0..<2];
+    }
+    return out;
+}
+
+// Wird nur in format_runtimes() aufgerufen...
+private string _format(int date, string command, string verursacher, 
+    string firstroom, int flag)
+{
+#   define RFORMAT "%-=12s %-=66s\n"
+    return 
+	"Datum:       " + timestr(date) + "\n" +
+	(command ? sprintf(RFORMAT,"Kommando:",command) : "") +
+	sprintf(RFORMAT,"Verursacher:",verursacher ? verursacher : "Niemand") +
+	(firstroom ? sprintf(RFORMAT,
+	"Erster Raum:",stringp(firstroom)?implode(explode(firstroom,"|") - ({""}),"\n")
+	                                 :sprintf("%O",firstroom)) : "") +
+	"Was:         "+({"Runtime-Fehler","Heart-Beat-Fehler",
+		"Benutzerdefiniert (do_error)"})[flag] + "\n";
+}
+
+// Bringt die Daten fuer RUNTIME und HB-Errors in eine huebsche Liste
+// wird ausschliesslich von get_msg_text verwendet
+private string format_runtimes(mixed date, mixed command, mixed verursacher,
+    mixed firstroom, mixed flag)
+{
+    string tmp, t, *f;
+    int i;
+
+    tmp = "";
+    if (intp(date)) 
+        return _format(date,command,verursacher,firstroom,flag);
+    if (pointerp(date))
+    {
+        for (i = 0; i < sizeof(date); i++)
+	    tmp += _format(date[i],command[i],verursacher[i],firstroom[i],
+		    flag[i]) + "\n";
+	return tmp[0..<2];
+    }
+    return tmp;
+}
+
+private string format_comment(mixed *comment)
+{
+    string ret;
+    
+    ret = "";
+
+    for (int i = 0; i < sizeof(comment); i++)
+    {
+	ret += sprintf("Kommentar:   %-10s %55s\n             %=-62s\n",
+		capitalize(comment[i][EDB_COM_WHO]),
+		timestr(comment[i][EDB_COM_DATE]),
+		comment[i][EDB_COM_COMMENT]);
+    }
+    return ret;
+}
+
+private string format_filename(string name)
+{
+    string file;
+
+    if(!name) return "-";
+    if(sizeof(explode(name," "))>1) return name;
+
+    file=map2domain(name,1);
+    if(!file) return name;
+    if(name[<2..<1]!=".c") file=file[0..<3];
+    if(file==name)  return name;
+    return name + " ("+file+")";
+}
+
+// Hier wird die lange Ausgabe eines Fehlers berechnet
+//  excl wird an update_new_wiz_errors weitergeleitet (eval-sparend)
+private varargs string get_msg_text(int err, mixed *m, int *excl)
+{
+    string out, tmp_fe, tmp_co;
+    int what, pos, errnum;
+    mixed *error;
+
+    errnum = ERROR_NUMS[err - 1];
+    error = ERRORS[errnum];
+    what = error[EDB_TYPE];
+    out = sprintf("%s%-12s %-27s %38s\n",
+	    LINE,
+	    to_string(err) + ":",
+	    ERROR_NAMES[what] + " ("+ errnum + "):",
+	    timestr(get_date(error)));
+
+    update_new_wiz_errors(({errnum})+(excl||({})),({}));
+
+    switch (what)
+    {
+	case EDB_FEHLER: 
+	case EDB_IDEE:
+        case EDB_LOB:
+        case EDB_TYPO:
+        case EDB_DETAIL:
+/*
+-------------------------------------------------------------------------------
+nr:           FEHLER/IDEE (<Fehlernummer>)                              <Datum>
+Urheber:      <Name>, (z.Zt in <Umgebung>)
+Zustaendig:   <Wiz-Liste>
+File:         <Filename>
+              (<Fehlerfeedbackobjektname>)
+
+<Fehlertext> ....
+-------------------------------------------------------------------------------
+*/
+	    out = sprintf("%sUrheber:     %s (z.Zt. in %s)\n"
+		    "Zustaendig:  %-=66s\nFile:        %-=66s\n\n%s%s",
+		    out,
+		    CAP(error[EDB_F_WHO]),
+		    error[EDB_F_ROOM]||"dem Nirwana!",
+		    implode(error[EDB_F_DEBUGGER],", "),
+		    (format_filename(error[EDB_F_FILE])||"-")+
+		    ((sizeof(error)>EDB_F_OBJECT_CLEARTEXT && error[EDB_F_OBJECT_CLEARTEXT])
+			?("\n("+error[EDB_F_OBJECT_CLEARTEXT]+")")
+			:""),
+		    error[EDB_F_ERROR],
+		    format_comment(error[EDB_F_COMMENT]));
+	    break;
+	case EDB_RUNTIME:
+/*
+-------------------------------------------------------------------------------
+nr:           RUNTIME/HEARTBEAT ERROR (<Fehlernummer>)                  <Datum>
+Zustaendig:   <Wiz-Liste>
+Objekt:       <fehlerobjekt>
+File:         <filename>
+Zeile:        <Zeile>
+Fehler:       <Fehlermeldung>
+             -------------------------
+<Liste der Fehler: Datum - ausloesendes Kommando - ausloesendes Objekt>
+-------------------------------------------------------------------------------
+*/
+	    if ((pos = strstr(error[EDB_R_ERROR], "Kommentar:")) != -1)
+	    {
+		tmp_fe = error[EDB_R_ERROR][0..(pos - 1)];
+		tmp_co = error[EDB_R_ERROR][pos..<1];
+	    }
+	    else
+	    {
+		tmp_fe = (error[EDB_R_ERROR][<1] == '\n' ?
+			error[EDB_R_ERROR][0..<2] : error[EDB_R_ERROR]);
+		tmp_co = "";
+	    }
+	    out = sprintf("%s\nZustaendig:  %-=66s\nObjekt:      %s\n"
+		    "File:        %s\nZeile:       %d\nFehler:      %-=66s\n"
+		    "%s%s%s",
+		    out[0..<2],
+		    implode(error[EDB_R_DEBUGGER],", "),
+		    format_filename(error[EDB_R_OB]),
+		    format_filename(MASTER_OB->add_slash(error[EDB_R_FILE]))||"-",
+		    error[EDB_R_LINE],
+		    tmp_fe,
+		    format_runtimes(error[EDB_R_DATE],error[EDB_R_COMMAND],
+			error[EDB_R_WHO],error[EDB_R_FIRST_ROOM],
+			error[EDB_R_SUB_TYPE]),
+		    tmp_co,
+		    format_comment(error[EDB_R_COMMENT]));
+	    break;
+/*
+-------------------------------------------------------------------------------
+nr:           COMPILE ERROR (<Fehlernummer>)                            <Datum>
+Zustaendig:   <Wiz-Liste>
+File:         <filename>
+Fehler:       <Fehlermeldung>
+-------------------------------------------------------------------------------
+*/
+	case EDB_COMPILE:
+	    out = sprintf("%s\nZustaendig:  %-=66s\nFile:        %s\n"
+		    "Fehler:      %-=66s\n%s",
+		    out[0..<2],
+		    implode(error[EDB_C_DEBUGGER],", "),
+		    error[EDB_C_FILE]||"-",
+		    error[EDB_C_ERROR],
+		    format_comment(error[EDB_C_COMMENT]));
+    }
+    return out + LINE[0..<2];
+}
+
+
+private mixed get_info_text(int errnr, mixed *m)
+{
+    string *strs;
+    mixed *err;
+    mapping info;
+		
+    err = ERRORS[ERROR_NUMS[errnr-1]];
+		 
+    switch(err[EDB_TYPE])
+    {
+	case EDB_FEHLER:
+	case EDB_IDEE:
+	case EDB_LOB:
+	case EDB_TYPO:
+        case EDB_DETAIL:
+	    if(sizeof(err)>EDB_F_USER_INFO)
+		info = err[EDB_F_USER_INFO];
+	    break;
+		    
+	case EDB_RUNTIME:
+	    if(sizeof(err)>EDB_R_USER_INFO)
+		info = err[EDB_R_USER_INFO];
+	    break;
+	case EDB_COMPILE:
+	    return "Es gibt keine Debug-Infos zu Compile-Fehlern.\n";
+    }
+		
+    if(!sizeof(info))
+        return "Zu diesem Fehler gibt es keine Debug-Infos.\n";
+		
+    strs = ({});
+    foreach(string key:sort_array(m_indices(info),#'>))
+	strs += explode(
+	    sprintf("%-=11s %-=66s\n", key+":",
+		stringp(info[key])?info[key]:mixed2str(info[key])),
+		"\n")[0..<2];
+
+    return strs;		    
+}
+
+// Sucht das Objekt, zu dem die Fehler angezeigt werden sollen (-o)
+private void search_f_object(string was, mapping opt)
+{
+    mixed ob;
+    string file;
+
+    if (ob = search_object(was,1))
+    {
+        if (mappingp(ob) && (file = funcall((ob)["environment"])))
+            file = explode(to_string(file),"#")[0];
+        else
+       	{
+	    if (mappingp(ob))
+		ob = environment(this_player());
+            file = explode(object_name(ob),"#")[0];
+        }
+    }
+    else 
+    {
+        if (was[0] == '/')
+            file = was;
+        else
+            file = (strlen(
+			file=(string)this_player()->query_current_path()) > 1 ?
+		    (file + "/") : file) + was;
+        file=domain2map(file)||file;
+    }
+    if(file[<2..] == ".c")
+    {
+        opt["o"] = file;
+        opt["f"] = ({file[0..<3]});
+    }
+    else
+    {
+        opt["o"] = file + ".c";
+        opt["f"] = ({file});
+    }
+}
+
+private string get_trace_text(int errnr, mixed *m, int nr)
+{
+    mixed *err = ERRORS[ERROR_NUMS[errnr-1]];
+    string str;
+    int off, len, tim;
+
+    if (err[EDB_TYPE] == EDB_RUNTIME)
+    {
+	if (pointerp(err[EDB_R_DEBUG_OFFSET]))
+	{
+	    if (nr <= 0 || nr > sizeof(err[EDB_R_DEBUG_OFFSET]))
+		nr = sizeof(err[EDB_R_DEBUG_OFFSET]) - 1;
+	    else
+		nr -= 1;
+	    off = err[EDB_R_DEBUG_OFFSET][nr];
+	    len = err[EDB_R_DEBUG_SIZE][nr];
+	    tim = err[EDB_R_DATE][nr];
+	}
+	else
+	{
+	    off = err[EDB_R_DEBUG_OFFSET];
+	    len = err[EDB_R_DEBUG_SIZE];
+	    tim = err[EDB_R_DATE];
+	}
+    }
+    // Nur, wenn dafuer ueberhaupt ein Fehler da ist
+    if (len > 0)
+    {
+	// Nur wenn der Fehler im Aktuellen Log-File liegt
+	if (tim >= time() - query_up_time())
+	{
+#ifdef UNItopia
+	    str = read_bytes("/UNItopia.debug.log",off,len);
+#else
+	    str = read_bytes("/" __HOST_NAME__ ".debug.log",off,len);
+#endif
+	}
+	else
+	{
+	    // Schauen, ob das letzte File noch da ist.
+	    mixed *dir;
+	    int i, date;
+
+	    dir = get_dir("/log/sys/debug.*");
+	    for (i = 0; i < sizeof(dir); i++)
+	    {
+		date = to_int(dir[i][6..]);
+		if (tim < date)
+		    break;
+	    }
+	    if (i > 0 && i < sizeof(dir))
+		str = read_bytes("/log/sys/" + dir[i - 1],off,len);
+	}
+    }
+    if (str)
+	return str;
+    return 0;
+}
+
+private mixed print_trace(mixed m, int nr)
+{
+    string str = get_trace_text(m[<1][BR_PATH],m,nr);
+    if (str)
+	return m+({({ explode(str,"\n")[0..<2], SSTATUS, 0, M_HEADER_LINE, 0})});
+    else
+        return "Zu diesem Fehler ist kein Trace vorhanden.\n";
+}
+
+// Die add_action
+int limited_z_fehler(string str)
+{
+    int i;
+    mixed pro;
+    mixed *new;
+    mapping opt, add_groups;
+
+    SECURE;
+    HELP("zfehler");
+
+    opt = getopt(str,(["o":"%s", "s":0, "f":"%s", "v":"%s","w":"%s",
+                       "e":"%s", "u":0, "d":0, "D":0, "z":0, "t":0, "m":0, 
+                       "g":0, "G":0,
+                       "i":0, "l":0, "r":0, "c":0, "n":0, "S":0, "E":"%s",
+		       "x":"%s", ]),
+                 GO_ERRS);
+    if (!opt)
+	opt = ([]);
+
+    if ((opt["t"] + opt["m"] + opt["i"] + opt["l"] + opt["r"] + opt["c"]) > 1)
+        FAIL("Die Optionen -t, -i, -l, -m, -r und -c koennen leider nicht zusammen\n"
+             "benutzt werden.\n");
+
+    if (opt["S"])
+    {
+      set_param("zfe-s",!params["zfe-s"]);
+      if(params["zfe-s"])
+          write("Option -s aktiviert.\n");
+      else
+          write("Option -s "+(opt["s"]?"zukuenftig ":"")+"deaktiviert.\n");
+      if(!sizeof(opt-(["S"])))
+          return 1;
+    }
+
+    if (opt["G"])
+    {
+      set_param("zfe-g",!params["zfe-g"]);
+      if(params["zfe-g"])
+          write("Option -g aktiviert.\n");
+      else
+          write("Option -g "+(opt["g"]?"zukuenftig ":"")+"deaktiviert.\n");
+      if(!sizeof(opt-(["S","G"])))
+          return 1;
+    }
+
+    if(opt["g"]) opt["g"] = !params["zfe-g"];
+    else opt["g"] = params["zfe-g"];
+
+    if (sizeof(opt["E"]))
+        opt["E"]=regexplode(opt["E"][0],"[,;]")-({",",";",""});
+    else
+        opt["E"]=({});
+    if (opt["t"])
+	opt["EDB_TYPE"] = EDB_TYPO;
+    else if (opt["m"])
+	opt["EDB_TYPE"] = EDB_FEHLER;
+    else if (opt["i"])
+	opt["EDB_TYPE"] = EDB_IDEE;
+    else if (opt["D"])
+        opt["EDB_TYPE"] = EDB_DETAIL;
+    else if (opt["l"])
+	opt["EDB_TYPE"] = EDB_LOB;
+    else if (opt["r"])
+	opt["EDB_TYPE"] = EDB_RUNTIME;
+    else if (opt["c"])
+	opt["EDB_TYPE"] = EDB_COMPILE;
+
+    if (params["zfe-s"] || opt["f"] || opt["v"] || opt["EDB_TYPE"])
+        opt["s"] = 1;
+    if (opt["o"]) 
+        search_f_object(opt["o"][0],opt);
+    if (opt["f"])
+	opt["f"] = opt["f"][0];
+    if (opt["v"])
+	opt["v"] = opt["v"][0];
+    if (opt["f"] && !regexp(({"dummy"}),opt["f"]))
+        FAIL("Fehler in der Regexp. '"+opt["f"]+"' fuer den Dateinamen\n");
+
+    if (opt["v"] && !regexp(({"dummy"}),opt["v"]))
+        FAIL("Fehler in der Regexp. '"+opt["v"]+"' fuer den Verursacher\n");
+
+//    if(!adminp(this_player()))
+    {
+        pro = ERROR_DB->query_wiz_projects(this_player()->query_real_name(),0,0,0,0);
+        pro = mkmapping(pro)+mkmapping(map(pro,(:explode($1,":")[0]:)));
+	pro += params["zfe-groups"];
+    }
+
+    new = this_player()->query_new_wiz_errors();
+    new[EDB_NEW_WIZ_ERRORS] =
+	filter(new[EDB_NEW_WIZ_ERRORS],#'is_existing_error,pro);
+    this_player()->set_new_wiz_errors(new);
+    browse(opt);
+    return 1;
+}
+
+int z_fehler(string str)
+{
+    return limited(#'limited_z_fehler, ({__MAX_EVAL_COST__ * 4}), str);
+}
+
+string f_size(mixed * str, mixed *m) //str: ({gruppe, wiz_errors})
+{
+    int *wiz_errors, new, *nums;
+
+    wiz_errors = str[1];
+    nums = this_player()->query_new_wiz_errors()[EDB_NEW_WIZ_ERRORS];
+    for (int i = sizeof(wiz_errors); i--; )
+        if (is_new_wiz_error(wiz_errors[i],nums))
+	{
+            new = 1;
+	    break;
+	}
+    return sprintf("%4d %c %s", sizeof(wiz_errors), (new ? '+' : ' '), str[0]);
+}
+
+/* 
+Diese Funktion liefert das erste Array fuer den Browser:
+Alle Debuggernamen, fuer die der Wiz zustaendig ist. Der Wiz ist
+Argument des Befehls zfehler
+*/
+static mixed get_initial_more_info(mixed opt)
+{
+    string *domains, name;
+    int *errnums;
+    int i, j;
+    mixed *m, *new, *tmp;
+
+    if(pointerp(opt)) // Um ein unterbrochenes Menue neu zu starten
+	return opt;
+
+    name = this_player()->query_real_name();
+    m = allocate(BR_SIZE);
+    m[BR_USER]=([]);
+    m=({m});
+    OPT=opt;
+    ERRORS=([]);
+
+    if (!OPT["args"])
+	OPT["args"] = ({});
+    else
+    {
+	tmp = ({});
+	for (i = sizeof(OPT["args"]); i--; )
+	    tmp += explode(OPT["args"][i]," ");
+	OPT["args"] = tmp;
+    }
+    
+    errnums = ({});
+    tmp = ({});
+    foreach(string str: OPT["args"])
+	if(!str2int(str, &i))
+	    errnums += ({i});
+	else
+	    tmp += ({str});
+    OPT["args"] = tmp;
+
+    // Ein leeres '-e' deaktivieren.
+    if(OPT["e"] && !sizeof(OPT["e"]))
+	m_delete(OPT,"e");
+	    
+    // Falls eine Fehlernummer (und sonst keine andere Domain)
+    // angegeben wurde, dann '-e' aktivieren (es werden also
+    // nicht mehr die Standardgebiete angezeigt).
+    if(sizeof(errnums) && !sizeof(OPT["args"]) && !OPT["e"])
+	    OPT["e"] = ({});
+    
+    if (OPT["e"])
+    {
+	tmp = ({});
+	for (i = sizeof(OPT["e"]); i--; )
+	    tmp += explode(OPT["e"][i]," ");
+	domains = tmp;
+	last_zfe = 0;
+    }
+    else
+    {
+	domains = ERROR_DB->query_wiz_projects(
+	    OPT["w"] ? OPT["w"][0] : name,
+	    0, 0, 0, 0);
+	domains += unmkmapping(params["zfe-groups"])[0] - domains;
+    }
+    
+    if(OPT["x"])
+	foreach(string wc: OPT["x"])
+	    domains -= regexp(domains,WILDCARD2REGEXP(wc));
+    
+    OPT["Exclude"]=({});
+    foreach(tmp:OPT["E"])
+    {
+	domains -= ({tmp});
+        OPT["Exclude"]+=ERROR_DB->query_wiz_errors(tmp,0,0,0)||({});
+    }
+
+    if (OPT["d"] && lordp(this_player()))
+	OPT["args"] += DOMAIN_INFOS->query_domains() - OPT["args"];
+
+    if (OPT["z"] && lordp(this_player()))
+	OPT["args"] += map(FILED->query_types(), #'capitalize) - OPT["args"];
+
+    domains += OPT["args"] - domains;
+    
+    if(opt["g"] && sizeof(last_zfe))
+    {
+	if(sizeof(errnums))
+	    last_zfe=0;
+	else if(last_zfe[0]=="Fehlernummern")
+	{
+	    if(sizeof(last_zfe)>1 && ERROR_DB->query_error(last_zfe[1]))
+		errnums=({last_zfe[1]});
+	    else
+		last_zfe=0;
+	}
+	else
+	{
+	    if(member(domains,last_zfe[0])<0)
+	    {
+		if(!OPT["e"])
+		    domains += last_zfe[0..0];
+		else
+		    last_zfe=0;
+	    }
+	    if(sizeof(last_zfe)>1)
+	    {
+		if(ERROR_DB->query_error(last_zfe[1]))
+		    update_new_wiz_errors(({}),({last_zfe[1]}));
+		else
+		    last_zfe = last_zfe[0..0];
+	    }
+	}
+    }
+
+    if (!OPT["u"])
+	domains = sort_array(domains, #'>);
+
+    update_new_wiz_errors(({}),({}));
+
+    tmp = transpose_array(({domains,map(domains, #'query_wiz_errors, m)}));
+
+    if(OPT["s"])
+    {
+	tmp = filter(tmp, (:sizeof($1[1]):));
+	domains = map(tmp, #'[, 0);
+    }
+    
+    if(sizeof(errnums))
+    {
+	mixed *diff;
+	domains = ({"Fehlernummern"})+domains;
+	OPT["errnums"] = sort_array(filter(errnums,(:ERROR_DB->query_error($1):)),#'>);
+	diff = errnums - OPT["errnums"];
+	if(sizeof(diff))
+	{
+	    if(sizeof(diff)>1)
+		write(wrap("Die Fehler mit der Nummer "+liste(map(diff,#'to_string))+" existieren nicht."));
+	    else
+		write(wrap("Der Fehler mit der Nummer "+to_string(diff[0])+" existiert nicht."));
+	}
+	tmp = ({ ({"Fehlernummern", OPT["errnums"]}) }) + tmp;
+    }
+    else
+	m_delete(OPT,"errnums");
+    
+    OPT["args"] = domains;
+
+    if (sizeof(domains) == 0)
+    {
+	if (member(OPT,"o"))
+            write(wrap("Zu \"" + OPT["o"] + "\" hast Du keine Fehler!"));
+        else if (OPT["f"])
+            write(wrap("Keiner deiner Fehler enthaelt den im Filter \"" +
+                       OPT["f"] + "\" angegebenen Pfad!"));
+        else if (OPT["v"])
+            write(wrap("Keiner deiner Fehler wurde von \"" +
+                       OPT["v"] + "\" verursacht!"));
+        else if (OPT["t"])
+            write(wrap("Keiner deiner Fehler ist ein Typo."));
+        else if (OPT["m"])
+            write(wrap("Keiner deiner Fehler ist eine Fehlermeldung."));
+        else if (OPT["i"])
+            write(wrap("Keiner deiner Fehler ist eine Idee."));
+        else if (OPT["l"])
+            write(wrap("Keiner deiner Fehler ist eine Wuerdigung."));
+        else if (OPT["n"])
+            write(wrap("Du hast keine neuen Fehler/Kommentare."));
+        else
+            write("Du hast keine Fehler!\n");
+        return 0;
+    }
+
+    m[0][BR_MENUE]=map(tmp,#'f_size,m);
+    m[0][BR_STATUS_LINE]=RSTATUS;
+    m[0][BR_STATUS_BYTE]=MFLAGS;
+    
+    /* 
+    Sehr huebsch, man kann den Browser tatsaechlich auch schon in einem
+    Menuepunkt initialisieren!
+    */
+    if (opt["g"] && sizeof(last_zfe))
+    {
+	mixed oldm = m;
+	i =  member(domains, last_zfe[0]);
+	if(i>=0)
+	{
+	    m = get_menue_more_info(m,i+1);
+	    if(stringp(m))
+		m = oldm;
+	    else if(sizeof(last_zfe)>1)
+	    {
+		oldm = m;
+		i = member(ERROR_NUMS, last_zfe[1]);
+		if(i>=0)
+		{
+		    m = get_menue_more_info(m,i+1);
+		    if(stringp(m))
+			m = oldm;
+		}
+	    }
+	}
+	last_zfe = 0;
+    }
+    else if (sizeof(domains) == 1 && sizeof(tmp[0][1]))
+    {
+        m=get_menue_more_info(m,1);
+	if(sizeof(errnums)==1)
+	    m = get_menue_more_info(m,1);
+    }
+
+    return m;
+}
+
+/*
+Diese Funktion liefert die weiteren Menuepunkte: 
+Stufe 1: Fehleruebersicht,
+Stufe 2: Einen Fehler im Detail,
+Stufe 3: Fehler mit Nummer nr, zurueck zu Stufe 2
+*/
+static mixed get_menue_more_info(mixed m, int nr)
+{
+    int tmp;
+    if(!pointerp(m)) return m;
+
+    switch (sizeof(m))
+    {
+	case 1:
+	    m+=({({ 0 , 0 , 0, MFLAGS2, nr, ([]) })});
+	    m[0][BR_BEGIN_LINE] = 0;
+	    if(OPT["errnums"] && nr==1)
+	    {
+		OPT["errnums"] = filter(OPT["errnums"],(:ERROR_DB->query_error($1):));
+		ERROR_NUMS=OPT["errnums"];
+	    }
+	    else
+	    {
+        	update_new_wiz_errors(({}),({}),({OPT["args"][nr-1]}));
+		ERROR_NUMS=sort_array(query_wiz_errors(OPT["args"][nr-1],m)||({}),#'>);
+	    }
+	    m[<1][BR_MENUE]=get_msg(m);
+	    m[<1][BR_STATUS_LINE]=MSTATUS;
+	    return m;
+	case 2:
+          if(nr>sizeof(ERROR_NUMS))
+	      return "Diesen Menuepunkt gibt es nicht.\n";
+	  return m+({({ explode(get_msg_text(nr,m), "\n"), 
+                SSTATUS, 0, M_DO_NOT_END, nr })});  
+    }
+}
+
+varargs static mixed get_more_info(mixed m, int flag, int nr)
+{
+    if(pointerp(m) && sizeof(m)==4 && flag!=B_BACK)
+	m=m[0..2]-({0});
+    return ::get_more_info(m,flag,nr);
+}
+
+//Einfach die aktuelle Darstellung erneuern.
+mixed get_the_more_info(mixed m)
+{
+    int i,bl;
+    mixed tmp;
+    if(!pointerp(m)) return m;
+    bl=m[<1][BR_BEGIN_LINE];
+
+    switch (sizeof(m))
+    {
+        case 1:
+	    tmp=get_initial_more_info(OPT);
+	    if(pointerp(tmp))
+	    {
+	         i=sizeof(tmp[<1][BR_MENUE])-this_player()->query_more_chunk()+3;
+	         if(bl>i) bl=i;
+		 if(bl<0) bl=0;
+	         tmp[<1][BR_BEGIN_LINE]=bl;
+	    }
+	    return tmp||END_BROWSE;
+	    break;
+	case 2:
+            m = get_menue_more_info(({m[0]}),m[1][BR_PATH]);
+            if (pointerp(m) && !sizeof(m[<1][BR_MENUE]))
+                  return get_initial_more_info(OPT)||END_BROWSE;
+	    if(pointerp(m))
+	    {
+	         i=sizeof(m[<1][BR_MENUE])-this_player()->query_more_chunk()+3;
+	         if(bl>i) bl=i;
+		 if(bl<0) bl=0;
+	         m[<1][BR_BEGIN_LINE]=bl;
+	    }
+            return m;
+	case 3:
+            tmp = ERROR_NUMS[m[<1][BR_PATH]-1];
+	    // Wieder als ungelesen markieren, damit
+	    // es bei der Uebersicht noch angezeigt wird.
+	    // Bei -s fliegt es sonst raus und wir kommen zum naechsten Fehler.
+            update_new_wiz_errors(({}),({tmp}));
+            m=get_the_more_info(m[0..1]);
+            if(!pointerp(m) || sizeof(m)!=2) return m;
+            for(i=sizeof(ERROR_NUMS);(i>0) && (ERROR_NUMS[i-1]>=tmp);i--);
+	    i++;
+	    if(i>sizeof(ERROR_NUMS))
+	       i=sizeof(ERROR_NUMS);
+	    if(i)
+		m+=({({ explode(get_msg_text(i,m,({tmp})), "\n"),
+                    SSTATUS, 0, M_DO_NOT_END, i })});
+	    return m;
+    }	
+ 
+}
+
+/*
+Damit die ggf. vorhandene Markierung (+) der gerade gelesenen Fehler auch 
+schon beim Zurueckgehen entfernt wird (und nicht erst beim erneuten An-
+waehlen dieses Menuepunkts), muss das Array jedes Mal neu aufgebaut werden.
+*/
+static mixed get_back_more_info(mixed m)
+{
+    int tmp;
+    if(sizeof(m)==4 && !m[2])
+    {
+	m[1][BR_BEGIN_LINE]-=this_player()->query_more_chunk()-2;
+        return get_the_more_info(m[0..1]);
+    }
+    if((tmp=sizeof(m))>1)
+    {
+	int line;
+        tmp-=2;
+	line=m[<1][BR_PATH];
+	if(tmp==1)
+	    line = ERROR_LINES[line-1]+1;
+        m[tmp][BR_BEGIN_LINE]=(  (m[tmp][BR_BEGIN_LINE]-this_player()->query_more_chunk()+3>line)
+                                ||(m[tmp][BR_BEGIN_LINE]<line)
+                               )?line
+                                :(m[tmp][BR_BEGIN_LINE]-this_player()->query_more_chunk()+3);
+        return get_the_more_info(m[0..tmp]);
+    }
+}
+
+/* 
+Hier werden die zusaetzlichen Browser-Commands definiert:
+m    fuer Stufe 2
+l, v fuer Stufen 2 und 3,
+e    fuer Stufe 3
+?    fuer alle Stufen
+*/
+static mixed browse_action(string str, mixed *m)
+{
+    string name, flag, err, *tmp2, *strs;
+    object ob;
+    int    l_begin, l_end, force, tmp, size, cmd;
+    mixed  debugger;
+
+    /* ist wohl ueberfluessig */
+    if (!str || str == "")
+	return browser::browse_action(str, m);
+
+    if (sizeof(m) == 4) //Normales more
+    {
+	if(m[<1][BR_STATUS_BYTE]&BF_NO_MENUE)
+	    return browser::browse_action(str, m);
+	m = m[0..2]-({0});
+    }
+
+    /* 
+    Wenn auf Stufe 3 eine Zahl angewaehlt wird, dann zu anderem Fehler
+    gehen!
+    */
+    if (sizeof(m) == 3 && sscanf(str,"%d", tmp))
+    {
+	if (tmp < 1 || tmp > sizeof(m[<2][0]))
+	    return "Diesen Menue-Punkt gibt es nicht.\n";
+	return get_menue_more_info(m[0..1],tmp);
+    }
+    else if((lower_case(str[0..1])!="g!") && ((str[1..1]-" ")!=""))
+       return browser::browse_action(str, m);
+
+    /* So, hier kommt der Rest */
+    switch (cmd = str[0])
+    {
+        case 'q':
+        case 'Q':
+	    if(sizeof(m)>1)
+	    {
+		last_zfe = ({ OPT["args"][m[1][BR_PATH]-1] });
+		if(sizeof(m)>2)
+		    last_zfe += ({ ERROR_NUMS[m[2][BR_PATH]-1] });
+	    }
+	    else
+		last_zfe = 0;
+
+            return END_BROWSE;
+        case 'm':
+	    /* MarkRead ist nur auf Stufe 2 erlaubt: */
+	    if (sizeof(m) != 2)
+		return 0;
+	    CLIPIT(str);
+	    if (sscanf(str,"%d-%d",l_begin,l_end)!=2)
+	    {
+		if (sscanf(str,"%d%~.1s",l_begin)!=1)
+		   return "'m <nr>' oder 'm <nr>-<nr>'\n";
+		else
+		    l_end=l_begin;
+	    }
+	    if(l_begin>0 && l_begin<=sizeof(ERROR_NUMS))
+	    {
+	        int *errnums=({});
+		if (l_end>sizeof(ERROR_NUMS))
+		    l_end=sizeof(ERROR_NUMS);
+                for (tmp = l_begin - 1; tmp < l_end; tmp++)
+                    errnums+=({ERROR_NUMS[tmp]});
+                update_new_wiz_errors(errnums,({}));
+                return get_the_more_info(m);
+	    }
+            break;
+	case 'e':
+	case 'E':
+	    /* Edit ist nur auf Stufe 3 erlaubt: */
+	    if (sizeof(m) != 3)
+		return 0;
+	    tmp = str[0]=='E';
+	    CLIPIT(str);
+	    if (str && str != "")
+		name = str;
+	    else
+		name = get_file_name(m[<1][BR_PATH]-1,m,1);
+	    if (!name)
+		return "Keine Datei angegeben.\n";
+	    else if (file_size(name) < 0)
+		return "File " + name + " nicht gefunden.\n";
+	    if(tmp)
+	    {
+		// lambda, damit keine Parameter uebergeben werden.
+		if(edit_file(name,lambda(0,({#'continue_browse})))<1)
+		    return NOTHING;
+	    }
+	    else
+		ed(name,"continue_browse");
+	    return BREAK_BROWSE;
+        case 'G':
+	case 'g':
+            if (wizardshellp(this_player()))
+                return "Von der Wizard - Shell aus nicht verfuegbar.\n";
+	    /* Nur auf Stufe 3! */
+	    if (sizeof(m) != 3)
+		return 0;
+	    /* g! umgeht den let_not_in/out */
+	    force = (strlen(str) > 1 && str[1] == '!');
+	    if(str[0]=='G')
+	    {
+	       mixed theerr;
+	       theerr=ERRORS[ERROR_NUMS[m[<1][BR_PATH] - 1]];
+	       if(theerr[EDB_TYPE]==EDB_RUNTIME)
+	       {
+	           theerr=theerr[EDB_R_FIRST_ROOM];
+	           if(pointerp(theerr))
+	           {
+	              l_begin=to_int(str[2..]);
+	              if(l_begin) l_begin--;
+	              if(l_begin>=sizeof(theerr)) l_begin=sizeof(theerr)-1;
+	              else if(l_begin<0) l_begin=0;
+	              theerr=theerr[l_begin];
+	           }
+	           if(sscanf(theerr||"","%s(%~s",name)!=2)
+	               return "Es gibt keinen 'First-Room'.\n";
+	       }
+               else if (member(([EDB_FEHLER,EDB_IDEE,EDB_DETAIL,EDB_TYPO,EDB_LOB]),theerr[EDB_TYPE]))
+                   name=theerr[EDB_F_ROOM];
+               if(!name)
+                   return "Kein Raum im Fehler angegeben.\n";
+	    }
+	    else
+	    {
+	        name = get_file_name(m[<1][BR_PATH] - 1,m,0);
+		if (!name)
+		    return "Kein Dateiname angegeben.\n";
+	    }
+	    // Wenn ein Compile-Error im File ist, braucht man den catch()
+	    if ((err = catch(ob=touch(name))) || !ob)
+		return "File " + name + " konnte nicht geladen werden" +
+			(err ? ": " + err : ".") + "\n";
+	    if (environment(this_player())->
+		query_type("teleport_raus_verboten") && !force)
+		return "Der Teleport ist aus diesem Raum heraus verboten.\n";
+	    if (!ob->query_room())
+		return "File " + name + " ist kein Raum.\n";
+	    if (ob->query_type("teleport_rein_verboten") && !force)
+		return "Der Teleport ist in diesen Raum hinein verboten.\n";
+	    if (this_player()->move(ob, MOVE_MAGIC) != MOVE_OK)
+		return "Bewegung nicht erlaubt.\n";
+	    break;
+	case 'l':
+	case 'v':
+	    /* 
+	    loeschen und verstecken: Kompliziert wird's nur dadurch, dass
+	    man die jeweils darueberliegenden Stufen des Menues aendern
+	    muss, sonst stimmt der ganz Klumpatsch nimmer
+	    */
+	    flag = str[0..0];
+	    if (sizeof(m) == 1)
+		return 0;
+	    CLIPIT(str);
+	    if (sizeof(m) == 2)
+	    {
+	        /* 
+		Loeschen auf Stufe 2: Man muss einen Punkt oder einen
+		Bereich von Punkten angeben, sonst geht's nicht
+		*/
+		if (sscanf(str,"%d-%d %s",l_begin,l_end,name)>=2) {
+		    kill_errors(l_begin, l_end, flag, name,m);
+		    return get_the_more_info(m);
+		}
+		if (sscanf(str,"%d %s",l_begin,name)>=1) {
+		    kill_errors(l_begin, l_begin, flag,name,m);
+		    return get_the_more_info(m);
+		}
+		return "'" + flag + " <nr>' oder '" + flag + " <nr>-<nr>'\n";
+	    }
+	    if (sizeof(m)==3) {
+		kill_errors(m[<1][BR_PATH], m[<1][BR_PATH], flag, str, m);
+		return get_the_more_info(m);
+	    }
+	    break;
+	case 'a':
+	    if (sizeof(m)==1)
+		return 0;
+	    CLIPIT(str);
+	    if (sizeof(m)==2)
+	    {
+                if (sscanf(str,"%d-%d %s",l_begin,l_end,str)!=3)
+                {
+                    if (sscanf(str,"%d %s",l_begin,str)!=2)
+                        return "a <nr>[-<nr>] {<gott>|<domain>|<bereich>|Root|Objekt|Datei}\n";
+                    else
+                        l_end=l_begin;
+                }
+                str=trim(str);
+                if (l_end>sizeof(ERROR_NUMS))
+                    l_end=sizeof(ERROR_NUMS);
+            }
+            else
+                l_end=l_begin=m[<1][BR_PATH];
+
+	    if (!str || str == "")
+		return "a {<gott>|<domain>|<bereich>|Root|Objekt|Datei}\n";
+            strs = regexplode(str,"[ ,;]")-({""," ",",",";"});
+            debugger = ({});
+            
+            foreach(string deb:strs)
+            {
+		string vdeb; // valid_debugger korrigiert evntl. die Gross-/Kleinschreibung
+                if ( vdeb = ERROR_DB->valid_debugger( deb ) )
+                    debugger += ({ ({vdeb, 0}) });
+                else
+                {
+                    // ok, war kein debugger direkt
+                    //  schauen, ob ein Objekt gemeint ist
+                    if ( ob = search_object( deb ) )
+                        debugger += map( MASTER_OB->query_debugger(
+                            deb = object_name( ob )), (: ({$1,$2}) :), deb);
+
+                    // Vielleicht ist new Datei angegeben?
+                    else if ( sizeof( tmp2 = expand_wildcards( deb ))  &&
+                          !catch( size = file_size( tmp2[0]))  &&
+                          (size > 0 || size == FSIZE_DIR))
+                        debugger += map( MASTER_OB->query_debugger(deb = tmp2[0]),
+                            (: ({$1,$2}) :), deb);
+                    else
+		        return "a {<gott>|<domain>|<bereich>|Root|Objekt|Datei}\n";
+                }
+            }
+
+            l_begin--; l_end--;
+            err = "";
+
+            if(l_begin>=0 && l_begin<sizeof(ERROR_NUMS))
+            {
+                for(;l_begin<=l_end;l_begin++)
+                {
+                    int err_code;
+
+                    tmp = ERROR_NUMS[l_begin];
+
+                    // Neuen Debugger setzen + Fehlermeldungen!
+                    foreach(mixed deb: debugger)
+                    {
+                        err_code=ERROR_DB->add_debugger( tmp, deb[0]);
+                
+                        switch ( err_code )
+                        {
+                            case NO_ERROR:
+                                err+= (sizeof(m)==3?"":((l_begin+1)+": ")) +
+                                    "Diesen Fehler gibt es nicht (mehr).\n";
+                                break;
+                            case NOT_RESPONSIBLE:
+                                err+= (sizeof(m)==3?"":((l_begin+1)+": ")) +
+                                    "Du bist dafuer nicht zustaendig.\n";
+                                break;
+                            case ALREADY_DEBUGGER:
+                                err+= wrap((sizeof(m)==3?"":((l_begin+1)+": ")) +
+                                    (deb[1]?(deb[1]+": "):"") + 
+                                    capitalize(deb[0])+" ist bereits fuer diesen Fehler "
+                                    "eingetragen!");
+                                break;
+                            case NOT_VALID:
+                                err+= capitalize(deb[0])+" ist ein ungueltiger Debugger. Report to Admin.\n";
+                                break;
+                        }
+                        if(err_code == NO_ERROR || err_code == NOT_RESPONSIBLE
+                         ||err_code == NOT_VALID)
+                            break;
+                    }
+                    if(err_code == NOT_VALID)
+                        break;
+                }
+            }
+            
+            // Fehler neu holen;
+            if(sizeof(m)==3 && !(ERRORS[tmp]=ERROR_DB->query_error(tmp)))
+            {
+                write( err+"Dieser Fehler wurde inzwischen geloescht!\n");
+	        return m[0..1];
+	    }
+            if(strlen(err))
+                write(err);
+            return get_the_more_info(m);
+            
+	case 'c':
+	    // Einen Comment anhaengen:
+	    // Nur auf Stufe 3!
+	    if (sizeof(m)!=3)
+		return 0;
+	    CLIPIT(str);
+	    if (!str || str == "")
+	    {
+		this_player()->mini_ed(
+		    lambda(({'text}),({
+			(:
+			    mixed m = $3;
+			    if($1)
+			    {
+				switch (ERROR_DB->add_comment($2,
+				    ({ this_player()->query_real_name(), time(),
+					implode($1,"\n") })) )
+				{
+				    case NO_ERROR:
+					write("Diesen Fehler gibt es nicht (mehr).\n");
+					break;
+				    case NOT_RESPONSIBLE:
+					write("Du bist dafuer nicht zustaendig.\n");
+					break;
+				}
+			    }
+			    // Fehler neu holen;
+			    if (!(ERRORS[$2] = ERROR_DB->query_error($2)))
+			    {
+				write( "Dieser Fehler wurde inzwischen geloescht!\n");
+				browse(m[0..<2]);
+			    }
+			    browse(get_the_more_info(m));
+			:),'text, ERROR_NUMS[m[<1][BR_PATH]-1], quote(m)})),
+		    0, 0, 0, 
+		    ([ MINI_ED_WRAP_LEN: 62, MINI_ED_FORCE_WRAP: 1]));
+		return END_BROWSE;
+	    }
+	    tmp = ERROR_NUMS[m[<1][BR_PATH]-1];
+	    // Kommentar anhaengen
+	    switch (ERROR_DB->add_comment(tmp,
+			({ this_player()->query_real_name(), time(), str })) )
+	    {
+		case NO_ERROR :
+		    return "Diesen Fehler gibt es nicht (mehr).\n";
+		case NOT_RESPONSIBLE :
+		    return "Du bist dafuer nicht zustaendig.\n";
+	    }
+	    // Fehler neu holen;
+	    if (!(ERRORS[tmp] = ERROR_DB->query_error(tmp)))
+	    {
+		write( "Dieser Fehler wurde inzwischen geloescht!\n");
+		return m[0..<2];
+	    }
+            return get_the_more_info(m);
+        case 'M':
+            {
+               int date;
+               string text, origin, *wizzes;
+               mixed *mail_err;
+
+               if (sizeof(m) != 3)
+                   return 0;
+
+               mail_err = ERROR_DB->query_error(ERROR_NUMS[m[<1][BR_PATH]-1]);
+               text = implode(explode(get_msg_text(m[<1][BR_PATH],m),
+                                      "\n")[1..<2],"\n");
+               switch(mail_err[0])
+               {
+                  case EDB_FEHLER:
+                  case EDB_IDEE:
+                  case EDB_LOB:
+                  case EDB_TYPO:
+                  case EDB_DETAIL:
+                     date = mail_err[EDB_F_DATE];
+                     origin = mail_err[EDB_F_WHO];
+                     wizzes = mail_err[EDB_F_DEBUGGER];
+                     break;
+                  case EDB_RUNTIME:
+                     date = pointerp(mail_err[EDB_R_DATE])
+			 ? mail_err[EDB_R_DATE][0] : mail_err[EDB_R_DATE];
+                     origin = this_player()->query_real_name();
+                     wizzes = mail_err[EDB_R_DEBUGGER];
+                     break;
+                  case EDB_COMPILE:
+                     date = mail_err[EDB_C_DATE];
+                     origin = this_player()->query_real_name();
+                     wizzes = mail_err[EDB_C_DEBUGGER];
+                     break;
+               }
+               MAILD->zfehler(origin, wizzes, date, text, mail_err[EDB_TYPE]);
+               write("Mail abgesandt.\n");
+               return 0;
+            }
+        case 'F':
+        case 'f':
+            {
+               int date, errnr;
+               string text, origin, wozu;
+               mixed *err2;
+
+	       // Eine Rueckfrage stellen oder Feedback geben:
+	       // Nur auf Stufe 3!
+               if (sizeof(m) != 3)
+                   return 0;
+
+	       CLIPIT(str);
+	       if (!str || str == "")
+                   if (cmd == 'F')
+	               return "F <Rueckfrage>\n";
+                   else return "f <Feedback>\n";
+
+               errnr = ERROR_NUMS[m[<1][BR_PATH]-1];
+               err2 = ERROR_DB->query_error(errnr);
+               switch(err2[0])
+               {
+                  case EDB_FEHLER:
+                  case EDB_IDEE:
+                  case EDB_LOB:
+                  case EDB_TYPO:
+                  case EDB_DETAIL:
+                     date = err2[EDB_F_DATE];
+                     origin = err2[EDB_F_WHO];
+                     text = err2[EDB_ERROR];
+                     break;
+                  case EDB_RUNTIME:
+                  case EDB_COMPILE:
+                     write("Mit Runtime und Compile Errors geht das nicht.\n");
+                     return 0;
+               }
+
+               if (guestp (origin))
+	           return "Mit Gaesten geht sowas nicht.\n";
+               if (!player_exists(origin))
+                   return "Es gibt keinen Spieler dieses Namens (mehr)\n";
+	       if ((cmd=='F') && GOETTER_REGISTER->is_wiz(origin))
+	    	   return "Der Urheber ist ein Gott, trag ihn doch einfach als Debugger ein.\n";
+
+               // Objekt    : /obj/fackel#1398257 ("fackel")
+               // in Fehler zu "fackel"
+               // verwandeln:
+               if (text)
+	       {
+	    	   string *lines = explode(text,"\n");
+		   for(int i=0; i<sizeof(lines); i++)
+		   {
+		       if(lines[i][0..12] == "Objekt    : /")
+		       {
+		          int a,z;
+			  a = strstr (lines[i],"(\"");
+			  z = strstr (lines[i],"\")");
+			  if (a>0 && z>0)
+			     lines[i] = "Fehler zu: "+capitalize(lines[i][a+2..z-1]);
+		       }
+		       else if(lines[i][0..11] == "V-Item    : ")
+		       {
+		          int a = strstr(lines[i],". ");
+			  if(a>0)
+		             lines[i] = "Zum Detail: "+lines[i][12..a+1]+capitalize(lines[i][a+2..<1]);
+			  else
+		             lines[i] = "Zum Detail: "+capitalize(lines[i][12..<1]);
+		       }
+		       else
+		          break;
+		   }
+		   text = implode(lines,"\n");
+               }
+
+               if (sizeof (err2) > EDB_F_OBJECT_CLEARTEXT)
+                   wozu = err2[EDB_F_OBJECT_CLEARTEXT];
+
+	       // Kommentar anhaengen
+	       switch (ERROR_DB->add_comment(errnr,
+			({ this_player()->query_real_name(), time(), 
+                        (cmd == 'F' ? "Rueckfrage" : "Feedback") +
+                        " an Spieler:\n"+str })) )
+	       {
+		    case NO_ERROR :
+		        return "Diesen Fehler gibt es nicht (mehr).\n";
+		    case NOT_RESPONSIBLE :
+		        return "Du bist dafuer nicht zustaendig.\n";
+	       }
+
+               ERROR_DB->add_feedback(origin,
+                   (["date_err":date,
+                     "date_fb":time(),
+                     "text":text,
+                     "fb":str,
+                     "nr":errnr,
+                     "typ":(cmd == 'F') ? "r" : "f",
+                     "by":this_player()->query_real_name(),
+                     "objekt":wozu
+                   ]));
+
+                if (cmd == 'F')
+	            write ("Rueckfrage an Spieler eingetragen.\n"
+                           "Wird der Fehler geloescht, so wird auch die "
+                           "Rueckfrage geloescht.\n");
+                else write ("Feedback an Spieler eingetragen.\n"
+                            "Hinweis: Ein Feedback wird nicht geloescht, "
+                            "wenn der Fehler geloescht wird.\n"
+                            "         Der Fehler kann also ruhig geloescht "
+                            "werden, wenn er bearbeitet wurde.\n");
+
+	        // Fehler neu holen;
+	        if (!(ERRORS[errnr] = ERROR_DB->query_error(errnr)))
+	        {
+		    write( "Dieser Fehler wurde inzwischen geloescht!\n");
+		    return m[0..<2];
+	        }
+                return get_the_more_info(m);
+            }
+        case 'n': //Naechster neuer Fehler
+            {
+               mixed *new_errs, *wiz_errs;
+               update_new_wiz_errors(({}),({}));
+               new_errs=this_player()->query_new_wiz_errors()[EDB_NEW_WIZ_ERRORS];
+               if (sizeof(m)==1)
+               {
+                   //Kleiner Missbrauch der Variablen...
+                   for (l_begin=0;l_begin<sizeof(OPT["args"]);l_begin++)
+                   {
+                       for (l_end=sizeof(
+                           wiz_errs=query_wiz_errors(OPT["args"][l_begin],m));
+                           l_end--;)
+                               if (is_new_wiz_error(wiz_errs[l_end],new_errs))
+                                   break;
+                       if(l_end>=0)
+                          break;
+                   
+                   }
+                   if(l_begin<sizeof(OPT["args"]))
+                       return get_menue_more_info(m,l_begin+1);
+                   else
+                       return "Du hast keine neuen Fehler/Kommentare.\n";
+               }
+               for (l_begin = (sizeof(m)==3)?m[<1][BR_PATH]:0;
+                    l_begin < sizeof(ERROR_NUMS);
+                    l_begin++)
+               {
+                   if (is_new_wiz_error(ERROR_NUMS[l_begin],new_errs))
+                        return get_menue_more_info(m[0..1],l_begin+1);
+               }
+               return "Du hast keine neuen Fehler/Kommentare.\n";
+            }
+        case 'N':  //Fehler als ungelesen markieren
+	    if (sizeof(m) == 1)
+		return 0;
+	    CLIPIT(str);
+	    if (sizeof(m) == 2) //Stufe 2: Angabe der Fehlernummer
+	    {
+	        mixed *new_errs;
+	        new_errs=this_player()->query_new_wiz_errors();
+		if (sscanf(str,"%d-%d",l_begin,l_end)!=2)
+		{
+		    if (sscanf(str,"%d%~.1s",l_begin)!=1)
+		        return "'N <nr>' oder 'N <nr>-<nr>'\n";
+		    else
+		        l_end=l_begin;
+		}
+		if (l_end>sizeof(ERROR_NUMS))
+		    l_end=sizeof(ERROR_NUMS);
+		l_begin--; l_end--;
+		
+		if(l_begin>=0 && l_begin<sizeof(ERROR_NUMS))
+		{
+		    for(;l_begin<=l_end;l_begin++)
+	                new_errs[EDB_NEW_WIZ_ERRORS]+=({ERROR_NUMS[l_begin]});
+	            this_player()->set_new_wiz_errors(new_errs);
+	        }
+		return get_the_more_info(m);
+	    }
+	    if (sizeof(m)==3)
+	    {
+	        mixed *new_errs;
+	        new_errs=this_player()->query_new_wiz_errors();
+	        new_errs[EDB_NEW_WIZ_ERRORS]+=({ERROR_NUMS[m[<1][BR_PATH]-1]});
+	        this_player()->set_new_wiz_errors(new_errs);
+                return m; //Beim zurueckgehen wird eh alles neu berechnet...
+            }
+	    break;
+	case 't':
+	    if (sizeof(m) != 3)
+		return 0;
+	    return print_trace(m,to_int(str[2..]));
+	case 's':
+	case 'S':
+	    if (sizeof(m) != 3)
+		return 0;
+	    tmp=to_int(str[1..]);
+	    if(tmp<=0) tmp=1;
+	    l_begin=m[<1][BR_PATH]-1;
+            name = get_file_name(l_begin,m,1);
+	    if (!name)
+		return "Keine Datei angegeben.\n";
+            l_begin=ERROR_NUMS[l_begin];
+            switch(ERRORS[l_begin][EDB_TYPE])
+            {
+              case EDB_FEHLER:
+              case EDB_IDEE:
+              case EDB_LOB:
+              case EDB_TYPO:
+              case EDB_DETAIL:
+                l_end=0;
+                flag="";
+                break;
+              case EDB_RUNTIME:
+                l_end=ERRORS[l_begin][EDB_R_LINE];
+                flag=ERRORS[l_begin][EDB_R_ERROR];
+                break;
+              case EDB_COMPILE:
+                l_end=0;
+                flag=ERRORS[l_begin][EDB_C_ERROR];
+                sscanf(flag,"%!s line %d%!s",l_end);
+                break;
+            }
+            l_begin=l_end-tmp;
+            if(l_begin<1) l_begin=1;
+            if(str[0]=='s')
+            {
+              err=read_file(name,l_begin,2*tmp+1);
+              if(!err) return wrap("Konnte die Datei '"+name+"' nicht einlesen.");
+              return LINE + "File:   " + name + "  Zeile: " + (l_end)
+                   + "\n\n" + err + "\n" + flag + LINE;
+            }
+            else
+            {
+              err=read_file(name);
+              if(!err) return wrap("Konnte die Datei '"+name+"' nicht einlesen.");
+              return m+({({ explode(err, "\n"), 0, l_begin,
+                  M_LINE_NUMBERS|M_HEADER_LINE|BF_NO_MENUE , 0})});
+            }
+        case 'T':  //Typ aendern
+            if (sizeof(m) != 3)
+                return 0;
+	    CLIPIT(str);
+            if (!strlen(str))
+                return "'T fehler|idee|typo|wuerdigung'\n";
+            {
+                mixed theerr;
+                str=lower_case(str);
+                theerr=ERRORS[ERROR_NUMS[m[<1][BR_PATH]-1]];
+                if (!member(([EDB_FEHLER,EDB_IDEE,EDB_DETAIL,EDB_TYPO,EDB_LOB]),theerr[EDB_TYPE]))
+                    return "Fehler wurde nicht von einem Spieler abgesetzt.\n";
+                switch(str[0])
+                {
+                    case 'f':
+                       theerr[EDB_TYPE]=EDB_FEHLER;
+                       break;
+                    case 'i':
+                       theerr[EDB_TYPE]=EDB_IDEE;
+                       break;
+                    case 't':
+                       theerr[EDB_TYPE]=EDB_TYPO;
+                       break;
+                    case 'd':
+                    case 'v':
+                       theerr[EDB_TYPE]=EDB_DETAIL;
+                       break;
+                    case 'l':
+                    case 'w':
+                       theerr[EDB_TYPE]=EDB_LOB;
+                       break;
+                }
+                return get_the_more_info(m);
+            }
+	case 'i':	// Debug-Infos anzeigen
+	    {
+		mixed *info;
+		
+		if (sizeof(m) != 3)
+		    return 0;
+
+		info = get_info_text(m[<1][BR_PATH], m);
+		if(stringp(info))
+		    return info;
+		    
+		return m+({({ info, SSTATUS, 0, M_HEADER_LINE, 0})});
+            }
+	case 'Z':
+            if (sizeof(m) <2 || sizeof(m)>3)
+                return 0;
+	    CLIPIT(str);
+	    {
+		int flags=0;
+		int zeilen;
+		int max_zeilen = query_limits()[LIMIT_ARRAY];
+		
+		l_begin=-1; l_end=-1;
+		foreach(string opt:explode(str," ")-({""}))
+		    if(opt[0]=='-')
+			foreach(int o: opt[1..<1])
+			    switch(o)
+			    {
+				case 'i': flags|=1; break;
+				case 't': flags|=2; break;
+				default:
+				    return sprintf("Option '%c' unbekannt.\n",o);
+			    }
+		    else if(sscanf(opt, "%d-%d", l_begin, l_end)<1)
+			return "Unbekannter Parameter '"+opt+"'.\n";
+
+		if(sizeof(m)==3 && l_begin==-1)
+		    l_begin=l_end=m[<1][BR_PATH];
+		if(l_begin==-1)
+		    return "Z "+((sizeof(m)==2)?"<nr>[-<nr>]":"[<nr>-[<nr>]]")+" [-i] [-t].\n";
+		if(l_end==-1)
+		    l_end=l_begin;
+		if(l_begin<1 || l_end<l_begin || l_end>sizeof(ERROR_NUMS))
+		    return "Ungueltige Fehlernummer angegeben.\n";
+
+		strs = ({"-"*79});
+		for(int err3=l_begin;err3<=l_end;err3++)
+		{
+		    mixed *txt;
+		
+#define ADD_TEXT    if(strs)						\
+		    {							\
+			if(sizeof(strs)+sizeof(txt)>max_zeilen)		\
+			{						\
+			    zeilen = sizeof(strs)+sizeof(txt);		\
+			    strs = 0;					\
+			}						\
+			else						\
+			    strs += txt;				\
+		    }							\
+		    else						\
+		    {							\
+			zeilen += sizeof(txt);				\
+		    }
+			
+		    txt = explode(get_msg_text(err3,m),"\n")[1..<2];
+		    ADD_TEXT;
+
+		    if(flags&1)
+		    {
+			txt = get_info_text(err3,m);
+			if(pointerp(txt))
+			{
+			    txt = ({"."*79})+txt;
+			    ADD_TEXT;
+			}
+		    }
+		    if(flags&2)
+		    {
+			txt = ({});
+			mixed * errm = ERRORS[ERROR_NUMS[err3-1]];
+			if(errm[EDB_TYPE]==EDB_RUNTIME)
+			{
+			    if(pointerp(errm[EDB_R_DEBUG_OFFSET]))
+				for(int i=0;i<sizeof(errm[EDB_R_DEBUG_OFFSET]);i++)
+				{
+				    string str2 = get_trace_text(err3,m,i);
+				    if(str2)
+					txt+=({"."*79})+explode(str2,"\n")[0..<2];    
+				}
+			    else
+			    {
+				string str3 = get_trace_text(err3,m,0);
+				if(str3)
+				    txt+=({"."*79})+explode(str3,"\n")[0..<2];
+			    }
+			}
+			ADD_TEXT;
+		    }
+		    txt = ({"-"*79});
+		    ADD_TEXT;
+		}
+		if(!strs)
+		    return "Das wuerden zuviele ("+zeilen+") Zeilen werden.\n";
+		return m+((sizeof(m)==3)?({({ strs, SSTATUS, 0, 0, 0})}):({0,({ strs, SSTATUS, 0, 0, 0})}));
+	    }
+	    break;
+	case '?':
+	    BHELP(sizeof(m));
+	    break;
+    }
+    return 0;
+}
+/*
+Alle Befehle und in welcher Ebene sie definiert sind:
+   
+      1 2 3
+  a     * *  Weitere Debugger eintragen.
+  A
+  b   * * *  Eine Seite nach oben gehen
+  B   * * *  Eine halbe Seite nach oben gehen
+  c       *  Einen Kommentar anhaengen
+  C
+  d   * * *  Eine halbe Seite nach unten gehen
+  D   * * *  Eine halbe Seite nach unten gehen.
+  e       *  Datei im ED bearbeiten
+  E       *  Datei im XED bearbeiten
+  f       *  Fehlerfeedback
+  F       *  Rueckfrage
+  g       *  In dieses Objekt gehen
+  G       *  In den Raum gehen, wo dieser Fehler abgesetzt wurde
+  h
+  H
+  i       *  Debug-Infos anzeigen
+  I
+  j
+  J
+  k
+  K
+  l     * *  Fehler loeschen
+  L
+  m       *  Fehler als gelesen markieren
+  M       *  Fehler per Post schicken
+  n   * * *  Zum naechsten Fehler
+  N     * *  Fehler als ungelesen markieren
+  o
+  O
+  p
+  P
+  q   * * *  Browser beenden
+  Q   * * *  Browser beenden
+  r   * * *  Menue/Fehler erneut ausgeben
+  R
+  s       *  Die Fehlerzeile ausgeben
+  S       *  Die Fehlerdatei ab der Fehlerzeile im more ausgeben
+  t       *  Trace zum Fehler anzeigen
+  T       *  Fehlertyp aendern.
+  u   * * *  Eine Seite nach oben gehen
+  U   * * *  Eine halbe Seite nach oben gehen
+  v     * *  Fehler aus der Uebersicht entfernen
+  V
+  w   * * *  Text in einer Datei speichern
+  W
+  x
+  X
+  y
+  Y
+  z     * *  Zur vorherigen Ebene
+  Z     * *  Zusammenfassung zeigen
+  ?   * * *  Hilfe
+  +     * *  Zur naechsten Uebersicht / Zum naechsten Fehler
+  -     * *  Zur vorherigen Uebersicht / Zum vorherigen Fehler
+ <nr> * * *  Menue/Fehler auswaehlen
+  <   * * *  Zur ersten Zeile gehen
+  >   * * *  Ans Ende des Menues/Textes gehen
+  /   * * *  Im Text suchen
+Enter * * *  Eine Seite nach unten gehen
+*/
+
+// Manche Fehlergruppen sind so voll, dass die Bearbeitung im Fehler-Browser
+// die Evalgrenzen sprengt. Fehler muss man aber immer bearbeiten koennen,
+// also brauchen wir hier hoehere Limits. :-(
+
+private int do_zfe_more_action(string str, int more_line, int max_line, mixed more_id)
+{
+    return ::more_action(str, more_line, max_line, more_id);
+}
+
+private int zfe_more_action(string str, int more_line, int max_line, mixed more_id)
+{
+    return limited(#'do_zfe_more_action, ({__MAX_EVAL_COST__ * 4}),
+                   str, more_line, max_line, more_id);
+}

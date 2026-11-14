@@ -1,0 +1,2877 @@
+// This file is part of UNItopia Mudlib (partly based on Avalon Mudlib).
+// ----------------------------------------------------------------
+// File:        /i/tools/rollen.c
+// Description: Rollenverhalten von Objekten
+// Author:      Francis@UNItopia (23.12.93)
+// Modified:    Avatar ( 2/95): "dynamische" Rollen mit if/else
+//              Avatar (12/95): Routinen an einigen Stellen optimiert,
+//                              "Auto_Pause".
+//              Avatar ( 3/96): Goto/GoSub/Return/Wait/Time_Out/Stop_Time_Out
+//                              - starte_rolle() mit "Cache"
+//                              - Debug-Infos in ein File
+//                              - Ueberarbeitete Doku jetzt in
+//                                  /doc/funktionsweisen/monster/rollen/*
+//              Avatar ( 7/96): - #define DEBUG_INFO sorgt fuer schnelleren
+//                                Ablauf, wenn Debugger nicht "vorhanden"
+//                              - rollen_debugger auch im Rollen-Header setzbar
+//                              - starte_rolle("filename" [<,"label">] );
+//                              - Position von '{'- und '}'-Klammer jetzt
+//                                unwichtig
+//              Parsec 15.6.98  Rollen-this_player eingefuehrt:
+//                              - Ersetzung von $tp / $Tp in do_command-Zeilen
+//                              - Rollen-Id 0 wird fuer den Rollen-this_player
+//                                verwendet:  $der(0), $0->func() ist moeglich
+//                              - set/query_this_player_in_rolle()
+//              Gnomi   4.4.00  Rollen Version 2
+//              Gnomi   6.7.00  Auf Raeume und andere Gegenstaende erweitert
+//
+// $Log: rollen.c,v $
+// Revision 1.34  2015/10/24 18:10:25  myonara
+// ein debug_rolle2 durch DEBUG_ROLLE ersetzt, da Rueckgabewert
+// und Debugausgabe besser als staendig einen RTE zu produzieren.
+// Ort: partner_gefunden
+//
+// Revision 1.33  2013-03-16 16:24:09  gnomi
+// Typen korrigiert.
+//
+// Revision 1.32  2005/08/25 22:21:52  gnomi
+// Indexing past string end...
+//
+// Revision 1.31  2005/05/26 01:02:17  gnomi
+// Suche nach Partnern korrigiert.
+//
+// Revision 1.30  2005/03/14 19:08:09  gnomi
+// Nach "message_type" kommt ein Doppelpunkt.
+//
+// Revision 1.29  2005/03/14 19:07:47  gnomi
+// Aenderungen bei der Stringindizierung (fuer den 3.3er).
+//
+// Revision 1.28  2005/02/02 22:14:18  gnomi
+// Im reset() die Rolle loeschen. (Speicher sparen.)
+//
+// Revision 1.27  2004/07/04 00:13:40  gnomi
+// Define __LPC_PARSER__ fuer den LPC-Parser setzen.
+//
+// Revision 1.26  2003/12/13 16:01:16  gnomi
+// partner- und paramterparser privatisiert.
+//
+// Revision 1.25  2003/08/26 00:55:35  gnomi
+// Fehlermeldung, wenn das Inherit nicht initialisiert wurde.
+//
+// Revision 1.24  2003/05/28 01:04:25  gnomi
+// Beim Rollenende wurde der Controller der Rollenpartner nicht aufgerufen.
+//
+// Revision 1.23  2003/04/16 03:26:16  gnomi
+// Die verspaetete Initialiserung ueberschrieb eventuelle von aussen
+// eingelesene Defines.
+//
+// Revision 1.22  2003/02/18 04:36:21  gnomi
+// Speicheroptimierung: Der LPC-Parser wird erst initialisiert, wenn eine Rolle
+// angeworfen wird.
+//
+// Revision 1.21  2003/01/13 03:26:16  gnomi
+// Falls Controller die Rolle verbieten, die Rolle auch wirklich beenden.
+//
+// Revision 1.20  2002/08/20 21:59:57  gnomi
+// Eintrag "file_time" erst am Ende setzen. (Damit durch fehler abgebrochene
+// Einleseversuche nicht beim naechsten Mal als Rolle genutzt werden.)
+//
+// Revision 1.19  2002/03/16 09:51:56  gnomi
+// Doku zu query_rolle: klargestellt, dass sich die Datenstruktur aendern kann.
+//
+// Revision 1.18  2002/01/25 22:49:28  gnomi
+// Doku zu notify_rollenende: Hinweis zum Starten einer weiteren Rolle.
+//
+// Revision 1.17  2001/10/22 20:34:13  mudadm
+// wechsel_rolle: Erst moegliche Parameter auswerten, dann Rolle beenden.
+// partnerparser: Ein einzelnes Dollarzeichen ohne Zahl zurueckweisen.
+// fun-exec: Testen, ob ueberfluessige Zeichen in der Zeile sind.
+//
+// Revision 1.16  2001/10/05 20:55:08  freaky
+// Sichtbarkeit von Redefinitionen korrigiert.
+//
+// Revision 1.15  2001/07/02 02:31:41  freaky
+// Variablen nicht verwenden.
+//
+// Revision 1.14  2001/06/25 11:48:30  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.13  2001/05/14 19:50:26  gnomi
+// beende_rolle: Schauen, ob man nicht zerstoert wurde.
+//
+// Revision 1.12  2001/04/24 21:45:08  gnomi
+// Doku: Deklarationen in einer Zeile schreiben.
+//
+// Revision 1.11  2001/02/19 13:29:16  gnomi
+// Bugfix beim Rolleneinlesen, wenn ein Dateiname als Rollen-Debugger angegeben
+// wurde.
+//
+// Revision 1.10  2001/02/12 16:30:36  gnomi
+// Doku zu beginne_rolle geaendert.
+//
+// Revision 1.9  2001/02/12 00:14:20  gnomi
+// Am Ende von beginne_rolle  1 returnen fuer Erfolg.
+//
+// Revision 1.8  2001/02/10 23:42:54  gnomi
+// Controller...
+//
+// Revision 1.7  2000/10/22 13:46:32  sissi
+// Gnomi:
+//  - Bugfix beim else-Befehl der Version 2
+//  - Bugfix bei Label am Anfang von alten Rollen
+//
+// Revision 1.6  2000/10/02 19:50:10  jesaia
+// BugFix und Rollenhandling verbessert by Gnomi
+//
+// Revision 1.5  2000/10/02 11:29:21  sissi
+// Fehler bei der Verarbeitung aelterer Rollen behoben (Gnomi).
+//
+// Revision 1.4  2000/10/01 21:43:37  sissi
+// Rollen:
+//  Verhalten von \ am Ende einer Zeile korrigiert.
+//  Rollen koennen bei starte_rolle relativ zum aktuellen Objekt angegeben werden.
+//  Doku korrigiert. (Nicht nur auf Monster bezogen, Gruppe: Rollen)
+//  query_macht_bei_rollen_mit ueberpruefen, wenn rollen.c nicht inheritet wurde.
+//  Start_ort-Ueberpruefung verbessert. (Falls Objekt selber der Raum ist)
+//  Wieder 'part of UNItopia Mudlib. (partly based on Avalon Mudlib).'
+//  Kann #include, #if, #defines usw. behandeln.
+//  (-> Rollen werden nun zeilenweise eingelesen.)
+//  Bessere (zeilengenaue) Fehlermeldungen
+//  #pragma novars -> Fehlermeldungen bei unbekannten Bezeichnern
+//  #pragma localvars -> lokale Variablen nutzbar
+//  #pragma globalvars -> Alle Variablen sind global
+//  Kommentare der Form // oder /* */ werden bei 'includeten' .h-Dateien beachtet.
+//
+// Revision 1.3  2000/09/08 20:39:05  freaky
+// alle deprecated Funktionen an ldmud-3.3 angepasst.
+//
+// Revision 1.2  2000/08/29 16:20:32  freaky
+// file_name() ueberall durch object_name() ersetzt.
+//
+// Revision 1.1  2000/07/10 13:55:07  sissi
+// Rollen aus /i/monster in verallgemeinerter Form, die auch fuer Raueme
+// verwendbar ist, nach /i/tools verschoben. Dank geht an Gnomi.
+//
+// Revision 1.9  2000/06/20 10:54:28  freaky
+// *** empty log message ***
+//
+// Revision 1.8  2000/06/20 10:54:08  freaky
+// Bugfix in do_efun_call, wenn kein Parameter uebergeben wird.
+//
+// Revision 1.7  2000/06/19 22:06:54  freaky
+// Kleiner Tweak bei do_efun_call()
+//
+// Revision 1.6  2000/06/19 14:58:02  freaky
+// alte Funktion strip() raus.
+//
+// Revision 1.5  2000/06/19 14:53:43  freaky
+// do_(e)fun_call repariert
+//
+// Revision 1.4  2000/06/19 14:39:02  freaky
+// do_efun_call und do_fun_call repariert und auf ::fun() umgebaut
+//
+// Revision 1.3  2000/06/18 23:23:05  freaky
+// include vergessen gehabt
+//
+// Revision 1.2  2000/06/18 23:22:09  freaky
+// call-others rausgeschmissen (Sicherheitsproblem)
+//
+
+/*
+Die Datenstruktur der Version 2 (mapping rolle):
+"abbrechbar": !=0, wenn die Rolle von aussen abbrechbar ist.
+"auto_pause": Die aktuelle Auto-Pause-Einstellung.
+"file_time": Datum der letzten Aenderung der Rollendatei
+"global_vars": Mapping, welches die globalen Variablen waehrend der
+               Ausfuehrung beinhaltet.
+"ifs": Ein Array, in dem waehrend des Einlesens die aktuellen if-Ebenen
+       abgespeichert werden. Eine Zahl >0 steht fuer die Zeile, bei der der
+       if/else-Block begonnen hat, =0 fuer eine {. -1 fuer eine einzelne Zeile,
+       die den Block darstellt.
+       Bei der Ausfuehrung der Rolle ist es ein Mapping, in dem zu einer
+       else-Zeilennummer gebenenfalls ein Sprungziel steht.
+"ipstack": Der IP-Stack. Enthaelt die Zeile, ab der fortgefahren werden soll.
+"labels": Ein Mapping, welches zu jeder Sprungmarke die Zeile enthaelt,
+          welche auf die Sprungmarke folgt.
+"name": Dem Dateinamen der Rolle
+"partner": ist ein Array aus Mappings, welche in der Reihenfolge den
+           Rollenpartnern entsprechen. Das Mapping hat folgende Eintraege:
+            - "ob": Das Objekt.
+            - "kriterien": Ein Mapping, welche zu jedem Funktionsnamen das
+                           gewuenschte Ergebnis liefert.
+"position": Die aktuelle Position in der Rolle.
+"standard_auto_pause": Die Auto-Pause-Einstellung zu Beginn der Rolle.
+"standard_global_vars": Mapping, welches die globalen Variablen zu Beginn
+                        der Rolle beinhaltet. (Durch #if's koennen Werte
+                        zugewiesen werden.)
+"start_ort": Dateinamen des gewuenschten Startortes (ohne .c)
+"text": ist ein Array aus Mappings mit folgenden Eintraegen:
+         - "befehl": Die Art des Befehles in der Zeile
+            Davon haengen die weiteren Eintraege ab:
+             - "if": "bedingung":closure,
+                     "ende_if": letzte zeile des if-Blockes,
+                     "ende_else":letzte zeile des else-Blockes
+                                 (falls vorhanden)
+             - "pause": "anzahl":closure,
+             - "auto_pause": "anzahl":closure,
+             - "stop": -
+             - "wechsel_rolle": "wohin":closure, "label":closure
+             - "goto": "wohin":closure,
+             - "gosub": "wohin":closure,
+             - "return": -
+             - "time_out": "anzahl":closure, "wohin":closure,
+             - "stop_time_out": -
+             - "wait": "worauf":closure,
+             - "fun-exec": "was":closure,
+             - "exec": "wer":monster_nr, "was":({argumente fuer exec_command})
+                       (die argumente sind u.U. closures)
+             - "msg": wie bei "exec"
+             - "msgparams": "type": der Msg-Typ,
+                            "action": die Msg-Action fuer send_message
+         - "debug": Mapping mit den Lambdas der Befehlsparameter und
+                    folgenden weiteren Eintraegen:
+             - "text": Original-text des Befehls
+             - "zeile": die Zeilennummer in der Datei
+             - "datei": die Include-Dateien-Liste (Array mit den Dateien,
+                        welche sich includen. Der letzte Eintrag ist die
+                        Datei mit dieser Zeile.)
+"time_out": Ein zweielementiges Array, welches die Anzahl an Sekunden
+            und das Sprungziel (letzteres als Closure) beinhaltet.
+"varsmode": Enthaelt waehrend des Einlesens der Rolle die Art der Behandlung
+            von unbekannten Symbolen:
+             0: Fehler
+             1: lokale Variablen
+             2: globale Variablen
+"version": 2
+"waitfun": Eine Closure, welches gegebenenfalls eine Wartebedigung darstellt.
+"warte": Anzahl an Heartbeats, welche bis zum naechsten Befehl abgewartet
+         werden.
+*/
+#define FUNSYMBOL "$"
+
+#pragma save_types
+#pragma strong_types
+
+inherit "/i/tools/func_parser";
+protected functions inherit "/i/tools/lpc_parser";
+
+#include <touch.h>
+#include <rollen.h>
+#include <config.h>
+#include <level.h>
+#include <error.h>
+#include <apps.h>
+#include <touch.h>
+
+
+private nosave int     modus, zustand, macht_mit;
+private nosave mapping rolle = ([]);
+private nosave object  souffleur;
+private nosave mixed   debug_ob;
+
+private nosave object  this_player_in_rolle;
+private nosave int     rollen_wechsel ;
+private nosave int     standard_msg_type, standard_msg_action;
+private nosave string *allowed_dirs;
+
+// Freaky: (26.05.2001) warum war das hier public?
+// Gnomi: (27.05.2003) weiss ich doch jetzt nicht mehr.
+nosave private mixed *rollen_parameter=({});
+
+void init_lpc_parser();
+
+private mixed partnerparser(string params, int pos, mixed error)
+{
+  mixed back;
+  int oldpos;
+  if(params[pos]!='$')
+  {
+    error=1;
+    return 0;
+  }
+  pos++;
+  oldpos = pos;
+  back=0;
+  while((pos<strlen(params))&&(params[pos]>='0')&&(params[pos]<='9'))
+  {
+    back=back*10+params[pos]-'0';
+    pos++;
+  }
+  if(pos == oldpos) // Keine Zahl angegeben -> alles zurueck
+  {
+    pos--;
+    error=1;
+    return 0;
+  }
+  return ({#'call_other,this_object(),"query_rollen_partner",back});
+}
+
+private mixed parameterparser(string params, int pos, mixed error)
+{
+  mixed back;
+  if((pos+1>=strlen(params)) || (params[pos]!='#'))
+  {
+    error=1;
+    return 0;
+  }
+  pos++;
+  if((params[pos]<'0') || (params[pos]>'9'))
+  {
+    error=1;
+    return 0;
+  }
+  back=0;
+  while((pos<strlen(params))&&(params[pos]>='0')&&(params[pos]<='9'))
+  {
+    back=back*10+params[pos]-'0';
+    pos++;
+  }
+  if(!back)
+    return ({#'rollen_parameter});
+  else
+    return ({#'[,({#'rollen_parameter}),back-1});
+}
+
+#define DEBUG_ROLLE(x) { if( debug_ob ) debug_rolle(x); }
+
+/*
+FUNKTION: set_rollen_debugger
+DEKLARATION: void set_rollen_debugger(mixed ob)
+BESCHREIBUNG:
+Mit set_rollen_debugger kann man das Objekt setzen, das mit debug_rolle
+dann angesprochen wird. Nuetzlich bei der Entwicklung einer Rolle. Es werden
+allerlei Fehlerinformationen an ob geschickt.
+Auf Wunsch kann man auch einfach einen Filenamen uebergeben. Dadurch werden
+die Informationen in eine Datei abgespeichert.
+VERWEISE: query_rollen_debugger, debug_rolle
+GRUPPEN: Rollen
+*/
+void set_rollen_debugger(mixed ob) { debug_ob = ob; }
+
+/*
+FUNKTION: query_rollen_debugger
+DEKLARATION: mixed query_rollen_debugger()
+BESCHREIBUNG:
+Liefert, wenn vorhanden, das Objekt zuruck, das mit set_rollen_debugger
+gesetzt wurde.
+VERWEISE: set_rollen_debugger, debug_rolle
+GRUPPEN: Rollen
+*/
+mixed query_rollen_debugger() { return debug_ob; }
+
+/*
+FUNKTION: debug_rolle
+DEKLARATION: mixed debug_rolle(string str)
+BESCHREIBUNG:
+Schickt per tell_object einen String an das Objekt, das mit set_rollen_debugger
+gesetzt wurde, oder tut gar nichts, wenn query_rollen_debugger() 0
+zuruckliefert. Der String setzt sich aus dem Namen des Rollenmonsters und
+str zusammen.
+VERWEISE: set_rollen_debugger, query_rollen_debugger, tell_object
+GRUPPEN: Rollen
+*/
+mixed debug_rolle(string str)
+{
+   string msg;
+
+   msg=(this_object()->query_cap_name()||explode(object_name(),"/")[<1])+": "+str;
+
+   if( objectp(debug_ob) )
+      tell_object(debug_ob,sprintf("   %5s%=-1.73s",msg[0..4],msg[5..]));
+   else
+      if( stringp(debug_ob) )
+         write_file(debug_ob,msg);
+
+   return debug_ob;
+}
+
+/*
+FUNKTION: set_macht_bei_rollen_mit
+DEKLARATION: void set_macht_bei_rollen_mit(int flag)
+BESCHREIBUNG:
+Sagt einem Objekt, ob es bei Rollen mitmachen soll. Bei Flag 0 macht es nicht
+mit, bei allem anderen macht es bei Rollen mit. Defaultmaessig wird NICHT
+mitgemacht.
+VERWEISE: query_macht_bei_rollen_mit
+GRUPPEN: Rollen
+*/
+void set_macht_bei_rollen_mit(int a) { macht_mit = a ? 1 : 0; }
+
+/*
+FUNKTION: query_macht_bei_rollen_mit
+DEKLARATION: int query_macht_bei_rollen_mit()
+BESCHREIBUNG:
+Liefert zurueck, ob ein Objekt bei Rollen mitspielen will.
+VERWEISE: set_macht_bei_rollen_mit
+GRUPPEN: Rollen
+*/
+int query_macht_bei_rollen_mit() { return macht_mit; }
+
+/*
+FUNKTION: query_rolle
+DEKLARATION: mapping query_rolle()
+BESCHREIBUNG:
+Liefert Informationen ueber die Rolle eines rollengesteuerten Objekts.
+Vielleicht will ja mal jemand ein Tool schreiben, mit dem die Ausgabe
+verstaendlicher wird :-)
+
+ACHTUNG: Diese Funktion ist nur fuer Debugzwecke gedacht, da sich diese
+Datenstruktur aendern kann.
+
+Eine Beschreibung der Datenstruktur befindet sich am Anfang dieser Datei.
+VERWEISE: in_rolle
+GRUPPEN: Rollen
+*/
+mapping query_rolle() { return rolle; }
+
+int query_modus() { return modus; }
+int query_zustand() { return zustand; }
+
+int query_rollen_modus() { return modus; }
+
+/*
+FUNKTION: in_rolle
+DEKLARATION: string in_rolle()
+BESCHREIBUNG:
+Liefert den Namen der Rolle, der das Objekt folgt zurueck, egal ob das Objekt
+passiv oder aktiv teilnimmt zurueck, oder 0, wenn das Objekt an keiner Rolle
+teilnimmt.
+VERWEISE: query_rolle
+GRUPPEN: Rollen
+*/
+string in_rolle()
+{
+   string name;
+
+   if( modus == R_SOUFFLEUR )
+      return rolle["name"];
+
+   if( modus == R_PASSIV )
+   {
+      if( !souffleur )
+      {
+         modus = R_AUS;
+         zustand = R_STANDBY;
+         return 0;
+      }
+      if( !(name=souffleur->in_rolle()) )
+      {
+         modus = R_AUS;
+         zustand = R_STANDBY;
+         return 0;
+      }
+      return name;
+   }
+   modus = R_AUS;
+   zustand = R_STANDBY;
+}
+
+/*
+FUNKTION: stop_rolle
+DEKLARATION: int stop_rolle(int partner)
+BESCHREIBUNG:
+Mit stop_rolle kann man eine Rolle anhalten, in der sich ein Objekt befindet,
+auch wenn das Objekt nur passiver Teilnehmer ist. Wenn das Objekt an keiner
+Rolle teilnimmt, die Rolle schon gestoppt ist oder das Stoppen via
+Controller verboten wurde, wird 0 zuruckgeliefert, bei Erfolg 1.
+(Partner ist 1, wenn der Aufruf vom stop_rolle des Souffleurs kommt.)
+VERWEISE: in_rolle, query_rolle, restart_rolle, starte_rolle, breche_rolle_ab,
+          notify_rollenrestart, notify_rollenstop
+GRUPPEN: Rollen
+*/
+varargs int stop_rolle(int partner)
+{
+   if( !in_rolle() )
+      return 0;
+
+   if( modus == R_SOUFFLEUR )
+   {
+      if( zustand == R_STOPPED )
+         return 0;
+      if(this_object()->forbidden("rollenstop",this_object(),0,in_rolle()))
+         return 0;
+      foreach(mapping p:rolle["partner"])
+         if(p["ob"] && p["ob"]->forbidden("rollenstop",p["ob"],this_object(),
+	     in_rolle()))
+	         return 0;
+	  
+      zustand = R_STOPPED;
+      foreach(mapping p:rolle["partner"][1..<1])
+         if(p["ob"])
+	    p["ob"]->stop_rolle(1);
+      this_object()->notify("rollenstop",this_object(),0,in_rolle());
+      return 1;
+   }
+
+   if( modus == R_PASSIV )
+   {
+      if( zustand == R_STOPPED )
+         return 0;
+      if(!partner)
+      {
+         souffleur->stop_rolle();
+	 if(zustand==R_STOPPED)
+	    return 1;
+      }
+      zustand = R_STOPPED;
+      this_object()->notify("rollenstop",this_object(),souffleur||1,in_rolle());
+      return 1;
+   }
+}
+
+/*
+FUNKTION: forbidden_rollenstop
+DEKLARATION: int forbidden_rollenstop(object wer, mixed souffleur, string rolle)
+BESCHREIBUNG:
+Bevor in einem Objekt wer die Rolle rolle unterbrochen wird,
+wird wer->forbidden("rollenstop", wer, souffleur, rolle) aufgerufen,
+wobei souffleur 0 ist, wenn wer der Souffleur ist, ansonsten das Objekt,
+welches die Rolle steuert, ist. (Falls dieses Objekt nicht mehr existiert,
+wird 1 geliefert.) Diese Funktion wird in allen Teilnehmern der Rolle
+aufgerufen. Liefert einer dieser forbidden-Aufrufe einen Wert != 0, so
+kann die Rolle nicht unterbrochen werden.
+
+Die Funktion forbidden ruft dann in allen mit wer->add_controller(
+"forbidden_rollenstop", other) angemeldeten Objekten other die Funktion
+other->forbidden_rollenstop(wer, souffleur, rolle) auf. Liefert
+einer dieser Aufrufe einen Wert != 0, so liefert forbidden diesen zurueck.
+VERWEISE: breche_rolle_ab, restart_rolle, notify_rollenstop
+GRUPPEN: Rollen
+*/
+
+/*
+FUNKTION: notify_rollenstop
+DEKLARATION: void notify_rollenstop(object wer, mixed souffleur, string rolle)
+BESCHREIBUNG:
+Wenn in einem Objekt wer die Rolle rolle unterbrochen wurde,
+dann wird wer->notify("rollenstop", wer, souffleur, rolle) aufgerufen,
+wobei souffleur 0 ist, wenn wer der Souffleur ist, ansonsten das Objekt,
+welches die Rolle steuert, ist. (Falls dieses Objekt nicht mehr existiert,
+wird 1 geliefert.) Diese Funktion wird in allen Teilnehmern der Rolle
+aufgerufen.
+
+Die Funktion notify ruft dann in allen mit wer->add_controller(
+"notify_rollenstop", other) angemeldeten Objekten other die Funktion
+other->notify_rollenstop(wer, souffleur, rolle) auf.
+VERWEISE: breche_rolle_ab, forbidden_rollenstop,
+          restart_rolle, notify_rollenrestart
+GRUPPEN: Rollen
+*/
+
+/*
+FUNKTION: restart_rolle
+DEKLARATION: int restart_rolle(int partner)
+BESCHREIBUNG:
+Mit restart_rolle kann man eine Rolle fortsetzen, die mit stop_rolle
+angehalten wurde. Das klappt auch dann, wenn das Objekt nur passiver
+Teilnehmer ist. Wenn das Objekt an keiner Rolle teilnimmt, die Rolle
+schon weiterlaeuft oder diese Aktion mittels Controller verboten wurde,
+wird 0 zuruckgeliefert, bei Erfolg 1. (Partner ist 1, wenn der Aufruf
+vom restart_rolle des Souffleurs kommt.)
+VERWEISE: in_rolle, query_rolle, starte_rolle, breche_rolle_ab,
+          notify_rollenrestart, notify_rollenstop
+GRUPPEN: Rollen
+*/
+varargs int restart_rolle(int partner)
+{
+   if( !in_rolle() )
+      return 0;
+
+   if( modus == R_SOUFFLEUR )
+   {
+      if( zustand == R_RUNNING )
+         return 0;
+      if(this_object()->forbidden("rollenrestart",this_object(),0,in_rolle()))
+         return 0;
+      foreach(mapping p:rolle["partner"])
+         if(p["ob"] && p["ob"]->forbidden("rollenrestart",p["ob"],
+	     this_object(), in_rolle()))
+	         return 0;
+      zustand = R_RUNNING;
+      foreach(mapping p:rolle["partner"][1..<1])
+         if(p["ob"])
+	    p["ob"]->restart_rolle(1);
+      this_object()->notify("rollenrestart",this_object(),0,in_rolle());
+      return 1;
+   }
+
+   if( modus == R_PASSIV )
+   {
+      if( zustand == R_RUNNING )
+         return 0;
+      if(!partner)
+      {
+         souffleur->restart_rolle();
+	 if(zustand==R_RUNNING)
+	    return 0;
+      }
+      zustand = R_RUNNING;
+      this_object()->notify("rollenrestart",this_object(),souffleur||1,in_rolle());
+      return 1;
+   }
+}
+
+/*
+FUNKTION: forbidden_rollenrestart
+DEKLARATION: int forbidden_rollenrestart(object wer, mixed souffleur, string rolle)
+BESCHREIBUNG:
+Bevor in einem Objekt wer die Rolle rolle nach einer Unterbrechung
+fortgesetzt wird, wird wer->forbidden("rollenrestart", wer, souffleur,
+rolle) aufgerufen, wobei souffleur 0 ist, wenn wer der Souffleur ist,
+ansonsten das Objekt, welches die Rolle steuert, ist. Diese Funktion wird
+in allen Teilnehmern der Rolle aufgerufen. Liefert einer dieser Funktionen
+einen Wert != 0, so kann die Rolle nicht fortgesetzt werden.
+
+Die Funktion forbidden ruft dann in allen mit wer->add_controller(
+"forbidden_rollenrestart", other) angemeldeten Objekten other die Funktion
+other->forbidden_rollenrestart(wer, souffleur, rolle) auf. Liefert
+einer dieser Aufrufe einen Wert != 0, so liefert forbidden diesen zurueck.
+VERWEISE: restart_rolle, breche_rolle_ab, notify_rollenrestart
+GRUPPEN: Rollen
+*/
+
+/*
+FUNKTION: notify_rollenrestart
+DEKLARATION: void notify_rollenrestart(object wer, mixed souffleur, string rolle)
+BESCHREIBUNG:
+Wenn in einem Objekt wer die Rolle rolle nach einer Unterbrechung
+fortgesetzt wird, dann wird wer->notify("rollenrestart", wer, souffleur,
+rolle) aufgerufen, wobei souffleur 0 ist, wenn wer der Souffleur ist,
+ansonsten das Objekt, welches die Rolle steuert, ist. Diese Funktion wird
+in allen Teilnehmern der Rolle aufgerufen.
+
+Die Funktion notify ruft dann in allen mit wer->add_controller(
+"notify_rollenrestart", other) angemeldeten Objekten other die Funktion
+other->notify_rollenrestart(wer, souffleur, rolle) auf.
+VERWEISE: restart_rolle, forbidden_rollenrestart,
+          breche_rolle_ab, notify_rollenstop
+GRUPPEN: Rollen
+*/
+
+varargs void beende_rolle(int partner)
+{
+   string name;
+   if(!(name=in_rolle()) )
+      return;
+
+   if( modus == R_SOUFFLEUR )
+   {
+      if( zustand == R_STANDBY )
+         return;
+      zustand = R_STANDBY;
+      foreach(mapping p:rolle["partner"][1..<1])
+         if(p["ob"])
+	    p["ob"]->beende_rolle(1);
+      // Erst hier, damit beim beende_rolle(1) in_rolle noch die Rolle liefert
+      modus = R_AUS;
+      if(this_object())
+          this_object()->notify("rollenende",this_object(),0,name);
+   }
+
+   if( modus == R_PASSIV )
+   {
+      if( zustand == R_STANDBY )
+         return;
+      if(!partner)
+      {
+         souffleur->beende_rolle();
+	 if(zustand==R_STANDBY)
+	    return;
+      }
+      zustand = R_AUS;
+      modus = R_AUS;
+      if(this_object()) // Falls das Monster ueberhaupt noch lebt...
+          this_object()->notify("rollenende",this_object(),souffleur||1,name);
+   }
+   if ( !rollen_wechsel )
+       this_player_in_rolle = 0 ;
+
+   if( this_object() )
+      this_object()->rolle_beendet(rolle["name"]);
+}
+
+/*
+FUNKTION: notify_rollenende
+DEKLARATION: void notify_rollenende(object wer, mixed souffleur, string rolle)
+BESCHREIBUNG:
+Wenn in einem Objekt wer die Rolle rolle abgebrochen oder beendet wurde,
+dann wird wer->notify("rollenende", wer, souffleur, rolle) aufgerufen,
+wobei souffleur 0 ist, wenn wer der Souffleur ist, ansonsten das Objekt,
+welches die Rolle steuert, ist. (Falls dieses Objekt nicht mehr existiert,
+wird 1 geliefert.) Diese Funktion wird in allen Teilnehmern der Rolle
+aufgerufen.
+
+Die Funktion notify ruft dann in allen mit wer->add_controller(
+"notify_rollenende", other) angemeldeten Objekten other die Funktion
+other->notify_rollenende(wer, souffleur, rolle) auf.
+
+Falls man eine neue Rolle starten will, so sollte dies mit einem call_out
+geschehen.
+VERWEISE: breche_rolle_ab, notify_rollenstart
+GRUPPEN: Rollen
+*/
+
+/*
+FUNKTION: rolle_beendet
+DEKLARATION: void rolle_beendet(string name)
+BESCHREIBUNG:
+Nachdem eine Rolle beendet wurde, wird in allen Partnern die Funktion
+rolle_beendet(rollenname) aufgerufen.
+VERWEISE: breche_rolle_ab, notify_rollenende
+GRUPPEN: Rollen
+*/
+void rolle_beendet(string name) {}
+
+/*
+FUNKTION: debug_rolle2
+DEKLARATION: varargs void debug_rolle2(string str,string file, int line, mixed extended)
+BESCHREIBUNG:
+Ruft debug_rolle mit dem Text str auf.
+Wenn file!=0 ist, dann wird der Fehler ausserdem in die FDB geschrieben.
+(Falls der Rollen-Debugger nicht zufaellig zustaendig fuer das Objekt ist.)
+Falls extended angegegen ist, wird es der Fehlermeldung angehaengt.
+VERWEISE: debug_rolle, set_rollen_debugger, query_rollen_debugger, tell_object
+GRUPPEN: Rollen
+*/
+varargs void debug_rolle2(string str,string file, int line, mixed extended)
+{
+ debug_rolle(line?((str[<1]=='\n'?str[0..<2]:str)+" (Zeile "+line+")\n"):str);
+ if(file
+  &&((!wizp(debug_ob))
+   || !sizeof(
+        filter(MASTER_OB->query_debugger(object_name(this_object())),
+        lambda(({'gr,'name}),
+         ({#'||,
+           ({#'==,'gr,'name}),
+           ({symbol_function("is_group_member","/apps/groups"),'name,'gr})
+         })),
+        debug_ob->query_real_name()
+    ))))
+  do_error2(
+   extended?sprintf("%=-1.65s\n\nZusatzinfos:\n"+(stringp(extended)?"%=-1.65s\n":"%=-1.65O\n"),str,extended):sprintf("%=-1.65s\n",str),
+   file,
+   object_name(),
+   line);
+}
+
+//Hier wird eine gegebene Lambda aufgerufen.
+//Dabei werden eventuell auftretene Fehler per debug_rolle ausgegeben.
+protected mixed myfuncall(mixed cl,mixed command,varargs mixed *params)
+{
+  mixed back;
+  string err;
+  if(err=catch(back=apply(#'funcall,cl,params)))
+  {
+    if(stringp(command))
+      debug_rolle2(err[1..<1],rolle["name"],0,command);
+    else if(pointerp(command))
+      debug_rolle2(err[1..<1],command[0],command[1],command[2]);
+    else
+      debug_rolle2(err[1..<1],rolle["name"]+" ("+command["debug"]["datei"][<1]+")",command["debug"]["zeile"],command);
+  }
+  else
+    return back;
+}
+
+private mapping temprolle; //Wird nur waehrend des Compilierens gebraucht.
+
+protected varargs mixed process_pragma(string text, string *file, int zeile, mixed *lines)
+{
+   int i;
+   string name="";
+   if(!temprolle) return ::process_pragma(text,file,zeile,lines);
+   for(;(i<strlen(text))&&allowed_char(text[i]);i++)
+      name+=text[i..i];
+   switch(lower_case(name))
+   {
+      case "novars":
+         temprolle["varsmode"]=0;
+         break;
+      case "localvars":
+         temprolle["varsmode"]=1;
+         break;
+      case "globalvars":
+         temprolle["varsmode"]=2;
+         break;
+   }
+}
+
+protected varargs mixed handle_preprocessor_symbols(mixed *parr, mixed l, string *symbols, mixed *line, mixed error, int mkcl)
+{
+   mixed tmp,back;
+   if(!temprolle) return ::handle_preprocessor_symbols(parr,l,symbols,line,&error,mkcl);
+   error=0;
+   if(sizeof(tmp=symbols-(parr?map(parr,#'to_string):({}))))
+      switch(temprolle["varsmode"])
+      {
+         case 0:
+            error=({(sizeof(symbols)>1)
+                    ?("Unbekannte Variablen "+liste(symbols))
+                    :("Unbekannte Variable "+symbols[0])})+line;
+            return 0;
+         case 1:
+            back=({#',})+map(tmp,(:({#'=,quote($1),0}):))+({l});
+            if(!mkcl) return back;
+            if(error=catch(back=lambda(parr,back)))
+            {
+               error=({error[1..<2]})+line;
+               return 0;
+            }
+            else
+               return back;
+         case 2:
+            if(error=catch(back=lambda((parr||({}))+map(tmp,#'quote),l)))
+            {
+               error=({error[1..<2]})+line;
+               return 0;
+            }
+            temprolle["global_vars"]+=mkmapping(tmp,({0})*sizeof(tmp))-temprolle["global_vars"];
+            back=({#'funcall,back})+(parr||({}))
+               +map(tmp,(:
+                  ({#'&,({#'[,({#'[,({#'||,({#'temprolle}),({#'rolle})}),"global_vars"}),$1})})
+               :));
+            if(!mkcl) return back;
+            return lambda(parr,back);
+      }
+   else if(!mkcl) return l;
+   else if(error=catch(back=lambda(parr,l)))
+        {
+           error=({error[1..<2]})+line;
+           return 0;
+        }
+   else
+      return back;
+}
+
+protected varargs string *preprocess_include_lines(string *lines, string filename)
+{
+   if(!temprolle) return ::preprocess_include_lines(lines,filename);
+   if(filename[<2..<1]==".h") return delete_comments(lines);
+   return lines;
+}
+
+//Nur Leerzeichen uebergehen
+#define WHITESPACE while((j<strlen(line[0]))&& member(([' ','\t']),line[0][j])) j++
+#define ERROR(x) return ({x})+line
+
+private varargs mixed process_one_rollen_line(mixed *lines,mapping rolle)
+{
+   mixed tmp,res,err,symbols;
+   mixed line=lines[0];
+   int j;
+   if(tmp=::process_one_include_line(&lines)) return tmp;
+   if(!strlen(line[0]) || line[0][0]=='#' || !mappingp(rolle)) return 0;
+   if(rolle["text"]) //Schon Rollentext?
+   {
+      if(rolle["version"]==2)
+      {
+         mapping befehl;
+  
+//Fehlermeldung vom Parser
+#define P_ERROR if(err) ERROR(sprintf("%s an Position %d",err[1],err[0]))
+//Umwandlung in Closure, dabei Beachtung der benutzten Symbole
+#define LAMBDA                                                        \
+   {                                                                  \
+      mixed error;                                                    \
+      err=handle_preprocessor_symbols(0,res,symbols,line,&error,1);   \
+      if(error) return error;                                         \
+   }
+
+         WHITESPACE;
+         tmp="";
+         if(!strlen(trim(line[0]))) return 0;
+         for(;(j<strlen(line[0]))&&allowed_char(line[0][j]);j++)
+            tmp+=line[0][j..j];
+         tmp=lower_case(tmp);
+
+         //Jetzt kommt also der einzelne Befehl im if-Block.
+         if(sizeof(rolle["ifs"]) && (rolle["ifs"][<1]==-1))
+            rolle["ifs"]=rolle["ifs"][0..<2];
+         else
+           //Ansonsten geklammerte if/else's behandeln:
+            while(sizeof(rolle["ifs"]) && rolle["ifs"][<1])
+            {
+               //Fall 1: Ende eines else-Blockes
+               if(member(rolle["text"][rolle["ifs"][<1]-1],"ende_if"))
+               {
+                  rolle["text"][rolle["ifs"][<1]-1]+=(["ende_else":sizeof(rolle["text"])-1]);
+                  rolle["ifs"]=rolle["ifs"][0..<2];
+               }
+               //Fall 2: Ende eines if-Blockes ohne ein else
+               else if(tmp!="else")
+               {
+                  rolle["text"][rolle["ifs"][<1]-1]+=(["ende_if":sizeof(rolle["text"])-1]);
+                  rolle["ifs"]=rolle["ifs"][0..<2];
+               }
+               //Fall 3: Ein else-Block
+               else
+               {
+                  rolle["text"][rolle["ifs"][<1]-1]+=(["ende_if":sizeof(rolle["text"])-1]);
+                  break;
+               }
+            }
+
+         befehl=(["debug":(["text":line[0],"datei":line[1],"zeile":line[2]])]);
+         switch(tmp)
+         {
+           case "if":
+              befehl+=(["befehl":"if"]);
+              WHITESPACE;
+              if((j>=strlen(line[0]))||(line[0][j]!='('))
+                 ERROR("Syntax-Fehler: fehlende Klammer auf");
+              j++;
+              res=parse_expr(line[0],&j,&err,0,&symbols);
+              if((!err)&&((j>=strlen(line[0]))||(line[0][j]!=')')))
+                 err=({j,"Fehlende schliessende Klammer"});
+              P_ERROR;
+              LAMBDA;
+              j++;
+              befehl+=(["bedingung":err]);
+              befehl["debug"]["bedingung"]=res;
+              rolle["text"]+=({befehl});
+              rolle["ifs"]+=({sizeof(rolle["text"]),-1});
+              lines=({({line[0][j..<1],line[1],line[2]})})+lines;
+              break;
+           case "else":
+              if(!sizeof(rolle["ifs"]))
+                ERROR("Syntax-Fehler: else ohne if");
+              rolle["ifs"]+=({-1});
+              lines=({({line[0][j..<1],line[1],line[2]})})+lines;
+              break;
+           case "pause":
+           case "auto_pause":
+              WHITESPACE;
+              if((j>=strlen(line[0]))||(line[0][j]!=':'))
+                 ERROR("Syntax-Fehler: fehlender Doppelpunkt");
+              j++;
+           case "wait":
+              befehl+=(["befehl":tmp]);
+              res=parse_expr(line[0],&j,&err,0,&symbols);
+              if((!err)&&(j<strlen(line[0])))
+                 err=({j,"Extra Zeichen in der Zeile."});
+              P_ERROR;
+              LAMBDA;
+              befehl+=([((tmp=="wait")?"worauf":"anzahl"):err]);
+              befehl["debug"][(tmp=="wait")?"worauf":"anzahl"]=res;
+              rolle["text"]+=({befehl});
+              break;
+           case "wechsel_rolle":
+              WHITESPACE;
+              if((j>=strlen(line[0]))||(line[0][j]!=':'))
+                 ERROR("Syntax-Fehler: fehlender Doppelpunkt");
+              j++;
+              befehl+=(["befehl":"wechsel_rolle"]);
+              res=parse_expr(line[0],&j,&err,query_ops()[",",1],&symbols);
+              if(!err)
+              {
+                 if(symbolp(res) && !member(rolle["global_vars"],to_string(res)))
+                   err=to_string(res);
+                 else
+                   LAMBDA;
+                 befehl+=(["wohin":err]);
+                 befehl["debug"]["wohin"]=res;
+                 if((j<strlen(line[0]))&&(line[0][j]==','))
+                 {
+                    j++;
+                    res=parse_expr(line[0],&j,&err,0,&symbols);
+                    if((!err)&&(j<strlen(line[0])))
+                       err=({j,"Extra Zeichen in der Zeile."});
+                    if(!err)
+                    {
+                       if(symbolp(res) && !member(rolle["global_vars"],to_string(res)))
+                         err=to_string(res);
+                       else
+                         LAMBDA;
+                       befehl+=(["label":err]);
+                       err=0;
+                       befehl["debug"]["label"]=res;
+                    }
+                 }
+                 else err=0;
+              }
+              P_ERROR;
+              rolle["text"]+=({befehl});
+              break;
+           case "stop":
+           case "return":
+           case "stop_time_out":
+              WHITESPACE;
+              if((j<strlen(line[0]))&&(line[0][j]!='\n'))
+                 ERROR("Extra Zeichen in Zeile");
+              befehl+=(["befehl":tmp]);
+              rolle["text"]+=({befehl});
+              break;
+           case "goto":
+           case "gosub":
+              befehl+=(["befehl":tmp]);
+              res=parse_expr(line[0],&j,&err,0,&symbols);
+              if((!err)&&(j<strlen(line[0])))
+                 err=({j,"Extra Zeichen in der Zeile."});
+              P_ERROR;
+              if(symbolp(res) && !member(rolle["global_vars"],to_string(res)))
+                err=to_string(res);
+              else
+                LAMBDA;
+              befehl+=(["wohin":err]);
+              befehl["debug"]["wohin"]=res;
+              rolle["text"]+=({befehl});
+              break;
+           case "time_out":
+              befehl+=(["befehl":"time_out"]);
+              res=parse_expr(line[0],&j,&err,query_ops()[",",1],&symbols);
+              if((!err)&&((j>=strlen(line[0]))||(line[0][j]!=',')))
+                 err=({j,"Zweiter Parameter fehlt bei Time_out."});
+              P_ERROR;
+              LAMBDA;
+              befehl+=(["anzahl":err]);
+              befehl["debug"]["anzahl"]=res;
+              j++;
+              res=parse_expr(line[0],&j,&err,0,&symbols);
+              if((!err)&&(j<strlen(line[0])))
+                 err=({j,"Extra Zeichen in der Zeile."});
+              P_ERROR;
+              if(symbolp(res) && !member(rolle["global_vars"],to_string(res)))
+                err=to_string(res);
+              else
+                LAMBDA;
+              befehl+=(["wohin":err]);
+              befehl["debug"]["wohin"]=res;
+              rolle["text"]+=({befehl});
+              break;
+           case "message_type":
+              WHITESPACE;
+              if(j<strlen(line[0]) && line[0][j]==':')
+	        j++;
+              befehl+=(["befehl":"msgparams"]);
+              res=parse_expr(line[0],&j,&err,query_ops()[",",1],&symbols);
+              if((!err)&&((j>=strlen(line[0]))||(line[0][j]!=',')))
+                 err=({j,"Aktionstyp fehlt bei Message_Type."});
+              P_ERROR;
+              LAMBDA;
+              befehl+=(["type":err]);
+              befehl["debug"]["type"]=res;
+              j++;
+              res=parse_expr(line[0],&j,&err,0,&symbols);
+              if((!err)&&(j<strlen(line[0])))
+                 err=({j,"Extra Zeichen in der Zeile."});
+              P_ERROR;
+              LAMBDA;
+              befehl+=(["action":err]);
+              befehl["debug"]["action"]=res;
+              rolle["text"]+=({befehl});
+              break;
+           case "":
+              if(j>=strlen(line[0])) break;
+              if(line[0][j]=='{')
+              {
+                rolle["ifs"]+=({0});
+                j++;
+                lines=({({line[0][j..<1],line[1],line[2]})})+lines;
+                break;
+              }
+              else if(line[0][j]=='}')
+              {
+                if((!sizeof(rolle["ifs"]))|| rolle["ifs"][<1])
+                   ERROR("Syntax-Fehler: } ohne {");
+                else rolle["ifs"]=rolle["ifs"][0..<2];
+                j++;
+                lines=({({line[0][j..<1],line[1],line[2]})})+lines;
+                break;
+              }
+              else if(line[0][j]=='[')
+              {
+                j++;
+                for(;(j<strlen(line[0])) && (line[0][j]!=']');j++)
+                 tmp+=line[0][j..j];
+                if(j>=strlen(line[0]))
+                   ERROR("Syntax-Fehler: [ ohne ]");
+                j++;
+                if(member(rolle["labels"],tmp))
+                   ERROR("Label "+tmp+" mehrfach vorhanden");
+                rolle["labels"][tmp]=sizeof(rolle["text"]);
+                lines=({({line[0][j..<1],line[1],line[2]})})+lines;
+                break;
+              }
+           default:
+           //Hier kommt nun entweder ein Funktionsaufruf oder exec_command
+              if(sscanf(line[0],"%d: %s",tmp,line[0])!=2) //fun-exec
+              {
+                befehl+=(["befehl":"fun-exec"]);
+		j = 0;
+                res=parse_expr(line[0],&j,&err,0,&symbols);
+                if((!err)&&(j<strlen(line[0])))
+            	    err=({j,"Extra Zeichen in der Zeile."});
+                P_ERROR;
+                LAMBDA;
+                befehl+=(["was":err]);
+                befehl["debug"]["was"]=res;
+                rolle["text"]+=({befehl});
+              }
+              else //exec_command
+              {
+                 string str="";
+                 mixed back=({}), deb=({});
+                 if(sizeof(rolle["partner"])<tmp)
+                    ERROR("Rollenpartner "+tmp+" gibt's nicht");
+                 befehl+=(["befehl":member(rolle["partner"][tmp-1]["kriterien"],"Objekt")?"msg":"exec",
+                           "wer":tmp]);
+                 j=0;
+                 while(j>=0)
+                 {
+                    tmp=strstr(line[0],FUNSYMBOL,j);
+                    if(tmp<0)
+                    {
+                       str+=line[0][j..<1];
+                       break;
+                    }
+                    else if(tmp>j)
+                    {
+                       if(line[0][tmp-1]=='\\')
+                       {
+                          str+=line[0][j..(tmp-2)]+FUNSYMBOL;
+                          j=tmp+1;
+                          continue;
+                        }
+                       else
+                          str+=line[0][j..(tmp-1)];
+                    }
+                    j=tmp; tmp++;
+                    res=parse_expr(line[0],&tmp,&err,query_ops()[",",1],&symbols);
+                    P_ERROR;
+                    if(strlen(str)) {back+=({str}); deb+=({str}); str="";}
+                    LAMBDA;
+                    back+=({err});
+                    deb+=({res});
+                    for(tmp--;(tmp>j)&& member(([' ','\t']),line[0][tmp]);tmp--);
+                    j=tmp+1;
+                    if((j<strlen(line[0])) && (line[0][j]=='$')) j++;
+                 }
+                 if(strlen(str)) {back+=({str}); deb+=({str});}
+                 befehl+=(["was":back]);
+                 befehl["debug"]["was"]=deb;
+                 rolle["text"]+=({befehl});
+              }
+              break;
+         }
+      }
+      else
+      {
+         string label;
+         // Avatar: Hier wird schonmal der Text praepariert, damit der
+         //         Befehlsparser spaeter nicht soviel zu tun hat...
+         //         (spart Rechenzeit, wenn der Cache zum Einsatz kommt)
+         tmp=regexplode(line[0],"{|}")-({""});
+         if((j=sizeof(tmp))>1)
+         {
+            lines=transpose_array(({tmp[1..<1],
+                                  ({line[1]})*(j-1),
+                                  ({line[2]})*(j-1)}))+lines;
+            line[0]=tmp[0];
+         }
+         tmp="";
+         if(sscanf(trim(line[0]),"[%s]%s",label,tmp))
+         {
+            if(member(rolle["labels"],label))
+               ERROR("Label '"+label+"' mehrfach vorhanden");
+            rolle["labels"][label]=sizeof(rolle["text"]);
+         }
+         else tmp=line[0];
+         tmp=trim(tmp);
+         if(strlen(tmp))
+            rolle["text"]+=({tmp});
+      }
+   }
+   else //Header
+   {
+      WHITESPACE;
+      tmp="";
+      for(;(j<strlen(line[0]))&&allowed_char(line[0][j]);j++)
+         tmp+=line[0][j..j];
+      if(tmp=="") return 0;
+      if(j>=strlen(line[0])) ERROR("Unerwartetes Ende");
+      if(line[0][j]!=':') ERROR("Syntax-Fehler: fehlender Doppelpunkt");
+      j++;
+      WHITESPACE;
+      if(line[0][j..j]==FUNSYMBOL)
+      {
+        j++;
+        res=parse_expr(line[0],&j,&err,0,&symbols);
+        if((!err)&&(j<strlen(line[0])))
+           err=({j,"Extra Zeichen in der Zeile."});
+        P_ERROR;
+        LAMBDA;
+        if(err=catch(res=funcall(err)))
+           ERROR(err[1..<1]);
+      }
+      else
+        res=trim(line[0][j..<1]);
+      switch(lower_case(tmp))
+      {
+         case "start_ort":
+            if(!stringp(res)) ERROR(sprintf("Kein String bei Start_Ort (%O)",res));
+            rolle["start_ort"]=res[<2..<1]==".lpc" ? res[0..<3] : res;
+            break;
+         case "rolle_abbrechbar":
+            rolle["abbrechbar"]=stringp(res) && (lower_case(res) == "ja");
+            break;
+         case "auto_pause":
+            rolle["standard_auto_pause"]=to_int(res);
+            break;
+         case "version":
+            rolle["version"]=to_int(res);
+            break;
+         case "anzahl_teilnehmer":
+            tmp=to_int(res)||1;
+            if(!rolle["partner"])
+               rolle["partner"] = map(({(["kriterien":([])])})*tmp,#'deep_copy);
+            else if((tmp=tmp-sizeof(rolle["partner"]))>0)
+               rolle["partner"] += map(({(["kriterien":([])]) })*tmp,#'deep_copy);
+            else if(tmp<0)
+               rolle["partner"] = rolle["partner"][0..<(1-tmp)];
+            break;
+         case "rollen_debugger":
+            if( query_rollen_debugger() )
+            {
+               // Avatar: sorgt dafuer dass ein Wiz auch ohne Schreibrecht auf das
+               //         Rollenscript den Rollen-Debugger setzen kann.
+               DEBUG_ROLLE("rollen_debugger: wurde bereits festgelegt.\n");
+            }
+            else
+            {
+               object ob;
+               set_rollen_debugger(
+                  (!stringp(res) || !strlen(res) || res == "0")
+                     ? 0
+                     : ( (ob=find_player(res))
+                        ? ob
+                        : ( res[0]=='/'
+                           ? abs_path(res,implode(explode(rolle["name"],"/")[0..<2],"/"))
+                           : 0) ) );
+            }
+            break;
+         case "text":
+            rolle["text"]=({});
+            rolle["labels"]=([]);
+            //In ifs speichern wir die aktuellen if-Ebenen
+            //Eine Zahl >0 steht fuer die Zeile, bei der der if/else-Block
+            //begonnen hat, =0 fuer eine {. -1 fuer eine einzelne Zeile, die
+            //den Block darstellt.
+            rolle["ifs"]=({});
+            break;
+         default:
+            if(lower_case(tmp)[0..10]=="teilnehmer_")
+            {
+               string func;
+               if(sscanf(tmp[11..<1],"%d_%s",tmp,func)!=2)
+                  ERROR("Syntax Fehler");
+               if(!rolle["partner"])
+                  rolle["partner"]=map(({(["kriterien":([])])})*tmp,#'deep_copy);
+               else if(tmp>sizeof(rolle["partner"]))
+                  rolle["partner"]+=map(({(["kriterien":([])]) })*(tmp-sizeof(rolle["partner"])),#'deep_copy);
+
+               if(member((["Lebewesen","Objekt"]),func)
+                  && stringp(res) && (res[0..0]==FUNSYMBOL))
+                     res[1..0]=to_string(temprolle["varsmode"]);
+               rolle["partner"][tmp-1]["kriterien"][func]=res;
+            }
+            else
+               ERROR("Unbekannter Parameter '"+tmp+"'");
+            break;
+       }
+       if(!rolle["partner"])
+          rolle["partner"]=({ (["kriterien":([])]) });
+   }
+}
+
+private mapping lese_rolle(string name, mapping cache)
+{
+
+   if( !cache ||
+       cache["name"] != name || cache["file_time"] != file_time(name) )
+   {
+      mixed lines,tmp,x;
+
+      if( !name || name == "" )
+      {
+         debug_rolle2("lese_rolle: Kein Filenamen uebergeben.\n",__FILE__,__LINE__);
+         return 0;
+      }
+
+      if( !sizeof(lines=get_lines_from_file(name)) )
+      {
+         debug_rolle2("lese_rolle: Die Rolle "+name+" ist leer.\n",name);
+         return 0;
+      }
+
+      init_lpc_parser();
+
+      rolle=(["name":name,
+              "global_vars":([])
+            ]);
+      temprolle=rolle;
+
+      lines=transpose_array(({lines,({({name})})*sizeof(lines),({1})+({0})*(sizeof(lines)-1)}));
+      x=sizeof(lines)+1;
+
+      while(sizeof(lines))
+      {
+        tmp=process_one_rollen_line(&lines,&rolle);
+        if(pointerp(tmp))
+          debug_rolle2("lese_rolle: "+tmp[0]+".\n",name+" ("+tmp[2][<1]+")",tmp[3]);
+      }
+      //Sind noch offene if's da?
+      while(sizeof(rolle["ifs"]))
+      {
+         //Fall 1: Ein Befehl nach einem if/else
+         if(rolle["ifs"][<1]==-1)
+         {
+            debug_rolle2("lese_rolle: Syntax-Fehler: "
+               "Fehlender Befehl nach einem if/else.\n",name,x,rolle["ifs"]);
+            break;
+         }
+         //Fall 2: Offene geschweifte Klammern?
+         else if(!rolle["ifs"][<1])
+         {
+            debug_rolle2("lese_rolle: Syntax-Fehler: "
+               "Fehlende }.\n",name,x,rolle["ifs"]);
+            break;
+         }
+         //Fall 3: Ende eines else-Blockes
+         else if(member(rolle["text"][rolle["ifs"][<1]-1],"ende_if"))
+            rolle["text"][rolle["ifs"][<1]-1]+=(["ende_else":sizeof(rolle["text"])-1]);
+         //Fall 4: Ende eines if-Blockes ohne ein else
+         else
+            rolle["text"][rolle["ifs"][<1]-1]+=(["ende_if":sizeof(rolle["text"])-1]);
+         rolle["ifs"]=rolle["ifs"][0..<2];
+      }
+      temprolle=0;
+      rolle["standard_global_vars"]=rolle["global_vars"];
+      rolle["file_time"] = file_time(name);
+      rolle-=(["ifs","varsmode"]);
+
+      if( !sizeof(rolle["text"]) )
+      {
+         debug_rolle2("lese_rolle: Im File "+name+" fehlt der Rollentext.\n",name);
+         return 0;
+      }
+
+   }
+   else
+   {
+      rolle=cache;
+      DEBUG_ROLLE("lese_rolle: Die Rolle "+name+" befand sich noch im "+
+         "Speicher.\n")//;
+
+      for(int a=sizeof(rolle["partner"]);a--;)
+         rolle["partner"][a]["ob"]=0;
+   }
+
+   rolle["ipstack"]=({});
+   rolle["time_out"]=0;
+   rolle["warte"]=0;
+   rolle["waitfun"]=0;
+   rolle["auto_pause"]=rolle["standard_auto_pause"];
+   rolle["global_vars"]=rolle["standard_global_vars"];
+
+   return rolle;
+  
+}
+
+private string lies_von_rolle()
+{
+   string command, ret;
+
+   if( rolle["position"] >= sizeof(rolle["text"]) )
+      return 0;
+
+   ret="";
+   do
+   {
+      command = rolle["text"][rolle["position"]++];
+      DEBUG_ROLLE("|" + command + "|\n")//;
+      ret += command[<1] == '\\' ? command[0..<2] : command;
+   }
+   while( command[<1] == '\\' );
+
+   return ret;
+}
+
+private string search_next_br()
+{
+   string command;
+   int ebene;
+
+   ebene=1;
+
+   do
+   {
+      if( !(command=lies_von_rolle()) )
+         return 0;
+
+      if( command[0] == '{' )
+         ++ebene;
+      else
+         if( command[0] == '}' )
+            --ebene;
+   }
+   while( ebene > 0 );
+
+   return lies_von_rolle();
+}
+
+private int check_for_pause(string command)
+{
+   int tmp;
+
+// 'command' ist lower_case
+   if( sscanf(command,"auto_pause: %d",tmp) )
+   {
+      rolle["auto_pause"]=tmp;
+      return -1;
+   }
+   else
+      if( sscanf(command,"pause: %d",tmp) == 1 )
+         return tmp||-1;
+}
+
+mixed do_fun_call(mixed ob, string funktion, varargs mixed *parameter)
+{
+   int wer;
+   object who;
+
+   if( !in_rolle() )
+      return ::do_fun_call(ob,funktion,parameter);
+
+   if( !(who=touch(ob,NO_LOG|NO_WRITE) ) &&
+       (!sscanf(ob,"%d",wer) ||
+        wer > sizeof(rolle["partner"]) ||
+        wer < 0 ||
+        wer >= 1 && !(who=rolle["partner"][wer-1]["ob"]) ||
+        wer == 0 && !(who=this_player_in_rolle)
+        )
+       )
+   {
+      DEBUG_ROLLE(sprintf("do_fun_call: '%s' gibt es nicht (mehr).\n",ob))//;
+      return 0;
+   }
+
+   return ::do_fun_call(who,funktion,parameter);
+}
+
+private mixed _do_fun_call(string funktion, string parameter)
+{
+   string obj, fun;
+
+   if( (funktion=trim(funktion))[0] == '$' )
+   {
+      if( sscanf(funktion,"$%s->%s",obj,fun) != 2 )
+      {
+         DEBUG_ROLLE(sprintf("_do_fun_call: Falsches Aufrufeformat: '%s->"+
+            "%s'\n",funktion,parameter))//;
+         return 0;
+      }
+   }
+   else
+   {
+      obj=object_name();
+      fun=funktion;
+   }
+
+   DEBUG_ROLLE(sprintf("_do_fun_call: Rufe '%s->%s(%s)' auf.\n",
+      obj=trim(obj),fun=trim(fun),parameter=trim(parameter)))//;
+
+   return do_fun_call(obj,fun,parameter);
+}
+
+mixed do_efun_call(string funktion, varargs mixed *parameter)
+{
+   int wer;
+   string ob;
+
+   if (sizeof(parameter) == 1)
+       ob = parameter[0];
+
+   if( !in_rolle() || !ob)
+      return ::do_efun_call(funktion,sizeof(parameter) ? parameter : 0);
+
+   if( !sscanf(ob,"%d",wer) || wer > sizeof(rolle["partner"]) || wer < 0 )
+      return 0;
+
+   if ( wer == 0 )
+       return ( this_player_in_rolle ) ?
+	   ::do_efun_call(funktion,this_player_in_rolle) : 0;
+   else
+       return ::do_efun_call(funktion,rolle["partner"][wer-1]["ob"]);
+}
+
+private mixed get_label(string str)
+{
+   string fun, arg;
+
+   if( sscanf(str=trim(str),"%s(%s(%s)%s)",str,fun,arg,str) == 4 )
+   {
+      if( !strlen(str=_do_fun_call(fun,arg)) )
+      {
+         DEBUG_ROLLE(sprintf("Goto (%s(%s)) lieferte keinen "+
+            "String als Ergebnis.\n",fun,arg))//;
+         return 0;
+      }
+   }
+
+   if( !member(rolle["labels"],str))
+   {
+      DEBUG_ROLLE(sprintf("Das Label '%s' gibt es nicht.\n",str))//;
+      return 0;
+   }
+
+   return ({ str, rolle["labels"][str] });
+}
+
+/*
+FUNKTION: set_standard_msg_params
+DEKLARATION: void set_standard_msg_params(int msg_type, int msg_action)
+BESCHREIBUNG:
+Setzt die Standardmeldungstypen der Rollen-Meldungen bei Nicht-Lebewesen
+fuer send_message.
+VERWEISE: query_standard_msg_params, starte_rolle
+GRUPPEN: Rollen
+*/
+void set_standard_msg_params(int msg_type, int msg_action)
+{
+  standard_msg_type=msg_type;
+  standard_msg_action=msg_action;
+}
+
+/*
+FUNKTION: query_standard_msg_params
+DEKLARATION: int *query_standard_msg_params()
+BESCHREIBUNG:
+Liefert die Standardmeldungstypen in einem Array ({msg_type, msg_action}).
+VERWEISE: set_standard_msg_params, starte_rolle
+GRUPPEN: Rollen
+*/
+int *query_standard_msg_params()
+{
+  return ({standard_msg_type,standard_msg_action});
+}
+
+/*
+FUNKTION: prepare_exec
+DEKLARATION: mixed *prepare_exec(mixed *pars,mixed command)
+BESCHREIBUNG:
+Aus dem uebergebenen Array pars mit Strings und Closures wird
+eine Parameterliste fuer exec_command gemacht, d.h. fuer jede Closure
+wird myfuncall aufgerufen und das Ergebnis wird im neuen Array gespeichert.
+Strings werden direkt uebernommen. Mehrere Strings hintereinander werden
+zu einem Zusammengefasst. Folgt auf einen String ein Array oder Objekt
+im Array, so wird dem String ein Leerzeichen am Ende weggenommen. Genauso
+wird einem dem Array/Objekt folgendem String ein Leerzeichen am Anfang
+entfernt. Der zweite Parameter command wird fuer Debugzwecke genutzt und
+direkt an myfuncall weitergegeben.
+VERWEISE: exec_command
+GRUPPEN: Rollen
+*/
+mixed *prepare_exec(mixed *pars,mixed command)
+{
+  string str;
+  mixed *back;
+  mixed tmp;
+  int i;
+  back=({}); str="";
+  pars=map(pars,#'myfuncall,command);
+  for(i=0;i<sizeof(pars);i++)
+  {
+    if(stringp(pars[i])) str+=pars[i];
+    else
+    {
+      tmp=myfuncall(pars[i],command);
+      if(stringp(tmp))
+       str+=tmp;
+      else
+      {
+        if(strlen(str))
+        {
+          if(str[<1]==' ') str=str[0..<2];
+          if(sizeof(back) && strlen(str) && (str[0]==' ')) str=str[1..<1];
+          if(strlen(str)) {back+=({str}); str="";}
+        }
+        back+=({tmp});
+      }
+    }
+  }
+  if(sizeof(back) && strlen(str) && (str[0]==' ')) str=str[1..<1];
+  if(strlen(str)) back+=({str});
+  return back;
+}
+
+private int drehe_an_rolle_v2()
+{
+  mapping command;
+  mixed tmp;
+
+  if(!rolle["ifs"]) rolle["ifs"]=([]);
+//Hier werden die die Sprungziele nach ende eines if-Blockes abgelegt, wenn
+//ein else-Block existiert.
+  do
+  {
+    if(rolle["position"]<0)
+    {
+      do_error(sprintf("%=-1.65s\n\Rollendaten:\n%=-1.65O\n",
+        "Fehler: Position ist kleiner als 0.",rolle));
+      return 0;
+    }
+
+    command = rolle["text"][rolle["position"]];
+    DEBUG_ROLLE("| Ein "+command["befehl"]+"-Befehl in Zeile "+command["debug"]["zeile"]+": |\n");
+    DEBUG_ROLLE(command["debug"]["text"]+"\n");
+
+    //Ist hier zufaellig ein if/else-Block zu Ende?
+    while(member(rolle["ifs"],rolle["position"]))
+      rolle["position"]=rolle["ifs"][rolle["position"]];
+
+    rolle["position"]++;
+    switch(command["befehl"])
+    {
+      case "if":
+        if(myfuncall(command["bedingung"],command))
+        {
+          DEBUG_ROLLE("-> Ergebnis: Wahr\n");
+          if(member(command,"ende_else"))
+            rolle["ifs"][command["ende_if"]]=command["ende_else"];
+        }
+        else
+        {
+          DEBUG_ROLLE("-> Ergebnis: Falsch\n");
+          rolle["position"]=command["ende_if"]+1;
+        }
+        break;
+      case "pause":
+        tmp=myfuncall(command["anzahl"],command);
+        DEBUG_ROLLE("-> Ergebnis: "+tmp+"\n");
+        if(tmp>0) return tmp;
+        break;
+      case "auto_pause":
+        rolle["auto_pause"]=myfuncall(command["anzahl"],command);
+        DEBUG_ROLLE("-> Ergebnis: "+rolle["auto_pause"]+"\n");
+        break;
+      case "stop":
+        return 0;
+      case "wechsel_rolle":
+        rollen_wechsel = 1 ;
+        tmp=myfuncall(command["wohin"],command);
+        beende_rolle();
+        if(stringp(tmp))
+          apply(#'call_other,this_object(),"starte_rolle",
+            (tmp[0]=='/')?tmp:abs_path("../"+tmp,rolle["name"]),
+            myfuncall(command["label"],command),rollen_parameter);
+        else
+          debug_rolle2("Rollenname bei Wechsel_Rolle ist kein String.\n",
+            rolle["name"]+" ("+command["debug"]["datei"][<1]+")",command["debug"]["zeile"],command);
+        rollen_wechsel = 0 ;
+        return -2;
+      case "goto":
+        tmp=myfuncall(command["wohin"],command);
+        if(!member(rolle["labels"],tmp)) return -1;
+        rolle["position"]=rolle["labels"][tmp];
+        DEBUG_ROLLE("-> Springe nach ["+tmp+"].\n")//;
+        break;
+      case "gosub":
+        tmp=myfuncall(command["wohin"],command);
+        if(!member(rolle["labels"],tmp)) return -1;
+        rolle["ipstack"]+=({ rolle["position"] });
+        rolle["position"]=rolle["labels"][tmp];
+        DEBUG_ROLLE("-> Springe nach ["+tmp+"].\n")//;
+        break;
+      case "return":
+        if( !sizeof(rolle["ipstack"]) )
+        {
+           DEBUG_ROLLE("Die Rolle wird beendet.\n")//;
+           return 0;
+        }
+        DEBUG_ROLLE("-> Springe zurueck...\n")//;
+        rolle["position"]=rolle["ipstack"][<1];
+        rolle["ipstack"]=rolle["ipstack"][0..<2];
+        break;
+      case "time_out":
+        rolle["time_out"]=({myfuncall(command["anzahl"],command),command["wohin"]});
+        DEBUG_ROLLE("-> Ergebnis: "+rolle["time_out"][0]+"\n");
+        break;
+      case "stop_time_out":
+        DEBUG_ROLLE("-> Time-Out abgebrochen.\n")//;
+        rolle["time_out"]=0;
+        break;
+      case "wait":
+        rolle["waitfun"]=command["worauf"];
+        return -2;
+        break;
+      case "fun-exec":
+        myfuncall(command["was"],command);
+        break;
+      case "exec":
+        if( !rolle["partner"][command["wer"]-1]["ob"] )
+        {
+           DEBUG_ROLLE("Der Partner mit der Nummer "+(command["wer"])+" ist tot.\n")//;
+           return -1;
+        }
+        apply(#'call_other,rolle["partner"][command["wer"]-1]["ob"],
+                "exec_command",
+                prepare_exec(command["was"],command));
+        if( rolle["auto_pause"] )
+          return rolle["auto_pause"];
+        break;
+      case "msg":
+        if( !rolle["partner"][command["wer"]-1]["ob"] )
+        {
+          DEBUG_ROLLE("Der Partner mit der Nummer "+(command["wer"])+" (ein Raum) ist nicht mehr da.\n");
+          return -1;
+        }
+        tmp=prepare_exec(command["was"],command);
+        if(!sizeof(tmp))
+        {
+          debug_rolle2("Keine Meldung angegeben.\n",
+            rolle["name"]+" ("+command["debug"]["datei"][<1]+")",command["debug"]["zeile"],command);
+          return -1;
+        }
+        else if((sizeof(tmp)>1) || !stringp(tmp[0]))
+        {
+          debug_rolle2("Die LPC-Ausdruecke in der Meldung liefern keinen String.\n",
+            rolle["name"]+" ("+command["debug"]["datei"][<1]+")",command["debug"]["zeile"],command);
+          return -1;
+        }
+        rolle["partner"][command["wer"]-1]["ob"]->send_message(
+          standard_msg_type,standard_msg_action,wrap(tmp[0]));
+        if( rolle["auto_pause"] )
+          return rolle["auto_pause"];
+        break;
+      case "msgparams":
+        set_standard_msg_params(
+          myfuncall(command["type"],command),
+          myfuncall(command["action"],command));
+        break;
+    }
+  }while(rolle["position"] < sizeof(rolle["text"]));
+}
+
+void rolle_v2()
+{
+   int pause;
+   mixed res;
+
+   if( rolle["position"] >= sizeof(rolle["text"]) )
+   {
+      DEBUG_ROLLE("rolle: Ich bin am Ende der Rolle.\n")//;
+      beende_rolle();
+      return;
+   }
+
+   if( rolle["time_out"] && !--rolle["time_out"][0] )
+   {
+      if( !res=myfuncall(rolle["time_out"][1],"Wurde ausgefuehrt durch Time_Out.\n") )
+      {
+         beende_rolle();
+         return;
+      }
+      rolle["time_out"]=0;
+      rolle["warte"]=0;
+      rolle["waitfun"]=0;
+      DEBUG_ROLLE("rolle: Time-Out-Sprung nach ["+res+"].\n")//;
+      rolle["position"]=rolle["labels"][res];
+   }
+
+   if( (res=rolle["waitfun"]) && !myfuncall(res,"Wurde ausgefuehrt durch Wait") )
+   {
+      DEBUG_ROLLE("rolle: Ich warte...\n");
+      return;
+   }
+   else
+      rolle["waitfun"]=0;
+
+   if( rolle["warte"] > 0 )
+   {
+      DEBUG_ROLLE("rolle: Ich warte noch "+rolle["warte"]+" mal.\n")//;
+      rolle["warte"]--;
+      return;
+   }
+
+   if( (pause=drehe_an_rolle_v2()) <= 0 )
+   {
+      if( !pause )
+      {
+         DEBUG_ROLLE("rolle: Ende der Rolle erreicht.\n") //;
+         beende_rolle();
+      }
+      if( pause == -1 )
+         beende_rolle();
+   }
+   else
+   {
+      DEBUG_ROLLE("rolle: Ich beginne eine Pause ("+pause+").\n")//;
+      rolle["warte"] = pause-1;
+   }
+}
+
+private int drehe_an_rolle()
+{
+   string  command, lcommand, new_command, str, rest, nrest, if_fun, fun, arg;
+   string  name;
+   int     wer, pause, a;
+   mixed   obj;
+   mixed   res;
+   object  who;
+
+   do
+   {
+      if( !(command=lies_von_rolle()) )
+         return 0;
+
+/* If-Command */
+      if( lower_case(command[0..1]) == "if" )
+      {
+         if( sscanf(command,"%s(%s(%s)%s)",str,if_fun,arg,str) != 4 )
+         {
+            DEBUG_ROLLE("Die Syntax der If-Abfrage ist falsch: "
+               +(str||"?")+"( "+(if_fun||"?")+" ( "+(arg||"?")+" ) ).\n")//;
+            return -1;
+         }
+
+         res=_do_fun_call(if_fun,arg)?1:0;
+         DEBUG_ROLLE(sprintf("Ergebnis: %d.\n",res))//;
+
+         if( !command=lies_von_rolle() )
+            return 0;
+
+         if( command[0] != '{' )
+         {
+            DEBUG_ROLLE("Unter der 'if'-Anweisung fehlt "+
+               "eine '{'-Klammer.\n");
+            return -1;
+         }
+
+         if( !res )
+         {
+            command=search_next_br();
+
+/* Else-Command (before) */
+            if( lower_case(command[0..3]) == "else" )
+            {
+               if( !(command=lies_von_rolle()) )
+                  return 0;
+
+               if( command[0] != '{' )
+               {
+                  DEBUG_ROLLE("Unter der 'else'-Anweisung fehlt "+
+                     "eine '{'-Klammer.\n");
+                  return -1;
+               }
+            }
+            else
+               --rolle["position"];
+         }
+
+         continue;
+      }
+
+      while( command[0] == '}' )
+         if( !(command=lies_von_rolle()) )
+            return 0;
+
+/* Else-Command (after) */
+      while( lower_case(command[0..3]) == "else" )
+      {
+         if( !command=lies_von_rolle() )
+            return 0;
+
+         if( command[0] != '{' )
+         {
+            DEBUG_ROLLE("Unter der 'else'-Anweisung fehlt "+
+               "eine '{'-Klammer.\n");
+            return -1;
+         }
+
+         if( !command=search_next_br() )
+            return 0;
+      }
+
+      while( command[0] == '}' )
+         if( !command=lies_von_rolle() )
+            return 0;
+
+/* Pause-Command */
+      while( pause=check_for_pause(lower_case(command)) )
+      {
+         if( pause > 0 )
+            return pause;
+         else
+            if( !command=lies_von_rolle() )
+               return 0;
+      }
+
+      lcommand=lower_case(command)+" ";
+
+      if( lcommand[0..1] == "if" || lcommand[0..3] == "else" )
+      {
+         --rolle["position"];
+         continue;
+      }
+
+/* Stop-Command */
+      if( lcommand[0..4] == "stop ")
+      {
+         DEBUG_ROLLE("Die Rolle wird abgebrochen.\n")//;
+         return 0;
+      }
+
+/* "Wechsel_Rolle"-Command */
+      if( lcommand[0..13] == "wechsel_rolle:" )
+      {
+         str=trim(command[14..]);
+         DEBUG_ROLLE("Wechsel zu Rolle '"+str+"'.\n")//;
+         rollen_wechsel = 1 ;
+         beende_rolle();
+         this_object()->starte_rolle(str);
+         rollen_wechsel = 0 ;
+         return -2;
+      }
+
+/* Goto-Command */
+      if( lcommand[0..3] == "goto" )
+      {
+         if( !res=get_label(command[4..]) )
+            return -1;
+         DEBUG_ROLLE("Springe nach ["+res[0]+"].\n")//;
+         rolle["position"]=res[1];
+         continue;
+      }
+
+/* GoSub-Command */
+      if( lcommand[0..4] == "gosub" )
+      {
+         if( !res=get_label(command[5..]) )
+            return -1;
+
+         rolle["ipstack"]+=({ rolle["position"] });
+         DEBUG_ROLLE("Springe nach ["+res[0]+"].\n")//;
+         rolle["position"]=res[1];
+         continue;
+      }
+
+/* Return-Command */
+      if( lcommand[0..6] == "return " )
+      {
+         if( !sizeof(rolle["ipstack"]) )
+         {
+            DEBUG_ROLLE("Die Rolle wird beendet.\n")//;
+            return 0;
+         }
+         DEBUG_ROLLE("Springe zurueck...\n")//;
+         rolle["position"]=rolle["ipstack"][<1];
+         rolle["ipstack"]=rolle["ipstack"][0..<2];
+         continue;
+      }
+
+/* Time-Out-Command */
+      if( lcommand[0..8] == "time_out " )
+      {
+         if( sscanf(command[9..],"%d,%s",a,str) != 2 )
+         {
+            DEBUG_ROLLE("Falsches Aufrufeformat: 'Time_Out zahl, label'\n")//;
+            return -1;
+         }
+         DEBUG_ROLLE("Time-Out gestartet.\n")//;
+         rolle["time_out"]=({ a, trim(str) });
+         continue;
+      }
+
+/* Break-Command */
+      if( lcommand[0..13] == "stop_time_out " )
+      {
+         DEBUG_ROLLE("Time-Out abgebrochen.\n")//;
+         rolle["time_out"]=0;
+         continue;
+      }
+
+/* Wait-Command */
+      if( lcommand[0..4] == "wait " )
+      {
+         if( sscanf(trim(command[5..]),"%s(%s)",fun,arg) != 2 )
+         {
+            DEBUG_ROLLE("Kein oder falsches Argument hinter "+
+               "'Wait'.\n")//;
+            return -1;
+         }
+         rolle["waitfun"]=({ trim(fun), trim(arg) });
+         return -2;
+      }
+
+/* Fun-Exec */
+      if( command[0] == '$' )
+      {
+         func_parser(command);
+         continue;
+      }
+
+/* do_command()-Exec */
+      if( sscanf(command,"%d: %s",wer,new_command) != 2 )
+      {
+         DEBUG_ROLLE("Mit dieser Zeile kann ich nichts anfangen:\n"+
+            command+"\n")//;
+         return -1;
+      }
+
+      command = new_command;
+      if( wer > sizeof(rolle["partner"]) )
+      {
+         DEBUG_ROLLE("Einen Partner mit der Nummer "+wer+
+            " gibt es nicht.\n"+command+"\n")//;
+         return -1;
+      }
+
+      wer--;
+      new_command = func_parser(command);
+
+      if( !rolle["partner"][wer]["ob"] )
+      {
+         DEBUG_ROLLE("Der Partner mit der Nummer "+(wer++)+" ist tot.\n")//;
+         return -1;
+      }
+
+      if ( this_player_in_rolle &&
+           ( (name = this_player_in_rolle->query_real_name()) ||
+             (name = this_player_in_rolle->query_name()) )
+          )
+      {
+          new_command = regreplace( new_command, "\\$tp", name, 1) ;
+          new_command = regreplace( new_command, "\\$Tp", capitalize( name), 1);
+      }
+
+      if ( sizeof( regexp( ({ new_command }), "\\$[tT]p")) == 0 )
+          rolle["partner"][wer]["ob"]->do_command(new_command);
+
+      if( rolle["auto_pause"] )
+         return rolle["auto_pause"];
+   }
+   while( rolle["position"] < sizeof(rolle["text"]) );
+}
+
+void rolle()
+{
+   int pause;
+   mixed res;
+
+   set_heart_beat(1);
+
+   if( !rolle || !in_rolle() )
+   {
+      DEBUG_ROLLE("rolle: Ich habe keine Rolle.\n")//;
+      beende_rolle();
+      return;
+   }
+
+   if(modus!=R_SOUFFLEUR)
+      return;
+
+   if( zustand == R_STOPPED )
+      return;
+
+   if( rolle["version"]==2 ) {rolle_v2(); return;}
+
+   if( rolle["position"] >= sizeof(rolle["text"]) )
+   {
+      DEBUG_ROLLE("rolle: Ich bin am Ende der Rolle.\n")//;
+      beende_rolle();
+      return;
+   }
+
+   if( rolle["time_out"] && !--rolle["time_out"][0] )
+   {
+      if( !res=get_label(rolle["time_out"][1]) )
+      {
+         beende_rolle();
+         return;
+      }
+      rolle["time_out"]=0;
+      rolle["warte"]=0;
+      rolle["waitfun"]=0;
+      DEBUG_ROLLE("rolle: Time-Out-Sprung nach ["+res[0]+"].\n")//;
+      rolle["position"]=res[1];
+   }
+
+   if( (res=rolle["waitfun"]) && !_do_fun_call(res[0],res[1]) )
+      return;
+   else
+      rolle["waitfun"]=0;
+
+   if( rolle["warte"] > 0 )
+   {
+      DEBUG_ROLLE("rolle: Ich warte noch "+rolle["warte"]+" mal.\n")//;
+      rolle["warte"]--;
+      return;
+   }
+
+   if( (pause=drehe_an_rolle()) <= 0 )
+   {
+      if( !pause )
+      {
+         DEBUG_ROLLE("rolle: Ende der Rolle erreicht.\n") //;
+         beende_rolle();
+      }
+      if( pause == -1 )
+         beende_rolle();
+   }
+   else
+   {
+      DEBUG_ROLLE("rolle: Ich beginne eine Pause ("+pause+").\n")//;
+      rolle["warte"] = pause-1;
+   }
+}
+
+/*
+FUNKTION: beginne_rolle
+DEKLARATION: varargs int beginne_rolle(mapping r, string label)
+BESCHREIBUNG:
+Diese Funktion wird im Souffleur mit der Rolle im 1. Argument und dem
+Startlabel im 2. Parameter aufgerufen, wenn alle Voraussetzungen fuer den
+Start der Rolle erfuellt wurden. Sie ruft dann beginne_rolle(0,label) in
+allen weiteren Teilnehmern auf, schaltet den Heart-Beat an und startet die
+Rolle sofort.
+
+Diese Funktion wird Rollen-intern verwendet. Sie darf auf keinen Fall
+"geshadowt" werden. Auch ist diese Funktion nicht dazu gedacht, von jemand
+anderem als starte_rolle() aufgerufen zu werden. Um den Start einer Rolle
+mitzubekommen, gibt es notify_rollenstart.
+
+VERWEISE: starte_rolle, notify_rollenstart
+GRUPPEN: Rollen
+*/
+varargs int beginne_rolle(mapping r, string label)
+{
+   int a;
+   object ob;
+
+   if( !r )
+   {
+      modus = R_PASSIV;
+      souffleur = previous_object();
+      zustand = R_RUNNING;
+      this_player_in_rolle = souffleur->query_this_player_in_rolle();
+      this_object()->notify("rollenstart",this_object(), souffleur,
+          in_rolle(),label);
+      return 1;
+   }
+
+   rolle = r;
+
+   modus = R_SOUFFLEUR;
+   zustand = R_RUNNING;
+   if ( !rollen_wechsel )
+       this_player_in_rolle = this_player() ;
+
+   if(this_object()->forbidden("rollenstart",this_object(),0,rolle["name"],
+      label))
+   {
+         DEBUG_ROLLE("rolle: Start der Rolle durch Controller verboten.\n");
+	 modus = R_AUS;
+	 zustand = R_STANDBY;
+         return 0;
+   }
+   foreach(mapping p:rolle["partner"])
+      if(p["ob"] && p["ob"]->forbidden("rollenstart",p["ob"],this_object(),
+         rolle["name"],label))
+   {
+         DEBUG_ROLLE("rolle: Start der Rolle durch Controller verboten.\n");
+	 modus = R_AUS;
+	 zustand = R_STANDBY;
+         return 0;
+   }
+   if( strlen(label) )
+   {
+      if( !member(rolle["labels"],label) )
+      {
+         debug_rolle2(sprintf("start_rolle: Das Label '%s' gibt es nicht.\n",
+            label),rolle["name"]);
+	 modus = R_AUS;
+	 zustand = R_STANDBY;
+         return 0;
+      }
+      rolle["position"]=rolle["labels"][label];
+   }
+   else
+      rolle["position"] = 0;
+
+   this_object()->notify("rollenstart",this_object(),0,rolle["name"],label);
+   
+   for(a=1;a<sizeof(rolle["partner"]);a++)
+      if(ob=rolle["partner"][a]["ob"])
+         ob->beginne_rolle(0,label);
+
+   set_heart_beat(1);
+   rolle();
+   return 1;
+}
+
+/*
+FUNKTION: forbidden_rollenstart
+DEKLARATION: int forbidden_rollenstart(object wer, object souffleur, string rolle, string label)
+BESCHREIBUNG:
+Bevor in einem Objekt wer die Rolle rolle ab dem Label label gestartet wird,
+wird wer->forbidden("rollenstart", wer, souffleur, rolle, label) aufgerufen,
+wobei souffleur 0 ist, wenn wer der Souffleur ist, ansonsten das Objekt,
+welches die Rolle steuert, ist. Diese Funktion wird in allen Teilnehmern
+der Rolle aufgerufen. Liefert einer dieser Funktionen einen Wert != 0,
+so kann die Rolle nicht gestartet werden.
+
+Die Funktion forbidden ruft dann in allen mit wer->add_controller(
+"forbidden_rollenstart", other) angemeldeten Objekten other die Funktion
+other->forbidden_rollenstart(wer, souffleur, rolle, label) auf.
+Liefert einer der Aufrufe einen Wert != 0, so liefert forbidden diesen.
+VERWEISE: starte_rolle, notify_rollenstart
+GRUPPEN: Rollen
+*/
+
+/*
+FUNKTION: notify_rollenstart
+DEKLARATION: void notify_rollenstart(object wer, object souffleur, string rolle, string label)
+BESCHREIBUNG:
+Wenn in einem Objekt wer die Rolle rolle ab dem Label label gestartet wird,
+dann wird wer->notify("rollenstart", wer, souffleur, rolle, label) aufgerufen,
+wobei souffleur 0 ist, wenn wer der Souffleur ist, ansonsten das Objekt,
+welches die Rolle steuert, ist. Diese Funktion wird in allen Teilnehmern
+der Rolle aufgerufen.
+
+Die Funktion notify ruft dann in allen mit wer->add_controller(
+"notify_rollenstart", other) angemeldeten Objekten other die Funktion
+other->notify_rollenstart(wer, souffleur, rolle, label) auf.
+VERWEISE: starte_rolle, forbidden_rollenstart, notify_rollenende
+GRUPPEN: Rollen
+*/
+
+protected int passt_figur(mapping kriterien)
+{
+   string *i;
+   int a;
+
+   i=m_indices(kriterien)-({"Objekt","Lebewesen"});
+   for(a=sizeof(i);a--;)
+      if( call_other(this_object(),i[a]) != kriterien[i[a]] )
+         return 0;
+   return 1;
+}
+
+
+/*
+FUNKTION: spiele_rolle_mit
+DEKLARATION: int spiele_rolle_mit(mapping rolle)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, um anzufragen, ob dieses Objekt an der
+im 1. Parameter uebergebenen Rolle teilnehmen moechte. Es ist nun Aufgabe
+dieses Objektes die Teilnehmernummer zu suchen, dessen Kriterien auf dieses
+Objekt passen. Ausserdem wird geprueft, ob dieses Objekt bereits an einer Rolle
+teilnimmt oder gerade eine Kampagne spielt. Die Funktion sollte 0 liefern,
+wenn das Objekt nicht teilnehmen kann, ansonsten 1. Dabei sollte es sich
+gleich in der Rolle eintragen.
+VERWEISE: starte_rolle, rolle_machbar, partner_gefunden, spiele_mit_nummer_mit
+GRUPPEN: Rollen
+*/
+int spiele_rolle_mit(mapping rolle)
+{
+   int a;
+
+   if( !this_object()->query_macht_bei_rollen_mit() )
+   {
+      DEBUG_ROLLE("spiele_rolle_mit: Ich spiele keine Rollen mit.\n")//;
+      return 0;
+   }
+
+   if( in_rolle() )
+   {
+      DEBUG_ROLLE("spiele_rolle_mit: Ich bin bereits in einer Rolle.\n")//;
+      return 0;
+   }
+
+   if( this_object()->in_kampagne() )
+   {
+      DEBUG_ROLLE("spiele_rolle_mit: Ich bin gerade in einer Kampagne.\n")//;
+      return 0;
+   }
+
+
+   for(a=1;a<sizeof(rolle["partner"]);a++)
+   {
+      if( !rolle["partner"][a]["ob"] &&
+          passt_figur(rolle["partner"][a]["kriterien"]) )
+      {
+         rolle["partner"][a]["ob"] = this_object();
+         DEBUG_ROLLE("spiele_rolle_mit: ich spiele mit.\n")//;
+         return 1;
+
+      }
+   }
+   DEBUG_ROLLE("spiele_rolle_mit: Ich passe nicht zu dieser Rolle.\n")//;
+}
+
+/*
+FUNKTION: spiele_mit_nummer_mit
+DEKLARATION: int spiele_mit_nummer_mit(mapping rolle, int nr)
+BESCHREIBUNG:
+Diese Funktion wird aufgerufen, um anzufragen, ob dieses Objekt an der
+im 1. Parameter uebergebenen Rolle mit der im 2. Parameter uebergeben
+Nummer teilnehmen moechte. Es ist nun Aufgabe dieses Objektes, die fuer diesen
+Teilnehmer in der Rolle angegeben Kriterien zu pruefen. Ausserdem wird
+geprueft, ob dieses Objekt bereits an einer Rolle teilnimmt oder gerade
+eine Kampagne spielt. Die Funktion sollte -1 liefern, wenn das Objekt nicht
+teilnehmen kann, ansonsten 1. Falls es 0 liefert, werden vom Souffleur nur die
+in der Rolle angegebenen Kriterien geprueft und falls ja, dieses Objekt
+zum mitspielen gezwungen.
+VERWEISE: starte_rolle, rolle_machbar, partner_gefunden, spiele_rolle_mit
+GRUPPEN: Rollen
+*/
+int spiele_mit_nummer_mit(mapping rolle, int nr)
+{
+
+   if( !this_object()->query_macht_bei_rollen_mit() )
+   {
+      DEBUG_ROLLE("spiele_mit_nummer_mit: Ich spiele keine Rollen mit.\n")//;
+      return -1;
+   }
+
+   if( in_rolle() )
+   {
+      DEBUG_ROLLE("spiele_mit_nummer_mit: Ich bin bereits in einer Rolle.\n")//;
+      return -1;
+   }
+
+   if( this_object()->in_kampagne() )
+   {
+      DEBUG_ROLLE("spiele_mit_nummer_mit: Ich bin gerade in einer Kampagne.\n")//;
+      return -1;
+   }
+
+   if( passt_figur(rolle["partner"][nr]["kriterien"]) )
+   {
+      DEBUG_ROLLE("spiele_mit_nummer_mit: ich spiele mit.\n")//;
+      return 1;
+
+   }
+   DEBUG_ROLLE("spiele_mit_nummer_mit: Ich passe nicht zu dieser Rolle.\n")//;
+   return -1;
+}
+
+protected mixed suche_partner_objekt(int a, mixed k, mapping rolle,int liv)
+{
+  mixed raum;
+  if(!stringp(k))
+  {
+    if(objectp(k)) raum=({k});
+    else raum=k;
+    if(pointerp(raum)) raum-=({0});
+  }
+  else
+  {
+    int i;
+    mixed tmp;
+    if(!strlen(k))
+    {
+      debug_rolle2(sprintf("Kriterium fuer %i ist leer.\n",a),rolle["name"]);
+      return 0;
+    }
+    k=map(explode(k,":"),#'strip);
+
+    if(raum=touch(k[0],NO_LOG|NO_WRITE)) i=1;
+    else if(k[0]=="HIER")
+    {
+      raum=this_object();
+      while(raum && !raum->query_room()) raum=environment(raum);
+      if(!raum)
+      {
+        debug_rolle2("Bin im Nirwana! (Zumindest in keinem Raum.)\n",rolle["name"],0,
+         all_environment());
+        return 0;
+      }
+      i=1;
+    }
+    else if((k[0]=="ICH") || (k[0]=="TO")) {raum=this_object(); i=1;}
+    else if(k[0]=="TP") {raum=this_player(); i=1;}
+    if(!raum)
+    {
+      raum=this_object();
+      while(raum && !raum->query_room()) raum=environment(raum);
+      if(!raum)
+      {
+        debug_rolle2("Bin im Nirwana! (Zumindest in keinem Raum.)\n",rolle["name"],0,
+         all_environment());
+        return 0;
+      }
+    }
+    raum=({raum});
+    for(;sizeof(raum) && (i<sizeof(k));i++)
+    {
+      if(k[i]=="^")
+        raum=map(raum,#'environment)-({0});
+      else if(k[i]=="*")
+      {
+        tmp=({});
+        foreach(object x:raum)
+          tmp+=all_inventory(x)-({this_object()});
+        raum=tmp;
+      }
+      else if(sizeof((tmp=
+            map(raum,(:touch($1->query_one_exit($2),NO_LOG|NO_WRITE):),k[i])
+            )-({0})))
+        raum=tmp;
+      else
+      {
+        tmp=({});
+        foreach(object x:raum)
+          tmp+=filter_objects(all_inventory(x)-({this_object()}),"id",k[i]);
+        raum=tmp;
+      }
+    }
+  }
+  raum=filter(raum,(:!playerp($1):));
+  if(liv) raum=filter(raum,#'living);
+  return raum;
+}
+
+/*
+FUNKTION: partner_gefunden
+DEKLARATION: int partner_gefunden(mapping rolle)
+BESCHREIBUNG:
+Diese Funktion sucht die fuer die uebergebene Rolle benoetigten Teilnehmer
+und traegt sie im Mapping ein. Sie liefert 1 bei Erfolg, ansonsten 0.
+VERWEISE: starte_rolle, rolle_machbar
+GRUPPEN: Rollen
+*/
+int partner_gefunden(mapping rolle)
+{
+   int a, fehlen;
+   object *inv;
+
+   fehlen=sizeof(rolle["partner"]) - 1;
+
+   if( fehlen <= 0 )
+   {
+      DEBUG_ROLLE("partner_gefunden: Ich brauche keine Partner.\n")//;
+      return 1;
+   }
+
+   DEBUG_ROLLE("partner_gefunden: Ich brauche "+fehlen+" Partner fuer "+
+      "diese Rolle.\n")//;
+
+   for(a=sizeof(rolle["partner"])-1;a>0;a--)
+   {
+     mixed k,raum,tmp;
+     k=rolle["partner"][a]["kriterien"]["Objekt"];
+     if(!k) {k=rolle["partner"][a]["kriterien"]["Lebewesen"]; raum=1;}
+     if(!k) continue;
+     raum=suche_partner_objekt(a,k,rolle,raum);
+     if(!raum) return 0;
+     if((!pointerp(raum)) || (!sizeof(raum)))
+     {
+       //debug_rolle2("Objekt \""+k+"\" nicht gefunden.\n",rolle["name"]);
+       DEBUG_ROLLE("Objekt \""+k+"\" nicht gefunden.\n");
+       return 0;
+     }
+     foreach(tmp:raum)
+     {
+       DEBUG_ROLLE("partner_gefunden: Ich pruefe "+object_name(tmp)+".\n");
+       if( (k=tmp->spiele_mit_nummer_mit(rolle,a)) >= 0)
+       {
+          if(!k) //Objekt inheritet nicht rollen.c -> eigener Test
+          {
+            int i;
+            if(call_resolved(&i,tmp,"query_macht_bei_rollen_mit") && !i)
+              continue;
+            k=m_indices(rolle["partner"][a]["kriterien"])-({"Objekt","Lebewesen"});
+            for(i=sizeof(k);i--;)
+              if(call_other(tmp,k[i])!=rolle["partner"][a]["kriterien"][k[i]])
+                break;
+            if(i>=0) continue;
+          }
+          rolle["partner"][a]["ob"] = tmp;
+          DEBUG_ROLLE("partner_gefunden: Er passt und ist eingetragen.\n");
+          fehlen--;
+          if( fehlen <= 0 )
+            return 1;
+          else
+            break;
+       }
+     }
+     if(!rolle["partner"][a]["ob"])
+     {
+       DEBUG_ROLLE("Habe kein passendes Objekt gefunden.\n");
+       return 0;
+     }
+   }
+
+   if( environment() )
+      inv=all_inventory(environment());
+   else
+      inv=all_inventory();
+   for(a=sizeof(inv);a--;)
+   {
+      if( inv[a] == this_object() )
+         continue;
+      DEBUG_ROLLE("partner_gefunden: Ich pruefe "+
+         inv[a]->query_cap_name()+".\n")//;
+      if( inv[a]->spiele_rolle_mit(rolle) )
+      {
+         DEBUG_ROLLE("partner_gefunden: Er passt und ist eingetragen.\n")//;
+         fehlen--;
+         if( fehlen <= 0 )
+         return 1;
+      }
+   }
+   return 0;
+}
+
+/*
+FUNKTION: rolle_machbar
+DEKLARATION: int rolle_machbar(mapping rolle)
+BESCHREIBUNG:
+Ueberprueft, ob die uebergebene Rolle jetzt durchfuehrbar ist.
+Dazu werden alle in der Rolle angegebenen Kritieren fuer den Startraum und
+die Rollenpartner ueberprueft. Die Funktion besetzt alle Rollenpartner und
+liefert 1 zurueck, falls die Rolle ausfuehrbar ist. Anderenfalls liefert sie 0.
+VERWEISE: starte_rolle, partner_gefunden
+GRUPPEN: Rollen
+*/
+int rolle_machbar(mapping rolle)
+{
+   mixed tmp;
+   int l;
+
+   if( rolle["start_ort"]
+    && (tmp=explode(object_name(environment()||this_object()),"#")[0])!=rolle["start_ort"]
+    && map2domain(tmp,1)!=(rolle["start_ort"]+".lpc") )
+   {
+      DEBUG_ROLLE("rolle_machbar: Wir sind nicht am verlangten Startort\n"
+                  "       ("+rolle["start_ort"]+").\n");
+      return 0;
+   }
+
+   tmp=rolle["partner"][0]["kriterien"]["Objekt"];
+   if(!tmp) {tmp=rolle["partner"][0]["kriterien"]["Lebewesen"]; l=1;}
+   if(tmp)
+   {
+     tmp=suche_partner_objekt(0,tmp,rolle,l);
+     if((!tmp) || (member(tmp,this_object())<0))
+     {
+       DEBUG_ROLLE("rolle_machbar: Ich passe nicht zu dieser Rolle!\n");
+       return 0;
+     }
+   }
+
+   if( !passt_figur(rolle["partner"][0]["kriterien"]) )
+   {
+      DEBUG_ROLLE("rolle_machbar: Ich passe nicht zu dieser Rolle.\n")//;
+      return 0;
+   }
+
+   rolle["partner"][0]["ob"]=this_object();
+
+   if( !partner_gefunden(rolle) )
+   {
+      DEBUG_ROLLE("rolle_machbar: Ich konnte nicht alle "+
+         "Partner auftreiben.\n")//;
+      return 0;
+   }
+   return 1;
+}
+
+
+/*
+FUNKTION: starte_rolle
+DEKLARATION: varargs int starte_rolle(string rollenname, string label, varargs mixed *params)
+BESCHREIBUNG:
+Mit starte_rolle kann man ein Objekt dazu veranlassen, eine Rolle abzuspielen.
+Dazu muss nur der Filename der Rolle in rollenname angegeben werden.
+Der Dateiname kann auch relativ zum Objektnamen angegeben werden.
+Moechte man erreichen, dass die Rolle ab einem bestimmten Label gestartet
+wird, so kann man dieses in 'label' uebergeben.
+Man kann nach dem 2. Parameter noch weitere Parameter fuer die Rollen der
+Version 2 uebergeben, welche mit der Option 'Version: 2' in den Rollendateien
+aktiviert wird. Auf die Parameter kann innerhalb der Rollen mit #1, #2 usw.
+zugegriffen werden.
+Die Funktion liefert 1, bei erfolgreichen Start der Rolle, ansonsten 0.
+VERWEISE: in_rolle, query_rolle, restart_rolle, breche_rolle_ab,
+          notify_rollenstart, notify_rollenstop
+GRUPPEN: Rollen
+*/
+varargs int starte_rolle(string rollenname, string label, varargs mixed *params)
+{
+   mapping _rolle;
+
+   if(!allowed_dirs)
+      raise_error("Rollen wurden nicht korrekt initialisiert.\n(Kein ::create() aufgerufen?)\n");
+      
+   if( in_rolle() )
+   {
+      DEBUG_ROLLE("starte_rolle: Ich bin bereits im Modus: "+modus+".\n")//;
+      return 0;
+   }
+   if( !rollenname )
+   {
+      DEBUG_ROLLE("starte_rolle: Kein Rollenname uebergeben.\n")//;
+      return 0;
+   }
+   rollenname=abs_path(rollenname);
+
+   if((!rollen_wechsel)
+    &&(!sizeof(filter(allowed_dirs,(:!strstr($2,$1):),rollenname))))
+   {
+      debug_rolle2("starte_rolle: Rolle "+rollenname
+        +" liegt nicht in den erlaubten Verzeichnissen.\n",__FILE__,
+        __LINE__,allowed_dirs);
+      return 0;
+   }
+
+   if( function_exists("rolle_erwuenscht",this_object()) &&
+       !this_object()->rolle_erwuenscht(rollenname) )
+   {
+      DEBUG_ROLLE("starte_rolle: Rolle "+rollenname+
+         " von rolle_erwuenscht() abgelehnt.\n")//;
+      return 0;
+   }
+   if( !(_rolle=lese_rolle(rollenname,rolle)) )
+   {
+      DEBUG_ROLLE("starte_rolle: Die Rolle "+rollenname+
+         " konnte ich nicht einlesen.\n")//;
+      return 0;
+   }
+   if( !rolle_machbar(_rolle) )
+   {
+      DEBUG_ROLLE("starte_rolle: Die Rolle "+rollenname+
+         "\n                 ist nicht machbar.\n")//;
+      return 0;
+   }
+   rollen_parameter=params;
+   return beginne_rolle(_rolle,label);
+}
+
+
+/*
+FUNKTION: breche_rolle_ab
+DEKLARATION: int breche_rolle_ab()
+BESCHREIBUNG:
+Mit breche_rolle_ab kann man eine Rolle komplett abbrechen. Wenn dabei
+kein Fehler auftritt, wird 1 zuruckgeliefert, sonst 0.
+Es wird abschliessend rolle_beendet aufgerufen.
+VERWEISE: starte_rolle, stoppe_rolle, restart_rolle, rolle_beendet,
+          notify_rollenstart, notify_rollenstop
+GRUPPEN: Rollen
+*/
+int breche_rolle_ab()
+{
+   if( !in_rolle() )
+   {
+      DEBUG_ROLLE("breche_rolle_ab: Ich bin in keiner Rolle.\n")//;
+      return 1;
+   }
+
+   if( modus == R_PASSIV )
+   {
+      if( !souffleur )
+      {
+         DEBUG_ROLLE("breche_rolle_ab: Kein Souffleur; ich breche ab.\n")//;
+         beende_rolle();
+         return 1;
+      }
+      if( !souffleur->breche_rolle_ab() )
+      {
+         DEBUG_ROLLE("breche_rolle_ab: Souffleur "+
+            souffleur->query_cap_name()+" bricht nicht ab.\n")//;
+         return 0;
+      }
+      DEBUG_ROLLE("breche_rolle_ab: Souffleur "+souffleur->query_cap_name()+
+         " hat zugestimmt und bricht ab.\n")//;
+      beende_rolle();
+      return 1;
+   }
+
+   if( modus == R_SOUFFLEUR )
+   {
+      if( !rolle["abbrechbar"] )
+      {
+         DEBUG_ROLLE("breche_rolle_ab: Die Rolle ist nicht abbrechbar.\n")//;
+         return 0;
+      }
+      beende_rolle();
+      return 1;
+   }
+}
+
+
+/*
+FUNKTION: set_this_player_in_rolle
+DEKLARATION: void set_this_player_in_rolle( object tp)
+BESCHREIBUNG:
+Mit dieser Funktion kann das Objekt, das als 'this_player' in der Rolle
+gilt, veraendert werden. Zu Beginn einer Rolle wird es automatisch auf
+this_player() gesetzt, so dass man diese Funktion nur in Spezialfaellen
+benoetigen duerfte.
+In Rollen kann man mittels $0 auf diesen 'this_player' zugreifen.
+Anwendungen in der Rolle:
+  1: knuddle $$0
+  1: ich streckt &dem($$0) die Zunge raus.
+  1: ich gratuliert &dem($$0). &Der($$0) $(findet,findest) das prima.
+  1: ich sagt zu &dem($$2): $Den($0) mag ich gern.
+  1: sage Hallo, $$0->query_cap_name()!
+
+VERWEISE: query_this_player_in_rolle
+GRUPPEN: Rollen
+*/
+void set_this_player_in_rolle( object tp)
+{
+    int  a;
+
+    switch( modus )
+    {
+        case R_SOUFFLEUR:
+            this_player_in_rolle = tp ;
+            for( a = 1 ; a <sizeof( rolle["partner"]) ; a++ )
+                if( rolle["partner"][a]["ob"] )
+                    rolle["partner"][a]["ob"]->set_this_player_in_rolle( tp);
+            break;
+
+        case R_PASSIV:
+            if( souffleur )
+            {
+                if ( previous_object() == souffleur )
+                    this_player_in_rolle = tp ;
+                else
+                    souffleur->set_this_player_in_rolle( tp) ;
+            }
+    }
+}
+
+
+/*
+FUNKTION: query_this_player_in_rolle
+DEKLARATION: object query_this_player_in_rolle()
+BESCHREIBUNG:
+Mit dieser Funktion kann das Objekt, das als 'this_player' in der Rolle
+gilt, abgefragt werden.
+Genauere Beschreibung: siehe set_this_player_in_rolle.
+VERWEISE: set_this_player_in_rolle
+GRUPPEN: Rollen
+*/
+object query_this_player_in_rolle()
+{
+    return this_player_in_rolle ;
+}
+
+/*
+FUNKTION: query_rollen_partner
+DEKLARATION: object query_rollen_partner(int nr)
+BESCHREIBUNG:
+Liefert den Partner mit der jeweiligen Nummer. (0 entspricht dem
+this_player_in_rolle). Falls kein Rollenpartner mit der Nummer existiert,
+oder keine Rolle aktiv ist, wird 0 geliefert.
+VERWEISE: in_rolle, query_this_player_in_rolle
+GRUPPEN: Rollen
+*/
+object query_rollen_partner(int nr)
+{
+   if( (nr<0) || !in_rolle() )
+      return 0;
+
+   if( !nr )
+      return query_this_player_in_rolle();
+   else if( modus == R_SOUFFLEUR )
+   {
+      if(nr>sizeof(rolle["partner"]))
+         return 0;
+      else
+         return rolle["partner"][nr-1]["ob"];
+   }
+   else if( modus == R_PASSIV )
+   {
+      if( !souffleur )
+         return 0;
+      else
+         return souffleur->query_rollen_partner(nr);
+   }
+}
+
+/*
+FUNKTION: set_rollen_dirs
+DEKLARATION: nosave void set_rollen_dirs(mixed dirs)
+BESCHREIBUNG:
+Damit setzt man die Verzeichnisse, aus denen die Rollendateien kommen duerfen.
+Man kann entweder ein einzelnes Verzeichnis oder ein Array aus Verzeichnissen
+angeben. Mit 0 deaktiviert man Rollen. Diese Bedingung gilt nur fuer
+starte_rolle, nicht fuer die bei Wechsel_Rolle angegebenen Rollen.
+Standardmaessig ist "/" gesetzt.
+VERWEISE: query_rollen_dirs, starte_rolle
+GRUPPEN: Rollen
+*/
+nosave void set_rollen_dirs(mixed dirs)
+{
+  if(stringp(dirs))
+    allowed_dirs=({(sizeof(dirs) && dirs[<1]=='/')?dirs:(dirs+"/")});
+  else if(pointerp(dirs))
+    allowed_dirs=map(dirs,(: (!stringp($1))?0:(sizeof($1) && $1[<1]=='/')?$1:($1+"/") :))-({0});
+  else
+    allowed_dirs=({});
+}
+
+/*
+FUNKTION: query_rollen_dirs
+DEKLARATION: string *query_rollen_dirs()
+BESCHREIBUNG:
+Liefert die mit set_rollen_dirs gesetzten Verzeichnisse zurueck.
+VERWEISE: set_rollen_dir, starte_rolle
+GRUPPEN: Rollen
+*/
+string *query_rollen_dirs()
+{
+  return deep_copy(allowed_dirs);
+}
+
+void heart_beat()
+{
+  if(in_rolle() && query_rollen_modus()==R_SOUFFLEUR)
+  {
+    rolle();
+    return;
+  }
+  set_heart_beat(0);
+}
+
+void create()
+{
+    set_rollen_dirs("");
+    clear_makros();
+    clear_konstanten();
+    clear_defines();
+    add_define("__LPC_PARSER__");
+    add_parser(#'partnerparser);
+    add_parser(#'parameterparser);
+}
+
+void reset()
+{
+    if(!in_rolle())
+	rolle = ([]); // Speicher sparen.
+}
+
+private nosave int parser_initialized = 0;
+
+void init_lpc_parser()
+{
+    if(parser_initialized)
+	return;
+    parser_initialized = 1;
+    if(!is_makro("QUERY"))
+    {
+	mapping makros, defines, konstanten; // Falls jemand schon was gemacht hat.
+	makros = query_makros();
+	defines = query_defines();
+	konstanten = query_konstanten();
+	lpc_parser::create();
+	walk_mapping(makros, #'add_makro);
+	walk_mapping(defines, #'add_define);
+	walk_mapping(konstanten, #'add_konstante);
+    }
+    read_include("/sys/message.h");
+}

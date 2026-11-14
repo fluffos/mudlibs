@@ -1,0 +1,2499 @@
+// This file is part of UNItopia Mudlib.
+// -----------------------------------------------------------------------
+//  Datei:  /room/rathaus/obj/uiko.c
+//  Autor:  Myonara 28.Sep.2014 
+// -----------------------------------------------------------------------
+// Beschreibung: Der AutoLoader/Kobold fuer Umfragen und Ideen
+// -----------------------------------------------------------------------
+//
+// Aenderungen:
+//  $Log: uiko.c,v $
+//  Revision 1.12  2014/12/21 15:20:48  myonara
+//  BugFix in idee_uebersicht_display.
+//
+//  Revision 1.11  2014/11/09 14:24:42  myonara
+//  Funktionailitaet Beitraege Gelesen/Ungelesen
+//
+//  Revision 1.10  2014/11/01 14:53:36  myonara
+//  Diskussion und Ignoriere. wrap_say bei Kommunikationen
+//
+//  Revision 1.9  2014/10/30 17:45:05  myonara
+//  Anpassungen Diksussion und Beitraege
+//
+//  Revision 1.8  2014/10/19 07:09:40  myonara
+//  msg_to_clones und idee:aktuell
+//
+//  Revision 1.7  2014/10/18 09:18:41  myonara
+//  Auswertungen angepasst
+//
+//  Revision 1.6  2014/10/16 18:02:32  myonara
+//  Neuer Befehl idee:offeneStimmen oder i:o
+//
+//  Revision 1.5  2014/10/16 04:57:58  myonara
+//  Auswertung Ideen, neue Umfragen.
+//
+//  Revision 1.4  2014/10/06 05:06:38  myonara
+//  uiko:lerne fuer das Erneuern durch Spieler.
+//
+//  Revision 1.3  2014/10/05 19:44:19  myonara
+//  Jede Menge Features und BugFixes.
+//
+//  Revision 1.2  2014/10/04 11:19:34  myonara
+//  Einbaufertig
+//
+//  Revision 1.1  2014/10/03 17:22:29  myonara
+//  Neuerstellung
+//
+
+inherit "/i/tools/security";
+inherit "%monster/monster";
+inherit "/i/tools/dynamic_browser";
+
+#include <commands.h>
+#include <dynamic_browser.h>
+#include <editor.h>
+#include <files.h>
+#include <input_to.h>
+#include <level.h>
+#include <message.h>
+#include <misc.h>
+#include <move.h>
+#include <properties.h>
+#include <umfragen.h>
+
+#define IST_RAUM    1
+#define IST_SPIELER 2
+#define IST_ENGEL   3
+#define IST_GOTT    4
+#define IST_ADMIN   5
+#define IDEE_TMP_FILE ("/w/"+geteuid()\
+    	              +((file_size("/w/"+geteuid()+"/priv")==FSIZE_DIR)?"/priv":"")\
+	              +"/IDEE")
+#define PANTHEON2TEXT(x) ("Publikum: "+((x)?"Pantheon":"Spieler und Pantheon"))
+#define PDBG(x) send_message_to( ({find_player("myonara") }), \
+                    MT_DEBUG, MA_UNKNOWN, wrap(x))
+                  
+private int umgebung, *selected_status = ({ }), *selected = ({});
+private mapping pl_tmp = ([ ]);
+private object master, *rclones = ({});
+private mapping al_options = ([ ]);
+private int db_version;
+
+private int uiko_lerne();
+void msg_to_clones(string pre, string msg);
+
+nomask int query_no_move() 
+{
+    return 1;
+}
+
+private object get_master()
+{
+    if (objectp(master))
+        return master;
+    master = find_object(UMFRAGE_MASTER) || touch(UMFRAGE_MASTER);
+    return master;
+}
+
+private int query_commander(object pl)
+{
+    return adminp(pl);
+}
+
+private int check_ob(object env)
+{
+    if (!env || guestp(env)) 
+        return 0;
+    if (env->is_room())
+        return 0; // IST_RAUM; deaktiviert, da nicht getestet.
+    else if (adminp(env))
+        return IST_ADMIN;
+    else if (wizp(env))
+        return IST_GOTT;
+    else if (hlpp(env))
+        return IST_ENGEL;
+    else if (playerp(env))
+        return IST_SPIELER;
+    return 0;
+}
+
+private void check_env(object pl)
+{
+    umgebung = check_ob(ENV_TO);
+    if (clonep() && umgebung == 0 )
+    {
+        call_out("remove",0);
+        send_message_to( ({ pl }),MT_LOOK, MA_LOOK, wrap(
+            "Der Kobold verschwindet so schnell wie er erschien."));
+    }
+}
+
+string query_long(object viewer)
+{
+    string l = "Ein winziger Umfrage- und Ideenkobold (kurz UIKO), ";
+    if (umgebung == IST_RAUM)
+    {
+        l += "der in einer Ecke hockt. ";
+    }
+    else if (viewer == ENV_TO)
+    {
+        l += "der Dir helfend auf der Schulter hockt. ";
+    }
+    else
+    {
+        l += "der "+ihm(ENV_TO)+" helfend auf der Schulter hockt.";
+        return wrap(l);
+    }
+    l += "Die Befehlsliste/Hilfe ist mit idee:? bzw. i:? einsehbar.";
+    return wrap(l);
+    
+}
+
+private void check_version()
+{
+    int db_neu = get_master()->get_current_version();
+    if (db_version == db_neu)
+    {
+        return;
+    }
+    db_version = db_neu;
+    // TODO Nachricht ueber alle Aenderungen??
+}
+
+mixed query_auto_load()
+{
+    return ([
+           "DB_VERSION" : db_version,
+           ]);
+}
+
+void init_arg(mixed data)
+{
+    if (!mappingp(data))
+    	return;
+    if (member(data,"DB_VERSION"))
+    {
+        db_version = data["DB_VERSION"];
+        call_out(#'check_version, 4);
+    }
+}
+
+private void set_pl_tmp(object pl, string key, mixed value)
+{
+    if (!playerp(pl))
+        return;
+    if (!stringp(key))
+    {
+        m_delete(pl_tmp, pl);
+        return;
+    }
+    if (value == 0)
+    {
+        if (!member(pl_tmp,pl))
+        {
+            return; //nothing to delete
+        }
+        else if (!member(pl_tmp[pl],key))
+        {
+            return; // key not existent, nothing to delete
+        }
+        else
+        {
+            m_delete(pl_tmp[pl],key);
+            if (!sizeof(pl_tmp[pl]))
+            {
+                m_delete(pl_tmp, pl);
+            }
+        }
+    }
+    else
+    {
+        if (!member(pl_tmp,pl))
+        {
+            pl_tmp[pl] = ([ key : value ]);
+        }
+        else
+        {
+            pl_tmp[pl][key] = value;
+        }
+    }
+}
+
+private mixed query_pl_tmp(object pl, string key)
+{
+    if (member(pl_tmp,pl) && member(pl_tmp[pl],key))
+        return pl_tmp[pl][key];
+    return 0;
+}
+
+private void idee_neu_pantheon(string str)
+{
+    int flag;
+    switch (lower_case(space(str)))
+    {
+    case "~q":
+    case ".":
+        send_message_to(TP, MT_LOOK, MA_READ, wrap("Idee abgebrochen."));
+        set_pl_tmp(TP, 0, 0);
+        return;
+    case "s":
+        flag = 0;
+        break;
+    case "p":
+        flag = 1;
+        break;
+    default:
+        input_to(#'idee_neu_pantheon, INPUT_PROMPT, 
+            "Sollen die Idee (S)pieler und Pantheon \n"
+            "oder nur das (P)antheon sehen? (S/P/~q):");
+        return;
+    }
+    int i_id = get_master()->add_idee(
+                    query_pl_tmp(TP,"Titel"),
+                    query_pl_tmp(TP,"Inhalt"),
+                    TP_RN, UMFRAGE_S_NEU, flag);
+    set_pl_tmp(TP, 0, 0);
+    if (i_id <= 0)
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, 
+            wrap("Fehler beim Anlegen der Idee."));
+        return;
+    }
+    int u_id = master->add_umfrage(
+                    "Wie gefaellt Dir die Idee?",
+                    TP_RN, UMFRAGE_S_NEU, i_id, flag);
+    if (u_id <= 0)
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, 
+            wrap("Fehler beim Anlegen der Umfrage zur Idee."));
+        return;
+    }
+    if (  master->add_antwort(u_id, "Mag ich") <= 0
+        || master->add_antwort(u_id, "Neutral") <= 0
+        || master->add_antwort(u_id, "Mag ich nicht") <= 0)
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, 
+            wrap("Fehler beim Anlegen der Antworten zur Idee."));
+        return;
+    }
+    if ( master->aktiviere_idee_und_umfrage(i_id, u_id) <= 0)
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, 
+            wrap("Fehler beim Aktivieren der Idee."));
+        return;
+    }
+    send_message_to(TP, MT_LOOK, MA_READ, 
+        wrap("Idee erfolgreich bereitgestellt, warten auf Adminfreigabe."));
+    PDBG("Neue Idee von "+TP_RCN);
+}
+
+private void idee_neu_rumpf(string *puffer)
+{
+    if (puffer == 0)
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, 
+            wrap("Idee nicht gespeichert."));
+        set_pl_tmp(TP, 0, 0);
+        return;
+    }
+    // TODO Inhalt pruefen
+    set_pl_tmp(TP, "Inhalt", implode(puffer,"\n"));
+    input_to(#'idee_neu_pantheon, INPUT_PROMPT, 
+        "Sollen es (S)pieler und Pantheon \n"
+        "oder nur das (P)antheon sehen (S/P/~q):");
+}
+
+private void idee_neu_titel(string titel)
+{
+    titel = space(titel);
+    if (titel == "" || lower_case(titel) == "~q" || titel == ".")
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, wrap("Idee abgebrochen."));
+        return;
+    }
+    if (strlen(titel)>70) 
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, wrap("Titel zu lang (70)."));
+        return;
+    }
+    set_pl_tmp(TP, 0, 0);
+    set_pl_tmp(TP, "Titel", titel);
+    TP->mini_ed(#'idee_neu_rumpf, 0,
+      IDEE_TMP_FILE, 
+      ([
+         MINI_ED_START_TEXT:
+            "Gib nun die Ideenzusammenfassung an\n"+
+            "Mit '**' oder '.' beenden, mit '~q' abbrechen.\n",
+         MINI_ED_NAME:
+            titel,
+      ]),
+      ([
+         MINI_ED_FORCE_WRAP: 1
+      ]), 0);    
+}
+
+private int idee_neu()
+{
+    string intro = 
+"Bitte gib einen kurzen und praegnanten Titel ein gefolgt von einer "
+"Zusammenfassung Deiner Idee. Die Erfahrung zeigt, dass zu lange Texte "
+"von anderen nicht gelesen werden. Die Ideen werden den anderen Spielern "
+"anonym zur Wahl gestellt, aber die Admins koennen den Ersteller einsehen. "
+"Mit ~q am Zeilen Anfang kannst Du ohne zu speichern abbrechen.";
+    
+    send_message_to(TP, MT_LOOK, MA_READ, wrap(intro));
+    
+    input_to(#'idee_neu_titel, INPUT_PROMPT, "Titel:");
+    return 1;
+}
+
+private void umfrage_neue_antwort(string str, mixed menues, int u_id)
+{
+    str = space(str);
+    get_master();
+    switch (str)
+    {
+    case ".":
+    case "~q":
+        browse_write_line("Eingabe neue Antwort abgebrochen");
+        break;
+    case "":
+        input_to(#'umfrage_neue_antwort, INPUT_PROMPT, 
+                         "Neue Antwort:",menues,u_id);
+        return;
+    default:
+        if (master->add_antwort(u_id, str))
+        {
+            browse_write_line("Antwort eingefuegt.");
+            break;
+        }
+        else
+        {
+            browse_write_line("Antwort nicht eingefuegt.");
+            break;
+        }
+    }
+    dynamic_browse(menues);
+}
+
+private void umfrage_neu_pantheon(string str, mixed menues, int i_id, 
+        string frage)
+{
+    int flag, u_id;
+    switch (lower_case(space(str)))
+    {
+    case "~q":
+    case ".":
+        send_message_to(TP, MT_LOOK, MA_READ, wrap("Umfrage abgebrochen."));
+        return;
+    case "s":
+        flag = 0;
+        break;
+    case "p":
+        flag = 1;
+        break;
+    default:
+        input_to(#'umfrage_neu_pantheon, INPUT_PROMPT, 
+            "Soll die Umfrage von (S)pieler und Pantheon \n"
+            "oder nur vom (P)antheon gesehen werden? (S/P/~q):",
+            menues,i_id, frage);
+        return;
+    }
+    u_id = get_master()->add_umfrage(frage,TP_RN,UMFRAGE_S_NEU,i_id,flag);
+    if (u_id == 0)
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, wrap(
+            "Umfrage aufgrund eines internen Fehler nicht angelegt."));
+        return;
+    }
+    if (pointerp(menues))
+    {
+        menues[<1][B_FLAGS] |= BF_DIRTY;
+        dynamic_browse(menues + ({([
+                        B_TYPE : "umfrage_wahl",
+                        UI_OPT_U_ID : u_id,
+                        B_START_LINE : 0
+                    ]) }) );
+    }
+    else
+    {
+        dynamic_browse( ([
+                        B_TYPE : "umfrage_wahl",
+                        UI_OPT_U_ID : u_id,
+                        B_START_LINE : 0
+                    ]) );
+    }
+    browse_write_line("Umfrage angelegt, Antworten einfuegen.");
+}
+
+private void umfrage_neu_frage(string frage, mixed menues, int i_id)
+{
+    frage = space(frage);
+    if (frage=="~q" || frage==".")
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, wrap("Umfrage abgebrochen."));
+        return;
+    }
+    if (frage == "" || strlen(frage)> 70)
+    {
+        input_to(#'umfrage_neu_frage, INPUT_PROMPT, "Frage:", menues, i_id);
+        return;
+    }
+    input_to(#'umfrage_neu_pantheon, INPUT_PROMPT, 
+            "Soll die Umfrage von (S)pieler und Pantheon \n"
+            "oder nur vom (P)antheon gesehen werden? (S/P/~q):",
+            menues,i_id, frage);
+}
+
+varargs private int umfrage_neu(mixed menues, int i_id)
+{
+    string intro =
+"Bitte gib die Frage der Umfrage ein, die neu zu erstellen ist. "
+"Abbruch jederzeit mit ~q oder einem einzelnen Punkt moeglich.";
+    send_message_to(TP, MT_LOOK, MA_READ, wrap(intro));
+    
+    input_to(#'umfrage_neu_frage, INPUT_PROMPT, "Frage:", menues, i_id);
+    return 1;
+}
+
+private void diskussion_neu_rumpf(string *puffer)
+{
+    if (puffer == 0)
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, 
+            wrap("Diskussionsbeitrag nicht gespeichert."));
+        mixed menues = query_pl_tmp(TP, "Menues");
+        set_pl_tmp(TP, 0, 0);
+        dynamic_browse(menues);
+        return;
+    }
+    // TODO Inhalt pruefen
+    set_pl_tmp(TP, "Inhalt", implode(puffer,"\n"));
+    switch(get_master()->add_diskussionsbeitrag(
+            query_pl_tmp(TP, "d_id"),TP_RN,
+            query_pl_tmp(TP, "Titel"),
+            query_pl_tmp(TP, "Inhalt")))
+    {
+    case 0:
+    case -2:
+        browse_write_line("Interner Fehler bei der Beitragserstellung.");
+        break;
+    case -1: 
+        browse_write_line("Diskussion nimmt keine neuen Beitraege an.");
+        break;
+    case 1:
+        browse_write_line("Beitrag angelegt.");
+        break;
+    break;
+    }
+    mixed menues = query_pl_tmp(TP, "Menues");
+    menues[<1][B_FLAGS] |= BF_DIRTY;
+    set_pl_tmp(TP, 0, 0);
+    dynamic_browse(menues);
+}
+
+private void diskussion_neu_titel(string titel, mixed menues, int d_id)
+{
+    titel = space(titel);
+    if (titel == "" || lower_case(titel) == "~q" || titel == ".")
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, wrap("Beitrag abgebrochen."));
+        dynamic_browse(menues);
+        return;
+    }
+    if (strlen(titel)>50) 
+    {
+        send_message_to(TP, MT_LOOK, MA_READ, wrap("Titel zu lang (50)."));
+        dynamic_browse(menues);
+        return;
+    }
+    set_pl_tmp(TP, 0, 0);
+    set_pl_tmp(TP, "Titel", titel);
+    set_pl_tmp(TP, "Menues", menues);
+    set_pl_tmp(TP, "d_id", d_id);
+    
+    TP->mini_ed(#'diskussion_neu_rumpf, 0,
+      IDEE_TMP_FILE, 
+      ([
+         MINI_ED_START_TEXT:
+            "Gib nun den Diskussionsbeitrag an\n"+
+            "Mit '**' oder '.' beenden, mit '~q' abbrechen.\n",
+         MINI_ED_NAME:
+            titel,
+      ]),
+      ([
+         MINI_ED_FORCE_WRAP: 1
+      ]), 0);    
+}
+
+private int diskussionsbeitrag_neu(mixed menues, int d_id)
+{
+    string intro =
+"Bitte gib den Diskussionsbeitrag mit Titel und Inhalt an. "
+"Abbruch jederzeit mit ~q oder einem einzelnen Punkt moeglich.";
+    send_message_to(TP, MT_LOOK, MA_READ, wrap(intro));
+    
+    input_to(#'diskussion_neu_titel, INPUT_PROMPT, "Titel:", menues, d_id);
+    return 1;
+}
+
+
+#define HILFE_TEXT \
+"Im folgenden wird eine alternative kurzform in Klammern angegeben:\n"\
+"idee:neu(i:n) legt eine neue Idee mit Standardumfrage an.\n" \
+"idee:wahl(i:w) zeigt die aktiv zur Wahl stehenden Ideen in einem Menu an.\n" \
+"idee:offeneStimmen (i:o) zeigt nur die Ideen an, deren Wahl aussteht.\n" \
+"idee:meine(i:m) zeigt die eigenen Ideen an, unabhaengig vom Status.\n" \
+"idee:aktuell(i:a) zeigt die aktuell zur Diskussion stehende Idee an.\n" \
+"idee:diskussion(i:d) zeigt die zur Diskussion stehenden Ideen an.\n" \
+"idee:ignoriert zeigt alle ignorierten Ideen an.\n" \
+"uiko:lerne   Falls noetig, verreist Uiko kurz, um was neues zu lernen.\n" \
+"uiko:verjage  verjagt den Kobold.\n"
+
+#define HILFE_TEXT_ADMIN \
+"Befehle nur fuer Admins:\n" \
+"idee:bereit(i:b) zeigt die auf Freigabe wartenden Ideen in einem Menu an.\n" \
+"idee:alle zeigt Ideen unabhaengig vom Status an.\n" \
+"idee:aktuellaus deaktiviert die aktuelle Idee wieder.\n" \
+"idee:auswertung-s zeigt die Auswertung aller Spielerideen an.\n" \
+"idee:auswertung-p zeigt die Auswertung aller Pantheonsideen an.\n" \
+"idee:auswertung-sp zeigt die Auswertung aller Ideen(Spieler und Pantheon)an.\n" \
+"umf:neu (u:n) legt eine neue Umfrage unabhaengig von einer Idee an.\n"\
+"uiko:sql <query> setzt ein sql-Kommando an die Datenbank ab.\n" \
+"uiko:tablelist <table> zeigt alle oder eine bestimmte Tabelle an.\n"\
+"uiko:dbglog zeigt das debuglog der Datenbank an.\n"
+
+int idee_cmd(string str)
+{
+    if (!check_security())
+        return 0;
+    str = lower_case(space(str)); // behandelt zuviele spaces und 0=>""
+    switch (str)
+    {
+    default:
+    case "":
+    case "hilfe":
+    case "?":
+        send_message_to(TP, MT_LOOK, MA_READ, 
+            query_commander(TP) ? HILFE_TEXT+HILFE_TEXT_ADMIN : HILFE_TEXT
+            );
+        return 1;
+    case "n":
+    case "neu":
+        return idee_neu();
+    case "a":
+    case "aktuell":
+        dynamic_browse( ([ B_TYPE:"idee_aktuell" ]) );
+        return 1;
+    case "aktuellaus":
+        if (query_commander(TP))
+        {
+            get_master()->set_aktuelle_idee(0);
+            browse_write_line("Aktuelle Idee zurueckgesetzt.");
+        }
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return 1;
+    case "alle":
+        if (query_commander(TP))
+            dynamic_browse( ([ B_TYPE:"idee_uebersicht",
+                               UI_OPT_MENUTYPE : UI_MENUTYPE_ALLE,
+                           ]) );
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return 1;
+    case "w":
+    case "wahl":
+        dynamic_browse( ([ B_TYPE:"idee_uebersicht",
+                           UI_OPT_MENUTYPE : UI_MENUTYPE_WAHL,
+                           UI_OPT_STATUS : ({UMFRAGE_S_AKTIV,
+                                             UMFRAGE_S_OFFEN})
+                         ]) );
+        return 1;
+    case "o":
+    case "offen":
+    case "offenestimmen":
+        dynamic_browse( ([ B_TYPE:"idee_uebersicht",
+                           UI_OPT_MENUTYPE : UI_MENUTYPE_OFFEN,
+                           UI_OPT_UMFRAGE_OFFEN : 1,
+                           UI_OPT_STATUS : ({UMFRAGE_S_AKTIV,
+                                             UMFRAGE_S_OFFEN})
+                         ]) );
+        return 1;
+    case "m":
+    case "meine":
+        dynamic_browse( ([ B_TYPE:"idee_uebersicht",
+                           UI_OPT_MENUTYPE : UI_MENUTYPE_OWN,
+                           UI_OPT_ERSTELLER : TP_RN]) );
+        return 1;
+    case "b":
+    case "bereit":
+        if (query_commander(TP))
+            dynamic_browse( ([ B_TYPE:"idee_uebersicht",
+                               UI_OPT_MENUTYPE : UI_MENUTYPE_BEREIT,
+                               UI_OPT_STATUS : ({UMFRAGE_S_BEREIT})
+                           ]) );
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return 1;
+    case "d":
+    case "diskussion":
+            dynamic_browse( ([ B_TYPE:"idee_uebersicht",
+                               UI_OPT_MENUTYPE : UI_MENUTYPE_DISKU,
+                               UI_OPT_DISKUSSION : 1
+                           ]) );
+            return 1;
+    case "keinediskussion":
+        if (query_commander(TP))
+            dynamic_browse( ([ B_TYPE:"idee_uebersicht",
+                               UI_OPT_MENUTYPE : UI_MENUTYPE_NDISKU,
+                               UI_OPT_OHNE_DISKUSSION : 1
+                           ]) );
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return 1;
+    case "ignoriert":
+            dynamic_browse( ([ B_TYPE:"idee_uebersicht",
+                               UI_OPT_MENUTYPE : UI_MENUTYPE_IGNORIERT,
+                               UI_OPT_IGNORELIST : 2
+                           ]) );
+        return 1;
+    case "auswertung-s":
+        if (query_commander(TP))
+            dynamic_browse( ([ B_TYPE:"ideen_auswertung",
+                           ]) );
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return 1;
+    case "auswertung-p":
+        if (query_commander(TP))
+            dynamic_browse( ([ B_TYPE:"ideen_auswertung",
+                               UI_OPT_PANTHEON : -1,
+                           ]) );
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return 1;
+    case "auswertung-sp":
+        if (query_commander(TP))
+            dynamic_browse( ([ B_TYPE:"ideen_auswertung",
+                               UI_OPT_PANTHEON : 1,
+                           ]) );
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return 1;
+    }
+}
+
+int umfrage_cmd(string str)
+{
+    if (!check_security())
+        return 0;
+    str = lower_case(space(str)); // behandelt zuviele spaces und 0=>""
+    switch (str)
+    {
+    default:
+    case "":
+    case "hilfe":
+    case "?":
+        send_message_to(TP, MT_LOOK, MA_READ, 
+            query_commander(TP) ? HILFE_TEXT+HILFE_TEXT_ADMIN : HILFE_TEXT
+            );
+        return 1;
+    case "n":
+    case "neu":
+        if (!query_commander(TP))
+        {
+            FAIL("Kommando ist reserviert.\n");
+        }
+        return umfrage_neu();
+    case "wahl":
+        FAIL("Kommando nicht verfuegbar.");
+        return 1;
+    }
+   return 0;
+}
+
+int uiko_cmd(string str)
+{
+    if (!check_security())
+        return 0;
+    string * parts = explode(space(str), " ");
+    string param = implode(parts[1..]," ");
+    switch (lower_case(parts[0]))
+    {
+    default:
+    case "":
+    case "hilfe":
+    case "?":
+        send_message_to(TP, MT_LOOK, MA_READ, 
+            query_commander(TP) ? HILFE_TEXT+HILFE_TEXT_ADMIN : HILFE_TEXT
+            );
+        return 1;
+    case "lern":
+    case "lerne":
+    case "lernen":
+        return uiko_lerne();
+    case "verjage":
+        send_message_to(TP, MT_NOISE, MA_COMM, wrap(
+            "Der Kobold schaut dich traurig an bevor er verschwindet "
+            "und fluestert dir zu: Du weisst ja, "
+            "wo du mich wiederfinden kannst."));
+        call_out("remove",0);
+        return 1;
+    case "sql":
+        if (!query_commander(TP)) 
+            FAIL("Kein Zugriff");
+        return get_master()->sql(param);
+    case "tablelist":
+        if (!query_commander(TP)) 
+            FAIL("Kein Zugriff");
+        return get_master()->tablelist(param);
+    case "dbglog":
+        if (!query_commander(TP)) 
+            FAIL("Kein Zugriff");
+        TP->more(get_master()->dbglog());
+        return 1;
+    }
+   return 1;
+}
+
+void init()
+{
+    switch (check_ob(TP))
+    {
+    case IST_ADMIN: 
+    case IST_GOTT:
+    case IST_ENGEL:
+    case IST_SPIELER:
+        add_action("umfrage_cmd","umf:",AA_NOSPACE);
+        add_action("umfrage_cmd","u:",AA_NOSPACE);
+        add_action("idee_cmd", "idee:",AA_NOSPACE);
+        add_action("idee_cmd", "i:",AA_NOSPACE);
+        add_action("uiko_cmd", "uiko:",AA_NOSPACE);
+        PDBG("uiko:init: "+TP_RCN);
+    }
+}
+
+private string get_menue_path(mixed menues)
+{
+    if (mappingp(menues))
+    {
+        return menues[B_TYPE];
+    }
+    if (pointerp(menues)&&sizeof(menues))
+    {
+        string path = menues[<1][B_TYPE];
+        for (int i=sizeof(menues)-2;i>=0 ; i--)
+        {
+            path += "/" + menues[i][B_TYPE];
+        }
+        return path;
+    }
+    return "";
+}
+
+private string get_status(int st)
+{
+    switch (st)
+    {
+    case UMFRAGE_S_GELOESCHT:  return "Geloescht";
+    case UMFRAGE_S_NEU:        return "Neu";
+    case UMFRAGE_S_STANDARD:   return "Standard";
+    case UMFRAGE_S_BEREIT:     return "Bereit";
+    case UMFRAGE_S_AKTIV:      return "Aktiv";
+    case UMFRAGE_S_OFFEN:      return "Offen";
+    case UMFRAGE_S_BEENDET:    return "Beendet";
+    case UMFRAGE_S_ABGELEHNT:  return "Abgelehnt";
+    case UMFRAGE_S_ARCHIVIERT: return "Archiviert";
+    default:                   return "";
+    }
+}
+
+private int get_status_id(string st)
+{
+    switch (st)
+    {
+    case "Geloescht":  return UMFRAGE_S_GELOESCHT;
+    case "Neu":        return UMFRAGE_S_NEU;
+    case "Standard":   return UMFRAGE_S_STANDARD;
+    case "Bereit":     return UMFRAGE_S_BEREIT;
+    case "Aktiv":      return UMFRAGE_S_AKTIV;
+    case "Offen":      return UMFRAGE_S_OFFEN;
+    case "Beendet":    return UMFRAGE_S_BEENDET;
+    case "Abgelehnt":  return UMFRAGE_S_ABGELEHNT;
+    case "Archiviert": return UMFRAGE_S_ARCHIVIERT;
+    default:                   return -1;
+    }
+}
+
+private mixed neue_diskussion(string was, int id, int flags)
+{
+    get_master();
+    int i = 0;
+    if (flags & 1)
+    {
+        switch(master->add_diskussion(was,id,0,UMFRAGE_S_BEREIT))
+        {
+        case 1: 
+            i++; 
+        case -1:
+            break;
+        case -2:
+        case 0:
+            browse_write_line("Interner Fehler beim Diskussion anlegen");
+            return B_DONE;
+           
+        }
+    }
+    if (flags & 2)
+    {
+        switch(master->add_diskussion(was,id,1,UMFRAGE_S_BEREIT))
+        {
+        case 1: 
+            i++; 
+        case -1:
+            break;
+        case -2:
+        case 0:
+            browse_write_line("Interner Fehler beim Diskussion anlegen");
+            return B_DONE;
+           
+        }
+    }
+    switch (i)
+    {
+    default:
+    case 0: 
+        browse_write_line("Keine Diskussion angelegt, schon vorhanden.");
+        return B_DONE;
+    case 1:
+        browse_write_line("Eine Diskussion angelegt.");
+        return B_DONE;
+    case 2:
+        browse_write_line("Zwei Diskussionen angelegt.");
+        return B_DONE;
+    }
+}
+
+/*
+nosave mixed <type>_init(mapping old)
+{
+}
+
+nosave string * <type>_display(mapping menue)
+{
+}
+
+nosave int <type>_total(mapping menue)
+{
+}
+
+nosave string <type>_prompt(mapping menue)
+{
+}
+
+nosave mixed <type>_action(string str, mapping * menues)
+{
+}
+
+*/
+
+#define HELP_standard ({ \
+"Im folgenden werden die Standardbefehle erlaeutert wobei die Angabe ohne ''",\
+"anzugeben sind: 'd' blaettert eine Seite runter 'u' eine Seite nach oben.",\
+"'<' blaettert an den Anfang zurueck, '>' blaettert ans Ende. ",\
+"'q' Beendet das Menu, 'z' geht eine Menuebene hoeher, falls verfuegbar.",\
+"'?' zeigt diese Hilfe.", \
+})
+
+#define HELP_idee_uebersicht_wahl ({ \
+"In dieser Ansicht kann man die zur Wahl aktiven Ideen sehen. Diese sind ", \
+"durchnummeriert und koennen ueber Angabe der Nummer angewaehlt werden. ",  \
+"Mit f <begriff> kann in den Ideen nach einem Begriff gefiltert werden. ", \
+"Mit N sind alle Ideen mit ungelesenen Diskussionen markiert. ", \
+"mit gelesen/ungelesen kann man alle Ideen entsprechend markieren. ", \
+})
+
+#define HELP_idee_uebersicht_meine ({ \
+"In dieser Ansicht kann man die eigenen Ideen sehen. Diese sind ", \
+"durchnummeriert und koennen ueber Angabe der Nummer angewaehlt werden. ",\
+"Mit f <begriff> kann in den Ideen nach einem Begriff gefiltert werden. ", \
+"Mittels dem Befehl 'status' kann man nach Status filtern.",\
+})
+
+
+nosave mixed idee_uebersicht_init(mapping old)
+{
+    old[B_START_LINE] = 1;
+    switch (old[UI_OPT_MENUTYPE])
+    {
+    case UI_MENUTYPE_WAHL:
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu idee:wahl-Uebersicht Zeile",
+                         B_DATA : HELP_idee_uebersicht_wahl+HELP_standard ]);
+        old[B_PROMPT] = "idee:wahl";
+        break;
+    case UI_MENUTYPE_OWN:
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu idee:meine-Uebersicht Zeile",
+                         B_DATA : HELP_idee_uebersicht_meine+HELP_standard ]);
+        old[B_PROMPT] = "idee:meine";
+        break;
+    case UI_MENUTYPE_BEREIT:
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu idee:bereit-Uebersicht Zeile",
+                         B_DATA : HELP_idee_uebersicht_meine+HELP_standard ]);
+        old[B_PROMPT] = "idee:bereit";
+        break;
+    case UI_MENUTYPE_ALLE:
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu idee:alle-Uebersicht Zeile",
+                         B_DATA : HELP_idee_uebersicht_meine+HELP_standard ]);
+        old[B_PROMPT] = "idee:alle";
+        break;
+    case UI_MENUTYPE_OFFEN:
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu idee:offeneStimmen-Uebersicht Zeile",
+                         B_DATA : HELP_idee_uebersicht_wahl+HELP_standard ]);
+        old[B_PROMPT] = "idee:offeneStimmen";
+        break;
+    case UI_MENUTYPE_DISKU:
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu idee:diskussion-Uebersicht Zeile",
+                         B_DATA : HELP_idee_uebersicht_wahl+HELP_standard ]);
+        old[B_PROMPT] = "idee:diskussion";
+        old[UI_OPT_DISKUSSION] = 1;
+        break;
+    case UI_MENUTYPE_NDISKU:
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu idee:keinediskussion-Uebersicht Zeile",
+                         B_DATA : HELP_idee_uebersicht_wahl+HELP_standard ]);
+        old[UI_OPT_OHNE_DISKUSSION] = 1;
+        old[B_PROMPT] = "idee:keinediskussion";
+        break;
+    case UI_MENUTYPE_IGNORIERT:
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu idee:ignoriert-Uebersicht Zeile",
+                         B_DATA : HELP_idee_uebersicht_wahl+HELP_standard ]);
+        old[B_PROMPT] = "idee:ignoriert";
+        break;
+    }
+    return old;
+}
+
+private mapping idee_uebersicht_suchmuster(mapping menue)
+{
+    mapping opt = ([ UI_OPT_PANTHEON : wizp(TP) ]);
+    mixed data;
+    if (member(menue, UI_OPT_SUCHFILTER))
+    {
+        opt[UI_OPT_SUCHFILTER] = menue[UI_OPT_SUCHFILTER];
+    }
+    if (member(menue, UI_OPT_ERSTELLER))
+    {
+        opt[UI_OPT_ERSTELLER] = menue[UI_OPT_ERSTELLER];
+    }
+    if (member(menue, UI_OPT_UMFRAGE_OFFEN))
+    {
+        opt[UI_OPT_UMFRAGE_OFFEN] = menue[UI_OPT_UMFRAGE_OFFEN];
+    }
+    if (member(menue, UI_OPT_STATUS))
+    {
+        data = menue[UI_OPT_STATUS];
+        if (intp(data))
+        {
+            selected_status = opt[UI_OPT_STATUS] = ({ menue[UI_OPT_STATUS] });
+        }
+        else if (pointerp(data))
+        {
+            selected_status = opt[UI_OPT_STATUS] = menue[UI_OPT_STATUS];
+        }
+        else if (sizeof(selected_status))
+        {
+            opt[UI_OPT_STATUS] = selected_status;
+        }
+    }
+    if (member(menue, UI_OPT_DISKUSSION))
+    {
+        opt[UI_OPT_DISKUSSION] = menue[UI_OPT_DISKUSSION];
+    }
+    if (member(menue, UI_OPT_OHNE_DISKUSSION))
+    {
+        opt[UI_OPT_OHNE_DISKUSSION] = menue[UI_OPT_OHNE_DISKUSSION];
+    }
+    if (member(menue, UI_OPT_IGNORELIST))
+    {
+        opt[UI_OPT_IGNORELIST] = menue[UI_OPT_IGNORELIST];
+    }
+    return opt;
+}
+
+nosave mixed idee_uebersicht_reload(mixed menues)
+{
+    menues[<1] = idee_uebersicht_init(menues[<1]);
+    menues[<1][B_FLAGS] &= ~BF_DIRTY;
+    return menues;
+}
+
+nosave string * idee_uebersicht_display(mapping menue)
+{
+    int i;
+    string c;
+    mapping opt = idee_uebersicht_suchmuster(menue);
+    mixed data;
+    int total = get_master()->get_ideen_wahl_uebersicht(
+                    opt+([UI_OPT_COUNTALL:1]) );
+    int start = max(menue[B_START_LINE],
+                min(menue[B_CURRENT_LINE]-1,total-menue[B_NUM_LINES]+1));
+    opt[UI_OPT_OFFSET] = start-1;
+    opt[UI_OPT_LIMIT] = menue[B_NUM_LINES]+1;
+    data = get_master()->get_ideen_wahl_uebersicht(opt);
+    string * content = ({});
+    int end = min(total, start+menue[B_NUM_LINES]);
+    //start = max(min(start, total - menue[B_NUM_LINES]),menue[B_START_LINE]);
+    //PDBG(sprintf("idee_uebersicht_display %d/%d\n%Q\n%Q\n",
+    //                                    start,end,opt,data));
+    //if (start > sizeof(data))
+    //    return 0;
+    if (start < 1)
+        start = 1;
+    if (end < start) 
+        return 0;
+    for (i = start; i <= end; i++)
+    {
+        c = master->ist_idee_ungelesen(opt
+                +([UI_OPT_I_ID : data[i-start][0]]), TP_RN) ? "N" : " ";
+        content += ({ sprintf("%3d %s %s", i, c, data[i-start][1]) });
+    }
+    return content;
+}
+
+nosave int idee_uebersicht_total(mapping menue)
+{
+    mapping opt = idee_uebersicht_suchmuster(menue);
+    opt[UI_OPT_COUNTALL] = 1;
+    return get_master()->get_ideen_wahl_uebersicht(opt);
+}
+
+nosave string idee_uebersicht_prompt(mapping menue)
+{
+    string r = "Ideenuebersicht ";
+    int total = idee_uebersicht_total(menue);
+    int line = min(menue[B_CURRENT_LINE], total); // TODO workaround loesen
+    if (member(menue, UI_OPT_SUCHFILTER))
+    {
+        r+= "<"+menue[UI_OPT_SUCHFILTER]+"> ";
+    }
+    if (member(menue, UI_OPT_ERSTELLER))
+    {
+        r+= "<"+menue[UI_OPT_ERSTELLER]+"> ";
+    }
+    r+= sprintf("%s Zeile %d/%d [q,z,?,<nr>]",menue[B_PROMPT], line, total);
+    return r;
+}
+
+nosave mixed idee_uebersicht_action(string str, mapping * menues)
+{
+    mapping menue = menues[<1];
+    int end = idee_uebersicht_total(menue);
+    int start = menue[B_CURRENT_LINE];
+    int item;
+    mapping opt = idee_uebersicht_suchmuster(menue);
+    mixed r,data;
+    string * parts = explode(space(str), " ");
+    string param = implode(parts[1..]," ");
+    switch (lower_case(parts[0]))
+    {
+    case "gelesen":
+        get_master()->update_gelesen(opt, TP_RN);
+        return B_REBUILT;
+    case "ungelesen":
+        get_master()->update_ungelesen(opt, TP_RN);
+        return B_REBUILT;
+    case "f":
+    case "finde":
+        if (stringp(param) && param != "")
+        {
+            menues[<1][UI_OPT_SUCHFILTER] = param;
+        }
+        else
+        {
+            m_delete(menues[<1],UI_OPT_SUCHFILTER);
+        }
+        menues[<1][B_FLAGS] |= ~BF_DIRTY;
+        return menues;
+    case "status":
+        if (query_commander(TP) || menue[UI_OPT_MENUTYPE] == UI_MENUTYPE_OWN)
+        {
+            return menues+({ ([
+                            B_TYPE : "status_wahl",
+                            UI_OPT_MC : 1,
+                          ]) });;
+        }
+        else
+        {
+            browse_write_line("Befehl Status nicht verfuegbar.");
+            return B_DONE;
+        }
+    case "bereit":
+    case "aktiv":
+    case "offen":
+    case "beendet":
+    case "abgelehnt":
+        if (query_commander(TP) || menue[UI_OPT_MENUTYPE] == UI_MENUTYPE_OWN)
+        {
+            menues[<1][UI_OPT_STATUS] = selected_status = ({
+                    get_status_id(capitalize(lower_case(parts[0]))) });
+            return menues;
+        }
+        else
+        {
+            browse_write_line("Befehl "+parts[0]+" nicht verfuegbar.");
+            return B_DONE;
+        }
+    case "alle":
+        if (query_commander(TP) || menue[UI_OPT_MENUTYPE] == UI_MENUTYPE_OWN)
+        {
+            m_delete(menues[<1],UI_OPT_STATUS);
+            selected_status = ({ });
+            return menues;
+        }
+        else
+        {
+            browse_write_line("Befehl "+parts[0]+" nicht verfuegbar.");
+            return B_DONE;
+        }       
+    default:
+        if (!str2int(space(str),&item) && item >= 1 && item <= end)
+        {
+            opt[UI_OPT_OFFSET] = item-1;
+            opt[UI_OPT_LIMIT] = 1;
+            r = master->get_ideen_wahl_uebersicht(opt);
+            //PDBG(sprintf("idee_uebersicht_action %Q %Q",opt,r));
+            if (sizeof(r) == 1)
+            {
+                int i_id = r[0][0];
+                menues[<1][B_CURRENT_LINE] = item;
+                menues += ({ ([ B_TYPE : "idee_umfragen",
+                                UI_OPT_I_ID : i_id,
+                                UI_OPT_ITEM : item,
+                                B_START_LINE : 0 ]) });
+                return menues;
+            }
+        }
+        break;
+    }
+    return B_NOTHING;
+}
+
+#define HELP_idee_umfragen ({ \
+"In dieser Ansicht kann man eine Idee (i) mit all ihren Umfragen (U) sehen. ",\
+"Diese sind durchnummeriert und koennen ueber Angabe der Nummer ",\
+"angewaehlt werden. Mit '+' bzw. '-' kann die naechste bzw. vorherige Idee ",\
+"angezeigt werden. Mit 'ignoriere' kann man das Ignorieren einzelner Ideen ", \
+"an- und abschalten. Mit gelessen/ungelesen kann man die Diskussionen ", \
+"entsprechend markieren.",  \
+})
+#define HELP_idee_umfragen_admin ({ \
+"Mit Status kann der Status gesetzt werden, die Befehle bereit, aktiv, ",\
+"offen, beendet, abgelehnt, archiviert machen das direkt.",  \
+"Mittels uneu kann eine neue Umfrage hinzugefuegt werden.", \
+"Mit aktuell kann man eine aktuelle Idee fuer alle setzen.", \
+})
+nosave mixed idee_umfragen_init(mapping old)
+{
+    int i;
+    string * result = ({});
+    mixed data = get_master()->get_ideen_wahl(([
+            UI_OPT_I_ID : old[UI_OPT_I_ID],
+            UI_OPT_PANTHEON : wizp(TP),
+            ]));
+    //PDBG(sprintf("idee_umfragen_init data %Q",data));
+    if (!pointerp(data))
+    {
+        return B_QUIT;
+    }
+    for (i = 0; i< sizeof(data); i++)
+    {
+        result += ({ sprintf("%3d %s: %s",
+                     i+1,
+                     data[i][IDEEN_W_ZEICHEN],
+                     data[i][IDEEN_W_TEXT] ) });
+    }
+    //PDBG(sprintf("idee_umfragen_init result %Q",result));
+    old[UI_OPT_DATA] = data;
+    old[B_DATA] = result;
+    old[B_START_LINE] = 0;
+    old[B_CURRENT_LINE] = 0;
+    old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                     B_PROMPT : "Hilfe zu Idee x mit Umfragen Zeile",
+                     B_DATA : HELP_idee_umfragen
+                            +(query_commander(TP)?HELP_idee_umfragen_admin:({}))
+                            +HELP_standard ]);
+    return old;
+}
+
+nosave mixed idee_umfragen_reload(mixed menues)
+{
+    string str = menues[<1][UI_OPT_GOTO]||""; 
+    int end, item, i_id;
+    menues[<1][B_FLAGS] &= ~BF_DIRTY;
+    switch (str)
+    {
+    case "+":
+        item = 1;
+        break;
+    case "-":
+        item = -1;
+        break;
+    default:
+        return menues[..<2] + ({idee_umfragen_init(menues[<1])});
+    }
+    mapping menue = menues[<2];
+    mapping opt = idee_uebersicht_suchmuster(menue);
+    mixed r;
+    end = idee_uebersicht_total(menue);
+    item += menue[B_CURRENT_LINE];
+    if (item < 1 || item > end)
+    {
+        browse_write_line("Anfang bzw. Ende der Daten erreicht.");
+        return menues;
+    }
+    opt[UI_OPT_OFFSET] = item-1;
+    opt[UI_OPT_LIMIT] = 1;
+    r = master->get_ideen_wahl_uebersicht(opt);
+    if (sizeof(r) == 1)
+    {
+        i_id = r[0][0];
+        menue[B_CURRENT_LINE] = item;
+        menues = menues[..<3] + ({menue}) +
+                  ({ idee_umfragen_init( 
+                     ([ B_TYPE : "idee_umfragen",
+                        UI_OPT_I_ID : i_id,
+                        UI_OPT_ITEM : item,
+                        B_START_LINE : 0 ])) });
+        return menues;
+    }
+    return menues;
+}
+
+nosave string * idee_umfragen_display(mapping menue)
+{
+    string * result = ({});
+    if (!mappingp(menue) )
+        return 0;
+    int start = menue[B_CURRENT_LINE];
+    mixed * content = menue[B_DATA];
+    int end = min(sizeof(content)-1, start+menue[B_NUM_LINES]);
+    //start = min(start, end - menue[B_NUM_LINES]);
+    int i;
+    if (start > sizeof(content))
+        return 0;
+    if (start < 0)
+        start = 0;
+    if (end < start) 
+        return 0;
+    return content[start..end];
+}
+
+nosave int idee_umfragen_total(mapping menue)
+{
+    return sizeof(menue[B_DATA]);
+}
+
+nosave string idee_umfragen_prompt(mapping menue)
+{
+    return sprintf("Idee Nr.%d mit Umfragen Zeile %d/%d [+,-,<nr>,z,q,?]",
+        menue[UI_OPT_ITEM], 
+        menue[B_CURRENT_LINE]+1,
+        idee_umfragen_total(menue));
+}
+
+nosave mixed idee_umfragen_action(string str, mapping * menues)
+{
+    mapping menue = menues[<1];
+    int i, item, end = sizeof(menue[B_DATA]);
+    string * parts = explode(space(str), " ");
+    string param = implode(parts[1..]," ");
+    get_master();
+    
+    switch(lower_case(parts[0]))
+    {
+    case "gelesen":
+        master->update_gelesen(menue, TP_RN);
+        return B_REBUILT;
+    case "ungelesen":
+        master->update_ungelesen(menue, TP_RN);
+        return B_REBUILT;
+    case "+":
+    case "-":
+        menues[<1][UI_OPT_GOTO] = space(str);
+        menues[<1][B_FLAGS] |= BF_DIRTY;
+        return menues;
+    case "uneu":
+        if (query_commander(TP))
+        {
+            umfrage_neu(menues, menues[<1][UI_OPT_I_ID]);
+            return B_QUIT;
+        }
+        else
+        {
+            browse_write_line("Befehl uneu nicht verfuegbar.");
+            return B_DONE;
+        }
+    case "ignore":
+    case "ignoriere":
+        switch(get_master()->toggle_ignore_idee(menues[<1][UI_OPT_I_ID],TP_RN))
+        {
+        case 0:
+            browse_write_line("Fehler beim Ignorieren.");
+            break;
+        case 1:
+            browse_write_line("Idee wird nun ignoriert.");
+            break;
+        case -1:
+            browse_write_line("Idee wird nicht mehr ignoriert.");
+            break;
+        }
+        return B_DONE;
+    case "aktuell":
+        if (query_commander(TP))
+        {
+            get_master()->set_aktuelle_idee(menues[<1][UI_OPT_I_ID]);
+            __FILE__->msg_to_clones("Uiko fluestert Dir zu:",
+                "Es wurde eine neue, aktuelle Idee gesetzt. "
+                "Aufruf mit idee:aktuell oder kurz i:a .");
+            browse_write_line("Aktuelle Idee gesetzt.");
+        }
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return B_DONE;
+    case "bereit":
+    case "aktiv":
+    case "offen":
+    case "beendet":
+    case "abgelehnt":
+    case "archiviert":
+        if (query_commander(TP))
+        {
+            for (i=0;i<sizeof(menue[UI_OPT_DATA]);i++)
+            {
+                mixed * data = menue[UI_OPT_DATA][i];
+                switch(data[IDEEN_W_ZEICHEN])
+                {
+                case "Idee":
+                    master->aktualisiere_ideen_status(
+                            data[IDEEN_W_I_ID],
+                            get_status_id(capitalize(lower_case(parts[0]))));
+                case "Umfrage":
+                    master->aktualisiere_umfragen_status(
+                            data[IDEEN_W_U_ID],
+                            get_status_id(capitalize(lower_case(parts[0]))));
+                case "Diskussion":
+                    master->aktualisiere_diskussion_status(
+                            data[IDEEN_W_U_ID], // ist das Feld fuer d_id hier.
+                            get_status_id(capitalize(lower_case(parts[0]))));
+                default:
+                }
+            }
+            browse_write_line("Status aktualisiert");
+            return B_DONE;
+        }
+        else
+        {
+            browse_write_line("Befehl "+parts[0]+" nicht verfuegbar.");
+            return B_DONE;
+        }
+   case "diskussion-s":
+        if (query_commander(TP))
+            return neue_diskussion("ideen", menues[<1][UI_OPT_I_ID], 1);
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return B_DONE;
+   case "diskussion-p":
+        if (query_commander(TP))
+            return neue_diskussion("ideen", menues[<1][UI_OPT_I_ID], 2);
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return B_DONE;
+   case "diskussion-sp":
+        if (query_commander(TP))
+            return neue_diskussion("ideen", menues[<1][UI_OPT_I_ID], 3);
+        else
+            browse_write_line("Befehl steht nicht zur Verfuegung.");
+        return B_DONE;
+   default:
+        if (!str2int(space(str),&item) && item >= 1 && item <= end)
+        {
+            mixed * data = menue[UI_OPT_DATA][item-1];
+            switch (data[IDEEN_W_ZEICHEN])
+            {
+            case "Idee":
+                menues += ({ ([ B_TYPE : "idee_details",
+                        UI_OPT_I_ID : data[IDEEN_W_I_ID],
+                        UI_OPT_ITEM : item,
+                        B_START_LINE : 0 ]) });
+                return menues;
+            case "Umfrage":
+                menues += ({ ([ B_TYPE : "umfrage_wahl",
+                        UI_OPT_U_ID : data[IDEEN_W_U_ID],
+                        UI_OPT_ITEM : item,
+                        B_START_LINE : 0 ]) });
+                return menues;
+            case "Diskussion":
+                menues += ({ ([ B_TYPE : "diskussion",
+                        UI_OPT_D_ID : data[IDEEN_W_U_ID],
+                        UI_OPT_ITEM : item,
+                        B_PROMPT: data[IDEEN_W_TEXT],
+                        B_START_LINE : 0 ]) });
+                return menues;
+            default:
+                break;
+            }
+        }
+        break;
+    }
+    return B_NOTHING;
+}
+
+#define HELP_idee_aktuell ({ \
+"In dieser Ansicht kann man die aktuelle Idee (i) mit all ihren Umfragen (U)",\
+"sehen. Diese sind durchnummeriert und koennen ueber Angabe der Nummer ",\
+"angewaehlt werden. Mit 'ignoriere' kann man das Ignorieren der Idee an- ",\
+"und abschalten.",  \
+})
+#define HELP_idee_aktuell_admin ({ \
+"Mit Status kann der Status gesetzt werden, die Befehle bereit, aktiv, ",\
+"offen, beendet, abgelehnt, archiviert machen das direkt.",  \
+"Mittels uneu kann eine neue Umfrage hinzugefuegt werden.", \
+})
+nosave mixed idee_aktuell_init(mapping old)
+{
+    int i;
+    string * result = ({});
+    mixed data = get_master()->get_aktuelle_idee(([
+            UI_OPT_PANTHEON : wizp(TP),
+            ]));
+    //PDBG(sprintf("idee_aktuell_init data %Q",data));
+    if (!pointerp(data) || !sizeof(data))
+    {
+        browse_write_line("Zur Zeit ist keine aktuelle Idee gesetzt.");
+        return B_QUIT;
+    }
+    for (i = 0; i< sizeof(data); i++)
+    {
+        result += ({ sprintf("%3d %s: %s",
+                     i+1,
+                     data[i][IDEEN_W_ZEICHEN],
+                     data[i][IDEEN_W_TEXT] ) });
+    }
+    //PDBG(sprintf("idee_umfragen_init result %Q",result));
+    old[UI_OPT_DATA] = data;
+    old[B_DATA] = result;
+    old[B_START_LINE] = 0;
+    old[B_CURRENT_LINE] = 0;
+    old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                     B_PROMPT : "Hilfe zur aktuellen Idee x Zeile",
+                     B_DATA : HELP_idee_aktuell
+                            +(query_commander(TP)?HELP_idee_aktuell_admin:({}))
+                            +HELP_standard ]);
+    return old;
+}
+
+nosave string * idee_aktuell_display(mapping menue)
+{
+    string * result = ({});
+    if (!mappingp(menue) )
+        return 0;
+    int start = menue[B_CURRENT_LINE];
+    mixed * content = menue[B_DATA];
+    int end = min(sizeof(content)-1, start+menue[B_NUM_LINES]);
+    //start = min(start, end - menue[B_NUM_LINES]);
+    int i;
+    if (start > sizeof(content))
+        return 0;
+    if (start < 0)
+        start = 0;
+    if (end < start) 
+        return 0;
+    return content[start..end];
+}
+
+nosave int idee_aktuell_total(mapping menue)
+{
+    return sizeof(menue[B_DATA]);
+}
+
+nosave string idee_aktuell_prompt(mapping menue)
+{
+    return sprintf("Aktuelle Idee mit Umfragen Zeile %d/%d [<nr>,z,q,?]",
+        menue[B_CURRENT_LINE]+1,
+        idee_umfragen_total(menue));
+}
+
+nosave mixed idee_aktuell_action(string str, mapping * menues)
+{
+    mapping menue = menues[<1];
+    int i, item, end = sizeof(menue[B_DATA]);
+    string * parts = explode(space(str), " ");
+    string param = implode(parts[1..]," ");
+    get_master();
+    
+    switch(lower_case(parts[0]))
+    {
+    case "uneu":
+        if (query_commander(TP))
+        {
+            umfrage_neu(menues, menues[<1][UI_OPT_I_ID]);
+            return B_QUIT;
+        }
+        else
+        {
+            browse_write_line("Befehl uneu nicht verfuegbar.");
+            return B_DONE;
+        }
+    case "ignore":
+    case "ignoriere":
+        switch(get_master()->toggle_ignore_idee(menues[<1][UI_OPT_I_ID],TP_RN))
+        {
+        case 0:
+            browse_write_line("Fehler beim Ignorieren.");
+            break;
+        case 1:
+            browse_write_line("Idee wird nun ignoriert.");
+            break;
+        case -1:
+            browse_write_line("Idee wird nicht mehr ignoriert.");
+            break;
+        }
+        return B_DONE;
+    case "bereit":
+    case "aktiv":
+    case "offen":
+    case "beendet":
+    case "abgelehnt":
+    case "archiviert":
+        if (query_commander(TP))
+        {
+            for (i=0;i<sizeof(menue[UI_OPT_DATA]);i++)
+            {
+                mixed * data = menue[UI_OPT_DATA][i];
+                switch(data[IDEEN_W_ZEICHEN])
+                {
+                case "Idee":
+                    master->aktualisiere_ideen_status(
+                            data[IDEEN_W_I_ID],
+                            get_status_id(capitalize(lower_case(parts[0]))));
+                case "Umfrage":
+                    master->aktualisiere_umfragen_status(
+                            data[IDEEN_W_U_ID],
+                            get_status_id(capitalize(lower_case(parts[0]))));
+                default:
+                }
+            }
+            browse_write_line("Status aktualisiert");
+            return B_DONE;
+        }
+        else
+        {
+            browse_write_line("Befehl "+parts[0]+" nicht verfuegbar.");
+            return B_DONE;
+        }
+   default:
+        if (!str2int(space(str),&item) && item >= 1 && item <= end)
+        {
+            mixed * data = menue[UI_OPT_DATA][item-1];
+            switch (data[IDEEN_W_ZEICHEN])
+            {
+            case "Idee":
+                menues += ({ ([ B_TYPE : "idee_details",
+                        UI_OPT_I_ID : data[IDEEN_W_I_ID],
+                        UI_OPT_ITEM : item,
+                        B_START_LINE : 0 ]) });
+                return menues;
+            case "Umfrage":
+                menues += ({ ([ B_TYPE : "umfrage_wahl",
+                        UI_OPT_U_ID : data[IDEEN_W_U_ID],
+                        UI_OPT_ITEM : item,
+                        B_START_LINE : 0 ]) });
+                return menues;
+            default:
+                break;
+            }
+        }
+        break;
+    }
+    return B_NOTHING;
+}
+
+
+
+#define HELP_idee_details ({ \
+"In dieser Ansicht kann man eine Idee mit Titel umd Zusammenfassung sehen.",  \
+"Mit 'ignoriere' kann man das Ignorieren der Idee an- und abschalten.", \
+})
+#define HELP_idee_details_admin ({ \
+"Mit Status kann der Status gesetzt werden, die Befehle bereit, aktiv, ",\
+"offen, beendet, abgelehnt, archiviert machen das direkt.",  \
+})
+nosave mixed idee_details_init(mapping old)
+{
+    int i_id = old[UI_OPT_I_ID], i_st, i_pa;
+    string * r2,*r1 = get_master()->get_idee(i_id);
+    if (sizeof(r1) != 2)
+    {
+        browse_write_line("Idee nicht vorhanden.");
+        return B_QUIT;
+    }
+    r2 = ({ "Titel: "+r1[0] });
+    i_st = master->get_ideen_status(i_id);
+    i_pa = master->get_ideen_pantheon(i_id);
+    r2 += ({ "Status: "+get_status(i_st)+" "+PANTHEON2TEXT(i_pa) });
+    if (query_commander(TP))
+    {
+        r2+= ({ "I_ID:"+i_id+" Ersteller: "+master->get_ideen_ersteller(i_id)});
+    }
+    r2 += explode(r1[1], "\n");
+    old[B_DATA] = r2;
+    old[B_START_LINE] = 0;
+    old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                     B_PROMPT : "Hilfe zu Ideendetailansicht Zeile",
+                     B_DATA : HELP_idee_details
+                            +(query_commander(TP)?HELP_idee_details_admin:({}))
+                            +HELP_standard ]);
+    return old;
+}
+
+nosave mixed idee_details_reload(mixed menues)
+{
+    menues[<1] = idee_details_init(menues[<1]);
+    menues[<1][B_FLAGS] &= ~BF_DIRTY;
+    return menues;
+}
+
+nosave string * idee_details_display(mapping menue)
+{
+    return staticmore_display(menue);
+}
+
+nosave int idee_details_total(mapping menue)
+{
+    return sizeof(menue[B_DATA]);
+}
+
+nosave string idee_details_prompt(mapping menue)
+{
+    return sprintf("Ideendetailansicht Zeile %d/%d) [q,z,?]",
+        menue[B_CURRENT_LINE]+1, sizeof(menue[B_DATA]) );
+}
+
+nosave mixed idee_details_action(string str, mapping * menues)
+{
+    string * parts = explode(space(str), " ");
+    string param = implode(parts[1..]," ");
+    get_master();
+    
+    switch(lower_case(parts[0]))
+    {
+    case "ignore":
+    case "ignoriere":
+        switch(get_master()->toggle_ignore_idee(menues[<1][UI_OPT_I_ID],TP_RN))
+        {
+        case 0:
+            browse_write_line("Fehler beim Ignorieren.");
+            break;
+        case 1:
+            browse_write_line("Idee wird nun ignoriert.");
+            break;
+        case -1:
+            browse_write_line("Idee wird nicht mehr ignoriert.");
+            break;
+        }
+        return B_DONE;
+    case "status":
+        if (query_commander(TP))
+        {
+            return menues+({ ([
+                            B_TYPE : "status_wahl",
+                            UI_OPT_STATUS : 
+                get_master()->get_ideen_status(menues[<1][UI_OPT_I_ID])
+                          ]) });;
+        }
+        else
+        {
+            browse_write_line("Befehl Status nicht verfuegbar.");
+            return B_DONE;
+        }
+    case "bereit":
+    case "aktiv":
+    case "offen":
+    case "beendet":
+    case "abgelehnt":
+    case "archiviert":
+        if (query_commander(TP))
+        {
+            master->aktualisiere_ideen_status(
+                    menues[<1][UI_OPT_I_ID],
+                    get_status_id(capitalize(lower_case(parts[0]))));
+            browse_write_line("Status aktualisiert");
+        }
+        else
+        {
+            browse_write_line("Befehl "+parts[0]+" nicht verfuegbar.");
+        }
+        return B_DONE;
+    }
+    return B_NOTHING;
+}
+
+#define HELP_umfrage_wahl ({ \
+"In dieser Ansicht kann man eine Umfrage optional mit der zugehoerigen Idee ",\
+"zu sehen. Alle moeglichen Antworten sind dargestellt, die mit der Nummer ", \
+"auszuwaehlen sind. Ein * kennzeichnet die Wahl, die man getaetigt hat.",  \
+})
+#define HELP_umfrage_wahl_admin ({ \
+"Mit Status kann der Status gesetzt werden, die Befehle bereit, aktiv, ",\
+"offen, beendet, abgelehnt, archiviert machen das direkt.",  \
+"Mittels aneu kann im Status neu und bereit eine neue Antwort ",\
+"hinzugefuegt werden",\
+})
+nosave mixed umfrage_wahl_init(mapping old)
+{
+    int u_id = old[UI_OPT_U_ID],u_st,u_pa;
+    mixed r1 = get_master()->get_ideen_wahl(([
+            UI_OPT_U_ID:u_id,
+            UI_OPT_PANTHEON : wizp(TP)?1:0,
+            ]));
+    string sel,*lines = ({});
+    int i,a_id;
+    if (sizeof(r1)==2)
+    {
+        for (i = 0; i< 2; i++)
+        {
+            lines  += ({ sprintf("%s: %s",
+                         r1[i][IDEEN_W_ZEICHEN],
+                         r1[i][IDEEN_W_TEXT] ) });
+        }
+        u_st = master->get_umfragen_status(u_id);
+        u_pa = master->get_umfragen_pantheon(u_id);
+        lines += ({ "Status: "+get_status(u_st)+" "+PANTHEON2TEXT(u_pa) });
+        if (query_commander(TP))
+        {
+            lines+= ({ "U_ID:"+u_id+" Ersteller: "
+                    +master->get_umfragen_ersteller(u_id) });
+        }
+    }
+    else
+    {
+        r1 = master->get_umfrage(old[UI_OPT_U_ID]);
+        if (stringp(r1))
+        {
+            lines  += ({ sprintf("0 Umfrage: %s",r1) }) ;
+        }
+        else
+        {
+            browse_write_line("Keine Umfrage gefunden.");
+            return B_QUIT;
+        }
+        u_st = master->get_umfragen_status(u_id);
+        u_pa = master->get_umfragen_pantheon(u_id);
+        lines += ({ "Status: "+get_status(u_st)+" "+PANTHEON2TEXT(u_pa) });
+        if (query_commander(TP))
+        {
+            lines+= ({ "U_ID:"+u_id+" Ersteller: "
+                    +master->get_umfragen_ersteller(u_id) });
+        }
+    }
+    lines += ({ "Antworten auf die aktuelle Umfrage:" });
+    r1 = master->get_antworten(old[UI_OPT_U_ID]);
+    a_id = master->hat_gewaehlt(old[UI_OPT_U_ID],TP_RN);
+    for (i = 0; i<sizeof(r1); i++)
+    {
+        sel = (a_id == r1[i][0])? "*" :" ";
+        lines += ({ sprintf("%s%2d %s",sel,i+1,r1[i][1]) });
+    }
+    old[B_DATA] = lines;
+    old[UI_OPT_DATA] = r1;
+    old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                     B_PROMPT : "Hilfe zu Umfragenabstimmung Zeile",
+                     B_DATA : HELP_umfrage_wahl
+                            +(query_commander(TP)?HELP_umfrage_wahl_admin:({}))
+                            +HELP_standard ]);
+    return old;
+}
+
+nosave mixed umfrage_wahl_reload(mixed menues)
+{
+    string str = menues[<1][UI_OPT_GOTO]||""; 
+    int end, item, i_id;
+    if (strstr(get_menue_path(menues),
+            "umfrage_wahl/idee_umfragen/idee_uebersicht")==0)
+    {
+        ;
+    }
+    mixed m = umfrage_wahl_init(menues[<1]);
+    if (mappingp(m))
+    {
+        m[B_FLAGS] &= ~BF_DIRTY;
+        return menues[..<2] + ({ m });
+    }
+    return m;
+}
+
+nosave string * umfrage_wahl_display(mapping menue)
+{
+    return staticmore_display(menue);
+}
+
+nosave int umfrage_wahl_total(mapping menue)
+{
+    return sizeof(menue[B_DATA]);
+}
+
+nosave string umfrage_wahl_prompt(mapping menue)
+{
+    return sprintf("Umfragenabstimmung Zeile:%d/%d [q,z,?,<nr>]",
+        menue[B_CURRENT_LINE],sizeof(menue[B_DATA]));
+}
+
+nosave mixed umfrage_wahl_action(string str, mapping * menues)
+{
+    int item,end,a_id, u_id = menues[<1][UI_OPT_U_ID];
+    mapping menue = menues[<1];
+    mixed data = menue[UI_OPT_DATA];
+    end = sizeof(data);
+    string * parts = explode(space(str), " ");
+    string param = implode(parts[1..]," ");
+    get_master();
+    
+    switch(lower_case(parts[0]))
+    {
+    case "aneu":
+        if (query_commander(TP))
+        {
+            if (!param || param == "")
+            {
+                input_to(#'umfrage_neue_antwort, INPUT_PROMPT, 
+                         "Neue Antwort:",menues,u_id);
+            }
+            else
+            {
+                umfrage_neue_antwort(param, menues, u_id);
+            }
+            return B_QUIT;
+        }
+        else
+        {
+            browse_write_line("Befehl aneu nicht verfuegbar.");
+            return B_DONE;
+        }
+    case "status":
+        if (query_commander(TP))
+        {
+            return menues+({ ([
+                            B_TYPE : "status_wahl",
+                            UI_OPT_STATUS : 
+                master->get_umfragen_status(u_id)
+                          ]) });;
+        }
+        else
+        {
+            browse_write_line("Befehl Status nicht verfuegbar.");
+            return B_DONE;
+        }
+    case "bereit":
+    case "aktiv":
+    case "offen":
+    case "beendet":
+    case "abgelehnt":
+    case "archiviert":
+        if (query_commander(TP))
+        {
+            master->aktualisiere_umfragen_status(
+                    menues[<1][UI_OPT_U_ID],
+                    get_status_id(capitalize(lower_case(parts[0]))));
+            browse_write_line("Status aktualisiert");
+        }
+        else
+        {
+            browse_write_line("Befehl "+parts[0]+" nicht verfuegbar.");
+        }
+        return B_DONE;
+    default:
+        if (!str2int(space(str),&item) && item >= 1 && item <= end)
+        {
+            a_id = data[item-1][0];
+            if (master->add_erhebung(a_id, TP_RN,wizp(TP)!=0))
+            {
+                browse_write_line("Wahl erfolgt.");
+                menue[B_FLAGS] |= BF_DIRTY;
+                menues[<1] = menue;
+                return menues;
+            }
+            else
+            {
+                browse_write_line("Wahl nicht erfolgt.");
+                return B_DONE;
+            }
+        }
+        break;
+    }
+    return B_NOTHING;
+}
+
+#define HELP_status_wahl_mc ({ \
+"In dieser Ansicht kann man einen oder mehrere Status ueber <nr> auswaehlen.",\
+})
+#define HELP_status_wahl ({ \
+"In dieser Ansicht kann man genau einen Status ueber <nr> auswaehlen.",\
+})
+#define HELP_status_wahl_liste ({ \
+"Die Bedeutung der einzelnen Status ist wie folgt:",\
+"Geloescht: ist ein interner Status, der nicht angewaehlt werden kann.",\
+"Neu: ist ein Zustand beim Anlegen der Idee oder Umfrage.",\
+"Standard: sind Ideen und Umfragen, die als Vorlage dienen sollen.",\
+"Bereit: sind alle Ideen und Umfragen, die auf Freigabe warten.",\
+"Aktiv: sind alle Ideen und Umfragen, die zur Wahl stehen.",\
+"Offen: sind die Umfragen, wo man Antworten frei ergaenzen kann.",\
+"Beendet: sind Ideen und Umfragen, welche so oder so aehnlich umgesetzt wurden.",\
+"Abgelehnt: sind die abgelehnten Ideen.",\
+"Archiviert: sind veraltete Ideen und Umfragen",\
+})
+
+nosave mixed status_wahl_init(mapping old)
+{
+    selected = selected_status;
+    if (member(old,UI_OPT_STATUS))
+    {
+        if (intp(old[UI_OPT_STATUS]))
+        {
+            selected = ({ old[UI_OPT_STATUS] });
+        }
+        else if (pointerp(old[UI_OPT_STATUS]))
+        {
+            selected = old[UI_OPT_STATUS];
+        }
+    }
+   if (member(old, UI_OPT_MC))
+   {
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu Mehrfach-Statusauswahl Zeile", 
+                         B_DATA : HELP_status_wahl_mc+HELP_standard
+                                 +HELP_status_wahl_liste]);
+   }
+   else
+   {
+        old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                         B_PROMPT : "Hilfe zu Statusauswahl Zeile", 
+                         B_DATA : HELP_status_wahl+HELP_standard
+                                 +HELP_status_wahl_liste ]);
+   }
+   old[B_START_LINE] = 1;
+   return old;
+}
+
+nosave string * status_wahl_display(mapping menue)
+{
+    int i;
+    string sel,* result = ({});
+    for (i=UMFRAGE_S_GELOESCHT; i <= UMFRAGE_S_ARCHIVIERT; i++)
+    {
+        sel = (member(selected,i)!=-1) ? "*" : " ";
+        result += ({ sprintf("%s %d %s", sel, i+1, get_status(i)) });
+    }
+    return result;
+}
+
+nosave int status_wahl_total(mapping menue)
+{
+    return UMFRAGE_S_ARCHIVIERT+1;
+}
+
+nosave string status_wahl_prompt(mapping menue)
+{
+    return member(menue,UI_OPT_MC) ? 
+            "Mehrfach-Statusauswahl [<nr>,z,q,?]" :
+            "Statusauswahl [<nr>,z,q,?]";
+}
+
+nosave mixed status_wahl_action(string str, mapping * menues)
+{
+    int item, i;
+    string path = get_menue_path(menues);
+    get_master();
+    //PDBG("status_wahl_action: "+path);
+    if (space(str)=="z")
+    {
+        if (strstr(path,
+            "status_wahl/idee_uebersicht")==0)
+        {
+            selected_status = selected;
+            if (sizeof(selected_status))
+            {
+                menues[<2][UI_OPT_STATUS] = selected_status;
+            }
+            else
+            {
+                menues[<2][UI_OPT_STATUS] = UMFRAGE_S_AKTIV;
+            }
+        }
+        else if (strstr(get_menue_path(menues),
+            "status_wahl/umfrage_wahl")==0)
+        {
+            item = menues[<2][UI_OPT_U_ID];
+            if (sizeof(selected))
+            {
+                master->aktualisiere_umfragen_status(item,selected[0]);
+            }
+        }
+        else if (strstr(get_menue_path(menues),
+            "status_wahl/idee_details")==0)
+        {
+            item = menues[<2][UI_OPT_I_ID];
+            if (sizeof(selected))
+            {
+                master->aktualisiere_ideen_status(item,selected[0]);
+            }
+        }
+        else
+        {
+            browse_write_line("Unbekannter Pfad");
+            return B_DONE;
+        }
+        menues[<2][B_FLAGS] |= BF_DIRTY;
+        return B_NOTHING;
+    }
+    if (!str2int(space(str),&item) 
+            && item > UMFRAGE_S_NEU && item <= UMFRAGE_S_ARCHIVIERT+1)
+    {
+        item--;
+        if (member(menues[<1], UI_OPT_MC))
+        {
+            if ((i=member(selected,item)) != -1)
+            {
+                selected = arr_delete(selected,i);
+            }
+            else
+            {
+                selected += ({ item });
+            }
+        }
+        else 
+        {
+            if ((i=member(selected,item)) != -1)
+            {
+                selected = arr_delete(selected,i);
+            }
+            else
+            {
+                selected = ({ item });
+            }
+        }
+        return B_REBUILT;
+    }
+    return B_NOTHING;
+}
+
+#define HELP_ideen_auswertung ({ \
+"In dieser Ansicht sind die Ideen inkl. Auswertung angezeigt und",\
+"absteigend sortiert. Per <nr> kann man eine Idee auswaehlen.",\
+})
+nosave mixed ideen_auswertung_init(mapping old)
+{
+    mixed * data = get_master()->get_erhebung_alle_ideen(old);
+    string * list = ({ });
+    int i;
+    if (!query_commander(TP) || TI!=TP) return B_QUIT;
+    for (i=0; i < sizeof(data);i ++)
+    {
+        list += ({  sprintf("%3d %11s %60s",i+1,
+            data[i][UI_ERHEBUNG1I_SCHLUESSEL],
+            data[i][UI_ERHEBUNG1I_TEXT] )
+            });
+    }
+   old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                    B_PROMPT : "Hilfe zur Auswertung Zeile", 
+                    B_DATA : HELP_ideen_auswertung+HELP_standard ]);
+    old[B_DATA] = list;
+    old[B_START_LINE] = 0;
+    old[UI_OPT_DATA] = data;
+    return old;
+}
+
+nosave string * ideen_auswertung_display(mapping menue)
+{
+    return staticmore_display(menue);
+}
+
+nosave int ideen_auswertung_total(mapping menue)
+{
+    return sizeof(menue[UI_OPT_DATA]);
+}
+
+nosave string ideen_auswertung_prompt(mapping menue)
+{
+    int ix = menue[B_CURRENT_LINE];
+    int ex = ideen_auswertung_total(menue);
+    return sprintf("Ideen Auswertung [u,d,<nr>,?,q]");
+}
+
+nosave mixed ideen_auswertung_action(string str, mapping * menues)
+{
+    int item, i_id;
+    mapping menue = menues[<1];
+    if (!str2int(space(str),&item) 
+            && item > 0 && item <= sizeof(menue[UI_OPT_DATA]))
+    {
+        item--;
+        i_id = menue[UI_OPT_DATA][item][UI_ERHEBUNG1I_I_ID];
+        
+        menues[<1][B_CURRENT_LINE] = item;
+        menues += ({ ([ B_TYPE : "idee_umfragen",
+                        UI_OPT_I_ID : i_id,
+                        UI_OPT_ITEM : item,
+                        B_START_LINE : 0 ]) });
+        return menues;
+    }
+    return B_NOTHING;
+}
+
+#define HELP_diskussion ({ \
+"In dieser Ansicht ist die Uebersicht ueber die Beitraege.",\
+"Mit gelesen/ungelesen kann man alle Beitraege entsprechend markieren.",\
+})
+nosave mixed diskussion_init(mapping old)
+{
+   old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                    B_PROMPT : "Hilfe zur Auswertung Zeile", 
+                    B_DATA : HELP_diskussion+HELP_standard ]);
+   return old;
+}
+
+nosave int diskussion_total(mapping menue)
+{
+    return get_master()->get_diskussionsbeitraege(
+                     menue+([UI_OPT_COUNTALL:1,
+                     UI_OPT_PANTHEON:wizp(TP)]) );
+}
+
+nosave string * diskussion_display(mapping menue)
+{
+    string * result = ({}), c;
+    if (!mappingp(menue) )
+        return 0;
+    mixed data = get_master()->get_diskussionsbeitraege(menue
+            +([UI_OPT_PANTHEON:wizp(TP)]) );
+    int start = menue[B_CURRENT_LINE];
+    int end = min(diskussion_total(menue), start+menue[B_NUM_LINES]);
+    start = min(start, end - menue[B_NUM_LINES]);
+    int i;
+    if (start < 0)
+        start = 0;
+    if (end < start) 
+        return 0;
+    for(i=start;i<end;i++)
+    {
+        c = master->ist_beitrag_ungelesen(
+                data[i-start][UI_BEITRAG_B_ID], TP_RN) ? "N" : " ";
+        result += ({ sprintf("%3d %s %s %10s %s",i,c, 
+                shorttimestr(data[i-start][UI_BEITRAG_WANN]),
+                data[i-start][UI_BEITRAG_WER],
+                data[i-start][UI_BEITRAG_TITEL] ) });
+    }
+    return result;
+
+}
+
+nosave string diskussion_prompt(mapping menue)
+{
+    int ix = menue[B_CURRENT_LINE];
+    int ex = diskussion_total(menue);
+    return sprintf("Diskussionsbeitraege %s %d/%d [u,d,neu,<nr>,?,q]",
+            menue[B_PROMPT]||"",ix,ex);
+}
+
+nosave mixed diskussion_action(string str, mapping * menues)
+{
+    int item, b_id;
+    mapping menue = menues[<1];
+    switch (lower_case(space(str)))
+    {
+    case "gelesen":
+        get_master()->update_gelesen(menue, TP_RN);
+        return B_REBUILT;
+    case "ungelesen":
+        get_master()->update_ungelesen(menue, TP_RN);
+        return B_REBUILT;
+    case "neu":
+        diskussionsbeitrag_neu(menues, menues[<1][UI_OPT_D_ID]);
+        return B_QUIT;
+    case "z":
+        menues[<2][B_FLAGS] |= BF_DIRTY;
+        return B_NOTHING;
+    default:
+        if (!str2int(space(str),&item) && item >= 0)
+        {
+            mixed data = get_master()->get_diskussionsbeitraege(menue
+                +([UI_OPT_PANTHEON:wizp(TP), 
+                    UI_OPT_OFFSET : item, UI_OPT_LIMIT : 1 ]) );
+            if (data == 0 || sizeof(data)!=1)
+            {
+                break;
+            }
+            b_id = data[0][UI_BEITRAG_B_ID];
+            
+            menues[<1][B_CURRENT_LINE] = item;
+            menues += ({ ([ B_TYPE : "beitrag",
+                            UI_OPT_B_ID : b_id,
+                            UI_OPT_ITEM : item,
+                            B_START_LINE : 0 ]) });
+            return menues;
+        }
+    }
+    return B_NOTHING;
+}
+
+//---------------------------------------------------------------------------
+#define HELP_beitrag ({ \
+"In dieser Ansicht ist ein Beitrag zu sehen.",\
+})
+
+nosave mixed beitrag_init(mapping old)
+{
+    old[B_DATA] = get_master()->get_beitrag(old[UI_OPT_B_ID])
+        +({"------------ Ende Beitrag ----------------"});
+    old[B_START_LINE] = 0;
+    old[B_HELP] = ([ B_TYPE : B_STATICMORE,
+                     B_PROMPT : "Hilfe zu Beitragsansicht Zeile",
+                     B_DATA : HELP_beitrag+HELP_standard ]);
+    master->update_gelesen(old, TP_RN);
+    return old;
+}
+
+nosave string * beitrag_display(mapping menue)
+{
+    return staticmore_display(menue);
+}
+
+nosave int beitrag_total(mapping menue)
+{
+    return sizeof(menue[B_DATA]);
+}
+
+nosave string beitrag_prompt(mapping menue)
+{
+    return sprintf("Diskussionsbeitrag Zeile %d/%d [z,q,?]",
+        menue[B_CURRENT_LINE],sizeof(menue[B_DATA]) );
+}
+
+nosave mixed beitrag_action(string str, mapping * menues)
+{
+    mapping menue = menues[<1];
+    switch (lower_case(space(str)))
+    {
+    case "gelesen":
+        get_master()->update_gelesen(menue, TP_RN);
+        return B_REBUILT;
+    case "ungelesen":
+        get_master()->update_ungelesen(menue, TP_RN);
+        return B_REBUILT;
+    }
+    return B_NOTHING;
+}
+
+//---------------------------------------------------------------------------
+
+private void uiko_will_lernen()
+{
+    send_message_to( ({ENV_TO}), MT_NOISE, MA_COMM, wrap_say(
+        "Uiko jammert dir leise ins Ohr:","Lass mich bitte mit uiko:lerne "
+        "etwas dazulernen."));
+}
+
+int check_current()
+{
+    if (clonep())
+    {
+        if (__FILE__->check_current() > object_time())
+        {
+            call_out(#'uiko_will_lernen, 3+random(7));
+            return 0;
+        }
+        return object_time();
+    }
+    else
+    {
+        return program_time();
+    }
+}
+
+private void abbruch_lehrstunde(object pl, object old, object new)
+{
+    if (pl && pl->query_ghost())
+    {
+        pl->close_con();
+    }
+    send_message_to(({pl}), MT_LOOK, MA_LOOK, wrap(
+            "Uiko ist auf seiner Reise wohl mit einem Kuscheli "
+            "zusammengestossen und kommt nicht wieder. Du wirst Dir bei Leo "
+            "einen neuen Uiko holen muessen."));
+    if (old)
+    {
+        destruct(old);
+    }
+    if (new)
+    {
+        destruct(new);
+    }
+}
+
+void lehrstunde(object pl, object old)
+{
+    if (clonep() || !playerp(pl) || !objectp(old) || !clonep(old) 
+        || ENV(old)!=pl || program_name(old) != __FILE__ 
+        || object_time(old) >= program_time())
+    {
+        send_message_to(pl, MT_LOOK, MA_LOOK, wrap(
+            "Uiko braucht momentan nichts lernen, es jammert schon, "
+            "sollte es noetig sein."));
+        return;
+    }
+    send_message_to(pl, MT_LOOK, MA_LOOK, wrap(
+        "Uiko macht sich reisefertig und verschwindet mit einem Plopp."));
+    closure cl = #'abbruch_lehrstunde;
+    call_out(cl ,0, pl, old, 0);
+    mixed data = old->query_auto_load();
+    old->remove();
+    if (old)
+        destruct(old);
+    object new = clone_object(__FILE__);
+    new->init_arg(data);
+    remove_call_out(cl);
+    call_out(cl ,0, pl, old, new);
+    if (pl->query_ghost())
+    {
+        pl->open_con();
+    }
+    int mr = new->move(pl, MOVE_ERR_REMOVE);
+    if (pl->query_ghost())
+    {
+        pl->close_con();
+    }
+    switch (mr)
+    {
+    case MOVE_OK:
+        send_message_to(pl, MT_LOOK, MA_LOOK, wrap(
+            "Uiko erscheint wohlgelaunt wieder."));
+        break;
+    default:
+        send_message_to(pl, MT_LOOK, MA_LOOK, wrap(
+            "Uiko bleibt in den weitlaeufigen Strukturen des "
+            "Raum-Zeit-Kontinuums verloren. Du wirst Dir bei Leo einen "
+            "neuen Uiko holen muessen."));
+        break;
+    }
+    remove_call_out(cl);
+}
+
+private int uiko_lerne()
+{
+    __FILE__->lehrstunde(TP,TO);
+    return 1;
+}
+
+
+void test_clones()
+{
+    if (!clonep())
+    {
+        rclones -= ({ 0 });
+        rclones->check_current();
+    }
+}
+
+void msg_to_clones(string pre, string msg)
+{
+    if (!clonep())
+    {
+        rclones -= ({ 0 });
+        send_message_to( map(rclones, (: ENV($1) :)), MT_NOISE, MA_COMM, 
+                wrap_say(pre,msg));
+    }
+}
+
+
+void register_clone(object ob)
+{
+    if (!clonep() && objectp(ob) && program_name(ob) == __FILE__)
+    {
+        rclones -= ({ 0, ob });
+        rclones += ({ ob });
+        //PDBG(sprintf("uiko %Q registriert",ob));
+    }
+}
+
+void reset()
+{
+    // Momentan muss reset noch nicht im create aufgerufen werden
+    check_current();
+}
+
+void create()
+{
+    "*"::create();
+    initialize("kobold",100);
+    set_weight(0);
+    set_adjektiv("klein");
+    set_name("uiko");
+    set_short("Uiko, ein Umfrage- und Ideenkobold");
+    set_gender("maennlich");
+    set_id(({"uiko","umfragekobold","ideenkobold","kobold"}));
+    set_long( "Ein winziger Umfrage- und Ideenkobold kurz Uiko, "
+            "der helfend auf Deiner Schulter hockt.");
+    set_rollen_dirs(0); //Keine Rollen
+    set(P_LOOK_MSG, ""); // Kein Anzeichen, dass der Eigentuemer es anschaut.
+    
+    init_security_trust_mudlib();
+    init_security_for_actions();
+    add_security_condition((: return adminp($1); :));
+    
+    clone_object("/obj/soul")->move(this_object());
+    close_con();
+    call_out(#'check_env,0, TI); // nach dem Move...
+    if (clonep())
+        __FILE__->register_clone(this_object());
+    else
+        call_out("test_clones",0);
+}
+
+public void transfer_clones(object * obs)
+{
+    string * on1 = explode(object_name(TO),"/");
+    string * on2 = explode(object_name(PO),"/");
+    if (implode(on1[..<2],"/") != implode(on2[..<2],"/"))
+        return;
+    if ( on2[<1] != ("$"+on1[<1]+"$"))
+        return;
+    if (!clonep() && pointerp(obs))
+    {
+        rclones -= obs;
+        rclones += obs;
+        rclones -= ({ 0 });
+    }
+}
+
+void abort_renewal() 
+{
+}
+void finish_renewal(object neu) 
+{
+    if (!clonep())
+    {
+        neu->transfer_clones(rclones);
+    }
+}
+void prepare_renewal() 
+{
+}
+
+// EOF

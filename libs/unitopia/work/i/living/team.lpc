@@ -1,0 +1,1644 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/living/team.c
+// Description: Die Gruppenfaehigkeiten, vorerst nur fuer Spieler
+// Modified by: Myonara (12.Feb.2015)
+//
+// $Log: team.c,v $
+// Revision 1.7  2015/11/22 16:31:20  myonara
+// g ohne irgendwas bringt nur eine Zeile und keine vollst.Hilfe mehr.
+// g v funzt beim Gruppenleiter, wenn dieser alleine in der Gruppe ist.
+//
+// Revision 1.6  2015/11/22 15:52:53  myonara
+// Statuen sollen nicht mehr folgen...
+//
+// Revision 1.5  2015/05/19 18:47:45  myonara
+// Unsichtbare reden ohne Jemand; Gruppenanzeige verdeutlicht.
+//
+// Revision 1.4  2015/04/07 18:19:10  myonara
+// weitere Controller und Bugfixes.
+//
+// Revision 1.3  2015/04/04 19:56:26  myonara
+// Controller, neue Befehle und Bugfixes.
+//
+// Revision 1.2  2015/04/02 18:13:34  myonara
+// Bugfixes.
+//
+// Revision 1.1  2015/04/02 15:52:06  myonara
+// Neue Datei team.c
+//
+//
+
+#include <apps.h>
+#include <config.h>
+#include <deklin.h>
+#include <message.h>
+#include <misc.h>
+#include <more.h>
+#include <move.h>
+#include <notify_fail.h>
+#include <room.h>
+#include <simul_efuns.h>
+
+#define DEBUGGER "myonara"
+#include <debug.h>
+
+#define REQUEST_TIMEOUT 600 // 10 Minuten
+
+private nosave object leader = 0;
+private nosave string team_name = 0;
+private nosave object *members = ({});
+private nosave mapping requests =([]);
+private nosave mapping offers =([]);
+private nosave string current_command = 0;
+private nosave int command_approved = 0;
+private int team_autofollow = 1;
+
+/*
+FUNKTION: query_is_in_team
+DEKLARATION: int query_is_in_team()
+BESCHREIBUNG:
+Liefert 1, wenn der Spieler in einer Gruppe ist.
+VERWEISE: query_is_team_leader
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+public int query_is_in_team()
+{
+    return leader != 0;
+}
+
+/*
+FUNKTION: query_is_team_leader
+DEKLARATION: int query_is_team_leader()
+BESCHREIBUNG:
+Liefert 1, wenn der Spieler ein Gruppenleiter ist.
+VERWEISE: query_is_in_team
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+public int query_is_team_leader()
+{
+    return leader == this_object();
+}
+
+/*
+FUNKTION: query_team_autofollow
+DEKLARATION: int query_team_autofollow()
+BESCHREIBUNG:
+Liefert 1, wenn der Spieler versucht, dem Gruppenleiter autmatisch zu folgen.
+VERWEISE: query_is_in_team
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+public int query_team_autofollow()
+{
+    return team_autofollow;
+}
+
+/*
+FUNKTION: query_team_name
+DEKLARATION: string query_team_name()
+BESCHREIBUNG:
+Liefert beim Gruppenleiter den Namen der Gruppe, oder 0, wenn kein
+Gruppenleiter.
+VERWEISE: query_is_team_leader
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+public string query_team_name()
+{
+    if (leader!=this_object()) return 0;
+    if (team_name) return team_name;
+    return get_genitiv(TO->query_real_cap_name())+" Gruppe";
+}
+
+// Hook fuer Zielraum-Controller.
+private int team_internal_forbidden_move(string ctrl, 
+            object wer, object woher, object wohin, 
+            string dir, int wie, string verlassen, string ankommen)
+{
+    if (wer != TO || !objectp(wohin) || !wohin->query_room())
+    {
+        return 0;
+    }
+    mixed rtype = wohin->query_type("no_team_follow_in");
+    if (rtype)
+    {
+        if (stringp(rtype))
+        {
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(rtype));
+        }
+        else
+        {
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+                "Gruppenbewegung nicht erlaubt."));
+        }
+        return 1;
+    }
+    return wohin->forbidden("team_follow_in", 
+            wer,leader,woher,wohin, dir ? dir:wohin,verlassen,ankommen);
+}
+
+// hook-Controller fuer das autofollow.
+private void team_internal_notified_move(string ctrl, object wer, object woher, 
+            object wohin, string dir, int wie, 
+            string verlassen, string ankommen)
+{
+    if (wer)
+        wer->notify("team_after_follow",
+            wer,leader,woher,wohin, dir ? dir:wohin,verlassen,ankommen);
+    if (wohin)
+        wohin->notify("team_after_follow_in",
+            wer,leader,woher,wohin, dir ? dir:wohin,verlassen,ankommen);
+}
+
+private void team_internal_remove_move_controller_move(object pl)
+{
+    pl->delete_controller("forbidden_move", 
+                        #'team_internal_forbidden_move);
+    pl->delete_controller("notify_move", 
+                        #'team_internal_notified_move);
+}
+
+/*
+NOENZY: team_follow
+DEKLARATION: void team_follow(object * mems, object oldenv, mixed dest, string out, string in)
+BESCHREIBUNG:
+Bewegt alle Gruppenmitglieder, 1 per Callout, und nur dann, wenn es
+autofollow an hat, keine Statue ist, und im gleichen Environment ist 
+wie der Gruppenleiter war.
+VERWEISE: query_is_team_leader
+GRUPPEN: spieler, kampf, gruppen
+*/
+private void team_follow(object * mems, object oldenv, mixed dest, 
+        string out, string in)
+{
+    mixed rtype;
+    mems = filter(mems -({0}),
+        (: ENV($1) == $2 && $1->query_team_autofollow() 
+            && $1->query_statue_time() == 0 :), oldenv);
+    if (sizeof(mems))
+    {
+        rtype = oldenv->query_type("no_team_follow_out");
+        if (rtype)
+        {
+            if (stringp(rtype))
+            {
+                TO->send_message_to(mems[0], MT_NOTIFY, MA_UNKNOWN, wrap(rtype));
+            }
+            else
+            {
+                TO->send_message_to(mems[0], MT_NOTIFY, MA_UNKNOWN, wrap(
+                    "Gruppenbewegung nicht erlaubt."));
+            }
+            if (sizeof(mems)>1)
+                call_out(#'team_follow, 0, mems[1..], oldenv,  dest, out, in);
+            return;
+        }
+        if (mems[0]->forbidden("team_follow", mems[0],TO,oldenv, dest,out,in))
+        {
+            if (sizeof(mems)>1)
+                call_out(#'team_follow, 0, mems[1..], oldenv,  dest, out, in);
+            return;
+        }
+        if (oldenv->forbidden("team_follow_out", mems[0],TO,oldenv, dest,out,in))
+        {
+            if (sizeof(mems)>1)
+                call_out(#'team_follow, 0, mems[1..], oldenv,  dest, out, in);
+            return;
+        }
+        mems[0]->notify("team_before_follow",
+            mems[0],leader,oldenv,dest,out,in);
+        oldenv->notify("team_before_follow_out",
+            mems[0],leader,oldenv,dest,out,in);
+
+        call_out(#'team_internal_remove_move_controller_move, 0, mems[0]);
+        mems[0]->add_controller("forbidden_move", 
+                        #'team_internal_forbidden_move);
+        mems[0]->add_controller("notify_move",
+                        #'team_internal_notified_move);
+        mems[0]->move(dest,MOVE_NORMAL, out, in);
+        team_internal_remove_move_controller_move(mems[0]);
+        remove_call_out(#'team_internal_remove_move_controller_move);
+        if (sizeof(mems)>1)
+            call_out(#'team_follow, 0, mems[1..], oldenv,  dest, out, in);
+        //else
+        //    TO->send_message_to(TO, MT_NOTIFY, MA_MOVE, wrap(
+        //        "Alle Gruppenmitglieder bewegt."));
+    }
+    else
+    {
+        //TO->send_message_to(TO, MT_NOTIFY, MA_MOVE, wrap(
+        //        "Keine folgenden Gruppenmitglieder gefunden."));
+    }
+}
+
+/*
+FUNKTION: forbidden_team_follow
+DEKLARATION: int forbidden_team_follow(object follower, object leader,object oldenv, mixed dest, string out, string in)
+BESCHREIBUNG:
+Vor der Bewegung des follower, welcher dem leader folgt, wird im follower
+forbidden_team_follow aufgerufen, bei Rueckgabe 1 wird der MOVE_NORMAL 
+nicht ausgefuehrt. Bei 1 muss sich forbidden_team_follow um eine Ausgabe
+an den follower kuemmern. oldenv ist die jetzige Umgebung und bei Rueckgabe 0
+wird move(dest,MOVE_NORMAL, out, in); aufgerufen.
+VERWEISE: query_is_team_leader, move, query_team_members
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+FUNKTION: forbidden_team_follow_out
+DEKLARATION: int forbidden_team_follow_out(object follower, object leader,object oldenv, mixed dest, string out, string in)
+BESCHREIBUNG:
+Vor der Bewegung des follower, welcher dem leader folgt, wird im oldenv
+forbidden_team_follow_out aufgerufen, bei Rueckgabe 1 wird der MOVE_NORMAL 
+nicht ausgefuehrt. Bei 1 muss sich forbidden_team_follow_out um eine Ausgabe
+an den follower kuemmern. oldenv ist die jetzige Umgebung und bei Rueckgabe 0
+wird move(dest,MOVE_NORMAL, out, in); aufgerufen.
+VERWEISE: forbidden_team_follow,forbidden_team_follow_in,move
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+FUNKTION: forbidden_team_follow_in
+DEKLARATION: int forbidden_team_follow_in(object follower, object leader,object oldenv, object newenv, mixed dest, string out, string in)
+BESCHREIBUNG:
+Vor der Bewegung des follower, welcher dem leader folgt, wird im newenv
+forbidden_team_follow_in aufgerufen, bei Rueckgabe 1 wird der MOVE_NORMAL 
+nicht ausgefuehrt. Bei 1 muss sich forbidden_team_follow_in um eine Ausgabe
+an den follower kuemmern. oldenv ist die jetzige Umgebung und bei Rueckgabe 0
+wird move(dest,MOVE_NORMAL, out, in); aufgerufen.
+VERWEISE: forbidden_team_follow,forbidden_team_follow_out, move
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+FUNKTION: notify_team_before_follow
+DEKLARATION: void notify_team_before_follow(object follower, object leader,object oldenv, mixed dest, string out, string in)
+BESCHREIBUNG:
+Vor der Bewegung des follower, welcher dem leader folgt, wird im follower
+notify_team_before_follow aufgerufen oldenv ist die jetzige Umgebung und 
+es wird move(dest,MOVE_NORMAL, out, in); aufgerufen.
+VERWEISE: notify_team_before_follow_out, notify_team_after_follow, move
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+FUNKTION: notify_team_before_follow_out
+DEKLARATION: void notify_team_before_follow_out(object follower, object leader,object oldenv, mixed dest, string out, string in)
+BESCHREIBUNG:
+Vor der Bewegung des follower, welcher dem leader folgt, wird im oldenv
+notify_team_before_follow_out aufgerufen oldenv ist die jetzige Umgebung und 
+wird move(dest,MOVE_NORMAL, out, in); aufgerufen.
+VERWEISE: notify_team_after_follow,notify_team_after_follow,move
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+FUNKTION: notify_team_after_follow
+DEKLARATION: void notify_team_after_follow(object follower, object leader,object oldenv, object newenv, mixed dest, string out, string in)
+BESCHREIBUNG:
+Nach der Bewegung des follower, welcher dem leader folgt, wird im follower
+notify_team_after_follow aufgerufen. oldenv ist die jetzige Umgebung und
+es wurde move(dest,MOVE_NORMAL, out, in); aufgerufen.
+VERWEISE: notify_team_before_follow,notify_team_after_follow_in, move
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+FUNKTION: notify_team_after_follow_in
+DEKLARATION: void notify_team_after_follow_in(object follower, object leader,object oldenv, object newenv, mixed dest, string out, string in)
+BESCHREIBUNG:
+Nach der Bewegung des follower, welcher dem leader folgt, wird im newenv
+notify_team_after_follow_in aufgerufen. oldenv ist die alte Umgebung,
+newenv ist die jetzige Umgebung und es wird gerade
+move(dest,MOVE_NORMAL, out, in); abgearbeitet.
+VERWEISE: notify_team_before_follow,notify_team_after_follow, move
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+// Controller fuer das autofollow.
+private void team_internal_notify_move(string ctrl, object wer, object woher, 
+            object wohin, string dir, int wie, 
+            string verlassen, string ankommen)
+{
+    if (!query_is_team_leader()) return;
+    if(wie != MOVE_NORMAL) return;
+    call_out(#'team_follow, 0, members-({TO}), woher,  dir ? dir:wohin,
+        verlassen, ankommen);
+}
+
+// Gruppe aufloesen, wenn der Gruppenleiter ausloggt
+// TODO Meldung an die Gruppe, wenn jemand die Gruppe verlaesst?
+private void team_internal_notify_quit(string ctrl, object player, int flag,
+    int mode)
+{
+    if (!query_is_in_team() || player != TO)
+    {
+        TO->delete_controller("notify_quit",#'team_internal_notify_quit);
+        return;
+    }
+    if (!query_is_team_leader()) 
+    {
+        leader->leave_team(TO,1);
+        leader = 0;
+        return;
+    }
+    // TODO Gruppe vom Gruppenleiter aus aufloesen, auch bei Statue!!
+    
+    TO->send_message_to(members,MT_NOTIFY, MA_SENSE, wrap(
+        "Gruppenleiter verlaesst "+MUD_NAME+", die Gruppe loest sich auf."));
+}
+
+/*
+NOENZY: check_team_size
+DEKLARATION: private void check_team_size()
+BESCHREIBUNG:
+Wird vor allen Kommandos im Gruppenleiter aufgerufen, um bei weniger 
+als zwei Mitgliedern die Gruppe aufzuloesen.
+VERWEISE: query_is_team_leader
+GRUPPEN: spieler, kampf, gruppen
+*/
+private void check_team_size()
+{
+    if (query_is_team_leader())
+    {
+        members -= ({0});
+        if (sizeof(members) < 1)
+        {
+            members = ({ });
+            leader = 0;
+            team_name = 0;
+            TO->delete_controller("notify_move",#'team_internal_notify_move);
+            TO->delete_controller("notify_quit",#'team_internal_notify_quit);
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN,
+                wrap("Die Gruppe hat sich aufgeloest."));
+            return;
+        }
+    }
+}
+
+/*
+FUNKTION: query_team_members
+DEKLARATION: object* query_team_members()
+BESCHREIBUNG:
+Liefert die Liste der anderen Gruppenmitglieder, falls in Gruppe.
+VERWEISE: query_is_team_leader
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+public object* query_team_members()
+{
+    if (query_is_team_leader())
+    {
+        check_team_size();
+        return copy(members);
+    }
+    if (leader)
+        return leader->query_team_members();
+    return ({ });
+}
+
+/*
+NOENZY: set_team_leader
+DEKLARATION: public int set_team_leader(object tl)
+BESCHREIBUNG:
+Wird von cmd_aufnahme aufgerufen, um den Teamleiter im neuen Mitglied 
+zu setzen.
+VERWEISE: query_is_team_leader
+GRUPPEN: spieler, kampf, gruppen
+*/
+public int set_team_leader(object tl)
+{
+    if (!playerp(tl))
+    {
+        FAILWP("Kein Gruppenleiter gefunden.", FAIL_INTERNAL);
+    }
+    if (PO != tl)
+    {
+        FAILWP("Interner Fehler Gruppenleiter.", FAIL_INTERNAL);
+    }
+    if (leader == 0)
+    {
+        CONTROL->notify("join_team", TO, tl);
+        TO->notify("join_team_me", TO, tl);
+        ENV_TO->notify("join_team_here", TO, tl);
+    }
+    leader = tl;
+    TO->add_controller("notify_quit",#'team_internal_notify_quit);
+    team_autofollow = 1;
+    return 1;
+}
+
+/*
+FUNKTION: notify_join_team_me
+DEKLARATION: int notify_join_team_me(object member, object leader)
+BESCHREIBUNG:
+In member wird ein notify_join_team_me aufgerufen, sobald member vom
+leader aufgenommen wurde und member dem leader folgt.
+VERWEISE: notify_join_team, notify_join_team_here
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+FUNKTION: notify_join_team_here
+DEKLARATION: int notify_join_team_here(object member, object leader)
+BESCHREIBUNG:
+In der Umgebung von member wird ein notify_join_team_here aufgerufen, 
+sobald member vom leader aufgenommen wurde und member dem leader folgt.
+VERWEISE: notify_join_team_me, notify_join_team
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+FUNKTION: notify_join_team
+DEKLARATION: int notify_join_team(object member, object leader)
+BESCHREIBUNG:
+In /apps/control wird ein notify_join_team aufgerufen, sobald member vom
+leader aufgenommen wurde und member dem leader folgt.
+VERWEISE: notify_join_team_me, notify_join_team_here
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+NOENZY: remove_leader
+DEKLARATION: public int remove_leader()
+BESCHREIBUNG:
+Wird von cmd_entlasse im Gruppenmitglied aufgerufen.
+VERWEISE: query_is_team_leader
+GRUPPEN: spieler, kampf, gruppen
+*/
+public int remove_leader() 
+{
+    if (leader != PO)
+    {
+        FAILWP("Interner Fehler Gruppe verlassen.", FAIL_INTERNAL);
+    }
+    leader = 0;
+    TO->delete_controller("notify_quit",#'team_internal_notify_quit);
+    return 1;
+}
+
+/*
+NOENZY: hand_over
+DEKLARATION: public int hand_over(object * mems, string tname)
+BESCHREIBUNG:
+Interne Funktion, die vom alten Gruppenleiter aufgerufen wird, um die Gruppe
+an den neuen Gruppenleiter zu uebergeben.
+VERWEISE: query_is_team_leader
+GRUPPEN: spieler, kampf, gruppen
+*/
+public int hand_over(object * mems, string tname)
+{
+    if (!leader)
+        FAILWP("In keiner Gruppe.", FAIL_INTERNAL);
+    if (PO != leader)
+        FAILWP("Kann nur vom Gruppenleiter uebergeben werden.", FAIL_INTERNAL);
+    if (TO == leader)
+        FAILWP("Ist schon Gruppenleiter.", FAIL_INTERNAL);
+    if (sizeof(mems-({0}))<2)
+        FAILWP("Parameterfehler Anzahl Gruppenmitglieder.", FAIL_INTERNAL);
+    members = mems-({0});
+    team_name = tname;
+    members->set_team_leader(TO);
+    TO->add_controller("notify_move",#'team_internal_notify_move);
+    TO->send_message_to(members-({TO}), MT_NOTIFY, MA_SENSE, wrap(
+        "Neuer Gruppenleiter ist nun "+TO->query_real_cap_name()+"."));
+    TO->send_message_to(TO, MT_NOTIFY, MA_SENSE, wrap(
+        "Neuer Gruppenleiter bist nun du."));
+    return 1;
+}
+
+/*
+NOENZY: leave_team
+DEKLARATION: public int leave_team(object mem,  int flag)
+BESCHREIBUNG:
+Interne Funktion, die von Gruppenmitgliedskommando cmd_verlasse aufgerufen wird.
+VERWEISE: hand_over
+GRUPPEN: spieler, kampf, gruppen
+*/
+public int leave_team(object mem, int flag)
+{
+    if (!playerp(mem) || mem != PO || !query_is_team_leader()) // nur im Leader...
+    {
+        FAILWP("Interner Fehler beim Verlassen der Gruppe.", FAIL_INTERNAL);
+    }
+    if (mem != TO && member(members,mem)>-1)
+    {
+        members -= ({ mem, 0 });
+        TO->send_message_to(members, MT_NOTIFY, MA_UNKNOWN, wrap(
+            Der(mem)+" hat die Gruppe"
+            +(flag?" und "+MUD_NAME:"")+" verlassen."));
+        check_team_size();
+        return 1;
+    }
+    FAILWP("Interner Fehler beim Verlassen der Gruppe!", FAIL_INTERNAL);
+}
+
+/*
+NOENZY: request_member
+DEKLARATION: public int request_member(object m)
+BESCHREIBUNG:
+Interne Funktion, die von Gruppenmitgliedskommando cmd_folge aufgerufen wird.
+VERWEISE: hand_over
+GRUPPEN: spieler, kampf, gruppen
+*/
+public int request_member(object m)
+{
+    if (!playerp(m) || PO != m)
+    {
+        FAILWP("Interner Fehler, Gruppe.",FAIL_INTERNAL);
+    }
+    string rn = m->query_real_name();
+    // DEBUG(sprintf("%s<-%s %Q",TO->query_real_name(),rn,offers));
+    if (query_is_team_leader())
+    {
+        if (member(offers,rn) && offers[rn] > time())
+        {
+            offers -= ([ rn ]);
+            m->set_team_leader(TO);
+            TO->send_message_to(members, MT_NOTIFY, MA_NOISE, wrap(
+                m->query_real_cap_name()+" wurde in die Gruppe aufgenommen."));
+            members += ({m});
+            TO->send_message_to(m, MT_NOTIFY, MA_NOISE, wrap(
+                "Du wurdest in die Gruppe aufgenommen."));
+            return 2;
+        }
+        offers -= ([ rn ]);
+        TO->send_message_to(TO, MT_NOTIFY, MA_NOISE,
+            wrap(Der(m)+" will Mitglied in Deiner Gruppe werden, "
+                "tippe 'g aufnahme "+rn+"' um "
+                +ihn(m)+" aufzunehmen."));
+        requests[rn] = time() + REQUEST_TIMEOUT;
+        return 1;
+    }
+    if (query_is_in_team())
+    {
+        FAILWP("Der angegebene Spieler ist zwar in einer Gruppe, ist aber nicht "
+                "der Gruppenleiter.", FAIL_INTERNAL);
+    }
+    if (member(offers,rn) && offers[rn] > time())
+    {
+        leader = TO;
+        TO->add_controller("notify_move",#'team_internal_notify_move);
+        TO->add_controller("notify_quit",#'team_internal_notify_quit);
+        offers -= ([ rn ]);
+        m->set_team_leader(TO);
+        TO->send_message_to(TO, MT_NOTIFY, MA_NOISE, wrap(
+            m->query_real_cap_name()+" wurde in die Gruppe aufgenommen."));
+        members = ({TO,m});
+        TO->send_message_to(m, MT_NOTIFY, MA_NOISE, wrap(
+            "Du wurdest in die Gruppe aufgenommen."));
+        return 2;
+    }
+    TO->send_message_to(TO, MT_NOTIFY, MA_NOISE,
+        wrap(Der(m)+" will Mitglied in Deiner Gruppe werden, "
+            "tippe 'g aufnahme "+rn+"' um "
+            +ihn(m)+" aufzunehmen."));
+    requests[rn] = time() + REQUEST_TIMEOUT;
+    return 1;
+}
+
+/*
+NOENZY: register_new_order
+DEKLARATION: public void register_new_order(string cmd)
+BESCHREIBUNG:
+Interne Funktion, die von Gruppenleiterkommando cmd_befehl aufgerufen wird.
+VERWEISE: query_current_order
+GRUPPEN: spieler, kampf, gruppen
+*/
+public void register_new_order(string cmd)
+{
+    if (!query_is_in_team() || PO != leader)
+    {
+        return;
+    }
+    current_command = cmd;
+    command_approved = 0;
+    TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+        "Gruppenkommando '"+cmd+"' gesetzt, mit 'g b' bestaetigen, "
+        "oder anderen Befehl mit 'g b <befehl>' eingeben."));
+    return;
+}
+
+/*
+NOENZY: query_current_order
+DEKLARATION: public string query_current_order()
+BESCHREIBUNG:
+Interne Funktion, die von Gruppenleiterkommando cmd_befehl aufgerufen wird.
+Sie dient dazu den Status und Befehle der Gruppenmitglieder anzuzeigen.
+VERWEISE: register_new_order, execute_team_order
+GRUPPEN: spieler, kampf, gruppen
+*/
+public string query_current_order()
+{
+    if (query_is_in_team())
+    {
+        return sprintf("%11s",TO->query_real_cap_name())+": "+current_command
+            +(command_approved?"(bestaetigt)":"(unbestaetigt)");
+    }
+    return 0;
+}
+
+/*
+NOENZY: execute_team_order
+DEKLARATION: public int execute_team_order()
+BESCHREIBUNG:
+Interne Funktion, die von Gruppenleiterkommando cmd_angriff aufgerufen wird.
+VERWEISE: register_new_order, query_current_order
+GRUPPEN: spieler, kampf, gruppen
+*/
+public int execute_team_order()
+{
+    if (!query_is_in_team() || PO != leader)
+    {
+        return 0;
+    }
+    if (current_command && command_approved)
+    {
+        if (TO->forbidden("team_order", current_command, TO, leader))
+        {
+            current_command = 0;
+            command_approved = 0;
+            return 0;            
+        }
+        // verzoegern?? evals??
+        current_command = expand_direction(current_command, DIR_ALS_DEFAULT);
+        TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+            "Gruppenbefehl wird ausgefuehrt: "+current_command));
+        if (current_command[0..0] != "\\")
+        {
+            current_command = "\\"+current_command; // keine kuerzel
+        }
+        TO->exec_command(current_command);
+        current_command = 0;
+        command_approved = 0;
+        return 1;
+    }
+    else
+    {
+        current_command = 0;
+        command_approved = 0;
+        return 0;
+    }
+}
+
+/*
+FUNKTION: forbidden_team_order
+DEKLARATION: int forbidden_team_order(string command, object member, object leader)
+BESCHREIBUNG:
+Nach dem "g: los" des Gruppenleiters und vor eigentlicher Ausfuehrung durch
+das Gruppenmitglied, wird forbidden_team_order in dem Gruppenmitglied member
+aufgerufen. command enthaelt die Kommandozeile, leader den Gruppenleiter.
+Bei Rueckgabe von 1 muss sich die forbidden_team_order Funktion um die Ausgabe
+an das Gruppenmitglied kuemmern wie z.B. "Das Gruppenkommando "+command
++" kann nicht ausgefuehrt werden, weil ..."
+VERWEISE: forbidden_team_follow
+GRUPPEN: spieler, kampf, gruppen, team
+*/
+
+/*
+NOENZY: cmd_liste
+DEKLARATION: private int cmd_liste()
+BESCHREIBUNG:
+Interne Kommandofunktion, um alle Gruppen und deren Mitglieder anzuzeigen.
+VERWEISE: cmd_folge
+GRUPPEN: spieler, kampf, gruppen
+*/
+private int cmd_liste(string opt)
+{
+    object *tls = filter(users(),(: $1->query_is_team_leader():));
+    object tl,*mems,mem;
+    string * result = ({"Folgende Gruppen sind in UNItopia vertreten:"});
+    opt = lower_case(space(opt));
+    if (!sizeof(tls))
+    {
+        FAILWP("Keine Gruppen online.",FAIL_INTERNAL);
+    }
+    tls = sort_array(tls, function int (object a,object b)
+        {
+            return a->query_team_name() > b->query_team_name();
+        });
+    foreach (tl : tls)
+    {
+        mems = tl->query_team_members() - ({tl,0});
+        result+= ({tl->query_team_name() +"("+tl->query_real_cap_name()
+            +":"+(sizeof(mems)+1)+")"});
+        if (opt != "lang") continue;
+        foreach(mem : mems)
+        {
+            result+= ({"  "+mem->query_real_cap_name() });
+        }
+    }
+    TP->more(result, "----Mehr----", 0, M_AUTO_END);
+    return 1;
+}
+
+/*
+NOENZY: cmd_folge
+DEKLARATION: private int cmd_folge(string name)
+BESCHREIBUNG:
+Anfrage von einem Spieler, Teil einer Gruppe zu werden.
+VERWEISE: cmd_aufnahme
+GRUPPEN: spieler, kampf, gruppen
+*/
+private int cmd_folge(string name)
+{
+    object tl = find_player(lower_case(space(name)));
+    object *usrs = filter(users(), 
+        (: $1->query_is_team_leader() 
+                && lower_case($1->query_team_name()) == $2 :), 
+            lower_case(space(name)));
+    int ret;
+    if (sizeof(usrs)==1)
+    {
+        tl = usrs[0];
+    }
+    if (!tl)
+    {
+        FAILWP("Spieler nicht gefunden.", FAIL_NOT_OBJ);
+    }
+    if (tl == TO)
+    {
+        FAILWP("Dir selbst folgen geht nicht.", FAIL_NOT_OBJ);
+    }
+    if (query_is_in_team())
+    {
+        FAILWP("Du bist schon in einem Team.", FAIL_INTERNAL);
+    }
+    if (ENV(tl) != ENV(TO))
+    {
+        FAILWP("Du solltest schon im gleichen Raum sein.", FAIL_NOT_OBJ);
+    }
+    if (tl->query_is_team_leader())
+    {
+        ret = tl->request_member(TO);
+    } 
+    else if (tl->query_is_team())
+    {
+        FAILWP("Der angegebene Spieler ist zwar in einer Gruppe, ist aber nicht "
+                "der Gruppenleiter.", FAIL_INTERNAL);
+    }
+    else
+    {
+        ret = tl->request_member(TO);
+    }
+    if (ret>0)
+    {
+        team_autofollow = 1;
+        if (ret == 1) // bei 2 existiert schon eine Ausgabe durch request_member
+            TO->send_message_to(TO, MT_NOTIFY, MA_NOISE, wrap(
+                Der(tl)+" hat Deine Gruppenanfrage erhalten."));
+    }
+    return ret;
+}
+
+/*
+NOENZY: cmd_aufnahme
+DEKLARATION: int cmd_aufnahme(string name)
+BESCHREIBUNG:
+Aufnahme eines Spielers in die Gruppe, wenn dieser zuvor eine Anfrage via
+cmd_folge gestellt hat.
+VERWEISE: cmd_folge
+GRUPPEN: spieler, kampf, gruppen
+*/
+int cmd_aufnahme(string name)
+{
+    name = lower_case(space(name));
+    object mem = find_player(name);
+    int ret;
+    if ((leader == 0 || leader == TO) && name=="alle")
+    {
+        object * usrs = filter(users(),(: !$1->query_is_team_member()
+            && ENV($1) == $2 :), ENV_TO);
+        usrs -= ({ TO });
+        object * mems = filter(usrs, (: member($2, $1->query_real_name())
+            && $2[$1->query_real_name()] >= time() :), requests);
+        ret = 0;
+        if (sizeof(mems))
+        {
+            if (leader)
+            {
+                members += mems;
+                TO->send_message_to(members, MT_NOTIFY, MA_UNKNOWN, wrap(
+                    liste(map(mems,(: $1->query_real_cap_name() :)))
+                    +((sizeof(mems)>1)?" wurden ":" wurde ")
+                    +"in die Gruppe aufgenommen."));
+            }
+            else
+            {
+                leader = TO;
+                TO->add_controller("notify_move",#'team_internal_notify_move);
+                TO->add_controller("notify_quit",#'team_internal_notify_quit);
+                members = ({ TO }) + mems;
+                TO->send_message_to(members, MT_NOTIFY, MA_UNKNOWN, wrap(
+                    liste(map(mems,(: $1->query_real_cap_name() :)))
+                    +((sizeof(mems)>1)?" wurden ":" wurde ")
+                    +"in die Gruppe aufgenommen."));
+            }
+            mems->set_team_leader(TO);
+            requests -= mkmapping(map(mems,(: $1->query_real_name() :) ));
+            ret += 1;
+        }
+        usrs -= mems;
+        if (sizeof(usrs))
+        {
+            offers += mkmapping(
+                    map(usrs, (: $1->query_real_name() :)),
+                    allocate(sizeof(usrs), time()+REQUEST_TIMEOUT) );
+            TO->send_message_to(usrs, MT_NOTIFY, MA_UNKNOWN, wrap(
+                "Du wurdest in die Gruppe von "+TO->query_real_cap_name()
+                +" eingeladen, nutze 'g beitreten "+TO->query_real_name()
+                +"' um "+ihm(TO)+" zu folgen."));
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+                "Du hast "+liste(map(usrs, (: $1->query_real_cap_name() :) ))
+                +" eingeladen."));
+            ret += 2;
+        }
+        if (!ret)
+        {
+            FAILWP("Keine neuen Gruppenmitglieder gefunden.", FAIL_INTERNAL);
+        }
+        return 1;
+    }
+    if (!mem)
+    {
+        FAILWP("Spieler nicht gefunden.", FAIL_NOT_OBJ);
+    }
+    if (mem == TO)
+    {
+        FAILWP("Dich selbst aufnehmen geht nicht.", FAIL_INTERNAL);
+    }
+    if (ENV(mem) != ENV(TO))
+    {
+        FAILWP("Du solltest schon im gleichen Raum sein.", FAIL_NOT_OBJ);
+    }
+    if (!member(requests,name))
+    {
+        TO->send_message_to(mem, MT_NOTIFY, MA_UNKNOWN, wrap(
+                "Du wurdest in die Gruppe von "+TO->query_real_cap_name()
+                +" eingeladen, nutze 'g beitreten "+TO->query_real_name()
+                +"' um "+ihm(TO)+" zu folgen."));
+        offers[name] = time() + REQUEST_TIMEOUT;
+        TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+                "Du hast "+mem->query_real_cap_name()
+                +" eingeladen."));
+        return 1;
+    }
+    if (requests[name] < time())
+    {
+        m_delete(requests, name);
+        FAILWP("Du hast zu lange gewartet, um "+den(mem)+" aufzunehmen.",
+            FAIL_INTERNAL);
+    }
+    m_delete(requests, name);
+    if (leader != 0 && leader != TO)
+    {
+        FAILWP("Du bist kein Gruppenleiter (mehr).", FAIL_INTERNAL);
+    }
+    if (leader)
+    {
+        if ( mem->set_team_leader(TO))
+        {
+            members += ({ mem });
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+                Der(mem)+" wurde von Dir in die Gruppe aufgenommen."));
+            TO->send_message_to(mem, MT_NOTIFY, MA_UNKNOWN, wrap(
+                "Du wurdest in die Gruppe '"+query_team_name()
+                +"' aufgenommen."));
+            TO->send_message_to(members-({0,mem,TO}), MT_NOTIFY, MA_UNKNOWN, 
+                wrap(Der(mem)+" wurde in die Gruppe '"+query_team_name()
+                +"' aufgenommen."));
+            return 1;
+        }
+        return 0; // Fehler im set_team_leader ausgegeben
+    }
+    else
+    {
+        if ( mem->set_team_leader(TO))
+        {
+            leader = TO;
+            members += ({ TO, mem });
+            TO->add_controller("notify_move",#'team_internal_notify_move);
+            TO->add_controller("notify_quit",#'team_internal_notify_quit);
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+                Der(mem)+" wurde von Dir in die Gruppe aufgenommen."));
+            TO->send_message_to(mem, MT_NOTIFY, MA_UNKNOWN, wrap(
+                "Du wurdest in die Gruppe '"+query_team_name()
+                +"' aufgenommen."));
+            return 1;
+        }
+        return 0; // Fehler im set_team_leader ausgegeben
+    }
+}
+
+/*
+NOENZY: cmd_verlasse
+DEKLARATION: private int cmd_verlasse()
+BESCHREIBUNG:
+Ein Gruppenmitglied will die Gruppe verlassen.
+VERWEISE: cmd_folge, leave_team
+GRUPPEN: spieler, kampf, gruppen
+*/
+private int cmd_verlasse()
+{
+    if (query_is_team_leader())
+    {
+        if (sizeof(members-({0})) <= 1)
+        {
+            leader = 0;
+            team_name = 0;
+            TO->delete_controller("notify_move",#'team_internal_notify_move);
+            TO->delete_controller("notify_quit",#'team_internal_notify_quit);
+            TO->send_message_to(members, MT_NOTIFY, MA_UNKNOWN,
+                wrap("Die leere Gruppe wurde durch den Gruppenleiter "
+                    "aufgeloest."));
+            members = ({ });
+            return 1;
+        }
+        FAILWP("Du musst erst jemand anderes zum Gruppenleiter bestimmen, "
+            "bevor Du die Gruppe verlassen kannst. Oder Du entlaesst alle.", 
+            FAIL_INTERNAL);
+    }
+    if (!query_is_in_team())
+    {
+        FAILWP("Du bist in keiner Gruppen, die Du verlassen koenntest.",
+            FAIL_INTERNAL);
+    }
+    if (leader->leave_team(TO,0))
+    {
+        leader = 0;
+        TO->send_message_to(TO,MT_NOTIFY, MA_NOISE, wrap(
+            "Du hast die Gruppe verlassen."));
+        return 1;
+    }
+    return 0; // fail im leave_team
+}
+
+/*
+NOENZY: cmd_leiter
+DEKLARATION: int cmd_leiter(string name)
+BESCHREIBUNG:
+Der Gruppenleiter uebergibt die Fuehrung an ein Gruppenmitglied.
+VERWEISE: hand_over
+GRUPPEN: spieler, kampf, gruppen
+*/
+int cmd_leiter(string name)
+{
+    object mem = find_player(lower_case(name));
+    if (!mem)
+    {
+        FAILWP("Spieler nicht gefunden.", FAIL_NOT_OBJ);
+    }
+    if (leader == 0)
+    {
+        FAILWP("Du bist in keiner Gruppe.", FAIL_INTERNAL);
+    }
+    if (mem == leader)
+    {
+        if (mem == TO)
+        {
+            FAILWP("Du bist doch schon Gruppenleiter.", FAIL_INTERNAL);
+        }
+        else
+        {
+            FAILWP(Der(mem)+" ist schon Gruppenleiter.", FAIL_INTERNAL);
+        }
+    }
+    if (mem == TO)
+    {
+        FAILWP("Du kannst dich nicht selbst zum Gruppenleiter machen.",
+                FAIL_INTERNAL);
+    }
+    if (TO != leader)
+    {
+        FAILWP("Nur als Gruppenleiter kannst Du ein anderes Gruppenmitglied "
+            "zum Gruppenleiter bestimmen.", FAIL_INTERNAL);
+    }
+    if (member(members, mem)== -1)
+    {
+        FAILWP(Der(mem)+" ist nicht Mitglied Deiner Gruppe, kann so nicht "
+            "zum Gruppenleiter bestimmt werden.", FAIL_INTERNAL);
+    }
+    if (mem->hand_over(members, team_name))
+    {
+        members = ({});
+        TO->remove_controller("notify_move",#'team_internal_notify_move);
+        return 1;
+    }
+    return 0; // notify_fail in hand_over.
+}
+
+/*
+NOENZY: cmd_entlasse
+DEKLARATION: private int cmd_entlasse(string name)
+BESCHREIBUNG:
+Der Gruppenleiter entlaesst ein Gruppenmitglied oder bei alle die gesamte Gruppe.
+VERWEISE: remove_leader
+GRUPPEN: spieler, kampf, gruppen
+*/
+private int cmd_entlasse(string name)
+{
+    object mem = find_player(lower_case(name));
+    if (!query_is_team_leader())
+    {
+        FAILWP("Du bist kein Gruppenleiter.", FAIL_INTERNAL);
+    }
+    if (lower_case(space(name))=="alle")
+    {
+        leader = 0;
+        team_name = 0;
+        TO->delete_controller("notify_move",#'team_internal_notify_move);
+        TO->delete_controller("notify_quit",#'team_internal_notify_quit);
+        TO->send_message_to(members, MT_NOTIFY, MA_UNKNOWN,
+            wrap("Die Gruppe wurde durch den Gruppenleiter aufgeloest."));
+        members-=({TO});
+        members->remove_leader();
+        members = ({ });
+        return 1;
+    }
+    if (!mem)
+    {
+        FAILWP("Spieler nicht gefunden.", FAIL_INTERNAL);
+    }
+    if (mem == TO)
+    {
+        FAILWP("Dich selbst kannst Du so nicht entlassen.", FAIL_INTERNAL);
+    }
+    if (member(members, mem)==-1)
+    {
+        FAILWP(Der(mem)+" ist nicht Teil Deiner Gruppe",FAIL_INTERNAL);
+    }
+    if (!mem->remove_leader())
+    {
+        return 0;
+    }
+    members -= ({mem});
+    TO->send_message_to(mem,MT_NOTIFY, MA_UNKNOWN, wrap(
+        Der(TO)+" hat Dich aus der Gruppe entlassen."));
+    TO->send_message_to(TO,MT_NOTIFY, MA_UNKNOWN, wrap(
+        "Du hast "+den(mem)+" aus Deiner Gruppe entlassen."));
+    check_team_size();
+    return 1;
+}
+
+/*
+NOENZY: cmd_grede
+DEKLARATION: public int cmd_grede(string text, object mem)
+BESCHREIBUNG:
+Der Gruppenmitglied spricht zum Rest der Gruppe.
+VERWEISE: query_is_in_team
+GRUPPEN: spieler, kampf, gruppen
+*/
+public int cmd_grede(string text, object mem)
+{
+    if (!query_is_in_team())
+    {
+        FAILWP("Du bist in keiner Gruppe, zu welcher Du reden koenntest.",
+            FAIL_INTERNAL);
+    }
+    if (!query_is_team_leader())
+    {
+        return leader->cmd_grede(text, mem);
+    }
+    object *mems = members - ({0,mem});
+    string my_buffer,other_buffer,my_talk,other_talk;
+    if (!sizeof(mems))
+        FAILWP("Keiner zum Reden da.",FAIL_INTERNAL);
+    my_talk = wrap_say("{"+query_team_name()+"} Du redest zur Gruppe:",
+        text);
+    my_buffer = wrap_say("{"+query_team_name()+"} Du redeste zur Gruppe:",
+        text);
+    other_talk = wrap_say("{"+query_team_name()+"} "
+        +Wer(mem,ART_VIS)+" redet zur Gruppe:", text);
+    other_buffer = wrap_say("{"+query_team_name()+"} "
+        +Wer(mem,ART_VIS)+" redete zur Gruppe:", text);
+    if (mem->query_echomode())
+        mem->send_message_to(mem,
+            MT_NOTIFY|MT_SENSE|MT_FAR,MA_COMM,my_talk);
+    else
+        mem->send_message_to(mem,
+            MT_NOTIFY|MT_SENSE|MT_FAR,MA_COMM,"Ok.\n");
+    mem->send_message_to(mems,
+            MT_NOTIFY|MT_SENSE|MT_FAR,MA_COMM,other_talk);
+    mem->add_to_rede_puffer(my_buffer);
+    mems->add_to_rede_puffer(other_buffer);
+    return 1;
+}
+
+/*
+NOENZY: cmd_gname
+DEKLARATION: private int cmd_gname(string text)
+BESCHREIBUNG:
+Der Gruppenleiter bestimmt den Namen der Gruppe.
+VERWEISE: query_is_team_leader
+GRUPPEN: spieler, kampf, gruppen
+*/
+private int cmd_gname(string text)
+{
+    if (!query_is_team_leader())
+    {
+        FAILWP("Bist nicht der Gruppenleiter.", FAIL_INTERNAL);
+    }
+    string * groupnames = 
+            map(filter(users()-({TO}),
+                    (: $1->query_is_team_leader() :)),
+                (: lower_case($1->query_team_name()) :));
+    text = space(text);
+    if (sizeof(text)>50)
+    {
+        FAILWP("Gruppenname zu lang.", FAIL_INTERNAL);
+    }
+    if (text=="") text = 0;
+    if (text && member(groupnames,lower_case(text))>=0)
+    {
+        FAILWP("Gruppenname schon vorhanden.",FAIL_INTERNAL);
+    }
+    team_name = text; 
+    TO->send_message_to(members,MT_NOTIFY, MA_NOISE, wrap(
+            "Der Name der Gruppe lautet nun: "+query_team_name()));
+    return 1;
+}
+
+private int cmd_gruenden(string text)
+{
+    if (query_is_in_team())
+    {
+        FAILWP("Du bist bereits in einer Gruppe.", FAIL_INTERNAL);
+    }
+    string * groupnames = 
+            map(filter(users(),
+                    (: $1->query_is_team_leader() :)),
+                (: lower_case($1->query_team_name()) :));
+    text = space(text);
+    if (sizeof(text)>50)
+    {
+        FAILWP("Gruppenname zu lang.", FAIL_INTERNAL);
+    }
+    if (text=="") text = 0;
+    if (text && member(groupnames,lower_case(text))>=0)
+    {
+        FAILWP("Gruppenname schon vorhanden.",FAIL_INTERNAL);
+    }
+    team_name = text; 
+    leader = TO;
+    members = ({ TO });
+    TO->add_controller("notify_move",#'team_internal_notify_move);
+    TO->add_controller("notify_quit",#'team_internal_notify_quit);
+    TO->send_message_to(members,MT_NOTIFY, MA_NOISE, wrap(
+            "Der Name der neuen Gruppe lautet nun: "+query_team_name()));
+    CONTROL->notify("join_team", TO, TO);
+    TO->notify("join_team_me", TO, TO);
+    ENV_TO->notify("join_team_here", TO, TO);
+    return 1;
+}
+
+/*
+NOENZY: cmd_befehl
+DEKLARATION: private int cmd_befehl(string bef)
+BESCHREIBUNG:
+Der Universalbefehl mit folgenden Befehlsvarianten:
+- Gruppenleiter:
+    bef leer: Anzeige der Gruppenbefehle inkl. Befehlsstatus der Mitglieder.
+    bef gesetzt: Setzen des Befehls fuer alle.
+- Gruppenmitglied:
+    bef leer: Bestaetigen des Gruppenbefehls.
+    bef gesetzt: Individueller Befehl setzen.
+VERWEISE: register_new_order, query_current_order
+GRUPPEN: spieler, kampf, gruppen
+*/
+private int cmd_befehl(string bef)
+{
+    object *mems, mem;
+    if (!query_is_in_team())
+    {
+        FAILWP("Du bist z.Zt. in keiner Gruppe.", FAIL_INTERNAL);
+    }
+    if (query_is_team_leader())
+    {
+        if (bef == "")
+        {
+            if (current_command == 0)
+            {
+                FAILWP("Kein Kommando aktiv.", FAIL_INTERNAL);
+            }
+            mems = members - ({ 0 });
+            string * result = mems->query_current_order();
+            TO->more(result, "--- Mehr ---",0, M_AUTO_END);
+            return 1;
+        }
+        else
+        {
+            mems = members - ({ 0, TO });
+            mems->register_new_order(bef);
+            current_command = bef;
+            command_approved = 1;
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+                    "Befehl uebermittelt."));
+            return 1;
+        }
+    }
+    if (current_command)
+    {
+        if (bef == "")
+        {
+            command_approved = 1;
+            TO->send_message_to(leader, MT_NOTIFY, MA_UNKNOWN, wrap(
+                Der(TO)+" hat den Angriffsbefehl bestaetigt."));
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+                "Du hast den Angriffsbefehl bestaetigt."));
+            return 1;
+        }
+        else
+        {
+            current_command = bef;
+            command_approved = 1;
+            TO->send_message_to(leader, MT_NOTIFY, MA_UNKNOWN, wrap(
+                Der(TO)+" hat den Angriffsbefehl geaendert auf: "+bef));
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, wrap(
+                "Du hast den Angriffsbefehl fuer Dich geaendert."));
+            return 1;
+            
+        }
+    }
+    FAILWP("Kein Angriffskommando gesetzt.", FAIL_INTERNAL);
+}
+
+/*
+NOENZY: cmd_angriff
+DEKLARATION: private int cmd_angriff()
+BESCHREIBUNG:
+Der Gruppenleiter loest den Angriffsbefehl aus.
+VERWEISE: cmd_befehl, execute_team_order
+GRUPPEN: spieler, kampf, gruppen
+*/
+private int cmd_angriff()
+{
+    if (!query_is_in_team())
+    {
+        FAILWP("Du bist z.Zt. in keiner Gruppe.", FAIL_INTERNAL);
+    }
+    if (!query_is_team_leader())
+    {
+        FAILWP("Nur der Gruppenleiter darf den Angriffsbefehl geben.",
+            FAIL_INTERNAL);
+    }
+    if (current_command == 0)
+    {
+        FAILWP("Kein aktueller Befehl gesetzt.", FAIL_INTERNAL);
+    }
+    object * mems = members - ({0});
+    int c = filter(mems->execute_team_order(), (: $1>0 :) );
+    TO->send_message_to(TO, MT_NOTIFY,MA_FIGHT, wrap(
+        "Es wurden "+sizeof(c)+" Angriffsbefehle durchgefuehrt."));
+    return 1;
+}
+
+/*
+NOENZY: cmd_autofolge
+DEKLARATION: private int cmd_autofolge(string anaus)
+BESCHREIBUNG:
+Einstellung fuer das automatische Folgen (Mitglied folgt Gruppenleiter).
+VERWEISE: 
+GRUPPEN: spieler, kampf, gruppen
+*/
+private int cmd_autofolge(string anaus)
+{
+    switch(anaus)
+    {
+        case "an":
+        case "ein":
+            if (team_autofollow)
+            {
+                TO->send_message_to(TO,MT_NOTIFY,MA_MOVE,wrap(
+                    "Du folgst dem Gruppenleiter schon automatisch."));
+                return 1;
+            }
+            team_autofollow = 1;
+            TO->send_message_to(TO,MT_NOTIFY,MA_MOVE,wrap(
+                "Du folgst nun dem Gruppenleiter automatisch."));
+            return 1;
+        case "aus":
+            if (!team_autofollow)
+            {
+                TO->send_message_to(TO,MT_NOTIFY,MA_MOVE,wrap(
+                    "Du folgst dem Gruppenleiter bereits nicht automatisch."));
+                return 1;
+            }
+            team_autofollow = 0;
+            TO->send_message_to(TO,MT_NOTIFY,MA_MOVE,wrap(
+                "Du folgst dem Gruppenleiter nicht mehr automatisch."));
+            return 1;
+        default:
+            FAILWP("g autofolge an/aus?",FAIL_NOT_OBJ);
+    }
+}
+
+public int list_sequence(object pl, int flag)
+{
+    if (!playerp(pl) || !query_is_team_leader())
+    {
+        FAILWP("Interner Fehler bei der Anzeige der Reihenfolge.", 
+            FAIL_INTERNAL);
+    }
+    TO->send_message_to(pl, MT_NOTIFY, MA_UNKNOWN, wrap(
+        "Die "+(flag?"neue ":"")+"Reihenfolge lautet: "
+        +liste(map(members,(: $1->query_real_cap_name() :))) ));
+    return 1;
+}
+
+public int change_sequence(object pl, string modifier)
+{
+    if (!playerp(pl) || !query_is_team_leader())
+    {
+        FAILWP("Interner Fehler bei der Aenderung der Reihenfolge.", 
+            FAIL_INTERNAL);
+    }
+    int i = member(members, pl);
+    if (i == -1)
+    {
+        FAILWP("Interner Fehler bei der Aenderung der Reihenfolge.", 
+            FAIL_INTERNAL);
+    }
+    switch (modifier)
+    {
+        case "+":
+            if (i==0)
+            {
+                FAILWP("Bist schon auf 1. Position.", FAIL_INTERNAL);
+            }
+            members[(i-1)..i] = ({ members[i], members[i-1] });
+            return list_sequence(pl, 1);
+        case "-":
+            if (i==(sizeof(members)-1))
+            {
+                FAILWP("Bist schon auf letzter Position.", FAIL_INTERNAL);
+            }
+            members[i..(i+1)] = ({ members[i+1], members[i] });
+            return list_sequence(pl, 1);
+        case "++":
+            if (i==0)
+            {
+                FAILWP("Bist schon auf 1. Position.", FAIL_INTERNAL);
+            }
+            members = ({ pl }) + (members-({pl}));
+            return list_sequence(pl, 1);
+        case "--":
+            if (i==(sizeof(members)-1))
+            {
+                FAILWP("Bist schon auf letzter Position.", FAIL_INTERNAL);
+            }
+            members = (members-({pl})) + ({ pl });
+            return list_sequence(pl, 1);
+        default:
+            FAILWP("Fehler bei der Aenderung der Reihenfolge.",FAIL_INTERNAL);
+    }
+}
+
+/*
+NOENZY: cmd_reihenfolge
+DEKLARATION: private int cmd_reihenfolge(string str)
+BESCHREIBUNG:
+Die Anzeige bzw Aenderung der Reihenfolge innerhalb der Gruppe.
+VERWEISE: 
+GRUPPEN: spieler, kampf, gruppen
+*/
+private int cmd_reihenfolge(string str)
+{
+    if (!query_is_in_team())
+    {
+        FAILWP("Du bist z.Zt. in keiner Gruppe.", FAIL_INTERNAL);
+    }
+    switch (space(str))
+    {
+    case "":
+        return leader->list_sequence(TO, 0);
+    case "+":
+    case "++":
+    case "-":
+    case "--":
+        return leader->change_sequence(TO, space(str));
+    }
+    if (!query_is_team_leader())
+    {
+        FAILWP("Gruppenmitglieder koennen nur mit +,++,-,-- die "
+            "Reihenfolge fuer sich aendern.", FAIL_INTERNAL);
+    }
+    string *plnames = regexplode(lower_case(space(str)),"[ ,]") - ({ "","," });
+    object *players = map(plnames, (: find_player($1) :)) - ({ 0 });
+    players -= (players - members);// Nichtmitglieder rauswerfen
+    members = players + (members - players);
+    // die angegebenen an den Anfang, den Rest dahinter.
+    return list_sequence(TO, 1); // und anzeigen nach Aenderung.
+}
+
+/*
+                      Name   - der Name
+                      AP     - Ausdauerpunkte
+                      ZP/xx  - Zauberpunkte o.ae.
+                      A      - Autom.Verfolgen aktiviert
+                      WO     - Short, wo sich das Gruppenmitglied befindet.
+*/
+/*
+NOENZY: cmd_anzeige
+DEKLARATION: public int cmd_anzeige(object pl)
+BESCHREIBUNG:
+Der Anzeigebefehl fuer Gruppenmitglieder.
+VERWEISE: 
+GRUPPEN: spieler, kampf, gruppen
+*/
+#define ANZEIGE_FORMAT "%11s %3d/%3d %3d/%3d %s %s"
+public int cmd_anzeige(object pl)
+{
+    if (!query_is_in_team())
+    {
+        FAILWP("Du bist z.Zt. in keiner Gruppe.", FAIL_INTERNAL);
+    }
+    if (!query_is_team_leader())
+    {
+        return leader->cmd_anzeige(pl);
+    }
+    object * mems = members - ({0}), mem;
+    string * result = ({ "       Name AP      ZP      A WO" });
+    foreach (mem:mems)
+    {
+        result += ({ sprintf(ANZEIGE_FORMAT,
+                         mem->query_real_cap_name(),
+                         mem->query_hp(),mem->query_max_hp(),
+                         mem->query_sp(),mem->query_max_sp(),
+                         (mem==TO)?"*":(mem->query_team_autofollow()?"A":" "),
+                         ENV(mem)->query_short()) });
+    }
+    result += ({ 
+        "Anzeige in Reihenfolge, * ist der Anfuehrer, A ist Autofolgen." });
+    pl->more(result, "----Mehr----", 0, M_AUTO_END);
+    return 1;
+}
+
+/*
+NOENZY: cmd_group
+DEKLARATION: int cmd_group(string str)
+BESCHREIBUNG:
+Die Gruppenkommandos.
+VERWEISE: add_actions
+GRUPPEN: spieler, kampf, gruppen
+*/
+int cmd_group(string str)
+{
+    string *strs = explode(space(str)," ");
+    check_team_size();
+    switch (lower_case(strs[0]))
+    {
+        default:
+        case "":
+            TO->send_message_to(TO, MT_NOTIFY, MA_UNKNOWN, 
+                "Mit \"g ?\" oder \"hilfe gruppe\" "
+                "erhaelt man ausfuehrliche Hilfe zu den Gruppen");
+            return 1;
+        case "?":
+        case "hilfe":
+            TO->more(HELP_PATH+"/gruppe", "----Mehr----", 0, M_AUTO_END);
+            return 1;
+        case "li":
+        case "lis":
+        case "list":
+        case "liste":
+            if (sizeof(strs)<2)
+            {
+                return cmd_liste("");
+            }
+            return cmd_liste(strs[1]);
+        case "folge":
+        case "beitreten":
+            if (sizeof(strs)<2)
+            {
+                FAILWP("g beitreten <wem>?",FAIL_NOT_OBJ);
+            }
+            return cmd_folge(strs[1]);
+        case "aufnahme":
+        case "einladen":
+            if (sizeof(strs)<2)
+            {
+                FAILWP("g einladen <wen>?",FAIL_NOT_OBJ);
+            }
+            return cmd_aufnahme(strs[1]);
+        case "v":
+        case "ve":
+        case "ver":
+        case "verl":
+        case "verla":
+        case "verlas":
+        case "verlass":
+        case "verlasse":
+            return cmd_verlasse();
+        case "le":
+        case "lei":
+        case "leit":
+        case "leite":
+        case "leiter":
+            if (sizeof(strs)<2)
+            {
+                FAILWP("g leiter <wen>?",FAIL_NOT_OBJ);
+            }
+            return cmd_leiter(strs[1]);
+        case "entlasse":
+            if (sizeof(strs)<2)
+            {
+                FAILWP("g entlasse <wen>?",FAIL_NOT_OBJ);
+            }
+            return cmd_entlasse(strs[1]);
+        case "r":
+        case "re":
+        case "red":
+        case "rede":
+            if (sizeof(strs)<2)
+            {
+                FAILWP("g rede <text>?",FAIL_NOT_OBJ);
+            }
+            return cmd_grede(implode(strs[1..]," "),TO);
+        case "rei":
+        case "reih":
+        case "reihe":
+        case "reihen":
+        case "reihenf":
+        case "reihenfo":
+        case "reihenfol":
+        case "reihenfolg":
+        case "reihenfolge":
+            if (sizeof(strs)<2)
+            {
+                return cmd_reihenfolge("");
+            }
+            return cmd_reihenfolge(implode(strs[1..]," "));
+        case "name":
+            if (sizeof(strs)<2)
+            {
+                FAILWP("g name <text>?",FAIL_NOT_OBJ);
+            }
+            return cmd_gname(implode(strs[1..]," "));
+        case "gruend":
+        case "gruende":
+        case "gruenden":
+            if (sizeof(strs)<2)
+            {
+                return cmd_gruenden("");
+            }
+            return cmd_gruenden(implode(strs[1..]," "));
+        case "b":
+        case "be":
+        case "bef":
+        case "befe":
+        case "befeh":
+        case "befehl":
+        case "bes":
+        case "best":
+        case "besta":
+        case "bestae":
+        case "bestaet":
+        case "bestaeti":
+        case "bestaetig":
+        case "bestaetige":
+            if (sizeof(strs)<2)
+            {
+                return cmd_befehl("");
+            }
+            return cmd_befehl(implode(strs[1..]," "));
+        case "ang":
+        case "angr":
+        case "angri":
+        case "angrif":
+        case "angriff":
+        case "los":
+            return cmd_angriff();
+        case "a":
+        case "an":
+        case "anz":
+        case "anze":
+        case "anzei":
+        case "anzeig":
+        case "anzeige":
+            return cmd_anzeige(TO);
+        case "au":
+        case "aut":
+        case "auto":
+        case "autof":
+        case "autofo":
+        case "autofol":
+        case "autofolg":
+        case "autofolge":
+            if (sizeof(strs)<2)
+            {
+                FAILWP("g autofolge an/aus?",FAIL_NOT_OBJ);
+            }
+            return cmd_autofolge(strs[1]);
+    }
+}
+
+/*
+NOENZY: add_actions
+DEKLARATION: protected void add_actions()
+BESCHREIBUNG:
+Das einzige Kommando g(ruppe) definieren.
+VERWEISE: cmd_group
+GRUPPEN: spieler, kampf, gruppen
+*/
+protected void add_actions()
+{
+    add_action("cmd_group","gruppe", -1);
+}

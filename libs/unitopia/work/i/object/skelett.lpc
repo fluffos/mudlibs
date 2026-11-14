@@ -1,0 +1,292 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/object/skelett.c
+// Description:
+//
+// $Log: skelett.c,v $
+// Revision 1.20  2016/03/23 20:37:03  myonara
+// Default clonen: no_remove ist 1, add_skelett setzt es auf 0.
+// als Enhancement zu vorherigem Patch...
+//
+// Revision 1.19  2016/03/23 04:09:23  myonara
+// set_skelett_no_remove/query_skelett_no_remove
+//
+// Revision 1.18  2016/03/18 16:23:54  myonara
+// check_skelette bei jedem init anstatt bei keinem (!first)
+//
+// Revision 1.17  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.16  2003/09/02 14:15:42  menaures
+// Bugfix zum vorhergehenden Patch
+//
+// Revision 1.15  2003/07/31 00:46:03  menaures
+// Landschaftstypen beim Begraben beachten
+//
+// Revision 1.14  2003/07/27 02:34:33  gnomi
+// Unnoetigen typecast entfernt.
+//
+// Revision 1.13  2003/06/19 22:40:29  gnomi
+// Doku korrigiert.
+//
+// Revision 1.12  2003/02/14 03:55:34  gnomi
+// Schauer, wenn man sein eigenes Skelett sieht.
+//
+// Revision 1.11  2002/01/13 04:50:15  freaky
+// query_long() umgestellt.
+//
+// Revision 1.10  2002/01/13 00:55:21  gnomi
+// string query_long() -> varargs string query_long(object viewer)
+//
+// Revision 1.9  2001/09/05 20:50:57  freaky
+// Typo in Doku gefixed
+//
+// Revision 1.8  2001/06/25 11:48:23  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.7  2001/03/04 04:51:22  freaky
+// von sent.h auf commands.h umgestellt.
+//
+// Revision 1.6  2001/03/03 22:55:20  gnomi
+// Zahlen in add_action's durch ihre Defines ersetzt.
+//
+// Revision 1.5  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+inherit "/i/item";
+inherit "/i/install";
+
+#include <deklin.h>
+#include <level.h>
+#include <landschaft.h>
+#include <message.h>
+#include <commands.h>
+
+#define LEBENSDAUER_SKELETT 604800   /* 604800    1 Woche  */
+                                     /* 2419200   4 Wochen */
+
+private string *player_names = ({});
+private int *todeszeiten = ({});
+private int no_remove = 1;
+
+void create()
+{
+    set_id( ({"skelett","skelette","knochen"}) );
+    set_name("skelett");
+    set_short("Ein Skelett");
+    set_material("bein");
+    set_long("Das Skelett eines Spielers.\n");
+    set_gender("saechlich");
+    set_weight(1);
+    seteuid(getuid());
+    set_no_move_reason("Das Skelett wuerde das nicht ueberstehen.\n");
+}
+
+/*
+FUNKTION: query_skelett_no_remove
+DEKLARATION: int query_skelett_no_remove()
+BESCHREIBUNG:
+Ungleich 0 verhindert es die interne Pruefung.
+VERWEISE: set_skelett_no_remove
+GRUPPEN: Monster, Player
+*/
+int query_skelett_no_remove()
+{
+    return no_remove;
+}    
+
+/*
+FUNKTION: set_skelett_no_remove
+DEKLARATION: void set_skelett_no_remove(int i)
+BESCHREIBUNG:
+Ungleich 0 verhindert es die interne Pruefung, damit geclonete Skelette
+nicht einfach verschwinden. (Im Gegensatz zu verstorbene Spieler.)
+Defaultmaessig (clonen) ist das intern 1, bei Spielern (add_skelett) 0.
+VERWEISE: query_skelett_no_remove
+GRUPPEN: Monster, Player
+*/
+void set_skelett_no_remove(int i)
+{
+    no_remove = (i?1:0);
+}
+
+/*
+FUNKTION: is_skelett
+DEKLARATION: int is_skelett()
+BESCHREIBUNG:
+Liefert 1 wenn das objekt ein Skelett ist.
+VERWEISE:
+GRUPPEN: Monster, Player
+*/
+int is_skelett() { return 1; }
+
+int query_schwimmfaehig() { return 1; }
+
+void make_autoload() {
+	string *entrys, filename;
+	int a, dummy;
+
+    if (!todeszeiten || !player_names || sizeof(todeszeiten) <= 0 ||
+	sizeof(todeszeiten) != sizeof(player_names) || !environment())
+	return;
+
+    entrys = ({});
+    for (a=0; a<sizeof(todeszeiten); a++)
+	entrys += ({ player_names[a]+"_"+todeszeiten[a] });
+    sscanf(object_name(),"%s#%d",filename,dummy);
+    environment()->remove_autoload(filename);
+    environment()->set_autoload(this_object(),implode(entrys,","));
+}
+
+void begrabe() {
+	string filename;
+	int dummy;
+    
+    if (environment()) {
+	sscanf(object_name(),"%s#%d",filename,dummy);
+	environment()->remove_autoload(filename);
+	}
+    remove();
+}
+
+varargs void check_skelette(int change) {
+	int a;
+
+    if (no_remove)
+        return; // kein Check
+    if (!todeszeiten || sizeof(todeszeiten) <= 0) {
+	begrabe();
+	return;
+	}
+    for (a=0; a<sizeof(todeszeiten); a++)
+	if (time()-todeszeiten[a] > LEBENSDAUER_SKELETT) {
+	    todeszeiten[a] = 0;
+	    player_names[a] = 0;
+	    change = 1;
+	    }
+    todeszeiten -= ({ 0 });
+    player_names -= ({ 0 });
+
+    if (sizeof(todeszeiten) <= 1) {
+	set_short("Ein Skelett");
+	set_name("skelett");
+	set_gender("saechlich");
+	set_long("Ein menschliches Skelett.\n");
+	}
+    else {
+	set_short(sizeof(todeszeiten)+" Skelette");
+	set_name("skelette");
+	set_gender("saechlich");
+	set_plural(1);
+	set_long("Du siehst mehrere menschliche Skelette.\n");
+	}
+    if (change)
+	make_autoload();
+    if (sizeof(todeszeiten) <= 0)
+	call_out("zerfall",10);
+    return;
+}
+
+void init() {
+    add_action("begrabe_command","begrabe",-6);
+    add_action("begrabe_command","vergrabe",-7);
+    add_action("begrabe_command","verbudd",AA_SHORT);
+    check_skelette();
+}
+
+void install_parameter(string str) {
+	string *skelette, name;
+	int zeit, a;
+
+    if (!str || sizeof((skelette = explode(str,","))) <= 0) {
+	begrabe();
+	return;
+	}
+    player_names = ({});
+    todeszeiten = ({});
+    for (a=0; a< sizeof(skelette); a++)
+	if (sscanf(skelette[a],"%s_%d",name,zeit) == 2) {
+	    player_names += ({ name });
+	    todeszeiten += ({ zeit });
+	    }
+    check_skelette();
+    return;
+}
+
+int begrabe_command(string str) {
+    object *inv;
+    int a;
+
+    if (!me (str)) {
+        notify_fail ("Was willst Du begraben?\n");
+        return 0;
+    }
+    if (!environment() || environment()->query_type("graben_verboten") ||
+        environment()->query_type(LANDSCHAFT) & (L_WASSER|L_FLIESSEND|L_FLACH|L_UNTERWASSER))
+    {
+        write("Das geht hier nicht.\n");
+        return 1;
+    }
+    if (this_player()->free_hand() == -1) {
+        write ("Du hast keine Hand mehr frei.\n");
+        return 1;
+    }
+
+    write("Du verbuddelst die herumliegenden Knochen.\n");
+    say(Der(OBJ_TP)+" verbuddelt die herumliegenden Knochen.\n");
+
+    if (inv = all_inventory(this_object()))
+	for (a=0; a<sizeof(inv); a++)
+	{
+	    if (inv[a])
+		inv[a]->remove();
+	    if (inv[a])
+		destruct(inv[a]);
+	}
+    begrabe();
+    return 1;
+}
+
+void zerfall() {
+    this_object()->send_message(MT_LOOK,MA_UNKNOWN,
+	    "Das Skelett zerfaellt zu Staub.\n"+
+	    "Der Staub wird durch den Wind in alle Richtungen verstreut.\n");
+    begrabe();
+}
+
+int query_enable_cleanup() { return 1; }
+
+string *query_player_names() { return player_names; }
+int *query_todeszeiten() { return todeszeiten; }
+
+void add_skelett(string name, int zeit) {
+    if (!name || !zeit)
+	return;
+    player_names += ({ name });
+    todeszeiten += ({ zeit });
+    set_skelett_no_remove(0);
+    check_skelette(1);
+}
+
+string query_long(object viewer) {
+	int a;
+	string ret;
+
+    if (wizp(viewer) && todeszeiten && sizeof(todeszeiten) > 0) {
+	ret = item::query_long(viewer)+"\n";
+	for(a=0; a<sizeof(todeszeiten); a++)
+	    ret += "  "+right(capitalize(player_names[a]),10)+": "+shorttimestr(todeszeiten[a])+"\n";
+	return ret;
+	}
+    if(playerp(viewer) && member(player_names, viewer->query_real_name())>=0)
+	call_out((:
+	    if($1)
+		$1->send_message_to($1, MT_NOTIFY|MT_FEEL, MA_UNKNOWN,
+		    "Dir laeuft ein eiskalter Schauer ueber den Ruecken.\n");
+	:),4);
+    return ::query_long(viewer);
+}

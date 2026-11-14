@@ -1,0 +1,206 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/money/exchange.c
+// Description: Umrechnung verschiedener Waehrungen.
+// Author:	Francis
+// Modified By: Garthan: Kurse aus der Zentralbank holen, wenn nicht gesetzt.
+//
+// $Log: exchange.c,v $
+// Revision 1.8  2016/09/03 14:11:09  myonara
+// Neue Funktion convert_float
+//
+// Revision 1.7  2013/12/11 13:09:28  gnomi
+// Beim Wechseln von Waehrungen nicht aufrunden...
+//
+// Revision 1.6  2008-04-02 08:03:56  gnomi
+// Waehrungsangaben erst durch ZB->update_valuta(s) jagen.
+//
+// Revision 1.5  2003/05/10 20:55:53  gnomi
+// Pulami: convert akzeptiert als Waehrung auch 0 statt "taler".
+//
+// Revision 1.4  2001/06/22 22:15:23  sissi
+// mehr quellensteuerlog
+//
+// Revision 1.3  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+ * wert_waehrung2 = convert(wert_waehrung1,waehrung1,waehrung2)
+ */
+
+#pragma save_types
+
+#include <money.h>
+
+private string *valuta;
+private string *valutas;
+private int *kurs;
+
+#define VALUTA  (valuta  ? valuta  : ZENTRALBANK->query_valuta_tafel())
+#define VALUTAS (valutas ? valutas : ZENTRALBANK->query_valutas_tafel())
+#define KURS    (kurs    ? kurs    : ZENTRALBANK->query_kurs_tafel())
+#define UPDATE_VALUTA(str) (ZENTRALBANK->update_valuta((str)) || (str))
+#define UPDATE_VALUTAS(str) (ZENTRALBANK->update_valutas((str)) || (str))
+
+/*
+FUNKTION: convert
+DEKLARATION: int convert(int value, string ovaluta, string nvaluta)
+BESCHREIBUNG:
+convert() rechnet einen Geldbetrag gegeben durch value (Wert) und ovaluta
+(Waehrung) in eine andere Waehrung gegeben durch nvaluta um. Zurueckgegeben
+wird der Wert in dieser Waehrung.
+
+Als Waehrung kann auch 0 angegeben werden, es wird dann die Basiswaehrung
+verwendet (dies entspricht i. d. R. dem Taler).
+
+Beispiele:
+
+    convert(1000, "gulden", "taler") rechnet 1000 Gulden in Taler um.
+
+    convert(ob->query_value(), 0, "riki") berechnet den Wert des Objektes
+                                          ob in Riki.
+
+VERWEISE: set_kurs_tafel, set_valuta_tafel, set_valutas_tafel
+GRUPPEN: handel
+*/
+float convert_float(float value, string ovaluta, string nvaluta)
+{
+    // Waehrungstabelle ermitteln; Waehrung==0 ist Basiswaehrung (Warenwert):
+    string *p_valuta=({0})   +VALUTA;
+    int    *p_kurs  =({1000})+KURS;
+
+    // Indizes in der Tabelle berechnen:
+    int o=member(p_valuta, UPDATE_VALUTA(ovaluta));
+    int n=member(p_valuta, UPDATE_VALUTA(nvaluta));
+
+    // Eine der Waehrungen nicht in der Tabelle enthalten? Dann Fehler:
+    if(o==-1 || n==-1)
+        return -1.0;
+
+    return to_float(value)*to_float(p_kurs[n])/to_float(p_kurs[o]);
+}
+
+int convert(int value, string ovaluta, string nvaluta)
+{
+    return to_int(floor(convert_float(to_float(value),ovaluta,nvaluta)));
+}
+
+
+/*
+FUNKTION: query_valuta_tafel
+DEKLARATION: string *query_valuta_tafel()
+BESCHREIBUNG:
+Liefert alle erlaubten Zahlungsmittel.
+Dies sind sofern nicht durch set_valuta_tafel() anders angegeben, alle
+der Zentralbank bekannten Waehrungen.
+VERWEISE: set_valuta_tafel, query_valutas_tafel, query_kurs_tafel
+GRUPPEN: handel
+*/
+string *query_valuta_tafel() { return VALUTA; }
+
+/*
+FUNKTION: query_valutas_tafel
+DEKLARATION: string *query_valutas_tafel()
+BESCHREIBUNG:
+Liefert alle erlaubten Zahlungsmittel im Plural.
+Dies sind sofern nicht durch set_valuta_tafel() anders angegeben, alle
+der Zentralbank bekannten Waehrungen.
+VERWEISE: set_valutas_tafel, query_valuta_tafel, query_kurs_tafel
+GRUPPEN: handel
+*/
+string *query_valutas_tafel() { return VALUTAS; }
+
+/*
+FUNKTION: query_kurs_tafel
+DEKLARATION: int *query_kurs_tafel()
+BESCHREIBUNG:
+Liefert die aktuellen Kurse. Die zu den Zahlen gehoerigen Werte erhaelt man
+mit query_valuta_tafel(). Der Wert query_kurs_tafel()[i] gehoert also zur
+Waehrung query_valuta_tafel()[i].
+VERWEISE: set_kurs_tafel, query_valuta_tafel, query_valutas_tafel
+GRUPPEN: handel
+*/
+int *query_kurs_tafel() { return KURS; }
+
+/*
+FUNKTION: set_valuta_tafel
+DEKLARATION: void set_valuta_tafel(string *str)
+BESCHREIBUNG:
+Damit werden alle akzeptierten Waehrungen gesetzt. Wird 0 angegeben, so
+werden alle, der Zentralbank bekannten Waehrungen genommen.
+Der Plural der Waehrungen und ihre Umrechnungskurse sollten auch
+mit set_valutas_tafel und set_kurs_tafel gesetzt werden.
+VERWEISE: query_valuta_tafel, set_valutas_tafel, set_kurs_tafel
+GRUPPEN: handel
+*/
+void set_valuta_tafel(string *str) { valuta = map(str, (:UPDATE_VALUTA($1):)); }
+
+/*
+FUNKTION: set_valutas_tafel
+DEKLARATION: void set_valutas_tafel(string *str)
+BESCHREIBUNG:
+Damit wird der Plural aller akzeptierten Waehrungen gesetzt. Wird 0 angegeben,
+so werden alle, der Zentralbank bekannten Waehrungen genommen.
+Der Singular der Waehrungen und ihre Umrechnungskurse sollten auch
+mit set_valuta_tafel und set_kurs_tafel gesetzt werden.
+VERWEISE: query_valutas_tafel, set_valuta_tafel, set_kurs_tafel
+GRUPPEN: handel
+*/
+void set_valutas_tafel(string *str) { valutas = map(str,(:UPDATE_VALUTAS($1):)); }
+
+/*
+FUNKTION: set_kurs_tafel
+DEKLARATION: void set_kurs_tafel(string *str)
+BESCHREIBUNG:
+Damit werden die Umrechnungskurse gesetzt. Wird 0 angegeben, so werden
+die Umrechnungskurse der Zentralbank genommen. Diese Umrechnungskurse
+beziehen sich auf die mit set_valuta_tafel und set_valutas_tafel gesetzten
+Waehrungen, weshalb diese auch gesetzt (bzw. auf 0 gesetzt) werden sollten.
+VERWEISE: query_kurs_tafel, set_valuta_tafel, set_valutas_tafel
+GRUPPEN: handel
+*/
+void set_kurs_tafel(int *a) { kurs = a; }
+
+/*
+FUNKTION: query_accepted_valutas
+DEKLARATION: string query_accepted_valutas(string str)
+BESCHREIBUNG:
+Liefert 0, wenn die angegebene Waehrung nicht akzeptiert wird, ansonsten
+der Plural der Waehrung.
+VERWEISE: query_accepted_valuta, query_valutas_tafel
+GRUPPEN: handel
+*/
+string query_accepted_valutas(string str)
+{
+   int i;
+
+   str = lower_case(str);
+   if((i = member(VALUTAS, UPDATE_VALUTAS(str))) < 0 &&
+      (i = member(VALUTA, UPDATE_VALUTA(str))) < 0)
+      return 0;
+   return VALUTAS[i];
+}
+
+/*
+FUNKTION: query_accepted_valuta
+DEKLARATION: string query_accepted_valuta(string str)
+BESCHREIBUNG:
+Liefert 0, wenn die angegebene Waehrung nicht akzeptiert wird, ansonsten
+der Singular der Waehrung.
+VERWEISE: query_accepted_valutas, query_valutas_tafel
+GRUPPEN: handel
+*/
+string query_accepted_valuta(string str)
+{
+   int i;
+
+   if(!stringp(str))
+      return 0;
+   str = lower_case(str);
+   if((i = member(VALUTA, UPDATE_VALUTA(str))) < 0 &&
+      (i = member(VALUTAS,UPDATE_VALUTAS(str))) < 0)
+      return 0;
+   return VALUTA[i];
+}

@@ -1,0 +1,763 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/money/bank.c
+// Description: Die Standardbank
+//		Sie definiert die Befehle fuer das Einzahlen, Auszahlen,
+//		Wechseln und Abfragen des Kontostands.
+// Author:	Francis
+// Modified by:	Garthan	(26.09.1994)  Kosmetik
+//		Freaky  (06.04.1998)  abheben nur fuer Players (playerp)
+//		Sissi   (09.04.1998)  Wenn ein Spieler das abgehobene Geld nicht
+//			              mehr tragen kann, dann wird es nicht
+//                                    mehr "hingelegt".
+//
+// $Log: bank.c,v $
+// Revision 1.20  2011-07-13 08:46:29  sorcerer
+// Fehlenden Zeilenumbruch ergaenzt.
+//
+// Revision 1.19  2010-12-10 12:36:40  sorcerer
+// auf send_message umgestellt
+//
+// Revision 1.18  2009-01-15 08:48:26  gnomi
+// Zinsen von der Gebuehrentabelle genommen.
+//
+// Revision 1.17  2008-05-19 14:18:38  gnomi
+// Beim Konvertieren von Waehrungen keinen Hinweis darauf, welchen
+// Verlust der Spieler dabei macht, da die Konvertierung in beide
+// Richtungen rundet.
+//
+// Revision 1.16  2008-04-02 08:03:20  gnomi
+// Waehrungsangaben erst durch ZB->update_valuta(s) jagen.
+//
+// Revision 1.15  2006/08/29 22:32:50  gnomi
+// Grundwaehrung ist 0 und nicht "taler".
+//
+// Revision 1.14  2004/07/25 00:09:17  gnomi
+// 'Zahle alles ein': Geschlossene Behaelter ignorieren.
+//
+// Revision 1.13  2004/05/22 19:50:55  menaures
+// Neue Annoyance: Kontosperrung
+//
+// Revision 1.12  2004/01/02 01:03:43  gnomi
+// add_actions filtern ueberfluessige Leerzeichen raus.
+//
+// Revision 1.11  2003/04/25 02:37:52  gnomi
+// Etliche Leerzeichen vor einem Satzendezeichen entfernt.
+//
+// Revision 1.10  2003/01/25 22:51:22  sissi
+// Die Engelskugel wird bei "zahle 100 taler ein" nicht mehr versucht,
+// einzuzahlen.
+//
+// Revision 1.9  2002/04/10 05:19:43  gnomi
+// Einige Variableninitialisierungen wegen Typcheck getrennt.
+//
+// Revision 1.8  2002/01/15 03:38:28  gnomi
+// query_short umgestellt.
+//
+// Revision 1.7  2001/07/15 12:34:09  sissi
+// In der Gebuehrentafel wird ein viertel Jahr als Zeitraum erkannt.
+//
+// Revision 1.6  2001/07/15 11:40:31  sissi
+// Standard Zinszeitraum auf ein viertel Jahr gesetzt.
+//
+// Revision 1.5  2001/06/25 11:48:20  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.4  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+inherit "/i/money/banking";
+
+#include <config.h>
+#include <move.h>
+#include <deklin.h>
+#include <message.h>
+#include <money.h>
+#include <time.h>
+
+private int kredit_rahmen;
+private int wechsel_kosten;
+
+void set_kredit_rahmen(int a) { kredit_rahmen = a; }
+void set_kosten_wechseln(int a) { wechsel_kosten = a; }
+
+int query_kredit_rahmen() { return kredit_rahmen; }
+int query_kosten_wechseln() { return wechsel_kosten; }
+
+void init()
+{
+   add_action("zahle" ,"zahle",-4);
+   add_action("hebe", "hebe",-3);
+   add_action("wechsle", "wechsle");
+   add_action("wechsle", "wechsel");
+   add_action("kontostand", "kontostand");
+}
+
+#define CV(x) (query_valuta() ? convert(x,0,query_valuta()) : x)
+
+/*
+FUNKTION: set_kosten
+DEKLARATION: void set_kosten()
+BESCHREIBUNG:
+set_kosten() setzt die Kosten fuer das Konto auf Defaultwerte, mit den
+Einzelfunktionen koennen dann nachher noch spezielle Werte abgeaendert werden.
+Die aktuell gesetzten werte kann man in der Bank der Gebuehrentafel entnehmen.
+VERWEISE: set_kosten_wechseln, set_kredit_rahmen,
+	  set_kosten_einzahlung, set_kosten_auszahlung, set_kosten_kontostand,
+	  set_zins, set_kredit_zins, set_kosten_fuehrung, set_zins_zeitraum
+GRUPPEN: bank, handel
+*/
+void set_kosten()
+{
+    set_kosten_wechseln(CV(6));    // absolut pro Wechseln in ob. W.
+    set_kredit_rahmen(CV(15));     // Wieviel kann ueberzogen werden in o. W.
+
+    set_kosten_einzahlung(CV(2));  // absolut pro Einzahlung in Bankwaehrung
+    set_kosten_auszahlung(CV(5));  //             Auszahlung
+    set_kosten_kontostand(CV(1));  // absolut pro Kontostandabfrage in obiger W.
+    set_zins(5);                   // Prozentual pro zins_zeitraum (+)
+    set_kredit_zins(12);           // Prozentual pro zins_zeitraum (-)
+    set_kosten_fuehrung(CV(125));  // Kosten einmal pro zins_zeitraum in ob. W.
+    set_zins_zeitraum(91*DAY)  ;   // Zeitraum fuer *zins und kosten_fuehrung
+                                   // Ein viertel Jahr
+}
+
+private void moerder()
+{
+    this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                       "Moerder werden hier nicht bedient!\n"
+	               "Vergrab doch Dein geklautes Geld.\n");
+    this_player()->send_message(MT_LOOK, MA_EMOTE,
+                       wrap(Der(OBJ_TP)+" macht ein betretenes Gesicht."));
+}
+
+nosave string zahl_text(int betrag)
+{
+   return sprintf("%d", betrag);
+}
+
+nosave varargs string betrag_text(int value, string valuta, string valutas)
+{
+   return value == 1 ? zahl_text(1)+" "+capitalize(valuta || query_valuta()) :
+	         zahl_text(value)+" "+capitalize(valutas || query_valutas());
+}
+
+// Wird von zahle() aufgerufen, wenn alles Geld, das der Spieler bei sich hat
+// eingezahlt werden soll.
+private void zahle_alles()
+{
+   object *inv;
+   int a, wieviel, betrag, eingezahlt;
+   string wieviel_str;
+
+   inv = deep_inventory(this_player());
+   for (a = 0; a < sizeof(inv); a++)
+   {
+      if(inv[a]->query_con_close()) // Geschlossene Container ignorieren...
+      {
+         inv-=deep_inventory(inv[a]);
+         continue;
+      }
+      if((wieviel = inv[a]->query_money()) <= 0)
+	 continue;
+      if((betrag=convert(wieviel,inv[a]->query_valuta(),query_valuta())) < 0)
+      {
+	 this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                            wrap(capitalize(inv[a]->query_valutas())+
+                                 " nehmen wir nicht an.\n"));
+	 continue;
+      }
+      if(!betrag)
+      {
+	 this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                            "Das ist so wenig, das lohnt sich nicht.\n");
+	 continue;
+      }
+
+      wieviel_str =
+	 betrag_text(wieviel, inv[a]->query_valuta(), inv[a]->query_valutas());
+      if(query_valuta() == inv[a]->query_valuta())
+         this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                            wrap(wieviel_str+" eingezahlt."));
+      else
+	 this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                            wrap(wieviel_str+" in "+betrag_text(betrag)+
+	                         " gewechselt und eingezahlt."));
+
+      // Transaktion begin
+      bewegung(betrag, this_player());
+      inv[a]->remove();
+      // Transaktion end
+      eingezahlt = 1;
+   }
+
+   if(eingezahlt)
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap("Ihr neuer Kontostand betraegt jetzt "+
+	                        betrag_text(query_kontostand(this_player()))+
+                                ".\n"
+                              "Vielen Dank fuer Ihren Besuch."));
+   else
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         "Sie haben nichts Einzahlbares bei sich.\n");
+}
+
+// Einzahlungsbefehl wird durch add_action vom Spieler in der Bank aufgerufen.
+int zahle(string str)
+{
+   int betrag, a, vermoegen, neu;
+   string gram, name;
+   object *inv;
+
+   if(this_player()->query_moerder())
+   {
+      moerder();
+      return 1;
+   }
+
+   if(PLAYER_ANNOYER->query("Konto", this_player()->query_real_name()))
+   {
+       notify_fail("Ihr Konto wurde gesperrt.\n");
+       return 0;
+   }
+
+   if (!str)
+   {
+      notify_fail("Zahle wieviel "+capitalize(query_valutas())+" ein?\n");
+      return 0;
+   }
+   str = lower_case(space(str));
+
+   if(str == "alles ein")
+   {
+      zahle_alles();
+      return 1;
+   }
+
+   sscanf(str, "%d %s %s", betrag, name, gram);
+   if(query_valuta() != (ZENTRALBANK->update_valuta(name) || name) &&
+      query_valutas() != (ZENTRALBANK->update_valutas(name) || name))
+        name = 0;
+
+   if(!betrag || gram != "ein" || !name)
+   {
+      notify_fail("Zahle wieviel "+capitalize(query_valutas())+" ein?\n");
+      return 0;
+   }
+   if(betrag <= 0)
+   {
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap(betrag+" "+capitalize(query_valutas())+
+                              ", wie soll das gehen?"));
+      return 1;
+   }
+   inv = all_inventory(this_player());
+   for(a = 0; a < sizeof(inv); a++)
+      if (!inv[a]->id("hlp#tool") && 
+          inv[a]->query_valuta() == query_valuta())
+      {
+         vermoegen = inv[a]->query_money();
+	 if(!vermoegen)
+	 {
+	    this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                               "Tut mir leid, das ist Falschgeld.\n");
+	    this_player()->send_message(MT_LOOK, MA_PUT, 
+                               wrap(Der(OBJ_TP)+" hat versucht, Falschgeld "
+                                    "einzuzahlen."));
+	    return 1;
+	 }
+	 if(vermoegen < betrag)
+	 {
+	    this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                               wrap("Sie haben nur "+betrag_text(vermoegen)+
+                                    " bei sich."));
+	    betrag = vermoegen;
+         }
+
+	 // Transaktion begin
+	 neu = bewegung(betrag, this_player());
+	 inv[a]->add_money(-betrag);
+	 // Transaktion end
+
+	 this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                            wrap("Bitte sehr.\n"
+	                         "Ihr Kontostand betraegt jetzt "+
+                                   betrag_text(neu)+".\n"
+	                         "Vielen Dank fuer Ihren Besuch."));
+	 this_player()->send_message(MT_LOOK, MA_PUT,
+                            wrap(Der(OBJ_TP)+" zahlt "+betrag_text(betrag)+
+                            " auf "+seinem((["gender":"saechlich", 
+                            "name":"konto"]),0,OBJ_TP)+" ein."));
+	    return 1;
+      }
+    this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                       wrap("Sie haben keine "+capitalize(query_valutas())+
+                            " bei sich."));
+    return 1;
+}
+
+#define GELD_FAIL { this_player()->send_message_to(this_player(),\
+                        MT_NOTIFY, MA_UNKNOWN,\
+                        "Eine magische Kraft erlaubt Dir das nicht.\n");\
+                    return 0; }
+
+// Betrag vom Konto abheben
+// Ueberreicht dem Spieler das Geldobjekt, oder legt es nebendran.
+private int old_ueberreiche(object geld)
+{
+   if(geld->move(this_player()) != MOVE_OK)
+   {
+      if(!geld)
+         GELD_FAIL;
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         "Da Du das Geld nicht tragen kannst, liegt es neben "
+                         "Dir!\n");
+      if(geld->move(environment(this_player())) != MOVE_OK)
+      {
+         if(geld)
+            geld->remove();
+         GELD_FAIL;
+      }
+   }
+   return 1;
+}
+
+// Ueberreicht dem Spieler das Geldobjekt, legt es aber nicht nebendran,
+// wenn er es nicht mehr tragen kann.
+private int ueberreiche(object geld)
+{
+   if(geld->move(this_player()) != MOVE_OK)
+   {
+      if(!geld)
+         GELD_FAIL;
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         "Da Du das Geld nicht mehr tragen kannst, "
+	                 "wird es Dir NICHT ausgezahlt.\n");
+      geld->remove();
+      return 0;
+   }
+   return 1;
+}
+
+// Wird vom Spieler in der Bank via add_action aufgerufen.
+int hebe(string str)
+{
+   int betrag, a, rest, guthaben, neu, alles;
+   string gram, name;
+   object money;
+
+   if(this_player()->query_moerder())
+   {
+      moerder();
+      return 1;
+   }
+
+   if(PLAYER_ANNOYER->query("Konto", this_player()->query_real_name()))
+   {
+       notify_fail("Ihr Konto wurde gesperrt.\n");
+       return 0;
+   }
+
+   if(!str || str == "")
+   {
+      notify_fail("Hebe wieviel "+capitalize(query_valutas())+" ab?\n");
+      return 0;
+   }
+   str = lower_case(space(str));
+   if(alles = str == "alles ab")
+   {
+      betrag = query_kontostand(this_player()) - query_kosten_auszahlung();
+      gram = "ab";
+      if(betrag < 0)
+      {
+	 notify_fail("Da gibt es nichts mehr abzuheben!\n");
+	 return 0;
+      }
+   }
+   else
+   
+   sscanf(str, "%d %s %s", betrag, name, gram);
+   if(query_valuta() != (ZENTRALBANK->update_valuta(name) || name) &&
+      query_valutas() != (ZENTRALBANK->update_valutas(name) || name))
+        name = 0;
+
+   if(!betrag || gram != "ab" || !name)
+   {
+      notify_fail("Hebe wieviel "+capitalize(query_valutas())+" ab?\n");
+      return 0;
+   }
+   
+   if (betrag <= 0)
+   {
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap(betrag+" "+capitalize(query_valutas())+", wie "
+                              "soll das gehen?"));
+      return 1;
+   }
+
+   if (!playerp(this_player()))
+   {
+       this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                          "Sie haben leider kein Konto bei uns.\n");
+       return 1;
+   }
+
+   if ((guthaben = query_kontostand(this_player())) < 0)
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         "\nSie haben Ihr Konto bereits ueberzogen!\n\n");
+   if (guthaben - query_kosten_auszahlung() <= -kredit_rahmen)
+   {
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         "Wollen Sie nicht lieber etwas einzahlen?\n");
+      this_player()->send_message(MT_LOOK, MA_EMOTE,
+                         wrap(Der(OBJ_TP)+" macht einen enttaeuschten "
+                              "Eindruck."));
+      return 1;
+   }
+
+   if((rest = guthaben-(betrag+query_kosten_auszahlung())) < -kredit_rahmen)
+   {
+      betrag = kredit_rahmen + guthaben - query_kosten_auszahlung();
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap("Wir koennen Ihnen leider nur "+
+                              betrag_text(betrag)+" auszahlen."));
+
+   }
+   else
+   if (rest < 0)
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap("Damit haben Sie Ihr Konto um "+
+                              betrag_text(-rest)+" ueberzogen."));
+   else
+   if (alles)
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap("Der Schalterbeamte haendigt Dir "+
+                              betrag_text(betrag)+" aus."));
+   else
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         "Bitte sehr.\n");
+
+   // Transaktion begin
+   money = clone_object("/obj/money");
+   money->init_money(betrag, query_valuta());
+   if(!ueberreiche(money))
+      return 1;
+   neu = bewegung(-betrag,this_player());
+   // Transaktion end
+
+   this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                      wrap("Ihr Kontostand betraegt jetzt "+betrag_text(neu)+
+                             ".\n"
+                           "Vielen Dank fuer Ihren Besuch."));
+   this_player()->send_message(MT_LOOK, MA_TAKE,
+                      wrap(Der(OBJ_TP)+" hebt "+betrag_text(betrag)+" von "+
+                      seinem((["gender":"saechlich", "name":"konto"]),
+                      0,OBJ_TP)+" ab."));
+   return 1;
+}
+
+// Dieser Befehl gibt den aktuellen Kontostand aus.
+// Wird vom Spieler in der Bank via add_action aufgerufen.
+int kontostand(string str)
+{
+   int guthaben;
+
+   if (this_player()->query_moerder())
+   {
+      moerder();
+      return 1;
+   }
+
+   if (PLAYER_ANNOYER->query("Konto", this_player()->query_real_name()))
+   {
+       notify_fail("Ihr Konto wurde gesperrt.\n");
+       return 0;
+   }
+
+   if (!interactive(this_player()))
+   {
+      notify_fail("Hier werden nur Spieler bedient.\n");
+      return 0;
+   }
+
+   if ((guthaben = bewegung(0, this_player())) < 0)
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         "\nSie haben Ihr Konto ueberzogen!\n\n");
+   this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                      wrap("Ihr Kontostand betraegt "+
+                           betrag_text(guthaben)+"."));
+   this_player()->send_message(MT_LOOK, MA_COMM,
+                      wrap(Der(OBJ_TP)+" erkundigt sich nach "+
+                           seinem((["gender":"maennlich", 
+                           "name":"kontostand"]),0,OBJ_TP)+"."));
+    return 1;
+}    
+
+int wechsle(string str)
+{
+   int a, betrag_sonst, vermoegen, betrag_total, betrag_rueck;
+   string nvaluta, nvalutas, new;
+   object *inv, money, sonst;
+
+   if(this_player()->query_moerder())
+   {
+      moerder();
+      return 1;
+   }
+
+   if(PLAYER_ANNOYER->query("Konto", this_player()->query_real_name()))
+   {
+       notify_fail("Ihr Konto wurde gesperrt.\n");
+       return 0;
+   }
+
+   if(!str || sscanf(space(str),"%d %s", betrag_sonst, nvaluta) != 2)
+   {
+      notify_fail("Wechsle wieviel von welcher Waehrung?\n");
+      return 0;
+   }
+   if(betrag_sonst <= 0)
+   {
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap(betrag_sonst+" "+nvaluta+
+                              ", wie soll das gehen?"));
+      return 1;
+   }
+
+   if (!(new = query_accepted_valuta(lower_case(nvaluta))))
+   {
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         "Diese Waehrung nehmen wir nicht an.\n");
+      return 1;
+   }
+   nvaluta = new;
+   nvalutas = query_accepted_valutas(nvaluta);
+   if(query_valuta() == nvaluta)
+   {
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap(capitalize(nvalutas)+" in "+
+                              capitalize(nvalutas)+" wechseln, wollen Sie "
+                              "mich auf den Arm nehmen?"));
+      return 1;
+   }
+
+   // such geld in spieler
+   for(a = sizeof(inv = all_inventory(this_player())); a--;)
+      if(inv[a]->query_valuta() == nvaluta && inv[a]->query_money())
+      {
+	 sonst = inv[a];
+	 break;
+      }
+   if(!sonst)
+   {
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         str+" haben Sie nicht.\n");
+      return 1;
+   }
+
+   if ((vermoegen = sonst->query_money()) <= 0)
+   {
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         "Sie haben Falschgeld bei sich.\n");
+      this_player()->send_message(MT_LOOK, MA_PUT,
+                         wrap(Der(OBJ_TP)+" versuchte, Falschgeld zu "
+                              "wechseln."));
+      return 1;
+   }
+   if (vermoegen < betrag_sonst)
+   {
+      betrag_sonst = vermoegen;
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap("Sie haben nur "+
+                              sonst->query_short(this_player())+" bei "
+                              "sich."));
+   }
+   betrag_total = convert(betrag_sonst, nvaluta, query_valuta());
+   betrag_total -= wechsel_kosten;
+   if(betrag_total <= 0)
+   {
+      this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                         wrap("Weniger als 1 "+capitalize(query_valuta())+
+	                      " koennen wir leider nicht auszahlen."));
+      return 1;
+   }
+
+   // Transaction begin
+   money = clone_object("/obj/money");
+   money->init_money(betrag_total, query_valuta());
+   if (!ueberreiche(money))
+      return 1;
+   sonst->add_money(-betrag_sonst);
+   // Transaction end
+
+   this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+                      "Bitte sehr.\n");
+   this_player()->send_message(MT_LOOK, MA_TAKE,
+                      wrap(Der(OBJ_TP)+" wechselt "+capitalize(nvalutas)+
+                           " in "+capitalize(query_valutas())+"."));
+   return 1;
+}
+
+/*
+FUNKTION: set_sorten
+DEKLARATION: int set_sorten([string *sorten [, int *kurse]])
+BESCHREIBUNG:
+set_sorten ist eine Hilfsfunktion aus /i/money/bank mit der die Wechselkurse
+und die Defaultwaehrung einer Bankfiliale unter Beruecksichtigung der Kurse
+aus der Zentralbank eingestellt werden koennen.
+
+sorten ist ein Stringfeld in dem die angebotenen Waherungen eingetragen werden.
+Erlaubt sind nur Waehrungen, die in der Zentralbank gehandelt werden.
+Der *erste gueltige* Eintrag dieses Feldes ist sogleich die Standardwaehrung
+der Bank, in der alle Transaktionen und Kosten vorgenommen werden.
+Alle weiteren Sorten sind nur fuer den Wechsel von Sorten interessant.
+
+Wird ein zweites Feld kurse angegeben, so koennen dort eigene Kurse statt der
+der Zentralbank fuer die Sorten angegeben werden. Der Wert 0 bedeutet
+default aus der Zentralbank, (genauso wie wenn das ganze Feld kurse fehlt.)
+(Die Zahl ist der Wert von 1000 Talern in der jeweiligen Waehrung.)
+
+Fehlt sorten und kurse ganz, so werden alle Waherungen aus der Zentralbank
+mit samt ihren Kursen uebernommen und die default Waehrung der Bank wird Taler.
+(dies kann man mit set_valuta und set_valutas nachtraeglich aendern.)
+
+Diese Funktion ruft im wesentlichen die Funktionen 
+   set_valuta und
+   set_valutas zum Setzen der Standardwaehrung der Bank,
+   und
+   set_valuta_tafel,
+   set_valutas_tafel,
+   set_kurs_tafel zum Einrichten der Wechselkurstafel auf. (siehe dort)
+
+BEISPIEL:
+   set_sorten(({"gulden", "taler"}));
+      Die Bank handelt mit Gulden und akzeptiert beim Wechseln ausserdem
+      noch Taler, der Kurs wird aus der Zentralbank uebernommen.
+   set_sorten();
+      Die Bank handelt mit Talern und wechselt alle gaengigen Waehrungen ein.
+   set_sorten(({"dukaten", "taler", "sesterzen"}), ({ 7700, 0, 0 }));
+      Die Bank handelt in Dukaten und wechselt Taler und Sesterzen.
+      Der Dukatenkurs ist etwas abweichend vom Zentralbankkurs (7690).
+VERWEISE: set_valuta, set_valutas,
+	  set_valuta_tafel, set_valutas_tafel, set_kurs_tafel
+GRUPPEN: bank, handel
+*/
+varargs int set_sorten(string *sorten, int *kurse)
+{
+   mixed *money;  // Infos aus der Zentralbank
+
+   int    *valid_k;// Gueltige Kurse gemaess Zentralbank
+   string *valid_v, *valid_vs;
+		   // Gueltige Valuta(s) gemaess Zentralbank
+
+   int *k;         // Einzutragende Kurse
+   string *v, *vs; // Einzutragende Valuta, Valutas 
+
+   int anz;        // Anzahl der eingetragenen Sorten
+   int i;          // Zaehler
+   int idx;
+
+   valid_k = ({});
+   valid_v = ({});
+   valid_vs = ({});
+   k = ({});
+   v = ({});
+   vs = ({});
+
+   money = sort_array(ZENTRALBANK->query_money_info(), lambda(({'a,'b}), 
+      ({ #'<, ({ #'[, 'a, MONEY_VALUTAS }), ({ #'[, 'b, MONEY_VALUTAS })  })));
+   // Matrix transponieren :(
+   for(i = sizeof(money); i--;)
+   {
+      valid_k += ({ money[i][MONEY_KURS] });
+      valid_vs += ({ money[i][MONEY_VALUTAS] });
+      valid_v += ({ money[i][MONEY_VALUTA] });
+   }
+     
+   if(!sorten)
+   {
+      k = valid_k; 
+      vs = valid_vs;
+      v = valid_v;
+      anz = sizeof(valid_v);
+      set_valuta("taler");
+      set_valutas("taler");
+   }
+   else
+      for(anz = i = 0; i < sizeof(sorten); i++) // nicht umkehrinvariant
+	 if((idx = member(valid_vs, sorten[i])) >= 0 ||
+	    (idx = member(valid_v, sorten[i])) >= 0)
+	 {
+	    // Die erste gueltige Waehrung wird als def fuer die Bank genommen.
+	    if(!anz++)
+	    {
+	       set_valuta(valid_v[idx]);
+	       set_valutas(valid_vs[idx]);
+	    }
+	    k  += ({ sizeof(kurse) > i && kurse[i] ? kurse[i] : valid_k[idx] });
+	    v  += ({ valid_v[idx] });
+	    vs += ({ valid_vs[idx] });
+	 }
+   
+   set_valuta_tafel(v);
+   set_valutas_tafel(vs);
+   set_kurs_tafel(k);
+   return anz;
+}
+
+string query_kurse_string()
+{
+   string tmp, *name, *names;
+   int a;
+
+   tmp = "";
+   name = query_valuta_tafel();
+   names = query_valutas_tafel();
+
+   for(a = 0; a < sizeof(name); a++)
+      if(name[a] != query_valuta())
+         tmp += right(zahl_text(100), 14)+" "+
+		left(capitalize(names[a]), 15)+" "+
+                right(zahl_text(convert(100, name[a], query_valuta())), 6)+
+		"\n";
+
+   return
+   "           Die Wechselkurse von heute\n\n"
+   "           Sorten               "+
+   capitalize(query_valutas())+"\n\n"+
+   tmp;
+}
+
+private string zeitraum_text(int zeitraum)
+{
+   if(zeitraum == DAY*91)
+      return "viertel Jahr";
+   if((zeitraum /= 86400) <= 1)
+      return "Tag";
+   if(zeitraum % 7)
+      return ""+zeitraum+" Tage";
+   if((zeitraum /= 7) <= 1)
+      return "Woche";
+   return ""+zeitraum+" Wochen";
+}
+
+string query_kosten_string()
+{
+   return
+"           Aktuelle Geschaeftsbedingungen:\n"
+"\n"
+"           Bareinzahlungen        "+betrag_text(query_kosten_einzahlung())+"\n"
+"           Barauszahlungen        "+betrag_text(query_kosten_auszahlung())+"\n"
+"           Kontostand             "+betrag_text(query_kosten_kontostand())+"\n"
+//"           Zinsen                 "+zahl_text(query_zins())+
+//			 " Prozent/"+zeitraum_text(query_zins_zeitraum())+"\n"
+"           Kontofuehrung          "+betrag_text(query_kosten_fuehrung())+"\n"
+"           Ueberziehungskredit    "+betrag_text(query_kredit_rahmen())+"\n"
+"           Ueberziehungszinsen    "+zahl_text(query_kredit_zins())+
+			 " Prozent/"+zeitraum_text(query_zins_zeitraum())+"\n"
+"           Wechseln               "+betrag_text(query_kosten_wechseln())+"\n";
+}

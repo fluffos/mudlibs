@@ -1,0 +1,632 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/item/property_master.c
+// Description: Dynamische Eigenschaften
+// Author:      Gnomi
+//
+// $Log: property_master.c,v $
+// Revision 1.7  2013/12/01 12:54:13  gnomi
+// Unterstuetzung fuer V-Item-Properties eingebaut.
+//
+// Revision 1.6  2013-04-02 22:27:16  gnomi
+// Noch eine Korrektur zur Praefixweitergabe.
+//
+// Revision 1.5  2013-04-02 22:10:46  gnomi
+// Unterstuetzung fuer V-Item-Properties.
+//
+// Revision 1.4  2013-03-18 21:49:48  gnomi
+// Korrektur zur Praefixweitergabe.
+//
+// Revision 1.3  2013-03-18 21:46:35  gnomi
+// PI_BASENAME wird nicht mehr gesetzt.
+//
+// Revision 1.2  2013-03-18 21:42:31  gnomi
+// Properties werden mit Praefix angemeldet.
+//
+// Revision 1.1  2013-03-16 15:15:25  gnomi
+// Property-Implementation.
+//
+
+#include <apps.h>
+#include <description.h>
+#include <error.h>
+#include <property_master.h>
+
+private nosave mapping prop_master = ([:1]);
+private nosave mapping prop_infos = ([:1]);
+private nosave int prefix_checked;
+
+private string expand_property_master(string file)
+{
+    // Geklaut aus v_item.c
+    if(file[<2..] == ".lpc")
+    {
+        do_warning("Property-Master sollte ohne .c-Endung angeben werden.\n");
+        file= file[..<3];
+    }
+
+    return abs_path(file);
+}
+
+/*
+FUNKTION: add_property_master
+DEKLARATION: protected void add_property_master(string prefix, string file|string* files)
+BESCHREIBUNG:
+Fuegt weitere Property-Master hinzu. Die in diesen Mastern definierten
+Eigenschaften erhalten 'prefix' und einen Doppelpunkt im Namen vorangestellt.
+(Der Doppelpunkt wird weggelassen, wenn 'prefix' leer ist.)
+VERWEISE: delete_property_master, is_property_master, query_property_master,
+          query_property_prefixes, set_property_info
+GRUPPEN: properties
+*/
+protected void add_property_master(string prefix, mixed file)
+{
+    file = map(stringp(file)?({file}):file, #'expand_property_master);
+
+    if(sizeof(prefix))
+        prefix += ":";
+
+    if(!prop_master[prefix])
+        prop_master[prefix] = file;
+    else
+        prop_master[prefix] += file - prop_master[prefix];
+}
+
+/*
+FUNKTION: delete_property_master
+DEKLARATION: protected void delete_property_master(string prefix, string file|string* files)
+BESCHREIBUNG:
+Entfernt einen oder mehrere Property-Master. Die Parameter entsprechen denen
+von add_property_master().
+VERWEISE: add_property_master, is_property_master, query_property_master,
+          query_property_prefixes, set_property_info
+GRUPPEN: properties
+*/
+protected void delete_property_master(string prefix, mixed file)
+{
+    if(sizeof(prefix))
+        prefix += ":";
+
+    if(!prop_master[prefix])
+        return;
+
+    file = map(stringp(file)?({file}):file, #'expand_property_master);
+
+    prop_master[prefix] -= file;
+}
+
+/*
+FUNKTION: is_property_master
+DEKLARATION: int is_property_master(string prefix, string file)
+BESCHREIBUNG:
+Liefert einen Wert != 0, wenn 'file' als Master fuer 'prefix'
+(siehe add_property_master()) eingetragen ist.
+VERWEISE: add_property_master, delete_property_master, query_property_master,
+          query_property_prefixes, set_property_info
+GRUPPEN: properties
+*/
+int is_property_master(string prefix, string file)
+{
+    if(sizeof(prefix))
+        prefix += ":";
+
+    if(!prop_master[prefix])
+        return 0;
+
+    file = expand_property_master(file);
+
+    return member(prop_master[prefix], file)>=0;
+}
+
+/*
+FUNKTION: query_property_master
+DEKLARATION: string* query_property_master(string prefix)
+BESCHREIBUNG:
+Liefert alle fuer 'prefix' eingetragenen Property-Master zurueck.
+VERWEISE: add_property_master, delete_property_master, is_property_master,
+          query_property_prefixes, set_property_info
+GRUPPEN: properties
+*/
+string* query_property_master(string prefix)
+{
+    if(sizeof(prefix))
+        prefix += ":";
+
+    return copy(prop_master[prefix] || ({}));
+}
+
+/*
+FUNKTION: query_property_prefixes
+DEKLARATION: string* query_property_prefixes()
+BESCHREIBUNG:
+Liefert alle bekannten Prefixe zurueck.
+VERWEISE: add_property_master, delete_property_master, is_property_master,
+          query_property_master, set_property_info
+GRUPPEN: properties
+*/
+string* query_property_prefixes()
+{
+    return map(m_indices(prop_master), function string(string prefix)
+    {
+        return sizeof(prefix) ? prefix[0..<2] : prefix;
+    });
+}
+
+mapping query_property_info(string name, string myprefix)
+{
+    mapping res;
+    string subname;
+
+    if(member(prop_infos, name))
+        return copy(prop_infos[name]);
+
+    myprefix ||= "";
+    subname = name[sizeof(myprefix)..<1];
+
+    foreach(string prefix, string* files: prop_master)
+        if(sizeof(prefix) && !strstr(subname, prefix))
+        {
+            string subprefix = myprefix + prefix;
+            foreach(string file: files)
+            {
+                if(!catch(res = file->query_property_info(name, subprefix); publish, reserve 10) && res)
+                    break;
+            }
+            break;
+        }
+
+    if(!res)
+    {
+        foreach(string file: prop_master[""] || ({}))
+            if(!catch(res = file->query_property_info(name, myprefix); publish, reserve 10) && res)
+                break;
+    }
+
+    if(res)
+    {
+        res[PI_MASTER] += ({ object_name() });
+        return res;
+    }
+}
+
+/*
+FUNKTION: set_property_info
+DEKLARATION: void set_property_info(string name, mapping info)
+BESCHREIBUNG:
+Hiermit wird eine Eigenschaft definiert. Der Attributname muss bereits den
+Prefix des Property-Masters enthalten (z.B. bei Domains das "Domainname:").
+
+Die Definition 'info' kann folgende Eintraege enthalten (es sind alle
+freiwillig, Defines in property_master.h):
+
+    PI_VALUE:       Der Standardwert
+    PI_FLAGS:       Flags:
+
+                        PF_SET_LOCAL   Darf nur vom Objekt selbst gesetzt
+                                       werden (wie eine nosave set-Funktion).
+                                       Impliziert PF_GET_NOMASK.
+
+                        PF_LOCAL       Nur lokal les- und schreibbar.
+                                       Impliziert PF_GET_NOMASK und
+                                       PF_SET_NOMASK.
+
+                        PF_GET_NOMASK  Beim Abfragen werden keine modify-
+                                       Controller aufgerufen.
+
+                        PF_SET_NOMASK  Beim Setzen (set, add) werden keine
+                                       modify-Controller aufgerufen.
+
+                        PF_SINGLE_SHOT Darf nur einmal gesetzt werden
+                                       (auch kein add, delete).
+
+                        PF_NO_CLOSURE  Closures werden nicht automatisch
+                                       ausgewertet.
+
+                        PF_PERSISTANT  Diese Eigenschaft wird vom
+                                       save_properties() gesichert.
+
+    PI_TYPES:       Hiermit kann man angeben, welche Typen erlaubt sind
+                    (Kombination von PT_MIXED, PT_INT, PT_STRING, PT_ARRAY,
+                    PT_OBJECT, PT_MAPPING, PT_FLOAT, PT_CLOSURE, PT_SYMBOL,
+                    PT_QUOTED_ARRAY und PT_STRUCT moeglich).
+                    Wenn PF_NO_CLOSURE nicht angegeben wurde, sind unabhaengig
+                    von dieser Information Closures immer moeglich.
+
+    PI_USES:        An welchen Dingen diese Property Verwendung finden darf.
+                    Dies ist eine Kombination aus folgenden Defines:
+
+                        PU_ROOM        Raeume
+                        PU_ITEM        Gegenstaende (nicht lebendig)
+                        PU_MONSTER     NPCs
+                        PU_PLAYER      Spieler
+                        PU_LIVING      Lebewesen (= PU_MONSTER|PU_PLAYER)
+                        PU_MOVABLE     Bewegliches (= PU_ITEM|PU_LIVING)
+                        PU_OBJEKT      Objekte (= PU_MOVABLE | PU_ROOM)
+                        PU_VITEM       V-Items
+
+                    Default is PU_MOVABLE.
+
+    PI_SHORTNAME:   Der alte Name (ohne Master-Prefix) dieser Eigenschaft.
+                    Dieser wird z.B. vom QUERY()-Makro genutzt, um
+                    Kompatibilitaet zu gewaehrleisten.
+
+    PI_WIZ_SHORT:   Eine Kurzbeschreibung dieser Eigenschaft fuer Goettertools.
+
+    PI_WIZ_LONG:    Eine ausfuehrliche Beschreibung zur Anzeige fuer Goetter.
+
+    PI_SET_FUN:     Damit kann man den Namen (keine Closure!) einer Funktion
+                    in diesem Master angeben, welcher zum Setzen der
+                    Eigenschaft aufgerufen wird:
+
+                        mixed set_fun(mapping property, mixed value,
+                                      object caller, object item)
+
+                    In die Property (enthaelt diese Definition und einen evntl.
+                    aelteren Wert als PI_VALUE-Eintrag) soll der Wert 'value'
+                    eingetragen werden. 'caller' ist das aufrufende Objekt,
+                    'item' der Gegenstand mit dieser Eigenschaft. Diese
+                    Funktion soll den Wert in PI_VALUE speichern und den
+                    gespeicherten Wert (nicht das gesamte Mapping)
+                    zurueckliefern. Es ist erlaubt, weitere Details in
+                    zusaetzlichen Eintraegen im Mapping abzuspeichern.
+
+    PI_GET_FUN:     Der Name (keine Closure!) einer Funktion in diesem Master
+                    zur Abfrage der Eigenschaft:
+
+                        mixed get_fun(mapping property, mixed info,
+                                      object caller, object item)
+
+                    'property' enthaelt die Definition und den derzeitigen
+                    Wert in PI_VALUE. 'info' ist der query() uebergebene
+                    Parameter.
+
+    PI_ADD_FUN:     Der Name (keine Closure!) einer Funktion in diesem Master
+                    zur Implementation von add():
+
+                        mixed add_fun(mapping property, mixed key, mixed value,
+                                      object caller, object item)
+
+                    'property' enthaelt die Definition und den derzeitigen
+                    Wert in PI_VALUE. 'key' und 'value' sind die Parameter
+                    von add().
+
+    PI_DEL_FUN:     Der Name (keine Closure!) einer Funktion in diesem Master
+                    zur Implementation von delete():
+
+                        mixed del_fun(mapping property, mixed key,
+                                      object caller, object item)
+
+                    'property' enthaelt die Definition und den derzeitigen
+                    Wert in PI_VALUE. 'key' ist der delete() uebergebene
+                    Parameter.
+
+    PI_SAVE_FUN:    Der Name (keine Closure!) einer Funktion in diesem Master,
+                    um die Eigenschaft abzuspeichern:
+
+                        mapping save_fun(mapping property, object item);
+
+                    Die Funktion sollte das abzuspeichernde Mapping (dies sollte
+                    ein neues Mapping sein, nicht 'property') zurueckliefern.
+
+    PI_RESTORE_FUN: Der Name (keine Closure!) einer Funktion in diesem Master,
+                    um die Eigenschaft wiederherzustellen:
+
+                        void restore_fun(mapping property,
+                                         mapping saved_property, object item);
+
+                    Die Funktion erhaelt die Definition als 'property' und den
+                    gespeicherten Wert als 'saved_property' und soll den Wert
+                    als PI_VALUE-Eintrag in das 'property'-Mapping speichern.
+
+    PI_VITEM_SET_FUN: Pendant zu PI_SET_FUN fuer V-Items:
+
+                        mixed vitem_set_fun(mapping property, mixed value,
+                            object caller, object item, mapping vitem);
+
+    PI_VITEM_GET_FUN: Pendant zu PI_GET_FUN fuer V-Items:
+
+                        mixed vitem_get_fun(mapping property, mixed info,
+                            object caller, object item, mapping vitem):
+
+    PI_VITEM_ADD_FUN: Pendant zu PI_ADD_FUN fuer V-Items:
+
+                        mixed vitem_add_fun(mapping property, mixed key,
+                            mixed value, object caller, object item,
+                            mapping vitem);
+
+    PI_VITEM_DEL_FUN: Pendant zu PI_DEL_FUN fuer V-Items:
+
+                        mixed vitem_del_fun(mapping property, mixed key,
+                            object caller, object item, mapping vitem)
+
+VERWEISE: query_property_info, query_property_names, query_property_infos
+GRUPPEN: properties
+*/
+protected void set_property_info(string name, mapping info)
+{
+    info ||= ([]);
+    m_add(info, PI_MASTER, ({ object_name() }));
+    m_add(prop_infos, name, info);
+}
+
+string* query_property_names()
+{
+    string* result = m_indices(prop_infos);
+    foreach(string prefix, string* files: prop_master)
+        foreach(string file: files)
+        {
+            string* props;
+
+            catch(props = file->query_property_names(); publish, reserve 10);
+            if(props)
+                result += props;
+        }
+
+    return result;
+}
+
+mapping query_property_infos(string myprefix)
+{
+    mapping result;
+
+    if(myprefix && !prefix_checked)
+    {
+        mapping illegal = ([:0]);
+
+        foreach(string name, mapping prop: prop_infos)
+            if(strstr(name, myprefix))
+            {
+                do_my_error(sprintf("Property hat falschen Prefix: %s (Prefix ist %s)\n", name, myprefix));
+                m_add(illegal, name);
+            }
+
+        prop_infos -= illegal;
+        prefix_checked = 1;
+    }
+
+    result = deep_copy(prop_infos);
+
+    foreach(string prefix, string* files: prop_master)
+        foreach(string file: files)
+        {
+            mapping props;
+
+            catch(props = file->query_property_infos(myprefix && myprefix + prefix); publish, reserve 10);
+            if(props)
+            {
+                foreach(string name, mapping prop: props & result)
+                    do_warning2(sprintf("Doppelte Property-Definition: '%s'\n", name), __FILE__, file, __LINE__);
+
+                result += props - result;
+            }
+        }
+    return result;
+}
+
+
+// Hilfsfunktionen zur Definition von Properties.
+
+/*
+FUNKTION: set_pseudoclosure
+DEKLARATION: mixed set_pseudoclosure(mapping property, mixed value, object caller, object item)
+BESCHREIBUNG:
+Diese Funktion kann als PI_SET_FUN angegeben werden, um einer Eigenschaft
+die Moeglichkeit zu geben, Pseudoclosures anzunehmen.
+VERWEISE: get_pseudoclosure, set_property_info
+GRUPPEN: properties
+*/
+mixed set_pseudoclosure(mapping property, mixed value, object caller, object item)
+{
+    property[PI_VALUE] = CLOSURE_CONTAINER->mixed_to_closure(value, ({'item}), 'item, (["OBJ_TO": 'item]));
+    return value;
+}
+
+/*
+FUNKTION: get_pseudoclosure
+DEKLARATION: mixed get_pseudoclosure(mapping property, mixed info, object caller, object item)
+BESCHREIBUNG:
+Diese Funktion kann als PI_GET_FUN angegeben werden, um einer Eigenschaft
+die Moeglichkeit zu geben, Pseudoclosures auszuwerten.
+VERWEISE: set_pseudoclosure, set_property_info
+GRUPPEN: properties
+*/
+mixed get_pseudoclosure(mapping property, mixed info, object caller, object item)
+{
+    mixed c = property[PI_VALUE];
+    return closurep(c) ? funcall(CLOSURE_CONTAINER->do_bind(c), item) : c;
+}
+
+/*
+FUNKTION: set_description
+DEKLARATION: mixed set_description(mapping property, mixed value, object caller, object item)
+BESCHREIBUNG:
+Diese Funktion kann als PI_SET_FUN angegeben werden, um einer Eigenschaft
+die Moeglichkeit zu geben, Descriptions (wie bei set_long) anzugeben.
+VERWEISE: get_description, set_property_info
+GRUPPEN: properties
+*/
+mixed set_description(mapping property, mixed value, object caller, object item)
+{
+    mapping tags;
+#if __BOOT_TIME__ < 1363380000
+    property[PI_VALUE] = "/apps/description_container"->compile_description(value, &tags);
+#else
+    property[PI_VALUE] = CLOSURE_CONTAINER->compile_description(value, &tags);
+#endif
+    property["DescTags"] = tags;
+
+    return value;
+}
+
+/*
+FUNKTION: get_description
+DEKLARATION: mixed get_description(mapping property, mixed value, object caller, object item)
+BESCHREIBUNG:
+Diese Funktion kann als PI_GET_FUN angegeben werden, um einer Eigenschaft
+die Moeglichkeit zu geben, Descriptions (wie bei set_long) auszuwerten.
+VERWEISE: set_description, set_property_info
+GRUPPEN: properties
+*/
+mixed get_description(mapping property, mixed info, object caller, object item)
+{
+    mixed c = property[PI_VALUE];
+    string res;
+    if(!c)
+        return 0;
+
+    res = funcall(c, item->get_desc_info_mapping(objectp(info) && living(info) && info || this_player()));
+    if(strlen(res) && res[<1] != '\n')
+        res = wrap(trim(res));
+    return res;
+}
+
+/*
+FUNKTION: set_vitem_pseudoclosure
+DEKLARATION: mixed set_vitem_pseudoclosure(mapping property, mixed value, object caller, object item, mapping vitem)
+BESCHREIBUNG:
+Diese Funktion kann als PI_VITEM_SET_FUN angegeben werden, um einer Eigenschaft
+die Moeglichkeit zu geben, Pseudoclosures anzunehmen.
+VERWEISE: get_vitem_pseudoclosure, set_property_info
+GRUPPEN: properties
+*/
+mixed set_vitem_pseudoclosure(mapping property, mixed value, object caller, object item, mapping vitem)
+{
+    property[PI_VALUE] = CLOSURE_CONTAINER->mixed_to_closure(value, ({'vitem, 'item}), 'item, (["OBJ_TO": 'item]));
+    return value;
+}
+
+/*
+FUNKTION: get_vitem_pseudoclosure
+DEKLARATION: mixed get_vitem_pseudoclosure(mapping property, mixed info, object caller, object item, mapping vitem)
+BESCHREIBUNG:
+Diese Funktion kann als PI_VITEM_GET_FUN angegeben werden, um einer Eigenschaft
+die Moeglichkeit zu geben, Pseudoclosures auszuwerten.
+VERWEISE: set_vitem_pseudoclosure, set_property_info
+GRUPPEN: properties
+*/
+mixed get_vitem_pseudoclosure(mapping property, mixed info, object caller, object item, mapping vitem)
+{
+    mixed c = property[PI_VALUE];
+    return closurep(c) ? funcall(CLOSURE_CONTAINER->do_bind(c), vitem, item) : c;
+}
+
+/*
+FUNKTION: set_vitem_description
+DEKLARATION: mixed set_vitem_description(mapping property, mixed value, object caller, object item, mapping vitem)
+BESCHREIBUNG:
+Diese Funktion kann als PI_VITEM_SET_FUN angegeben werden, um einer Eigenschaft
+die Moeglichkeit zu geben, Descriptions (wie bei set_long) anzugeben.
+VERWEISE: get_vitem_description, set_property_info
+GRUPPEN: properties
+*/
+mixed set_vitem_description(mapping property, mixed value, object caller, object item, mapping vitem)
+{
+    mapping tags;
+#if __BOOT_TIME__ < 1363380000
+    property[PI_VALUE] = "/apps/description_container"->compile_description(value, &tags);
+#else
+    property[PI_VALUE] = CLOSURE_CONTAINER->compile_description(value, &tags);
+#endif
+    property["DescTags"] = tags;
+
+    return value;
+}
+
+/*
+FUNKTION: get_vitem_description
+DEKLARATION: mixed get_vitem_description(mapping property, mixed value, object caller, object item, mapping vitem)
+BESCHREIBUNG:
+Diese Funktion kann als PI_VITEM_GET_FUN angegeben werden, um einer Eigenschaft
+die Moeglichkeit zu geben, Descriptions (wie bei set_long) auszuwerten.
+VERWEISE: set_vitem_description, set_property_info
+GRUPPEN: properties
+*/
+mixed get_vitem_description(mapping property, mixed arg, object caller, object item, mapping vitem)
+{
+    mixed c = property[PI_VALUE];
+    mixed env;
+    mapping info;
+
+    string res;
+    if(!c)
+        return 0;
+
+
+    info = item->get_desc_info_mapping(this_player());
+    env = vitem;
+
+    while(mappingp(env))
+        env = env["environment"];
+    if(env)
+    {
+        info[TI_OBJECT] = env;
+
+        while(environment(env))
+            env = environment(env);
+        info[TI_ROOM] = env;
+    }
+
+    info[TI_ITEM] = vitem;
+
+    res = funcall(c, info);
+    if(strlen(res) && res[<1] != '\n')
+        res = wrap(trim(res));
+    return res;
+}
+
+/*
+FUNKTION: invalid_set
+DEKLARATION: mixed invalid_set(mapping property, mixed value, object caller, object item)
+BESCHREIBUNG:
+Diese Funktion kann als PI_SET_FUN angegeben werden
+und wirft beim Aufruf einen Fehler.
+VERWEISE: invalid_get, invalid_add, invalid_del, set_property_info
+GRUPPEN: properties
+*/
+mixed invalid_set(mapping property, mixed value, object caller, object item)
+{
+    raise_error("Illegal call to set().\n");
+}
+
+/*
+FUNKTION: invalid_get
+DEKLARATION: mixed invalid_get(mapping property, mixed info, object caller, object item)
+BESCHREIBUNG:
+Diese Funktion kann als PI_GET_FUN angegeben werden und wirft beim Aufruf
+einen Fehler. (Die Funktion existiert nur der Vollstaendigkeit halber,
+der Autor erkennt keinen Sinn in dieser Funktion.)
+VERWEISE: invalid_set, invalid_add, invalid_del, set_property_info
+GRUPPEN: properties
+*/
+mixed invalid_get(mapping property, mixed info, object caller, object item)
+{
+    raise_error("Illegal call to query().\n");
+}
+
+/*
+FUNKTION: invalid_add
+DEKLARATION: mixed invalid_add(mapping property, mixed key, mixed value, object caller, object item)
+BESCHREIBUNG:
+Diese Funktion kann als PI_ADD_FUN angegeben werden
+und wirft beim Aufruf einen Fehler.
+VERWEISE: invalid_set, invalid_get, invalid_del, set_property_info
+GRUPPEN: properties
+*/
+mixed invalid_add(mapping property, mixed key, mixed value, object caller, object item)
+{
+    raise_error("Illegal call to add().\n");
+}
+
+/*
+FUNKTION: invalid_del
+DEKLARATION: mixed invalid_del(mapping property, mixed key, object caller, object item)
+BESCHREIBUNG:
+Diese Funktion kann als PI_DEL_FUN angegeben werden
+und wirft beim Aufruf einen Fehler.
+VERWEISE: invalid_set, invalid_get, invalid_add, set_property_info
+GRUPPEN: properties
+*/
+mixed invalid_del(mapping property, mixed key, object caller, object item)
+{
+    raise_error("Illegal call to delete().\n");
+}

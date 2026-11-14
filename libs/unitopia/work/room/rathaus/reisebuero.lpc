@@ -1,0 +1,320 @@
+// -*-C++-*---------------------------------------------------------
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/rathaus/reisebuero.c
+// Description:	Setzen der Wissen-Skills
+// Author:	Parsec (3/99)
+// Quelle:      /w/parsec/priv/skills/reisebuero.c
+//
+// Modified by:
+//
+// $Log: reisebuero.c,v $
+// Revision 1.8  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.7  2005/05/26 01:04:26  gnomi
+// Nicht so strenge Sicherheitsueberpruefungen bei der Anzeige und Anmeldung
+// der Befehle.
+//
+// Revision 1.6  2002/09/09 20:31:25  sissi
+// Aktion unser Rathaus soll schoener werden:
+// Ueberall ne Pflanze eingebaut.
+//
+// Revision 1.5  2002/01/13 04:50:23  freaky
+// query_long() umgestellt.
+//
+// Revision 1.4  2001/04/07 02:03:03  gnomi
+// Etwas Gemuetlichkeit hinzugefuegt.
+//
+// Revision 1.3  2001/03/12 01:00:30  gnomi
+// set_light -> set_own_light
+//
+// Revision 1.2  2000/12/04 20:23:57  gnomi
+// "Pantheon" als room_domain eingetragen.
+//
+// Revision 1.1  2000/08/02 23:27:39  freaky
+// hinzugefuegt.
+//
+
+#pragma save_types
+#pragma strong_types
+
+
+inherit "/i/room" ;
+
+
+#include <apps.h>
+
+
+/* prototypes */
+void reset();
+void create();
+string query_long(object who);
+void init();
+int query_prevent_shadow( object shadow);
+int aktivieren( string str);
+int list_skill( string str);
+int new_bereich( string str);
+int list_bereich( string str);
+int list_kontingente( string str);
+int set_kontingent( string str);
+int set_kontingent_bereich( string str);
+int list_objekte( string str);
+int set_objekte( string str);
+int set_objekte2( string str);
+int setze_sicherheitsbits( string str);
+int aktiviere_objekte( string str);
+int aendere_komentar_objekte( string str);
+int aender_pfad_objekte( string str);
+int loesche_objekte( string str);
+int check_objekte( string str);
+/* end prototypes */
+
+
+#define PO               previous_object()
+#define TI               this_interactive()
+
+#define G_LORD   1
+#define G_ADMIN  2
+#define V_LONG   G_LORD
+#define V_INIT   G_LORD
+
+
+void reset()
+{
+    "/room/rathaus/div/lager"->get_moebel(this_object());
+    "/room/rathaus/div/lager"->get_pflanze(this_object());
+}
+
+    
+void create()
+{
+    set_short( "Reisebuero");
+    set_long( "") ;
+
+    add_type( "kunstlicht", 1);
+    add_type( "teleport_rein_verboten", 1);
+    add_type( "graben_verboten", 1);
+    set_exit( "forum", "forum");
+    set_own_light( 1);
+
+    seteuid( getuid());
+
+    add_v_item( ([
+        "name"   : "G-Bit",
+        "id"     : ({ "g", "gbit", "g-bit", "bit" }),
+        "gender" : "saechlich",
+        "long"   : WISSEN_MASTER->query_bit_info( "g"),
+        ])) ;
+    add_v_item( ([
+        "name"   : "E-Bit",
+        "id"     : ({ "e", "ebit", "e-bit", "bit" }),
+        "gender" : "saechlich",
+        "long"   : WISSEN_MASTER->query_bit_info( "e")
+        ])) ;
+    add_v_item( ([
+        "name"   : "T-Bit",
+        "id"     : ({ "t", "tbit", "t-bit", "bit" }),
+        "gender" : "saechlich",
+        "long"   : WISSEN_MASTER->query_bit_info( "t")
+        ])) ;
+    add_v_item( ([
+        "name"   : "I-Bit",
+        "id"     : ({ "i", "ibit", "i-bit", "bit" }),
+        "gender" : "saechlich",
+        "long"   : WISSEN_MASTER->query_bit_info( "i")
+        ])) ;
+    set_room_domain("Pantheon");
+    reset();
+}
+
+
+string query_long(object who)
+{
+    int  recht ;
+
+    return
+        sprintf( "%-=77s\n",
+            (( WISSEN_MASTER->query_aktiv() ) ?
+             "Im Reisebuero. "
+             "Es ist geoeffnet und laedt zu Reisen in alle Welt ein." :
+             "Du befindest dich im Reisebuero. Es ist geschlossen!")+
+            ( (PO == TI && (recht = WISSEN_MASTER->valid_caller( V_LONG, 1)) ) ?
+     "\nHier werden erforschens- und bereisenswerte "
+     "Raeume sowie Dinge die man gesehen oder gemacht haben muss "
+     "verwaltet.  Moegliche Buchungen:\n"
++( (recht == G_ADMIN) ?
+     "  aktiv                            (Skillvergabe ein/aus)\n"
+   : "")+
+     "  skillinfo                        (Info ueber Skillvergabe ein/aus)\n"
+     "  Skills:\n"
+     "    slist                          (Liste)\n"
+     "  Bereiche:\n"
+     "    blist                          (Liste)\n"
++( (recht == G_ADMIN) ?
+     "    bneu  <Bereich>                (Neuanlegen)\n"
+   : "")+
+     "  Kontingente:\n"
+     "    klist                          (Liste)\n"
++( (recht == G_ADMIN) ?
+     "    kset  <Skill> <Sum>            "
+             "(Gesamtkontingent Skill, kein Absenken!)\n"
+     "    kbset <Skill> <Bereich> <Sum>  "
+             "(Skill fuer Bereich, kein Absenken!)\n"
+   : "")+
+     "  Objekte:  (Liste, Setzen, Sicherheitstestbits setzen, "
+              "De-/Aktivieren,\n"
+     "             aktive Obj. testen, Kommentar aendern, "
+              "Pfad aendern, Loeschen)\n"
+     "    olist [-dl] <Skill>|-a [<Bereich>]\n"
+     "    oset    <Skill> <Bereich> <Nummer> <Pfad> <Kommentar>"
+              "  (oset2: handel*2)\n"
+     "    osetbit <Skill> <Bereich> <Nummer> <Bit>             "
+              "  (Bit= I,T,E,G)\n"
+     "    oakt    <Skill> <Bereich> <Nummer> \n"
+     "    ocheck\n"
+     "    ochkomm <Skill> <Bereich> <Nummer> <Kommentar> \n"
+     "    ochpfad <Skill> <Bereich> <Nummer> <Pfad>  "
+                                              "(nur wenn selbes Objekt!)\n"
+     "    odel    <Skill> <Bereich> <Nummer>         (nur im Notfall!)\n"
+         : ""))+
+        ::query_long(who) ;
+}
+
+
+void init()
+{
+    if ( WISSEN_MASTER->valid_caller( V_INIT, 1) )
+    {
+        add_action( "aktivieren",                "aktiv") ;
+        add_action( "informiere",                "skillinfo") ;
+
+        add_action( "list_skill",                "slist") ;
+
+        add_action( "new_bereich",               "bneu") ;
+        add_action( "list_bereich",              "blist") ;
+
+        add_action( "list_kontingente",          "klist") ;
+        add_action( "set_kontingent",            "kset") ;
+        add_action( "set_kontingent_bereich",    "kbset") ;
+
+        add_action( "list_objekte",              "olist") ;
+        add_action( "set_objekte",               "oset") ;
+        add_action( "set_objekte2",              "oset2") ;
+        add_action( "setze_sicherheitsbits",     "osetbit") ;
+        add_action( "aktiviere_objekte",         "oakt") ;
+        add_action( "aendere_komentar_objekte",  "ochkomm") ;
+        add_action( "aender_pfad_objekte",       "ochpfad") ;
+        add_action( "loesche_objekte",           "odel") ;
+
+        add_action( "check_objekte",             "ocheck") ;
+    }
+}
+
+
+int query_prevent_shadow( object shadow)
+{
+    return 1 ;
+}
+
+
+int aktivieren( string str)
+{
+    return WISSEN_MASTER->aktivieren( str) ;
+}
+
+
+int informiere( string str)
+{
+    return WISSEN_MASTER->informiere( str) ;
+}
+
+
+int list_skill( string str)
+{
+    return WISSEN_MASTER->list_skill( str) ;
+}
+
+
+int new_bereich( string str)
+{
+    return WISSEN_MASTER->new_bereich( str) ;
+}
+
+
+int list_bereich( string str)
+{
+    return WISSEN_MASTER->list_bereich( str) ;
+}
+
+
+int list_kontingente( string str)
+{
+    return WISSEN_MASTER->list_kontingente( str) ;
+}
+
+
+int set_kontingent( string str)
+{
+    return WISSEN_MASTER->set_kontingent( str) ;
+}
+
+
+int set_kontingent_bereich( string str)
+{
+    return WISSEN_MASTER->set_kontingent_bereich( str) ;
+}
+
+
+int list_objekte( string str)
+{
+    return WISSEN_MASTER->list_objekte( str) ;
+}
+
+
+int set_objekte( string str)
+{
+    return WISSEN_MASTER->set_objekte( str, 0) ;
+}
+
+
+int set_objekte2( string str)
+{
+    return WISSEN_MASTER->set_objekte( str, 1) ;
+}
+
+
+int setze_sicherheitsbits( string str)
+{
+    return WISSEN_MASTER->setze_sicherheitsbits( str) ;
+}
+
+
+int aktiviere_objekte( string str)
+{
+    return WISSEN_MASTER->aktiviere_objekte( str) ;
+}
+
+
+int aendere_komentar_objekte( string str)
+{
+    return WISSEN_MASTER->aendere_komentar_objekte( str) ;
+}
+
+
+int aender_pfad_objekte( string str)
+{
+    return WISSEN_MASTER->aender_pfad_objekte( str) ;
+}
+
+
+int loesche_objekte( string str)
+{
+    return WISSEN_MASTER->loesche_objekte( str) ;
+}
+
+
+int check_objekte( string str)
+{
+    return WISSEN_MASTER->check_objekte( str) ;
+}

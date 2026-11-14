@@ -1,0 +1,487 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /secure/level_lister.c
+// Description: Macht die Top-Spieler-Liste
+// Author:      Garthan	(13.07.94)
+// Modified by:	Freaky (08.07.95) Player-Log hierher verschoben
+//				  Security-Check in new_enter
+//              Sissi  (04.06.96) Raetsel - Top - Liste
+//
+// $Log: level_lister.c,v $
+// Revision 1.20  2007-10-24 21:53:52  gnomi
+// IP-Adresse mit aufnehmen (nicht nur DNS-Namen).
+//
+// Revision 1.19  2003/07/24 15:03:08  menaures
+// make_lists wegen TLEs etwas optimiert
+//
+// Revision 1.18  2003/07/16 00:58:02  gnomi
+// Nachbesserungsmoeglichkeit eingebaut.
+//
+// Revision 1.17  2002/11/07 01:19:18  gnomi
+// make_lists() nicht in der Login-Prozedur aufrufen, sondern einen call_out
+// starten, denn das verbraucht sonst zuviele Evals.
+//
+// Revision 1.16  2002/10/26 20:23:54  sissi
+// Sortier-Variable wird jetzt, um Speicherplatz zu sparen, auf 0 gesetzt.
+//
+// Revision 1.15  2002/10/26 20:22:16  sissi
+// Da bei Erstellen der Top-Spieler-Raetsel- und Top-Engel-Raetsel-Listen
+// eine TLE auftrat, werden diese beiden Listen jetzt in getrennten
+// Aufrufen berechnet.
+//
+// Revision 1.14  2002/10/19 00:49:50  gnomi
+// Kleine Schoenheitsaenderung.
+//
+// Revision 1.13  2002/10/05 00:49:22  gnomi
+// Dateinamen leicht geaendert.
+//
+// Revision 1.12  2002/09/26 20:45:29  gnomi
+// Logging-Teil in eine extra Funktion ausgelagert.
+//
+// Revision 1.11  2002/09/04 22:23:56  gnomi
+// Playerlist-Dateien in ein extra Verzeichnis verschoben.
+//
+// Revision 1.10  2002/07/30 11:00:28  sissi
+// Die PLAYER_LIST wird jetzt mit angehaengtem Datum erzeugt, damit man
+// ne Chance hat, etwas nachzuvollziehen, was laenger als 1, 2 Tage
+// zurueckliegt.
+//
+// Revision 1.9  2002/06/24 22:51:21  gnomi
+// seteuid(getuid()) entfernt; EUID wird vom Master aus gesetzt.
+//
+// Revision 1.8  2001/12/29 01:04:12  sissi
+// Engels-Top-Liste nen Tick schoener formatiert.
+//
+// Revision 1.7  2001/12/29 00:19:16  sissi
+// Eine Schleife um Spieler- und Engelssliste statt zwei mal selbe Code,
+// die Top-Liste fuer Raetsel ist jetzt eine Raetsel + Spiele Top-Liste.
+// Stimmen zwei Leute bei Raetseln ueberein, so entscheidet die Anzahl
+// geloester Spiele ueber ihren Platz.
+//
+// Revision 1.6  2001/09/16 19:03:42  sissi
+// Spieler- und Engels - Top Listen auf "mehr Plaetze" aufgepeppt.
+//
+// Revision 1.5  2001/04/29 14:21:52  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.4  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma no_inherit
+
+#ifndef TestMUD
+
+#include <level.h>
+#include <config.h>
+#include <quest.h>
+#include <uids.h>
+#include <time.h>
+
+#define LEVEL_BASE           "/var/level_lister"
+#define TOP_PLAYERS          "/var/TOP_PLAYERS"
+#define TOP_HLPS             "/var/TOP_HLPS"
+#define TOP_PLAYERS_QUESTS   "/var/TOP_PLAYERS_QUESTS"
+#define TOP_HLPS_QUESTS      "/var/TOP_HLPS_QUESTS"
+#define TOP_PLAYERS_QUESTS_SIZE	500
+#define TOP_HLPS_QUESTS_SIZE 250
+
+#ifdef UNItopia
+#define PLAYER_LIST_DIR ("/var/adm/player_list/"+timearray(time())[TM_YEAR])
+#define PLAYER_LIST	(sprintf("/PLAYER_LIST.%04d.%02d.%02d",timearray(time())[TM_YEAR],timearray(time())[TM_MON],timearray(time())[TM_MDAY]))
+static mapping zweities = ([]);
+static mapping ersties = ([]);
+#endif
+
+#define MIN_EXP 50000
+#define MIN_QUEST 15
+#define COUNT   20
+
+mapping level_base = m_allocate(50,4);
+static int count = COUNT;
+
+void create()
+{
+   string file;
+   restore_object(LEVEL_BASE);
+#ifdef UNItopia
+   file = read_file("/var/adm/SPIELZWEITIES");
+   if(file)
+      foreach(string line:explode(file,"\n"))
+      {
+         string *parts;
+         line = space(line);
+         if(line[0]=='#' || line=="")
+	    continue;
+	 parts = explode(lower_case(line)," ");
+	 if(sizeof(parts)!=2)
+	    continue;
+	 if(zweities[parts[0]])
+	    zweities[parts[0]]+=({parts[1]});
+	 else
+	    zweities[parts[0]]=({parts[1]});
+	 ersties[parts[1]] = parts[0];
+      }   
+#endif
+}
+
+void save()
+{
+   save_object(LEVEL_BASE);
+}
+
+void prepare_renewal() {save();}
+void abort_renewal() {}
+void finish_renewal() {}
+
+int remove()
+{
+   save();
+   destruct(this_object());
+   return 1;
+}
+
+int testp(mixed *part)
+{
+   return !testplayerp(part[0]);
+}
+
+int hlpfilter(mixed *part)
+{
+   return part[<1] == LVL_HLP;
+}
+
+int playerfilter(mixed *part)
+{
+   return part[<1] < LVL_HLP;
+}
+
+int sort_fun (mixed a, mixed b)
+{
+    if (a[1] == b[1]) return a[0] > b[0];
+    return a[1] < b[1];
+}
+
+int sort_fun2 (mixed a, mixed b)
+{
+    if (a[1] == b[1])
+        if (a[2] == b[2])
+            return a[0] > b[0];
+        else
+            return a[2] < b[2];
+    else
+        return a[1] < b[1];
+}
+
+mixed * sort_base, out_base;
+
+void make_lists()
+{
+   string *idxs;
+   string list;
+   int i;
+
+   sort_base = ({ });
+   count = COUNT;
+
+   save();
+
+   rm(TOP_PLAYERS);
+   rm(TOP_HLPS);
+
+   for(i = sizeof(idxs = m_indices(level_base)); i--;)
+      sort_base += ({({idxs[i], level_base[idxs[i]], level_base[idxs[i],1]})});
+   sort_base = filter(sort_base, #'testp);
+
+   call_out("make_lists2", 2);
+}
+
+void make_lists2()
+{
+   sort_base = sort_array(sort_base,#'sort_fun);
+   call_out("make_lists3", 2);
+}
+
+void make_lists3()
+{
+   int i;
+   string list;
+
+   out_base  = filter(sort_base, #'playerfilter);
+   list = "*************************\n"+
+          "*                       *\n"+
+          "* Liste der Top-Spieler *\n"+
+          "* --------------------- *\n"+
+          "*                       *\n";
+   for(i = 0; i < 15 && i < sizeof(out_base); i++)
+      list += "*  "+
+	      right((i+1)+")",3)+
+	      " "+
+	      left(capitalize(out_base[i][0]),16)+
+	      " *\n";
+   list += "*                       *\n"+
+	   "*************************\n";
+   write_file(TOP_PLAYERS, list);
+
+   call_out("make_lists4", 2);
+}
+
+void make_lists4()
+{
+   int i;
+   string list;
+
+   out_base  = filter(sort_base, #'hlpfilter);
+   list = "*************************\n"+
+          "*                       *\n"+
+          "* Liste der Erzengel    *\n"+
+          "* ------------------    *\n"+
+          "*                       *\n";
+   for(i = 0; i < 15 && i < sizeof(out_base); i++)
+      list += "*  "+
+	      right((i+1)+")",3)+
+	      " "+
+	      left(capitalize(out_base[i][0]),16)+
+	      " *\n";
+   list += "*                       *\n"+
+	   "*************************\n";
+   write_file(TOP_HLPS, list);
+   call_out("make_lists5", 2);
+}
+
+// Raetsel - Spiele - Top - Listen
+
+void make_lists5()
+{
+   int i;
+   string *idxs;
+   sort_base = ({ });
+   for(i = sizeof(idxs = m_indices(level_base)); i--;)
+      sort_base += ({({idxs[i],level_base[idxs[i],2],level_base[idxs[i],3],level_base[idxs[i],1]})});
+   sort_base = filter(sort_base, #'testp);
+
+   call_out("make_lists6", 2);
+}
+
+void make_lists6()
+{
+   sort_base = sort_array(sort_base,#'sort_fun2);
+   call_out("make_lists7", 2, 0);
+}
+
+void make_lists7(int l)
+{
+   string list;
+   int i;
+
+   count = COUNT;
+
+   int top;
+   if (l == 0)
+       out_base  = filter(sort_base, #'playerfilter);
+   else
+       out_base  = filter(sort_base, #'hlpfilter);
+
+   list = "************************************************\n"
+          "*                                              *\n";
+   if (l == 0)
+       list +=
+              "*                Top - Spieler                 *\n"
+              "*                =============                 *\n";
+   else
+       list +=
+              "*                 Top - Engel                  *\n"
+              "*                 ===========                  *\n";
+   list +=
+              "*                                              *\n"
+              "*   Platz    Name            Raetsel  Spiele   *\n"
+              "*   -----    ----            -------  ------   *\n"
+              "*                                              *\n";
+
+   if (l == 0) top = TOP_PLAYERS_QUESTS_SIZE;
+   else top = TOP_HLPS_QUESTS_SIZE;
+
+   for(i = 0; i < top && i < sizeof(out_base); i++) {
+      list = sprintf("%s*   %4s     %-16s%6d  %6d    *\n",
+                     list, 
+        ( ( (!i) || (out_base[i][1] != out_base[i-1][1])
+               || (out_base[i][2] != out_base[i-1][2]))
+        ? (i+1)+"." : ""),
+        capitalize(out_base[i][0]), out_base[i][1], out_base[i][2]);
+   }
+
+   list += "*                                              *\n"+
+           "************************************************\n";
+   if (l == 0)
+   {
+       rm(TOP_PLAYERS_QUESTS);
+       write_file(TOP_PLAYERS_QUESTS, list);
+   }
+   else
+   {
+       rm(TOP_HLPS_QUESTS);
+       write_file(TOP_HLPS_QUESTS, list);
+   }
+   if (l == 1)
+       sort_base = 0;
+
+   if (l == 0)
+   {
+       call_out("make_lists7", 2, 1);
+   }
+}
+
+void reset()
+{
+   object *obs;
+   int i, skill, quest;
+   string name;
+
+   for(i = sizeof(obs = users()); i--;)
+      if(!wizp(obs[i]) &&
+	 (((skill = obs[i]->query_sum_skill()) > MIN_EXP) ||
+	   (quest = obs[i]->query_quest_count() > MIN_QUEST)) &&
+	 (name  = obs[i]->query_real_name()))
+      {
+	 level_base[name]   = skill;
+	 level_base[name,1] = obs[i]->query_level();
+         level_base[name,2] = obs[i]->query_quest_count ();
+         level_base[name,3] = obs[i]->query_game_count ();
+      }
+   call_out ("make_lists",2);
+}
+
+int check_me(string name)
+{
+#ifdef UNItopia
+    string *namen;
+    string on_po = object_name(previous_object());
+
+    if (strstr(on_po,LOGIN_OB"#") &&
+        strstr(on_po,"/obj/player#") &&
+	strstr(on_po,"/secure/udp/ftpserv"))
+	 return 0;
+
+    if(zweities[name])
+	namen = zweities[name];
+    else if(ersties[name])
+	namen = ({ersties[name]});
+    else
+	return 0;
+    namen = filter(namen, #'find_player);
+    if(!sizeof(namen))
+	return 0;
+    write_file("/var/adm/CHECK",sprintf("%s %s eingeloggt, %s aber bereits drin.\n",
+	shorttimestr(time()), capitalize(name), liste(map(namen,#'capitalize))));
+    return 1;
+#endif
+}
+
+void list_me(object who, string name)
+{
+   string on_po = object_name(previous_object());
+   if (strstr(on_po,LOGIN_OB"#") &&
+       strstr(on_po,"/obj/player#"))
+	return;
+
+   check_me(name);
+    
+#ifdef PLAYER_LIST
+//    if (file_size(PLAYER_LIST)>65000)
+//	rename(PLAYER_LIST,PLAYER_LIST+".old");
+    if(file_size(PLAYER_LIST_DIR)!=-2)
+	mkdir(PLAYER_LIST_DIR);
+    write_file(PLAYER_LIST_DIR+PLAYER_LIST,
+	       left(name,11)+
+	       shorttimestr(time())+" "+
+	       left(efun::query_ip_number(who),15)+" "+
+	       efun::query_ip_name(who)+"\n");
+#endif
+}
+
+#if defined(UNItopia) && defined(PLAYER_LIST)
+void correct_list(string ip_name, string ip_number)
+{
+    if(!playerp(previous_object()))
+	return;
+    if(file_size(PLAYER_LIST_DIR)!=-2)
+	mkdir(PLAYER_LIST_DIR);
+    write_file(PLAYER_LIST_DIR+PLAYER_LIST,
+	       left(previous_object()->query_real_name(),11)+
+	       shorttimestr(time())+" "+
+	       left(ip_number,15)+" "+
+	       ip_name+"\n");
+}
+#endif
+
+void new_enter(object who)
+{
+   string name;
+   int skill;
+
+   if (!who)
+	return;
+   if (strstr(object_name(previous_object()),LOGIN_OB"#") &&
+       strstr(object_name(previous_object()),"/obj/player#"))
+	return;
+
+   name = who->query_real_name();
+
+   list_me(who, name);
+
+   if(wizp(who) || (skill = who->query_sum_skill()) < MIN_EXP)
+      m_delete(level_base, name);
+   else
+   {
+      level_base[name]   = skill;
+      level_base[name,1] = who->query_level();
+      level_base[name,2] = who->query_quest_count ();
+      level_base[name,3] = who->query_game_count ();
+      count--;
+   }
+   if(!count && find_call_out(#'make_lists)<0)
+      call_out(#'make_lists,4);
+}
+
+//suicid
+int remove_entry(string name)
+{
+   if(previous_object() &&
+   	(playerp(previous_object()) || geteuid(previous_object()) == ROOT_UID)
+	&& stringp(name))
+   {
+      m_delete(level_base, name);
+      if(!--count)
+	 make_lists();
+      return 1;
+   }
+}
+
+mapping query_level_base() { return copy(level_base); }
+
+
+#ifdef CONVERT
+// OneShot: OldStyle -> New
+void convert()
+{
+   string st, *sts;
+   int i, exp;
+
+   if ((st = read_file("/save/TOP_ALL")) && st != "")
+   {
+      sts = explode(st,"\n")-({""});
+      for (i=0; i<sizeof(sts); i++)
+	 if (sscanf(sts[i],"%s %d",st,exp)==2 && exp>MIN_EXP)
+	 {
+	    level_base[st] = exp;
+	    level_base[st,1] = 1;
+	 }
+      save();
+   }
+   
+
+}
+#endif // !CONVERT
+
+#endif // !TestMUD

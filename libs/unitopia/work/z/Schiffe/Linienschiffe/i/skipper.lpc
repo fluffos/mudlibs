@@ -1,0 +1,515 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:    /z/Schiffe/Linienschiffe/i/skipper.c
+// Description:
+// Modified:    Sissi       (30.01.1999)    Parse Conversation
+//              Menaures    (19.11.2001)    Doku
+//              Wyvern      (13.10.2005)    send_message in mess_to_all
+//                                          sowie Enzy-Eintrag
+//              Wyvern      (06.02.2009)    capitalize(from/to) in fahr_los
+//              Wyvern      (14.08.2009)    deprecated: member_array
+
+
+/*
+ * /z/Schiffe/Linienschiffe/i/skipper.c
+ *
+ * Der Skipper ist in der Lage, nach speziellen "Segel-Anweisungen", die
+ * in den Files 'hafenname1-hafenname2' stehen, ein Schiff vom Hafen 1
+ * zum Hafen 2 zu steuern. Gestartet wird er mit dem Funktionsaufruf:
+ *
+ *    fahr_los(string zielhafenname)
+ *
+ * Das Schiff muss sich in einem Hafen befinden. Ein Hafen wird daran erkannt,
+ * dass er ein add_type("hafen",hafenname) besitzt.
+ * Der Skipper sucht sich dann die entsprechende "Segel-Anweisung" heraus und
+ * arbeitet sie Zeile um Zeile mit do_command(..) ab.
+ *
+ * Die "Segel-Anweisungen" werden per Voreinstellung in den
+ * Directorys "/d/Domain/routen" gesucht und heissen >>hafen1-hafen2<< .
+ *
+ * Mit der Funktion:
+ *
+ *
+ *    add_search_dir(string directory)
+ *
+ *
+ * kann man weitere Directorys angeben, in denen VOR den Standard-Directorys
+ * gesucht werden soll.
+ *
+ * Die Pausen zwischen den einzelnen Kommandos kann man mit der Funktion:
+ *
+ *
+ *    set_pause(int laenge)
+ *
+ *
+ * in Sekunden setzen. Default sind 10 Sekunden.
+ *
+ * Hat der Skipper oder das Schiff sich verfahren und sind irgendwo stehen-
+ * geblieben, so kann der Skipper mit der Funktion:
+ *
+ *
+ *    korrektur()
+ *
+ *
+ * den Zustand ueberpruefen und gegebenenfalls das Schiff in den Heimathafen
+ * zurueckversetzen. Eine add_action() fuer Spieler ist auf das Kommando:
+ *
+ *
+ *    "skipper"
+ *
+ *
+ * gesetzt.
+ *
+ * Debug-Information erhaelt man mit der Funktion:
+ *
+ *
+ *    zustand()
+ *
+ * Will man keine Debug-Informations-Ausgabe am Bildschirm, so nehme
+ * man die Funktion:
+ *
+ *
+ *    problem()
+ *
+ *
+ * Sie liefert 0 zurueck, wenn alles in Ordnung ist, ansonsten !=0 .
+ *
+ * Ein Skipper laesst sich mit der Funktion:
+ *
+ *
+ *    ursprung()
+ *
+ *
+ * reinitialisieren, hierbei werden aber nur Variableninhalte geloescht,
+ * keine Objekte bewegt oder zerstoert.
+ *
+ * Bei der Abfahrt wird die (von euch selbst zu schreibende) Routine
+ *
+ *
+ *    depart_message(string hafen, string zielhafen)
+ *
+ *
+ * aufgerufen und ihr die Namen das aktuellen Hafens und des
+ * Ziel-Hafens uebergeben. In ihr jann zB der Skipper ankuendigen,
+ * dass es jetzt losgeht o.ae.
+ *
+ * Bei jedem do_command waehrend der Fahrt wird die Routine
+ *
+ *
+ *    command_action()
+ *
+ *
+ * aufgerufen. In ihr kann man zB den Skipper auf den Kompass schauen
+ * lassen oder das Steuerrad bewegen lassen usw.
+ *
+ * Bei der Ankunft wird schliesslich
+ *
+ *
+ *    arrival_message(string hafen)
+ *
+ *
+ * aufgerufen und ihr der Name des Hafens uebergeben, in dem man gerade
+ * eingelaufen ist. In ihr kann wiederum eine Meldung an die Passagiere
+ * usw ausgegeben werden.
+ *
+ * Um in allen Schiffsraeumen eine Meldung durchzugeben, kann man
+ * die Routine
+ *
+ *
+ *    mess_to_all(string meldung)
+ *
+ *
+ * aufrufen (zB von den .._action(..) - Routine aus).
+ *
+ * Dem Skipper teilt man die Schiffsraeume, in die er die Meldungen
+ * schicken soll mit
+ *
+ *
+ *    add_ship_room(string filename)
+ *
+ *
+ * mit. Dies wird durch /z/Schiffe/Linienschiffe/i/schiff (falls das Schiff damit arbeitet)
+ * bereits automatisch erledigt.
+ *
+ * Ein Beispiel fuer einen skipper findet man im /obj/kapitaen.c ,
+ * dem Faehren-Kommandanten.
+ */
+
+#pragma save_types
+
+inherit "/i/monster/monster";
+#include <message.h>
+
+object bruecke;
+string from, to, *kurse;
+int pause, etappe, on_tour;
+string *ship_rooms;
+string *such_path;
+int first;
+string heimat_hafen;
+
+void create() {
+
+ monster::create();
+ first = 1;
+ pause = 10;
+ etappe = -1;
+ kurse = ({});
+ such_path = ({});
+ set_id(({"skipper","kapitaen"}));
+ set_gender("maennlich");
+ set_name("skipper");
+ set_personal(1);
+ set_long("Er hat wohl hier das Kommando.\n");
+ set_prevent_cleanup();
+ set_parse_conversation (this_object(),({
+   "korrektur: sagt && in && ordnung || sagt && wie && gehts || "
+       "sagt && wo || sagt && wohin || sagt && ort || "
+       "sagt && problem || sagt && probleme",
+   "korrektur: fragt && in && ordnung || fragt && wie && gehts || "
+       "fragt && wo || fragt && wohin || fragt && ort || "
+       "fragt && problem || fragt && probleme"}));
+
+}
+
+/*
+FUNKTION: mess_to_all
+DEKLARATION: varargs void mess_to_all(string message[, int msg_type, int msg_action])
+BESCHREIBUNG:
+Um in allen Schiffsraeumen eine Meldung durchzugeben, kann man mess_to_all()
+verwenden; fuer message_type und message_action koennen die defines aus
+message.h verwendet werden. -> header von /z/Schiffe/Linienschiffe/i/skipper.c
+VERWEISE:
+GRUPPEN: schiff
+*/
+varargs void mess_to_all(string str, int msg_type, int msg_action)
+{
+  int a;
+  object env;
+
+  if (!str || str == "")
+    return;
+
+  if (env = environment()){
+    send_message_in(env,msg_type,msg_action,str);
+//    tell_room(env,str);
+  }
+  if (ship_rooms)
+     ship_rooms -= ({0});
+  for (a = sizeof(ship_rooms); a--;)
+    send_message_in(touch(ship_rooms[a]),MT_FAR|msg_type,msg_action,str);
+//    tell_room(ship_rooms[a],str);
+}
+
+nosave void gib_kommando() {
+
+  if (etappe < 0)
+    return;
+  if (etappe >= sizeof(kurse)) {
+    etappe = -1;
+    kurse = ({});
+    on_tour = 0;
+    this_object()->arrival_action(to);
+    from = to = "";
+    return;
+  }
+  this_object()->command_action();
+  do_command(kurse[etappe]);
+  etappe++;
+}
+
+void add_search_dir(string dir) {
+
+  if (!dir || dir == "")
+    return;
+  if (dir[<1] != '/')
+    dir += "/";
+  such_path += ({ dir });
+}
+
+private string get_weg_beschreibung(string tour) {
+  string *doms;
+  int a;
+
+  for (a = sizeof(such_path); a--;)
+    if (file_size(such_path[a]+tour) > 0)
+      return such_path[a]+tour;
+
+  for (a = sizeof(doms = get_dir("/d/")); a--;)
+    if (file_size("/d/"+doms[a]+"/routen/"+tour) > 0)
+      return "/d/"+doms[a]+"/routen/"+tour;
+
+  return 0;
+}
+
+/*
+FUNKTION: fahr_los
+DEKLARATION: void fahr_los(string dest)
+BESCHREIBUNG:
+Laesst einen Skipper in die Richtung dest fahren. dest muss dabei einfach
+irgendein in den Routen-Files bekannter Hafen sein. -> header von
+/z/Schiffe/Linienschiffe/i/skipper.c
+VERWEISE:
+GRUPPEN: schiff
+*/
+void fahr_los(string dest) {
+  object heimat, schiff, env;
+  string hafen, tour, tour_file;
+
+  if (on_tour) {
+    do_command("sage Wir sind bereits auf Fahrt von "+capitalize(from)+
+               " nach "+capitalize(to)+".");
+    return;
+  }
+  if (!dest || dest == "") {
+    do_command("sage Wohin soll es gehen?");
+    return;
+  }
+  if (!(env = environment(this_object()))) {
+    do_command("sage Im absoluten Nichts kenne ich mich nicht aus.");
+    return;
+  }
+  if (!(schiff = (object)env->query_type("mein_schiff"))) {
+    do_command("sage Ohne Schiff geht das nicht.");
+    return;
+  }
+  if (!(heimat = environment(schiff))) {
+    do_command("sage Das Schiff befindet sich im Nichts.");
+    return;
+  }
+  if (first)
+    heimat_hafen = object_name(heimat);
+  if (!(hafen = (string)heimat->query_type("hafen")) || hafen == "") {
+    do_command("sage Hier kenne ich mich nicht aus.");
+    return;
+  }
+  
+//  Hier werden Leerzeichen und das Sonderzeichen # vorher rausgefiltert.
+//  Das Leerzeichen ist fuer Hafennamen, die aus mehreren Worten bestehen, wie
+//  z.B. "Port Amber" und das Sonderzeichen fuer nicht offizielle Haefen, wie
+//  z.B. "suedpol_1" und "suedpol_2"
+  if (lower_case(hafen-" #") == lower_case(dest-" #")) {
+    do_command("sage Wir sind bereits in "+dest+".");
+    return;
+  }
+  if (!(tour_file = get_weg_beschreibung(tour = lower_case(hafen-" #")+"-"+
+                     lower_case(dest-" #")))) {
+    do_command("sage Die Strecke von "+capitalize(hafen)+" nach "+
+        capitalize(dest)+" kenne ich nicht.");
+    return;
+  }
+  if (!(kurse = explode(read_file(tour_file),"\n")-({""})) ||
+      sizeof(kurse) <= 0) {
+    do_command("sage Diese Strecke habe ich vergessen.\n");
+    return;
+  }
+  etappe = 0;
+  this_object()->depart_action(from = hafen,to = dest);
+  on_tour = 1;
+  call_out("gib_kommando",pause);
+}
+
+void kreuz_ende() {
+
+  if (etappe == sizeof(kurse)-1 )
+    call_out("gib_kommando",0);
+  else
+    call_out("gib_kommando",pause);
+}
+
+void set_pause(int a) { pause = (a<0)?0:a; }
+
+void add_ship_room(object ob) {
+  if (!ship_rooms)
+    ship_rooms = ({});
+  else
+    ship_rooms -= ({0});
+  if (member(ship_rooms, ob) < 0)
+    ship_rooms += ({ ob });
+}
+
+void ursprung() {
+
+  from = to = "";
+  kurse = ({});
+  etappe = -1;
+  on_tour = 0;
+}
+
+/*
+FUNKTION: zustand
+DEKLARATION: void zustand()
+BESCHREIBUNG:
+Liefert einen Zustandsbericht an den Aufrufenden, wenn die Funktion in einem
+Skipper aufgerufen wurde.
+VERWEISE: problem, korrektur
+GRUPPEN: schiff
+*/
+void zustand() {
+  int a;
+
+  write("Auf Fahrt: "+on_tour+".\n"+
+    "Von: "+from+"\n"+
+    "Nach: "+to+"\n"+
+    "Etappe: "+etappe+".\n");
+  if (!kurse)
+    write("Kurse: 0.\n");
+  else if (sizeof(kurse) <= 0)
+    write("Kurse: leer.\n");
+  else
+    for (a = sizeof(kurse); a--;)
+      write("Kurse["+a+"]: "+kurse[a]+".\n");
+
+  a=find_call_out("gib_kommando");
+  if (a==-1) {
+    write("Kein Call_out.\n");
+    return;
+  }
+  write("Call-Out 'gib_kommando' in "+a+" Sekunden.\n");
+}
+
+/*
+ * Analysiert den Zustand des Skippers und gibt 0 zurueck, wenn alles
+ * ok ist, ansonsten eine negative Zahl.
+ */
+
+/*
+FUNKTION: problem
+DEKLARATION: int problem()
+BESCHREIBUNG:
+Liefert, auf einen Skipper angewandt, 0 zuruck, wenn alles OK ist, sonst
+eine negative Zahl:
+
+    -1    Bin im Nirvana.
+    -2    Bin auf dem falschen Dampfer.
+    -3    Bin unterwegs
+
+Eine fuer Menschen leichter verstaendliche Ausgabe erzeugt zustand.
+VERWEISE: korrektur, zustand
+GRUPPEN: schiff
+*/
+int problem() {
+  object schiff, env;
+
+  return !(env = environment()) ?
+         -1 :
+       !(schiff = env->query_type("mein_schiff")) ?
+       -2 :
+         schiff->query_on_kreuz() ?
+         0 :
+           find_call_out("gib_kommando") != -1 ?
+           0 :
+        on_tour ?
+        -3 :
+          0;
+}
+
+
+/*
+ * Return-Code:
+ *     1: Alles OK
+ *    -1: Kapitaen hilflos (kein Schiff usw)
+ *    -2: Korrektur durchgefuehrt.
+ *
+ * Achtung, diese Funktion wird auch von der parse conversation aufgerufen!
+ *
+ */
+
+/*
+FUNKTION: korrektur
+DEKLARATION: int korrektur(string str)
+BESCHREIBUNG:
+Mit dieser Funktion kann man von problem() o.ae. erkannte Probleme korrigieren.
+
+Return-Codes:
+    1: Alles OK
+   -1: Kapitaen hilflos (kein Schiff usw)
+   -2: Korrektur durchgefuehrt.
+
+Achtung, diese Funktion wird auch von der parse conversation aufgerufen.
+
+VERWEISE: problem
+GRUPPEN: schiff
+*/
+int korrektur(string str) {
+  object schiff, env;
+  string hafen, envname;
+
+  do_command("sage Moment, ich check mal alles durch.");
+  if (!(env = environment())) {
+    do_command("sage Ich bin im Nirwana.");
+    return -1;
+  }
+  if (bruecke && (bruecke != env)) {
+    do_command ("sage Ups. Ich bin ja gar nicht auf der Bruecke.");
+    this_object()->move (bruecke,1,"eilt davon","eilt herbei");
+  }
+  if (!(schiff = (object)env->query_type("mein_schiff"))) {
+    do_command("sage Ich bin nicht in einem Schiff.");
+    return -1;
+  }
+  if (schiff->query_on_kreuz()) {
+    do_command("sage Das Schiff ist gerade auf einem Kreuzschlag.");
+    return 1;
+  }
+  if (find_call_out("gib_kommando") != -1) {
+    do_command("sage Ich steuere wie gewohnt das Schiff nach "+capitalize(to)+".");
+    return 1;
+  }
+  if (on_tour) {
+    do_command("sage Da ist was schiefgelaufen! Sowas aber auch!");
+    ursprung();
+  }
+  if (env = environment(schiff)) {
+    if ((envname = (string)env->query_type("hafen")) && envname != "") {
+      do_command("sage Wir sind im Hafen "+capitalize(envname)+
+          "; Schiff und Besatzung sind wohlauf.");
+      this_object()->recover_action();
+      return -2;
+    }
+    do_command("sage Ich kann nicht genau feststellen, wo wir sind.");
+  }
+  else
+    do_command("sage Das Schiff befindet sich im Nirwana.");
+
+  if ((!hafen = (string)schiff->query_default_room()) || hafen == "")
+    hafen = heimat_hafen;
+  if (!hafen || hafen == "")
+    hafen = "/map/m8_0";
+  schiff->move(hafen);
+
+  this_object()->arrival_action(touch(hafen)->query_type("hafen"));
+  this_object()->recover_action();
+  return -2;
+}
+
+void set_bruecke()
+{
+  bruecke = environment ();
+}
+
+void init() {
+  add_action("korrektur","skipper");
+
+  /* Freaky: Sonst funktionieren die Skipper nicht richtg (Kampf) */
+  ::init();
+}
+
+int query_on_tour()
+{
+    return on_tour;
+}
+
+string query_start_hafen()
+{
+    return from;
+}
+string query_ziel_hafen()
+{
+    return to;
+}
+
+string *query_ship_rooms() {
+
+  return ship_rooms -= ({0});
+}

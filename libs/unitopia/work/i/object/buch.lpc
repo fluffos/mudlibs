@@ -1,0 +1,1555 @@
+// This file is part of UNItopia Mudlib.
+// ---------------------------------------------------------------------
+// File:          /i/object/buch.c
+// Description:   Ein Buch
+// Author:        Freaky
+// Modified by:   Garthan (23.12.93)
+// Major Rewrite: Sissi   (12. 5.95 - 7.1.96)
+// Modified by:   Sissi   (10. 5.96): M_AUTO_END im more gesetzt
+//                Sissi   (28. 6.97): more_end verbessert
+//                Croft   ( 9.12.98): Auf- und Zuschlagen optional
+//                                    Einige Meldungen dynamischer gemacht
+//                                    seiten_desc eingebaut
+//                Croft   (29.12.98)  seiten_desc erweitert
+//                                    r eingebaut
+//                                    Pseudoclosures erlaubt
+//                Croft   ( 4. 1.99)  Bugfix in eval_entry
+//                Croft   (25. 1.99)  Unsichtbare erzeugen keine Meldungen mehr
+//                Croft   ( 1. 2.99)  catmore verdoppelt im moremode nicht mehr
+//                                    das letzte \n, \n-Ausgabe vor
+//                                    Befehlszeile verbessert
+//                Croft   (22. 4.99)  saechlicher Genderfix in more_end
+//                Croft   (24. 6.00)  suchen eingebaut
+//
+// $Log: buch.c,v $
+// Revision 1.30  2012-01-03 12:02:03  sorcerer
+// Aktualisierungen (Doku/veraltet)
+//
+// Revision 1.29  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.28  2009-01-15 08:49:16  gnomi
+// Die Nobody-UID nicht im /w setzen.
+//
+// Revision 1.27  2007/10/29 09:41:38  gnomi
+// INPUT_PROMPT verwenden.
+//
+// Revision 1.26  2006/06/07 20:37:47  gnomi
+// Weniger Einschraenkungen durch Dunkelheit.
+//
+// Revision 1.25  2006/05/12 09:58:37  gnomi
+// Als "page_nr" auch Closures zulassen.
+//
+// Revision 1.24  2004/08/27 12:59:11  menaures
+// Typo
+//
+// Revision 1.23  2003/09/20 02:10:17  gnomi
+// Korrektur bei wildcard-Beandlung.
+//
+// Revision 1.22  2003/06/19 22:40:29  gnomi
+// Doku korrigiert.
+//
+// Revision 1.21  2003/05/06 02:46:18  gnomi
+// Typo.
+//
+// Revision 1.20  2003/02/20 01:12:49  gnomi
+// forbidden_read(_me) eingebaut.
+//
+// Revision 1.19  2003/01/17 01:50:41  gnomi
+// Hilfe in extene Funktion ausgelagert, welche man ueberlagern kann.
+//
+// Revision 1.18  2003/01/13 03:27:55  gnomi
+// get_status_line eingefuehrt.
+//
+// Revision 1.17  2002/02/09 10:39:31  gnomi
+// More-Handling ueberarbeitet.
+// Funktionen fuer die Enzy dokumentiert.
+// Weiteren Modus "morefile" eingefuehrt.
+//
+// Revision 1.16  2002/01/15 03:38:28  gnomi
+// query_short umgestellt.
+//
+// Revision 1.15  2002/01/14 04:16:13  gnomi
+// Deklaration von query_read korrigiert.
+//
+// Revision 1.14  2002/01/11 04:54:32  gnomi
+// Kleine Korrektur des "r"-Befehls fuer Inhaltsverzeichnisse.
+//
+// Revision 1.13  2002/01/10 08:24:23  gnomi
+// value auch virtual inheritet.
+//
+// Revision 1.12  2002/01/10 07:53:04  gnomi
+// item, move virtuell inheriten.
+//
+// Revision 1.11  2001/08/25 13:32:10  freaky
+// Evals angepasst
+//
+// Revision 1.10  2001/04/29 14:21:44  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.9  2001/04/15 00:24:41  freaky
+// UID auf nobody-uid setzen.
+//
+// Revision 1.8  2001/03/14 17:31:00  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.7  2001/02/14 00:28:55  sissi
+// Pulami:
+// set_page_names() und set_verzeichnis() auf relative Pfade umgestellt.
+//
+//
+// Revision 1.6  2001/02/10 18:23:54  gnomi
+// Bugfix im catmore. (Thanks, Lara Croft!)
+//
+// Revision 1.5  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+FUNKTION: buch
+DEKLARATION: zum Buch siehe /doc/funktionsweisen/buch
+BESCHREIBUNG:
+Wie man ein Buch macht steht aussfuehrlich in der Datei
+/doc/funktionsweisen/buch, auch mit der Enzy zu lesen unter
+"menue", "funktionsweisen", "buecher".
+GRUPPEN: buch
+*/
+
+
+#pragma save_types
+
+
+virtual inherit "/i/item";
+virtual inherit "/i/move";
+virtual inherit "/i/value";
+
+
+#include <apps.h>
+#include <invis.h>
+#include <level.h>
+#include <more.h>
+#include <uids.h>
+#include <rtlimits.h>
+#include <simul_efuns.h>
+#include <input_to.h>
+
+private int current_page = -1;
+private int max_page;
+private string *page_names;
+private mixed verzeichnis;
+private int moremode;
+private int wiz;
+private int hlp;
+private int open_close = 1;
+private mapping seiten_desc = ([]);
+private int searchable;
+private string i_status_line, status_line;
+private int more_status; // 1: more_end nur, weil ein neues more aktiv wurde
+
+#define BUCH_MORE_ID(page)		(["ID":"Mudlib - Buch", "Page": page])
+#define BUCH_HELP_MORE_ID(page,line)	(["ID":"Mudlib - Buch - Hilfe", "Page": page, "Line": line])
+#define IS_BUCH_HELP_MORE_ID(id)	(mappingp(id) && (id)["ID"]=="Mudlib - Buch - Hilfe")
+#define IS_BUCH_MORE_ID(id)		(mappingp(id) && (id)["ID"]=="Mudlib - Buch")
+#define GET_PAGE_FROM_MORE_ID(id)	((id)["Page"])
+#define GET_LINE_FROM_MORE_ID(id)	((id)["Line"])
+
+#ifdef TestMUD
+#define DEPRECATED private
+#else
+#define DEPRECATED
+#endif
+
+/*
+FUNKTION: query_max_page
+DEKLARATION: int query_max_page()
+BESCHREIBUNG:
+Liefert die Seitenzahl dieses Buches zurueck.
+VERWEISE: set_max_page, set_page_names
+GRUPPEN: buch
+*/
+int query_max_page()
+{
+    return max_page;
+}
+
+/*
+FUNKTION: set_max_page
+DEKLARATION: int set_max_page(int max_page)
+BESCHREIBUNG:
+Damit setzt man die Seitenzahl dieses Buches.
+Dies ist nur bei dynamischen Buechern erforderlich, wo die Seiten nicht
+mittels set_page_names gesetzt wurden.
+VERWEISE: query_max_page, set_page_names
+GRUPPEN: buch
+*/
+int set_max_page(int x)
+{
+    return max_page = x;
+}
+
+/*
+FUNKTION: query_current_page
+DEKLARATION: int query_current_page()
+BESCHREIBUNG:
+Damit kann man den Status des Buches abfragen.
+Ein negativer Wert zeigt an, dass dieses Buch geschlossen ist.
+Bei 0 ist dieses Buch beim Inhaltsverzeichnis aufgeschlagen.
+Positive Werte geben die Seitennummer an, bei welcher dieses Buch
+aufgeschlagen ist.
+Ist dieses Buch nicht zum Auf- und Zuschlagen, so kann trotzdem ein
+negativer Wert zurueckgeliefert werden, was dann das gleiche wie 0 bedeutet.
+VERWEISE: set_current_page
+GRUPPEN: buch
+*/
+int query_current_page()
+{
+    return current_page;
+}
+
+/*
+FUNKTION: query_verzeichnis
+DEKLARATION: mixed query_verzeichnis()
+BESCHREIBUNG:
+Liefert den Dateinamen des aktuellen Verzeichnisses oder 0, falls keine
+Datei dafuer angegeben wurde.
+VERWEISE: set_verzeichnis, query_page_names, query_verzeichnis_inhalt
+GRUPPEN: buch
+*/
+mixed query_verzeichnis()
+{
+    return verzeichnis;
+}
+
+/*
+FUNKTION: query_page_names
+DEKLARATION: string *query_page_names()
+BESCHREIBUNG:
+Liefert ein Array mit den Dateinamen der einzelnen Seiten zurueck bzw.,
+falls keine Dateien angegeben wurden, 0.
+VERWEISE: set_page_names, query_verzeichnis, query_page_inhalt
+GRUPPEN: buch
+*/
+string *query_page_names()
+{
+    return page_names;
+}
+
+/*
+FUNKTION: set_wizard_book
+DEKLARATION: int set_wizard_book (int wiz)
+BESCHREIBUNG:
+Damit setzt man, ob nur Goetter dieses Buch lesen koennen (wiz=1) oder
+auch Nicht-Goetter dies duerfen (wiz=0). Eine entsprechende
+Fehlermeldung kann man mit set_seiten_desc setzen.
+VERWEISE: set_hlp_book, query_wizard_book, set_seiten_desc
+GRUPPEN: buch
+*/
+int set_wizard_book(int i)
+{
+    return wiz = (i ? 1 : 0);
+}
+
+/*
+FUNKTION: set_hlp_book
+DEKLARATION: int set_hlp_book(int hlp)
+BESCHREIBUNG:
+Damit setzt man, ob nur Engel und Goetter dieses Buch lesen koennen (hlp=1)
+oder ob auch normale Spieler dies duerfen (hlp=0). Eine entsprechende
+Fehlermeldung kann man mit set_seiten_desc setzen.
+VERWEISE: set_wizard_book, query_hlp_book, set_setien_desc
+GRUPPEN: buch
+*/
+int set_hlp_book(int i)
+{
+    return hlp = (i ? 1 : 0);
+}
+
+/*
+FUNKTION: query_wizard_book
+DEKLARATION: int query_wizard_book()
+BESCHREIBUNG:
+Liefert 1, wenn nur Goetter dieses Buch lesen koennen, ansonsten 0.
+VERWEISE: set_wizard_book, query_hlp_book
+GRUPPEN: buch
+*/
+int query_wizard_book()
+{
+    return wiz;
+}
+
+/*
+FUNKTION: query_hlp_book
+DEKLARATION: int query_hlp_book()
+BESCHREIBUNG:
+Liefert 1, wenn nur Engel dieses Buch lesen koennen, ansonsten 0.
+VERWEISE: set_hlp_book, query_wizard_book
+GRUPPEN: buch
+*/
+int query_hlp_book ()
+{
+    return hlp;
+}
+
+/*
+FUNKTION: set_open_close
+DEKLARATION: int set_open_close(int cl)
+BESCHREIBUNG:
+Damit kann man angeben, ob man dieses Buch auf- und zuschlagen kann (cl=1)
+oder ob das Buch automatisch aufgeschlagen ist (cl=0).
+Bei letzten wird ein negativer Wert bei set_current_page wie 0 behandelt.
+VERWEISE: query_open_close, set_current_page
+GRUPPEN: buch
+*/
+int set_open_close (int i)
+{
+    return open_close = (i ? 1 : 0);
+}
+
+/*
+FUNKTION: query_open_close
+DEKLARATION: int query_open_close()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn man dieses Buch auf- und zuschlagen kann, ansonsten 0.
+VERWEISE: set_open_close
+GRUPPEN: buch
+*/
+int query_open_close()
+{
+    return open_close;
+}
+
+/*
+FUNKTION: set_searchable
+DEKLARATION: int set_searchable(int searchable)
+BESCHREIBUNG:
+Damit kann man angeben, ob dieses Buch mit dem Befehl '/<suchstring>'
+durchsuchbar sein soll. Falls 0 (also nicht durchsuchbar) angegeben wurde,
+aber mittels set_page_mode auf more() umgeschaltet wurde, so bleibt
+die Moeglichkeit, innerhalb einer Seite zu suchen.
+VERWEISE: query_searchable
+GRUPPEN: buch
+*/
+int set_searchable(int i) 
+{
+    return searchable = (i ? 1 : 0);
+}
+
+/*
+FUNKTION: query_searchable
+DEKLARATION: int query_searchable()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn dieses Buch durchsuchbar ist.
+VERWEISE: set_searchable
+GRUPPEN: buch
+*/
+int query_searchable()
+{
+    return searchable;
+}
+
+/*
+FUNKTION: set_status_line
+DEKLARATION: void set_status_line(string inhaltsverzeichnis, string seite)
+BESCHREIBUNG:
+Damit setzt man die Statuszeile des more, falls eine Seite mittels more
+ausgegeben wird. Der erste Parameter gibt die Statuszeile fuer das
+Inhaltsverzeichnis, der zweite fuer alle weiteren Seiten an.
+Ein %p wird (nicht beim Inhaltsverzeichnis) durch die aktuelle Seitenzahl,
+das erste %d (dies aber auch beim Inhaltsverzeichnis) durch die Nummer der
+aktuellen Zeile und das zweite %d durch die Anzahl an Zeilen ersetzt.
+VERWEISE: query_status_line, set_page_mode, more
+GRUPPEN: buch
+*/
+void set_status_line(string inhalt, string normal)
+{
+    i_status_line=inhalt;
+    status_line=normal;
+}
+
+/*
+FUNKTION: query_status_line
+DEKLARATION: string *query_status_line()
+BESCHREIBUNG:
+Liefert die Statuszeile fuer das Inhaltsverzeichnis und alle weiteren Seiten
+in einem zweielementigen Array zurueck.
+VERWEISE: set_status_line, query_page_mode, more
+GRUPPEN: buch
+*/
+string *query_status_line()
+{
+    return ({i_status_line, status_line});
+}
+
+/*
+FUNKTION: set_seiten_desc
+DEKLARATION: void set_seiten_desc(mapping m)
+BESCHREIBUNG:
+Damit kann man den Seiten eines Buches einen anderen Namen geben und
+dazu noch einige Fehlermeldungen aendern.
+Folgende Eintraege sind moeglich:
+
+    "name":             Der neue Name einer Seite
+    "gender":           Das dazugehoerige Geschlecht
+    "ids":              IDs, welche beim Lese-Befehl erkannt werden sollen
+
+    "no_pages":       	Keine Seiten im Buch
+    "which_page" :      Es wurde nicht angegeben welche Seite man lesen will.
+    "invalid_page":     Die erwuenschte Seitennummer ist <= 0.
+    "page_overflow":    Die erwuenschte Seitennummer ist zu gross.
+    "no_previous_page": Es wurde versucht zu weit zurueckzublaettern (-).
+    "no_next_page":     Es wurde versucht zu weit vorzublaettern (+).
+    "read_page_msg":    Meldung beim lesen an Andere
+    "stop_reading":     Man hoert auf zu lesen
+    "stop_reading_msg": Aufhoerenmeldung fuer Andere
+    "not_allowed":	Meldungen fuer Nicht-Goetter bei Goetterbuechern bzw.
+                        Nicht-Engel bei Engelsbuechern, wenn sie dieses
+                        Buch lesen wollen.
+
+Bei den Fehlermeldungen duerfen Pseudoclosures verwendet werden.
+'book_ob ist dabei das Buchobjekt und 'page_ob entweder das uebergebene
+Mapping (falls dort ein Eintrag "name" existiert) oder eine
+V-Item-Beschreibung einer Seite. 'page_nr ist die aktuelle Seitennummer.
+
+
+Beispiel:
+
+      set_seiten_desc(([
+                "name": "Abschnitt",
+              "gender": "maennlich",
+                 "ids": ({"inschrift", "absatz", "abschnitt"}),
+            "no_pages": "Alle Abschnitte wurden wohl von einem Vandalen "
+                        "unleserlich gemacht.",
+          "which_page": "Welchen Abschnitt willst du lesen?",
+        "invalid_page": "Diesen Abschnitt gibt es nicht.",
+       "page_overflow": "Soviele Abschnitte gibt es nicht.",
+    "no_previous_page": "Das ist schon der erste Abschnitt.",
+        "no_next_page": "Das ist schon der letzte Abschnitt."
+       "read_page_msg": "$Der(OBJ_TP) liest sich eine Inschrift durch."
+        "stop_reading": "Du hoerst auf $den('book_ob) zu studieren.",
+    "stop_reading_msg": "$Der(OBJ_TP) hoert auf $den('book_ob) zu studieren.",
+         "not_allowed": "Eine seltsame Schrift... "
+                        "Du kannst sie nicht entziffern...",
+      ]));
+VERWEISE: query_seiten_desc
+GRUPPEN: buch
+*/
+void set_seiten_desc(mapping m)
+{
+    seiten_desc = m || ([]);
+}
+
+/*
+FUNKTION: query_seiten_desc
+DEKLARATION: mapping query_seiten_desc()
+BESCHREIBUNG:
+Liefert die mit set_seiten_desc gesetzte Beschreibung zurueck.
+VERWEISE: set_seiten_desc
+GRUPPEN: buch
+*/
+mapping query_seiten_desc()
+{
+    return copy(seiten_desc);
+}
+
+/*
+FUNKTION: set_page_mode
+DEKLARATION: void set_page_mode(string s)
+BESCHREIBUNG:
+Damit wird eingestellt, auf welche Art die Seiten ausgegeben werden.
+Es gibt drei Modi:
+
+    "page":	Die Seite wird auf einmal ausgegeben.
+    "more":	Die Seite wird per more() ausgegeben.
+    "morefile": Eine Datei wird ausgegeben. (siehe query_verzeichnis_inhalt
+		und query_page_inhalt)
+
+Standardmaessig ist "page" eingestellt.
+VERWEISE: query_page_mode, more, set_status_line,
+	  query_verzeichnis_inhalt, query_page_inhalt
+GRUPPEN: buch
+*/
+void set_page_mode(string s)
+{
+    if (s == "page") moremode = 0;
+    else if (s == "more") moremode = 1;
+    else if (s == "morefile") moremode = 2;
+    else raise_error ("set page mode: unzulaessiger Modus gesetzt, nur "
+        "'more' und 'page' sind erlaubt.\n");
+}
+
+/*
+FUNKTION: query_page_mode
+DEKLARATION: string query_page_mode()
+BESCHREIBUNG:
+Liefert den mit set_page_mode gesetzten Modus zurueck.
+VERWEISE: set_page_mode
+GRUPPEN: buch
+*/
+string query_page_mode()
+{
+    return ({"page","more","morefile"})[moremode];
+}
+
+
+void create()
+{
+    set_id("buch");
+    set_name("buch");
+    set_gender("saechlich");
+    set_long("Dies ist ein Buch. Buecher sind zum aufschlagen, lesen "
+             "und wieder zumachen da.");
+    set_material("papier");
+    // UID setzen, damit das Buch files lesen kann. Aber nur die geringste
+    // UID um keine Sicherheitsloecher zu oeffnen. Fuers /w brauchen wir
+    // das aber nicht, da die w-UID schon restriktiv genug ist.
+    if(strstr(getuid(),"w:"))
+	seteuid(NOBODY_UID);
+    set_weight(1);
+    current_page = -1;
+    moremode = 0;
+    open_close = 1;
+    seiten_desc = ([]);
+}
+
+
+void init()
+{
+    if (open_close)
+    {
+        add_action ("oeffne",  "oeffne");
+        add_action ("schlag",  "schlage",-6);
+        add_action ("schliess","schliesse",-8);
+    }
+}
+
+private string eval_entry(string index, string def) {
+    string entry;
+
+    if (member(seiten_desc, index)) {
+        entry = seiten_desc[index];
+        if (!entry || (entry == "")) {
+            return "";
+        }
+	
+        if(stringp(entry))
+	    entry = regreplace(entry, "'page_nr", ""+current_page, 1);
+	
+        if (seiten_desc["name"]) {
+            return wrap(apply(CLOSURE_CONTAINER->do_bind(mixed_to_closure(entry,
+                                                ({ 'book_ob, //'
+                                                   'page_ob  //'
+                                                })), ({})),
+                              this_object(), seiten_desc));
+        } else {
+            return wrap(apply(CLOSURE_CONTAINER->do_bind(mixed_to_closure(entry,
+                                                ({ 'book_ob, //'
+                                                   'page_ob  //'
+                                                })), ({})),
+                              this_object(),
+                              (["name":"Seite", "gender":"weiblich"])));
+        }
+    } else {
+        return wrap(def);
+    }
+}
+
+
+/*
+FUNKTION: set_current_page
+DEKLARATION: int set_current_page(int page)
+BESCHREIBUNG:
+Damit kann man das Buch an einer bestimmten Stelle aufschlagen.
+Mit einem negativen Wert schlaegt man das Buch zu, mit 0 am Inhaltsverzeichnis
+und mit postiven Werten bei der entsprechenden Seite auf.
+Diese Funktion liefert den neuen Wert ausserdem zurueck.
+VERWEISE: set_current_page
+GRUPPEN: buch
+*/
+int set_current_page(int i)
+{
+    return (i <= max_page)
+        ? (current_page = (i<0)?-1:i)
+        : current_page;
+}
+
+/*
+FUNKTION: set_verzeichnis
+DEKLARATION: mixed set_verzeichnis(mixed verzeichnis)
+BESCHREIBUNG:
+Damit kann man angeben, ob dieses Buch ein Inhaltsverzeichnis besitzt
+(verzeichnis=1). Liegt das Inhaltsverzeichnis bereits als Datei vor,
+so kann man dessen Dateinamen als Parameter angeben. Relative
+Pfadnamen sind dabei erlaubt.
+VERWEISE: set_page_names, query_verzeichnis, query_verzeichnis_inhalt
+GRUPPEN: buch
+*/
+mixed set_verzeichnis(mixed x)
+{
+    if(stringp(x))
+        return verzeichnis=abs_path(x,extern_call()?
+            implode(explode( // Pfad von previous_object()
+            object_name(previous_object()),
+            "/")[0..<2], "/"):
+            0); // Dasselbe mit this_object()
+    return verzeichnis = x;
+}
+
+/*
+FUNKTION: set_page_names
+DEKLARATION: void set_page_names(string *files)
+BESCHREIBUNG:
+Hiermit gibt man die Dateinamen der einzelnen Seiten an.
+Wildcards und relative Pfadangaben sind moeglich.
+
+Beispiel:
+    set_page_names( ({ "../texte/atlasseite*",
+                       "../texte/einzelseite" }) );
+
+VERWEISE: set_verzeichnis, query_page_names, query_page_inhalt
+GRUPPEN: buch
+*/
+void set_page_names(string *str)
+{
+    int i, j;
+    mixed * dir_entries;
+    string path, s;
+
+    if(!sizeof(str))
+    {
+        page_names = 0;
+        max_page = 0;
+        return;
+    }
+    page_names = ({});
+    for(i = 0; i < sizeof(str); i++) {
+        s=abs_path(str[i],extern_call()?
+            implode(explode( // Pfad von previous_object()
+            object_name(previous_object()),
+            "/")[0..<2], "/"):
+            0); // Dasselbe mit this_object()
+	path = implode(explode(s,"/")[0..<2], "/") + "/";
+        if (dir_entries = get_dir(s))
+	    foreach(string file:dir_entries)
+                if (file!="." && file!=".." &&
+		    file_size (path+file) > 0)
+                    page_names += ({ path + file });
+    }
+    max_page = page_names ? sizeof(page_names) : 0;
+}
+
+private void start_input_to()
+{
+    string cmdline;
+    if(moremode)
+	return;
+
+    cmdline = query_cap_name()
+        + (current_page ? " "+capitalize(seiten_desc["name"] || "seite")+
+                          " "+(string)current_page : "") +": ";
+    cmdline += "[-/+/1.."+max_page+",r,";
+    if (verzeichnis) cmdline += "i,";
+    if (searchable) cmdline += "/<such>,";
+    cmdline += "q,?]: ";
+    if (strlen (cmdline) > 75)
+        cmdline = wrap(cmdline)[0..<2];
+
+    input_to("more_end", INPUT_PROMPT, cmdline);
+}
+
+// Dies wird nur vom more-Modus genutzt
+private string more_status_line(int more_line, int max_line, mixed more_id)
+{
+    string line;
+    int chunk, page,zulang;
+    if(!IS_BUCH_MORE_ID(more_id))
+	raise_error("more_status_line() mit falscher more-ID aufgerufen!\n");
+    page = GET_PAGE_FROM_MORE_ID(more_id);
+    if(page<=0) // Inhaltsverzeichnis
+    {
+	if(i_status_line)
+	    return i_status_line;
+	line = query_cap_name()+": ";
+    }
+    else
+    {
+	if(status_line)
+	    return regreplace(status_line,"%p",to_string(page),1);
+	line = query_cap_name() + " "
+	     + capitalize(seiten_desc["name"] || "seite")
+	     + " " + to_string(page) + ": ";
+    }
+    chunk = this_player()->query_more_chunk();
+    if(zulang = (more_line && (chunk<more_line || more_line<max_line)))
+	line += "Zeilen "+((chunk>more_line)?1:(more_line-(more_line-1)%chunk))
+	     +  "-"+more_line+" von "+max_line+" ";
+	
+    line +=  "[-/+/1.."+max_page+",r,";
+    if(verzeichnis && page>=0) line += "i,";
+    if(searchable) line += "/<such>,";
+    if(zulang) line += "<,>,u,";
+    line += "q,?] ";
+    if (strlen (line) > 78)
+	line = wrap(line)[0..<2];
+    return line;
+}
+
+private void catmore(mixed was, int line, int quiet)
+{
+    mixed tmp;
+
+    if (!was)
+        return;
+    switch(moremode)
+    {
+	case 0:
+    	    if (was[<1..<1] == "\n")
+        	write(was);
+    	    else
+		write(was+"\n");
+	    break;
+	case 1:
+    	    tmp = explode(was, "\n");
+    	    if (tmp[<1] == "")
+        	tmp = tmp[0..<2];
+    	    this_player()->more(tmp, #'more_status_line,
+        	line,M_DO_NOT_END|(quiet && M_NO_FIRST_SCREEN),
+		BUCH_MORE_ID(current_page));
+	    break;
+	case 2:
+    	    this_player()->more(was, #'more_status_line,
+        	line,M_DO_NOT_END|(quiet && M_NO_FIRST_SCREEN),
+		BUCH_MORE_ID(current_page));
+	    break;
+    }
+}
+
+/*
+FUNKTION: display_verzeichnis
+DEKLARATION: deprecated void display_verzeichnis()
+BESCHREIBUNG:
+
+DIESE FUNKTION IST VERALTET. SIE SOLLTE NICHT VON AUSSEN AUFGERUFEN WERDEN
+UND UEBERLAGERN KANN MAN STATTDESSEN query_verzeichnis_inhalt.
+
+Hiermit wird das Inhaltsverzeichnis an den Spieler ausgegeben.
+VERWEISE: query_verzeichnis_inhalt, query_page_inhalt
+GRUPPEN: buch
+*/
+DEPRECATED void display_verzeichnis()
+{
+    catmore(this_object()->query_verzeichnis_inhalt(),0,0);
+}
+
+/*
+FUNKTION: query_verzeichnis_inhalt
+DEKLARATION: mixed query_verzeichnis_inhalt()
+BESCHREIBUNG:
+Diese Funktion liefert den Text des Inhaltsverzeichnisses (als String) zurueck.
+Sie ist nicht dazu gedacht, um von aussen aufgerufen zu werden, sondern
+zur Ueberlagerung, um dynamische Buecher zu gestaltet.
+
+Im "morefile" Modus wird der zurueckgelieferte Text als Dateiname
+interpretiert. Ein normaler Text muss dann als Array aus den einzelnen
+Zeilen zurueckgeliefert werden.
+VERWEISE: set_verzeichnis, query_page_inhalt
+GRUPPEN: buch
+*/
+mixed query_verzeichnis_inhalt()
+{
+    if (verzeichnis && stringp(verzeichnis))
+        return (moremode==2)?verzeichnis:read_file(verzeichnis);
+}
+
+/*
+FUNKTION: show_verzeichnis
+DEKLARATION: deprecated void show_verzeichnis()
+BESCHREIBUNG:
+
+DIESE FUNKTION IST VERALTET. SIE SOLLTE NICHT VON AUSSEN AUFGERUFEN WERDEN
+UND UEBERLAGERN KANN MAN STATTDESSEN query_verzeichnis_inhalt.
+
+Hiermit wird das Inhaltsverzeichnis an den Spieler ausgegeben.
+Diese Funktion generiert ausserdem eine Meldung fuer umstehende Spieler.
+VERWEISE: query_verzeichnis_inhalt, query_page_inhalt
+GRUPPEN: buch
+*/
+DEPRECATED void show_verzeichnis()
+{
+    if (!verzeichnis) return;
+    write ("\n");
+    display_verzeichnis ();
+    if (!(this_player()->query_invis() & V_ATOM_INVIS)) {
+        say(wrap(Der(this_player())+" liest das Inhaltsverzeichnis "+
+                 seines()+"."));
+    }
+}
+
+/*
+FUNKTION: display_page
+DEKLARATION: deprecated void display_page(int nr)
+BESCHREIBUNG:
+
+DIESE FUNKTION IST VERALTET. SIE SOLLTE NICHT VON AUSSEN AUFGERUFEN WERDEN
+UND UEBERLAGERN KANN MAN STATTDESSEN query_page_inhalt.
+
+Hiermit wird die Seite mit der Nummer nr an den Spieler ausgegeben.
+VERWEISE: query_verzeichnis_inhalt, query_page_inhalt
+GRUPPEN: buch
+*/
+DEPRECATED void display_page (int seitenr)
+{
+    catmore(this_object()->query_page_inhalt(seitenr),0,0);
+}
+
+/*
+FUNKTION: query_page_inhalt
+DEKLARATION: mixed query_page_inhalt(int nr)
+BESCHREIBUNG:
+Diese Funktion liefert den Text (als String) der Seite mit der Nummer nr
+zurueck. Sie ist nicht dazu gedacht, um von aussen aufgerufen zu werden,
+sondern zur Ueberlagerung, um dynamische Buecher zu gestaltet.
+
+Im "morefile" Modus wird der zurueckgelieferte String als Dateiname
+interpretiert. Ein normaler Text muss dann als Array aus den einzelnen
+Zeilen zurueckgeliefert werden.
+VERWEISE: set_page_names, set_max_page, query_verzeichnis_inhalt
+GRUPPEN: buch
+*/
+mixed query_page_inhalt(int seitenr)
+{
+    if (seitenr >= 0 && seitenr <= sizeof(page_names))
+        return (moremode==2)?page_names[seitenr-1]:read_file(page_names[seitenr-1]);
+}
+
+/*
+FUNKTION: show_page
+DEKLARATION: deprecated void show_page()
+BESCHREIBUNG:
+
+DIESE FUNKTION IST VERALTET. SIE SOLLTE NICHT VON AUSSEN AUFGERUFEN WERDEN
+UND UEBERLAGERN KANN MAN STATTDESSEN query_page_inhalt.
+
+Hiermit wird die aktuelle Seite an den Spieler ausgegeben.
+Meldungen fuer Umstehende werden ebenfalls generiert.
+VERWEISE: query_verzeichnis_inhalt, query_page_inhalt, query_current_page
+GRUPPEN: buch
+*/
+DEPRECATED void show_page ()
+{
+    if ((current_page <= 0) || (current_page > max_page)) return;
+    if (!(this_player()->query_invis() & V_ATOM_INVIS)) {
+        say (eval_entry("read_page_msg",
+             Der(this_player())+" liest in "+seinem()+"."));
+    }
+    write ("\n");
+    display_page (current_page);
+}
+
+
+void stop_reading()
+{
+    write (eval_entry("stop_reading",
+               "Du hoerst auf, in "+deinem()+" zu lesen."));
+    if (!(this_player()->query_invis() & V_ATOM_INVIS)) {
+        say (eval_entry("stop_reading_msg",
+             Der(this_player())+" hoert auf, in "+
+             seinem (this_object(),0,this_player())+" zu lesen."));
+    }
+}
+
+
+void oeffnen ()
+{
+    if (current_page >= 0) {
+        if (open_close) {
+            write (wrap(Dein()+(query_plural() ? " sind" : " ist")+
+                   " doch bereits aufgeschlagen."));
+        }
+        return;
+    }
+    if (open_close) {
+        write(wrap("Du schlaegst "+deinen()+" auf."));
+        if (!(this_player()->query_invis() & V_ATOM_INVIS)) {
+            say(wrap(Der(this_player())+" schlaegt "+seinen()+" auf."));
+        }
+    }
+    if (verzeichnis)
+        current_page = 0;
+    else
+        current_page = 1;
+}
+
+
+void schliessen ()
+{
+    if (current_page == -1) {
+        if (open_close) {
+            write (wrap(Dein()+(query_plural() ? " sind" : " ist")+
+                   " doch gar nicht aufgeschlagen."));
+        }
+        return;
+    }
+    if (open_close) {
+        write (wrap("Du schliesst "+deinen()+"."));
+        if (!(this_player()->query_invis() & V_ATOM_INVIS)) {
+            say (wrap (Der(this_player())+" schliesst "+seinen()+"."));
+        }
+    } else {
+        stop_reading();
+    }
+    current_page = -1;
+}
+
+/*
+FUNKTION: book_action
+DEKLARATION: mixed book_action(string str, int page, int more_line, int max_line)
+BESCHREIBUNG:
+Wenn man diese Funktion ueberlagert, kann man eigene Befehle im Buch
+implementieren. Dies gilt nur fuer die Modi "more" und "morefile".
+In str wird der eingebene Befehl beim Lesen des Buches
+uebergeben, page enthaelt die Seitennummer (0 fuers Inhaltsverzeichnis),
+more_line die aktuelle Zeile und max_line die Anzahl an Zeilen in dieser Seite.
+
+Zurueckliefern kann man entweder wie bei more_action die Konstanten:
+    CONTINUE	Mit dem Lesen weitermachen
+    END_MORE	Mit dem Lesen aufhoeren (Hierbei wird einfach abgebrochen,
+                man kann das Lesen dann mit continue_read fortsetzen.)
+    NOTHING	Nix machen, Prompt nochmal ausgeben
+Diese Konstanten sind in more.h definiert.
+
+Man kann ausserdem ein Array der Form ({neue Seite, Zeilennummer}) uebergeben,
+was bedeutet, dass die angegebene Seite ab der angegebenen Zeile angezeigt
+werden soll. 
+VERWEISE: book_help, set_page_mode, continue_read
+GRUPPEN: buch
+*/
+mixed book_action(string str, int page, int more_line, int max_line)
+{
+}
+
+/*
+FUNKTION: book_help
+DEKLARATION: string* book_help(int page, int more_line, int max_line)
+BESCHREIBUNG:
+Wenn man diese Funktion ueberlagert, kann man die Hilfe des Buches erweitern
+oder veraendern. Standardmaessig liefert die Funktion die originale Hilfe
+als Array aus den einzelnen Zeilen zurueck.
+Dies gilt bisher aber nur fuer die Modi "more" und "morefile".
+page enthaelt die Seitennummer (0 fuers Inhaltsverzeichnis),
+more_line die aktuelle Zeile und max_line die Anzahl an Zeilen in dieser Seite.
+VERWEISE: book_action, set_page_mode, continue_read
+GRUPPEN: buch
+*/
+string *book_help(int page, int more_line, int max_line)
+{
+    return explode(wrap("Folgendes kannst Du beim Lesen "+des()+" machen:"),"\n")
+		+ ({
+		    "  1..       "+capitalize(seiten_desc["name"] || "seite")+" x lesen",
+		    "  -/+       "+(seiten_desc["name"] ?
+				    choose_by_gender(seiten_desc, ({
+					"vorheriges / naechstes",
+					"vorherigen / naechsten",
+					"vorherige / naechste" })) :
+                		    "vorherige / naechste Seite")+" lesen",
+		    "  r         "+capitalize(seiten_desc["name"] || "seite")+" neu ausgeben",
+		}) + (verzeichnis ? ({
+        	    "  i,z       Inhaltsverzeichnis anschauen",
+		}) : ({}) ) + (searchable ? ({
+		    "  /<wort>   sucht ab "+
+				    (seiten_desc["name"] ?
+					 dem(seiten_desc,"naechst") :
+					 "der naechsten Seite")+
+				     " nach dem Wort",
+		}) : ({}) ) + (open_close ? ({
+		    "  a         aufhoeren zu lesen ("+query_cap_name()+" bleibt offen)",
+        	    "  q         aufhoeren zu lesen, "+query_cap_name()+" schliessen",
+		}) : ({
+        	    "  a,q       aufhoeren zu lesen",
+		}) );
+}
+
+/*
+FUNKTION: continue_read
+DEKLARATION: varargs void continue_read(int page, int line, int quiet)
+BESCHREIBUNG:
+Damit wird ein durch END_MORE bei book_action abgebrochenes Lesen an
+der Seite page, Zeile line fortgesetzt. Wenn quiet != 0 ist, dann
+wird erstmal nur die Statuszeile ausgegeben.
+VERWEISE: book_action
+GRUPPEN: buch
+*/
+varargs void continue_read(int page, int line, int quiet)
+{
+    current_page = page;
+    catmore(
+        current_page
+        ?this_object()->query_page_inhalt(current_page)
+        :this_object()->query_verzeichnis_inhalt(),
+        line,quiet);
+}
+
+nomask int more_action(string str, int more_line, int max_line, mixed more_id)
+{
+    mixed ac;
+    int seite;
+    
+    if(!IS_BUCH_MORE_ID(more_id))	// Aus Kompatibilitaetsgruenden
+	return CONTINUE;
+	
+    ac = this_object()->book_action(str, GET_PAGE_FROM_MORE_ID(more_id),
+	more_line, max_line);
+    if(ac)
+    {
+	if(pointerp(ac))
+	{
+	    continue_read(ac[0], sizeof(ac)>1 && ac[1], sizeof(ac)>2 && ac[2]);
+	    more_status = 1;
+	    return END_MORE;
+	}
+	else
+	{
+	    if(ac==END_MORE)
+		more_status = 1;
+	    return ac;
+	}
+    }
+
+    switch(trim(lower_case(str)))
+    {
+	case "-":
+	    if(current_page > 1)
+	    {
+        	current_page--;
+        	show_page();
+		more_status = 1;
+        	return END_MORE;
+	    }
+	    else if (verzeichnis && (current_page == 1))
+	    {
+        	current_page--;
+        	show_verzeichnis();
+		more_status = 1;
+        	return END_MORE;
+	    }
+	    write(eval_entry("no_previous_page", "Weiter zurueck geht es nicht."));
+	    return NOTHING;
+	case "+":
+    	    if (current_page < max_page)
+	    {
+        	current_page++;
+        	show_page ();
+		more_status = 1;
+        	return END_MORE;
+    	    }
+	    write(eval_entry("no_next_page", "Weiter geht's nicht mehr, "+
+        	der()+ist(this_object(), IST_SPACE_BEFORE) +" zu Ende."));
+	    return NOTHING;
+	case "z":
+    	    if (!current_page)
+	    {
+		write("Du bist doch schon im Inhaltsverzeichnis.\n");
+		return NOTHING;
+	    }
+	case "i":
+    	    if (verzeichnis)
+	    {
+		current_page = 0;
+        	show_verzeichnis();
+		more_status = 1;
+        	return END_MORE;
+	    }
+	    write(wrap(Dieser(this_object(),0)
+	        +plural(" hat"," haben",this_object())
+	        +" kein Inhaltsverzeichnis."));
+	    return NOTHING;
+	case "a":
+	    return END_MORE;
+	case "?":
+	    this_player()->more(
+		book_help(GET_PAGE_FROM_MORE_ID(more_id), more_line, max_line),
+		"Hilfe zu "+dem()+": ",
+		0, M_AUTO_END | M_HEADER_LINE,
+		BUCH_HELP_MORE_ID(GET_PAGE_FROM_MORE_ID(more_id),more_line-this_player()->query_more_chunk()));
+	    more_status = 1;
+	    return END_MORE;
+	default:
+	    if (seite = to_int (str))
+	    {
+		if( seite > 0 && seite <= max_page)
+		{
+		    if(current_page==seite)
+		    {
+			write(wrap("Du befindest Dich bereits auf "
+			    + (seiten_desc["name"] ? dem(seiten_desc) : "der Seite")
+			    + " " + seite +"."));
+			return NOTHING;
+		    }
+		    current_page = seite;
+        	    show_page ();
+		    more_status = 1;
+		    return END_MORE;
+    		}
+    		if (seite <= 0)
+		    write(eval_entry("invalid_page", "Diese Seite gibts nicht."));
+		else
+		    write(eval_entry("page_overflow",
+			"Soviele Seiten "+ (query_plural() ? "haben " : "hat ")+
+                        der()+" nicht."));
+		return NOTHING;
+    	    }
+	    if (str[0..0] == "/" && searchable)
+	    {
+    		int search;
+
+    		search = current_page;
+    		str = str[1..];
+    		
+		if (str=="")
+		{
+		    write(eval_entry("empty_search", "Wonach willst du suchen?"));
+		    return NOTHING;
+    		}
+		if (current_page == max_page)
+		{
+        	    write(eval_entry("search_beyond_end",
+                             "Weiter kannst du nicht mehr suchen, "+
+                              der()+(query_plural() ? " sind" : " ist")+
+                              " zu Ende."));
+		    return NOTHING;
+		}
+    		current_page++;
+    		while (search < max_page)
+		{
+        	    search++;
+		    if(moremode==2)
+		    {
+			mixed datei = query_page_inhalt(search);
+			int groesse;
+			if(!stringp(datei))
+			{
+			    if(strstr(implode(datei,"\n"),str) != -1)
+			    {
+				current_page = search;
+            			show_page ();
+				more_status = 1;
+				return END_MORE;
+			    }
+			}
+			else if((groesse = file_size(datei))>0 && groesse < 500000)
+			{
+			    int pos = 0, blen = query_limits()[LIMIT_FILE];
+			    while(pos<groesse &&
+				strstr(read_bytes(datei, pos, blen),str)==-1)
+				    pos+=blen-strlen(str);
+			    if(pos<groesse)
+			    {
+				current_page = search;
+            			show_page ();
+				more_status = 1;
+				return END_MORE;
+			    }
+			}
+		    }
+		    else
+		    {
+        		if (strstr(query_page_inhalt(search), str) != -1)
+			{
+			    current_page = search;
+            		    show_page ();
+			    more_status = 1;
+			    return END_MORE;
+			}
+		    }
+        	    if (get_eval_cost() < 150000)
+		    {
+            		write (eval_entry("search_too_long_evaluation",
+                                  "Du durchsuchst "+den()+" ab Seite "+current_page+
+                                  " einige Seiten, findest aber nichts."));
+            		current_page = search;
+			return NOTHING;
+        	    }
+    		}
+    		write (eval_entry("search_reached_last_page",
+                          "Du durchsuchst "+den()+" ab Seite "+current_page+
+                          " bis zur letzten Seite, findest aber nichts."));
+    		current_page = search;
+		return NOTHING;
+	    }
+    }
+}
+
+// Das wird auch vom input_to genutzt...
+nomask void more_end(string s, int line, int max_line, mixed more_id)
+{
+    int seite;
+    if(IS_BUCH_HELP_MORE_ID(more_id))
+    {
+	current_page = GET_PAGE_FROM_MORE_ID(more_id);
+	catmore(
+	    current_page
+	    ?this_object()->query_page_inhalt(current_page)
+	    :this_object()->query_verzeichnis_inhalt(),
+	    GET_LINE_FROM_MORE_ID(more_id)-this_player()->query_more_chunk(),1);
+	return;
+    }
+    if(IS_BUCH_MORE_ID(more_id))	// Jemand will das Buch schliessen
+    {
+	if(more_status)
+	    more_status = 0;
+	else 
+	{
+	    if(stringp(s) && trim(lower_case(s))=="a")
+		stop_reading();
+	    else
+		schliessen();
+	}
+	return;
+    }
+    if (pointerp (s) || line) s = "";
+    if (s == "-") {
+        if (current_page > 1) {
+            current_page--;
+            show_page ();
+	    start_input_to();
+            return;
+        }
+        if (verzeichnis && (current_page == 1)) {
+            current_page--;
+            show_verzeichnis ();
+	    start_input_to();
+            return;
+        }
+        write (eval_entry("no_previous_page",
+                    "Weiter zurueck geht es nicht."));
+	start_input_to();
+        return;
+    }
+    if ((s == "+") || ((s == "") && !moremode)) {
+        if (current_page < max_page) {
+            current_page++;
+            show_page ();
+	    start_input_to();
+            return;
+        }
+        write (eval_entry("no_next_page",
+               "Weiter geht's nicht mehr, "+
+               der()+(query_plural() ? " sind" : " ist")+" zu Ende."));
+	start_input_to();
+        return;
+    }
+    if ((s == "z") || (s == "Z") || (s == "i") || (s == "I")) {
+        if (!current_page && ((s == "z") || (s == "Z")))
+            write ("Du bist doch schon im Inhaltsverzeichnis.\n");
+        else if (verzeichnis) {
+            current_page = 0;
+            show_verzeichnis();
+	    start_input_to();
+            return;
+        } else
+            write (wrap(Dieser(this_object(),0)+
+                  (query_plural() ? " haben" : " hat")+
+                  " kein Inhaltsverzeichnis."));
+        start_input_to();
+        return;
+    }
+    if (seite = to_int (s)) {
+        if ((seite > 0) && (seite <= max_page)) {
+            current_page = seite;
+            show_page ();
+	    start_input_to();
+            return;
+        }
+        if (seite <= 0) {
+            write (eval_entry("invalid_page",
+                        "Diese Seite gibts nicht."));
+        } else {
+            write (eval_entry("page_overflow",
+                        "Soviele Seiten "+
+                        (query_plural() ? "haben " : "hat ")+
+                        der()+" nicht."));
+        }
+        start_input_to();
+        return;
+    }
+    if ((s == "r") || (s == "R")) {
+	if(current_page)
+    	    show_page ();
+	else
+	    show_verzeichnis();
+	start_input_to();
+        return;
+    }
+    if ((s == "q") || (s == "Q")) {
+        schliessen ();
+        return;
+    }
+    if ((s == "a") || (s == "A")) {
+        stop_reading();
+        return;
+    }
+    if (s == "?") {
+        write("\n"
+            "1..:      lies "+capitalize(seiten_desc["name"] || "seite")+" x\n"
+            "-/+:      lies "+
+                (seiten_desc["name"] ?
+                    (seiten_desc["gender"] == "weiblich" ?
+                        "vorherige / naechste" :
+                        (seiten_desc["gender"] == "saechlich" ?
+                            "vorheriges / naechstes" :
+                            "vorherigen / naechsten"))+
+                        " "+capitalize(seiten_desc["name"]) :
+                    "vorherige / naechste Seite")+"\n"+
+            "r:        "+capitalize(seiten_desc["name"] || "seite")+
+                       " neu ausgeben\n"+
+            (verzeichnis ?
+            "i,z:      Inhaltsverzeichnis (sofern "+der(this_object(),0)+
+            " eines "+(query_plural() ? "haben" : "hat")+")\n":"")+
+            (searchable ?
+            "/<wort>:  sucht ab "+
+                 (seiten_desc["name"] ?
+                     dem(seiten_desc,"naechst") :
+                     "der naechsten Seite")+
+                 " nach dem Wort\n" : "")+
+            (open_close ?
+            "a:        aufhoeren zu lesen ("+query_cap_name()+" bleibt offen)\n"
+            "q:        aufhoeren zu lesen, "+query_cap_name()+" schliessen\n" :
+            "a,q:      aufhoeren zu lesen\n"));
+        start_input_to();
+        return;
+    }
+    if (s[0..0] == "/") {
+        int search;
+
+        search = current_page;
+        if (!searchable) {
+            write (eval_entry("not_searchable",
+                              "In "+dem()+" kannst du nichts suchen."));
+            start_input_to();
+            return;
+        }
+        s = s[1..];
+        if (s=="") {
+            write (eval_entry("empty_search",
+                              "Wonach willst du suchen?"));
+            start_input_to();
+            return;
+        }
+        if (current_page == max_page) {
+            write (eval_entry("search_beyond_end",
+                             "Weiter kannst du nicht mehr suchen, "+
+                              der()+(query_plural() ? " sind" : " ist")+
+                              " zu Ende."));
+            start_input_to();
+            return;
+        }
+        current_page++;
+        while (search < max_page) {
+            search++;
+            if (strstr(query_page_inhalt(search), s) != -1) {
+                current_page = search;
+                show_page ();
+		start_input_to();
+                return;
+            }
+            if (get_eval_cost() < 150000) {
+                write (eval_entry("search_too_long_evaluation",
+                                  "Du durchsuchst "+den()+" ab Seite "+current_page+
+                                  " einige Seiten, findest aber nichts."));
+                current_page = search;
+                start_input_to();
+                return;
+            }
+        }
+        write (eval_entry("search_reached_last_page",
+                          "Du durchsuchst "+den()+" ab Seite "+current_page+
+                          " bis zur letzten Seite, findest aber nichts."));
+        current_page = search;
+        start_input_to();
+        return;
+    }
+
+    start_input_to();
+}
+
+/*
+FUNKTION: forbidden_read
+DEKLARATION: mixed forbidden_read(mixed buch, object wer)
+BESCHREIBUNG:
+Wenn der Spieler 'wer' das Buch 'buch' (oder ein anderes Objekt mit dieser
+Abfrage) lesen will, ruft das Buch wer->forbidden("read", buch) auf.
+forbidden ruft dann in allen mit wer->add_controller("forbidden_read", other)
+angemeldeten Controllern other die Funktion other->forbidden_read(buch, wer)
+auf.
+
+Liefert eine dieser Funktionen einen Wert != 0 zurueck, so kann derjenige
+das Buch nicht lesen. Ist dieser Rueckgabewert ein String, so wird dieser
+ausgegeben, ansonsten (wenn es eine Zahl ist), wird die Standardfehlermeldung
+ausgegeben.
+VERWEISE: forbidden, add_controller, forbidden_read_me, query_read
+GRUPPEN: buch
+*/
+/*
+FUNKTION: forbidden_read_me
+DEKLARATION: mixed forbidden_read_me(object wer, mixed buch)
+BESCHREIBUNG:
+Wenn der Spieler 'wer' das Buch 'buch' (oder ein anderes Objekt mit dieser
+Abfrage) lesen will, ruft das Buch buch->forbidden("read_me", wer) auf.
+forbidden ruft dann in allen mit buch->add_controller("forbidden_read_me",
+other) angemeldeten Controllern other die Funktion other->forbidden_read_me(
+wer, buch) auf.
+
+Liefert eine dieser Funktionen einen Wert != 0 zurueck, so kann derjenige
+das Buch nicht lesen. Ist dieser Rueckgabewert ein String, so wird dieser
+ausgegeben, ansonsten (wenn es eine Zahl ist), wird die Standardfehlermeldung
+ausgegeben.
+VERWEISE: forbidden, add_controller, forbidden_read, query_read
+GRUPPEN: buch
+*/
+
+varargs string query_read(string str, string all, object betrachter)
+{
+    string side;
+    int page;
+    mixed err;
+
+    if ((max_page <= 0) && !verzeichnis)
+        return eval_entry("no_pages",
+                    "Es sind leider alle Seiten herausgerissen worden.");
+    if ((hlp && !hlpp (this_player()) && !wizp (this_player())) ||
+        (wiz && !wizp (this_player())))
+        return eval_entry("not_allowed",
+	    "Eine seltsame Schrift... Du kannst sie nicht entziffern...");
+
+    err = this_player()->forbidden("read", this_object()) ||
+	  this_object()->forbidden("read_me", this_player());
+    if(stringp(err))
+	return err;
+    else if(err)
+        return eval_entry("not_allowed",
+	    "Eine seltsame Schrift... Du kannst sie nicht entziffern...");
+
+    page = current_page;
+    if (str && (str != "")) {
+        str = lower_case(str);
+        if (str == "inhaltsverzeichnis" || str == "verzeichnis" ||
+            str == "index" || str == "inhalt") {
+            if (verzeichnis)
+                current_page = 0;
+            else return wrap(Der()+(query_plural() ? " haben" : " hat")+
+                     " kein Inhaltsverzeichnis.");
+        } else {
+            sscanf(str,"%s %d", side, page);
+            if (side) {
+                if (member(seiten_desc["ids"] || ({ "seite" }),
+			    lower_case(side)) == -1)
+                    return wrap ("Lies "+den()+" oder lies "+den()+" "+
+                           capitalize(seiten_desc["name"] || "seite")+" <1..>"+
+                           (verzeichnis ? " oder lies "+den()+
+                               " Inhaltsverzeichnis" : ""));
+                if (page == 0)
+                    return eval_entry("which_page",
+                                "Welche Seite willst Du lesen?");
+                if (page < 0)
+                    return eval_entry("invalid_page",
+                                "Diese Seite gibts nicht.");
+                if (page > max_page)
+                    return eval_entry("page_overflow",
+                                 "Soviele Seiten "+
+                                 (query_plural() ? "haben " : "hat ")+
+                                 der()+" nicht.");
+                current_page = page;
+            } else return wrap ("Lies "+den()+" oder lies "+den()+
+                       " "+capitalize(seiten_desc["name"] || "seite")+" <1..>"+
+                       (verzeichnis ? " oder lies "+den()+
+                           " Inhaltsverzeichnis" : ""));
+        }
+    }
+    if (current_page == -1)
+        oeffnen ();
+    if (current_page == 0)
+        show_verzeichnis();
+    else
+        show_page ();
+    start_input_to();
+    return "";
+}
+
+
+int oeffne(string str)
+{
+    if (!open_close)
+    {
+        return 0;
+    }
+    if (!me(str))
+    {
+        notify_fail("Oeffne was?\n");
+        return 0;
+    }
+    oeffnen ();
+    return 1;
+}
+
+
+int schliess(string s)
+{
+    if (!open_close)
+    {
+        return 0;
+    }
+    if (!me(s))
+    {
+         notify_fail("Schliesse was?\n");
+         return 0;
+    }
+    schliessen();
+    return 1;
+}
+
+
+int schlag(string s)
+{
+    string wie;
+    if (!open_close)
+    {
+        return 0;
+    }
+    if (!(wie=me(s)))
+    {
+        notify_fail("Schlag was auf oder zu?\n");
+        return 0;
+    }
+    wie = lower_case (wie);
+    if (wie == "auf") {
+        oeffnen ();
+        return 1;
+    }
+    if (wie == "zu") {
+        schliessen();
+        return 1;
+    }
+    write(wrap("schlag "+den()+" auf oder zu?"));
+    return 1;
+}
+
+/*
+FUNKTION: query_book
+DEKLARATION: int query_book()
+BESCHREIBUNG:
+Liefert bei einem Buch 1 zurueck.
+VERWEISE:
+GRUPPEN: buch
+*/
+int query_book()
+{
+    return 1;
+}
+
+
+string query_short (object betrachter)
+{
+    if (open_close && (current_page >= 0))
+        return ::query_short(betrachter)+" (aufgeschlagen)";
+    return ::query_short(betrachter);
+}

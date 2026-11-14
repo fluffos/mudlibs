@@ -1,0 +1,1736 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /apps/protokollarchiv.c
+// Description: Archiv aller Protokolle (UNItopia only!)
+// Author:      Myonara (11.Apr.2013)
+
+// Userid fuer  /apps/protokollarchiv setzen:
+// UID: Apps
+//
+// $Log: protokollarchiv.c,v $
+// Revision 1.9  2015/12/18 16:24:50  myonara
+// query_database_description
+//
+// Revision 1.8  2015/08/26 21:40:27  gnomi
+// Anpassungen an LDMud 3.5.0
+//
+// Revision 1.7  2015/01/24 19:24:50  myonara
+// und DEBUG wieder ausgebaut...
+//
+// Revision 1.5  2014/01/27 17:05:23  myonara
+// Bugfixes und mudlib-Klammern.
+//
+// Revision 1.4  2013/12/07 14:04:07  myonara
+// Kommentaraenderungen
+//
+// Revision 1.3  2013-05-26 10:58:16  myonara
+// Bugfix zum vorherigen Patch
+//
+// Revision 1.2  2013-05-03 16:40:52  myonara
+// purge_protokolle+Co, neuer PR_ZUSTAND_FREI ueberall etabliert.
+//
+// Revision 1.1  2013-05-03 16:47:42  myonara
+// Erstellung
+//
+//
+
+#pragma no_shadow
+#pragma no_inherit
+#pragma save_types
+
+inherit "/i/tools/database";
+inherit "/i/tools/security";
+
+// HomeMud Umgehung:
+
+#include <config.h>
+#include <database.h>
+#include <error.h>
+#include <files.h>
+#include <level.h>
+#include <misc.h>
+#include <more.h>
+#include <protokoll.h>
+#include <rtlimits.h>
+#include <security.h>
+
+#define DEBUGGER "myonara"
+#include <debug.h>
+
+#define PROTOKOLLE_ROOT     "/var/spool/protokoll/"
+#define PROTOKOLL_DB        PROTOKOLLE_ROOT "index.db"
+#define PROTOKOLL_DATEIEN   PROTOKOLLE_ROOT "files/"
+#define LINE      "-------------------------------------------------------------------------------"
+#define MORE_LINE "...--------------------------------------------------------------------- (MORE)"
+
+
+// Die Version History dient dazu, bei Version Unterschieden
+// ein schrittweises Update durchzufuehren. Feld 0 ist die aktuelle Version
+// Feld n-1 die aelteste Version. 
+#define DB_VERSION_HISTORY  ({ \
+    "1.0" /* initale Version */ \
+    })
+#define FILE_VERSION_HISTORY ({ \
+    "1.0" /* initale Version */ \
+    })
+
+//Zeit, die gewartet wird, bevor ein geloeschtes Protokoll ueberschrieben wird
+#define MINTIME_2DELETE 60*60*24*31
+
+private nosave mapping zustand = ([ ]);
+private nosave mapping offene_protokolle = ([ ]);
+private nosave mapping zugriffstabelle = ([ ]);
+private nosave int max_size;
+
+
+public string query_database_description()
+{
+    return "Diese Datenbank dient zur Archivierung von Protokollen. "
+    "Zum Verwalten gibt es /obj/protokollindex. " 
+    "Fuer Admins gibt es speziell die Lfuns sql und db_get_table.";
+}
+
+/*
+NOENZY: flatten_array
+DEKLARATION: private mixed flatten_array(mixed arr)
+BESCHREIBUNG:
+Aus /p/Misc/i/array kopiert: verflacht ein Array.
+VERWEISE: 
+GRUPPEN: protokoll
+*/
+private mixed flatten_array(mixed arr)
+{
+    mixed tmp, erg;
+    int i, size;
+
+    if (!pointerp(arr)) {
+        do_error("flatten_array: Parameter 1 muss ein Array sein.\n");
+        return 0;
+    }
+
+    tmp = ({}) + arr;
+    erg = ({});
+    while (sizeof(tmp)) {
+        if (pointerp(tmp[0])) {
+            tmp[0..0] = tmp[0];
+        } else {
+            i = 1;
+            size = sizeof(tmp);
+            while (i<size && !pointerp(tmp[i])) {
+                i++;
+            }
+            erg += tmp[0..(i-1)];
+            tmp = tmp[i..<1];
+        }
+    }
+    return erg;
+}
+
+/*
+NOENZY: parameter_check
+DEKLARATION: private mixed parameter_check(mapping protokoll)
+BESCHREIBUNG:
+Prueft und ergaenzt Datenelemente im Protokoll.
+VERWEISE: get_empty_protokoll
+GRUPPEN: protokoll
+*/
+private mixed parameter_check(mapping protokoll)
+{
+    // TODO Parameter mapping pruefen.
+    return protokoll;
+}
+
+/*
+NOENZY: get_empty_protokoll
+DEKLARATION: public mapping get_empty_protokoll()
+BESCHREIBUNG:
+Erzeugt ein leeres Protokoll mit allen Pflichtfeldern als mapping.
+VERWEISE: parameter_check
+GRUPPEN: protokoll
+*/
+public mapping get_empty_protokoll()
+{
+    return ([
+        // PR_FILENAME : 0, // wird spaeter gefuellt
+        PR_FILEVERSION : FILE_VERSION_HISTORY[0],
+        PR_ZUSTAND : PR_ZUSTAND_GELOESCHT,
+        PR_INHALT : ({ }),
+        PR_STICHWORTE : ({ }),
+        PR_LESEZUGRIFFE : ({ }),
+        PR_SCHREIBZUGRIFFE : ({ }),
+    ]);
+}
+
+
+/*
+NOENZY: check_and_create_dir
+DEKLARATION: private int check_and_create_dir(string fn)
+BESCHREIBUNG:
+Prueft, ob ein Unterverzeichnis existiert, wenn nicht, legt es an.
+VERWEISE: 
+GRUPPEN: protokoll
+*/
+private int check_and_create_dir(string fn)
+{
+    if (!stringp(fn)) return 0;
+    if (file_size(fn) != FSIZE_NOFILE) { 
+        // Entweder ein directory oder eine Datei!
+        return 1; // ok.
+    }
+    string * path = explode(fn,"/");
+    string dir;
+    if (sizeof(path) >= 5) {
+        dir = implode(path[..3],"/");
+        if (file_size(dir) != FSIZE_DIR) {
+            mkdir(dir);
+        }
+    } else {
+        return 0; // mehr machen wir nicht
+    }
+    if (sizeof(path) >= 6) {
+        dir = implode(path[..4],"/");
+        if (file_size(dir) != FSIZE_DIR) {
+            mkdir(dir);
+        }
+    }
+    if (sizeof(path) >= 7) {
+        dir = implode(path[..5],"/");
+        if (file_size(dir) != FSIZE_DIR) {
+            mkdir(dir);
+        }
+    }
+    return 1;
+}
+
+/*
+NOENZY: create_or_update_file
+DEKLARATION: private mixed create_or_update_file(mapping protokoll) 
+BESCHREIBUNG:
+Wenn im protokoll ein Dateiname (PR_FILENAME) enthalten ist, so wird
+dieser zum speichern des Mappings verwendet. Ansonsten wird entweder
+ein geloeschtes Protokoll ueberschrieben oder eine neue Datei erzeugt.
+Im Erfolgsfall wird das protokoll mit neuem Dateinamen (PR_FILENAME)
+und Zeitstempel (PR_ZEITTEMPEL) zurueckgegeben, ansonsten 
+PR_PARAMETER_ERROR oder PR_DB_ERROR.
+zurueckg
+VERWEISE: get_file
+GRUPPEN: protokoll
+*/
+private mixed create_or_update_file(mapping protokoll) 
+{
+    string fn;
+    mixed result;
+    int ix,jx;
+    if (!mappingp(protokoll)) {
+        db_debug("create_or_update_file:Parameter_error-1",DB_DBGLVL_WARNING,
+            DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+        return PR_PARAMETER_ERROR;
+    }
+    if (!db_open()) return PR_DB_ERROR;
+    db_debug("create_or_update_file",DB_DBGLVL_DEBUG,
+        DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+    if (!member(protokoll, PR_FILENAME)) 
+    {
+        result = db_query("SELECT filename FROM protokoll_1 "
+                "WHERE zustand = "+PR_ZUSTAND_FREI
+                +" AND zeitstempel < "+(time()-MINTIME_2DELETE)
+                +" LIMIT 1");
+        if (result != 0) 
+        {
+            fn = get_one_string(result);
+            db_debug("recycle deleted file:"+fn,DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+        } 
+        else 
+        {
+            result = db_query("SELECT MAX(filename) FROM protokoll_1");
+            fn = get_one_string(result);
+            if (fn == 0) {
+                ix = jx = 1;
+            } 
+            else if (strstr(fn,PROTOKOLL_DATEIEN)==0) 
+            {
+                if (sscanf(fn[(strlen(PROTOKOLL_DATEIEN)+1)..],
+                        "%d/PR%d",ix,jx)==2) 
+                {
+                    if (++jx >= max_size) 
+                    {
+                        if (++ix >=max_size) 
+                        {
+                            return PR_DB_ERROR;
+                        }
+                        jx = 1;
+                    } 
+                } 
+                else 
+                {
+                    db_debug("create_or_update_file:fn-error1:"+fn,
+                        DB_DBGLVL_WARNING,DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+                    return PR_DB_ERROR;
+                }
+            } 
+            else 
+            {
+                db_debug("create_or_update_file:fn-error2:"+fn,
+                        DB_DBGLVL_WARNING,DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+                return PR_PARAMETER_ERROR;
+            }
+            fn = sprintf(PROTOKOLL_DATEIEN "%03d/PR%06d",ix,jx);
+            db_debug("create new file:"+fn,DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+         }
+    } 
+    else 
+    {
+        db_debug("use existing file:"+fn,DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+        fn = protokoll[PR_FILENAME];
+    }
+    check_and_create_dir(fn);
+    protokoll[PR_ZEITSTEMPEL] = time();
+    if (protokoll[PR_ZUSTAND] == PR_ZUSTAND_FREI) 
+    {
+        rm(fn);
+        db_debug("file deleted:"+fn,DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+        return protokoll;
+    }
+    protokoll -= ([ PR_FILENAME ]);
+    write_file(fn,save_value(protokoll),1);
+    protokoll[PR_FILENAME] = fn;
+    db_debug("file written:"+fn,DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+    return protokoll;
+}
+
+/*
+NOENZY: get_file
+DEKLARATION: private mixed get_file(string fn) 
+BESCHREIBUNG:
+Liest eine Protokolldatei ein.
+zurueckg
+VERWEISE: create_or_update_file
+GRUPPEN: protokoll
+*/
+private mixed get_file(string fn)
+{
+    string str;
+    mixed result;
+    if (stringp(fn) && file_size(fn) >= 0) 
+    {
+        str = read_file(fn);
+        result = restore_value(str);
+        if (mappingp(result)) 
+        {
+            result[PR_FILENAME] = fn;
+            return result;
+        }
+        db_debug("get_file:fn-error1:"+fn,
+            DB_DBGLVL_WARNING,DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+        return PR_DB_ERROR;
+    }
+    db_debug("get_file:fn-error2:"+sprintf("%Q",fn),
+            DB_DBGLVL_WARNING,DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+    return PR_PARAMETER_ERROR;
+}
+
+/*
+NOENZY: get_typklasse
+DEKLARATION: private int get_typklasse(string str)
+BESCHREIBUNG:
+Liefert die interne ID fuer die Typklasse.
+VERWEISE: 
+GRUPPEN: protokoll
+*/
+private int get_typklasse(string str)
+{
+    mixed result;
+    int ix;
+    str = space(str);
+    result = db_query("SELECT klassenID FROM typklasse_1 "
+        "WHERE klassename = ?",str);
+    if (query_db_error() || result == 0) 
+        return 0;
+    return get_one_int(result);
+}
+
+/*
+NOENZY: get_stichwort
+DEKLARATION: private int get_stichwort(string wort)
+BESCHREIBUNG:
+Liest ein Stichwort aus der Datenbank ein oder legt es neu an.
+Im Fehlerfall wird 0 zurueckgegeben ansonsten eine ID groesser 0.
+VERWEISE: update_db_stichworte
+GRUPPEN: protokoll
+*/
+private int get_stichwort(string wort)
+{
+    if (!stringp(wort)) 
+    {
+        return 0;
+    }
+    mixed result = db_query("SELECT ID_WORT FROM stichworte_1 "
+                   "WHERE wort = ?",wort);
+    int idwort = get_one_int(result);
+    if (!idwort) 
+    {
+        idwort = increment_counter("ID_STICHWORTE_1");
+        db_query("INSERT INTO stichworte_1 (ID_WORT,wort) VALUES (?,?)",
+                 idwort, wort);
+    }
+    return idwort;
+}
+
+/*
+NOENZY: update_db_stichworte
+DEKLARATION: private int update_db_stichworte(int id, string * stichworte)
+BESCHREIBUNG:
+Stellt die Relation zwischen Protokoll-id und Stichworten her,
+und legt bei Bedarf neue Stichworte an. Rueckgabe 1 bei Erfolg, 0 sonst.
+VERWEISE: get_stichwort
+GRUPPEN: protokoll
+*/
+private int update_db_stichworte(int id, string * stichworte)
+{
+    int idwort, ix;
+    db_debug("update_db_stichworte:",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");    
+    if (id > 0 && db_open()) 
+    {
+        db_query("DELETE FROM stichwort_index_1 WHERE ID = ?",id);
+        if (query_db_error()) 
+            return 0;
+        if (!pointerp(stichworte)) 
+            return 1;
+        for (ix = 0; ix < sizeof(stichworte); ix++) 
+        {
+        // IDEE per map und liste EINEN insert sting statt Schleife.
+            idwort = get_stichwort(stichworte[ix]);
+            db_query("INSERT INTO stichwort_index_1 (ID,ID_WORT) "
+                     "VALUES (?,?)",id,idwort);
+            if (query_db_error()) 
+                return 0;
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/*
+NOENZY: update_db_zugriffe
+DEKLARATION: protected void update_db_zugriffe(int id, int schreiben, string * namen)
+BESCHREIBUNG:
+Die Zugriffe werden ueber Relationen zur Haupttabelle (id) geloest,
+das Flag schreiben erlaubt Schreibzugriff(1) oder Lesezugriff (0).
+Rueckgabe 1 bei Erfolg, 0 sonst.
+VERWEISE: get_stichwort
+GRUPPEN: protokoll
+*/
+protected int update_db_zugriffe(int id, int schreiben, string * namen)
+{
+    int ix;
+    db_debug("update_db_zugriffe:",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");    
+    if (id > 0 && schreiben >= 0 && schreiben <= 1 && db_open()) 
+    {
+        db_query("DELETE FROM zugriff_1 WHERE refID = ? AND acl = ?",
+                id,schreiben);
+        if (query_db_error()) 
+            return 0;
+        if (!pointerp(namen)) 
+            return 1;
+        for (ix = 0; ix < sizeof(namen); ix++) 
+        {
+        // IDEE per map und liste EINEN insert sting statt Schleife.
+            db_query("INSERT INTO zugriff_1 (refID,name,acl) "
+                     "VALUES (?,?,?)",id,namen[ix],schreiben);
+            if (query_db_error()) 
+                return 0;
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/*
+NOENZY: update_db_protokoll
+DEKLARATION: protected void update_db_protokoll(mapping protokoll)
+BESCHREIBUNG:
+Die Metainformation des Protokolls wird in der Datenbank gespeichert.
+VERWEISE: create_or_update_file
+GRUPPEN: protokoll
+*/
+protected mixed update_db_protokoll(mapping protokoll)
+{
+    mixed result;
+    int ix,klasse;
+    db_debug("update_db_protokoll-1:",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");    
+    if (!mappingp(protokoll)) 
+    {
+        db_debug("update_db_protokoll:protokoll-error:",
+            DB_DBGLVL_WARNING,DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+        return PR_PARAMETER_ERROR;
+    }
+    klasse = get_typklasse(protokoll[PR_TYPKLASSE]);
+    if (klasse <= 0) 
+    {
+        klasse = 0;
+    }
+    if (!db_open()) 
+    {
+    	return PR_DB_ERROR;
+    }
+    db_debug("update_db_protokoll-2:",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");    
+    result = db_query("SELECT ID,filename,fileversion,zustand, "
+             "typklasse,autor,titel,zeitstempel "
+             "FROM protokoll_1 WHERE filename = '"
+             +protokoll[PR_FILENAME]+"'");
+    if (query_db_error()) return PR_DB_ERROR;
+    db_begin(); // Transaktion starten.
+    if (protokoll[PR_ZUSTAND] == PR_ZUSTAND_FREI) 
+    {
+        db_debug("update_db_protokoll-4 ZUSTAND_FREI:",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");    
+        switch(sizeof(result)) 
+        {
+        case 0:
+            return protokoll;  // ein freies Protokoll wird nicht neu angelegt
+        case 1:
+            db_debug("update_db_protokoll-5-UPDATE_FREI:",DB_DBGLVL_DEBUG,
+                    DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");    
+            ix = result[0][0];
+            db_query("UPDATE protokoll_1 SET fileversion = ?,zustand = ?, "
+                     "typklasse = ?, autor = ?, titel = ?, zeitstempel = ? "
+                     "WHERE ID = "+ix, protokoll[PR_FILEVERSION],
+                     protokoll[PR_ZUSTAND],klasse,
+                     protokoll[PR_AUTOR],protokoll[PR_TITEL],
+                     protokoll[PR_ZEITSTEMPEL] );
+            if (query_db_error()) 
+                break;
+            protokoll[PR_STICHWORTE] = ({ });
+            protokoll[PR_LESEZUGRIFFE] = ({ });
+            protokoll[PR_SCHREIBZUGRIFFE] = ({ });
+            if (!update_db_stichworte(ix, 0 )) 
+                break;
+            if (!update_db_zugriffe(ix, 0, 0 )) 
+                break;
+            if (!update_db_zugriffe(ix, 1, 0 ))
+                break;
+            db_commit(); // Transaktion abschliessen.
+            protokoll[PR_ID] = ix;
+            return protokoll;
+
+        default: // passiert nie, da filename unique (constraint)
+          db_debug("Dateiname mehr als einmal in DB:"+protokoll[PR_FILENAME],
+            DB_DBGLVL_ERROR,DB_DBG_FLUSH_BUFFER,"PROTOKOLLARCHIV");
+        }
+    }
+    switch (sizeof(result)) 
+    {
+    case 0:
+        db_debug("update_db_protokoll-3 INSERT:",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");    
+        ix = increment_counter("PROTOKOLL_1");
+        if (ix <= 0 || query_db_error()) break;
+        db_query("INSERT INTO protokoll_1 "
+                 "(ID,filename,fileversion,zustand,typklasse,"
+                 "autor,titel,zeitstempel) VALUES (?,?,?,?,?,?,?,?) ",
+                 ix,protokoll[PR_FILENAME],protokoll[PR_FILEVERSION],
+                 protokoll[PR_ZUSTAND],klasse,
+                 protokoll[PR_AUTOR],protokoll[PR_TITEL],
+                 protokoll[PR_ZEITSTEMPEL] );
+        if (query_db_error()) 
+            break;
+        if (!update_db_stichworte(ix, protokoll[PR_STICHWORTE])) 
+            break;
+        if (!update_db_zugriffe(ix, 0, protokoll[PR_LESEZUGRIFFE])) 
+            break;
+        if (!update_db_zugriffe(ix, 1, protokoll[PR_SCHREIBZUGRIFFE]))
+            break;
+        db_commit(); // Transaktion abschliessen.
+        protokoll[PR_ID] = ix;
+        return protokoll;
+    case 1:
+        db_debug("update_db_protokoll-2-UPDATE:",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");    
+        ix = result[0][0];
+        db_query("UPDATE protokoll_1 SET fileversion = ?,zustand = ?, "
+                 "typklasse = ?, autor = ?, titel = ?, zeitstempel = ? "
+                 "WHERE ID = "+ix, protokoll[PR_FILEVERSION],
+                 protokoll[PR_ZUSTAND],klasse,
+                 protokoll[PR_AUTOR],protokoll[PR_TITEL],
+                 protokoll[PR_ZEITSTEMPEL] );
+        if (query_db_error()) 
+            break;
+        if (!update_db_stichworte(ix, protokoll[PR_STICHWORTE])) 
+            break;
+        if (!update_db_zugriffe(ix, 0, protokoll[PR_LESEZUGRIFFE])) 
+            break;
+        if (!update_db_zugriffe(ix, 1, protokoll[PR_SCHREIBZUGRIFFE]))
+            break;
+        db_commit(); // Transaktion abschliessen.
+        protokoll[PR_ID] = ix;
+        return protokoll;
+    default: // passiert nie, da filename unique (constraint)
+        db_debug("Dateiname mehr als einmal in DB:"+protokoll[PR_FILENAME],
+            DB_DBGLVL_ERROR,DB_DBG_FLUSH_BUFFER,"PROTOKOLLARCHIV");
+    }
+    db_rollback();  // Transaktion zuruecknehmen.
+    return PR_DB_ERROR;
+}
+
+/*
+NOENZY: speichere_protokoll
+DEKLARATION: public mixed speichere_protokoll(mapping protokoll)
+BESCHREIBUNG:
+Speichert das Protokoll als Einzeldatei und die Metadaten in der Datenbank.
+VERWEISE: update_db_protokoll, create_or_update_file
+GRUPPEN: protokoll
+*/
+public mixed speichere_protokoll(mapping protokoll)
+{
+    mixed result;
+    check_security(CHECK_ERROR);
+    result = parameter_check(protokoll);
+    if (!mappingp(result)) 
+        return result;
+    result = create_or_update_file(protokoll);
+    if (!mappingp(result)) 
+        return result;
+    result = update_db_protokoll(result);
+    if (!mappingp(result)) 
+        return result;
+    return result;
+}
+
+/*
+NOENZY: import_file
+DEKLARATION: private void import_file(string onefile)
+BESCHREIBUNG:
+Das Protokoll wird eingelesen (get_file) und in der Datenbank gespeichert
+(update_db_protokoll) falls notwendig.
+VERWEISE: get_file, update_db_protokoll
+GRUPPEN: protokoll
+*/
+private void import_file(string onefile)
+{
+    mixed protokoll = get_file(onefile);
+    mixed result;
+    // IDEE unterschiedliche DB_FILEVERSIONen handeln.
+    if (!mappingp(protokoll) || !db_open()) 
+    {
+    	return;
+    }
+    result = db_query("SELECT ID,filename,fileversion,zustand, "
+             "typklasse,autor,titel,zeitstempel "
+             "FROM protokoll_1 WHERE filename = '"+onefile+"'");
+    if (sizeof(result) == 1) {
+        if ( result[0][2] != protokoll[PR_FILEVERSION]
+           ||result[0][3] != protokoll[PR_ZUSTAND]
+           ||result[0][4] != protokoll[PR_TYPKLASSE]
+           ||result[0][5] != protokoll[PR_AUTOR]
+           ||result[0][6] != protokoll[PR_TITEL]
+           ||result[0][7] != protokoll[PR_ZEITSTEMPEL]) 
+        {
+           
+            update_db_protokoll(protokoll);
+        }
+    } 
+    else if (sizeof(result) == 0) 
+    {
+        update_db_protokoll(protokoll);
+    } 
+    else 
+    {
+        db_debug("Dateiname mehr als einmal in DB:"+onefile,DB_DBGLVL_ERROR,
+            DB_DBG_FLUSH_BUFFER,"PROTOKOLLARCHIV");
+    }
+}
+
+/*
+NOENZY: import_files
+DEKLARATION: nosave varargs void import_files(string onedir)
+BESCHREIBUNG:
+Die Funktion liest die Directory-Struktur der PROTOKOLL_DATEIEN ein.
+VERWEISE: import_file
+GRUPPEN: protokoll
+*/
+nosave varargs void import_files(string onedir)
+{
+    mixed * files;
+    int fsize;
+    if (!stringp(onedir)) 
+    {
+        if (file_size(PROTOKOLL_DATEIEN) != FSIZE_DIR) 
+        {
+            check_and_create_dir(PROTOKOLL_DATEIEN);
+            // da Neuanlage, kein Scannen
+            return;
+        }
+        files = get_dir(PROTOKOLL_DATEIEN,GETDIR_PATH);
+        if (pointerp(files) && sizeof(files)) 
+        {
+            map(files,(: import_files($1) :));
+        }
+    } 
+    else 
+    {
+        fsize = file_size(onedir);
+        if (fsize == FSIZE_DIR) 
+        {
+            files = get_dir(onedir+"/",GETDIR_PATH);
+            if (pointerp(files) && sizeof(files)) 
+            {
+                map(files,(: import_files($1) :));
+            }
+        } 
+        else if (fsize >= 0) 
+        {
+            import_file(onedir);
+        }
+    }
+}
+
+/*
+NOENZY: create_all
+DEKLARATION: nosave void create_all(string version)
+BESCHREIBUNG:
+Erzeugt die Datenbank in der Version <version>. Zur Zeit wird nur
+Version 1.0 unterstuetzt.
+VERWEISE: create_or_update_db
+GRUPPEN: protokoll
+*/
+nosave void create_all(string version)
+{
+    mixed result;
+    int ix; 
+    string str;
+    if (!db_open()) 
+    {
+        raise_error("Datenbank konnte nicht geoeffnet werden: "+PROTOKOLL_DB);
+    }
+    
+    switch (version) 
+    { 
+    case "1.0": // Initiale Version
+        // Pruefe, ob Tabelle "typklasse_1" existiert.------------------------
+        if (db_check_table("typklasse_1")==-1) 
+        {
+            db_debug("create typklasse_1",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+            // Ersetze bei gleicher ID aber unterschiedlichem Namen (REPLAYE)
+            // Rollback ein INSERT NEW, dass den gleichen Namen bringt.
+            db_query_err("CREATE TABLE IF NOT EXISTS typklasse_1 ("
+                "klassenID INTEGER CONSTRAINT pk_protokoll_1 "
+                "PRIMARY KEY , "
+                "klassename TEXT CONSTRAINT uq_protokoll_1 UNIQUE )");
+            setup_counter("ID_TYPKLASSE_1",0);
+        } 
+        // Pruefe, ob Tabelle "protokoll_1" existiert.------------------------
+        if (db_check_table("protokoll_1")==-1) 
+        {
+            db_debug("create protokoll_1",DB_DBGLVL_DEBUG,
+                        DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+            db_query_err("CREATE TABLE IF NOT EXISTS protokoll_1 ("
+                "ID INTEGER CONSTRAINT pk_protokoll_1 PRIMARY KEY , "
+                "filename TEXT CONSTRAINT uq_protokoll_1 UNIQUE , "
+                "fileversion TEXT,zustand INTEGER, "
+                "typklasse INTEGER, autor TEXT, titel TEXT, "
+                "zeitstempel INTEGER, "
+                "CONSTRAINT fk01_protokoll_1 FOREIGN KEY (typklasse) "
+                "REFERENCES typklasse_1 (klassenID))");
+            setup_counter("ID_PROTOKOLL_1",0);
+        } 
+        // Tabelle Zugriff_1--------------------------------------------------
+        if (db_check_table("zugriff_1")==-1) 
+        {
+            db_debug("create zugriff_1",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+            db_query_err("CREATE TABLE IF NOT EXISTS zugriff_1 ("
+                "refID INTEGER, name TEXT NOT NULL, "
+                "acl INTEGER, "
+                "CONSTRAINT pk_zugriff_1 PRIMARY KEY (refID, name, acl) , "
+                "CONSTRAINT fk_zugriff_1_01 FOREIGN KEY (refID) "
+                    "REFERENCES protokoll_1 (ID), "
+                "CONSTRAINT ch_zugriff_1_01 CHECK (acl>=0 AND acl <=1))");
+        }
+        // Tabelle Stichworte_1
+        if (db_check_table("stichworte_1")==-1)
+        {
+            db_debug("create stichworte_1",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+            db_query_err("CREATE TABLE IF NOT EXISTS stichworte_1 ("
+                "ID_WORT INTEGER PRIMARY KEY, "
+                        "wort TEXT UNIQUE )");
+            setup_counter("ID_STICHWORTE_1",0);
+        } 
+        // Tabelle Stichwort_Index_1
+        if (db_check_table("stichwort_index_1")==-1)
+        {
+            db_debug("create stichwort_index_1",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+            db_query_err("CREATE TABLE IF NOT EXISTS stichwort_index_1 ("
+                "ID INTEGER, ID_WORT INTEGER, "
+                "CONSTRAINT pk_stichwort_index_1 " 
+                    "PRIMARY KEY(ID,ID_WORT) , "
+                "CONSTRAINT fkstichwort_index_1_01 FOREIGN KEY (ID) "
+                    "REFERENCES protokoll_1 (ID), "
+                "CONSTRAINT fkstichwort_index_1_02 FOREIGN KEY (ID_WORT) "
+                    "REFERENCES stichworte_1 (ID_WORT))");
+        }
+        // Tabelle Gelesen_1
+        if (db_check_table("gelesen_1")==-1)
+        {
+            db_debug("create gelesen_1",DB_DBGLVL_DEBUG,
+                DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+            db_query_err("CREATE TABLE IF NOT EXISTS gelesen_1 ("
+                "wer TEXT,was INTEGER, wann INTEGER, "
+                "CONSTRAINT pk_gelesen_1 PRIMARY KEY (wer,was),"
+                "CONSTRAINT fk_gelesen_1 FOREIGN KEY (was) "
+                    "REFERENCES protokoll_1 "
+                "(ID) )");
+        }
+        db_debug("Aktuelle db_version setzen 1.0",DB_DBGLVL_DEBUG,
+            DB_DBG_BUFFER_MSG,"PROTOKOLLARCHIV");
+        set_db_info("db_version","1.0");
+        db_debug("create_all 1.0: Erfolgreich",DB_DBGLVL_DEBUG,
+            DB_DBG_FLUSH_BUFFER,"PROTOKOLLARCHIV");
+        call_out("import_files",0);
+        db_close();
+        return; // ERFOLG
+    default:
+    }
+    // Hier kommt man nur im Fehlerfall hin...jetzt gar nicht mehr.
+    db_debug("create_all "+version+" abgebrochen!",DB_DBGLVL_ERROR,
+            DB_DBG_FLUSH_BUFFER,"PROTOKOLLARCHIV");
+    db_close();
+}
+
+/*
+NOENZY: create_or_update_db
+DEKLARATION: private void create_or_update_db()
+BESCHREIBUNG:
+Prueft die verfuegbare Datenbank und aktualisiert diese, falls noetig.
+VERWEISE: create_all
+GRUPPEN: protokoll
+*/
+private void create_or_update_db()
+{
+    mixed result;
+    int ix; 
+    string str;
+    
+    if (!db_open()) 
+    {
+        raise_error("Datenbank konnte nicht geoeffnet werden: "+PROTOKOLL_DB);
+    }
+    // Pruefe ob Datenbank existiert und welche DB Version sie hat.
+    str = get_db_info("db_version");
+    if (str == 0) 
+    { 
+        // Der Eintrag existiert nicht, also gehen wir davon aus,
+        // dass die Datenbank nicht existiert.
+        call_out("create_all",0,DB_VERSION_HISTORY[<1]);
+    } 
+    else 
+    {
+        ix=member(DB_VERSION_HISTORY,str||"");
+        if (ix==-1) 
+        {
+            raise_error("Inkonsistente Datenbankversion");
+        }
+        if (ix > 0) 
+        {
+            // bei der naechst neuren Version einsteigen.
+            call_out("create_all",0,DB_VERSION_HISTORY[ix-1]);
+        }
+    }
+}
+
+// ------------------------------------------------------------------------
+// Lfuns zum Interface fuer den protokoll_index.
+
+/*
+NOENZY: pr_get_typklassen
+DEKLARATION: public string * pr_get_typklassen(int start, int lines)
+BESCHREIBUNG:
+Gibt die verfuegbaren TypKlassen zurueck.
+VERWEISE: pr_get_typklasse
+GRUPPEN: protokoll
+*/
+public string * pr_get_typklassen(int start, int lines)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP) ) 
+    {
+        return 0;
+    }
+    q= "SELECT klassename FROM typklasse_1 ORDER BY klassename ";
+    if (lines > 0 && start >= 0) q+= "LIMIT "+lines+" OFFSET "+start;
+    result = db_query(q);
+    if (query_db_error() || result == 0) 
+    {
+        return 0;
+    }
+    return map(result, (: $1[0] :));
+}
+
+/*
+NOENZY: pr_get_anzahl_typklassen
+DEKLARATION: public int pr_get_anzahl_typklassen()
+BESCHREIBUNG:
+Gibt die Anzahl der verfuegbaren TypKlassen zurueck.
+VERWEISE: pr_get_typklasse
+GRUPPEN: protokoll
+*/
+public int pr_get_anzahl_typklassen()
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP) ) 
+    {
+        return 0;
+    }
+    q= "SELECT COUNT(klassename) FROM typklasse_1";
+    result = db_query(q);
+    if (query_db_error() || result == 0) 
+    {
+        return 0;
+    }
+    return get_one_int(result);
+}
+
+/*
+NOENZY: pr_get_typklasse
+DEKLARATION: public int pr_get_typklasse(string str)
+BESCHREIBUNG:
+Liefert zu dem String die interne ID, wenn vorhanden. 0 sonst.
+VERWEISE: pr_get_typklassen
+GRUPPEN: protokoll
+*/
+public int pr_get_typklasse(string str)
+{
+    if (!check_security() || !playerp(TP) || str == "") 
+    {
+        return 0;
+    }
+    return get_typklasse(str);
+}
+
+/*
+NOENZY: pr_create_typklasse
+DEKLARATION: public int pr_create_typklasse(string str)
+BESCHREIBUNG:
+Erzeugt eine Typklasse und gibt den eindeutigen Identifier zurueck.
+Nur fuer Admins!
+VERWEISE: pr_get_typklassen
+GRUPPEN: protokoll
+*/
+public int pr_create_typklasse(string str)
+{
+    mixed result;
+    int ix;
+    str = space(str);
+    if (!check_security() || !playerp(TP) || str == "") 
+    {
+        return 0;
+    }
+    result = db_query("SELECT klassenID FROM typklasse_1 "
+        "WHERE klassename = ?",str);
+    if (query_db_error()) return 0;
+    if (result == 0) 
+    {
+        if (adminp(this_player())) 
+        {
+            db_begin();
+            ix = increment_counter("TYPKLASSE_1");
+            if (ix < 0) 
+            {
+                db_rollback();
+                return 0;
+            }
+            db_query("INSERT INTO typklasse_1 (klassenID, klassename) "
+                "VALUES (?,?)",ix,str);
+            if (query_db_error()) 
+            {
+                db_rollback();
+                return 0;
+            }
+            db_commit();
+            return ix;
+        } 
+        else 
+        {
+           return 0;
+        }
+    } 
+    else 
+    {
+        return get_one_int(result);
+    }
+}
+
+
+/*
+NOENZY: get_zugriffsliste
+DEKLARATION: private string get_zugriffsliste(object pl)
+BESCHREIBUNG:
+Aus dem uebergebenen Wizard wird die Liste der Zustaendigkeiten
+erzeugt fuer eine "WHERE name IN"-Liste.
+VERWEISE: pr_ungelesen
+GRUPPEN: protokoll
+*/
+private string get_zugriffsliste(object pl)
+{
+    string *astr,str;
+    if (!playerp(pl)) 
+    {
+        return "'None'";
+    }
+    if (member(zugriffstabelle,RN(pl))) 
+    {
+        return zugriffstabelle[RN(pl)]; // nicht nochmal berechnen!
+    }
+    astr = "/apps/groups"->query_all_memberships_of(RN(pl));
+    // TODO in /apps/groups query_all_memberships_of fuer uns freischalten!
+    if (astr == 0) 
+    {
+        str = "'"+RN(pl)+"'";
+        if (spielerratp(pl)) str += ", 'Spielerrat'";
+        if (wizp(pl)) str += ", 'Pantheon'";
+        zugriffstabelle[RN(pl)] = str;
+        //DEBUG("get_zugriffsliste-1:"+str);
+        return str;
+    }
+    if (wizp(pl)) astr += ({ "Pantheon" });
+    str = liste(map(astr,(: "'"+$1+"'" :)),", ");
+    if (spielerratp(pl)) str += ", 'Spielerrat'";
+    zugriffstabelle[RN(pl)] = str;
+    //DEBUG("get_zugriffsliste-2:"+str);
+    return str;
+}
+
+/*
+NOENZY: get_wortliste
+DEKLARATION: private string get_wortliste(string * astr)
+BESCHREIBUNG:
+Konvertiert die Wortliste in eine geschuetzte Liste, wie sie
+in Abfragen genutzt werden kann.
+VERWEISE: get_zugriffsliste
+GRUPPEN: protokoll
+*/
+private string get_wortliste(string * astr)
+{
+    string str;
+    if (!pointerp(astr)||!sizeof(astr)) 
+    {
+        return "'None'";
+    }
+    str = liste(map(astr,(: "'"+db_escape_string($1)+"'" :)),", ");
+    return str;
+}
+
+/*
+NOENZY: pr_ungelesen
+DEKLARATION: public string * pr_ungelesen(int start,int lines, int admin)
+BESCHREIBUNG:
+Es werden die ungelesenen Protokolle fuer den this_player ausgegeben,
+bei admin-Flag werden alle Protokolle ohne Ruecksicht auf die Zugriffsrechte
+zurueckgegeben, die noch nicht gelesen wurden.
+Es wird immer ab OFFSET start und LIMIT lines die Abfrage eingeschraenkt.
+VERWEISE: pr_gelesen, pr_anzahl_ungelesen
+GRUPPEN: protokoll
+*/
+public varargs string * pr_ungelesen(int start,int lines, int admin,
+            mixed typklasse)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP)) 
+    {
+        return 0;
+    }
+    if (stringp(typklasse)) 
+    {
+        typklasse = get_typklasse(typklasse);
+    }
+    if (!intp(typklasse) || typklasse < 0) 
+    {
+        typklasse = 0;
+    }
+    q = "SELECT DISTINCT p1.ID, p1.titel ";
+    q+= "FROM protokoll_1 p1";
+    if (!admin) q+= " INNER JOIN zugriff_1 z1 ON (z1.refID = p1.ID)";
+    //q+= " LEFT OUTER JOIN gelesen_1 g1 ON ";
+    //q+= "(g1.was = p1.ID AND g1.wann < p1.zeitstempel ";
+    //q+= "AND g1.wer = '"+TP->query_real_name()+"') ";
+    if (!admin) 
+    {
+        q+= " WHERE z1.name IN ("+get_zugriffsliste(TP)+")";
+    } 
+    else 
+    {
+        q+= " WHERE p1.zustand = "+PR_ZUSTAND_AKTIV;
+    }
+    if (typklasse) q+= " AND p1.typklasse = "+typklasse;
+    q+= " AND p1.ID NOT IN (SELECT g1.was FROM gelesen_1 g1 ";
+    q+= "WHERE g1.wann > p1.zeitstempel ";
+    q+= "AND g1.wer = '"+TP->query_real_name()+"') ";
+    q+= "ORDER BY p1.ID ";
+    q+= "LIMIT "+lines+" OFFSET "+start;
+    result = db_query(q);
+    //DEBUG(sprintf("pr_ungelesen: %s=>%Q\n",q,result));
+    if (result == 0 || query_db_error()!=0) 
+    {
+        return 0;
+    }
+    return map(result, (: sprintf("%d:%s",$1[0],$1[1]) :) );
+}
+
+/*
+NOENZY: pr_anzahl_ungelesen
+DEKLARATION: public varargs int pr_anzahl_ungelesen(int admin, mixed typklasse)
+BESCHREIBUNG:
+Liefert die Gesamtanzahl der Protokolle, die mit pr_ungelesen scheibchenweise
+gelesen werden koennen.
+VERWEISE: pr_ungelesen
+GRUPPEN: protokoll
+*/
+public varargs int pr_anzahl_ungelesen(int admin, mixed typklasse)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP)) 
+    {
+        return 0;
+    }
+    if (stringp(typklasse)) 
+    {
+        typklasse = get_typklasse(typklasse);
+    }
+    if (!intp(typklasse) || typklasse < 0) 
+    {
+        typklasse = 0;
+    }
+    q = "SELECT COUNT(DISTINCT p1.ID) ";
+    q+= "FROM protokoll_1 p1";
+    if (!admin) q+= " INNER JOIN zugriff_1 z1 ON (z1.refID = p1.ID)";
+    q+= " LEFT OUTER JOIN gelesen_1 g1 ON ";
+    q+= "(g1.was = p1.ID AND g1.wann < p1.zeitstempel)";
+    if (!admin) 
+    {
+        q+= " WHERE z1.name IN ("+get_zugriffsliste(TP)+")";
+    } 
+    else 
+    {
+        q+= " WHERE p1.zustand = "+PR_ZUSTAND_AKTIV;
+    }
+    q+= " AND g1.wer = '"+TP->query_real_name()+"'";
+    if (typklasse) 
+        q+= " AND pr.typklasse = "+typklasse;
+    result = db_query(q);
+    if (result == 0 || query_db_error()!=0) 
+    {
+        return 0;
+    }
+    return get_one_int(result);
+}
+
+/*
+NOENZY: get_protokoll_by_id
+DEKLARATION: public mapping get_protokoll_by_id(int id, int admin)
+BESCHREIBUNG:
+Liest das Protokoll mit der id aus, im Normalmodus (admin==0) werden
+nur aktive Protokolle, welche vom Zugriff freigegeben sind, angezeigt.
+VERWEISE: get_file
+GRUPPEN: protokoll
+*/
+public mapping get_protokoll_by_id(int id, int admin)
+{
+    mixed result;
+    if (!check_security() || !playerp(TP) || id <=0) 
+    {
+        return 0;
+    }
+    if (admin && adminp(TP)) 
+    {
+        result = db_query("SELECT pr.filename "
+             "FROM protokoll_1 pr WHERE pr.ID = "+id);
+    } 
+    else 
+    {
+        result = db_query("SELECT DISTINCT pr.filename "
+             "FROM protokoll_1 pr,zugriff_1 z1 WHERE pr.ID = "+id+
+             " AND pr.zustand = "+PR_ZUSTAND_AKTIV
+             +" AND pr.ID = z1.refID AND z1.name IN ("
+             +get_zugriffsliste(TP)+")");
+    }
+    if (result == 0 || query_db_error()!=0 || !sizeof(result)) 
+    {
+        return 0;
+    }
+    result = get_file(get_one_string(result));
+    return mappingp(result) ? (result + ([PR_ID:id]) ): 0;
+}
+
+/*
+NOENZY: pr_has_write_access
+DEKLARATION: public int pr_has_write_access(int id)
+BESCHREIBUNG:
+Prueft ab, ob der aktuelle Spieler (TP) Zugriff ueber die Zugriffsliste hat.
+Gibt 1 bei Zugriff zurueck, 0 sonst.
+VERWEISE: pr_gelesen
+GRUPPEN: protokoll
+*/
+public int pr_has_write_access(int id)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP)) 
+    {
+        return 0;
+    }
+    q = "SELECT refID FROM zugriff_1 ";
+    q+= "WHERE acl = 1 AND name IN ("+get_zugriffsliste(TP)+") ";
+    q+= "AND refID = "+id;
+    result = db_query(q);
+    if (result == 0 || query_db_error()!=0 || !sizeof(result)) 
+    {
+        return 0;
+    }
+    return 1;
+}
+
+/*
+NOENZY: pr_id_gelesen
+DEKLARATION: nosave void pr_id_gelesen(string name, int id)
+BESCHREIBUNG:
+Ein einzelner Artikel wird ungelesen markiert.
+VERWEISE: pr_gelesen
+GRUPPEN: protokoll
+*/
+nosave void pr_id_gelesen(string name, int id)
+{
+    if (sizeof(db_query("SELECT wer,was,wann FROM gelesen_1 "
+            "WHERE wer = ? AND was = ?",name,id))) {
+        //DEBUG(sprintf("pr_id_gelesen-update(%s,%d)\n",name,id));
+        db_query("UPDATE gelesen_1 SET wann = "+time()+" "
+                 "WHERE wer = ? AND was = ?",name,id);
+    } 
+    else 
+    {
+        //DEBUG(sprintf("pr_id_gelesen-insert(%s,%d)\n",name,id));
+        db_query("INSERT INTO gelesen_1 "
+             "(wer, was, wann) VALUES (?,?,?)",
+             name,id,time());
+    }
+}
+
+/*
+NOENZY: pr_gelesen
+DEKLARATION: public int pr_gelesen(int * ids)
+BESCHREIBUNG:
+Es werden alle uebergebenen ID's nach und nach als Gelesen markiert.
+VERWEISE: pr_id_gelesen
+GRUPPEN: protokoll
+*/
+public int pr_gelesen(int * ids, int admin)
+{
+    int ix;
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP)) 
+    {
+        return 0;
+    }
+    if (ids == 0) 
+    {
+        q = "SELECT DISTINCT p1.ID ";
+        q+= "FROM protokoll_1 p1";
+        if (!admin) 
+            q+= " INNER JOIN zugriff_1 z1 ON (z1.refID = p1.ID)";
+        q+= " INNER JOIN gelesen_1 g1 ON ";
+        q+= "(g1.was = p1.ID)";
+        if (!admin) 
+        {
+            q+= " WHERE z1.name IN ("+get_zugriffsliste(TP)+")";
+        } 
+        else 
+        {
+            q+= " WHERE p1.zustand = "+PR_ZUSTAND_AKTIV;
+        }
+        q+= " AND g1.wann < p1.zeitstempel";
+        q+= " AND g1.wer = '"+TP->query_real_name()+"'";
+        q+= " LIMIT "+max_size;
+        result = db_query(q);
+        //DEBUG(sprintf("pr_gelesen: %s=>%Q\n",q,result));
+        if (result == 0 || query_db_error()!=0) 
+        {
+            return 0;
+        }
+        ids = map(result, (: $1[0] :) );
+    }
+    for (ix = 0; ix < sizeof(ids); ix++) 
+    {
+        call_out("pr_id_gelesen",0,RN(TP),ids[ix]);
+    }
+    return 1;
+}
+
+/*
+NOENZY: pr_stichwortliste
+DEKLARATION: public string * pr_stichwortliste(int start, int lines, int admin)
+BESCHREIBUNG:
+Es wird die Stichwortliste fuer alle erreichbaren Protokolle ausgelesen.
+Beim admin-Flag werden die Zugriffsliste ignoriert und alle Stichworte
+angezeigt.
+VERWEISE: pr_id_gelesen
+GRUPPEN: protokoll
+*/
+public string * pr_stichwortliste(int start, int lines, int admin)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP)) 
+    {
+        return 0;
+    }
+    if (admin) 
+    {
+        q= "SELECT ID_WORT,wort FROM stichworte_1 ORDER BY wort ";
+        q+= "LIMIT "+lines+" OFFSET "+start;
+    } 
+    else 
+    {
+        q= "SELECT DISTINCT stw.ID_WORT,stw.wort FROM stichworte_1 stw ";
+        q+= "INNER JOIN stichwort_index_1 sti ON (stw.ID_WORT = sti.ID_WORT) ";
+        q+= "INNER JOIN protokoll_1 pr ON (sti.ID = pr.ID) ";
+        q+= "INNER JOIN zugriff_1 z1 ON (pr.ID = z1.refID) ";
+        q+= "WHERE z1.name IN ("+get_zugriffsliste(TP)+") ";
+        q+= "AND pr.zustand = "+PR_ZUSTAND_AKTIV+" ";
+        q+= "ORDER BY stw.wort ";
+        q+= "LIMIT "+lines+" OFFSET "+start;
+    }
+    result = db_query(q);
+    if (result == 0 || query_db_error()!=0) 
+    {
+        return 0;
+    }
+    return map(result, (: sprintf("%s",$1[1]) :) );
+}
+
+/*
+NOENZY: pr_anzahl_stichwortliste
+DEKLARATION: public int pr_anzahl_stichwortliste(int admin)
+BESCHREIBUNG:
+Es wird die Anzahl in der Stichwortliste fuer alle erreichbaren Protokolle 
+ausgelesen. 
+VERWEISE: pr_stichwortliste
+GRUPPEN: protokoll
+*/
+public int pr_anzahl_stichwortliste(int admin)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP)) 
+    {
+        return 0;
+    }
+    if (admin) 
+    {
+        q= "SELECT COUNT(ID_WORT) FROM stichworte_1 ORDER BY wort ";
+    } 
+    else 
+    {
+        q= "SELECT COUNT(DISTINCT stw.ID_WORT) FROM stichworte_1 stw ";
+        q+= "INNER JOIN stichwort_index_1 sti ON (stw.ID_WORT = sti.ID_WORT) ";
+        q+= "INNER JOIN protokoll_1 pr ON (sti.ID = pr.ID) ";
+        q+= "INNER JOIN zugriff_1 z1 ON (pr.ID = z1.refID) ";
+        q+= "WHERE z1.name IN ("+get_zugriffsliste(TP)+") ";
+        q+= "AND pr.zustand = "+PR_ZUSTAND_AKTIV+" ";
+        q+= "ORDER BY stw.wort ";
+    }
+    result = db_query(q);
+    if (result == 0 || query_db_error()!=0) 
+    {
+        return 0;
+    }
+    return get_one_int(result);
+}
+
+/*
+NOENZY: pr_getliste_via_sw
+DEKLARATION: public string * pr_getliste_via_sw(string * stichworte, int start, int lines, int admin)
+BESCHREIBUNG:
+Listet alle Protokolle welche mind. 1 der angegeben Stichworte referenziert,
+im Ausschnitt [start,start+lines], ueber Zugriffsliste (admin=0) oder ohne. 
+Im Adminmodus werden auch geloeschte Protokolle angezeigt,
+sonst nur aktive Protokolle.
+VERWEISE: pr_getliste
+GRUPPEN: protokoll
+*/
+public string * pr_getliste_via_sw(string * stichworte,
+			int start, int lines, int admin)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP) 
+            || !pointerp(stichworte) || !sizeof(stichworte)) 
+    {
+        return 0;
+    }
+    if (admin) 
+    {
+        q= "SELECT pr.ID, pr.titel FROM protokoll_1 pr ";
+        q+= "INNER JOIN stichworte_1 stw ON (sti.ID = pr.ID) ";
+        q+= "INNER JOIN stichwort_index_1 sti ON (stw.ID_WORT = sti.ID_WORT) ";
+        q+= "WHERE stw.wort IN ("+get_wortliste(stichworte)+") ";
+        q+= "ORDER BY pr.ID ";
+        q+= "LIMIT "+lines+" OFFSET "+start;
+    } 
+    else 
+    {
+        q= "SELECT pr.ID, pr.titel FROM protokoll_1 pr ";
+        q+= "INNER JOIN stichworte_1 stw ON (sti.ID = pr.ID) ";
+        q+= "INNER JOIN stichwort_index_1 sti ON (stw.ID_WORT = sti.ID_WORT) ";
+        q+= "INNER JOIN zugriff_1 z1 ON (pr.ID = z1.refID) ";
+        q+= "WHERE stw.wort IN ("+get_wortliste(stichworte)+") ";
+        q+= "AND z1.name IN ("+get_zugriffsliste(TP)+") ";
+        q+= "AND pr.zustand = "+PR_ZUSTAND_AKTIV+" ";
+        q+= "ORDER BY pr.ID ";
+        q+= "LIMIT "+lines+" OFFSET "+start;
+    }
+    result = db_query(q);
+    if (result == 0 || query_db_error()!=0) 
+    {
+        return 0;
+    }
+    return map(result, (: sprintf("%d:%s",$1[0],$1[1]) :) );
+}
+
+/*
+NOENZY: pr_anzahl_getliste_via_sw
+DEKLARATION: public int pr_anzahl_getliste_via_sw(string * stichworte, int admin)
+BESCHREIBUNG:
+Gibt die Gesamtanzahl zu pr_getliste_via_sw aus.
+VERWEISE: pr_getliste_via_sw
+GRUPPEN: protokoll
+*/
+public int pr_anzahl_getliste_via_sw(string * stichworte, int admin)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP) 
+            || !pointerp(stichworte) || !sizeof(stichworte)) 
+    {
+        return 0;
+    }
+    if (admin) 
+    {
+        q= "SELECT COUNT(DISTINCT pr.ID) FROM protokoll_1 pr ";
+        q+= "INNER JOIN stichworte_1 stw ON (sti.ID = pr.ID) ";
+        q+= "INNER JOIN stichwort_index_1 sti ON (stw.ID_WORT = sti.ID_WORT) ";
+        q+= "WHERE stw.wort IN ("+get_wortliste(stichworte)+") ";
+    } 
+    else 
+    {
+        q= "SELECT COUNT(DISTINCT pr.ID) FROM protokoll_1 pr ";
+        q+= "INNER JOIN stichworte_1 stw ON (sti.ID = pr.ID) ";
+        q+= "INNER JOIN stichwort_index_1 sti ON (stw.ID_WORT = sti.ID_WORT) ";
+        q+= "INNER JOIN zugriff_1 z1 ON (pr.ID = z1.refID) ";
+        q+= "WHERE stw.wort IN ("+get_wortliste(stichworte)+") ";
+        q+= "AND z1.name IN ("+get_zugriffsliste(TP)+") ";
+        q+= "AND pr.zustand = "+PR_ZUSTAND_AKTIV+" ";
+    }
+    result = db_query(q);
+    if (result == 0 || query_db_error()!=0) 
+    {
+        return 0;
+    }
+    return get_one_int(result);
+}
+
+/*
+NOENZY: pr_getliste
+DEKLARATION: public varargs string * pr_getliste(int start, int lines, int admin, mixed typklasse)
+BESCHREIBUNG:
+Listet alle Protokolle auf im Ausschnitt [start,start+lines], ueber 
+Zugriffsliste (admin=0) oder ohne, gefiltertet nach Typklasse, 
+wenn angegeben. Im Adminmodus werden auch geloeschte Protokolle angezeigt,
+sonst nur aktive Protokolle.
+VERWEISE: pr_getliste_via_sw
+GRUPPEN: protokoll
+*/
+public varargs string * pr_getliste(int start, int lines, int admin,
+            mixed typklasse)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP) ) 
+    {
+        return 0;
+    }
+    if (stringp(typklasse)) 
+    {
+        typklasse = get_typklasse(typklasse);
+    }
+    if (!intp(typklasse) || typklasse < 0) 
+    {
+        typklasse = 0;
+    }
+    if (admin) 
+    {
+        q= "SELECT pr.ID, pr.titel FROM protokoll_1 pr ";
+        if (typklasse) q+= "WHERE pr.typklasse = "+typklasse+" ";
+        q+= "ORDER BY pr.ID ";
+        q+= "LIMIT "+lines+" OFFSET "+start;
+    }
+    else 
+    {
+        q= "SELECT DISTINCT pr.ID, pr.titel FROM protokoll_1 pr ";
+        q+= "INNER JOIN zugriff_1 z1 ON (pr.ID = z1.refID) ";
+        q+= "WHERE z1.name IN ("+get_zugriffsliste(TP)+") ";
+        q+= "AND pr.zustand = "+PR_ZUSTAND_AKTIV+" ";
+        if (typklasse) q+= "AND pr.typklasse = "+typklasse+" ";
+        q+= "ORDER BY pr.ID ";
+        q+= "LIMIT "+lines+" OFFSET "+start;
+    }
+    result = db_query(q);
+    if (result == 0 || query_db_error()!=0) 
+    {
+        return 0;
+    }
+    return map(result, (: sprintf("%d:%s",$1[0],$1[1]) :) );
+}
+
+/*
+NOENZY: pr_anzahl_getliste
+DEKLARATION: public varargs int pr_anzahl_getliste(int admin, mixed typklasse)
+BESCHREIBUNG:
+Gibt die Gesamtanzahl zu pr_getliste zurueck, abhaengig von den selben
+Auswahlkriterien wie bei pr_getliste (admin, typklasse).
+VERWEISE: pr_getliste
+GRUPPEN: protokoll
+*/
+public varargs int pr_anzahl_getliste(int admin, mixed typklasse)
+{
+    string q;
+    mixed result;
+    if (!check_security() || !playerp(TP) ) 
+    {
+        return 0;
+    }
+    if (stringp(typklasse)) 
+    {
+        typklasse = get_typklasse(typklasse);
+    }
+    if (!intp(typklasse) || typklasse < 0) 
+    {
+        typklasse = 0;
+    }
+    if (admin) 
+    {
+        q= "SELECT COUNT(pr.ID) FROM protokoll_1 pr ";
+        if (typklasse) q+= "WHERE pr.typklasse = "+typklasse+" ";
+    } 
+    else 
+    {
+        q= "SELECT COUNT(DISTINCT pr.ID) FROM protokoll_1 pr ";
+        q+= "INNER JOIN zugriff_1 z1 ON (pr.ID = z1.refID) ";
+        q+= "WHERE z1.name IN ("+get_zugriffsliste(TP)+") ";
+        q+= "AND pr.zustand = "+PR_ZUSTAND_AKTIV+" ";
+        if (typklasse) q+= "AND pr.typklasse = "+typklasse+" ";
+    }
+    result = db_query(q);
+    if (result == 0 || query_db_error()!=0) 
+    {
+        return 0;
+    }
+    return get_one_int(result);
+}
+
+/*
+NOENZY: purge_protokoll
+DEKLARATION: private void purge_protokoll(int id)
+BESCHREIBUNG:
+Hiermit wird ein Protokoll von PR_ZUSTAND_GELOESCHT auf PR_ZUSTAND_FREI
+gesetzt und in der DB gepseichert und als File geloescht.
+VERWEISE: purge_protokolle
+GRUPPEN: protokoll
+*/
+private void purge_protokoll(int id)
+{
+    mapping prot;
+    mixed result = db_query("SELECT pr.filename "
+             "FROM protokoll_1 pr WHERE pr.ID = "+id);
+    result = get_file(get_one_string(result));
+    if (!mappingp(result)) 
+    {
+        return;
+    } 
+    else 
+    {
+        prot = result;
+    }
+    prot[PR_ZUSTAND] = PR_ZUSTAND_FREI;
+    speichere_protokoll(prot);
+}
+
+/*
+NOENZY: purge_protokolle
+DEKLARATION: nosave void purge_protokolle()
+BESCHREIBUNG:
+Hiermit wird ein Protokoll von PR_ZUSTAND_GELOESCHT auf PR_ZUSTAND_FREI
+gesetzt und in der DB gepseichert und als File geloescht.
+VERWEISE: purge_protokolle
+GRUPPEN: protokoll
+*/
+nosave void purge_protokolle()
+{
+    string q;
+    mixed result;
+    while (remove_call_out("purge_protokolle")!=-1);
+    // MINTIME_2DELETE
+    q = "SELECT pr.ID FROM protokoll_1 pr ";
+    q+= "WHERE pr.zustand = " +PR_ZUSTAND_GELOESCHT;
+    q+= " AND pr.zeitstempel <= "+ (time()+MINTIME_2DELETE);
+    q+= " LIMIT 10";
+    result = db_query(q);
+    if (result == 0 || query_db_error()!=0 || !sizeof(result)) 
+    {
+        // TODO Leere Bezuege Stichworte aufraeumen.
+        return;
+    }
+    map(result, (: purge_protokoll($1[0]) :) );
+    if (sizeof(result) >=10) 
+    {
+        call_out("purge_protokolle",3);
+    }
+}
+
+// ------------------------------------------------------------------------
+
+/*
+NOENZY: db_flush
+DEKLARATION: public void db_flush()
+BESCHREIBUNG:
+Hiermit kann der Debugpuffer in die Datenbank geschrieben werden
+und die Datenbank geschlossen werden.
+VERWEISE: show_debug
+GRUPPEN: protokoll
+*/
+public void db_flush()
+{
+    db_debug(0,0,DB_DBG_FLUSH_BUFFER,"PROTOKOLLARCHIV");
+    db_close();
+}
+
+/*
+NOENZY: show_debug
+DEKLARATION: public void show_debug()
+BESCHREIBUNG:
+Es wird der Debugpuffer an TP ausgegeben.
+VERWEISE: sql
+GRUPPEN: protokoll
+*/
+public void show_debug()
+{
+    check_security(CHECK_ERROR);
+    db_debug(0,0,DB_DBG_FLUSH_BUFFER,"PROTOKOLLARCHIV");
+    string * result = query_all_dbg_messages(DB_DBG_FLUSH_BUFFER);
+    if (result == 0) 
+        return;
+    result = flatten_array(map(result,(: explode(wrap($1),"\n")[..<2] :)));
+    TP->more(result,({ "Debuglog [?,w,q,z] ",
+           "----------- Debuglog: --------------------------------------------------------",
+           LINE, MORE_LINE, MORE_LINE
+        }), 0,
+        M_DO_NOT_END|M_FRAME|M_THIS_OBJECT,
+        "Root:Protokollarchiv:DebugLog");
+}
+
+/*
+NOENZY: sql
+DEKLARATION: public mixed sql(string q)
+BESCHREIBUNG:
+Hiermit koennen direkte Abfragen und Manipulationen an der Datenbank
+durchgefuehrt werden. Nur fuer Admins.
+VERWEISE: show_debug
+GRUPPEN: protokoll
+*/
+public mixed sql(string q)
+{
+    check_security(CHECK_ERROR);
+    if (!db_open()) 
+        return -1;
+    return db_query(q) || query_db_error();
+}
+
+/*
+NOENZY: db_get_table
+DEKLARATION: public varargs mixed db_get_table(string tb)
+BESCHREIBUNG:
+Ohne Parameter oder mit tb==0 wird eine Liste aller Tabellen ausgegeben,
+mit Parameter die Definition dieser speziellen Tabelle, sofern vorhanden.
+VERWEISE: 
+GRUPPEN: protokoll
+*/
+public varargs mixed db_get_table(string tb)
+{
+    check_security(CHECK_ERROR);
+    tb = space(tb);
+    if (tb == "") 
+    {
+        return sql("SELECT name FROM sqlite_master WHERE type = 'table'");
+    } 
+    else 
+    {
+        return sql("SELECT sql FROM sqlite_master WHERE NAME = '"+tb+"'");
+    }
+}
+
+void abort_renewal()
+{
+}
+
+void finish_renewal(object neu)
+{
+}
+
+void prepare_renewal()
+{
+    db_flush();
+}
+
+int remove()
+{
+    db_flush();
+    destruct( TO );
+    return 1;
+}
+
+void reset()
+{
+    purge_protokolle();
+    db_flush();
+}
+
+void create()
+{
+    int * arr = query_limits();
+    max_size = min(arr[LIMIT_ARRAY],arr[LIMIT_MAPPING]) / 10;
+    init_security_trust_mudlib();
+    add_security_condition(PROTOKOLL_VC);
+    add_security_condition(OBJ_PROTOKOLLINDEX+"#");
+    check_and_create_dir(PROTOKOLL_DB);
+    // TODO Foreign Keys debuggen, momentan sind sie abgeschaltet
+    if (!init_database(PROTOKOLL_DB, 1)) 
+        raise_error("Datenbank "+PROTOKOLL_DB
+            +" konnte nicht geoeffnet werden.");
+    db_debug("protokollarchiv started:"+PROTOKOLL_DB,DB_DBGLVL_INFO,
+            DB_DBG_CREATE,"PROTOKOLLARCHIV");
+    create_or_update_db();
+}

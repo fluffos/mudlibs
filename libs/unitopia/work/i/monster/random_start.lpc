@@ -1,0 +1,970 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/monster/random_start.c
+// Description: Random-Start von Rollen, Kampagnen, Kommandos
+// Author:	Francis (3.2.94)
+//
+// $Log: random_start.c,v $
+// Revision 1.24  2015/12/12 11:44:56  myonara
+// Einfuehrung von query_current_vtime
+//
+// Revision 1.23  2013-03-16 16:18:07  gnomi
+// Typen angepasst.
+//
+// Revision 1.22  2009-03-20 07:54:18  gnomi
+// Ein paar Verweise mehr in die Doku eingetragen.
+//
+// Revision 1.21  2008-09-18 07:20:16  gnomi
+// Anin: Einstellbare Mindestruhezeit zwischen den Aktivitaeten.
+//
+// Revision 1.20  2008-05-19 14:23:31  gnomi
+// call_out-Modus auch fuer Blueprints erlauben.
+//
+// Revision 1.19  2005/06/03 19:49:38  menaures
+// Unterstuetzung fuer Rollen-Label
+//
+// Revision 1.18  2005/01/05 21:52:41  gnomi
+// random_activities im call_out-Modus automatisch starten.
+//
+// Revision 1.17  2004/08/27 12:58:47  menaures
+// Closures und Arrays zulassen
+//
+// Revision 1.16  2004/02/19 21:39:33  gnomi
+// Typo.
+//
+// Revision 1.15  2002/08/20 22:00:51  gnomi
+// Verweise korrigiert.
+//
+// Revision 1.14  2002/06/17 02:02:15  gnomi
+// In den Beispielen muss vor dem Namen der Kampagne natuerlich ein & anstatt $.
+//
+// Revision 1.13  2002/03/16 10:04:24  gnomi
+// query_random_rollen in query_random_activities umbenannt und dokumentiert.
+//
+// Revision 1.12  2001/07/23 23:28:44  sissi
+// *** empty log message ***
+//
+// Revision 1.11  2001/06/25 11:48:21  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.10  2001/06/12 00:18:03  gnomi
+// Der Bettler ist umgezogen.
+//
+// Revision 1.9  2001/06/12 00:08:22  menaures
+// Orte und Zeiten wurden nicht richtig beruecksichtigt.
+// Entfehlert, hier und da nachgebessert, etwas optimiert.
+//
+// Revision 1.8  2001/03/14 17:30:59  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.7  2001/03/05 02:46:14  gnomi
+// set_random_activities eingefuehrt.
+//
+// Revision 1.6  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+//
+
+/*
+ * Wird von /i/monster/monster inherited.
+ *
+ *
+ * Zufallsgesteuerter Start beliebiger Monster-Kommandos.
+ *
+ *
+ * Was kann gestartet werden ?
+ *
+ *	Alles was Monster so draufhaben; Kommandos per do_command,
+ *	Rollen, Kampagnen.
+ *
+ *	random_start unterscheidet die verschiedenen Moeglichkeiten
+ *	anhand des ersten Zeichen:
+ *
+ *	a.	!<kommando>		<kommando> wird an do_command
+ *					uebergeben;
+ *
+ *	          zB: "!sage Warum gibt mir keiner etwas Geld?"
+ *		      "!mache schaut sich um."
+ *
+ *	b.	$<rollenname>		<rollenname> ist der Filename
+ *					einer Rolle;
+ *
+ *		  zB: "$/d/Vaniorh/Tadmor/Strassen/rollen/zuwenig"
+ *                Label kann man mit "$/pfad/zum/rollenfile,label" angeben.
+ *
+ *
+ *	c.	&<kampagnename>		<kampagnenname> ist der Filename
+ *					einer Kampagne;
+ *
+ *		  zB: "&/d/Vaniorh/Tadmor/Strassen/rollen/sauftour.kamp"
+ *
+ *      d.      Zusaetzlich sind auch noch Arrays moeglich, die Befehle
+ *              werden dann ohne Zeitverzoegerung hintereinander
+ *              ausgefuehrt.
+ *              ({"!huepfe herum", "!grinse doof"})
+ *
+ *      e.      Auch Closures koennen verwendet werden. Sie werden mit
+ *              dem NPC als einzigem Parameter aufgerufen.
+ *
+ *              #'mach_was
+ *
+ *              Der Rueckgabewert der Closure darf a.-d. sein.
+ *              Closures in Arrays duerfen nur a.-c. zurueckliefern.
+ *
+ *
+ *
+ * Es ist moeglich, eine Rolle in Abhaengigkeit von bestimmten Orten
+ * starten zu lassen, hierbei kann man komplette Filenamen oder auch
+ * Directorynamen (bzw Substrings davon) angeben;
+ *
+ *		zB:   "/room/rathaus/treppe"    Kommando wird nur in
+ *						diesem Raum gestartet;
+ *
+ *		      "/d/Vaniorh"		Kommando wird ueberall
+ *						in Vaniorh gestartet;
+ *
+ *		      "*" oder 0		Kommando wird ueberall
+ *						in UNItopia gestartet.
+ *
+ *
+ * Weiterhin kann eine Rolle auch nur innerhalb bestimmter Zeitraeume
+ * gestartet werden; Zeitraeume gibt man in der Form "hhmm-hhmm" an.
+ *
+ *		zB:	"400-1100"		von 4 Uhr bis 11 Uhr
+ *			"1200-2359"		von 12 Uhr bis 23 Uhr 59
+ *			"*" oder 0		zu beliebigen Zeiten.
+ *
+ *
+ *
+ * Alle diese Parameter werden in folgenden Aufruf zusammengefasst:
+ *
+ *	void add_random_activities( ([
+ *			     activity1 : ([ ort1 : ({ zeit1, zeit2, .. }),
+ *					    ort2 :   ..... ,
+ *					       .....
+ *					]),
+ *
+ *			     activity2 : ..... ,
+ *
+ *				.......
+ *			  ]);
+ *	Beispiel:
+ *
+ *	add_random_activities( ([
+ *		"!sage Wie gehts?" : 0 ,
+ *		"!sage Schoenes Wetter heute morgen!" :
+ *			([ "*" : ({ "400-1000" }) ]),
+ *		"!sage Warst du schon Mittagessen? Westlich von hier "+
+ *		"gibts eine gute Wirtschaft." :
+ *		     ([ "/d/Vaniorh/uluji/market_place" :({"1130-1330"}) ]),
+ *
+ *		"!sage Wie waers mit einem Kaffee?" :
+ *			([ "*": ({ "800-1000", "1300-1600" }) ])
+ *	]));
+ *			
+ *
+ * Wann werden solche Random-Kommandos ueberhaupt angestartet ?
+ *
+ *	1. Nur wenn ein Spieler sich im selben Raum wie das Monster
+ *	   befindet.
+ *
+ *		Dies ist die Voreinstellung und erspart dem
+ *	   	Game-Driver viel unnoetige Arbeit, denn meistens machen
+ *		Aktivitaeten von Monster keinen Sinn wenn kein Spieler
+ *		da ist, um zuzuschauen oder darauf zu reagieren.
+ *
+ *		Falls man die Voreinstellung geaendert hat, kann man
+ *		diesen Modus mit:
+ *
+ *			void set_random_modus("heart_beat")
+ *
+ *		wieder setzen.
+ *
+ *	2. Staendig, egal ob Spieler anwesend sind oder nicht.
+ *	
+ *		Das macht Sinn bei Monstern, die sich wie zB. die
+ *		Stadtwache in Tadmor staendig bewegt.
+ *
+ *			void set_random_modus("call_out")
+ *
+ *		Vor exzessiven Gebrauch sei gewarnt, uU wird dadurch
+ *		das Mud stark gebremst.
+ *
+ *
+ * Wie 'aktiv' ist das Monster oder wie haeufig startet es ein Kommando ?
+ *
+ *
+ *	Dies setzt man mit:
+ *
+ *		void set_activity(int prozent)
+ *
+ *	Man gibt hierbei die Wahrscheinlicheit einer Aktion in % an.
+ *	Voreinstellung sind 10%.
+ *		
+ *		Im "heart_beat"-modus:	100 : jeder heart_beat (1-2 Sekunden)
+ *					1   : jeden 100. heart_beat (3 Minuten)
+ *
+ *		Im "call_out"-modus:	100 : Minimum      0 Sekunden
+ *					      Maximum      2 Sekunden
+ *					      Mittelwert   1 Sekunde
+ *					1   : Minimum      0 Sekunden
+ *					      Maximum    200 Sekunden
+ *					      Mittelwert 100 Sekunden
+ *
+ *
+ * Man muss das ganze noch mit dem Aufruf:
+ *
+ *		set_start_random(1)
+ *
+ * aktivieren und kann es mit:
+ *
+ *		set_start_random(0);
+ *
+ * wieder abstellen.
+ *
+ * Ein konkretes Beispiel findet man in:
+ *
+ *			/d/Vaniorh/Tadmor/Strassen/npc/bettler.c
+ *
+ *
+ *
+ *
+ * Interne Struktur der random_rollen:
+ *
+ *	random_rollen["rollen"] :	String-Feld mit den einzelnen
+ *					Kommandos bzw Namen der
+ *					Rollen/Kampagnen.
+ *
+ *	random_rollen["orte"]   :   mapping mit Orten als indices.
+ *				    Pro Ort ein Mapping mit Integer als
+ *				    Indices; fortlaufend nicht ueberlappend
+ *				    von 0 bis 1439 Minuten des Tages)
+ *				    Eintraege: Integer-Feld mit den
+ *				    Indices auf random_rollen["rollen"];
+ *				
+ */
+
+#pragma save_types
+#pragma strong_types
+
+#include <error.h>
+
+private mapping random_rollen = ([ "rollen" : ({}), "orte" : ([]) ]);
+
+private int random_start;
+private string random_modus = "heart_beat";
+private int aktivitaet = 10;
+private int actdelay;
+private int act_timestamp;
+
+varargs int starte_rolle(string rollenname, string label, varargs mixed *params);
+int starte_kampagne(string name);
+string func_parser(string command);
+
+/*
+FUNKTION: query_random_activities
+DEKLARATION: mapping query_random_activities()
+BESCHREIBUNG:
+Liefert die interne Datenstruktur mit den Zufallshandlungen des Monsters.
+
+ACHTUNG: Diese Funktion sollte nur zu Debugzwecken genutzt werden, da sich
+diese Datenstruktur aendern kann.
+
+Dieses Mapping besitzt zwei Eintraege:
+
+    query_random_activities()["rollen"]
+        Array aus Strings mit den einzelnen den Kommandos bzw Namen der
+	Rollen/Kampagnen (so wie sie bei set/add_random_activities
+	angegeben wurden)
+	
+    query_random_activities()["orte"]
+        Mapping mit den moeglichen Orten als Indizes ("*" steht fuer alle
+	Orte). Pro Ort ein Mapping mit Integer (0 bis 1439 Minuten des
+	Tages) als Indizes, wobei fuer eine Tageszeit der Eintrag mit
+	groessten Nummer, welche kleiner oder gleich der Tageszeit ist,
+	gueltig ist. Als Werte enthaelt dieses Mapping ein Array
+	mit den Indizes fuer query_random_activities()["rollen"].
+
+VERWEISE: add_random_activities, query_random_modus, query_activity,
+          query_start_random
+GRUPPEN: monster
+*/
+mapping query_random_activities()
+{
+  return random_rollen;
+}
+
+/*
+Gueltige Werte fuer add_zeit:
+ begin: zwischen 0 und 2359
+ end:   zwischen 1 und 2400
+ wobei end groesser als begin sein muss.
+*/
+void add_zeit(int begin, int end, string ort, int rolle)
+{
+  int *i, a, p, *old_begin, *before;
+  mapping zeiten;
+
+  if(begin < 0 || begin > 2359 || end < 1 || end > 2400 || begin >= end)
+    return;
+
+  zeiten = random_rollen["orte"][ort];
+  i = m_indices(zeiten);
+
+  // Es sind noch keine Zeiten eingetragen:
+  if(!sizeof(i))
+  {
+    zeiten[begin] = ({ rolle });
+
+    if(end < 2400)
+      zeiten[end] = ({});
+
+    return;
+  }
+
+  // Pruefen, ob zu diesem Zeitpunkt bereits etwas eingetragen ist:
+  if( (p=member(i,begin)) >= 0 )
+  {
+    // Alten Startpunkt merken, um das Ende korrekt eintragen zu
+    // koennen.
+    old_begin = copy(zeiten[begin]);
+    zeiten[begin]+=({ rolle });
+
+  }
+
+  else
+  {
+    // Es gibt keinen Eintrag, wir muessen also einen neuen machen.
+    zeiten[begin] = ({ rolle });
+
+    // Da wir das Mapping geaendert haben, unsere Variablen auch aendern:
+    i = sort_array( i+({ begin }), #'> );
+
+    // Rollen des vorherigen Eintrags uebernehmen:
+    if( (a=member(i,begin)) > 0 )
+      zeiten[begin] += copy(zeiten[i[a-1]]);
+  }
+
+  // Eintraege bis zum Ende um unsere Rolle erweitern:
+  before = filter(i,(: $1 > $2 && $1 < $3 :),begin,end);
+
+  if(sizeof(before))
+  {
+    before = sort_array(before,#'<);
+
+    // Vorherigen Eintrag ans Ende setzen (ohne die neue Rolle)
+    if(end != 2400 && !zeiten[end])
+    {
+      zeiten[end] = copy(zeiten[before[0]]);
+    }
+
+    // Unsere Rolle in den vorherigen Eintraegen eintragen
+    for(a=sizeof(before); a--; )
+    {
+      zeiten[before[a]] += ({ rolle });
+    }
+  }
+
+  else // es gibt keine Eintraege zwischen begin und end
+  {
+    if(old_begin && end != 2400)
+    {
+      if(!zeiten[end])
+      {
+        zeiten[end] = old_begin;
+      }
+    }
+  }
+
+  // End-Eintrag nochmals pruefen:
+  if(end != 2400 && !zeiten[end])
+  {
+    zeiten[end] = ({});
+  }
+}
+
+// Wandelt einen String "1033" in die Anzahl Minuten um
+int to_minutes(string time)
+{
+  int hours, minutes;
+
+  if((hours = to_int(time[<4..<3])) < 0 || hours > 23)
+    return -1;
+
+  if((minutes = to_int(time[<2..<1])) < 0 || minutes > 59)
+    return -1;
+
+  return (hours*60)+minutes;
+}
+
+// Fuegt eine Rolle fuer Ort zu den uebergebenen Zeiten ein
+void add_act(mixed rolle, string ort, string * zeiten)
+{
+  int a, num, beginn, ende;
+  string begin, end;
+
+  // Nachsehen, ob die Rolle schon vorhanden ist:
+  if((num=member(random_rollen["rollen"],rolle)) == -1)
+  {
+    // Rolle hinzufuegen, Index merken und Orteintrag machen
+    random_rollen["rollen"] += ({ rolle });
+    num = sizeof(random_rollen["rollen"]) - 1;
+  }
+
+  if(!member(random_rollen["orte"],ort))
+    random_rollen["orte"][ort] = ([ 0 : ({}) ]);
+
+  for(a=sizeof(zeiten); a--; )
+  {
+    if(!zeiten[a] || zeiten[a] == "*")
+    {
+      add_zeit(0,2400,ort,num);
+      continue;
+    }
+
+    if(sscanf(zeiten[a],"%s-%s",begin,end) != 2 ||
+             (beginn = to_minutes(begin)) == -1 ||
+             (ende = to_minutes(end)) == -1 )
+      continue;
+
+    if(ende == 0)
+      ende = 2400; // Dummy
+
+    if(beginn > ende)
+    {
+      add_zeit(beginn, 2400, ort, num);
+      beginn = 0;
+    }
+
+    add_zeit(beginn, (beginn==ende ? ende+1 : ende), ort, num);
+  }
+}
+
+/*
+FUNKTION: add_random_activities
+DEKLARATION: void add_random_activities(mapping aktionen)
+BESCHREIBUNG:
+Damit kann ein Monster ziemlich gut mit einer (Zufalls-)
+Handlung ausgestattet werden. Angegeben werden koennen:
+  - Kommandos per do_command (evtl. Seele nicht vergessen)
+  - Rollen
+  - Kampagnen
+random_start erkennt die verschiedenen Moeglichkeiten anhand des ersten
+Zeichens:
+
+  a. "!<kommando>"     <kommando> wird an do_command uebergeben;
+                       zB: "!sage Warum gibt mir keiner etwas Geld?"
+                           "!mache schaut sich um."
+
+  b. "$<rollenname>"   <rollenname> ist der Filename einer Rolle;
+                       zB: "$/d/Vaniorh/Tadmor/Strassen/rollen/zuwenig"
+                       Label mit: "$/pfad/zum/rollenfile,label"
+
+  c. "&<kampagnename>" <kampagnenname> ist der Filename einer Kampagne;
+                       zB: "&/d/Vaniorh/Tadmor/Strassen/rollen/sauftour.kamp"
+
+  d. <array>           Darf mehrere Aktionen enthalten, die direkt hinter-
+                       einander ausgefuehrt werden.
+                       zB: ({"!grinse breit", 
+		             "!emote Du kannst einige Zahnluecken erkennen."})
+
+  e. <closure>         Closures werden mit dem NPC als Parameter aufgerufen.
+                       Rueckgabewert darf 0 oder eines von a. bis d. sein.
+
+  Es ist moeglich, eine Rolle in Abhaengigkeit von bestimmten Orten starten
+  zu lassen, hierbei kann man komplette Filenamen oder auch Directorynamen
+  (bzw. Substrings davon) angeben;
+
+  z.B.:
+
+     "/room/rathaus/treppe"    Kommando wird nur in diesem Raum gestartet;
+     "/d/Vaniorh"              Kommando wird ueberall in Vaniorh gestartet;
+     "*" oder 0                Kommando wird ueberall in UNItopia gestartet.
+
+  Weiterhin kann eine Rolle auch nur innerhalb bestimmter Zeitraeume gestartet
+  werden; Zeitraeume gibt man in der Form "hhmm-hhmm" an.
+
+  z.B.: "400-1100"            von 4 Uhr bis 11 Uhr
+        "1200-2359"            von 12 Uhr bis 23 Uhr 59
+        "*" oder 0             zu beliebigen Zeiten.
+
+  Alle diese Parameter werden in folgenden Aufruf zusammengefasst:
+
+  void add_random_activities( ([
+    activity1 : ([ ort1 : ({ zeit1, zeit2, .. }),
+                   ort2 :   ..... ,
+                   .....
+                ]),
+    activity2 : ..... ,
+    .......
+  ]);
+
+  Beispiel:
+
+  add_random_activities( ([
+    "!sage Wie gehts?" : 0 ,
+    "!echo $Der() streckt sich und gaehnt herzhaft." : 0;
+    "!sage Schoenes Wetter heute morgen!" : ([ "*" : ({ "400-1000" }) ]),
+    "!sage Warst du schon Mittagessen? Westlich von hier gibts eine gute "+
+      "Wirtschaft." : ([ "/d/Vaniorh/uluji/market_place" :({"1130-1330"}) ]),
+    "!sage Wie waers mit einem Kaffee?" :
+      ([ "*": ({ "800-1000", "1300-1600" }) ])
+  ]));
+VERWEISE: set_random_activities, set_start_random, set_activity,
+          set_activity_delay, set_random_modus
+GRUPPEN: monster
+*/
+void add_random_activities(mapping defs)
+{
+  string * rn, *on;
+  int a, b;
+  mapping ort;
+
+  if(!mappingp(defs))
+    return;
+
+  rn = m_indices(defs);
+
+  foreach(mixed rolle, mapping orte: defs)
+  {
+    if(!sizeof(orte))
+      orte = (["*": ({"*"}) ]);
+  
+    foreach(string my_ort, string *zeiten: orte)
+    {
+      if(!sizeof(zeiten))
+        zeiten = ({"*"});
+      add_act(rolle, my_ort, zeiten);
+    }
+  }
+}
+
+/*
+FUNKTION: query_current_vtime
+DEKLARATION: int query_current_vtime()
+BESCHREIBUNG:
+Liefert die aktuelle vtime. Kann ueberlagert werden, um fuer die 
+random_activities einen anderen Zeitgeber als vtime() zu nutzen.
+VERWEISE: add_random_activities, set_random_activities
+GRUPPEN: monster
+*/
+public int query_current_vtime()
+{
+    return vtime();
+}
+
+/*
+FUNKTION: set_random_activities
+DEKLARATION: void set_random_activities(mapping aktionen)
+BESCHREIBUNG:
+Damit kann ein Monster ziemlich gut mit einer (Zufalls-)
+Handlung ausgestattet werden. Angegeben werden koennen:
+  - Kommandos per do_command (evtl. Seele nicht vergessen)
+  - Rollen
+  - Kampagnen
+random_start erkennt die verschiedenen Moeglichkeiten anhand des ersten
+Zeichens:
+
+  a. !<kommando>      <kommando> wird an do_command uebergeben;
+                      zB: "!sage Warum gibt mir keiner etwas Geld?"
+                          "!mache schaut sich um."
+
+  b. $<rollenname>    <rollenname> ist der Filename einer Rolle;
+                      zB: "$/d/Vaniorh/Tadmor/Strassen/rollen/zuwenig"
+                      Label mit: "$/pfad/zum/rollenfile,label"
+
+  c. &<kampagnename>  <kampagnenname> ist der Filename einer Kampagne;
+                      zB: "&/d/Vaniorh/Tadmor/Strassen/rollen/sauftour.kamp"
+
+  d. <array>           Darf mehrere Aktionen enthalten, die direkt hinter-
+                       einander ausgefuehrt werden.
+                       zB: ({"!grinse breit", 
+                             "!emote Du kannst einige Zahnluecken erkennen."})
+
+  e. <closure>         Closures werden mit dem NPC als Parameter aufgerufen.
+                       Rueckgabewert darf 0 oder eines von a. bis d. sein.
+
+  Es ist moeglich, eine Rolle in Abhaengigkeit von bestimmten Orten starten
+  zu lassen, hierbei kann man komplette Filenamen oder auch Directorynamen
+  (bzw. Substrings davon) angeben;
+
+  z.B.:
+
+     "/room/rathaus/treppe"    Kommando wird nur in diesem Raum gestartet;
+     "/d/Vaniorh"              Kommando wird ueberall in Vaniorh gestartet;
+     "*" oder 0                Kommando wird ueberall in UNItopia gestartet.
+
+  Weiterhin kann eine Rolle auch nur innerhalb bestimmter Zeitraeume gestartet
+  werden; Zeitraeume gibt man in der Form "hhmm-hhmm" an.
+
+  z.B.: "400-1100"            von 4 Uhr bis 11 Uhr
+        "1200-2359"            von 12 Uhr bis 23 Uhr 59
+        "*" oder 0             zu beliebigen Zeiten.
+
+  Alle diese Parameter werden in folgenden Aufruf zusammengefasst:
+
+  void add_random_activities( ([
+    activity1 : ([ ort1 : ({ zeit1, zeit2, .. }),
+                   ort2 :   ..... ,
+                   .....
+                ]),
+    activity2 : ..... ,
+    .......
+  ]);
+
+  Beispiel:
+
+  add_random_activities( ([
+    "!sage Wie gehts?" : 0 ,
+    "!echo $Der() streckt sich und gaehnt herzhaft." : 0;
+    "!sage Schoenes Wetter heute morgen!" : ([ "*" : ({ "400-1000" }) ]),
+    "!sage Warst du schon Mittagessen? Westlich von hier gibts eine gute "+
+      "Wirtschaft." : ([ "/d/Vaniorh/uluji/market_place" :({"1130-1330"}) ]),
+    "!sage Wie waers mit einem Kaffee?" :
+      ([ "*": ({ "800-1000", "1300-1600" }) ])
+  ]));
+VERWEISE: add_random_activities, set_start_random, set_activity,
+          set_activity_delay, set_random_modus
+GRUPPEN: monster
+*/
+void set_random_activities(mapping defs)
+{
+  random_rollen = ([ "rollen" : ({}), "orte" : ([]) ]);
+
+  add_random_activities(defs);
+}
+
+mixed get_random_activity()
+{
+  string ort, *orte, *zeiten;
+  int a, stunde, minute, time, p, *found, *satz, *s;
+  mapping rollen;
+
+  if(!environment())
+    return 0;
+
+  ort = map2domain(object_name(environment()),1);
+  orte = m_indices(random_rollen["orte"]);
+
+  found = ({ member(orte,"*") }) - ({-1});
+
+  // Nach weiteren zutreffenden Orten suchen:
+  for(a=sizeof(orte); a--; )
+  {
+    if( (ort && !strstr(ort, orte[a])) ||
+        !strstr(object_name(environment()), orte[a]) )
+    {
+      found += ({a});
+    }
+  }
+
+  if(!sizeof(found))
+    return 0;
+
+  satz = ({});
+
+  if(sscanf(shortvtimestr(this_object()->query_current_vtime(),0,1),
+                "%d:%d:%!d",stunde, minute) != 2)
+  {
+    raise_error("\nFehler: Kann Zeit nicht auslesen!\n");
+    return 0;
+  }
+
+  time = stunde*60 + minute;
+
+  // Die Orte durchgehen, pruefen, Saetze sammeln
+  for(a=sizeof(found); a--; )
+  {
+    rollen = random_rollen["orte"][orte[found[a]]];
+    // rollen ist jetzt das Mapping mit Zeitkeys des Ortes
+
+    zeiten = sort_array(m_indices(rollen), #'>);
+    // zeiten ist nun ein Array von Minutenzahlen
+
+    if( (p=member(zeiten,time)) == -1 )
+    {
+      // Die momentane Zeit ist nicht als Key vorhanden. Vorherigen Key suchen:
+      s = sort_array( zeiten + ({time}), #'> );
+      p = member(s,time) - 1;
+    }
+
+    satz += rollen[zeiten[p]];
+
+  }
+
+  if(!sizeof(satz))
+    return 0;
+
+  return random_rollen["rollen"][satz[random(sizeof(satz))]];
+}
+
+/*
+FUNKTION: query_activity
+DEKLARATION: int query_activity(void)
+BESCHREIBUNG:
+Liefert die 'laberrate' eines Monsters zurueck, die zuvor mit
+set_activity(laberrate) gesetzt wurde.
+VERWEISE: set_activity, set_activity_delay, add_random_activities
+GRUPPEN: monster
+*/
+int query_activity()
+{
+  return aktivitaet;
+}
+
+/*
+FUNKTION: set_activity
+DEKLARATION: void set_activity(int laberrate)
+BESCHREIBUNG:
+set_activity setzt die Aktivitaet eines Monsters. Das Argument
+'laberrate' sollte Werte zwischen 0 und 100 haben. Alles kleiner als 0 wird
+als 0 interpretiert, alles groesser 100 wird als 100 akzeptiert.
+Je groesser 'laberrate', desto mehr Aktionen fuehrt das Monster aus, die
+zuvor mit add_random_activities gesetzt wurden.
+Wird als Argument 0 uebergeben, so werden keine Aktivitaeten ausgefuehrt.
+Das Monster verhaelt sich mucksmaeuschenstill. Mit Argument 100 wird man
+seines Lebens nicht mehr froh. Ist die Rate groesser als 10, so fuehlt man
+sich schon genervt.
+Der Defaultwert fuer die Aktivitaet ist daher 10.
+
+Wie oft wird eine Aktivitaet ausgefuehrt?
+
+      Modus              gesetzte Rate             wird wie oft ausgefuehrt
+
+  "heart_beat"                100             jeder heart_beat (1-2 Sekunden)
+                                1             jeden 100. heart_beat (3 Minuten)
+
+  "call_out"                  100               Minimum      0 Sekunden
+                                                Maximum      2 Sekunden
+                                                Mittelwert   1 Sekunde
+                                1               Minimum      0 Sekunden
+                                                Maximum    200 Sekunden
+                                                Mittelwert 100 Sekunden
+
+Die Aktivitaet eines Monsters hat nichts mit der set_parse_conversation zu
+tun, durch die ein Monster auf Ansprache reagiert.
+VERWEISE: query_activity, set_activity_delay, add_random_activities,
+          set_random_modus
+GRUPPEN: monster
+*/
+void set_activity(int laberrate)
+{
+  aktivitaet = laberrate;
+
+  if(aktivitaet < 0)
+    aktivitaet = 0;
+
+  else if(aktivitaet > 99)
+    aktivitaet = 99;
+
+}
+
+/*
+FUNKTION: set_start_random
+DEKLARATION: void set_start_random(int flag)
+BESCHREIBUNG:
+Startet die Aktivitaet eines Monsters, die ihm zuvor mit
+add_random_activities mitgegeben wurden. Ist flag == 0, so wird die
+Handlung gestoppt. Hat Flag einen Wert != 0, so nimmt das Monster seine
+Taetigkeit wieder auf.
+VERWEISE: query_start_random, add_random_activities, set_random_modus,
+   query_random_modus
+GRUPPEN: monster
+*/
+void set_start_random(int a)
+{
+  random_start = a ? 1 : 0;
+}
+
+/*
+FUNKTION: query_start_random
+DEKLARATION: int query_start_random(void)
+BESCHREIBUNG:
+Liefert den Zustand des Monsters zurueck, ob es und seine
+Aktivitaeten schon gestartet wurden.
+Returnwert 1: das Monster handelt schon
+Returnwert 0: das Monster tut noch nichts
+VERWEISE: set_start_random, add_random_activities, set_random_modus,
+   query_random_modus
+GRUPPEN: monster
+*/
+int query_start_random()
+{
+  return random_start;
+}
+
+/*
+FUNKTION: set_random_modus
+DEKLARATION: void set_random_modus(string mode)
+BESCHREIBUNG:
+Setzt den Modus, nach dem ein Monster handeln soll.
+Es gibt zwei Modi, die das Monster kennt:
+
+  1. Nur wenn ein Spieler sich im selben Raum wie das Monster befindet.
+     Dies ist die Voreinstellung und erspart dem Game-Driver viel unnoetige
+     Arbeit, denn meistens machen Aktivitaeten von Monster keinen Sinn wenn
+     kein Spieler da ist, um zuzuschauen oder darauf zu reagieren.
+
+     Der Modus wird gesetzt mit: void set_random_modus("heart_beat");
+
+  2. Staendig, egal ob Spieler anwesend sind oder nicht.
+     Das macht Sinn bei Monstern, die sich wie zB. die Stadtwache in Tadmor
+     staendig bewegt.
+
+     Der Modus wird gesetzt mit: void set_random_modus("call_out")
+
+     Vor exzessiven Gebrauch sei gewarnt, unter Umstaenden wird dadurch das
+     Mud stark gebremst.
+
+Defaultwert ist "heart_beat".
+
+VERWEISE: add_random_activities, query_random_modus, set_activity,
+          set_activity_delay
+GRUPPEN: monster
+*/
+void set_random_modus(string mode)
+{
+  random_modus = mode;
+}
+
+/*
+FUNKTION: query_random_modus
+DEKLARATION: string query_random_modus(void)
+BESCHREIBUNG:
+Liefert den Modus als String zurueck, nach dem ein Monster
+handelt. Dieser muss vorher mit set_random_modus gesetzt worden sein.
+VERWEISE: add_random_activities, set_random_modus
+GRUPPEN: monster
+*/
+string query_random_modus()
+{
+  return random_modus;
+}
+
+/*
+FUNKTION: set_activity_delay
+DEKLARATION: void set_activity_delay(int delay)
+BESCHREIBUNG:
+Setzt die garantierte Mindestruhezeit zwischen zwei random_activities
+auf 'delay' Sekunden.
+
+Das bedeutet, dass bei random_modus "heart_beat" 'delay' Sekunden nach einer
+Aktion die naechste Aktion in jedem weiteren Herzschlag mit Wahrscheinlichkeit
+query_activity() Prozent kommen kann.
+Nach Ausfuehrung der Aktion wird die Referenzzeit fuer 'delay' neu gesetzt.
+
+Bei random_modus "call_out" wird ein call_out der Laenge
+delay + (Zufallswert zwischen 1 und 2*(100-query_activity())) gestartet, der
+die naechste Aktion ausloest.
+
+VERWEISE: query_activity_delay, set_random_modus, set_activity
+GRUPPEN: monster
+*/
+void set_activity_delay(int delay)
+{
+    actdelay = max(delay,0);
+}
+
+/*
+FUNKTION: query_activity_delay
+DEKLARATION: int query_activity_delay()
+BESCHREIBUNG:
+Info, welcher Wert fuer die garantierte Mindestruhezeit zwischen zwei
+random_activities per set_activity_delay gesetzt wurde.
+VERWEISE: set_activity_delay
+GRUPPEN: monster
+*/
+int query_activity_delay()
+{
+    return actdelay;
+}
+
+void do_random_activity()
+{
+  mixed act, actions;
+  string cmd;
+
+  if (!(actions = get_random_activity()))
+    return;
+
+  actions = funcall(actions, this_object());
+
+  if(!pointerp(actions))
+      actions = ({actions});
+
+  foreach(act : actions)
+  {
+      act = funcall(act, this_object());
+
+      if(!act)
+          continue;
+
+      if(!stringp(act))
+      {
+          do_warning(wrap(sprintf("do_random_activity: %#Q ist kein String.",
+                                  act)));
+          continue;
+      }
+
+      switch (act[0])
+      {
+        case '!' :
+          if (cmd = func_parser(act[1..]))
+            this_object()->do_command(cmd);
+          break;
+
+        case '$' :
+          string * split = explode(act[1..], ",");
+          apply(#'starte_rolle, split);
+          break;
+
+        case '&' :
+          starte_kampagne(act[1..]);
+          break;
+
+        default:
+          do_warning(wrap(sprintf("do_random_activity: %#Q beginnt "
+                                  "nicht mit !$&", act)));
+      }
+   }
+}
+
+void start_random_activity()
+{
+  switch(random_modus)
+  {
+    case "call_out":
+      if(!query_start_random())
+      {
+        remove_call_out("start_random_activity");
+      }
+      else
+      {
+        if(environment() && (find_call_out("start_random_activity") == -1))
+        {
+          call_out("start_random_activity",
+                   actdelay+random(2*(101-query_activity()))+1);
+          do_random_activity();
+        }
+      }
+      break;
+    case "heart_beat":
+      if(query_start_random() && ((time() - act_timestamp) > actdelay) &&
+         (random(100) < query_activity()))
+      {
+        act_timestamp = time();
+        do_random_activity();
+      }
+      break;
+  }
+}
+
+protected void start_activity_call_outs()
+{
+    if (random_modus == "call_out" &&
+        find_call_out("start_random_activity") == -1)
+	    call_out("start_random_activity",
+	        random(actdelay + 2*(101-query_activity()))+1);
+}
+

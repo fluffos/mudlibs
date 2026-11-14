@@ -1,0 +1,451 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/weapon/nahkampf_waffe.c
+// Description:
+//
+// $Log: nahkampf_waffe.c,v $
+// Revision 1.20  2015/07/28 17:20:53  myonara
+// Neue Waffenlogik MONSTER_SCHIESSEN_IM_HEARTBEAT
+//
+// Revision 1.19  2012-09-14 19:11:41  gnomi
+// Scientus: init_weapon setzt ein paar damage_types.
+//
+// Revision 1.18  2005/05/06 22:59:55  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.17  2005/02/17 20:29:34  gnomi
+// Vorbereitende Aenderungen fuers Beschuetzen.
+//
+// Revision 1.16  2005/01/05 21:49:21  gnomi
+// Typo.
+//
+// Revision 1.15  2004/11/27 21:25:21  gnomi
+// add_hp-Aenderung: add_hp-Aufrufe angepasst.
+//
+// Revision 1.14  2004/02/18 22:33:01  gnomi
+// init_weapon: (1,2) als Minimum fuer set_damage festgelegt.
+// (set_damage akzeptiert keine Nullwerte.)
+//
+// Revision 1.13  2003/08/29 18:18:25  menaures
+// weapon_logic virtual inheriten
+//
+// Revision 1.12  2002/11/20 04:07:40  gnomi
+// query_learning_type ausgebaut.
+//
+// Revision 1.11  2002/10/16 00:58:59  gnomi
+// init_weapon: Handwaffen nun moeglich. Ausserdem wurde bei der
+// set_no_store-Abfrage eine falsche Variable genommen.
+//
+// Revision 1.10  2002/07/01 23:25:58  gnomi
+// Geschlecht der Axt korrigiert.
+//
+// Revision 1.9  2002/06/24 13:37:08  gnomi
+// Pulamis init_weapon-Dokuergaenzung eingebaut.
+//
+// Revision 1.8  2001/07/10 00:04:05  gnomi
+// notify_hit eingebaut.
+//
+// Revision 1.7  2001/06/25 11:48:34  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.6  2001/05/27 21:21:59  sissi
+// Learning Types Handling geaendert.
+// Jede Waffe weiss jetzt selber, was sie ist, und vergibt selber ihre Skills.
+//
+// Revision 1.5  2001/04/24 21:45:08  gnomi
+// Doku: Deklarationen in einer Zeile schreiben.
+//
+// Revision 1.4  2001/02/26 03:41:59  gnomi
+// Negative Prozentwerte haben bei init_weapon eine besondere Bedeutung.
+//
+// Revision 1.3  2001/02/25 05:12:48  gnomi
+// init_weapon
+//
+// Revision 1.2  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+virtual inherit "/i/weapon/weapon_logic";
+
+#include <config.h>
+#include <add_hp.h>
+#include <error.h>
+#ifdef MONSTER_SCHIESSEN_IM_HEARTBEAT
+#include <attack.h>
+#endif
+#include <misc.h>
+
+private int damage;
+
+void do_wield()
+{
+    damage = -1;
+    ::do_wield();
+}
+
+void create()
+{
+    set_id(({"waffe","nahkampfwaffe"}));
+    set_class_id(({"waffe","nahkampfwaffe"}));
+    set_weight(1);
+    set_name("nahkampfwaffe");
+    set_weapon_class("nahkampf");
+    set_gender("weiblich");
+    set_material("metall");
+    set_long("Du siehst nichts Besonderes.\n");
+    set_value(1,5);
+    if (program_name(this_object())==__FILE__) // fuer replace_program-Objekte
+        clear_initial_conservation_data();
+    seteuid(getuid());
+}
+
+#ifdef MONSTER_SCHIESSEN_IM_HEARTBEAT
+varargs int do_attack(object enemy, int flag)
+ // flag == 1:	Angriff ist erfolglos, add_hp wird im Feind mit 0 aufgerufen.
+ //		Kampfmeldungen werden jedoch generiert, es ist also ein
+ //		"programmiertes, normales verfehlen", was ein Spieler nicht
+ //		als solches erkennen kann.
+{
+   object owner;
+   int extra_damage, applied_damage, critical;
+
+   if(!enemy ||
+      !(owner = environment()) ||
+      !living(owner) ||
+      !query_wield())
+      return ATTACK_DA_ABBRUCH;
+
+   if(query_broken())
+      return ATTACK_DA_WAR_BEREITS_KAPUTT;
+      
+   if(!check_life())
+      return ATTACK_DA_KAPUTT;
+
+   if (flag == 1)
+      return enemy->add_hp(0, ([AH_ATTACKER: owner]) ) >= 0 ? ATTACK_DA_OK :
+         ATTACK_DA_ABBRUCH;
+
+   switch(random(10))
+   {
+      case 0:
+        owner->add_skill_points(query_skill_path(),LEARNING_NAHKAMPF);
+        break;
+      case 5:
+        damage = compute_damage();
+   }
+
+   if(damage <= 0)
+      damage = compute_damage();
+   if(damage <= 0)
+      return ATTACK_DA_ABBRUCH;
+
+   if((critical = critical_hit()) && 
+      !(interactive(enemy) && enemy->query_age() < 86400))
+   {
+      // maximaler Waffenschaden!
+      applied_damage = compute_damage(critical);
+   }
+   else
+      applied_damage = random(damage+1);
+   if (applied_damage < 0)
+       applied_damage = 0;
+
+#ifdef FIGHT_DEBUG
+   fight_debug(owner,damage,extra_damage,applied_damage);
+#endif
+
+    return owner->do_hit(
+        ([
+            AH_VICTIM: enemy,
+            AH_DAMAGE: applied_damage,
+            AH_FLAGS: critical?AH_CRITICAL:0,
+            AH_WEAPON: this_object(),
+        ]));
+
+}
+#else //MONSTER_SCHIESSEN_IM_HEARTBEAT
+varargs int do_attack(object enemy, int flag)
+ // flag == 1:	Angriff ist erfolglos, add_hp wird im Feind mit 0 aufgerufen.
+ //		Kampfmeldungen werden jedoch generiert, es ist also ein
+ //		"programmiertes, normales verfehlen", was ein Spieler nicht
+ //		als solches erkennen kann.
+{
+    object owner;
+    int applied_damage, critical;
+
+    if(!enemy ||
+	!(owner = environment()) ||
+	!living(owner) ||
+	!check_life() ||
+	!query_wield())
+	    return 0;
+
+    if (flag != 1)
+    {
+	switch(random(10))
+	{
+	    case 0:
+		owner->add_skill_points(query_skill_path(),LEARNING_NAHKAMPF);
+		break;
+	    case 5:
+		damage = compute_damage();
+	}
+	
+	if(damage <= 0)
+	    damage = compute_damage();
+	
+	if(damage <= 0)
+	    return 0;
+
+	critical = critical_hit();
+
+	if(critical && !(interactive(enemy) && enemy->query_age() < 86400))
+	     // maximaler Waffenschaden!
+	    applied_damage = compute_damage(critical);
+	else
+	    applied_damage = random(damage+1);
+	    
+	if (applied_damage < 0)
+	    applied_damage = 0;
+    }
+    
+#ifdef FIGHT_DEBUG
+    fight_debug(owner,damage,extra_damage,applied_damage);
+#endif
+
+    return owner->do_hit(
+        ([
+            AH_VICTIM: enemy,
+            AH_DAMAGE: applied_damage,
+            AH_FLAGS: critical?AH_CRITICAL:0,
+            AH_WEAPON: this_object(),
+        ]));
+}
+#endif //MONSTER_SCHIESSEN_IM_HEARTBEAT
+
+/*
+FUNKTION: init_weapon
+DEKLARATION: init_weapon(string kategorie, int max_schaden_in_prozent, int min_schaden_in_prozent, int leben_in_prozent)
+BESCHREIBUNG:
+Setzt den Skillpfad, die Lebensdauer, Schlagkraft, das Gewicht und den
+Wert der Waffe aufgrund der Richtlinien. kategorie ist dabei der Waffentyp,
+also sowas wie "kurzschwert","messer","degen" usw. max_schaden_in_prozent
+gibt an, wie stark die Waffe bezueglich den Richtlinien sein soll. Ein Wert
+von 100 entspricht den Richtlinien, 200 dem Grenzwert. Von einem negativen
+Wert wird der absolute Wert genommen, wobei beachtet wird, dass die Waffe
+verkaufbar bleibt. min_schaden_in_prozent ist das Aequivalent fuer den
+Anfaengerschaden, leben_in_prozent fuer die Lebensdauer.
+
+
+Folgende Kategorien gibt es:
+
+Nahkampfwaffen    Schusswaffen    Wurfwaffen    Defensivwaffen
+--------------    ------------    ----------    --------------
+axt               armbrust        speer         grossschild
+degen             blasrohr        wurfmesser    kleinschild
+kurzschwert       bogen
+keule             schleuder
+langschwert
+messer
+peitsche
+saebel
+stock
+hand (wird als Handschuh initialisiert)
+
+
+Bei Schusswaffen werden zusaetzlich noch diese Pfeil- und Koecher-IDs gesetzt:
+
+Schusswaffe    Pfeil-ID         Koecher-ID
+-----------    -------------    ------------
+armbrust       bolzen           bolzentasche
+blasrohr       blasrohrpfeil    -
+bogen          pfeil            koecher
+schleuder      stein            -
+
+VERWEISE: set_damage, set_life, set_value, set_skill_path, set_weight,
+          set_pfeil_id, set_koecher_id, init_geschoss
+GRUPPEN: waffen
+*/
+varargs void init_weapon(string kategorie, int max_damage_percent,
+    int min_damage_percent, int life_percent)
+{
+    int min,max,grenze,schaden,max_wert, min_wert;
+    int tmp;
+
+    switch(lower_case(kategorie))
+    {
+        default:
+	    do_error("Unbekannte Waffenkategorie '"+kategorie+"'!\n");
+	    return;
+	case "messer":
+	    set_skill_path( ({"skill","offensiv","scharf","messer"}) );
+	    set_name("messer");
+	    set_gender("saechlich");
+	    set_id(({"messer"}));
+	    set_damage_type(({"stich","schnitt"}));
+	    min=2; max=7; grenze=10;
+	    break;
+	case "kurzschwert":
+	    set_skill_path( ({"skill","offensiv","scharf","schwert", "kurzschwert"}) );
+	    set_name("kurzschwert");
+	    set_gender("saechlich");
+	    set_id(({"schwert","kurzschwert"}));
+	    set_damage_type(({"stich","schnitt"}));
+	    min=5; max=12; grenze=20;
+	    break;
+	case "langschwert":
+	    set_skill_path( ({"skill","offensiv","scharf","schwert", "langschwert"}) );
+	    set_name("langschwert");
+	    set_gender("saechlich");
+	    set_id(({"schwert","langschwert"}));
+	    set_damage_type(({"stich","schnitt"}));
+	    min=4; max=22; grenze=30;
+	    break;
+	case "saebel":
+	    set_skill_path( ({"skill","offensiv","scharf","saebel"}) );
+	    set_name("saebel");
+	    set_gender("maennlich");
+	    set_id(({"saebel"}));
+	    set_damage_type(({"schnitt"}));
+	    min=4; max=16; grenze=25;
+	    break;
+	case "degen":
+	    set_skill_path( ({"skill","offensiv","scharf","degen"}) );
+	    set_name("degen");
+	    set_gender("maennlich");
+	    set_id(({"degen"}));
+	    set_damage_type(({"stich","schnitt"}));
+	    min=3; max=15; grenze=25;
+	    break;
+	case "axt":
+	    set_skill_path( ({"skill","offensiv","scharf","axt"}) );
+	    set_name("axt");
+	    set_gender("weiblich");
+	    set_id(({"axt"}));
+	    set_damage_type(({"schnitt"}));
+	    min=6; max=18; grenze=30;
+	    break;
+	case "keule":
+	    set_skill_path( ({"skill","offensiv","stumpf","keule"}) );
+	    set_name("keule");
+	    set_gender("weiblich");
+	    set_id(({"keule"}));
+	    set_damage_type(({"stumpf"}));
+	    min=8; max=15; grenze=30;
+	    break;
+	case "peitsche":
+	    set_skill_path( ({"skill","offensiv","stumpf","peitsche"}) );
+	    set_name("peitsche");
+	    set_gender("weiblich");
+	    set_id(({"peitsche"}));
+	    set_damage_type(({"schnitt"}));
+	    min=5; max=15; grenze=20;
+	    break;	    
+	case "stock":
+	    set_skill_path( ({"skill","offensiv","stumpf", "stock"}) );
+	    set_name("stock");
+	    set_gender("maennlich");
+	    set_id(({"stock"}));
+	    set_damage_type(({"stumpf"}));
+	    min=2; max=10; grenze=15;
+	    break;
+	case "hand":
+	    set_skill_path( ({"skill","offensiv","haende"}) );
+	    set_name("handschuh");
+	    set_gender("maennlich");
+	    set_id(({"handschuh"}));
+	    set_damage_type(({"stumpf"}));
+	    min=3; max=7; grenze=9;
+	    break;
+    }
+
+    // Standards setzen.
+    max_damage_percent = max_damage_percent || 100;
+    min_damage_percent = min_damage_percent || max_damage_percent;
+    life_percent = abs(life_percent) || 100;
+    
+    if(max_damage_percent<0)
+    {
+	if(max>20)
+	    schaden = calc_percent(-max_damage_percent, 20, grenze);
+	else
+	    schaden = calc_percent(-max_damage_percent, max, grenze);
+    }
+    else
+	schaden = calc_percent(max_damage_percent, max, grenze);
+
+    if(min_damage_percent<0)
+    {
+	if(max>20)
+	    min = calc_percent(-min_damage_percent, min * 20 / max, grenze*2/3);
+	else
+	    min = calc_percent(-min_damage_percent, min, grenze*2/3);
+    }
+    else
+	min = calc_percent(min_damage_percent, min, grenze*2/3);
+
+    if(min > schaden*2/3) min = schaden*2/3;
+    
+    set_damage(max(min,1),max(schaden,2));
+    set_weight(1+(schaden-1)/5);
+    
+    switch(schaden)
+    {
+	case 0..9:
+	    set_life(calc_percent(
+	        life_percent,
+		({1000,750,660,590,540,500,470,450,430,410})[schaden],
+		({2000,1500,1320,1180,1080,1000,940,900,860,820})[schaden]
+		));
+	    break;
+	case 10..30: // Ab hier linear.
+	    set_life(calc_percent(life_percent,500-schaden*10,1000-schaden*20));
+	    break;
+    }
+
+    if(schaden>20) set_no_store(1);
+    
+    max_wert = 
+        ({ /* 0- 9*/ 50000,20000,12000,7200,4300,2600,1500,900,510,280,
+	   /*10-19*/   160,  110,   76,  59,  49,  43,  39, 35, 31, 28,
+           /*20-30*/    25,   22,   18,  14,  11,   8,   6,  5,  4,  3,  2
+	})[schaden];
+
+    max_wert = query_life() * 50 / max_wert;
+    min_wert = max_wert / 4; //Gibts keine Richtlinie fuer...
+    
+    // So, nun diesen Wert ordentlich aufrunden, da einige Verkaeufer
+    // diesen Wert direkt verwenden.
+    // 2 Stellen genau, der Rest gerundet.
+    tmp=1;
+    while(max_wert>99)
+    {
+	max_wert=(max_wert+8)/10; // Bei 1 koennen wir ruhig abrunden... ;-)
+	tmp*=10;
+    }
+    if(max_wert>49)
+    {
+	max_wert=(max_wert+4)/5;
+	tmp*=5;
+    }
+    max_wert*=tmp;
+
+    tmp=1;
+    while(min_wert>99)
+    {
+	min_wert=(min_wert+8)/10;
+	tmp*=10;
+    }
+    if(min_wert>49)
+    {
+	min_wert=(min_wert+4)/5;
+	tmp*=5;
+    }
+    min_wert*=tmp;
+    
+    set_value(min_wert,max_wert);
+}
+

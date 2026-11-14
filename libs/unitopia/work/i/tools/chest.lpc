@@ -1,0 +1,218 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/object/chest.c
+// Description:	Eine Kiste zum Vergraben von Geld
+// Author:	Francis '92
+// Modified by:	Freaky (16.02.2000) auf /i/base/container umgestellt
+// 		Freaky (07.05.2000) auf /i/object/kiste umgestellt
+//
+// $Log: chest.c,v $
+// Revision 1.2  2013-04-15 17:20:56  sorcerer
+// check_handeln() fuer korrektes PO1 bei Skillvergabe
+//
+// Revision 1.1  2011-12-10 01:19:42  gnomi
+// Schatztruhen umgebaut.
+//
+// Revision 1.5  2008/01/24 22:49:24  gnomi
+// Typo.
+//
+// Revision 1.4  2001/06/25 11:48:23  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.3  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+private functions inherit "/i/money/exchange";
+
+#include <apps.h>
+#include <room.h>
+
+/*
+FUNKTION: query_chest
+DEKLARATION: int query_chest()
+BESCHREIBUNG:
+Wenn diese Funktion 1 liefert, dann ist das Objekt vergrabbar.
+Ein solches Objekt sollte "/i/tools/chest" erben
+(und "*"::create(); nicht vergessen).
+VERWEISE: bury_chest, init_chest
+GRUPPEN: graben
+*/
+int query_chest() { return 1; }
+
+/*
+FUNKTION: bury_chest
+DEKLARATION: mapping bury_chest()
+BESCHREIBUNG:
+Liefert ein Mapping zurueck, welches fuer diese Schatztruhe
+abgespeichert wird. Diese Funktion wird nur einmal aufgerufen
+und zwar kurz, bevor die Truhe zerstoert wird.
+
+Wenn die Truhe ausgegraben wird, bekommt ein neuer Clone
+dieses Mapping via init_chest() uebergeben. Das Mapping
+sollte nur abspeicherbare Werte (keine Objekte oder Closures)
+enthalten.
+
+Mit dem Eintrag CHEST_OB (aus room.h) kann man einen
+alternativen Dateinamen zum Clonen beim Ausgraben angeben.
+Ansonsten sind die Eintraege frei waehlbar.
+
+VERWEISE: init_chest, query_chest
+GRUPPEN: graben
+*/
+mapping bury_chest()
+{
+    mapping *geld = ({});
+    mapping data = ([]);
+    object con;
+
+    this_object()->open_con();
+
+    foreach(object inv: all_inventory())
+    {
+        if(inv->query_money())
+        {
+            geld += ({([
+                "valuta":  inv->query_valuta(),
+                "valutas": inv->query_valutas(),
+                "money":   inv->query_money(),
+                ])});
+        }
+        else if(inv->query_no_retain())
+        {
+            inv->move(environment());
+        }
+        else if(present(inv, this_object()))
+        {
+            if(!con)
+            {
+                int num;
+
+                if(sscanf(object_name(), "%~s#%d", num)!=2)
+                    num = random(__INT_MAX__);
+                while(1)
+                {
+                    string conname = sprintf("/secure/player_container/chest-%08X", num);
+                    if(!find_object(conname))
+                    {
+                        con = touch(conname);
+                        m_add(data, CHEST_INV_ID, num);
+                        break;
+                    }
+                    num++;
+                }
+            }
+
+            data[CHEST_INV_VALUE] += inv->query_value();
+            inv->move(con);
+        }
+    }
+
+    this_object()->close_con();
+
+    if(sizeof(geld))
+        m_add(data, CHEST_MONEY, geld);
+
+    return data;
+}
+
+/*
+FUNKTION: init_chest
+DEKLARATION: void init_chest(mapping data)
+BESCHREIBUNG:
+Wenn eine vergrabene Kiste wieder ausgegraben wird, so wird in
+der neu geclonten Kiste init_chest() mit dem vorher abgefragten
+Mapping aufgerufen. Die Kiste kann sich dann initialisieren
+bzw. wieder fuellen.
+VERWEISE: bury_chest, query_chest
+GRUPPEN: graben
+*/
+void check_handeln() 
+{
+    this_player()->set_handeln();
+}
+
+void init_chest(mapping data)
+{
+    this_object()->open_con();
+
+    foreach(mapping geld: data[CHEST_MONEY] || ({}))
+    {
+        // There is nothing quite as wonderful as money.
+        object schatz = clone_object("/obj/money");
+
+        // There is nothing quite as beautiful as cash.
+        schatz->init_money(geld["money"], geld["valuta"]);
+        schatz->set_valuta(geld["valuta"]);
+        schatz->set_valutas(geld["valutas"]);
+        schatz->set_money(geld["money"]);
+
+        if(convert(geld["money"], geld["valuta"], 0) > 1000)
+            __FILE__->check_handeln();
+        schatz->move(this_object());
+    }
+
+    if(member(data, CHEST_INV_ID))
+    {
+        string conname = sprintf("/secure/player_container/chest-%08X", data[CHEST_INV_ID]);
+        object con = find_object(conname);
+        if(con)
+        {
+            foreach(object inv: all_inventory(con))
+                inv->move(this_object());
+            con->remove();
+        }
+        else
+        {
+            // Everyone must hanker for the butchness of a banker.
+            object schatz = clone_object("/obj/money");
+
+            // It's accountancy that makes the world go round...
+            schatz->set_money(data[CHEST_INV_VALUE]);
+            schatz->move(this_object());
+        }
+    }
+
+    this_object()->close_con();
+}
+
+private void chest_moved(string contr, object wer, object woher, object wohin,
+                         string dir, int wie, string verlassen, string ankommen)
+{
+    object* envwoher, *envwohin;
+    int i;
+
+    if(woher)
+    {
+        envwoher = ({woher}) + (all_environment(woher)||({}));
+        reverse(&envwoher);
+    }
+    else
+        envwoher = ({});
+
+    envwohin = ({wohin}) + (all_environment(wohin)||({}));
+    reverse(&envwohin);
+
+    foreach(i: min(sizeof(envwoher), sizeof(envwohin)))
+        if(envwoher[i] != envwohin[i])
+            break;
+
+    envwoher[i..]->delete_controller("notify_move", #'chest_moved);
+    envwohin[i..]->add_controller("notify_move", #'chest_moved);
+    if(!i)
+    {
+        if(sizeof(envwoher))
+            ROOM_AUTOLOAD->remove_dig_controller(envwoher[0]);
+        ROOM_AUTOLOAD->add_dig_controller(envwohin[0]);
+    }
+}
+
+void create()
+{
+    "*"::create();
+
+    this_object()->add_controller("notify_move", #'chest_moved);
+}

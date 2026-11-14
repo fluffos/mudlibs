@@ -1,0 +1,171 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /secure/rpc/app.c
+// Description: RPC-Funktionen
+// Author:      Gnomi
+//
+// $Log: app.c,v $
+// Revision 1.8  2015/08/26 21:40:30  gnomi
+// Anpassungen an LDMud 3.5.0
+//
+// Revision 1.7  2015/03/03 19:46:45  gnomi
+// player_exists eingebaut.
+//
+// Revision 1.6  2013/12/01 12:56:35  gnomi
+// SMTP-Authorisierung eingebaut.
+//
+// Revision 1.5  2012-12-01 22:55:35  sorcerer
+// start_banishing_wiz gibt int zurueck
+//
+// Revision 1.4  2011-06-10 14:22:51  gnomi
+// MUDFTP-Unterstuetzung.
+//
+// Revision 1.3  2009-06-17 08:03:21  gnomi
+// Daemmerungsfunktion.
+//
+// Revision 1.2  2008-04-02 08:38:42  gnomi
+// Passwortabfrage um einen Grund erweitert.
+//
+// Revision 1.1  2008/02/25 20:42:27  gnomi
+// RPC-Funktionalitaet.
+//
+
+private functions inherit "/secure/i/sperre";
+
+#include <apps.h>
+#include <config.h>
+#include <finger.h>
+#include <level.h>
+#include <message.h>
+#include <rpc.h>
+
+#define WIDTH 61
+#define LINE "+-------------------------------------------------------------+\n"
+
+int level;
+string real_name;
+
+private void clear_vars()
+{
+    "*"::clear_vars();
+    level = 0;
+}
+
+private int load_player(string name)
+{
+    if(real_name == name)
+	return 1;
+	
+    clear_vars();
+    if(!restore_object(PLAYER_FILE(name)))
+	return 0;
+
+    return 1;
+}
+
+nosave mixed who()
+{
+    return ([
+	"header": LINE +
+	"|" + center(MUD_NAME, WIDTH) + "|\n|" +
+              center(HOST_NAME " (" __HOST_IP_NUMBER__ ") " +
+#ifdef UNItopia
+           "23"
+#elif  __EFUN_DEFINED__(query_mud_port)
+           query_mud_port()
+#else
+           driver_info(DI_MUD_PORTS)[0]
+#endif
+		    , WIDTH) + "|\n|" +
+               center("Gamedriver: LDMud "+__VERSION__+" NATIVE-Mode",WIDTH) + "|\n|" +
+	       center("Uptime: "+format_seconds(query_up_time()),WIDTH)+"|\n"+
+	       LINE,
+	
+	"mudname": MUD_NAME,
+	"sumusers": STATISTIK->query_sum_users(),
+	"maxusers": STATISTIK->query_max_users(),
+	"maxevertime" : timestr(STATISTIK->query_max_users_ever_time()),
+	"maxever" : STATISTIK->query_max_users_ever(),
+	"users": sort_array(map(users(), (: 
+	    string title=$1->query_title();
+	    return ({
+		$1->query_real_name(),
+		$1->query_personal_title()||"",
+		$1->query_real_cap_name(),
+		((title[0]==',')?"": " ")+title
+	    }); :)), (: $1[2]>$2[2] :))
+    ]);
+}
+
+nosave string finger(string who)
+{
+    return "/secure/udp/finger"->do_local_finger(who,0,FINGER_FLAG_OTHER_EXTERN);
+}
+
+nosave int player_exists(string name)
+{
+    return sefun::player_exists(name);
+}
+
+nosave mixed password(string name, string pass, string whatfor)
+{
+    string res;
+    
+    if(!load_player(name))
+	return 0;
+
+    res = check_password(pass, name, 0);
+    if(res)
+	return res;
+
+    switch(whatfor)
+    {
+	case "usenet":
+	    if(level<LVL_WIZ && !testplayerp(name))
+		return "Sorry, der NNTP-Zugang ist noch nicht freigeschaltet.";
+
+	case "ftp":
+	    if(level<LVL_WIZ)
+		return 0;
+	
+	case "smtp":
+	    if(level >= LVL_WIZ)
+	        break;
+	    if(spielerratp(name))
+	        break;
+	    if(member(VORSTAND||({}), name)>=0)
+	        break;
+	    return 0;
+    }
+
+    return level;
+}
+
+nosave mixed mkerror(string str)
+{
+    raise_error(sprintf("FEHLER, FEHLER: %s\n", str));
+}
+
+nosave int tell(string src, string dest, string text)
+{
+    object pl = find_player(dest);
+    if(!pl)
+        return 0;
+
+    pl->send_message_to(pl, MT_NOTIFY|MT_SENSE|MT_FAR,MA_COMM,
+        wrap_say(sprintf("%s redet zu Dir:", capitalize(src)), text));
+    return 1;
+}
+
+nosave int start_banishing_wiz(string wiz)
+{
+    return GOETTER_REGISTER->start_banishing_wiz(wiz);
+}
+
+void call(closure cb, mixed* args)
+{
+    if(object_name(previous_object()) != RPC_SERVER)
+	return;
+    
+    funcall(cb, apply(#'call_other, this_object(), args));
+}

@@ -1,0 +1,613 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/living/legs.c
+// Description:
+// Modified by:	Monty (06.12 96) Die graessliche alte Funktion random_move()
+//			ersetzt. Mann war das Teil angestaubt!
+//		Freaky (29.07.97) Random-move und runaway geaendert, so dass
+//				  NCS's automatisch zurueckkommen.
+//		Freaky (10.03.1998) message auf send_message umgebaut.
+//
+// $Log: legs.c,v $
+// Revision 1.40  2012-11-26 22:18:12  gnomi
+// Auf Zerstoerungen bei der Bewegung achten.
+//
+// Revision 1.39  2008/02/25 11:35:55  gnomi
+// Geistertueren scharfgeschaltet.
+//
+// Revision 1.38  2008/01/28 13:18:05  gnomi
+// Typo in Doku.
+//
+// Revision 1.37  2008/01/24 22:49:17  gnomi
+// Geisterbewegung implementiert.
+//
+// Revision 1.36  2008/01/16 09:16:36  gnomi
+// Betreten: Keine "Das hat leider nicht geklappt"-Meldung bei erfolglosem
+// Move, denn move() gibt bei Lebewesen selbst eine Meldung aus.
+// Typo bei forbidden_enter_here-Doku.
+//
+// Revision 1.35  2007/05/26 22:32:32  gnomi
+// Indexing past string end.
+//
+// Revision 1.34  2006/05/01 00:39:11  gnomi
+// "geh Richtung" -> Richtung in Kleinbuchstaben umwandeln, damit Controller
+// entsprechend drauf reagieren koennen.
+//
+// Revision 1.33  2006/01/12 23:41:40  gnomi
+// Ein paar wraps rein.
+//
+// Revision 1.32  2005/05/06 22:59:52  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.31  2004/11/27 21:40:52  gnomi
+// add_hp-Aenderung: Aufruf angepasst.
+//
+// Revision 1.30  2004/10/06 22:07:44  gnomi
+// Schwimmen nagt nicht an der Ausdauer, wenn man Fliegen kann (und man nicht
+// unter Wasser ist).
+// Controller notify/forbidden_enter(_me,_here) eingefuehrt. (War ich nicht.)
+//
+// Revision 1.29  2004/08/05 19:35:00  gnomi
+// Typo.
+//
+// Revision 1.28  2003/11/06 04:09:58  gnomi
+// Typo.
+//
+// Revision 1.27  2003/10/19 11:39:15  sissi
+// notify fail fuers Betreten von Dingen, die man nicht betreten
+// kann, auf notify_not_cmd umgestellt (wenn man etwas nicht betreten
+// kann ist es ein notify not cmd).
+//
+// Revision 1.26  2003/07/31 00:45:19  menaures
+// "Xyz kann man nicht betreten"-Meldung entfernt, da verwirrend
+//
+// Revision 1.25  2003/06/17 04:34:05  menaures
+// Meldungs-Array beim Betreten nicht direkt modifizieren.
+//
+// Revision 1.24  2003/03/13 23:22:48  gnomi
+// Menaures:
+//  - Betrete-Befehl aus /i/object/vehikel hierher verlegt
+//  - Eigene Befehle in Lfun add_actions definieren
+//
+// Revision 1.23  2003/02/01 02:44:55  gnomi
+// 'lauf/gehe nach <richtung>' unterstuetzen.
+//
+// Revision 1.22  2003/01/26 03:58:14  gnomi
+// Beim Fliehen kann man auch ersaufen.
+//
+// Revision 1.21  2003/01/25 04:29:47  gnomi
+// Wenn es einen Raumtyp "fluchtausgaenge" gibt, wird dieser zur Flucht
+// genutzt, statt die Liste aller sichtbaren Ausgaenge.
+//
+// Revision 1.20  2003/01/07 23:26:48  gnomi
+// runaway: Beachten, dass das Vieh die Flucht nicht ueberleben koennte.
+//
+// Revision 1.19  2002/06/24 14:15:23  gnomi
+// Patch von Ranger: Man kann bei random_move die Bewegungsmeldungen angeben.
+//
+// Revision 1.18  2002/05/21 16:19:19  sissi
+// Gimli: query_abilities() & MD_AB_SWIM fuers Schwimmen beruecksichtigen
+//        statt query_meerjung und dergleichen
+//
+// Revision 1.17  2002/05/20 16:05:45  sissi
+// Spieler, die auf query_meerjung reagieren (Geisterschiffraetsel) verlieren
+// beim Schwimmen keine APs.
+//
+// Revision 1.16  2002/01/25 01:11:31  gnomi
+// Vor der Meldungsausgabe erstmal schauen, ob derjenige ueberhaupt noch lebt
+// (sprich das Objekt noch existiert).
+//
+// Revision 1.15  2001/12/11 13:18:02  freaky
+// Typo in der Doku gefixed.
+//
+// Revision 1.14  2001/06/25 11:48:19  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.13  2001/05/27 15:58:43  sissi
+// Schwimmen ist jetzt ein bisschen weniger gefaehrlich.
+//
+// Revision 1.12  2001/05/08 20:56:15  gnomi
+// Typo.
+//
+// Revision 1.11  2001/05/04 16:47:38  sissi
+// Schoenere Meldungen beim AP Verlust durch Schwimmen, schoenere Meldung
+// beim Sterben durch HP Verlust beim Schwimmen.
+//
+// Revision 1.10  2001/04/06 20:26:04  gnomi
+// query_lock_reason_other abfragen.
+//
+// Revision 1.9  2001/03/14 17:30:57  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.8  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strong_types
+
+#include <commands.h>
+#include <control.h>
+#include <move.h>
+#include <room.h>
+#include <landschaft.h>
+#include <message.h>
+#include <monster_master.h>
+#include <notify_fail.h>
+#include <parse_com.h>
+#include <misc.h>
+#include <add_hp.h>
+
+private nosave int last_room_was_wet;
+
+
+// Prototypes:
+void add_sum_move(int i);
+varargs void notify_message(string msg, int type);
+
+#define DIRS ({ "norden","nordwesten","westen","suedwesten", \
+		"sueden","suedosten","osten","nordosten", \
+		"hoch","runter","rein","raus","ausgang" })
+
+nosave void handle_swimming()
+{
+    int raumtyp;
+
+    if (!this_object() || !environment())
+	return;
+    raumtyp = environment()->query_type(LANDSCHAFT);
+    if (raumtyp &&
+       ((raumtyp & (L_WASSER | L_FLIESSEND | L_UNTERWASSER)) == raumtyp) &&
+       !this_object()->query_ghost() &&
+       !(this_object()->query_abilities() & MD_AB_SWIM) &&
+       ((raumtyp & L_UNTERWASSER) || !(this_object()->query_abilities() & MD_AB_FLY)) )
+    {
+       if (!sizeof(filter_objects(all_inventory(),"query_schwimmhilfe"))
+              && last_room_was_wet)
+       {
+          this_object()->add_hp(
+	     -1-random(this_object()->query_internal_encumbrance()/5),
+	     ([
+	        AH_ERF_TOD: "Du hast Dich beim Schwimmen uebernommen und bist ertrunken.",
+		AH_DAMAGE_TYPE: ({ "anstrengung" }),
+	     ]));
+	  if (!this_object())
+	      return;
+          else if (this_object()->query_hp()>50)
+	      notify_message("Das Schwimmen nagt an Deiner Ausdauer.\n",
+	          MA_MOVE);
+          else if (this_object()->query_hp()>20)
+	      notify_message("Das Schwimmen setzt Dir ganz unschoen zu.\n"
+	          "Du solltest Dich erstmal wieder etwas erholen.\n"
+	          "Vielleicht hilft es auch, Ballast loszuwerden.\n",
+	          MA_MOVE);
+          else if (this_object()->query_hp()>=0)
+              notify_message("Das Schwimmen setzt Dir gewaltig zu.\n"
+                  "Du solltest Dich unbedingt erholen und Dich unnoetigen "
+                  "Ballasts entledigen.\n",
+	          MA_MOVE);
+        }
+	last_room_was_wet = 1;
+    }
+    else
+	last_room_was_wet = 0;
+}
+
+nosave int go_command(string dir)
+{
+    object env;
+    int res;
+    string dest, reason, *hidden;
+
+    if(!(env = environment()))
+	return 0;
+
+    if(member((["laufe","lauf","geh","gehe"]), query_verb()))
+    {
+	if (!dir)
+	    return notify_fail("Gehe wohin?\n", FAIL_NOT_OBJ);
+
+	sscanf(dir, "nach %s", dir);
+	dir = lower_case(dir);
+    }
+    else
+    {
+	if (dir)
+	    return 0;
+
+	dir = lower_case(query_verb());
+    }
+
+#if 0  //Vorerst deaktiviert
+    //Bei zu hohem Alkoholpegel den falschen Ausgang erwischen...
+    if(member(DIRS[0..7],dir)>=0
+      && random(50)<this_object()->query_alc()-5)
+    {
+      string *dirs=env->query_command_list(
+        EXIT_ATOM_NOT|EXIT_ATOM_LOCKED|EXIT_ATOM_HIDDEN)&DIRS[0..7];
+      if(sizeof(dirs)) dir=dirs[random(sizeof(dirs))];
+    }
+#endif
+
+    dest = env->query_one_exit(dir);
+
+    if (dest && dest != "")
+    {
+	if (this_object()->move(dir, MOVE_NORMAL) == MOVE_OK)
+	{
+	    add_sum_move(1);
+	    handle_swimming();
+	}
+	return 1;
+    }
+
+    if(this_object()->query_ghost() && (dest = env->query_one_exit(dir,1)))
+    {
+	mapping info = ([]);
+	
+	if(this_object()->query_sp()<2)
+	    return notify_fail(wrap(
+		"Du hast nicht genug "+this_object()->query_sp_name()+"."));
+
+	this_player()->send_message_to(this_player(), MT_NOTIFY, MA_MOVE,
+	    "Du konzentrierst Dich...\n");
+	this_object()->add_sp(-2);
+
+	if(!environment()->allowed("ghost_pass", this_object(), dir, dest, info))
+        {
+    	    this_object()->send_message_to(this_object(),
+            	MT_FEEL|MT_NOTIFY, MA_MOVE,
+                "...leider erfolglos.\n");
+	    return 1;
+	}
+
+	if (this_object()->move(dir, MOVE_GHOST, info[MOVE_MSG_OUT],
+				info[MOVE_MSG_IN]) == MOVE_OK)
+	    add_sum_move(1);
+
+	return 1;
+    }
+
+    // Fehlgeschlagen:
+    
+    if (reason = env->query_lock_reason_other(dir))
+    {
+	this_player()->send_message(MT_LOOK, MA_MOVE, wrap(reason));
+	this_player()->send_message_to(this_player(), MT_NOTIFY, MA_MOVE,
+	    wrap(env->query_lock_reason(dir)||"Da geht's nicht weiter."));
+	return 1;
+    }
+    else if (reason = env->query_lock_reason(dir))
+        notify_fail (wrap (reason));
+    else if (member(DIRS,dir) >= 0)
+        notify_fail("Da geht's nicht weiter.\n");
+
+    return 0;
+}
+/*
+FUNKTION: allowed_ghost_pass
+DEKLARATION: int allowed_ghost_pass(object player, string dir, string room, mapping info)
+BESCHREIBUNG:
+Wenn ein Geist auf einen gesperrten Ausgang trifft und diesen durchqueren
+will, so wird bei allen am Raum angemeldeten Controllern allowed_ghost_pass
+aufgerufen. Liefert ein Controller 1, so wird dem Geist erlaubt, da durch-
+zugehen. 'dir' ist der Name des Ausgangs, 'dest' der dahinterliegende Raum.
+
+'info' ist ein Mapping, in welchem der erfolgreiche Controller folgende
+Eintraege vornehmen soll:
+
+    MOVE_MSG_OUT: Die Meldung beim Verlassen des Raumes (wie normalerweise
+                  bei move() als 3. Parameter angegeben.)
+    MOVE_MSG_IN:  Die Meldung beim Betreten des Raeumes (wie normalerweise
+                  bei move() als 4. Paraemter angegeben).
+
+VERWEISE: move
+GRUPPEN: spieler
+*/
+
+/*
+FUNKTION: random_move
+DEKLARATION: varargs string random_move(int return_time, string verlassen, string ankommen)
+BESCHREIBUNG:
+random_move fuehrt eine Bewegung in eine offene Richtung aus dem momentanen
+Raum heraus aus. In dem zurueckgelieferten String steht die gewaehlte Richtung.
+Zusaetzlich kann man der Funktion Bewegungsmeldungen (wie bei move())
+uebergeben. Ansonsten werden die Standard-Fluchtmeldungen verwendet.
+Wenn return_time angegeben wird und nicht 0 ist, kehrt der NPC nach
+'return_time' Sekunden wieder an die alte Stelle zurueck.
+VERWEISE: move, runaway
+GRUPPEN: spieler, monster
+*/
+varargs string random_move(int return_time, string verlassen, string ankommen)
+{
+    object env;
+    string *dirs, dir;
+    int x, y, flag;
+
+    // Wer kein Environment hat, laeuft auch nicht davon!
+    if (!(env = environment()))
+	return 0;
+
+    // Auf der Map sind Ausgaenge immer Nolist, Hidden oder wasweisich,
+    // deshalb kommen alle Ausgaenge in Frage, die nicht Geschlossen
+    // sind.
+    if (sscanf(object_name(env), "/map/m%d_%d", x, y)!=2)
+        flag = EXIT_VISIBLE;
+
+    if (!sizeof(dirs = env->query_type("fluchtausgaenge")) &&
+	!sizeof(dirs = env->query_command_list(flag)))
+	    return 0;
+
+    if (!verlassen) verlassen = "$Der() fluechtet panisch $dir().";
+    if (!ankommen) ankommen = "$Ein() kommt panisch $dir() angerannt.";
+    // OK, es hat Ausgaenge, dann nehmen wir einen, bewegen uns dorthin und
+    // returnen die Richtung.
+    dir = dirs[random(sizeof(dirs))];
+    if (return_time)
+    {
+    	if (this_object()->move_return(dir,return_time,0,"random_move",
+		MOVE_NORMAL,verlassen,ankommen) == MOVE_OK)
+	    return dir;
+    }
+    else
+    {
+    	if (this_object()->move(dir,MOVE_NORMAL,
+		verlassen,ankommen) == MOVE_OK)
+	    return dir;
+    }
+}
+
+/*
+FUNKTION: runaway
+DEKLARATION: int runaway()
+BESCHREIBUNG:
+Fuehrt eine Bewegung aus wie im Flucht-Modus des Players, mit allen Meldungen
+und allem drum und dran. Wenn die Flucht erfolgreich war, wird 1
+zurueckgeliefert, sonst 0.
+VERWEISE: random_move, move
+GRUPPEN: spieler, monster
+*/
+int runaway()
+{
+    if (random_move(playerp(this_object()) ? 0 : 30))
+    {
+	if(!this_object())
+	    return 1;
+	notify_message("Deine Fuesse sind mit dir davongelaufen!\n");
+	this_object()->send_message(MT_LOOK,MA_UNKNOWN,
+            wrap(Der()+" wirkt sichtlich verstoert."));
+	handle_swimming();
+	return 1;
+    }
+    else
+    {
+	if(!this_object())
+	    return 0;
+	this_object()->send_message(MT_LOOK,MA_UNKNOWN,
+            wrap(Der()+" versucht vergeblich, davonzulaufen."));
+	notify_message(
+		"Deine Fuesse wollen mit dir wegrennen, aber vergeblich.\n");
+	return 0;
+    }
+}
+
+int cmd_runaway ()
+{
+    runaway ();
+    return 1;
+}
+
+int cmd_enter(string str)
+{
+    mixed * parse;
+    mixed obj, room, env;
+    string * msg;
+
+    if(stringp(str))
+    {
+        parse = parse_com(str, 0, ({"in","auf"}), PARSE_AFTER_TRENNER);
+
+        if(parse[PARSE_NUM_OBS] == 1)
+        {
+            // Okay, ein Objekt / V-Item gefunden haben wir...
+            obj = parse[PARSE_OBS][0];
+
+            // ... aber kann man das auch betreten?
+            room = QUERY_PARS("enter_room", obj, ({this_player()}));
+
+            if(stringp(room))
+            {
+                room = touch(room);
+            }
+
+            if(objectp(room))
+            {
+                // Man kann es betreten, mal sehen mit welchen Meldungen.
+                msg = QUERY_PARS("enter_messages", obj, ({this_player()}));
+
+                if(msg == 0)
+                {
+                    msg = ({ Der(this_player())+" betritt "+den(obj)+".$",
+                             Ein(this_player())+" betritt den Raum.$" });
+                }
+
+                else
+                {
+                    msg = copy(msg);        
+
+                    if(sizeof(msg[0]) && msg[0][<1] != '$' &&
+			member(msg[0], '$') != -1)
+                    {
+                        msg[0] = TO->closure_to_string(mixed_to_closure(
+                                     msg[0], ({'vehikel}), 1), ({obj})) + "$";
+                    }
+
+                    if(sizeof(msg[1]) && msg[1][<1] != '$' &&
+			member(msg[1], '$') != -1)
+                    {
+                        msg[1] = TO->closure_to_string(mixed_to_closure(
+                                     msg[1], ({'vehikel}), 1), ({obj})) + "$";
+                    }
+                }
+
+                env = environment(TP);
+
+                if(TO->do_forbiddens(C_NO_HERE, "enter", ({"","_me","","_here"}),
+                                     ({TP,obj,env,room})))
+                {
+                    return 1;
+                }
+
+                else if(TP->move(room, MOVE_NORMAL, msg[0], msg[1]) == MOVE_OK && TO)
+                {
+                    TO->do_notifies(C_NO_HERE, "enter", ({"","_me","","_here"}),
+                                    ({TP,obj,env,room}));
+                    return 1;
+                }
+
+		//move selbst gibt die Fehlermeldung aus.
+                //notify_message("Das hat leider nicht geklappt.\n", MA_MOVE);
+                return 1;
+            }
+        }
+
+        else if(parse[PARSE_NUM_OBS] > 1)
+        {
+            return notify_fail("Du kannst nicht mehrere Dinge auf einmal "
+                               "betreten.\n");
+        }
+    }
+
+    return notify_fail("Betrete was?\n", FAIL_NOT_CMD);
+}
+
+void add_actions()
+{
+    add_action("go_command",    "",             AA_SHORT);
+    add_action("go_command",    "gehe",         -3);
+    add_action("go_command",    "laufe",        -4);
+    add_action("cmd_runaway",   "fliehe",       -5);
+    add_action("cmd_runaway",   "fluechte");
+    add_action("cmd_enter",     "entere",       -5);
+    add_action("cmd_enter",     "steige",       -5);
+    add_action("cmd_enter",     "betrete",      -6);
+    add_action("cmd_enter",     "betritt");
+}
+
+/* --- Dokumentation: --- */
+
+/*
+FUNKTION: forbidden_enter
+DEKLARATION: int forbidden_enter(object wer, mixed was, object woher, object wohin)
+BESCHREIBUNG:
+Ein Spieler oder NPC 'wer' versucht, ein Objekt oder V-Item 'was' zu
+betreten. Dies wird zu einer Bewegung von 'wer' nach 'wohin' von 'woher'
+fuehren.
+
+Zuvor wird mit forbidden("enter", wer, was, woher, wohin) geprueft,
+ob das Betreten zulaessig ist. Der Controller wird in allen Objekten
+aufgerufen, die sich bei 'wer' oder 'woher' fuer "forbidden_enter"
+angemeldet haben. Liefert ein Objekt einen Wert != 0 zurueck, wird
+das Betreten verhindert. Fuer eine entsprechende Meldung ist zu sorgen.
+
+In 'was' wird forbidden("enter_me"), in 'wohin' forbidden("enter_here")
+zusaetzlich aufgerufen.
+VERWEISE: forbidden_enter_me, forbidden_enter_here
+GRUPPEN: spieler, monster
+*/
+
+/*
+FUNKTION: forbidden_enter_me
+DEKLARATION: int forbidden_enter_me(object wer, mixed was, object woher, object wohin)
+BESCHREIBUNG:
+Ein Spieler oder NPC 'wer' versucht, ein Objekt oder V-Item 'was' zu
+betreten. Dies wird zu einer Bewegung von 'wer' nach 'wohin' von 'woher'
+fuehren.
+
+Zuvor wird mit forbidden("enter_me", wer, was, woher, wohin) geprueft,
+ob das Betreten zulaessig ist. Der Controller wird in allen Objekten 
+aufgerufen, die sich bei 'was' fuer "forbidden_enter_me" angemeldet
+haben. Ist 'was' ein V-Item, so wird der Controller in dessen Umgebung
+aufgerufen. Liefert ein Objekt einen Wert != 0 zurueck, wird
+das Betreten verhindert. Fuer eine entsprechende Meldung ist zu sorgen.
+
+In 'wer' und 'woher' wird forbidden("enter") zusaetzlich aufgerufen,
+in 'wohin' ausserdem forbidden("enter_here").
+zusaetzlich aufgerufen. 
+VERWEISE: forbidden_enter, forbidden_enter_here        
+GRUPPEN: spieler, monster
+*/
+
+/*
+FUNKTION: forbidden_enter_here
+DEKLARATION: int forbidden_enter_here(object wer, mixed was, object woher, object wohin)
+BESCHREIBUNG:
+Ein Spieler oder NPC 'wer' versucht, ein Objekt oder V-Item 'was' zu
+betreten. Dies wird zu einer Bewegung von 'wer' nach 'wohin' von 'woher'
+fuehren.
+
+Zuvor wird mit forbidden("enter_here", wer, was, woher, wohin) geprueft,
+ob das Betreten zulaessig ist. Der Controller wird in allen Objekten
+aufgerufen, die sich bei 'wohin' fuer "forbidden_enter_here" angemeldet
+haben. Liefert ein Objekt einen Wert != 0 zurueck, wird das Betreten
+verhindert. Fuer eine entsprechende Meldung ist zu sorgen.
+
+In 'wer' und 'woher' wird forbidden("enter") zusaetzlich aufgerufen,
+in 'was' ausserdem forbidden("enter_me").
+zusaetzlich aufgerufen.
+VERWEISE: forbidden_enter, forbidden_enter_me
+GRUPPEN: spieler, monster
+*/
+
+/*
+FUNKTION: notify_enter
+DEKLARATION: int notify_enter(object wer, mixed was, object woher, object wohin)
+BESCHREIBUNG:
+Ein Spieler oder NPC 'wer' hat das Objekt oder V-Item 'was' betreten.
+Dadurch wurde 'wer' bewegt, und zwar von 'woher' nach 'wohin'.
+
+Anschliessend werden mit notify("enter", wer, was, woher, wohin) alle
+Objekte, die sich bei 'wer' oder 'woher' fuer "notify_enter" angemeldet
+haben, von dem Vorgang unterrichtet.
+
+In 'was' wird notify("enter_me"), in 'wohin' notify("enter_here")
+zusaetzlich aufgerufen.
+VERWEISE: notify_enter_me, notify_enter_here
+GRUPPEN: spieler, monster
+*/
+
+/*
+FUNKTION: notify_enter_me
+DEKLARATION: int notify_enter_me(object wer, mixed was, object woher, object wohin)
+BESCHREIBUNG:
+Ein Spieler oder NPC 'wer' hat das Objekt oder V-Item 'was' betreten.
+Dadurch wurde 'wer' bewegt, und zwar von 'woher' nach 'wohin'.
+
+Anschliessend werden mit notify("enter_me", wer, was, woher, wohin) alle
+Objekte, die sich bei 'was' fuer "notify_enter_me" angemeldet haben, von
+dem Vorgang unterrichtet. Ist 'was' ein V-Item, wird der Controller in
+dem Objekt aufgerufen, an dem das V-Item haengt.
+
+In 'wer' und 'woher' wird notify("enter") aufgerufen, 
+ausserdem in 'wohin' notify("enter_here").
+VERWEISE: notify_enter_me, notify_enter_here
+GRUPPEN: spieler, monster
+*/
+
+/*
+FUNKTION: notify_enter_here
+DEKLARATION: int notify_enter_here(object wer, mixed was, object woher, object wohin)
+BESCHREIBUNG:
+Ein Spieler oder NPC 'wer' hat das Objekt oder V-Item 'was' betreten.
+Dadurch wurde 'wer' bewegt, und zwar von 'woher' nach 'wohin'.
+
+Anschliessend werden mit notify("enter_here", wer, was, woher, wohin) alle
+Objekte, die sich bei 'wohin' fuer "notify_enter_here" angemeldet haben,
+von dem Vorgang unterrichtet. 
+
+In 'wer' und 'woher' wird notify("enter") aufgerufen, 
+ausserdem in 'was' notify("enter_me").
+VERWEISE: notify_enter_me, notify_enter_here
+GRUPPEN: spieler, monster
+*/

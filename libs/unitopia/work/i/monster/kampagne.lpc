@@ -1,0 +1,881 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/monster/kampagne.c
+// Description: Programm-Interpreter fuer Monster
+// Author:	Francis (23.12.93)
+// Modified by:	Croft   ( 9.11.99) Bugfix bei <timeout
+//
+// $Log: kampagne.c,v $
+// Revision 1.10  2003/06/20 01:18:24  gnomi
+// Doku korrigiert.
+//
+// Revision 1.9  2003/06/19 22:40:40  gnomi
+// Doku korrigiert.
+//
+// Revision 1.8  2002/04/10 05:19:43  gnomi
+// Einige Variableninitialisierungen wegen Typcheck getrennt.
+//
+// Revision 1.7  2002/03/16 09:42:05  gnomi
+// Doku zu in_kampagne hinzugefuegt.
+//
+// Revision 1.6  2001/10/07 16:38:36  freaky
+// Prototype korrigiert.
+//
+// Revision 1.5  2001/06/25 11:48:21  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.4  2001/06/12 00:18:03  gnomi
+// Der Bettler ist umgezogen.
+//
+// Revision 1.3  2001/03/14 17:30:59  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.2  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+ * /i/monster/kampagne.c	(wird von /i/monster/monster.c inherited)
+ *
+ *
+ *
+ *                  Programmgesteuerte Monster
+ *
+ *
+ *
+ * Was ist eine Kampagne ?
+ *
+ *	Prinzipiell nichts anderes als ein Script in einer
+ *	zugegebenermassen recht primitven Interpreter-Sprache.
+ *
+ *	Sie kennt lediglich 'if' und 'goto'; allerdings weiss
+ *	jeder Informatiker nach dem Vordiplom, dass sich damit
+ *	alle Probleme, die ueberhaupt auf einem Computer loesbar
+ *	sind, tatsaechlich loesen lassen...
+ *
+ *
+ *
+ * Warum eine neue Interpreter-Sprache in einem Mud ?
+ *
+ *	Alles in Kampagnen realisierbare laesst sich natuerlich auch
+ *	in LPC machen, allerdings ist dort der Aufwand ungemein
+ *	groesser; der wesentliche Faktor ist das in den Kampagnen
+ *	automatisierte call_out- und timeout-Handling, was in LPC
+ *	Grund zu groesserem Overhead an Funktionen, Fehlermoeglich-
+ *	keiten und Kopfzerbrechen gibt.
+ *
+ *
+ *
+ * Wie unterscheidet sich eine Kampagne von einer Rolle ?
+ *
+ *	Rollen sind starre Handlungsablaeufe an denen
+ *	mehrere Monster teilnehmen koennen.
+ *
+ *	In Kampagnen kann nur ein Monster gesteuert werden,
+ *	allerdings sind hier je nach Umgebungsbedingungen
+ *	verschiedene Handlungsstraenge moeglich. Ausserdem
+ *	koennen Rollen innerhalb einer Kampagne gestartet
+ *	werden. Die Kampagne wird nach Beendigung der Rolle
+ *	wieder aufgenommen.
+ *
+ *
+ *
+ * Wie funktioniert eine Kampagne ?
+ *
+ *	Eine Kampagne besteht aus einer Liste von sogenannten 'Steps',
+ *	die mit 0 beginnend fortlaufend durchnummeriert sind. Zwecks
+ *	besserer Programmierbarkeit kann man einzelnen Steps auch
+ *	Labels verpassen:
+ *
+ *				-<labelname>
+ *			zB:
+ *				-hier_wird_bestellt
+ *
+ *
+ *	Jeder Step fuehrt ein Kommando aus. Das Kommando wird mit
+ *	dem Stichwort 'if' eingeleitet:
+ *
+ *				if <kommando>
+ *
+ *	Eine Kommando kann aus folgenden Typen bestehen, die
+ *	anhand des ERSTEN Zeichens erkannt werden:
+ *
+ *	a.		! command	command wird direkt
+ *					an do_command(..) ueber-
+ *					geben.
+ *
+ *					Hat das Kommando geklappt, wird
+ *					1 zurueckgegeben, ansonsten 0.
+ *
+ *		zB:	! sage Hallo wie geht's ?
+ *
+ *
+ *
+ *	b.		$ rolle		rolle ist der Filename
+ *					einer Rolle.
+ *					Klappt der Start der Rolle,
+ *					wird 1 zurueckgegeben, ansonsten 0.
+ *
+ *		zB:	$ /d/Vaniorh/Tadmor/Strassen/rollen/smalltalk
+ *
+ *
+ *
+ *	c.		& kampagne	kampagne ist der Filename
+ *					einer Kampagne. Hierbei wird
+ *					die alte Kampagne abgebrochen!
+ *					Klappt der Start der Kampagne,
+ *					wird 1 zurueckgegeben, ansonsten 0.
+ *
+ *		zB:	& /d/Vaniorh/Tadmor/Strassen/rollen/sauftour.kamp
+ *
+ *
+ *
+ *
+ *	d.		> function	im Monster wird die Funktion
+ *					function aufgerufen.
+ *					Parameter koennen nicht uebergeben
+ *					werden; alle Return-Werte != 0
+ *					werden als 1 interpretiert.
+ *
+ *		zB:	> random_move
+ *
+ *
+ *
+ *	e.		< timeout	Die Kampagne wird gestoppt
+ *					und wartet auf:
+ *
+ *					  1. einen Aufruf von:
+ *
+ *						resume_kampagne()
+ *
+ *					     in diesem Fall wird 1
+ *					     zurueckgegeben.
+ *
+ *					  oder, wenn timeout angegeben wurde
+ *					  und > 0 ist,
+ *
+ *					  2. Nach timout Sekunden wird
+ *					     automatisch mit einem Wert von
+ *					     0 weitergemacht.
+ *		zB:	<40
+ *
+ *
+ *	Nach dem Ende des Kommandos wird je nach zurueckgegebenen Wert
+ *	mittels folgender Zeilen verzweigt:
+ *
+ *	Rueckgabe 1:	then <wartezeit> <label>
+ *	Rueckgabe 0:	else <wartezeit> <label>
+ *
+ *		<wartezeit> ist die Zeit, die gewartet werden soll, um dann
+ *			    mit der Kampagne bei dem Step mit dem Label <label>
+ *			    fortzufahren. Laesst man die <wartezeit> weg,
+ *			    wird mit call_out(..,0) weitergemacht, und gibt
+ *			    man kein <label> an, so wird am nachfolgenden Step
+ *			    fortgesetzt. Demzufolge kann man auch beide
+ *			    Statements einfach auch weglassen.
+ *
+ *			    Ein besonderer Fall ist das Label 'ende'
+ *			    Es ist reserviert und steht fuer das Ende
+ *			    der Kampagne.
+ *
+ *		Beispiele:
+ *				then 10 hier_wird_bestellt
+ *				else 5
+ *				then ende
+ *
+ *	Als Endekennung eines Steps muss das Schluesselwort 'fi' folgen.
+ *
+ *
+ *	Zeilen, die mit einem '#' beginnen, werden als Kommentarzeilen
+ *	ignoriert, ebenso Leerzeilen.
+ *
+ *	Hier ein Beispiel fuer eine einfache Kampagne:
+ *
+ *
+ *	#
+ *	# Eine Beispiel-Kampagne
+ *	#
+ *	if !mache schaut sich um.
+ *	then 10
+ *	else 10
+ *	fi
+ *
+ *	if >player_here
+ *	else 20 kein_spieler_da
+ *	fi
+ *
+ *	if !sage Hallo Du da !
+ *	fi
+ *
+ *	#
+ *	# Das Monster hat ein parse_conversation; wenn dieses zuschlaegt
+ *	# muss eine Routine innerhalb de Monsters resume_kampagne()
+ *	# aufrufen. Passiert das nicht innerhalb von 60 Sekunden,
+ *	# wird beim Label spieler_antwortet_nicht weitergemacht.
+ *	#
+ *	if <60
+ *	else spieler_antwortet_nicht
+ *	fi
+ *
+ *	#
+ *	# Dieser Step klappt nur, wenn das Monster eine Seele hat.
+ *	# Einfach im create(): clone_object("/obj/soul")->move(this_object());
+ *	# einfuegen.
+ *	#
+ *	if !laechle
+ *	then ende
+ *	else ende
+ *	fi
+ *
+ *	-spieler_antwortet_nicht
+ *	if !sage Du redest wohl nicht mit jedem !
+ *	then ende
+ *	else ende
+ *	fi
+ *
+ *	-kein_spieler_da
+ *	if !mache schaut truebe aus der Waesche.
+ *	then ende
+ *	else ende
+ *	fi
+ *
+ *
+ *
+ *
+ * Wie startet man eine Kampagne ?
+ *
+ *
+ *	1. durch den Aufruf
+ *
+ *		int starte_kampagne(string filename)
+ *
+ *		Diese Routine liefert 1 zurueck, wenn der Start geklappt hat,
+ *		ansonsten 0.
+ *
+ *	2. durch random_start.
+ *
+ *		Naeheres hierzu siehe /i/monster/random_start.c
+ *
+ *
+ *	Wird eine Kampagne beendet, ruft sie die Funktion
+ *
+ *			void kampagne_beendet(string filename)
+ *
+ *	auf.
+ *
+ *
+ *
+ * Wie bricht man eine Kampagne vorzeitig ab ?
+ *
+ *	Man ruft einfach:
+ *
+ *			int breche_kampagne_ab()
+ *
+ *	auf. Diese liefert bei Erfolg 1 zurueck, ansonsten 0.
+ *	Hat die Kampagne ein Rolle gestartet, die nicht abbrechbar ist,
+ *	wird die Kampagne ebenfalls erst mit der Rolle beendet. In diesem
+ *	Fall wird 0 zurueckgegeben, und beim tatsaechlichen Ende der Kampagne
+ *	wie gewoehnlich kampagne_beendet() aufgerufen.
+ *
+ *
+ *
+ * Wie unterbreche ich kurzzeitig eine Kampagne ?
+ *
+ *	Durch den Aufruf von:
+ *
+ *		int stop_kampagne(int dauer)
+ *
+ *	Wie ueblich: bei Erfolg wird 1 zurueckgeliefert, ansonsten 0.
+ *
+ *	Das Anstarten nach einem Stop geschieht mit:
+ *
+ *		int resume_kampagne()
+ *
+ *
+ *
+ * Wie stelle ich fest, ob das Monster in einer Kampagne ist und an welchem
+ * Step ?
+ *
+ *		string in_kampagne()
+ *
+ *	liefert den Namen der Kampagne zurueck, in der sich das Monster
+ *	befindet, ansonsten 0.
+ *
+ *		string kampagne_waits(string filename)
+ *
+ *	liefert das Label bzw einen String mit der Nummer des Steps
+ *	zurueck, wenn das Monster in der Kampagne filename ist,
+ *	ansonsten 0.
+ *
+ *
+ * Ein Beispiel fuer eine Kampagne findet man in
+ *
+ *		/d/Vaniorh/Tadmor/Strassen/npc/bettler.c
+ *              /d/Vaniorh/Tadmor/Strassen/rollen/sauftour.kamp
+ *
+ *
+ *
+ * interne Darstellung der Kampagne:
+ *
+ * ({
+ *    ([ CMD		: Kommando/Rolle/Kampagne,
+ *       TRUE		: indice
+ *       TRUE_WAIT	: wartezeit,
+ *       FALSE		: indice
+ *       FALSE_WAIT	: wartezeit
+ *    ]),
+ *    .....
+ * })
+ *
+ */
+
+#pragma save_types
+#pragma strong_types
+
+#define CMD    		0
+#define TRUE		1
+#define TRUE_WAIT	2
+#define FALSE		3
+#define FALSE_WAIT	4
+
+
+#define DEBUGGER 0
+#include <debug.h>
+
+string in_rolle();
+int stop_rolle();
+int restart_rolle();
+string func_parser(string command);
+
+private mixed *kampagne = ({});
+private string *labels = ({});
+private string filename;
+private int position;
+private int last_position;
+private int warte_auf_abbruch;
+private int in_kampagne;
+private int rolle_stopped;
+private int wait_for_resume;
+private int wait_for_next_step;
+private int timeout_position;
+
+int starte_rolle(string name);
+string in_rolle();
+int breche_rolle_ab();
+int starte_kampagne(string name);
+nosave void do_step();
+
+/*
+FUNKTION: query_kampagne
+DEKLARATION: mixed *query_kampagne()
+BESCHREIBUNG:
+Liefert zurueck, ob ein Monster ein Kampagnen-Monster ist, und wenn es eines
+ist, dann die Kampagnen, die es benutzt.
+Eine ausfuehrliche Beschreibung zu Kampagnen findet sich in
+/doc/funktionsweisen/monster/kampagnen.
+VERWEISE: in_kampagne, starte_kampagne
+GRUPPEN: monster
+*/
+mixed *query_kampagne() { return kampagne; }
+
+
+/*
+FUNKTION: in_kampagne
+DEKLARATION: string in_kampagne()
+BESCHREIBUNG:
+Liefert den Namen der Kampagne zurueck, in der sich das Monster befindet,
+ansonsten 0.
+Eine ausfuehrliche Beschreibung zu Kampagnen findet sich in
+/doc/funktionsweisen/monster/kampagnen.
+VERWEISE: query_kampagne, starte_kampagne, stop_kampagne
+GRUPPEN: monster
+*/
+string in_kampagne()
+{
+    if (in_kampagne)
+	return filename;
+    return 0;
+}
+
+
+int get_jump(string line, int wait, string label)
+{
+    int pos;
+    string word;
+
+    wait = 0;
+    label = 0;
+
+    line = trim(line);
+    if (strlen(line) <= 0)
+	return 0;
+
+    pos = strstr(line," ");
+    if (pos < 0)
+    {
+	word = line;
+	line = "";
+    }
+    else
+    {
+	word = line[0..pos-1];
+	line = line[pos..];
+    }
+
+    if (!sscanf(word,"%d",wait))
+    {
+	wait = 0;
+	label = trim(word+line);
+	return 1;
+    }
+
+    if (strlen(line) <= 0)
+	return 1;
+
+    label = trim(line);
+
+    return 2;
+}
+
+
+int lese_kampagne(string name)
+{
+    int a, pos, true_wait, false_wait, p;
+    string file, label, command, line, false, true, junk;
+    string *lines;
+
+
+    if (!name || name == "")
+	return 0;
+
+
+    if (!(file = read_file(name)) || file == "")
+	return 0;
+
+    if (sizeof(lines = explode(file,"\n") - ({""})) <= 0)
+	return 0;
+
+    filename = name;
+    for (a=0; a<sizeof(lines); a++)
+	if (lines[a][0] == '#')
+	    lines[a] = "";
+        else
+	    lines[a] = trim(lines[a]);
+    lines = lines - ({""});
+
+    kampagne = ({});
+    pos = -1;
+    labels = ({});
+
+
+    while (pos < sizeof(lines)-1)
+    {
+	pos ++;
+	line = lines[pos];
+
+	while (line[<1] == '\\' && pos < sizeof(lines)-1)
+	{
+	    line = line[0..<2];
+	    pos++;
+	    line += lines[pos];
+	}
+
+	if (strlen(line) > 1 && line[0] == '-')
+	{
+	    label = trim(line[1..]);
+	    continue;
+	}
+
+	if (strlen(line) >= 2 && line[0..1] == "if")
+	{
+	    command = trim(line[2..]);
+	    continue;
+	}
+
+	if (strlen(line) >= 4 && line[0..3] == "then")
+	{
+	    line = trim(line[4..]);
+	    if (line == "ende")
+	    {
+		true = "ende";
+		true_wait = 0;
+	    }
+	    else if (!get_jump(line, &true_wait, &true))
+	    {
+		true = 0;
+		true_wait = 0;
+	    }
+	    continue;
+	}
+
+	if (strlen(line) >= 4 && line[0..3] == "else")
+	{
+	    line = trim(line[4..]);
+	    if (line == "ende")
+	    {
+		false = "ende";
+		false_wait = 0;
+	    }
+	    else if (!get_jump(line, &false_wait, &false))
+	    {
+		false = 0;
+		false_wait = 0;
+	    }
+	    continue;
+	}
+
+	if (strlen(line) >= 2 && line[0..1] == "fi")
+	{
+	    kampagne += ({({ command,
+			     true,
+			     true_wait,
+			     false,
+			     false_wait
+			})});
+	    labels += ({ label });
+
+
+	    label = 0;
+	    command = 0;
+	    true = 0;
+	    true_wait = 0;
+	    false = 0;
+	    false_wait = 0;
+	}
+    }
+
+    for (a=0; a<sizeof(kampagne); a++)
+    {
+	if (kampagne[a][TRUE] == "ende")
+	    kampagne[a][TRUE] = -1;
+	else if (kampagne[a][TRUE])
+	{
+	    if ((p = member(labels,kampagne[a][TRUE])) >= 0)
+		kampagne[a][TRUE] = p;
+	    else
+		kampagne[a][TRUE] = -1;
+	}
+	else if (a < sizeof(kampagne)-1)
+	    kampagne[a][TRUE] = a + 1;
+	else
+	    kampagne[a][TRUE] = -1;
+
+	if (kampagne[a][FALSE] == "ende")
+	    kampagne[a][FALSE] = -1;
+	else if (kampagne[a][FALSE])
+	{
+	    if ((p = member(labels,kampagne[a][FALSE])) >= 0)
+		kampagne[a][FALSE] = p;
+	    else
+		kampagne[a][FALSE] = -1;
+	}
+	else if (a < sizeof(kampagne)-1)
+	    kampagne[a][FALSE] = a + 1;
+	else
+	    kampagne[a][FALSE] = -1;
+
+ DEBUG("Step   : "+a+"\n");
+ DEBUG("Label  : "+labels[a]+"\n");
+ DEBUG("Command: "+kampagne[a][CMD]+"\n");
+ DEBUG("True   : "+kampagne[a][TRUE]+"\n");
+ DEBUG("False  : "+kampagne[a][FALSE]+"\n");
+ DEBUG("----------------------\n");
+
+
+    }
+
+    return 1;
+}
+
+
+void beende_kampagne()
+{
+    in_kampagne = 0;
+    this_object()->kampagne_beendet(filename);
+}
+
+/*
+FUNKTION: stop_kampagne
+DEKLARATION: int stop_kampagne(int dauer)
+BESCHREIBUNG:
+Haelt eine Kampagne fuer dauer sec an. Wenn das geklappt hat liefert
+stop_kampagne 1 zuruck, sonst 0.
+Eine ausfuehrliche Beschreibung zu Kampagnen findet sich in
+/doc/funktionsweisen/monster/kampagnen.
+VERWEISE: in_kampagne, starte_kampagne, resume_kampagne, breche_kampagne_ab
+GRUPPEN: monster
+*/
+int stop_kampagne(int dauer)
+{
+    if (!in_kampagne())
+	return 0;
+
+    if (dauer > 0)
+	wait_for_resume = dauer;
+    else
+	wait_for_resume = -1;
+
+    if (in_rolle())
+    {
+	stop_rolle();
+	rolle_stopped = 1;
+	return 1;
+    }
+
+    return 1;
+}
+
+/*
+FUNKTION: kampagne_waits
+DEKLARATION: string kampagne_waits(string name)
+BESCHREIBUNG:
+Liefert die Position zuruck, an der das Monster in der Kampagne name gerade
+auf Fortsetzung wartet, oder null, wenn das Monster kein Kampagnenmonster ist,
+nicht gerade die Kampagne name abarbeitet oder garn nicht wartet.
+Eine ausfuehrliche Beschreibung zu Kampagnen findet sich in
+/doc/funktionsweisen/monster/kampagnen.
+VERWEISE: in_kampagne, query_kampagne, stop_kampagne, resume_kampagne
+GRUPPEN: monster
+*/
+string kampagne_waits(string name)
+{
+    if (!in_kampagne() || name != filename || !wait_for_resume)
+	return 0;
+
+    if (labels[last_position])
+	return labels[last_position];
+
+    return last_position+"";
+}
+
+/*
+FUNKTION: resume_kampagne
+DEKLARATION: int resume_kampagne()
+BESCHREIBUNG:
+Mit resume_kampagne kann man eine kampagne wieder aufnehmen, die mit
+stop_kampagne unterbrochen wurde. Wenn es geklappt hat, liefert resume_kampagne
+1 zurueck, sonst 0.
+Eine ausfuehrliche Beschreibung zu Kampagnen findet sich in
+/doc/funktionsweisen/monster/kampagnen.
+VERWEISE: in_kampagne, kampagne_waits, stop_kampagne
+GRUPPEN: monster
+*/
+int resume_kampagne()
+{
+ DEBUG("resume_kampagne:\n");
+
+    if (!in_kampagne() || !wait_for_resume)
+	return 0;
+
+    if (rolle_stopped)
+    {
+	rolle_stopped = 0;
+	restart_rolle();
+    }
+
+    if (kampagne[timeout_position][CMD][0] == '<') {
+        position = kampagne[timeout_position][TRUE];
+    }
+    wait_for_resume = 0;
+
+    return 1;
+}
+
+private void do_false()
+{
+    wait_for_next_step = kampagne[position][FALSE_WAIT];
+    position = kampagne[position][FALSE];
+    if (wait_for_next_step <=0)
+	do_step();
+}
+
+private void do_true()
+{
+    wait_for_next_step = kampagne[position][TRUE_WAIT];
+    position = kampagne[position][TRUE];
+    if (wait_for_next_step <=0)
+	do_step();
+}
+
+nosave void do_step()
+{
+    string command, cmd;
+    int wait;
+
+    set_heart_beat(1);
+
+    if (wait_for_resume < 0)
+	return;
+
+    if (wait_for_resume > 0)
+    {
+	wait_for_resume--;
+	return;
+    }
+
+    if (wait_for_next_step > 0)
+    {
+	wait_for_next_step--;
+	return;
+    }
+
+ DEBUG("position :"+position+"\n");
+
+    if (position < 0 || position >= sizeof(kampagne))
+    {
+	beende_kampagne();
+	return;
+    }
+
+    last_position = position;
+    command = kampagne[position][CMD];
+
+ DEBUG("command: "+command+"|\n");
+
+    if (!command || command == "")
+    {
+	do_false();
+	return;
+    }
+
+    if (command[0] == '<')
+    {
+        timeout_position = position;
+	position = kampagne[position][FALSE];
+
+	if (strlen(command) > 1 && (wait = to_int(command[1..])) > 0)
+	{
+	    wait_for_resume = wait;
+	    DEBUG("input_timeout: "+wait+"\n");
+	}
+	else
+	    wait_for_resume = -1;
+
+	return;
+    }
+
+    if (strlen(command) < 2)
+    {
+	do_false();
+	return;
+    }
+
+    if (command[0] == '!')
+    {
+	DEBUG("execute: "+command[1..]+"|\n");
+
+	cmd = func_parser(command[1..]);
+
+	DEBUG("after func_parser: "+cmd+"|\n");
+
+	if (this_object()->do_command(cmd))
+	    do_true();
+	else
+	    do_false();
+
+	return;
+    }
+
+    if (command[0] == '$')
+    {
+	if (!starte_rolle(command[1..]))
+	{
+	    do_false();
+	}
+	return;
+    }
+
+    if (command[0] == '&')
+    {
+	beende_kampagne();
+	starte_kampagne(command[1..]);
+	return;
+    }
+
+    if (command[0] == '>')
+    {
+	if (call_other(this_object(),command[1..]))
+	    do_true();
+	else
+	    do_false();
+	return;
+    }
+
+    do_false();
+}
+
+/*
+FUNKTION: starte_kampagne
+DEKLARATION: int starte_kampagne(string name)
+BESCHREIBUNG:
+Mit starte_kampagne kann man die Kampagne mit dem Filenamen name starten. Wenn
+es geklappt hat, liefert starte_kampagne 1 zurueck, sonst 0.
+Eine ausfuehrliche Beschreibung zu Kampagnen findet sich in
+/doc/funktionsweisen/monster/kampagnen.
+VERWEISE: query_kampagne, breche_kampagne_ab
+GRUPPEN: monster
+*/
+int starte_kampagne(string name)
+{
+    int a;
+
+    if (in_kampagne() || in_rolle())
+	return 0;
+
+    if (!lese_kampagne(name))
+	return 0;
+
+    position = 0;
+    in_kampagne = 1;
+    warte_auf_abbruch = 0;
+    wait_for_resume = 0;
+
+    set_heart_beat(1);
+
+    return 1;
+}
+
+/*
+FUNKTION: breche_kampagne_ab
+DEKLARATION: void breche_kampagne_ab()
+BESCHREIBUNG:
+Mit breche_kampagne_ab kann man eine Kampagne vorzeitig abbrechen.
+Eine ausfuehrliche Beschreibung zu Kampagnen findet sich in
+/doc/funktionsweisen/monster/kampagnen.
+VERWEISE: starte_kampagne, stop_kampagne, in_kampagne
+GRUPPEN: monster
+*/
+void breche_kampagne_ab()
+{
+    if (!in_kampagne())
+	return;
+
+    if (in_rolle() && !breche_rolle_ab())
+	warte_auf_abbruch = 1;
+    else
+	warte_auf_abbruch = 0;
+
+    if (!warte_auf_abbruch)
+	beende_kampagne();
+}
+
+void rolle_beendet(string rolle)
+{
+    int wait;
+
+    if (!in_kampagne())
+	return;
+
+    if (rolle != kampagne[position][CMD][1..])
+	return;
+
+    if (warte_auf_abbruch)
+    {
+	warte_auf_abbruch = 0;
+	beende_kampagne();
+	return;
+    }
+
+    do_true();
+}

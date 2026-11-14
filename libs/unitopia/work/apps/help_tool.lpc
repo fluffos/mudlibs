@@ -1,0 +1,1209 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/help_tool.c
+// Description: Server fuer die Enzyclopedia UNItopia
+// Author:	Freaky (01.01.94)
+
+// UID: Apps
+
+// $Log: help_tool.c,v $
+// Revision 1.42  2013-03-16 16:10:49  gnomi
+// Mehr Evals...
+//
+// Revision 1.41  2010-08-28 17:48:38  sorcerer
+// neue Headerlocation
+//
+// Revision 1.40  2009-07-30 16:45:08  gnomi
+// Mehr Evals fuer die Lfuns...
+//
+// Revision 1.39  2009-03-20 07:43:24  gnomi
+// Driver-Doku zu LPC mit einlesen.
+//
+// Revision 1.38  2009-03-02 15:47:37  gnomi
+// OLD_FUNS-Teile rausgeworfen.
+//
+// Revision 1.37  2007/08/09 22:15:00  gnomi
+// Auch fuer die Efun-Dokus innerhalb des Menues wahlweise Original oder
+// Uebersetzung anbieten.
+//
+// Revision 1.36  2005/10/27 16:39:48  gnomi
+// Mehr Evals fuer die LFuns. (Vielleicht mal mit Continuations arbeiten?)
+//
+// Revision 1.35  2004/07/19 21:10:33  gnomi
+// Alpha-Konversionen...
+//
+// Revision 1.34  2004/05/27 19:39:28  gnomi
+// Wiki beigebracht, die Enzy-Verweise korrekt umzusetzen.
+//
+// Revision 1.33  2004/04/14 21:57:48  gnomi
+// Kleine Korrektur zum letzten Patch.
+//
+// Revision 1.32  2004/04/14 16:39:43  mudadm
+// Moeglichkeit, das Wiki anzuzeigen.
+//
+// Revision 1.31  2004/04/14 16:35:43  menaures
+// Wahlmoeglichkeit Englisch/Deutsch bei EFun-Dokumentation
+//
+// Revision 1.30  2003/06/20 02:49:55  gnomi
+// Alte Funktionen deaktiviert, limited zur Umgehung der Mapping-Grenzen
+// genutzt.
+//
+// Revision 1.29  2003/06/07 01:37:34  gnomi
+// Neue Datenstruktur eingefuehrt. Einige Funktionen dokumentiert.
+//
+// Revision 1.28  2003/05/06 02:38:57  gnomi
+// Einige Sachen vereinfacht.
+//
+// Revision 1.27  2003/02/16 05:29:53  gnomi
+// update_p_doc eingebaut.
+// 'zern -t'-Funktionen eingebaut.
+//
+// Revision 1.26  2002/08/12 23:50:01  gnomi
+// Liest Unterverzeichnisse von Verzeichnissen ohne Menu richtig ein.
+// deksource wird nun alphabetisch sortiert ausgegeben.
+//
+// Revision 1.25  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.24  2002/03/07 08:37:44  gnomi
+// Bugfix zum letzten Patch.
+//
+// Revision 1.23  2002/03/02 12:00:47  gnomi
+// Verarbeitung der Gruppen.
+//
+// Revision 1.22  2001/12/14 11:02:15  gnomi
+// do_read darf nun auch von /secure/udp/signal ausgeloest werden.
+//
+// Revision 1.21  2001/12/03 01:00:51  gnomi
+// Bei deksource, dekgrp kann man nun auch eine regexp als Parameter angeben.
+//
+// Revision 1.20  2001/07/10 16:39:49  freaky
+// lfuns einlesen fuer grosse files gemacht.
+//
+// Revision 1.19  2001/06/22 17:10:23  freaky
+// domain-doc-update eingebaut.
+//
+// Revision 1.18  2001/05/04 21:33:27  freaky
+// auch lokale Pfade zugelassen in Menues (../)
+//
+// Revision 1.17  2001/04/30 22:16:44  freaky
+// call-out-time besser gestaltet
+//
+// Revision 1.16  2001/04/30 20:43:57  freaky
+// Gilden-Doku-Update eingebaut.
+//
+// Revision 1.15  2001/04/25 19:06:16  gnomi
+// regexp bei dek mit catch testen.
+//
+// Revision 1.14  2001/04/25 18:21:31  gnomi
+// DEKLARATIONszeile der LFun-Doku umbrechen.
+// 
+
+// Save-File: /var/help_tool.o
+
+#pragma combine_strings
+#pragma strict_types
+
+#include <help_tool.h>
+#include <level.h>
+#include <files.h>
+#include <rtlimits.h>
+
+// Zum Aufbau der Menuedateien siehe /doc/menues/Bsp_Menue
+
+/*
+ * Um die WWW-Doku zu erzeugen muss man folgendes tun:
+ * - HTML definieren (siehe unten)
+ * - /apps/help_tool.c erneuern
+ * - zcall /apps/help_tool->do_read()
+ * - HTML wueder undef'en
+ * - /apps/help_tool.c erneuern
+ * - als Mudadm:
+ *   - cd ~/magyra/lib/log
+ *   - tar cf ~www/misc/HT.tar +*
+ *   - rm +*
+ *   - chmod 664 ~www/misc/HT.tar
+ */
+#undef HTML
+
+#define LOW(x)	   lower_case(x)
+#define CAP(x)     capitalize(x)
+#define ERRFILE    "HELP_TOOL"
+#define ERR(x)	   { sys_log(ERRFILE,x); write(x); }
+#define NULL_ERR(x) { ERR(x); return 0; }
+#define FATAL(x)   { ERR(x); return; }
+#define FAIL(x)    { notify_fail(x); return 0; }
+
+#define SAVE_FILE  "/var/help_tool"
+
+#define MENU_FILE  "Menu"
+#define GILDEN_MENU_FILE "/doc/menues/Gilden"
+#define DOMAIN_MENU_FILE "/doc/menues/Domains"
+#define P_MENU_FILE "/p/INFO/Enzyclopedia"
+
+#define LDOCPATH   "/doc/lfun/funk/"
+#define LSTATFILE  LDOCPATH+"Statistiken"
+#define LTEXTFILE  LDOCPATH+"Texte"
+#define LDECFILE   LDOCPATH+"Deklarationen"
+#define LFUNFILE  LDOCPATH+"Funktionen"
+#define LFUN_TRENNER   'n'
+
+#define EDOCPATH   "/doc/efun/funk/"
+#define EDECFILE   "/doc/efun/deklarationen"
+#define EFUN_TRENNER   'n'
+#define EFUN_LOW_PATH  "/doc/efun/a-m/"
+#define EFUN_HIGH_PATH "/doc/efun/n-z/"
+
+#define EFUN_NOTES "/doc/efun/notes/"
+#define EFUN_NOTES_LINE "--- Anmerkungen: --------------------------------------------------------------\n"
+
+#define WIKIPATH(x) ("/doc/wiki/"+capitalize((x)[0..0])+"/"+(x))
+
+#define R_LFUN   1
+#define R_NO_MEN 2
+#define R_EFUN   3
+#define R_WIKI	 4
+
+#define HTML_MENU_FILE  "index.html"
+
+#define JUNK ({"CVS"})
+
+#define DRIVER_JUNK ({"CVS","Menu"})
+#define FUN_JUNK ({"Funktionen", "Statistiken","Texte","Deklarationen","WasIstWo","WoIstWas",\
+		HTML_MENU_FILE, "CVS"})
+
+#ifdef HTML
+#define HTML_WRITE(x,y) write_file("/log/"+implode(explode(x,"/"),"+")+HTML_MENU_FILE,y);
+#else
+#define HTML_WRITE(x,y) {}
+#endif
+
+#define HTML_POINT(x,y) HTML_WRITE(path,"<LI> <A HREF = "+(x)+">"+(y)+"</A>\n");
+#define HTML_BEGIN HTML_WRITE(path,"<HTML>\n<HEAD>\n<TITLE>"+path+"</TITLE>\n</HEAD>\n<BODY>\n<H1>"+path[5..<2]+"</H1>\n<HR>\n<UL>\n");
+#define HTML_END  HTML_WRITE(path,"</UL>\n</BODY>\n</HTML>\n");
+#define HTML_LINE HTML_WRITE(path,"<P>\n");
+#define HTML_LFUN(x) HTML_WRITE(path,"Lfun: '"+x+"'\n");
+#define HTML_LFUN_GRP(x,y) HTML_WRITE(path,"Lfun-Grp: '"+x+"' : "+mixed2str(y)+"\n");
+#define HTML_EFUN(x) HTML_WRITE(path,"Efun: '"+x+"'\n");
+#define HTML_EFUN_GRP(x,y) HTML_WRITE(path,"Efun-Grp: '"+x+"' : "+mixed2str(y)+"\n");
+#define HTML_REST_FILES(x) html_rest_files(path,x);
+#define HTML_SUB_LFUN_GRUPPEN  HTML_POINT("/doc/lfun/funk","Lfun-Gruppen");
+#define HTML_SUB_EFUN_GRUPPEN  HTML_POINT("/doc/efun/funk","Efun-Gruppen");
+#define HTML_SUB_LFUN_GRP(x,y) HTML_POINT("/doc/lfun/funk/"+x+".html",hdr);
+#define HTML_SUB_EFUN_GRP(x,y) HTML_POINT("/doc/efun/funk/"+x+".html",hdr);
+#define HTML_SUB_EFUNS_LOW  HTML_POINT("/doc/efun/a-m",hdr);
+#define HTML_SUB_EFUNS_HIGH HTML_POINT("/doc/efun/n-z",hdr);
+#define HTML_SUB_LFUNS_LOW  HTML_POINT("/doc/lfun/a-m",hdr);
+#define HTML_SUB_LFUNS_HIGH HTML_POINT("/doc/lfun/n-z",hdr);
+#define HTML_SUB_REST_FILES(x) HTML_WRITE(path,"<P>Sub-Rest-Files: "+mixed2str(x)+"<P>\n");
+#define HTML_FILE(x)     HTML_POINT(x,hdr);
+#define HTML_SUB_MENU(x) HTML_POINT(x,hdr);
+
+// Variablen:
+//   edecs: Mapping: "efun": Deklaration
+//   egrps: Mapping: "efun-gruppe": ({"efun", ... })
+//   lgrps_alpha: sortiertes Array aus den Lfun-Gruppennamen
+//                (entspricht sort_array(m_indices(lgrps),#'>))
+//   egrps_alpha: sortiertes Array aus den Efun-Gruppennamen
+//                (entspricht sort_array(m_indices(egrups),#'>))
+//   efuns_low: sortiertes Array aus den Efun-Namen a-m
+//   efuns_high: sortiertes Array aus den Efun-Namen n-z
+//   driver_texte: Mapping "name": Datei
+mapping edecs, egrps, driver_texte;
+string *lgrps_alpha, *egrps_alpha, *efuns_low, *efuns_high;
+
+// Die Menuestruktur:
+//  2-elementiges Array:
+//    1. Element: Array aus den Ueberschriften der Eintraege
+//    2. Element: Array aus den dazugehoerigen Eintraegen:
+//       - Falls der Eintrag ein String ist, so ist er ein Dateiname,
+//         dessen Inhalt angezeigt werden soll.
+//       - Falls der Eintrag ein Array ist, so ist es ebenfalls wieder
+//         eine solche Menuestruktur
+//       - Ist der Eintrag eine Zahl, so gibt es folgende Moeglichkeiten:
+//	   R_LFUN: Lfun (Name siehe Ueberschrift)
+//         R_NO_MEN: Kein Menue
+//         R_EFUN: Efun (Name siehe Ueberschrift)
+//         R_WIKI: Eine Wiki-Seite (Name siehe Ueberschrift)
+mixed *dir_stru;
+
+// Zeiger auf Arrays innerhalb von dir_stru fuer entsprechende Updates
+mixed *gilden_dir_stru, *domain_dir_stru, *p_dir_stru;
+
+// Neue Lfun-Strukturen:
+//   ldata: ([ Position: Deklaration; Name; Groesse ])
+//   lgruppen: ([ Gruppe: ([ Funktionsname: ([ Position, ... ]) ]) ])
+//     (Es existiert auch ein Eintrag fuer die Gruppe "", welche alle
+//     Lfuns beinhaltet.)
+//   lsourcen: ([Dateiname: ([ Positionen, ...])
+mapping ldata;
+mapping lgruppen;
+mapping lsourcen;
+
+#define L_DEKLARATION	0
+#define L_NAME		1
+#define L_GROESSE	2
+
+/*
+FUNKTION: read_dir
+DEKLARATION: private mixed *read_dir(string str, int flag)
+BESCHREIBUNG:
+Ersatz fuer get_dir, wobei uninteressante Sachen (siehe Define JUNK)
+rausgefiltert werden. Als flag ist nur GETDIR_NAMES oder
+GETDIR_NAMES|GETDIR_SIZES erlaubt.
+GRUPPEN: Root:Enzy
+*/
+private mixed *read_dir(string str, int flag)
+{
+    mixed *ret;
+    int nr, much;
+
+    ret = get_dir(str,flag);
+    if (!sizeof(ret))
+	return ret;
+
+    if (flag == GETDIR_NAMES)
+	much = 0;
+    else if (flag == (GETDIR_NAMES|GETDIR_SIZES))
+	much = 1;
+    else
+    {
+	ERR("Falsches Flag in read_dir von " + str + ".\n");
+	return ret;
+    }
+
+    for (int i = sizeof(JUNK); i--; )
+    {
+	nr = member(ret,JUNK[i]);
+	if (nr >= 0)
+	    ret[nr..(nr + much)] = ({});
+    }
+    return ret;
+}
+
+nosave void html_rest_files(string path, string *files) {
+    int i;
+    string ret;
+
+    ret="";
+    for (i=0; i<sizeof(files); i++)
+	ret+="<LI> <A HREF = "+files[i]+">"+files[i]+"</A>\n";
+    HTML_WRITE(path,ret);
+}
+
+/*
+FUNKTION: read_file_unlimited
+DEKLARATION: private string read_file_unlimited(string file)
+BESCHREIBUNG:
+Ersatz fuer read_file ohne Beachtung der Laufzeitbeschraenkungen
+(LIMIT_FILE/LIMIT_BYTES siehe query_limits).
+GRUPPEN: Root:Enzy
+*/
+private string read_file_unlimited(string file)
+{
+    int size, i, blk;
+    string ret;
+    
+    blk = query_limits()[LIMIT_BYTE];
+    size = file_size(file);
+    ret = "";
+
+    do
+    {
+	ret += read_bytes(file,i,blk);
+	i += blk;
+    }
+    while(i < size);
+
+    return ret;
+}
+
+nosave void read_lfuns()
+{
+    mapping gruppen_namen = ([:0]);
+    string rest = "";
+    int pos = 0;
+    int blk = query_limits()[LIMIT_BYTE];
+    
+    ldata = ([:3]);
+    lgruppen = ([:1]);
+    lsourcen = ([:1]);
+
+    while(1)
+    {
+	string neu;
+	string *lines;
+	
+	neu = read_bytes(LFUNFILE, pos, blk);
+	if(!neu)
+	    break;
+	
+	rest += neu;
+	lines = explode(rest,"\n");
+	
+	foreach(string line: lines[0..<2])
+	{
+	    string *fields = explode(line,";");
+	    string funname = trim(fields[1]);
+	    string dateiname = trim(fields[0]);
+	    int startpos = to_int(fields[2]);
+	    mapping gruppen;
+	    
+	    m_add(ldata, startpos, trim(implode(fields[5..<1],";")),
+		funname, to_int(fields[3]));
+
+	    gruppen = mkmapping(map(explode(fields[4]+",",","),(:capitalize(trim($1)):)));
+	    if(sizeof(gruppen)<=1)
+		m_add(gruppen, "Unbekannt");
+	    gruppen_namen += gruppen;
+
+	    foreach(string gruppe: gruppen)
+	    {
+		gruppe = lower_case(trim(gruppe));
+		if(!member(lgruppen, gruppe))
+		    m_add(lgruppen, gruppe, ([funname:([startpos])]));
+		else if(!member(lgruppen[gruppe],funname))
+		    m_add(lgruppen[gruppe], funname, ([startpos]));
+		else
+		    m_add(lgruppen[gruppe][funname], startpos);
+	    }
+	    
+	    if(!member(lsourcen, dateiname))
+		m_add(lsourcen, dateiname, ([startpos]));
+	    else
+		m_add(lsourcen[dateiname], startpos);
+	}
+	
+	rest = lines[<1];
+	pos += blk;
+    }
+    
+    lgrps_alpha = sort_array(m_indices(m_delete(gruppen_namen, "")), #'>);
+}
+
+nosave void read_efuns() {
+    string txt, *lines;
+    int i, siz, wo;
+
+    edecs=([]);
+
+    txt=read_file(EDECFILE);
+    if (!txt || txt=="")
+	FATAL("Fehler beim Einlesen der Efun-Deklarationen.\n");
+
+    lines=explode(txt,"\n")-({""});
+    if (!lines || !sizeof(lines))
+	FATAL("Fehler beim explode() der Efun-Deklarationen.\n");
+
+    for (i=0,siz=sizeof(lines); i<siz; i++)
+	if ((wo=member(lines[i],' '))<0)
+	    ERR("Fehler in Zeile "+i+" der Efun-Deklarationen beim Zerlegen\n")
+	else
+	    edecs[lines[i][0..wo-1]]=trim(explode(lines[i][wo+2..]," #$# ")[0]);
+
+    efuns_low = filter(read_dir(EFUN_LOW_PATH + ".",GETDIR_NAMES) || ({}), (:member($1,'.')<0:));
+    efuns_high = filter(read_dir(EFUN_HIGH_PATH + ".",GETDIR_NAMES) || ({}), (:member($1,'.')<0:));
+
+    foreach(string fun: efuns_low + efuns_high)
+	if (!member(edecs,fun))
+	{
+	    edecs[fun] = "unknown";
+	    ERR("Efun-Deklaration fehlt: '" + fun + "'\n");
+	}
+}
+
+nosave void read_egrps() {
+    string *dir, txt, *lines;
+    int i, siz;
+
+    egrps=([]);
+    dir=get_dir(EDOCPATH+".");
+    if (!dir || !sizeof(dir))
+	FATAL("Fehler beim Einlesen des Efun-Doc-Verzeichnisses.\n");
+    dir=filter(dir-FUN_JUNK, (: $1[0]!='.' :));
+    egrps_alpha = dir;
+
+    for (i=0,siz=sizeof(dir); i<siz; i++) {
+	txt=read_file(EDOCPATH+dir[i]);
+	if (!txt || txt=="") {
+	    ERR("Fehler beim Einlesen des Efun-Gruppen-Files '"+dir[i]+"'\n")
+	    egrps_alpha-=({dir[i]});
+	    }
+	else {
+	    lines=explode(txt,"\n")-({""});
+	    if (!sizeof(lines)) {
+		ERR("Fehler beim Explode des Efun-Gruppen-Files '"+ dir[i]+"'\n")
+		egrps_alpha-=({dir[i]});
+		}
+	    else {
+		txt = lower_case(dir[i]);
+		if(member(egrps, txt)) {
+		    egrps[txt]+=map(lines,#'trim);
+		    egrps_alpha-=({dir[i]});
+		    }
+		else
+		    egrps[txt]=map(lines,#'trim);
+		}
+            }
+	}
+    egrps_alpha = sort_array(egrps_alpha,#'>);
+}
+
+nosave void read_driver()
+{
+    driver_texte = ([]);
+    
+    foreach(string dir: ({"concepts", "applied", "LPC" }))
+    {
+	string *inhalt = get_dir("/doc/"+dir+"/.");
+	if(!inhalt)
+	    FATAL("Fehler beim Einlesen der Driver-Doku-Verzeichnisse.\n");
+	inhalt -= DRIVER_JUNK;
+	
+	foreach(string file: inhalt)
+	    if(lower_case(file) == file)
+		m_add(driver_texte, file, sprintf("/doc/%s/%s", dir, file));
+    }
+}
+
+nosave mixed get_stru_lgruppe(string str)
+{
+    mapping ret=lgruppen[lower_case(str)];
+    return ({ 0, ({sort_array(m_indices(ret),#'>), ({R_LFUN})*sizeof(ret) }) });
+}
+
+nosave mixed get_stru_egruppe(string str)
+{
+    mixed ret=egrps[lower_case(str)];
+    return ({ 0, ({ret,({R_EFUN})*sizeof(ret) }) });
+}
+
+nosave mixed get_stru_funk(string str, string path, string *files, string hdr) {
+    int i;
+    mixed ret, *dir;
+    string *tmps;
+
+    switch(str) {
+      case "lfun_gruppen":
+	HTML_SUB_LFUN_GRUPPEN;
+	return ({ 0, ({ lgrps_alpha, 
+			map(lgrps_alpha,#'get_stru_lgruppe) }) });
+
+      case "efun_gruppen":
+	HTML_SUB_EFUN_GRUPPEN;
+	return ({ 0, ({ egrps_alpha, 
+			map(egrps_alpha,#'get_stru_egruppe) }) });
+
+      case "efuns_low":
+	HTML_SUB_EFUNS_LOW;
+	return ({ 0, ({ efuns_low, ({R_EFUN})*sizeof(efuns_low) }) });
+
+      case "efuns_high":
+	HTML_SUB_EFUNS_HIGH;
+	return ({ 0, ({ efuns_high, ({R_EFUN})*sizeof(efuns_high) }) });
+
+      case "rest_files":
+	dir = read_dir(path + ".",GETDIR_NAMES|GETDIR_SIZES);
+	tmps=({});
+	for (i=0; i<sizeof(dir); i+=2)
+	    if (dir[i+1]>0 && member(files,dir[i])<0)
+		tmps+=dir[i..i];
+	if (!sizeof(tmps))
+	    return 0;
+	HTML_SUB_REST_FILES(tmps);
+	return ({ 0, ({ tmps, tmps }) });
+
+      case "lfuns_low":
+        ret = sort_array(m_indices(filter(lgruppen[""],(:$1[0]<LFUN_TRENNER:))),#'>);
+	HTML_SUB_LFUNS_LOW;
+	return ({ 0, ({ ret, ({R_LFUN})*sizeof(ret) }) });
+
+      case "lfuns_high":
+        ret = sort_array(m_indices(filter(lgruppen[""],(:$1[0]>=LFUN_TRENNER:))),#'>);
+	HTML_SUB_LFUNS_HIGH;
+	return ({ 0, ({ ret, ({R_LFUN})*sizeof(ret) }) });
+
+      default:
+	if (str[0..11]=="lfun_gruppe:") {
+	    ret=lgruppen[lower_case(trim(str[12..]))];
+	    if (!ret)
+		NULL_ERR("get_stru_funk: Lfun-Gruppe "+str[12..]+" gibt es nicht.")
+	    HTML_SUB_LFUN_GRP(str[12..],ret);
+	    return ({ 0, ({ sort_array(m_indices(ret),#'>), ({R_LFUN})*sizeof(ret) }) });
+	    }
+	if (str[0..11]=="efun_gruppe:") {
+	    ret=egrps[lower_case(str[12..])];
+	    if (!ret)
+		NULL_ERR("get_stru_funk: Efun-Gruppe "+str[12..]+" gibt es nicht.")
+	    HTML_SUB_EFUN_GRP(str[12..],ret);
+	    return ({ 0, ({ ret, ({R_EFUN})*sizeof(ret) }) });
+	    }
+	NULL_ERR("get_stru_funk: "+str+" kenne ich nicht.")
+      }
+}
+
+nosave mixed get_stru_add(mixed stru, string typ, string rest, string path, string *files) {
+    int i, *tmp, siz;
+    mixed ret, *dir;
+    string *tmps, *fils;
+
+    switch(typ) {
+      case "line":
+	i=to_int(rest);
+	if (i<=0)
+	    i=60;
+	stru[0]+=({ copies("-",i) });
+	stru[1]+=({ R_NO_MEN });
+	HTML_LINE;
+	break;
+      case "lfun":
+	if (member(lgruppen[""],rest)<0)
+	    NULL_ERR("Lfun "+rest+" gibt es nicht.")
+	stru[0]+=({ rest });
+	stru[1]+=({ R_LFUN });
+	HTML_LFUN(rest);
+	break;
+      case "lfun_gruppe":
+	ret=lgruppen[lower_case(rest)];
+	if (!ret)
+	    NULL_ERR("Lfun-Gruppe "+rest+" gibt es nicht.")
+	stru[0]+=sort_array(m_indices(ret), #'>);
+	stru[1]+=({R_LFUN})*sizeof(ret);
+	HTML_LFUN_GRP(rest,sort_array(m_indices(ret), #'>));
+	break;
+      case "efun":
+	if (member(efuns_low,rest)<0 && member(efuns_high,rest)<0)
+	    NULL_ERR("Efun "+rest+" gibt es nicht.")
+	stru[0]+=({ rest });
+	stru[1]+=({ R_EFUN });
+	HTML_EFUN(rest);
+	break;
+      case "efun_gruppe":
+	ret=egrps[lower_case(rest)];
+	if (!ret)
+	    NULL_ERR("Efun-Gruppe "+rest+" gibt es nicht.")
+	stru[0]+=ret;
+	stru[1]+=({R_EFUN})*sizeof(ret);
+	HTML_EFUN_GRP(rest,ret);
+	break;
+       case "wiki":
+        stru[0]+=({ rest });
+	stru[1]+= ({ R_WIKI });
+	break;
+      case "rest_files":
+	dir = read_dir(path + ".", GETDIR_NAMES|GETDIR_SIZES);
+	fils=explode(rest,",")+files;
+	tmps=({});
+	for (i=0; i<sizeof(dir); i+=2)
+	    if (dir[i+1]>0 && member(fils,dir[i])<0)
+		tmps+=dir[i..i];
+	stru[0]+=tmps;
+	stru[1]+=tmps;
+	HTML_REST_FILES(tmps);
+	break;
+      default:
+	NULL_ERR("get_stru_add: "+rest+" kenne ich nicht.")
+      }
+    return stru;
+}
+
+nosave mixed *get_sub_dir(string menu_file) {
+    mixed *stru;
+    int i, siz;
+    string men, path, hdr;
+
+    stru=({ ({}), ({}) });
+    path=implode(explode(menu_file,"/")[0..<2],"/")+"/";
+    HTML_BEGIN;
+    if ((men=read_file(menu_file)) && men!="") {
+	string *lines, file, tmp, *file_list;
+	int size, pos1, pos2;
+	mixed ret;
+
+	file_list=({});
+	lines=explode(men,"\n");
+	for (i=0,siz=sizeof(lines); i<siz; i++) {
+	    if (lines[i]=="" || lines[i][0]=='#')
+		continue;
+	    pos1 = member(lines[i],' ');
+	    pos2 = member(lines[i],'\t');
+	    if (pos1<=0 && pos2<=0)
+		ERR("Fehler im Menue-File "+menu_file+" Zeile "+(i+1)+"\n")
+	    else {
+		if (pos1<=0)
+		    pos1=pos2;
+		else if (pos2>0)
+		    pos1=pos1<pos2?pos1:pos2;
+		file=lines[i][0..pos1-1];
+		hdr=trim(lines[i][pos1+1..]);
+
+		if (file[0]=='+') {
+		    ret=get_stru_add(stru,file[1..],hdr,path,file_list);
+		    if (!ret)
+			ERR(" ["+menu_file+" : "+(i+1)+"]\n")
+		    else
+			stru=ret;
+		    continue;
+		    }
+		if (file[0]=='@') {
+		    ret=get_stru_funk(file[1..],path,file_list,hdr);
+		    if (!ret)
+			ERR(" ["+menu_file+" : "+(i+1)+"]\n")
+		    else {
+			stru[0]+=({ hdr });
+			stru[1]+=({ ret });
+			}
+		    continue;
+		    }
+		if (file[0]=='>') {
+		    mixed *tmp_sub_dir;
+
+		    stru[0]+=({hdr});
+		    HTML_SUB_MENU(file);
+		    if (file[1]!='/')
+			file=path+file[1..];
+		    else
+			file=file[1..];
+		    tmp_sub_dir = ({ implode(explode(file,"/")[0..<2],"/")+"/",
+				     get_sub_dir(file) });
+		    if (file == GILDEN_MENU_FILE)
+		    {
+			gilden_dir_stru = tmp_sub_dir;
+		    }
+		    else if (file == DOMAIN_MENU_FILE)
+		    {
+			domain_dir_stru = tmp_sub_dir;
+		    }
+		    stru[1]+=({ tmp_sub_dir });
+		    continue;
+		    }
+		if (file[0] == '/')
+		    tmp = file;
+		else if (file[0..2] == "../") {
+		    tmp = abs_path(file,path);
+		    file = tmp;
+		    }
+		else {
+		    file_list += ({file});
+		    tmp = path + file;
+		    }
+		size=file_size(tmp);
+		if (size==-2) {
+		    stru[0]+=({ hdr });
+		    stru[1]+=({ ({ file, get_sub_dir(tmp+"/"+MENU_FILE) }) });
+		    if(file==P_MENU_FILE)
+			p_dir_stru = stru[1][<1];
+		    HTML_SUB_MENU(file);
+		    }
+		else if (size<=0)
+		    ERR("Fehler im Menue-File "+menu_file+" Zeile "+(i+1)+
+			" '"+file+"' existiert nicht\n")
+		else {
+		    stru[0]+=({ hdr });
+		    stru[1]+=({ file });
+		    HTML_FILE(file);
+		    }
+		}
+	    }
+	}
+    else {
+	mixed *dir;
+	string head;
+
+	dir = read_dir(path + ".", GETDIR_NAMES|GETDIR_SIZES);
+	for (i=0,siz=sizeof(dir); i<siz; i+=2) {
+	    if ((i+2)<sizeof(dir) && dir[i+2]==dir[i]+".hdr") {
+		i+=2;
+		head=read_file(path+dir[i],1,1)[0..<2];
+		stru[0]+=({ head });
+		}
+	    else {
+		head=dir[i];
+		if (dir[i+1]==-2)
+		    head+="/";
+		stru[0]+=({ head });
+		}
+	    if (dir[i+1]==-2) {
+		HTML_SUB_MENU(dir[i]);
+		stru[1]+=({({dir[i],get_sub_dir(path+dir[i]+"/"+MENU_FILE)})});
+		}
+	    else {
+		HTML_SUB_MENU(dir[i]);
+		stru[1]+=({ dir[i] });
+		}
+	    }
+    	}
+    HTML_END;
+    return stru;
+}
+
+nosave void read_something(int i) {
+    switch(i) {
+      case 0: 
+	write("Reading Efun-Declarations... ");
+	read_efuns();
+	break;
+      case 1:
+	write("Reading Efun-Groups... ");
+	read_egrps();
+	break;
+      case 2:
+        write("Reading new data for Lfuns...");
+	limited(#'read_lfuns,LIMIT_EVAL,2000000,LIMIT_MAPPING,10000);
+	// Spaetestens ab 10000 Eintraegen sollte man eine bessere
+	// Einteilung statt a-m, n-z im Menue finden.
+	break;
+      case 3:
+	write("Reloading menu-structure... ");
+	limited(function void()
+	{
+	    dir_stru=get_sub_dir("/doc/"+MENU_FILE);
+	}, LIMIT_EVAL,1000000);
+	break;
+      case 4:
+        write("Reading Driver documentation...");
+	read_driver();
+	break;
+      default:
+	write("Saving... ");
+	save_object(SAVE_FILE);
+	write("Finished.\n");
+	return;
+      }
+    write("done. ("+get_eval_cost()+")\n");
+    call_out("read_something",2,i+1);
+}
+
+void do_read(int i) {
+    if ((this_interactive()==this_player() && adminp(this_player()) &&
+         geteuid(previous_object()) == geteuid(this_player())) ||
+	(object_name(previous_object()) == "/secure/udp/signal")) {
+	if (find_call_out("read_something")<0)
+	    read_something(i);
+	else
+	    write("Die Variablen werden gerade geladen !\n");
+	}
+}
+
+int update_gilden_doc(string gilde)
+{
+    write("Reloading Gilden-Menu-structure... ");
+    gilden_dir_stru[1] = get_sub_dir(GILDEN_MENU_FILE);
+    save_object(SAVE_FILE);
+    write("done\n");
+    return 1;
+}
+
+int update_domain_doc(string domain)
+{
+    write("Reloading Domain-Menu-structure... ");
+    domain_dir_stru[1] = get_sub_dir(DOMAIN_MENU_FILE);
+    save_object(SAVE_FILE);
+    write("done\n");
+    return 1;
+}
+
+int update_p_doc()
+{
+    write("Reloading p-Menu-structure... ");
+    p_dir_stru[1] = get_sub_dir(P_MENU_FILE+"/"+MENU_FILE);
+    save_object(SAVE_FILE);
+    write("done\n");
+    return 1;
+}
+
+void create() {
+    restore_object(SAVE_FILE);
+}
+
+void prepare_renewal() {}
+void finish_renewal(object neu) {}
+void abort_renewal() {}
+
+/*
+FUNKTION: query_efuns
+DEKLARATION: string *query_efuns(string regexp)
+BESCHREIBUNG:
+Liefert die Namen aller Efuns, die auf den regulaeren Ausdruck regexp passen
+(oder alle, falls regexp 0 ist).
+GRUPPEN: Root:Enzy
+*/
+string *query_efuns(string pad) {
+    string *res;
+    if (!pad)
+	return efuns_low+efuns_high;
+    if (!stringp(pad))
+	FAIL("Keine Regular-Expression uebergeben.\n");
+    if (pad=="." || pad=="*" || pad==".*")
+	return efuns_low+efuns_high;
+    if (catch(res=regexp(efuns_low,pad)+regexp(efuns_high,pad)))
+	FAIL("Ungueltige Regular-Expression uebergeben.\n");
+    return res;
+}
+
+/*
+FUNKTION: query_efun_hilfetext
+DEKLARATION: varargs string query_efun_hilfetext(string funk, int original)
+BESCHREIBUNG:
+Liefert den Hilfetext zu einer Efun zurueck.
+Ist original != 0, wird nur der englische Originaltext geliefert,
+keine uebersetzte deutsche Fassung.
+GRUPPEN: Root:Enzy
+*/
+varargs string query_efun_hilfetext(string funk, int original)
+{
+    string txt,txt2;
+    int *stat;
+
+    if (!stringp(funk))
+	FAIL("Keine Funktion uebergeben.\n");
+    if (!member(edecs,funk))
+	FAIL("Eine solche Funktion kenne ich nicht.\n");
+    if (funk[0]<EFUN_TRENNER)
+    {
+        if(original)
+            txt = read_file(EFUN_LOW_PATH+funk);
+        txt ||= read_file(EFUN_LOW_PATH+funk+".de");
+        txt ||= read_file(EFUN_LOW_PATH+funk);
+    }
+    else
+    {
+        if(original)
+            txt = read_file(EFUN_HIGH_PATH+funk);
+        txt ||= read_file(EFUN_HIGH_PATH+funk+".de");
+        txt ||= read_file(EFUN_HIGH_PATH+funk);
+    }
+    if (!txt || txt=="")
+	NULL_ERR("Efun "+funk+" : Keine Hilfe!\nWende dich an einen Admin.\n")
+    txt2=read_file(EFUN_NOTES+funk);
+    if(txt2)
+	txt = txt + EFUN_NOTES_LINE + txt2;
+    return txt;
+}
+
+/*
+FUNKTION: query_driver_hilfetext
+DEKLARATION: varargs string query_driver_hilfetext(string name, int original)
+BESCHREIBUNG:
+Liefert den Hilfetext zu einem Thema in der Driver-Doku zurueck.
+Ist original != 0, wird nur der englische Originaltext geliefert,
+keine uebersetzte deutsche Fassung.
+GRUPPEN: Root:Enzy
+*/
+varargs string query_driver_hilfetext(string name, int original)
+{
+    string txt;
+    
+    if (!stringp(name))
+	FAIL("Keinen Name uebergeben.\n");
+    if (!member(driver_texte,name))
+	FAIL("Keine Dokumentation dazu vorhanden.\n");
+
+    if(original)
+	txt = read_file(driver_texte[name]);
+    txt ||= read_file(driver_texte[name]+".de");
+    txt ||= read_file(driver_texte[name]);
+
+    return txt;
+}
+
+/*
+FUNKTION: query_efun_deklaration
+DEKLARATION: string query_efun_deklaration(string funk)
+BESCHREIBUNG:
+Liefert die Deklaration zu einer Efun zurueck.
+GRUPPEN: Root:Enzy
+*/
+string query_efun_deklaration(string funk) {
+    if (!stringp(funk))
+	FAIL("Keine Efun uebergeben.\n");
+    notify_fail("Diese Efun kenne ich nicht.\n");
+    return ""+edecs[funk];
+}
+
+/*
+FUNKTION: query_efun_gruppen
+DEKLARATION: string *query_efun_gruppen()
+BESCHREIBUNG:
+Liefert alle Efun-Gruppen zurueck
+GRUPPEN: Root:Enzy
+*/
+string *query_efun_gruppen() { return ({})+egrps_alpha; }
+
+/*
+FUNKTION: query_efun_gruppen_funktionen
+DEKLARATION: varargs string *query_efun_gruppen_funktionen(string grp, string regexp)
+BESCHREIBUNG:
+Liefert alle Funktionen der Efun-Gruppe grp zurueck, die auf den regulaeren
+Ausdruck regexp passen (bzw. alle Funktionen, falls regexp gleich 0 ist).
+GRUPPEN: Root:Enzy
+*/
+varargs string *query_efun_gruppen_funktionen(string grp,string pad) {
+    mixed r;
+    string *ret;
+
+    if (!stringp(grp))
+	FAIL("Keine Efun-Gruppe uebergeben.\n");
+    ret=egrps[lower_case(grp)];
+    if (!ret)
+	FAIL("Diese Efun-Gruppe kenne ich nicht.\n");
+    if (!pad)
+	return ({})+ret;
+    if (!stringp(pad))
+	FAIL("Keine Regular-Expression uebergeben.\n");
+    if (pad=="." || pad=="*" || pad==".*")
+	return ({})+ret;
+    if (catch(r=regexp(({"dummy"}),pad)) || !r)
+	FAIL("Ungueltige Regular-Expression uebergeben.\n");
+    return regexp(ret,pad);
+}
+
+private mapping merge_group_data(mapping g1, mapping g2)
+{
+    mapping res = g1 + g2;
+    mapping diff = g1 & g2;
+    
+    foreach(string name, mapping pos: diff)
+	res[name] += pos;
+
+    return res;
+}
+
+private mapping get_group_data(string *gruppen)
+{
+    mapping res = ([:1]);
+
+    if(!gruppen)
+	gruppen = ({""});
+    
+    foreach(string gruppe: gruppen)
+	if(lgruppen[gruppe])
+	    res = merge_group_data(res, lgruppen[gruppe]);
+
+    return res;
+}
+/*
+FUNKTION: query_lfun_deklarationen
+DEKLARATION: varargs mapping query_lfun_deklarationen(string *gruppen, string regexp, string dateiname)
+BESCHREIBUNG: -- Interne Funktion! --
+Liefert die Funktion mit ihren Deklarationen aus den Gruppen 'gruppen', welche
+auf den regulaeren Ausdruck 'regexp' passen und in der Datei 'dateiname'
+vorkommen, in einem Mapping (["Funktionsname":"Deklarationen"]) zurueck.
+Jeder der Parameter kann 0 sein, dann werden entsprechend alle Funktionen
+genommen.
+GRUPPEN: Root:Enzy
+VERWEISE: query_lfun_texte
+*/
+varargs mapping query_lfun_deklarationen(string *pgruppen, string pre, string pdateiname)
+{
+    return limited(lambda(0, ({
+    (:
+	string *gruppen = $1;
+	string re = $2;
+	string dateiname = $3;
+
+	mapping res;
+
+	if(dateiname && !member(lsourcen, dateiname))
+	    FAIL("Ich habe keine Informationen ueber diesen Dateinamen.\n");
+
+	if(!gruppen)
+	    res = lgruppen[""];
+	else
+	    res = get_group_data(gruppen);
+	
+        if(re)
+	{
+	    string *names = m_indices(res);
+	    if(catch(names=regexp(names,re)))
+		FAIL("Ungueltige Regular-Expression uebergeben.\n");
+	    res = res & names;
+	}
+
+	res = map(res,
+	    (:
+		implode(sort_array(m_indices(mkmapping(map(m_indices($3?($2&$3):$2), ldata))),#'>), " / ")
+	    :), dateiname && lsourcen[dateiname]);
+
+	if(dateiname)
+	    return filter(res,(:strlen($2):));
+	return res;
+    :), pgruppen && quote(pgruppen), pre, pdateiname })),
+	LIMIT_MAPPING, 10000, LIMIT_ARRAY, 10000);
+}
+
+/* Diese Funktion wird nirgendwo genutzt.
+varargs string *query_lfun_namen(string *gruppen, string re)
+{
+    mapping res = ([:0]);
+
+    if(!gruppen)
+	res = m_reallocate(lgruppen[""],0);
+    else
+	foreach(string gruppe: gruppen)
+	    if(lgruppen[gruppe])
+		res += m_reallocate(lgruppen[gruppe],0);
+    
+    if(re)
+    {
+	string *names = m_indices(res);
+	if(catch(names=regexp(names,re)))
+	    FAIL("Ungueltige Regular-Expression uebergeben.\n");
+	return sort_array(names, #'>);
+    }
+    else
+	return sort_array(m_indices(res), #'>);
+}
+*/
+
+/*
+FUNKTION: query_lfun_texte
+DEKLARATION: string query_lfun_texte(string* gruppen, string name)
+BESCHREIBUNG: -- Interne Funktion! --
+Liefert die Texte der Funktionen 'name' in den Gruppen 'gruppen' zurueck.
+'gruppen' kann auch 0 sein, dann werden alle Funktionen betrachtet.
+GRUPPEN: Root:Enzy
+VERWEISE: query_lfun_deklarationen
+*/
+string query_lfun_texte(string* gruppen, string name)
+{
+    mapping pos;
+    string text;
+    
+    if (!stringp(name))
+	FAIL("Keine Funktion uebergeben.\n");
+	
+    if(!gruppen)
+	pos = lgruppen[""][name];
+    else
+    {
+	pos = ([:0]);
+	foreach(string gruppe: gruppen)
+	    if(lgruppen[gruppe] && lgruppen[gruppe][name])
+		pos += lgruppen[gruppe][name];
+    }
+    
+    if(!sizeof(pos))
+	FAIL("Eine solche Funktion kenne ich nicht.\n");
+    
+    foreach(int p: pos)
+    {
+	int j;
+	string doku = read_bytes(LTEXTFILE, p, ldata[p,L_GROESSE]);
+
+        if (!doku || doku=="")
+    	    doku = "Fehler im Texte-File (Funktion: "+name+" Ab: "+p+")\n";
+	
+	// Umbrechen der Deklaration
+	j=strstr(doku,"\nDEKLARATION: ");
+        if(j>=0)
+        {
+	    int k = strstr(doku,"\n",j+1) - 1;
+            if(k<0) k=strlen(doku);
+            doku[j+1..k+1] = sprintf("DEKLARATION: %s%=-62s\n",
+                doku[j+14..min(j+17,k)], doku[j+18..k]);
+        }
+	
+	if (text)
+	    text += "--------------------\n"+doku;
+	else
+	    text = doku;
+    }
+    return text;
+}
+
+string *query_lfun_gruppen() { return ({})+lgrps_alpha; }
+
+nosave mixed get_new_menu(int *path, mixed *stru, string pfad, int original)
+{
+    mixed tmp;
+    string txt;
+    int *stat;
+
+    if (!sizeof(path))
+	return ({ stru[0], sizeof(stru[0]) });
+
+    if(intp(stru[1][path[0]]) && stru[1][path[0]]==R_WIKI)
+    {
+	txt = stru[0][path[0]];
+	foreach(tmp : path[1..])
+	    txt=explode(read_file(WIKIPATH(txt)+".lnk")||"","\n")[tmp];
+	if(!strstr(txt,"/doc/"))
+	    return ({ txt, -1 });
+	
+	return ({ WIKIPATH(txt)+".txt",
+	    strlen((read_file(WIKIPATH(txt)+".lnk")||"")&"\n")||-1 });
+    }
+
+    if (sizeof(path)>1) {
+	tmp=stru[1][path[0]][0];
+	return get_new_menu(path[1..],stru[1][path[0]][1],
+		tmp?(tmp[0]!='/'?pfad+"/"+tmp:tmp):0, original);
+	}
+
+    tmp=stru[1][path[0]];
+    if (stringp(tmp))
+	return ({ tmp[0]!='/'?pfad+"/"+tmp:tmp , 0 });
+
+    if (intp(tmp))
+	switch(tmp)
+	{
+	    case R_LFUN:
+		txt = query_lfun_texte(0, stru[0][path[0]]);
+		if(!txt)
+		    return ({ ({ "Unbekannte Funktion '"+stru[0][path[0]]+"'."}), 0 });
+		
+		return ({ explode(("-"*79)+txt+("-"*79),"\n"), 0 });
+		
+	    case R_NO_MEN:
+		return ({ ({ "Das ist kein Menue-Punkt." }), 0 });
+		
+	    case R_EFUN:
+		if (stru[0][path[0]][0]<EFUN_TRENNER)
+		{
+		    if(original || file_size(EFUN_LOW_PATH+stru[0][path[0]]+".de")<0)
+			return ({ EFUN_LOW_PATH+stru[0][path[0]], 0 });
+		    else
+			return ({ EFUN_LOW_PATH+stru[0][path[0]]+".de", 0 });
+		}
+		else
+		{
+		    if(original || file_size(EFUN_HIGH_PATH+stru[0][path[0]]+".de")<0)
+			return ({ EFUN_HIGH_PATH+stru[0][path[0]], 0 });
+		    else
+			return ({ EFUN_HIGH_PATH+stru[0][path[0]]+".de", 0 });
+		}
+
+	    default:
+		return ({ "/doc/lfun/README", 0 });
+	}
+
+    return ({ tmp[1][0], sizeof(tmp[1][0]) });
+}
+
+mixed get_menu(mixed men, int num, int original)
+{
+    int *path, i, siz;
+    mixed *tmp;
+
+    if (!pointerp(men))
+	return ({ ({({1,1})}), dir_stru[0], "Menu [z,<nr>,u,q] ", sizeof(dir_stru[0]) });
+
+    if (!sizeof(men))
+	return "Weiter zurueck geht es nicht.\n";
+
+    path=({});
+    for (i=0,siz=sizeof(men); i<siz; i++)
+    {
+	if (!pointerp(men[i]) || sizeof(men[i])<S_SIZE || men[i][S_MENUE]<=0)
+	    return "Fehler im Parameter.\n";
+	path+=({men[i][S_MENUE]-1});
+    }
+    if (num>0)
+    {
+	path+=({num-1});
+	men+=({ ({num,1}) });
+    }
+    tmp=get_new_menu(path[1..],dir_stru,"/doc",original);
+    return ({ men, tmp[0], tmp[1]?"Menu [z,<nr>,u,q] ":0, tmp[1] });
+}

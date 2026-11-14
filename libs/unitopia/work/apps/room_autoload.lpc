@@ -1,0 +1,1111 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/room_autoload.c
+// Description: Room-Autoload-Objekte (z.B. Skelette und Schranken)
+// Author:	Maulwurf
+//
+// UID: Apps
+//
+// Modified by: Freaky (23.12.93)
+//
+// $Log: room_autoload.c,v $
+// Revision 1.13  2013/12/08 21:10:21  myonara
+// Befehl umzug und bugfixes dazu.
+//
+// Revision 1.12  2013/12/08 19:32:21  myonara
+// User-Interface ergaenzt, als Buch in /room/rathaus/teleport
+//
+// Revision 1.11  2013/12/08 14:11:32  myonara
+// tabs durch spaces ersetzt
+//
+// Revision 1.10  2011-12-10 01:19:36  gnomi
+// Schatztruhen umgebaut.
+//
+// Revision 1.9  2009-06-17 07:44:09  gnomi
+// Die Schatzkisten werden jetzt von hier aus gesteuert.
+//
+// Revision 1.8  2009-04-15 13:36:22  gnomi
+// Bauarbeiter-Liste regelmaessig und nach /var rausschreiben.
+// 0-Sekunden-Call-out.
+//
+// Revision 1.7  2002/12/01 13:41:28  freaky
+// auch nicht-strings als Parameter zulassen
+//
+// Revision 1.6  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.5  2002/05/04 08:37:30  gnomi
+// Beim Schreiben der Info-Datei wird bei Map-Raeumen der Originalname
+// in Klammern angegeben.
+//
+// Revision 1.4  2002/04/15 04:06:27  gnomi
+// write_all_bauarbeiter freigegeben.
+//
+// Revision 1.3  2001/04/20 13:46:56  freaky
+// Debuggin eingebaut.
+//
+// Revision 1.2  2001/04/20 00:24:23  freaky
+// schatzkisten eingebaut.
+//
+// Revision 1.1  2001/04/19 23:40:18  freaky
+// aus /secure/master/auto_load.inc extrahiert.
+//
+
+#pragma strict_types
+
+nosave variables inherit "/i/item";
+nosave variables inherit "/i/install";
+nosave variables inherit "/i/tools/security";
+
+#include <apps.h>
+#include <level.h>
+#include <message.h>
+#include <more.h>
+#include <room.h>
+#include <tls.h>
+
+#define SAVE_FILE  "/var/room_autoload"
+#define LIST_FILE  "/var/BAUARBEITER"
+#define LOGD_FILE  "/var/BAUARBEITER_GELOESCHT"
+#define CHEST_FILE "/save/SCHATZKISTEN"
+// CHEST_FILE ist veraltet und wird nur der Kompatibilitaet
+// wegen geschrieben und gelesen.
+#define CHECK_REST_EVALS 170000
+
+private mapping room_objects;
+private mapping room_initializer;
+private mapping schatzkisten;
+
+int has_schatzkiste(object room);
+void remove_dig_controller(object room);
+void add_dig_controller(object room);
+
+nosave string desc = "Das Buch der Baustellen.\n"+
+  "Beim Lesen sieht man die eigenen Zustaendigkeitsbereiche als Dateipfade.\n"+
+  "Mit 'pruefe <pfad>' kann man innerhalb seiner Bereiche eine Pruefung\n"+
+  "anstossen, diese gibt dann die Pfade aus, welche nicht mehr existieren.\n"+
+  "Bei map und vc Raeumen kann es vorkomment, dass der Raum durch die \n"+
+  "Pruefung geladen wird. Mit 'loesche <raumpfad>' lassen sich alle\n"
+  "Autoloader des Raumes auf einmal loeschen, nur fuer Berechtigte.\n"
+  "'umzug <pfad-alt> <pfad-neu>' koennen Autoloader von einem Raum zum\n"
+  "anderen umgezogen werden, danach bitte von Hand vor Ort pruefen.\n";
+
+string * get_wiz_pathes_of(string wiz)
+{
+    mapping result = ([ ]);
+    string * doms = ({string*}) DOMAIN_INFOS->query_domains_of(wiz)
+                 + ({string*})DOMAIN_INFOS->query_domainhelfer_of(wiz);
+    string * auths = map(({string*})FILED->query_auth_of(wiz),
+                (: capitalize($1) :));
+    foreach(string dom : doms)
+    {
+        result[dom] = "/d/"+dom+"/";
+    }
+    foreach(string auth : auths & ({ "Gilden","Raetsel","Spiele"  }))
+    {
+        result[auth] = "/z/"+auth+"/";
+    }
+    return sort_array(m_values(result),#'>);
+}
+
+string query_long(object who)
+{
+   return desc + "Man kann das Buch und die Liste lesen.\n";
+}
+
+varargs string query_read(string rest, string str, object leser)
+{
+    string res = desc;
+    string * zust;
+    
+    leser ||= this_player();
+    
+    zust = get_wiz_pathes_of(({string})leser->query_real_name());
+    res += "Zustaendigkeitsbereiche:\n";
+    if (sizeof(zust))
+        res+=implode(zust,"\n")+"\n";
+    else
+        res+="Keine.ßn";
+    leser->more(explode(res,"\n"),0,0,M_AUTO_END);
+    return "";
+}
+
+string bauarbeiter_read(string parse_rest, string str, mapping was, 
+                        object leser)
+{
+    if (wizp(leser))
+    {
+        leser->more(LIST_FILE);
+        return "";
+    }
+    return "Unleserliches Gebrabbel!\n";
+}
+
+int pruefe_com(string str)
+{
+    string * zust;
+    string name;
+    str = space(str);
+    if (str == "")
+    {
+        notify_fail("pruefe <pfad>\n");
+        return 0;
+    }
+    if(!wizp(this_player()) || !check_security())
+    {
+        notify_fail("Du darfst das noch nicht!\n");
+        return 0;
+    }
+    name = ({string})this_player()->query_real_name();
+    if (adminp(this_player())) // darf jeden Pfad pruefen
+    {
+        call_out("do_check_path",1,name,str,0);
+        send_message_to(this_player(),MT_DEBUG,MA_LOOK,
+            wrap("Pruefung gestartet."));
+        return 1;
+    }
+    zust = get_wiz_pathes_of(name);
+    if (!sizeof(zust))
+    {
+        notify_fail("Keine Zustaendigkeiten!\n");
+        return 0;
+    }
+    if (find_call_out("do_check_path")>-1)
+    {
+        notify_fail("Es laeuft schon eine Pruefung!\n");
+        return 0;
+    }
+    foreach(string path : zust)
+    {
+        if (strstr(str,path)==0)
+        {
+            call_out("do_check_path",1,name,str,0);
+            send_message_to(this_player(),MT_DEBUG,MA_LOOK,
+                wrap("Pruefung gestartet."));
+            return 1;
+        }
+    }
+    notify_fail("Pfad passt zu keinem Zustaendigkeitsbereich.\n");
+    return 0;
+}
+
+void init()
+{
+    if (wizp(this_player()))
+    {
+        add_action("pruefe_com","pruefe");
+        add_action("loesche_com","loesche");
+        add_action("umzug_com","umzug");
+    }
+}
+
+void create()
+{
+   init_security_for_actions();
+   set_name("baustellenbuch");
+   set_gender("saechlich");
+   set_id(({"buch", "baustellenbuch","roomautoload"}));
+   set_short("Das Buch der Baustellen");
+   add_v_item( ([
+    "name": "liste",
+    "gender":"weiblich",
+    "id": ({ "liste","bauarbeiter" }),
+    "long":"Eine Liste von Bauarbeitern, die man lesen kann. Die Liste ist "
+           "alphabetisch nach Raumname sortiert und wird 5 min nach der "
+           "letzten Aenderung neu erzeugt.",
+    "read" : #'bauarbeiter_read,
+   ]) );
+    if (!room_objects)
+    {
+        restore_object(SAVE_FILE);
+        if (!room_objects)
+            room_objects = ([]);
+        if (!room_initializer)
+            room_initializer = ([]);
+        if (!schatzkisten)
+            schatzkisten = ([]);
+    }
+}
+
+void save()
+{
+    save_object(SAVE_FILE);
+
+    write_file(CHEST_FILE, implode(m_values(map(schatzkisten,
+        function string(string room, mapping *kisten)
+        {
+            return sprintf("%s:%s\n", room, implode(map(kisten,
+                function string(mapping kiste)
+                {
+                    return sprintf("%s|%s", kiste[CHEST_NAME] || kiste[CHEST_OWNER] || "niemand",
+                        implode(map(kiste[CHEST_MONEY]||({}),
+                            function string(mapping geld)
+                            {
+                                return sprintf("%s|%s|%d",
+                                geld["valuta"], geld["valutas"], geld["money"]);
+                            }),"|"));
+                        }),"#"));
+                })), ""), 1);
+
+    remove_call_out("write_all_bauarbeiter");
+    call_out("write_all_bauarbeiter",300);
+}
+
+void prepare_renewal() {}
+void abort_renewal() {}
+void finish_renewal(object neu) {}
+
+int secure()
+{
+    if (adminp(this_interactive()) && this_interactive() == this_player() &&
+            geteuid(previous_object()) == geteuid(this_interactive()))
+        return 1;
+}
+
+mapping query_room_objects()
+{
+    if (secure())
+        return room_objects;
+}
+
+mapping query_room_initializers()
+{
+    if (secure())
+        return room_initializer;
+}
+
+mapping query_all_schatzkisten()
+{
+    if (secure())
+        return schatzkisten;
+}
+
+// Wird beim allersten Laden des Raumes aufgerufen
+void init_room(object room)
+{
+    string *to_remove = ({});
+
+    foreach(string master: room_initializer[object_name(room)] || ({}))
+    {
+        string err = catch(master->init_room(room); publish);
+        if(err)
+            to_remove += ({master});
+    }
+
+    if(sizeof(to_remove))
+    {
+        string name = object_name(room);
+        string *initializer  = room_initializer[name] - to_remove;
+
+        if(sizeof(initializer))
+            room_initializer[name] = initializer;
+        else
+            m_delete(room_initializer, name);
+        save();
+    }
+
+    if(has_schatzkiste(room))
+        add_dig_controller(room);
+}
+
+mixed *query_autoload_objects(object ob)
+{
+#if __BOOT_TIME__ < 1323460000
+    if(!ob->query_type("room_initialised"))
+    {
+        ob->add_type("room_initialised", 1);
+        init_room(ob);
+    }
+#endif
+    return objectp(ob) && deep_copy(room_objects[object_name(ob)]);
+}
+
+varargs mixed *set_autoload(object room, object ob, string parameter)
+{
+    object who;
+    string room_name, obj_name, name, wiz_name, content;
+    int num;
+    mixed *old_load;
+
+    if (!ob || !room || !present(ob,room))
+        return 0;
+
+    room_name = object_name(room);
+    obj_name = object_name(ob);
+    if (sscanf(obj_name,"%s#%d",name,num) == 2)
+        obj_name = name;
+
+    who = this_interactive();
+    if (!who)
+    {
+        who = this_player();
+        if (!who)
+            who = previous_object();
+    }
+
+    if (!who)
+        wiz_name = "__UNBEKANNT__";
+    else
+    {
+        wiz_name = ({string})who->query_real_name();
+        if (!stringp(wiz_name) || wiz_name == "")
+        {
+            wiz_name = ({string})who->query_name();
+            if (!stringp(wiz_name) || wiz_name == "")
+                wiz_name = object_name(who);
+        }
+    }
+
+    old_load = room_objects[room_name];
+    if (!old_load)
+        old_load = ({ ({}), ({}), ({}) });
+    old_load[0] += ({ wiz_name });
+    old_load[1] += ({ obj_name });
+    old_load[2] += ({ parameter });
+    room_objects[room_name] = old_load;
+
+    save();
+    return deep_copy(old_load);
+}
+
+varargs int remove_autoload(object room, string o_name,
+                    string o_parameter, string o_wiz_name)
+{
+    string room_name;
+    mixed *old_load;
+    int i;
+    
+    if (!room)
+        return -1;
+
+    if (!o_name || o_name == "")
+        return -1;
+
+    room_name = object_name(room);
+
+    old_load = room_objects[room_name];
+    if (!old_load)
+        return -1;
+
+    for (i = sizeof(old_load[0]); i--; )
+        if (old_load[1][i] == o_name &&
+            (!stringp(o_parameter) || o_parameter == old_load[2][i]) &&
+            (!o_wiz_name || o_wiz_name == old_load[0][i]) )
+        {
+            if (sizeof(old_load[0]) == 1)
+                m_delete(room_objects,room_name);
+            else
+            {
+                old_load[0] = arr_delete(old_load[0],i);
+                old_load[1] = arr_delete(old_load[1],i);
+                old_load[2] = arr_delete(old_load[2],i);
+
+                room_objects[room_name] = old_load;
+            }
+
+            save();
+            return i;
+        }
+    return -1;
+}
+
+int remove_room(string roomname)
+{
+    int res = member(room_objects, roomname);
+    
+    // mal abgesichert.
+    if (extern_call() && (!check_security() || !adminp(this_player())))
+        return 0;
+
+    if (res)
+    {
+        write_file(LOGD_FILE, shorttimestr(time())+": "+roomname+"\n"+
+                   mixed2str(room_objects[roomname]));
+        m_delete(room_objects, roomname);
+        save();
+    }
+    
+    return res;
+}
+
+
+void clean_autoload(string ob)
+{
+    int i, j, min, too_old_skelett;
+    string *file_names, *to_check;
+    mixed *obs;
+
+    file_names = m_indices(room_objects);
+    to_check = ({});
+
+    for (i = sizeof(file_names); i--; )
+    {
+        obs = room_objects[file_names[i]];
+        if (!pointerp(obs))
+        {
+            printf("Fehler bei %s : %O\n",file_names[i],obs);
+            m_delete(room_objects,file_names);
+        }
+        else if (sizeof(obs) != 3)
+        {
+            printf("Size != 3 : %s : %O\n",file_names[i],obs);
+            m_delete(room_objects,file_names);
+        }
+        else
+        {
+            min = sizeof(obs[0]);
+            if (min != sizeof(obs[1]))
+            {
+                printf("Laengen sind unterschiedlich : %s : %O\n",
+                    file_names[i],obs);
+                if (min > sizeof(obs[1]))
+                    min = sizeof(obs[1]);
+                if (min > 0)
+                {
+                    obs[0] = obs[0][0..min-1];
+                    obs[1] = obs[1][0..min-1];
+                    obs[2] = obs[2][0..min-1];
+                    room_objects[file_names[i]] = obs;
+                }
+            }
+            if (min != sizeof(obs[2]))
+            {
+                printf("Laengen sind unterschiedlich : %s : %O\n",
+                    file_names[i],obs);
+                if (min > sizeof(obs[2]))
+                    min = sizeof(obs[2]);
+                if (min > 0)
+                {
+                    obs[0]=obs[0][0..min-1];
+                    obs[1]=obs[1][0..min-1];
+                    obs[2]=obs[2][0..min-1];
+                    room_objects[file_names[i]]=obs;
+                }
+            }
+            if (min == 0)
+            {
+                printf("Leer: %s : %O \n",file_names[i],obs);
+                m_delete(room_objects,file_names[i]);
+            }
+            else if (file_names[i][0..2]=="/w/" || file_names[i][0..2]=="/p/")
+            {
+                printf("Deleting %s\n",file_names[i]);
+                m_delete(room_objects,file_names[i]);
+            }
+            else if (ob)
+            {
+                for (j=min; j--; )
+                    if (obs[1][j] == ob)
+                    {
+                        printf("Deleting in : %s\n",file_names[i]);
+                        if (min==1)
+                            m_delete(room_objects,file_names[i]);
+                        else
+                        {
+                            obs[0] = arr_delete(obs[0],j);
+                            obs[1] = arr_delete(obs[1],j);
+                            obs[2] = arr_delete(obs[2],j);
+
+                            room_objects[file_names[i]] = obs;
+                        }
+                    }
+            }
+            // entferne uralte Skelette
+            too_old_skelett = time() - 604800;
+            for (j = min; j--; )
+                if (obs[1][j] == "/obj/skelett")
+                {
+                    if (too_old_skelett > to_int (explode(obs[2][j],"_")[1]))
+                    {
+                        printf ("Deleting skelett in: %s\nvon: %s time: %d\n",
+                        file_names[i], explode(obs[2][j],"_")[0],
+                        to_int(explode(obs[2][j],"_")[1]));
+                        if (min==1)
+                            m_delete(room_objects,file_names[i]);
+                        else
+                        {
+                            obs[0] = arr_delete(obs[0],j);
+                            obs[1] = arr_delete(obs[1],j);
+                            obs[2] = arr_delete(obs[2],j);
+
+                            room_objects[file_names[i]]=obs;
+                        }
+                    }
+                }
+            if (member(room_objects,file_names[i]))
+            {
+                if (!find_object(file_names[i]))
+                    to_check += ({file_names[i]});
+            }
+        }
+    }
+    save();
+    printf("To check: %O\n",to_check);
+    if (sizeof(to_check))
+        call_out("clean_rest",1,to_check,sizeof(to_check) - 1);
+}
+
+nosave void clean_rest(string *files, int num)
+{
+    if (num > 0)
+        call_out("clean_rest",1,files,num - 1);
+
+    if (!find_object(files[num]))
+    {
+        object ob;
+        string err;
+
+        err = catch(ob = touch(files[num]); publish);
+        if (err)
+        {
+            printf("Error occured at %s: %s",files[num],err);
+            /*
+            printf("Deleting %s\n",files[num]);
+            m_delete(room_objects,files[num]);
+            */
+            save();
+        }
+        else if (!ob)
+        {
+            printf("Deleting (does not exists): %s\n",files[num]);
+            m_delete(room_objects,files[num]);
+            save();
+        }
+        else
+        {
+            ob->let_not_in(this_object(),this_object(),0);
+            ob->remove();
+            if (ob)
+                destruct(ob);
+        }
+    }
+}
+
+private string calc_room_key(object room)
+{
+    return hash(TLS_HASH_MD5, object_name(room));
+}
+
+/*
+FUNKTION: query_schatzkisten
+DEKLARATION: mapping *query_schatzkisten(object room)
+BESCHREIBUNG:
+Liefert zu einem Raum ein Array mit allen Schatzkisten.
+(Die zuletzt vergrabenen Kisten befinden sich am Ende des Arrays.)
+Eine Schatzkiste ist ein Mapping mit folgenden Eintraegen:
+(Defines aus <room.h>)
+
+    CHEST_NAME:  Die Beschriftung der Truhe
+    CHEST_OWNER: Der, der die Kiste vergraben hat (optional)
+    CHEST_MONEY: Ein Array aus Geld-Mappings.
+                 Ein Geld-Mapping enthaelt die Eintraege
+                "valuta", "valutas" und "money".
+    CHEST_INV_VALUE: Der Wert sonstiger Gegenstaende
+                     in Talern.
+
+VERWEISE: add_schatzkiste, get_schatzkiste, has_schatzkiste
+GRUPPEN: raum
+*/
+mixed *query_schatzkisten(object room)
+{
+    return objectp(room) && deep_copy(schatzkisten[calc_room_key(room)]);
+}
+
+/*
+FUNKTION: add_schatzkiste
+DEKLARATION: void add_schatzkiste(object room, mapping kiste)
+BESCHREIBUNG:
+Vergraebt eine Kiste im Raum. Eine Schatzkiste ist ein Mapping mit
+folgenden Eintraegen (Defines aus <room.h>):
+
+    CHEST_NAME:  Die Beschriftung der Truhe
+    CHEST_OWNER: Der, der die Kiste vergraben hat (optional)
+    CHEST_MONEY: Ein Array aus Geld-Mappings.
+                 Ein Geld-Mapping enthaelt die Eintraege
+                 "valuta", "valutas" und "money".
+    CHEST_INV_VALUE: Der Wert sonstiger Gegenstaende
+                     in Talern.
+
+VERWEISE: query_schatzkisten, get_schatzkiste, has_schatzkiste
+GRUPPEN: raum
+*/
+void add_schatzkiste(object room, mapping data)
+{
+    string raum = calc_room_key(room);
+    mapping *tmp;
+
+    tmp = schatzkisten[raum] || ({});
+    schatzkisten[raum] = tmp + ({ data });
+    save();
+}
+
+/*
+FUNKTION: get_schatzkiste
+DEKLARATION: mapping get_schatzkiste(object room)
+BESCHREIBUNG:
+Entfernt die zuletzt vergrabene Kiste aus der Liste
+und liefert sie zurueck. Eine Schatzkiste ist ein Mapping
+mit folgenden Eintraegen (Defines aus <room.h>):
+
+    CHEST_NAME:  Die Beschriftung der Truhe
+    CHEST_OWNER: Der, der die Kiste vergraben hat (optional)
+    CHEST_MONEY: Ein Array aus Geld-Mappings.
+                 Ein Geld-Mapping enthaelt die Eintraege
+                "valuta", "valutas" und "money".
+    CHEST_INV_VALUE: Der Wert sonstiger Gegenstaende
+                     in Talern.
+
+Liefert 0, wenn keine Kiste vergraben wurde.
+
+VERWEISE: add_schatzkiste, query_schatzkisten, has_schatzkiste
+GRUPPEN: raum
+*/
+
+mixed get_schatzkiste(object room)
+{
+    string raum;
+    mapping *tmp;
+    if (!objectp(room))
+        return 0;
+        
+    raum = calc_room_key(room);
+    tmp = schatzkisten[raum];
+    
+    if(!sizeof(tmp))
+        return 0;
+
+    if(sizeof(tmp)==1)
+        m_delete(schatzkisten, raum);
+    else
+        schatzkisten[raum] = tmp[0..<2];
+
+    save();
+    remove_dig_controller(room);
+    return tmp[<1];
+}
+
+/*
+FUNKTION: has_schatzkiste
+DEKLARATION: int has_schatzkiste(object room)
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn in dem Raum eine Kiste vergraben
+wurde, sonst 0.
+VERWEISE: get_schatzkiste, query_schatzkisten, add_schatzkiste
+GRUPPEN: raum
+*/
+int has_schatzkiste(object room)
+{
+    return objectp(room) && sizeof(schatzkisten[calc_room_key(room)]) > 0;
+}
+
+void add_dig_controller(object room)
+{
+    room->add_controller("concerned_dig", object_name());
+}
+
+void remove_dig_controller(object room)
+{
+    if(has_schatzkiste(room))
+        return;
+
+    if(cond_deep_present(0, room, 0, "query_chest"))
+        return;
+
+    room->delete_controller("concerned_dig", object_name());
+}
+
+int concerned_dig(object wer, object womit, mixed was)
+{
+    if(objectp(was))
+    {
+        // Es soll was vergraben werden.
+        if(was->query_chest())
+            return 1;
+    }
+    else
+    {
+        // Es soll etwas ausgegraben werden.
+        if(has_schatzkiste(environment(wer)))
+            return 1;
+    }
+}
+
+int do_dig(object wer, object womit, mixed was)
+{
+    object room = environment(wer);
+
+    if(objectp(was))
+    {
+        // Wir vergraben eine Kiste.
+        mapping data;
+
+        ({ womit, wer, room, was })->notify("dig", wer, womit, was);
+
+        data = was->bury_chest() || ([]);
+        if(!member(data, CHEST_OB) && load_name(was) != "/obj/truhe")
+            m_add(data, CHEST_OB, load_name(was));
+        if(!member(data, CHEST_OWNER) && playerp(wer))
+            m_add(data, CHEST_OWNER, wer->query_real_name());
+
+        add_schatzkiste(room, data);
+
+        wer->send_message_to(wer, MT_LOOK|MT_FEEL|MT_NOTIFY, MA_USE,
+            wrap("Du graebst ein ca. ein Meter tiefes Loch, bugsierst vorsichtig "+
+            den(was)+" hinein und schaufelst das Loch wieder zu."));
+        wer->send_message(MT_LOOK, MA_USE,
+            wrap(Der(wer)+" vergraebt "+seinen(was)+"."), 0, wer);
+
+        was->close_con();
+        was->move(room);
+        was->remove();
+    }
+    else
+    {
+        // Wir graben eine Kiste aus.
+        mapping data = get_schatzkiste(room) || ([]);
+        object kiste = clone_object(data[CHEST_OB] || "/obj/truhe");
+        kiste->init_chest(data);
+        kiste->move(room);
+
+        wer->send_message_to(wer, MT_LOOK|MT_FEEL|MT_NOTIFY, MA_USE,
+            "Du graebst und graebst...\n"
+            "...und findest etwas!\n");
+        wer->send_message(MT_LOOK, MA_USE,
+            wrap(Der(wer)+" graebt mit "+seinem(womit)+
+            " ein Loch in den Boden und findet sogar etwas!"), 0, wer);
+
+        ({ womit, wer, room, kiste })->notify("dig", wer, womit, was);
+    }
+
+    return 1;
+}
+
+string* query_room_initializer(object room)
+{
+    if(!room || clonep(room))
+        return ({});
+
+    return room_initializer[object_name(room)] || ({});
+}
+
+void add_room_initializer(object room, string master)
+{
+    string name;
+
+    if(!room || clonep(room))
+        return;
+
+    name = object_name(room);
+    if(!member(room_initializer, name))
+        m_add(room_initializer, name, ({master}));
+    else
+        room_initializer[name] += ({master});
+    save();
+}
+
+void remove_room_initializer(object room, string master)
+{
+    string name;
+    string* initializer;
+
+    if(!room || clonep(room))
+        return;
+
+    name = object_name(room);
+    if(!member(room_initializer, name))
+        return;
+
+    initializer = room_initializer[name] - ({master});
+    if(sizeof(initializer))
+        room_initializer[name] = initializer;
+    else
+        m_delete(room_initializer, name);
+    save();
+}
+
+void write_all_bauarbeiter()
+{
+    string *result = ({});
+
+    rm (LIST_FILE);
+
+    foreach(string fn, mixed* obs: room_objects)
+    {
+        int min;
+        string temp;
+        
+        if (!pointerp(obs) || sizeof(obs)!=3)
+            continue;
+
+        min = sizeof(obs[0]);
+
+        if (min != sizeof(obs[1]) || min != sizeof(obs[2]))
+            continue;
+
+        temp=map2domain(fn,1);
+        if(temp)
+            fn=temp[0..<3]+" ("+fn+")";
+
+        for (int j=min; j--;)
+            if (obs[1][j]=="/obj/bauarbeiter")
+            {
+                string val = obs[2][j];
+                temp = "";
+                if(sizeof(val) && val[0]=='#')
+                {
+                    mapping dirs = restore_value(val);
+                
+                    foreach(string dir, mapping data: dirs)
+                    temp += sprintf("%s: %s, %s\n",
+                        data["wiz"], dir, shorttimestr(data["time"]));
+                }
+                else
+                {
+                    string *vals;
+                    if(member(val,';')<0)
+                        vals = explode(val," ");
+                    else
+                        vals = explode(val,"|");
+                    foreach(string dir: vals)
+                    {
+                        string *pars = explode(dir,";");
+                        if (sizeof (pars) >= 3)
+                            temp += pars[2]+": "+pars[0]
+                                 +", "+shorttimestr(to_int(pars[1]))+"\n";
+                        else
+                            temp += sprintf("%s: %s\n",
+                                    capitalize(obs[0][j]), dir);
+                    }
+                }
+                if (strlen (temp))
+                {
+                    temp = fn+":\n"+temp;
+                    result += ({temp});
+                }
+                else
+                {
+                    temp = fn+": Keine Angaben da.\n";
+                    result += ({temp});
+                }
+            }
+            else
+               result += ({sprintf("%s:\n%s von %s: %O\n",fn,
+                   obs[1][j], obs[0][j], obs[2][j])});
+    }
+    write_file (LIST_FILE,implode(sort_array (result,#'>),"\n"));
+}
+
+nosave void do_check_path(string wiz, string prefix, mapping rooms)
+{
+    object ob,pl = find_player(wiz);
+    string * keys,room,mroom,err;
+    int val;
+    if (pl==0) return; // no wizard no check...
+    if (rooms == 0)
+    {
+        rooms = ([]);
+        foreach(room: m_indices(room_objects))
+        {
+            mroom = map2domain(room,1);
+            if (stringp(mroom) && strstr(mroom,prefix)==0)
+                rooms[room] = 1;
+            if (strstr(room,prefix)==0)
+                rooms[room] = 2;
+        }
+        foreach(room: m_indices(room_initializer))
+        {
+            mroom = map2domain(room,1);
+            if (stringp(mroom) && strstr(mroom,prefix)==0)
+                rooms[room] |= 4;
+            if (strstr(room,prefix)==0)
+                rooms[room] |= 8;
+        }
+    }
+    keys = m_indices(rooms);
+    while (sizeof(keys) && get_eval_cost() > CHECK_REST_EVALS)
+    {
+        // Schleife initialisieren und fortzaehlen:
+        room = keys[<1];
+        val = rooms[room];
+        m_delete(rooms,room);
+        keys = keys[..<2];
+        //
+        if (file_size(room+".lpc")>=0) continue;
+        mroom = map2domain(room);
+        if (stringp(mroom) && file_size(mroom)>=0) continue;
+        ob = 0;
+        err = catch(ob = touch(room)); // touch meldet an this_player...
+        if (!ob && member(room_objects,room))
+        {
+            send_message_to(pl,MT_DEBUG,MA_LOOK,
+                wrap("room_autoload-was:"+mixed2str(room_objects[room][1])));
+        }
+    }
+    if (sizeof(keys))
+    {
+        call_out("do_check_path",1,wiz,prefix,rooms);
+    }
+    else
+    {
+        send_message_to(pl,MT_DEBUG,MA_LOOK,
+                wrap("room_autoload: Pruefung beendet."));
+    }
+}
+
+int loesche_com(string str)
+{
+    string * zust;
+    string name;
+    str = space(str);
+    if (str == "")
+    {
+        notify_fail("loesche <pfad>\n");
+        return 0;
+    }
+    if(!wizp(this_player()) || !check_security())
+    {
+        notify_fail("Du darfst das noch nicht!\n");
+        return 0;
+    }
+    name = ({string})this_player()->query_real_name();
+    if (adminp(this_player())) // darf jeden Pfad pruefen
+    {
+        if (remove_room(str))
+        {
+            send_message_to(this_player(),MT_DEBUG,MA_LOOK,
+                wrap("Loeschen erfolgreich"));
+            return 1;
+        }
+        else
+        {
+            notify_fail("Loeschen fehlgeschlagen.\n");
+            return 0;
+        }
+        return 1;
+    }
+    zust = get_wiz_pathes_of(name);
+    if (!sizeof(zust))
+    {
+        notify_fail("Keine Zustaendigkeiten!\n");
+        return 0;
+    }
+    foreach(string path : zust)
+    {
+        if (strstr(str,path)==0)
+        {
+            if (str[<2..]==".lpc") str = str[..<3];
+            if (remove_room(str))
+            {
+                send_message_to(this_player(),MT_DEBUG,MA_LOOK,
+                    wrap("Loeschen erfolgreich"));
+                return 1;
+            }
+            else
+            {
+                notify_fail("Loeschen fehlgeschlagen.\n");
+                return 0;
+            }
+        }
+    }
+    notify_fail("Nicht zustaendig!\n");
+    return 0;
+}
+
+int umzug_com(string str)
+{
+    string * zust, * strs, name, room, mroom, err;
+    object ob;
+    int flag_ok = 0;
+    str = space(str);
+    strs = explode(str," ");
+    if (str == "" || sizeof(strs)!=2)
+    {
+        notify_fail("umzug <raumpfad-alt> <raumpfad-neu>\n");
+        return 0;
+    }
+    if(!wizp(this_player()) || !check_security())
+    {
+        notify_fail("Du darfst das noch nicht!\n");
+        return 0;
+    }
+    name = ({string})this_player()->query_real_name();
+    if (adminp(this_player())) // darf jeden Pfad umziehen
+    {
+        flag_ok = 3;
+    }
+    else
+    {
+        zust = get_wiz_pathes_of(name);
+        if (!sizeof(zust))
+        {
+            notify_fail("Keine Zustaendigkeiten!\n");
+            return 0;
+        }
+        foreach(string path : zust)
+        {
+            if (strstr(strs[0],path)==0)
+            {
+                flag_ok |= 1;
+            }
+            if (strstr(strs[1],path)==0)
+            {
+                flag_ok |= 2;
+            }
+        }
+    }
+    if (flag_ok == 3)
+    {
+        if (strs[0][<2..] == ".lpc") strs[0] = strs[0][..<3];
+        if (strs[1][<2..] == ".lpc") strs[1] = strs[1][..<3];
+        if (strs[0] == strs[1])
+        {
+            notify_fail(wrap("Ziel gleich Quellpfad!"));
+            return 0;
+        }
+        if (!member(room_objects,strs[0]))
+        {
+            notify_fail(wrap("Quellraum nicht gefunden: "+strs[0]));
+            return 0;
+        }
+        room = strs[1];
+        if (file_size(room+".lpc")>=0)
+            flag_ok = 0;
+        else
+        {
+            mroom = map2domain(room);
+            if (stringp(mroom) && file_size(mroom)>=0) 
+                flag_ok = 0;
+            else
+            {
+                err = catch(ob = touch(room));
+                if (ob)
+                    flag_ok = 0;
+            }
+        }
+        if (flag_ok)
+        {
+            notify_fail(wrap("Zielraum nicht gefunden: "+room));
+            return 0;
+        }
+        if (!member(room_objects, room))
+        {
+            room_objects[room] = room_objects[strs[0]];
+        }
+        else
+        {
+            mixed * old_load = room_objects[room];
+            old_load[0] += room_objects[strs[0]][0];
+            old_load[1] += room_objects[strs[0]][1];
+            old_load[2] += room_objects[strs[0]][2];
+            room_objects[room] = old_load;
+        }
+        m_delete(room_objects,strs[0]);
+        write_file(LOGD_FILE, wrap(shorttimestr(time())+" umzug: "+strs[0]+
+                " => "+strs[1]));
+        send_message_to(this_player(),MT_DEBUG,MA_LOOK,
+            wrap("Umziehen erfolgreich, zz -d zielraum und wieder laden!"));
+        return 1;
+    }
+    notify_fail("Nicht zustaendig fuer Quell- oder Zielpfad!\n");
+    return 0;
+}

@@ -1,0 +1,466 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/gildenskills.c
+// Description:	
+// Author:	Parsec 14.9.98
+
+// UID: Apps
+
+
+// Modified by:
+//
+// $Log: gildenskills.c,v $
+// Revision 1.8  2003/02/11 01:21:35  gnomi
+// Erlaubtes Objekt der Magiergilde geaendert.
+//
+// Revision 1.7  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.6  2002/02/01 08:13:31  gnomi
+// Eine Funktion zur Korrektur von Skils > 4500 von Risky eingebaut.
+//
+// Revision 1.5  2001/04/29 14:21:40  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.4  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.3  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+// -----------------------------------------------------------------
+//  Objekt zur Verwaltung von Gildenskills.
+//  Alle aus den Spielern geloeschte Gildenskills werden in ihm
+//  aufgenommen
+// -----------------------------------------------------------------
+/*
+  
+Doku:
+
+   Verwaltet die in  gildenskills.h  definierten Skills.
+   Alle Skills duerfen von  0 - MAX_INT  laufen.
+
+   
+Das Objekt sorgt fuer
+- korrektes Erhoehen der Skills
+- Abspeichern ueber Armageddon und GILDEN-EIN/AUS-Tritte hinaus
+- automatisch fuer die Anlegung neuer Spieler die es nicht kennt 
+- Suizidete Spielerdaten koennen auch gerettet werden
+- NEUE derartige Skills koennen leicht hinzugefuegt werden
+  (auch von anderen Gilden) -> nur eine neue und eine geaenderte
+  #define-Zeile in gildenskills.h& 1 zern.
+- Schutz gegen Manipulation von Unbefugten
+
+
+Funktionen:
+
+   Fragt fuer Spieler  spieler  den Skill  skill_nummer  ab.
+   Rueckgabe:  Skill-Wert, oder Fehler-Code.
+   int query_skill( mixed spieler, int skill_nummer)
+
+   Veraendert fuer Spieler  spieler  den Skill  skill_nummer  um  count.
+   Rueckgabe:  Neuer Skill-Wert, oder Fehler-Code.
+   int add_skill( mixed spieler, int skill_nummer, int count)
+
+Internes:   
+   Spieler wird als Suizidet markiert (nur fuer Admins). 
+   Skills bleiben allerdings so lange erhalten, bis unter dem selben Namen
+   eine erneute Skill-Veraenderung stattfindet.
+   Rueckgabe:  1 falls erfolgreich, oder Fehler-Code.
+   int mark_suicide( string spieler)
+   
+   Markierung wird aufgehoben (nur fuer Admins).
+   Um wiederbelebten Spielern ihre alten Skills wiederzugeben.
+   Rueckgabe:  1 falls erfolgreich, oder Fehler-Code.
+   int unmark_suicide( string spieler)
+
+   Setzt alle Skills eines Spieler (Nur fuer den Skill-Checker)
+   Rueckgabe:  1 falls erfolgreich, oder Fehler-Code.
+   int init_skills( string spieler, int * skill)
+   
+Fehler-Codes:
+   Unerlaubter Aufrufer:        -1
+   Spieler existiet nicht:      -2
+   Skill existiert nicht:       -3
+   Spieler existiert ist
+   aber als Suizidet markiert:  -4
+   
+Gueltige Skillnummern:
+   Gueltige Skillnummern sind z.Z. 0-8 , siehe  gildenskills.h
+   Neue hoehere Nummern koennen automatisch verwaltet werden
+   -> keine Aenderungen notwendig (ausser den #defines in
+      gildenskills.h) und Eintraegen in wer_darf_was[] ;
+   
+----------------------------------------------------------------------*/  
+
+
+#include <gildenskills.h>
+#include <config.h>
+#include <level.h>
+
+
+
+#define SKILL_SAVE_FILE     "/var/gildenskills"
+// fuer SKILL_CHECKER
+#include <apps.h>
+
+
+// Bei Aenderungen wird in dieem Zeitintervall gespeichert
+// (wichtige Aenderungen wie Initialisierung oder suizid werden sofort
+//  gespeichert)
+#define SAVE_INTERVAL   300 
+
+
+// Std-Kram
+#define TI   this_interactive()
+#define TP   this_player()
+#define PO   previous_object()
+
+
+/* prototypes */
+int query_skill( mixed spieler, int skill_nummer);
+int add_skill( mixed spieler, int skill_nummer, int count);
+int mark_suicide( string spieler);
+int unmark_suicide( string spieler);
+int init_skills( string spieler, int * skill);
+int valid_caller( int skill_nummer, int type);
+int query_prevent_shadow( object shadow);
+void create();
+int remove();
+varargs void daten_geaendert( int sofort_sichern);
+int save_data();
+/* end prototypes */
+
+
+nosave int  speichern_notwendig = 0 ;
+
+
+mapping  skills   = ([]) ;
+mapping  suicides = ([]) ;
+
+
+// Eintraege
+//    Dateiname : Feld mit Skills die das Obj. aendern darf
+// Hat der Dateiname ein "/" am Ende so wird fuer alle Dateien in
+// dem Verzeichnis die Erlaubnis erteilt.
+nosave mapping wer_darf_was = ([
+    "/z/Gilden/Magiergilde/beutel/" :
+            ({ MAGIE_MANIPULATION, MAGIE_OFFENSIV,
+               MAGIE_ILLUSION, MAGIE_DEFENSIV,
+               MAGIE_INFORMATION }),
+    "/z/Gilden/Sehergilde/obj/kristall" :
+            ({ ZAUBER_SUCHE }),
+    "/z/Gilden/Diebesgilde/tool/" : // Erlaubnis fuer ganzes Verzeichnis
+                                    // wegen / am Ende
+                                    // notwendig wegen VC bei Dieben
+            ({ HANDWERK_STEHLEN, ZAUBER_TARNEN }),
+    ]) ;
+
+
+#define DEBUGGER   ({ "parsec" })
+
+
+// Fehler-Codes
+#define INVALID_CALLER   -1 
+#define ILLEGAL_PLAYER   -2
+#define ILLEGAL_SKILL    -3
+#define PLAYER_SUICIDED  -4
+
+// Typen beim zugriff auf Skills (von valid_caller benoetigt)
+#define SKILL_QUERY    0
+#define SKILL_ADD      1
+#define SKILL_MARK     2
+#define SKILL_UNMARK   3
+#define SKILL_INIT     4
+
+
+
+//   Fragt fuer Spieler  spieler  den Skill  skill_nummer  ab.
+int query_skill( mixed spieler, int skill_nummer)
+{
+    string  name ;
+    int     *data ;
+
+    if ( objectp( spieler)  &&
+         playerp( spieler)  &&
+         (name = spieler->query_real_name())
+         ||
+         stringp( name = spieler) &&
+         player_exists( name)
+         )
+    {
+        if ( skill_nummer < 0 || skill_nummer > MAX_GILDENSKILL )
+            return ILLEGAL_SKILL ;
+        
+        if ( !valid_caller( skill_nummer, SKILL_QUERY) )
+            return INVALID_CALLER ;
+
+        if ( member( suicides, name) )
+            return PLAYER_SUICIDED ;
+        else if ( !(data = skills[name]) ||
+                  sizeof( data) <= skill_nummer )
+            // Der Skill ist beim Spieler nicht eingetragen - also ist er 0
+            return 0 ;
+        else
+            // Skill ist eingetragen
+            return data[skill_nummer] ;
+    }
+    else
+        return ILLEGAL_PLAYER ;
+}
+
+
+//   Veraendert fuer Spieler  spieler  den Skill  skill_nummer  um  count.
+int add_skill( mixed spieler, int skill_nummer, int count)
+{
+    string  name ;
+    int     *data ;
+
+    if ( objectp( spieler)  &&
+         playerp( spieler)  &&
+         (name = spieler->query_real_name())
+         ||
+         stringp( name = spieler) &&
+         player_exists( name)
+         )
+    {
+        if ( skill_nummer < 0 || skill_nummer > MAX_GILDENSKILL )
+            return ILLEGAL_SKILL ;
+        
+        if ( !valid_caller( skill_nummer, SKILL_ADD) )
+            return INVALID_CALLER ;
+
+        if ( member( suicides, name) )
+        {
+            // Hier koennen alte Daten ueberschrieben werden
+            // Als suizidet markierter Spieler bekommt Skills
+            // -> alle alten werden weggeworfen und er bekommt alle Skills
+            // mit 0 initialisiert
+            data = allocate( skill_nummer + 1) ;
+            suicides -= ([ name ]) ;
+        }
+        else if ( !(data = skills[name]) )
+            // Spieler hatte noch keine Skills eingetragen
+            data = allocate( skill_nummer + 1) ;
+        else if ( sizeof( data) <= skill_nummer)
+            // Spieler hatte diesen Skills noch nicht eingetragen
+            data += allocate( skill_nummer - sizeof( data) + 1) ;
+
+        // Skill veraendern
+        if ( (data[skill_nummer] += count) < 0 )
+            // Skill darf nicht unter 0 sinken
+            data[skill_nummer] = 0 ;
+
+        skills[name] = data ;
+        
+        if ( count )
+            daten_geaendert() ;
+        
+        return data[skill_nummer] ;
+    }
+    else
+        return ILLEGAL_PLAYER ;
+}
+
+
+// Spieler wird als suizidet markiert
+// Naechste Skillveraenderung in diesem Spieler fuehrt zum Loeschen
+// und neuinitialisieren all seiner Skills
+int mark_suicide( string spieler)
+{
+    int     *data ;
+
+    if ( player_exists( spieler) )
+    {
+        if ( !valid_caller( 0, SKILL_MARK) )
+            return INVALID_CALLER ;
+
+        if ( !member( skills, spieler) )
+            return 1 ;
+        
+        suicides += ([ spieler ]) ;
+        daten_geaendert( 1) ;
+        return 1 ;
+    }
+    else
+        return ILLEGAL_PLAYER ;
+}
+
+
+// Suizid-Markierung wird wieder aufgehoben - Spieler kann wie gewohnt
+// Skills sammeln
+int unmark_suicide( string spieler)
+{
+    int     *data ;
+
+    if ( player_exists( spieler) )
+    {
+        if ( !valid_caller( 0, SKILL_UNMARK) )
+            return INVALID_CALLER ;
+
+        if ( !member( suicides, spieler) )
+            return 1 ;
+        
+        suicides -= ([ spieler ]) ;
+        daten_geaendert( 1) ;
+        return 1 ;
+    }
+    else
+        return ILLEGAL_PLAYER ;
+}
+
+
+//   Setzt alle Skills eines Spieler (Nur fuer den Skill-Checker)
+int init_skills( string spieler, int * skill)
+{
+    int     *data, i ;
+
+    if ( player_exists( spieler) )
+    {
+        if ( !valid_caller( 0, SKILL_INIT) )
+            return INVALID_CALLER ;
+
+        while ( sizeof( skill) && skill[<1] == 0 )
+            skill = skill[0..<2] ;
+
+        if ( sizeof( skill) == 0 )
+            skills -= ([ spieler ]) ;
+        else
+            skills[spieler] = skill ;
+        
+        daten_geaendert( 1) ;
+        
+        return 1 ;
+    }
+    else
+        return ILLEGAL_PLAYER ;
+}
+
+
+// Bestimmen, wer welche Akrionen durchfuehren darf
+int valid_caller( int skill_nummer, int type)
+{
+    int  * was ;
+    
+#if IM_TEST_BETRIEB    
+    // Parsec darf testen
+    if ( TI && TI == TP && member( DEBUGGER, TP->query_real_name()) != -1 )
+        return 1 ;
+#endif
+
+    // Admins duerfen alles
+    if ( TI && TI == TP && adminp( TI) )
+        return 1 ;
+
+    switch ( type )
+    {
+        case SKILL_QUERY :
+            // Abfragen duerfen alle
+            return 1 ;
+            break ;
+        case SKILL_ADD :
+            // Addieren duerfen die entsprechenden Gilden-Tools
+            return
+                ( // Entweder finde ich den Filenamen direkt
+                  (was = wer_darf_was[ explode( object_name( PO), "#")[0] ]) ||
+                  // oder ich hab ein Obj. wo ein ganzes Verzeichnis die
+                  // Erlaubnis hat
+                  (was = wer_darf_was[ regreplace( object_name( PO),
+                                                   "[a-z]*$", "", 1) ]) )
+                && member( was, skill_nummer) != -1 ;
+            break ;
+        case SKILL_MARK :
+            // Suicid kommt nur aus dem Spieler
+            return playerp( PO) ;
+            break ;
+        case SKILL_UNMARK :
+            // De-Suiciden duerfen nur Admins
+            return 0 ;
+            break ;
+        case SKILL_INIT :
+            // Initialisierung nur duch Skill-Checker
+            return object_name( PO) == SKILL_CHECKER ;
+            break ;
+        default :
+            return 0 ;
+    }
+}
+
+
+// -----------------------------------------
+
+int query_prevent_shadow( object shadow)
+{
+    return 1 ;
+}
+
+
+void create()
+{
+    restore_object( SKILL_SAVE_FILE) ;
+}
+
+
+int remove()
+{
+    save_data() ;
+    
+    destruct( this_object()) ;
+    return 1 ;
+}
+
+
+// Verwaltung des Speicherns. Entweder sofort speichen oder bei Veraenderungen 
+// (nur dann wird diese Funktion aufgerufen) verzoegert speichern.
+// Verzoegerung sammelt dann mehrere Verzoegerung auf.
+varargs void daten_geaendert( int sofort_sichern)
+{
+    if ( sofort_sichern )
+    {
+        if ( speichern_notwendig )
+            remove_call_out( "save_data") ;
+        save_data() ;
+    }
+    else if ( !speichern_notwendig )
+    {
+        speichern_notwendig = 1 ;
+        call_out( "save_data", SAVE_INTERVAL) ;
+    }
+}
+
+
+//  eigentliches speichern
+int save_data()
+{
+    save_object( SKILL_SAVE_FILE) ;
+    speichern_notwendig = 0 ;
+}
+
+
+// Test-Kram
+// Abfragen ;
+
+/*
+mapping query_skills()
+{
+    return deep_copy( skills) ;
+}
+
+
+mapping query_suicides()
+{
+    return deep_copy( suicides) ;
+}
+*/
+void correct_skills() {
+  string *names;
+  int i,j;
+
+  names = m_indices(skills);
+  for (i=0; i<sizeof(names); i++)
+    for (j=0; j<sizeof(skills[names[i]]) && j<5; j++)
+      if (skills[names[i]][j]>4500)
+        skills[names[i]][j] = 4500;
+}
+

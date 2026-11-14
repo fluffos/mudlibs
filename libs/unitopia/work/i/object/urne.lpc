@@ -1,0 +1,1217 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/object/urne.c
+// Description:	Wahlurne v3
+// Author:	Garthan (21.03.96)
+// Modified by:	Offler  (13.03.2000) Zeitpunkt fuer neue Wahlthemen abspeichern.
+//              Sissi   (18.06.2000) Man muss jetzt nicht mehr die ganze
+//                                   Urne auf einmal aufraeumen lassen sondern
+//                                   muss dabei ein von und bis - Listennummer
+//                                   angeben, sodass man die neuen Listen
+//                                   stehen lassen kann.
+//
+// NICHT zum clonen gedacht, nur zum inheriten.
+//
+// $Log: urne.c,v $
+// Revision 1.29  2013-03-16 15:45:18  gnomi
+// read_topic() eingebaut, um nur eine bestimmte Liste zu lesen.
+//
+// Revision 1.28  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.27  2009-07-30 16:46:50  gnomi
+// may_debug liefert ein int zurueck.
+//
+// Revision 1.26  2009-03-20 07:57:43  gnomi
+// may_debug zum Erlauben von Testies eingebaut.
+// may_delete_empty_subject wurd nun tatsaechlich beim Loeschen von Subjects
+// (Listen) aufgerufen.
+//
+// Revision 1.25  2008/01/16 09:21:48  gnomi
+// INPUT_PROMPT und den Mini-Ed verwenden.
+//
+// Revision 1.24  2007/12/05 10:56:28  gnomi
+// Besseres more-Handling.
+// Die Urnen sind nun durch ueberlagerte Funktionen besser an eigene
+// Beduerfnisse anpassbar. API fuer Aenderungen an den Themen eingebaut.
+//
+// Revision 1.23  2006/08/01 10:30:06  menaures
+// Rangecheck in vote() vorgezogen
+//
+// Revision 1.22  2005/08/26 22:18:50  gnomi
+// Beschreibungen umbrechen.
+//
+// Revision 1.21  2005/06/04 20:22:44  gnomi
+// Benutzerdefinierte Daten ermoeglicht.
+//
+// Revision 1.20  2005/01/05 21:51:56  gnomi
+// /i/tools/security nutzen.
+//
+// Revision 1.19  2004/11/27 21:18:30  gnomi
+// may_delete_empty_subject eingefuehrt. (Bisher konnte jeder leere Eintraege
+// loeschen.)
+//
+// Revision 1.18  2004/07/25 00:12:27  gnomi
+// Erweiterte Analysefaehigkeit. (War ich nicht.)
+//
+// Revision 1.17  2002/12/12 00:37:43  gnomi
+// Zusaetzliche Sicherheitsabfrage beim Loeschen? (War ich nicht)
+//
+// Revision 1.16  2002/01/29 04:35:05  gnomi
+// Sicherheitsluecke geschlossen.
+//
+// Revision 1.15  2002/01/13 04:50:15  freaky
+// query_long() umgestellt.
+//
+// Revision 1.14  2002/01/13 00:55:21  gnomi
+// string query_long() -> varargs string query_long(object viewer)
+//
+// Revision 1.13  2001/11/29 18:24:11  sissi
+// Bei geheimer Wahl wird auch keine Anzeige gemacht, wieviel Stimmen
+// insgesammt abgegeben wurden.
+//
+// Revision 1.12  2001/11/27 22:49:21  sissi
+// may_add_topic wird nun verwendet, um zu testen, ob jemand ein Topic
+// anlegen darf, bisher wurde es fuer subjects verwendet; may_add_subject
+// uebernimmt jetzt diese Rolle. Beite Methoden erhalten nun zusaetzlich
+// auch den Text des Subjects bzw. Topics und koennen als Rueckgabewert
+// entweder 0 fuer darf nicht, 1 fuer darf nicht oder einen String fuer
+// darf nicht und der Meldung fuer den Spieler mit diesem Text.
+//
+// Geheime Wahllisten, wie sie fuer die Wahl des Spielerrats noetig
+// sind, sind jetzt moeglich in der Variante:
+//   0: Stimmenanzahl und Prozentpunkte werden angezeigt,
+//   1: Prozentwerte werden angezeigt,
+//   2: Gar nix wird mehr angezeigt.
+//
+// Revision 1.11  2001/06/15 22:33:50  gnomi
+// Abfrage, ob man loeschen kann -> may_delete()
+//
+// Revision 1.10  2001/05/22 17:36:58  gnomi
+// Moeglichkeit, eine Meldung in Abhaengigkeit von den Leuten, die gewaehlt
+// haben, auszugeben, eingebaut.
+//
+// Revision 1.9  2001/05/08 23:05:49  gnomi
+// Wahl etwas geheimer gemacht. (Sprich: Es wird nicht mehr angezeigt, wo man
+// waehlt.)
+//
+// Revision 1.8  2001/04/25 18:24:05  gnomi
+// Sicherheitscheck in query_vote_list.
+//
+// Revision 1.7  2001/04/25 00:11:07  gnomi
+// Man kann die Themen abfragen, wo man noch nicht abgestimmt hat.
+//
+// Revision 1.6  2001/04/18 19:48:38  sissi
+// may_read: Lesebeschraenkungen fuer Urnen, sodass Gaeste keine Goetterurnen
+//           mehr lesen koennen
+// may_add_topic: Erlaubnis, neue Abstimmungsthemen hinzuzufuegen
+//
+// Revision 1.5  2001/02/10 21:33:45  sissi
+// Man kann jetzt nicht nur die liste und listen lesen, sondern auch die
+// wahlliste und die wahllisten.
+//
+// Revision 1.4  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+inherit "/i/item";
+inherit "/i/install";
+inherit "/i/tools/security";
+
+nosave int am_analysieren = 0;
+
+#include <more.h>
+#include <level.h>
+#include <apps.h>
+#include <misc.h>
+#include <editor.h>
+#include <input_to.h>
+
+#define STATUS_0 "===(%d/%d)=== [q,<nr>,n,l,?] Listen> "
+#define STATUS_1 ("---(%d/%d)--- [q,<nr>,z,n,l,?] Liste "+(subject+1)+"> ")
+#define SAVE_FILE object_name()
+#define ANALYSE_FILE "/log/WAHLAUSWERTUNG"
+
+#define MAX_LEN_TOPIC   62
+#define MAX_LEN_SUBJECT 45
+
+#define ALL -1
+
+#define S_NAME  0
+#define S_DESC  1
+#define S_TOPIC 2
+#define S_MULTI 3
+#define S_TIME  4
+#define S_USER	5
+
+#define T_NAME  0
+#define T_VOTE  1
+#define T_USER	2
+
+#define PERCENT(x,a) ((1000*x+5)/(10*a))
+#define ERR(x)       { write(wrap(x)); return 0; }
+
+#define L_LISTE	 0
+#define L_MORE   1
+#define L_NOBACK 2
+
+private mapping liste = ([:3]);
+private mixed *top;
+
+#define INIT_VALUE \
+({ \
+   ({ /* subject names */ }), \
+   ({ /* subject descriptions */ }), \
+   ({ /* topics */ }), \
+   ({ /* Anzahl der Stimmen */ }), \
+   ({ /* Zeitpunkt der Eintragung */ }), \
+   ({ /* Benutzerdefinierte Werte */ }), \
+})
+
+#define INIT_SUBJECT \
+    ({ ({ /* Tops */ }), ({ /* Votes */ }), ({ /* User defined */ }) })
+
+// <subject> ist im folgenden die Nummer des Eintrages (0..sizeof(top)-1)
+// <topic> ist entsprechend die Nummer des waehlbaren Punktes
+//
+// top[S_NAME][subject]    Name von Subject <subject>
+// top[S_DESC][subject]    Beschreibung des Subject <subject>
+// top[S_MULTI][subject]   Anzahl an Stimmen, die man hier hat
+// top[S_TOPIC][subject][T_NAME][topic]
+//                         Name des Topics <topic> in Subject <subject>
+// top[S_TOPIC][subject][T_VOTE][topic][i]
+//                         i-ter Waehler des Punkts <topic> in 
+//                         Subject <subject>
+// top[S_TOPIC][subject][T_USER][topic]
+//			   Benutzerdefinierte Werte fuer diesen Punkt
+// top[S_TIME][subject]    Zeitpunkt zu dem das Wahlthema eingetragen wurde
+// top[S_USER][subject]    Benutzerdefinierte Werte fuer dieses Thema
+// sizeof(top[S_TOPIC][subject][T_VOTE][topic])
+//    Anzahl der Stimmen des Punkts <topic> in Subject <subject>
+
+// --SAVE------------------------------------------------------------------- //
+
+nosave void save()
+{
+   WAHLEN->set_votes(top);
+}
+
+private void delayed_save()
+{
+   remove_call_out("save");
+   call_out("save", 300);
+}
+
+// --ACCESS----------------------------------------------------------------- //
+
+// Die _data-Parameter werden als Referenz uebergeben...
+varargs nosave int may_vote(object who, string subject, mixed subject_data, string topic, mixed topic_data)
+{
+   // standard: jeder darf waehlen.
+   return 1;
+}
+
+nosave int may_read(object who)
+{
+    // standard: jeder darf lesen.
+    return 1;
+}
+
+varargs nosave mixed may_add_topic(object who, string subject, mixed subject_data, string topic)
+{
+    // standard: Jeder darf Topics hinzufuegen
+    return 1;
+}
+
+nosave mixed may_add_subject(object who, string subject)
+{
+    // standard: Goetter duerfen subjects hinzufuegen
+    return wizp (who);
+}
+
+varargs nosave int may_delete(object who, string subject, mixed subject_data, string topic, mixed topic_data)
+{
+    return lordp (who);
+}
+
+varargs nosave int may_delete_empty_subject(object who, string subject, mixed subject_data, string topic, mixed topic_data)
+{
+    return 1;
+}
+
+// callback bekommt einen Parameter und zwar die benutzerdefinierten Daten
+// fuer das subject.
+nosave void do_add_subject(closure callback, object who, string subject)
+{
+    funcall(callback, 0);
+}
+
+// callback bekommt einen Parameter und zwar die benutzerdefinierten Daten
+// fuer das topic.
+nosave void do_add_topic(closure callback, object who, string subject, mixed subjectdata, string topic)
+{
+    funcall(callback, 0);
+}
+
+nosave int geheim ()
+{
+    // Geheimhaltungsstufe:
+    // 0: man sieht absolute und prozentuale Stimmenverteilung
+    // 1: man sieht nur Prozentwerte.
+    // 2: man sieht gar nix mehr.
+    return 0;
+}
+
+nosave string subject_info(object who, string subject, mixed subject_data)
+{
+    return 0;
+}
+
+nosave string print_topic(object who, string subject, mixed subjectdata, string topic, mixed topic_data)
+{
+    return topic;
+}
+
+nosave int topic_action(object who, string cmd, string rest, string subject, mixed subjectdata, string topic, mixed topic_data)
+{
+    return CONTINUE;
+}
+
+nosave int subject_action(object who, string cmd, string rest, string subject, mixed subject_data)
+{
+    return CONTINUE;
+}
+
+nosave int list_action(object who, string cmd, string rest)
+{
+    return CONTINUE;
+}
+
+nosave string subject_help(object who, string subject, mixed subjectdata)
+{
+    return "";
+}
+
+nosave string list_help(object who)
+{
+    return "";
+}
+
+nosave int allow_API_access(object who)
+{
+    return 0;
+}
+
+nosave void check_listen()
+{
+}
+
+nosave int may_debug(object who)
+{
+    // Wenn 1, dann duerfen auch Testspieler unabhaengig vom Alter
+    // abstimmen.
+    return 0;
+}
+
+// --DISPLAY---------------------------------------------------------------- //
+
+private void check(object who)
+{
+    if(!sizeof(m_indices(liste)-({who})))
+    {
+	// Wegen eines Fehlers.
+	if(sizeof(top[S_NAME])<sizeof(top[S_USER]))
+	    top[S_USER] = top[S_USER][0..sizeof(top[S_NAME])-1];
+
+	check_listen();
+    }
+}
+
+private string topic_line(int subject, int topic, int votes, string name)
+{
+   int vote;
+
+   vote = sizeof(top[S_TOPIC][subject][T_VOTE][topic]);
+
+   switch (geheim()) {
+      case 2:
+         return
+            right(to_string(topic+1),3)+" "+
+	    "           "+
+            (member(top[S_TOPIC][subject][T_VOTE][topic],name) >= 0 ?"* ":"  ")+
+            print_topic(
+		this_player(),
+		top[S_NAME][subject], &(top[S_USER][subject]),
+		top[S_TOPIC][subject][T_NAME][topic],
+		top[S_TOPIC][subject][T_USER][topic]);
+
+      case 1:
+         return
+            right(to_string(topic+1),3)+" "+
+            (vote ? right(PERCENT(vote, votes),3)+"%       "
+	          : "           ")+
+            (member(top[S_TOPIC][subject][T_VOTE][topic],name) >= 0 ?"* ":"  ")+
+            print_topic(
+		this_player(),
+		top[S_NAME][subject], &(top[S_USER][subject]),
+		top[S_TOPIC][subject][T_NAME][topic],
+		top[S_TOPIC][subject][T_USER][topic]);
+      case 0:
+         return
+            right(to_string(topic+1),3)+" "+
+            (vote ? right(PERCENT(vote, votes),3)+"% "+left("("+vote+")",5)+" "
+	          : "           ")+
+            (member(top[S_TOPIC][subject][T_VOTE][topic],name) >= 0 ?"* ":"  ")+
+            print_topic(
+		this_player(),
+		top[S_NAME][subject], &(top[S_USER][subject]),
+		top[S_TOPIC][subject][T_NAME][topic],
+		top[S_TOPIC][subject][T_USER][topic]);
+   }
+}
+
+// Zum Ueberlagern, um einen Text auszugeben, wie etwa
+// "Es haben mind. 4 SR und mind. 2 Admins abgestimmt."
+varargs protected string voted_message(string *namen, string subject, mixed subject_data) {}
+
+private int list(int subject)
+{
+   int i, votes;
+   string name, *out, tmp;
+   mapping names = ([]);
+
+   if(subject == -1)
+   {
+      m_add(liste, this_player(), 0, 0, 0);
+      out = ({"Zur Wahl gestellte Themen (Listen):"});
+      for(i = 0; i < sizeof(top[S_NAME]); i++)
+         out += ({right(to_string(i+1), 3)+" "+
+                (sizeof(filter(top[S_TOPIC][i][T_VOTE],
+                   (:member($1,$2)>=0:),this_player()->query_real_name()))?"* ":"  ")+
+                left(top[S_NAME][i], MAX_LEN_SUBJECT)+
+	        (top[S_MULTI][i] > 1 ?" ("+top[S_MULTI][i]+" Stimmen)":
+	         !top[S_MULTI][i] ? " (beliebig viele Stimmen)" : "")});
+      this_player()->more(out, STATUS_0);
+   }
+   else
+   {
+      if(--subject < 0 || subject >= sizeof(top[S_NAME]))
+	 ERR("Liste "+(subject+1)+" existiert nicht!");
+      liste[this_player()] = subject+1;
+      out = ({"Liste "+(subject+1)+": "+top[S_NAME][subject] })+
+	    explode(wrap(top[S_DESC][subject]), "\n")[0..<2];
+	    
+      tmp = subject_info(this_player(),
+        top[S_NAME][subject], &(top[S_USER][subject]));
+      if(tmp)
+         out += explode(wrap(tmp), "\n")[0..<2];
+
+      out += ({"", "Hier hast Du "+
+		(top[S_MULTI][subject]?top[S_MULTI][subject]:"beliebig viele")+
+		" Stimme"+(top[S_MULTI][subject]==1?"":"n")+"."});
+
+      for(votes = 0, i = sizeof(top[S_TOPIC][subject][T_VOTE]); i--;)
+      {
+	 votes += sizeof(top[S_TOPIC][subject][T_VOTE][i]);
+         names += mkmapping(top[S_TOPIC][subject][T_VOTE][i]);
+      }
+      
+      if(!strstr(object_name(),"/room/"))
+      {
+         tmp = voted_message(m_indices(names),
+		top[S_NAME][subject], &(top[S_USER][subject]));
+         if(tmp)
+    	     out += ({ tmp });
+      }
+      
+      switch (geheim()) {
+          case 2:
+              out += ({ "Diese Wahl ist eine geheime Wahl, es wird kein "
+                        "Abstimmungsergebnis angezeigt." });
+              break;
+          case 1:
+              out += ({ "Diese Wahl ist eine geheime Wahl, es werden "
+                        "nur Prozentangaben angezeigt." });
+              break;
+      }
+      name = this_player()->query_real_name();
+      for(i = 0; i < sizeof(top[S_TOPIC][subject][T_VOTE]); i++)
+	 out += ({ topic_line(subject, i, votes, name) });
+      if (!geheim())
+      switch(votes)
+      {
+	 case 0:  out += ({"Noch keine Stimmen zu dieser Liste."});  break;
+	 case 1:  out += ({"Bereits eine Stimme zu dieser Liste."}); break;
+	 default: out += ({"Insgesamt "+votes+" Stimmen zu dieser Liste."});
+      }
+      this_player()->more(out, STATUS_1);
+   }
+   return 1;
+}
+
+string read_list(object who)
+{
+   if(!who)
+   {
+       who = PL;
+       if(!who)
+           return "Die Wahllisten weigern sich, von Dir gelesen zu werden.\n";
+   }
+   if (may_read (this_player()) && this_player()==this_interactive())
+   {
+       if(who!=this_player()) // zeigen
+           return "Die Wahllisten liest man am besten aus eigenem Willen.\n";
+       else  
+       {
+           check(this_player());
+           list(ALL);
+       }
+   }
+   else
+       return "Die Wahllisten weigern sich, von Dir gelesen zu werden.\n";
+   return "";
+}
+
+string read_topic(object who, string topic)
+{
+   if(!who)
+   {
+       who = PL;
+       if(!who)
+           return "Die Wahllisten weigern sich, von Dir gelesen zu werden.\n";
+   }
+   if (may_read (this_player()) && this_player()==this_interactive())
+   {
+       if(who!=this_player()) // zeigen
+           return "Die Wahllisten liest man am besten aus eigenem Willen.\n";
+       else  
+       {
+           int i;
+
+           check(this_player());
+
+           i = member(top[S_NAME], topic);
+           if(i<0)
+               return "Die Liste ist wohl abhanden gekommen.\n";
+           m_add(liste, this_player(), 0, 0, 1);
+           list(i+1);
+       }
+   }
+   else
+       return "Die Wahllisten weigern sich, von Dir gelesen zu werden.\n";
+   return "";
+}
+
+// --VOTE------------------------------------------------------------------- //
+
+private int vote(int subject, int topic) // 1..
+{
+   int old_topic, i, multiple;
+   string name;
+
+   subject--;
+   topic--;
+
+   if(topic < 0 || topic >= sizeof(top[S_TOPIC][subject][T_NAME]))
+      ERR("Punkt "+(topic+1)+" der Liste "+(subject+1)+" existiert nicht.");
+
+   if(!may_vote(this_player(), top[S_NAME][subject], &(top[S_USER][subject]),
+	top[S_TOPIC][subject][T_NAME][topic],
+	&(top[S_TOPIC][subject][T_USER][topic])))
+      ERR("Du bist nicht stimmberechtigt!");
+   if(guestp(this_player()))
+      ERR("Gaeste sind nicht stimmberechtigt. Tut mir leid.");
+   if(!may_debug(this_player()))
+   {
+      if(testplayerp(this_player()))
+         ERR("Testcharaktere sind nicht stimmberechtigt.");
+      if(this_player()->query_age() < 3600)
+         ERR("Du bist noch zu jung zum Waehlen.");
+   }
+
+   old_topic = -1;
+   name = this_player()->query_real_name();
+   for(i = sizeof(top[S_TOPIC][subject][T_VOTE]); i--;)
+      if(member(top[S_TOPIC][subject][T_VOTE][i], name) >= 0)
+      {
+	 old_topic = i;
+	 multiple ++;
+      }
+	    
+   if(member(top[S_TOPIC][subject][T_VOTE][topic], name) >= 0)
+   {
+      say(wrap(Der(this_player())+" kritzelt auf einer Liste rum."));
+      top[S_TOPIC][subject][T_VOTE][topic] -= ({ name, 0 });
+      delayed_save();
+      return 1;
+   }
+   if(top[S_MULTI][subject] && multiple >= top[S_MULTI][subject])
+   {
+      if(multiple > 1)
+	 ERR("Du hast schon bei "+multiple+" Punkt"+(multiple==1?"":"en")+
+	      " eine Stimme abgegeben!")
+      else
+	 top[S_TOPIC][subject][T_VOTE][old_topic] -= ({ name, 0 });
+   }
+   top[S_TOPIC][subject][T_VOTE][topic] -= ({ name });
+   top[S_TOPIC][subject][T_VOTE][topic] += ({ name });
+
+   say(wrap(Der(this_player())+" kritzelt auf einer Liste rum."));
+
+   delayed_save();
+   return 1;
+}
+
+// --ADD-ITEMS-------------------------------------------------------------- //
+
+private int _add_topic(int subject, string text, mixed user)
+{
+    top[S_TOPIC][subject][T_NAME] += ({ text });
+    top[S_TOPIC][subject][T_VOTE] += ({ ({}) });
+    top[S_TOPIC][subject][T_USER] += ({ user });
+	
+    delayed_save();
+    
+    return sizeof(top[S_TOPIC][subject][T_NAME])-1;
+}
+
+private int new_topic(int subject, string text)
+{
+   mixed msg;
+
+   subject--;
+
+   msg = may_add_topic(this_player(),
+	    top[S_NAME][subject], &(top[S_USER][subject]), text);
+   if (stringp (msg)) ERR(msg);
+   if (!msg) ERR ("Du darfst hier leider keine neuen Abstimmungspunkte hinzufuegen.");
+   if(!text || !strlen(text = trim(text)) || strlen(text) > MAX_LEN_TOPIC)
+      ERR("Der Titel des Punkts ist zu kurz oder zu lang "
+          "(max. "+MAX_LEN_TOPIC+" Zeichen).");
+   
+   do_add_topic(lambda(({'user}),
+	({ (:
+		_add_topic($1, $2, $3);
+		
+		list($1+1);
+	    :), subject, text, 'user })),
+	this_player(), top[S_NAME][subject], &(top[S_USER][subject]), text);
+
+   return 1;
+}
+
+private int new_subject(string text)
+{
+    mixed msg;
+    msg = may_add_subject(this_player(),text);
+    if (stringp (msg)) ERR(msg);
+    if (!msg) ERR("Du darfst hier leider keine neuen Abstimmungsthemen hinzufuegen.");
+    if(!text || !strlen(text = trim(text)) || strlen(text) > MAX_LEN_SUBJECT)
+	ERR("Der Listenname ist zu kurz oder zu lang "
+          "(max. "+MAX_LEN_SUBJECT+" Zeichen).");
+    this_player()->mini_ed(lambda(({'str}),({
+    (:
+	if(!$1)
+	{
+	    list(ALL);
+	    return;
+	}
+	
+	 write("Wieviele Stimmen soll ein Spieler "
+	       "in dieser Liste abgeben koennen? (0=beliebig)\n");
+	 input_to("new_list2", INPUT_PROMPT, "Zahl> ",
+	    $2, implode($1,"\n")+"\n");
+    :), 'str, text})), 0, 0,
+    ([
+	MINI_ED_START_TEXT:
+	    "Gib nun eine KURZE Beschreibung der Liste (1-3 Zeilen) ein.\n"
+	    "Ende mit . oder ** oder ~q\n",
+    ]));
+    return 1;
+}
+
+private int _add_list(string name, string desc, int votes, mixed user)
+{
+    top[S_NAME] += ({ name });
+    top[S_DESC] += ({ desc });
+    top[S_MULTI] += ({votes });
+    top[S_TIME] += ({ time() });
+    top[S_TOPIC] += ({ INIT_SUBJECT });
+    top[S_USER] += ({ user });
+    
+    delayed_save();
+
+    return sizeof(top[S_NAME])-1;
+}
+
+nosave void new_list2(string str, string name, string desc)
+{
+   do_add_subject(lambda(({'user}),
+	({ (:
+		_add_list($2, $3, !$1 || $1 == "" ? 1 : to_int($1), $4);
+
+		list(ALL);
+	    :), str, name, desc, 'user })),
+	this_player(), name);
+}
+
+// --DELETE-ITEMS----------------------------------------------------------- //
+
+private int deny_delete()
+{
+   int res;
+
+   m_delete(liste, 0);
+
+/* Wird schon vom Aufrufer abgefragt
+   if(!may_delete(this_player()))
+      ERR("Hmmmm. Dazu bist du noch nicht weise genug.");
+*/
+
+   if(res = sizeof(m_indices(liste)-({this_player()})))
+      write("Loeschen kannst Du nur, wenn Du alleine an "+dem()+" bist.\n"+
+            wrap( "(An "+dem()+" sind: "+
+         implode(map_objects(m_indices(liste),"query_cap_name"),", ")+".)\n"));
+   return res;
+}
+
+private void _delete_topic(int subject, int topic)
+{
+   foreach(int idx: ({T_NAME, T_VOTE, T_USER}))
+      top[S_TOPIC][subject][idx] = arr_delete(top[S_TOPIC][subject][idx], topic);
+
+   delayed_save();
+}
+
+private int user_delete_topic(int subject, int topic)
+{
+   subject--;
+   topic--;
+
+   if(topic < 0 || topic >= sizeof(top[S_TOPIC][subject][T_NAME]))
+      ERR("Punkt "+(topic+1)+" der Liste "+(subject+1)+" existiert nicht.");
+
+   if((sizeof(top[S_TOPIC][subject][T_VOTE][topic]) &&
+	    !may_delete(this_player(), 
+		top[S_NAME][subject], &(top[S_USER][subject]),
+		top[S_TOPIC][subject][T_NAME][topic],
+		&(top[S_TOPIC][subject][T_USER][topic]))) ||
+      (!sizeof(top[S_TOPIC][subject][T_VOTE][topic]) && 
+    	    !may_delete_empty_subject(this_player(),
+		top[S_NAME][subject], &(top[S_USER][subject]),
+		top[S_TOPIC][subject][T_NAME][topic],
+		&(top[S_TOPIC][subject][T_USER][topic]))))
+      ERR("Hmmmm. Dazu bist du noch nicht weise genug.");
+
+   if(deny_delete())
+      return 0;
+
+   _delete_topic(subject, topic);
+   return 1;
+}
+
+private int user_delete_subject(int subject)
+{
+   if(deny_delete())
+      return 0;
+
+   if(--subject < 0 || subject >= sizeof(top[S_NAME]))
+      ERR("Liste "+(subject+1)+" existiert nicht!");
+
+   if(sizeof(top[S_TOPIC][subject][T_VOTE])
+	? !may_delete(this_player(), 
+	    top[S_NAME][subject], &(top[S_USER][subject]))
+	: !may_delete_empty_subject(this_player(),
+	    top[S_NAME][subject], &(top[S_USER][subject])))
+      ERR("Hmmmm. Dazu bist du noch nicht weise genug.");
+
+   input_to("delete_list", INPUT_PROMPT,
+     "LOESCHE GESAMTE LISTE "+(subject+1)+" (j/n)? ",
+     subject);
+   return 1;
+}
+
+private void _delete_list(int subject)
+{
+    foreach(int idx: ({S_NAME, S_DESC, S_TOPIC, S_MULTI, S_TIME, S_USER}))
+	top[idx] = arr_delete(top[idx], subject);
+    delayed_save();
+}
+
+nosave void delete_list(string str, int subject)
+{
+   if(str && lower_case(str) == "j")
+      _delete_list(subject);
+   list(ALL);
+}
+
+// --ANALYSE-&-DELETE------------------------------------------------------- //
+
+private string analyse_string(int subject, int sort)
+{
+   string out;
+   int votes, i, t;
+   int *different;
+
+   out = "";
+   if(subject)
+   {
+      subject --;
+      out += "Liste "+(subject+1)+": "+top[S_NAME][subject]+"\n"+
+            wrap(top[S_DESC][subject])+
+            "Hier gab es "+
+                (top[S_MULTI][subject]?top[S_MULTI][subject]:"beliebig viele")+
+                " Stimme"+(top[S_MULTI][subject]==1?"":"n")+" zu verteilen.\n";
+      different = ({});
+      for(votes = 0,
+          i = sizeof(top[S_TOPIC][subject][T_VOTE]); 
+          i--;) {
+             t = sizeof(top[S_TOPIC][subject][T_VOTE][i]);
+             votes += t;
+             if (sort)
+                 if (member (different,t) == -1)
+                     different += ({t});
+      }
+      if (sort) {
+          different = sort_array (different,#'>);
+          for (t = sizeof (different)-1; t >= 0; t--)
+              for(i = 0; i < sizeof(top[S_TOPIC][subject][T_VOTE]); i++)
+                  if (sizeof (top[S_TOPIC][subject][T_VOTE][i]) == different[t])
+                      out += topic_line(subject, i, votes, 0)+"\n";
+      }
+      else
+          for(i = 0; i < sizeof(top[S_TOPIC][subject][T_VOTE]); i++)
+              out += topic_line(subject, i, votes, 0)+"\n";
+      switch(votes)
+      {
+	 case 0:  out += "Noch keine Stimmen zu dieser Liste.\n";  break;
+	 case 1:  out += "Bereits eine Stimme zu dieser Liste.\n"; break;
+	 default: out += "Insgesamt "+votes+" Stimmen zu dieser Liste.\n";
+      }
+      write_file(ANALYSE_FILE,out+"\n");
+   }
+   else
+   if (sort) {
+      am_analysieren = 1;
+      for(subject = 1; subject <= sizeof(top[S_NAME]); subject++)
+         call_out ("analyse_callout",subject*2,subject,sort);
+      call_out ("analyse_fertig",subject * 2);
+   } else {
+      for (subject = 1; subject <= sizeof (top[S_NAME]); subject++)
+          analyse_string (subject, sort);
+   }
+}
+
+public void analyse_callout (int subject, int sort)
+{
+    if (am_analysieren) {
+       write ("Analysiere Punkt Nummer "+subject+"...");
+       analyse_string (subject, sort);
+       write (" fertig.\n");
+    }
+}
+
+public void analyse_fertig ()
+{
+    if (am_analysieren) {
+        write ("Gesamte Wahlanalyse ist fertig.\n");
+        am_analysieren = 0;
+    }
+}
+
+private int analyse(int subject, int sort)
+{
+   string header;
+
+   if(!gesellep(this_player()))
+      ERR("Hmm. Dazu bist Du noch nicht weise genug.");
+   rm(ANALYSE_FILE);
+   header = "Wahlergebnisse vom "+timestr(time());
+   write_file(ANALYSE_FILE, header+"\n"+copies("-", strlen(header))+"\n\n");
+   analyse_string(subject,sort);
+   write("Auswertung in: "+ANALYSE_FILE+"\n");
+   return 1;
+}
+
+nosave int cleanse_and_burn(string s)
+{
+   int i, subject, von, bis;
+   if (!s || sscanf (s,"%d %d", von, bis) != 2) {
+       write ("Syntax: cleanse_and_burn von bis\n"
+           "Von und bis geben dabei die Nummern der Listen an, die betroffen\n"
+           "sein sollen.\n");
+       return 1;
+   }
+   if ((von > bis) || (bis > sizeof (top[S_NAME])) || (von <= 0)) {
+       write ("Ungueltiges von und bis angegeben.\n"
+           "Von muss <= bis sein, bis <= Anzahl der Listen, von > 0.\n");
+       return 1;
+   }
+   if(this_player() && this_player() == this_interactive() &&
+      adminp(this_player()))
+      for(subject = bis; subject-- >= von;)
+	 for(i = sizeof(top[S_TOPIC][subject][T_VOTE]); i--;)
+	    top[S_TOPIC][subject][T_VOTE][i] = ({});
+   return 1;
+}
+
+nosave int cleanse_and_burn_von_bis(string s)
+{
+    int i, subject, von, bis;
+    write ("Von: "+von+" bis "+bis+"\n");
+    return 1;
+}
+
+
+// --MORE------------------------------------------------------------------- //
+
+nomask int more_action(string eingabe)
+{
+   int nummer, res;
+   string text;
+
+   if(!(playerp(previous_object()) && check_security(0)) &&
+	object_name()[0..5]=="/room/")
+   {
+       sys_log("Urne", sprintf("%s: TP: %O, caller_stack: %s\n",
+           shorttimestr(time()), this_player(),
+	   implode(map(caller_stack(1),(:sprintf("%O (EUID: %O)", $1, geteuid($1)):)),", ")));
+       return NOTHING;
+   }
+
+   if(!may_read(this_player()) || this_player()!=this_interactive() ||
+      this_player()!=previous_object())
+       return NOTHING;
+
+   liste[this_player(),L_MORE] = 1;
+   
+   if(liste[this_player()])
+      switch(eingabe)
+      {
+         case "z":
+	    //list(ALL);
+	    liste[this_player(),L_MORE] = 0;
+	    return END_MORE;
+	 case "n":
+	    write("n <text_ohne_nummer>\n");
+	    return NOTHING;
+	 case "l":
+	    write("l <punkt_nr>\n");
+	    return NOTHING;
+         case "a":
+            analyse(liste[this_player()],0);
+            return NOTHING;
+         case "A":
+            analyse(liste[this_player()],1);
+            return NOTHING;
+         case "?":
+            write(
+               "q            Menue verlassen.\n"
+               "<return>     Blaettern/Zurueck.\n"
+               "z            Zurueck zum Listenmenue.\n"
+               "<nr>         Einen Punkt der Liste waehlen.\n"
+               "+            Naechste Liste.\n"
+               "-            Vorherige Liste.\n"
+               "n <text>     Neuen Punkt in die Liste eintragen.\n"
+               "l <nr>       Einen Punkt, samt seiner Stimmen, loeschen.\n"+
+	       subject_help(this_player(),
+	    	  top[S_NAME][liste[this_player()]-1],
+		  &(top[S_USER][liste[this_player()]-1]))+
+	       (gesellep(this_player())?
+	       "a            Wahlergebnisse dieser Liste als File ausgeben.\n"+
+	       "A            Sortierte Wahlergebnisse dieser Liste als File ausgeben.\n":
+	       "")
+               );
+	    return NOTHING;
+	 case "+":
+	    if(liste[this_player(),L_NOBACK])
+	        return NOTHING;
+	    return list(liste[this_player()]+1) ? END_MORE : NOTHING;
+	 case "-":
+	    if(liste[this_player(),L_NOBACK])
+	        return NOTHING;
+	    return list(liste[this_player()]-1) ? END_MORE : NOTHING;
+         default:
+	    if(sscanf(eingabe, "%d", nummer))
+	       res = vote(liste[this_player()], nummer);
+	    else if(sscanf(eingabe, "n %s", text))
+	       return new_topic(liste[this_player()], text) ? END_MORE : NOTHING;
+	    else if(sscanf(eingabe, "l %d", nummer))
+	       res = user_delete_topic(liste[this_player()], nummer);
+	    else 
+	    {
+		string cmd, rest;
+		int subject = liste[this_player()]-1;
+		
+		if(sscanf(eingabe, "%s %d %s", cmd, nummer, rest)>1)
+		{
+		    mixed *topics = top[S_TOPIC][subject];
+		    
+		    if(nummer < 1 || nummer > sizeof(topics[T_NAME]))
+		    {
+    			write(wrap("Punkt "+nummer+" der Liste "+(subject+1)+" existiert nicht."));
+			return NOTHING;
+		    }
+		    
+		    nummer--;
+		    res = topic_action(this_player(), cmd, rest || "", 
+		    	top[S_NAME][subject], &(top[S_USER][subject]),
+			topics[T_NAME][nummer], &(topics[T_USER][nummer]));
+		}
+		else
+		{
+		    nummer = strstr(eingabe, " ");
+		    if(nummer<0)
+			nummer = sizeof(eingabe);
+		
+		    res = subject_action(this_player(), eingabe[0..nummer-1], eingabe[nummer+1..<1],
+		    	top[S_NAME][subject], &(top[S_USER][subject]));
+		}
+		
+		if(res != END_MORE)
+		{
+		    liste[this_player(),L_MORE] = 0;
+		    return res;
+		}
+	    }
+	    if(res)
+	       list(liste[this_player()]);
+	    return res ? END_MORE : NOTHING;
+      }
+   else
+      switch(eingabe)
+      {
+	 case "n":
+	    write("n <text_ohne_nummer>\n");
+	    return NOTHING;
+	 case "l":
+	    write("l <listen_nr>\n");
+	    return NOTHING;
+         case "a":
+            analyse(0,0);
+            return NOTHING;
+         case "A":
+            analyse(0,1);
+            return NOTHING;
+         case "?":
+            write(
+               "q            Menue verlassen.\n"
+	       "<return>     Blaettern.\n"
+               "<nr>         Eine Liste zur Stimmabgabe auswaehlen.\n"
+               "n <text>     Eine neue Liste anlegen.\n"
+               "l <nr>       Eine Liste, samt ihrer Punkte und "
+                            "Stimmen, loeschen.\n"+
+	       list_help(this_player())+
+	       (gesellep(this_player())?
+	       "a            Wahlergebnisse als File ausgeben.\n"
+	       "A            Sortierte Wahlergebnisse als File ausgeben.\n"
+	       :"")
+               );
+	    return NOTHING;
+	 default:
+	    if(sscanf(eingabe, "%d", nummer))
+	       return list(nummer) ? END_MORE : NOTHING;
+	    else if(sscanf(eingabe, "n %s", text))
+	       return new_subject(text) ? END_MORE : NOTHING;
+	    else if(sscanf(eingabe, "l %d", nummer))
+	       return user_delete_subject(nummer) ? END_MORE : NOTHING;
+	    else
+	    {
+		string cmd, rest;
+		
+		if(sscanf(eingabe, "%s %d %s", cmd, nummer, rest)>1)
+		{
+		    if(nummer < 1 || nummer > sizeof(top[S_NAME]))
+		    {
+    			write(wrap("Liste "+(nummer)+" existiert nicht."));
+			return NOTHING;
+		    }
+		    
+		    nummer--;
+		    res = subject_action(this_player(), cmd, rest || "", 
+		    	top[S_NAME][nummer], &(top[S_USER][nummer]));
+		}
+		else
+		{
+		    nummer = strstr(eingabe, " ");
+		    if(nummer<0)
+			nummer = sizeof(eingabe);
+		
+		    res = list_action(this_player(),
+			eingabe[0..nummer-1], eingabe[nummer+1..<1]);
+		}
+		
+		if(res != END_MORE)
+		    liste[this_player(),L_MORE] = 0;
+		else
+		    list(ALL);
+		return res;
+	    }
+      }
+}
+
+void more_end(string str)
+{
+   if(str == "q")
+      m_delete(liste, this_player());
+   else if(!liste[this_player(), L_MORE] && !liste[this_player(), L_NOBACK])
+     list(ALL);
+}
+
+// --API----------------------------------------------------------------- //
+#define SECURE	if(extern_call() && !allow_API_access(previous_object())) return 0;
+
+mixed* query_subjects()
+{
+    SECURE;
+    
+    return transpose_array(({
+	top[S_NAME], top[S_DESC],
+	top[S_MULTI], top[S_TIME],
+	top[S_USER]}));
+}
+
+mixed *query_topics(int subject)
+{
+    SECURE;
+    
+    return transpose_array(({
+	top[S_TOPIC][subject][T_NAME],
+	top[S_TOPIC][subject][T_USER]
+	}));
+}
+
+void delete_subject(int subject)
+{
+    SECURE;
+
+    _delete_list(subject);
+}
+
+void delete_topic(int subject, int topic)
+{
+    SECURE;
+
+    _delete_topic(subject, topic);
+}
+
+int add_subject(string name, string desc, int votes, mixed user)
+{
+    SECURE;
+
+    return _add_list(name, desc, votes, user);
+}
+
+int add_topic(int subject, string name, mixed user)
+{
+    SECURE;
+
+    return _add_topic(subject, name, user);
+}
+
+
+// --PUBLIC----------------------------------------------------------------- //
+
+// Liefert entweder die Listen, die nach einem bestimmten Zeitpunkt entstanden
+// sind (nach ist dann eine Zahl, der Zeitpunkt), oder, bei dem ein Spieler
+// noch keine Stimmen abgegeben hat. (nach ist dann ein Objekt, der Spieler)
+string *query_vote_list(mixed nach)
+{
+    // Liefert die Liste der Wahlthemen, die nach <nach> eingetragen
+    // wurden.
+
+    string *ret;
+
+    ret = ({});
+
+    check(0);
+    
+    if(intp(nach))
+    {
+        for(int i = sizeof(top[S_NAME]); i-- ; )
+            if (top[S_TIME][i] > nach) ret = ({ top[S_NAME][i] }) + ret;
+    }
+    else if(playerp(nach) && nach==this_player())
+    {
+        for(int i = sizeof(top[S_NAME]); i-- ; )
+            if(!sizeof(filter(top[S_TOPIC][i][T_VOTE],
+                (:member($1,$2)>=0:),nach->query_real_name())))
+                    ret = ({ top[S_NAME][i] }) + ret;
+    }
+
+    return ret;
+}
+
+
+string query_long(object viewer)
+{
+   return ::query_long(viewer)+
+   wrap(
+   "Die Listen kann man mit 'lies listen' lesen. Man gelangt dann in ein "
+   "Menue, dort erhaelt man mit '?' weitere Hilfe. "
+   "Man kann jederzeit seine Wahl zu einer Liste aendern, indem man "
+   "einfach nochmals waehlt."
+   );
+}
+
+
+void create()
+{
+   int i;
+   
+   "*"::create();
+   
+   set_name("urne");
+   set_gender("weiblich");
+   set_id(({"wahlurne", "urne"}));
+   set_long(Der()+" steht auf einem kleinen Tisch auf dem viele Listen "
+            "ausliegen.");
+   add_v_item(
+   ([ "name": "listen",
+      "gender": "weiblich",
+      "id": ({ "listen", "liste", "wahllisten", "wahlliste" }),
+      "plural": 1,
+      "read_msg": "$Der() schaut sich die Wahllisten an",
+      "look_msg": "$Der() schaut sich die Wahllisten an",
+      "read": (:read_list($4):),
+      "long": (:read_list($2):) ]));
+
+   set_read(Den()+" kannst Du nicht lesen, hoechstens die Listen.\n");
+   seteuid(getuid());
+   if(!(top = WAHLEN->query_votes()))
+      top = INIT_VALUE;
+   if(sizeof(top) < 4)
+   {
+      top += ({({})});
+      for(i = 0; i<sizeof(top[S_NAME]);i++)
+	 top[S_MULTI] += ({1});
+      // top[S_MULTI][sizeof(top[S_NAME])-2] = 0;
+   }
+   if (sizeof(top) <= S_TIME)
+       top += ({ allocate(sizeof(top[S_NAME])) });
+
+   if (sizeof(top) <= S_USER)
+   {
+      top += ({ allocate(sizeof(top[S_NAME])) });
+      top[S_TOPIC] = map(top[S_TOPIC],
+    			(: $1 + ({ allocate(sizeof($1[T_NAME])) }) :));
+   }
+       
+   add_security_condition(#'playerp);
+   add_security_condition(this_object());
+}
+
+void init()
+{
+   add_action("cleanse_and_burn", "cleanse_and_burn");
+}
+
+int remove()
+{
+   remove_call_out("save");
+   save();
+   ::remove();
+}

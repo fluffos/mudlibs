@@ -1,0 +1,304 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/living/ears.c
+// Description:	Die Ohren, hauptsaechlich zum Horchen da.
+// Author:	Freaky (07.04.94)
+// Modified by: Freaky (10.03.1998) message auf send_message umgebaut.
+//
+// $Log: ears.c,v $
+// Revision 1.15  2006/01/22 00:51:30  gnomi
+// Du hoerst/richts nichts *Besonderes*.
+//
+// Revision 1.14  2006/01/12 23:41:40  gnomi
+// Ein paar wraps rein.
+//
+// Revision 1.13  2005/04/10 01:19:28  gnomi
+// hear-Controller eingebaut.
+//
+// Revision 1.12  2003/03/30 23:33:36  gnomi
+// Typo.
+//
+// Revision 1.11  2003/03/13 23:23:08  gnomi
+// Menaures: Eigene Befehle in LFun add_actions() definieren
+//
+// Revision 1.10  2002/08/11 01:52:29  gnomi
+// Auch das "invis" von V-Items beachten.
+//
+// Revision 1.9  2002/06/18 01:08:38  gnomi
+// "far" kann auch eine Closure sein.
+//
+// Revision 1.8  2002/04/16 01:22:40  gnomi
+// Typo.
+//
+// Revision 1.7  2002/03/16 12:19:46  gnomi
+// query_feel/hear_msg dokumentiert.
+//
+// Revision 1.6  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strong_types
+
+#include <parse_com.h>
+#include <invis.h>
+#include <message.h>
+#include <control.h>
+
+varargs void notify_message(string msg, int type);
+
+/*
+FUNKTION: query_hear_msg
+DEKLARATION: string query_hear_msg()
+BESCHREIBUNG:
+Diese Funktion wird in einem Objekt aufgerufen, wenn this_player() an dem
+Objekt horcht. Liefert diese Funktion 0 zurueck, wird die Standardmeldung
+"<TP> horcht an <Objekt>." generiert, ansonsten wird diese Meldung
+umgebrochen und ausgegeben.
+VERWEISE: set_noise, query_noise
+GRUPPEN: grundlegendes
+*/
+int horche_command(string str)
+{
+    mixed *parsed, ob;
+    string text, desc, tmp;
+    object where, owner;
+
+    if (!str || str == "hier")
+    {
+	where = environment(this_player());
+	
+	if(this_object()->do_forbiddens(C_RESORT, "hear",
+	    ({"", "_me"}), ({this_object(), where})))
+		return 1;
+	
+	if(where && (text = where->query_noise()))
+	{
+	   if (!IS_HIDDEN(this_object()))
+	   {
+	      if (tmp=where->query_hear_msg())
+	      {
+		 if (tmp != "")
+		    this_object()->send_message(MT_LOOK,MA_NOISE,wrap(add_dot_to_msg(tmp)));
+	      }
+	      else
+		 this_object()->send_message(MT_LOOK,MA_NOISE,
+                    wrap(Der()+" horcht angespannt."));
+	   }
+	   this_object()->send_message_to(this_object(),MT_NOISE,MA_NOISE,text);
+	   
+	   this_object()->do_notifies(C_RESORT, "hear",
+	       ({"", "_me"}), ({this_object(), where}));
+	   
+	   return 1;
+	}
+	return notify_fail("Du hoerst hier nichts Besonderes.\n");
+    }
+    sscanf(str,"an %s",str);
+    parsed = parse_com(str);
+    if (parse_com_error(parsed,"Horche an was?\n",1))
+	return 0;
+    ob = parsed[PARSE_OBS][0];
+
+    if(this_object()->do_forbiddens(C_RESORT, "hear",
+	({"", "_me"}), ({this_object(), ob})))
+	    return 1;
+
+    text = QUERY("noise",ob);
+
+    if (!text)
+    {
+	if (mappingp(ob) && (text=QUERY("far",ob)))
+	    notify_message(stringp(text)?text:wrap(Der(ob)+" "+
+	        (ob["plural"]?"sind":"ist")+
+		" viel zu weit weg, um dran zu horchen."),MA_NOISE);
+	else
+	    this_object()->send_message_to(this_object(),MT_NOISE,MA_NOISE,
+	    	"Du hoerst nichts Besonderes.\n");
+
+	this_object()->do_notifies(C_RESORT, "hear",
+	       ({"", "_me"}), ({this_object(), ob}));
+	
+	return 1;
+    }
+
+    if (text == "")
+    {
+	this_object()->do_notifies(C_RESORT, "hear",
+	       ({"", "_me"}), ({this_object(), ob}));
+
+	return 1;
+    }
+
+    this_object()->send_message_to(this_object(),MT_NOISE,MA_NOISE,text);
+
+    /* MELDUNG fuer OTHERS */
+
+    if(!IS_HIDDEN(this_object()))
+       if (ob == this_object())
+	  this_object()->send_message(MT_LOOK,MA_NOISE,
+             wrap(Der()+" horcht an sich."));
+       else if (tmp=QUERY("hear_msg",ob))
+       {
+	  if (tmp != "")
+	     this_object()->send_message(MT_LOOK,MA_NOISE,wrap(tmp));
+       }
+       else if (objectp(ob) && living(ob))
+	  this_object()->send_message(MT_LOOK,MA_NOISE,
+	     ob->query_invis() & V_ATOM_HIDDEN ?
+		wrap(Der()+" horcht an jemandem.") : 
+		wrap(Der()+" horcht an "+seinem(ob)+"."),
+	     wrap(Der()+" horcht an dir."), ob);
+       else if (QUERY("invis",ob) & V_ATOM_HIDDEN)
+	  this_object()->send_message(MT_LOOK,MA_NOISE,
+             wrap(Der()+" horcht an etwas."));
+       else
+	  if((owner = auto_owner_search(ob)) && owner != this_object())
+	     this_object()->send_message(MT_LOOK,MA_NOISE,
+		wrap(Der()+" horcht an "+ihrem(ob)+"."),
+		wrap(Der()+" horcht an "+deinem(ob)+"."),
+		owner);
+	  else
+	     this_object()->send_message(MT_LOOK,MA_NOISE,
+                wrap(Der()+" horcht an "+seinem(ob)+"."));
+
+    this_object()->do_notifies(C_RESORT, "hear",
+	({"", "_me"}), ({this_object(), ob}));
+
+    return 1;
+}
+
+/* --- add_actions: --- */
+
+protected void add_actions()
+{
+    add_action("horche_command",    "horche",-5);
+    add_action("horche_command",    "lausche",-6);
+    add_action("horche_command",    "hoere",-4);
+}
+
+/* --- End of file. --- */
+
+/*
+FUNKTION: forbidden_hear
+DEKLARATION: int forbidden_hear(mixed what, object who)
+BESCHREIBUNG:
+Bevor am Objekt (kann auch ein Raum sein) oder Mapping (v-item) what
+vom Lebewesen who gehorcht werden kann, wird who->forbidden("hear", what)
+aufgerufen, liefert dieser Aufruf einen Wert ungleich 0 zurueck, kann nicht
+am Objekt gelauscht werden.
+
+Die Funktion forbidden ruft in allen mit who->add_controller("forbidden_hear",
+ other) angemeldeten Objekten other die Funktionen other->forbidden_hear(what,
+who) auf. Liefert auch nur eine dieser Funktionen einen Wert ungleich
+0, dann returnt forbidden diesen und es darf nicht gelauscht werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who muss der Programmierer
+in forbidden_hear oder forbidden, falls er diese Funktion ueberlagern will,
+sorgen.
+
+Bemerkung: Es wird auch what->forbidden("hear_me", who) aufgerufen
+VERWEISE: forbidden, notify, notify_hear
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: forbidden_hear_me
+DEKLARATION: int forbidden_hear_me(object who, mixed what)
+BESCHREIBUNG:
+Bevor am Objekt oder Mapping (v-item) what vom Lebewesen who gehorcht
+werden kann, wird what->forbidden("hear_me", who) aufgerufen, liefert dieser
+Aufruf einen Wert ungleich 0 zurueck, kann am Objekt nicht gelauscht werden.
+
+Die Funktion forbidden ruft in allen mit what->add_controller(
+"forbidden_hear_me", other) angemeldeten Objekten other die Funktionen
+other->forbidden_hear_me(who, what) auf. Liefert auch nur eine dieser
+Funktionen einen Wert ungleich 0, dann returnt forbidden diesen und
+es darf nicht gelauscht werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who muss der Programmierer
+in forbidden_hear_me oder forbidden, falls er diese Funktion ueberlagern will,
+sorgen.
+
+Bemerkung: Es wird auch who->forbidden("hear", what) aufgerufen.
+VERWEISE: forbidden, notify, notify_hear
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: forbidden_hear_here
+DEKLARATION: int forbidden_hear_here(object who, mixed what)
+BESCHREIBUNG:
+Bevor am Objekt oder Mapping (v-item) what vom Lebewesen who gehorcht
+werden kann, wird im Raum room->forbidden("hear_here", who, what) aufgerufen,
+liefert dieser Aufruf einen Wert ungleich 0 zurueck, kann am Objekt nicht
+gelauscht werden.
+
+Die Funktion forbidden ruft in allen mit room->add_controller(
+"forbidden_hear_here", other) angemeldeten Objekten other die Funktionen
+other->forbidden_hear_here(who, what) auf. Liefert auch nur eine dieser
+Funktionen einen Wert ungleich 0, dann returnt forbidden diesen und es
+darf nicht gelauscht werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who muss der Programmierer
+in forbidden_hear_here oder forbidden, falls er diese Funktion ueberlagern
+will, sorgen.
+
+Bemerkung: Es wird auch who->forbidden("hear", what) und
+           what->forbidden("hear_me", who) aufgerufen.
+VERWEISE: forbidden, notify, notify_hear
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: notify_hear
+DEKLARATION: void notify_hear(mixed what, object who)
+BESCHREIBUNG:
+Nachdem am Objekt (kann auch ein Raum sein) oder Mapping (v-item) what
+vom Lebewesen who gehorcht wurde, wird who->notify("hear", what) aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller("notify_hear",
+ other) angemeldeten Objekten other die Funktionen other->notify_hear(what,
+who) auf. Sowohl who als auch other haben dann die Moeglichkeit, auf
+das Lauschen von what zu reagieren.
+
+Bemerkung: Es wird auch what->notify("hear_me", who) aufgerufen.
+VERWEISE: forbidden, notify, forbidden_hear
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: notify_hear_me
+DEKLARATION: void notify_hear_me(object who, mixed what)
+BESCHREIBUNG:
+Nachdem am Objekt oder Mapping (v-item) what vom Lebewesen who gehorcht
+wurde, wird what->notify("hear_me", who) aufgerufen.
+
+Die Funktion notify ruft in allen mit what->add_controller("notify_hear_me",
+other) angemeldeten Objekten other die Funktionen other->notify_hear_me(who,
+what) auf. Sowohl what als auch other haben dann die Moeglichkeit, auf das
+Lauschen von what zu reagieren.
+
+Bemerkung: Es wird auch who->notify("hear", what) aufgerufen.
+VERWEISE: forbidden, notify, forbidden_hear
+GRUPPEN: spieler, monster, nase
+*/
+
+/*
+FUNKTION: notify_hear_here
+DEKLARATION: void notify_hear_here(object who, mixed what)
+BESCHREIBUNG:
+Nachdem am Objekt oder Mapping (v-item) what vom Lebewesen who gehorcht
+wurde, wird im Raum room->notify("hear_here", who, what) aufgerufen.
+
+Die Funktion notify ruft in allen mit room->add_controller("notify_hear_here",
+other) angemeldeten Objekten other die Funktionen other->notify_hear_here(who,
+what) auf. Sowohl what als auch other haben dann die Moeglichkeit, auf das
+Lauschen von what zu reagieren.
+
+Bemerkung: Es wird auch who->notify("hear", what) und
+           what->notify("hear_me", who) aufgerufen.
+VERWEISE: forbidden, notify, forbidden_hear
+GRUPPEN: spieler, monster, nase
+*/

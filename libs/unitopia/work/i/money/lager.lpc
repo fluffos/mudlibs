@@ -1,0 +1,438 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/money/lager.c
+// Description: Lager zu /i/money/laden.c
+// Author:	Garthan
+// Modified by:	Garthan	(27.07.94) dispatcher, timestamps, docs
+// Concepts:	Inspiration durch TappMud Store
+// Modified by:	Freaky (19.06.96) Fixed Bug in reset (Laden aufraeumen)
+//              Kurdel (13.10.97) Eintritt fuer Vehikel und Tiere verboten
+//
+// $Log: lager.c,v $
+// Revision 1.7  2013-05-13 17:47:11  myonara
+// Import/Export aus /w/ Lagern geblockt.
+//
+// Revision 1.6  2008/01/21 14:06:30  gnomi
+// query_lager eingebaut.
+//
+// Revision 1.5  2001/07/20 21:58:34  gnomi
+// virtual inherit "/i/room";
+//
+// Revision 1.4  2001/06/25 11:48:20  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.3  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+virtual inherit "/i/room";
+
+#include <move.h>
+#include <apps.h>
+#include <level.h>
+#include <time.h>
+
+#define FORWARD(i,x)  for(i=0; i<sizeof(x); i++)
+#define BACKWARD(i,x) for(i=sizeof(x); i--;)
+#define MIN(x,y) ((x)<(y)?(x):(y))
+
+// Maximale Anzahl von Objekten eines Artikels
+#define MAX_OBJ 6
+
+// Jeden wievielten reset() wird der Laden resetet?
+#define RESETS 1
+
+// Anzahl der Artikel, die Laden nicht weiterverteilt
+#define MAX_ART 120
+
+// Anzahl der Artikel, ab der der Laden die Haelfte loescht
+// Sollte sinnvollerweise groeser sein als MAX_ART
+#define MAX_ART_DELETE 150
+
+// Wie lange wird ein Object (realzeit) im Laden gehalten?
+#define EXPIRE (3*DAY/2)
+
+// 
+// Das store mapping enthaelt den Inhalt des Lagers in der Form
+// ([
+// "Eine Fackel": 
+//    ({
+//	 ({ OBJ(/obj/fackel#17460), 10, "fackel", 775137613 }),
+//	 ({ naechste Fackel }), ...,
+//    }),
+// "Eine Schaufel":
+//    ({
+//	 ({ OBJ(/obj/schaufel#17462),40, "schaufel", 775137613 }),
+//	    ...
+//    })
+// long: 
+//    ({
+//	 ({ object_pointer, value, name, time_stamp }),
+//    })
+// ])
+// Die unterschiedlichen Objekte eines Artikels werden nach Wert sortiert.
+//
+private mapping store = ([]);
+
+// Das sold mapping enthaelt die Information, wie oft ein Artikel
+// bereits angekauft wurde.
+// Diese Zahl wird im reset (jedes RESETS-mal zurueckgezaehlt)
+// und bestimmt den Preis.
+//
+private mapping sold = ([]);
+
+// Diese Variable haelt fest, wann ein reset des Ladens faellig wird.
+private int reset;
+
+/// dispatcher code
+///
+/// Der Dispatcher exportiert Objekte an andere Laeden, sobald hier die
+/// Anzahl der verschiedenen Artikel > MAX_ART geworden ist.
+/// Der Zielladen erhaelt Objekte, wenn er importwillig ist und selbst 
+/// nicht exportieren muss.
+
+private int import, export;
+
+// Funktionen zum Setzen und Abfragen der Import/Export Eigenschaften
+void set_export(int i) { export = i; }
+int query_export() { return export; }
+
+void set_import(int i) { import = i; }
+int query_import() { return import; }
+
+// Blockiere Laeden aus dem /w/-Bereich
+int block_w()
+{
+    return strstr(program_name(this_object()),"/w/")==0;
+}
+
+// Wird vom store_master aufgerufen, um festzustellen, ob ein
+// Laden importwillig ist.
+int want_import()
+{
+   return import && sizeof(store) < export && !block_w();
+}
+
+// Der Dispatcher wird vom reset aufgerufen
+void dispatch()
+{
+   string *entries;
+   object *stores, ob;
+   mixed *items;
+   int i, j;
+
+   if(!block_w() && export &&
+      sizeof(store) > export &&
+      sizeof(stores = STORE_MASTER->query_import_stores()-({this_object()})))
+      for(i = sizeof(entries = m_indices(store)); i--;)
+	 if(sizeof(items = store[entries[i]]) == 1 &&
+	    !sold[entries[i]] &&
+	    (ob = items[0][0]) &&
+	    !living(ob))
+	 {
+	    if(stores[j])
+	       ob->move(stores[j]);
+	    j = (j+1)%sizeof(stores);
+	    if(sizeof(store) <= export)
+	       break;
+	 }
+}
+
+/// end dispatcher code
+
+// Alle RESETS reset() Aufrufe wird der Laden nach zu loeschenden
+// Objekten durchforstet.
+// Zu loeschen sind Objekte die laenger als EXPIRE (in s) im Laden
+// liegen, Objekte die mehr als sold[artikel] mal im Laden sind.
+
+void reset()
+{
+   int i, j, count;
+   string * shorts;
+   mixed * items;
+
+
+   if (object_name()+".lpc"!=__FILE__)
+   {
+       if(!--reset)
+       {
+	  reset = RESETS;
+	  shorts = m_indices(sold);
+	  BACKWARD(i, shorts)
+	  {
+	     if((count = --sold[shorts[i]]) <= 0)
+		m_delete(sold, shorts[i]);
+	     if(items = store[shorts[i]])
+	     {
+		// Alle Objekte aelter als EXPIRE loeschen
+		for(j = sizeof(items); j--;)
+		   if(time()-items[j][3] > EXPIRE)
+		   {
+		      if(items[j][0])
+			 items[j][0]->remove();
+		      items[j] = 0;
+		   }
+		items -= ({ 0 });
+
+		// Objekte von Objekttyp mit Anzahl > count loeschen
+		while(sizeof(items) > (count || 1))
+		{
+		   j = random(sizeof(items));
+		   if(items[j][0])
+		      items[j][0]->remove();
+		   items[j] = 0;
+		   items -= ({ 0 });
+		}
+
+		// Clear/Restore store entry
+		if(!sizeof(items))
+		   m_delete(store, shorts[i]);
+		else
+		   store[shorts[i]] = items;
+	     }
+	  }
+       }
+
+      if (!present("fackel")) 
+	 clone_object("/obj/fackel")->move(this_object());
+      if (!present("truhe")) 
+	 clone_object("/obj/truhe")->move(this_object());
+      if (!present("schaufel"))
+	 clone_object("/obj/schaufel")->move(this_object());
+
+      dispatch();
+
+      // Falls sich nichts verteilen laesst und trotzdem zuviel im Lager ist,
+      // wird hier mal einfach die Haelfte geloescht
+      if(sizeof(store) > MAX_ART_DELETE)
+         for(i = sizeof(shorts = m_indices(store)); i--;)
+	    if(random(2))
+	    {
+	       items = store[shorts[i]];
+	       for (j=sizeof(items); j--; )
+	       {
+	       	  if (items[j][0])
+		      items[j][0]->remove();
+	       }
+	       m_delete(store, shorts[i]);
+	    }
+   }
+}
+
+void create()
+{
+   set_long("Das Lager des Ladens. "+
+      "In vielen Regalen wird hier aufbewahrt, was im Verkaufsraum angekauft "
+      "wurde.");
+   set_short("Das Lager");
+   set_own_light(1);
+   add_type("kunstlicht", 1);
+   add_type("nocleanup", 1);
+   add_type("teleport_rein_verboten", 1);
+   add_type("teleport_raus_verboten", 1);
+   if(object_name()+".lpc"!=__FILE__)
+   {
+      STORE_MASTER->add_store(this_object());
+      set_import(1);
+      set_export(MAX_ART);
+   }
+   reset();
+   reset = RESETS;
+}
+
+int remove()
+{
+   STORE_MASTER->delete_store(this_object());
+   return ::remove();
+}
+
+// Sortierhilfsfunktion zu add_object()
+int sort_by_value(mixed *a, mixed *b)
+{
+   return a[1] > b[1];
+}
+
+// add_object() fuegt ein Objekt in die Lagerverwaltung ein.
+// Das Objekt erhaelt einen Eintrag im Mapping store.
+// Sein long, objectpointer, value und name wird festgehalten, genauso wie 
+// der Zeitpunkt der Aufnahme ins Lager.
+// Wird aufgerufen, wenn ein Objekt ins Lager kommt (von moved_in() aus)
+//
+int add_object(object item)
+{
+   mixed * items;
+   string short;
+
+   if(!objectp(item))
+      return 1;
+   if(living(item))
+      return 0;
+   if(!(short = item->query_short()))
+      return 1;
+   if(!(items = store[short]))
+      items = ({});
+
+   sold[short]++;
+   items += ({ ({ item,
+		  item->query_value(), 
+		  lower_case(item->query_name()),
+		  time()
+	    }) });
+   items = sort_array(items, "sort_by_value");
+   if(sizeof(items) > MAX_OBJ)
+   {
+      if(items[0][0])
+	 items[0][0]->remove();
+      items = items[1..];
+   }
+   store[short] = items;
+   return item ? 0 : MOVE_DESTRUCTED;
+} 
+
+// restore_object() enfernt ein Objekt aus der Lagerverwaltung.
+// Wird von moved_out aufgerufen, falls das Objekt das Lager 
+// verlaesst.
+//
+int remove_object(object item)
+{
+   mixed items;
+   string short;
+   int i;
+
+   if(!objectp(item))
+      return 1;
+   if(living(item))
+      return 0;
+   if((short = item->query_short()) && (items = store[short]))
+      BACKWARD(i, items)
+	 if(items[i][0] == item)
+	 {
+	    items[i] = 0;
+	    items -= ({ 0 });
+	    if(!sizeof(items))
+	       m_delete(store, short);
+	    else
+	       store[short] = items;
+	    if(--sold[short] <= 0)
+	       m_delete(sold, short);
+	    return 0;
+	 }
+   item->remove();
+   return MOVE_DESTRUCTED;
+}
+
+// check_store entfernt "tote" Eintraege, deren Objekte sich ohne
+// Einflussnahme des Lagers zerstoert haben.
+// Wird vor der Inhaltsabfrage des Lagers aufgerufen
+void check_store()
+{
+   string * shorts;
+   mixed items;
+   int i, j;
+
+   if(!store)
+      store = ([]);
+   shorts = m_indices(store);
+   BACKWARD(i, shorts)
+   {
+      items = store[shorts[i]];
+      BACKWARD(j, items)
+	 if(!items[j][0])
+	 {
+	    items[j] = 0;
+	    items -= ({ 0 });
+            if(!sizeof(items))
+               m_delete(store, shorts[i]);
+            else
+               store[shorts[i]] = items;
+	    if(--sold[shorts[i]] <= 0)
+	       m_delete(sold, shorts[i]);
+	 }
+   }
+}
+
+// Die folgenden zwei Funktionen sind die Interfacefunktionen zum 
+// Laden selbst, der hieraus ein Angebot fuer den Spieler erstellt.
+mapping query_store()
+{
+   check_store();
+   return store;
+}
+
+mapping query_sold()
+{
+   return sold;
+}
+
+// Ueber diese Funktion wird dem Lagerraum mitgeteilt,
+// dass ein neues Objekt in die Lagerverwaltung eingetragen werden muss.
+void moved_in(object was, object woher, string dir, int way)
+{
+   room::moved_in(was, woher, dir, way);
+   add_object(was);
+}
+
+// Ueber diese Funktion wird dem Lagerraum mitgeteilt,
+// dass ein Objekt aus dem Lagerraum entfernt werden soll.
+// Dieses wird mittels remove_object() aus der Lagerverwaltung entfernt.
+void moved_out(object was, object wohin, string dir, int way)
+{
+   room::moved_out(was, wohin, dir, way);
+   remove_object(was);
+}
+
+// Administrative Funktionen fuer den Lagerverwalter
+void init()
+{
+   if(adminp(this_player()))
+      add_action("transfer", "transfer");
+}
+
+int transfer(string str)
+{
+   string tmp;
+   object wohin, woher, *inv;
+   int i;
+
+   if(!str)
+      return 0;
+   if(sscanf(str, "nach %s", tmp) == 1)
+   {
+      wohin = search_object(tmp);
+      woher = this_object();
+   }
+   else if(sscanf(str, "von %s", tmp) == 1)
+   {
+      wohin = this_object();
+      woher = search_object(tmp);
+   }
+   if(!wohin || !woher)
+      return 0;
+
+   inv = all_inventory(woher);
+   for(i = 0; i < MIN(50,sizeof(inv)); i++)
+      if(inv[i] != this_player())
+	 inv[i]->move(wohin);
+   return 1;
+}
+
+int let_not_in(object ob, object room, string dir)
+{
+   return ob->query_vehikel() || ob->query_animal() ||
+      ob->query_reittier() || ::let_not_in(ob, room, dir);
+}
+
+/*
+FUNKTION: query_lager
+DEKLARATION: int query_lager()
+BESCHREIBUNG:
+Liefert 1, wenn der Raum ein Warenlager fuer einen Gemischtwarenladen ist.
+GRUPPEN: handel
+*/
+int query_lager()
+{
+    return 1;
+}

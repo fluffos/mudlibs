@@ -1,0 +1,519 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/player/delay.c
+// Description:	Fuehrt eine Aktion mit mehreren Schritten aus
+// Author:	Freaky (31.05.96)
+// Modified by:	Monty (05.06 96) in delay_action bei stringp(comm) und 
+//			pointerp(comm) die messages gewrappt.
+//			query_da_handler() wrappt auch, falls da_handle ein
+//			String ist
+//		Monty (07.06 96) in delay_act ein break gegen return getauscht
+//			(Ausfuehrung stoppt nun tatsaechlich bei return von
+//			DA_STOP, statt halt_delayed_action(DA_STOPPED); zu
+//			machen um weiterzumachen :)
+//		Freaky (07.06.95) da_handler wird gleich am Anfang gewrapped
+//		Monty/Offler (19.02 97): Kleiner Patch an halt_delay_action:
+//			Variablen werden VOR dem funcall() geloescht.
+//		Freaky (10.03.1998) message auf send_message umgebaut.
+//
+// $Log: delay.c,v $
+// Revision 1.14  2016/04/29 13:23:35  myonara
+// Fehlermeldung zum leeren Array aufgesplittet.
+//
+// Revision 1.13  2016/04/29 10:50:35  myonara
+// 0 in dda zulassen als No operation.
+//
+// Revision 1.12  2016/04/29 09:40:13  myonara
+// Fehlerlog zu vorherigem Patch etabliert.
+//
+// Revision 1.11  2016/03/22 20:22:37  myonara
+// Parameterpruefung in do_delayed_actions ergaenzt.
+//
+// Revision 1.10  2004/01/28 23:28:10  gnomi
+// Mechanismus eingebaut, um auch waehrend der Ausfuehrung einer Action
+// mitzubekommen, dass gerade eine DA laeuft.
+//
+// Revision 1.9  2003/08/29 21:41:14  gnomi
+// Hinweis auf delayed_action.h eingebaut.
+//
+// Revision 1.8  2002/07/07 22:49:14  gnomi
+// delay_act: Noch ein paar Sicherheitsabfragen zur Arraygroesse.
+//
+// Revision 1.7  2002/07/07 22:38:48  gnomi
+// Man kann auch Message-Typen angeben.
+//
+// Revision 1.6  2001/12/27 02:53:47  gnomi
+// Flag DO_NO_HALT eingefuehrt, bei welchem eine delayed_action nicht
+// abgebrochen werden kann.
+//
+// Revision 1.5  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strict_types
+
+#include <delayed_action.h>
+#include <message.h>
+
+#define DA_FUN "delay_act"
+
+private nosave mixed da_handler;
+private nosave closure da_callback;
+private nosave mixed da_tmp_var;
+private nosave int da_flag, da_rest_time, da_reattack, da_last_time;
+// In da_last_time wird der Zeitpunkt des letzten DA_FUN-Aufrufs
+// gespeichert. Falls da_last_time==time() befinden wir uns gerade
+// in einem solchen Aufruf. Wird da_last_time waehrend eines Aufrufes
+// auf 0 gesetzt, soll die Action abgebrochen werden.
+
+// Prototypes
+void stop_all_fights();
+int query_reattack();
+void set_reattack(int i);
+
+nosave mixed query_da_handler()
+{
+    return da_handler;
+}
+
+nosave int query_da_flag()
+{
+    return da_flag;
+}
+
+nosave void halt_delayed_action(int flag)
+{
+    closure callback;
+    mixed tmp_var;
+
+    remove_call_out(DA_FUN);
+    if (da_reattack)
+	set_reattack(1);
+
+    tmp_var = da_tmp_var;
+    callback = da_callback;
+
+    da_handler = da_callback = da_tmp_var = 0;
+    da_flag = da_rest_time = da_reattack = da_last_time = 0;
+
+    if(closurep(callback) && to_object(callback))
+        funcall(callback,flag,tmp_var);
+}
+
+nosave void _dda_parameter_log(mixed * acts, int time)
+{
+    sys_log("do_delayed_action_parameter",
+        sprintf("%s\n%Q\n",shorttimestr(time),acts));
+}
+
+/*
+FUNKTION: do_delayed_action
+DEKLARATION: int do_delayed_action(mixed action_handler, mixed *actions [, closure callback [, int flag]])
+BESCHREIBUNG:
+
+Diese Funktion soll es moeglich machen, Aktionen verzoegert auszufuehren.
+
+int do_delayed_action(string|closure action_handler, mixed *actions
+	[, closure callback [, int flag] ])
+
+Returnwert: DA_OK	Aktion wird ausgefuehrt
+	    DA_BUSY	Das Lebewesen macht schon etwas und darf
+	                nichts neues anfangen
+
+action_handler:
+    string:
+	Ein String der ausgegenben wird, wenn man ein anderes Kommando
+	ausfuehren will waehrend die Aktion laeuft (wird automatisch gewrappt).
+    closure:
+	Wenn eine Closure uebergeben wurde, wird diese mit dem Kommando, das
+	eingegeben wurde aufgerufen.
+	Returnwert der Closure:
+	    DA_COMMAND_ALLOWED	Das Kommando ist erlaubt und wird ausgefuehrt
+	    ein String		Dieser wird ausgegeben, und das Kommando
+				nicht ausgefuehrt.
+	    alles andere	Das Kommando wird nicht ausgefuehrt.
+
+actions: Ein Array mit 'Delay' + 'Aktion' Paaren
+   ({
+       int delay, 
+       closure || string || array,
+       int delay2,
+       closure || string || array,
+       ...
+   })
+
+    delay: Zeit in der die naechste Aktion ausgefuehrt wird in Sekunden.
+
+    closure: Eine Closure, die aufgerufen wird. Diese Closure kann etwas
+	zurueckliefern:
+	DA_STOP		Stoppt den Vorgang
+	DA_CONTINUE	Macht einfach weiter
+	alles andere	Dieser Wert wird in einer Variablen gespeichert
+			und jede weitere Closure wird damit aufgerufen
+			bis der Wert wieder veraendert wird.
+			Der Wert darf kein Integer sein (ausser 0).
+
+    string: Ein String, der an den Spieler ausgegeben wird 
+	(automatisch gewrappt).
+
+    array: Ein Array mit dem String an den Spieler und den Uebergabeparametern
+        fuer 'send_message()'. Es gibt folgende Varianten:
+        
+        ({ MSG an Spieler, MSG an alle anderen im Raum
+           [, Message an WHO, Objekt WHO ] })
+                
+        ({ MSG-Type, MSG-Action, MSG an Spieler })
+        
+        ({ MSG-Type, MSG-Action, MSG an Spieler, MSG an alle anderen
+           [, Message an WHO, Objekt WHO ] })
+                
+        ({ MSG-Type, MSG-Action, MSG an Spieler,
+           MSG-Type, MSG-Action, MSG an alle anderen
+           [, Message an WHO, Objekt WHO ] })
+
+        ({ MSG-Type, MSG-Action, MSG an Spieler,
+           MSG-Type, MSG-Action, MSG an alle anderen
+           [, MSG-Type, MSG-Action, MSG an WHO, Objekt WHO ] })
+
+callback: Eine Closure, die aufgerufen wird, wenn die Aktion beendet ist
+	Diese Closure wird mit folgenden Parametern aufgerufen:
+	1. Einem Flag, das anzeigt, wie die Aktion beendet wurde:
+	   DA_STOPPED	Die Aktion wurde vom Spieler beendet
+			(z.B. durch eine Bewegung)
+	   DA_BREAK	Die Aktion wurde unterbrochen
+			(z.B. durch eine Flucht, Net-Dead, Ausloggen)
+	   DA_NEW_ACTION Es wurde eine neue Aktion gestartet.
+	   DA_DONE	Die Aktion wurde normal beendet
+	2. Die evtl. gespeicherte Variable aus einer vorherigen Closure
+
+flag:	DA_OK_ACTION	Es darf eine neue Delay-Aktion gestartet werden, die
+			die alte abbricht mit 'DA_NEW_ACTION'
+	DA_OK_MOVE	Die Aktion wird bei einem move() nicht abgebrochen
+	DA_OK_COMMAND	Der Spieler kann auch Kommando ausser 'halt' eingeben
+	DA_OK_FIGHT	Der Spieler darf waehrend der Aktion WEITERkaempfen
+	DA_VALID_OBJECT Wenn das Objekt, auf das sich das Callback bezieht, 
+	                zerstoert wird, bricht die Aktion ab.
+	DA_NO_HALT	Damit bei 'halt' (DA_STOP_ACTION) die Meldung
+	                vom action_handler ausgegeben bzw. die Action
+			nur dann angehalten, wenn der action_handler
+			DO_COMMAND_ALLOWED liefert.
+	
+	Diese Flags koennen mit '|' verknuepft werden.
+
+Die DA-Konstanten sind in <delayed_action.h> definiert.
+
+VERWEISE: query_delayed_action_time, stop_delayed_action, in_delayed_action
+GRUPPEN: spieler
+*/
+varargs int do_delayed_action(mixed act_hand, mixed *acts, closure callback,
+	int flag)
+{
+    int i;
+ 
+#if 1
+    // Parameter loggen, wenn Fehler auftreten.
+    call_out("_dda_parameter_log", 0, acts,time());
+    // Parameterpruefung, um kryptische send_message-Errors abzufangen.
+    for(i=0;i<sizeof(acts);i++)
+    {
+        if (!intp(acts[i]))
+            raise_error("actions["+i+"] ist kein Integer (Dauer).\n");
+        i++; // zweite Haelfte des Parameters...
+        if (i>=sizeof(acts))
+            raise_error("actions["+i+"] fehlt die Aktion.\n");
+        if (closurep(acts[i]) || stringp(acts[i]) || acts[i] == 0)
+            continue; // OK.
+        if (!pointerp(acts[i]))
+            raise_error("actions["+i+"] weder Closure, String noch Array.\n");
+        if (!sizeof(acts[i]))
+            raise_error("actions["+i+"] ist ein leeres Array.\n");
+        if (stringp(acts[i][0]))
+        {
+            if (sizeof(acts[i])>1)
+            {
+                if (!stringp(acts[i][1]))
+                    raise_error("actions["+i+"] ist ({ string, ???...\n");
+                if (sizeof(acts[i])==2)
+                    continue;
+            }
+            else
+                raise_error("actions["+i+"] ist nur ({ string })!\n");
+            if (sizeof(acts[i]!=4))
+                raise_error("actions["+i+"] ist ({ string, string, ???...\n");
+            if (!stringp(acts[i][2]))
+                raise_error("actions["+i
+                    +"] ist ({ string, string, nicht string\n");
+            if (pointerp(acts[i][3]))
+            {
+                if (sizeof(acts[i][3]) > sizeof(filter(acts[i][3],
+                        (: $1==0 ||objectp($1) :))))
+                    raise_error("actions["+i
+                        +"][3] besteht nicht nur aus Objekten\n");
+            }
+            else if (objectp(acts[i][3]))
+                continue;
+            raise_error("actions["+i
+                +"] ist ({string,string,string,KEIN Objekt})\n");
+        }
+        else if (intp(acts[i][0]))
+        {
+            if (sizeof(acts[i])<3)
+                raise_error("actions["+i
+                    +"] ist zu kurz fuer ({MT,MA,string}).\n");
+            if (!intp(acts[i][1]))
+                raise_error("actions["+i+"][1] ist kein Integer(MA).\n");
+            if (!stringp(acts[i][2]))
+                raise_error("actions["+i+"][2] ist kein String(msg).\n");
+            if (sizeof(acts[i])==3)
+                continue; // OK.
+            if (stringp(acts[i][3]))
+            {
+                if (sizeof(acts[i])==4)
+                    continue; // OK.
+                if (sizeof(acts[i])!=6)
+                    raise_error("actions["+i
+                        +"] ist kein ({MT,MA,msg_pl,msg_oth,msg_who,who}).\n");
+                if (!stringp(acts[i][4]))
+                    raise_error("actions["+i
+                  +"] ist kein ({MT,MA,msg_pl,msg_oth,?keinstring?,who}).\n");
+                if (pointerp(acts[i][5]))
+                {
+                    if (sizeof(acts[i][5]) > sizeof(filter(acts[i][5],
+                            (: $1==0 ||objectp($1) :))))
+                        raise_error("actions["+i
+                            +"][5] besteht nicht nur aus Objekten\n");
+                }
+                else if (objectp(acts[i][5]))
+                    continue;
+                raise_error("actions["+i
+                    +"] ist ({MT,MA,string,string,string,KEIN Objekt})\n");
+            }
+            else if (intp(acts[i][3]))
+            {
+                if (sizeof(acts[i])<6)
+                    raise_error("actions["+i
+                        +"] ist kein ({MT,MA,msg_pl,MT,MA,msg_oth,...}).\n");
+                if (!intp(acts[i][4]))
+                    raise_error("actions["+i
+                        +"] ist ({MT,MA,msg_pl,MT,?kein INT?,...}).\n");
+                if (!stringp(acts[i][5]))
+                    raise_error("actions["+i
+                        +"] ist ({MT,MA,msg_pl,MT,MA,?kein string?,...}).\n");
+                if (sizeof(acts[i])==6)
+                    continue; // OK
+                if (sizeof(acts[i])<8)
+                    raise_error("actions["+i
+                        +"] ist 7 Felder gross.\n");
+                if (stringp(acts[i][6]))
+                {
+                    if (sizeof(acts[i])>8)
+                        raise_error("actions["+i
+                        +"] ist mehr als 8 Felder gross, aber string an 6.\n");
+                    if (pointerp(acts[i][7]))
+                    {
+                        if (sizeof(acts[i][7]) > sizeof(filter(acts[i][7],
+                                (: $1==0 ||objectp($1) :))))
+                            raise_error("actions["+i
+                                +"][7] besteht nicht nur aus Objekten\n");
+                    }
+                    else if (objectp(acts[i][7]))
+                        continue;
+                    raise_error("actions["+i
+                +"] ist ({MT,MA,msg_pl,MT,MA,msg_oth,string,KEIN Objekt})\n");
+                }
+                else if (intp(acts[i][6]))
+                {
+                    if (sizeof(acts[i])!=10)
+                        raise_error("actions["+i
+                            +"] ist mehr oder weniger als 10 Felder gross.\n");
+                    if (!intp(acts[i][7])) // MA_who
+                        raise_error("actions["+i
+                            +"] MA_who ist kein Integer.\n");
+                    if (!stringp(acts[i][8])) 
+                        raise_error("actions["+i
+                            +"] msg_who ist kein String.\n");
+                    if (pointerp(acts[i][9]))
+                    {
+                        if (sizeof(acts[i][9]) > sizeof(filter(acts[i][9],
+                                (: $1==0 ||objectp($1) :))))
+                            raise_error("actions["+i
+                                +"][9] besteht nicht nur aus Objekten\n");
+                    }
+                    else if (objectp(acts[i][9]))
+                        continue;
+                    raise_error("actions["+i+"] ist who kein Objekt\n");
+                }
+                else
+                    raise_error("actions["+i
+                        +"] ist ({MT,MA,msg_pl,MT,MA,msg_oth,???,...}).\n");
+            }
+            else
+                raise_error("actions["+i
+                    +"][3] ist weder String noch Integer!\n");
+        }
+        else
+            raise_error("actions["+i+"][0] ist weder String noch Integer!\n");
+    }
+    while (remove_call_out("_dda_parameter_log")!=-1); 
+    // callouts wieder loeschen.
+#endif
+
+    if (find_call_out(DA_FUN) != -1 || da_last_time == time())
+    {
+	// Wenn eine Action laeuft und es nicht explizit erlaubt wurde,
+	// diese durch eine neue zu unterbrechen -> return DA_BUSY
+	if (!(da_flag & DA_OK_ACTION))
+	    return DA_BUSY;
+	halt_delayed_action(DA_NEW_ACTION);
+    }
+
+    // Zeit berechnen, die die Aktion braucht.
+    da_rest_time = 0;
+    for (i=2; i<sizeof(acts); i+=2)
+	da_rest_time += acts[i];
+
+    if (stringp(act_hand))
+	act_hand = wrap(act_hand);
+    da_handler = act_hand;
+    da_callback = callback;
+    da_flag = flag;
+    da_tmp_var = 0;
+
+    // Kaempfe stoppen
+    if (!(da_flag & DA_OK_FIGHT))
+    {
+	stop_all_fights();
+	if (da_reattack = query_reattack())
+	    set_reattack(0);
+    }
+
+    call_out(DA_FUN,acts[0],acts[1],acts[2..]);
+    return DA_OK;
+}
+
+nosave void delay_act(mixed comm, mixed *actions)
+{
+    mixed ret;
+
+    if((da_flag&DA_VALID_OBJECT) && !to_object(da_callback))
+    {
+	halt_delayed_action(DA_DONE);
+	return;
+    }
+    
+    da_last_time = time();
+    
+    if (stringp(comm))
+	this_object()->send_message_to(this_object(),MT_UNKNOWN,MA_UNKNOWN,
+		wrap(comm));
+    else if (pointerp(comm))
+    {
+	int mt=MT_UNKNOWN, ma=MA_UNKNOWN;
+	if(intp(comm[0]))
+	{
+	    mt = comm[0];
+	    ma = comm[1];
+	    comm = comm[2..<1];
+	}
+	this_object()->send_message_to(this_object(),mt, ma, wrap(comm[0]));
+	if(sizeof(comm)>1 && intp(comm[1]))
+	{
+	    mt = comm[1];
+	    ma = comm[2];
+	    comm = comm[3..<1];
+	}
+	else
+	    comm = comm[1..<1];
+	if(sizeof(comm)>1 && intp(comm[1]))
+	{
+	    this_object()->send_message(mt, ma, wrap(comm[0]), 0, comm[4]);
+	    this_object()->send_message_to(comm[4], comm[1], comm[2], wrap(comm[3]));
+	}
+	else if(sizeof(comm))
+	    apply(#'call_other,this_object(),"send_message",mt, ma,
+		map(comm, (: stringp($1)?wrap($1):$1 :)));
+    }
+    else
+    {
+	ret = funcall(comm,da_tmp_var);
+	if (intp(ret))
+	    switch(ret)
+	    {
+	      case DA_CONTINUE:
+		break;
+	      case DA_STOP:
+		halt_delayed_action(DA_STOPPED);
+		// Monty: hier das break gegen return getauscht. Bei DA_STOP
+		// soll ja die Ausfuehrung stehenbleiben!
+		return;
+	      default:
+		halt_delayed_action(DA_STOPPED);
+		raise_error("do_delayed_action: Illegal returnvalue.\n");
+	    }
+	else
+	    da_tmp_var = ret;
+    }
+
+    if (!da_last_time)
+	return;
+    else if (sizeof(actions))
+    {
+	call_out(DA_FUN,actions[0],actions[1],actions[2..]);
+	da_rest_time -= actions[0];
+    }
+    else
+	halt_delayed_action(DA_DONE);
+}
+
+/*
+FUNKTION: stop_delayed_action
+DEKLARATION: int stop_delayed_action()
+BESCHREIBUNG:
+Stoppt die Aktion, die gerade laeuft.
+Returnwert:
+    DA_OK		Aktion wurde gestoppt
+    DA_NO_ACTION	Es war keine Aktion am Laufen
+VERWEISE: query_delayed_action_time, in_delayed_action, do_delayed_action
+GRUPPEN: spieler
+*/
+int stop_delayed_action()
+{
+    if (find_call_out(DA_FUN) == -1 && da_last_time!=time())
+	return DA_NO_ACTION;
+
+    halt_delayed_action(DA_STOPPED);
+    return DA_OK;
+}
+
+/*
+FUNKTION: query_delayed_action_time
+DEKLARATION: int query_delayed_action_time()
+BESCHREIBUNG:
+Liefert die Zeit, die die jetzige Aktion noch benoetigt, bzw '-1' wenn
+keine Aktion laeuft.
+VERWEISE: in_delayed_action, stop_delayed_action, do_delayed_action
+GRUPPEN: spieler
+*/
+int query_delayed_action_time()
+{
+    int tim;
+
+    if ((tim = find_call_out(DA_FUN)) == -1)
+	return -1;
+    return da_rest_time + tim;
+}
+
+/*
+FUNKTION: in_delayed_action
+DEKLARATION: int in_delayed_action()
+BESCHREIBUNG:
+Liefert 1, wenn der Spieler sich in einer Aktion befindet.
+VERWEISE: query_delayed_action_time, stop_delayed_action, do_delayed_action
+GRUPPEN: spieler
+*/
+int in_delayed_action()
+{
+    return find_call_out(DA_FUN) != -1 || da_last_time == time();
+}

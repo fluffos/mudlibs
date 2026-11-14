@@ -1,0 +1,132 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/tools/trust.c
+// Description: Trusten von Objekten
+// Author:	Freaky (23.12.93)
+// Modified by: Garthan (23.12.93)
+//		Freaky (26.12.97) Security-Bugfix in trust_command
+//		Freaky (19.11.1999) Security-Bugfix in trust_command
+//
+// $Log: trust.c,v $
+// Revision 1.9  2007/12/15 22:52:36  gnomi
+// check_security() vergessen gehabt.
+//
+// Revision 1.8  2007/12/14 21:38:30  gnomi
+// Keine nosave-add_action.
+//
+// Revision 1.7  2001/06/13 22:10:15  gnomi
+// trusted: Variable wird durch callback gesetzt.
+//
+// Revision 1.6  2001/06/13 21:45:38  gnomi
+// callback_trust: Geschweifte Klammern vergessen...
+//
+// Revision 1.5  2001/06/08 23:51:00  gnomi
+// EUID wird ueber setup_trust geloescht.
+//
+// Revision 1.4  2001/06/03 11:18:05  freaky
+// trust auf neues UID-Handling umgestellt.
+//
+// Revision 1.3  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/* Truster */
+/* Doku /doc/funktionsweisen/trust */
+
+#pragma save_types
+
+private functions inherit "/i/tools/security";
+
+nosave private string trust_reason;
+nosave private int trusted = init_security_for_actions() || 0;
+
+void set_trust_reason(string str) { trust_reason = wrap(str); }
+string query_trust_reason() { return trust_reason; }
+
+string trusted()
+{
+   int ret;
+
+   if (trusted)
+       return geteuid();
+
+//   seteuid(0);
+   if(this_player() && (ret = this_player()->is_trusted_object()) == 1)
+   {
+//      seteuid(getuid());
+//      trusted = 1;
+      return geteuid();
+   }
+//   seteuid(getuid());
+   if(ret)
+      notify_fail("Dies ist "+ein()+" neueren Datums, wenn Du "+ihm()+
+		  " weiterhin auf Dauer\nvertrauen willst, dann mittels "+
+		  "'vertraue "+this_object()->query_name()+" immer'.\n");
+   else
+      notify_fail((trust_reason?trust_reason:"")+"Du musst "+dem()+
+		  " mittels 'vertraue "+this_object()->query_name()+"' "+
+		  "dein Vertrauen schenken.\n");
+   return 0;
+}
+
+void init()
+{
+   add_action("trust_command", "vertraue",-7);
+   add_action("trust_command", "trust");
+}
+
+int trust_command(string str)
+{
+   string rest;
+   int mode, ret;
+
+   if(!check_security() || !this_player() ||
+      this_player() != this_interactive() ||
+      this_player() != environment())
+      return 0;
+   if(!(rest = this_object()->me(str)))
+      return 0;
+   if (!clonep())
+   {
+      notify_fail("Man kann nur Clones vertrauen...\n");
+      return 0;
+   }
+   switch(rest)
+   {
+      case "ewig":
+	 mode = 2; break;
+      case "immer":
+      case "+":
+	 mode = 1; break;
+      case "nicht":
+      case "nicht mehr":
+      case "-" :
+	 mode = -1; break;
+      default: 
+	 mode = 0; break;
+   }
+//   seteuid(0);
+   this_player()->trust(mode);
+//   trusted = 1;
+   /*
+   if(this_player()->trust(mode) == 1 && !geteuid())
+      seteuid(getuid());
+   */
+   return 1;
+}
+
+void setup_trust()
+{
+    if(playerp(previous_object()))
+        seteuid(0);
+}
+
+void callback_trust(object ob, int mode)
+{
+    if (playerp(previous_object()) && !geteuid() && ob==this_object())
+    {
+	seteuid(getuid());
+        trusted=(mode>=0);
+    }
+}

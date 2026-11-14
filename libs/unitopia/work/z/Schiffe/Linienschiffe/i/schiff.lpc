@@ -1,0 +1,1975 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /z/Schiffe/Linienschiffe/i/schiff.c
+// Description: Ein generisches Schiff
+// Author:      Francis
+// Aenderung:   17.12.1994
+// Aenderung:   23.03.1995 Freaky: stop_kreuz und skill-handling
+//                27.07.1996 Freaky: message_rooms und ship_rooms sind object *
+//              24.04.1997 Kurdel: Nicht mehr nehmbar, schiebbar,
+//                                 bewegbar in Nicht-Raeume (Goetter :(
+//                Freaky (10.03.98) message auf send_message umgebaut.
+//                Parsec (29.03.99) Letzte angefahrene Haefen werden gemerkt und
+//                                Skillvergabe angepasst
+//              Tmm    (01.10.00) Typo in Doku repariert
+//              Mirak  (05.02.01) query_not_moved_reason() in steer_ship() eingebaut
+//              Tmm    (06.02.01) Div. Typos (Leerzeichen vor Satzzeichen)
+//              Menaures (28.05.01) Was gegen TLE bei enter 100. Schiff
+//              Menaures (29.05.01) Neue Schiffslogik.
+//              Menaures (01.06.01) Abbruchmeldung vom Kreuzschlag verschoenert
+//              Menaures (21.07.01) Alle Variablen private.
+//              Menaures (12.07.02) steuer norden == steuer 1 sm 0 grad etc.
+// Menaures (26.08.02): Geister duerfen keine Schiffe mehr steuern
+// Menaures (26.10.02): Aktualisierung fuer den neuen Kursmaster
+//                      hier implementiert
+// Menaures (03.09.04): Segelskill umverlegt
+// Gnomi    (15.12.05): sscanf() ist im 3.3.712 strenger geworden.
+// Menaures (24.07.07): default_room fuer Schiffe aus dem /w
+// Wyvern   (20.06.09): query_linienschiff() hinein
+// Wyvern   (14.08.09): deprecated: member_array(a,b) -> member(b,a)
+// Anin     (22.06.14): Schiffe nicht anzuendbar, weil zu feucht!
+
+
+inherit "/p/Item/i/anzuendbar";
+
+#include <touch.h>
+
+/*
+ * Die Schiffslogik.
+ *
+ * Sie ist auf /i/object/vehikel aufgebaut, der Basis ALLER Fahrzeuge
+ * in UNItopia.
+ *
+ * Kernstueck sind folgende Steuer-Kommandos, die von der Routine:
+ *
+ *
+ *                int steer_ship(string command)
+ *
+ *
+ * interpretiert werden:
+ *
+ *                a.   einfache Kommandos wie   "westen","nordosten", usw
+ *
+ *                        Hier wird command einfach an move(..)
+ *                        weitergereicht.
+ *
+ *
+ *                        Fuer laengere Strecken (mehrere hundert Raeume)
+ *                        ist es nicht mehr praktikabel, jeden Raum
+ *                        zu durchpfluegen.
+ *
+ *                b.   Kreuz-Kommandos wie      "5 sm 168 grad"   oder
+ *                                              "40 grad 308 sm"
+ *
+ *                        sm      steht fuer Seemeile
+ *                                und ist einfach ein Raum.
+ *
+ *                        Grad    -Angaben beziehen sich auf
+ *                                den Kompass mit:
+ *
+ *                                  0 Grad = Norden,
+ *                                  90 Grad = Osten,
+ *                                180 Grad = Sueden und
+ *                                270 Grad = Westen.
+ *
+ *
+ *
+ *   1. Wie funktioniert das "Kreuzen"?
+ *   -----------------------------------
+ *
+ *
+ * Die Logik berechnet aus den Koordinaten der Umgebung des Schiffes
+ * und den obigen Werten mit Hilfe der Simul-EFun's:
+ *
+ *               xy2pol(..)        | Umrechnung kartesischer |
+ *               pol2xy(..)        | in Polarkoordinaten     |
+ *
+ * die Koordinaten des Zielraumes. Aus der Geschwindigkeit des Schiffes,
+ * zu setzen mit:
+ *
+ *                void set_speed(int speed)        speed in Raeume pro
+ *                                                Minute Echtzeit.
+ *
+ * wird nun die Zeitdauer dieser "Kreuz" berechnet. Der Weg wird in
+ * einzelnen "Etappen" zurueckgelegt, d.h. nur bestimmte "Etappenraeume"
+ * werden vom Schiff beruehrt und die dazwischenliegenden Raeume einfach
+ * uebersprungen.
+ *
+ *                        | Damit ist es prinzipiell leider moeglich,     |
+ *                        | Inseln zu ueberspringen, ohne sie zu bemerken |
+ *
+ * Der Wert "etmal", die Zeitdauer einer Etappe, wird mit der Routine:
+ *
+ *
+ *                void set_etmal(int dauer)        dauer in Sekunden
+ *                                                Echtzeit.
+ *
+ * gesetzt. Aus der Gesamtdauer der Kreuz und der Dauer einer einzelnen
+ * Etappe wird nun die Anzahl der Etappen berechnet. Damit bei langen
+ * Strecken die Anzahl nicht ins unermesslichs steigt, gibt man noch
+ * die Maximalzahl an Etappen mit der Routine:
+ *
+ *
+ *                void set_max_etappen(int anzahl)
+ *
+ *
+ * an. Damit hat man auch gleichzeitig ein oberes Zeitlimit fuer die
+ * Dauer einer einzelnen "Kreuz" festgelegt, naemlich:
+ *
+ *                max_etappen * etmal
+ *
+ * egal wie gross auch die Gesamtlaenge (in Seemeilen) der "Kreuz" ist.
+ *
+ * Schliesslich werden die Koordinaten der Etappen-Raaeume berechnet
+ * und per call_out() angesprungen.
+ *
+ *
+ *
+ *   2. Wer darf ueberhaupt ein Schiff steuern ?
+ *   -------------------------------------------
+ *
+ * Wenn mehrere Leute abwechselnd Steuer-Kommandos eingeben koennen,
+ * werden Sie sich garantiert auf dem Meer verirren und nie ans Ziel kommen.
+ *
+ * Deshalb ist hier ein folgender Mechanismus eingebaut:
+ *
+ * Man setzt mit Hilfe der Routine:
+ *
+ *                void set_command_room(string raum)
+ *
+ * den Filenamen des Raumes, von dem aus Kommandos abgegeben werden duerfen.
+ *
+ *                | Dieser Raum muss gleichzeitig add_action(..)'s |
+ *                | auf "steuer" oder aehnliches haben, die dann   |
+ *                | die Routine steer_ship(..) hier im Schiff      |
+ *                | aufrufen.                                         |
+ *
+ * Der erste (Spieler oder Monster), der aus diesem Raum heraus
+ * steer_ship(..) aufruft, wird als "commander" vermerkt.
+ *
+ *                 | Solange, bis dieser den "command_room" |
+ *                | verlaesst, akzeptiert steer_ship(..)   |
+ *                | NUR von ihm Kommandos, und von keinem  |
+ *                | anderen.                                 |
+ *
+ *
+ *
+ *
+ *  3. Wie erfaehrt ein "Monster"-Kapitaen, dass das Schiff mit seiner
+ *     Bewegung fertig ist, und er das naechste Kommando anstarten kann ?
+ *  ---------------------------------------------------------------------
+ *
+ * Nach erfolgreicher Beendigung der "Kreuz" bzw des einzelnen move()-Aufrufs
+ * wird im "commander" die Funktion:
+ *
+ *                        void kreuz_ende()
+ *
+ * aufgerufen, in der er dann das naechste Kommando anstarten kann. Ein
+ * Beispiel fuer eine solche Interaktion von Schiff und Monster ist:
+ *
+ *                        /skipper.c
+ *
+ * Er ist darueberhinaus noch ein Beispiel fuer eine einfache Navigation
+ * zwischen verschiedenen Haefen.
+ *
+ * Auf den "skipper" aufbauend ist in:
+ *
+ *                        /z/Schiffe/Linienschiffe/i/kapitaen.c
+ *
+ * ein Mechanismus realisiert, der verschiedene Haefen anhand eines
+ * Fahrplanes abklappert.
+ *
+ *
+ *
+ *
+ *
+ *    4. Im Schiff implementierte "Features":
+ *    ---------------------------------------
+ *
+ *
+ * a. Wie unterbricht man kurzzeitig das Gespann Schiff-Kapitaen ?
+ *
+ *        Will man ein Schiff zB auf offenem Ozean anhalten,
+ *        (zB Piratenueberfall) ohne dass das Schiff von einem
+ *        Spieler oder "Monster"-Kapitaen weiterbewegt wird, und ohne
+ *        vor allem die Fahrplaene durcheinanderzubringen, ruft man
+ *        im Schiff einfach:
+ *
+ *                        void stop_ship()
+ *
+ *        auf. Niemand an Bord kann dann noch das Schiff bewegen, bis
+ *        die Routine:
+ *
+ *                        void restart_ship()
+ *
+ *        das Schifff weiterfahren laesst.
+ *
+ *
+ *
+ * b. Wie meldet der Kapitaen zB die Ankunft des Schiffes in einem Hafen
+ *    in den Raeumen des Schiffes ?
+ *
+ *
+ *        Dem Schiff muss man mit der Funktion:
+ *
+ *                        void add_ship_room(string raum)
+ *
+ *        die Filenamen aller Schiffsraeume (ohne den command_room)
+ *         mitteilen. Am besten ruft jeder Schiffsraum diese Funktion
+ *        in seinem create(..) auf.
+ *
+ *      Unter anderem hierfuer sind die Inherit-Files:
+ *
+ *                /z/Schiffe/Linienschiffe/i/ship_room.c
+ *                /z/Schiffe/Linienschiffe/i/command_room.c
+ *
+ *      vorgesehen. Sie bieten daneben noch eine Reihe weiterer Vorzuege,
+ *      so zB das Betreten und Verlassen des Schiffes, das Ausschau halten,
+ *      und andere Dinge, die uns hier aber nicht interessieren.
+ *
+ *      Mit der Routine:
+ *
+ *                        void verkuende_an_alle(string essage)
+ *
+ *        kann man eine "message" in ALLE Raeume des Schiffes schicken.
+ *        Manche Meldungen sind nur in bestimmten Raeumen interessant, zB
+ *      Bewegungs-Meldungen des Schiffes nur an Deck....
+ *
+ *        Eine Auswahl solcher Raeume kann man mit:
+ *
+ *                        void add_message_room(string raum)
+ *
+ *        treffen. Diesen Raeumen kann man mit:
+ *
+ *                        void verkuende(string message)
+ *
+ *        eine Meldung schicken.
+ *
+ *        verkuende(..) und verkuende_an_alle(..) verwenden uebrigens
+ *        intern die EFun tell_room(..).
+ *
+ *
+ *
+ * c. Wie erfaehrt man in den Schiffsraeumen naeheres ueber die Umgebung
+ *    des Schiffes ?
+ *
+ *
+ *        Hier ist ein Funktion:
+ *
+ *                varargs int look_out(string dest, int depht)
+ *
+ *        implementiert; in "dest" ist die Richtung gesetzt, in die
+ *        man vom Schiff ausschau halten will, also zB "norden",
+ *      "suedwesten"; ist "dest" == 0, dann wird die Umgebung des Schiffes
+ *        betrachtet. "depht" steht fuer die Anzahl der Raeume, die man
+ *        in diese Richtung gleichzeitig sieht.
+ *
+ *        Ein Beispiel, wie man diese Routine verwendet, ist in
+ *        /z/Schiffe/Linienschiffe/i/ship_room.c
+ *      und /z/Schiffe/Linienschiffe/i/command_room.c
+ *        zu finden.
+ *
+ *
+ *
+ * d. Wer ist an Bord eines Schiffes ?
+ *
+ *        mit der Routine:
+ *
+ *                object *query_passagiere()
+ *
+ *        erhaelt man eine Liste aller Lebewesen an Bord des Schiffes.
+ *
+ *
+ *
+ * e. Was passiert, wenn man ein Schiff zerstoert / versenkt.
+ *
+ *
+ *        Alle Schiffsraeume werden mitsamt ihrem Inhalt mit Ausnahme
+ *        von Spielern ZERSTOERT; die Spieler werden in die letzte Umgebung
+ *        des Schiffes gesetzt.
+ *
+ *        Fuer das Versenken des Schiffes ist eine add_action (!) fuer
+ *        Goetter ab Level 21 eingebaut.
+ *
+ *
+ * f. Ein Schiff hat einen Schiffstyp
+ *
+ *
+ *        Diesen setzt man mit:
+ *
+ *                void set_typ()
+ *
+ *        Dies ist ebenfalls fuer das Schiffsregister von Bedeutung.
+ *
+ *
+ *
+ * g. Ein Schiff hat einen Heimathafen
+ *
+ *
+ *        Diesen setzt man mit der Routine:
+ *
+ *                               void set_default_room(string raum)
+ *
+ *        Das Schiffahrtsbuero im Rathaus in Tadmor zB beruecksichtigt
+ *        uU diesen Eintrag.
+ *
+ *
+ * h. Wieviel Seemeilen = Raeume hat ein Schiff, seitdem es geladen wurde,
+ *    zurueckgelegt ?
+ *
+ *
+ *        Mit:
+ *
+ *                        int query_logge()
+ *
+ *        kann man dies abfragen.
+ *
+ *
+ * i. Wie betritt man ein Schiff ?
+ *
+ *
+ *        Hierfuer ist /i/object/vehikel.c zustaendig.
+ *        In ihm findet man auch den Mechanismus, mit dem man
+ *        verhindert, dass Schiffe ueber Land fahren koennen.
+ *
+ *
+ */
+
+
+#define USE_NEW_KURSMASTER 1	// Benutze neuen Kursmaster
+#define TEST_NEW_KURSMASTER 1   // Teste neuen Kursmaster
+
+#define KURSMASTER     "/z/Schiffe/apps/kurse"
+#define NEW_KURSMASTER "/z/Schiffe/NEU/apps/kurse"
+
+
+
+#ifdef TEST_NEW_KURSMASTER
+#define CALL_KURSE(x) catch((find_object(NEW_KURSMASTER) && \
+                       find_object(NEW_KURSMASTER)->x); nolog)
+#else
+#define CALL_KURSE(x) {}
+#endif
+
+#pragma save_types
+
+#ifdef USE_NEW_KURSMASTER
+inherit "/z/Schiffe/NEU/i/koordinaten";
+#endif
+inherit "/i/object/vehikel";
+
+#include <config.h>
+#include <move.h>
+#include <error.h>
+#include <eyes.h>
+#include <level.h>
+#include <parse_com.h>
+#include <simul_efuns.h>
+#include <message.h>
+// #define DEBUGGER "menaures"
+#include <debug.h>
+#include <misc.h>
+
+#define DSK(x) {} /* log_file("schiff_dsk", wrap(x)) */
+
+#define LEARNING_NAVIGATION (10+random(70))
+#define MTC                 mixed_to_closure
+#define CTS                 closure_to_string
+
+private int schiff_debug;
+
+private int logge;
+private nosave int logge_new;
+private nosave int distanz;
+private nosave int kurs;
+private nosave int e_distanz;
+private nosave int e_etmal;
+private nosave int on_tour;
+private nosave int etappen;
+private nosave int *dest_coords;
+private nosave int *e_coords;
+private int speed;
+private int etmal;
+private int max_etappen;
+private nosave int last_time;
+private nosave string dest;
+private object *ship_rooms;
+private object *message_rooms;
+private string command_room;
+private string move_message;
+private string default_room;
+private nosave object commander;
+private string typ;
+private int stopped;
+private string command_stack;
+private string commander_bei_abfahrt;
+private string abfahrts_hafen;
+private string lmsg_out,lmsg_in;
+private nosave int linienschiff;
+private string  * haefen = ({}) ;
+private mapping spieler_haefen = ([]) ;
+
+private mixed k_inf=0;
+private nosave int neue_schiffslogik = 0;
+
+void set_schiff_debug(int i) { schiff_debug = i; }
+/*
+FUNKTION: set_neue_schiffslogik
+DEKLARATION: int set_neue_schiffslogik(int wert)
+BESCHREIBUNG:
+Diese Funktion aktiviert in einem Schiffs-Objekt die neue Schiffslogik,
+die verhindert, dass Schiffe ueber Land springen koennen.
+Der Funktionsname ist nur temporaer, die neue Schiffslogik nur im
+Testbetrieb. Sie ist daher standardmaessig bei Schiffen deaktiviert und
+sollte auf _keinen_ Fall bei Faehren oder Schiffen aktiviert werden.
+VERWEISE: query_neue_schiffslogik
+GRUPPEN: schiff
+*/
+int set_neue_schiffslogik(int i)
+
+  {
+
+    if(intp(i))
+
+      neue_schiffslogik = i;
+
+    return neue_schiffslogik;
+
+  }
+
+/*
+FUNKTION: query_neue_schiffslogik
+DEKLARATION: int query_neue_schiffslogik()
+BESCHREIBUNG:
+Diese Funktion liefert einen Wert != 0, sofern die Logik bei einem Schiff
+aktiviert wurde.
+VERWEISE: set_neue_schiffslogik
+GRUPPEN: schiff
+*/
+int query_neue_schiffslogik() { return neue_schiffslogik; }
+
+void tell_command_room(string str) {
+  object ob;
+
+  if (command_room && (ob = find_object(command_room)))
+    tell_room(ob,str);
+}
+
+/*
+FUNKTION: set_leave_messages
+DEKLARATION: void set_leave_message(string min,string mout)
+BESCHREIBUNG:
+Hier werden die Meldungen beim Verlassen des Schiffes gesetzt.
+VERWEISE: query_leave_messages, set_enter_messages
+GRUPPEN: schiff
+*/
+void set_leave_messages(string min,string mout)
+{
+  lmsg_in=min; lmsg_out=mout;
+}
+
+/*
+FUNKTION: query_leave_messages
+DEKLARATION: string* query_leave_messages()
+BESCHREIBUNG:
+Liefert die Meldungen beim Verlassen des Schiffes zurueck.
+VERWEISE: set_leave_messages, set_enter_messages
+GRUPPEN: schiff
+*/
+string *query_leave_messages()
+{
+  return ({lmsg_in,lmsg_out});
+}
+
+/*
+FUNKTION: set_commander
+DEKLARATION: void set_commander(object commander)
+BESCHREIBUNG:
+Mit set_commander kann man den Kapitaen eines Schiffes festlegen.
+VERWEISE: query_commander
+GRUPPEN: schiff
+*/
+void set_commander(object ob) {
+  commander = ob;
+}
+
+/*
+FUNKTION: query_commander
+DEKLARATION: object query_commander()
+BESCHREIBUNG:
+Liefert einen Objektpointer auf den Kommandanten eines Schiffes zurueck.
+VERWEISE: set_commander
+GRUPPEN: schiff
+*/
+object query_commander() {
+  return commander;
+}
+
+/*
+FUNKTION: set_command_room
+DEKLARATION: void set_command_room(string filename)
+BESCHREIBUNG:
+Mit set_command_room teilt man einem Schiff den Filenamen seiner Bruecke mit.
+VERWEISE: query_command_room
+GRUPPEN: schiff
+*/
+void set_command_room(string name) {
+  command_room = name;
+}
+
+/*
+FUNKTION: query_command_room
+DEKLARATION: string query_command_room()
+BESCHREIBUNG:
+Mit query_command_room kann man den Filenamen der Bruecke eines Schiffes
+abfragen.
+VERWEISE: set_command_room
+GRUPPEN: schiff
+*/
+string query_command_room() {
+  return command_room;
+}
+
+/*
+FUNKTION: query_ship_rooms
+DEKLARATION: object *query_ship_rooms()
+BESCHREIBUNG:
+query_ship_rooms liefert ein Objekt-Feld aller Schiffsraeume, ohne den
+command_room eines Schiffes zurueck.
+VERWEISE: add_ship_room, query_command_room
+GRUPPEN: schiff
+*/
+object *query_ship_rooms() {
+  return ship_rooms;
+}
+
+/*
+FUNKTION: add_ship_room
+DEKLARATION: void add_ship_room(string str|object ob)
+BESCHREIBUNG:
+Mit dieser Routine kann man dem Schiff mitteilen, welche Raeume zu dem Schiff
+gehoeren. Die eingetragenen Raeume kommen dann alle in den Genuss der
+verschiedenen Features auf Schiffen, wei zB die Moeglichkeit, das Schiff dort
+zu verlassen oder Meldungen vom Kapitaen zu empfangen.
+VERWEISE: query_ship_rooms, verkuende_an_alle
+GRUPPEN: schiff
+*/
+void add_ship_room(mixed ob)
+{
+  if (!ship_rooms)
+    ship_rooms = ({});
+  else
+    ship_rooms -= ({0});
+  if (!objectp(ob))
+    ob = find_object(ob);
+  if (ob)
+  {
+    if (member(ship_rooms, ob) < 0)
+      ship_rooms += ({ ob });
+    if (commander)
+      commander->add_ship_room(ob);
+  }
+}
+
+
+/*
+FUNKTION: query_message_rooms
+DEKLARATION: object *query_message_rooms()
+BESCHREIBUNG:
+Diese Funktion lifert alle Schiffsraeume zurueck, die Meldungen
+mit der Funktion verkuende empfangen sollen.
+VERWEISE: add_message_room, verkuende
+GRUPPEN: schiff
+*/
+object *query_message_rooms() {
+  return message_rooms;
+}
+
+/*
+FUNKTION: add_message_room
+DEKLARATION: void add_message_room(string str|object ob)
+BESCHREIBUNG:
+add_message_room fuegt zu der Liste der Schiffsraeume, die
+Meldungen von der Funktion verkuende empfangen sollen, den Raum str
+hinzu.
+VERWEISE: query_message_rooms, verkuende
+GRUPPEN: schiff
+*/
+void add_message_room(mixed ob)
+{
+  if (!message_rooms)
+    message_rooms = ({});
+  else
+    message_rooms -= ({0});
+  if (!objectp(ob))
+    ob = find_object(ob);
+  if (ob)
+  {
+    if (member(message_rooms, ob) < 0)
+      message_rooms += ({ ob });
+    if (commander)
+      commander->add_message_room(ob);
+  }
+}
+
+/*
+FUNKTION: set_speed
+DEKLARATION: void set_speed(int speed)
+BESCHREIBUNG:
+Mit set_speed kann man die Geschwindigkeit eines Schiffes in Raeumen pro
+Minute setzen. Macht die Teile nicht zu schnell!
+VERWEISE: query_speed, set_etmal, query_etmal
+GRUPPEN: schiff
+*/
+void set_speed(int a) {
+  speed = a;
+}
+
+/*
+FUNKTION: set_etmal
+DEKLARATION: void set_etmal(int dauer)
+BESCHREIBUNG:
+Mit set_etmal kann man die Verweildauer eines Schiffes zwischen den
+einzelnen Etappen eines Kreuzes festlegen. Naeheres siehe in den
+Funktionsweisen oder im Header von /z/Schiffe/Linienschiffe/i/schiff.c.
+VERWEISE: set_speed, query_speed, query_etmal
+GRUPPEN: schiff
+*/
+void set_etmal(int a) {
+  etmal = a;
+}
+
+/*
+FUNKTION: set_max_etappen
+DEKLARATION: void set_max_etappen(int anzahl)
+BESCHREIBUNG:
+Setzt die Maximale Anzahl von Zwischenstopps (Etappen) auf einem "Kreuz".
+Naeheres siehe in den Funktionsweisen oder im Header von
+/z/Schiffe/Linienschiffe/i/schiff.c.
+VERWEISE: query_max_etappen, set_etmal
+GRUPPEN: schiff
+*/
+void set_max_etappen(int a) {
+  max_etappen = a;
+}
+
+/*
+FUNKTION: query_speed
+DEKLARATION: int query_speed()
+BESCHREIBUNG:
+Liefert die Geschwindigkeit eines SChiffes in Raeume/Minute zurueck.
+VERWEISE: set_speed, set_etmal
+GRUPPEN: schiff
+*/
+int query_speed() {
+  return speed;
+}
+
+/*
+FUNKTION: query_etmal
+DEKLARATION: int query_etmal()
+BESCHREIBUNG:
+Liefert die Verweildauer eines Schiffes zwischen den einzelnen Etappen
+eines Kreuzes zurueck.
+Naeheres siehe in den Funktionsweisen oder im Header von
+/z/Schiffe/Linienschiffe/i/schiff.c.
+VERWEISE: set_etmal, set_speed, query_speed
+GRUPPEN: schiff
+*/
+int query_etmal() {
+  return etmal;
+}
+
+/*
+FUNKTION: query_max_etappen
+DEKLARATION: int query_max_etappen()
+BESCHREIBUNG:
+Liefert die Maximale Anzahl von Zwischenstopps (Etappen) auf einem "Kreuz".
+Naeheres siehe in den Funktionsweisen oder im Header von
+/z/Schiffe/Linienschiffe/i/schiff.c.
+VERWEISE: set_max_etappen, set_etmal
+GRUPPEN: schiff
+*/
+int query_max_etappen() {
+  return max_etappen;
+}
+
+/*
+FUNKTION: set_move_message
+DEKLARATION: void set_move_message(string str)
+BESCHREIBUNG:
+Damit kann man die Bewegungsmeldung eines Schiffe, die in allen Raeumen
+verkuendet wird, setzen. Sie wird nur in den Raeumen verkuendet, die mit
+add_message_room im Schiff eingetragen wurden.
+VERWEISE: verkuende, add_message_room, query_message_room
+GRUPPEN: schiff
+*/
+void set_move_message(string str) {
+  move_message = str;
+}
+
+string query_move_message() {
+  return move_message;
+}
+
+/*
+FUNKTION: verkuende
+DEKLARATION: nosave void verkuende(string message)
+BESCHREIBUNG:
+Erzeugt eine Meldung in allen Raeumen des Schiffes, die mit add_message_room
+eingetragen wurden. Diese Funktion kann nur vom Schiffsobjekt selbst
+aufgerufen werden.
+VERWEISE: add_message_room
+GRUPPEN: schiff
+*/
+nosave void verkuende(string message) {
+  int a;
+
+  if (!message || message == "")
+    return;
+  if (message_rooms)
+    message_rooms -= ({0});
+  for (a = sizeof(message_rooms); a--;)
+    tell_room(message_rooms[a],message);
+  tell_command_room(message);
+}
+
+/*
+FUNKTION: verkuende_an_alle
+DEKLARATION: void verkuende_an_alle(string message)
+BESCHREIBUNG:
+Erzeugt eine Meldung in allen Raeumen des Schiffes, die mit add_ship_room
+eingetragen wurden. Diese Funktion kann nur vom Schiffsobjekt selbst
+aufgerufen werden.
+VERWEISE: add_ship_room
+GRUPPEN: schiff
+*/
+void verkuende_an_alle(string message)
+{
+  int a;
+
+  if (!message || message == "")
+    return;
+  if (ship_rooms)
+    ship_rooms -= ({0});
+  for (a = sizeof(ship_rooms); a--;)
+    tell_room(ship_rooms[a],message);
+  tell_command_room(message);
+}
+
+private void init_spread_skill() {
+/*
+  string hafen, name;
+  object env;
+
+  DSK("init_spread_skill()");
+
+  env = environment();
+  hafen = env->query_type("hafen");
+  if (commander)
+      name = commander->query_name();
+  if (!playerp(commander) || !env || !hafen || !name)
+  {
+    DSK(sprintf(" --> Stop: playerp %d env %d hafen %d name %d",
+        !playerp(commander) , !env , !hafen , !name));
+    return;
+  }
+  if (!commander_bei_abfahrt || !abfahrts_hafen)
+  {
+    commander_bei_abfahrt = name;
+    abfahrts_hafen = hafen;
+  }
+
+  DSK(sprintf(" --> commander %#Q commander_bei_abfahrt %#Q hafen %#Q abfahrts_hafen %#Q",
+      commander,commander_bei_abfahrt,hafen,abfahrts_hafen));
+*/
+}
+
+private void spread_skill()
+{
+/*
+  string hafen, cname;
+  object env;
+  int    hafen_id, *sp_haefen ;
+
+  DSK("spread_skill()");
+
+  if (!commander_bei_abfahrt ||
+      !abfahrts_hafen ||
+      !playerp(commander) ||
+      !(env = environment()) ||
+      !(hafen = env->query_type("hafen")) )
+  {
+    DSK(sprintf(" --> Stop: commander_bei_abfahrt %d abfahrts_hafen %d playerp %d env %d hafen %d",
+        !commander_bei_abfahrt ,
+      !abfahrts_hafen ,
+      !playerp(commander) ,
+      !(env = environment()) ,
+      !(hafen = env->query_type("hafen"))));
+    return;
+  }
+
+  DSK(sprintf(" --> hafen %#Q abfahrts_hafen %#Q commander %#Q commander_bei_abfahrt %#Q",
+      hafen, abfahrts_hafen, commander, commander_bei_abfahrt));
+
+  if (hafen != abfahrts_hafen)
+  {
+      if ( !haefen )
+          haefen = ({}) ;
+      if ( (hafen_id = member( haefen, hafen)) == -1 )
+      {
+          hafen_id = sizeof( haefen) ;
+          haefen += ({ hafen }) ;
+      }
+      if ( !spieler_haefen )
+          spieler_haefen = ([]) ;
+      cname = commander->query_real_name() ;
+      if ( !(sp_haefen = spieler_haefen[cname]) )
+      {
+          spieler_haefen[cname] = ({}) ;
+          sp_haefen = ({}) ;
+      }
+
+     if ( member( sp_haefen, hafen_id) == -1 )
+      {
+          DSK(" --> adding skill");
+
+          commander->add_skill_points(({"skill","wissen","navigation"}),
+                                      LEARNING_NAVIGATION);
+          spieler_haefen[cname] = (({ hafen_id }) + sp_haefen)[0..3] ;
+      }
+      else
+          spieler_haefen[cname] =
+              (({ hafen_id }) + (sp_haefen - ({ hafen_id })))[0..3] ;
+      abfahrts_hafen = commander_bei_abfahrt = 0;
+  }
+*/
+}
+
+
+// Alle vom Schiff angefahrenen Haefen
+string * query_haefen()
+{
+    return haefen ;
+}
+
+
+// Sie letzten 4 angefahrenen Haefen pro Spieler
+mapping query_spieler_haefen()
+{
+    return spieler_haefen ;
+}
+
+void kreuze() {
+  int x, y, ret;
+  string e_dest;
+
+  if (stopped) {
+    call_out("kreuze",e_etmal);
+    return;
+  }
+
+  etappen--;
+  call_out("kreuze",e_etmal);
+
+  if (playerp(commander))
+    init_spread_skill();
+
+#ifdef USE_NEW_KURSMASTER
+  if(etappen <= 0 && (!neue_schiffslogik || (!pointerp(k_inf) || k_inf[2])))
+#else
+  if (etappen <= 0 && (!neue_schiffslogik || (!pointerp(k_inf) || !k_inf[0])))
+#endif
+   {
+    DEBUG("Final Move...");
+
+    if (object_name(environment(TO)) != dest)
+      ret = TO->move(dest, MOVE_NORMAL,
+                                     "$Der() entfernt sich auf "+kurs+" Grad");
+    remove_call_out("kreuze");
+    on_tour = 0;
+    if (ret == MOVE_OK) { DEBUG("... MOVE_OK");
+      last_time = time();
+      verkuende(move_message);
+      logge = logge_new;
+      tell_command_room("Der Kreuzschlag wurde erfolgreich beendet.\n");
+      if (commander) {
+        if (playerp(commander))
+          spread_skill();
+        else
+          commander->kreuz_ende();
+      }
+    }
+    else { DEBUG("... MOVE_FAIL");
+          tell_command_room(wrap("Der Kreuzschlag wurde vorzeitig abgebrochen, "
+            "da das Schiff sonst auf Grund laufen wuerde.")); }
+
+    return;
+  }
+
+  if (sscanf(object_name(environment(TO)),"/map/m%d_%d",x,y) != 2) {
+    remove_call_out("kreuze");
+    on_tour = 0;
+    tell_command_room("Der Kreuzschlag wurde vorzeitig abgebrochen; "
+                      "in diesen Gewaessern\nkann man nicht kreuzen.\n");
+    return;
+  }
+
+
+#ifdef USE_NEW_KURSMASTER
+  if(neue_schiffslogik && pointerp(k_inf) && !k_inf[2])
+  {
+      DEBUG("CHECK: This etappe may be the failing one");
+
+      // k_inf[2] == 0, d.h. der Kurse-Master war der Meinung, dass der
+      // Kurs nicht zu Ende gefahren werden kann.
+
+      // Pruefen, ob wir diesen Punkt in dieser Etappe ueberschreiten
+      if(query_distanz(x, y, x+e_coords[0], y+e_coords[1]) >=
+         query_distanz(x, y, k_inf[0], k_inf[1]))
+      {
+          // Wir wuerden in diesem Schritt gegen Land fahren.
+          // Punkt vor dem Land bestimmen.
+
+          k_inf = pol_xy_xy(x, y, k_inf[0], k_inf[1]); // Kreuzschlag auf den Landpunkt
+          k_inf[1] -= 2 + random(5); // Per Zufall ein paar sm vorher halten
+
+          // Nur weiterfahren, wenn wir nich schon zu dicht am Land sind
+          if(k_inf[1] > 0)
+          {
+              k_inf += xy_xy_pol(x, y, k_inf); // Zielkoordinaten ermitteln
+
+              if(TO->move("/map/m"+k_inf[2]+"_"+k_inf[3],
+                     MOVE_NORMAL, "$Der() entfernt sich auf Kurs "+kurs+" Grad")
+                 == MOVE_OK)
+              {
+                  logge += k_inf[1];
+                  verkuende(move_message);
+              }
+          }
+#else
+  if(neue_schiffslogik && pointerp(k_inf) && k_inf[0])
+  {
+      if(touch(KURSMASTER)->calc_laenge(x,y,x+e_coords[0],
+                                                     y+e_coords[1]) >
+         touch(KURSMASTER)->calc_laenge(x,y,k_inf[2],k_inf[3]))
+
+
+        {
+
+          k_inf = xy2pol(k_inf[2]-x,k_inf[3]-y);
+          k_inf = pol2xy(k_inf[0], (k_inf[1]>5 ? k_inf[1] - 3 : k_inf[1]) );
+
+          if(TO->move("/map/m"+(x+k_inf[0])+"_"+(y+k_inf[1]),
+               MOVE_NORMAL,"$Der() entfernt sich auf Kurs "+kurs+" Grad")==
+              MOVE_OK)
+
+          {
+              logge += round(touch(KURSMASTER) ->
+                                   calc_laenge(x,y,x+k_inf[0], y+k_inf[1]));
+
+              verkuende(move_message);
+          }
+#endif
+
+          remove_call_out("kreuze");
+          on_tour = 0;
+          tell_command_room(wrap("Der Kreuzschlag wurde vorzeitig abgebrochen, "
+            "da das Schiff sonst auf Grund laufen wuerde."));
+
+          return;
+
+        }
+
+    }
+
+  if (TO->move((e_dest = "/map/m" + (x+e_coords[0]) +
+                               "_"+ (y+e_coords[1])), MOVE_NORMAL,
+                               "$Der() entfernt sich auf Kurs "+
+                               kurs+" Grad") != MOVE_OK) {
+    remove_call_out("kreuze");
+    on_tour = 0;
+          tell_command_room(wrap("Der Kreuzschlag wurde vorzeitig abgebrochen, "
+            "da das Schiff sonst auf Grund laufen wuerde."));
+    return;
+  }
+  last_time = time();
+  logge += e_distanz;
+  verkuende(move_message);
+}
+
+int starte_kreuz(int dir, int dist) {
+  object env;
+  int x, y, *coords, eta;
+
+  if (!speed)
+    speed = 150;
+  if (!etmal)
+    etmal = 10;
+  if (!max_etappen)
+    max_etappen = 15;
+
+  if (on_tour) {
+    notify_fail("Das Schiff ist bereits auf einem Kreuzschlag.\n");
+    return 0;
+  }
+  if (dist <= 0) {
+    notify_fail("Eine Strecke von "+dist+" sm, wie soll das gehen?\n");
+    return 0;
+  }
+  if (dist >=10000) {
+    notify_fail("Eine Strecke von "+dist+" sm, das ist zu weit!\n");
+    return 0;
+  }
+
+  if (dir == 360)
+    dir = 0;
+  if (dir > 360 || dir < 0) {
+    notify_fail("Ein Kurs von "+dir+" Grad, wie soll das gehen?\n");
+    return 0;
+  }
+
+  if (!(env = environment(TO))) {
+    notify_fail("Das Schiff hat keine Umgebung.\n");
+    return 0;
+  }
+  if (sscanf(object_name(env),"/map/m%d_%d",x,y) != 2) {
+    notify_fail("Kreuzschlaege kann man nur auf offener See fahren.\n");
+    return 0;
+  }
+
+  coords = pol2xy((kurs = dir),(distanz = dist));
+  if (coords[0] == 0 && coords[1] == 0) {
+    notify_fail("Das Ziel liegt hier im Raum.\n");
+    return 0;
+  }
+  dest_coords = ({ x + coords[0] , y + coords[1] });
+  dest = "/map/m"+dest_coords[0]+"_"+dest_coords[1];
+
+  // Testweise
+  CALL_KURSE(update_room(0, dest));
+
+  if(dist == 1)
+  {
+      int * xy;
+      string direction;
+
+      xy = pol2xy(dir, 1);
+
+      switch(sprintf("%d%d", xy[0], xy[1]))
+      {
+          case "01":
+              direction = "Norden";
+              break;
+
+          case "0-1":
+              direction = "Sueden";
+              break;
+
+          case "11":
+              direction = "Nordosten";
+              break;
+
+          case "10":
+              direction = "Osten";
+              break;
+
+          case "1-1":
+              direction = "Suedosten";
+              break;
+
+          case "-11":
+              direction = "Nordwesten";
+              break;
+
+          case "-10":
+              direction = "Westen";
+              break;
+
+          case "-1-1":
+              direction = "Suedwesten";
+              break;
+
+          default:
+              raise_error("Illegal Dircode: "+sprintf("%d%d", xy[0], xy[1])+"\n");
+      }
+
+      if(move(dest, MOVE_NORMAL, "$Der() entfernt sich nach "+direction,
+                                 "$Der() naehert sich von "+
+    capitalize(opposite_direction(lower_case(direction)))) == MOVE_OK)
+      {
+          logge += 1;
+          verkuende(move_message);
+          if(objectp(commander) && !playerp(commander)) commander->kreuz_ende();
+          return 1;
+      }
+
+      else
+      {
+          notify_fail("Das ist nicht moeglich.\n");
+          return 0;
+      }
+  }
+
+  etappen = (etappen = ((eta = ((distanz * 60) / speed)) / etmal)) < 1 ?
+              1 :
+              etappen > max_etappen ?
+                max_etappen :
+                etappen;
+
+  e_etmal = (eta / etappen);
+
+  e_coords = pol2xy(kurs,(e_distanz = (distanz / etappen)));
+
+  if (e_coords[0] == 0 && e_coords[1] == 0)
+    etappen = 1;
+
+  on_tour = 1;
+  logge_new = logge+distanz;
+
+  tell_command_room("Das Schiff beginnt einen Kreuzschlag.\n");
+
+  k_inf = 0;
+
+  if(neue_schiffslogik)
+  {
+#ifdef USE_NEW_KURSMASTER
+      DEBUG("Asking Kursmaster check_step...");
+
+      k_inf = apply(#'call_other, NEW_KURSMASTER, "check_step",
+                  query_koordinaten(TO) + dest_coords);
+#else
+      k_inf = touch(KURSMASTER)->check_kreuzschlag(
+              TO, dir, dist );
+#endif
+  }
+
+  // Kurze Kreuzschlaege duerfen nicht schneller sein als ein langer
+  call_out("kreuze",e_etmal+2);
+
+  return 1;
+}
+
+/*
+FUNKTION: query_logge
+DEKLARATION: int query_logge()
+BESCHREIBUNG:
+Liefert die Anzahl Seemeilen, die ein Schiff seit dem Laden zuruecklegt hat,
+zurueck.
+VERWEISE: add_logge
+GRUPPEN: schiff
+*/
+int query_logge() {
+
+  return logge;
+}
+
+/*
+FUNKTION: add_logge
+DEKLARATION: void add_logge(int seemeilen)
+BESCHREIBUNG:
+Damit kann man die Logge eines Schiffes um 'seemeilen' verstellen.
+VERWEISE: add_logge
+GRUPPEN: schiff
+*/
+void add_logge(int a) {
+
+  logge += a;
+}
+
+
+void init() {
+
+  ::init();
+ // if (query_real_player_level(TP) >= LVL_VOGT)
+ //   add_action("versenke", "versenk",1);
+}
+
+void set_linienschiff (int l)
+{
+#if 0
+  if(l && member("/room/rathaus/schiffahrt"->query_faehren(),object_name()) == -1)
+  {
+    do_warning(wrap("\nDas Schiff "+object_name()+" ist kein eingetragenes Linienschiff.\n"));
+  }
+#endif
+  linienschiff = l;
+}
+
+/*
+FUNKTION: query_linienschiff
+DEKLARATION: int query_linienschiff()
+BESCHREIBUNG:
+Liefert, wenn es sich bei dem abgefragten Objekt um ein Linienschiff handelt,
+1 zurueck.
+GRUPPEN: schiff
+*/
+int query_linienschiff()
+{
+    return linienschiff;
+}
+
+private string convert_steer_command(string str)
+{
+   object env = environment();
+   int sm, grad;
+   string exit;
+   int * xy;
+
+   str = ([ "n" : "norden", "no" : "nordosten",
+            "o" : "osten",  "so" : "suedosten",
+            "s" : "sueden", "sw" : "suedwesten",
+            "w" : "westen", "nw" : "nordwesten" ])[str] ||
+         str;
+
+
+   if(!objectp(env))
+   {
+       return str;
+   }
+
+   else
+   {
+       string name = object_name(env);
+
+       if(map_object(name))
+       {
+           // Umgebung ist ein Map-Raum
+           if(is_direction(str, DIR_NUR_HIMMELSRICHTUNGEN))
+           {
+               exit = env->query_one_exit(str, 0);
+
+               if(!stringp(exit) || !strlen(exit) || map_object(exit))
+               {
+                   switch(str)
+                   {
+                       case "norden":
+                           return "1 sm 0 grad";
+                           break;
+
+                       case "nordosten":
+                           return "1 sm 45 grad";
+                           break;
+
+                       case "osten":
+                           return "1 sm 90 grad";
+                           break;
+
+                       case "suedosten":
+                           return "1 sm 135 grad";
+                           break;
+
+                       case "sueden":
+                           return "1 sm 180 grad";
+                           break;
+
+                       case "suedwesten":
+                           return "1 sm 225 grad";
+                           break;
+
+                       case "westen":
+                           return "1 sm 270 grad";
+                           break;
+
+                       case "nordwesten":
+                           return "1 sm 315 grad";
+                           break;
+                   }
+               }
+           }
+       }
+
+       else
+       {
+           // Umgebung ist kein Map-Raum
+
+           if((sscanf(str, "%d sm %d grad", sm, grad) == 2 ||
+               sscanf(str, "%d grad %d sm", grad, sm) == 2) &&
+               sm == 1 && grad >= 0 && grad <= 360)
+           {
+               xy = pol2xy(grad, 1);
+
+               switch(sprintf("%d%d", xy[0], xy[1]))
+               {
+                   case "01":
+                      return "norden";
+                      break;
+
+                   case "0-1":
+                       return "sueden";
+                       break;
+
+                   case "11":
+                       return "nordosten";
+                       break;
+
+                   case "10":
+                       return "osten";
+                       break;
+
+                   case "1-1":
+                       return "suedosten";
+                       break;
+
+                   case "-11":
+                       return "nordwesten";
+                       break;
+
+                   case "-10":
+                       return "westen";
+                       break;
+
+                   case "-1-1":
+                       return "suedwesten";
+                       break;
+
+                  default:
+                      raise_error("Illegal Dircode: "+sprintf("%d%d", xy[0],
+                                  xy[1])+"\n");
+               }
+           }
+       }
+   }
+
+   return str;
+}
+
+int steer_ship (string dest) {
+  int distanz, kurs, ret;
+  object env;
+
+  if(!TP) return 0;
+  if(TP->query_ghost() && playerp(TP))
+      return notify_fail(wrap("Das ist unmoeglich in deinem nichtmateriellen Zustand."));
+  if (TI && (TP != TI))
+    return 0;
+    // gegen verbloedetes Pantheon:
+    // zwinge kapitaen steure norden darf nicht gehen
+  if (linienschiff && (commander != TP)) {
+    notify_fail ("Du willst doch das Linienschiff nicht vom Kurs "
+      "abbringen?\n");
+    return 0;
+  }
+  if (!commander)
+    commander=TP;
+  else {
+    if (TP != commander &&
+            (env = environment(commander)) && object_name(env) == command_room) {
+      notify_fail(Der(commander)+" haette wohl etwas dagegen.\n");
+      return 0;
+    }
+//    if (playerp (commander)) Wozu hier playerp?
+      commander=TP;
+  }
+
+  if (!dest || dest == "" || member(dest,'/') != -1) {
+    notify_fail("Steuere welche Richtung bzw\n"+
+                "steuere wieviel sm wieviel Grad?\n");
+    return 0;
+  }
+
+  dest = convert_steer_command(dest);
+
+  if (sscanf(dest = lower_case(dest),"%d sm %d grad",distanz, kurs) == 2 ||
+      sscanf(dest,"%d grad %d sm",kurs, distanz) == 2 ||
+      // Ab 3.3.712 ist sscanf strenger:
+      sscanf(dest,"%d sm %d",distanz, kurs) == 2 ||
+      sscanf(dest,"%d grad %d",kurs, distanz) == 2 )
+    return starte_kreuz(kurs, distanz);
+
+  if (stopped) {
+    if (playerp(TP)) {
+      write("Das geht im Moment nicht.\n");
+      return 1;
+    }
+    /*
+     * Die automatischen Kapitaene wiederholen die
+     * Steuer-Kommandos nicht freiwillig. Ausserdem
+     * warten sie auf den Call:   kreuz_ende()  ,
+     * bevor sie das naechste Kommando abschicken.
+     * Wir merken uns hier das Kommando und fuehren
+     * es dann aus, wenn das Schiff wieder weiter-
+     * fahren darf.
+     */
+    command_stack = dest;
+    return 1;
+  }
+
+  if (playerp(commander))
+    init_spread_skill();
+
+  ret = fahre(dest);
+
+  if (ret == MOVE_OK) {
+    last_time = time();
+    verkuende(move_message);
+    logge++;
+
+    if (playerp(commander))
+      spread_skill();
+    else
+      commander->kreuz_ende();
+  }
+  else{
+    // Mirak: query_not_moved_reason() eingebaut
+    write(query_not_moved_reason()||"Das ist nicht moeglich.\n");
+  }
+
+  return 1;
+}
+
+void ursprung() {
+
+  remove_call_out("kreuze");
+  on_tour = 0;
+}
+
+int stop_kreuz(string str) {
+  object env;
+
+  if (!str || strstr(lower_case(str),"kreuz")) {
+    notify_fail("Stoppe was?\n");
+    return 0;
+  }
+
+  if (commander != TP) {
+    if (!commander || !(env = environment(commander)) ||
+        object_name(env) != command_room)
+      commander = TP;
+    else {
+      write(Der(commander)+" haette wohl etwas dagegen.\n");
+      return 1;
+    }
+  }
+  if (!on_tour)
+    write(Der()+" befindet sich nicht auf einem Kreuzschlag.\n");
+  else
+    tell_command_room("Der Kreuzschlag wurde von "+
+                        dem(TP)+" vorzeitig abgebrochen.\n");
+  ursprung();
+  return 1;
+}
+
+int remove()
+{
+  object env, room, *inv;
+  int a, b;
+  object *all_rooms;
+
+  env = environment();
+
+  if (!objectp(env)) {
+    destruct(TO);
+    return 1;
+  }
+
+  verkuende_an_alle("\n"+Der()+" geht unter.\n\n");
+  if (env)
+    tell_room(env,"\n"+Der()+" geht unter.\n\n");
+  set_short(Der(0,"untergehend"));
+
+  if (command_room && (room = find_object(command_room)))
+    all_rooms = ({ room });
+  else
+    all_rooms = ({});
+  if (sizeof(ship_rooms))
+  {
+    ship_rooms -= ({0});
+    all_rooms += ship_rooms;
+  }
+
+  for (a = sizeof(all_rooms); a--;)
+  {
+    room = all_rooms[a];
+    if (env && sizeof(inv = all_inventory(room)))
+      for (b = sizeof(inv); b--;)
+      {
+        if (interactive(inv[b]))
+          inv[b]->move(env);
+        if (inv[b]->query_animal())
+          inv[b]->move(env);
+      }
+    room->remove();
+    if (room)
+      destruct(room);
+  }
+  destruct(TO);
+  return 1;
+}
+
+
+int versenke(string str) {
+
+  if (!me(str)) {
+    notify_fail("Versenke was?\n");
+    return 0;
+  }
+  remove();
+  return 1;
+}
+/*
+    if(wizp(TP)){
+        write(center(" In der Umgebung "+des()+" siehst du: ",79,"-")+"\n");
+        
+        if(TP->query_eye_option("file"))
+        {
+            if((tmp = map2domain((fname = object_name(out)),1)) && strstr(tmp,"/map/m"))
+            {
+                room = tmp[0..<3]+(file_size(tmp) > 0?"*":"")+" ("+fname+")";
+            }
+            else if((tmp = out->query_file_name()) && stringp(tmp)){
+                room = tmp[0..<3]+(file_size(tmp)> 0?"*":"")+" ("+fname+")";
+            }
+            else {
+                room = fname;
+            }
+
+            write(room+"\n");
+        }
+
+        if(TP->query_eye_option("shadows"))
+        {
+            object ob = out;
+            int first = 1;
+
+            room = "";
+            while(ob = shadow(ob, 0))
+                room += sprintf("%-8s %-=70s\n", first?(first=0,"Shadows:"):"",
+                object_name(ob));
+
+            if(strlen(room))
+            write(room);
+        }        
+
+        if(TP->query_eye_option("v_items"))
+        {
+            res = map(out->query_all_v_items()||({}), #'[, "name") - ({0});
+            if(sizeof(res))
+            write(sprintf("v_items: %=-64s\n", implode(res,", ")));
+        }
+
+        write(TP->describe_room(out,
+                               EYE_FORCE_LONG|EYE_NO_EXITS|EYE_FORCE_LIGHT)+
+          copies("-",79)+"\n");
+        return 1;
+    }
+*/
+varargs int look_out(string str, int depth)
+{
+  object out;
+  string room;
+  int a;
+
+
+  if (!(out = environment(TO)))
+  {
+    write(Der()+" befindet sich im Nirwana.\n");
+    return 0;
+  }
+  if (!str || str == "")
+  {
+  
+    write(center(" In der Umgebung "+des()+" siehst du: ",79,"-")+"\n"+
+          TP->describe_room(out,
+                               EYE_FORCE_LONG|EYE_NO_EXITS|EYE_FORCE_LIGHT)+
+          copies("-",79)+"\n");
+    return 1;
+  }
+  if (!(room = out->query_one_exit(str = lower_case(str))) || room =="")
+  {
+    write("In dieser Richtung gibt es nichts zum Anschauen.\n");
+    return 0;
+  }
+  if (depth < 1)
+    depth = 1;
+  while (room && room != "" && a < depth)
+  {
+    a++;
+    switch(a) {
+    case 1:
+      write(center("In Richtung "+capitalize(str)+" siehst du: ",79,"-")+"\n");
+      break;
+    case 2:
+      write(center("Noch ein Stueckchen weiter siehst du: ",79,"-")+"\n");
+      break;
+    default:
+      write(center("Und noch ein Stueckchen weiter siehst du: ",79,"-")+"\n");
+      break;
+    }
+    write(TP->describe_room(out = touch(room),
+                               EYE_FORCE_LONG|EYE_NO_EXITS|EYE_FORCE_LIGHT));
+    room = out->query_one_exit(str);
+    write(copies("-",79)+"\n");
+  }
+  //write(TP->describe_room(out,EYE_FORCE_LONG|EYE_NO_EXITS));
+  return 1;
+}
+
+/*
+FUNKTION: set_default_room
+DEKLARATION: void set_default_room(string default_room)
+BESCHREIBUNG:
+Damit wird der Heimathafen eines Schiffe gesetzt.
+VERWEISE: query_default_room
+GRUPPEN: schiff
+*/
+void set_default_room(string str) {
+
+  default_room = str;
+}
+
+/*
+FUNKTION: query_default_room
+DEKLARATION: string query_default_room()
+BESCHREIBUNG:
+Damit kann man den Heimathafen des Schiffe abfragen.
+VERWEISE: set_default_room
+GRUPPEN: schiff
+*/
+string query_default_room() {
+  object startraum;
+
+  // Goetterschiffe haben einen Startraum jwd
+  if(default_room &&
+     strstr(object_name(TO), "/w/") == 0 &&
+     (startraum=touch(default_room, NO_LOG | NO_WRITE)) &&
+      startraum->query_room_domain() != "Pantheon")
+  {
+      return "/map/m1234567890_1234567890";
+  }
+
+  return default_room;
+}
+
+/*
+FUNKTION: query_last_time
+DEKLARATION: int query_last_time()
+BESCHREIBUNG:
+Liefert die Systemzeit (in Sekunden seit ????) zueruck, an der zum letzten
+Mal ein Befehl vom Schiff ausgefuehrt wurde.
+VERWEISE:
+GRUPPEN: schiff
+*/
+int query_last_time() {
+
+return last_time;
+}
+
+/*
+FUNKTION: query_on_kreuz
+DEKLARATION: int query_on_kreuz()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn das SChiff gerade kreuzt, sonst 0.
+VERWEISE:
+GRUPPEN: schiff
+*/
+int query_on_kreuz() {
+
+  return find_call_out("kreuze") >= 0;
+}
+
+/*
+FUNKTION: query_typ
+DEKLARATION: string query_typ()
+BESCHREIBUNG:
+Liefert den Schiffstyp zurueck.
+VERWEISE: set_typ
+GRUPPEN: schiff
+*/
+string query_typ() {
+
+  return typ;
+}
+
+/*
+FUNKTION: set_typ
+DEKLARATION: void set_typ(string typ)
+BESCHREIBUNG:
+Damit setzt man den Schifstyp bei Schiffen, zB Brigantine, Galeasse, Dampfer...
+VERWEISE: query_typ
+GRUPPEN: schiff
+*/
+void set_typ(string str) {
+
+  typ = str;
+}
+
+
+/*
+FUNKTION: query_passagiere
+DEKLARATION: object *query_passagiere(string dummy)
+BESCHREIBUNG:
+Liefert ein Feld mit Objektpointern auf alle Passagiere des Schiffs
+zurueck.
+VERWEISE:
+GRUPPEN: schiff
+*/
+object *query_passagiere(string str)
+{
+  int a, b;
+  object room, *inv, *passagiere;
+  object *rooms;
+
+  rooms = (command_room && (room = find_object(command_room))) ?
+            ({ room }) :
+            ({});
+  if (ship_rooms)
+  {
+    ship_rooms -= ({0});
+    rooms += ship_rooms;
+  }
+  passagiere = ({});
+  for (a = sizeof(rooms); a--;)
+  {
+    inv = all_inventory(rooms[a]);
+    for (b = sizeof(inv); b--;)
+      if (living(inv[b]))
+        passagiere += ({ inv[b] });
+  }
+  return passagiere;
+}
+
+
+/*
+FUNKTION: stop_ship
+DEKLARATION: void stop_ship()
+BESCHREIBUNG:
+Damit kann man ein Schiff mitten in der Fahr anhalten, zB fuer einen
+Piratenueberfall. Das SChiff kann nicht mehr bewegt werden, bis
+restart_ship aufgerufen wurde.
+VERWEISE: query_stopped, restart_ship
+GRUPPEN: schiff
+*/
+void stop_ship() {
+
+  stopped = 1;
+}
+
+/*
+FUNKTION: query_stopped
+DEKLARATION: int query_stopped()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn das ein Schiff mit stop_ship angehalten wurde.
+VERWEISE: stop_ship, restart_ship
+GRUPPEN: schiff
+*/
+int query_stopped() {
+
+  return stopped;
+}
+
+/*
+FUNKTION: restart_ship
+DEKLARATION: void restart_ship()
+BESCHREIBUNG:
+Startet ein mit stop_ship angehaltenes Schiff wieder.
+VERWEISE: stop_ship, query_stopped
+GRUPPEN: schiff
+*/
+void restart_ship() {
+
+  if (stopped && find_call_out("do_restart") == -1)
+    call_out("do_restart",5);
+}
+
+void do_restart() {
+
+  stopped = 0;
+  if (!command_stack)
+    return;
+
+  if (fahre(command_stack) == MOVE_OK) {
+    last_time = time();
+    verkuende(move_message);
+    logge++;
+    if (commander)
+      commander->kreuz_ende();
+  }
+  command_stack = 0;
+}
+
+int forbidden(string message, varargs mixed data) {
+  data = expand(data);
+  if (message == "take" || message == "push") {
+    tell_object(data[0],wrap("Das kannst Du mit "+dem(TO)+
+      " nicht machen!"));
+    return 1;
+  }
+  return ::forbidden(message, data);
+}
+
+varargs int move(mixed dest, int way, string out, string in) {
+int i;
+  if(schiff_debug)
+  {
+     DEBUG(sprintf("%Q->move(%Q, %Q, %Q, %Q)", TO, dest, way, out, in));
+  }
+
+  if (objectp(dest) && !dest->query_room())
+    return MOVE_NOT_ALLOWED;
+  i = ::move(dest, way, out, in);
+  if(schiff_debug) { DEBUG(sprintf(" -- MOVE == %d", i)); }
+
+  // Testweise. Wir wollen, dass das die alten Schiffe nicht behindert.
+  // Daher catched.
+  if(i == MOVE_OK)
+  {
+      CALL_KURSE(update_room(environment(), 0));
+
+      // Segelskill
+      catch(touch("/z/Schiffe/Werft/master_object")->spread_skill(
+            TO, environment(), commander
+            ); publish);
+  }
+
+  else
+  {
+      if(stringp(dest) && is_direction(dest) && environment())
+      {
+          CALL_KURSE(update_room(0, environment()->query_one_exit(dest)));
+      }
+
+      else
+      {
+          CALL_KURSE(update_room(dest, dest));
+      }
+  }
+
+  return i;
+}
+
+/*
+FUNKTION: set_enter_messages_wait
+DEKLARATION: void set_enter_messages_wait(string aussen, string innen, string spieler)
+BESCHREIBUNG:
+Setzt die Meldungen, die beim Betreten des Schiffes an die Umgebung (aussen), an
+den betretenen Raum (innen), sowie an den Wartenden (spieler) geschickt werden.
+
+Die Benutzung von Pseudoclosures ist erlaubt.
+$Der('vehikel) bezeichnet hierbei das Schiff.
+VERWEISE: query_enter_messages_wait
+GRUPPEN: schiff
+*/
+private string *enter_messages_wait;
+
+void set_enter_messages_wait(string aussen, string innen, string spieler){
+    enter_messages_wait=({aussen, innen, spieler});
+}
+
+/*
+FUNKTION: query_enter_messages_wait
+DEKLARATION: string *query_enter_messages_wait()
+BESCHREIBUNG:
+Liefert die Meldungen, die beim Betreten des Schiffes an die Umgebung (aussen),
+an den betretenen Raum (innen), sowie an den Wartenden (spieler) geschickt
+werden.
+
+    Der Rueckgabewert ist ({string aussen, string innen, string spieler}).
+
+Die drei Meldungen koennen Pseudoclosures enthalten.
+VERWEISE: set_enter_messages_wait
+GRUPPEN: schiff
+*/
+
+string *query_enter_messages_wait(object einsteiger){
+    string aussen, innen, spieler;
+
+    aussen=enter_messages_wait[0];
+    innen=enter_messages_wait[1];
+    spieler=enter_messages_wait[2];
+    
+    if(!einsteiger) einsteiger = TP;
+
+    aussen =  CTS(MTC(aussen, ({'vehikel, 'tp}), 1, 1),({TO, einsteiger }));
+    innen =   CTS(MTC(innen,  ({'vehikel, 'tp}), 1, 1),({TO, einsteiger }));
+    spieler = CTS(MTC(spieler,({'vehikel, 'tp}), 1, 1),({TO, einsteiger }));
+
+    return ({aussen, innen, spieler});
+}
+
+/*
+FUNKTION: set_leave_messages_wait
+DEKLARATION: void set_leave_messages_wait(string aussen, string innen, string spieler)
+BESCHREIBUNG:
+Setzt die Meldungen, die beim Verlassen des Schiffes an die Umgebung (aussen),
+an den betretenen Raum (innen), sowie an den Wartenden (spieler) geschickt
+werden.
+
+Die Benutzung von Pseudoclosures ist erlaubt.
+$Der('vehikel) bezeichnet hierbei das Schiff.
+VERWEISE: query_leave_messages_wait
+GRUPPEN: schiff
+*/
+private string *leave_messages_wait;
+
+void set_leave_messages_wait(string aussen, string innen, string spieler){
+    leave_messages_wait=({aussen, innen, spieler});
+}
+
+/*
+FUNKTION: query_leave_messages_wait
+DEKLARATION: string *query_leave_messages_wait()
+BESCHREIBUNG:
+Liefert die Meldungen, die beim Verlassen des Schiffes an die Umgebung (aussen),
+an den betretenen Raum (innen), sowie an den Wartenden (spieler) geschickt
+werden.
+
+    Der Rueckgabewert ist ({string aussen, string innen, string spieler}).
+
+Die drei Meldungen koennen Pseudoclosures enthalten.
+VERWEISE: set_leave_messages_wait
+GRUPPEN: schiff
+*/
+
+string *query_leave_messages_wait(object aussteiger){
+    string aussen, innen, spieler;
+
+    aussen=leave_messages_wait[0];
+    innen=leave_messages_wait[1];
+    spieler=leave_messages_wait[2];
+
+    if(!aussteiger) aussteiger = TP;
+
+    aussen =  CTS(MTC(aussen, ({'vehikel, 'tp}), 1, 1),({TO, aussteiger }));
+    innen =   CTS(MTC(innen,  ({'vehikel, 'tp}), 1, 1),({TO, aussteiger }));
+    spieler = CTS(MTC(spieler,({'vehikel, 'tp}), 1, 1),({TO, aussteiger }));
+
+    return ({aussen, innen, spieler});
+}
+
+
+void reset()
+{
+    "*"::reset();
+    TO->make_skipper();
+}
+
+void create() {
+
+  ::create();
+  set_vehikel("schiff");
+  set_msg("$Der() entfernt sich $dir().", "$Ein() naehert sich $dir().", 1);
+  set_mmsg("$Der() verschwindet zwischen den Wellen.",
+           "$Ein() taucht aus den Wellen auf.");
+  set_id("schiff");
+  set_name("schiff");
+  set_gender("saechlich");
+  set_long("Ein ganz normales Schiff.\n");
+  move_message = "Das Schiff kaempft sich durch die Wellen.\n";
+  set_enter_messages("$Der() betritt das Schiff.","$Ein() kommt an Bord.");
+  set_enter_messages_wait("$Der() wird von ein paar Matrosen, die von "
+                          "$dem('vehikel) kommen, an Bord gebracht.",
+                          "$Der() wird von ein paar Matrosen an Bord gebracht.",
+                          "Du wirst von ein paar Matrosen an Bord gebracht.");
+  set_leave_messages_wait("$Der() wird von einigen Matrosen, die von "
+                          "$dem('vehikel) kommen, von Bord gebracht.",
+                          "$Der() wird von einigen Matrosen von Bord gebracht.",
+                          "Du wirst von einigen Matrosen von Bord gebracht.");
+  last_time = time();
+  add_controller(({"concerned_strike"}));
+}
+
+mixed brenn_problem(object womit, mixed was, mixed melder, object wer)
+{
+    return Der()+" "+ist()+" einfach zu feucht, zum Brennen!";
+}

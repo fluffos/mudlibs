@@ -1,0 +1,455 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/rathaus/spielerrat/i/rauswurf.c
+// Description: Rathaus, Spielerratsraeume, Rauswurfsinherit
+// Author:      Goldie (14.10.2004)
+//
+// $Log: rauswurf.c,v $
+// Revision 1.4  2004/11/27 21:35:07  gnomi
+// Schoenheitskorrekturen.
+//
+// Revision 1.3  2004/10/19 18:47:23  gnomi
+// Verbessert.
+//
+// Revision 1.2  2004/10/18 23:29:27  gnomi
+// Syslog und kleine Korrekturen eingebaut.
+//
+// Revision 1.1  2004/10/18 23:19:16  gnomi
+// Neuen Rauswurf von Goldie eingebaut.
+//
+
+inherit "%rauswurf_tuer";
+inherit "/i/tools/security";
+
+#include <apps.h>
+#include <message.h>
+#include <move.h>
+#include <level.h>
+#include <parse_com.h>
+#include <notify_fail.h>
+
+#define SECURE (check_security() && \
+	(spielerratp(this_player()) || adminp(this_player())))
+
+void init()
+{   
+    if(SPIELERRAT->is_spielerrat(this_player()) || adminp(this_player()))
+    {
+        add_action ("rausschmiss","verweise", -7);
+        add_action ("rausschmiss","schmeisse", -8);
+        add_action ("rausschmiss","pruegele", -7);
+        add_action ("rausschmiss","pruegle");
+        add_action ("rausschmiss","zeige", -4);
+        add_action ("rausschmiss","schnipse", - 7);
+    }
+}
+
+private void real_move(object raus, string msg)
+{
+// Direkt den force_move nehmen...
+//    if(raus->move(query_tuer_richtung(),MOVE_NORMAL,"$", msg)!=MOVE_OK)
+    {
+	string dir = query_tuer_richtung();
+	object dest = touch(this_object()->query_one_exit(dir));
+	
+	raus->force_move(dest, MOVE_NORMAL);
+	raus->send_move_in_msg(this_object(), dest, MOVE_NORMAL, dir,
+	    this_object()->query_exit_info(dir), "$", msg);
+    }
+}
+
+private int rausfunktion(object raus, string msg_wen_mit_tuer, 
+        string msg_draussen_mit_tuer, string msg_alle_mit_tuer,
+        string msg_tp_mit_tuer,
+        string msg_wen_ohne_tuer, string msg_draussen_ohne_tuer, 
+        string msg_alle_ohne_tuer, string msg_tp_ohne_tuer)
+{
+    object tuer = present("SRTuer");
+    
+    if(!living(raus))
+	return notify_fail(wrap(Der(raus)+" ist kein Lebewesen."),
+		FAIL_WRONG_ARG);
+    
+    if(raus==this_player())
+	return notify_fail("Noe.\n");
+	
+    sys_log("SR_RAUSWURF", sprintf("%s | %10-s rauswurf %#Q\n",
+	shorttimestr(time()),
+	this_player()->query_real_name(), 
+	raus->query_real_name() || 
+	    ({raus, raus->query_name(), raus->query_short()})));
+    
+    if(tuer->query_door_is_open()==0)
+    {
+        this_player()->send_message_to(raus, MT_NOTIFY, MA_MOVE_OUT,
+            wrap(msg_wen_mit_tuer));
+    	tuer->open_door(0,1);
+	real_move(raus, msg_draussen_mit_tuer);
+        tuer->close_door(0,1);
+        this_player()->send_message(MT_NOTIFY, MA_MOVE_OUT,
+            wrap(msg_alle_mit_tuer),wrap(msg_tp_mit_tuer),this_player());
+    }
+    else
+    {
+        this_player()->send_message_to(raus, MT_NOTIFY, MA_MOVE_OUT,
+            wrap(msg_wen_ohne_tuer));
+        real_move(raus, msg_draussen_ohne_tuer);
+        this_player()->send_message(MT_NOTIFY, MA_MOVE_OUT,
+            wrap(msg_alle_ohne_tuer),wrap(msg_tp_ohne_tuer),this_player());
+    }
+    
+    return 1;
+}
+
+int rausschmiss(string str)
+{
+    mixed parsed;
+    
+    if(!SECURE)
+	return 0;
+
+    parsed = parse_com(str, this_object(), 0, PARSE_NO_V_ITEMS);
+    
+    if(query_verb()=="verweis" || query_verb()=="verweise")
+    {
+	object raus;
+
+        if(parse_com_error(parsed,"Wen willst du aus dem Raum verweisen?\n",1))
+	    return 0;
+
+	raus = parsed[PARSE_OBS][0];
+
+        return rausfunktion(raus,
+	    "\n" + Der(this_player()) + " oeffnet die Tuer, verweist dich "
+	    "des Raumes und schliesst sie wieder hinter dir.\n\n",
+		    
+	    "Eine Tuer oeffnet sich und $der() naehert sich mit gesenktem "
+	    "Kopf $dir(), daraufhin schliesst sich die Tuer wieder.",
+		    
+	    Der(this_player()) + " oeffnet die Tuer, verweist "
+             +den(raus)+" des Raumes und schliesst die Tuer wieder.",
+		     
+	    "Du oeffnest die Tuer und verweist " + den(raus) + " des Raumes.",
+		    
+	    "\n"+Der(this_player())+" verweist dich des Raumes.\n\n",
+		    
+	    "$Der() naehert sich mit gesenktem Kopf $dir().",
+		    
+	    Der(raus) + " wird von " + dem(this_player()) +
+	    " des Raumes verwiesen.",
+		    
+	    "Du verweisst "+den(raus)+" des Raumes.");
+    }
+    
+    if(query_verb()=="schmeiss" || query_verb()=="schmeisse")
+    {
+	object raus;
+
+        if(parse_com_error(parsed,"Wen willst du aus dem Raum schmeissen?\n",1))
+	    return 0;
+
+	raus = parsed[PARSE_OBS][0];
+		
+        if(parsed[PARSE_REST]!="raus" && parsed[PARSE_REST]!="hinaus")
+            return notify_fail("Wohin willst du jemanden schmeissen?\n");
+		
+        return rausfunktion(raus,
+		    
+            "\n"+Der(this_player())+" oeffnet die Tuer, schmeisst dich im "
+	    "hohen Bogen aus dem Spielerratsraum und schliesst die Tuer "
+	    "anschliessend wieder.\n\n",
+			
+	    "Eine Tuer geht auf und $der() kommt im hohen Bogen $dir() "
+	    "angeflogen. Daraufhin schliesst sich die Tuer wieder.",
+			
+	    Der(this_player())+" oeffnet die Tuer und schmeisst "+den(raus)+
+	    " im hohen Bogen aus dem Raum. Danach schliesst "+
+	    er(this_player())+" wieder die Tuer.",
+			
+            "Du oeffnest die Tuer und schmeisst "+den(raus)+" im hohen "
+	    "Bogen aus dem Raum. Danach schliesst du die Tuer wieder.",
+			
+	    "\n"+Der(this_player())+" schmeisst dich im hohen Bogen aus "
+	    "dem Spielerratsraum.\n\n",
+			
+	    "$Der() kommt im hohen Bogen $dir() angeflogen.",
+			
+	    Der(this_player())+" schmeisst "+den(raus)+" im hohen Bogen aus "
+	    "dem Raum.",
+			
+	    "Du schmeisst "+den(raus)+" im hohen Bogen aus dem Raum.");
+    }
+    
+    if(query_verb()=="pruegel" || query_verb()=="pruegele" || 
+       query_verb()=="pruegle")
+    {
+	object raus;
+        
+        if(parse_com_error(parsed,"Wen willst du aus dem Raum pruegeln?\n",1))
+	    return 0;
+
+	raus = parsed[PARSE_OBS][0];
+
+        if(parsed[PARSE_REST]!="raus" && parsed[PARSE_REST]!="hinaus")
+            return notify_fail("Wohin willst du jemanden pruegeln?\n");
+	
+	return rausfunktion(raus,
+		    
+	    "\n"+Der(this_player())+" oeffnet die Tuer und verpasst dir "
+	    "einen schmerzhaften Tritt in den Hintern, welcher dich vor die "
+	    "selbige befoerdert. Danach schliesst "+er(this_player())+
+	    " die Tuer wieder.\n\n",
+	    
+	    "Eine Tuer geht auf und $der() naehert sich mit schmerzverzogenem"
+	    " Gesicht $dir(). Danach wird die Tuer wieder geschlossen.",
+	    
+	    Der(this_player())+" oeffnet die Tuer und verpasst "+dem(raus)+
+	    " einen schmerzhaften Tritt in den Hintern, welcher "+ihn(raus)+
+	    " vor die selbige befoerdert. Anschliessend schliesst "+
+	    er(this_player())+" die Tuer wieder.",
+			
+	    "Du oeffnest die Tuer und verpasst "+dem(raus)+" einen "
+	    "schmerzhaften Tritt in den Hintern, welcher "+ihn(raus)+" vor "
+	    "die selbige befoerdert. Danach schliesst du die Tuer wieder.",
+	    
+	    "\n"+Der(this_player())+" verpasst dir einen schmerzhaften Tritt "
+	    "in den Hintern, welcher dich vor die Tuer befoerdert.\n\n",
+			
+	    "$Der() naehert sich mit schmerzverzogenem Gesicht $dir().",
+			
+	    Der(this_player())+" verpasst "+dem(raus)+" einen schmerzhaften "
+	    "Tritt in den Hintern, welcher "+ihn(raus)+" vor die Tuer "
+	    "befoerdert.",
+			
+	    "Du verpasst "+dem(raus)+" einen schmerzhaften Tritt in den "
+	    "Hintern, welcher "+ihn(raus)+" vor die Tuer befoerdert.");
+    }
+    
+    if(query_verb()=="zeig" || query_verb()=="zeige")
+    {
+	object raus;
+	object tuer;
+        
+        if(parse_com_error(parsed,"Zeige wem was?\n",1))
+	    return 0;
+
+	raus = parsed[PARSE_OBS][0];
+
+	if((tuer=present("SRTuer")) && !tuer->me(parsed[PARSE_REST]))
+	    return 0;
+	
+	return rausfunktion(raus,
+
+	    "\n"+Der(this_player())+" zeigt dir die Tuer. "+Er(this_player())+
+	    " moechte wohl, dass du gehst.\nAlso oeffnest du die Tuer und "
+	    "verlaesst diesen Raum Richtung "+
+	    capitalize(query_tuer_richtung())+". \nHinter dir schliesst du "
+	    "natuerlich wieder die Tuer.\n\n",
+	    
+	    "Eine Tuer oeffnet sich. $Der() naehert sich $dir() und "
+	    "schliesst hinter sich wieder die Tuer.",
+	    
+	    Der(this_player())+" zeigt "+dem(raus)+" die Tuer.\n"+Der(raus)+
+	    " oeffnet daraufhin die Tuer, verlaesst den Raum und schliesst "
+	    "die Tuer wieder hinter sich.",
+	    
+	    "Du zeigst "+dem(raus)+" die Tuer. "+Der(raus)+" oeffnet "
+	    "daraufhin die Tuer und verlaesst den Raum. Hinter sich "
+	    "schliesst "+er(raus)+" sie wieder.",
+	    
+	    "\n"+Der(this_player())+" zeigt dir die Tuer. "+Er(this_player())+
+	    " moechte wohl, dass du gehst.\nAlso verlaesst du diesen Raum "
+	    "Richtung "+capitalize(query_tuer_richtung())+".\n\n",
+	    
+	    "$Der() naehert sich $dir().",
+	    
+	    Der(this_player())+" zeigt "+dem(raus)+" die Tuer.\n"+Der(raus)+
+	    " verlaesst daraufhin den Raum.",
+	    
+	    "Du zeigst "+dem(raus)+" die Tuer. "+Der(raus)+" verlaesst "
+	    "daraufhin den Raum.");
+    }
+    
+    if(query_verb()=="schnips" || query_verb()=="schnipse")
+    {
+	object raus;
+	
+        if(parse_com_error(parsed,"Wen willst du rausschmeissen lassen?\n",1))
+	    return 0;
+
+	raus = parsed[PARSE_OBS][0];
+
+	if(!living(raus))
+	    return notify_fail(wrap(Der(raus)+" ist kein Lebewesen."),
+		    FAIL_WRONG_ARG);
+	
+        if(raus==this_player())
+	    return notify_fail("Noe.\n");
+
+	
+        this_player()->send_message(MT_NOISE, MA_EMOTE,
+	    wrap(Der(this_player())+" schnipst kurz mit den Fingern."),
+	    wrap("Du schnipst kurz mit den Fingern."), this_player());
+	    
+	if(find_call_out("schnips1") == -1 &&
+	   find_call_out("schnips2") == -1 &&
+	   find_call_out("schnips3") == -1 &&
+	   find_call_out("schon_weg")== -1)
+	    call_out("schnips1", 3, raus);
+        return 1;
+    }
+}
+
+nosave void schnips1(object raus)
+{
+    if(!raus || !this_player())
+	return;
+
+    this_player()->send_message_in(
+	touch(this_object()->query_one_exit(query_tuer_richtung())),
+        MT_NOTIFY,MA_MOVE_OUT,
+        wrap("Zwei Rathausangestellte naehern sich und verschwinden "
+         "durch die Tuer im "+capitalize(query_raum_richtung())+"."));
+	 
+    this_player()->send_message(MT_NOTIFY, MA_LOOK, 
+        wrap("Ploetzlich kommen zwei muskuloese Rathausangestellte durch die "
+        "Tuer und sehen "+den(this_player())+" fragend an."),
+	
+        wrap("Ploetzlich kommen zwei muskuloese Rathausangestellte durch die "
+         "Tuer und sehen dich fragend an."), this_player());
+	 
+    call_out("schnips2", 2, raus);
+}
+
+nosave void schnips2(object raus)
+{
+    if(!this_player())
+	call_out("schon_weg", 2, raus);
+    else if(!raus || !present(raus))
+    {
+        this_player()->send_message(MT_NOISE, MA_COMM,
+            wrap(Der(this_player())+" sagt: Oh, ich seh gerade, es hat sich "
+            "erledigt."),
+	    wrap("Du sagst: Oh, ich seh gerade, es hat sich erledigt."),
+	    this_player());		
+	
+        call_out("schon_weg",2,raus);
+    }
+    else
+    {
+        this_player()->send_message(MT_NOISE, MA_COMM,
+            wrap_say(Der(this_player())+" sagt:", Der(raus)+" moechte gehen."),
+            wrap_say("Du sagst:",Der(raus)+" moechte gehen."), this_player());
+
+        call_out("schnips3",3,raus);
+    }
+}
+
+nosave void schon_weg(object raus)
+{
+    if(!raus || !present(raus) || !this_player())
+    {
+        this_object()->send_message(MT_NOTIFY, MA_LOOK,
+            wrap("Die Angestellten nicken knapp und verlassen wieder "
+             "den Raum."));
+	
+	(this_object()->query_one_exit(query_tuer_richtung()))->send_message(
+            MT_NOTIFY,MA_MOVE_OUT,
+            wrap("Kurz darauf kommen die Angestellten wieder heraus und "
+             "entfernen sich."));
+    }
+    else
+    {
+        call_out("schnips3",3, raus);
+    }
+}
+
+nosave void schnips3(object raus)
+{
+    if(!raus || !present(raus))
+    {
+        this_object()->send_message(MT_NOTIFY, MA_LOOK,
+            wrap("Die Angestellten schauen verbluefft drein, zucken dann "
+             "aber mit ihren Schultern und gehen wieder."));
+	
+	(this_object()->query_one_exit(query_tuer_richtung()))->send_message(
+            MT_NOTIFY,MA_MOVE_OUT,
+	    wrap("Kurz darauf kommen die Angestellten wieder heraus und "
+             "entfernen sich."));
+    }
+    else
+    {
+        object tuer = present("SRTuer");
+
+	sys_log("SR_RAUSWURF", sprintf("%s | %10-s rauswurf %#Q\n",
+	    shorttimestr(time()),
+	    this_player() && this_player()->query_real_name(), 
+	    raus->query_real_name() || 
+		({raus, raus->query_name(), raus->query_short()})));
+
+        this_object()->send_message_to(raus, MT_NOTIFY, MA_MOVE_OUT,
+            wrap("Die Angestellten nicken knapp, packen dich an den Armen "
+             "und verlassen mit dir den Raum.\n\n"));
+	
+        if(tuer->query_door_is_open()==0)
+        {
+            tuer->open_door(0,1);
+            real_move(raus,
+                "Kurz darauf wird $der() von ihnen $dir() herangeschleift und "
+                "fallen gelassen. Daraufhin verschwinden beide wieder.");
+            tuer->close_door(0,1);
+        }
+        else
+        {
+	    real_move(raus,
+                "Kurz darauf wird $der() von ihnen $dir() herangeschleift und "
+                "fallen gelassen. Daraufhin verschwinden beide wieder.");
+        }
+	
+        this_object()->send_message(MT_NOTIFY, MA_MOVE_OUT,
+            wrap("Die Angestellten nicken knapp, packen "+den(raus)+" an den "
+            "Armen und verlassen mit "+ihm(raus)+" den Raum."));
+    }
+}
+
+string sr_tafel(mapping vitem, object betrachter)
+{
+    if(spielerratp(betrachter) || adminp(betrachter))
+        return "Auf dieser unscheinbaren Tafel scheinen Hinweise fuer dich "
+            "zu stehen, wie du hier kreativ Gaeste hinaus befoerden "
+            "kannst, welche sich unbeliebt gemacht haben.\n";
+    else
+        return "Hmmm... eine Tafel. Mit irgendeinem albernen Gekritzel "
+            "drauf.\n";
+}
+
+string sr_text(string parse_rest, string str, mapping vitem, object betrachter)
+{
+    if(spielerratp(betrachter) || adminp(betrachter))
+        return "Folgende Aktionen sind hier moeglich: \n"
+            "    - verweis[e] <jemanden>\n"
+            "    - schmeiss[e] <jemanden> raus|hinaus\n"
+            "    - pruegel <jemanden> raus|hinaus\n"
+            "    - zeig[e] <jemanden> die tuer\n"
+            "    - schnips[e] <jemanden>.\n";
+    else 
+        return "Dieses Gekrakel kannst du leider nicht entziffern.\n" ;
+}
+
+void create()
+{
+    this_object()->add_v_item(([
+        "name":     "tafel",
+        "gender":   "weiblich",
+        "id":     ({"tafel","hinweis","gekritzel","gekrakel"}),
+        "long":     #'sr_tafel,
+        "read":     #'sr_text ]));
+	
+     this_object()->add_controller("forbidden_spy_here",
+        (: 
+	    object tuer = present("SRTuer");
+	    return tuer && !tuer->query_door_is_open();
+	:));
+	
+    init_security_for_actions();
+}

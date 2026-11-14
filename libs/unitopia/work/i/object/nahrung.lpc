@@ -1,0 +1,1144 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/object/nahrung.c
+// Description: Nahrungsmittel
+// Modified:    Yellow (29.2.96) - Nahrung wird jetzt stueckchenweise gegessen
+//                               - Wird nur noch zerstoert, wenn TP nichtmehr
+//                                 anwesend
+//              Garthan (27.05.96) Ohne freie Hand geht's nicht
+//              Sissi (11.6.96):   set_start_chew_message, 
+//                                 set_other_start_chew_message
+//
+//		Zap (27.09 96) query_nahrung_messages()
+//		Freaky (11.03.1998) class_id + 'essen'
+//              Sissi (27.06.2000) query/set_vamp_nahrung()
+//
+// $Log: nahrung.c,v $
+// Revision 1.42  2016/03/21 12:36:38  gnomi
+// Korrektur beim Aufruf von notify("bite_self")
+//
+// Revision 1.41  2016/03/14 20:34:57  gnomi
+// notify_bite(_self) implementiert.
+//
+// Revision 1.40  2009-01-15 08:49:55  gnomi
+// query_failure_remove eingebaut.
+//
+// Revision 1.39  2008-04-02 08:15:24  gnomi
+// Die Meldungen via this_object()->query_* abfragen, damit sie ueberlagert
+// werden koennen.
+//
+// Revision 1.38  2008/01/16 09:19:28  gnomi
+// Auf neues Beschreibungssystem umgestellt. Amount von 0 zulassen.
+//
+// Revision 1.37  2007/12/05 10:54:15  gnomi
+// Teil der Doku (soweit vorhanden) ins Getraenk ruebergezogen.
+// Gewicht nimmt ab, wenn Nahrung aufgegessenwird.
+//
+// Revision 1.36  2006/02/21 21:28:25  gnomi
+// Call from destructed object...
+//
+// Revision 1.35  2005/05/06 22:59:54  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.34  2005/04/10 01:22:15  gnomi
+// Typo in Doku.
+//
+// Revision 1.33  2004/11/27 21:15:55  gnomi
+// add_hp-Aenderung: add_hp-Aufruf angepasst.
+//
+// Revision 1.32  2004/01/08 14:40:59  menaures
+// Heilung haeppchenweise
+//
+// Revision 1.31  2003/12/14 00:23:15  gnomi
+// Man kann nur eine Nahrung auf einmal essen...
+//
+// Revision 1.30  2003/12/08 17:29:55  gnomi
+// Linley: Auf das Message-System umgestellt.
+//
+// Revision 1.29  2003/09/20 12:11:43  freaky
+// FPs erst am Ende eines jeden Call-Outs addieren.
+//
+
+/*
+ * Standard-Nahrung.
+ * set_angeknabbert_adjektiv(string str)
+ * query_angeknabbert_adjektiv()
+ * set_start_chew_message (mixed str)
+ * set_other_start_chew_message (mixed str)
+ * set_success_message(mixed str)
+ * set_other_success_message(mixed str)
+ * set_failure_message(mixed str)
+ * set_other_failure_message(mixed str)
+ * set_chew_message(mixed str)
+ * set_other_chew_message(mixed str)
+ * set_healing(int i)
+ * set_amount(int a)
+ * set_dauer(int i)
+ * set_failure_remove(int a)
+ * set_angebrochen()
+ * query_healing()
+ * query_amount()
+ * query_dauer()
+ * query_angebrochen()
+ */
+
+// Die meisten Funktionen von nahrung sind in /i/object/getraenk dokumentiert,
+// da sie gleich lauten und auch meistens das selbe machen.
+
+virtual inherit "/i/item";
+virtual inherit "/i/move";
+virtual inherit "/i/value";
+
+#include <description.h>
+#include <deklin.h>
+#include <config.h>
+#include <object_stats.h>
+#include <apps.h>
+#include <notify_fail.h>
+#include <message.h>
+#include <misc.h>
+#include <add_hp.h>
+#include <error.h>
+
+#pragma save_types
+
+private int healing, amount, dauer, failure_remove, angebrochen;
+private int min_weight = 1, max_weight, max_amount;
+private int stufe = 15;
+private string angeknabbert;
+private closure start_chew_message, other_start_chew_message;
+private closure chew_message, other_chew_message;
+private closure failure_message, other_failure_message;
+private closure success_message, other_success_message;
+
+mixed *query_adjektiv()
+{
+  if (angebrochen && angeknabbert)
+    return ({angeknabbert})+::query_adjektiv();
+  return ::query_adjektiv();
+}
+
+protected mixed desc_condition(string name, mixed info, mixed* par)
+{
+    switch(name)
+    {
+	case T_ATOM_BITTEN_INTO:
+	    return angebrochen;
+
+	case T_ATOM_BEING_EATEN:
+	    return this_object()->query_eating();
+
+	case T_ATOM_BEING_EATEN_BY_VIEWER:
+	    return info[TI_VIEWER] == environment() &&
+		   this_object()->query_eating();
+    }
+
+    return ::desc_condition(name, info, par);
+}
+
+protected mixed desc_text(string name, mixed info, mixed* par)
+{
+    switch(name)
+    {
+	case T_ATOM_BITTEN_INTO_TEXT:
+	    return "Es hat schon jemand davon gegessen.";
+	
+	case T_ATOM_BEING_EATEN_TEXT:
+	    if(info[TI_VIEWER] == environment())
+		return "Du isst "+ihn()+" gerade.";
+	    else if(living(environment()))
+		return Der(environment())+
+		    plural(" isst "," essen ",environment())+
+		    ihn()+" gerade.";
+	    else
+		return Er()+plural(" wird "," werden ")+
+			"gerade gegessen.";
+	    break;
+    }
+
+    return desc_text(name, info, par);
+}
+
+protected string query_long_postprocess(string msg, mapping info)
+{
+    msg = ::query_long_postprocess(msg, info);
+    
+    if(angebrochen)
+    {
+	if(!this_object()->query_eating())
+	{
+	    if(!query_long_has_tag(T_ATOM_TAG_BITTEN_INTO_TEXT))
+		msg += wrap(desc_text(T_ATOM_BITTEN_INTO_TEXT, info, ({})));
+	}
+	else
+	{
+	    if(!query_long_has_tag(T_ATOM_TAG_BEING_EATEN_TEXT))
+		msg += wrap(desc_text(T_ATOM_BEING_EATEN_TEXT, info, ({})));
+	}
+    }
+
+    return msg;
+}
+
+/*
+FUNKTION: T_LISTE
+DEKLARATION: Liste der T-Defines fuer Nahrung
+BESCHREIBUNG:
+
+Vordefinierte Bedingungen:
+ - T_BITTEN_INTO	Es wurde schonmal davon abgebissen.
+ - T_BEING_EATEN	Es wird gerade gegessen.
+ - T_BEING_EATEN_BY_VIEWER	Der Betrachter isst es gerade.
+
+Vordefinierte Texte:
+ - T_BITTEN_INTO_TEXT	"Es hat schon jemand davon gegessen." oder so.
+ - T_BEING_EATEN_TEXT	"Werauchimmer isst es gerade." oder so.
+ 
+Hinweise fuer die Meldungsgeneration:
+ - T_HAS_BITTEN_INTO_TEXT	Keine eigene Meldung, ob es angeknabbert ist.
+ - T_HAS_BEING_EATEN_TEXT	Keine eigene Meldung, ob gerade gegessen wird.
+
+GRUPPEN: nahrung
+*/
+		    
+void create()
+{
+    set_name("brot");
+    set_gender("saechlich");
+    set_long("Ein Stueck Brot. Man kann es essen!\n");
+    set_id(({"brot","nahrung"}));
+    set_class_id(({"nahrung","essen"}));
+    set_material( ({"nahrung"}) );
+    set_value(10);
+    set_weight(1);
+}
+
+int query_sellable() { return 0; }
+
+void init() {
+    add_action("essen","esse");
+    add_action("essen","iss");
+    add_action("essen","mampfe",-5);
+    add_action("essen","speise",-5);
+    add_action("essen","verspeise",-8);
+    add_action("stoppe_essen", "stoppe", -4);
+}
+
+/*
+FUNKTION: query_nahrung_messages
+DEKLARATION: closure *query_nahrung_messages()
+BESCHREIBUNG:
+Liefert alle Closure-Eintraege der Nahrung als Array zurueck:
+    ({
+	success_message,
+	other_success_message,
+	failure_message,
+	other_failure_message,
+	chew_message,
+	other_chew_message,
+	start_chew_message,
+	other_start_chew_message
+    })
+Diese Meldungen koennen mit den korrespondierenden set_*_message-Funktionen
+gesetzt werden.
+VERWEISE: set_success_message, set_other_success_message,
+	  set_failure_message, set_other_failure_message,
+	  set_chew_message, set_other_chew_message,
+	  set_start_chew_message, set_other_start_chew_message
+GRUPPEN: nahrung
+*/
+closure *query_nahrung_messages() {
+    return ({
+        success_message,
+        other_success_message,
+        failure_message,
+        other_failure_message,
+        chew_message,
+        other_chew_message,
+        start_chew_message,
+        other_start_chew_message });
+}
+
+/*
+FUNKTION: set_angeknabbert_adjektiv
+DEKLARATION: void set_angeknabbert_adjektiv(string str)
+BESCHREIBUNG:
+  setzt dieses Adjektiv vor die anderen (falls vorhanden) Adjektive, wenn 
+  von dem Stueck Nahrung bereits etwas abgebissen wurde.
+VERWEISE: query_angeknabbert_adjektiv
+GRUPPEN: nahrung
+*/
+
+void set_angeknabbert_adjektiv(string str) { angeknabbert=str; }
+
+/*
+FUNKTION: query_angeknabbert_adjektiv
+DEKLARATION: string query_angeknabbert_adjektiv()
+BESCHREIBUNG:
+  gibt das Adjektiv zurueck, welches bei einem angekabberten Stueck Nahrung
+  gesetzt wurde.
+VERWEISE: set_angeknabbert_adjektiv
+GRUPPEN: nahrung
+*/
+
+string query_angeknabbert_adjektiv() { return angeknabbert; }
+
+void set_success_message(mixed str)
+{ 
+  success_message = mixed_to_closure(str);
+}
+
+/*
+FUNKTION: query_success_message
+DEKLARATION: closure query_success_message()
+BESCHREIBUNG:
+Liefert bei Nahrung die Meldung, die ein Spieler am Ende des Essens bekommt.
+Diese Meldung wird als Closure zurueckgeliefert, welche bei Aufruf den
+entsprechenden Text liefert.
+VERWEISE: set_other_start_chew_message, query_chew_message,
+          set_chew_message, set_other_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message,
+          set_dauer, set_failure_remove
+GRUPPEN: nahrung
+*/
+closure query_success_message()
+{
+  return success_message;
+}
+
+void set_other_success_message(mixed str)
+{
+  other_success_message = mixed_to_closure(convert_message(str));
+}
+
+/*
+FUNKTION: query_other_success_message
+DEKLARATION: closure query_other_success_message()
+BESCHREIBUNG:
+Liefert bei Nahrung die Meldung, die die anderen im Raum bekommen, wenn ein
+Spieler die Nahrung aufgegessen hat. Diese Meldung wird als Closure
+zurueckgeliefert, welche bei Aufruf den entsprechenden Text liefert.
+VERWEISE: set_other_start_chew_message, query_chew_message,
+          set_chew_message, set_other_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message,
+          set_dauer, set_failure_remove
+GRUPPEN: nahrung
+*/
+closure query_other_success_message()
+{
+  return other_success_message;
+}
+
+void set_failure_message(mixed str)
+{
+  failure_message = mixed_to_closure(str);
+}
+
+/*
+FUNKTION: query_failure_message
+DEKLARATION: closure query_failure_message(mixed failure_message)
+BESCHREIBUNG:
+Liefert bei Nahrung die Meldung, die ein Spieler bekommt, wenn er die Nahrung
+nicht mehr essen kann, weil er bereits satt ist. Diese Meldung wird als
+Closure zurueckgeliefert, welche bei Aufruf den entsprechenden Text liefert.
+VERWEISE: set_start_chew_message, set_other_start_chew_message,
+          query_start_chew_message, query_other_start_chew_message,
+          set_chew_message, set_other_chew_message,
+          query_chew_message, query_other_chew_message,
+          set_success_message, set_other_success_message,
+          query_success_message, query_other_success_message,
+          set_failure_message, set_other_failure_message,
+          query_failure_message, query_other_failure_message,
+          set_dauer, set_failure_remove
+GRUPPEN: nahrung
+*/
+closure query_failure_message()
+{
+  return failure_message;
+}
+
+void set_other_failure_message(mixed str)
+{
+  other_failure_message = mixed_to_closure(convert_message(str));
+}
+
+/*
+FUNKTION: query_other_failure_message
+DEKLARATION: closure query_other_failure_message()
+BESCHREIBUNG:
+Liefert bei Nahrung die Meldung, die die anderen im Raum bekommen, wenn ein
+Spieler die Nahrung nicht mehr essen kann, weil er bereits satt ist.
+Diese Meldung wird als Closure zurueckgeliefert, welche bei Aufruf den
+entsprechenden Text liefert.
+VERWEISE: set_start_chew_message, set_chew_message, set_other_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message,
+          query_failure_message, set_dauer, set_failure_remove
+GRUPPEN: nahrung
+*/
+closure query_other_failure_message()
+{
+  return other_failure_message;
+}
+
+/*
+FUNKTION: set_start_chew_message
+DEKLARATION: void set_start_chew_message(mixed chew_message)
+BESCHREIBUNG:
+Setzt bei Nahrung die Meldung, die ein Spieler beim Beginn des Essens bekommt.
+Pseudoclosures und Closures sind erlaubt. Die Meldung wird automatisch
+umgebrochen.
+VERWEISE: set_other_start_chew_message, query_start_chew_message,
+          set_chew_message, set_other_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message,
+	  set_dauer, set_failure_remove
+GRUPPEN: nahrung
+*/
+void set_start_chew_message(mixed str) {
+  start_chew_message = mixed_to_closure(str);
+}
+
+/*
+FUNKTION: query_start_chew_message
+DEKLARATION: closure query_start_chew_message()
+BESCHREIBUNG:
+Liefert den String, den ein Spieler beim Begin des Essens bekommt.
+Diese Meldung wird als Closure zurueckgeliefert, welche bei Aufruf den
+entsprechenden Text liefert.
+VERWEISE: set_other_start_chew_message, query_chew_message,
+          set_chew_message, set_other_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message,
+          set_dauer, set_failure_remove
+GRUPPEN: nahrung
+*/
+closure query_start_chew_message()
+{
+  return start_chew_message;
+}
+
+/*
+FUNKTION: set_other_start_chew_message
+DEKLARATION: void set_other_start_chew_message(mixed other_chew_message)
+BESCHREIBUNG:
+Setzt bei Nahrung die Meldung, die die anderen im Raum bekommen, wenn ein
+Spieler beginnt, die Nahrung zu essen. Pseudoclosures und Closures sind
+erlaubt. Die Meldung wird automatisch umgebrochen.
+VERWEISE: set_start_chew_message, query_other_start_chew_message,
+          set_chew_message, set_other_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message,
+	  set_dauer, set_failure_remove
+GRUPPEN: nahrung
+*/
+void set_other_start_chew_message(mixed str) { 
+  other_start_chew_message = mixed_to_closure(convert_message(str));
+}
+
+/*
+FUNKTION: query_other_start_chew_message
+DEKLARATION: closure query_other_start_chew_message()
+BESCHREIBUNG:
+Liefert bei Nahrung die Meldung, die die anderen im Raum bekommen, wenn ein
+Spieler beginnt, die nahrung zu essen. Diese Meldung wird als Closure
+zurueckgeliefert, welche bei Aufruf den entsprechenden Text liefert.
+VERWEISE: set_start_chew_message, set_chew_message, set_other_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message,
+          set_dauer, set_failure_remove, query_start_chew_message,
+          query_chew_message, query_other_chew_message
+GRUPPEN: nahrung
+*/
+closure query_other_start_chew_message()
+{
+  return other_start_chew_message;
+}
+
+/*
+FUNKTION: set_chew_message
+DEKLARATION: void set_chew_message(mixed chew_message)
+BESCHREIBUNG:
+Setzt bei Nahrung die Meldung, die ein Spieler beim Kauen bekommt.
+Pseudoclosures und Closures sind erlaubt. Die Meldung wird automatisch
+umgebrochen.
+VERWEISE: set_other_chew_message, query_chew_message,
+          set_dauer, set_failure_remove,
+          set_start_chew_message, set_other_start_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message
+GRUPPEN: nahrung
+*/
+void set_chew_message(mixed str) {
+  chew_message = mixed_to_closure(str);
+}
+
+/*
+FUNKTION: query_chew_message
+DEKLARATION: closure query_chew_message()
+BESCHREIBUNG:
+Liefert bei Nahrung die Meldung, die Spieler beim Kauen bekommt.
+Diese Meldung wird als Closure zurueckgeliefert, welche bei Aufruf den
+entsprechenden Text liefert.
+VERWEISE: set_chew_message, set_other_chew_message, set_dauer,
+          set_failure_remove, set_start_chew_message,
+          set_other_start_chew_message, set_success_message,
+          set_other_success_message, set_failure_message,
+          set_other_failure_message, query_start_chew_message
+GRUPPEN: nahrung
+*/
+closure query_chew_message()
+{
+  return chew_message;
+}
+
+/*
+FUNKTION: set_other_chew_message
+DEKLARATION: void set_other_chew_message(mixed other_chew_message)
+BESCHREIBUNG:
+Setzt bei Nahrung die Meldung, die die anderen im Raum bekommen, wenn ein
+Spieler kaut. Pseudoclosures und Closures sind erlaubt. Die Meldung wird
+automatisch umgebrochen.
+VERWEISE: set_chew_message, query_other_chew_message,
+          set_dauer, set_failure_remove,
+          set_start_chew_message, set_other_start_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message
+GRUPPEN: nahrung
+*/
+void set_other_chew_message(mixed str) { 
+  other_chew_message = mixed_to_closure(convert_message(str));
+}
+
+/*
+FUNKTION: query_other_chew_message
+DEKLARATION: closure query_other_chew_message()
+BESCHREIBUNG:
+Liefert bei Nahrung die Meldung, die die anderen im Raum bekommen, wenn ein
+Spieler kaut. Diese Meldung wird als Closure zurueckgeliefert, welche bei
+Aufruf den entsprechenden Text liefert.
+VERWEISE: set_chew_message, set_dauer, set_failure_remove,
+          set_start_chew_message, set_other_start_chew_message,
+          set_success_message, set_other_success_message,
+          set_failure_message, set_other_failure_message
+GRUPPEN: nahrung
+*/
+closure query_other_chew_message()
+{
+  return other_chew_message;
+}
+
+void set_healing(int i) { healing = i; }
+void set_amount(int a)
+{
+    amount = a;
+    max_amount = amount;
+    max_weight = query_weight();
+}
+
+/*
+FUNKTION: set_dauer
+DEKLARATION: void set_dauer(int dauer)
+BESCHREIBUNG:
+Setzt bei Nahrung die Zeit, die man zum Essen braucht. Waehrend dieser Zeit
+bekommt der Spieler alle 15 Sekunden die chew_message, die anderen im Raum die
+other_chew_message zu hoeren. Bei dauer=0 wird keine start_message beim Essen
+ausgegeben, sondern gleich die success_message.
+VERWEISE: query_dauer, set_chew_message, set_other_chew_message,
+          set_healing, query_healing, set_amount, query_amount
+GRUPPEN: nahrung
+*/
+void set_dauer(int i) { dauer = (!i) ? 0 : i < stufe ? stufe+1 : i; }
+
+int query_healing() { return healing; }
+int query_amount() { return amount; }
+
+/*
+FUNKTION: query_dauer
+DEKLARATION: int query_dauer()
+BESCHREIBUNG:
+Liefert bei einer Speise zurueck, wielange man zum Essen braucht.
+VERWEISE: set_dauer, set_healing, query_healing, set_amount, query_amount
+GRUPPEN: nahrung
+*/
+int query_dauer() { return dauer; }
+
+void set_min_weight(int mw) { min_weight = mw; }
+int query_min_weight() { return min_weight; }
+
+void set_max_weight(int mw)
+{
+    ::set_weight(mw);
+    max_weight = mw;
+
+    if(!amount && max_amount)
+	// max_weight bei amount=0 zu setzen ergibt keinen Sinn.
+	do_warning3("set_max_weight("+mw+") waehrend amount=0\n", __FILE__, object_name(), __LINE__,
+	    ({"Root:Nahrung","gnomi"}));
+
+    max_amount = amount;
+}
+
+int query_max_weight() { return max_weight; }
+
+int set_weight(int w)
+{
+    ::set_weight(w);
+    max_weight = w;
+
+    if(!amount && max_amount)
+	min_weight = w;
+
+    max_amount =  amount;
+    
+}
+
+void set_failure_remove(int a) { failure_remove = a ? 1 : 0; }
+
+int query_failure_remove() { return failure_remove; }
+
+protected void heal_self(int heal_amount)
+{
+    int hp_get, sp_get;
+
+    if (heal_amount < 0)
+    {
+	int hp_available = this_player()->query_hp();
+	if(heal_amount+hp_available < 0)
+	{
+	    hp_get = -hp_available;
+	    sp_get = heal_amount + hp_available;
+	}
+	else
+	{
+	    hp_get = heal_amount;
+	    sp_get = 0;
+	}
+    }
+    else
+    {
+	int hp_needed = this_player()->query_max_hp() - this_player()->query_hp();
+	if (heal_amount > hp_needed)
+	{
+    	    hp_get = hp_needed;
+    	    sp_get = heal_amount - hp_needed;
+	}
+	else
+	{
+    	    hp_get = heal_amount;
+    	    sp_get = 0;
+	}
+    }
+    if (hp_get)
+	this_player()->add_hp(hp_get, ([ AH_HEAL_TYPE: AH_HEAL_MEDIC ]));
+    if (sp_get)
+	this_player()->add_sp(sp_get);
+}
+
+
+void failure()
+{
+    mixed tmp;
+    
+    if (tmp=this_object()->query_failure_message())
+	TP->send_message_to(TP, MT_NOTIFY, MA_EAT,
+	  wrap(closure_to_string(tmp)));
+    else
+	TP->send_message_to(TP, MT_NOTIFY, MA_EAT,
+	  wrap("Du kriegst "+deinen()+" einfach nicht mehr runter."));
+
+    if (tmp=this_object()->query_other_failure_message())
+	TP->send_message(MT_LOOK, MA_EAT,
+	  wrap(closure_to_string(tmp)));
+    else
+	TP->send_message(MT_LOOK, MA_EAT,
+	  wrap(Der(OBJ_TP)+" muemmelt an "+seinem()+"."));
+
+    this_player()->notify("eat_failure",this_object());
+    notify("eat_failure_self",this_player());
+
+    if (failure_remove)
+	remove();
+}
+
+void success()
+{
+    mixed tmp;
+    
+    // Monty (03.12 96): 
+    // Angeknabbert auf 0, damit das adjektiv nicht mehr kommt.
+    // Vorschlag von Jafar
+
+    angeknabbert=0;
+    if (tmp=this_object()->query_success_message())
+	TP->send_message_to(TP, MT_NOTIFY|MT_TASTE, MA_EAT,
+	  wrap(closure_to_string(tmp)));
+    else
+	TP->send_message_to(TP, MT_NOTIFY|MT_TASTE, MA_EAT,
+	    wrap(Dein()+plural(" hat"," haben")+" gut geschmeckt."));
+
+    if (tmp=this_object()->query_other_success_message())
+	TP->send_message(MT_LOOK, MA_EAT,
+	  wrap(closure_to_string(tmp)));
+    else
+	TP->send_message(MT_LOOK, MA_EAT,
+	  wrap(Der(OBJ_TP)+" vertilgt den letzten Happen "+seines()+"."));
+
+    this_player()->add_fp(amount);
+    // hier wird der rest an futterpunkten zugegeben
+    if (healing)
+	heal_self(healing);
+
+    this_player()->notify("eaten",this_object());
+    notify("eaten_self",this_player());
+    remove();
+}
+
+#ifdef UNItopia
+
+/*
+FUNKTION: query_vamp_nahrung
+DEKLARATION: int query_vamp_nahrung()
+BESCHREIBUNG:
+Liefert, ob die Nahrung fuer Mitglieder der Vampyrgilde geniessbar ist.
+Werte > 0: Fuer Vampyre und normale Spieler essbar,
+Wert == 0: Nur fuer normale Spieler essbar,
+Werte < 0: Nur fuer Vampyre essbar.
+VERWEISE: set_vamp_nahrung
+GRUPPEN: nahrung
+*/
+/*
+FUNKTION: set_vamp_nahrung
+DEKLARATION: void set_vamp_nahrung(int)
+BESCHREIBUNG:
+Setzt, ob eine Nahrung fuer Vampyre essbar ist.
+Werte > 0: Fuer Vampyre und normale Spieler essbar,
+Wert == 0: Nur fuer normale Spieler essbar,
+Werte < 0: Nur fuer Vampyre essbar.
+VERWEISE: query_vamp_nahrung
+GRUPPEN: nahrung
+*/
+
+
+
+int ist_vamp_nahrung;
+
+int query_vamp_nahrung () { return ist_vamp_nahrung; }
+void set_vamp_nahrung (int v) { ist_vamp_nahrung = v; }
+
+#endif
+
+/*
+FUNKTION: query_eating
+DEKLARATION: int query_eating()
+BESCHREIBUNG:
+Liefert 1, wenn die Umgebung gerade diese Nahrung isst.
+VERWEISE: stop_eating, query_nahrung
+GRUPPEN: nahrung
+*/
+int query_eating()
+{
+    return find_call_out("weiter_essen") != -1 && living(environment());
+}
+
+/*
+FUNKTION: stop_eating
+DEKLARATION: int stop_eating()
+BESCHREIBUNG:
+Damit hoert das Lebewesen, welche diese Nahrung besitzt, auf, diese
+Nahrung zu essen. Die Funktion liefert 1, falls das Lebewesen gerade
+dabei war, diese Nahrung zu essen.
+VERWEISE: query_eating, query_nahrung
+GRUPPEN: nahrung
+*/
+int stop_eating()
+{
+    return remove_call_out("weiter_essen")>=0;
+}
+
+int weiter_essen(int fps, int mk_notify_eat)
+{
+    int bite, partheal;
+
+    if (!this_player() || environment() != this_player() ||
+	this_player()->free_hand() < 0 || 
+	(playerp(this_player()) && !interactive(this_player())))
+    {
+	// weggelegt oder Hand anderweitig benutzt.
+	return 0;
+    }
+    bite = amount * stufe / (dauer + stufe);
+    if (this_player()->has_enough_fp(bite))
+    {
+	failure();
+	return 0;
+    }
+    // Immer am Ende die FPs addieren, nicht am Anfang des call-outs,
+    // da sonst geht: esse xx, stoppe essen, esse xx, ...
+    if (fps)
+    {
+	this_player()->add_fp(fps);
+        
+        if(healing)
+        {
+            partheal = sgn(healing) * random(abs(healing) / 2);
+            healing -= partheal;
+            heal_self(partheal);
+        }
+    }
+
+    if (dauer && ((amount<0)?(amount<=bite):(amount>=bite)))
+    {
+	mixed tmp;
+	
+        amount -= bite;
+	dauer = max(dauer-stufe,0);
+	
+	if (angebrochen)
+	{
+	   if(tmp=this_object()->query_chew_message())
+	      TP->send_message_to(TP,MT_NOTIFY|MT_TASTE, MA_EAT,
+	        wrap(closure_to_string(tmp)));
+	   else
+	      TP->send_message_to(TP,MT_NOTIFY|MT_TASTE, MA_EAT,
+	        wrap("Du kaust an "+deinem()+"."));
+	   if(tmp=this_object()->query_other_chew_message())
+	      TP->send_message(MT_LOOK, MA_EAT,
+	       wrap(closure_to_string(tmp)));
+	   else
+	      TP->send_message(MT_LOOK, MA_EAT,
+	       wrap(Der(OBJ_TP)+" kaut an "+seinem()+"."));
+	}
+	else
+	{
+           if (tmp=this_object()->query_start_chew_message())
+	      TP->send_message_to(TP, MT_NOTIFY|MT_TASTE, MA_EAT,
+	        wrap(closure_to_string(tmp)));
+           else
+	      TP->send_message_to(TP, MT_NOTIFY|MT_TASTE, MA_EAT,
+	        wrap("Du faengst an, "+deinen()+" zu essen."));
+           if (tmp=this_object()->query_other_start_chew_message())
+	      TP->send_message(MT_LOOK, MA_EAT,
+	        wrap(closure_to_string(tmp)));
+           else
+	      TP->send_message(MT_LOOK, MA_EAT,
+	        wrap(Der(OBJ_TP)+" beginnt, "+seinen()+" zu essen."));
+           angebrochen = 1;
+	   
+	}
+
+        if(mk_notify_eat)
+        {
+	    this_player()->notify("eat",this_object());
+	    notify("eat_self", this_player());
+	}
+
+        this_player()->notify("bite",this_object(), bite);
+        notify("bite_self", this_player(), bite);
+
+	call_out("weiter_essen",stufe,bite,0);
+	
+	if(max_amount)
+	    ::set_weight((max_weight-min_weight)*amount/max_amount+min_weight);
+    }
+    else
+    {
+        if(mk_notify_eat)
+        {
+	    this_player()->notify("eat",this_object());
+	    notify("eat_self", this_player());
+	}
+
+        this_player()->notify("bite",this_object(), bite);
+        notify("bite_self", this_player(), bite);
+
+	success();
+    }
+    return 1;
+}
+
+int essen(string str) {
+    object ob;
+
+    if (!me(str)) {
+        notify_fail("Iss was?\n", FAIL_NOT_OBJ);
+        return 0;
+	}
+#ifdef UNItopia
+    if (query_vamp_nahrung() < 0) {
+        if (this_player()->query_gilde() != "Vampyrgilde") {
+            notify_fail (wrap ("Waah! Igitt! Was ist denn das ekliges? "
+                "Sowas widerliches kann man doch gar nicht essen, "
+                "pfui Spinne! Beim Gedanken, "
+                +den(this_object())+" aufzufuttern, wird dir "
+                "richtig uebel."),FAIL_INTERNAL);
+            return 0;
+        }
+    } else if (!query_vamp_nahrung()) {
+        if (this_player()->query_gilde() == "Vampyrgilde") {
+            notify_fail (wrap ("Als Vampyr verabscheust du natuerlich "
+            +den(this_object())+". Vampyre moegen nur Blut!"),
+            FAIL_INTERNAL);
+            return 0;
+        }
+    }
+#endif
+    if (this_player()->free_hand() < 0) {
+        notify_fail("Ohne eine freie Hand ist das nicht moeglich.\n",FAIL_INTERNAL);
+        return 0;
+        }
+    if (environment() != this_player()) {
+	notify_fail("Du musst "+den()+" erst nehmen.\n", FAIL_INTERNAL);
+	return 0;
+	}
+    if (query_eating()) {
+	notify_fail("Du isst doch bereits "+deinen()+".\n", FAIL_INTERNAL);
+	return 0;
+	}
+    if (ob=cond_present(0,this_player(),"query_eating"))
+	return notify_fail(wrap("Du isst doch bereits "+einen(ob)+"."),FAIL_INTERNAL);
+    if (this_player()->forbidden("eat", this_object()) ||
+        forbidden("eat_self", this_player()))
+        return 1;
+    if(!weiter_essen(0,1))
+	return 1;
+    return 1;
+}
+
+int stoppe_essen(string str)
+{
+    if(!str || (!me(str) && lower_case(str)!="essen"))
+	return notify_fail("Stoppe was?\n", FAIL_NOT_OBJ);
+    if(remove_call_out("weiter_essen")<0)
+	return notify_fail("Du isst doch gerade gar nichts.\n", FAIL_WRONG_ARG);
+    this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+	"Ok.\n");
+    return 1;
+}
+
+void just_moved()
+{
+    remove_call_out("weiter_essen");
+}
+
+/*
+FUNKTION: query_nahrung
+DEKLARATION: int query_nahrung()
+BESCHREIBUNG:
+Liefert bei Nahrung 1 zurueck
+VERWEISE: query_getraenk
+GRUPPEN: nahrung
+*/
+int query_nahrung() { return 1; }
+
+void set_angebrochen(int haps) { angebrochen = haps; }
+
+int query_angebrochen() { return angebrochen; }
+
+string forbidden_steal()
+{
+    if (query_eating())
+	return wrap(Der(environment()) + " isst gerade " + seinen() + ".");
+}
+
+#ifdef LOG_OBJECT_STATS
+void log_object_stats()
+{
+   OBJECT_STATS->add_object_stats(OS_NAHRUNG, this_object(),
+      ({
+         query_name(),
+         query_weight(),
+         query_value(),
+         query_amount(),
+         query_dauer(),
+         query_healing(),
+      }));
+}
+#endif
+
+/*
+FUNKTION: notify_eaten
+DEKLARATION: void notify_eaten(object nahrung, object who)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who die Nahrung nahrung gegessen hat,
+wird who->notify("eaten", nahrung) aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller("notify_eaten",
+other) angemeldeten Objekten other die Funktionen other->notify_eaten(nahrung,
+who) auf. Sowohl who als auch other haben dann eine Moeglichkeit, auf den
+Genuss der Nahrung nahrung durch das Lebewesen who zu reagieren.
+VERWEISE: forbidden, notify, notify_eaten_self, notify_eat, notify_eat_self,
+          forbidden_eat, forbidden_eat_self
+GRUPPEN: nahrung
+*/
+
+/*
+FUNKTION: notify_eaten_self
+DEKLARATION: void notify_eaten_self(object who, object nahrung)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who die Nahrung nahrung gegessen hat,
+wird nahrung->notify("eaten_self", who) aufgerufen.
+
+Die Funktion notify ruft in allen mit nahrung->add_controller(
+"notify_eaten_self", other) angemeldeten Objekten other die Funktionen
+other->notify_eaten_self(who, nahrung) auf. Sowohl nahrung als auch other
+haben dann eine Moeglichkeit, auf den Genuss der Nahrung nahrung durch das
+Lebewesen who zu reagieren.
+VERWEISE: forbidden, notify, notify_eaten, notify_eat, notify_eat_self,
+          forbidden_eat, forbidden_eat_self
+GRUPPEN: nahrung
+*/
+
+/*
+FUNKTION: notify_eat_failure
+DEKLARATION: void notify_eat_failure(object nahrung, object who)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who die Nahrung nahrung nicht essen konnte, weil
+er bereits satt war, wird who->notify("eat_failure", nahrung) aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller("notify_eat_failure",
+other) angemeldeten Objekten other die Funktionen other->notify_eat_failure(
+nahrung, who) auf. Sowohl who als auch other haben dann eine Moeglichkeit,
+darauf zu reagieren.
+VERWEISE: forbidden, notify, notify_eat_failure_self, notify_eaten,
+          notify_eaten_self, notify_eat, notify_eat_self,
+          forbidden_eat, forbidden_eat_self
+GRUPPEN: nahrung
+*/
+
+/*
+FUNKTION: notify_eat_failure_self
+DEKLARATION: void notify_eat_failure_self(object who, object nahrung)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who die Nahrung nahrung nicht essen konnte, weil
+er bereits satt war, wird nahrung->notify("eat_failure_self", nahrung)
+aufgerufen.
+
+Die Funktion notify ruft in allen mit nahrung->add_controller(
+"notify_eat_failure_self", other) angemeldeten Objekten other die Funktionen
+other->notify_eat_failure_self(who, nahrung) auf. Sowohl nahrung als auch
+other haben dann eine Moeglichkeit, darauf zu reagieren.
+VERWEISE: forbidden, notify, notify_eat_failure, notify_eaten,
+          notify_eaten_self, notify_eat, notify_eat_self,
+          forbidden_eat, forbidden_eat_self
+GRUPPEN: nahrung
+*/
+
+/*
+FUNKTION: notify_eat
+DEKLARATION: void notify_eat(object nahrung, object who)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who begonnen hat, die Nahrung nahrung zu essen,
+wird who->notify("eat", nahrung) aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller("notify_eat",
+other) angemeldeten Objekten other die Funktionen other->notify_eat(nahrung,
+who) auf. Sowohl who als auch other haben dann eine Moeglichkeit, auf den
+Genuss der Nahrung nahrung durch das Lebewesen who zu reagieren.
+VERWEISE: forbidden, notify, notify_eat, notify_eat_self,
+          forbidden_eat, forbidden_eat_self
+GRUPPEN: nahrung
+*/
+
+/*
+FUNKTION: notify_eat_self
+DEKLARATION: void notify_eat_self(object who, object nahrung)
+BESCHREIBUNG:
+Nachdem ein Lebewesen who begonnen hat, die Nahrung nahrung zu essen,
+wird nahrung->notify("eat_self", who) aufgerufen.
+
+Die Funktion notify ruft in allen mit nahrung->add_controller(
+"notify_eat_self", other) angemeldeten Objekten other die Funktionen
+other->notify_eat_self(who, nahrung) auf. Sowohl nahrung als auch other haben
+dann eine Moeglichkeit, auf den Genuss der Nahrung nahrung durch das
+Lebewesen who zu reagieren.
+VERWEISE: forbidden, notify, notify_eat, notify_eat_self,
+          forbidden_eat, forbidden_eat_self
+GRUPPEN: nahrung
+*/
+
+/*
+FUNKTION: notify_bite
+DEKLARATION: void notify_bite(object nahrung, int amount, object who)
+BESCHREIBUNG:
+Wenn ein Lebewesen who ein Stueckchen amount von der Nahrung nahrung
+abbeisst, wird who->notify("bite", nahrung, amount) aufgerufen.
+
+Die Funktion notify ruft in allen mit who->add_controller("notify_bite",
+other) angemeldeten Objekten other die Funktionen other->notify_bite(nahrung,
+amount, who) auf. Sowohl who als auch other haben dann eine Moeglichkeit,
+auf den Genuss der Nahrung nahrung durch das Lebewesen who zu reagieren.
+VERWEISE: forbidden, notify, notify_bite, notify_bite_self,
+          notify_eat, notify_eat_self, forbidden_eat, forbidden_eat_self
+GRUPPEN: nahrung
+*/
+
+/*
+FUNKTION: notify_bite_self
+DEKLARATION: void notify_bite_self(object who, int amount, object nahrung)
+BESCHREIBUNG:
+Wenn ein Lebewesen who ein Stueckchen amount von der Nahrung nahrung
+abbeisst, wird who->notify("bite_self", who, amount) aufgerufen.
+
+Die Funktion notify ruft in allen mit nahrung->add_controller(
+"notify_bite_self", other) angemeldeten Objekten other die Funktionen
+other->notify_bite_self(who, amount, nahrung) auf. Sowohl nahrung als auch
+other haben dann eine Moeglichkeit, auf den Genuss der Nahrung nahrung
+durch das Lebewesen who zu reagieren.
+VERWEISE: forbidden, notify, notify_bite, notify_bite_self,
+          notify_eat, notify_eat_self, forbidden_eat, forbidden_eat_self
+GRUPPEN: nahrung
+*/
+
+/*
+FUNKTION: forbidden_eat
+DEKLARATION: int forbidden_eat(object nahrung, object who)
+BESCHREIBUNG:
+Bevor ein Lebewesen who die Nahrung nahrung essen darf, wird who->forbidden(
+"eat", nahrung) aufgerufen, liefert dieser Aufruf einen Wert ungleich 0
+zurueck, wird nahrung nicht gegessen.
+
+Die Funktion forbidden ruft in allen mit who->add_controller("forbidden_eat",
+other) angemeldeten Objekten other die Funktionen other->forbidden_eat(
+nahrung, who) auf. Liefert auch nur eine dieser Funktionen einen Wert
+ungleich 0, dann returnt forbidden diesen und das Objekt nahrung kann nicht
+gegessen werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who und ggf. an den Raum muss
+der Programmierer in forbidden_eat oder forbidden, falls er diese Funktion
+ueberlagern will, sorgen.
+VERWEISE: forbidden, notify, forbidden_eat_self, notify_eat, notify_eat_self
+GRUPPEN: nahrung
+*/
+
+/*
+FUNKTION: forbidden_eat_self
+DEKLARATION: int forbidden_eat_self(object who, object nahrung)
+BESCHREIBUNG:
+Bevor ein Lebewesen who die Nahrung nahrung essen darf, wird
+nahrung->forbidden("eat_self", who) aufgerufen, liefert dieser Aufruf
+einen Wert ungleich 0 zurueck, wird nahrung nicht gegessen.
+
+Die Funktion forbidden ruft in allen mit who->add_controller(
+"forbidden_eat_self", other) angemeldeten Objekten other die Funktionen
+other->forbidden_eat_self(who, nahrung) auf. Liefert auch nur eine dieser
+Funktionen einen Wert ungleich 0, dann returnt forbidden diesen und das
+Objekt nahrung kann nicht gegessen werden.
+
+Fuer die Ausgabe einer Meldung an das Lebewesen who und ggf. an den Raum muss
+der Programmierer in forbidden_eat_self oder forbidden, falls er diese
+Funktion ueberlagern will, sorgen.
+VERWEISE: forbidden, notify, forbidden_eat, notify_eat, notify_eat_self
+GRUPPEN: nahrung
+*/
+
+// Fuer den Zauberstab:
+string query_info()
+{
+    return sprintf("Menge:      %d FPs\n"
+                   "Dauer:      %d sek (%d sek pro Biss)\n"
+                   "Heilung:    %d APs",
+	query_amount(), query_dauer(), stufe, query_healing());
+}

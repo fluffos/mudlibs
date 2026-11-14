@@ -1,0 +1,835 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/weapon/schuss_waffe.c
+// Description:
+// Modified by: Garthan (11.03.96) Akzeptiert jetzt auch count_obs
+// 		Zap (27.09 96) query_koecher_id, query_pfeil_id,
+//			query_schuss_messages
+//              Kurdel (25.04.97) Nachgeladen wird nicht nur aus dem 1. Koecher
+//		Freaky (10.03.1998) message auf send_message umgebaut.
+//              Sissi  (10.05.1999) Opfer muss beim Schuss beim Taeter stehen.
+//
+// $Log: schuss_waffe.c,v $
+// Revision 1.24  2015/09/21 16:54:05  myonara
+// bugfix in default ohne koecher_id korrigiert.
+//
+// Revision 1.23  2015/07/28 17:20:53  myonara
+// Neue Waffenlogik MONSTER_SCHIESSEN_IM_HEARTBEAT
+//
+// Revision 1.22  2013/12/15 17:16:10  myonara
+// Bugfix zum 04.12.2013: this_object UND owner muessen geprueft werden.
+//
+// Revision 1.21  2013/12/15 06:20:38  myonara
+// current_pfeil_id wird von living/hands uebernommen,
+// um ein korrektes HAndling mit special-ids zu gewaehrleisten.
+//
+// Revision 1.20  2013/12/14 16:54:08  myonara
+// Ueberarbeitung: tell_objects, tabs, wraps, Doku.
+//
+// Revision 1.19  2013/12/07 10:27:33  sorcerer
+// ein paar wraps
+//
+// Revision 1.18  2013/12/04 20:22:09  myonara
+// pfeil present owner statt this_object. fiel nur auf ohne koecher_id?
+//
+// Revision 1.17  2012-10-15 19:47:21  sorcerer
+// Nur in jedem 10. Versuch lernen
+//
+// Revision 1.16  2010-12-11 19:59:20  sorcerer
+// Arrays an grenze=40 im init_weapon angepasst
+//
+// Revision 1.15  2005/05/26 01:35:34  gnomi
+// query_damage_type() via call_other abfragen, um Shadows zu ermoeglichen.
+//
+// Revision 1.14  2005/05/26 01:02:48  gnomi
+// damage_type des Pfeils beachten und ggf. Vorrang geben.
+//
+// Revision 1.13  2005/05/06 22:59:55  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.12  2005/01/05 21:49:21  gnomi
+// Typo.
+//
+// Revision 1.11  2004/11/27 21:25:21  gnomi
+// add_hp-Aenderung: add_hp-Aufrufe angepasst.
+//
+// Revision 1.10  2003/01/26 03:54:11  gnomi
+// Schussmeldungen sind MA_FIGHT und nicht MA_EMOTE.
+//
+// Revision 1.9  2002/11/20 04:07:40  gnomi
+// query_learning_type ausgebaut.
+//
+// Revision 1.8  2002/07/27 01:50:14  gnomi
+// Besseres Traglasthandling.
+//
+// Revision 1.7  2002/02/23 05:19:22  gnomi
+// Letzte Aenderung zu Ende gefuehrt.
+//
+// Revision 1.6  2002/02/16 07:35:20  gnomi
+// An geaendertes Life-Handling der Geschosse angepasst.
+//
+// Revision 1.5  2002/01/01 18:38:00  sissi
+// Pulami: init_weapon eingebaut
+//
+// Revision 1.4  2001/06/25 11:48:34  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.3  2001/05/27 21:21:59  sissi
+// Learning Types Handling geaendert.
+// Jede Waffe weiss jetzt selber, was sie ist, und vergibt selber ihre Skills.
+//
+// Revision 1.2  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+inherit "/i/weapon/weapon_logic";
+inherit "/i/contain";
+
+#include <error.h>
+#include <move.h>
+#include <config.h>
+#include <add_hp.h>
+#include <message.h>
+#ifdef MONSTER_SCHIESSEN_IM_HEARTBEAT
+#include <attack.h>
+#endif
+#include <misc.h>
+//#define DEBUGGER "myonara"
+#include <debug.h>
+
+
+#define PENETRATE 6
+#define CTS closure_to_string
+#define MTC mixed_to_closure
+#define CM convert_message
+#define CONSERVATION_HANDLE_XYZ(s,x) \
+    if (stringp(x) || !x) \
+        this_object()->add_setter_conservation((s),({x})); \
+    else \
+        this_object()->set_conservation_constraint((s),1);
+
+
+private string koecher_id, pfeil_id, current_pfeil_id;
+private int destroy_pfeil;
+private int reload_time = 1;
+private string reload_message = "Jetzt musst du erst mal kurz nachladen.";
+closure no_arrow_message, owner_message, enemy_message, others_message;
+
+/*
+FUNKTION: set_current_pfeil_id
+DEKLARATION: void set_current_pfeil_id(string str)
+BESCHREIBUNG:
+Wird von living/hands gestetzt, um spezifische Pfeile zu addressien.
+VERWEISE: query_current_pfeil_id
+GRUPPEN: waffen
+*/
+void set_current_pfeil_id(string str)
+{
+    current_pfeil_id = str;
+    this_object()->add_setter_conservation("set_current_pfeil_id",({str}));
+}
+
+/*
+FUNKTION: query_current_pfeil_id
+DEKLARATION: string query_current_pfeil_id()
+BESCHREIBUNG:
+Wird von living/hands gestetzt, um spezifische Pfeile zu addressien.
+VERWEISE: query_current_pfeil_id
+GRUPPEN: waffen
+*/
+string query_current_pfeil_id() { return current_pfeil_id; }
+
+/*
+FUNKTION: set_reload_message
+DEKLARATION: void set_reload_message(string str)
+BESCHREIBUNG:
+Setzt die Meldung, wenn man beim Nachladen ist.
+Default ist "Jetzt musst du erst mal kurz nachladen."
+VERWEISE: set_reload_time
+GRUPPEN: waffen
+*/
+void set_reload_message(string str)
+{
+    reload_message = str;
+    this_object()->add_setter_conservation("set_reload_message",({str}));
+}
+
+/*
+FUNKTION: query_reload_message
+DEKLARATION: string query_reload_message()
+BESCHREIBUNG:
+Gibt die Meldung zurueck, wenn man beim Nachladen ist.
+Default ist "Jetzt musst du erst mal kurz nachladen."
+VERWEISE: set_reload_message
+GRUPPEN: waffen
+*/
+string query_reload_message() { return  reload_message; }
+
+/*
+FUNKTION: set_reload_time
+DEKLARATION: void set_reload_time(int i)
+BESCHREIBUNG:
+Setzt die Zeit fuers Nachladen. Default ist 1;
+VERWEISE: set_reload_message, query_reload_time
+GRUPPEN: waffen
+*/
+void set_reload_time(int i)
+{
+    reload_time = i;
+    this_object()->add_setter_conservation("set_reload_time",({i}));
+}
+
+/*
+FUNKTION: query_reload_time
+DEKLARATION: int query_reload_time()
+BESCHREIBUNG:
+Gibt die Zeit fuers Nachladen.
+VERWEISE: set_reload_message, set_reload_time
+GRUPPEN: waffen
+*/
+int query_reload_time() { return reload_time; }
+
+/*
+FUNKTION: query_koecher_id
+DEKLARATION: string query_koecher_id()
+BESCHREIBUNG:
+Liefert die Id des zugehoerigen Koechers zurueck, falls vorhanden.
+VERWEISE: set_koecher_id, set_pfeil_id, query_pfeil_id
+GRUPPEN: waffen
+*/
+string query_koecher_id() { return koecher_id; }
+
+/*
+FUNKTION: query_pfeil_id
+DEKLARATION: string query_pfeil_id()                 
+BESCHREIBUNG:
+Liefert die Id des Pfeils zurueck, falls vorhanden.
+VERWEISE: set_pfeil_id, set_koecher_id, query_koecher_id
+GRUPPEN: waffen
+*/
+string query_pfeil_id() { return pfeil_id; }
+
+/*
+FUNKTION: query_schuss_messages
+DEKLARATION: closure *query_schuss_messages()
+BESCHREIBUNG:
+Liefert alle Closure-Eintraege der Schuss-Waffe als Array zurueck.
+VERWEISE:
+GRUPPEN: waffen
+*/
+closure *query_schuss_messages() {
+    return ({
+        no_arrow_message, 
+        owner_message, 
+        enemy_message, 
+        others_message }); 
+}
+
+/*
+FUNKTION: set_koecher_id
+DEKLARATION: void set_koecher_id(string koecher_id)
+BESCHREIBUNG:
+Damit kann man bei Schusswaffen die id auf den Koecher setzen. Wenn eine koecher_id
+angegeben wird, kann man die Munition direkt aus dem Koecher entnehmen. Notfalls wird
+das Projektil aber auch aus dem Gepaeck genommen, wenn keine koecher_id angegeben 
+wurde oder der Koecher leer ist.
+VERWEISE: set_pfeil_id
+GRUPPEN: waffen
+*/
+void set_koecher_id(string str)
+{
+    koecher_id = str;
+    this_object()->add_setter_conservation("set_koecher_id",({str}));
+}
+
+/*
+FUNKTION: set_pfeil_id
+DEKLARATION: void set_pfeil_id(string pfeil_id)
+BESCHREIBUNG:
+Damit kann man bei Schusswaffen eine id auf die benoetigten Projektile setzen. 
+Eine Schusswaffe funktioniert nur mit der passenden Munition . Wenn keine 
+pfeil_id gesetzt wird, funktioniert die Waffe nicht.
+VERWEISE: set_koecher_id
+GRUPPEN: waffen
+*/
+void set_pfeil_id(string str)
+{
+    pfeil_id = str;
+    this_object()->add_setter_conservation("set_pfeil_id",({str}));
+}
+
+/*
+FUNKTION: set_no_arrow_message
+DEKLARATION: void set_no_arrow_message(mixed no_arrow_message)
+BESCHREIBUNG:
+Setzt die Meldung, wenn bei einer Schusswaffe die Munition ausgegangen ist. 
+Default ist "Du hast keine Pfeile (mehr)!"
+VERWEISE: set_owner_message, set_enemy_message, set_others_message
+GRUPPEN: waffen
+*/
+void set_no_arrow_message(mixed str)
+{
+    CONSERVATION_HANDLE_XYZ("set_no_arrow_message",str);
+    no_arrow_message = mixed_to_closure(str);
+}
+
+/*
+FUNKTION: set_owner_message
+DEKLARATION: void set_owner_message(mixed owner_message)
+BESCHREIBUNG:
+Setzt die Meldung, die man bei Schusswaffen beim Verschiessen des Projektils 
+bekommt. Die Meldung wird automatisch gewrapt.
+Default ist "Du schiesst $einen('pfeil) auf $den('enemy)."
+VERWEISE: set_no_arrow_message, set_enemy_message, set_others_message
+GRUPPEN: waffen
+*/
+void set_owner_message(mixed str)
+{
+    CONSERVATION_HANDLE_XYZ("set_owner_message",str);
+    owner_message = mixed_to_closure(str,({'owner,'enemy,'pfeil}));
+}
+
+/*
+FUNKTION: set_enemy_message
+DEKLARATION: void set_enemy_message (mixed enemy_message)
+BESCHREIBUNG:
+Setzt die Meldung, die der Gegener bei Schusswaffen beim Verschiessen des 
+Projektils bekommt. Die Meldung wird automatisch gewrapt.
+Default ist "$Der('owner) schiesst mit $einem('pfeil) auf dich."
+VERWEISE: set_no_arrow_message, set_owner_message, set_others_message
+GRUPPEN: waffen
+*/
+void set_enemy_message (mixed str)
+{
+    CONSERVATION_HANDLE_XYZ("set_enemy_message",str);
+    enemy_message = mixed_to_closure(convert_message(str),
+                        ({'owner,'enemy,'pfeil}));
+}
+
+/*
+FUNKTION: set_others_message
+DEKLARATION: void set_others_message(mixed others_message)
+BESCHREIBUNG:
+Setzt die Meldung, die andere im Raum bei Schusswaffen beim Verschiessen des
+Projektils bekommen. Die Meldung wird automatisch gewrapt. Default ist
+"$Der('owner) schiesst $einen('pfeil) auf $den('enemy)."
+VERWEISE: set_no_arrow_message, set_owner_message, set_enemy_message
+GRUPPEN: waffen
+*/
+void set_others_message(mixed str)
+{
+    CONSERVATION_HANDLE_XYZ("set_others_message",str);
+    others_message = mixed_to_closure(convert_message(str),
+                        ({'owner,'enemy,'pfeil}));
+}
+
+/*
+FUNKTION: query_destroy_pfeil
+DEKLARATION: int query_destroy_pfeil()
+BESCHREIBUNG:
+Mit query_destroy_pfeil kann man abfragen, ob eine Schusswaffe den Pfeil
+zerstoert, oder ob der Pfeil nur abgenutzt wird. Bei 1 wird der Pfeil beim
+Schuss zerstoert, sonst nur abgenutzt.
+VERWEISE: set_destroy_pfeil
+GRUPPEN: waffen 
+*/
+int query_destroy_pfeil()     { return destroy_pfeil; }
+
+/*
+FUNKTION: set_destroy_pfeil
+DEKLARATION: void set_destroy_pfeil(int flag)
+BESCHREIBUNG:
+Bei flag=1 zerstoert eine Schusswaffe ihr Projektil beim Schuss, bei flag=0 
+wird es nur abgenutzt.
+VERWEISE: query_destroy_pfeil
+GRUPPEN: waffen
+*/
+void set_destroy_pfeil(int i)
+{
+    destroy_pfeil = i;
+    this_object()->add_setter_conservation("set_destroy_pfeil",({i}));
+}
+
+void create()
+{
+   set_name("schusswaffe");
+   set_gender("weiblich");
+   set_id(({"waffe","schusswaffe"}));
+   set_class_id(({"waffe","schusswaffe"}));
+   set_weight(1);
+   set_long("Du siehst nichts Besonderes.");
+
+   set_value(1,5);
+   set_weapon_class("schuss");
+
+   set_no_arrow_message("Du hast keine Pfeile (mehr)!\n");
+   set_owner_message("Du schiesst $einen('pfeil) auf $den('enemy).\n");
+   set_enemy_message("$Der('owner) schiesst mit $einem('pfeil) auf dich.\n");
+   set_others_message("$Der('owner) schiesst $einen('pfeil) "
+                "auf $den('enemy).\n");
+   set_destroy_pfeil(1);
+   
+   set_current_pfeil_id(0);
+   if (program_name(this_object())==__FILE__) // fuer replace_program-Objekte
+        clear_initial_conservation_data();
+   seteuid(getuid());
+}
+
+private object inhalt(object koecher)
+{
+   return present(current_pfeil_id||pfeil_id, koecher);
+}
+
+#ifdef MONSTER_SCHIESSEN_IM_HEARTBEAT
+/*
+FUNKTION: present_pfeil
+DEKLARATION: varargs object present_pfeil(object lebewesen)
+BESCHREIBUNG:
+Schaut, ob sich in der Schusswaffe (!query_koecher_id()) ein Pfeil oder im
+angegebenen Lebewesen (query_koecher_id()) ein Koecher, der einen Pfeil
+enthaelt, oder ein Pfeil selber befindet. Der gefundene Pfeil wird
+zurueckgeliefert.
+
+Ist kein Objekt angegeben oder dieses 0, so wird dafuer die Umgebung der Waffe
+verwendet.
+
+Diese Funktion wird von do_schuss() in /i/weapon/schuss_waffe und
+get_weapon_check_object() in /i/living/hands verwendet, um passende Pfeile zu
+finden.
+VERWEISE: do_schuss, get_weapon_check_object
+GRUPPEN: waffen, kampf
+*/
+
+varargs object present_pfeil(object wo)
+{
+    object pfeil;
+    object koecher;
+    
+    if(!wo)
+        wo=ENV(TO);
+
+DEBUGX(wo);
+    if(!query_koecher_id())
+    {
+        pfeil = present(query_pfeil_id(), TO);
+        if(!pfeil)
+            pfeil = present(query_pfeil_id(), wo);
+    }
+    else
+    {
+        if(koecher = cond_present(query_koecher_id(), wo, (:
+            present(query_pfeil_id(), $1)
+            :)))
+            pfeil = present(query_pfeil_id(), koecher);
+        if(!pfeil)
+            pfeil = present(query_pfeil_id(), wo);
+    }
+
+DEBUGX(koecher);
+DEBUGX(pfeil);    
+    return pfeil;
+}
+
+varargs int do_schuss(object enemy, int flag)
+{
+   object owner, env, pfeil, splitted;
+   int damage, extra_damage, applied_damage, res, critical;
+
+   if(!enemy ||
+      !(owner = environment()) ||
+      !living(owner) ||
+      !query_wield() ||
+      !pfeil_id)
+      return ATTACK_DA_ABBRUCH;
+
+   if(query_broken())
+      return ATTACK_DA_WAR_BEREITS_KAPUTT;
+      
+   if(!check_life())
+      return ATTACK_DA_KAPUTT;
+
+   if(find_call_out("nachladen") >= 0)
+   {
+      owner->send_message_to(owner, MT_NOTIFY, MA_FIGHT, reload_message);
+      return ATTACK_DA_OK;
+   }
+
+   env = environment(enemy);
+   if (env != environment(owner))
+       return ATTACK_DA_ABBRUCH;
+       
+   pfeil=present_pfeil(owner);
+   if(!pfeil)
+   {
+      owner->send_message_to(owner, MT_UNKNOWN, MA_FIGHT,
+         wrap(CTS(no_arrow_message)));
+      return ATTACK_DA_KEIN_PFEIL;
+   }
+
+   if(splitted = pfeil->split_object(1))
+      pfeil = splitted;
+
+   call_out("nachladen", reload_time);
+
+   extra_damage   = pfeil->query_extra_damage(enemy, owner, this_object());
+   applied_damage = (critical = critical_hit()) ?
+      (damage = compute_damage(critical)) + extra_damage :
+      random((damage = compute_damage())+1) + extra_damage;
+   if (applied_damage < 0)
+       applied_damage = 0;
+
+   owner->send_message(MT_UNKNOWN, MA_FIGHT,
+      wrap(CTS(others_message, ({owner, enemy, pfeil}))),
+      wrap(CTS(enemy_message,  ({owner, enemy, pfeil}))), enemy);
+   owner->send_message_to(owner, MT_UNKNOWN, MA_FIGHT,
+      wrap(CTS(owner_message,  ({owner, enemy, pfeil}))));
+
+   if(!random(10))
+      owner->add_skill_points(query_skill_path(),LEARNING_SCHUSS);
+
+#ifdef FIGHT_DEBUG
+    fight_debug(owner,damage,extra_damage,applied_damage);
+#endif
+
+   res = enemy->add_hp(-applied_damage, ([
+    AH_ATTACKER: owner,
+    AH_WEAPON: this_object(),
+    AH_PROJECTILE: pfeil,
+    AH_DAMAGE_TYPE: pfeil->query_damage_type() ||
+                    this_object()->query_damage_type() ||
+        ({ (sizeof(query_skill_path())>2 && query_skill_path()[2]=="stumpf")?
+        "stumpf":"stich" }),
+    AH_FLAGS: critical ? AH_NO_ARMOUR|AH_CRITICAL_MESSAGE : 0,
+   ]));
+
+
+   pfeil->real_lost_hp(enemy, owner, res);
+
+   // real_lost_hp() koennte den Pfeil zerstoert haben:
+   if(!pfeil)
+      return ATTACK_DA_OK;
+
+   // Dem Pfeil die Chance geben, kaputt zu gehen:
+   if(destroy_pfeil)
+       pfeil->remove();
+   else
+       pfeil->check_life();
+   if(!pfeil)
+      return ATTACK_DA_OK;
+
+   // Bleibt der Pfeil im Feind stecken?
+   if(enemy &&
+      res >= PENETRATE &&
+      pfeil->move(enemy) == MOVE_OK)
+      return ATTACK_DA_OK;
+
+   // move() koennte den Pfeil zerstoert haben:
+   if(!pfeil)
+      return ATTACK_DA_OK;
+
+   if(pfeil->move(env) != MOVE_OK && pfeil)
+      pfeil->remove();
+    return ATTACK_DA_OK;
+}
+#else //MONSTER_SCHIESSEN_IM_HEARTBEAT
+void do_schuss(object enemy)
+{
+   object owner, env, koecher, pfeil, splitted;
+   int damage, extra_damage, applied_damage, res, critical;
+
+   if(!enemy ||
+      !(owner = environment()) ||
+      !living(owner) ||
+      !check_life() ||
+      !query_wield() ||
+      !pfeil_id)
+      return;
+
+   if(find_call_out("nachladen") >= 0)
+   {
+      owner->send_message_to(owner, MT_UNKNOWN,MA_FIGHT,wrap(reload_message));
+      return;
+   }
+
+
+   env = environment(enemy);
+   if (env != environment(owner))
+       return;
+       
+   if(!koecher_id)
+   {
+      pfeil = present(current_pfeil_id||pfeil_id,this_object());
+      if(!pfeil)
+        pfeil = present(current_pfeil_id||pfeil_id,owner);
+   }
+   else
+   {
+      if(koecher = cond_present(koecher_id, owner, #'inhalt))
+        pfeil = present(current_pfeil_id||pfeil_id, koecher);
+      if(!pfeil)
+        pfeil = present(current_pfeil_id||pfeil_id,owner);
+   }
+   if(!pfeil)
+   {
+      owner->send_message_to(owner, MT_UNKNOWN,MA_FIGHT,wrap(
+                                CTS(no_arrow_message)));
+      return;
+   }
+
+   if(splitted = pfeil->split_object(1))
+      pfeil = splitted;
+
+   call_out("nachladen", reload_time);
+
+   extra_damage   = pfeil->query_extra_damage(enemy, owner, this_object());
+   applied_damage = (critical = critical_hit()) ?
+      (damage = compute_damage(critical)) + extra_damage :
+      random((damage = compute_damage())+1) + extra_damage;
+   if (applied_damage < 0)
+       applied_damage = 0;
+
+   owner->send_message(MT_UNKNOWN,MA_FIGHT,
+                wrap(CTS(others_message, ({owner, enemy, pfeil}))),
+                wrap(CTS(enemy_message,  ({owner, enemy, pfeil}))), 
+                       enemy);
+   owner->send_message_to(owner, MT_UNKNOWN,MA_FIGHT,wrap(
+            CTS(owner_message,  ({owner, enemy, pfeil}))));
+
+   if(!random(10))
+      owner->add_skill_points(query_skill_path(),LEARNING_SCHUSS);
+
+#ifdef FIGHT_DEBUG
+    fight_debug(owner,damage,extra_damage,applied_damage);
+#endif
+
+   res = enemy->add_hp(-applied_damage, ([
+    AH_ATTACKER: owner,
+    AH_WEAPON: this_object(),
+    AH_PROJECTILE: pfeil,
+    AH_DAMAGE_TYPE: pfeil->query_damage_type() ||
+                    this_object()->query_damage_type() ||
+        ({ (sizeof(query_skill_path())>2 && query_skill_path()[2]=="stumpf")?
+        "stumpf":"stich" }),
+    AH_FLAGS: critical ? AH_NO_ARMOUR|AH_CRITICAL_MESSAGE : 0,
+   ]));
+
+   pfeil->real_lost_hp(enemy, owner, res);
+
+   // real_lost_hp() koennte den Pfeil zerstoert haben:
+   if(!pfeil)
+      return;
+
+   // Dem Pfeil die Chance geben, kaputt zu gehen:
+   if(destroy_pfeil)
+       pfeil->remove();
+   else
+       pfeil->check_life();
+   if(!pfeil)
+      return;
+
+   // Bleibt der Pfeil im Feind stecken?
+   if(enemy &&
+      res >= PENETRATE &&
+      pfeil->move(enemy) == MOVE_OK)
+      return;
+
+   // move() koennte den Pfeil zerstoert haben:
+   if(!pfeil)
+      return;
+
+   if(pfeil->move(env) != MOVE_OK && pfeil)
+      pfeil->remove();
+}
+#endif //MONSTER_SCHIESSEN_IM_HEARTBEAT
+
+int let_not_in(object ob, object old_room, string dir)
+{
+    if(koecher_id || !pfeil_id || !ob || !ob->id(pfeil_id) ||
+            first_inventory() || ob->query_count()>1)
+        return 1;
+}
+
+int query_container()
+{
+    return (!koecher_id && pfeil_id && 1);
+}
+
+varargs void init_weapon(string kategorie, int max_damage_percent,
+    int min_damage_percent, int life_percent)
+{
+    int min,max,grenze,schaden,max_wert, min_wert;
+    int tmp;
+
+    switch(lower_case(kategorie))
+    {
+
+        case "bogen":
+            set_skill_path(({"skill", "offensiv", "scharf", "bogen", }));
+            set_name("bogen");
+            set_gender("maennlich");
+            set_id("bogen");
+            set_material("holz");
+            set_pfeil_id("pfeil");
+            set_koecher_id("koecher");
+            set_destroy_pfeil(0);
+            set_no_arrow_message("Du hast keine Pfeile (mehr)!");
+            set_damage_type(({"stich"}));
+            min=10; max=19; grenze=40;
+            break;
+
+/*
+        case "langbogen":
+            set_skill_path(({"skill", "offensiv", "scharf", "bogen", }));
+            set_name("langbogen");
+            set_gender("maennlich");
+            set_id(({"langbogen", "bogen", }));
+            set_material("holz");
+            set_pfeil_id("pfeil");
+            set_koecher_id("koecher");
+            set_destroy_pfeil(0);
+            min=10; max=19; grenze=40;
+            break;
+*/
+
+        case "armbrust":
+            set_skill_path(({"skill", "offensiv", "scharf", "bogen", }));
+            set_name("armbrust");
+            set_gender("weiblich");
+            set_id("armbrust");
+            set_material("holz");
+            set_pfeil_id("bolzen");
+            set_koecher_id("bolzentasche");
+            set_destroy_pfeil(0);
+            set_no_arrow_message("Du hast keine Bolzen (mehr)!");
+            set_damage_type(({"stich"}));
+            min=10; max=19; grenze=40;
+            break;
+
+        case "blasrohr":
+            set_skill_path(({"skill", "offensiv", "scharf", "blasrohr", }));
+            set_name("blasrohr");
+            set_gender("saechlich");
+            set_id(({"blasrohr", "rohr", }));
+            set_material("holz");
+            set_pfeil_id("blasrohrpfeil");
+            set_destroy_pfeil(0);
+            set_no_arrow_message("Du hast keine Blasrohrpfeile (mehr)!");
+            set_max_internal_encumbrance(1);
+            set_damage_type(({"stich"}));
+            min=3; max=8; grenze=15;
+            break;
+
+        case "schleuder":
+            set_skill_path(({"skill", "offensiv", "stumpf", "schleuder", }));
+            set_name("schleuder");
+            set_gender("weiblich");
+            set_id("schleuder");
+            set_material("holz");
+            set_pfeil_id("stein");
+            set_destroy_pfeil(0);
+            set_no_arrow_message("Du hast keine Steine (mehr)!");
+            set_max_internal_encumbrance(10);
+            min=6; max=10; grenze=20;
+            set_damage_type(({"stumpf"}));
+            break;
+
+        default:
+            do_error("Unbekannte Waffenkategorie '"+kategorie+"'!\n");
+            return;
+
+    }
+
+    // Standards setzen.
+    max_damage_percent = max_damage_percent || 100;
+    min_damage_percent = min_damage_percent || max_damage_percent;
+    life_percent = abs(life_percent) || 100;
+    
+    if(max_damage_percent<0)
+    {
+        if(max>20)
+            schaden = calc_percent(-max_damage_percent, 20, grenze);
+        else
+            schaden = calc_percent(-max_damage_percent, max, grenze);
+    }
+    else
+        schaden = calc_percent(max_damage_percent, max, grenze);
+
+    if(min_damage_percent<0)
+    {
+        if(max>20)
+            min = calc_percent(-min_damage_percent, min * 20 / max, grenze*2/3);
+        else
+            min = calc_percent(-min_damage_percent, min, grenze*2/3);
+    }
+    else
+        min = calc_percent(min_damage_percent, min, grenze*2/3);
+
+    if(min > schaden*2/3) min = schaden*2/3;
+    
+    set_damage(min,schaden);
+    set_weight(1+(schaden-1)/5);
+    set_min_weight(query_weight());
+    set_max_weight(query_weight()+(query_max_internal_encumbrance()>1
+                                    ?query_max_internal_encumbrance():0));
+    
+    switch(schaden)
+    {
+        case 0..9:
+            set_life(calc_percent(
+                life_percent,
+                ({1000,750,660,590,540,500,470,450,430,410})[schaden],
+                ({2000,1500,1320,1180,1080,1000,940,900,860,820})[schaden]
+                ));
+            break;
+        case 10..40: // Ab hier linear.
+            set_life(calc_percent(life_percent,500-schaden*10,1000-schaden*20));
+            break;
+    }
+
+    if(max>20) set_no_store(1);
+    
+    max_wert = 
+        ({ /* 0- 9*/ 50000,20000,12000,7200,4300,2600,1500,900,510,280,
+           /*10-19*/   160,  110,   76,  59,  49,  43,  39, 35, 31, 28,
+           /*20-29*/    25,   22,   18,  14,  11,   8,   6,  5,  4,  3,  
+           /*30-40*/     2,    1,    1,   1,   1,   1,   1,  1,  1,  1, 1
+        })[schaden];
+
+    max_wert = query_life() * 50 / max_wert;
+    min_wert = max_wert / 4; //Gibts keine Richtlinie fuer...
+    
+    // So, nun diesen Wert ordentlich aufrunden, da einige Verkaeufer
+    // diesen Wert direkt verwenden.
+    // 2 Stellen genau, der Rest gerundet.
+    tmp=1;
+    while(max_wert>99)
+    {
+        max_wert=(max_wert+8)/10; // Bei 1 koennen wir ruhig abrunden... ;-)
+        tmp*=10;
+    }
+    if(max_wert>49)
+    {
+        max_wert=(max_wert+4)/5;
+        tmp*=5;
+    }
+    max_wert*=tmp;
+
+    tmp=1;
+    while(min_wert>99)
+    {
+        min_wert=(min_wert+8)/10;
+        tmp*=10;
+    }
+    if(min_wert>49)
+    {
+        min_wert=(min_wert+4)/5;
+        tmp*=5;
+    }
+    min_wert*=tmp;
+    
+    set_value(min_wert,max_wert);
+}
+

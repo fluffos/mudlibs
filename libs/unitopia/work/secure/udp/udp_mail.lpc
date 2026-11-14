@@ -1,0 +1,291 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/udp/udp_mail.c
+// Description:	Handles a UDP-Mail-Request
+// Author:	Alvin@Sushi
+// Modified by:	Freaky (06.10.94)
+//
+// $Log: udp_mail.c,v $
+// Revision 1.8  2004/05/12 21:11:09  gnomi
+// Typo.
+//
+// Revision 1.7  2003/08/15 03:20:05  gnomi
+// Unnoetigen Typ-Cast entfernt.
+//
+// Revision 1.6  2002/07/04 23:07:57  gnomi
+// seteuid(getuid()) entfernt; EUID wird vom Master aus gesetzt.
+//
+// Revision 1.5  2001/03/14 17:31:08  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.4  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+ * VERSION 1.0
+ * UDP MAIL system (Author: Alvin@Sushi)
+ * Requires INETD V0.60 or higher (INETD Author: Nostradamus@Zebedee)
+ */
+
+#include <udp.h>
+#include <mail.h>
+#include "udp_mail.h"
+
+#pragma strict_types
+
+mapping spool_item;
+
+nosave string *spool;
+
+private int match_mud_name(string mudname, string match_str) {
+    return mudname[0..strlen(match_str)-1] == match_str;
+}
+
+nosave void save_spool_item()
+{
+  string name;
+  int count;
+
+  if(!mappingp(spool_item) || sizeof(spool_item))
+    return;
+
+  do {
+    ++count;
+    name=spool_item[UDPMS_DEST]+"-"+to_string(count);
+  } while(spool && member(spool,name)!=-1);
+
+  save_object(UDPM_SPOOL_DIR+name);
+
+  if(!spool || !sizeof(spool))
+    spool = ({ name });
+  else
+    spool += ({ name });
+}
+
+/* forward declaration */
+void deliver_mail(string recipient,string mud,string from,string *cc,
+	string subj,string mail_body,int status_flag,string spool_name);
+
+/* forward declaration */
+nosave void start_retry_callout();
+
+nosave void remove_from_spool(string spool_file)
+{
+  int idx;
+
+  if(spool && (idx=member(spool,spool_file))!=-1)
+    {
+      spool -= ({ spool_file });
+      if(!sizeof(spool))
+        spool=0;
+    }
+
+  if(file_size(UDPM_SPOOL_DIR+spool_file+".o")>0)
+    if(!rm(UDPM_SPOOL_DIR+spool_file+".o"))
+      sys_log("Mail","UPD_MAIL: Can't delete spool file "+
+		UDPM_SPOOL_DIR+spool_file+".o");
+}
+
+nosave void retry_send()
+{
+  int i;
+  string msg;
+
+  if(!spool || !sizeof(spool)) return;
+
+  for(i=0;i<sizeof(spool);++i)
+    {
+      if(!restore_object(UDPM_SPOOL_DIR+spool[i]))
+        {
+          sys_log("Mail","UDP_MAIL: Failed to restore spool file "+
+		UDPM_SPOOL_DIR+spool[i]);
+          continue;
+        }
+
+      if(time() - spool_item[UDPMS_TIME] > UDPM_SEND_FAIL*60)
+        {
+          msg="Grund: Fehler beim Schicken der Post nach \""+
+		spool_item[UDPMS_DEST]+
+		"\"\n\nFEHLER FOLGT :-\n\n"+
+		"An: "+spool_item[UDPMS_TO]+"\n"+
+		"Titel: "+spool_item[UDPMS_SUBJECT]+"\n"+
+		spool_item[UDPMS_BODY];
+
+          LOCAL_MAILER->deliver_mail(
+		spool_item[UDPMS_FROM],			 /* TO */
+		"Post@"+LOCAL_NAME,			 /* FROM */
+		0,					 /* CC */
+		"Brief konnte nicht abgeliefert werden", /* SUBJECT */
+		msg					 /* MAIL BODY */
+	  );
+          remove_from_spool(spool[i]);
+          return;
+        }
+
+      deliver_mail(
+	spool_item[UDPMS_TO],
+	spool_item[UDPMS_DEST],
+	spool_item[UDPMS_FROM],
+	spool_item[UDPMS_CC],
+	spool_item[UDPMS_SUBJECT],
+	spool_item[UDPMS_BODY],
+	UDPM_STATUS_IN_SPOOL,
+	spool[i]);
+    }
+
+  start_retry_callout();
+}
+
+nosave void start_retry_callout()
+{
+  if(find_call_out("retry_send")!= -1 ) return;
+
+  call_out("retry_send",UDPM_RETRY_SEND*60);
+}
+
+nosave void failed_to_deliver(mapping data)
+{
+  string msg;
+  object obj;
+
+  if(!data[SYSTEM] || data[SYSTEM] != TIME_OUT)
+    {
+      msg="Grund: Fehler beim Schicken der Post nach \""+data[NAME]+"\"\n\n"+
+	"FEHLER FOLGT :-\n\n"+
+	"An: "+data[RECIPIENT]+"\n"+
+	"Titel: "+data[UDPM_SUBJECT]+"\n"+data[DATA];
+
+      LOCAL_MAILER->deliver_mail(
+		data[UDPM_WRITER],			 /* TO */
+		"Post@"+LOCAL_NAME,			 /* FROM */
+		0,					 /* CC */
+		"Brief konnte nicht abgeliefert werden", /* SUBJECT */
+		msg					 /* MAIL BODY */
+      );
+      return;
+    }
+
+  /* OK transmission timed out.. place in mail spool */
+  
+  if(obj=find_player(lower_case(data[UDPM_WRITER])))
+    {
+      tell_object(obj,wrap("Die Sendefrist der Post an "+
+	data[RECIPIENT]+"@"+data[NAME]+
+	" ist verstrichen. Ich stelle den Brief in die Warteschlange.\n"));
+    }
+
+  spool_item=([
+	UDPMS_TIME:	time(),
+	UDPMS_TO:	data[RECIPIENT],
+	UDPMS_DEST:	data[NAME],
+	UDPMS_FROM:	data[UDPM_WRITER],
+	UDPMS_SUBJECT:	data[UDPM_SUBJECT],
+	UDPMS_BODY:	data[DATA]
+  ]);
+
+  save_spool_item();
+
+  start_retry_callout();
+}
+
+nosave void get_pending_deliveries()
+{
+  string *entries;
+  int i;
+
+  entries=get_dir(UDPM_SPOOL_DIR+"*.o");
+  if(!entries || !sizeof(entries)) return;
+
+  spool=allocate(sizeof(entries));
+  for(i=0;i<sizeof(entries);++i)
+    spool[i]=entries[i][0..<3];
+
+  start_retry_callout();
+}
+
+void create()
+{
+  get_pending_deliveries();
+}
+
+/*
+ * Public routines
+ */
+
+int query_valid_mail_host(string hostname)
+{
+  string *match;
+
+  match=filter(m_indices((mapping)INETD->query("hosts")),
+		#'match_mud_name,lower_case(hostname));
+
+  return (sizeof(match)==1);
+}
+
+void deliver_mail(string recipient,string mud,string from,string *cc,
+	string subj,string mail_body,int status_flag,string spool_name)
+{
+  mapping data;
+
+  if (object_name(previous_object()) != MAILD)
+  {
+      sys_log("Mail",
+	      sprintf("Illegal call of UDP_MAILD::deliver_mail() from %O\n",
+		      previous_object()));
+      return;
+  }
+  data=([
+	REQUEST: "mail",
+	RECIPIENT: recipient,
+        SENDER: object_name(),
+	UDPM_STATUS: status_flag,
+	UDPM_WRITER: lower_case(from),
+	UDPM_CC: pointerp(cc) ? implode(cc,",") : "0",
+	UDPM_SUBJECT: subj,
+        UDPM_SPOOL_NAME: spool_name,
+	DATA: mail_body
+  ]);
+
+  INETD->send_udp(mud,data,1);
+}
+
+void udp_reply(mapping data)
+{
+  object sender;
+
+  switch(data[UDPM_STATUS])
+    {
+      case UDPM_STATUS_TIME_OUT:
+        failed_to_deliver(data);
+        break;
+
+      case UDPM_STATUS_DELIVERED_OK:
+        if(sender=find_player(lower_case(data[UDPM_WRITER])))
+          {
+            tell_object(sender,"Post@"+data[NAME]+": "+
+		"Brief wurde an "+capitalize(data[DATA])+" geschickt.\n");
+          }
+        if(data[UDPM_SPOOL_NAME])
+          remove_from_spool(data[UDPM_SPOOL_NAME]);
+
+        break;
+
+      case UDPM_STATUS_UNKNOWN_PLAYER:
+        LOCAL_MAILER->deliver_mail(
+		data[UDPM_WRITER],			 /* TO */
+		"Post@"+data[NAME],			 /* FROM */
+		0,					 /* CC */
+		"Brief konnte nicht abgeliefert werden", /* SUBJECT */
+		data[DATA]				 /* MAIL BODY */
+	);
+        if(data[UDPM_SPOOL_NAME])
+          remove_from_spool(data[UDPM_SPOOL_NAME]);
+        break;
+
+	case UDPM_STATUS_IN_SPOOL:
+          /* Do nothing */
+          break;
+    }
+}

@@ -1,0 +1,195 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/object/feuer_shadow.c
+// Description: So brennt was :)
+// Original files: /obj/feuer_shadow.c and /z/Schiffe/Werft/obj/feuer_shadow.c
+// Set up as Inherit: 2011-12-19, Sorcerer
+//
+// $Log: feuer_shadow.c,v $
+// Revision 1.1  2011-12-19 21:23:06  sorcerer
+// Auf Inherit-File umgestellt und etwas erweitert.
+//
+//
+
+#include <shadow.h>
+#include <message.h>
+#include <deklin.h>
+
+inherit "/i/shadow";
+inherit "/i/tools/update_actions";
+
+
+/* --- API --- */
+
+/*
+FUNKTION: query_abbrennzeit
+DEKLARATION: int query_abbrennzeit()
+BESCHREIBUNG:
+Diese Funktion ist zum Ueberlagern gedacht, wenn nicht die normale Zeit fuer
+das Abbrennen eines Objektes veranschlagt werden soll.
+Default ist: Zeit = random(40)+20 * Gewicht des brennenden Objekts
+Die Funktion wird jeweils beim Ueberwerfen des Shadows aufgerufen.
+GRUPPEN: feuer
+*/
+
+int query_abbrennzeit() {
+  int dauer, weight;
+
+  dauer = random(40)+20;
+  if ((weight = query_shadow_owner()->query_weight()) > 0)
+    dauer*=weight;
+
+  return dauer;
+}
+
+/*
+FUNKTION: query_fire_shadow
+DEKLARATION: object query_fire_shadow()
+BESCHREIBUNG:
+Liefert den Feuershadow eines brennenden Objektes zurueck.
+GRUPPEN: feuer
+*/
+
+object query_fire_shadow() {
+  return this_object();
+}
+
+
+/* --- Aenderungen am Erscheinungsbild des brennenden Objekts --- */
+
+string query_long(object who) {
+  return query_shadow_owner()->query_long(who)+
+    plural(wrap(Er(query_shadow_owner())+" brennt lichterloh."),
+    "Sie brennen lichterloh.\n", query_shadow_owner());
+}
+
+string query_short(object viewer) {
+  return Ein(query_shadow_owner());
+}
+
+mixed *query_adjektiv() {
+  return ({"brennend"})+
+         (query_shadow_owner()->query_adjektiv() || ({}));
+}
+
+string *query_adjektiv_grundform() {
+  return ({"brennend"})+ 
+         (query_shadow_owner()->query_adjektiv_grundform() || ({}));
+}
+
+string *query_adjektiv_stamm() {
+  return ({"brennend"})+ 
+         (query_shadow_owner()->query_adjektiv_stamm() || ({}));
+}
+
+string query_feel() {
+  return wrap("Du haeltst deine Finger in die Naehe von "+
+              deinem(query_shadow_owner())+
+              " und spuerst die Abwaerme der Flammen.");
+}
+
+string query_feel_msg() {
+  return wrap(Der(OBJ_TP)+plural(" waermt sich "," waermen sich ",OBJ_TP)+
+    seinen((["name":"finger","gender":"maennlich","plural":1]),0,OBJ_TP)+
+    " an "+dem(query_shadow_owner())+".");
+}
+
+int query_own_light() {
+  return query_shadow_owner()->query_own_light()+1;
+}
+
+int query_is_lighted() { 
+  return 1; 
+}
+
+int query_burning() {
+  return 1;
+}
+
+
+/* --- Funktionen zum Loeschen und Abbrennen --- */
+
+int feuershadow_loeschen(string str) {
+
+  if (!(query_shadow_owner()->me(str))) 
+    return notify_fail("Loesche was?\n");
+
+  this_player()->send_message(MT_LOOK,MA_USE,
+                   Der(this_player())+" loescht "+
+                     seinen(query_shadow_owner())+".\n",
+                   "Du loeschst "+deinen(query_shadow_owner())+".\n",
+                   this_player());
+
+  remove_shadow(this_object());
+
+  return 1;
+}
+
+void abgebrannt() {
+  object env, player;
+  string erlischt;
+
+  if (!(env = environment(query_shadow_owner()))) {
+    remove_shadow(this_object());
+    return;
+  }
+  if (living(env)) {
+    player = env;
+    env = environment(player);
+  }
+
+  erlischt = plural(" erlischt.", " erloeschen.", query_shadow_owner());
+
+  if (player) {
+    player->send_message(MT_LOOK,MA_LOOK,
+              wrap(Ihr(query_shadow_owner(),0,player) + erlischt),
+              wrap(Dein(query_shadow_owner()) + erlischt),
+              player);
+  }
+  else {
+    env->send_message(MT_LOOK, MA_LOOK,
+           wrap(Der(query_shadow_owner()) + erlischt));
+  }
+
+  // Hierbei wird der Shadow automatisch zerstoert.
+  if (query_once_interactive(query_shadow_owner()))
+    remove_shadow(this_object());
+  else
+    query_shadow_owner()->remove();
+
+  return;
+}
+
+
+/* --- Verwaltungsfunktionen des Shadows --- */
+
+varargs int init_shadow(object ob, int flag) {
+  return shadow::init_shadow(ob, flag | NO_MULTI_SHADOW);
+}
+
+void shadow_create_action(object ob) {
+  int dauer, weight;
+
+  if (ob != this_object()) {
+    // Aufruf durchreichen
+    query_shadow_owner()->shadow_create_action(ob);
+    return;
+  }
+
+  call_out("abgebrannt", query_abbrennzeit());
+
+  return;
+}
+
+void shadow_remove_action(object ob) {
+  if (ob != this_object()) 
+    // Aufruf durchreichen
+    query_shadow_owner()->shadow_remove_action(ob);
+  return;
+}
+
+void init() {
+  query_shadow_owner()->init();
+  add_action("feuershadow_loeschen","loesche",-6);
+  return;
+}

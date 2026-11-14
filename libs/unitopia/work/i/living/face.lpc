@@ -1,0 +1,646 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/living/face.c
+// Description:
+// Modified by:	Freaky (09.02.2000) query_hp_string() beachtet jetzt Plural.
+//
+// $Log: face.c,v $
+// Revision 1.35  2012-11-16 17:47:23  gnomi
+// /i/item wird virtuell geerbt.
+//
+// Revision 1.34  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.33  2007/12/05 10:51:09  gnomi
+// protector_string: Abfangen, dass der NPC im Nirwana sein kann.
+//
+// Revision 1.32  2007/08/25 23:20:32  gnomi
+// Anzeige des Schutz-Status.
+//
+// Revision 1.31  2007/06/25 22:16:25  gnomi
+// Auf neue Beschreibungen umgestellt.
+//
+// Revision 1.30  2006/12/30 01:12:16  gnomi
+// query_hp_string ueberall via call_other abfragen.
+//
+// Revision 1.29  2006/05/12 09:58:15  gnomi
+// Doku: Verweise auf examine_object entfernt.
+//
+// Revision 1.28  2005/04/10 01:21:14  gnomi
+// Typo im hp_string.
+//
+// Revision 1.27  2005/02/13 13:44:47  sissi
+// Man sieht jetzt ueber dem Kopf eines Spielers, der eine Feuerkugel
+// erschaffen hat, eben jene schweben.
+//
+// Revision 1.26  2004/04/17 02:19:36  gnomi
+// process_alignment protected und einfacher gemacht.
+//
+// Revision 1.25  2003/12/27 22:55:12  sissi
+// Bei query_short verschwindet der personal title bei nicht-persoenlichkeit
+// nicht mehr.
+//
+// Revision 1.24  2003/06/20 01:13:43  gnomi
+// Doku korrigiert.
+//
+// Revision 1.23  2003/04/29 03:33:06  gnomi
+// Typo.
+//
+// Revision 1.22  2003/02/01 02:46:20  gnomi
+// query_long: Dem Short nur ein Punkt anhaengen, wenn dort noch kein
+// Satzendezeichen ist.
+// Moerderbeschreibung aus dem Finger-Ob holen (dort gibt es eine
+// ausgereiftere Funktion dazu).
+//
+// Revision 1.21  2003/01/25 17:08:01  sissi
+// (S) fuer Engels-Survival Urlaub ist nicht mehr im Titel zulaessig.
+//
+// Revision 1.20  2002/02/01 07:56:42  gnomi
+// Abfrage auf HLP_ALIGN ausgebaut, da sinnlos.
+//
+// Revision 1.19  2002/01/15 03:38:28  gnomi
+// query_short umgestellt.
+//
+// Revision 1.18  2002/01/13 04:50:12  freaky
+// query_long() umgestellt.
+//
+// Revision 1.17  2002/01/13 00:57:17  gnomi
+// Deklaration von query_long geaendert.
+//
+// Revision 1.16  2002/01/06 16:17:04  sissi
+// notify("alignment_change") wird in add_align und set_align aufgerufen und
+// ist sogar dokumentiert...
+//
+// Revision 1.15  2001/12/22 23:58:30  gnomi
+// extra_look wird automatisch umgebrochen.
+//
+// Revision 1.14  2001/10/05 20:55:35  freaky
+// Sichtbarkeit von Redefinitionen korrigiert.
+//
+// Revision 1.13  2001/08/25 18:27:23  sissi
+// query_title jetzt shadowbar
+//
+// Revision 1.12  2001/06/12 21:34:26  jesaia
+// Experimentelle neue Align Berechnung.
+//
+// Revision 1.11  2001/04/11 23:59:40  gnomi
+// zsag eingebaut.
+//
+// Revision 1.10  2001/03/15 15:14:44  freaky
+// query-scar-description wird in TO aufgerufen.
+//
+// Revision 1.9  2001/03/02 12:14:29  sissi
+// Moerderliste verschoenert.
+//
+// Revision 1.8  2001/03/01 23:42:32  sissi
+// Moerder haben jetzt ein M ueber ihrem Kopf schweben (Idee: Gaspode).
+//
+// Revision 1.7  2001/02/19 18:19:03  sissi
+// Spieler ohne Titel aber mit Adjektiv erhalten jetzt kein komisches
+// Short mehr.
+//
+// Revision 1.6  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+#pragma strong_types
+
+virtual inherit "/i/item";
+
+#include <config.h>
+#include <invis.h>
+#include <hlp.h>
+#include <level.h>
+#include <finger.h>
+#include <description.h>
+
+// Prototypes:
+nomask int query_wiz_level();
+nomask string *query_opfer();
+nomask int query_moerder();
+
+private int alignment;
+private string title;
+private string align_title;
+private nosave int show_align_title;
+private int *alignment_list;
+
+string query_short(object betrachter)
+{
+    string desc, pers_title, title;
+    object kugel;
+
+    if(desc = query_short_string())
+        return desc;
+
+    if(IS_INVIS(this_object()))
+       return Ein();
+       
+    // damit man query_title shadowen kann:
+    title = this_object()->query_title();
+
+    if(playerp(this_object()) || (title && title != ""))
+    {
+        if(desc = this_object()->query_personal_title())
+           desc += " ";
+        else
+           desc = "";
+        desc += this_object()->query_cap_name();
+        if (title && title != "")
+            desc += (title[0] == ',' ? "" : " ") + title;
+    }
+    else
+        desc = Ein();
+#if 0
+    if(show_align_title && align_title && align_title != "")
+        desc += " ("+align_title+")";
+#endif
+    if(!wizp(this_object()) && (kugel = present ("hlp#tool")) && kugel->query_surviving())
+        desc += " (S)";
+    if(query_moerder() && !query_wiz_level())
+        desc += " (M)";
+
+    return desc;
+}
+
+/*
+FUNKTION: query_hp_string
+DEKLARATION: string query_hp_string()
+BESCHREIBUNG:
+Liefert einen Text (mit abschliessendem Zeilenumbruch), welcher die
+aktuelle Ausdauer des Monsters beschreibt, zurueck. 
+VERWEISE: query_long
+GRUPPEN: spieler, monster
+*/
+string query_hp_string()
+{
+    int hp, max_hp;
+    string er_ist;
+
+    hp     = this_object()->query_hp();
+    max_hp = this_object()->query_max_hp();
+
+    er_ist = Er() + plural(" ist ", " sind ", this_object());
+
+    if (hp < 0)
+        return er_ist + "tot.\n";
+    if (hp < max_hp/10)
+        return er_ist + "fast am Ende.\n";
+    if (hp < max_hp/5)
+        return er_ist + "in sehr schlechtem Zustand.\n";
+    if (hp < max_hp/2)
+        return er_ist + "in schlechtem Zustand.\n";
+    if (hp < max_hp - 20)
+        return er_ist + "nicht so fit.\n";
+    return er_ist + "topfit.\n";
+}
+
+private string query_opfer_string(mapping info)
+{
+    string *opfer = query_opfer();
+
+    if (sizeof(opfer)) opfer -= ({0});
+    if (sizeof(opfer) && !query_wiz_level())
+        return "Ein grosses M schwebt unuebersehbar einen Meter ueber "
+            +seinem((["name":"kopf","gender":"maennlich"]),0,this_object())
+            +".\n" + wrap(Er()+" ist "+FINGER_OB->moerder_text(opfer,
+		this_object()->query_gender())+".");
+
+    return "";
+}
+
+private string query_protectee_string(mapping info)
+{
+    object prot = this_object()->query_protectee();
+
+    if(prot && present(prot, environment()))
+	return Er()+plural(" beschuetzt ", " beschuetzen ")+
+	    den(prot)+".";
+
+    return "";
+}
+
+private string query_protector_string(mapping info)
+{
+    object *prots;
+    
+    if(!environment())
+	return "";
+
+    prots = filter(all_inventory(environment()),
+	(: living($1) && $1->query_protectee()==this_object() :));
+
+    if(sizeof(prots))
+    	return Er()+plural(" wird", " werden")+" von "+
+	    liste(map(prots,#'dem))+" beschuetzt.";
+
+    return "";
+}
+
+protected string query_long_exec(mapping info)
+{
+    return ::query_long_exec(info) || "";
+}
+
+protected string query_long_postprocess(string msg, mapping info)
+{
+    string tmp, ptmp;
+    int invis = IS_INVIS(this_object());
+    int desc;	// long oder description
+    
+    if(sizeof(msg))
+    {
+	// Eine normale long-Beschreibung (Monster und Engel):
+	msg = item::query_long_postprocess(msg, info);
+	desc = 0;
+    }
+    else
+    {
+	msg = add_dot_to_msg(this_object()->query_short(info[TI_VIEWER]))+"\n";
+	
+	if (!invis && tmp = this_object()->query_description())
+    	    msg += tmp;
+	
+	desc = 1;
+    }
+    
+       // Soll man nicht verhindern:
+    if(// !query_long_has_tag(T_ATOM_TAG_VICTIM_TEXT) &&
+	sizeof(tmp = query_opfer_string(info)))
+        msg += wrap(tmp);
+
+    if (desc && !invis && !query_long_has_tag(T_ATOM_TAG_SCAR_TEXT) &&
+	tmp = this_object()->query_scar_description())
+        msg += tmp;
+
+    if((!desc || !invis) && !query_long_has_tag(T_ATOM_TAG_PROTECTEE_TEXT) &&
+	sizeof(tmp = query_protectee_string(info)))
+    {
+	ptmp = tmp;
+    }
+
+    if((!desc || !invis) && !query_long_has_tag(T_ATOM_TAG_PROTECTORS_TEXT) &&
+	sizeof(tmp = query_protector_string(info)))
+    {
+	if(ptmp)
+	    ptmp += " " + tmp;
+	else
+	    ptmp = tmp;
+    }
+    
+    if(ptmp)
+	msg += wrap(ptmp);
+
+    if((!desc || !invis) && !query_long_has_tag(T_ATOM_TAG_HP_TEXT))
+        msg += wrap(this_object()->query_hp_string());
+
+    return msg;
+}
+
+protected mixed desc_condition(string name, mixed info, mixed* par)
+{
+    switch(name)
+    {
+	case T_ATOM_HAS_VICTIMS:
+	    return !query_wiz_level() && sizeof(query_opfer()-({0}));
+	    
+	case T_ATOM_HAS_SCARS:
+	    return this_object()->query_scar() != 0;
+	
+	case T_ATOM_HAS_PROTECTEE:
+	{
+	    object prot = this_object()->query_protectee();
+	    if(prot && present(prot, environment()))
+		return 1;
+	    return 0;
+	}
+	
+	case T_ATOM_HAS_PROTECTORS:
+	    for(object obj=first_inventory(environment());obj;
+		obj=next_inventory(obj))
+		if(living(obj) && obj->query_protectee()==this_object())
+		    return 1;
+	    return 0;
+    }
+    
+    return ::desc_condition(name, info, par);
+}
+
+protected mixed desc_text(string name, mixed info, mixed* par)
+{
+    switch(name)
+    {
+	case T_ATOM_VICTIM_TEXT:
+	    return query_opfer_string(info);
+	
+	case T_ATOM_SCAR_TEXT:
+	    return this_object()->query_scar_description() || "";
+	
+	case T_ATOM_HP_TEXT:
+	    return this_object()->query_hp_string();
+	
+	case T_ATOM_PROTECTEE_TEXT:
+	    return query_protectee_string(info);
+
+	case T_ATOM_PROTECTORS_TEXT:
+	    return query_protector_string(info);
+	    
+    }
+    
+    return ::desc_text(name, info, par);
+}
+
+/*
+FUNKTION: T_LISTE
+DEKLARATION: Liste der T-Defines in Lebewesen
+BESCHREIBUNG:
+
+Vordefinierte Bedingungen:
+ - T_HAS_VICTIMS	Der Spieler ist Moerder.
+ - T_HAS_SCARS		Der Spieler hat Narben.
+ - T_HAS_PROTECTEE	Das Lebewesen beschuetzt jemanden.
+ - T_HAS_PROTECTORS	Das Lebewesen wird von jemanden beschuetzt.
+ 
+Vordefinierte Texte:
+ - T_VICTIM_TEXT	Ein Text, der ein (M) beschreibt.
+ - T_SCAR_TEXT		Die Aufzaehlung der Narben.
+ - T_HP_TEXT		Wie fit das Monster ist.
+ - T_PROTECTEE_TEXT	Wen das Lebewesen beschuetzt.
+ - T_PROTECTORS_TEXT	Von wem das Lebewesen beschuetzt wird.
+ 
+Hinweise fuer die Meldungsgeneration:
+ - T_HAS_SCAR_TEXT	Keine eigene Narbenbeschreibung.
+ - T_HAS_HP_TEXT	Keine eigene Meldung ueber die Ausdauer.
+ - T_HAS_PROTECTEE_TEXT	Keine eigene Beschuetzensmeldung
+ - T_HAS_PROTECTORS_TEXT Keine eigene Beschuetzermeldung.
+
+GRUPPEN: spieler, monster
+*/
+
+/*
+FUNKTION: extra_look
+DEKLARATION: string extra_look()
+BESCHREIBUNG:
+Diese Funktion wird von query_extra_look() des umgebenden Objektes aufgerufen
+falls dieses ein Lebewesen ist, wenn die Augen eines anderen Lebewesens 
+dieses betrachten.
+query_extra_look() ruft extra_look() also in jedem Objekt auf, das ein
+Lebewesen (Spieler/Monster) bei sich traegt, wenn es angeschaut wird.
+Wenn ein Objekt etwas anderes als 0 zurueckliefert, wird der String in der
+langen Beschreibung des Besitzers in einer eigenen Zeile ausgegeben (und
+bei Ueberlaenge umgebrochen, ein "\n" ist also nicht noetig).
+Kein Objekt besitzt diese Funktion von Hause aus, wenn Du einen extra_look
+erzeugen willst, musst Du diese Funktion speziell in Deinem Objekt definieren.
+VERWEISE: query_object_description, query_extra_look, query_long,
+    query_transparent
+GRUPPEN: spieler, monster, augen
+*/
+
+/*
+FUNKTION: query_extra_look
+DEKLARATION: string query_extra_look()
+BESCHREIBUNG:
+Diese Funktion wird von den Augen in jedem Objekt aufgerufen, das sie
+betrachten, falls es ein Lebewesen (Spieler/Monster) (living()) ist. 
+Die Funktion durchlaeuft den Inhalt des Objekts und ruft in jedem
+enthaltenen Objekt die Funktion extra_look auf. (siehe dort).
+Und liefert die so gesammelten Beschreibungen zurueck.
+Die Augen haengen diesen String, falls != 0, an die Langbeschreibung
+eines Lebewesens an.
+VERWEISE: extra_look, query_object_description, query_long, query_transparent
+GRUPPEN: spieler, monster, augen
+*/
+
+string query_extra_look()
+{
+   string el;
+
+   el = implode(map(all_inventory()->extra_look() - ({0}),#'wrap, 78),"");
+   if (find_call_out("licht_aus") != -1)
+       el += wrap("Ueber dem Kopf von "+dem()+" schwebt eine Feuerkugel.");
+   return el == "" ? 0 : el;
+}
+
+
+/*
+FUNKTION: query_align_title
+DEKLARATION: string query_align_title()
+BESCHREIBUNG:
+Liefert den string zuruck, der bei einem Spieler in Klammern erscheint.
+VERWEISE: set_align_title, query_align, set_align, add_align
+GRUPPEN: spieler
+*/
+string query_align_title() { return align_title; }
+
+/*
+FUNKTION: set_align_title
+DEKLARATION: void set_align_title(string align_title)
+BESCHREIBUNG:
+Setzt den Titel, der bei Spieler in Klammern erscheint.
+VERWEISE: query_align_title, query_align, set_align, add_align
+GRUPPEN: spieler
+*/
+void set_align_title(string str)
+{
+    int i;
+    if (!str) align_title = str;
+    else if (playerp (this_object())) {
+        // kein regreplace verwenden, solange dies nen Bug hat
+        while ((i=strstr(str,"M)")) != -1)
+            str = str[0..i-1]+str[i+2..]; 
+        while (str[strlen(str)-2..strlen(str)-1] == "(M")
+            str = str[0..strlen(str)-3]; 
+        if (str != "M")
+            align_title = str;
+    }
+    else align_title = str;
+}
+
+/*
+FUNKTION: query_show_align_title
+DEKLARATION: int query_show_align_title()
+BESCHREIBUNG:
+Liefert zurueck, ob hinter dem Titel in Klammern ein Align-Titel 
+entsprechend des Align generiert werden soll.
+VERWEISE: set_show_align_title
+GRUPPEN: spieler
+*/
+int query_show_align_title() { return show_align_title; }
+
+/*
+FUNKTION: set_show_align_title
+DEKLARATION: void set_show_align_title(int flag)
+BESCHREIBUNG:
+Setzt, ob automatisch nach dem Titel eines Spielers entsprechend dem
+Ansehen in Klammern ein String erscheinen soll oder nicht.
+VERWEISE: query_show_align_title
+GRUPPEN: spieler
+*/
+void set_show_align_title(int i) { show_align_title=i; }
+
+/*
+FUNKTION: query_align
+DEKLARATION: int query_align()
+BESCHREIBUNG:
+Liefert das Ansehen des Spielers oder Monsters.
+VERWEISE: set_align_title, query_align_title, set_align, add_align,
+          query_real_align
+GRUPPEN: spieler, monster
+*/
+int query_align() { return alignment; }
+
+/*
+FUNKTION: query_real_align
+DEKLARATION: int query_real_align()
+BESCHREIBUNG:
+Liefert das echte, nicht von Shadows beeinflusste Ansehen des Spielers
+oder Monsters.
+VERWEISE: set_align_title,query_align_title,set_align,add_align,query_align
+GRUPPEN: spieler, monster
+*/
+nomask int query_real_align() { return alignment; }
+
+/*
+FUNKTION: add_align
+DEKLARATION: void add_align(int i)
+BESCHREIBUNG:
+Addiert i zum Ansehen eines Spielers oder Monsters.
+VERWEISE: set_align_title, query_align_title, set_align, query_align,
+          notify_alignment_change
+GRUPPEN: spieler, monster
+*/
+void add_align(int i)
+{
+    int old_alignment = alignment;
+    alignment = alignment*9/10+i;
+
+    if(!query_wiz_level()) // && !HLP_ALIGN(this_object()))
+        align_title = get_align_string(this_object()->query_align());
+    if (old_alignment != alignment)
+        notify("alignment_change",this_object(), alignment, old_alignment);
+}
+
+/*
+FUNKTION: set_align
+DEKLARATION: void set_align(int i)
+BESCHREIBUNG:
+Setzt das Ansehen eines Spielers oder Monsters.
+VERWEISE: set_align_title, query_align_title, query_align, add_align,
+          notify_alignment_change
+GRUPPEN: spieler, monster
+*/
+void set_align(int i)
+{
+    int old_alignment = alignment;
+    if (intp(i))
+    {
+        alignment = i;
+        if (!query_wiz_level()) // && !HLP_ALIGN(this_object()))
+            align_title = get_align_string(this_object()->query_align());
+    }
+    if (old_alignment != alignment)
+        notify("alignment_change",this_object(), alignment, old_alignment);
+}
+
+/*
+FUNKTION: notify_alignment_change
+DEKLARATION: void notify_alignment_change(object who, int new, int old)
+BESCHREIBUNG:
+Meldet sich ein Objekt bei einem Lebewesen mit
+    add_controller("notify_alignment_change",<objekt>)
+an, so wird bei einer durch add_align oder set_align ausgeloesten Align-
+Aenderung in diesem angemeldeten Controllern die Funktion
+    notify_alignment_change (who, new, old)
+aufgerufen. who ist dabei das Lebewesen, dessen Align sich geaendert hat,
+new das neue Align und old das alte Align.
+Bei add_align oder set_align, wodurch sich das Align nicht aendert, wird auch
+kein notify_alignment_change aufgerufen.
+VERWEISE: set_align, add_align
+GRUPPEN: spieler, monster
+*/
+
+
+/*
+FUNKTION: set_title
+DEKLARATION: void set_title(string str)
+BESCHREIBUNG:
+Setzt den Titel eines Monsters oder Spielers.
+VERWEISE: query_title
+GRUPPEN: spieler, monster
+*/
+void set_title(string str)
+{
+    int i;
+    if (playerp (this_object())) {
+        // kein regreplace verwenden, solange dies nen Bug hat
+        while (str && ((i=strstr(str,"(M)")) != -1))
+            str = str[0..i-1]+str[i+3..]; 
+        while (str && ((i=strstr(str,"(S)")) != -1))
+            str = str[0..i-1]+str[i+3..];
+    }
+    title = str;
+}
+
+/*
+FUNKTION: query_title
+DEKLARATION: string query_title()
+BESCHREIBUNG:
+Liefert den Titel eines Monsters oder Spielers.
+VERWEISE: set_title
+GRUPPEN: spieler, monster
+*/
+string query_title() { return title; }
+
+/*
+FUNKTION: query_magic_disguise
+DEKLARATION: mapping query_magic_disguise()
+BESCHREIBUNG:
+Liefert die Beschreibung des Lebewesen unter Beachtung von magischen
+Tarnungen. Magische Tarnungen fuer Spieler muessen von den Admins
+genehmigt werden.
+VERWEISE: query_real_name, query_real_cap_name, query_real_gender
+GRUPPEN: spieler, monster
+*/
+mapping query_magic_disguise()
+{
+    return ([
+             "gender":   query_gender(),
+             "name":     this_object()->query_real_name()||query_name(),
+	     "plural":   query_plural(),
+	     "cap_name": this_object()->query_real_cap_name()||query_cap_name(),
+	     "personal": query_personal(),
+	     "personal_title": query_personal_title(),
+	     "adjektiv": query_adjektiv(),
+	     "menge":    query_menge()
+	   ]);
+}
+
+protected void process_alignment()
+{
+    if (sizeof(alignment_list) != 20)
+	alignment_list = ({ alignment }) * 20;
+    else
+	alignment_list = ({ alignment }) + alignment_list[0..18];
+}
+
+int query_new_align()
+{
+    int RC,counter;
+    if (sizeof(alignment_list) != 20)
+	process_alignment();
+    for (counter = sizeof(alignment_list); counter--;)
+	RC += alignment_list[counter];
+    return RC / 20;
+}
+
+string query_str_alignList()
+{
+	string RC;
+	int counter;
+	RC="";
+	for (counter=0; counter < sizeof(alignment_list);counter++)
+		RC += to_string(alignment_list[counter])+", ";
+	return RC;
+}

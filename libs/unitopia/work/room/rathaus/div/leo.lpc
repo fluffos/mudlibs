@@ -1,0 +1,245 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/room/rathaus/div/leo.c
+// Description: Leo, der Goetterbote, macht Goetter froh.
+
+// $Log: leo.c,v $
+// Revision 1.24  2015/08/18 19:15:04  myonara
+// Dem Leo ein Gummitgoettchen spendiert inkl. ao-Routine :)
+//
+// Revision 1.23  2015/08/18 17:38:55  myonara
+// will [keine] gummigoettchen => an/aus
+//
+// Revision 1.22  2014/12/09 15:58:53  myonara
+// Hinweis Kobold und Orkmist eingebaut.
+//
+// Revision 1.21  2009-09-07 21:56:21  gnomi
+// Bei initialize() eine Rasse statt eines Namens angeben.
+//
+// Revision 1.20  2009-02-06 22:40:41  menaures
+// Sin: parse_conversation mit PARSE_SAY
+//
+// Revision 1.19  2008/01/16 09:46:04  gnomi
+// INPUT_PROMPT verwenden.
+//
+// Revision 1.18  2006/10/02 20:16:39  gnomi
+// load_chat direkt im Inherit aufrufen.
+//
+// Revision 1.17  2004/11/27 21:43:57  menaures
+// "will helfen" fuer Orkschlaechter-Raetsel
+//
+// Revision 1.16  2003/05/13 01:57:28  menaures
+// Zweitiegoetter nun ueber Leo
+//
+// Revision 1.15  2002/09/08 00:08:04  gnomi
+// Typo.
+//
+// Revision 1.14  2002/06/17 00:41:21  gnomi
+// Definition von query_prevent_shadow korrigiert.
+//
+// Revision 1.13  2002/02/07 22:45:41  gnomi
+// leo_tester.inc rausgenommen (wird durch die Aenderung im Levelsystem nicht
+// mehr benoetigt) und daher ein paar globale Variablen in leo.c entfernt.
+//
+// Revision 1.12  2001/12/02 12:14:54  sissi
+// Typo behoben sowie aus Tunika einen Umhang gemacht.
+//
+// Revision 1.11  2001/08/30 00:53:03  sissi
+// Leo begruesst jetzt Leute.
+//
+// Revision 1.10  2001/08/30 00:01:59  sissi
+// Leo reagiert nun auch auf "will tip/tipp [ab]geben
+//
+// Revision 1.9  2001/06/14 22:40:57  gnomi
+// 'sagt' beim set_parse_conversation verlangen. (Damit kein Name und PTitel
+// geparst wird.)
+//
+// Revision 1.8  2001/04/13 13:27:05  sissi
+// wizinfos bei Levelaenderungen eingebaut.
+//
+// Revision 1.7  2001/02/11 04:18:58  sissi & gnomi
+// Neues Levelsystem
+//
+// Revision 1.6  2001/01/27 02:13:13  sissi
+// cvs logeintrag eingebaut
+//
+
+inherit "/i/monster/monster";
+inherit "/room/rathaus/i/wizinfo";
+
+#include <config.h>
+#include <apps.h>
+#include <stats.h>
+#include <quest.h>
+#include <game.h>
+#include <gilden.h>
+#include <deklin.h>
+#include <level.h>
+#include <parse_com.h>
+#include <invis.h>
+#include <soul.h>
+#include <message.h>
+#include <input_to.h>
+#include <monster.h>
+#include <move.h>
+
+#define HOUR 3600
+#define ANGEL_TIME_TO_WIZ (3*HOUR)
+#define LEARNER_TIME (12*HOUR)
+#define REJECT(x) { do_command(x); return 0; }
+
+// learner
+int lehrmeister;
+object lehrling;
+
+#include "rollen_weg.inc"
+#include "leo_hlp.inc"
+#include "leo_misc.inc"
+#include "leo_lehrling.inc"
+#include "leo_geselle.inc"
+#include "leo_vogt.inc"
+
+int query_prevent_shadow(object shadow) { return 1; }
+
+int nein_danke(object ob)
+{
+    if (!present(ob,this_object()) || ob->id("seele"))
+	return 1;
+    do_command("sage Nein danke. Das will ich nicht.");
+}
+
+int gummigoettchen(object ob)
+{
+    if (!ob)
+        return 0;
+    if (!present(ob, this_object()))
+        return 1;
+    if (ob->id("gummigoettchen"))
+    {
+        if (sizeof(filter(all_inventory(),(: $1->id("gummigoettchen") :)))>1)
+            do_command("iss gummigoettchen");
+        else
+            do_command("knuddel gummigoettchen");
+        return 1;
+    }
+    return 0;
+}
+
+int orkmist(object ob, object woher)
+{
+    if (!woher || !ob)
+        return 0;
+    if (!present(ob,this_object()))
+        return 1;
+    if (ob->query_orkmist()) 
+    {
+        do_command("sage Ach ist das ein niedlicher Schreihals. Der will "
+            "wohl erst noch ein Orkschlaechter werden? Ist allerdings schon "
+            "etwas arg rostig dafuer...");
+        exec_command("gib",woher,ob);
+        return 1;
+    }
+    return nein_danke(ob);
+}
+
+int goetterbuch(object ob, object woher) {
+    if(!woher)
+        return 0;
+    if (!present(ob,this_object()))
+	return 1;
+    if (!wizp(this_player()))
+	do_command("sage Soso, Du willst also nicht den Weg der Goetter "
+	    "einschlagen. Dann eben viel Spass als Engel.");
+    else
+	do_command("sage Danke.");
+    ob->remove();
+    return 1;
+}
+
+void reset()
+{
+    if (!present("gummigoettchen"))
+    {
+        object bonbon=clone_object("/room/rathaus/obj/gummigott");
+        bonbon->move(this_object(),MOVE_ERR_REMOVE);
+    }
+}
+ 
+void create()
+{
+    monster::create();
+    clone_object("/obj/soul")->move(this_object());
+    initialize("mensch",100);
+    set_name("leo");
+    set_npc_name("leo");
+    set_id(({"leo","bote", "goetterbote"}));
+    set_short("Leo, der Goetterbote");
+    set_long("Leo, der Goetterbote. Er ist ein alter, betagter Mann, der "
+             "sich sehr sorgsam um die Beduerfnisse werdender Engel und "
+	     "Goetter kuemmert und deshalb ein gutes Verhaeltnis zum "
+	     "Obersten Rat des Pantheons unterhaelt. Er traegt einen langen "
+	     "Bart und einen noch viel laengeren weissen Umhang, welcher sein "
+	     "weiteres Aeusseres verbirgt. Dieser Umstand verleiht ihm "
+	     "eine geheimnisvolle Aura.");
+    set_personal(1);
+    set_gender("maennlich");
+    set_align(1000);
+    ::load_chat(1,({"Es freut mich, Euch hier zu sehen."}));
+    ::add_chats(({"Es freut mich, Euch hier zu sehen."}));
+
+    set_parse_conversation(this_object(), ({
+"engel:    engel && werden || will && engel || [mach] && engel ", PARSE_SAY,
+"keingott: kein && gott || nicht && gott ||nicht && goetter", PARSE_SAY,
+"lehrling: gott && werden || will && gott ||"
+        " [mach] && gott ||"
+        " goetter && werden || nimm,nehm,nehme && goetter ||"
+        " nimm,nehm,nehme && auf", PARSE_SAY,
+"lehrling: goettin && werden || will && goettin ||"
+        "  [mach] && goettin ", PARSE_SAY,
+"lehrling: lehrling && werden || will && lehrling ||"
+        "  lehre && gehen ", PARSE_SAY,
+"zweitie:  <fluester> && [zweitie] ", PARSE_SAY,
+"geselle:  geselle && werden || will && geselle ||"
+        "  gesellin && werden || will && gesellin ||"
+        "  [mach] && geselle,gesellen,gesellin", PARSE_SAY,
+"vogt:     vogt && werden || will && vogt ||"
+        "  [mach] && vogt", PARSE_SAY,
+"admin:    admin && werden || will && admin ||"
+        "  [mach] && admin", PARSE_SAY,
+"helfen:   will && helfen", PARSE_SAY,
+"gummiaus: will && [kein] && gummigoettchen", PARSE_SAY,
+"gummian:  will && gummigoettchen", PARSE_SAY,
+"wiegehts: wie && [geht] && dir", PARSE_SAY,
+"werbistdu: wer && bist && du", PARSE_SAY,
+"wasengel: wer,was && engel", PARSE_SAY,
+"wasgott: wer,was && gott,goetter", PARSE_SAY,
+"kobold: kobold,ecke", PARSE_SAY,
+"neuer_tip: habe,hab && tip,tipp ||"
+           "moechte,will && formblatt || "
+           "<frag> && formblatt || tip,tipp && abgeben || "
+           "moechte,will && tip,tipp && geben", PARSE_SAY,
+"gruss:    hallo || hi || moin || moinmoin", PARSE_SAY,
+"response: .*", PARSE_SAY|PARSE_RE_TRADITIONAL //sonst
+	}));
+    reset();
+    set_accept_objects(({#'accept_from_void,
+             #'orkschlaechter,   "ork#schlaechter",
+             #'orkmist,          "kurzschwert",
+             #'lehrlingsvertrag, "lehrlingsvertrag",
+			 #'gesellenvertrag,  "gesellenvertrag",
+			 #'vogtvertrag,      "vogtvertrag",
+			 #'goetterbuch,      "goetterbuch",
+             #'gummigoettchen,   "gummigoettchen",
+                         #'accept_invis,
+			 #'nein_danke,
+			 #'refuse}));
+    init_misc();
+}
+
+void response(string str)
+{
+   if(!str)
+      return;
+   if(lehrmeister && lehrling)
+      response_lehrling(str);
+}

@@ -1,0 +1,228 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/object/quest_obj.c
+// Description: Gemeinsames Inherit fuer Raetsel und Spiele
+//
+// $Log: mission_obj.c,v $
+// Revision 1.4  2013-03-16 15:42:30  gnomi
+// query_solved_msg_me() eingebaut.
+//
+// Revision 1.3  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.2  2008-05-28 07:33:00  gnomi
+// In TestMUDs kommt trotz Testflag eine Erfolgsmeldung uebern Kurier.
+//
+// Revision 1.1  2006/01/12 22:06:10  gnomi
+// Gemeinsame Sachen von game_obj und quest_obj nach mission_obj ausgelagert.
+//
+
+#pragma save_types
+
+/*
+ * This is a standard game or quest object.
+ * Configure it to make it look the way you want.
+ */
+
+inherit "/i/item/messages";
+
+#include <config.h>
+#include <level.h>
+#include <filed.h>
+#include <apps.h>
+
+#define H_NAME 0
+#define H_VAL 1
+#define H_DETAIL 2
+#define EMPTY_HINT ({"","",({})})
+
+string query_cap_name();
+
+private string hint_string, name, cap_name, *skillpfad, loesung;
+private mixed *skill_msgs, *hint_array=({});
+private int * skill_lvls;
+private int skill, min_skill_solved;
+private closure solved_msg, solved_msg_me;
+private string control_name, event_name;
+
+void create()
+{
+    name = "aufgabe";
+    hint_string = "Keine zusaetzlichen Hinweise.\n";
+    loesung = "";
+    skill = AVERAGE_EXPERIENCE;
+    skillpfad=({"skill","mission",name});
+}
+
+int query_prevent_shadow(object dummy) { return 1; }
+
+protected int set_mission_type(string sname, string cname, string ename)
+{
+    skillpfad[1] = sname;
+    control_name = cname;
+    event_name = ename;
+}
+
+nosave void set_skill(int a)
+{
+    if (a > 0)
+	skill = a;
+}
+
+int query_skill() { return skill; }
+
+nosave void set_min_skill_solved(int a)
+{
+    if (a > 0)
+        min_skill_solved = a;
+}
+
+int query_min_skill_solved() { return min_skill_solved || skill; }
+
+int query_points(object ob)
+{
+    if (!ob)
+	return skill;
+    return (int)ob->get_one_skill(skillpfad);
+}
+
+nosave void set_skill_path(string str) { skillpfad[2]=str; }
+
+string *query_skill_path() { return skillpfad; }
+
+int has_test_flag() { return 0; }
+
+protected int set_mission(int points, object ob)
+{
+    int old;
+    if (points < 0 || points > skill)
+	points = skill;
+    if (!ob || points<0)
+	return 0;
+    old=(int)ob->get_one_skill(skillpfad);
+    if (old<skill)
+    {
+        if (points<(skill-old))
+	    ob->add_skill_points(skillpfad,points);
+        else
+        {
+	    ob->add_skill_points(skillpfad,skill-old);
+#ifndef TestMUD
+	    if(!has_test_flag())
+#endif
+	        if(!solved_msg)
+		    EVENT_MASTER->event(event_name,ob,0,query_cap_name());
+	        else
+		    EVENT_MASTER->event(event_name,ob,
+				     closure_to_string(solved_msg,({ob})));
+        }
+        CONTROL->notify(control_name,name,points,ob,old,skill,
+            query_min_skill_solved());
+        return 1;
+    }
+    return 0;
+}
+
+nosave void set_hint(string h) { hint_string = h; }
+// structure: ({ ({Name, Text, structure}), ({Name,...}), ... })
+// hint_array[0][2][1][0] = Name des 2. Details des 1. Eintrags
+nosave void set_hint_array(mixed *data) { hint_array = data; }
+
+nosave string find_hint(mixed *hints, string *path)
+{
+    int i;
+    string prev, ret;
+
+    for(i = sizeof(hints); i--; )
+    {
+	if(hints[i][H_NAME] == path[0])
+	{
+	    ret = prev = hints[i][H_VAL];
+	    if (sizeof(path)>1)
+	    {
+		ret = find_hint(hints[i][H_DETAIL],path[1..]);
+		if (!ret)
+		    ret = prev;
+	    }
+	    break;
+	}
+    }
+    return ret;
+}
+
+varargs string query_hint(string was)
+{
+    string *path;
+    int cont;
+
+    if (!was || (was == "") || !hint_array
+	    || !sizeof(path = explode(was,":")-({""})) )
+	return hint_string;
+
+    // "Domain:Stadt:Person"
+    path = explode(was,":")-({""});
+    return find_hint(hint_array,path);
+}
+
+
+nosave void set_name(string n)
+{
+    name = lower_case(n);
+    if (skillpfad[2]=="aufgabe")
+	set_skill_path(name);
+}
+nosave void set_cap_name(string n)
+{
+    cap_name = n;
+}
+
+string query_name() { return name; }
+string query_cap_name() { return cap_name || (name && capitalize (name)); }
+int id(string str) { return (str && lower_case(str) == name); }
+string query_short() { return query_cap_name(); }
+
+string query_long(object who)
+{
+    if (wizp(who))
+        return hint_string+loesung;
+    else
+        return hint_string;
+}
+
+nosave void set_loesung(string str) { loesung=str; }
+string query_loesung() { return loesung; }
+
+nosave varargs void set_skill_msgs(mixed *m, int *l)
+{
+   skill_msgs = m;
+   skill_lvls = l;
+}
+
+mixed *query_skill_msgs() { return ({skill_msgs, skill_lvls}) ; }
+
+/*
+FUNKTION: set_solved_msg
+DEKLARATION: varargs nosave string set_solved_msg(mixed str_other, mixed str_me)
+BESCHREIBUNG:
+Liefert die Meldung, welche ueber den Spiele- bzw. Raetselkanal
+ausgegeben wird, wenn ein Spieler ein Spiel bzw. Raetsel geloest hat.
+Die Meldung kann entweder eine Pseudoclosure (mit 'ob als Spieler)
+oder eine Closure (der Spieler als 1. Parameter) sein. Der Spieler
+kann dabei ein Objekt oder Mapping (V-Item) sein. Optional kann man
+eine Meldung in der 1. Person angeben.
+*/
+varargs nosave string set_solved_msg(mixed str_other, mixed str_me)
+{
+   solved_msg = str_other ? mixed_to_closure(str_other,({'ob})) : 0;
+   solved_msg_me = str_me ? mixed_to_closure(str_me,({'ob})) : 0;
+}
+
+mixed query_solved_msg()
+{
+    return solved_msg;
+}
+
+mixed query_solved_msg_me()
+{
+    return solved_msg_me;
+}

@@ -1,0 +1,329 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/tools/colours.c
+// Description:	Hilfs-Funktionen fuer die Farbverwaltung der Spieler
+// Author:	Freaky (30.03.2000) extrahiert aus /i/player/colours.c
+// Modified by:	
+//
+// $Log: colours.c,v $
+// Revision 1.11  2015/04/26 14:07:27  myonara
+// Enzykommentare und string_to_colour("?") ermoelgicht.
+//
+// Revision 1.10  2013-03-16 16:23:36  gnomi
+// Erweiterte Farbeinstellungen.
+//
+// Revision 1.9  2010-07-13 18:33:28  gnomi
+// Soundunterstuetzung fuer das WebMUD.
+//
+// Revision 1.8  2008-05-28 07:36:59  gnomi
+// Piepton mit in die Farbeinstellungen aufgenommen.
+//
+// Revision 1.7  2008/01/31 07:55:00  gnomi
+// Unterstuetzung fuer 256 Farben.
+//
+// Revision 1.6  2002/11/30 03:44:57  gnomi
+// colour_to_string: Zeigt auch die Einrueckung an.
+//
+// Revision 1.5  2002/06/16 14:11:21  freaky
+// Einrueckung fertig implementiert.
+//
+// Revision 1.4  2001/03/24 03:36:47  gnomi
+// Typo.
+//
+// Revision 1.3  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+#include <colours.h>
+#include <message.h>
+
+// Liefert aus dem String (z.B. 'blau') die zugehoerige Farbe im Bitfeld
+private int* string_to_bitcolour(string colour, int offset, int eoffset, int eset)
+{
+    int col;
+
+    if ((col = CO_COL_NAMES[colour]) || member(CO_COL_NAMES,colour))
+        return ({ (CO_SET + col) << offset, 0});
+    if (sscanf(colour, "farbe%d", col))
+        return ({ 0, (col << eoffset) | eset });
+    return 0;
+}
+
+/*
+FUNKTION: colour_to_ansi
+DEKLARATION: varargs string colour_to_ansi(int colour, int ecol)
+BESCHREIBUNG:
+Erzeugt aus dem Bitfeld der Farbe den ANSI-String.
+In ecol sind erweiterte Farbbits. Bei einem 32-Bit-System stehen uns in 
+colour nur 32Bits zur Verfuegung wovon das meiste schon in Benutzung ist. 
+Fuer 256-Farben, wie sie einige Terminals haben, brauchen wir weitere 16 Bits. 
+Die sind in ecol drin.
+VERWEISE: colours_to_ansi_colours, colour_to_string, string_to_colour
+GRUPPEN: farben
+*/
+varargs string colour_to_ansi(int colour, int ecol)
+{
+    string ret;
+    int col, i, val;
+
+    if (!colour && !ecol)
+        return 0;
+    ret = "";
+    if (ecol & COE_FG256_SET)
+    {
+        col = COE_TO_FG256(ecol);
+        ret += "38;5;"+col+";";
+    }
+    else if (colour & CO_FG_SET)
+    {
+        col = CO_TO_FG(colour);
+        ret += "3" + col + ";";
+    }
+    
+    if (ecol & COE_BG256_SET)
+    {
+        col = COE_TO_BG256(ecol);
+        ret += "48;5;"+col+";";
+    }
+    else if (colour & CO_BG_SET)
+    {
+        col = CO_TO_BG(colour);
+        ret += "4" + col + ";";
+    }
+    // Die ganzen Modifier einbauen
+    val = 1 << CO_OFFSET_MOD;
+    for (i = CO_OFFSET_MOD; i <= CO_END_MOD; i++)
+    {
+        if (colour & val)
+            ret += (i - CO_OFFSET_MOD + 1) + ";";
+        val *= 2;
+    }
+    if (strlen(ret))
+        ret = VT_ESC + "[" + ret[0..<2] + "m";
+
+    if (colour & CO_BEEP)
+        ret = "\a"+ret;
+
+    if (sizeof(ret))
+        return ret;
+}
+
+/*
+FUNKTION: colours_to_ansi_colours
+DEKLARATION: varargs mapping colours_to_ansi_colours(mapping cols)
+BESCHREIBUNG:
+Erzeugt aus einem Mapping mit den Bitfeldern ein Mapping mit ANSI-Strings
+VERWEISE: colour_to_ansi, colour_to_string, string_to_colour
+GRUPPEN: farben
+*/
+varargs mapping colours_to_ansi_colours(mapping cols)
+{
+    mapping ret;
+    int i, indent;
+    string *keys, tmp;
+
+    if (cols[ACT_CONFIG] & CO_CONFIG_OFF)
+        return m_allocate(0,3);
+
+    if(widthof(cols)<5)
+        cols = m_reallocate(cols, 5);
+
+    keys = m_indices(cols);
+    ret = m_allocate(sizeof(cols),5);
+    for (i = sizeof(keys); i--; )
+    {
+        if (tmp = colour_to_ansi(cols[keys[i],0], cols[keys[i],2]))
+            ret[keys[i],0] = tmp;
+        if (tmp = colour_to_ansi(cols[keys[i],1], cols[keys[i],3]))
+            ret[keys[i],1] = tmp;
+        if (indent = CO_TO_INDENT(cols[keys[i],0]))
+            ret[keys[i],2] = " " * indent;
+        if (cols[keys[i], 0] & CO_BEEP)
+            ret[keys[i], 3] = COE_TO_IDLEBEEP(cols[keys[i], 2]) || -1;
+        ret[keys[i], 4] = cols[keys[i], 4];
+    }
+    for (i = 5; i--; )
+    {
+        if (ret[ACT_MOVE,i])
+        {
+            ret[MA_MOVE_IN,i] = ret[ACT_MOVE,i];
+            ret[MA_MOVE_OUT,i] = ret[ACT_MOVE,i];
+        }
+    }
+    return ret;
+}
+
+/*
+FUNKTION: colour_to_string
+DEKLARATION: varargs string colour_to_string(int col, int ecol)
+BESCHREIBUNG:
+Macht aus dem Bitfeld einen menschenlesbaren String.
+In ecol sind erweiterte Farbbits, siehe colour_to_ansi. 
+VERWEISE: colour_to_ansi, colours_to_ansi_colours, string_to_colour
+GRUPPEN: farben
+*/
+varargs string colour_to_string(int col, int ecol)
+{
+    int colo, i;
+    string *strs, ret;
+
+    ret = "";
+    strs = sort_array(m_indices(CO_NAMES),#'<);
+    for (i = sizeof(strs); i--; )
+    {
+        if (col & CO_NAMES[strs[i]])
+        {
+            ret += strs[i] + " ";
+        }
+    }
+
+    if (ecol & COE_FG256_SET)
+    {
+        colo = COE_TO_FG256(ecol);
+        ret += "Farbe "+colo+":";
+    }
+    else if (col & CO_FG_SET)
+    {
+        colo = CO_TO_FG(col);
+        strs = sort_array(m_indices(CO_COL_NAMES),#'<);
+        for (i = sizeof(strs); i--; )
+            if (colo == CO_COL_NAMES[strs[i]])
+            {
+                ret += strs[i] + ":";
+                break;
+            }
+    }
+
+    if (ecol & COE_BG256_SET)
+    {
+        colo = COE_TO_BG256(ecol);
+        ret += "Farbe "+colo+" ";
+    }
+    else if (col & CO_BG_SET)
+    {
+        colo = CO_TO_BG(col);
+        strs = sort_array(m_indices(CO_COL_NAMES),#'<);
+        for (i = sizeof(strs); i--; )
+            if (colo == CO_COL_NAMES[strs[i]])
+            {
+                ret += strs[i] + " ";
+                break;
+            }
+    }
+    else if(ret != "")
+        ret = ret[0..<2] + " ";
+
+    if (CO_TO_INDENT(col))
+        ret += "Einrueckung: "+CO_TO_INDENT(col)+" ";
+
+    if (col & CO_BEEP)
+        ret += "mit Piepton ";
+
+    if (ret == "")
+        return "normal";
+    return ret[0..<2];
+}
+
+/*
+FUNKTION: string_to_colour
+DEKLARATION: varargs mixed string_to_colour(string str, int ecol)
+BESCHREIBUNG:
+Macht aus einem String das bitfeld oder eine Fehlermeldung.
+In ecol werden die erweiterten Farbbits (siehe colour_to_ansi) als Referenz 
+zurueckgegeben, d.h. die Funktion wird wie folgt aufgerufen:
+colour = string_to_colour(str, &ecol);
+VERWEISE: colour_to_ansi, colours_to_ansi_colours, colour_to_string
+GRUPPEN: farben
+*/
+varargs mixed string_to_colour(string str, int ecol)
+{
+    int col_set, colour;
+    string *indents;
+
+    str = space(lower_case(str));
+    if (str == "?")
+    {
+        return wrap(
+            "Gueltige Farben: "
+            +liste(sort_array(m_indices(CO_COL_NAMES),#'<)," oder ")
+            +". Hervorhebungen: "
+            +liste(sort_array(m_indices(CO_NAMES),#'<), " oder ")
+            +". Wobei Vordergrund- von Hintergrundfarbe mittels : "
+            +"getrennt werden (Bsp. weiss:blau).");
+    }
+    str = regreplace(str,"einrueckung: ", "einrueckung:",1);
+    str = regreplace(str,"farbe ([0-9]+)", "farbe\\1", 1);
+    indents = explode(str," ");
+
+    foreach(string indent: indents)
+    {
+        string was, rest;
+
+        if (indent == "normal")
+        {
+            colour = 0;
+            ecol = 0;
+        }
+        else if (sscanf(indent,"%s:%s",was,rest) == 2)
+        {
+            int* colos;
+            if ((colos = string_to_bitcolour(was,CO_OFFSET_FG, 
+                                COE_OFFSET_FG256, COE_FG256_SET)))
+            {
+                if (col_set)
+                    return "Es wurde schon eine Farbe gesetzt '"
+                        + indent + "'\n";
+                colour |= colos[0];
+                ecol   |= colos[1];
+                col_set = 1;
+                if (!(colos = string_to_bitcolour(rest,CO_OFFSET_BG, 
+                                    COE_OFFSET_BG256, COE_BG256_SET)))
+                    return "Unbekannte Hintergrundfarbe '" + rest + "'\n";
+                colour |= colos[0];
+                ecol   |= colos[1];
+            }
+            else
+            {
+                int val;
+                switch(was)
+                {
+                    case "einrueckung":
+                        val = to_int(rest);
+                        if (val <= 0)
+                            return "Falsche Einruecktiefe '" + rest + "'\n";
+                        if (val > 7)
+                            return "Zu hohe Einruecktiefe '" + rest + "'\n";
+                        colour |= val;
+                        break;
+                    default:
+                        return "Unbekannte Hervorhebung '" + was + "'\n";
+                }
+            }
+        }
+        else
+        {
+            int colo;
+            if (colo = CO_NAMES[indent])
+                colour |= colo;
+            else if(!strstr(indent,"beep") || !strstr(indent,"piep"))
+                colour |= CO_BEEP;
+            else
+            {
+                int *colos;
+                if (!(colos = string_to_bitcolour(indent,CO_OFFSET_FG, 
+                            COE_OFFSET_FG256, COE_FG256_SET)))
+                    return "Unbekannte Hervorhebung '" + indent + "'\n";
+                if (col_set)
+                    return "Es wurde schon eine Farbe gesetzt '"
+                            + indent + "'\n";
+                colour |= colos[0];
+                ecol   |= colos[1];
+                col_set = 1;
+            }
+        }
+    }
+    return colour;
+}

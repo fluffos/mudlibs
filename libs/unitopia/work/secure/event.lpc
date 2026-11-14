@@ -1,0 +1,686 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/event.c
+// Description: Der Event-Master fuer Kurier und Brueller zustaendig
+// Author:	Garthan
+// Modified by: Mammi (01.11.99) notify("event")
+// 		Freaky (22.05.2000) grats() verschaerft
+//
+// $Log: event.c,v $
+// Revision 1.37  2010-07-04 10:30:02  sorcerer
+// Returntype int bei validate_event sichergestellt
+//
+// Revision 1.36  2005/08/25 22:24:08  gnomi
+// Indexing past string end...
+//
+// Revision 1.35  2004/04/17 02:27:16  gnomi
+// Ein Objekt vom K9 ausgeschlossen.
+//
+// Revision 1.34  2004/04/16 18:20:08  menaures
+// Goetter koennen Kanaele auch ohne benoetigte Items hoeren
+//
+// Revision 1.33  2003/11/25 00:07:56  gnomi
+// Eine Option sys_log gibt an, ob ein Log dieses Kanals erstellt werden soll.
+//
+// Revision 1.32  2003/11/04 03:24:40  gnomi
+// get_event_index: Den kleingeschriebenen Namen zum Vergleich heranziehen.
+// Sperrung eines Kanals mittels Knebel zulassen.
+//
+// Revision 1.31  2003/03/13 23:33:44  gnomi
+// Weitere Eigenschaft 'undisclosed', welche den zuhoerer-Befehl verhindert.
+// Eigenschaftstyp BOOL eingefuehrt.
+//
+// Revision 1.30  2003/01/13 02:06:36  gnomi
+// Typo beim letzten Patch behoben.
+//
+// Revision 1.29  2002/12/17 03:53:31  gnomi
+// 'zern -t'-Funktionen hinzugefuegt. Sie sichern automatisch die History.
+//
+// Revision 1.28  2002/12/05 00:47:01  gnomi
+// Prevents aus /nosave/adm/KEIN_KURIER einlesen.
+// An Spieler gibt es eine weniger technische Meldung.
+//
+// Revision 1.27  2002/11/26 22:36:55  gnomi
+// Gratsfilter: Es wurde vergessen, eine Variable wieder zurueckzusetzen.
+//
+// Revision 1.26  2002/07/01 20:06:58  sissi
+// Eval Cost fuer einen Event, der per call put ablaeuft, von 100000 auf
+// 200000 erhoeht; wir haben zu viele Spieler...
+//
+// Revision 1.25  2002/06/24 22:51:21  gnomi
+// seteuid(getuid()) entfernt; EUID wird vom Master aus gesetzt.
+//
+// Revision 1.24  2002/06/16 14:28:46  freaky
+// kleiner Bugfix.
+//
+// Revision 1.23  2002/06/16 14:20:21  sissi
+// applaudier mit aufgenommen, Anzahl der Grossbuchstaben - Berechnung nach
+// oben gezogen, Anzahl der Ausrufezeichen wird nun separat gezaehlt, bei
+// mehr als 3 ! wird gefiltert.
+//
+// Revision 1.22  2002/06/02 15:01:32  sissi
+// klatsch und beifall in gratsfilter aufgenommen.
+//
+// Revision 1.21  2002/01/13 23:00:19  sissi
+// Sicherheitsluecke gestopft: query_events mit deep_copy statt gar nichts,
+// query_prevents mit deep_copy statt copy.
+//
+// Revision 1.20  2001/11/09 23:46:31  gnomi
+// event(): Wenn ein call_out gestartet wird, abbrechen, damit die Meldung
+// nicht zweimal kommt.
+//
+// Revision 1.19  2001/10/20 19:00:04  freaky
+// Doku erweitert.
+//
+// Revision 1.18  2001/10/13 19:07:11  sissi
+// Events werden nun doch wieder sofort ausgefuehrt, sofern genug evals
+// da sind. Die notifies, die problematisch waren, werden jetzt allerdings
+// per call out ausgefuehrt.
+//
+// Revision 1.17  2001/10/13 18:19:52  sissi
+// Events jetzt ueber call out.
+// notifies bei einem Event werden erst nach dem event ausgefuehrt.
+//
+// Revision 1.16  2001/04/29 14:21:52  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.15  2001/03/02 22:09:24  sissi
+// Todesursache wird Goettern angezeigt.
+//
+// Revision 1.14  2001/02/12 22:12:46  gnomi
+// Level 20 - Kanaele uebern Controller schicken.
+//
+// Revision 1.13  2001/02/11 02:24:01  sissi
+// Anpassung an neues Levelsystem.
+//
+// Revision 1.12  2001/02/10 05:07:34  gnomi
+// Sonderzeichenregel erst ab 11 Zeichen.
+//
+// Revision 1.11  2001/02/10 03:52:57  gnomi
+// Zuviele Sonderzeichen im Brueller -> Gratsfilter schlaegt zu.
+//
+// Revision 1.10  2001/02/04 22:49:19  gnomi
+// grats nicht mehr private.
+//
+// Revision 1.9  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma no_inherit
+
+#include <apps.h>
+#include <config.h>
+#include <invis.h>
+#include <level.h>
+#include <event.h>
+#include <gilden.h>
+
+
+#define INFO "Info: "
+#define HISTORY_SIZE 40
+
+// events und prevents werden aus /nosave/adm eingelesen
+nosave mapping events, prevents;
+// Das speichern wir beim zerneuern.
+mapping history;
+
+#include "format.inc"
+
+#define NUM 1
+#define ALNUM 2
+#define BOOL 3
+
+#define ALLOWED_INDICES \
+([ "nr":	NUM,    \
+   "name":	ALNUM,  \
+   "level":	NUM,    \
+   "invis":	NUM,    \
+   "distrib":	NUM,    \
+   "func":	ALNUM,  \
+   "gilde":	ALNUM,  \
+   "desc":	ALNUM,  \
+   "musthave":  ALNUM,	\
+   "undisclosed": BOOL,	\
+   "sys_log":	ALNUM,  \
+ ])
+
+int get_event_index(mixed event_nr);
+
+nosave mapping decode_packet(string rawpacket, mapping idxs)
+{
+   int i;
+   string *lines, key, data;
+   mapping packet;
+
+   for(packet = ([]),
+       i = sizeof(lines = map(explode(rawpacket, "\n"), #'trim)-({""}));
+       i--;)
+      if(sscanf(implode(explode(lines[i], "\t"), " "), "%s %s", key, data) == 2)
+         if(idxs[key = lower_case(key)] == NUM)
+            packet[key] = to_int(data);
+	 else if(idxs[key] == ALNUM)
+	    packet[key] = (data = trim(data)) == "0" ? 0 : data;
+	 else if(idxs[key] == BOOL)
+	    packet[key] = member(({"true","1","on"}), trim(data))>=0;
+   return packet;
+}
+
+nosave mapping load(string filename)
+{
+   int i;
+   string file, *lines, *packets;
+   mapping ret, idxs, def, packet;
+
+   ret = ([]);
+   idxs = ALLOWED_INDICES;
+
+   if(file = read_file(filename))
+   {
+      for(i = sizeof(lines = explode(file,"\n")); i--;)
+         if(lines[i][0..0] == "#")
+            lines[i] = 0;
+      packets = explode(implode(lines - ({ 0 }), "\n"), "\n\n") - ({""});
+      def = sizeof(packets) ? decode_packet(packets[0], idxs) : ([]);
+      if(sizeof(packets) > 1)
+         for(i = 1; i < sizeof(packets); i++)
+            if(sizeof(packet = decode_packet(packets[i], idxs)) &&
+               member(packet, "nr"))
+	    {
+               ret[packet["nr"]] = def + packet;
+	       if(packet["name"])
+	    	 m_add(ret[packet["nr"]], "lcname", lower_case(packet["name"]));
+	    }
+   }
+   return ret;
+}
+
+void read_prevents()
+{
+    string kf;
+    
+    if(extern_call() &&
+	!(adminp(this_interactive()) && this_interactive()==this_player() &&
+	 geteuid(this_interactive())==geteuid(previous_object())))
+	    return;
+    
+    kf=read_file(PREVENT_FILE);
+    if(kf)
+	foreach(string str:explode(kf,"\n"))
+	{
+	    int i;
+	    str-=" \t\r";
+	    if(!strlen(str) || str[0]=='#')
+		continue;
+	    i = strstr(str,":");
+	    if(i>=0)
+		prevents[lower_case(str[0..i-1])] = map(explode(str[i+1..<1],","),
+		    (:
+			int val;
+			if($1=="*")
+			    return "*";
+			return get_event_index(str2int($1,&val)?$1:val);
+		    :)) - ({-1});
+	}
+}
+
+void create()
+{
+   int i, *idxs; 
+   
+   // Fuer den Fall, das wir zerneuert werden...
+   restore_object("/var/adm/event_history");
+   rm("/var/adm/event_history.o");
+
+   prevents = ([]);
+   events = load(EVENT_FILE);
+
+   for(i = sizeof(idxs = m_indices(events)); i--;)
+      if(events[idxs[i]]["func"])
+         events[idxs[i]]["func"] =
+	    lambda(({'ob,'mess,'param}),
+		   ({symbol_function(events[idxs[i]]["func"], this_object()),
+		     'ob,'mess,'param}));
+
+   read_prevents();
+}
+
+void prepare_renewal()
+{
+    save_object("/var/adm/event_history");
+}
+
+void abort_renewal()
+{
+    rm("/var/adm/event_history.o");
+}
+
+void finish_renewal(object neu) {}
+
+/* Diese Funktion existiert genauso in /i/player/event.c */
+int validate_event(object who, int i)
+{
+   return who &&
+          (who->query_level() >= events[i]["level"] ||
+           adminp(who)) &&
+          (!events[i]["gilde"] || who->query_wiz_level() ||
+            events[i]["gilde"] == who->query_gilde()) &&
+          (!events[i]["musthave"] || who->query_wiz_level() ||
+            present(events[i]["musthave"],who)) && 
+          1;
+}
+
+/* Diese Funktion existiert genauso in /i/player/event.c */
+int get_event_index(mixed event_nr)
+{
+   int i, *idxs;
+
+   if(intp(event_nr) && member(events, event_nr))
+      return event_nr;
+   else if(stringp(event_nr))
+   {
+      string name = lower_case(event_nr);
+      for(i = sizeof(idxs = m_indices(events)); i--;)
+         if(events[idxs[i]]["lcname"] == name)
+            return idxs[i];
+   }
+   return -1;
+}
+
+mixed prepare_mess(int index, mixed origin_ob, string mess, mixed param)
+{
+   mixed tmp = mess;
+   if(!events[index]["invis"] &&
+      objectp(origin_ob) && origin_ob->query_invis() & V_ATOM_INVIS)
+      return 0;
+   if(events[index]["func"] && objectp(origin_ob))
+      tmp = funcall(events[index]["func"],origin_ob, mess, param);
+   return (tmp == "" || tmp == "\n" ||
+           pointerp(tmp) && sizeof(tmp) && (tmp[0] == "" || tmp[0] == "\n"))
+	 ? 0 : tmp;
+}
+
+int grats(string str)
+{
+   int i, count, last, len, *counts, excl;
+   string mess, search, *ex;
+   mapping dupes;
+
+   // uups
+   if(!stringp(str))
+      return 0;
+
+   // cut shout prefix
+   ex = explode(str, ":");
+   str = implode(ex[(sizeof(ex) == 1 ? 0 : 1)..], ":");
+
+   // count upper chars and !
+   for(count = excl = 0, i = strlen(str); i--;) {
+      if(str[i] >= 'A' && str[i] <= 'Z')
+         count++;
+      if (str[i] == '!')
+         excl++;
+   }
+
+   // more than 40% uppercase ==> junk 
+   if((len = strlen(str)) && count*100/len > 40)
+      return 1;
+
+   // Mehr als drei Ausrufezeichen -> Muell
+   if (excl > 3)
+       return 1;   
+
+   // decomposite string, make dupes mapping and despacified search string 
+   len = strlen(mess = (lower_case(str)-" ")+" ");
+
+   // Buchstaben sind weniger als 60% des Gesamttextes ==> junk
+   if(len>10 && 3*strlen(mess-" ")>5*strlen(mess&"abcdefghijklmnopqrstuvwxyz"))
+       return 1;
+
+   for(count = 0, i = 0, dupes = ([]), search = "";  i < len;  i++)
+   {
+      count++;
+      if(mess[i] != last)
+      {
+         search += mess[i..i];
+         if(count > 1)
+            dupes[count]++;
+         count = 0;
+      }
+      last = mess[i];
+   }
+
+   // Find pattern in lowercased, despacified string ==> junk
+   // keine doppelten Buchstaben, die werden hier schon vereinfacht.
+   // Erstmal alle Sonderzeichen raus, die stoeren koennten
+   search &= "abcdefghijklmnopqrstuvwxyz@";
+       
+   if(sizeof(regexp(({ search }),
+      "grats|graz|gratz|gr@s|gr@t|kratz|kr@s|kr@t|gluex|gratul|"
+         "glueckwunsch|glueckwuensche|aplaus|prima|bravo|"
+	 "yabadabado|klatsch|beifall|applaudier|"
+      "thanks|thanx|juhu|"
+      "ciao|tschues|bye|"
+      "beileid")))
+      return 1;
+
+   // dupes = same characters adjacent  (eg. !!!!!!!! (8 dupes))
+   //     ones equal or more than 10 dupes or
+   //    twice equal or more than 05 dupes or
+   // 03 times equal or more than 04 dupes or
+   // 04 times equal or more than 03 dupes or
+   // 20 times equal or more than 02 dupes ==> junk
+   for(count = 0, i = sizeof(counts = sort_array(m_indices(dupes), #'>)); i--;)
+      if((count += dupes[counts[i]]) >= 
+         (([ 2:20, 3:4, 4:3, 5:2, 6:2, 7:2, 8:2, 9:2 ])[counts[i]] || 1))
+         return 1;
+
+}
+
+int add_to_history(int event_nr, mixed *event)
+{
+   mixed *entry;
+
+   if(!history)
+      history = ([]);
+   if(!(entry = history[event_nr]))
+      entry = ({});
+   entry += ({ event });
+   if(sizeof(entry) > HISTORY_SIZE)
+      entry = entry[1..];
+   history[event_nr] = entry;
+   return sizeof(entry);
+}
+
+mixed *query_history(int event_nr)
+{
+   if(playerp(previous_object()))
+      return history && pointerp(history[event_nr]) ? history[event_nr] : ({});
+}
+
+string clean_mess(string mess)
+{
+   return space(implode(explode(mess,"\n")-({""})," "));
+}
+
+/*
+FUNKTION: event
+DEKLARATION: varargs int event(mixed event_nr, mixed origin_ob, string inmess, mixed param)
+BESCHREIBUNG:
+Mit EVENT_MASTER->event(kanal, verursacher, meldung, parameter) wird eine
+Meldung mit dem Kurier verschickt. Kanal kann dabei die Kanalnummer oder
+die Kanalbezeichnung sein. Parameter ist kanalabhaengig und wird von der
+Formatierfunktion des Kanales verwendet. Bei Gildenkanaelen enthaelt
+er die Meldung fuer den Verursacher. (Er bekommt dann zumindest ein "Ok.",
+wenn er den Kanal nicht hoert.)
+Das Define EVENT_MASTER ist in /sys/config.h definiert.
+GRUPPEN: grundlegendes
+*/
+varargs int event(mixed event_nr, mixed origin_ob, string inmess, mixed param)
+{
+   int i, *prevent, flag, *idxs;
+   string origin_name, mess, wizmess, bracketmess;
+   mixed tmp;
+   string own_mess;
+   object *clients;
+   
+   if (get_eval_cost() < 200000)
+   {
+      call_out ("event", 2, event_nr, origin_ob, inmess, param);
+      return 2;
+   }
+
+   if((event_nr = get_event_index(event_nr)) < 0 ||
+      !(tmp = prepare_mess(event_nr, origin_ob, inmess, param)))
+      return 0;
+
+// /d/Doerrland/Doerrstadt/Strassen/obj/dspieler nervt auf dem K9.
+// Hinweis von mir in der FDB wurde geloescht. - Gnomi.
+if(event_nr==9 && objectp(origin_ob) &&
+    program_name(origin_ob)=="/d/Doerrland/Doerrstadt/Strassen/obj/dspieler.lpc")
+	return 0;
+    
+   if(stringp(tmp))
+      mess = tmp;
+   else if(pointerp(tmp))
+   {
+      if(sizeof(tmp))
+      {
+	 if(!stringp(mess = tmp[0]))
+	    return 0;
+	 if(sizeof(tmp)>1)
+	    own_mess = tmp[1];
+      }
+      else
+         return 0;
+   }
+   else
+     return 0;
+
+   if(event_nr == 7 && objectp(origin_ob))
+      for(i = sizeof(idxs = m_indices(events)); i--;)
+         if(events[idxs[i]]["gilde"] == inmess)
+            if(param)
+	       origin_ob->enter_event(idxs[i]);
+	    else
+	       origin_ob->leave_event(idxs[i]);
+
+   if((event_nr == 9 || event_nr == 10) && grats(mess))
+      flag |= EVF_GRATSFILTER;
+
+   // Die Funktion no_kurier darf nur vom Knebel-Shadow genutzt werden!
+   if(objectp(origin_ob) && (tmp=origin_ob->no_kurier(event_nr)))
+   {
+      tell_object(origin_ob, wrap(tmp));
+      return 1;
+   }
+   if(objectp(origin_ob) && 
+      (origin_name = origin_ob->query_real_name()) &&
+      sizeof(prevent = prevents[origin_name]) &&
+      (member(prevent, event_nr) >= 0 || 
+       (member(prevent, "*") >= 0 && validate_event(origin_ob, event_nr))))
+   {
+      if(wizp(origin_ob))
+         tell_object(origin_ob, "You triggered a prevented event (ClassId: "+
+			     events[event_nr]["name"]+").\n");
+      else
+          tell_object(origin_ob, "Dein Kurier versagt Dir seinen Dienst.\n");
+      return 1;
+   }
+
+   if (events[event_nr]["sys_log"])
+   {
+      mixed urheber = filter(caller_stack(1),#'living);
+      if(sizeof(urheber))
+         urheber = urheber[0];
+      else
+         urheber = origin_ob;
+      if(objectp(urheber))
+         urheber = playerp(urheber)?capitalize(urheber->query_real_name())
+			:sprintf("%s \"%s\"",object_name(urheber),urheber->query_name());
+      else if(stringp(urheber))
+         urheber = "\""+urheber+"\"";
+      else
+         urheber = "-";
+	 
+      sys_log(events[event_nr]["sys_log"],sprintf("[%s: %-10s] %-=79s\n", shorttimestr(time()), urheber, mess));
+   }
+
+   if (mess && (mess[0] != '['))
+      bracketmess = wrap_say ("["+(string)events[event_nr]["name"]+":"+
+	(objectp(origin_ob)?
+         (playerp(origin_ob)?capitalize(origin_ob->query_real_name())
+                         :origin_ob->query_cap_name())
+	 :capitalize(to_string(origin_ob?origin_ob:"-"))) +"]",
+         space(implode (explode (mess,"\n")," ")));
+   if (event_nr == 9 && playerp(origin_ob) && 
+       ((origin_ob->query_invis() & V_ATOM_INVIS)
+       || (origin_ob->query_name() != origin_ob->query_real_name())))
+   {
+      tmp = explode (mess,"\n");
+      if (strlen(tmp[sizeof(tmp)-2]) > 64)
+      {
+         wizmess = mess + "        ["
+            +capitalize(origin_ob->query_real_name())+"]\n";
+                                   // origin_ob ist player
+      }
+      else
+      {
+         tmp[sizeof(tmp)-2]+=" ["+capitalize(origin_ob->query_real_name())+"]";
+         wizmess = implode(tmp,"\n");
+      }
+   }
+   if ((event_nr == 3) && param && stringp (param)) {
+       wizmess = mess +"Todesursache: "+param+"\n";
+       bracketmess += "[Todesursache: "+param+"]\n";
+   }
+   add_to_history(event_nr, ({ time(),
+                               objectp(origin_ob) ? Name(origin_ob) : origin_ob,
+			       clean_mess(mess),
+			       flag }));
+   if(stringp(own_mess) && objectp(origin_ob) &&
+      validate_event(origin_ob, event_nr))
+   {
+      origin_ob->event(event_nr, origin_ob, own_mess, flag | EVF_FEEDBACK,
+	                  0, (own_mess[0]=='[')?0:
+         wrap_say ("["+(string)events[event_nr]["name"]+":"+
+            (playerp(origin_ob)?capitalize(origin_ob->query_real_name())
+                               :origin_ob->query_cap_name())+
+	    "]",space(implode (explode (own_mess,"\n")," "))));
+      clients=users()-({origin_ob});
+   }
+   else
+      clients=users();
+   for(i = sizeof(clients); i--;)
+      if(validate_event(clients[i], event_nr))
+	 clients[i]->event(event_nr, origin_ob, mess, flag, wizmess, bracketmess);
+   if (events[event_nr]["level"] <= LVL_WIZ && objectp(origin_ob))
+       call_out ("notify_control", 2,
+           "event_"+lower_case(events[event_nr]["name"]),
+	   origin_ob,mess,flag,wizmess);
+   return 1;
+}
+
+void notify_control (string call, object origin_ob, string mess, int flag, string wizmess)
+{
+    CONTROL->notify(call, origin_ob, mess, flag, wizmess);
+}
+
+object *query_listeners(mixed event_nr)
+{
+   int i;
+   object *clients, *ret;
+
+   clients = ({});
+
+   if((event_nr = get_event_index(event_nr)) >= 0)
+   {
+      for(i = sizeof(clients = users()); i--;)
+	 if(!validate_event(clients[i], event_nr) ||
+	    !clients[i]->event(event_nr, 0, 0, 0))
+	    clients[i] = 0;
+      clients -= ({ 0 });
+   }
+   return clients;
+}
+
+varargs int talk(mixed who, mixed event_nr, 
+		  mixed origin_ob, string mess, mixed param)
+{
+   int *prevent;
+   object client;
+   string origin_name;
+
+   if(stringp(who))
+      who = find_player(who);
+   if(!who || 
+      (event_nr = get_event_index(event_nr)) < 0 ||
+      !(mess = prepare_mess(event_nr, origin_ob, mess, param)))
+      return 0;
+   if(objectp(origin_ob) &&
+      (origin_name = origin_ob->query_real_name()) &&
+      sizeof(prevent = prevents[origin_name]) &&
+      (member(prevent, event_nr) >= 0 || 
+       (member(prevent, "*") >= 0 && validate_event(origin_ob, event_nr))))
+   {
+      if(wizp(origin_ob))
+          tell_object(origin_ob, "You triggered a prevented event (ClassId: "+
+                             events[event_nr]["name"]+").\n");
+      else
+          tell_object(origin_ob, "Dein Kurier versagt Dir seinen Dienst.\n");
+      return 1;
+   }
+   return who->event(event_nr, origin_ob, mess, 0);
+}
+
+
+void add_prevent(object who, mixed event_nr)
+{
+   int *prevent;
+   string name;
+
+   if(lordp(this_interactive()))
+   {
+      if(!who || (event_nr = get_event_index(event_nr)) < 0 ||
+	 !(name = who->query_real_name()))
+	 return;
+      if(!(prevent = prevents[name]))
+	 prevent = ({});
+      prevent -= ({ event_nr });
+      prevent += ({ event_nr });
+      prevents[name] = prevent;
+   }
+}
+
+void delete_prevent(object who, mixed event_nr)
+{
+   int *prevent;
+   string name;
+
+   if(lordp(this_interactive()))
+   {
+      event_nr = get_event_index(event_nr);
+      if(!who || !(name = who->query_real_name()))
+	 return;
+      if(event_nr < 0)
+	 m_delete(prevents, name);
+      else
+      if(sizeof(prevent = prevents[name]))
+      {
+	 prevent -= ({ event_nr });
+	 if(sizeof(prevent))
+	    prevents[name] = prevent;
+	 else 
+	    m_delete(prevents, name);
+      }
+   }
+}
+
+mapping query_events()
+{
+   return deep_copy(events);
+}
+
+mapping query_prevents()
+{
+   return deep_copy(prevents);
+}
+
+mixed *query_remote_channels()
+{
+   int i, *idxs;
+   mixed *ret;
+   ret = ({ ({}), ({}), ({}), ({}) });
+
+   idxs = m_indices(events);
+   for(i = 0; i < sizeof(idxs); i++)
+      if(events[idxs[i]]["distrib"])
+      {
+	 ret[EVR_ID_STRING] += ({ lower_case(events[idxs[i]]["name"]) });
+	 ret[EVR_LEVEL] +=     ({ events[idxs[i]]["level"] });
+	 ret[EVR_DISTRIB] +=   ({ events[idxs[i]]["distrib"] });
+	 ret[EVR_ID_NR] +=     ({ idxs[i] });
+      }
+   return ret;
+}
+

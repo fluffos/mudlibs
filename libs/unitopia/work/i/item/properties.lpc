@@ -1,0 +1,187 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/item/properties.c
+// Description: Dynamische Eigenschaften
+// Author:      Gnomi
+//
+// $Log: properties.c,v $
+// Revision 1.5  2013/12/01 12:50:08  gnomi
+// query_room() via call_direct aufrufen, um Rekursionen zu vermeiden.
+//
+// Revision 1.4  2013-04-02 22:09:22  gnomi
+// Anpassungen an zusaetzliche Parameter der Hilfsfunktionen.
+//
+// Revision 1.3  2013-03-18 21:41:17  gnomi
+// Formatierung der Doku verbessert.
+//
+// Revision 1.2  2013-03-16 18:08:42  gnomi
+// Typo.
+//
+// Revision 1.1  2013-03-16 15:15:25  gnomi
+// Property-Implementation.
+//
+
+#include <apps.h>
+#include <error.h>
+#include <property_master.h>
+
+private functions inherit "/i/tools/properties";
+
+private nosave mapping props=([:1]);
+private mapping saved_properties;
+
+private int get_property_use()
+{
+    if(living(this_object()))
+        return playerp(this_object()) ? PU_PLAYER : PU_MONSTER;
+
+    if(call_direct(this_object(), "query_room"))
+        return PU_ROOM;
+
+    return PU_ITEM;
+}
+
+/*
+FUNKTION: query
+DEKLARATION: nomask mixed query(string name [, mixed info])
+BESCHREIBUNG:
+Fragt die Eigenschaft 'name' ab. Der Name sollte dabei als Define
+angegeben werden (fuer die Mudlib-Properties dazu <properties.h> includen).
+In 'info' koennen zusaetzliche Infos uebergeben werden, diese
+wird an alle Controller und an eine ggf. gesetzte Abfragefunktion
+uebergeben.
+VERWEISE: set, add, delete
+GRUPPEN: properties
+*/
+varargs nomask mixed query(string name, mixed info)
+{
+    return query_property_mapping(props, "", get_property_use(), name, extern_call() ? previous_object() : this_object(), info, ({}));
+}
+
+/*
+FUNKTION: set
+DEKLARATION: nomask mixed set(string name, mixed value)
+BESCHREIBUNG:
+Damit wird ein neuer Wert 'value' fuer die Eigenschaft 'name' gesetzt.
+VERWEISE: query, add, delete
+GRUPPEN: properties
+*/
+nomask mixed set(string name, mixed value)
+{
+    return set_property_mapping(props, "", get_property_use(), name, value, extern_call() ? previous_object() : this_object(), ({}));
+}
+
+/*
+FUNKTION: add
+DEKLARATION: nomask mixed add(string name [, mixed key], value)
+BESCHREIBUNG:
+Falls die Eigenschaft 'name' ein Mapping ist, so kann man mit dieser Funktion
+einen neuen Eintrag key: value hinzufuegen. Falls sie ein Array ist, wird
+ein neues Element 'value' eingetragen. Ansonsten wird der Wert von 'value' zur
+bestehenden Eigenschaft addiert.
+VERWEISE: query, set, delete
+GRUPPEN: properties
+*/
+nomask mixed add(string name, varargs mixed* args)
+{
+    return add_property_mapping(props, "", get_property_use(), name, args, extern_call() ? previous_object() : this_object(), ({}));
+}
+
+/*
+FUNKTION: delete
+DEKLARATION: nomask mixed delete(string name, mixed key|value)
+BESCHREIBUNG:
+Falls die Eigenschaft 'name' ein Mapping ist, so entfernt dieser Aufruf den
+Eintrag 'key'. Falls sie ein Array ist, wird ein Element 'value' entfernt.
+Bei allen anderen Datentypen liefert der Aufruf einen Fehler, sofern
+keine spezielle delete-Funktion registriert wurde.
+VERWEISE: query, set, add
+GRUPPEN: properties
+*/
+nomask mixed delete(string name, mixed key)
+{
+    return delete_property_mapping(props, "", get_property_use(), name, key, extern_call() ? previous_object() : this_object(), ({}));
+}
+
+/*
+FUNKTION: query_property_info
+DEKLARATION: mapping query_property_info(string name)
+BESCHREIBUNG:
+Liefert alle Informationen zur Eigenschaft 'name' zurueck.
+Dieses Mapping enthaelt alle Informationen der Property-Definition
+inklusive des tatsaechlichen Wertes.
+
+ACHTUNG: Diese Abfrage umgeht alle Auswertungen (z.B. bei Closures)
+und Modifikationen des gespeicherten Wertes und sollte daher nur zu
+Debugging-Zwecken beachtet werden.
+
+VERWEISE: query, set_property_info, query_property_names, query_property_infos
+GRUPPEN: properties
+*/
+mapping query_property_info(string name)
+{
+    return query_property_info_mapping(props, name, extern_call() ? previous_object() : this_object());
+}
+
+/*
+FUNKTION: query_property_names
+DEKLARATION: string* query_property_names()
+BESCHREIBUNG:
+Liefert die Namen aller Eigenschaften zurueck,
+die an diesem Objekt gesetzt wurden.
+VERWEISE: query, query_property_info, query_property_infos
+GRUPPEN: properties
+*/
+string* query_property_names()
+{
+    return query_property_names_mapping(props, extern_call() ? previous_object() : this_object());
+}
+
+/*
+FUNKTION: query_property_infos
+DEKLARATION: mapping query_property_infos()
+BESCHREIBUNG:
+Liefert alle Informationen aller gesetzten Eigenschaften. Das Mapping
+enthaelt die Property-Definitionen inklusive der tatsaechlichen Werte.
+
+ACHTUNG: Diese Abfrage umgeht alle Auswertungen (z.B. bei Closures) und
+Modifikationen des gespeicherten Wertes und sollte daher nur zu
+Debugging-Zwecken beachtet werden.
+
+VERWEISE: query, set_property_info, query_property_info, query_property_names
+GRUPPEN: properties
+*/
+mapping query_property_infos()
+{
+    return query_property_infos_mapping(props, extern_call() ? previous_object() : this_object());
+}
+
+/*
+FUNKTION: save_properties
+DEKLARATION: protected void save_properties()
+BESCHREIBUNG:
+Speichert gesetzte Eigenschaften mit PF_PERSISTANT-Flag so ab, dass sie bei
+einem save_object() mitgespeichert werden. Zum Wiederherstellen ist
+nach dem restore_object() ein Aufruf von restore_properties() notwendig.
+VERWEISE: restore_properties
+GRUPPEN: properties
+*/
+protected void save_properties()
+{
+    saved_properties = save_property_mapping(props, "", ({}));
+}
+
+/*
+FUNKTION: restore_properties
+DEKLARATION: protected void restore_properties()
+BESCHREIBUNG:
+Stellt nach einem restore_object() die gespeicherten Eigenschaften wieder
+her. Die Eigenschaften muessen dazu vor dem save_object() mit einem Aufruf
+von save_properties() gespeichert werden.
+VERWEISE: save_properties
+GRUPPEN: properties
+*/
+protected void restore_properties()
+{
+    props = restore_property_mapping(saved_properties, "", ({}));
+}

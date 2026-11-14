@@ -1,0 +1,2278 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/room.c
+// Description: Inheritfile fuer einen Raum
+// Modified by: Francis, Freaky, Garthan (23.12.93)
+// Modified by: Freaky	(22.02.95)  check_light() ist nur noch in query_light()
+// Modified by: Freaky	(05.12.95)  filter_xxx wird nicht beachtet, wenn
+//                                  es ein unsichtbarer Gott ist.
+//		Freaky	(16.04.96)  load_objects() geaendert
+//              Sissi	(1996)      im Meer treiben Sachen ab oder gehen unter
+//		Garthan	(23.02.97)  traces, abtreiben/untergehen optimiert
+//		Freaky  (10.03.98)  set_item_descr* endgueltig geloescht
+//		Freaky  (10.03.98)  message auf send_message umgebaut.
+//              Parsec  (15.06.98)  query_exit_command() und
+//                                  query_temp_traces() eingebaut
+//              Sissi   (26.07.98)  visitors speichert jetzt auch Unsichtbarkeit
+//		Freaky  (30.03.1999) __INIT() in init_room() umbenannt.
+//		Freaky  (07.12.1999) check_light(): change_daylight eingebaut
+//		Freaky  (13.12.1999) trace_exit(): map2domain(fn,1): 1 rein
+// $Log: room.c,v $
+// Revision 1.87  2015/05/25 13:46:32  myonara
+// Aufruf von query_invis in Aufrufen von add_partial_trace gegen
+// RTEs abgesichert.
+//
+// Revision 1.86  2013/12/01 12:51:48  gnomi
+// Properties virtuell erben, damit Rauminherits gemischt werden koennen.
+//
+// Revision 1.85  2013/07/26 17:27:07  gnomi
+// Properties in Raeumen aktiviert.
+//
+// Revision 1.84  2013/06/15 20:55:03  sorcerer
+// Neu: query_no_idle_logout
+//
+// Revision 1.83  2012-12-19 20:14:39  sorcerer
+// Doku von add_type aktualisiert.
+//
+// Revision 1.82  2011-12-10 01:19:39  gnomi
+// Schatztruhen umgebaut.
+//
+// Revision 1.81  2010-04-01 23:38:16  gnomi
+// EI_DIRECTION eingebaut (liefert die eigentliche Richtung, falls man sowas
+// wie Aliase einbaut).
+//
+// Revision 1.80  2010-03-22 18:33:19  sorcerer
+// set_exit(s) auch mit categories
+//
+// Revision 1.79  2010-03-21 14:37:02  sorcerer
+// Gnomis Exit-Categories inkl. Bugfix
+//
+// Revision 1.78  2009-07-30 16:57:29  gnomi
+// VARARGS raus.
+//
+// Revision 1.77  2009-04-15 13:37:59  gnomi
+// Damit rechnen, dass ROOM_AUTOLOAD auch selbststaendig Autoloader
+// rausschmeisst.
+//
+// Revision 1.76  2008/02/28 08:53:09  gnomi
+// auto_loader: Aufpassen, dass der nicht bei der Bewegung irgendwohin
+// zerstoert wird.
+//
+// Revision 1.75  2008/01/24 22:48:30  gnomi
+// query_exit_info so erweitert, dass es auch gesperrte Ausgaenge liefern kann.
+//
+// Revision 1.74  2007/08/09 22:15:36  gnomi
+// Deklaration von set_msg korrigiert.
+//
+// Revision 1.73  2006/08/11 20:25:39  gnomi
+// Auf globale Variablen in den description-Inherits verzichten.
+// Nur /i/room speichert die Tageszeitmeldungen zwischen.
+//
+// Revision 1.72  2006/06/07 20:31:52  mudadm
+// Erweiterte Beschreibungsmoeglichkeiten.
+//
+// Revision 1.71  2006/06/07 20:28:35  gnomi
+// Defines fuer Temp-Traces nutzen. Zeit merken.
+//
+// Revision 1.70  2005/05/26 15:09:51  menaures
+// Ungueltige Domain bei Raum-Inherits nicht mehr bemaengeln
+//
+// Revision 1.69  2005/02/13 14:31:18  menaures
+// abtreiben_untergehen(): Weitere Materialien aufgenommen
+// Keine Sonderbehandlung mehr fuer "boje", die hat query_schwimmfaehig().
+//
+// Revision 1.68  2005/01/05 21:55:32  gnomi
+// /room-Raeume haben in HomeMUDs die Domain "Nirwana" statt "Vaniorh".
+//
+// Revision 1.67  2004/11/27 21:05:02  gnomi
+// Enzy-Doku: Gruppe 'raum' hinzugefuegt.
+//
+// Revision 1.66  2004/09/04 22:19:29  menaures
+// concerned_drift/sink
+//
+// Revision 1.65  2004/08/29 18:12:07  menaures
+// query_room_environment() zur zentralen Beachtung von repraesentant/umgebung
+// query_room_domain() beachtet jetzt solche virtuellen Umgebungen und erzeugt
+// einen Fehler, wenn keine gueltige Domain ermittelt werden konnte.
+//
+// Revision 1.64  2004/07/19 21:15:39  gnomi
+// Domain-Infos vom Master nach /apps/domains umgezogen.
+//
+// Revision 1.63  2004/06/07 22:27:34  menaures
+// Sonderregelungen fuer unsichtbare Goetter nur noch bei V_INVIS.
+//
+// Revision 1.62  2004/04/16 18:16:19  menaures
+// Wenn moeglich, room_domain nur einmal ermitteln.
+//
+
+#pragma save_types
+
+/* =====================  I N H E R I T S  ============================== */
+
+virtual inherit "/i/item/description";
+virtual inherit "/i/item/v_item";
+inherit "/i/item/smell";
+inherit "/i/item/noise";
+inherit "/i/item/feel";
+inherit "/i/item/control";
+inherit "/i/item/licht";
+inherit "/i/contain";
+inherit "/i/tools/message_parser";
+inherit "/i/tools/move_msg_utils";
+inherit "/i/item/message";
+inherit "/i/item/udl";
+virtual inherit "/i/item/properties";
+
+/* =====================  D E F I N E S  ================================ */
+
+#include <apps.h>
+#include <config.h>
+#include <error.h>
+#include <invis.h>
+#include <landschaft.h>
+#include <level.h>
+#include <message.h>
+#include <room.h>
+#include <time.h>
+#include <touch.h>
+#include <misc.h>
+
+#define FORWARD(i,x) for(i=0;i<sizeof(x);i++)
+
+// create traces?
+/* #define CREATE_TRACES    jetzt in /sys/room.h */
+
+// intern: flag fuer add_partial_trace()
+#define TR_MOVED_IN  0
+#define TR_MOVED_OUT 1
+
+/* =====================  G L O B A L S ================================= */
+
+private string *exits, *commands;
+private int *flags;
+private mapping categories;
+
+private mapping types;
+
+private mixed msg_in, msg_out, msg_self;
+private nosave closure c_msg_in, c_msg_out, c_msg_self;
+private mapping exit_msgs;
+private nosave mapping c_exit_msgs;
+private mapping dir_msgs;
+private string dir_prep_in, dir_prep_out;
+private string room_domain;
+
+private nosave int already_loading; // 0: uninitialisiert, 1: auto-loading laeuft gerade, -1: auto-loading lief schon mal
+private nosave object *auto_objects;
+private nosave mixed  *auto_object_array;
+private nosave mapping lock_reason, lock_reason_other;
+
+private nosave string loader;
+
+private nosave int *map_pos;
+
+// Einfach, damit die Funktion init_room() im __INIT() aufgerufen wird...
+// Uebler Hack ;) (Freaky)
+public int init_room();
+private nosave int kein_wissen = init_room();
+
+#ifdef CREATE_TRACES
+private nosave mapping traces, temp_traces;
+private nosave mixed *visitors;
+#endif
+
+/* =====================  R O O M   S E T U P =========================== */
+
+
+public int init_room()
+{
+    object ob;
+    int x, y;
+
+    seteuid(getuid());
+    if (!loader)
+    {
+	if (!(ob = this_interactive()))
+	    if (!(ob = this_player()))
+		ob = previous_object();
+	if (!ob)
+	    loader = "__unbekannt__";
+	else
+	{
+	    loader = ob->query_real_name();
+	    if (!loader || loader == "")
+		loader = ob->query_short(ob);
+	    if (!loader || loader == "")
+		loader = object_name(ob);
+	}
+    }
+    if (sscanf(object_name(),"/map/m%d_%d",x,y) == 2)
+    {
+	int xp = (x==MAP_MAX_X)?MAP_MIN_X:(x+1),
+	    yp = (y==MAP_MAX_Y)?MAP_MIN_Y:(y+1),
+	    xm = (x==MAP_MIN_X)?MAP_MAX_X:(x-1),
+	    ym = (y==MAP_MIN_Y)?MAP_MAX_Y:(y-1);
+	map_pos = ({ x, y });
+	commands = ({ "norden", "nordosten", "osten", "suedosten",
+		      "sueden", "suedwesten", "westen", "nordwesten" });
+	exits =
+	    ({ "/map/m"+x +"_"+yp,
+	       "/map/m"+xp+"_"+yp,
+	       "/map/m"+xp+"_"+y,
+	       "/map/m"+xp+"_"+ym,
+	       "/map/m"+x +"_"+ym,
+	       "/map/m"+xm+"_"+ym,
+	       "/map/m"+xm+"_"+y,
+	       "/map/m"+xm+"_"+yp });
+	flags = ({
+	    EXIT_ATOM_NOLIST,
+	    EXIT_ATOM_NOLIST,
+	    EXIT_ATOM_NOLIST,
+	    EXIT_ATOM_NOLIST,
+	    EXIT_ATOM_NOLIST,
+	    EXIT_ATOM_NOLIST,
+	    EXIT_ATOM_NOLIST,
+	    EXIT_ATOM_NOLIST });
+    }
+    else
+    {
+	commands = ({});
+	exits = ({});
+	flags = ({});
+    }
+    exit_msgs = ([]);
+    dir_msgs = ([]);
+    c_exit_msgs = ([]);
+    return 0;
+}
+
+void create() {} /* Dummy */
+void init() {}   /* Dummy */
+void reset() {}  /* Dummy */
+
+
+/* ======================== E X I T S  ================================= */
+
+
+private mixed * query_x_list(mixed * feld, int mode)
+{
+   string * ret;
+   int i;
+
+   if(!mode)
+      return ({}) + feld;
+
+   ret = ({});
+
+   if(mode & EXIT_ATOM_NOT)
+   {
+      mode &= ~EXIT_ATOM_NOT;
+      mode = ~mode;
+      FORWARD(i, feld)
+	 if((flags[i] | mode) == mode)
+	    ret += ({ feld[i] });
+   }
+   else
+      FORWARD(i, feld)
+	 if((flags[i] & mode) == mode)
+	    ret += ({ feld[i] });
+   return ret;
+}
+
+/*
+FUNKTION: query_command_list
+DEKLARATION: varargs string *query_command_list(int mode)
+BESCHREIBUNG:
+Mit dieser Funktion kann man die Kommandos zum Verlassen des Raumes
+abfragen.
+In der Regel fragt man nur die sichtbaren ab mit:
+   query_command_list(EXIT_VISIBLE);
+Ansonsten kommen alle Ausgaenge.
+
+Werte fuer mode siehe: add_exit_flag
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, 
+	  query_one_exit, query_exit_list,
+	  query_flag_list, query_category_list,
+          add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+
+varargs string * query_command_list(int mode)
+{
+   return query_x_list(commands, mode);
+}
+
+/*
+FUNKTION: query_exit_list
+DEKLARATION: varargs string *query_exit_list(int mode)
+BESCHREIBUNG:
+Mit dieser Funktion kann man die Anschluss-Raeume abfragen.
+
+Werte fuer mode siehe: add_exit_flag
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, set_exit_msg,
+	  query_one_exit, query_command_list,
+	  query_flag_list, query_category_list, 
+	  add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+varargs string * query_exit_list(int mode)
+{
+   return query_x_list(exits, mode);
+}
+
+/*
+FUNKTION: query_flag_list
+DEKLARATION: int *query_flag_list(int mode)
+BESCHREIBUNG:
+Mit dieser Funktion kann man den Status der Ausgaenge abfragen.
+
+Werte fuer mode siehe: add_exit_flag
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, 
+	  add_exit, add_exits, 
+	  delete_exit, delete_exits, set_exit_msg,
+	  query_one_exit, query_command_list,
+	  query_exit_list, query_category_list,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+int *query_flag_list(int mode)
+{
+   return query_x_list(flags, mode);
+}
+
+/*
+FUNKTION: query_category_list
+DEKLARATION: varargs string *query_category_list(int mode)
+BESCHREIBUNG:
+Mit dieser Funktion kann man die Ausgangs-Kategorien abfragen.
+
+Werte fuer mode siehe: add_exit_flag
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: query_exit_category, set_exit_category,
+	  set_exit, set_exits, add_exit, add_exits,
+	  query_one_exit, query_command_list,
+	  query_exit_list, query_flag_list,
+GRUPPEN: raum
+*/
+varargs string * query_category_list(int mode)
+{
+    return map(query_x_list(commands, mode), (: $2[$1] :), categories || ([]));
+}
+
+/*
+FUNKTION: query_exit_category
+DEKLARATION: string query_exit_category(string command)
+BESCHREIBUNG:
+Damit kann man die Kategorie eines Raumausgangs abfragen.
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, add_exit, set_exit_category, query_category_list
+GRUPPEN: raum
+*/
+string query_exit_category(string command)
+{
+    return categories && categories[command];
+}
+
+/*
+FUNKTION: set_exit_category
+DEKLARATION: void set_exit_category(string command, string category)
+BESCHREIBUNG:
+Damit kann man die Kategorie eines Raumausgangs setzen. Dieser String
+wird bei der Raumbeschreibung den Ausgaengen vorangestellt (statt des
+"Weiter:"). Ausgaenge mit gleicher Kategorie werden gemeinsam dargestellt.
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, add_exit, query_exit_category, query_category_list
+GRUPPEN: raum
+*/
+void set_exit_category(string command, string category)
+{
+    if(!categories)
+    {
+        if(category)
+            categories = ([command: category]);
+    }
+    else if(category)
+        m_add(categories, command, category);
+    else
+        m_delete(categories, command);
+}
+
+/*
+FUNKTION: query_one_exit
+DEKLARATION: varargs string query_one_exit(string command, int flag)
+BESCHREIBUNG:
+Mit dieser Funktion kann man den Raum abfragen, in den man kommt, wenn man 
+das Kommando <command> benutzt.
+Ist flag gesetzt so wird der der entsprechende Ausgang auch dann 
+zurueckgegeben wenn er fuer this_player() momentan nicht passierbar (locked) 
+ist.
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, query_exit_list, set_exit_msg,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+varargs string query_one_exit( string command, int flag)
+{
+    int i;
+    return 
+        stringp(command) &&
+        (i = member(commands, lower_case(command))) >= 0 &&
+        (flag ||
+         !(flags[i] & EXIT_ATOM_LOCKED) ||
+         this_player() && this_player()->query_wiz_level() &&
+         (this_player()->query_invis() == V_INVIS)) ?
+        exits[i] : 0;
+}
+
+
+/*
+FUNKTION: query_exit_command
+DEKLARATION: varargs string query_exit_command(object|string raum, int flag)
+BESCHREIBUNG:
+Mit dieser Funktion kann man das Kommando abfragen mit dem man in den
+Raum raum kommen wuerde. Ist flag gesetzt so wird der der entsprechende
+Ausgang auch dann zurueckgegeben wenn er fuer this_player() momentan
+nicht passierbar (locked) ist.
+VERWEISE: set_exit, set_exits, query_exit_list, set_exit_msg,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+varargs string query_exit_command(mixed raum, int flag)
+{
+   string fn;
+   int    i, j;
+   object tp ;
+
+   if( !raum )
+      return 0 ;
+
+   i = 0 ;
+   tp = this_player() ;
+   fn = stringp(raum)?raum:object_name(raum) ;
+   
+   // Ausgang suchen - wenn einer gefunden ist, aber auf
+   // gesperrte Ausgaenge Ruecksicht genommen werden soll und
+   // der Ausgang wirklich gesperrt ist, dann einen anderen Ausgang
+   // in den selben Raum suchen
+   while (
+       (i = ((j = member( exits[i..], fn)) >= 0) ? i+j : j) >= 0  &&
+       !flag                                                      &&
+       (flags[i] & EXIT_ATOM_LOCKED)                              &&
+       !(tp && tp->query_wiz_level()                              &&
+        tp->query_invis() == V_INVIS)
+       )
+       i++;
+   
+       
+   if( i < 0 )
+   { 
+       if( !fn  ||  !(fn = map2domain(fn,1)) )
+           return 0 ;
+
+       i = 0 ;
+       while (
+           (i = ((j = member( exits[i..], fn[0..<3])) >= 0) ? i+j : j) >= 0  &&
+           !flag                                                             &&
+           (flags[i] & EXIT_ATOM_LOCKED)                                     &&
+           !(tp && tp->query_wiz_level()                                     &&
+             tp->query_invis() == V_INVIS)
+           )
+           i++;
+       
+       if ( i < 0 )
+           return 0 ;
+   } 
+   
+   return commands[i];
+}
+
+
+/*
+FUNKTION: delete_exit
+DEKLARATION: void delete_exit(string command)
+BESCHREIBUNG:
+Mit dieser Funktion kann man den Ausgang, der in Richtung <command> liegt
+loeschen.
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, query_one_exit, query_exit_list,
+          query_command_list, add_exits, add_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+void delete_exit(string str)
+{
+    int i;
+
+    if((i = member(commands, lower_case(str))) >= 0)
+    {
+       commands=commands[0..i-1]+commands[i+1..];
+       exits=exits[0..i-1]+exits[i+1..];
+       flags=flags[0..i-1]+flags[i+1..];
+    }
+}
+
+/*
+FUNKTION: delete_exits
+DEKLARATION: void delete_exits(string *commands)
+BESCHREIBUNG:
+Mit dieser Funktion kann man die Ausgaenge, in die Richtungen, die
+in <command> stehen, loeschen.
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit,
+	  show_exit,  lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+void delete_exits(string *str)
+{
+    int a;
+    for (a=0; a<sizeof(str); a++)
+	delete_exit(str[a]);
+}
+
+#if defined(UNItopia_Blaschnack) && !defined(TestMUD)
+#define CHECK(x,y) if (extern_call() && previous_object()) \
+    "/w/sissi/ex"->exlog(previous_object(),x,y)
+#else
+#define CHECK(x,y)
+#endif
+
+/*
+FUNKTION: add_exit
+DEKLARATION: varargs void add_exit(string exit, string cmd [, int mode [, string category]])
+BESCHREIBUNG:
+Mit dieser Funktion kann man einen Ausgang zu den bestehenden Ausgaengen
+hinzufuegen.
+
+Werte fuer mode siehe: add_exit_flag
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exits, delete_exit, delete_exit,
+	  show_exit, hide_exit,  lock_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag, set_exit_category,
+	  query_exit_category
+GRUPPEN: raum
+*/
+
+varargs void add_exit(string exit, string cmd, int mode, string category)
+{
+    int i, not;
+
+    cmd = lower_case(cmd);
+
+    CHECK(exit,cmd);
+
+    if (stringp(exit)) 
+    {
+       if(exit[<2..] == ".lpc")
+	  exit = exit[0..<3];
+       exit = abs_path(exit);
+    }
+
+    if(map_pos && !mode)
+       mode = EXIT_ATOM_NOLIST;
+    else if(mode&EXIT_ATOM_NOT)
+       mode = (!map_pos || (mode&EXIT_ATOM_NOLIST))?0:EXIT_ATOM_NOLIST;
+
+    if((i = member(commands, lower_case(cmd))) >= 0)
+    {
+       exits[i] = exit ;
+       flags[i] = mode ;
+    }
+    else
+    {
+       commands += ({ cmd });
+       exits += ({ exit });
+       flags += ({ mode });
+    }
+
+    set_exit_category(cmd, category);
+}
+
+/*
+FUNKTION: add_exits
+DEKLARATION: varargs void add_exits(string *exits, string *cmds [, int *modes [, string *categories]])
+BESCHREIBUNG:
+Mit dieser Funktion kann man mehrere neue Ausgaenge zu den bestehenden
+Ausgaengen hinzufuegen.
+
+Werte fuer mode siehe: add_exit_flag
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, delete_exit, delete_exit,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+varargs void add_exits(string *exits, string *cmds, int * modes, string * cats)
+{
+    int a;
+
+    CHECK(exits,cmds);
+
+    for (a=0; a<sizeof(exits); a++)
+        add_exit(exits[a],cmds[a],modes?modes[a]:0, cats?cats[a]:0);
+}
+
+/*
+FUNKTION: set_exit
+DEKLARATION: varargs void set_exit(string exit, string command [, int mode [, string category]])
+BESCHREIBUNG:
+Mit dieser Funktion kann man einem Raum nur einen Ausgang setzen.
+<exit> ist dabei der anschliessende Raum, und <command> der Befehl, mit dem
+man in den Raum gelangt (z.B. norden)
+
+Werte fuer mode siehe: add_exit_flag
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+varargs void set_exit(string new_exit, string new_command, 
+                      int mode, string category)
+{
+    CHECK(new_exit,new_command);
+    exits = ({});
+    commands = ({});
+    flags = ({});
+    categories = ([]);
+    add_exit(new_exit, new_command, mode, category);
+}
+
+/*
+FUNKTION: set_exits
+DEKLARATION: varargs void set_exits(string *exits, string *commands [, int* modes [, string *categories]])
+BESCHREIBUNG:
+Mit dieser Funktion setzt man die Ausgaenge des Raumes.
+<exits> ist dabei ein Array der anschliessenden Raeume, und <commands> die
+dazugehoerigen Befehle, mit denen man in die Raeume gelangt (z.B. norden)
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+varargs void set_exits(string *new_exit_list, string *new_command_list,
+			int * modes, string * cats)
+{
+    CHECK(new_exit_list,new_command_list);
+    exits = ({});
+    commands = ({});
+    flags = ({});
+    categories = ([]);
+    add_exits(new_exit_list, new_command_list, modes, cats);
+}
+
+/* Die Funktionen filter_xxx werden beim Benutzen eines Ausganges aufgerufen,
+   sind im Standard-Raum aber gar nicht definiert... 
+*/
+
+/*
+FUNKTION: filter_xxx
+DEKLARATION: int filter_xxx(object who)
+BESCHREIBUNG:
+Die Funktion filter_xxx() wird beim Benutzen eines Raumausganges im Raum
+aufgerufen. Dabei ist fuer xxx die Richtung des Ausgangs (in Kleinbschrift)
+einzusetzen. Wenn filter_xxx() 0 zurueckliefert, so wird die Bewegung in 
+Richtung xxx erlaubt, sonst nicht. Die Richtung muss mit set_exits(),
+add_exit() oder add_exits() definiert sein, sonst hat filter_xxx() keinen
+Effekt.
+
+Beispiel:
+
+    // Standard-Raum, in dem ein Ausgang nach Osten definiert ist...
+    [ ..... ]
+
+    int filter_osten(object who)
+    {
+       if (who->query_hp() < 20)
+       {
+	  who->send_message_to(who,MT_NOTIFY, MA_MOVE, "Du darfst da nicht "
+	     "rein, Du wuerdest es nicht ueberleben!\n");
+	  return 1;
+       }
+       // An dieser Stelle darf noch keine Meldung ueber das erfolgreiche
+       // Nutzen des Ausganges kommen, denn diverse Controller koennen
+       // das immer noch verhindern!
+       return 0;
+    }
+    
+    // Meldung dann am besten mit moved_out ausgeben:
+    // (Derjenige ist jetzt schon im anderen Raum.)
+    void moved_out(object who, object where, string dir, int way)
+    {
+       ::moved_out(who,where,dir,way);
+       if(dir=="osten")
+       {
+          who->send_message_to(who, MT_LOOK|MT_FEEL, MA_MOVE, 
+	     wrap("Beim Durchschreiten des oestlichen Durchganges faellt "
+	     "Dir ein Amboss auf den Kopf. AUA, das gibt eine riesen Beule!"));
+          who->send_message_to(all_inventory(), MT_LOOK, MA_MOVE,
+	     wrap("Beim Durchschreiten des oestlichen Durchganges faellt "+
+	     dem(who)+" ein Amboss auf den Kopf."));
+          who->add_hp(-20);
+       }
+    }
+
+VERWEISE: set_exits, set_exit_msg, query_one_exit, query_exit_list,
+	  query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag, let_not_out
+GRUPPEN: raum, move
+*/
+
+
+/* ====================== F L A G S ============================= */
+
+/*
+FUNKTION: add_exit_flag
+DEKLARATION: void add_exit_flag(mixed command, int flag)
+BESCHREIBUNG:
+Aendert ein Statusflag fuer einen oder mehrere Raumausgaenge
+
+command ist dabei ein Ausgang "norden" oder mehrere Ausgaenge
+({"norden", "sueden" }) und flag ist das Flag, dass gesetzt 
+werden soll.
+
+Folgende Konstanten aus room.h stehen zur Verfuegung:
+
+EXIT_VISIBLE  Der Ausgang wird sichtbar. (nicht nolist oder versteckt)
+EXIT_NOLIST   Der Ausgang wird nicht angezeigt.  (Mapausgaenge)
+EXIT_HIDDEN   Der Ausgang ist versteckt,
+	      Man kann ihn benutzen, aber man sieht ihn nicht als Spieler,
+	      und andere sehen es nicht (deutlich), wenn ein Spieler ihn
+	      benutzt, im Gegensatz zu EXIT_NOLIST.
+EXIT_LOCKED   Der Ausgang wird gesperrt.
+EXIT_UNLOCKED Der Ausgang wird entsperrt.
+EXIT_VIEW     Beim Betrachten des Raumes sieht der Spieler dort befindliche
+              PCs + NPCs, sofern er bei den Helligkeitsverhaeltnissen
+              in der Lage waere zu sehen.
+
+BEISPIEL:
+   add_exit_flag(({"norden", "osten"}), EXIT_NOLIST);
+
+Fuer VISIBLE, NOLIST, HIDDEN, LOCKED und UNLOCKED gibt es eigene Funktionen:
+  show_exit, nolist_exit, hide_exit, lock_exit, unlock_exit  siehe dort.
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  query_exit_flag
+GRUPPEN: raum
+*/
+
+void add_exit_flag(mixed command, int mode)
+{
+   int i;
+
+   if(pointerp(command))
+      FORWARD(i, command)
+	 add_exit_flag(command[i], mode);
+   else if(command && (i = member(commands, lower_case(command))) >= 0)
+       if(mode & EXIT_ATOM_NOT)
+       {
+          flags[i] &= ~(mode & ~EXIT_ATOM_NOT);
+
+          // EXIT_LOCKED schliesst auch NOLIST mit ein, daher hier mit aufheben.
+          if(mode & EXIT_ATOM_LOCKED)
+              flags[i] &= ~EXIT_ATOM_NOLIST;
+       }
+       else
+	  flags[i] |= mode;
+}
+
+/*
+FUNKTION: query_exit_flag
+DEKLARATION: int query_exit_flag(string command, [ int flag ])
+BESCHREIBUNG:
+Damit kann man die Statusflags eines Raumausgangs abfragen, 
+bzw. testen, ob ein bestimmtes Flag gesetzt ist.
+
+Fehlt flag, so wird das Statusflag des Raumsausgangs command 
+zurueck geliefert.
+
+Ist flag angegeben so wird getestet, ob die angegebenen flags gesetzt sind.
+
+Folgende Konstanten aus room.h stehen zur Verfuegung:
+
+EXIT_VISIBLE  Der Ausgang wird sichtbar. (nicht nolist oder versteckt)
+EXIT_NOLIST   Der Ausgang wird nicht angezeigt.  (Mapausgaenge)
+EXIT_HIDDEN   Der Ausgang ist versteckt,
+	      Man kann ihn benutzen, aber man sieht ihn nicht als Spieler,
+	      und andere sehen es nicht (deutlich), wenn ein Spieler ihn
+	      benutzt, im Gegensatz zu EXIT_NOLIST.
+EXIT_LOCKED   Der Ausgang wird gesperrt.
+EXIT_UNLOCKED Der Ausgang wird entsperrt.
+
+BEISPIEL:
+   query_exit_flag("norden");
+
+Siehe auch /doc/funktionsweisen/raeume/ausgaenge
+VERWEISE: set_exit, set_exits, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag
+GRUPPEN: raum
+*/
+varargs int query_exit_flag(string command, int mode)
+{
+   int i;
+
+   if(command && (i = member(commands, lower_case(command))) >= 0)
+   {
+      if(!mode)
+	 return flags[i];
+      if(mode & EXIT_ATOM_NOT)
+      {
+	 mode &= ~EXIT_ATOM_NOT;
+	 mode = ~mode;
+	 return (flags[i] | mode) == mode;
+      }
+      else
+	 return (flags[i] & mode) == mode;
+   }
+   return 0;
+}
+
+/*
+FUNKTION: show_exit
+DEKLARATION: varargs void show_exit(mixed cmd)
+BESCHREIBUNG:
+
+Mit show_exit wird ein Ausgang sichtbar gemacht.
+(Die Eigenschaften NOLIST und HIDDEN werden geloescht.)
+
+cmd kann ein Ausgang  "norden" 
+oder mehrere Ausgaenge sein ({ "norden", "osten" }).
+
+Fehlt cmd dann werden alle Ausgaenge sichtbar gemacht.
+
+VERWEISE: set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+
+varargs void show_exit(mixed cmd)
+{
+   int i;
+
+   if(cmd)
+      add_exit_flag(cmd, EXIT_VISIBLE);
+   else
+      FORWARD(i, commands)
+	 show_exit(commands[i]);
+}
+
+/*
+FUNKTION: nolist_exit
+DEKLARATION: varargs void nolist_exit(mixed cmd)
+BESCHREIBUNG:
+
+Mit nolist_exit wird ein Ausgang aus der Liste der
+sichtbaren Ausgaenge genommen. (hauptsaechlich fuer Mapraeume)
+
+cmd kann ein Ausgang  "norden" 
+oder mehrere Ausgaenge sein ({ "norden", "osten" }).
+
+Fehlt cmd dann werden alle Ausgaenge aus der Liste der sichtbaren 
+Ausgaenge genommen.
+
+VERWEISE: set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+
+varargs void nolist_exit(mixed cmd)
+{
+   int i;
+
+   if(cmd)
+      add_exit_flag(cmd, EXIT_NOLIST);
+   else 
+      FORWARD(i, commands)
+	 nolist_exit(commands[i]);
+}
+
+/*
+FUNKTION: hide_exit
+DEKLARATION: varargs void hide_exit(mixed cmd)
+BESCHREIBUNG:
+
+Mit hide_exit wird ein Ausgang versteckt. (nicht fuer Mapausgaenge!)
+
+cmd koennen ein Ausgang  "norden" 
+oder mehrere Ausgaenge sein ({ "norden", "osten" })
+
+Fehlt cmd dann werden alle Ausgaenge versteckt.
+
+VERWEISE: set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+
+varargs void hide_exit(mixed cmd)
+{
+   int i;
+
+   if(cmd)
+      add_exit_flag(cmd, EXIT_HIDDEN);
+   else 
+      FORWARD(i, commands)
+	 hide_exit(commands[i]);
+}
+
+nosave varargs void set_lock_reason(mixed cmds, mixed reason, mixed reason_other)
+{
+   int i;
+
+   if(pointerp(cmds))
+      FORWARD(i, cmds)
+         set_lock_reason(cmds[i], reason, reason_other);
+   else
+   {
+      if(reason)
+      {
+         reason = closurep(reason)?reason:message_parser(reason);
+         if(!lock_reason)
+            lock_reason = ([cmds:reason]);
+         else
+            lock_reason[cmds] = reason;
+      }
+      if(reason_other)
+      {
+         reason_other = closurep(reason_other)?reason_other:message_parser(reason_other);
+         if(!lock_reason_other)
+            lock_reason_other = ([cmds:reason_other]);
+         else
+            lock_reason_other[cmds] = reason_other;
+      }
+   }
+}
+
+
+nosave void delete_lock_reason(mixed cmds)
+{
+   int i;
+
+   if(pointerp(cmds))
+      FORWARD(i, cmds)
+         delete_lock_reason(cmds[i]);
+   else
+   {
+      if(lock_reason)
+         lock_reason-=([cmds]);
+      if(lock_reason_other)
+         lock_reason_other-=([cmds]);
+   }
+}
+
+/*
+FUNKTION: query_lock_reason
+DEKLARATION: varargs string query_lock_reason(string exit, object fuer_wen)
+BESCHREIBUNG:
+
+Mit query_lock_reason kann in einem Raum abgefragt werden, warum ein bestimmter
+Ausgang gelockt ist (natuerlich nur, wenn der Grund dafuer mit lock_exit
+gesetzt worden ist).
+
+VERWEISE: query_lock_reason_other, lock_exit, unlock_exit
+GRUPPEN: raum
+*/
+varargs string query_lock_reason(string cmd, object wer)
+{
+   string dir;
+   if(!lock_reason || !lock_reason[cmd])
+      return 0;
+   if(!(query_exit_flag(cmd) & EXIT_ATOM_HIDDEN))
+   {
+      if(dir_msgs[cmd])
+         dir = dir_msgs[cmd][0];
+      else if (!dir_prep_out ||
+               !(dir = direction_string(dir_prep_out,cmd,0)))
+         dir = direction_string("nach", cmd, 0);
+   }
+   return message_expansion(lock_reason[cmd], wer || this_player(), dir);
+}
+
+/*
+FUNKTION: query_lock_reason_other
+DEKLARATION: varargs string query_lock_reason_other(string exit, object wer)
+BESCHREIBUNG:
+
+query_lock_reason_other liefert die Meldung fuer alle anderen im Raum,
+wenn 'wer' durch diesen gesperten Ausgang gehen moechte (natuerlich nur,
+wenn der Grund dafuer mit lock_exit gesetzt worden ist).
+
+VERWEISE: query_lock_reason, lock_exit, unlock_exit
+GRUPPEN: raum
+*/
+varargs string query_lock_reason_other(string cmd, object wer)
+{
+   string dir;
+   if(!lock_reason_other || !lock_reason_other[cmd])
+      return 0;
+   if(!(query_exit_flag(cmd) & EXIT_ATOM_HIDDEN))
+   {
+      if(dir_msgs[cmd])
+         dir = dir_msgs[cmd][0];
+      else if (!dir_prep_out ||
+               !(dir = direction_string(dir_prep_out,cmd,0)))
+         dir = direction_string("nach", cmd, 0);
+   }
+   return message_expansion(lock_reason_other[cmd], wer || this_player(), dir);
+}
+
+/*
+FUNKTION: lock_exit
+DEKLARATION: varargs void lock_exit(mixed cmd, mixed reason, mixed reason_other)
+BESCHREIBUNG:
+
+Mit lock_exit wird ein Ausgang gesperrt.
+
+cmd koennen ein Ausgang  "norden" 
+oder mehrere Ausgaenge sein ({ "norden", "osten" })
+Fehlt cmd dann werden alle Ausgaenge gesperrt.
+
+Mit reason kann ein Grund angegeben werden, warum der Ausgang gesperrt ist.
+Mit reason_other kann auch eine Meldung fuer alle anderen im Raum angegeben
+werden. (Dann wird der Grund nicht mehr per notify_fail ausgegeben.)
+Die Gruende koennen auch Closures oder Pseudoclosures sein.
+
+BEISPIEL: lock_exit("sueden","Die Schlucht suedlich von Dir ist zu steil.")
+
+VERWEISE: set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag, query_lock_reason,
+	  query_lock_reason_other
+GRUPPEN: raum
+*/
+varargs void lock_exit(mixed cmd, mixed reason, mixed reason_other)
+{
+   int i;
+
+   if(cmd)
+   {
+      add_exit_flag(cmd, EXIT_LOCKED);
+      if(reason || reason_other)
+         set_lock_reason(cmd, reason, reason_other);
+   }
+   else
+      FORWARD(i, commands)
+	 lock_exit(commands[i], reason, reason_other);
+}
+
+/*
+FUNKTION: unlock_exit
+DEKLARATION: varargs void unlock_exit(mixed cmd)
+BESCHREIBUNG:
+
+Mit unlock_exit wird ein Ausgang entsperrt.
+
+cmd koennen ein Ausgang  "norden" 
+oder mehrere Ausgaenge sein ({ "norden", "osten" })
+
+Fehlt cmd dann werden alle Ausgaenge entsperrt.
+
+VERWEISE: set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+varargs void unlock_exit(mixed cmd)
+{
+   int i;
+
+   if(cmd)
+   {
+      add_exit_flag(cmd, EXIT_UNLOCKED);
+      delete_lock_reason(cmd);
+   }
+   else
+      FORWARD(i, commands)
+	 unlock_exit(commands[i]);
+}
+
+
+
+/* ================ MESSAGE FUNKTIONEN ==================== */
+
+
+
+
+/* Doku siehe /doc/funktionsweisen/move */
+
+void set_msg_in(mixed str)
+{
+   c_msg_in = closurep(str)?str:message_parser(add_dot_to_msg(str));
+   msg_in = str;
+}
+
+void set_msg_out(mixed str)
+{
+   c_msg_out = closurep(str)?str:message_parser(add_dot_to_msg(str));
+   msg_out = str;
+}
+
+void set_msg_self(mixed str)
+{
+    c_msg_self = closurep(str)?str:message_parser(add_dot_to_msg(str));
+    msg_self = str;
+}
+
+mixed query_msg_in()  { return msg_in; }
+mixed query_msg_out() { return msg_out; }
+mixed query_msg_self(){ return msg_self; }
+
+/*
+FUNKTION: set_msg
+DEKLARATION: varargs void set_msg(mixed raus, mixed rein, mixed selbst)
+BESCHREIBUNG:
+    Setzt fuer alle Ausgaenge die Verlassensmeldung <raus> fuer diesen
+    Raum, die Ankunftsmeldung <rein> fuer die Zielraeume und eine
+    eventuelle Meldung <selbst> fuer den Bewegenden.
+
+    Mit set_exit_msg (siehe dort) koennen die Meldungen fuer einzelne 
+    Ausgaenge einzeln gesetzt werden.
+
+    Es sind auch Closures als Meldungen moeglich. Die Closures erhalten
+    als ersten Parameter das Lebewesen und als 2. Parameter die Richtung.
+
+BEISPIEL: Auf der oestlichen Spitze eines Stegs, ueberall ausser Westen
+          gehts ins Wasser, nach Westen auf dem Steg entlang:
+    set_msg("$Der(OBJ_TP) springt $dir() vom Steg.",
+            "$Der(OBJ_TP) kommt vom Steg zu Dir ins Wasser gesprungen.",
+	    "Du springst $dir() ins kalte Wasser. Viel Spass.");
+    set_exit_msg("westen",
+        "$Der(OBJ_TP) laeuft auf dem Steg nach Westen davon.",
+        "$Ein(OBJ_TP) kommt auf dem Steg von Osten hergelaufen.",
+	"Du verlaesst den Steg in Richtung Festland.");
+
+VERWEISE: set_exits, set_exit_msg, query_one_exit, query_exit_list,
+          query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+	  show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+	  add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+
+varargs void set_msg(mixed raus, mixed rein, mixed selbst)
+{
+   if(raus != "")
+      set_msg_out(raus);
+   if(rein != "")
+      set_msg_in(rein);
+   if(selbst != "")
+      set_msg_self(selbst);
+}
+
+void set_dir_prep_in(string str)  { dir_prep_in = str; }
+void set_dir_prep_out(string str) { dir_prep_out = str; }
+
+void set_dir_prep(string praus, string prein)
+{
+   set_dir_prep_in(prein);
+   set_dir_prep_out(praus);
+}
+
+string query_dir_prep_in() { return dir_prep_in; }
+string query_dir_prep_out() { return dir_prep_out; }
+
+
+/*
+FUNKTION: set_exit_msg
+DEKLARATION: varargs void set_exit_msg(string dir, mixed raus, mixed rein, mixed selbst)
+BESCHREIBUNG:
+    Setzt fuer den Ausgang <dir> die Verlassensmeldung fuer diesen Raum
+    <raus>, die Ankunftsmeldung <rein> fuer den Zielraum und eine
+    Meldung <selbst> fuer den Bewegenden. Der Ausgang sollte bereits
+    als solcher gesetzt sein.
+    
+    Mit set_msg (siehe dort) koennen die Meldungen fuer alle Ausgaenge auf
+    einmal gesetzt werden.
+    
+    Es sind auch Closures als Meldungen moeglich. Die Closures erhalten
+    als ersten Parameter das Lebewesen und als 2. Parameter die Richtung.
+
+BEISPIEL: 
+    set_exit_msg(
+        "nordosten",
+        "$Der(OBJ_TP) laeuft den Pfad nach Nordosten hoch",
+        "$Ein(OBJ_TP) kommt von Suedwesten den Pfad hochgelaufen",
+	"Du folgst brav dem Pfad $dir().");
+
+VERWEISE:
+    set_exits, set_msg, query_one_exit, query_exit_list,
+    query_command_list, add_exit, add_exits, delete_exit, delete_exits,
+    show_exit, lock_exit, hide_exit, nolist_exit, unlock_exit,
+    add_exit_flag, query_exit_flag
+GRUPPEN: raum
+*/
+
+varargs void set_exit_msg(string dir, mixed raus, mixed rein, mixed selbst)
+{
+   if(dir && member(commands, dir)>=0)
+      if(raus || rein || selbst)
+      {
+	 raus = add_dot_to_msg(raus);
+	 rein = add_dot_to_msg(rein);
+	 selbst = add_dot_to_msg(selbst);
+	 c_exit_msgs[dir] = ({ closurep(raus)?raus:message_parser(raus), 
+	                       closurep(rein)?rein:message_parser(rein),
+			       closurep(selbst)?selbst:message_parser(selbst) });
+	 exit_msgs[dir] = ({ raus, rein, selbst });
+      }
+      else
+      {
+	 m_delete(exit_msgs, dir);
+	 m_delete(c_exit_msgs, dir);
+      }
+}
+
+/*
+FUNKTION: set_dir_msg
+DEKLARATION: void set_dir_msg(string dir, string raus, string rein)
+BESCHREIBUNG:
+Damit kann die Richtungsbeschreibung fuer einen Ausgang festlegen.
+Dies ist also der String, welcher in Bewegungsmeldungen anstelle von
+"nach Norden" bzw. "von Norden" genommen wird. (In den Bewegunsmeldungen
+wird das "$dir()" durch diese Strings ersetzt.)
+VERWEISE: set_exit_msg, set_msg
+GRUPPEN: raum
+*/
+void set_dir_msg(string dir, string raus, string rein)
+{
+   if(dir && member(commands, dir)>=0)
+      if(raus || rein)
+	 dir_msgs[dir] = ({ raus, rein });
+      else
+	 m_delete(dir_msgs, dir);
+}
+
+
+/* ======================= A U T O   L O A D E R ========================= */
+
+private void load_objects()
+{
+    if (already_loading <= 0)
+    {
+	int num;
+	int first = !already_loading;
+	
+        auto_object_array = ROOM_AUTOLOAD->query_autoload_objects(
+		this_object());
+	
+	if (!sizeof(auto_object_array) || !sizeof(auto_object_array[0]))
+	{
+	    auto_objects = 0;
+	    return;
+	}
+	
+	num = sizeof(auto_object_array[0]);
+	
+	if (!auto_objects)
+	    auto_objects = allocate(num);
+	else if(sizeof(auto_objects) < num)
+	    auto_objects = auto_objects + allocate(num - sizeof(auto_objects));
+	else if(sizeof(auto_objects) > num)
+	    // Wir hoffen, dass das letzte Objekt geloescht wurde.
+	    auto_objects = auto_objects[0..num-1];
+
+	already_loading = 1;
+	for (int a = sizeof(auto_objects); a--; )
+	    if (!auto_objects[a])
+	    {
+		auto_objects[a] = clone_object(auto_object_array[1][a]);
+		auto_objects[a]->move(this_object());
+		if (auto_object_array[2][a] && auto_objects[a])
+		    auto_objects[a]->install_parameter(auto_object_array[2][a]);
+	    }
+	
+	if(first)
+	    ROOM_AUTOLOAD->init_room(this_object());
+	
+	already_loading = -1;
+    }
+}
+
+varargs int set_autoload(object ob, string parameter)
+{
+    mixed *new_load;
+
+    new_load = ROOM_AUTOLOAD->set_autoload(this_object(),ob,parameter);
+    if (new_load)
+    {
+	auto_object_array = new_load;
+	if (!auto_objects)
+	    auto_objects = ({ ob });
+	else
+	    auto_objects += ({ ob });
+	return 1;
+    }
+}
+
+varargs int remove_autoload(string o_name,string o_parameter,string o_wiz_name)
+{
+    int ret;
+
+    ret = ROOM_AUTOLOAD->remove_autoload(this_object(),o_name,o_parameter,
+	    o_wiz_name);
+    if (ret >= 0)
+    {
+	auto_object_array = ROOM_AUTOLOAD->query_autoload_objects(
+		this_object());
+	auto_objects = arr_delete(auto_objects,ret);
+	return 1;
+    }
+}
+
+
+/* ========================== R O O M  T Y P E S =================== */
+
+
+/*
+FUNKTION: add_type
+DEKLARATION: void add_type(mixed key, mixed data)
+BESCHREIBUNG:
+Mit dieser Funktion kann man einen Typ im Raum setzen.
+key ist ein String oder ein Feld von Strings, deren Typen gleichartig
+gesetzt werden. Die nutzbaren Strings sollen grundsaetzlich in Form der in
+/sys/room_types.h gelisteten Defines verwendet werden.
+Bsp.: add_type(RT_GRABEN_VERBOTEN, 1);
+      add_type(({RT_KUNSTLICHT, RT_KAEMPFEN_VERBOTEN}), 1);
+Diese Typen kann man individuell einsetzen.
+Alle benutzten Typen listet /doc/funktionsweisen/raeume/typenliste auf.
+Weiteres siehe auch /doc/funktionsweisen/raeume/typen.
+VERWEISE: query_types, query_type
+GRUPPEN: raum
+*/
+void add_type(mixed key, mixed data)
+{
+    if (stringp(key))
+    {
+	/* schauen, ob Eintrag geloescht werden darf */
+	if (key == "temperatur" && data == 20 ||
+	    key != "temperatur" && data == 0)
+       	{
+	    if (types)
+	    {
+		m_delete(types,key);
+		if (!sizeof(types))
+		    types = 0;
+	    }
+	}
+	else
+	{
+	  if(!types)
+	      types = ([]);
+	  types[key] = data;
+	}
+    }
+    else if(pointerp(key))
+        map(key,#'add_type,data);
+}
+
+/*
+FUNKTION: query_type
+DEKLARATION: mixed query_type(string type)
+BESCHREIBUNG:
+Mit dieser Funktion kann man einen Typ im Raum abfragen.
+Diese Typen kann man individuell einsetzen.
+Eine Liste aller benutzten Typen ist in /doc/funktionsweisen/raeume/typenliste
+Weiteres siehe auch: /doc/funktionsweisen/raeume/typen
+VERWEISE: add_type, query_types
+GRUPPEN: raum
+*/
+mixed query_type(string type)
+{
+    mixed ret;
+
+    if ((!types || !m_contains(&ret,types,type)) && type == "temperatur")
+	return 20;
+    return ret;
+}
+
+/*
+FUNKTION: query_types
+DEKLARATION: mapping query_types()
+BESCHREIBUNG:
+Mit dieser Funktion kann man alle Typen im Raum abfragen.
+Diese Typen kann man individuell einsetzen.
+Eine Liste aller benutzten Typen ist in /doc/funktionsweisen/raeume/typenliste
+Weiteres siehe auch: /doc/funktionsweisen/raeume/typen
+VERWEISE: add_type, query_type
+GRUPPEN: raum
+*/
+mapping query_types()
+{
+    if (types && member(types, "temperatur"))
+	return types;
+    return (types || ([]) ) + ([ "temperatur":20 ]);
+}
+
+/*
+FUNKTION: query_room
+DEKLARATION: int query_room()
+BESCHREIBUNG:
+Liefert bei Raeumen immer 1.
+VERWEISE: 
+GRUPPEN: raum
+*/
+int query_room() { return 1; }
+
+/*
+FUNKTION: query_room_environment
+DEKLARATION: varargs mixed * query_room_environment(int deep)
+BESCHREIBUNG:
+Hilfsfunktionen zur Beachtung der Raumtypen "repraesentant" und "umgebung".
+Falls solche Raumtypen gesetzt sind, erhaelt man ein Array, das sowohl
+die momentanen Repraesentanten (V-Items oder Nicht-Raum-Objekte) als auch
+Umgebungen (Container, Raeume) enthalten kann. Ob ein Objekt ein Raum ist,
+kann mit query_room() erfragt werden.
+
+Ist das Flag 'deep' == 1, werden auch die weiteren Repraesentanten und
+Umgebungen der aeusseren Raeume an das Array angehaengt. Das letzte Element
+des Arrays ist der aeusserste Raum.
+
+Hat der Raum keinen Repraesentant oder Umgebung, ist das Array leer.
+Mehr ueber die Raumtypen "repraesentant" und "umgebung" bitte nachlesen
+unter /doc/funktionsweise/raeume/typenliste
+VERWEISE: query_room, query_type
+GRUPPEN: raum
+*/
+varargs mixed * query_room_environment(int deep)
+{
+    mixed * env = ({this_object()});
+    mixed o;
+
+    while(env[<1])
+    {
+        if(objectp(env[<1]))
+        {
+            if(!environment(env[<1]) && !env[<1]->query_room())
+            {
+                do_my_warning("Ungueltiger Repraesentant/Umgebung.\n"
+                              "Objekt (Nicht-Raum) ohne Environment.\n");
+            }
+
+            if(deep == 1 || env[<1] == this_object() || environment(env[<1]))
+            {
+                env += ({ environment(env[<1]) ||
+                          env[<1]->query_type("repraesentant") ||
+                          env[<1]->query_type("umgebung") });
+            }
+
+            else
+            {
+                env += ({0});
+                break;
+            }
+        }
+
+        else if(mappingp(env[<1]))
+        {
+            env += ({ env[<1]["environment"] });
+
+            if(!env[<1])
+            {
+                do_my_warning("Ungueltiger Repraesentant/Umgebung.\n"
+                              "V-Item ohne Environment.\n");
+            }
+        }
+
+        else
+        {
+            do_my_warning("Ungueltiger Repraesentant/Umgebung.\n"
+                          "Kein Objekt oder V-Item.\n");
+            env[<1] = 0;
+        }
+    }
+
+    return env[1..<2];
+}
+
+/* ==================== D O M A I N ================================= */
+
+/*
+FUNKTION: query_room_domain
+DEKLARATION: string query_room_domain()
+BESCHREIBUNG:
+Liefert die Domain zurueck, in der sich der Raum befindet. Die room_domain
+kann man mit set_room_domain setzen, das ist aber nur in Ausnahmefaellen
+noetig und erwuenscht. Wenn keine room_domain gesetzt ist, wird sie aus dem
+Pfadnamen geholt. Fuer Raume unter /d/ ist die room_domain klar, unter 
+/z/ und /p/ (auch wenn da keine Raeum hingehoeren), ist es der Namen des 
+directorys, in dem sich der raum befindet, unter /w/ ist es "Pantheon".
+VERWEISE: set_room_domain
+GRUPPEN: raum
+*/
+string query_room_domain()
+{
+    string *path, name;
+    string domain;
+    int i;
+    mixed * rep;
+
+    // Hat der Raum eine feste Domain?
+    if(room_domain)
+        return room_domain;
+
+    // Hat der Raum eine virtuelle Umgebung?
+    rep = this_object()->query_room_environment();
+
+    if(sizeof(rep))
+    {
+        return rep[<1]->query_room_domain();
+    }
+
+    // room_domain anhand Dateiname ermitteln und setzen.
+    name = map2domain(object_name(), 1) || object_name();
+    path = explode(name, "/");
+
+    switch (path[1])
+    {
+	case "d":
+	    domain = path[2];
+            break;
+	case "w":
+	    domain = "Pantheon";
+            break;
+	case "z":
+	    if ((i=member(path, "d"))>2 && sizeof(path)>i+1)
+		domain = path[i+1];
+	    else
+                domain = path[<2];
+            break;
+	case "p":
+	    domain = path[<2];
+            break;
+	case "map":
+	    domain = "Ozean";
+            break;
+	case "room":
+	    if(member((["bsp","hell","void","statue"]),path[2]))
+		domain = "Pantheon";
+            else
+#ifdef UNItopia
+                domain = "Vaniorh";
+#else
+                domain = "Nirwana";
+#endif
+            break;
+    }
+
+    // Um Fehler zu erzeugen, wenn Domain ungueltig.
+    this_object()->set_room_domain(domain);
+
+    // Gueltige Domain zurueckliefern.
+    if(room_domain && room_domain == domain)
+    {
+        return room_domain;
+    }
+
+    if(!inheritp(this_object()))
+    {
+        do_my_warning("Es konnte keine gueltige Domain ermittelt werden.\n"
+                      "Bitte manuell setzen.\n");
+    }
+
+    return room_domain = "Nirwana";
+}
+
+/*
+FUNKTION: set_room_domain
+DEKLARATION: void set_room_domain(string room_domain)
+BESCHREIBUNG:
+Setzt die Domain, in der sich ein Raum befindet, wenn eine Domain abweichend
+vom Standard erwuenscht ist.
+Nur in Ausnahmefaellen verwenden. Beschreibung siehe query_room_domain
+VERWEISE: query_room_domain
+GRUPPEN: raum
+*/
+void set_room_domain(string d)
+{
+    if ((member(({"Ozean","Pantheon","Himmel","Nirwana"}),d)<0) &&
+	    (-1 == member(DOMAIN_INFOS->query_domains(),d)))
+    {
+        if(!inheritp(this_object()))
+        {
+            if(extern_call())
+                do_error(d+" ist keine existierende Domain.\n");
+            else
+                do_my_error(d+" ist keine existierende Domain.\n");
+        }
+    }
+
+    else
+	room_domain = d;
+}
+
+/* ==================== D E S C R I P T I O N ======================= */
+
+// Eine Optimierung fuer Raeume
+private nosave mixed *light_descriptions = __FILE__->get_light_descriptions();
+
+mixed * get_light_descriptions()
+{
+    return light_descriptions ||= ::get_light_descriptions();
+}
+
+string query_short(object viewer)
+{
+    return query_short_string();
+}
+
+string query_long_night(object viewer)
+{
+    string long_night;
+    long_night = description::query_long_night(viewer);
+    if (!long_night) return 0;
+    if (query_type("kunstlicht"))
+        return long_night;
+    return long_night +
+        query_light_description(vclock()) + "\n";
+}
+
+/*
+FUNKTION: query_daylight
+DEKLARATION: int query_daylight()
+BESCHREIBUNG:
+Liefert den momentanen Lichtlevels, der vom Tageslicht ausgeht. In Freiraeumen
+ist dies tagsueber 1, in der Nacht dagegen 0.
+
+Wer Einfluss auf das Tageslicht nehmen moechte, kann diese Funktion
+entsprechend ueberlagern. Dies wird z.B. in den Ebenen gemacht, die
+ueber ein eigenes Zeitensystem verfuegen.
+VERWEISE: query_light, query_light_description
+GRUPPEN: raum, licht
+*/
+int query_daylight()
+{
+    if(!query_type("kunstlicht") || query_type("change_daylight"))
+    {
+        int time;
+
+        time = vclock();
+
+        if(time >= BEGIN_DAYLIGHT && time < BEGIN_DARKNESS)
+        {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+int query_light()
+{
+    return licht::query_light() + this_object()->query_daylight();
+}
+
+/* ======================== T R A C E S ======================= */
+
+
+#ifdef CREATE_TRACES
+/*
+FUNKTION: query_visitors
+DEKLARATION: mixed *query_visitors()
+BESCHREIBUNG:
+query_visitors() liefert ein Feld, in dem diejenigen letzten TR_MAX_VISITORS
+Personen eingetragen sind, die den Raum vor kurzem verlassen haben.
+
+Das Feld besitzt folgende Form:
+   ({ 
+      ({ "<von>|<nach>", <uhrzeit>, <wer_object>, <wer_name>, <invis>,
+         V-Item-aehnliche Beschreibung,  Beschreibung mit real_name/gender,
+	 "<von-objektname>|<nach-objektname>" }),
+      ({ ... }),
+      ...
+   })
+
+BEMERKUNGEN:
+- Auf die Eintraege des Arrays sollte mittels der Konstanten
+  TRV_TRACE       0
+  TRV_TIME        1
+  TRV_WHO         2
+  TRV_NAME        3
+  TRV_INVIS       4
+  TRV_DESC        5
+  TRV_REAL_DESC   6
+  TRV_TRACE_ROOMS 7
+
+  aus <room.h> zugeriffen werden!
+
+- <wer_object> kann 0 sein!
+
+- TR_MAX_VISITORS ist zut Zeit 7, siehe /sys/room.h
+
+- Bei NPCs ist der Eintrag TRV_REAL_DESC 0.
+
+VERWEISE: query_traces
+GRUPPEN: raum
+*/
+
+mixed *query_visitors()
+{
+   return visitors || ({});
+}
+
+/*
+FUNKTION: query_traces
+DEKLARATION: mapping query_traces()
+BESCHREIBUNG:
+query_traces() liefert eine Statistik ueber die Auslastung der Ausgaenge
+eines Raumes, registiert in Form von Spuren von einem Ausgang zum anderen.
+Geliefert wird ein Mapping der folgenden Form:
+   ([ "<von>|<nach>" :
+	 <anzahl_der_benutzer_dieser_spur_seit_laden_des_raums>; 
+	 <letzte_benutzungs_zeit>;
+	 <letzer_benutzer_object>;
+	 <letzer_benutzer_name>;
+	 <durchschnittliche_pause_zwischen_den_durchlaeufen_in_s> ,
+      ...
+	 ...
+	 ...
+	 ...
+   ])
+
+BEMERKUNGEN:
+- Auf die einzelnen Eintraege des Mappings sollte mittels der Konstanten
+   TRT_COUNT 0
+   TRT_TIME  1
+   TRT_WHO   2
+   TRT_NAME  3
+   TRT_STAT  4
+  aus <room.h> zugeriffen werden!
+
+- Ist <durchschnittliche_pause_zwischen_den_durchlaeufen_in_s> == 0, so wurde
+  die Spur erst einmal benutzt. Der Wert kann aufgrund von Integerrundungen
+  ungenau sein.
+
+- <letzer_benutzer_object> kann 0 sein!
+
+VERWEISE: query_visitors
+GRUPPEN: raum
+*/
+
+mapping query_traces()
+{
+   return traces || m_allocate(0, TRT_WIDTH);
+}
+
+private string trace_exit(string fn)
+{
+   int i;
+
+   if(!fn)
+      return TR_NO_ENVIRONMENT;
+   if( (i = member(exits, fn) ) < 0)
+   { 
+       if( !fn || (!(fn = map2domain(fn,1)))     || 
+           ((i = member(exits,fn[0..<3])) < 0) )
+			return TR_MAGIC_MOVE;
+
+   } 
+   return commands[i];
+}
+
+private void add_trace(object was, string von, string nach, string von_raum, string nach_raum, int invis)
+{
+   int now, count, last;
+   string tr, nam;
+
+   tr = von+"|"+nach;
+   nam = was->query_name();
+   now = time();
+
+   if(!traces)
+      traces = m_allocate(0, TRT_WIDTH);
+   count = traces[tr, TRT_COUNT]++;
+   if(last = traces[tr, TRT_TIME])
+      traces[tr, TRT_STAT] = (count*traces[tr,TRT_STAT] + now-last) / (count+1);
+   traces[tr, TRT_TIME] = now;
+   traces[tr, TRT_WHO] = was;
+   traces[tr, TRT_NAME] = nam;
+
+   visitors = ({ ({ tr, now, was, nam, invis,
+	filter(map((["name","gender","cap_name","personal_title","personal",
+		     "plural","eigen","adjektiv","genitiv","dativ","akkusativ",
+		     "menge"]), (:call_other($3,"query_"+$1):), was), (:$2:)),
+	playerp(was) && filter(map((["name","gender","cap_name"]),
+	    (:call_other($3,"query_real_"+$1):), was), (:$2:)),
+	von_raum+"|"+nach_raum }) }) 
+	+ (visitors || ({}));
+   if(sizeof(visitors) >= TR_MAX_VISITORS)
+      visitors = visitors[0..TR_MAX_VISITORS-1];
+}
+
+
+private void add_partial_trace(object was, object wo, int move_direction, int invis)
+{
+   if(objectp(was) && living(was))
+      if(move_direction == TR_MOVED_IN)
+      {
+	 if(!temp_traces)
+	    temp_traces = ([:TRTT_WIDTH]);
+	 temp_traces[was,TRTT_ORIGIN] = wo;
+	 temp_traces[was,TRTT_ORIGIN_FN] = wo && object_name(wo);
+	 temp_traces[was,TRTT_TIME] = time();
+      }
+      else
+      {
+	 object woher;
+	 string woher_str;
+
+         if(temp_traces && member(temp_traces, was))
+	 {
+	    woher = temp_traces[was,0];
+	    woher_str = temp_traces[was,1];
+	    m_delete(temp_traces, was);
+	 }
+	 add_trace(was, trace_exit(woher_str), trace_exit(wo && object_name(wo)),
+	    woher_str || "", wo?object_name(wo):"", invis);
+      }
+}
+
+mapping query_temp_traces()
+{
+    return temp_traces || ([:TRTT_WIDTH]) ;
+}
+#endif
+
+
+/* ======================== M O V E M E N T =================== */
+
+
+/* Nur fuer /i/move 
+ * 
+ *  0   ==   EI_EXIT
+ *  1   ==   EI_C_EXIT_MSG_OUT
+ *  2   ==   EI_C_EXIT_MSG_IN
+ *  3   ==   EI_DIR_MSG_OUT
+ *  4   ==   EI_DIR_MSG_IN
+ *  5   ==     not used 
+ *  6   ==     not used
+ *  7   ==   EI_DIR_PREP_OUT
+ *  8   ==   EI_DIR_PREP_IN
+ *  9   ==   EI_EXIT_FLAG
+ * 10   ==   EI_C_EXIT_MSG_SELF
+ * 11   ==   EI_DIRECTION
+ */
+
+varargs mixed *query_exit_info(string dir, int flag)
+{
+   string raum, *exit_msg, *dir_msg;
+   mixed * res;
+   int i;
+
+   if(dir && (raum = query_one_exit(dir, flag)))
+   {
+      res =  ({ raum });
+      res += (exit_msg = exit_msgs[dir]) ? 
+		  ({ exit_msg[0] == "" ? 0 : c_exit_msgs[dir][0], 
+		     exit_msg[1] == "" ? 0 : c_exit_msgs[dir][1] }) :
+		  ({ c_msg_out, c_msg_in }) ;
+      res += (dir_msg = dir_msgs[dir]) ? dir_msg : ({ 0, 0 });
+      res += ({ 0, 0, dir_prep_out, dir_prep_in });
+      res += ({(i = member(commands, dir)) >= 0 ? flags[i] : 0});
+      res += exit_msg? ({ exit_msg[2] == "" ? 0 : c_exit_msgs[dir][2] }) : ({ c_msg_self });
+      res += ({ dir });
+      return res;
+   }
+}
+
+nosave void abtreiben_untergehen(object was)
+{
+   object ob;
+   int prio;
+   mixed zustaendig;
+
+   if(was && present(was))
+   {
+      if(sizeof((was->query_material()||({})) & 
+         ({"holz","papier","biologisch","kunststoff","pflanzlich","eis"})))
+      {
+         zustaendig = was->concerned(&prio, "drift", was, this_object());
+         zustaendig = this_object()->concerned(&prio, "drift", was, this_object())
+                      || zustaendig;
+
+         if(zustaendig)
+         {
+             if(objectp(zustaendig))
+                 zustaendig->do_drift(was, this_object());
+             else
+                 funcall(zustaendig, "do_drift", was, this_object());
+             return;
+         }
+
+         this_object()->send_message(MT_LOOK,MA_MOVE_OUT,wrap(Der(was)
+          + (was->query_plural()?" treiben" : " treibt") +" davon."));
+      }
+
+      else
+      {
+         zustaendig = was->concerned(&prio, "sink", was, this_object());
+         zustaendig = this_object()->concerned(&prio, "sink", was, this_object()) 
+                      || zustaendig;
+
+         if(zustaendig)
+         {
+             if(objectp(zustaendig))
+                 zustaendig->do_sink(was, this_object());
+             else
+                 funcall(zustaendig, "do_sink", was, this_object());
+             return;
+         }
+
+         this_object()->send_message(MT_LOOK,MA_MOVE_OUT,wrap(Der(was)
+         + (was->query_plural()?" gehen" : " geht") + " unter."));
+      }
+
+      while(was && (ob = first_inventory(was)))
+      {
+         ob->remove();
+	 if (ob)
+	    destruct(ob);
+      }
+      was->remove();
+      if(was)
+         destruct(was);
+   }
+}
+
+int let_not_in(object ob, object room, string dir)
+{
+#if __VERSION__ < "3.2.10-dev.541"
+    string vehikel;
+#endif
+    int i;
+    object *obs;
+
+    load_objects();
+
+#ifdef CREATE_TRACES
+    if(temp_traces)
+    {
+       for(i = sizeof(obs = m_indices(temp_traces)); i--;)
+	  if(!present(obs[i], this_object()))
+	     m_delete(temp_traces, obs[i]);
+    }
+#endif
+
+    if((i=this_object()->query_type("raumhoehe")) &&
+        ob->query_koerpergroesse()>i)
+    {
+	ob->set_not_moved_reason("Du bist zu gross!");
+	if(!(wizp(ob) && ob->query_invis() == V_INVIS))
+	    return 1;
+    }
+
+    if (::let_not_in(ob, room, dir))
+	return 1;
+
+#if __VERSION__ < "3.2.10-dev.541"
+    vehikel = ob->query_vehikel();
+
+    if (vehikel && !query_type(vehikel+"_erlaubt"))
+        return 1;
+#endif
+}
+
+int let_not_out(object player, object dest, string dir)
+{
+    if (::let_not_out(player, dest, dir) ||
+        dir && call_other(this_object(),"filter_"+dir,player) &&
+	!(wizp(player) && player->query_invis() == V_INVIS))
+	return 1;
+}
+
+void moved_in(object was, object woher, string dir, int way)
+{
+   int     raumtyp;
+   object  master;
+
+   if (!kein_wissen && playerp(was) &&
+	    master = touch(WISSEN_MASTER, NO_LOG | NO_WRITE))
+	kein_wissen = master->moved_in_room(was);
+
+   raumtyp = this_object()->query_type(LANDSCHAFT);
+   if (raumtyp & L_WASSER &&                 
+      !(raumtyp & ~(L_WASSER|L_FLIESSEND|L_DRINNEN)) &&
+      !living(was) &&
+      !was->query_vehikel() &&
+      !was->query_schwimmfaehig() &&
+      !was->query_invis())
+      call_out("abtreiben_untergehen", 4, was);
+
+   ::moved_in(was, woher, dir, way);
+#ifdef CREATE_TRACES
+   add_partial_trace(was, woher, TR_MOVED_IN, 
+        objectp(was)?was->query_invis():0);
+#endif
+}
+
+// Diese Funktion kann wieder ohne Ankuendigung verschwinden,
+// wenn ein besserer Weg gefunden wurde.
+void early_moved_in(object was, object woher, string dir, int way)
+{
+   add_partial_trace(was, woher, TR_MOVED_IN, 
+        objectp(was)?was->query_invis():0);
+}
+
+/*
+FUNKTION: query_schwimmfaehig
+DEKLARATION: int query_schwimmfaehig()
+BESCHREIBUNG:
+Definiert man in beweglichen Objekten, die im Wasser nicht untergehen
+sollen, in diesem Fall muss die Funktion einen von 0 verschiedenen
+Wert liefern.
+GRUPPEN: move
+*/
+
+
+void moved_out(object was, object wohin, string dir, int way)
+{
+   ::moved_out(was, wohin, dir, way);
+#ifdef CREATE_TRACES
+   add_partial_trace(was, wohin, TR_MOVED_OUT, 
+        objectp(was)?was->query_invis():0);
+#endif
+}
+
+
+int remove()
+{
+    destruct(this_object());
+    return 1;
+}
+
+/*
+   clean_up() will be called just before this room is swapped out.
+   This will give us a chance to free even more memory.
+   The default is to actually destruct the room.
+   If you want a room to remain, you have to define add_type("nocleanup",1)).
+*/
+
+/*
+FUNKTION: clean_up
+DEKLARATION: int clean_up(int arg)
+BESCHREIBUNG:
+Die Funktion clean_up() wird vom Game-Driver aufgerufen, falls das Objekt
+lange Zeit nicht mehr benutzt wurde, um dem Objekt zu ermoeglichen, sich
+selbst zu zerstoeren.
+
+arg ist 0, falls es sich um ein mit clone_object() erschafftes Objekt 
+	(d.h. ein Objekt mit #nummer) handelt
+arg ist 1, falls es sich um ein mit touch() geladenes Objekt handelt
+	(wie z.B. Raeume)
+arg ist >1, falls das File inherited oder sostwie benutzt wird.
+
+In clean_up() hat man nun die Moeglichkeit zu entscheiden, ob das Objekt
+zerstoert werden soll, oder nicht.
+
+Wenn clean_up() einen return 0; macht, wird clean_up() nie wieder aufgerufen,
+bei return 1; wird clean_up() wieder nach langer Zeit aufgerufen.
+Das ist z.B. sinnvoll, falls sich Objekte im Raum befinden, die normalerweise
+nicht dort hin gehoeren.
+
+In Raeumen wird das clean_up() folgendermassen ausgenutzt:
+
+Der Raum zerstoert sich nicht selbst und alle enthaltenen Objekte, wenn:
+
+    1. Der Raum wird von dessen Programmierer mit dem Aufruf
+
+                   add_type("nocleanup",1);
+
+       im create() daran gehindert,
+
+    2. Eines der im Raum enthaltenen Objekte gibt auf die Anfrage des Raumes:
+
+                   query_enable_cleanup()
+
+       eine 0 zurueck.
+
+In /i/move.c ist query_enable_cleanup() bereits definiert. Im Normalfall
+laesst sich ein Objekt beim Cleanup zerstoeren, wenn es durch diesen Raum
+erzeugt wurde, da es beim naechsten Laden des Raumes auch wieder erzeugt wird.
+Will man das Zerstoeren aber trotzdem verhindern, kann man im Objekt
+
+   set_prevent_cleanup()
+
+aufrufen.
+VERWEISE: add_type, remove, set_prevent_cleanup, query_enable_cleanup
+GRUPPEN: raum
+*/
+int clean_up(int arg)
+{
+    object *inv;
+    int a;
+
+    if (query_type("nocleanup"))
+	return 0;
+    inv = all_inventory();
+    for (a=0; a<sizeof(inv); a++)
+	if (!inv[a]->query_enable_cleanup())
+	    return 1;
+    // sys_log("clean_up",ctime(time())+" : "+object_name()+"\n");
+    remove();
+    return 0;
+}
+
+string query_loader()
+{
+    return loader;
+}
+
+/*
+FUNKTION: query_map_pos
+DEKLARATION: int *query_map_pos()
+BESCHREIBUNG:
+Liefert ein Feld ({ X, Y }) der Koordinaten eines Map-Raumes oder 0, wenn
+der Raum kein Map-Raum ist.
+GRUPPEN: raum, domain
+*/
+int *query_map_pos()
+{
+    if (map_pos)
+	return ({}) + map_pos;
+}
+
+varargs void send_message(int msg_type, int msg_action, string msg,
+	string msg_whom, mixed whom)
+{
+    if (whom && msg_whom)
+	send_message_to(whom, msg_type, msg_action, msg_whom);
+    if (!pointerp(whom))
+	whom = ({ whom });
+    if (stringp(msg))
+    {
+	object *wer;
+	wer = all_inventory() - whom;
+	if(msg_type & MT_DEBUG)
+	    wer = filter(wer,(:wizp($1):));
+	filter_objects(wer,"receive_message",msg_type,msg_action,
+	    this_object(),msg);
+    }
+}
+
+/* Dokumentation: */
+
+/*
+FUNKTION: query_long_dark
+DEKLARATION: string query_long_dark(object betrachter)
+BESCHREIBUNG:
+Wenn diese Funktion im Raum definiert ist und einen Wert != 0 liefert, so
+wird dies in der Dunkelheit als Raumbeschreibung ausgegeben.
+Der Text sollte ordentlich umgebrochen sein. Standardmaessig gibt es diese
+Funktion im Raum nicht (und daher gibt es auch kein set_long_dark).
+VERWEISE: query_long, set_long
+GRUPPEN: raum
+*/
+
+/*
+FUNKTION: concerned_drift
+DEKLARATION: int concerned_drift(object was, object wo)
+BESCHREIBUNG:
+Wenn ein Objekt 'was' in einen Raum 'wo' gelegt wird, und der Boden
+des Raumes tatsaechlich eine Wasseroberflaeche ist (Landschaftstyp)
+und das Objekt nicht schwimmen kann, droht es abzutreiben oder zu
+sinken.
+
+Bevor das Objekt 'was' abtreibt, wird in allen bei 'was' und 'wo'
+angemeldeten Controllern angefragt, ob sich jemand anderes als
+der Raum selbst um das Abtreiben kuemmern soll. Fuehlt man sich
+zustaendig, liefert man einen Wert > 0 zurueck. Die Funktion mit
+dem groessten Rueckgabewert erhaelt den Zuschlag.
+
+Hat man ein Objekt als Controller angemeldet, so wird dann
+    objekt->do_drift(was, wo)
+aufgerufen.
+
+Hat man eine Closure angemeldet, so wird diese mit
+    funcall(cl, "do_drift", was, wo)
+aufgerufen.
+
+In dieser Funktion kann man dann mit dem Objekt machen, wozu man
+Lust und Laune hat, z.B. das Objekt nach einer gewissen Zeit in
+einem Strudel verschwinden lassen...
+VERWEISE: concerned_sink, query_schwimmfaehig
+GRUPPEN: raum
+*/
+
+/*
+FUNKTION: concerned_sink
+DEKLARATION: int concerned_sink(object was, object wo)
+BESCHREIBUNG:
+Wenn ein Objekt 'was' in einen Raum 'wo' gelegt wird, und der Boden
+des Raumes tatsaechlich eine Wasseroberflaeche ist (Landschaftstyp)
+und das Objekt nicht schwimmen kann, droht es abzutreiben oder zu
+sinken.
+
+Bevor das Objekt 'was' sinkt, wird in allen bei 'was' und 'wo'
+angemeldeten Controllern angefragt, ob sich jemand anderes als
+der Raum selbst um das Sinken kuemmern soll. Fuehlt man sich
+zustaendig, liefert man einen Wert > 0 zurueck. Die Funktion mit
+dem groessten Rueckgabewert erhaelt den Zuschlag.
+
+Hat man ein Objekt als Controller angemeldet, so wird dann
+    objekt->do_sink(was, wo)
+aufgerufen.
+
+Hat man eine Closure angemeldet, so wird diese mit
+    funcall(cl, "do_sink", was, wo)
+aufgerufen.
+
+In dieser Funktion kann man dann mit dem Objekt machen, wozu man
+Lust und Laune hat, z.B. das Objekt nach einer gewissen Zeit in
+einem Strudel verschwinden lassen...
+VERWEISE: concerned_drift, query_schwimmfaehig
+GRUPPEN: raum
+*/
+
+/*
+FUNKTION: query_no_idle_logout
+DEKLARATION: int query_no_idle_logout(object wer)
+BESCHREIBUNG:
+Wenn ein Spieler in einem Raum aufgrund zu langen Idelns zur Statue 
+werden soll, wird im Raum diese Funktion mit dem Spielerobjekt als 
+Argument aufgerufen. Liefert sie einen Wert ungleich 0 zurueck, wird
+der Spieler nicht zur Statue.
+
+Diese Funktion ist privilegiert und kann nur nach Freigabe durch die
+Admins genutzt werden.
+GRUPPEN: raum, spieler
+*/
+
+/* End of file. */

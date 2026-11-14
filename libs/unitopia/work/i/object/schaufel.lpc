@@ -1,0 +1,305 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/object/schaufel.c
+// Description: Eine Schaufel zum Graben.
+// Modified by: Kurdel, 05.02.97: Raumtyp graben_verboten als String verwendet
+//              Kurdel, 25.04.97: Zum Graben braucht man eine freie Hand
+//              Offler, 07.06.98: Man kann auch mehrere Waehrungen gleichzeitig
+//                                vergraben.
+//              Parsec  11.11.98: Kein Graben im Wasser
+//
+// $Log: schaufel.c,v $
+// Revision 1.24  2012-11-07 20:59:08  sorcerer
+// Begruendung fuer nicht-graben kann 1 sein
+//
+// Revision 1.23  2011-12-10 01:19:42  gnomi
+// Schatztruhen umgebaut.
+//
+// Revision 1.22  2009-06-17 07:49:20  gnomi
+// Die Schatzkisten ueber den Master ver/ausgraben.
+//
+// Revision 1.21  2005/05/26 01:01:17  gnomi
+// notify_fail-Meldungen mit Prioritaeten versehen.
+//
+// Revision 1.20  2005/01/21 20:36:38  gnomi
+// Fehler beim concerned_dig.
+//
+// Revision 1.19  2004/11/27 21:18:02  gnomi
+// notify_dig/concerned_dig geaendert, um auch den gesparsten String zu
+// uebergeben (was auszugraben ist).
+//
+// Revision 1.18  2004/01/28 23:26:54  gnomi
+// Eine Meldung wurde falschherum ausgegeben (falsche Empfaenger).
+//
+// Revision 1.17  2003/11/18 02:12:31  gnomi
+// Ranger: Controller forbidden/concerned/notify_dig eingebaut.
+//
+// Revision 1.16  2003/09/20 02:09:13  gnomi
+// Aufs Message-System umgestellt.
+//
+// Revision 1.15  2003/06/02 00:07:12  gnomi
+// Typos.
+//
+// Revision 1.14  2002/07/07 19:45:37  gnomi
+// Kein lcrypt mehr nutzen.
+//
+// Revision 1.13  2002/06/20 03:38:43  gnomi
+// lcrypt -> md5
+//
+// Revision 1.12  2002/05/26 21:21:43  sissi
+// Rechtschreibfehler in den Meldungen behoben.
+//
+// Revision 1.11  2002/05/26 21:00:16  sissi
+// Es wird nun nicht mehr in jeder Schleife bei jedem Durchgang der
+// Dateiname, wo auf Schatztruhen geprueft werden soll, erneuet
+// verschluesselt sondern nur einmal und sich das Ergebnis dann
+// gemerkt.
+//
+// Revision 1.10  2002/05/16 15:50:42  sissi
+// Parsec: Schatztruhenliste ist jetzt verschluesselt mit /i/tools/crypt.
+//
+// Revision 1.9  2001/04/19 12:56:55  freaky
+// Typo gefixed.
+//
+// Revision 1.8  2001/04/13 15:12:51  sissi
+// da die Schaufel eine Schatzkiste clont, braucht sie eine euid.
+//
+// Revision 1.7  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+//
+
+#pragma save_types
+
+inherit "/i/item";
+inherit "/i/value";
+inherit "/i/move";
+inherit "/i/tools/room_types";
+
+#include <apps.h>
+#include <deklin.h>
+#include <parse_com.h>
+#include <move.h>
+#include <message.h>
+#include <notify_fail.h>
+#include <level.h>
+#include <room.h>
+
+void create() {
+    seteuid (getuid ()); // clonen von schatzkisten
+    set_id( ({ "schaufel","spaten" }) );
+    set_name("schaufel");
+    set_material( ({"metall","holz"}) );
+    set_gender("weiblich");
+    set_long("Es klebt noch ein wenig Erde an ihr.\n");
+    set_smell("Der Stiel riecht nach Schweiss.\n");
+    set_value(40);
+    set_weight(2);
+}
+
+void init() {
+    if (this_player() == environment()) {
+        add_action("put","vergrabe",-7);
+        add_action("get","grabe",-4);
+    }
+}
+
+int put(string str)
+{
+    object room, kiste;
+    mixed *parsed, responsible, reason;
+    string name;
+    object *inv, *schatz;
+    mapping data;
+    mapping *geld;
+
+    if (this_player()->free_hand()==-1) {
+        notify_fail("Du hast keine Hand frei zum Vergraben!\n", FAIL_INTERNAL);
+        return 0;
+    }
+    room = environment(this_player());
+    if (!room || (reason = room->query_type("graben_verboten")) ||
+        (reason = room->query_no_digging_in()) ||
+        !query_hat_boden(room))
+    {
+        if(!reason && query_im_wasser(room))
+            reason = "Im Wasser geht das schlecht!";
+	if(adminp(this_player()))
+	    write("Hier kannst du zwar nichts vergraben, aber weil Du ein Admin bist...\n");
+	else
+    	    return notify_fail(reason && stringp(reason) ? wrap(reason) :
+             "Hier kannst du nichts vergraben!\n", FAIL_INTERNAL);
+    }
+
+    parsed = parse_com(str);
+    if (parse_com_error(parsed,"Vergrabe was?\n",1))
+        return 0;
+    kiste = parsed[PARSE_OBS][0];
+
+    if (reason = environment(this_player())->
+        forbidden("dig", this_player(), this_object(), kiste))
+            return notify_fail(wrap(stringp(reason)?reason:
+		    "Hier kannst du nichts vergraben!"), FAIL_INTERNAL);
+
+    if (responsible = environment(this_player())->
+        concerned("dig", this_player(), this_object(), kiste)) {
+            if (closurep(responsible))
+                return funcall(responsible, "do_dig", this_player(), this_object(), kiste);
+            return responsible->do_dig(this_player(), this_object(), kiste);
+    }
+
+    notify_fail("Es erscheint dir irgendwie nicht ratsam, dies zu vergraben.\n", FAIL_WRONG_ARG);
+    return 0;
+}
+
+int get(string str)
+{
+    object room, kiste;
+    string reason, name, was;
+    mixed responsible;
+    mapping data;
+    
+    if (str)
+    {
+        if (sscanf(str,"%s ein", was) == 1)
+            return put(was);
+        if (sscanf(str,"%s aus", was) != 1)
+        {
+            notify_fail("Grabe was ein oder aus?\n", FAIL_NOT_OBJ);
+            return 0;
+        }
+    }
+
+    if (this_player()->free_hand()==-1)
+    {
+        notify_fail("Du hast keine Hand frei zum Graben!\n", FAIL_INTERNAL);
+        return 0;
+    }
+    room = environment(this_player());
+
+    if (!room || (reason = room->query_type("graben_verboten")) ||
+        (reason = room->query_no_digging()) ||
+        !query_hat_boden(room))
+    {
+        if(!reason && query_im_wasser(room))
+            reason = "Im Wasser gibt's nichts auszugraben!";
+	if(adminp(this_player()))
+	    write("Hier kannst du zwar nichts vergraben, aber weil Du ein Admin bist...\n");
+	else
+	    return notify_fail(reason && stringp(reason) ? wrap(reason) :
+                "Hier kann man nicht graben!\n", FAIL_INTERNAL);
+    }
+
+    if (reason = environment(this_player())->
+        forbidden("dig", this_player(), this_object(), was))
+            return notify_fail(wrap(stringp(reason)?reason:
+		    "Hier kannst du nicht graben!"), FAIL_INTERNAL);
+
+    if (responsible = environment(this_player())->
+        concerned("dig", this_player(), this_object(), was)) {
+            if (closurep(responsible))
+                return funcall(responsible, "do_dig", this_player(), this_object(), was);
+            return responsible->do_dig(this_player(), this_object(), was);
+    }
+
+    this_player()->send_message_to(this_player(), MT_LOOK|MT_FEEL|MT_NOTIFY, MA_USE,
+        "Du graebst und graebst.....\n");
+    this_player()->send_message(MT_LOOK, MA_USE,
+        Der(OBJ_TP)+" graebt mit "+seinem()+" ein Loch in den Boden.\n");
+    return 1;
+}
+
+
+
+/*
+FUNKTION: forbidden_dig
+DEKLARATION: string forbidden_dig(object wer, object womit, object|string was)
+BESCHREIBUNG:
+Diese Funktion wird in allen am entsprecheden Raum per Controller angemeldeten
+Objekten aufgerufen und ueberprueft, ob ein Spieler dort graben darf.
+"wer" ist der grabende Spieler, "womit" ist die Schaufel, mit der gegraben
+wird. Wenn bei dem Aufruf "was" ein Objekt ist, dann will der Spieler das
+angegebene Objekt vergraben, ansonsten will der Spieler den im String
+angegebenen Gegenstand oder (falls was == 0) irgendetwas ausgraben.
+Will ein Controller dies verbieten, so muss er eine entsprechende
+Fehlermeldung als String zurueckliefern.
+VERWEISE: add_controller, forbidden, concerned_dig, notify_dig
+GRUPPEN: graben, grundlegendes
+*/
+
+/*
+FUNKTION: concerned_dig
+DEKLARATION: int concerned_dig(object wer, object womit, object|string was)
+BESCHREIBUNG:
+Diese Funktion wird an im entsprechenden Raum per Controller angemeldeten
+Objekten aufgerufen und meldet zurueck, welches Objekt sich "am liebsten",
+also mit der hoechsten Prioritaet (der Wert, den die Funktion zurueck gibt),
+darum kuemmern moechte. Wenn sich kein Objekt angemeldet hat und Werte
+groesser 0 liefert, kuemmert sich die Schaufel selbst um das Graben.
+"wer" ist der grabende Spieler, "womit" ist die Schaufel, mit der gegraben
+wird. Wenn bei dem Aufruf "was" ein Objekt ist, dann will der Spieler das
+angegebene Objekt vergraben, ansonsten will der Spieler den im String
+angegebenen Gegenstand oder (falls was == 0) irgendetwas ausgraben.
+Im Objekt, dass den Zuschlag erhaelt, wird die Funktion do_dig aufgerufen.
+Ausserdem muss sich dieses Objekt selbst um die Benachrichtigung mittels
+notify_dig an alle beteiligten Objekte kuemmern.
+
+Die Prioritaeten sollten zwischen 0 und 100 liegen, wobei der untere
+Bereich (1-20) fuer allgemeine Graben-Funktionen, der mittlere fuer
+objekt- oder raumspezifische Funktionen und der obere (80-100)
+fuer objekt- *und* raumspezifische Graben-Funktionen genutzt werden
+sollte.
+
+VERWEISE: add_controller, concerned, notify_dig, forbidden_dig, do_dig
+GRUPPEN: graben, grundlegendes
+*/
+
+/*
+FUNKTION: do_dig
+DEKLARATION: int do_dig(object wer, object womit, object|string was)
+BESCHREIBUNG:
+Diese Funktion wird von der Schaufel in dem Objekt aufgerufen, welches per
+concerned_dig am Raum mit der hoechsten Prioritaet angemeldet war, und sich
+somit fuer das Graben zustaendig erklaert hat.
+In dieser Funktion handelt das zustaendige Objekt selbst das Graben ab und
+returned wie eine Action im Erfolgsfall 1 und im Fehlerfall sollte per
+notify_fail ein Grund angegeben werden und 0 zurueckgegeben werden, was aber
+einen triftigen Grund haben sollte, weil sonst haette man sich besser per
+concerned_dig gar nicht gemeldet.
+"wer" ist der grabende Spieler, "womit" ist die Schaufel, mit der gegraben
+wird. Wenn bei dem Aufruf "was" ein Objekt ist, dann will der Spieler das
+angegebene Objekt vergraben, ansonsten will der Spieler den im String
+angegebenen Gegenstand oder (falls was == 0) irgendetwas ausgraben.
+Ausserdem muss sich das zustaendige Objekt selbst um die Benachrichtigung
+mittels notify_dig an alle beteiligten Objekte kuemmern.
+
+zum Beispiel:
+
+  int do_dig(object wer, object womit, object was) {
+
+    // hier sich ums Graben kuemmern, Meldungen ausgeben
+    
+    ({ this_object(), wer, womit, was, })->notify("dig", wer, womit, was);
+    return 1;
+  }
+  
+VERWEISE: add_controller, concerned, notify_dig, concerned_dig
+GRUPPEN: graben, grundlegendes
+*/
+
+
+/*
+FUNKTION: notify_dig
+DEKLARATION: void notify_dig(object wer, object womit, object|string was)
+BESCHREIBUNG:
+Wenn in einem Raum gegraben wurde, wird in allen Objekten, die an einem der
+am Grabevorgang beteiligt waren, per Controller angemeldet sind, notify_dig
+aufgerufen.
+"wer" ist der grabende Spieler, "womit" ist die Schaufel, mit der gegraben
+wird. Wenn bei dem Aufruf "was" ein Objekt ist, dann will der Spieler das
+angegebene Objekt vergraben, ansonsten will der Spieler den im String
+angegebenen Gegenstand oder (falls was == 0) irgendetwas ausgraben.
+VERWEISE: add_controller, notify, notify_dig, concerned_dig, forbidden_dig
+GRUPPEN: graben, grundlegendes
+*/

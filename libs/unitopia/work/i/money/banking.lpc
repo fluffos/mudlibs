@@ -1,0 +1,356 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/money/banking.c
+// Description: Routinen zur Verwaltung der Spieler-Konten.
+// Author:	Francis
+// Modified by: Garthan	(29.09.94) Auf Spieleralter statt abs.zeit umgestellt
+//				   Generalueberholung
+// Modified by:	Garthan	(30.09.94) Quellensteuer
+//              Copper (7.12.98)   Bugfix in den Kreditzinsen,
+//                                 Quellensteuer gesenkt
+//
+// $Log: banking.c,v $
+// Revision 1.10  2008/01/16 09:17:43  gnomi
+// Zinsen deaktiviert.
+//
+// Revision 1.9  2003/05/10 20:57:15  gnomi
+// Pulami:
+//  - /i/money/exchange virtuell inheriten.
+//  - Keine Sonderstellung von "taler". Stattdessen 0 als Basiswaehrung nehmen.
+//
+// Revision 1.8  2001/07/05 22:37:48  sissi
+// Quellensteuer auskommentiert
+//
+// Revision 1.7  2001/06/25 11:48:20  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.6  2001/06/22 22:15:23  sissi
+// mehr quellensteuerlog
+//
+// Revision 1.5  2001/06/16 22:06:12  sissi
+// Vernuenftige Anzeige + Log von Quellensteuer, Kontofuehrungsgebuehren
+// und Zinsen.
+//
+// Revision 1.4  2001/06/06 21:44:52  sissi
+// Quellensteuerlog eingebaut.
+//
+// Revision 1.3  2001/05/25 23:03:38  sissi
+// Denkfehler bei konto age behoben und Quellensteuer vernuenftiger gemacht.
+//
+// Revision 1.2  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+FUNKTION: bewegung
+DEKLARATION: int bewegung(int betrag, object player)
+BESCHREIBUNG:
+player: Der Spieler dessen Konto behandelt werden soll.
+betrag:     0: Es wird nur der Konto-Stand zurueckgegeben
+	    > 0: Einzahlung
+	    < 0: Auszahlung
+Eventuelle Kosten werden abgezogen.
+Anfallender Zins gutschrieben.
+Der neue Kontostand wird zurueckgegeben.
+GRUPPEN: handel, bank
+VERWEISE: set_konto, query_konto, query_kontostand, 
+*/
+
+/*
+FUNKTION: query_kontostand
+DEKLARATION: int query_kontostand(object player)
+BESCHREIBUNG:
+player: Der Spieler dessen Konto behandelt werden soll.
+Eventuell annfallende Zinsen werden berechnet und der aktuelle
+Kontostand ohne Abzug der Kontostand-Kosten zurueckgegeben.
+Der Kontostand wird zurueckgegeben.
+GRUPPEN: handel, bank
+VERWEISE: set_konto, query_konto, bewegung, 
+*/
+
+/*
+FUNKTION: set_valuta
+DEKLARATION: void set_valuta(string waehrungsname_singular)
+BESCHREIBUNG:
+Setzen der Standardwaehrung einer Bank (singular)
+GRUPPEN: handel, bank
+VERWEISE: set_valutas, query_valuta, query_valutas, set_sorten
+*/
+
+/*
+FUNKTION: set_valutas
+DEKLARATION: void set_valutas(string waehrungsname_plural)
+BESCHREIBUNG:
+Setzen der Standardwaehrung einer Bank (plural)
+GRUPPEN: handel, bank
+VERWEISE: set_valuta, query_valuta, query_valutas, set_sorten
+*/
+
+/*
+FUNKTION: set_zins_zeitraum
+DEKLARATION: void set_zins_zeitraum(int zeitraum)
+BESCHREIBUNG:
+Zeitraum, fuer den die Zinsen berechnet werden.
+in Sekunden MagyraSPIELZEIT des Spielers im Mud (age based)
+GRUPPEN: handel, bank
+VERWEISE: set_kosten, set_zins, set_kredit_zins, set_kosten_fuehrung
+*/
+
+/*
+FUNKTION: set_zins
+DEKLARATION: void set_zins(int prozent)
+BESCHREIBUNG:
+Zinsen in Prozent, die im Zinszeitraum gutgeschrieben werden.
+GRUPPEN: handel, bank
+VERWEISE: set_kosten, set_zins_zeitraum, set_kredit_zins, set_kosten_fuehrung
+*/
+
+/*
+FUNKTION: set_kredit_zins
+DEKLARATION: void set_kredit_zins(int prozent)
+BESCHREIBUNG:
+Zinsen in Prozent, die bei Kontoueberziehung abgezogen werden.
+GRUPPEN: handel, bank
+VERWEISE: set_kosten, set_zins_zeitraum, set_zins, set_kosten_fuehrung
+*/
+
+/*
+FUNKTION: set_kosten_einzahlung
+DEKLARATION: void set_kosten_einzahlung(int kosten)
+BESCHREIBUNG:
+Abzug bei Einzahlungen, in durch set_valuta(s) angegebener Waehrung.
+GRUPPEN: handel, bank
+VERWEISE: set_kosten
+*/
+
+/*
+FUNKTION: set_kosten_auszahlung
+DEKLARATION: void set_kosten_auszahlung(int kosten)
+BESCHREIBUNG:
+Abzug bei Auszahlungen, in durch set_valuta(s) angegebener Waehrung.
+GRUPPEN: handel, bank
+VERWEISE: set_kosten
+*/
+
+/*
+FUNKTION: set_kosten_kontostand
+DEKLARATION: void set_kosten_kontostand(int kosten)
+BESCHREIBUNG:
+Abzug bei Kontostandabfrage, in durch set_valuta(s) angegebener Waehrung.
+GRUPPEN: handel, bank
+VERWEISE: set_kosten
+*/
+
+/*
+FUNKTION: set_kosten_fuehrung
+DEKLARATION: void set_kosten_fuehrung(int kosten)
+BESCHREIBUNG:
+Abzug einmal im Zins-Zeitraum, in durch set_valuta(s) angegebener Waehrung.
+GRUPPEN: handel, bank
+VERWEISE: set_kosten, set_zins_zeitraum, set_zins, set_kredit_zins
+*/
+
+#pragma save_types
+
+virtual inherit "/i/money/exchange";
+
+#include <time.h>
+
+private int kosten_fuehrung, kosten_einzahlung, kosten_auszahlung;
+private int kosten_kontostand;
+private int zins, kredit_zins, zins_zeitraum;
+private string valuta, valutas;
+
+void set_valuta(string str)       { valuta = str; }
+void set_valutas(string str)      { valutas = str; }
+
+void set_zins(int a)              { zins = a; }
+void set_kredit_zins(int a)       { kredit_zins = a; }
+void set_zins_zeitraum(int a)     { zins_zeitraum = a; }
+void set_kosten_einzahlung(int a) { kosten_einzahlung = a; }
+void set_kosten_auszahlung(int a) { kosten_auszahlung = a; }
+void set_kosten_fuehrung(int a)   { kosten_fuehrung = a; }
+void set_kosten_kontostand(int a) { kosten_kontostand = a; }
+
+string query_valuta()             { return valuta; }
+string query_valutas()            { return valutas; }
+
+int query_zins()                  { return zins; }
+int query_kredit_zins()           { return kredit_zins; }
+int query_zins_zeitraum()         { return zins_zeitraum; }
+int query_kosten_einzahlung()     { return kosten_einzahlung; }
+int query_kosten_auszahlung()     { return kosten_auszahlung; }
+int query_kosten_fuehrung()       { return kosten_fuehrung; }
+int query_kosten_kontostand()     { return kosten_kontostand; }
+
+nosave void rechnungspruefung(object player)
+{
+   int i, konto, konto_age, age, steuersatz, periods,
+       kontofuehrung, habenzins, kreditzins, quellensteuer;
+   string qslog;
+
+   if(!player)
+      return 0;
+
+   konto     = player->query_konto();
+   konto_age = player->query_konto_age();
+   age       = player->query_age();
+
+   if(konto_age <= 0 || age < konto_age)
+   {
+      player->set_konto_age(age);
+      return;
+   }
+
+   if(zins_zeitraum <= 0)
+      return;
+
+   if(periods = (age - konto_age) * TIMEWARP / zins_zeitraum)
+   {
+	qslog = "Spieler: "+player->query_real_name()+"\n"
+	   +"Konto vorher: "+konto+"\n";
+   }
+   for(i = periods; i--;)
+   {
+      // Kontofuehrungsgebuehren
+      if(kosten_fuehrung > 0) {
+	 konto -= convert(kosten_fuehrung, query_valuta(), 0);
+	 kontofuehrung += convert(kosten_fuehrung, query_valuta(), 0);
+      }
+      // Kreditzins kassieren
+      if(konto < 0 && kredit_zins > 0) {
+	 kreditzins -= round(((float)konto*(float)kredit_zins)/100.0);
+	 konto += round(((float)konto*(float)kredit_zins)/100.0);
+      }
+#if 0
+      // Zins auszahlen
+      if(konto > 0 && zins > 0) {
+	 habenzins += round(((float)konto*(float)zins)/100.0);
+	 konto += round(((float)konto*(float)zins)/100.0);
+      }
+#endif
+#if 0
+      // Quellensteuer einziehen
+      if(konto > 0)
+      {
+	 switch(konto)
+	 {
+	     case 0..5000:
+		steuersatz = 0; break;
+	     case 5001..10000:
+		steuersatz = 1; break;
+	     case 10001..15000:
+		steuersatz = 2; break;
+	     case 15001..20000:
+		steuersatz = 3; break;
+	     case 20001..30000:
+		steuersatz = 4; break;
+	     case 30001..50000:
+		steuersatz = 5; break;
+             case 50001..100000:
+                steuersatz = 6; break;
+             case 100001..150000:
+                steuersatz = 7; break;
+             case 150001..1000000:
+                steuersatz = 10; break;
+             default:
+                steuersatz = 20; break;
+	 }
+	 quellensteuer += round(((float)konto*(float)steuersatz)/100.0);
+	 konto -= round(((float)konto*(float)steuersatz)/100.0);
+	 if(konto < 0)
+	    konto = 0;
+      }
+#endif
+   }
+   if (periods) {
+       qslog +=
+           "Wann: "+timestr(time())+"\n"
+           "Bank: "+object_name(this_object())+"\n"
+           "age - konto_age: "+format_seconds(age-konto_age)+"\n"
+           "Perioden: "+periods+"\n"
+           "Habenzins: "+habenzins+"\n"
+           "Kreditzins: "+kreditzins+"\n"
+           "Quellensteuer: "+quellensteuer+"\n"
+           "Kontofuehrung: "+kontofuehrung+"\n" 
+           "Konto nachher: "+konto+"\n\n";
+       log_file ("Quellensteuer",qslog);
+
+       kontofuehrung = convert (kontofuehrung, 0, query_valuta());
+       habenzins = convert (habenzins, 0, query_valuta());
+       kreditzins = convert (kreditzins, 0, query_valuta());
+       quellensteuer = convert (quellensteuer, 0, query_valuta());
+
+       tell_object(player,
+         (kontofuehrung
+          ? "Angefallene Kontofuehrungsgebuehren: "+kontofuehrung+
+          " "+capitalize(query_valutas())+"\n"
+          :"")+
+#if 0
+         (habenzins
+          ? "Angefallene Zinsen: "+habenzins+
+          " "+capitalize(query_valutas())+"\n"
+          : "")+
+#endif
+         (kreditzins
+          ? "Angefallene Kreditzinsen: "+kreditzins+
+          " "+capitalize(query_valutas())+"\n"
+#if 0
+          : "")+ 
+         (quellensteuer
+          ? "Eingezogene Quellensteuer: "+quellensteuer+
+          " "+capitalize(query_valutas())+"\n"
+#endif
+          : ""));
+
+       // konto age darf nur dann zurueckgesetzt werden, wenn auch
+       // Zinsen, Quellensteuer usw. berechnet wurden, sonst koennte man
+       // der Quellensteuer durch oftmaliges Kontoabfragen entgehen.
+       if (periods)
+           player->set_konto_age(age);
+   }
+   player->set_konto(konto);
+}
+
+int bewegung(int betrag, object player)
+{
+   int konto;
+
+   if(!player)
+      return 0;
+
+   rechnungspruefung(player);
+
+   konto = player->query_konto();
+
+   if(betrag)
+   {
+      // Einzahlungsgebuehr erheben
+      if(betrag > 0 && kosten_einzahlung > 0)
+	 konto -= convert(kosten_einzahlung, query_valuta(), 0);
+      // Auszahlungsgebuehr erheben
+      if(betrag < 0 && kosten_auszahlung > 0)
+	 konto -= convert(kosten_auszahlung, query_valuta(), 0);
+      // Transaktion
+      konto += convert(betrag, query_valuta(), 0);
+   }
+   else
+      // Kosten fuer Kontostandsabfrage
+      if(kosten_kontostand > 0 && konto != 0)
+	 konto -= convert(kosten_kontostand, query_valuta(), 0);
+
+   player->set_konto(konto);
+
+   return convert(konto, 0, query_valuta());
+}
+
+int query_kontostand(object player)
+{
+   if(!player)
+      return 0;
+
+   rechnungspruefung(player);
+
+   return convert(player->query_konto(), 0, query_valuta());
+}

@@ -1,0 +1,237 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/town.c
+// Description: Konvertiere Ip-Name in Stadt-Name
+// Author:	Freaky
+//
+// $Log: town.c,v $
+// Revision 1.19  2016/03/21 12:35:59  gnomi
+// Mit efun::interactive() vor efun::interactive_info() pruefen.
+//
+// Revision 1.18  2015/08/26 21:40:27  gnomi
+// Anpassungen an LDMud 3.5.0
+//
+// Revision 1.17  2005/01/30 05:27:01  menaures
+// Keine Spielie-Abfrage mehr
+//
+// Revision 1.16  2003/11/11 03:16:22  gnomi
+// Fuer nicht-Admins deaktiviert.
+//
+// Revision 1.15  2003/07/25 04:07:41  gnomi
+// Hostnamen ohne Beachtung von Gross-/Kleinschreibung vergleichen.
+//
+// Revision 1.14  2003/07/16 00:59:57  gnomi
+// Die wirkliche IP abfragen.
+//
+// Revision 1.13  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.12  2001/08/17 23:33:08  sissi
+// Sissi kommt jetzt in UNItopia aus Berlin.
+//
+// Revision 1.11  2001/05/08 22:22:31  sissi
+// Spieler sehen jetzt nicht mehr den Provider.
+//
+// Revision 1.10  2001/05/08 20:11:54  sissi
+// T-Online Bug behoben.
+//
+// Revision 1.9  2001/05/08 19:56:14  sissi
+// Fuer t-Online wird auch dip0.t-ipconnect.de erkannt
+//
+// Revision 1.8  2001/05/08 19:48:42  sissi
+// T-Online Zuordnung UP -> Stadt
+//
+// Revision 1.7  2001/04/29 19:07:25  gnomi
+// Spielies haben nur "Deutschland".
+//
+// Revision 1.6  2001/03/15 14:59:50  freaky
+// geshadowte Variablen rausgenommen.
+//
+// Revision 1.5  2001/03/14 17:30:51  freaky
+// deprecated Funktion member-array durch member ersetzt.
+//
+// Revision 1.4  2001/01/25 15:40:46  freaky
+// Alten Code rausgenommen.
+//
+
+#undef LOGGING
+#undef DEBUG
+
+#define TOWN_FILE "/nosave/adm/TOWN"
+#define TOWN_FILE_TONLINE "/nosave/adm/TOWN-TONLINE"
+
+#ifdef LOGGING
+#define ERR sys_log("TOWN","STR:" + str + ": STRN:" + strn + ":\n");
+#define DO_ERR { ERR; return "Unbekannt"; }
+#else
+#define ERR {}
+#define DO_ERR return "Unbekannt";
+#endif
+
+#define JUNK ({"uni","fh","tu","fu","hu","th","lrz","kfa","ba","fernuni", \
+	"rwth","ku","htw","fht","tfh","unibw","fz","mu","hbi","dkfz"})
+
+#include <level.h>
+#if __EFUN_DEFINED__(interactive_info)
+#include <interactive_info.h>
+#endif
+
+private mapping towns, alias, domains, tonline;
+
+void create()
+{
+    string *lines, ip, str, descr, file;
+    int i;
+
+    towns = m_allocate(1,2);
+    alias = ([]);
+    tonline = ([]);
+    domains = m_allocate(1,2);
+    file = read_file(TOWN_FILE);
+    if (!file)
+	return;
+    lines = explode(file,"\n") - ({""});
+    for (i = 0; i < sizeof(lines); i++)
+    {
+	if (lines[i][0] == '#')
+	    continue;
+	if (sscanf(space(lines[i]),"%s %s",ip,str) != 2)
+       	{
+	    write("Error Line " + (i + 1) + ": '" + lines[i] + "'\n");
+	    continue;
+	}
+	if (ip[0] == '.')
+	{
+	    sscanf(str,"%s %s",str,descr);
+	    domains[ip[1..]] = str;
+	    domains[ip[1..],1] = descr;
+	}
+	else if (member(ip,'.')>0)
+       	{
+	    sscanf(str,"%s %s",str,descr);
+	    towns[ip] = str;
+	    towns[ip,1] = descr;
+	}
+	else
+	    alias[ip] = str;
+    }
+    file = read_file(TOWN_FILE_TONLINE);
+    if (file) {
+        lines = explode(file,"\n") - ({""});
+        for (i = 0; i < sizeof (lines); i++) {
+            if (lines[i][0] == '#')
+                continue;
+            if (sscanf (space (lines[i]),"%s %s",ip,str) != 2) {
+                write("Error line "+ (i+1)+": '"+lines[i]+"'\n");
+                continue;
+            }
+            tonline[lower_case(ip)] = str;
+        }
+    }
+}
+
+varargs string town(mixed ob, int flag)
+{
+    string str, strn, junk, tmp, town, *strs;
+    int a, b, c, d;
+
+    if (!adminp(this_interactive()) ||
+	    geteuid(previous_object()) != geteuid(this_interactive()))
+    {
+	return "";
+//	flag = 0;
+    }
+
+    if (stringp(ob))
+    {
+#ifdef UNItopia
+        if ((ob == "sissi") || (ob == "Sissi")) return "Berlin";
+#endif
+	if (to_int(ob))
+	    strn = ob;
+	else
+	    str = ob;
+    }
+    else if (objectp(ob) && efun::interactive(ob))
+    {
+#ifdef UNItopia
+        if (ob->query_real_name() == "sissi") return "Berlin";
+#endif
+#if __EFUN_DEFINED__(query_ip_number)
+	str = ob->query_real_ip_name(ob) || efun::query_ip_name(ob);
+	strn = ob->query_real_ip_number(ob) || efun::query_ip_number(ob);
+#else
+	str = ob->query_real_ip_name(ob) || efun::interactive_info(ob, II_IP_NAME);
+	strn = ob->query_real_ip_number(ob) || efun::interactive_info(ob, II_IP_NUMBER);
+#endif
+    }
+    else
+	return 0;
+
+    if (str && ((str [<17..] == ".dip.t-dialin.net")
+             || (str [<20..] == ".dip0.t-ipconnect.de"))) {
+        string temp = lower_case(str [..<18]);
+        for (int i = strlen(temp)-1; i >= 3; i--)
+            if (town = tonline[temp[0..i]])
+                return flag ? "Deutsche Telekom AG - "+town : town;
+        return flag ? "Deutsche Telekom AG" : "Deutschland";
+    }
+
+    if (strn)
+    {
+	if (sscanf(strn,"%d.%d.%d.%d",a,b,c,d) != 4)
+	    DO_ERR;
+	
+	if (town = towns[strn,flag])
+	    return town;
+	if (town = towns[a + "." + b + "." + c,flag])
+	    return town;
+	if (town = towns[a + "." + b,flag])
+	    return town;
+    }
+
+    if (str)
+    {
+	strs = explode(lower_case(str),".");
+	if (sizeof(strs) == 1)
+	    strs += explode(__DOMAIN_NAME__,".");
+
+	if (strs[<1] == "de")
+	{
+	    if ((sscanf(strs[<2],"%s-%s",junk,town) == 2) &&
+		    (member(JUNK,junk) >= 0))
+	    {
+		if (tmp = alias[town])
+		    return tmp;
+		return capitalize(town);
+	    }
+	    if (tmp = alias[strs[<2]])
+		return tmp;
+	}
+    }
+
+    ERR;
+
+    if (str)
+    {
+	for (int e = 1; e < sizeof(strs); e++ )
+	{
+	    if (tmp = domains[implode(strs[e..],"."),flag])
+	    {
+		return tmp;
+	    }
+	}
+    }
+    return "Unbekannt";
+}
+
+string description(mixed ob)
+{
+    return town(ob,1);
+}
+
+#ifdef DEBUG
+mapping query_towns() { return towns; }
+mapping query_alias() { return alias; }
+mapping query_domains() { return domains; }
+#endif

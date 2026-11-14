@@ -1,0 +1,757 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/portal/portal.c
+// Description:	Portal-Verwaltung
+// Author:	Gnomi
+//
+// $Log: portal.c,v $
+// Revision 1.6  2015/03/14 11:09:48  gnomi
+// Login-Meldung fuer Besucher ausgeben.
+//
+// Revision 1.5  2014/09/27 07:37:23  myonara
+// notify_login und _quit eingebaut mit neuen defines aus player.h
+//
+// Revision 1.4  2013-03-16 15:59:10  gnomi
+// Unterstuetzung fuer Portale in HomeMUDs.
+//
+// Revision 1.3  2012-12-09 21:20:43  gnomi
+// Zertifikatspruefung eingebaut.
+//
+// Revision 1.2  2012-11-27 22:16:56  gnomi
+// Ein paar Korrekturen und Renewal-Funktion.
+//
+// Revision 1.1  2012-11-26 22:22:38  gnomi
+// InterMUD-Portal.
+//
+
+nosave variables private functions inherit "/i/tools/config";
+nosave variables private functions inherit "/i/tools/security";
+
+#include <config.h>
+#include <level.h>
+#include <move.h>
+#include <player.h>
+#include <portal.h>
+#include <security.h>
+#include <udp.h>
+#include <uids.h>
+
+#define PORTAL_FILE "/static/adm/PORTALS"
+
+mapping config = ([]);
+int config_time;
+mapping connections = ([:1]); // "mud": Verbindungsobjekt
+mapping guests =      ([:1]); // "name@mud": Player-Ob
+mapping con_checks = ([:0]);
+
+private void start_timeout(object con);
+
+private void log_message(string msg, varargs mixed* args)
+{
+   sys_log("PORTAL", sprintf("[%s] "+msg, shorttimestr(time()), args...));
+}
+
+private void check_config()
+{
+    int cur = file_time(PORTAL_FILE);
+    if(cur != config_time)
+    {
+        config = map(read_config(PORTAL_FILE, 
+                        ([P_CONF_DEST_PORT: function int(string portal, string label, string value)
+                                            {
+                                                return to_int(value);
+                                            }
+                        ])) || ([:1]),
+            function mapping(string key, mapping val)
+            {
+                return m_add(val, P_CONF_SRC_PORTAL_NAME,  key);
+            });
+        config_time = cur;
+    }
+}
+
+void create()
+{
+    add_security_condition("/secure/portal/");
+    add_security_condition(PORTAL_ROOM);
+    add_security_condition(PORTAL_CONNECTION "#");
+    add_security_condition("/obj/player#");
+    add_security_condition("/obj/newplayer#");
+    check_config();
+}
+
+private string get_connection_ip(object con)
+{
+    string addr = efun::query_ip_number(con);
+    if(!strstr(addr, "::ffff:"))
+        addr = addr[7..];
+    return addr;
+}
+
+private string get_address(mapping info)
+{
+    if(info[P_CONF_DEST_IP])
+        return info[P_CONF_DEST_IP];
+    else
+    {
+        mixed* imud = INETD->query_host(info[P_CONF_DEST_MUD]);
+        string ip;
+
+        if(!imud)
+            return 0;
+
+        ip = imud[HL_HOST_IP];
+        if(!strstr(ip, "::ffff:"))
+            ip = ip[7..];
+
+        return ip;
+    }
+}
+
+private object get_connection(mapping info)
+{
+    string mud = info[P_CONF_DEST_MUD], lcmud = lower_case(mud);
+    object con = connections[lcmud];
+    if(con)
+        return con;
+#if !defined(UNItopia) || __VERSION__ > "3.5.0-3075.U025"
+    else
+    {
+        string ip = get_address(info), addr;
+        int port = info[P_CONF_DEST_PORT];
+
+        if(!ip)
+            return 0;
+
+        con = clone_object(PORTAL_CONNECTION);
+        con->set_mud(mud);
+        con->connect(ip, port);
+        con->send_tcp(([
+            P_MSG_TYPE: P_TYPE_HELLO,
+            P_MSG_MUD: MUD_NAME,
+        ]));
+
+        m_add(connections, lcmud, con);
+        return con;
+    }
+#endif
+}
+
+private varargs object check_guest(object player, int dontquit)
+{
+    object con;
+
+    if(!playerp(player))
+        return 0;
+
+    con = connections[lower_case(player->get_intermud_src_mud())];
+    if(!con && !dontquit)
+    {
+        player->quit();
+        return 0;
+    }
+
+    return con;
+}
+
+/*
+FUNKTION: query_guests
+DEKLARATION: object* query_guests()
+BESCHREIBUNG:
+Liefert alle hier herumlaufenden Gaeste.
+GRUPPEN: Portal
+*/
+object* query_guests()
+{
+    guests = filter(guests, (:$2:));
+    return m_values(guests);
+}
+
+/*
+FUNKTION: query_guest
+DEKLARATION: object query_guest(string name)
+BESCHREIBUNG:
+Liefert das Objekt zu dem Gast mit Namen.
+GRUPPEN: Portal
+*/
+object query_guest(string name)
+{
+    guests = filter(guests, (:$2:));
+    name = lower_case(name);
+    if (member(guests,name))
+        return guests[name];
+    return 0;
+}
+
+/*
+FUNKTION: portal_exists
+DEKLARATION: int portal_exists(string name)
+BESCHREIBUNG:
+Liefert 1, wenn der Name ein bekanntes (in /static/adm/PORTALS vorhandenes)
+Portal darstellt.
+VERWEISE: set_portal_name
+GRUPPEN: Portal
+*/
+int portal_exists(string name)
+{
+    check_config();
+
+    return member(config, name);
+}
+
+/*
+FUNKTION: is_homemud
+DEKLARATION: string is_homemud(string name)
+BESCHREIBUNG:
+Liefert den Namen des Gottes, wenn das Portal in ein HomeMUD fuehrt.
+VERWEISE: portal_exists
+GRUPPEN: Portal
+*/
+string is_homemud(string name)
+{
+    check_config();
+
+    name = lower_case(name);
+
+    foreach(string mud, mapping val: config)
+        if(lower_case(val[P_CONF_DEST_MUD]) == name)
+            return val[P_CONF_HOMEMUD];
+}
+
+/*
+FUNKTION: query_portal_room
+DEKLARATION: object query_portal_room(string name, object pl)
+BESCHREIBUNG:
+Liefert einen Raum zurueck, in welchen der Spieler bewegt
+werden muss, um das Portal 'name' zu betreten.
+VERWEISE: set_portal_name
+GRUPPEN: Portal
+*/
+object query_portal_room(string name, object pl)
+{
+    object room;
+
+    check_config();
+
+    if(!member(config, name))
+        return 0;
+
+    room = load_object(PORTAL_ROOM);
+    room->add_traveller(pl, config[name]);
+
+    return room;
+}
+
+/*
+FUNKTION: enter_portal
+DEKLARATION: void enter_portal(object player, mapping info)
+BESCHREIBUNG:
+Betritt das Portal.
+VERWEISE: set_portal_name
+GRUPPEN: Portal
+*/
+void enter_portal(object player, mapping info)
+{
+    check_security(CHECK_ERROR | CHECK_LAST_OBJECT);
+
+    if(player->is_intermud_guest())
+    {
+        string mud = lower_case(info[P_CONF_DEST_MUD]);
+        string name= player->get_intermud_src_name();
+        object con = check_guest(player);
+        if(!con)
+            return;
+
+        player->do_save();
+
+        con->send_tcp(([
+            P_MSG_TYPE:    P_TYPE_MOVE,
+            P_MSG_PLAYER:  name,
+            P_MSG_MUD:     info[P_CONF_DEST_MUD],
+            P_MSG_IP:      get_address(info),
+            P_MSG_PORT:    info[P_CONF_DEST_PORT],
+            P_MSG_PORTAL:  info[P_CONF_DEST_PORTAL_NAME]
+        ]));
+
+#ifdef PLAYER_NOTIFY_MODES
+        // Kundtun, dass der Intermud-Gast dieses Mud verlaesst.
+        player->do_notify("quit", NQ_ENDE, NQ_PORTAL_LEAVE);
+#endif
+        player->quit();
+        start_timeout(con);
+    }
+    else
+    {
+        object con;
+
+        con = get_connection(info);
+        if(!con)
+        {
+            PORTAL_ROOM->leave(player);
+#ifdef PLAYER_NOTIFY_MODES
+            // Kundtun, dass ein Spieler in diesem Mud zurueckkommt.
+            player->do_notify("login", NQ_ENDE, NL_PORTAL_REENTER);
+#endif
+            return;
+        }
+
+        con->send_tcp(([
+            P_MSG_TYPE:   P_TYPE_ENTER,
+            P_MSG_PLAYER: player->query_real_name(),
+            P_MSG_PORTAL: info[P_CONF_DEST_PORTAL_NAME],
+            P_MSG_DATA:   player->get_intermud_data(info[P_CONF_DEST_MUD]),
+            P_MSG_CHARACTER: ([
+                P_CHAR_NAME:   player->query_real_cap_name(),
+                P_CHAR_GENDER: player->query_real_gender(),
+                P_CHAR_LEVEL:  player->query_level(),
+            ]),
+        ]));
+#ifdef PLAYER_NOTIFY_MODES
+        // Kundtun, dass ein Spieler aus diesem Mud ein anderes betritt.
+        player->do_notify("quit", NQ_ENDE, NQ_PORTAL_TRAVEL);
+#endif
+    }
+}
+
+/*
+FUNKTION: send_command
+DEKLARATION: void send_command(object player, mapping info, string cmd)
+BESCHREIBUNG:
+Sendet einen Befehl an das Gast-MUD.
+VERWEISE: enter_portal
+GRUPPEN: Portal
+*/
+void send_command(object player, mapping info, string cmd)
+{
+    object con;
+
+    check_security(CHECK_ERROR);
+
+    con = get_connection(info);
+    if(!con)
+    {
+        PORTAL_ROOM->leave(player);
+#ifdef PLAYER_NOTIFY_MODES
+            // Kundtun, dass ein Spieler in diesem Mud zurueckkommt.
+            player->do_notify("login", NQ_ENDE, NL_PORTAL_REENTER);
+#endif
+        return;
+    }
+
+    con->send_tcp(([
+        P_MSG_TYPE:   P_TYPE_COMMAND,
+        P_MSG_PLAYER: player->query_real_name(),
+        P_MSG_DATA:   cmd,
+    ]));
+}
+
+/*
+FUNKTION: send_message
+DEKLARATION: void send_message(mapping data)
+BESCHREIBUNG:
+Sendet eine Meldung an das Original-MUD.
+VERWEISE: enter_portal, send_command
+GRUPPEN: Portal
+*/
+void send_message(mapping data)
+{
+    object player = previous_object(), con = check_guest(player);
+    if(!con)
+        return;
+
+    con->send_tcp(data + ([
+        P_MSG_TYPE:   P_TYPE_MESSAGE,
+        P_MSG_PLAYER: player->get_intermud_src_name(),
+    ]));
+}
+
+/*
+FUNKTION: send_savedata
+DEKLARATION: void send_savedata(mapping data)
+BESCHREIBUNG:
+Speichert Daten im Original-MUD.
+VERWEISE: enter_portal, send_command, send_message
+GRUPPEN: Portal
+*/
+void send_savedata(mapping data)
+{
+    object player = previous_object(), con = check_guest(player, 1);
+    if(!con)
+        return;
+
+    con->send_tcp(([
+        P_MSG_TYPE:   P_TYPE_SAVE_DATA,
+        P_MSG_PLAYER: player->get_intermud_src_name(),
+        P_MSG_DATA:   data,
+    ]));
+}
+
+/*
+FUNKTION: send_quit
+DEKLARATION: void send_quit()
+BESCHREIBUNG:
+Beendet den Gastauftritt.
+VERWEISE: enter_portal, send_command, send_message, send_savedata
+GRUPPEN: Portal
+*/
+void send_quit()
+{
+    object player = previous_object(), con = check_guest(player, 1);
+    if(!con)
+        return;
+
+    con->send_tcp(([
+        P_MSG_TYPE:   P_TYPE_QUIT,
+        P_MSG_PLAYER: player->get_intermud_src_name(),
+    ]));
+
+    start_timeout(con);
+}
+
+private object check_traveller(object con, mapping val)
+{
+    object player = find_player(val[P_MSG_PLAYER]);
+    if(!player)
+        log_message("Got unknown player for %Q: %Q\n", val[P_MSG_TYPE], val[P_MSG_PLAYER]);
+
+    if(player)
+    {
+        mapping current = PORTAL_ROOM->get_traveller_info(player);
+        if(!current || lower_case(current[P_CONF_DEST_MUD]) != lower_case(con->query_mud()))
+        {
+            log_message("MUD %Q wrongly sent %Q for player %Q.\n", con->query_mud(), val[P_MSG_TYPE], val[P_MSG_PLAYER]);
+            player = 0;
+        }
+    }
+
+    if(!player && val[P_MSG_TYPE] != P_TYPE_QUIT)
+    {
+        con->send_tcp(([
+            P_MSG_TYPE:    P_TYPE_LEAVE,
+            P_MSG_PLAYER:  val[P_MSG_PLAYER],
+        ]));
+    }
+
+    return player;
+}
+
+void receive_tcp(object con, mapping val)
+{
+    check_security(CHECK_ERROR);
+
+    if(!con->query_mud() && val[P_MSG_TYPE] != P_TYPE_HELLO)
+    {
+        log_message("Got command without Hello: %Q", val[P_MSG_TYPE]);
+        return;
+    }
+
+    switch(val[P_MSG_TYPE])
+    {
+        case P_TYPE_HELLO:
+        {
+            string mud = val[P_MSG_MUD], lcmud = lower_case(mud);
+
+            if(con->query_mud())
+            {
+                if(con->query_mud() != mud)
+                    log_message("Peer answered with wrong name: '%s' vs. '%s'\n", mud, con->query_mud());
+            }
+            else
+            {
+                string addr = get_connection_ip(con);
+
+                con->set_mud(mud);
+                check_config();
+
+                foreach(string pname, mapping info: config)
+                    if(lower_case(info[P_CONF_DEST_MUD]) == lcmud &&
+                       info[P_CONF_DEST_IP] && info[P_CONF_DEST_IP] != addr)
+                    {
+                        log_message("Wrong source address for '%s': %s.\n", mud, addr);
+                        destruct(con);
+                        return;
+                    }
+
+                if(connections[lcmud])
+                    log_message("Replacing connection for '%s'.\n", mud);
+                m_add(connections, lcmud, con);
+
+                con->send_tcp(([
+                    P_MSG_TYPE: P_TYPE_HELLO,
+                    P_MSG_MUD: MUD_NAME,
+                ]));
+
+            }
+            break;
+        }
+
+        case P_TYPE_ENTER:
+        {
+            if(!member(config, val[P_MSG_PORTAL]))
+            {
+                log_message("Unknown portal from %Q: %Q\n", con->query_mud(), val[P_MSG_PORTAL]);
+
+                con->send_tcp(([
+                    P_MSG_TYPE: P_TYPE_QUIT,
+                    P_MSG_PLAYER: val[P_MSG_PLAYER],
+                ]));
+
+                start_timeout(con);
+            }
+            else
+            {
+                mapping info = config[val[P_MSG_PORTAL]];
+                string name = lower_case(val[P_MSG_PLAYER] + "@" + con->query_mud());
+                object player = guests[name], room, portal;
+                mixed msg;
+
+                if(!player)
+                {
+#ifdef Orbit
+                    if(con->query_mud() == "UNItopia" && val[P_MSG_CHARACTER][P_CHAR_LEVEL] > LVL_LEARNER)
+                        seteuid(lower_case(val[P_MSG_CHARACTER][P_CHAR_NAME]));
+                    else
+#endif
+                    seteuid(PLAYER_UID);
+                    player = clone_object(PORTAL_GUEST);
+#ifdef Orbit
+                    seteuid(ROOT_UID);
+#endif
+                    player->setup_intermud_player(con->query_mud(), val[P_MSG_PLAYER], val[P_MSG_CHARACTER], val[P_MSG_DATA]);
+                    m_add(guests, name, player);
+                    if(get_eval_cost() >= 100000)
+                        EVENT_MASTER->event("Login", player);
+                }
+
+                room = touch(info[P_CONF_ROOM]);
+                if(!room)
+                    room = touch(DEFAULT_START_ROOM);
+                portal = present(ID_PORTAL(val[P_MSG_PORTAL]), room);
+                if(portal)
+                {
+                    msg = portal->query_enter_messages(player);
+                    msg = pointerp(msg) && msg[1];
+                }
+                player->move(room, MOVE_NORMAL, 0, msg);
+#ifdef PLAYER_NOTIFY_MODES
+                // Kundtun, dass ein Spieler aus einem anderen Mud hier ankommt.
+                player->do_notify("login", NQ_ENDE, NL_PORTAL_ENTER);
+#endif
+            }
+            break;
+        }
+
+        case P_TYPE_MOVE:
+        {
+            object player = check_traveller(con, val);
+
+            if(!player)
+                return;
+
+            if(lower_case(val[P_MSG_MUD]) == lower_case(MUD_NAME))
+            {
+                // Back home :-)
+                mapping info = config[val[P_MSG_PORTAL]];
+                if(!info)
+                    log_message("Unknown portal from %Q: %Q\n", con->query_mud(), val[P_MSG_PORTAL]);
+                PORTAL_ROOM->leave(player, info);
+#ifdef PLAYER_NOTIFY_MODES
+                // Kundtun, dass ein Spieler in diesem Mud zurueckkommt.
+                player->do_notify("login", NQ_ENDE, NL_PORTAL_REENTER);
+#endif
+            }
+            else
+            {
+                mapping info = ([
+                    P_CONF_DEST_MUD:         val[P_MSG_MUD],
+                    P_CONF_DEST_IP:          val[P_MSG_IP],
+                    P_CONF_DEST_PORT:        val[P_MSG_PORT],
+                    P_CONF_DEST_PORTAL_NAME: val[P_MSG_PORTAL],
+                ]);
+
+                PORTAL_ROOM->move_traveller(player, info);
+                enter_portal(player, info);
+            }
+            start_timeout(con);
+            break;
+        }
+
+        case P_TYPE_LEAVE:
+        {
+            string name = lower_case(val[P_MSG_PLAYER] + "@" + con->query_mud());
+            object player = guests[name];
+            if(player)
+                player->abort_intermud();
+            m_delete(guests, name);
+            start_timeout(con);
+            break;
+        }
+
+        case P_TYPE_QUIT:
+        {
+            object player = check_traveller(con, val);
+            if(!player)
+                return;
+
+            PORTAL_ROOM->leave(player);
+#ifdef PLAYER_NOTIFY_MODES
+            // Kundtun, dass ein Spieler in diesem Mud zurueckkommt.
+            player->do_notify("login", NQ_ENDE, NL_PORTAL_REENTER);
+#endif
+            start_timeout(con);
+            break;
+        }
+
+        case P_TYPE_COMMAND:
+        {
+            string name = lower_case(val[P_MSG_PLAYER] + "@" + con->query_mud());
+            object player = guests[name];
+            if(!player)
+            {
+                con->send_tcp(([
+                    P_MSG_TYPE:    P_TYPE_QUIT,
+                    P_MSG_PLAYER:  val[P_MSG_PLAYER],
+                ]));
+            }
+            else
+                player->do_intermud_cmd(val[P_MSG_DATA]);
+            break;
+        }
+
+        case P_TYPE_MESSAGE:
+        {
+            object player = check_traveller(con, val);
+            if(!player)
+                return;
+
+            player->receive_intermud_msg(con->query_mud(), val);
+            break;
+        }
+
+        case P_TYPE_SAVE_DATA:
+        {
+            object player = check_traveller(con, val);
+            if(!player)
+                return;
+
+            player->save_intermud_data(con->query_mud(), val[P_MSG_DATA]);
+            break;
+        }
+
+        default:
+            log_message("Unknown message: %#Q\n", val);
+            break;
+    }
+}
+
+int opened(object con, string name)
+{
+    check_security(CHECK_ERROR);
+
+    // Treat is as a Hello message.
+    receive_tcp(con, (([ P_MSG_TYPE: P_TYPE_HELLO, P_MSG_MUD: name ])));
+
+    return 1;
+}
+
+void closing(object con)
+{
+    string mud, lcmud;
+
+    check_security(CHECK_ERROR);
+
+    // Ist sie relevant?
+    mud = con->query_mud();
+    if(!mud)
+        return;
+
+    // Gibt's noch 'ne andere Connection?
+    lcmud = lower_case(mud);
+    if(connections[lcmud] && connections[lcmud] != con)
+        return;
+
+    // Alle Spieler zurueckholen.
+    PORTAL_ROOM->rescue(mud);
+
+    // Alle Gaeste rausschmeissen.
+    lcmud = "@" + lcmud;
+    foreach(string name, object pl: guests)
+        if(strstr(name, lcmud) >= 0 && pl)
+            pl->quit();
+}
+
+private void check_connection(object con)
+{
+    if(!con)
+        return;
+
+    do
+    {
+        string mud = con->query_mud(), lcmud;
+        if(!mud)
+            break;
+
+        lcmud = lower_case(mud);
+        if(connections[lcmud] && connections[lcmud] != con)
+            break;
+
+        if(PORTAL_ROOM->has_travellers(mud))
+            return;
+
+        // Noch Gaeste da?
+        lcmud = "@" + lcmud;
+        foreach(string name, object pl: guests)
+            if(strstr(name, lcmud) >= 0 && pl)
+                return;
+    } while(0);
+
+    con->remove();
+}
+
+private void check_connections()
+{
+    foreach(object con: con_checks)
+        check_connection(con);
+
+    con_checks = ([:0]);
+}
+
+private void start_timeout(object con)
+{
+    m_add(con_checks, con);
+    remove_call_out(#'check_connections);
+    call_out(#'check_connections, 10);
+}
+
+void reset()
+{
+    foreach(string mud, object con: connections)
+        check_connection(con);
+
+    guests = filter(guests, (:$2:));
+}
+
+void abort_renewal() {}
+
+void init_from_renewal(mapping old_connections, mapping old_guests, mapping old_con_checks)
+{
+    if(strstr(object_name(previous_object()), "/secure/portal/"))
+        return;
+
+    connections = old_connections || ([:1]);
+    guests = old_guests || ([:1]);
+    con_checks = old_con_checks || ([:0]);
+
+    if(sizeof(con_checks))
+    {
+        remove_call_out(#'check_connections);
+        call_out(#'check_connections, 10);
+    }
+}
+
+void finish_renewal(object neu)
+{
+    neu->init_from_renewal(connections, guests, con_checks);
+}
+
+void prepare_renewal() {}

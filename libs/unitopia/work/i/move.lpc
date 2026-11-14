@@ -1,0 +1,1528 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/move.c
+// Description: Bewegung von Objekten
+// Author:	Francis, Freaky, Garthan (23.12.93)
+// Modified by: Garthan	(10.01.94) set_no_move ueberarbeitet
+//              Pulami	(27.06.94) moved_in/out bekommen jetzt auch 'dir'
+//              Freaky	(22.10.94) Fehler, wenn 1. move nicht geklappt hat
+//              Freaky	(22.02.95) NO_GLOBAL_ARRAY definiert
+//              Freaky	(05.12.95) let_not_in wird nicht mehr ignoriert
+//              Sissi	(26.04.96) no_move_reason, not_moved_reason
+//              Garthan	(16.10.96) das ueberfluessige " " wegbeschissen durch ^A
+//		                   statt leerem dir_string (oh weia)
+//		Garthan	(03.01.97) Shimmer
+//              Kurdel  (14.10.97) first_player
+//		Freaky  (21.01.98) Messages nach /i/tools/move_msg.c
+//		Freaky  (21.01.98) In-Msg wird vor Move evaluiert.
+//		Freaky  (08.03.98) Teleport-Log wieder eingebaut
+//              Sissi   (03.08.99) notify_move_out, notify_move_in
+//		Freaky  (23.02.2000) notify_follow repariert
+//		Freaky  (01.03.2000) an das neue add_encumbrance() angepasst
+//		Freaky  (02.05.2000) query_enable_cleanup: Inhalt ueberpruefen
+//              Gnomi   (28.06.2000) Doku zu den ganzen Move - Controller -
+//                                   Methoden angehaengt
+//
+// $Log: move.c,v $
+// Revision 1.81  2015/01/20 19:45:05  myonara
+// do_error und return 0 in set_weight auskommentiert, kein Mehrwert.
+//
+// Revision 1.80  2015/01/20 19:38:15  myonara
+// am 15-Jul-2010 wurde *_follower als deprecated markiert.
+//
+// Revision 1.79  2010-03-31 18:29:33  sorcerer
+// Typos in Doku
+//
+// Revision 1.78  2010-03-28 13:15:52  gnomi
+// EI-Konstanten nach /sys/room.h ausgelagert.
+//
+// Revision 1.77  2008/02/25 11:29:05  gnomi
+// set_enable_cleanup als Gegenpart zu set_prevent_cleanup eingefuehrt.
+//
+// Revision 1.76  2008/01/24 22:48:09  gnomi
+// MOVE_ATOM_GHOST implementiert.
+//
+// Revision 1.75  2008/01/16 09:07:49  gnomi
+// Fehler bei falschen Controller-Rueckgabewerten.
+//
+// Revision 1.74  2007/12/05 10:50:07  gnomi
+// encumbrance: Wenn neues Gewicht == altes Gewicht, dann kein Test.
+//
+// Revision 1.73  2007/06/25 22:13:31  gnomi
+// Doku zu MOVE_SECRET: just_moved erwaehnen.
+//
+// Revision 1.72  2006/10/02 20:04:13  gnomi
+// Hack fuer temp_traces.
+//
+// Revision 1.71  2006/05/01 21:55:25  gnomi
+// Doku von let_not_in/out rausgenommen (da bereits in /i/contain drin).
+//
+// Revision 1.70  2006/01/26 18:34:38  gnomi
+// Noch mehr Abfragen auf this_object(). Bei Zerstoerung vor dem
+// efun::move_object wird MOVE_DESTRUCTED zurueckgeliefert, danach MOVE_OK.
+//
+// Revision 1.69  2006/01/23 23:22:05  gnomi
+// Abfrage gegen 'Call from destructed object'.
+//
+// Revision 1.68  2006/01/22 01:20:31  gnomi
+// Typo in Kommentaren...
+//
+// Revision 1.67  2005/12/15 13:20:52  gnomi
+// set_first_room-Call_outs minimieren.
+//
+// Revision 1.66  2005/08/26 22:18:47  gnomi
+// Bessere Fehlermeldung von set_weight.
+//
+// Revision 1.65  2005/06/03 19:47:36  menaures
+// Move von Mastern, Inherits und Obj-Blueprint auch im force_move verhindern.
+//
+// Revision 1.64  2005/03/27 20:27:35  menaures
+// query_hidden_until_next_move(); query_weight_description() dokumentiert
+//
+// Revision 1.63  2004/11/27 21:04:35  gnomi
+// Alten Code (bzgl. Aufnehmen von Lebewesen) entfernt.
+//
+// Revision 1.62  2004/07/04 00:08:31  gnomi
+// set_weight-Syslog entfernt. Zugehoerige Fehlermeldung aussagekraeftiger
+// gemacht.
+//
+// Revision 1.61  2004/04/22 22:33:44  gnomi
+// Lebewesen-Aufnehm-Verbot wirklich nur beim Nehmen (TP==new_room)
+// durchsetzen.
+//
+// Revision 1.60  2004/02/18 22:31:38  gnomi
+// Besserer Plural.
+//
+// Revision 1.59  2004/01/28 23:26:00  gnomi
+// Beachten, dass der Zielraum im just_moved oder moved_in zerstoert werden
+// kann (sowas gibt's wirklich).
+//
+// Revision 1.58  2003/07/27 21:04:34  menaures
+// Letzten Patch in Master ausgelagert (mudlib_privilege "move")
+//
+// Revision 1.57  2003/07/27 15:54:07  menaures
+// Path-Restrictions um NO_MOVE_DIRS erweitert (bisher nur als Warnung)
+//
+// Revision 1.56  2003/04/29 03:32:57  gnomi
+// Doku zu notify_remove: Klargestellt, dass es auch bei destruct wirksam wird.
+//
+// Revision 1.55  2003/04/05 21:33:56  gnomi
+// query_not_move_reason() wird nun mittels call_other aufgerufen.
+//
+// Revision 1.54  2003/03/13 23:30:01  gnomi
+// In Doku: Klargestellt, dass die Form der Bewegungsmeldungen ohne $Der()
+// veraltet ist.
+//
+// Revision 1.53  2003/02/14 03:55:48  gnomi
+// allowed_take_living eingefuehrt.
+//
+// Revision 1.52  2003/02/02 03:18:15  gnomi
+// query_last_player() eingefuehrt.
+//
+// Revision 1.51  2003/01/26 04:00:23  gnomi
+// Enzy-Doku: Verweise zu set_max/min_weight hinzugefuegt.
+//
+// Revision 1.50  2003/01/25 04:36:20  gnomi
+// Doku zu notify_remove hierher bewegt.
+//
+// Revision 1.49  2003/01/24 01:27:01  gnomi
+// Auf's Message-System umgestellt.
+// /obj/-Blueprints lassen sich nicht mehr bewegen.
+//
+// Revision 1.48  2003/01/17 01:52:23  gnomi
+// Dokumentationen verbessert.
+//
+// Revision 1.47  2003/01/09 00:39:01  gnomi
+// notify_before_move eingefuehrt.
+//
+// Revision 1.46  2002/12/12 00:37:41  gnomi
+// notify_move_in/out etwas korrigiert.
+// In move() noch ein paar Kommentare zu den expliziten Bewegungsmeldungen.
+//
+// Revision 1.45  2002/10/25 21:22:12  gnomi
+// DYNAMIC_LIGHT hart eingebaut.
+// STATIC_LIGHT ausgebaut.
+//
+// Revision 1.44  2002/10/03 00:34:41  gnomi
+// Diverse Fehlermeldungen: Plural beachten.
+//
+// Revision 1.43  2002/08/23 00:06:27  gnomi
+// Typo in Doku.
+//
+// Revision 1.42  2002/08/20 23:42:19  gnomi
+// Doku set_weight: Eingetragen, dass Engel bis zu 45 GE tragen koennen.
+//
+// Revision 1.41  2002/08/12 23:55:09  gnomi
+// Doku zu set_not_moved_reason/set_no_move_reason: Deutlich auf die andere
+// Funktion hingewiesen.
+//
+// Revision 1.40  2002/07/04 22:28:39  gnomi
+// Bessere Meldung, wenn Zielraum kein Container ist.
+//
+// Revision 1.39  2002/07/02 22:30:17  menaures
+// Lichtsystem in die Mudlib integriert.
+//
+// Revision 1.38  2002/06/19 01:42:07  gnomi
+// Bessere not_moved-Meldung.
+//
+// Revision 1.37  2002/03/29 06:01:28  gnomi
+// Moeglichkeit auf fuer den Bewegenden eine Meldung anzugeben.
+//
+// Revision 1.36  2002/01/13 02:44:32  gnomi
+// Follower als veraltet markieren.
+//
+// Revision 1.35  2001/12/25 09:40:27  gnomi
+// query_deathroom ist nun kein Grund mehr, um Controller zu ignorieren,
+// da die Bewegung zum Tod sowieso force_move ist.
+//
+// Revision 1.34  2001/12/16 07:24:54  gnomi
+// Typo.
+//
+// Revision 1.33  2001/12/03 23:31:42  gnomi
+// Zur Warnung bei Bewegung von Blueprints: Wenn der move-Aufruf nicht extern
+// war, wird nicht previous_object als Verursacher eingetragen.
+//
+// Revision 1.32  2001/12/03 01:02:47  gnomi
+// Warnungen bei Bewegung von /obj-Blueprints.
+//
+// Revision 1.31  2001/11/19 23:14:11  freaky
+// Doku gefixed.
+//
+// Revision 1.30  2001/11/09 23:41:05  gnomi
+// query_followers: Nullen aus dem array rausnehmen.
+//
+// Revision 1.29  2001/07/22 23:36:01  gnomi
+// Anstatt MOVE_FORCE gibt es nun eine Funktion force_move().
+//
+// Revision 1.28  2001/07/22 01:40:46  gnomi
+// MOVE_FORCE vom Master ueberpruefen lassen.
+//
+// Revision 1.27  2001/06/25 09:50:51  freaky
+// no-move-Objekte lassen sich nicht per MOVE_FORCE bewegen.
+// (Sicherheitsprobleme)
+//
+// Revision 1.26  2001/06/24 00:32:38  gnomi
+// MOVE_ERR_REMOVE, MOVE_FORCE eingefuehrt.
+//
+// Revision 1.25  2001/04/23 16:15:55  freaky
+// Typo in der Doku behoben.
+//
+// Revision 1.24  2001/04/07 23:47:30  gnomi
+// Debug-Infos zu set_first_room als String uebergeben.
+//
+// Revision 1.23  2001/04/02 19:47:42  sissi
+// typo behoben.
+//
+// Revision 1.22  2001/03/24 22:32:43  gnomi
+// Mehr Informationen beim Fehler "Objekt wurde nicht korrekt bewegt" ausgeben.
+//
+// Revision 1.21  2001/03/15 14:59:31  freaky
+// deprecated funktionen rausgenommen.
+//
+// Revision 1.20  2001/03/10 21:48:58  gnomi
+// Typo in der Doku zu remove().
+//
+// Revision 1.19  2001/03/06 01:24:40  gnomi
+// Der Fehler "Obj. wurde nicht korrekt bewegt" beim Erschaffer des Objektes
+// absetzen.
+//
+// Revision 1.18  2001/02/08 23:55:05  gnomi
+// query_creator eingefuehrt.
+//
+// Revision 1.17  2001/01/13 18:11:18  gnomi
+// Gnomi kann nix, nicht mal einfache Vorrangregelung.
+// (Sprich Bugfix zum vorherigen Patch.)
+//
+// Revision 1.16  2001/01/13 17:49:19  gnomi
+// forbidden_move_out/in eingefuert.
+//
+// Revision 1.15  2001/01/10 22:35:56  gnomi
+// Typo in der Doku zu den cleanup-Funktionen. (Die applied lfun heisst
+// clean_up, nicht cleanup)
+//
+// Revision 1.14  2000/12/20 13:18:48  freaky
+// Das neue add_encumbrance() als Standard eingefuehrt.
+//
+// Revision 1.13  2000/12/19 20:44:55  gnomi
+// query_enable_cleanup, query_prevent_cleanup und set_prevent_cleanup
+// dokumentiert.
+//
+// Revision 1.12  2000/12/11 16:59:43  freaky
+// add_encumbrance: Parameterliste umgestellt
+//
+// Revision 1.11  2000/08/29 16:20:20  freaky
+// file_name() ueberall durch object_name() ersetzt.
+//
+// Revision 1.10  2000/07/28 11:08:30  kurdel
+// *** empty log message ***
+//
+// Revision 1.9  2000/07/17 21:35:33  sissi
+// Bugfix Gnomi: Cleanup beruecksichtigt das aeusserste environment
+// und nicht mehr nur das environment.
+//
+// Revision 1.8  2000/06/28 19:15:31  sissi
+// "SOURCE" Eintrag aus den Kommentaren rausgenommen.
+//
+// Revision 1.7  2000/06/28 19:14:05  sissi
+// Gnomi hat die ganzen Move - Controller (notify_dingens, forbidden_dingens)
+// Sachen alle kommentiert. Ich hab diese Kommentare an die Datei
+// drangehaengt.
+//
+// Revision 1.6  2000/06/24 17:32:39  freaky
+// ein #endif vergessen rauszunehmen.
+//
+// Revision 1.5  2000/06/24 17:25:12  freaky
+// Spacing, Einrueckung geaendert.
+//
+//
+////////////////////////////////////////////////////////////////////////////
+//
+//  Das Inheritfile /i/move ist fuer
+//  Objekte, die unbegrenzt beweglich sein sollen, im Gegensatz zu
+//  /i/install, welches nur eine einmalige Bewegung zulaesst.
+//
+// Dokumentation siehe /doc/funktionsweisen/move
+//
+////////////////////////////////////////////////////////////////////////////
+
+
+#pragma save_types
+
+#include <config.h>
+#include <move.h>
+#include <room.h>
+#include <invis.h>
+#include <level.h>
+#include <error.h>
+#include <message.h>
+#include <properties.h>
+#include <simul_efuns.h>
+
+private        int     weight = 1;
+private nosave int     prevent_cleanup, make_visible_at_next_move, no_move;
+private nosave object  *followers = ({});
+private nosave string  first_room, first_player, no_move_reason,
+		       not_moved_reason, last_player;
+private nosave string  creator = sprintf("%s (UID: %s, EUID: %s)",
+			 object_name(previous_object()),
+			 getuid(previous_object())||"0",
+			 geteuid(previous_object())||"0");
+private nosave mixed   *return_move = ({});
+
+string query_no_move_reason();
+
+/* ================= FOLLOWERS ========================= */
+
+/*
+FUNKTION: add_follower
+DEKLARATION: deprecated void add_follower(object follower)
+BESCHREIBUNG:
+
+Diese Funktion ist veraltet. Stattdessen sollte der Controller notify_move
+verwendet werden.
+
+Traegt das Objekt follower als Verfolger bei einem Monster oder Spieler ein.
+In dem Verfolger wird nun bei jedem Move des Opfers die Funktion notify_follow
+aufgerufen.
+VERWEISE: notify_follow, delete_follower, query_followers
+GRUPPEN: spieler, monster, move
+*/
+deprecated void add_follower(object ob)
+{
+    if (ob)
+    {
+	followers -= ({ ob, 0});
+	followers += ({ ob });
+    }
+}
+
+/*
+FUNKTION: delete_follower
+DEKLARATION: deprecated void delete_follower(object follower)
+BESCHREIBUNG:
+
+Diese Funktion ist veraltet. Stattdessen sollte der Controller notify_move
+verwendet werden.
+
+Entfernt das Objekt follwer aus der Verfolgerliste (sofern es auch dort
+eingetragen ist).
+VERWEISE: add_follower, query_followers, notify_follow
+GRUPPEN: spieler, monster, move
+*/
+deprecated void delete_follower(object ob)
+{
+    followers -= ({ ob, 0 });
+}
+
+/*
+FUNKTION: query_followers
+DEKLARATION: deprecated object *query_followers()
+BESCHREIBUNG:
+
+Diese Funktion ist veraltet. Stattdessen sollte der Controller notify_move
+verwendet werden.
+
+Liefert alle Verfolger des Objekts.
+VERWEISE: add_follower, delete_follower, notify_follow
+GRUPPEN: spieler, monster, move
+*/
+object *query_followers()
+{
+    return (followers-=({0}));
+}
+
+
+/* ================= WEIGHT ============================ */
+
+/*
+FUNKTION: set_weight
+DEKLARATION: int set_weight(int weight)
+BESCHREIBUNG:
+Setzt das Gewicht eines Monsters, Spielers oder Objekts. Ein Newbie kann
+10 Einheiten Gewicht mit sich rumschleppen, ein Experte bis zu 30, Engel
+bis zu 45. Goetter koennen 100 Einheiten schleppen. Alle beweglichen
+Objekte sollten ein Gewicht haben, Spieler muessen ein Gewicht von 30 haben.
+Zu dem Gewicht von Autoloadern -> /doc/richtlinien/autoloader.
+VERWEISE: query_weight, set_min_weight, set_max_weight
+GRUPPEN: move, grundlegendes
+*/
+int set_weight(int enc)
+{
+    if (enc < 0)
+        enc = 0;
+        
+    if (enc == weight)
+        return 1;
+
+    if (environment() && !environment()->add_encumbrance(this_object(),
+            ENC_MODIFY,enc - weight))
+    {
+        /*do_error(
+          sprintf("set_weight: Gewicht wurde von %d auf den Wert %d gesetzt,\n"
+            "obwohl das Objekt sich in '%s'\n(%s UID: %s)\n"
+            "befindet und dieser Container schon voll (%d/%d) ist.\n",
+            weight, enc, Name(environment()),
+            object_name(environment()), getuid(environment()),
+            environment()->query_internal_encumbrance(),
+            environment()->query_max_internal_encumbrance()));*/
+        // return 0;
+    }
+
+    weight = enc;
+    this_object()->add_setter_conservation("set_weight",({weight}) );
+    return 1;
+}
+
+/*
+FUNKTION: query_weight
+DEKLARATION: nomask int query_weight()
+BESCHREIBUNG:
+Liefert das Gewicht eines Monsters, Spielers oder Objekts.
+VERWEISE: set_weight, query_min_weight, query_max_weight
+GRUPPEN: move, grundlegendes
+*/
+nomask int query_weight() { return weight; }
+
+/* 
+FUNKTION: query_weight_description
+DEKLARATION: string query_weight_description()
+BESCHREIBUNG:
+Diese Funktion kann man im Objekt definieren, damit beim Betrachten
+des Objektes ein besonderer String anstelle der Standardmeldung
+("Es scheint schwer zu sein.\n" usw.) ausgegeben wird.
+Der zurueckgelieferte String sollte korrekt umgebrochen sein.
+VERWEISE: query_weight, query_content_message, query_object_description 
+GRUPPEN: augen
+*/
+
+/* ================ MOVE UTILITY FUNCTIONS ============= */
+
+mixed move_destination(mixed dest)
+{
+    object old_room;
+    mixed *exit_info;
+
+    if (stringp(dest) && strlen(dest) && dest[0] != '/' &&
+	    (old_room = environment()) &&
+	    (exit_info = old_room->query_exit_info(dest)))
+	return exit_info[EI_EXIT];
+    else
+	return dest;
+}
+
+/* ======================= MOVE =========================== */
+
+/* /i/move::move() ist die einzige Funktion in UNItopia die
+ * Objekte von einem Ort zu einem anderen bewegen kann.
+ *
+ * Jedes Objekt, das bewegt werden soll, muss also diese Datei
+ * inheriten.
+ *
+ */
+
+/*
+FUNKTION: move
+DEKLARATION: varargs int move(mixed ziel, int wie, string verlassen, string ankommen)
+BESCHREIBUNG:
+Die exakte Beschreibung ->/doc/funktionsweisen/move
+/i/move::move() ist die einzige Funktion in UNItopia die Objekte von einem
+Ort zu einem anderen bewegen kann. Jedes Objekt, das bewegt werden soll,
+muss also diese Datei inheriten. "ziel" kann ein Objekt oder der Filename des
+Ziels als string sein oder aber, sofern sich das Objekt in einem Raum befindet,
+auch ein Ausgang des Raumes. 'wie' ist einer der folgenden Werte:
+
+    MOVE_NORMAL		: Standard-Move, normale Bewegungsmeldungen, also
+			  die mit set_msg_in() und set_msg_out() gesetzten,
+    MOVE_MAGIC		: Teleport, es werden die Bewegungsmeldungen
+			  erzeugt, die mit set_mmsg_in() und set_mmsg_out()
+			  gesetzt wurden,
+    MOVE_SECRET		: Es werden keine Bewegungsmeldungen erzeugt und
+                          nicht just_moved() aufgerufen (d.h. es gibt
+			  keine Ausgabe der Raumbeschreibung bei Spielern).
+    0			: Default, keine Bewegungsmeldungen.
+
+Diese kann man noch durch Oder | mit folgenden Werten verknuepfen:
+
+    MOVE_ERR_REMOVE     : Konnte die Bewegung nicht ausgefuehrt werden,
+                          wird der Gegenstand entfernt.
+                          
+Mit den Parametern verlassen und ankommen kann man die Bewegungsmeldungen
+auch fuer einen move explizit setzen. Diese Bewegungsmeldungen sind
+Pseudoclosures, wobei fuer den Bewegenden kein Argument (z.B. $Der(), $Ein())
+anzugeben ist und $dir() fuer die Richtung (samt Praeposition) steht.
+
+Enthaelt diese Bewegungsmeldung kein Dollarzeichen, so wird automatisch
+der Name des bewegten Objektes ("$Ein() " bzw. "$Der() ") voran- und
+die Richtung ("$dir().") hintenrangestellt. Ebenso wird ein fehlendes
+Satzzeichen angefuegt.
+ACHTUNG: Diese Bewegungsmeldungen (ohne Name und Richtung bzw. ohne
+Satzendezeichen) gelten als veraltet!
+
+Ein einzelnes Dollarzeichen am Ende dieser Meldungen wird abgeschnitten.
+Diese Meldungen werden automatisch umgebrochen.
+
+Achtung: Die Meldungen werden nur ausgegeben, wenn zusaetzlich noch
+/i/tools/move_msg inheritet wurde. (Lebewesen inheriten es automatisch.)
+
+Move liefert nach der Ausfuehrungen folgende Werte:
+
+    MOVE_NOT_ALLOWED    : Move wurde nicht erlaubt (zb Gewicht im Ziel
+			  ueberschritten oder let_not_in im Zielraum returnt 1.
+    MOVE_OK		: Move wurde ausgefuehrt.
+    MOVE_NO_ROOM	: Das angegebene Ziel ist kein Container oder nicht
+			  genug Platz.
+    MOVE_DEST_CLOSED    : Das Ziel ist ein geschlossener Container, kein move.
+    MOVE_ENV_CLOSED     : Der Ursprungsraum ist ein geschlossener Container,
+			  kein Move.
+    MOVE_NO_DEST	: Kein Zielraum angegeben oder dest == 0.
+
+Alle Defines sind in /sys/move.h definiert.
+
+Nach Beendigung eines moves, der nicht erfolgreich war,
+kann mit query_not_moved_reason eine Klartext - Fehlermeldung
+abgefragt werden, sofern eine vorliegt; naeheres siehe dort.
+
+Ob ein Move erfolgreich ist haengt von vielem ab; let_not_in, let_not_out,
+filtern, usw.; siehe dort.
+
+Wird ein Move ausgefuehrt, so wird unmittelbar davor im alten "Ort" ein
+notify_move_out aufgerufen, unmittelbar nach dem move ein notify_moved_out.
+Analog wird im Zielraum ein notify_move_in unmittelbar vor dem Move und
+ein notify_moved_in unmittelbar nach dem Move aufgerufen.
+
+VERWEISE: move_return, let_not_in, let_not_out, filter_xxx, just_moved,
+	  notify_follow, set_no_move, set_no_move_reason, set_not_moved_reason,
+	  query_no_move, query_no_move_reason, query_not_moved_reason
+GRUPPEN: move, grundlegendes
+*/
+varargs int move(mixed dest, int way, string explizit_out, string explizit_in)
+{
+    object old_room, new_room;
+    int i, res;
+    string tmp, dir;
+    mixed *exit_info;
+
+    not_moved_reason = 0; // erstmal initialisieren
+
+    // Move Privileges
+    if (!MASTER_OB->mudlib_privilege_violation("move", previous_object(), 
+                                               dest, way))
+    {
+        if(way & MOVE_ERR_REMOVE)
+            this_object()->remove();
+
+        return MOVE_NOT_ALLOWED;
+    }
+
+    // Wird das Objekt zum ersten Mal bewegt? -> first_room setzen
+    if (!first_room && find_call_out("set_first_room")<0)
+	call_out("set_first_room",0,sprintf("%O",previous_object()),sprintf("%O",dest));
+
+    if ((old_room = environment()) && this_object()->query_no_move())
+    {
+	not_moved_reason = this_object()->query_no_move_reason() ||
+	    Der()+plural(" laesst", " lassen", this_object()) +
+	    " sich nicht bewegen.";
+	if (living (this_object()))
+	    this_object()->send_message_to(this_object(), MT_FEEL|MT_NOTIFY,
+		MA_MOVE, wrap(not_moved_reason));
+        if(way&MOVE_ERR_REMOVE)
+            this_object()->remove();
+	return MOVE_NOT_ALLOWED;
+    }
+
+    /* Query Exit Info from room */
+
+    if (stringp(dest) && strlen(dest) && dest[0] != '/' && old_room)
+    {
+	if (exit_info = old_room->query_exit_info(dest, (way & MOVE_ATOM_GHOST)?1:0))
+	{
+	    /* Regular Movement */
+	    dir = (sizeof(exit_info) > EI_DIRECTION) && exit_info[EI_DIRECTION] || dest;
+	    dest = exit_info[EI_EXIT];
+	}
+	else if(way & MOVE_ATOM_GHOST)
+	{
+	    dir = dest;
+	    dest = old_room->query_one_exit(dest, 1);
+	}
+	else
+	    dest = 0;
+
+	if(!dest)
+        {
+            if(way&MOVE_ERR_REMOVE)
+                this_object()->remove();
+	    return MOVE_NO_DEST;
+        }
+    }
+    else
+	exit_info = allocate(EI_SIZE);
+
+    /* Garthans closure hack */
+    if (closurep(dest) &&
+	    intp(dest = funcall(dest,this_object(),way,
+		    explizit_out,explizit_in)))
+	return dest;
+
+    // Wenn der Zielraum nicht geladen werden konnte -> MOVE_NO_DEST
+    if (!(new_room = touch(dest)))
+    {
+        if(way&MOVE_ERR_REMOVE)
+            this_object()->remove();
+	return MOVE_NO_DEST;
+    }
+
+    // Nur Aufnehmen von Spielern verhindern.
+    // Den Rest uebernimmt take().
+    if(playerp(this_object()) && living(new_room))
+    {
+	not_moved_reason = Der() + plural(" laesst", " lassen", this_object()) +
+	    " sich nicht so einfach nehmen.";
+        if(way&MOVE_ERR_REMOVE)
+            this_object()->remove();
+	return MOVE_NOT_ALLOWED;
+    }
+
+    // Controller abfragen.
+    if (old_room &&
+	     this_object() &&
+	     ((res = old_room->let_not_out(this_object(),new_room,dir)) ||
+
+	     this_object() &&
+	     (res = old_room->forbidden("move_out",this_object(),new_room,
+	                                dir, way))) ||
+
+	     this_object() &&
+             (res = new_room->let_not_in(this_object(),old_room,dir)) ||
+
+	     this_object() &&
+	     (res = new_room->forbidden("move_in",this_object(),old_room,
+	                                dir, way)) ||
+
+	     this_object() &&
+	     (res = this_object()->forbidden("move",this_object(),old_room,
+					     new_room, dir, way, 0, 0)))
+    {
+	if (not_moved_reason && living (this_object()))
+	    this_object()->send_message_to(this_object(), MT_FEEL|MT_NOTIFY,
+		MA_MOVE, wrap(not_moved_reason));
+        if(way&MOVE_ERR_REMOVE)
+            this_object()->remove();
+	if(!intp(res))
+	{
+	    do_my_error(sprintf("Rueckgabewert res ist kein Integer, sondern %Q.\nAlter Raum: %Q\nNeuer Raum: %Q\n", res, old_room,new_room));
+	    return MOVE_NOT_ALLOWED;
+	}
+
+	return res == 1 ? MOVE_NOT_ALLOWED : res;
+    }
+
+    if(!this_object())
+	return MOVE_DESTRUCTED;
+
+    // Gewicht im neuen Raum dazuaddieren
+    if (!new_room->add_encumbrance(this_object(), ENC_ADD,0))
+    {
+	if(living(new_room))
+	{
+	    // Nur eine einfache Heuristik.
+	    if(2*new_room->query_internal_encumbrance()>=this_object()->query_weight())
+	    {
+		if(this_player() == new_room)
+		    not_moved_reason = "Du bist viel zu bepackt, um "+den()+" noch tragen zu koennen.";
+	        else 
+		    not_moved_reason = Der(new_room)+ist(new_room, IST_SPACE_BEFORE)+" viel zu bepackt, um "+
+			den()+" auch noch tragen zu koennen.";
+	    }
+	    else
+	    {
+		if(this_player() == new_room)
+		    not_moved_reason = Der()+ist(this_object(), IST_SPACE_BEFORE)+" viel zu schwer fuer Dich.";
+	        else 
+		    not_moved_reason = Der(new_room)+plural(" kann "," koennen ", new_room)+den()+" nicht tragen.";
+	    }
+	}
+	else if(!new_room->query_container())
+	    not_moved_reason = "Dafuer "+ist(new_room,IST_SPACE_AFTER)+der(new_room)+" nicht gedacht.";
+	else
+	    not_moved_reason = "Da ist nicht genug Platz fuer " + den() + ".";
+        if(way&MOVE_ERR_REMOVE)
+            this_object()->remove();
+	return MOVE_NO_ROOM;
+    }
+    this_object()->notify("before_move", this_object(), old_room, new_room,
+	dir, way, explizit_out, explizit_in);
+    this_object() && new_room->notify("move_in", this_object(), old_room, dir, way);
+
+    if(!this_object())
+	return MOVE_DESTRUCTED;
+
+    if (old_room)
+    {
+	if (way & MOVE_ATOM_MESSAGE)
+	    this_object()->send_move_msg_self(old_room, new_room, way,
+		    dir, exit_info, explizit_out, explizit_in);
+
+	old_room->notify("move_out", this_object(), new_room, dir, way);
+
+	if(!this_object())
+	    return MOVE_DESTRUCTED;
+
+	// Gewicht im alten Raum abziehen
+	old_room->add_encumbrance(this_object(),ENC_REMOVE,0);
+
+	if ((way & MOVE_ATOM_MESSAGE) && this_object())
+	    this_object()->send_move_out_msg(old_room, new_room, way,
+		    dir, exit_info, explizit_out, explizit_in);
+
+	// Log, wegen Teleportieren
+	if (query_once_interactive(this_object()) &&
+		this_interactive() != this_object() &&
+		wizp(this_interactive()) &&
+		!wizp(this_object()) &&
+		!testplayerp(this_object()))
+	    "/secure/log_move"->log_move(old_room, new_room);
+	
+	// Log zur Information
+	if(playerp(this_object()))
+	    "/secure/log_move"->log_move_player(old_room, new_room, way);
+    }
+
+    // Eigentlicher Move
+    efun::move_object(this_object(), new_room);
+
+    if (way & MOVE_ATOM_MESSAGE)
+	this_object()->send_move_in_msg(old_room, new_room, way,
+		dir, exit_info, explizit_out, explizit_in);
+
+    if (make_visible_at_next_move)
+    {
+	make_visible_at_next_move = 0;
+	this_object()->set_invis(V_VIS);
+    }
+
+    if (old_room)
+    {
+	old_room->moved_out(this_object(), new_room, dir, way);
+	if (old_room && this_object())
+	    old_room->notify("moved_out", this_object(), new_room, dir, way);
+    }
+    
+    if(new_room && this_object())
+    // Das ist ein Hack, damit die temp_traces vor dem just_moved gesetzt sind.
+    // Zu entfernen, wenn es bessere Loesungen gibt.
+	new_room->early_moved_in(this_object(), old_room, dir, way);
+
+    if (!(way & MOVE_ATOM_NOT_NOTIFY) && this_object())
+	this_object()->just_moved();
+
+    if(new_room && this_object()) // Manche just_moved reagieren explosiv... :(
+    {
+	new_room->moved_in(this_object(), old_room, dir, way);
+	if(new_room && this_object())
+	    new_room->notify("moved_in", this_object(), old_room, dir, way);
+    }
+
+    if(this_object())
+	map_objects(followers, "notify_follow", this_object(), old_room,
+	    new_room, dir, way, explizit_out, explizit_in);
+
+    if (this_object()) // Manche Follower zerstoeren this_object() :(
+	this_object()->notify("move", this_object(), old_room, new_room, dir,
+		way, explizit_out, explizit_in);
+    return MOVE_OK;
+}
+
+/*
+FUNKTION: allowed_take_living
+DEKLARATION: int allowed_take_living(object was, object wohin)
+BESCHREIBUNG:
+Wenn das Lebewesen 'was' in das Lebewesen 'wohin' bewegt werden soll, und
+'was' etwas mehr als 1 wiegt, wird was->allowed(was, wohin) gefragt.
+allowed ruft dann in allen mit was->add_controller("allowed_take_living",
+other) angemeldeten Objekten other die Funktion other->allowed_take_living(was,
+wohin) auf. Wurde mindestens ein solches Objekt angemeldet und liefern alle
+Funktionen einen Wert != 0, dann wird die Bewegung gestattet, ansonsten
+verboten.
+Somit kann man also Lebewesen bauen, die man aufnehmen kann, und die doch
+schwerer als 1 sind, indem man einen solchen Controller anmeldet, welcher 1
+liefert.
+VERWEISE: allowed, add_controller, take, forbidden_take, forbidden_take_me
+GRUPPEN: monster, haende
+*/
+
+// Als Ziel ist nur ein Dateiname oder Objekt zulaessig.
+// Diese Funktion gibt keine Bewegungsmeldungen aus.
+varargs nomask int force_move(mixed dest, int way)
+{
+    object old_room, new_room;
+    string filename;
+
+    // Move Privileges auch im force_move testen,
+    // da man sonst auch Blueprints usw. bewegen kann.
+    if (!MASTER_OB->mudlib_privilege_violation("move", previous_object(),
+                                               dest, way))
+    {
+        if(way & MOVE_ERR_REMOVE)
+            this_object()->remove();
+
+        return MOVE_NOT_ALLOWED;
+    }
+
+    // Wird das Objekt zum ersten Mal bewegt? -> first_room setzen
+    if (!first_room && find_call_out("set_first_room")<0)
+	call_out("set_first_room",0,sprintf("%O",previous_object()),sprintf("%O",dest));
+
+    if(!MASTER_OB->mudlib_privilege_violation("force_move",
+        previous_object(), dest, way))
+    {
+        do_error("Privilege violation: MOVE_FORCE\n");
+        if(way&MOVE_ERR_REMOVE)
+            this_object()->remove();
+        return MOVE_NOT_ALLOWED;
+    }
+    
+    old_room = environment();
+
+    // Wenn der Zielraum nicht geladen werden konnte -> MOVE_NO_DEST
+    if (!(new_room = touch(dest)))
+    {
+        if(way&MOVE_ERR_REMOVE)
+            this_object()->remove();
+	return MOVE_NO_DEST;
+    }
+
+    // Gewicht im neuen Raum dazuaddieren
+    new_room->add_encumbrance(this_object(),ENC_ADD|ENC_FORCE,0);
+    new_room->notify("move_in", this_object(), old_room, 0, way);
+
+    if (old_room)
+    {
+	old_room->notify("move_out", this_object(), new_room, 0, way);
+	// Gewicht im alten Raum abziehen
+	old_room->add_encumbrance(this_object(),ENC_REMOVE,0);
+
+	// Log, wegen Teleportieren
+	if (query_once_interactive(this_object()) &&
+		this_interactive() != this_object() &&
+		wizp(this_interactive()) &&
+		!wizp(this_object()) &&
+		!testplayerp(this_object()))
+	    "/secure/log_move"->log_move(old_room, new_room);
+    }
+
+    // Eigentlicher Move
+    efun::move_object(this_object(), new_room);
+
+    if (make_visible_at_next_move)
+    {
+	make_visible_at_next_move = 0;
+	this_object()->set_invis(V_VIS);
+    }
+
+    if (old_room)
+    {
+	old_room->moved_out(this_object(), new_room, 0, way);
+	if (old_room)
+	    old_room->notify("moved_out", this_object(), new_room, 0, way);
+    }
+
+    if (!(way & MOVE_ATOM_NOT_NOTIFY) && this_object())
+	this_object()->just_moved();
+
+    new_room->moved_in(this_object(), old_room, 0, way);
+    new_room->notify("moved_in", this_object(), old_room, 0, way);
+
+    map_objects(followers, "notify_follow", this_object(), old_room,
+	    new_room, 0, way, 0, 0);
+
+    if (this_object()) // Manche Follower zerstoeren this_object() :(
+	this_object()->notify("move", this_object(), old_room, new_room,
+            0, way, 0, 0);
+    return MOVE_OK;
+}
+
+/*
+FUNKTION: remove
+DEKLARATION: int remove()
+BESCHREIBUNG:
+Entfernt ein Objekt und zerstoert es dann. Man sollte Objekte immer erst mit
+remove entfernen, erst, wenn das nicht geklappt hat, mit destruct(). Wenn
+remove erfolgreich war, liefert es 1 zurueck. Remove kann in Objekten problem-
+los ueberlagert werden, es dient dann dazu, noch letzte Aktionen vor dem
+Ableben auszufuehren, z.B. ein save_object().
+VERWEISE: move, destruct
+GRUPPEN: move, grundlegendes
+*/
+int remove()
+{
+    destruct(this_object());
+    return 1;
+}
+
+nosave void set_first_room(string po, string dest)
+{
+    string name;
+    object ob;
+
+    if (first_room)
+	return;
+
+    ob = this_object();
+    first_room = "";
+    while (ob = environment(ob))
+    {
+	if (!(name = ob->query_real_name()) &&
+		!(name = ob->query_name()) &&
+		!(name = ob->query_short()))
+	    name = "*UNKNOWN*";
+	first_room = object_name(ob) + "(" + name + ")|" + first_room;
+    }
+    if (first_room == "")
+    {
+	int junk;
+
+	// Freaky: Hier ist wohl ein Fehler passiert :(
+	if (sscanf(object_name(),"%s#%d",name,junk) == 2)
+	    name += "#<nr>";
+	else
+	    name = object_name();
+	do_error2(sprintf(
+	    "Objekt %s (%s UID: %s) wurde nicht korrekt bewegt.\n\n"
+	    "Zielraum: %s\nprevious_object(): %s\n",
+	    name, Name(this_object()), getuid(), dest, po),
+	    __FILE__, explode(creator," (")[0], __LINE__);
+	remove();
+    }
+#ifdef LOG_OBJECT_STATS
+    else
+	this_object()->log_object_stats();
+#endif
+}
+
+/*
+FUNKTION: query_first_room
+DEKLARATION: nomask string query_first_room()
+BESCHREIBUNG:
+Liefert den Raum zurueck, in den ein Objekt zum ersten Mal gemoved wurde.
+VERWEISE: move
+GRUPPEN: move, grundlegendes
+*/
+nomask string query_first_room() { return first_room; }
+
+/*
+FUNKTION: query_first_player
+DEKLARATION: nomask string query_first_player()
+BESCHREIBUNG:
+Liefert den Spieler zurueck, in dem das aktuelle Objekt zum ersten Mal 
+gemoved wurde. Wegen den Schliessfaechern ist besser query_real_first_player 
+zu verwenden.
+VERWEISE: move, query_real_first_player
+GRUPPEN: move, grundlegendes
+*/
+nomask string query_first_player() { return first_player; }
+
+/*
+FUNKTION: query_real_first_player
+DEKLARATION: nomask string query_real_first_player()
+BESCHREIBUNG:
+Liefert den Spieler zurueck, in dem das urspruengliche Objekt zum ersten Mal 
+gemoved wurde, und zwar inkl. einem Ein-Auslagern in Schliessfaecher.
+VERWEISE: move, query_first_player
+GRUPPEN: move, grundlegendes
+*/
+nomask string query_real_first_player()
+{
+    mapping origin = this_object()->query(P_ORIGIN);
+    return sizeof(origin) ? origin[P_ORIGIN_PLAYER] : first_player;
+}
+
+/*
+FUNKTION: query_last_player
+DEKLARATION: nomask string query_last_player()
+BESCHREIBUNG:
+Liefert den Spieler zurueck, der das Objekt zuletzt in den Haenden hielt.
+VERWEISE: move
+GRUPPEN: move, grundlegendes
+*/
+nomask string query_last_player() { return last_player; }
+
+// Wird von let_not_in in player.c aufgerufen
+void set_first_player()
+{
+    if(!playerp(previous_object()))
+	return;
+    last_player = previous_object()->query_real_name();
+    if (!first_player)
+	first_player = previous_object()->query_real_name();
+}
+
+/*
+FUNKTION: query_creator
+DEKLARATION: nomask string query_creator()
+BESCHREIBUNG:
+Liefert das Objekt, welches diesen Gegenstand erschaffen hat.
+Der String hat die Form: "Dateiname (UID: uid, EUID: euid)"
+VERWEISE: move
+GRUPPEN: move, grundlegendes
+*/
+nomask string query_creator() { return creator; }
+
+/*
+FUNKTION: query_enable_cleanup
+DEKLARATION: int query_enable_cleanup()
+BESCHREIBUNG:
+Beim Cleanup im Raum fragt der Raum jeden Gegenstand, ob er das Zerstoeren
+des Raumes erlaubt. Liefert query_enable_cleanup() bei einem Gegenstand 0,
+so darf sich der Raum nicht zerstoeren. Im Normalfall liefert
+query_enable_cleanup 0, wenn sich der Gegenstand nicht mehr in dem Raum
+befindet, in welchem er erschaffen wurde, ansonsten eine 1. Soll ein
+Gegenstand immer ein Cleanup verhindern, so muss set_prevent_cleanup()
+aufgerufen werden. Daraufhin liefert query_enable_cleanup() immer 0.
+VERWEISE: clean_up, set_prevent_cleanup
+GRUPPEN: raum
+*/
+int query_enable_cleanup()
+{
+    string room, rest;
+
+    if (this_object()->query_prevent_cleanup())
+	return 0;
+
+    if (!first_room)  // objekt durch das resetten im cleanup erzeugt und der
+	return 1;   // call_out noch nicht ausgefuehrt, oder wirklich kein move
+
+    sscanf(first_room,"%s(%s",room,rest);
+
+    if (object_name(all_environment()[<1]) != room)
+	return 0;
+    if (living(this_object()))
+	return 1;
+    // Hier alle Objekte untersuchen, die in dem Objekt drin sind.
+    // Machen wir momentan aber nur bei Nicht-Livings
+    for (object ob = first_inventory(); ob; ob = next_inventory(ob))
+	if (!ob->query_enable_cleanup())
+	    return 0;
+    return 1;
+}
+
+/*
+FUNKTION: query_prevent_cleanup
+DEKLARATION: int query_prevent_cleanup()
+BESCHREIBUNG:
+Liefert 1, wenn set_prevent_cleanup() aufgerufen wurde.
+VERWEISE: set_prevent_cleanup, clean_up, query_enable_cleanup
+GRUPPEN: raum
+*/
+int query_prevent_cleanup() { return prevent_cleanup; }
+
+/*
+FUNKTION: set_prevent_cleanup
+DEKLARATION: void set_prevent_cleanup()
+BESCHREIBUNG:
+Nach Aufruf dieser Funktion wird ein Raum, in welchem dieser Gegenstand
+liegt, nicht mehr beim Cleanup zerstoert.
+VERWEISE: clean_up, query_enable_cleanup, set_enable_cleanup
+GRUPPEN: raum
+*/
+void set_prevent_cleanup() { prevent_cleanup = 1; }
+
+/*
+FUNKTION: set_enable_cleanup
+DEKLARATION: void set_enable_cleanup()
+BESCHREIBUNG:
+Nach Aufruf dieser Funktion wird ein Raum, in welchem dieser Gegenstand
+liegt, wieder beim Cleanup zerstoert. Diese Funktion ist das Gegenstueck
+zu set_prevent_cleanup.
+VERWEISE: clean_up, query_enable_cleanup, set_prevent_cleanup
+GRUPPEN: raum
+*/
+void set_enable_cleanup() { prevent_cleanup = 0; }
+
+/*
+FUNKTION: set_hidden_until_next_move
+DEKLARATION: void set_hidden_until_next_move([int invis_level])
+BESCHREIBUNG:
+Diese Funktion macht nix anderes, als ein Objekt so lange zu verbergen,
+bis es das erste mal bewegt wird. Siehe als Beispiel: /room/bsp/bsp9.c
+
+Ohne Parameter aufgerufen wird als invis_level V_HIDDEN angenommen.
+VERWEISE: query_hidden_until_next_move, move, set_invis
+GRUPPEN: move, grundlegendes
+*/
+void set_hidden_until_next_move(varargs mixed invis_level)
+{
+    int level;
+
+    if (sizeof(invis_level) == 1)
+	level = invis_level[0];
+    else
+	level = V_HIDDEN;
+    this_object()->set_invis(level);
+    make_visible_at_next_move = 1;
+}
+
+/*
+FUNKTION: query_hidden_until_next_move
+DEKLARATION: int query_hidden_until_next_move()
+BESCHREIBUNG:
+Die Funktion liefert 1, wenn das Objekt bei der naechsten Bewegung
+sichtbar gemacht wird, ansonsten 0.
+VERWEISE: set_hidden_until_next_move, move, set_invis
+GRUPPEN: move, grundlegendes
+*/
+int query_hidden_until_next_move()
+{
+    return make_visible_at_next_move;
+}
+
+/*
+FUNKTION: set_no_move
+DEKLARATION: void set_no_move(int no_move)
+BESCHREIBUNG:
+Mit Wert 1 kann man das Objekt fest installieren, es kann dann nicht mehr
+bewegt werden, mit 0 wird es wieder freigeben.
+Mit set_no_move_reason kann man eine Begruendung angeben.
+GRUPPEN: bewegen
+VERWEISE: move, query_no_move, set_no_move_reason
+*/
+void set_no_move(int i) { no_move = i != 0; }
+
+/*
+FUNKTION: query_no_move
+DEKLARATION: int query_no_move()
+BESCHREIBUNG:
+Mit dieser Funktion kann man abfragen, ob das Objekt im Moment installiert ist.
+Mit query_no_move_reason kann man eine ggf. gesetzte Begruendung abfragen.
+GRUPPEN: bewegen
+VERWEISE: move, set_no_move, query_no_move_reason, set_no_move_reason
+*/
+int query_no_move() { return no_move; }
+
+// ACHTUNG: Der Vergleich in der unteren Doku befindet sich auch in
+//          der Doku zu set_not_moved_reason.
+/*
+FUNKTION: set_no_move_reason
+DEKLARATION: void set_no_move_reason(string no_move_reason)
+BESCHREIBUNG:
+Mit dieser Funktion kann eine Begruendung dafuer gesetzt werden, dass ein
+Objekt nicht bewegbar ist.
+Beispiel: Der Baum ist mit seinen Wurzeln fest angewachsen, die Liste ist an
+die Wand genagelt.
+
+ACHTUNG: Es kommt desoefteren zur Verwechslung mit set_not_moved_reason.
+Daher hier die Unterschiede:
+
+    set_not_moved_reason:
+	- Wird erst WAEHREND des Bewegungsversuches (also von
+          let_not_in- oder forbidden_move*-Funktionen) gesetzt.
+	- Wird vor jedem Bewegungsversuch geloescht.
+	- Ist fuer die Begruendung des Fehlschlages EINER Bewegung da.
+
+    set_no_move_reason:
+        - Wird gewoehnlich bei der Initialisierung des Objektes
+	  (meist zusammen mit set_no_move(1) im create()) aufgerufen.
+	- Ist die Begruendung fuer alle wegen eines set_no_move(1)
+	  fehlgeschlagener Bewegungen.
+
+GRUPPEN: bewegen
+VERWEISE: move, query_no_move, set_no_move, query_no_move_reason
+*/
+void set_no_move_reason(string s) { no_move_reason = s; }
+
+/*
+FUNKTION: query_no_move_reason
+DEKLARATION: string query_no_move_reason()
+BESCHREIBUNG:
+Mit dieser Funktion kann man abfragen, warum ein Objekt nicht bewegbar ist.
+GRUPPEN: bewegen
+VERWEISE: move, set_no_move, query_no_move, set_no_move_reason
+*/
+string query_no_move_reason() { return no_move_reason; }
+
+// ACHTUNG: Der Vergleich in der unteren Doku befindet sich auch in
+//          der Doku zu set_no_move_reason.
+/*
+FUNKTION: set_not_moved_reason
+DEKLARATION: void set_not_moved_reason(string not_moved_reason)
+BESCHREIBUNG:
+Hiermit kann beispielsweise von Filtern wie let_not_in aus in einem
+Objekt eine Begruendung angegeben werden, warum es nicht bewegt
+werden konnte. Diese kann mit query_not_moved_reason abgefragt werden.
+
+ACHTUNG: Es kommt desoefteren zur Verwechslung mit set_no_move_reason.
+Daher hier die Unterschiede:
+
+    set_not_moved_reason:
+	- Wird erst WAEHREND des Bewegungsversuches (also von
+          let_not_in- oder forbidden_move*-Funktionen) gesetzt.
+	- Wird vor jedem Bewegungsversuch geloescht.
+	- Ist fuer die Begruendung des Fehlschlages EINER Bewegung da.
+
+    set_no_move_reason:
+        - Wird gewoehnlich bei der Initialisierung des Objektes
+	  (meist zusammen mit set_no_move(1) im create()) aufgerufen.
+	- Ist die Begruendung fuer alle wegen eines set_no_move(1)
+	  fehlgeschlagener Bewegungen.
+
+GRUPPEN: bewegen
+VERWEISE: move, query_not_moved_reason, set_no_move, set_no_move_reason,
+let_not_out, let_not_in
+*/
+void set_not_moved_reason(string s) { not_moved_reason = s; }
+
+/*
+FUNKTION: query_not_moved_reason
+DEKLARATION: string query_not_moved_reason()
+BESCHREIBUNG:
+Mit dieser Funktion kann man abfragen, warum der letzte move fehlgeschlagen
+ist, natuerlich nur dann, wenn der letzte move fehlgeschlagen ist.
+Ist das Ergebnis 0, so liegt keine eigene Klartextbegruendung vor.
+In diesem Fall kann dem Spieler eine Standardmeldung angezeigt werden.
+GRUPPEN: bewegen
+VERWEISE: move, set_not_moved_reason
+*/
+string query_not_moved_reason() { return not_moved_reason; }
+
+
+// Nun noch einige Funktionen, die von move aufgerufen werden, aber in /i/move
+// nicht selber definiert sind, sondern im Objekt dann definiert werden
+
+/*
+FUNKTION: just_moved
+DEKLARATION: void just_moved()
+BESCHREIBUNG:
+Diese Funktion wird im bewegten Objekt nach einem erfolgreichen Move
+aufgerufen.
+Diese Funktion wird nicht aufgerufen, wenn der move MOVE_SECRET ist!
+VERWEISE: move
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: notify_follow
+DEKLARATION: deprecated void notify_follow(object bewegtes_obj, object Ursprungsraum, object Zielraum, string Richtung, int wie, string verlassen, string ankommen)
+BESCHREIBUNG:
+
+Diese Funktion ist veraltet. Stattdessen sollte der Controller notify_move
+verwendet werden.
+
+Diese Funktion wird von /i/move::move() in allen Verfolgern des bewegten
+Objekts aufrufen. Damit kann dann ein Verfolger auf die Bewegung des Verfolgten
+reagieren. Im Normalfall wird das eine Bewegung in die entsprechende Richtung
+sein.
+VERWEISE: move, add_follower, delete_follower, query_followers
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: move_return
+DEKLARATION: varargs int move_return(mixed ziel, int delay, closure call_back, mixed events, int how, string verlassen, string ankommen, int how_back, string verlassen_back, string ankommen_back)
+BESCHREIBUNG:
+Mit dieser Funktion kann man das Objekt bewegen, so dass es nach 'delay'
+Sekunden wieder an seinen alten Platz zurueckkehrt.
+
+Die Parameter 'ziel, how, verlassen, ankommen' sind die Parameter fuer
+den move an die neue Stelle.
+Die Parameter 'how_back, verlassen_back, ankommen_back' sind die Parameter
+fuer den move an die alte Stelle zurueck.
+Falls how_back nicht angegeben wird, wird MOVE_NORMAL angenommen.
+Bei how_back == MOVE_NORMAL wird versucht, einen Ausgang zu finden, der
+zum alten Raum zurueckfuehrt.
+
+Die Call-Back-Closure wird aufgerufen, wenn das Objekt an seinen alten Platz
+zurueckgekehrt ist. Sie wird mit folgenden Parametern aufgerufen:
+   this_object(), Return des moves (oder -1, wenn kein move noetig war),
+   der Raum, in den das Objekt zurueckkehren sollte.
+
+Diese Funktion kann auch mehrmals hintereinander aufgerufen werden.
+Das Objekt kehrt dann nacheinander an die Stellen zurueck, an denen es
+weiterbewegt wurde.
+
+Wenn events uebergeben wird, koennen alle Moves dieses Event-Typs
+auf einmal rueckgaengig gemacht werden.
+Events kann ein String oder ein Array of Strings sein.
+Delay < 0 bedeutet, dass dieser Move nur durch ein Event wieder
+rueckgaengig gemacht werden kann.
+VERWEISE: move, return_to
+GRUPPEN: move
+*/
+varargs int move_return(mixed ziel, int delay, closure call_back, mixed events,
+	int how, string verlassen, string ankommen,
+	int how_back, string verlassen_back, string ankommen_back)
+{
+    int ret;
+    string old_room;
+
+    if (environment())
+	old_room = object_name(environment());
+
+    ret = this_object()->move(ziel,how,verlassen,ankommen);
+    if (ret != MOVE_OK)
+	return ret;
+
+    remove_call_out("return_to");
+    if (delay >= 0)
+	call_out("return_to",delay || 1);
+    return_move += ({ ({ call_back, delay < 0 ? -1 : time() + delay, events,
+	old_room, how_back, verlassen_back, ankommen_back }) });
+    return ret;
+}
+
+/*
+FUNKTION: return_to
+DEKLARATION: varargs int return_to(string event)
+BESCHREIBUNG:
+Bewegt das Objekt vorzeitig an seine alte Stelle zurueck.
+Returnwert:
+  -3, wenn der letzte Move kein Move war, auf den das event passt.
+  -2, wenn das Objekt keine alte Stelle hatte.
+  -1, wenn das Objekt schon an der alten Stelle ist.
+  sonst: Returnwert des Moves.
+
+Wenn event uebergeben wurde, werden alle Moves dieses Event-Typs
+rueckgaengig gemacht.
+VERWEISE: move_return
+GRUPPEN: move
+*/
+varargs int return_to(string event)
+{
+    string *exit_list;
+    mixed last;
+    string to;
+    int i, ret, delay, how, event_return;
+
+    if (event)
+    {
+	for (i = sizeof(return_move); i--; )
+	    if ((stringp(return_move[i][2]) && return_move[i][2] == event) ||
+		    (pointerp(return_move[i][2]) &&
+		     member(return_move[i][2],event) >= 0))
+	    {
+		return_move[i][1] = 0;
+		if (i == sizeof(return_move) - 1)
+		    event_return = 1;
+	    }
+	if (!event_return)
+	    return -3;
+    }
+
+    remove_call_out("return_to");
+
+    if (!sizeof(return_move))
+	return -2;
+
+    last = return_move[<1];
+    return_move = return_move[0..<2];
+
+    if (object_name(environment()) != last[3])
+    {
+	how = last[4];
+	if (!how)
+	    how = MOVE_NORMAL;
+
+	if (how == MOVE_NORMAL)
+	{
+	    exit_list = environment()->query_exit_list(EXIT_UNLOCKED);
+	    if (sizeof(exit_list))
+		if ((i = member(exit_list, last[3])) >= 0)
+		    to = environment()->query_command_list(EXIT_UNLOCKED)[i];
+
+	    if (to)
+		this_object()->move(to,how,last[5],last[6]);
+	}
+
+	if (object_name(environment()) != last[3])
+	    ret = this_object()->move(last[3],how,last[5],last[6]);
+    }
+    else
+	ret = -1;
+
+    if (sizeof(return_move))
+    {
+	delay = return_move[<1][1];
+	if (delay >= 0)
+	{
+	    delay -= time();
+	    if (delay < 0)
+		delay = 0;
+	    call_out("return_to",delay || 1);
+	}
+    }
+    funcall(last[0],this_object(),ret,last[3]);
+    return ret;
+}
+
+/*
+FUNKTION: notify_move_in
+DEKLARATION: void notify_move_in(object was, object woher, string dir, int wie)
+BESCHREIBUNG:
+Wenn ein Objekt 'was' bewegt wird, dann wird im Zielraum notify("move_in", ...)
+aufgerufen und zwar vor dem Move. Wurde move() mit einer Zeichenkette als
+Zielangabe aufgerufen, so steht sie in dir. Die Art der Bewegung steht in wie.
+
+Ein solcher Controller sollte nicht versuchen, ein anderes Objekt in diesen
+Start- oder Zielraum zu bewegen, sondern dies erst im notify_moved_in
+erledigen.
+VERWEISE: move, notify, notify_move_out, notify_moved_in
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: notify_move_out
+DEKLARATION: void notify_move_out(object was, object wohin, string dir, int wie)
+BESCHREIBUNG:
+Wenn ein Objekt 'was' bewegt wird, dann wird im Ursprungsraum
+notify("move_out", ...) aufgerufen und zwar vor dem Move.
+Wurde move() mit einer Zeichenkette als Zielangabe aufgerufen,
+so steht sie in dir. Die Art der Bewegung steht in wie.
+
+Ein solcher Controller sollte nicht versuchen, ein anderes Objekt in diesen
+Start- oder Zielraum zu bewegen, sondern dies erst im notify_moved_out
+erledigen.
+VERWEISE: move, notify, notify_move_in, notify_moved_out
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: notify_before_move
+DEKLARATION: void notify_before_move(object wer, object woher, object wohin, string dir, int wie, string verlassen, string ankommen)
+BESCHREIBUNG:
+Wenn ein Objekt bewegt wird, wird im bewegten Objekt notify("before_move", ...)
+aufgerufen und zwar vor dem Move. Wurde move() mit einer Zeichenkette als
+Zielangabe aufgerufen, so steht sie in dir. Die Art der Bewegung steht in wie.
+In verlassen und ankommen stehen evntl. gesetzte explizite Bewegungsmeldungen.
+
+Ein solcher Controller sollte nicht versuchen, ein anderes Objekt in diesen
+Start- oder Zielraum zu bewegen, sondern dies erst im notify_move erledigen.
+VERWEISE: move, notify, notify_move, forbidden_move
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: notify_moved_in
+DEKLARATION: void notify_moved_in(object wer, object woher, string dir, int wie)
+BESCHREIBUNG:
+Wenn ein Objekt bewegt wurde, dann wird im Zielraum notify("moved_in", ...)
+aufgerufen und zwar nach dem Move. Wurde move() mit einer Zeichenkette als
+Zielangabe aufgerufen, so steht sie in dir. Die Art der Bewegung steht in wie.
+VERWEISE: move, notify, notify_move_in, notify_moved_out
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: notify_moved_out
+DEKLARATION: void notify_moved_out(object wer, object wohin, string dir, int wie)
+BESCHREIBUNG:
+Wenn ein Objekt bewegt wurde, dann wird im Ursprungsraum notify("moved_out", ...)
+aufgerufen und zwar nach dem Move. Wurde move() mit einer Zeichenkette als
+Zielangabe aufgerufen, so steht sie in dir. Die Art der Bewegung steht in wie.
+VERWEISE: move, notify, notify_move_out, notify_moved_in
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: notify_move
+DEKLARATION: void notify_move(object wer, object woher, object wohin, string dir, int wie, string verlassen, string ankommen)
+BESCHREIBUNG:
+Wenn ein Objekt bewegt wurde, dann wird im bewegten Objekt notify("move", ...)
+aufgerufen und zwar nach dem Move. Wurde move() mit einer Zeichenkette als
+Zielangabe aufgerufen, so steht sie in dir. Die Art der Bewegung steht in wie.
+In verlassen und ankommen stehen evntl. gesetzte explizite Bewegungsmeldungen.
+VERWEISE: move, notify, forbidden_move
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: forbidden_move
+DEKLARATION: int forbidden_move(object wer, object woher, object wohin, string dir, int wie, string verlassen, string ankommen)
+BESCHREIBUNG:
+Bevor ein Objekt bewegt werden soll, wird im zu bewegenden Objekt
+forbidden("move", ...) aufgerufen. Wurde move() mit einer Zeichenkette als
+Zielangabe aufgerufen, so steht sie in dir. Die Art der Bewegung steht in wie.
+In verlassen und ankommen stehen evntl. gesetzte explizite Bewegungsmeldungen,
+zur Zeit wird dabei aber 0 uebergeben. Eine Begruendung fuer einen abgelehnten
+move sollte dann mit wer->set_not_moved_reason(Begruendung) gesetzt werden.
+VERWEISE: move, notify, notify_move
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: forbidden_move_out
+DEKLARATION: int forbidden_move_out(object wer, object wohin, string dir, int wie)
+BESCHREIBUNG:
+Bevor ein Objekt bewegt werden soll, wird im Ursprungsort
+forbidden("move_out", ...) aufgerufen. Wurde move() mit einer Zeichenkette als
+Zielangabe aufgerufen, so steht sie in dir. Die Art der Bewegung steht in wie.
+Eine Begruendung fuer einen abgelehnten move sollte dann mit
+wer->set_not_moved_reason(Begruendung) gesetzt werden.
+VERWEISE: move, forbidden, forbidden_move, forbidden_move_in, notify_moved_out
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: forbidden_move_in
+DEKLARATION: int forbidden_move_in(object wer, object woher, string dir, int wie)
+BESCHREIBUNG:
+Bevor ein Objekt bewegt werden soll, wird im Zielort
+forbidden("move_in", ...) aufgerufen. Wurde move() mit einer Zeichenkette als
+Zielangabe aufgerufen, so steht sie in dir. Die Art der Bewegung steht in wie.
+Eine Begruendung fuer einen abgelehnten move sollte dann mit
+wer->set_not_moved_reason(Begruendung) gesetzt werden.
+VERWEISE: move, forbidden, forbidden_move, forbidden_move_out, notify_moved_in
+GRUPPEN: move
+*/
+
+/*
+FUNKTION: notify_remove
+DEKLARATION: void notify_remove(object ob)
+BESCHREIBUNG:
+Wird ob removed (via Lfun remove() oder nur Efun destruct()),
+so wird vorher ob->notify("remove") aufgerufen.
+
+Die Funktion notify ruft dann in allem mit ob->add_controller("notify_remove",
+other) angemeldeten Objekten other die Funktion other->notify_remove(ob) auf.
+VERWEISE: notify, remove
+GRUPPEN: grundlegendes
+*/

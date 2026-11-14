@@ -1,0 +1,1788 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/obj/mailreader.c
+// Description: Mailreader
+// Author:	Freaky	(12.01.93)
+// Modified by:	Garthan (14.12.94) 'n'-Befehl, 'l' von bis, general cleanup
+//		Garthan (28.12.94) Major rewrite, andere datenstruktur
+//              Sissi   (21.01.95) schoeneres Aussehen (long, ...)
+//		Garthan (19.05.96) lpc_ed fuer Spieler
+//              Garthan (22.06.96) text reply mit B und V
+//              Garthan (11.07.96) mails umbenennen mit U
+//		Freaky  (02.02.97) 'Ungueltiger Filename'-Abfrage raus
+//              Sissi   (08.08.97) SECURE1 und 2
+//              Sissi   (26.12.98) hide_old (alte Post unterdrueckbar)
+//              Sissi   (22.11.99) schreibe oberste rat und so
+//              Sissi   (17.07.00) bei schreibe x,y,z wird nicht mehr
+//                                 nur auf Existenz von x getestet
+//                                 sondern auch von y und z.
+//
+// $Log: mailreader.c,v $
+// Revision 1.38  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.37  2009-06-17 07:52:56  gnomi
+// Gruppen-NPCs duerfen immer schreiben.
+//
+// Revision 1.36  2008-05-19 14:29:49  gnomi
+// Letzten Buchstaben beim Versenden nicht mehr Abschneiden.
+//
+// Revision 1.35  2008/01/24 22:52:56  gnomi
+// Typo.
+//
+// Revision 1.34  2008/01/21 14:24:27  gnomi
+// Auf Mini-ED umgestellt.
+//
+// Revision 1.33  2007/10/24 21:53:17  gnomi
+// wrap("").
+//
+// Revision 1.32  2007/08/12 00:49:13  gnomi
+// Bei ED-Start notify_ed_enter aufrufen.
+//
+// Revision 1.31  2007/08/11 21:32:23  gnomi
+// INPUT_PROMPT nutzen.
+//
+// Revision 1.30  2006/10/02 20:15:37  gnomi
+// Funktion, um Mailheader externer Mails anzuzeigen.
+//
+// Revision 1.29  2004/05/26 21:40:20  gnomi
+// notify_fail-Prios nutzen.
+//
+// Revision 1.28  2003/12/27 03:55:51  gnomi
+// Man kann jetzt mehrere Briefe in einem weiterleiten.
+//
+// Revision 1.27  2003/11/18 06:34:27  gnomi
+// !<Befehl> dokumentiert.
+//
+// Revision 1.26  2003/10/03 18:36:12  sissi
+// Leute ohne Post bekommen nicht mehr die Anzeige !@*^usw.
+//
+// Revision 1.25  2003/09/30 22:40:13  gnomi
+// Ein paar Aenderungen, damit es mit dem /obj/pplayer zusammenarbeitet.
+//
+// Revision 1.24  2003/07/02 02:34:20  gnomi
+// Sicherheitsluecke (Vertrauen auf TI/TP) behoben.
+//
+// Revision 1.23  2003/01/25 04:42:05  gnomi
+// Nach einem Puffer abspeichern darf auch ein Newbie an mudadm schreiben.
+//
+// Revision 1.22  2002/12/08 21:46:40  sissi
+// Dokumentiert, dass nach Loeschen eines Briefes das Loeschen mit
+// nochmaligem Benutzen von l wieder rueckgaengig gemacht werden kann.
+//
+// Revision 1.21  2002/07/05 20:53:37  gnomi
+// Besserer Antwortstitel.
+//
+// Revision 1.20  2002/06/18 02:11:48  gnomi
+// Beim Abspeichern schauen, ob das ein gueltiger Dateiname ist.
+//
+// Revision 1.19  2002/04/10 05:21:28  gnomi
+// Einige Variableninitialisierungen wegen Typcheck getrennt.
+//
+// Revision 1.18  2002/01/21 23:24:26  gnomi
+// Pragma no_shadow entfernt.
+//
+// Revision 1.17  2002/01/20 19:53:03  gnomi
+// Moeglichkeit eingebaut, damit bestimmte Zweities von Spielern zwecks
+// Ankuendigungen auch schreiben duerfen.
+//
+// Revision 1.16  2002/01/13 06:56:05  gnomi
+// Nur private Aliase aufloesen, den Rest macht der maild.
+//
+// Revision 1.15  2002/01/13 04:50:18  freaky
+// query_long() umgestellt.
+//
+// Revision 1.14  2001/12/24 08:21:32  gnomi
+// action "schreibe" ist nicht mehr static.
+// Nicht mehr shadowbar.
+//
+// Revision 1.13  2001/11/10 06:51:09  gnomi
+// Bugfix/Schoenheitskorrektur zur vorherigen Aenderung.
+//
+// Revision 1.12  2001/11/10 06:45:39  gnomi
+// Antworten an Internetmailadressen erlauben; Verteileradressen, denen
+// geantwortet wird, werden vor der Texteingabe geprueft.
+//
+// Revision 1.11  2001/08/21 23:17:05  sissi
+// Zu wenig Stats / zu Jung Regel gilt nicht mehr fuer Wizards.
+//
+// Revision 1.10  2001/06/24 21:13:47  gnomi
+// Moeglichkeit mit Q den Mailreader gleich zu verlassen.
+//
+// Revision 1.9  2001/04/28 23:47:53  gnomi
+// Dieselbe Beschraenkung fuer Newbies/Gaeste, wie im Newsreader.
+//
+// Revision 1.8  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma strong_types
+
+inherit "/i/install";
+inherit "/i/item";
+inherit "/i/tools/mail";
+inherit "/i/tools/security";
+
+#include <deklin.h>
+#include <editor.h>
+#include <hlp.h>
+#include <input_to.h>
+#include <invis.h>
+#include <level.h>
+#include <mail.h>
+#include <more.h>
+#include <stats.h>
+#include <apps.h>
+#include <files.h>
+#include <notify_fail.h>
+
+#define SECURE1 if (!this_interactive() || !check_security()) return "Da steht \"Post\" drauf.\n"
+#define SECURE2 if (!this_interactive() || !check_security()) return
+#define MAIL_TMP_FILE ("/w/"+geteuid()\
+    	              +((file_size("/w/"+geteuid()+"/priv")==FSIZE_DIR)?"/priv":"")\
+	              +"/MAIL")
+#define MAIL_RC_FILE  "/w/"+geteuid()+"/.mailrc"
+#define STATUS "** More: (%d/%d) [q,Q,n,u,<,>,+,-,b,v,f,F,U,l,?] "
+#define MSGS_PROMPT "[q,n,<nr>,b,v,f,F,U,s,l,m,z,c,r,?"
+#define FOLDERS_PROMPT "=Post= [q,<nr>,v,l,m,r,?"
+#define LINE "----------------------------------------"\
+             "---------------------------------------\n"
+
+#define FLAG_AL 1
+#define FLAG_ED 2
+#define FLAG_HO 4 // hide old: Nur neue Post anzeigen vs. alle anzeigen
+
+int line, in_loop, re_nr, modify, beant, verteil_beant, use_ed, text_reply,
+    post_size, post_count, hide_old;
+string text, titel, to, *to_add, *verteiler;
+object owner;
+mapping post, my_aliases;
+
+// startfolder;
+static string folder = DEFFOLDER;
+static string *folders;
+
+// Prototypes aus diesem File (predefinition use)
+//
+static void loop(string str);
+static void loop_folders(string str);
+int resolve_folder(string arg);
+
+// -STD--------------------------------------------------------------------- //
+
+// Standardgeraspel
+//
+void create()
+{
+   set_name("briefmappe");
+   set_gender("weiblich");
+   seteuid(getuid());
+   set_id(({"post", "briefkasten", "mailreader", "mail", "brief", "briefe",
+      "briefmappe", "postmappe", "mappe", "briefpapier"}));
+   set_weight(0);
+   set_no_move_reason(Den()+" hinlegen? Da koennte ja jeder Deine Briefe "
+      "lesen.");
+}
+
+void init()
+{
+   if(!owner && environment() == this_player())
+   {
+      owner = this_player();
+      // Der caller_stack (inkl. this_interactive()) darf nur aus owner und
+      // this_object() bestehen.
+      add_security_condition(owner);
+      add_security_condition("/secure/obj/login#");
+      // set_short(Ihr(0,0,0,"",0, ART_DER | ART_VIS));
+      if(!wizp(owner) && !GABE(owner, "mn"))
+         set_invis(V_NOLIST);
+      add_action("schreibe", "schreibe",-7);
+      my_aliases = wizp(owner) ? m_reallocate(read_alias(MAIL_RC_FILE),1) : ([]);
+   }
+}
+
+int query_auto_load()
+{
+   if(wizp(owner) || GABE(owner, "mn"))
+      return FLAG_AL | use_ed*FLAG_ED | hide_old*FLAG_HO;
+}
+
+void init_arg(int i)
+{
+   if(i & FLAG_ED)
+      use_ed = 1;
+   if(i & FLAG_HO)
+      hide_old = 1;
+   set_invis(V_VIS);
+}
+
+// -UTIL-------------------------------------------------------------------- //
+
+static int return_to_loop(string com)
+{
+   to_add = 0;
+   verteiler = 0;
+   verteil_beant = 0;
+   beant = 0;
+   if(!in_loop)
+      return 0;
+   if(folder)
+      loop(com);
+   else
+      loop_folders(com);
+   return 1;
+}
+
+string *expand_aliases(mixed arg)
+{
+   return recurse_aliases(arg,
+              MAILD->query_aliases(PRIVATE_ALIASES) + my_aliases,
+              owner->query_real_name(), 0);
+}
+
+// -EDIT-------------------------------------------------------------------- //
+
+// Die Abfrage nach Edit mit ed 
+//
+static void send_it(string str)
+{
+   if(member(({"","ja","j","y","yes"}), lower_case(str)) >= 0)
+   {
+      if(verteil_beant && sizeof(verteiler))
+	 write("Verteiler: (fuer '"+implode(verteiler,",")+
+	       "' nur <return>)\n");
+      input_to("get_verteiler", INPUT_PROMPT, "Verteiler: ");
+      return;
+   }
+   return_to_loop("r");
+}
+
+private void mini_ed_end(string* str)
+{
+    if(str)
+    {
+       text = implode(str,"\n");
+       input_to("send_it", INPUT_PROMPT, "Willst du den Brief wirklich abschicken (Ja/Nein)? Ja\b\b");
+    }
+    else
+    {
+      return_to_loop("r");
+    }
+}
+
+// Starten des Editierens via ed oder input_to
+// (von 's', schreibe oder 'b' aus)
+static void start_edit(int append)
+{
+   line = 1;
+   if(!append)
+      text = "";
+
+   owner->mini_ed(#'mini_ed_end, use_ed?1:0,
+      MAIL_TMP_FILE, 
+      ([
+         MINI_ED_START_TEXT:
+	    "Gib nun den"+(append?" anzuhaengenden":"")+" Brief ein."+
+            (append?"\n":" ")+
+            "Mit '**' oder '.' beenden, mit '~q' abbrechen.\n"
+      ]),
+      ([
+         MINI_ED_FORCE_WRAP: 1
+      ]), explode(text,"\n")[0..<2]);
+}
+
+// -MAIL-------------------------------------------------------------------- //
+
+// primitive zum Anzeigen einer Mail
+//
+private string read_mail(int i) // i = 1..sizeof(post[folder])
+{
+   string head;
+
+   re_nr = i--;
+   post[folder][i][MM_FLAG] |= MM_READ;
+   modify = 1;
+   head = LINE+
+	  "Titel: "+post[folder][i][MM_SUBJECT]+"\n"+
+	  left("Absender: "+post[folder][i][MM_FROM], 62)+
+	     shorttimestr(post[folder][i][MM_DATE])+"\n"+
+          (post[folder][i][MM_TO] != owner->query_real_name() ?
+          "Adressat: "+post[folder][i][MM_TO]+"\n" :"")+
+          (sizeof(post[folder][i][MM_CC]) ? 
+	  sprintf("Verteiler: %-=68s\n", 
+	     implode(post[folder][i][MM_CC] || ({}), ", ")) : "")+
+	  LINE;
+
+   return owner->more(explode(head + post[folder][i][MM_TEXT],"\n"),STATUS);
+}
+
+// primitive zum Loeschen einer Mail
+//
+private void delete_mail(int i) // i = 1..sizeof(post[folder]) ; toggles
+{
+   post[folder][i-1][MM_FLAG] ^= MM_DEL;
+   modify = 1;
+}
+
+// read, reply, grpreplay, forward --------
+
+// Der Lesebefehl aus dem Hauptmenue, bei Eingabe einer Nummer oder 'n'
+//
+private int lese(string str)
+{
+   int nr;
+   string ret;
+
+   if(!str || !sscanf(str,"%d",nr))
+      return 0;
+
+   if(nr < 1 || nr > sizeof(post[folder]))
+   {
+      write("Einen Brief mit dieser Nummer gibt es nicht.\n");
+      return 0;
+   }
+
+   if(ret = read_mail(nr))
+   {
+      write(M_ERR(ret));
+      return 0;
+   }
+   return 1;
+}
+
+/* Liefert 1, wenn derjenige genug Erfahrung, Stats usw. hat,
+   um am Brett zu schreiben.
+   Bedingungen:
+    - Geschicklichkeit >=35
+    - Staerke >=35 (Ausgebaut, mir fiel keine Begruendung ein)
+    - Ausdauer >=35
+    - Intelligenz >=35
+    - Alter >1 Tag
+    - Erfahrung > 5000
+*/
+private int can_write()
+{
+    if(testplayerp(owner) || wizardshellp(owner) || wizp (owner) ||
+	SECOND->is_writer(owner->query_real_name()) ||
+	SECOND->is_special(owner->query_real_name()))
+        return 1;
+#ifdef UNItopia
+    if(load_name(environment())=="/obj/pplayer")
+	return 1;
+#endif
+    if(owner->query_real_stat(STAT_DEX)<35)
+    {
+        write(wrap("Diese dumme Schreibfeder rutscht Dir dauernd aus Deinen"
+                  " ungeschickten Haenden."));
+        return 0;
+    }
+    if(owner->query_real_stat(STAT_CON)<35)
+    {
+        write(wrap("Du hast noch nicht die Ausdauer, um einen Brief zu Ende"
+                  " zu schreiben."));
+        return 0;
+    }
+    if(owner->query_real_stat(STAT_INT)<35)
+    {
+        write(wrap("Du hast Probleme, mehrere Buchstaben zu einem Text"
+                  " zusammenzufuegen."));
+        return 0;
+    }
+    if(owner->query_age() < 86400)
+    {
+        write(wrap("Du bist noch zu jung, um die vielen Buchstaben"
+                  " auseinanderhalten zu koennen."));
+        return 0;
+    }
+    if(owner->compute_one_skill(({"skill"}))<5000)
+    {
+        write(wrap("Dir fehlt etwas an Erfahrung, um einen Artikel zu schreiben."));
+        return 0;
+    }
+    if(guestp(owner))
+    {
+        write(wrap("Als Gast besitzt Du keine Schreibfeder, um einen Brief"
+                  " zu schreiben."));
+        return 0;
+    }
+    return 1;
+}
+
+// Der Schreibebefehl via 's' (in_loop==1) oder schreibe add_action (in_loop==0)
+//
+int schreibe(string str)
+{
+   string err, tmp;
+   int i;
+
+   // Ersatz fuer static add_action
+   if(this_interactive() != this_player() || this_player()!=environment() ||
+      (previous_object()!=this_object() && previous_object()!=this_player()))
+          return 0;
+  
+   if (str && (str[0..2]=="an ")) str = str[3..];
+#ifdef UNItopia
+   if (str && ((lower_case(str)=="oberste rat") ||
+      (lower_case(str)=="obersten rat") ||
+      (lower_case(str)=="oberstem rat") ||
+      (lower_case(str)=="obersten raeten") ||
+      (lower_case(str)=="oberster rat")))
+      str = "mudadm";
+#endif       
+
+   if((str!="mudadm" || !MASTER_OB->may_write_to_mudadm()) && !can_write())
+      return !return_to_loop(0);
+       
+   verteiler = 0;
+   verteil_beant = 0;
+   beant = 0;
+   text_reply = 0;
+
+   if(str == "~q" || !sizeof(to_add = expand_aliases(str)))
+   {
+      if(!return_to_loop(0))
+	 notify_fail("Schreibe wem?\n", FAIL_NOT_OBJ);
+      return 0;
+   }
+
+   str = to_add[0];
+   to_add = to_add[1..];
+   tmp = MAILD->known_mud_player(&str);
+   err = tmp ? tmp : "";
+   for (i=0; i<sizeof(to_add); i++) {
+      tmp = MAILD->known_mud_player(&(to_add[i]));
+      if (tmp) err += tmp;
+   }
+
+   if(strlen (err))
+   {
+      if(in_loop)
+	 input_to("schreibe",INPUT_PROMPT, err+"Wem willst du einen Brief schreiben? ");
+      else
+         notify_fail(err, FAIL_WRONG_ARG);
+      return 0;
+   }
+
+   to = str;
+   write("Bitte den Titel eingeben. (Abbruch mit '~q')\n");
+   input_to("get_titel", INPUT_PROMPT, "Titel: ");
+   return 1;
+}
+
+// Titelabfrage fuer 's' oder schreibe
+//
+static void get_titel(string str)
+{
+   if(!stringp(str) || str == "" || str == "~q")
+      return_to_loop(0);
+   else
+   {
+      titel = trim(str);
+      start_edit(0);
+   }
+}
+
+
+// Der beantworte Befehl 'b'
+//
+static void get_beant(string str)
+{
+   if(!str || str == "" || str == "~q")
+   {
+      return_to_loop(0);
+      return;
+   }
+
+   re_nr = 0;
+
+   if(!sscanf(str, "%d", re_nr))
+   {
+      write("Du musst die Nummer angeben.\n");
+      return_to_loop(0);
+      return;
+   }
+
+   if (re_nr > sizeof(post[folder]) || re_nr < 1)
+   {
+      write("Einen Brief mit dieser Nummer gibt es nicht.\n");
+      return_to_loop(0);
+      return;
+   }
+
+   if(!sizeof(to_add = expand_aliases(post[folder][re_nr-1][MM_FROM])))
+   {
+      write("Kein Empfaenger.\n");
+      return_to_loop(0);
+      return;
+   }
+   to = to_add[0];
+   to_add = to_add[1..];
+
+   if(verteil_beant)
+   {
+      verteiler = expand_aliases((post[folder][re_nr-1][MM_CC]||({})) +
+                                 ({ post[folder][re_nr-1][MM_TO] })) 
+                                 - ({ owner->query_real_name(), to })
+                                 - to_add;
+      for(int i=0;i<sizeof(verteiler);i++)
+      {
+         string err;
+	 if(err = MAILD->known_mud_player(&(verteiler[i])))
+	 {
+	    write(wrap_say(verteiler[i]+":",err[0..<2]));
+    	    return_to_loop(0);
+	    return;
+	 }
+      }
+   }
+
+   beant = 1;
+ 
+   titel = ""+post[folder][re_nr-1][MM_SUBJECT];
+   if(titel[0..3] != "Re: ")
+   {
+      if(member((["aw: ","re: "]),lower_case(titel[0..3])))
+          titel = titel[4..<1];
+      titel = "Re: "+titel;
+   }
+   write("Fuer 'Titel: "+titel+"' nur Return eingeben. (Abbruch mit '~q')\n");
+   input_to("re_titel", INPUT_PROMPT, "Titel: ");
+}
+
+private string reply_format(mixed *letter)
+{
+   string txt;
+
+   txt = capitalize(letter[MM_FROM])+" schrieb am "+
+         timestr(letter[MM_DATE])+" an "+
+         capitalize(letter[MM_TO])+":\n"+
+	 implode(map(explode(letter[MM_TEXT],"\n"),
+	    lambda(({'a}),({#'+, "> ", 'a}))),"\n")+"\n";
+   return txt;
+}
+
+// Titelabfrage beim 'b' Befehl
+//
+static void re_titel(string str)
+{
+   if(str == "~q")
+      return_to_loop(0);
+   else
+   {
+      if(str && str != "")
+	 titel = trim(str);
+      if(text_reply)
+         text = reply_format(post[folder][re_nr-1]);
+      start_edit(text_reply);
+   }
+}
+
+int* parse_numbers(string cmd, string rest)
+{
+    int a,b,i;
+    int* ret = ({});
+    
+    rest=0;
+    foreach(string str:regexplode(cmd||"","[, ]")-({""}))
+	if(rest)
+	    rest+=str;
+	else if(str=="," || str==" ")
+	    continue;
+	else if(!(i=sscanf(str,"%d-%d",a,b)))
+	    rest=str;
+	else if(i==1)
+	    ret+=({a});
+	else
+	    for(i=a;i<=b;i++)
+		ret+=({i});
+
+    return ret;
+}
+
+static int forward(string str, int edit, int more)
+{
+    int *nums;
+    string addr, err;
+    
+    nums = parse_numbers(str, &addr);
+    if(!sizeof(nums) || !sizeof(addr))
+    {
+	write((edit?"F":"f")+" "+(more?"":"<nr>[,<nr>-<nr>] ")+"<neuer Adressat>\n");
+	if(!more)
+	    return_to_loop(0);
+	return 0 ;
+    }
+    
+    if(min(nums)<1 || max(nums)>sizeof(post[folder]))
+    {
+	write("Du musst die Nummer(n) der weiterzuschickenden Mail angeben.\n");
+	if(!more)
+	    return_to_loop(0);
+	return 0;
+    }
+    
+    
+    if(!sizeof(to_add = expand_aliases(addr)))
+    {
+	write("Kein Empfaenger.\n");
+	if(!more)
+	    return_to_loop(0);
+	return 0;
+    }
+    
+    to = to_add[0];
+    to_add = to_add[1..];
+
+    if(err = MAILD->known_mud_player(&to))
+    {
+	write(err);
+	if(!more)
+	    return_to_loop(0);
+	return 0;
+    }
+    
+    if(sizeof(nums)>1)
+	titel = "Fwd: Briefe";
+    else
+	titel = "Fwd: "+post[folder][nums[0]-1][MM_SUBJECT];
+
+    verteil_beant = 0;
+    beant = 0;
+    verteiler = 0;
+    
+    if(sizeof(nums)==1)
+	text =
+    	    "Folgende Nachricht von "+
+	    capitalize(post[folder][nums[0]-1][MM_FROM])+
+	    " wurde an Dich weitergeleitet:\n"+
+	    copies("- ", 32)+"\n"+
+	    post[folder][nums[0]-1][MM_TEXT]+"\n"+
+	    copies("- ", 32)+"\n";
+    else
+    {
+	text = "Folgende Nachrichten wurden an Dich weitergeleitet:\n";
+	foreach(int nr:nums)
+	    text+=left("- - Von "+capitalize(post[folder][nr-1][MM_FROM])+
+		    ((strlen(post[folder][nr-1][MM_FROM])&1)?": ":":"),64," -")+"\n"
+		+ post[folder][nr-1][MM_TEXT]+"\n"
+		+ copies("- ",32)+"\n\n";
+    }
+    
+    if(edit)
+	start_edit(1); // append
+    else
+	input_to("get_verteiler", INPUT_PROMPT, "Verteiler: ");
+    return 1;
+}
+
+// ev. Verteiler abfragen und POST ABSCHICKEN
+static void get_verteiler(string str)
+{
+   mixed res;
+   int i;
+
+   if(str == "~q")
+   {
+      return_to_loop(0);
+      return;
+   }
+
+   if(str && str != "")
+      for(i = sizeof(verteiler = expand_aliases(str)); i--;)
+      {
+	 if(res = MAILD->known_mud_player(&(verteiler[i])))
+	 {
+	    write(res);
+	    input_to("get_verteiler", INPUT_PROMPT, "Verteiler: ");
+	    verteiler = 0;
+	    return;
+	 }
+      }
+   else
+      if(!verteil_beant)
+         verteiler = 0;
+
+   verteiler = (to_add||({}))+(verteiler||({}));
+
+   res = MAILD->send_mail(
+      ({ 0, to, sizeof(verteiler)?verteiler:0, titel, 0, 0 , text }),
+      beant && ({to}) );
+   if(stringp(res))
+      write(res);
+   else
+      if(pointerp(res))
+	 if(sizeof(res))
+	 {
+	    res = map(res, #'capitalize);
+	    write(wrap("Dein Brief wurde an "+klist(res)+" abgeschickt."));
+	 }
+	 else
+	    write("Dein Brief wurde an niemanden geschickt!\n");
+
+   return_to_loop("r");
+}
+
+// loesche, speichern, etc. ----------------
+
+// Der Loeschbefehl vom Menue aus.
+//
+static void get_loesch(string str)
+{
+   int i, von, bis;
+
+   if(!str || str == "" || str == "~q")
+      ;
+   else if(!sscanf(str,"%d",i))
+      write("Du musst die Artikelnummer angeben.\n");
+   else if(sscanf(str, "%d-%d", von, bis) == 2)
+      if(von < 1 || bis > sizeof(post[folder]) || von > bis)
+	 write("l <von>-<bis>   wobei Artikelnr <von> kleiner als <bis>.\n");
+      else
+      {
+	 for(i = von; i <= bis; i++)
+	    delete_mail(i);
+	 write("Ok.\n");
+      }
+   else if (i < 1 || i > sizeof(post[folder]))
+      write("Einen Brief mit dieser Nummer gibt es nicht.\n");
+   else
+   {
+      delete_mail(i);
+      write("Ok.\n");
+   }
+   return_to_loop(0);
+}
+
+private varargs string file_mail(string folder, int i, int all)
+{
+   return
+   "From "+post[folder][i][MM_FROM]+" "+
+	   ctime(post[folder][i][MM_DATE])+"\n"+
+   "From: "+post[folder][i][MM_FROM]+"\n"+
+   "To: "+post[folder][i][MM_TO]+"\n"+
+   "Subject: "+(all ? folder+": " : "")+post[folder][i][MM_SUBJECT]+"\n"+
+   (sizeof(post[folder][i][MM_CC])?
+      "Cc: "+implode(post[folder][i][MM_CC],", ")+"\n":"")+
+   "Message-Id: <"+post[folder][i][MM_DATE]+"@UNItopia>\n"+
+   (post[folder][i][MM_FLAG] & (MM_READ|MM_OLD) ?
+      "Status: "+ (post[folder][i][MM_FLAG] & MM_READ ? "R":"")+
+		  (post[folder][i][MM_FLAG] & MM_OLD  ? "O":"")+
+		  "\n":"")+
+   "\n"+
+   post[folder][i][MM_TEXT]+"\n\n";
+}
+
+static void file_folder(string str)
+{
+   string *args, err, out;
+   int i, s, folder_nr;
+
+   SECURE2;
+   if(!str || sizeof(args = explode(str, " ")) != 2)
+   {
+      write("a <name|nr> <filename>\n");
+      return_to_loop(0);
+      return;
+   }
+
+   if((folder_nr = resolve_folder(args[0])) < 0)
+   {
+      return_to_loop(0);
+      return;
+   }
+
+#if 0
+   str = args[1];
+   if(str[0] == '/' || member(str,' ') >= 0 || strstr(str, "..") >= 0)
+   {
+      write("Ungueltiger Filename.\n");
+      return_to_loop(0);
+      return;
+   }
+#endif
+
+   out = "";
+   s = sizeof(post[folders[folder_nr]]);
+   for(i = 0; i < s; i++)
+      out += file_mail(folders[folder_nr], i);
+
+   if(write_file(owner->add_path(args[1]), out))
+      write("Ok.\n");
+   else
+      write("Konnte Briefe nicht abspeichern.\n");
+   return_to_loop(0);
+}
+
+static void file_all(string str)
+{
+   string out;
+   int folder_nr, i, s;
+
+   SECURE2;
+#if 0
+   if(!str || str == "" || str[0] == '/' ||
+      member(str,' ') >= 0 || strstr(str, "..") >= 0)
+   {
+      write("Ungueltiger Filename.\n");
+      return_to_loop(0);
+      return;
+   }
+#endif
+   out = "";
+   for(folder_nr = 0; folder_nr < sizeof(folders); folder_nr++)
+   {
+      s = sizeof(post[folders[folder_nr]]);
+      for(i = 0; i < s; i++)
+	 out += file_mail(folders[folder_nr], i, 1);
+   }
+   if(write_file(owner->add_path(str), out))
+      write("Ok.\n");
+   else
+      write("Konnte Briefe nicht abspeichern.\n");
+   return_to_loop(0);
+}
+
+// Der Abspeicherbefehl mit drei Aufrufvarianten
+//
+static varargs void get_save(string str, int brief, int flag)
+{
+   string fname;
+   SECURE2;
+   if(str && str != "" && str != "~q")
+   {
+      if(brief == -1)
+      {
+	 int i;
+
+	 i = to_int(str);
+	 if(i <= 0 || i > sizeof(post))
+	 {
+	    write("Diesen Brief gibt es nicht.\n");
+	    return_to_loop(0);
+	    return;
+	 }
+	 input_to("get_save",INPUT_PROMPT,"Filename: ",i);
+	 return;
+      }
+
+#if 0
+      if (str[0] == '/' || member(str,' ') >= 0 || strstr(str, "..") >= 0)
+      {
+	 write("Ungueltiger Filename.\n");
+	 input_to("get_save", INPUT_PROMPT, "Filename: ", brief);
+	 return;
+      }
+#endif
+
+      fname = owner->add_path(str);
+      if(!valid_file_name(fname))
+          write("Das ist ein ungueltiger Dateiname.\n");
+      else if(file_size(fname)==FSIZE_DIR)
+          write("Das ist ein Verzeichnis.\n");
+      else if(write_file(fname, file_mail(folder,brief-1)))
+	 write("Ok.\n");
+      else
+	 write("Konnte Brief nicht abspeichern.\n");
+   }
+
+   if(!flag)
+      return_to_loop(0);
+   else if (flag==1)
+      owner->more(explode(post[folder][re_nr-1][MM_TEXT],"\n"),STATUS);
+}
+
+void show_aliases()
+{
+   write(LINE+
+   "Mailaliase: (Naeheres siehe "+SYSTEM_ALIASES+")\n"+LINE+
+   sprintf("%-75#s\n", 
+   implode(sort_array(m_indices(MAILD->query_aliases()+my_aliases),#'>),"\n"))+
+   LINE);
+}
+
+void rename_mail(int brief, string titel) // brief = 1..sizeof(post[folder])
+{
+   post[folder][brief-1][MM_SUBJECT] = titel;
+}
+
+void show_headers(int brief)
+{
+    if(sizeof(post[folder][brief-1])<=MM_HEADER ||
+	!sizeof(post[folder][brief-1][MM_HEADER]))
+	    write("Kein Header vorhanden.\n");
+    else
+	write(post[folder][brief-1][MM_HEADER]);
+}
+
+// -FOLDERS----------------------------------------------------------------- //
+
+static string *update_folders()
+{
+   return folders = sort_array(m_indices(post), #'>);
+}
+
+private void quit_reader()
+{
+   string tmp;
+
+   if(modify && (tmp = MAILD->save_post(post)))
+      write(tmp);
+   modify = 0;
+   if((post_size = MAILD->query_post_size()) > 100000 && !adminp(owner))
+   {
+      write("DU MUSST JETZT BRIEFE LOESCHEN!\a\n"
+	    "Vorher kannst Du den Mailreader nicht verlassen!\n");
+      update_folders(); // who knows...
+      return_to_loop(0);
+      return;
+   }
+   in_loop = 0;
+   post = 0; 
+   folders = 0;
+#ifdef UNItopia
+   environment()->mailreader_exitted();
+#endif
+}
+
+private int new_mails_in_folder(string fold)
+{
+   int a, i, flag;
+   for(i = sizeof(post[fold]); i--;)
+   {
+      if((flag = post[fold][i][MM_FLAG]) & MM_DEL)
+	 continue;
+      if(!(flag & (MM_READ|MM_OLD) ))
+	 return -1;
+      a += !(flag & MM_READ);
+   }
+   return a;
+}
+
+private int next_new_folder()
+{
+   int i;
+
+   for(i = 0; i < sizeof(folders); i++)
+      if(new_mails_in_folder(folders[i]))
+         return i+1;
+}
+
+
+private string query_look_folders()
+{
+   string dat;
+   int i, s, nm;
+
+   s = sizeof(folders);
+
+   dat = "";
+   for(i = 0; i < s; i++)
+      dat += sprintf("%1s  %2d  (%2d)  %s\n",
+		     ((nm = new_mails_in_folder(folders[i])) ?  nm == -1 ?
+			 "N" : "A" : " "),
+		     i+1, sizeof(post[folders[i]]), folders[i]);
+   if(dat == "")
+      dat = "Keine Verzeichnisse vorhanden.\n";
+   return LINE + dat + LINE;
+}
+
+int resolve_folder(string arg)
+{
+   int folder_nr;
+
+   if(!stringp(arg))
+   {
+      write("Kein Verzeichnis angegeben.\n");
+      return -2;
+   }
+   if(sscanf(arg, "%d", folder_nr) &&
+      --folder_nr >= 0 &&
+      folder_nr < sizeof(folders) 
+      ||
+      (folder_nr = member(folders, arg)) >= 0)
+      return folder_nr;
+   write("Kein gueltiges Verzeichnis ausgewaehlt (Name oder Nummer).\n");
+   return -1;
+}
+
+private string lookout(int size) {
+    switch (size) {
+	case -1..25600:
+	    return "";
+	case 25601..51200:
+	    return " (!)";
+	case 51201..102400:
+	    return " (!!!)";
+	default:
+	    return " (!@*^!#*!)";
+    }
+}
+
+private string make_prompt(int p)
+{
+   string ret;
+
+   ret = "";
+
+   if(post_size > 45*1024 && !adminp(owner))
+      ret += "WARNUNG! Dein Postfile ist zu gross! Loeschen mit l <nr>.\n";
+
+   ret += (p ? folder+ " "+MSGS_PROMPT : FOLDERS_PROMPT)+
+          " -"+to_string(post_size/1024)+"kB-"+lookout(post_size)+ "] ";
+   return ret;
+}
+
+static void loop_folders(string str)
+{
+   int folder_nr, nf;
+   string err, arg, *args;
+
+   if(str)
+   {
+      switch(str)
+      {
+	 case "?":
+	    write(
+	    LINE
+	    "    q                    Mailreader verlassen\n"
+	    "    n                    Wechsel in Verzeichnis mit neuer Post\n"
+	    "    <name|nr>            Verzeichnis wechseln\n"
+	    "    c                    Wechsel in das +Neues+ Verzeichnis\n"
+	    "    s <name>             Schreibe <name> einen Brief\n"
+	    "    v <name>             Verzeichnis anlegen\n"
+	    "    l <name|nr>          Verzeichnis loeschen, wenn leer\n"
+	    "    Loesche <name|nr>    Verzeichnis loeschen, mit Inhalt\n"
+	    "    m <name|nr> <neu>    Verzeichnis umbenennen in <neu>\n"+
+	    (gesellep(owner) ?
+	    "    a <name|nr> <file>   "
+			     "Verzeichnis <name|nr> nach <file> schreiben\n"
+	    "    A <file>             Ganzes Postfile nach <file> schreiben\n"
+	    :"")+
+	    (wizp(owner) ?
+	    "    I                    Mailaliase anzeigen\n":"")+
+	    "    r                    Liste der Verzeichnisse anzeigen\n"
+	    "    ?                    Diese Hilfe\n"
+	    "    !<befehl>            Befehl als Spieler ausfuehren\n"
+	    LINE);
+	    break;
+	 case "r":
+	    write(query_look_folders());
+	    break;
+         case "Q":
+	 case "q":
+	    quit_reader();
+	    return;
+	 case "l":
+	    write("l <Verzeichnisname oder Nummer>\n");
+	    break;
+	 case "v":
+	    write("v <Verzeichnisname>\n");
+	    break;
+	 case "m":
+	    write("m <Verzeichnisname oder Nummer> <Neuer Name>\n");
+	    break;
+	 case "s":
+	    input_to("schreibe", INPUT_PROMPT, "Wem willst du einen Brief schreiben? ");
+	    return;
+	 case "n":
+	    if(nf = next_new_folder())
+	    {
+	       folder = folders[nf-1];
+	       loop("r");
+	       return;
+	    }
+            write("Es gibt kein (weiteres) Verzeichnis mit neuer Post drin.\n");
+	    break;
+	 case "c":
+	    if(member(folders, DEFFOLDER) >= 0)
+	    {
+	       folder = DEFFOLDER;
+	       loop("r");
+	       return;
+	    }
+	    break;
+	 case "a":
+	    write("a <verzeichnisname|nummer> <filename>\n");
+	    break;
+	 case "A":
+	    write("A <filename>\n");
+	    break;
+	 case "I": 
+	    if(wizp(owner))
+	       show_aliases();
+	    break;
+	 default:
+	    arg = trim(str[2..]);
+	    if((arg = trim(str[2..])) == "")
+	       arg = 0;
+	    switch(str[0..1])
+	    {
+	       case "s ":
+		  schreibe(arg);
+		  return;
+	       case "v ":
+		  if(err = add_folder(post, arg))
+		     write(err);
+		  else
+		  {
+		     modify = 1;
+		     update_folders();
+		     loop_folders("r");
+		     return;
+		  }
+		  break;
+	       case "l ":
+		  if((folder_nr = resolve_folder(arg)) >= 0)
+		     if(err = delete_folder(post, folders[folder_nr]))
+			write(err);
+		     else
+		     {
+			modify = 1;
+			update_folders();
+			loop_folders("r");
+			return;
+		     }
+		  break;
+	       case "m ":
+		  if(!arg || sizeof(args = explode(arg, " ")-({""})) != 2)
+		     write("m <Verzeichnisname oder Nummer> <Neuer Name>\n");
+		  else if((folder_nr = resolve_folder(args[0])) >= 0)
+		     if(err = rename_folder(post, folders[folder_nr], args[1]))
+			write(err);
+		     else
+		     {
+			modify = 1;
+			update_folders();
+			loop_folders("r");
+			return;
+		     }
+		  break;
+	       case "a ":
+	          file_folder(arg);
+	          return;
+	       case "A ":
+	          file_all(arg);
+	          return;
+	       default:
+		  if(!strstr(str, "Loesche "))
+		  {
+		     if((folder_nr = resolve_folder(str[8..])) >= 0)
+		        if(err = remove_folder(post, folders[folder_nr]))
+		           write(err);
+			else
+			{
+			   modify = 1;
+			   update_folders();
+			   loop_folders("r");
+			   return;
+			}
+		  }
+		  else
+		  if(str != "" && (folder_nr = resolve_folder(str)) >= 0)
+		  {
+		     folder = folders[folder_nr];
+		     loop("r");
+		     return;
+		  }
+		  break;
+	    }
+	    break;
+      }
+   }
+   input_to("loop_folders", INPUT_PROMPT, make_prompt(0));
+}
+   
+
+// -MENUE------------------------------------------------------------------- //
+
+// Hilfe fuer das Hauptmenue
+//
+private void hilfe()
+{
+   write(
+      LINE
+      "    q           : Lesen beenden (quit)\n"
+      "    !<befehl>   : Befehl als Spieler ausfuehren\n"
+      "    n           : Naechsten neuen Brief lesen\n"
+      "    <nr>        : Brief <nr> lesen\n"
+      "    l <nr>      : Loesche Brief <nr>\n"
+      "    l <v>-<b>   : Loesche Briefe <v> bis <b>\n"
+      "    b <nr>      : Beantworte Brief <nr>               B <nr>: mit Text\n"
+      "    v <nr>      : (Verteiler-)Beantworte Brief <nr>   V <nr>: mit Text\n"
+      "    f <nr>[,<v>-<b>] <name> : Brief <nr> weiterschicken an <name>\n"
+      "    F <nr>[,<v>-<b>] <name> : "
+                "Text anhaengen und weiterschicken an <name>\n"
+      "    U <nr> <titel> : Brief <nr> umbenennen in <titel>\n"
+      "    s           : Schreibe Brief\n"+
+	         (gesellep(owner)?
+      "    a <nr> <fn> : Brief <nr> abspeichern unter <fn>\n":""
+                 )+
+      "    E           : ED als Editor verwenden? ("+use_ed+")\n"
+      "    r           : Briefe neu ausgeben\n"
+      "    R           : Briefe ausgeben mit umgekehrtem y - Flag\n"
+      "    y           : Alte Post in Uebersicht nicht anzeigen? ("+(hide_old?"ja":"nein")+")\n"
+      "    z           : Ins Menue der Verzeichnisse wechseln\n"
+      "    c           : Ins +Neues+ Verzeichnis wechseln\n"
+      "    c <nr|name> : In Verzeichnis <nr|name> wechseln\n"
+      "    m <v>[-<b>] <nr|name>: "
+		  "Schiebe Brief <v> bis <b> nach Verzeichnis <nr|name>\n"+
+	    (wizp(owner) ?
+      "    I           : Mailaliase anzeigen\n":"")+
+      "    Bei allgemeinen Problemen kann man an mudadm schreiben.\n"
+      LINE);
+}
+
+// Liefert die Liste, die beim Start und bei 'r' angezeigt wird
+//
+private string query_look()
+{
+   string ret;
+   int i;
+
+   if(sizeof(post[folder]))
+   {
+      ret = "";
+      for(i = 0; i<sizeof(post[folder]); i++)
+      {
+	 if(post[folder][i][MM_FLAG] & MM_DEL)
+	    ret += "L ";
+	 else
+	 if(post[folder][i][MM_FLAG] & MM_READ) {
+	    if (hide_old) continue;
+	    ret += "  ";
+	 }
+	 else
+	    ret += post[folder][i][MM_FLAG] & MM_OLD ? "A " : "N ";
+	 ret += right(i+1, 3)+"  "+
+		left(post[folder][i][MM_SUBJECT], 41)+" "+
+		left(capitalize(post[folder][i][MM_FROM]), 15)+" "+
+		shorttimestr(post[folder][i][MM_DATE])[0..13]+"\n";
+      }
+      if (ret=="") ret = "Nur noch alte, gelesene Post da (anschauen mit \"R\").\n";
+      return LINE+ret+LINE;
+   }
+}
+
+// Sucht die Nummer des naechsten neuen Briefs heraus
+//
+private int next_new_mail()
+{
+   int i;
+
+   for(i = 0; i < sizeof(post[folder]); i++)
+      if(!(post[folder][i][MM_FLAG] & (MM_DEL | MM_READ)))
+         return i+1;
+}
+
+// Das Menue, das man bei lese post bekommt
+//
+static void loop(string str)
+{
+   string tmp;
+   int nm, folder_nr, art_nr, von, bis;
+   string *args, err;
+
+   int brief;    // fuer a und U
+   string file;  // fuer a
+   string new_titel; // fuer U
+
+   text_reply = 0;
+   if(str)
+   {
+      if(lese(str))
+	 return;
+
+      switch(str)
+      {
+	 case "n":
+	    if(nm = next_new_mail())
+	    {
+	       lese(to_string(nm));
+	       return;
+	    }
+	    else
+	    {
+	       write("Du hast alle neuen Briefe bereits gelesen.\n");
+	       break;
+	    }
+	 case "V":
+	    text_reply = 1;
+	 case "v":
+	    verteil_beant = 1;
+	    input_to("get_beant", INPUT_PROMPT, 
+		"Welchen Brief willst du beantworten? (Nummer angeben) ");
+	    return;
+	 case "B":
+	    text_reply = 1;
+	 case "b":
+	    verteil_beant = 0;
+	    input_to("get_beant", INPUT_PROMPT, 
+		"Welchen Brief willst du beantworten? (Nummer angeben) ");
+	    return;
+	 case "q":
+	    quit_reader();
+	    return;
+	 case "s":
+	    input_to("schreibe", INPUT_PROMPT,
+		"Wem willst du einen Brief schreiben? ");
+	    return;
+	 case "?":
+	    hilfe();
+	    break;
+	 case "l":
+	    input_to("get_loesch", INPUT_PROMPT,
+		"Welchen Brief willst du loeschen? (Nummer angeben) ");
+	    return;
+	 case "a":
+	    if(!gesellep(owner))
+	       break;
+	    input_to("get_save", INPUT_PROMPT,
+		"Welchen Brief willst du abspeichern? (Nummer angeben) ", -1);
+	    return;
+	 case "E":
+	    write("Schalte ED als Eingabe "+((use_ed^=1)?"ein":"aus")+".\n");
+	    break;
+         case "y":
+            write("Verstecke alte Post: "+((hide_old^=1)?"ja":"nein")+".\n");
+            break;
+         case "r":
+	    if(tmp = query_look())
+	       write(tmp);
+	    else if(wizp(owner))
+	       write(LINE"Keine Nachrichten in diesem Verzeichnis.\n"LINE);
+	    else
+	       write(LINE"Du hast keine Post in diesem Postfach.\n"LINE);
+	    break;
+	 case "R":
+	    hide_old ^= 1;
+	    if(tmp = query_look())
+	       write(tmp);
+	    else if(wizp(owner))
+	       write(LINE"Keine Nachrichten in diesem Verzeichnis.\n"LINE);
+	    else
+	       write(LINE"Du hast keine Post in diesem Postfach.\n"LINE);
+	    hide_old ^= 1;
+	    break;
+	 case "z":
+	    folder = 0;
+	    loop_folders("r");
+	    return;
+	 case "m":
+	    write("m {<nr>|<von>-<bis>} <verzeichnisnr|verzeichnisname>\n");
+	    break;
+	 case "c":
+	    if(member(folders, DEFFOLDER) >= 0 && folder != DEFFOLDER)
+	    {
+	       folder = DEFFOLDER;
+	       loop("r");
+	       return;
+	    }
+	    write("c <verzeichnisnr|verzeichnisname>\n");
+	    break;
+         case "f":
+            write("f <nr> <neuer Adressat>\n");
+            break;
+         case "F":
+            write("F <nr> <neuer Adressat>\n");
+            break;
+	 case "I": 
+	    if(wizp(owner))
+	       show_aliases();
+	    break;
+	 case "U":
+	    write("U <nr> <neuer Titel>\n");
+	    break;
+	 default:
+	    switch(str[0..1])
+	    {
+	       case "B ":
+	          text_reply = 1;
+	       case "b ":
+		  verteil_beant = 0;
+		  get_beant(str[2..]);
+		  return;
+	       case "V ":
+	          text_reply = 1;
+	       case "v ":
+		  verteil_beant = 1;
+		  get_beant(str[2..]);
+		  return;
+	       case "l ":
+		  get_loesch(str[2..]);
+		  return;
+	       case "s ":
+		  schreibe(str[2..]);
+		  return;
+	       case "f ":
+                  forward(str[2..], 0, 0);
+                  return;
+	       case "F ":
+                  forward(str[2..], 1, 0);
+                  return;
+	       case "c ":
+		  if((folder_nr = resolve_folder(str[2..])) >= 0)
+		  {
+		     folder = folders[folder_nr];
+		     loop("r");
+		     return;
+		  }
+		  break;
+	       case "m ":
+		  bis = -1;
+		  if(sizeof(args = explode(trim(str[2..])," ")-({})) == 2 &&
+		     (folder_nr = resolve_folder(args[1])) >= 0 &&
+		     (sscanf(args[0], "%d-%d", von, bis) == 2 ||
+		      sscanf(args[0], "%d", von) == 1))
+		  {
+		     if(bis < von)
+			bis = von;
+		     if(err = move_mail(post, von-1, bis-1,
+					folder, folders[folder_nr]))
+			write(err);
+		     else
+		     {
+			modify = 1;
+			loop("r");
+			return;
+		     }
+		  }
+		  write("m {<nr>|<von>-<bis>} "
+			"<verzeichnisnr|verzeichnisname>\n");
+		  break;
+	       case "a ":
+
+		  if(!gesellep(owner))
+		     break;
+
+		  if(sscanf(str, "a %d %s", brief, file) != 2)
+		  {
+		     write("Bitte Nummer des Briefes und "
+			   "Filenamen angeben.\n");
+		     break;
+		  }
+		  if(brief <= 0 || brief > sizeof(post[folder]))
+		  {
+		     write("Diesen Brief gibt es nicht.\n");
+		     break;
+		  }
+		  get_save(file, brief);
+		  return;
+	       case "U ":
+		  if(sscanf(str, "U %d %s", brief, new_titel) != 2)
+		     write("u <br> <neuer Titel>\n");
+		  else if(brief <= 0 || brief > sizeof(post[folder]))
+		     write("Diesen Brief gibt es nicht.\n");
+		  else
+		  {
+		     rename_mail(brief, new_titel);
+		     write("Brief "+brief+" umbenannt.\n");
+		  }
+	    }
+      }
+   }
+
+   input_to("loop", INPUT_PROMPT, make_prompt(1));
+}
+
+
+// -MORE-------------------------------------------------------------------- //
+
+// Was wird mit den Kommandos im more gemacht, mit denen der more nix
+// anfangen kann?
+//
+int more_action(string what, string file)
+{
+   int nm;
+   int text_forward;
+
+   text_forward = 0;
+   text_reply = 0;
+   switch(what)
+   {
+      case "V":
+         text_reply = 1;
+      case "v":
+	 verteil_beant = 1;
+	 get_beant(""+re_nr);
+	 return END_MORE;
+      case "B":
+         text_reply = 1;
+      case "b":
+	 verteil_beant = 0;
+	 get_beant(""+re_nr);
+	 return END_MORE;
+      case "n":
+	 if(nm = next_new_mail())
+	    read_mail(nm);
+	 else
+	 {
+	    write("Es gibt keinen weiteren neuen Brief.\n");
+	    loop("r");
+	 }
+	 return END_MORE;
+      case "+":
+	 if(re_nr >= sizeof(post[folder]))
+	 {
+	    write("Es gibt keinen weiteren Brief.\n");
+	    return NOTHING;
+	 }
+	 read_mail(re_nr+1);
+	 return END_MORE;
+      case "-":
+	 if (re_nr <= 1) 
+	 {
+	    write("Es gibt keinen vorherigen Artikel.\n");
+	    return NOTHING;
+	 }
+	 read_mail(re_nr-1);
+	 return END_MORE;
+      case "l":
+	 delete_mail(re_nr);
+	 write("Ok.\n");
+	 return NOTHING;
+      case "a":
+	 if(gesellep(owner))
+	 {
+	    input_to("get_save", INPUT_PROMPT,"Filename: ",re_nr,1);
+	    return END_MORE;
+	 }
+	 return NOTHING;
+      case "f": 
+         write("f <neuer Empfaenger>\n");
+         return NOTHING;
+      case "F": 
+         write("F <neuer Empfaenger>\n");
+         return NOTHING;
+      case "U":
+         write("U <neuer Titel>\n");
+         return NOTHING;
+      case "h":
+          show_headers(re_nr);
+	  return NOTHING;
+      case "?":
+	 write(
+	    "    q: Lesen beenden (quit)\n"
+	    "    u: Eine Seite hochblaettern\n"
+	    "    <: An den Anfang des Briefes springen\n"
+	    "    >: An das Ende des Briefes springen \n"
+	    "    +: Den naechsten Brief lesen\n"
+	    "    -: Den vorigen Brief lesen\n"
+	    "    n: Naechsten neuen Brief lesen\n"
+	    "    b: Diesen Brief beantworten             B: mit Text\n"
+	    "    v: Diesen Brief (verteiler-)beantworten V: mit Text\n"
+	    "    l: Diesen Brief loeschen, nochmaliges l: Loeschen rueckgaengig machen\n"+
+	             (gesellep(owner)?
+	    "    a: Diesen Brief abspeichern\n"
+	    "    a <fn>: Diesen Brief unter <fn> abspeichern\n":""
+	             )+
+	    "    f <n>: Diesen Brief weiterschicken an <n>\n"
+	    "    F <n>: Text an diesen Brief haengen "
+	         "und weiterschicken an <n>\n"
+	    "    U <neuer Titel>: Brief umbennen\n"
+	    "    h: Mailheader dieses Briefes anzeigen\n"
+	    );
+	 return NOTHING;
+      default:
+	 switch(what[0..1])
+	 {
+	    case "a ":
+	       if(gesellep(owner))
+	       {
+		  get_save(what[2..],re_nr,2);
+		  return NOTHING;
+	       }
+	      break;
+	    case "F ":
+	       text_forward = 1;
+	       // fall thru
+	    case "f ":
+	       verteil_beant = 0;
+	       if(!forward(""+re_nr+" "+what[2..], text_forward, 1))
+		  return NOTHING;
+	       return END_MORE;
+	    case "U ":
+	       if(strlen(what[2..]))
+	       {
+	          rename_mail(re_nr, what[2..]);
+	          write("Brief umbenannt.\n");
+	       }
+	       else
+	          write("U <neuer Titel>\n");
+	       return NOTHING;
+	 }
+   }
+   return 0;
+}
+
+// Was wird gemacht wenn wir aus dem more rauskommen?
+//
+void more_end(string str)
+{
+   int i;
+   if(member(({"+","-","n","b","v", "B", "V","a","f","F"}), str) < 0 &&
+      member(({"F","f"}), str[0..0]) < 0) 
+   {
+      if(str=="l")
+         write("\n");
+      loop((str=="Q")?"q":"r");
+   }
+}
+
+// ------------------------------------------------------------------------- //
+
+// Neue Post eingetroffen waehrend des Lesens.
+varargs void neue_post(mixed *arr, string fold)
+{
+   if(previous_object() && object_name(previous_object()) == MAILD)
+   {
+      if(!fold)
+	 fold = DEFFOLDER;
+      if(!post)
+	 post = ([]);
+      if(!member(post, fold))
+	 post[fold] = ({});
+      post[fold] += ({arr});
+      modify = 1;
+   }
+}
+
+// -READ-------------------------------------------------------------------- //
+
+int query_mailreader_active() { return in_loop; }
+
+object is_reading()
+{
+   int i;
+   object *usrs, ob;
+   string rname;
+
+   if( !owner || !(rname=owner->query_real_name()) )
+      return 0;
+   for(i=sizeof(usrs=efun::users());i--;)
+      if( usrs[i]->query_real_name() == rname &&
+          (ob=present("mailreader",usrs[i])) &&
+          ob->query_mailreader_active() )
+         return usrs[i];
+}
+
+
+// Damit wird das ganze angestartet vom 'lese' des players
+varargs string query_read(string rest, string str)
+{
+   int i, mails, nf;
+   object ob;
+
+   SECURE1;
+   if (query_input_pending (owner) || query_editing (owner))
+      return "Jetzt geht das nicht. Eines nach dem anderen.\n";
+   if ((ob=is_reading()) && ob != owner) {
+      write(sprintf("%O liest bereits die Post.\n",ob));
+      return "";
+   }
+   if((post_size = MAILD->query_post_size()) > 45000 && !adminp(owner))
+      write("WARNUNG! Deine Post laeuft bald ueber!\n");
+   if(stringp(post = MAILD->query_post()))
+   {
+      write(post);
+      post = 0;
+      return "";
+   }
+   if(!mappingp(post))
+   {
+      write("Falsches Postformat.\n");
+      post = 0;
+      return "";
+   }
+   modify = 0;
+   update_folders();
+   if(nf = next_new_folder())
+      folder = folders[nf-1];
+   else if(sizeof(post[DEFFOLDER]))
+      folder = DEFFOLDER;
+   else
+   {
+      folder = 0;
+      for(i = sizeof(folders); i--;)
+	 mails += sizeof(post[folders[i]]);
+      if(!mails && load_name(environment())!="/obj/pplayer")
+	 return "Es ist leider keine Post fuer Dich da.\n";
+   }
+   in_loop = 1;
+   return_to_loop("r");
+   return "";
+}
+
+// Meldung an andere ausgeben, wenn die Post via 'lese post' gelesen wird.
+
+string query_read_msg()
+{
+   return Der(owner)+" liest "+
+	      seinen((["name":"briefe","gender":"maennlich","plural":1,
+	               "environment":owner]))+".";
+}
+
+// Aussehen
+
+private void get_post_count()
+{
+   int i;
+
+   if (owner != this_player())
+       return;
+
+   if (!mappingp (post) && !mappingp (post = MAILD->query_post())) {
+      post_count = 0;
+      return;
+   }
+   update_folders ();
+   for(i = sizeof(folders), post_count = 0; i--;)
+      post_count += sizeof(post[folders[i]]);
+}
+
+string query_long(object who)
+{
+   string tmp, tmp2;
+   int eigen, erfahren;
+   if (!owner) return "Eine Briefmappe mit Briefpapier.\n";
+   erfahren = hlpp (owner) || wizp (owner);
+   eigen = (previous_object() == owner);
+   if (wizp(owner) || GABE(owner, "mn"))
+      tmp = (eigen ? "Deine persoenliche Briefmappe"
+                   : "Die Briefmappe von "+dem(owner))+
+            ". Sie enthaelt ausser einigen Boegen mit leerem Briefpapier ";
+   else
+      tmp = "Du siehst leeres Briefpapier"+
+         (eigen ? ", mit dem Du anderen Spielern Briefe schreiben kannst"
+            +(erfahren ? "," :  " und zwar mit \"schreibe <spielername>\",")+
+                  " sowie "
+                : " zum Schreiben von Briefen und ");
+
+   get_post_count();
+   if (!post_count) tmp += "leider keinen einzigen Brief";
+   else if (post_count == 1) tmp += "immerhin auch einen Brief";
+   else if (post_count == 2) tmp += "auch noch zwei Briefe";
+   else if (post_count == 3) tmp += "auch noch drei Briefe";
+   else {
+      if (post_count > 3) tmp2 = "auch ein paar Briefe";
+      if (post_count >= 12) tmp2 = "noch ein gutes Dutzend Briefe";
+      if (post_count >= 20) tmp2 = "noch eine Menge Briefe";
+      if (post_count >= 30) tmp2 = "auch einen riesigen Berg Briefe";
+      if (post_count >= 50) tmp2 = "noch erschreckend fuerchterlich viele "
+                                   "Briefe";
+      tmp += tmp2;
+   }
+   if (eigen && post_count)
+      tmp += " an Dich"+(erfahren ? "" : ((post_count == 1) ? " den":" die")+
+             " Du lesen kannst");
+   return wrap (tmp+".");
+}
+
+string query_look_msg()
+{
+   if (!owner || (!wizp(owner) && !GABE(owner, "mn")))
+       return Der(owner)+" schaut "+
+	      seinen((["name":"briefe","gender":"maennlich","plural":1,
+	               "environment":owner]))+" an.";
+   return Der(owner)+" schaut "+seinen()+" an.";
+}

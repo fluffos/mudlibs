@@ -1,0 +1,396 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /room/rathaus/domain.c
+// Description: Schnittstelle zur Domainverwaltung
+// Author:      
+//
+// $Log: domain.c,v $
+// Revision 1.15  2016/03/14 19:11:35  myonara
+// lower_case bei mehr befehlen(wiz)
+//
+// Revision 1.14  2013/05/31 19:37:13  sorcerer
+// Neuer Beschreibungstext
+//
+// Revision 1.13  2009-03-20 08:11:17  gnomi
+// nosave-Funktionen raus.
+//
+// Revision 1.12  2008/02/29 14:34:39  gnomi
+// Static add_actions rausgehauen.
+//
+// Revision 1.11  2004/07/19 21:29:13  gnomi
+// Domain-Handling wird jetzt von /apps/domains statt dem Master uebernommen.
+//
+// Revision 1.10  2003/01/25 04:40:53  gnomi
+// Typo.
+//
+// Revision 1.9  2002/09/09 20:31:24  sissi
+// Aktion unser Rathaus soll schoener werden:
+// Ueberall ne Pflanze eingebaut.
+//
+// Revision 1.8  2001/06/26 00:52:31  gnomi
+// new_domain: Domain gross schreiben.
+//
+// Revision 1.7  2001/04/13 13:20:55  sissi
+// Infos, wenn jemand Lord, Helfer, Mitglied wird oder wenn jemand kein
+// Lord oder kein Helfer mehr ist.
+//
+// Revision 1.6  2001/04/07 00:23:55  gnomi
+// Header und/oder CVS-Log eingebaut.
+//
+
+#include <level.h>
+#include <apps.h>
+#include <config.h>
+#include <more.h>
+
+inherit "/i/room";
+inherit "/room/rathaus/i/wizinfo";
+inherit "/i/tools/security";
+
+#define FAIL(x) { notify_fail(x); return 0; }
+#define SECURE	(wizp(this_player()) && check_security())
+
+#define GROUPSCHANGED GROUP_MASTER->changed()
+
+void reset()
+{
+    "/room/rathaus/div/lager"->get_moebel(this_object());
+    "/room/rathaus/div/lager"->get_pflanze(this_object());
+}
+
+void create() {
+    init_security_for_actions();
+    set_short("Grundbuchamt");
+    set_long("\
+Dies ist das Grundbuchamt. Hier kannst Du, wenn Du Domainlord bist,\n\
+neue Mitglieder und Domainhelfer in Deine Domain eintragen.\n\
+Der Oberste Rat ernennt und entlaesst hier Domainlords und schafft\n\
+neue Domains.\n\
+   Kommandos: domains\n\
+	      lords\n\
+	      voegte         <Domain>\n\
+\n\
+	      aufnahme       <Domain> <Spieler>\n\
+	      loesche_vogt   <Domain> <Spieler>\n\
+	      neuhelfer      <Domain> <Spieler> [<Position>]\n\
+	      loesche_helfer <Domain> <Domainhelfer>\n\
+	      neulord        <Domain> <Spieler> [<Position>]\n\
+	      loesche_lord   <Domain> <Domainlord>\n\
+	      neudomain      <Domain>\n\
+	      loesche_domain <Domain>\n\
+");
+    add_type("kunstlicht",1);
+    add_type("teleport_rein_verboten", 1);
+    set_exit("forum","forum");
+    set_own_light(1);
+    set_room_domain("Pantheon");
+    reset();
+}
+
+int query_prevent_shadow(object ob) { return 1; }
+
+void init() {
+    add_action("new_member","aufnahme");
+    add_action("list_members","voegte");
+    add_action("list_lords","lords");
+    add_action("list_domains","domains");
+    add_action("new_helfer","neuhelfer");
+    add_action("new_lord","neulord");
+    add_action("delete_member","loesche_vogt");
+    add_action("delete_lord","loesche_lord");
+    add_action("delete_helfer","loesche_helfer");
+    add_action("new_domain","neudomain");
+    add_action("delete_domain","loesche_domain");
+}
+
+private int wiz_present(string wiz) {
+    object ob;
+
+    if (adminp(this_player()))
+	return 1;
+    ob=present(wiz);
+    if (!ob)
+	FAIL("'"+wiz+"' ist nicht hier.\n");
+    if (wiz!=ob->query_real_name() || !vogtp(ob))
+	FAIL("'"+wiz+"' ist kein Vogt.\n");
+    return 1;
+}
+
+int new_member(string str)
+{
+    string dom, wiz;
+    
+    if(!SECURE)
+	return 0;
+
+    if (!str || sscanf(str,"%s %s",dom,wiz)!=2)
+	FAIL(query_verb()+" <Domain> <Neues Mitglied>\n");
+    dom = capitalize(dom);
+    wiz=lower_case(wiz);
+    if (!wiz_present(wiz))
+	return 0;
+    if (DOMAIN_INFOS->add_domain_member(dom,wiz))
+    {
+	write("Ok.\n");
+	GROUPSCHANGED;
+	wizinfo (capitalize (wiz)+" ist jetzt Mitglied in "+dom+".");
+    }
+    return 1;
+}
+
+int new_helfer(string str)
+{
+    string dom, wiz, tmp;
+    int pos;
+    object wizob;
+
+    if(!SECURE)
+	return 0;
+
+    if (!str || sscanf(str,"%s %s",dom,tmp)!=2)
+	FAIL(query_verb()+" <Domain> <Neuer (oder alter) Domainhelfer> [<Position>]\n");
+    dom = capitalize(dom);
+    if (sscanf(tmp,"%s %d",wiz,pos)!=2)
+	wiz=tmp;
+
+    wiz=lower_case(wiz);
+    if (!wiz_present(wiz))
+	return 0;
+   
+    if (DOMAIN_INFOS->add_domain_helfer(dom,wiz,pos))
+    {
+	if(wizob = find_player(wiz))
+	   wizob->check_level();
+	GROUPSCHANGED;
+	wizinfo (capitalize (wiz)+" ist jetzt Domainhelfer von "+dom+".");
+	write("Ok.\n");
+    }
+    return 1;
+}
+
+int new_lord(string str)
+{
+    string dom, wiz, tmp;
+    int pos;
+    object wizob;
+
+    if(!SECURE)
+	return 0;
+
+    if (!str || sscanf(str,"%s %s",dom,tmp)!=2)
+	FAIL(query_verb()+" <Domain> <Neuer (oder alter) Domainlord> [<Position>]\n");
+    dom = capitalize(dom);
+    if (sscanf(tmp,"%s %d",wiz,pos)!=2)
+	wiz=tmp;
+
+    wiz=lower_case(wiz);
+    if (!wiz_present(wiz))
+	return 0;
+   
+    if(LVL_LORD >= BANISHD->query_banished(lower_case(wiz)))
+    {
+       write(capitalize(wiz)+" ist nicht zugelassen fuer dies hohe Amt!\n");
+       return 1;
+    }
+
+    if (DOMAIN_INFOS->add_domain_lord(dom,wiz,pos))
+    {
+	if(wizob = find_player(wiz))
+	   wizob->check_level();
+	GROUPSCHANGED;
+	wizinfo (capitalize(wiz)+" ist jetzt Domainlord von "+dom+"!");
+	write("Ok.\n");
+    }
+    return 1;
+}
+
+int delete_member(string str)
+{
+    string dom, wiz;
+
+    if(!SECURE)
+	return 0;
+
+    if (!str || sscanf(str,"%s %s",dom,wiz)!=2)
+	FAIL(query_verb()+" <Domain> <zu loeschendes Mitglied>\n");
+    dom = capitalize(dom);
+    wiz=lower_case(wiz);
+    if (DOMAIN_INFOS->delete_domain_member(dom,wiz))
+    {
+        GROUPSCHANGED;
+        // wizinfo (capitalize (wiz)+" ist kein Mitglied mehr von "+dom+".");
+	write("Ok.\n");
+    }
+    return 1;
+}
+
+int delete_lord(string str)
+{
+    string dom, wiz;
+    object wizob;
+
+    if(!SECURE)
+	return 0;
+
+    if (!str || sscanf(str,"%s %s",dom,wiz)!=2)
+	FAIL(query_verb()+" <Domain> <zu loeschende Domainlord>\n");
+    dom = capitalize(dom);
+    wiz=lower_case(wiz);
+    if (DOMAIN_INFOS->delete_domain_lord(dom,wiz))
+    {
+	if(wizob = find_player(wiz))
+	   wizob->check_level();
+	GROUPSCHANGED;
+	wizinfo (capitalize (wiz)+" ist kein Domainlord mehr von "
+	   +dom+"!");
+	write("Ok.\n");
+    }
+    return 1;
+}
+
+int delete_helfer(string str)
+{
+    string dom, wiz;
+    object wizob;
+
+    if(!SECURE)
+	return 0;
+
+    if (!str || sscanf(str,"%s %s",dom,wiz)!=2)
+	FAIL(query_verb()+" <Domain> <zu loeschende Domainhelfer>\n");
+    dom = capitalize(dom);
+    wiz=lower_case(wiz);
+    if (DOMAIN_INFOS->delete_domain_helfer(dom,wiz))
+    {
+	if(wizob = find_player(wiz))
+	   wizob->check_level();
+	GROUPSCHANGED;
+	wizinfo (capitalize (wiz)+" ist kein Domainhelfer mehr von "
+	    +dom+".");
+	write("Ok.\n");
+    }
+    return 1;
+}
+
+int new_domain(string str)
+{
+    if(!SECURE)
+	return 0;
+
+    if (DOMAIN_INFOS->add_domain(str && capitalize(lower_case(strip(str)))))
+    {
+        GROUPSCHANGED;
+        wizinfo ("Wahnsinn, es gibt eine neue Domain: "+str+"!");
+	write("Ok.\n");
+    }
+    return 1;
+}
+
+int delete_domain(string str)
+{
+    if(!SECURE)
+	return 0;
+
+    if (DOMAIN_INFOS->delete_domain(str)) {
+        GROUPSCHANGED;
+        wizinfo ("Oh, schade, die Domain "+str+" ist im Meer versunken.");
+	write("Ok.\n");
+    }
+    return 1;
+}
+
+int list_members(string str)
+{
+    string *members;
+
+    if (!str)
+	FAIL(query_verb()+" <Domain>\n");
+    str = capitalize(str);
+
+    members=DOMAIN_INFOS->query_domain_members(str);
+
+    if (!members)
+	FAIL("Diese Domain gibt es nicht.\n");
+
+    printf("%-79#s\n",implode(map(sort_array(members,#'>),#'capitalize),
+	"\n"));
+    return 1;
+}
+
+private string adjust_length(string str)
+{
+    if (strlen(str) > 10)
+	return capitalize(str);
+    return capitalize(str + "          ")[0..9];
+}
+
+int list_lords(string str)
+{
+    string *domains, *lords, *helfer;
+    string ret;
+    int i;
+
+    if (str)
+	FAIL(query_verb()+": Listet die Domainlords aller Domains auf.\n");
+
+    domains=DOMAIN_INFOS->query_domains();
+
+    if (!sizeof(domains))
+	FAIL("Es gibt keine Domains.\n");
+    
+    ret="";
+    domains=sort_array(domains,#'<);
+    for (i=sizeof(domains); i--; ) {
+	lords = map(DOMAIN_INFOS->query_domain_lords(domains[i]),
+		#'adjust_length);
+	helfer = map(DOMAIN_INFOS->query_domain_helfer(domains[i]),
+		#'adjust_length);
+	if (sizeof(helfer))
+	    printf("%-15s %-30#s [%-30#s]\n",domains[i]+":",
+			implode(lords,"\n"),
+			implode(helfer,"\n"));
+	else
+	    printf("%-15s %-30#s\n",domains[i]+":",implode(lords,"\n"));
+	}
+    return 1;
+}
+
+int list_domains(string str)
+{
+    string *domains, *lords, *members, *helfer;
+    string ret;
+    int i;
+
+    if (str)
+	FAIL(query_verb()+": Listet alle Domains auf.\n");
+
+    domains = DOMAIN_INFOS->query_domains();
+
+    if (!sizeof(domains))
+	FAIL("Es gibt keine Domains.\n");
+    
+    ret = "";
+    domains = sort_array(domains,#'<);
+    for (i = sizeof(domains); i--; )
+    {
+	lords = map(DOMAIN_INFOS->query_domain_lords(domains[i]),
+		#'capitalize);
+	helfer = map(DOMAIN_INFOS->query_domain_helfer(domains[i]),
+		#'capitalize);
+	members = sort_array(map(
+		DOMAIN_INFOS->query_domain_members(domains[i]),#'capitalize),#'>);
+	if (sizeof(helfer))
+	    ret += sprintf("%s: %-35#s [%-#*s]\n",domains[i],
+		implode(lords,"\n"),40-strlen(domains[i]),
+		implode(helfer,"\n"));
+	else
+	    ret += sprintf("%s: %-#*s\n",domains[i],75-strlen(domains[i]),
+		implode(lords,"\n"));
+	ret += sprintf("    %-65#s\n",implode(members,"\n"));
+	ret += "\n";
+    }
+    ret = this_player()->more(explode(ret[0..<3],"\n"));
+    if (ret)
+	return notify_fail(M_ERR(ret));
+    return 1;
+}

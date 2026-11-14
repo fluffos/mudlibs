@@ -1,0 +1,1075 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:  /i/object/rope.c
+// Description: Ein Seil
+// Modified:    Sissi   (11.7.97) Man kann das Seil jetzt an ein anderes
+//                                Seil binden (bisher gabs nen Laufzeitfehler)
+//              Freaky (20.01.98) Schreibfehler im long weg, unnode() liefert
+//                                als returnwert das neue seil anstelle
+//                                von /obj/rope object_name() clonen
+//              Milf   (14.09.99) Nachdem ich query_tied_to_ob() dahingehend
+//                                gepachtcht hatte, dass es v_items mit
+//                                fehlenden "environment" Eintraegen killt,
+//                                musste ich nochmal patchen, damit auch
+//                                jedes v_item einen solchen Eintrag beim
+//                                Festbinden bekommt. (siehe set_tied_to_ob())
+//                                Wir benutzen nun einen extra Eintrag im
+//                                Mapping wenn wir das Seil an ein v_item
+//                                binden
+//
+// $Log: rope.c,v $
+// Revision 1.22  2016/03/11 18:25:34  myonara
+// am 03.Feb.2015 von unbekannt ein bugfix an tie(str) durchgefuehrt.
+//
+// Revision 1.21  2009-08-15 21:23:32  gnomi
+// Ein paar wraps verteilt.
+//
+// Revision 1.20  2009-08-15 21:21:40  gnomi
+// Luca: Bessere Pluralbehandlung.
+//
+// Revision 1.19  2009-07-30 16:57:34  gnomi
+// VARARGS raus.
+//
+// Revision 1.18  2009-03-20 07:56:30  gnomi
+// Actions um Flag erweitert.
+//
+// Revision 1.17  2008/01/21 14:08:11  gnomi
+// Typos.
+//
+// Revision 1.16  2006/10/02 20:07:49  gnomi
+// Neues Seil von Imp: Merkt sich, welche Seile miteinander verbunden sind.
+//
+// Revision 1.15  2005/03/09 22:28:18  gnomi
+// Imp hat es freundlicherweise auf send_message umgestellt.
+//
+// Revision 1.14  2004/08/27 12:59:22  menaures
+// Typo
+//
+// Revision 1.13  2003/07/09 02:28:44  gnomi
+// Ein paar notifies wurden falsch aufgerufen.
+//
+// Revision 1.12  2003/06/20 02:51:12  gnomi
+// Doku korrigiert.
+//
+// Revision 1.11  2003/04/05 21:33:08  gnomi
+// Grammatik korrigiert. (An einem Seil (Dativ) festgebunden sein.)
+//
+// Revision 1.10  2003/01/25 04:27:10  gnomi
+// Von /obj hierher verschoben.
+//
+// Revision 1.9  2002/11/30 03:42:20  gnomi
+// Neue Controller: concerned_tie_rope, concerned_untie_rope, notify_tied_rope,
+// notify_tied_rope_to, notify_untied_rope und notify_untied_rope_from.
+//
+// Revision 1.8  2002/01/15 04:00:30  gnomi
+// query_short umgestellt.
+//
+// Revision 1.7  2002/01/13 04:50:18  freaky
+// query_long() umgestellt.
+//
+// Revision 1.6  2001/06/23 23:28:34  gnomi
+// Leerzeichen vor Fragezeichen entfernt.
+//
+// Revision 1.5  2001/02/20 16:49:15  gnomi
+// Bei "binde los" das Ergebnis von untie() zurueckliefern, anstatt 1.
+//
+// Revision 1.4  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+Die Seile werden als v_item am Objekt selber gespeichert, was den Vorteil
+hat, dass man here() zum Parsen benutzen kann. Das eigentliche Seil selber
+kommt ebenfalls als v_item dazu. Dieses ist das sog. "Initialseil", auf das
+nahezu alle set/add/delete-Funktionen angewandt werden (Gewicht, Wert, ...).
+*/
+
+inherit "/i/item";
+inherit "/i/value";
+inherit "/i/move";
+
+#define KEY_BOUND_OBJECT "angebunden_an"
+
+#include <move.h>
+#include <deklin.h>
+#include <message.h>
+#include <parse_com.h>
+#include <invis.h>
+#include <simul_efuns.h>
+
+#ifdef UNItopia
+#define PLURAL_MASTER    "/p/Apps/plural"
+#define MULTI_MASTER     "/p/Misc/apps/multi"
+#endif
+
+// bindet man x seile zusammen so haben diese den Wert x * VALUE
+// und das Gewicht x mal WEIGHT
+// .... nun nicht mehr (Imp y Cellyn) ;-)
+#define VALUE 15
+#define WEIGHT 1
+
+// Eintrag im Mapping fuer das erste Seil
+#define INITSEIL  "initialseil"
+
+nosave string *zahlen = ({"zwei","drei","vier","fuenf","sechs","sieben",
+    "acht","neun","zehn","elf","zwoelf","dreizehn","vierzehn", "fuenfzehn",
+    "sechzehn","siebzehn","achtzehn","neunzehn","zwanzig"});
+
+mixed tied_to_ob;
+
+int seilanzahl;
+
+int seillaenge;
+
+string long_fuer_mehrere_seile;
+string adjektiv_fuer_laenge;
+
+// Header
+mixed query_tied_to_ob();
+void set_tied_to_ob(mixed woran);
+
+// ----------------------------------------------------------------
+// Erstellt ein Mapping fuer ein Seilobject
+mapping create_mapping_from_object(object o)
+{
+    mapping m = ([]);
+
+    if(!o)
+        o = this_object();
+
+    // Beim Hinzufuegen von Eintraegen daran denken, die zustaendigen
+    // set/add/delete-Funktionen zu ueberlagern.
+    // Auch in unnode() muss der Aufruf an das neue Seil uebergeben werden.
+
+    /* Mudlibparameter */
+    m["name"] = o->query_name();
+    m["gender"] = o->query_gender();
+    m["value"] = o->query_value();
+    m["weight"] = o->query_weight();
+    m["id"] = o->query_id();
+    m["plural"] = o->query_plural();
+    m["plural_id"] = o->query_plural_id();
+    m["material"] = o->query_material();
+    m["adjektiv"] = o->query_adjektiv();
+    m["long"] = o->query_long_string();
+    /* interne Parameter */
+    m["seillaenge"] = o->query_seil();
+    m["load_name"] = load_name(o);
+    m["seil_parameter"] = o->query_seil_parameter();
+    m["invis"] = V_INVIS;
+
+    return m;
+}
+
+// ----------------------------------------------------------------
+mixed query_seile()
+{
+    if(sizeof(query_all_v_items()) == 0)
+        return ({});
+
+    return filter(query_all_v_items(),(: member($1,"seillaenge") :));
+}
+
+// ----------------------------------------------------------------
+mixed query_initseile()
+{
+    mixed qs = query_seile();
+    if(sizeof(qs) == 0)
+        return qs;
+  
+    return filter(qs, (: member($1, INITSEIL) :));
+}
+
+// ----------------------------------------------------------------
+void update_all()
+{
+    mapping m;
+    int w=0;
+    int v=0; 
+    int i;
+    string *id2add;                   // Temp zum adden von IDs
+    string common_name;		      // gemeinsamer Name
+    string p_id;                      // Temp Plural ID
+    mixed seile = query_seile();
+    mixed seile_ohne_invis = ({});
+    mixed initseile = query_initseile();
+
+    seilanzahl = sizeof(seile);
+    seillaenge = 0;
+
+    id2add = ({});
+    foreach(m : seile)
+    {
+        w += m["weight"];
+        v += m["value"];
+        seillaenge += m["seillaenge"];
+        id2add += (m["id"] || ({m["name"]})) - id2add;
+	if(!common_name)
+	    common_name = m["name"];
+	else if(common_name != m["name"])
+	    common_name = "seil";
+    }
+    ::set_id(id2add);
+    ::set_weight(w);
+    ::set_value(v);
+    ::set_name(common_name);
+
+    switch(seillaenge)
+    {
+        case 1: adjektiv_fuer_laenge = 0; break;
+        case 2: adjektiv_fuer_laenge = "lang"; break;
+        case 3: adjektiv_fuer_laenge = "sehr lang"; break;
+        case 4: adjektiv_fuer_laenge = "ganz schoen arg lang"; break;
+        default: adjektiv_fuer_laenge = "fuerchterlich lang"; break;
+    }
+    ::set_adjektiv(adjektiv_fuer_laenge);
+
+#ifdef UNItopia
+    if (seilanzahl>1)
+    {
+        if(!::id("seil"))
+            ::add_id("seil");
+        foreach(m : seile)
+        {
+            p_id = PLURAL_MASTER->get_plural_name_of(m);
+            if(!::id(p_id))
+                ::add_id(PLURAL_MASTER->get_plural_name_of(m));
+            seile_ohne_invis += ({ m_delete(m, "invis") });
+        }
+        long_fuer_mehrere_seile = MULTI_MASTER->multilist(seile_ohne_invis,
+            " und ", 0, FALL_DAT);
+    } // endif
+#else
+    if (seilanzahl>1)
+    {
+        if(!::id("seil"))
+            ::add_id("seil");
+/*
+        if(!::id("seile"))
+            ::add_id("seile");
+        if(!::id("knoten"))
+            ::add_id("knoten");
+*/
+        long_fuer_mehrere_seile = liste(map(seile_ohne_invis,
+            (: einem($1); :)), " und ");
+    } // endif
+#endif
+
+    if((i = sizeof(initseile)) == 0)
+    {
+        change_v_item(([ INITSEIL: 1 ]), seile[0]);
+    }
+    else if(i > 1)
+    {
+        for (i=i-1; i >= 1; i--)
+        {
+            // change_v_item(([ INITSEIL: 0 ]), seile[i]);
+            m = initseile[i];
+            delete_v_item(m);
+            m = m_delete(m, INITSEIL);
+            add_v_item(m);
+        }
+    }
+
+}
+
+// ----------------------------------------------------------------
+/* Fuegt ein neues Seil dem bestehenden hinzu. */
+// ----------------------------------------------------------------
+/* als mapping... */
+int add_seil_m(mapping m)
+{
+    if(!m || !mappingp(m) || !member(m,"seillaenge"))
+        return 0;
+
+    add_v_item(m);
+
+    return 1;
+}
+
+// ----------------------------------------------------------------
+/* und als object... */
+int add_seil_o(object o)
+{
+    int i;
+
+    if(!o || !objectp(o))
+        return 0;
+
+    i = add_seil_m( create_mapping_from_object(o) );
+
+    update_all();
+
+    return i;
+}
+
+// ----------------------------------------------------------------
+/* Fuegt mehrere Seile einem bestehenden Seil hinzu */
+// ----------------------------------------------------------------
+// Erwartet array aus fertigen v_items.
+int add_seile_m(mixed s)
+{
+    mapping m;
+
+    if(!pointerp(s))
+        return 0;
+
+    foreach(m : s)
+    {
+        add_seil_m(m);
+    }
+    update_all();
+
+    return 1;
+}
+
+// ----------------------------------------------------------------
+/* Entfernt ein Seil */
+// ----------------------------------------------------------------
+int remove_seil_m(mapping m)
+{
+    if(!m || !mappingp(m) || !member(m,"seillaenge"))
+        return 0;
+
+    delete_v_item(m);
+    update_all();
+    return 1;
+}
+
+// ----------------------------------------------------------------
+/* Aendert das Initialseil */
+// ----------------------------------------------------------------
+void change_initseil(mapping m)
+{
+    mixed mix;
+
+    if(sizeof(mix = query_initseile()))
+    {
+        change_v_item(m, mix[0]);
+        update_all();
+    }
+}
+
+// ----------------------------------------------------------------
+// Mudlibfunktionen ueberlagern, weil die Werte an das v_item INITSEIL
+// weitergegeben werden muessen.
+// ----------------------------------------------------------------
+void set_name(string name)
+{
+    ::set_name(name);
+    change_initseil((["name":name]));
+}
+
+void set_gender(string gender)
+{
+    ::set_gender(gender);
+    change_initseil((["gender":gender]));
+}
+
+void set_material(mixed materialien)
+{
+    ::set_material(materialien);
+    change_initseil((["material":materialien]));
+}
+
+void add_material(mixed materialien)
+{
+    ::add_material(materialien);
+    change_initseil((["material": ::query_material()]));
+}
+
+void delete_material(string materialien)
+{
+    ::delete_material(materialien);
+    change_initseil((["material": ::query_material()]));
+}
+
+void set_id(mixed id)
+{
+    ::set_id(id);
+    change_initseil((["id":id]));
+}
+
+void add_id(mixed id)
+{
+    ::add_id(id);
+    change_initseil((["id": ::query_id()]));
+}
+
+void delete_id(mixed id)
+{
+    ::delete_id(id);
+    change_initseil((["id": ::query_id()]));
+}
+
+void set_plural(int plural)
+{
+    ::set_plural(plural);
+    change_initseil((["plural":plural]));
+}
+
+void set_plural_id(mixed ids)
+{
+    ::set_plural_id(ids);
+    change_initseil((["plural_id": ::query_plural_id()]));
+}
+
+void add_plural_id(mixed ids)
+{
+    ::add_plural_id(ids);
+    change_initseil((["plural_id": ::query_plural_id()]));
+}
+
+void delete_plural_id(mixed ids)
+{
+    ::delete_plural_id(ids);
+    change_initseil((["plural_id": ::query_plural_id()]));
+}
+
+varargs void set_value(int val)
+{
+    ::set_value(val);
+    change_initseil((["value":val]));
+}
+
+int set_weight(int weight)
+{
+    change_initseil((["weight":weight]));
+    return ::set_weight(weight);
+}
+
+void set_adjektiv(mixed new_adj)
+{
+    ::set_adjektiv(new_adj);
+    change_initseil((["adjektiv":new_adj]));
+}
+
+varargs void add_adjektiv(mixed add_adj, int front)
+{
+    ::add_adjektiv(add_adj, front);
+    change_initseil((["adjektiv": ::query_adjektiv()]));
+}
+
+void delete_adjektiv(mixed del_adj)
+{
+    ::delete_adjektiv(del_adj);
+    change_initseil((["adjektiv": ::query_adjektiv()]));
+}
+
+void set_long(string long)
+{
+    ::set_long(long);
+    change_initseil((["long":long]));
+}
+
+void set_seillaenge(int laenge)
+{
+    if(laenge <= 0)
+        return;
+
+    change_initseil((["seillaenge":laenge]));
+    update_all();
+}
+
+// ----------------------------------------------------------------
+void create()
+{
+    set_name("seil");
+    set_gender("saechlich");
+    set_long("Ein festes, stabiles Seil aus Hanf gedreht.");
+    set_material(({"textil"}));    /* Zugegeben, ein weiter Begriff... */
+    set_id(({"seil","hanfseil"}));
+    set_plural(0);
+    set_value(VALUE);
+    set_weight(WEIGHT);
+    seillaenge = 1;
+
+    add_seil_o(this_object());
+}
+
+// ----------------------------------------------------------------
+string query_long(object who)
+{
+    string ql;
+
+    if(seilanzahl == 1)
+    {
+        ql = ::query_long(who);
+        if(seillaenge == 1)
+            return ::query_long(who);
+        else
+            return ::query_long(who) + wrap(Er()
+                     + ist(this_object(), IST_SPACE_BEFORE|IST_SPACE_AFTER)
+                     + adjektiv_fuer_laenge+".");
+    }
+
+    return wrap(::query_short(who) + ". "+Er() + " besteht aus "
+                     +long_fuer_mehrere_seile+".");
+}
+
+// ----------------------------------------------------------------
+object virt_environment(mixed ob)
+{
+    if(ob) 
+    {
+        if(objectp(ob))
+            return environment(ob);
+        while(mappingp(ob) && (ob = ob["environment"]));
+            if(!ob && this_player())
+                ob = environment(this_player());
+    }
+    return ob;
+}
+
+// ----------------------------------------------------------------
+string query_short(object viewer)
+{
+    if (query_tied_to_ob())
+        return Ein(0,"an "+einem(tied_to_ob)+" festgebunden");
+    return item::query_short(viewer);
+}
+
+// ----------------------------------------------------------------
+varargs int move(mixed dest, int way, string out, string in)
+{
+    if (query_tied_to_ob())
+    {
+        set_not_moved_reason(wrap(Der()+" "+ist()+" an "+einem(tied_to_ob)
+            +" festgebunden!"));
+        return MOVE_NOT_ALLOWED;
+    }
+    return move::move(dest,way,out,in);
+}
+
+// ----------------------------------------------------------------
+void init()
+{
+    add_action("loese", "loese", -4);
+    add_action("binde", "binde", -4);
+    add_action("binde", "knote", -4);
+    add_action("befestige", "befestige", -8);
+    add_action("entknote", "entknote", -7);
+}
+
+// ----------------------------------------------------------------
+int tie(string str)
+{
+    string t1, t2;
+    object ob, to_tie;
+    mixed *parsed;
+    mixed zustaendig;
+
+    if (query_tied_to_ob())
+    {
+        notify_fail(wrap(Er()+" "+ist()+ " bereits an "+einem(tied_to_ob)+
+                    " befestigt!"));
+        return 0;
+    }
+    parsed = parse_com(str);
+    if (parse_com_error(parsed,"Woran festbinden?\n",1))
+        return 0;
+
+    ob = parsed[PARSE_OBS][0];
+    if (ob == this_player())
+    {
+        notify_fail("Warum willst du das tun?\n");
+        return 0;
+    }
+
+    if (objectp (ob))
+        to_tie = ob;
+    else
+        to_tie = virt_environment(ob);
+
+    if(!to_tie)
+        return notify_fail("Das geht leider nicht.\n");
+
+    if (to_tie == this_object())
+    {
+        notify_fail ("An sich selbst? Das geht nicht.\n");
+        return 0;
+    }
+
+    if (to_tie->query_seil())
+    {
+        this_player()->send_message(MT_LOOK, MA_USE,
+    	wrap (Der(this_player())+" bindet "+den()+" und " +den(to_tie)+
+                " zusammen."),
+            wrap ("Du bindest "+den()+" und " +den(to_tie)+
+                " zusammen."),
+            this_player());
+
+        if ((environment(to_tie) != environment()) && living (environment()))
+        {
+	    if(!to_tie->query_seile()) // altes Seil?
+	        to_tie->set_seil(to_tie->query_seil()+seilanzahl);
+	    else
+                to_tie->add_seile_m(query_seile());
+            remove ();
+        }
+        else
+        {
+	    mixed* obseile = to_tie->query_seile();
+	    if(!obseile) // altes Seil
+	        add_seil_o( to_tie );
+	    else
+	        add_seile_m( to_tie->query_seile() );
+            to_tie->remove();
+        }
+        return 1;
+    }
+
+    if(zustaendig = to_tie->concerned("tie_rope",this_object(), ob))
+    {
+        if(closurep(zustaendig))
+            funcall(zustaendig,"do_tie_rope",this_object(), ob);
+        else
+            zustaendig->do_tie_rope(this_object(), ob);
+        return 1;
+    }
+
+    if (!to_tie || to_tie == this_object() || !to_tie->tie(parsed[PARSE_ID],ob))
+    {
+        notify_fail("Das geht leider nicht.\n");
+        return 0;
+    }
+    move(environment(to_tie)?environment(to_tie):to_tie);
+    set_tied_to_ob(ob);
+    this_player()->send_message(MT_LOOK, MA_USE,
+        wrap(Der(this_player())+" befestigt "+den()+" an "+dem(tied_to_ob)+"."),
+        wrap("Du befestigst "+den()+" an "+dem(query_tied_to_ob())+"."),
+        this_player());
+    return 1;
+}
+
+// ----------------------------------------------------------------
+object unnode(string str)
+{
+    object seil;
+    mapping seil_m;
+    string rest;
+
+    if (seilanzahl < 2)
+        return 0; // so nicht!
+
+    if(!str || str=="")
+        seil_m = query_seile()[<1];
+    else
+        rest = here(str, 0, &seil_m);
+
+    if(!seil_m)
+    {
+        send_message_to(this_player(), MT_NOTIFY, MA_USE,
+            wrap("Du zerrst an "+dem()+" herum, es tut sich aber nix."));
+        return 0;
+    }
+
+    seil = clone_object(seil_m["load_name"]);
+    seil->set_name(seil_m["name"]);
+    seil->set_gender(seil_m["gender"]);
+    seil->set_value(seil_m["value"]);
+    seil->set_weight(seil_m["weight"]);
+    seil->set_id(seil_m["id"]);
+    seil->set_plural(seil_m["plural"]);
+    seil->set_plural_id(seil_m["plural_id"]);
+    seil->set_material(seil_m["material"]);
+    seil->set_adjektiv(seil_m["adjektiv"]);
+    seil->set_long(seil_m["long"]);
+    seil->set_seillaenge(seil_m["seillaenge"]);
+    seil->set_seil_parameter(seil_m["seil_parameter"]);
+    remove_seil_m(seil_m);
+
+    if (seil->move(environment()) != MOVE_OK)
+    {
+        if (seil->move(environment(this_player())) != MOVE_OK)
+        {
+            add_seil_o(seil);
+            seil->remove();
+            send_message_to(this_player(), MT_NOTIFY, MA_USE,
+                wrap("Du zerrst an "+dem()+" herum, es tut sich aber nix."));
+            return 0;
+        }
+    }
+    if (seilanzahl == 1)
+    {
+        this_player()->send_message(MT_LOOK, MA_USE,
+            wrap(Der(this_player())+" loest den Knoten "+des(0,({}))+"."),
+            wrap("Du loest den Knoten "+des(0,({}))+"."),
+            this_player());
+    }
+    else
+    {
+        this_player()->send_message(MT_LOOK, MA_USE,
+            wrap(Der(this_player())+" loest einen der Knoten "+des(0,({}))+"."),
+            wrap("Du loest einen der Knoten "+des(0,({}))+"."),
+            this_player());
+    }
+    return seil;
+}
+
+// ----------------------------------------------------------------
+int untie(string str)
+{
+    mixed zustaendig;
+    if (!query_tied_to_ob())
+    {
+        if (seilanzahl>1)
+        {
+            unnode (str);
+            return 1;
+        }
+        notify_fail(wrap(Der()+" "+ist()+ " nirgends festgebunden."));
+        return 0;
+    }
+    if (this_player()->free_hand() == -1)
+    {
+        notify_fail("Also, eine Hand solltest Du mindestens frei haben.\n");
+        return 0;
+        // die Klimzuege zum Test auf zwei freie Haende sind der Muehe 
+        // nicht wert (Sissi)
+    }
+
+    if(mappingp(tied_to_ob))
+        zustaendig = tied_to_ob[KEY_BOUND_OBJECT];
+    else
+        zustaendig = tied_to_ob;
+    if(zustaendig = zustaendig->concerned("untie_rope",this_object(), 
+                                                       tied_to_ob))
+    {
+        if(closurep(zustaendig))
+            funcall(zustaendig,"do_untie_rope",this_object(), tied_to_ob);
+        else
+            zustaendig->do_untie_rope(this_object(), tied_to_ob);
+        return 1;
+    }
+
+    if ((objectp(tied_to_ob)
+              ? tied_to_ob
+              : virt_environment(tied_to_ob))->untie(tied_to_ob))
+    {
+        this_player()->send_message(MT_LOOK, MA_USE,
+            wrap(Der(this_player())+" loest "+den()+" von "
+                 +dem(tied_to_ob)+"."),
+            wrap("Du loest "+den()+" von "+dem(tied_to_ob)+"."),
+            this_player());
+        set_tied_to_ob(0);
+    }
+    else
+        send_message_to(this_player(), MT_NOTIFY, MA_USE,
+            wrap("Du schaffst es nicht, "+den()+" zu loesen."));
+    return 1;
+}
+
+// ----------------------------------------------------------------
+int befestige(string str)
+{
+    string rest;
+
+    if (!(rest = me(str)))
+    {
+        notify_fail("Befestige was woran?\n");
+        return 0;
+    }
+    if (!sscanf(rest,"an %s",rest))
+    {
+        notify_fail(wrap("Befestige "+den()+" woran?"));
+        return 0;
+    }
+    if (this_player()->free_hand() == -1)
+    {
+        notify_fail("Also, eine Hand solltest Du mindestens frei haben.\n");
+        return 0;
+        // die Klimzuege zum Test auf zwei freie Haende sind der Muehe 
+        // nicht wert (Sissi)
+    }
+    return tie(rest);
+}
+
+// ----------------------------------------------------------------
+int binde(string str)
+{
+    string rest;
+
+    if (!(rest = me(str)))
+    {
+        notify_fail(capitalize(query_verb())+" was woran fest, oder "
+            +query_verb()+" was los?\n");
+        return 0;
+    }
+    if (this_player()->free_hand() == -1)
+    {
+        notify_fail("Also, eine Hand solltest Du mindestens frei haben.\n");
+        return 0;
+        // die Klimzuege zum Test auf zwei freie Haende sind der Muehe 
+        // nicht wert (Sissi)
+    }
+    if (rest == "los")
+        return untie(str);
+    if (sscanf(rest,"an %s",rest))
+        return tie(rest);
+
+    notify_fail(wrap(capitalize(query_verb())+" "+den()+" woran fest, oder "
+        +query_verb()+" "+den()+" los?"));
+    return 0;
+}
+
+// ----------------------------------------------------------------
+int loese(string str)
+{
+    string rest;
+
+    if (!(rest = me(str)))
+    {
+        notify_fail("Loese was?\n");
+        return 0;
+    }
+    if (this_player()->free_hand() == -1)
+    {
+        notify_fail("Also, eine Hand solltest Du mindestens frei haben.\n");
+        return 0;
+        // die Klimzuege zum Test auf zwei freie Haende sind der Muehe 
+        // nicht wert (Sissi)
+    }
+    if (rest == "")
+        return untie(str);
+
+    notify_fail("Loese was?\n");
+    return 0;
+}
+
+// ----------------------------------------------------------------
+int entknote (string str)
+{
+    string rest;
+    if (!(rest=me(str)) || (rest!=""))
+    {
+        notify_fail ("Entknote was?\n");
+        return 0;
+    }
+    if (seilanzahl == 1)
+    {
+        notify_fail(wrap(Der()+" "+ist()+ " doch gar nicht verknotet."));
+        return 0;
+    }
+    if (this_player()->free_hand() == -1)
+    {
+        notify_fail("Also, eine Hand solltest Du mindestens frei haben.\n");
+        return 0;
+        // die Klimzuege zum Test auf zwei freie Haende sind der Muehe 
+        // nicht wert (Sissi)
+    }
+    unnode (0);
+    return 1;
+}
+
+/*
+FUNKTION: set_tied_to_ob
+DEKLARATION: void set_tied_to_ob(mixed woran)
+BESCHREIBUNG:
+Damit setzt man das Objekt oder Mapping eines V-Items, an welches das Seil
+gebunden sein soll. Diese Funktion ruft dabei automatisch die entsprechenden
+Controller notify_tied_rope auf. Gibt man 0 an, so wird das Seil geloest und
+die Controller notify_untied_rope werden aufgerufen.
+VERWEISE: query_tied_to_ob, notify_tied_rope, notify_untied_rope,
+          notify_tied_rope_to, notify_untied_rope_from
+GRUPPEN: seil
+*/
+void set_tied_to_ob(mixed woran)
+{
+    if(mappingp(woran)) // Hammern v_item und das passende Objekt?
+    {
+        object env=virt_environment(woran);
+        tied_to_ob=woran+([KEY_BOUND_OBJECT:env]);
+        this_object()->notify("tied_rope", this_object(), woran);
+        env->notify("tied_rope_to", this_object(), woran);
+    }
+    else if(objectp(woran))
+    {
+        tied_to_ob=woran;
+        this_object()->notify("tied_rope", this_object(), woran);
+        woran->notify("tied_rope_to", this_object(), woran);
+    }
+    else if(tied_to_ob)
+    {
+        mixed old_ob = tied_to_ob;
+        tied_to_ob=0;
+        if(objectp(old_ob) || old_ob[KEY_BOUND_OBJECT])
+        {
+            this_object()->notify("untied_rope", this_object(), old_ob);
+            if(mappingp(old_ob))
+                old_ob[KEY_BOUND_OBJECT]->notify("untied_rope_from", 
+                                                 this_object(), old_ob);
+            else
+                old_ob->notify("untied_rope_from", this_object(), old_ob);
+        }
+    }
+}
+
+/*
+FUNKTION: query_tied_to_ob
+DEKLARATION: mixed query_tied_to_ob()
+BESCHREIBUNG:
+Liefert Objekt oder mapping eines v_items, an welches das Seil gebunden ist.
+im mapping gibt es u.a. einen Eintrag "environment", der angibt, an welchem
+Objekt das v_item klebt, an das das Seil...
+Diese Funktion killt das v_item, wenn der o.g. Eintrag 0 ist, um eben der
+Tatsache Rechnung zu tragen, dass Dinge, an die ich Seile binde, auch 
+verschwinden koennen.
+VERWEISE: set_tied_to_ob, notify_tied_rope, notify_untied_rope
+          notify_tied_rope_to, notify_untied_rope_from
+GRUPPEN: seil
+*/
+mixed query_tied_to_ob() 
+{ 
+    if(mappingp(tied_to_ob)
+        &&
+        !tied_to_ob[KEY_BOUND_OBJECT]
+        )
+    {
+        tied_to_ob=0;
+    }
+    return tied_to_ob; 
+}
+
+/*
+FUNKTION: query_seil
+DEKLARATION: int query_seil()
+BESCHREIBUNG:
+Seile koennen aneinander angebunden werden, um auf diese Art und Weise
+ein laengeres Seil zu erhalten. Mit dieser Funktion kann abgefragt werden,
+wie lange ein Seil ist.
+So koennen Schluchten oder aehnliches realisiert werden, um in diese
+runterzuklettern man ein besonders langes Seil benoetigt.
+Natuerlich kann diese Funktion auch dazu verwendet werden, herauszufinden,
+ob ein bestimmtes Objekt ein Seil ist...
+VERWEISE: set_seil
+GRUPPEN: seil
+*/
+
+int query_seil ()
+{
+    return seillaenge;
+}
+
+/*
+FUNKTION: set_seil
+DEKLARATION: void set_seil(int laenge)
+BESCHREIBUNG:
+Mit dieser Funktion kann die Laenge eines Seiles gesetzt werden,
+die Laenge muss dabei groesser als 0 sein.
+VERWEISE: query_seil
+GRUPPEN: seil
+*/
+
+void set_seil (int laenge)
+{
+    set_seillaenge(laenge);
+}
+
+/*
+FUNKTION: concerned_tie_rope
+DEKLARATION: int concerned_tie_rope(object seil, mixed woran)
+BESCHREIBUNG:
+Wenn ein Seil 'seil' an das Objekt oder V-Item 'woran' gebunden werden soll,
+wird woran_ob->concerned("tie_rope", seil, woran) aufgerufen. Dabei ist
+'woran_ob' entweder das Objekt 'woran' oder das Objekt, an dem das V-Item 
+'woran' klebt. concerned ruft dann in allen mit woran_ob->add_controller(
+"concerned_tie_rope",other) angemeldeten Objekten other die Funktion
+other->concerned_tie_rope(seil, woran) auf.
+
+Der von dieser Funktion zurueckgelieferte Wert wird als Prioritaet aufgefasst.
+Das Objekt 'other' mit der hoechsten Prioritaet darf das Anbinden vornehmen.
+Dazu wird dann in diesem Objekt die Funktion other->do_tie_rope(seil, woran)
+aufgerufen. (Diese Funktion sollte - sofern sie das Seil nicht zerstoert - nicht
+vergessen, im Seil die Funktion set_tied_to_ob(woran) aufzurufen.)
+
+Fuehlt sich kein Objekt zustaendig, dann uebernimmt das Seil selber mit seinem
+Standardverhalten das Anbinden.
+VERWEISE: add_controller, concerned, concerned_untie_rope,
+          notify_tied_rope, notify_tied_rope_to, set_tied_to_ob
+GRUPPEN: seil
+*/
+/*
+FUNKTION: concerned_untie_rope
+DEKLARATION: int concerned_untie_rope(object seil, mixed wovon)
+BESCHREIBUNG:
+Wenn ein Seil 'seil' vom Objekt oder V-Item 'wovon' geloest werden soll,
+wird wovon_ob->concerned("untie_rope", seil, wovon) aufgerufen. Dabei ist
+'wovon_ob' entweder das Objekt 'wovon' oder das Objekt, an dem das V-Item 
+'wovon' klebt. concerned ruft dann in allen mit 
+wovon_ob->add_controller("concerned_tie_rope",other) angemeldeten Objekten 
+other die Funktion other->concerned_tie_rope(seil, wovon) auf.
+
+Der von dieser Funktion zurueckgelieferte Wert wird als Prioritaet aufgefasst.
+Das Objekt 'other' mit der hoechsten Prioritaet darf das Seil entfernen.
+Dazu wird dann in diesem Objekt die Funktion other->do_untie_rope(seil, wovon)
+aufgerufen. (Diese Funktion sollte - sofern sie das Seil nicht zerstoert - nicht
+vergessen, im Seil die Funktion set_tied_to_ob(0) aufzurufen.)
+
+Fuehlt sich kein Objekt zustaendig, dann uebernimmt das Seil selber mit seinem
+Standardverhalten das Loesen.
+VERWEISE: add_controller, concerned, concerned_untie_rope,
+          notify_untied_rope, notify_untied_rope_from, set_tied_to_ob
+GRUPPEN: seil
+*/
+/*
+FUNKTION: notify_tied_rope
+DEKLARATION: void notify_tied_rope(object seil, mixed woran)
+BESCHREIBUNG:
+Nachdem ein Seil 'seil' an das Objekt oder V-Item 'woran' gebunden wurde, wird
+seil->notify("tied_rope",seil,woran) aufgerufen. notify ruft dann in allen
+mit seil->add_controller("notify_tied_rope",other) angemeldeten Objekten other
+die Funktion other->notify_tied_rope(seil,woran) auf.
+Diese Funktionen haben dann die Moeglichkeit auf das Anbinden zu reagieren.
+VERWEISE: add_controller, notify, notify_tied_rope_to,
+        notify_untied_rope, notify_untied_rope_from,
+        concerned_tie_rope, concerned_untie_rope
+GRUPPEN: seil
+*/
+/*
+FUNKTION: notify_tied_rope_to
+DEKLARATION: void notify_tied_rope_to(object seil, mixed woran)
+BESCHREIBUNG:
+Nachdem ein Seil 'seil' an das Objekt oder V-Item 'woran' gebunden wurde, wird
+woran_ob->notify("tied_rope_to",seil,woran) aufgerufen. Dabei ist 'woran_ob'
+entweder das Objekt 'woran' oder das Objekt, an dem das V-Item 'woran' klebt.
+notify ruft dann in allen mit seil->add_controller("notify_tied_rope_to",other)
+angemeldeten Objekten other die Funktion other->notify_tied_rope_to(seil,woran)
+auf. Diese Funktionen haben dann die Moeglichkeit auf das Anbinden zu reagieren.
+VERWEISE: add_controller, notify, notify_tied_rope,
+          notify_untied_rope, notify_untied_rope_from,
+          concerned_tie_rope, concerned_untie_rope
+GRUPPEN: seil
+*/
+/*
+FUNKTION: notify_untied_rope
+DEKLARATION: void notify_untied_rope(object seil, mixed wovon)
+BESCHREIBUNG:
+Nachdem ein Seil 'seil' vom Objekt oder V-Item 'wovon' geloest wurde, wird
+seil->notify("untied_rope",seil,wovon) aufgerufen. notify ruft dann in allen
+mit seil->add_controller("notify_untied_rope",other) angemeldeten Objekten other
+die Funktion other->notify_untied_rope(seil,wovon) auf. Diese Funktionen haben
+dann die Moeglichkeit auf das Entfernen des Seils zu reagieren.
+VERWEISE: add_controller, notify, notify_untied_rope_from,
+          notify_tied_rope, notify_tied_rope_to,
+          concerned_tie_rope, concerned_untie_rope
+GRUPPEN: seil
+*/
+/*
+FUNKTION: notify_untied_rope_from
+DEKLARATION: void notify_untied_rope_from(object seil, mixed wovon)
+BESCHREIBUNG:
+Nachdem ein Seil 'seil' vom Objekt oder V-Item 'wovon' geloest wurde, wird
+wovon_ob->notify("untied_rope_from",seil,wovon) aufgerufen. Dabei ist 'wovon_ob'
+entweder das Objekt 'wovon' oder das Objekt, an dem das V-Item 'wovon' klebt.
+notify ruft dann in allen mit
+    seil->add_controller("notify_untied_rope_from",other)
+angemeldeten Objekten other die Funktion
+    other->notify_untied_rope_from(seil,wovon)
+auf. Diese Funktionen haben dann die Moeglichkeit darauf zu reagieren.
+VERWEISE: add_controller, notify, notify_untied_rope_from,
+          notify_tied_rope, notify_tied_rope_to,
+          concerned_tie_rope, concerned_untie_rope
+GRUPPEN: seil
+*/

@@ -1,0 +1,267 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/apps/cron.c
+// Description: Ein (einfaches) Crontool (siehe UNIX-Cron)
+// Author:	Garthan (23.12.93)
+// Modified by:	Garthan	(24.05.95) info(), catch bei touch, nosave functions.
+//                                 moved to /apps
+//
+// $Log: cron.c,v $
+// Revision 1.11  2003/10/14 23:49:57  gnomi
+// Bei catch den Modifier publish nutzen, statt den Fehler per do_error zu
+// werfen.
+//
+// Revision 1.10  2003/01/25 04:45:58  gnomi
+// add/delete_job dokumentiert.
+//
+// Revision 1.9  2003/01/16 22:56:15  gnomi
+// Eval-Debugging verbessert.
+//
+// Revision 1.8  2002/11/21 01:04:38  gnomi
+// Eval-Debugging eingebaut.
+// 'zern -t'-Funktionen eingebaut.
+//
+// Revision 1.7  2002/10/17 12:49:28  freaky
+// functio nach func wegen ldmud-3.3
+//
+// Revision 1.6  2002/06/24 22:48:56  gnomi
+// seteuid(getuid()); entfernt; wird vom Master gesetzt.
+//
+// Revision 1.5  2001/06/29 15:40:20  freaky
+// copy -> deep-copy
+//
+// Revision 1.4  2001/04/29 14:21:40  freaky
+// deprecated Funktion copy-mapping rausgenommen.
+//
+// Revision 1.3  2001/01/30 23:58:43  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma strict_types
+
+#include <more.h>
+#define CRONTAB "/nosave/adm/CRONTAB"
+
+#define ZEIT 0
+#define OBJECT 1
+#define FUNCTION 2
+#define PARAM 3
+
+#ifdef UNItopia
+#define DEBUG_EVALS
+#endif
+
+#ifdef DEBUG_EVALS
+int last_eval_time, di_counter, evals;
+mapping debug_infos;
+#define PRINT_EVALS(str) do{if(last_eval_time<time()) { evals=__MAX_EVAL_COST__; di_counter=0; debug_infos=([]); last_eval_time=time(); } debug_infos[sprintf("Evals %02d.",++di_counter)]=sprintf("%6d (%6d): %s",evals-(evals=get_eval_cost()),evals,(str));}while(0)
+mapping query_debug_info() {return debug_infos;}
+#else
+#define PRINT_EVALS(str)
+#endif
+
+mapping cron = ([]);
+int highest_batch = 0;
+
+private varargs int add_xjob(mixed ob, string func, int zeit, mixed param)
+{
+   mixed insert_object;
+   int i;
+   mixed * values;
+   if(stringp(ob))
+      insert_object = ob;
+   else if(clonep(ob))
+      insert_object = ob;
+   else
+      insert_object = object_name(ob);
+
+   if(cron)
+      for(i = 0; i < sizeof(values = m_values(cron)); i++)
+         if(values[i][ZEIT] == zeit &&
+            values[i][OBJECT] == insert_object &&
+            values[i][FUNCTION] == func)
+            return 0;
+   cron[++highest_batch] = ({ zeit, insert_object, func, param });
+   call_out("job", real_time_diff(vclock(), zeit), highest_batch);
+   return highest_batch;
+}
+
+void create()
+{
+   string def, *defs, *entries;
+   int i;
+
+   if((def = read_file(CRONTAB)) &&
+      (defs = explode(def,"\n")))
+      for(i = 0; i < sizeof(defs); i++)
+      {
+	 if(strlen(defs[i])>0 && defs[i][0] == '#')
+	    continue;
+	 if(sizeof(entries = explode(defs[i],":"))<3)
+	    continue;
+	 add_xjob(entries[0], entries[1], (int)entries[2], 
+                  sizeof(entries) > 3 ? entries[3] : 0) ;
+      }
+}
+/*
+FUNKTION: add_job
+DEKLARATION: varargs int add_job(string func, int zeit, mixed param)
+BESCHREIBUNG:
+Fuegt ein job in die crontab ein.
+
+Beispiel:
+    CRON_OB->add_job("my_func", 123456, "param")
+
+Das CRON_OB Objekt ruft dann jeden Spieltag um 12:34:56 die Funktion
+my_func() mit Parameter "param" in dem Objekt auf, das den Job mit add_job
+eingefuegt hat. CRON_OB ist in config.h definiert.
+
+Der Parameter param darf fehlen.
+add_job liefert bei Erfolg eine eindeutige Job_ID zurueck, sonst 0.
+
+add_job ignoriert weitere Aufrufe mit gleicher zeit und func.
+
+Alternativ kann man die Jobs auch in /nosave/adm/CRONTAB
+eintragen lassen.
+GRUPPEN: Zeit
+VERWEISE: delete_job
+*/
+
+varargs int add_job(string func, int zeit, mixed param)
+{
+   return add_xjob(previous_object(), func, zeit, param);
+}
+
+
+private void delete_batch(int batch)
+{
+   m_delete(cron, batch);
+}
+
+/*
+FUNKTION: delete_job
+DEKLARATION: varargs int delete_job(string func, int zeit)
+BESCHREIBUNG:
+Loescht einen  Job der auf die angegebenen Parameter passt.
+
+Beispiel:
+   CRON_OB->delete_job("do_it");
+      Loescht den Job mit der Funktion "do_it"
+   while(CRON_OB->delete_job());
+      Loescht alle Jobs des aufrufenden Objekts
+   
+delete_job  liefert !0  wenn das Loschen geklappt hat.
+GRUPPEN: Zeit
+VERWEISE: add_job
+*/
+
+varargs int delete_job(string func, int zeit)
+{
+   mixed * values;
+   int i, batch;
+   object ob;
+   mixed delete_object;
+
+   if(clonep(ob = previous_object()))
+      delete_object = ob;
+   else
+      delete_object = object_name(ob);
+
+   if(cron)
+      for(i = 0; i < sizeof(values = m_values(cron)); i++)
+      {
+	 if(values[i][OBJECT] == delete_object &&
+	    (!func || func == values[i][FUNCTION]) &&
+	    (!zeit || zeit == values[i][ZEIT]))
+	 {
+	    delete_batch(batch = m_indices(cron)[i]);
+	    return batch;
+	 }
+      }
+   return 0;
+}
+
+nosave void job(int batch)
+{
+   object called_ob;
+
+   if(cron[batch])
+   {
+      PRINT_EVALS(sprintf("Job: %O->%O(%s)", cron[batch][OBJECT], cron[batch][FUNCTION], mixed2str(cron[batch][PARAM])));
+      if(cron[batch][OBJECT] &&
+#if __VERSION__ < "3.2.10-dev.584"
+	!catch(called_ob = touch(cron[batch][OBJECT])) &&
+#else
+	!catch(called_ob = touch(cron[batch][OBJECT]);publish) &&
+#endif
+	objectp(called_ob))
+      {
+         PRINT_EVALS("Nach touch.");
+	 call_out("wait", 5, cron[batch][ZEIT], batch);
+	 call_other(called_ob, cron[batch][FUNCTION], cron[batch][PARAM]);
+         PRINT_EVALS("Call_other beendet.");
+      }
+      else
+      {
+         PRINT_EVALS("Laden fehlgeschlagen, loesche Job");
+	 delete_batch(batch);
+      }
+   }
+}
+
+nosave void wait(int when, int batch)
+{
+   call_out("job", real_time_diff(vclock(), when), batch);
+}
+
+mapping query_cron()
+{
+   return deep_copy(cron);
+}
+
+int remove()
+{
+   while(remove_call_out("job")>=0);
+   destruct(this_object());
+   return 1;
+}
+
+string info()
+{
+   int i;
+   string *idxs;
+   string *out;
+
+   idxs = m_indices(cron);
+   idxs = sort_array(idxs, lambda(({'a,'b}),
+      ({ #'<, ({ #'[, ({ #'[, cron, 'a }), ZEIT }),
+              ({ #'[, ({ #'[, cron, 'b }), ZEIT }) })));
+   for(out = ({}), i = sizeof(idxs); i--;)
+      out += ({ sprintf("%3d %06d %-43O %-22s",
+			idxs[i],
+			cron[idxs[i]][ZEIT],
+			(string)cron[idxs[i]][OBJECT],
+			cron[idxs[i]][FUNCTION]) });
+   this_player()->more(out,0,0,M_AUTO_END);
+}
+
+void init_cron()
+{
+    if(previous_object() && !strstr(object_name(previous_object()),"/apps/"))
+    {
+	cron = ({mapping})previous_object()->query_cron();
+	highest_batch = max(m_indices(cron));
+	while(remove_call_out("job")>=0);
+	foreach(int batch, mixed job: cron)
+	    call_out("job", real_time_diff(vclock(), job[ZEIT]), batch);
+    }
+}
+
+void prepare_renewal() {}
+void abort_renewal() {}
+
+void finish_renewal(object neu)
+{
+    neu->init_cron();
+}

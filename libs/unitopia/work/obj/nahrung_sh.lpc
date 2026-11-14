@@ -1,0 +1,273 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/obj/nahrung_sh.c
+// Description:	Implementiert Nahrung als Shadow
+// Author:	Gnomi
+//
+// $Log$
+
+// ACHTUNG: Dies dient nur Demonstrationszwecken!
+
+inherit "/i/shadow";
+inherit "/i/tools/update_actions";
+
+#include <shadow.h>
+#include <deklin.h>
+#include <notify_fail.h>
+#include <message.h>
+#include <misc.h>
+#include <add_hp.h>
+
+#pragma save_types
+
+private int amount, dauer, angebrochen;
+private int stufe = 15;
+
+mixed *query_adjektiv()
+{
+    if(!QSO)
+	return ({});
+	
+    if (angebrochen)
+	return ({"angeknabbert"}) + QSO->query_adjektiv();
+
+    return QSO->query_adjektiv();
+}
+
+string query_long(object who)
+{
+    string long;
+    int n;
+    
+    if(!QSO)
+	return "";
+    
+    long = QSO->query_long(who);
+
+    if(angebrochen)
+    {
+	if(!this_object()->query_eating())
+	    return long+"Es hat schon jemand daran genagt.\n";
+	else if(who==environment(QSO))
+	    return long+wrap("Du isst "+ihn(QSO)+" gerade.");
+    }
+
+    return long;
+}
+
+string *query_class_id()
+{
+    if(!QSO)
+	return ({});
+
+    return (QSO->query_class_id()||({})) + ({"nahrung","essen"});
+}
+
+void init()
+{
+    if(!QSO)
+	return;
+
+    QSO->init();
+    
+    add_action("nahrungsshadow_essen", "esse");
+    add_action("nahrungsshadow_essen", "iss");
+    add_action("nahrungsshadow_essen", "mampfe", -5);
+    add_action("nahrungsshadow_essen", "speise", -5);
+    add_action("nahrungsshadow_essen", "verspeise", -8);
+    add_action("nahrungsshadow_stoppe_essen", "stoppe", -4);
+}
+
+
+private void failure()
+{
+    TP->send_message_to(TP, MT_NOTIFY, MA_EAT,
+	wrap("Du kriegst "+deinen(QSO)+" einfach nicht mehr runter."));
+
+    TP->send_message(MT_LOOK, MA_EAT,
+	  wrap(Der(OBJ_TP)+" muemmelt an "+seinem(QSO)+"."));
+
+    this_player()->notify("eat_failure", QSO);
+    QSO->notify("eat_failure_self", this_player());
+}
+
+private void success()
+{
+    angebrochen=0;
+    
+    TP->send_message_to(TP, MT_NOTIFY|MT_TASTE, MA_EAT,
+	wrap(Dein(QSO)+plural(" hat"," haben")+" gut geschmeckt."));
+
+    TP->send_message(MT_LOOK, MA_EAT,
+	  wrap(Der(OBJ_TP)+" vertilgt den letzten Happen "+seines(QSO)+"."));
+
+    this_player()->add_fp(amount);
+
+    this_player()->notify("eaten", QSO);
+    QSO->notify("eaten_self",this_player());
+    QSO->remove();
+}
+
+private int weiter_essen(int fps, int mk_notify_eat)
+{
+    int bite, partheal;
+
+    if(!QSO)
+	return 0;
+
+    if (!this_player() || environment(QSO) != this_player() ||
+	this_player()->free_hand() < 0 || 
+	(playerp(this_player()) && !interactive(this_player())))
+    {
+	// weggelegt oder Hand anderweitig benutzt.
+	return 0;
+    }
+    
+    bite = amount * stufe / (dauer + stufe);
+    if (this_player()->has_enough_fp(bite))
+    {
+	failure();
+	return 0;
+    }
+    // Immer am Ende die FPs addieren, nicht am Anfang des call-outs,
+    // da sonst geht: esse xx, stoppe essen, esse xx, ...
+    if (fps)
+	this_player()->add_fp(fps);
+
+    if (dauer && ((amount<0)?(amount<=bite):(amount>=bite)))
+    {
+        amount -= bite;
+	dauer = max(dauer-stufe,0);
+	
+	if (angebrochen)
+	{
+	    angebrochen=0;	// Wegen der Meldung.
+
+	    TP->send_message_to(TP,MT_NOTIFY|MT_TASTE, MA_EAT,
+	        wrap("Du kaust an "+deinem(QSO)+"."));
+	    TP->send_message(MT_LOOK, MA_EAT,
+	       wrap(Der(OBJ_TP)+" knabbert an "+seinem(QSO)+"."));
+	}
+	else
+	{
+	    TP->send_message_to(TP, MT_NOTIFY|MT_TASTE, MA_EAT,
+	        wrap("Du faengst an, "+deinen(QSO)+" zu essen."));
+	    TP->send_message(MT_LOOK, MA_EAT,
+	        wrap(Der(OBJ_TP)+" beisst herzhaft in "+seinen(QSO)+" hinein."));
+	}
+    	
+	angebrochen = 1;
+
+        if(mk_notify_eat)
+        {
+	    this_player()->notify("eat",this_object());
+	    QSO->notify("eat_self", this_player());
+	}
+	call_out(#'weiter_essen,stufe,bite,0);
+    }
+    else
+    {
+        if(mk_notify_eat)
+        {
+	    this_player()->notify("eat",this_object());
+	    QSO->notify("eat_self", this_player());
+	}
+
+	success();
+    }
+    return 1;
+}
+
+int query_eating()
+{
+    return find_call_out(#'weiter_essen) != -1 && living(environment(QSO));
+}
+
+int stop_eating()
+{
+    return remove_call_out(#'weiter_essen)>=0;
+}
+
+
+int nahrungsshadow_essen(string str)
+{
+    object ob;
+
+    if(!QSO)
+	return 0;
+
+    if (!QSO->me(str))
+	return notify_fail("Iss was?\n", FAIL_NOT_OBJ);
+    
+    if (this_player()->free_hand() < 0)
+        return notify_fail("Ohne eine freie Hand ist das nicht moeglich.\n",
+	    FAIL_INTERNAL);
+
+    if (environment(QSO) != this_player())
+	return notify_fail("Du musst "+den(QSO)+" erst nehmen.\n", FAIL_INTERNAL);
+    
+    if (query_eating())
+	return notify_fail("Du isst doch bereits "+deinen(QSO)+".\n",
+	    FAIL_INTERNAL);
+    
+    if (ob=cond_present(0,this_player(),"query_eating"))
+	return notify_fail(wrap("Du isst doch bereits "+einen(ob)+"."),
+	    FAIL_INTERNAL);
+
+    if (this_player()->forbidden("eat", this_object()) ||
+        QSO->forbidden("eat_self", this_player()))
+        return 1;
+
+    if(!weiter_essen(0,1))
+	return 1;
+
+    return 1;
+}
+
+int nahrungsshadow_stoppe_essen(string str)
+{
+    if(!QSO)
+	return 0;
+
+    if(!str || (!QSO->me(str) && lower_case(str)!="essen"))
+	return notify_fail("Stoppe was?\n", FAIL_NOT_OBJ);
+
+    if(!stop_eating())
+	return notify_fail("Du isst doch gerade gar nichts.\n",
+	    FAIL_WRONG_ARG);
+
+    this_player()->send_message_to(this_player(), MT_NOTIFY, MA_UNKNOWN,
+	"Ok.\n");
+    return 1;
+}
+
+void just_moved()
+{
+    if(QSO)
+	QSO->just_moved();
+
+    remove_call_out(#'weiter_essen);
+}
+
+int query_nahrung() { return 1; }
+int query_angebrochen() { return angebrochen; }
+
+void nahrung_setup_shadow(object ob)
+{
+    if(!ob || ob->query_nahrung() || ob->query_getraenk() ||
+	ob->query_no_move() || living(ob))
+    {
+	destruct_shadow();
+	return;
+    }
+    
+    amount = ob->query_weight()*5 + ob->query_value()/15 + random(30);
+    dauer = 45 * ob->query_weight() + random(70);
+    
+    init_shadow(ob, NO_MULTI_SHADOW);
+}
+
+void nahrung_remove_shadow()
+{
+    remove_shadow(this_object());
+}

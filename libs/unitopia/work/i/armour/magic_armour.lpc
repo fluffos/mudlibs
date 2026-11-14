@@ -1,0 +1,185 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/armour/magic_armour.c
+// Description:	Magisches Feld als Ruestung
+// Author:	Aeneas
+// Modified by:	Freaky (04.04.96) komplettes Redesign
+//
+// $Log: magic_armour.c,v $
+// Revision 1.7  2007/08/09 22:19:32  gnomi
+// An neue Beschreibungen angepasst.
+//
+// Revision 1.6  2002/01/13 04:50:01  freaky
+// query_long() umgestellt.
+//
+// Revision 1.5  2002/01/13 01:01:22  gnomi
+// Deklaration von query_long geaendert.
+//
+// Revision 1.4  2001/07/13 22:52:01  gnomi
+// Einige Funktionen dokumentiert.
+//
+// Revision 1.3  2001/06/25 11:48:12  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.2  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#pragma save_types
+
+inherit "/i/armour/armour";
+
+#include <invis.h>
+#include <install.h>
+#include <description.h>
+
+private int time;
+private string first_msg;
+
+void create()
+{
+    ::create();
+
+    set_gender("saechlich");
+    set_noise("Du hoerst ein leises Knistern und Summen.");
+    set_id("feld");
+    set_class_id("feld");
+    set_adjektiv("magisch");
+    set_weight(0);
+    set_material( ({"gas"}) );
+    set_name("feld");
+    set_invis(V_NOLIST);
+    set_worn_adjektiv("blauelich schimmernd");
+    set_broken_adjektiv("durchlaessig");
+    set_broken_message("Mit einem PLOPP! verschwindet Dein magisches Feld!\n");
+    set_long("Ein blaeulich schimmerndes Feld. Du hoerst ein leises "
+	"Knistern\nund Summen.\n");
+    set_value(0,0);
+    set_life(150);
+    set_armour_class("magie");
+    set_armour_protection(2);
+    time=300;
+    first_msg="Dein magisches Feld faengt an zu flackern.\n";
+    clear_initial_conservation_data();
+    set_conservation_constraint("GENERAL_NO","magic_armour");
+}
+
+/*
+FUNKTION: set_first_msg
+DEKLARATION: void set_first_msg(string str)
+BESCHREIBUNG:
+Damit kann man die Meldung setzen, die nach 2/3 der Zeit der magischen
+Ruestung ausgegeben wird.
+VERWEISE: query_first_msg,
+          set_magic_protection_time, quer_magic_protection_time
+GRUPPEN: ruestung
+*/
+void set_first_msg(string str)
+{
+    first_msg=strlen(str) && str[<1] != '\n' ? wrap(str) : str;
+    add_setter_conservation("set_first_msg",({first_msg}));
+}
+
+/*
+FUNKTION: query_first_msg
+DEKLARATION: string query_first_msg()
+BESCHREIBUNG:
+Liefert die Meldung, die nach 2/3 der Zeit der
+magischen Ruestung ausgegeben wird.
+VERWEISE: set_first_msg,
+          query_magic_protection_time, set_magic_protection_time
+GRUPPEN: ruestung
+*/
+string query_first_msg() { return first_msg; }
+
+// Verhindern, dass die "Es ist angezogen."-Meldung erscheint.
+int query_long_has_tag(string tag)
+{
+    if(tag==T_ATOM_TAG_WORN_TEXT)
+	return 1;
+    else
+	return ::query_long_has_tag(tag);
+}
+
+string extra_look()
+{
+    return Er(environment())+" ist von "+einem()+" umgeben.";
+}
+
+void init()
+{
+    if (!query_worn())
+    {
+	do_wear();
+	call_out("first_ms",time/3*2);
+    }
+}
+
+/*
+FUNKTION: set_magic_protection_time
+DEKLARATION: void set_magic_protection_time(int time)
+BESCHREIBUNG:
+Damit setzt man die Haltbarkeitsdauer dieser magischen Ruestung.
+Diese Funktion sollte nur beim Erschaffen dieser Ruestung (noch vor der
+Bewegung in ein Lebewesen) aufgerufen werden.
+VERWEISE: query_magic_protection_time, query_remaining_magic_protection_time,
+          set_first_msg, query_first_msg
+GRUPPEN: ruestung
+*/
+void set_magic_protection_time(int t)
+{
+    time=t;
+    add_setter_conservation("set_magic_protection_time",({t}));
+}
+
+/*
+FUNKTION: query_magic_protection_time
+DEKLARATION: int query_magic_protection_time()
+BESCHREIBUNG:
+Liefert die Gesamthaltbarkeitsdauer dieser magischen Ruestung.
+VERWEISE: set_magic_protection_time, query_remaining_magic_protection_time,
+          set_first_msg, query_first_msg
+GRUPPEN: ruestung
+*/
+int query_magic_protection_time() {return time;}
+
+/*
+FUNKTION: query_remaining_magic_protection_time
+DEKLARATION: int query_remaining_magic_protection_time()
+BESCHREIBUNG:
+Liefert die Restdauer dieser magischen Ruestung oder -1, falls der Coutdown
+noch nicht laeuft.
+VERWEISE: set_magic_protection_time, query_magic_protection_time,
+          set_first_msg, query_first_msg
+GRUPPEN: ruestung
+*/
+int query_remaining_magic_protection_time()
+{
+    int i;
+    if((i=find_call_out("do_break"))>=0)
+        return i;
+    if((i=find_call_out("first_ms"))>=0)
+        return i+time/3;
+    return -1;
+}
+
+nosave void first_ms()
+{
+    if (!environment())
+    {
+        remove();
+        return;
+    }
+    tell_object(environment(),first_msg);
+    set_armour_protection(query_armour_protection()/2);
+    call_out("do_break",time/3);
+}
+
+void do_break()
+{
+    ::do_break();
+    if (environment())
+    	tell_object(environment(), query_broken_message());
+    remove();
+}

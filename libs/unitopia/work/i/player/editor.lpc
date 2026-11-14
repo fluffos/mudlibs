@@ -1,0 +1,946 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/player/editor.c
+// Description: lpc ed for buffers
+// Author:      Garthan(16.05.96)
+// Modified by:
+// Mammi (17.01.99) Eindeutschung, variable Fehlermeldungen moeglich.
+//
+// $Log: editor.c,v $
+// Revision 1.13  2013-03-16 15:46:30  gnomi
+// 'private nosave' ergibt keinen Sinn.
+//
+// Revision 1.12  2008/01/21 14:11:39  gnomi
+// notify_ed_enter/exit erhalten einen Parameter, der angibt, ob der
+// VT100-Client voruebergehend deaktiviert werden muss.
+//
+// Revision 1.11  2007/12/05 10:57:08  gnomi
+// Statt query_input_pending besser find_input_to nutzen.
+//
+// Revision 1.10  2007/08/11 21:32:13  gnomi
+// INPUT_PROMPT nutzen.
+//
+// Revision 1.9  2003/06/22 02:07:49  gnomi
+// Enzy-Gruppe geaendert.
+//
+// Revision 1.8  2003/05/28 01:03:15  gnomi
+// *** empty log message ***
+//
+// Revision 1.7  2001/06/25 11:48:26  freaky
+// Alle Variablen private deklariert
+//
+// Revision 1.6  2001/06/23 22:23:04  gnomi
+// Closures zum Callback zulassen.
+//
+// Revision 1.5  2001/06/21 20:53:14  gnomi
+// Die Angabe von msgs ist freiwillig.
+//
+// Revision 1.4  2001/04/28 03:34:41  gnomi
+// Funktion, um zu ermitteln, ob man sich im Editor befindet.
+//
+// Revision 1.3  2001/01/30 23:59:00  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+FUNKTION: edit
+DEKLARATION: int edit([string *puffer[, mixed retfun[, mixed retob, [int no_write [, mapping error_msgs]]]]])
+BESCHREIBUNG:
+Der LPC Ed.
+Diese Funktion ist dazu da, ein File interaktiv zu editieren.
+Der lpc ed aehnelt dem ed aus dem driver (efun ed()), beinhaltet 
+im wesentlichen aber keinerlei Funktionen zum Lesen und Schreiben
+von Dateien und ist damit dazu geeignet, von Spielern benutzt zu werden.
+
+Der lpc ed wird mit
+   this_player()->edit(puffer, retfun, retob, no_write, error_msgs);
+gestartet.
+Die Variable puffer enthaelt dabei den Puffer vor dem Editieren.
+Ist no_write == 1, wird im Falle, dass der Spieler bereits etwas editiert,
+die Fehlermeldung mit notify_fail() ausgegeben statt mit write().
+
+Schlaegt der Befehl fehl (weil der Spieler bereits editiert), wird 0
+returnt, ansonsten 1.
+
+Wird das nichtleere Mapping error_msgs uebergeben, so werden die 
+Fehlermeldungen aus diesem Mapping genommen statt der Standardmeldungen.
+Format des Mappings:
+([
+  ED_UNRECOGNIZED_COMMAND      : "<Befehl ungueltig>", 
+  ED_HELP_1                    : "<Allgemeine Anzeige wenn man h getippt hat>",
+  ED_HELP_2                    : "<zweite Hilfeseite>",
+  ED_SUBST_LINES_HELP          : "<Kurzhilfe zum Ersetzen>",
+  ED_SUBST_LINES_FAILED        : "<Fehlermeldung falls Ersetzen fehlschlug>",
+  ED_SUBST_LINES_GLOBAL_FAILED : "Fehlermeldung, wenn globales Ersetzen "
+                                 "fehlschlug>",  
+  ED_MOVE_LINES_FAILED         : "<Ungueltige Zielzeile angegeben>",
+  ED_START_TEXT                : "<Meldung dass dieser Editor gestartet wird>",
+  ED_NEW_TEXT                  : "<Meldung wenn neuer Text eingegeben wird>", 
+  ED_APPEND_TEXT               : "<Meldung wenn der Puffer nicht leer war>",
+  ED_MAX_SIZE_OVERRUN          : "<Meldung dass der Text zu lang ist>",
+  ED_TEXT_RESTORED             : "<Meldung, dass der Orginaltext verwendet "
+                                 "wird (siehe Kommando E)>",
+  ED_TEXT_CHANGED              : "<Meldung, dass man den Text veraendert hat "
+                                 "(siehe q,Q)>",
+  ED_MARKER_HELP               : "<Hilfe zum Markieren von Zeilen>",
+  ED_NUMBERS_ON                : "<Zeilennummernanzeige ein>",
+  ED_NUMBERS_OFF               : "<Zeilennummernanzeige aus>",
+  ED_ALREADY_EDITING           : "<Es wird schon ein Text geschrieben>",
+  ED_AT_END                    : "<Man ist am Ende des Textes>",
+])
+Wird ED_HELP_1 angegeben und ED_HELP_2 nicht, so gibt es auch keine weitere
+Hilfe!
+
+Am Ende des Editierens ruft dann der Editor im Objekt retob die 
+Funktion retfun mit zwei Parametern auf:
+
+   void edit_end(string *puffer, int changed)
+   { 
+      In puffer steht das Ergebnis, Zeile fuer Zeile 
+      und changed != 0 besagt, dass der puffer geaendert wurde.
+   }
+
+retfun kann auch eine Closure sein.
+Fehlt retob, dann wird previous_object() verwendet,
+Fehlt retfun, dann wird "edit_end" als Funktionsname verwendet,
+Fehlt der puffer, dann wird mit einem leeren Puffer gestartet.
+
+BEMERKUNG:
+Zum richtigen ed des Drivers fehlen dem lpc Editor
+- alle Filekommandos:       e, r, w, W      (absichtlich)
+- die globalen Befehle:     g, v            (i'm too lazy)
+- die indentation Kommandos I, A            (gibt's nicht fuer Spieler)
+- der Settingsbefehl:       set             (syntactic candy only)
+
+- Die Befehle f, E haben eine etwas andere Bedeutung.
+- Der join Befehl j verbindet auch mit naechster Zeile bei expliziter
+  Angabe *einer* Zeile
+- Der Befehl h gibt nur eine Uebersicht aus, keine Einzelhilfe zu
+  den Befehlen.
+- der lpc ed kann im Gegensatz zum ed des drivers nur maximal 3000 Zeilen
+  editieren. (MAX_ARRAY_SIZE, Beschraenkung durch den Driver)
+
+VERWEISE: ed, more, cat, tail, set_more_chunk, query_more_chunk, 
+GRUPPEN: Dateien
+*/
+
+#pragma save_types
+#pragma strong_types
+
+#include <editor.h>
+#include <input_to.h>
+
+#if EDITOR_IM_W
+void notify_ed_enter(int suspend_client) { this_player()->notify_ed_enter(suspend_client); }
+void notify_ed_exit(int suspend_client) { this_player()->notify_ed_exit(suspend_client); }
+#else
+void notify_ed_enter(int suspend_client);
+void notify_ed_exit(int suspend_client);
+#endif
+
+#define MAX_ARRAY_SIZE 3000
+
+#undef DEBUG
+
+#ifdef DEBUG
+#define CMD_LOOP { \
+   input_to("ed_command", INPUT_PROMPT, \
+      sprintf("%d(%d-%d): ", ed_buf[LINE]+1, ed_buf[FROM]+1, ed_buf[TO]+1)); }
+#else
+#define CMD_LOOP { \
+   input_to("ed_command", INPUT_PROMPT, ":"); }
+#endif
+
+#define TEXT         0
+#define ORIGINAL     1
+#define LINE         2
+#define OB           3
+#define FUN          4
+#define RESPONSIBLE  5
+#define START_TIME   6
+#define CHANGED      7
+#define FROM         8
+#define TO           9
+#define REGEXP      10
+#define LINEKEYS    11
+#define NUMBERS     12
+
+#define SIZE        13
+
+private nosave mixed *ed_buf;
+private nosave mapping ed_msgs;
+
+
+private void ed_help1()
+{
+   string err;
+
+   if(err = ed_msgs[ED_HELP_1])
+   {
+      write(err);
+      if(ed_msgs[ED_HELP_2])
+         input_to("ed_help2",0);
+      else
+         CMD_LOOP;
+   }
+   else
+   {
+      write(
+"--------------------------------------------------------------------------\n"
+"Syntax: [<bereich>]<befehle>[<optionen>]\n"
+"<bereich>  := % | ; | , | <von>[,<bis>] | <von>[;<bis>]\n"
+"mit:   %   := 1,$   , := 1,$    ; := .,$\n"
+"<von>      := <zeile>\n"
+"<bis>      := <zeile>\n"
+"<zeile>    := . | ^ | $ | <zeilennr> | <markierung> | <reg.Ausdruck> |\n"
+"              <zeile>+<zeile> | <zeile>-<zeile>\n"
+"<zeilennr> := <eine beliebige Zeilennummer/Offset(+,-,+1,-3,...)>\n"
+"<markierung>   := '<buchstabe>\n"
+"<reg.Ausdruck> := /<gesuchter Text vorwaerts (regexp Format)>/ |\n"
+"                  ?<gesuchter Text rueckwaerts (regexp Format)>? |\n"
+"mit:       := aktuelle Zeile;  ^ := erste Zeile;  $ := letzte Zeile\n"
+"<befehle>  := a|c|d|E|f|h|i|j|k|m|n|p|q|Q|t|x|z|Z|=\n"
+"<optionen> := Je nach Kommando, siehe unten\n"
+"--------------------------------------------------------------------------\n"
+	    );
+      input_to("ed_help2", INPUT_PROMPT, "--More--");
+   }
+}
+
+
+nosave void ed_help2(string str)
+{
+   string err;
+
+   if (err = ed_msgs[ED_HELP_2])
+       write(err);
+   else
+       write(
+"--------------------------------------------------------------------------\n"
+"Ist ein Bereich angegeben gilt dieser, anstatt der aktuellen Zeile.\n"
+"Bereiche ohne Befehl aendern nur die aktuelle Zeile.\n"
+"z,Z       20,40 Zeilen anzeigen\n"
+"p         Aktuelle Zeile zeigen\n"
+"a         Hinter der aktuellen Zeile werden weitere angefuegt. Ende mit .\n"
+"i         Vor der aktuellen Zeile werden weitere eingefuegt. Ende mit .\n"
+"c         Die aktuelle Zeile wird durch andere Zeilen ersetzt. Ende mit .\n"
+"d         Die aktuelle Zeile wird geloescht.\n"
+"x         Abspeichern und Ende\n"
+"q,Q       Ende, Ende + Aenderungen verwerfen\n"
+"E         Puffer nochmal von vorne editieren (Aenderungen verwerfen.)\n"
+"h         diese Hilfe\n"
+"s/o/n/g   Ersetze o durch n, g am Ende bewirkt mehrfaches Ersetzen in Zeile\n"
+"j         Diese Zeile mit der naechsten verbinden\n"
+"k<marker> Die Zeile markieren, <marker> ist ein Buchstabe\n"
+"m<line>   Zeile verschieben hinter Zeile <line>, 0 = Anfang\n"
+"t<line>   Zeile kopieren hinter Zeile <line>, 0 = Anfang\n"
+"=         Aktuelle Zeilennummer zeigen\n"
+"f         Anzahl der Zeilen im Puffer ausgeben\n"
+"n         Zeilennummerierung an/ausschalten\n"
+"--------------------------------------------------------------------------\n"
+   );
+   CMD_LOOP;
+}
+
+
+private string ed_prompt(int line, int input, int numbers)
+{
+   return numbers ?
+             input ?
+                sprintf("%6d. *\b", line+1) :
+                sprintf("%7d ",  line+1) :
+	     input ?
+	        "*\b" :
+	        "";
+}
+
+
+#define ABORT_REGEXP { line = -1; stop = 1; break; }
+
+private string extract_regexp(string str, string delim, int noskip)
+{
+   int i;
+   string reg;
+
+   str = str[1..];
+   reg = "";
+   for(i = 0; i < strlen(str); i++)
+      if(str[i] == delim[0])
+      {
+         if(!noskip)
+	    i++;
+         break;
+      }
+      else
+      if(str[i] == '\\' && i < strlen(str)-1 && str[i+1] == delim[0])
+      {
+	 reg += delim;
+	 i++;
+      }
+      else
+         reg += str[i..i];
+   str = str[i..];
+   return reg;
+}
+
+      
+private int get_line_no(string str, int curr)
+{
+   int i, line, scanned, stop, sign;
+   string search, *regs;
+
+   stop = 0;
+   line = curr;
+   do
+      switch(str[0..0])
+      {
+	 case "+": 
+	    sign = 1;
+	    str = str[1..];
+	    break;
+	 case "-": 
+	    sign = -1;
+	    str = str[1..];
+	    break;
+	 default:
+	    if(sscanf(str, "%d%s",scanned, str) == 2)
+	    {
+	       if(sign)
+		  line += sign * scanned;
+	       else
+		  line = scanned - 1;
+	       sign = 0;
+	    }
+	    else
+      switch(str[0..0])
+      {
+	 case " ":
+	    str = str[1..];
+	    break;
+	 case "^":
+	    if(!sign)
+	       line = 0;
+	    sign = 0;
+	    str = str[1..];
+	    break;
+	 case "$":
+	    if(sign)
+	       line += sign * (sizeof(ed_buf[TEXT]) - 1);
+	    else
+	       line = sizeof(ed_buf[TEXT]) - 1;
+	    sign = 0;
+	    str = str[1..];
+	    break;
+	 case ".":
+	    if(sign)
+	       line += sign * curr;
+	    str = str[1..];
+	    break;
+	 case "/":
+	    search = extract_regexp(&str, "/", 0);
+	    if(search == "" && !(search = ed_buf[REGEXP]) ||
+	       !sizeof(regs = regexp(ed_buf[TEXT][curr+1..], search)) &&
+	       !sizeof(regs = regexp(ed_buf[TEXT][0..curr], search)))
+	       ABORT_REGEXP;
+	    ed_buf[REGEXP] = search;
+	    for(i = curr+1; i < sizeof(ed_buf[TEXT]); i++)
+	       if(ed_buf[TEXT][i] == regs[0])
+		  { line = i; break; }
+	    for(i = 0 ; i < curr+1; i++)
+	       if(ed_buf[TEXT][i] == regs[0])
+		  { line = i; break; }
+	    break;
+	 case "?":
+	    search = extract_regexp(&str, "?", 0);
+	    if(search == "" && !(search = ed_buf[REGEXP]) ||
+	       !sizeof(regs = regexp(ed_buf[TEXT][0..curr-1], search)) &&
+	       !sizeof(regs = regexp(ed_buf[TEXT][curr..], search)))
+	       ABORT_REGEXP;
+	    ed_buf[REGEXP] = search;
+	    for(i = curr; i--;)
+	       if(ed_buf[TEXT][i] == regs[<1])
+		  { line = i; break; }
+	    for(i = sizeof(ed_buf[TEXT])-1; i >= curr; i--)
+	       if(ed_buf[TEXT][i] == regs[<1])
+		  { line = i; break; }
+	    break;
+	 case "'":
+	    if(member(ed_buf[LINEKEYS], str[1..1]))
+	    {
+	       line = ed_buf[LINEKEYS][str[1..1]];
+	       str = str[2..];
+	    }
+	    else
+	    {
+	       line = -1;
+	       stop = 1;
+	    }
+	    break;
+	 default:
+	    line += sign;
+	    stop = 1;
+	    break;
+      }
+      }
+   while(!stop);
+
+   if(line < 0 || line >= sizeof(ed_buf[TEXT]))
+      line = -1;
+   return line;
+}
+
+
+private string list_line(string str)
+{
+   int i;
+   string ret;
+
+   ret = "";
+   for(i = 0; i < strlen(str); i++)
+      switch(str[i])
+      {
+         case 0..' '-1:
+         case 128..255:
+            ret += sprintf("^%c", (str[i]&31)|'@'); break;
+         case 127:
+            ret += "^?"; break;
+	 default :
+	    ret += str[i..i];
+      }
+   return ret;
+}
+
+
+private void list_lines()
+{
+   int i;
+
+   if(sizeof(ed_buf[TEXT]))
+      for(i = ed_buf[FROM]; i <= ed_buf[TO]; i++)
+	 write(ed_prompt(i,0,ed_buf[NUMBERS])+list_line(ed_buf[TEXT][i])+"$\n");
+}
+
+
+private void print_lines()
+{
+   int i;
+
+   if(sizeof(ed_buf[TEXT]))
+      for(i = ed_buf[FROM]; i <= ed_buf[TO]; i++)
+	 write(ed_prompt(i,0,ed_buf[NUMBERS])+ed_buf[TEXT][i]+"\n");
+}
+
+
+
+#if __EFUN_DEFINED__(regreplace)
+private void subst_lines(string options)
+{
+   int i, matched;
+   string s, t, delim, old, err;
+   int flags;
+
+   delim = options[0..0];
+   s = extract_regexp(&options, delim, 1);
+   t = extract_regexp(&options, delim, 0);
+   if(s == "")
+      write(ed_msgs[ED_SUBST_LINES_HELP]);
+   if(member(options, 'g') >= 0)
+      flags |= 1;
+
+   if(sizeof(ed_buf[TEXT]))
+      for(i = ed_buf[FROM]; i <= ed_buf[TO]; i++)
+         if((ed_buf[TEXT][i] = regreplace(old = ed_buf[TEXT][i], s, t, flags))
+	     != old)
+	     matched++;
+   if(matched)
+   {
+      if(ed_buf[FROM] == ed_buf[TO])
+	 print_lines();
+      ed_buf[CHANGED]++;
+   }
+   else 
+      write(ed_msgs[ED_SUBST_LINES_FAILED]);
+}
+#else
+
+#define MATCH_FIRST 1
+#define MATCH_LAST  2
+#define MATCH_GLOB  4
+
+private int strrstr(string all, string str)
+{
+   int pos, i;
+   string str_rev, all_rev;
+
+   for(all_rev = "", i = strlen(all); i--;)
+      all_rev += all[i..i];
+   for(str_rev = "", i = strlen(str); i--;)
+      str_rev += str[i..i];
+   if((pos = strstr(all_rev, str_rev)) < 0)
+      return -1;
+   return strlen(all) - pos - strlen(str);
+}
+
+private int subst_line(string line, string s, string t, int restrictions)
+{
+   int pos, m, matched, begin, end;
+
+   begin = restrictions & MATCH_FIRST;
+   end   = restrictions & MATCH_LAST;
+   do
+   {
+      if(m = (pos = (end ? strrstr(line,s) : strstr(line, s))) >= 0 &&
+	     (!begin || !pos) &&
+	     (!end || pos == strlen(line)-strlen(s)))
+      {
+	 line[pos..pos+strlen(s)-1] = t;
+	 matched++;
+      }
+   }
+   while(m && restrictions & MATCH_GLOB);
+   return matched;
+}
+
+
+private void subst_lines(string options)
+{
+   int i, matched, restrictions;
+   string s, t, delim, err;
+
+   delim = options[0..0];
+   s = extract_regexp(&options, delim, 1);
+   t = extract_regexp(&options, delim, 0);
+   if(s == "")
+      write(ed_msgs[ED_SUBST_LINES_HELP]);
+   if(s[0] == '^')
+   {
+      s = s[1..];
+      restrictions |= MATCH_FIRST;
+   }
+   if(s[<1] == '$')
+   {
+      s = s[0..<2];
+      restrictions |= MATCH_LAST;
+   }
+   if(member(options, 'g') >= 0)
+      restrictions |= MATCH_GLOB;
+   subst_line(&t, "&", s, 0);
+   if(restrictions & MATCH_GLOB && strstr(t, s) >= 0)
+   {
+      write(ed_msgs[ED_SUBST_LINES_GLOBAL_FAILED]);
+      return;
+   }
+   if(sizeof(ed_buf[TEXT]))
+      for(i = ed_buf[FROM]; i <= ed_buf[TO]; i++)
+         matched += subst_line(&(ed_buf[TEXT][i]), s, t, restrictions);
+
+   if(matched)
+   {
+      if(ed_buf[FROM] == ed_buf[TO])
+	 print_lines();
+      ed_buf[CHANGED]++;
+   }
+   else 
+      write(ed_msgs[ED_SUBST_LINES_FAILED]);
+}
+#endif
+
+
+private void delete_lines()
+{
+   int next_line;
+
+   if(sizeof(ed_buf[TEXT]))
+   {
+      ed_buf[TEXT][ed_buf[FROM]..ed_buf[TO]] = ({});
+
+      if(ed_buf[LINE] >= sizeof(ed_buf[TEXT]))
+	 ed_buf[LINE] = sizeof(ed_buf[TEXT]) - 1;
+      if(ed_buf[LINE] < 0)
+	 ed_buf[LINE] = 0;
+      ed_buf[FROM] = ed_buf[LINE];
+      ed_buf[TO] = ed_buf[LINE];
+   }
+}
+
+
+private void move_lines(string starget, int last_line, int copy)
+{
+   int line, target;
+   string *segment,err;
+
+   if((line = starget=="0"? -2: get_line_no(starget, last_line)) == -1 ||
+      !copy && line >= ed_buf[FROM] && line < ed_buf[TO])
+      write(ed_msgs[ED_MOVE_LINES_FAILED]);
+   else
+   {
+      segment = ed_buf[TEXT][ed_buf[FROM]..ed_buf[TO]];
+      if(!copy)
+	 ed_buf[TEXT][ed_buf[FROM]..ed_buf[TO]] = ({});
+      if(line == -2)
+      {
+         ed_buf[TEXT] = segment + ed_buf[TEXT];
+         ed_buf[TO] = 0;
+      }
+      else
+      {
+	 target = line - (line >= ed_buf[TO] && !copy ? sizeof(segment) : 0);
+	 if(sizeof(ed_buf[TEXT])+sizeof(segment) > MAX_ARRAY_SIZE)
+	 {
+             if(err = ed_msgs[ED_MAX_SIZE_OVERRUN])
+                write(err);
+             else
+	        write("Mehr als "+MAX_ARRAY_SIZE+" Zeilen kannst Du nicht "
+                   +"schreiben.\n");
+	     return;
+	 }
+	    
+	 ed_buf[TEXT] = ed_buf[TEXT][0..target] +
+	                segment + 
+	                ed_buf[TEXT][target+1..];
+	 ed_buf[TO] = target;
+      }
+      ed_buf[CHANGED]++;
+   }
+}
+
+
+private void join_lines()
+{
+   if(ed_buf[FROM] == ed_buf[TO] && ed_buf[TO] < sizeof(ed_buf[TEXT])-1)
+      ed_buf[TO]++;
+   ed_buf[TEXT][ed_buf[FROM]..ed_buf[TO]] = 
+      ({ implode(ed_buf[TEXT][ed_buf[FROM]..ed_buf[TO]], "") });
+}
+
+
+private void set_z_borders(string options, int factor)
+{
+   int chunk;
+
+   chunk = this_object()->query_more_chunk();
+   switch(options)
+   {
+      case "":
+      case "+":
+         ed_buf[FROM] = ed_buf[LINE];
+         if((ed_buf[TO] = ed_buf[LINE]+factor*chunk-1) >=
+            sizeof(ed_buf[TEXT]))
+            ed_buf[TO] = sizeof(ed_buf[TEXT])-1;
+	 break;
+      case "-":
+         ed_buf[TO]  = ed_buf[LINE];
+         if((ed_buf[FROM] = ed_buf[LINE]-factor*chunk+1) < 0)
+            ed_buf[FROM] = 0;
+	 break;
+      case ".":
+         if((ed_buf[TO] = ed_buf[LINE]+factor*chunk/2-1) >= 
+            sizeof(ed_buf[TEXT]))
+            ed_buf[TO] = sizeof(ed_buf[TEXT])-1;
+         if((ed_buf[FROM] = ed_buf[LINE]-factor*chunk/2+1) < 0)
+            ed_buf[FROM] = 0;
+	 break;
+   }
+}
+
+
+nosave void ed_input(string str)
+{
+   string err;
+
+   if(str == ".")
+   {
+      if(--ed_buf[LINE] < 0)
+         ed_buf[LINE] = 0;
+      ed_buf[TO] = ed_buf[LINE];
+      CMD_LOOP;
+   }
+   else
+   {
+      if(sizeof(ed_buf[TEXT])+1 > MAX_ARRAY_SIZE)
+      {
+         if(err = ed_msgs[ED_MAX_SIZE_OVERRUN])
+            write(err);
+         else
+            write("Mehr als "+MAX_ARRAY_SIZE
+                +" Zeilen darfst Du nicht schreiben.\n");
+	 CMD_LOOP;
+	 return;
+      }
+      ed_buf[TEXT] = ed_buf[TEXT][0..ed_buf[LINE]-1] +
+		     ({ str }) +
+		     ed_buf[TEXT][ed_buf[LINE]..];
+      ed_buf[LINE]++;
+      input_to("ed_input", INPUT_PROMPT,
+        ed_prompt(ed_buf[LINE],1,ed_buf[NUMBERS]));
+   }
+}
+
+
+private void leave_edit(int save)
+{
+   string *txt, *org;
+   mixed fun;
+   object ob;
+   int changed;
+
+   ob = ed_buf[OB];
+   fun = ed_buf[FUN];
+   txt = ed_buf[TEXT];
+   org = ed_buf[ORIGINAL];
+   changed = ed_buf[CHANGED];
+
+   notify_ed_exit(0);
+   ed_buf = 0;
+
+   if(closurep(fun) && to_object(fun))
+      funcall(fun, save? txt: org, save? changed: 0);
+   else if(ob)
+      call_other(ob, fun, save? txt: org, save? changed: 0);
+}
+
+private void write_lpc_ed_start()
+{
+    string err;
+    
+    write(ed_msgs[ED_START_TEXT]);
+    if(!sizeof(ed_buf[TEXT]))
+       write(ed_msgs[ED_NEW_TEXT]);
+    else if(err = ed_msgs[ED_APPEND_TEXT])
+       write(err);
+    else
+       write("Dein Text ist "+sizeof(ed_buf[TEXT])+" Zeile(n) lang.\n");
+}
+
+nosave void ed_command(string str)
+{
+   string comm, options, *help, err;
+   int last_line;
+
+   last_line = ed_buf[LINE];
+
+   if(str == "")
+      str = "+";
+
+   if(str[0..0] == "%" || str[0..0] == ",")
+      str = "1,$" + str[1..];
+   if(str[0..0] == ";")
+      str = ".,$" + str[1..];
+
+   if(!sizeof(ed_buf[TEXT]))
+      ed_buf[FROM] = ed_buf[TO] = ed_buf[LINE] = 0;
+   else
+   {
+      ed_buf[FROM] = get_line_no(&str, ed_buf[LINE]);
+      if(str[0..0] == "," || str[0..0] == ";")
+      {
+	 str = str[1..];
+	 ed_buf[TO] = get_line_no(&str, ed_buf[LINE]);
+      }
+      else
+	 ed_buf[TO] = ed_buf[FROM];
+   }
+
+   if(ed_buf[FROM] < 0 || ed_buf[TO] < 0)
+   {
+      write(ed_msgs[ED_AT_END]);
+      ed_buf[FROM] = ed_buf[LINE];
+      ed_buf[TO] = ed_buf[LINE];
+      CMD_LOOP;
+      return;
+   }
+
+   if(ed_buf[FROM] > ed_buf[TO])
+   {
+      int swap;
+
+      swap = ed_buf[FROM];
+      ed_buf[FROM] = ed_buf[TO];
+      ed_buf[TO] = swap;
+   }
+
+   ed_buf[LINE] = ed_buf[FROM];
+
+   if(str == "")
+      str = "p";
+
+   comm = str[0..0];
+   options = str[1..];
+
+   if(!sizeof(ed_buf[TEXT]) && strstr("qQxiacEfhn", comm) < 0)
+   {
+      write(ed_msgs[ED_AT_END]);
+      CMD_LOOP;
+      return;
+   }
+
+   switch(comm)
+   {
+      case "q":
+         if(ed_buf[CHANGED])
+         {
+            write(ed_msgs[ED_TEXT_CHANGED]);
+            break;
+	 }
+      case "Q":
+      case "x": 
+	 leave_edit(comm == "x");
+	 return;
+
+      case "p":
+         print_lines();
+         break;
+
+      case "l":
+         list_lines();
+         break;
+
+      case "d":
+         delete_lines();
+	 ed_buf[CHANGED]++;
+	 print_lines();
+         break;
+
+      case "c":
+         delete_lines();
+      case "a":
+      case "i":
+         if(comm == "a" && sizeof(ed_buf[TEXT]))
+            ed_buf[LINE]++;
+         ed_buf[CHANGED]++;
+         input_to("ed_input", INPUT_PROMPT,
+            ed_prompt(ed_buf[LINE],1,ed_buf[NUMBERS]));
+         return;
+
+      case "Z":
+      case "z":
+         set_z_borders(options, comm == "Z" ? 2 : 1);
+         print_lines();
+         break;
+      
+      case "=":
+         write((ed_buf[LINE]+1)+"\n");
+         break;
+
+      case "E":
+         ed_buf[TEXT] = ({}) + ed_buf[ORIGINAL];
+         ed_buf[LINE] = ed_buf[TO] = ed_buf[FROM] = ed_buf[CHANGED] = 0;
+         write(ed_msgs[ED_TEXT_RESTORED]);
+         break;
+
+      case "f":
+         write_lpc_ed_start();
+         break;
+
+      case "m": 
+         move_lines(options, last_line, 0);
+         break;
+
+      case "t": 
+         move_lines(options, last_line, 1);
+         break;
+
+      case "j":
+         join_lines();
+         ed_buf[CHANGED]++;
+         break;
+
+      case "k":
+         if(options && strlen(options) == 1)
+	    ed_buf[LINEKEYS][options[0..0]] = ed_buf[LINE];
+	 else
+            write(ed_msgs[ED_MARKER_HELP]);
+         break;
+
+      case "h":
+	 ed_help1();
+	 return;
+
+      case "n":
+         ed_buf[NUMBERS] ^= 1;
+         write(ed_msgs[(ed_buf[NUMBERS] ? ED_NUMBERS_ON : ED_NUMBERS_OFF)]);
+         break;
+
+      case "s":
+         subst_lines(options);
+         break;
+
+      default:
+         write(ed_msgs[ED_UNRECOGNIZED_COMMAND]);
+         break;
+   }
+   ed_buf[LINE] = ed_buf[TO] != -1 ? ed_buf[TO] : 0;
+   CMD_LOOP;
+}
+
+
+varargs int edit(string *org_txt, mixed fun, mixed ob, 
+    int no_write, mapping msgs)
+{
+   string err;
+   int i;
+
+   if(!ob)
+      ob = previous_object();
+
+   if(!stringp(fun) && !closurep(fun))
+      fun = "edit_end";
+   if(!org_txt)
+      org_txt = ({});
+
+   if(ed_buf && query_input_pending(this_object()))
+   {
+      if(!msgs || (!err = msgs[ED_ALREADY_EDITING]))
+         err = ED_STD_MSGS[ED_ALREADY_EDITING];
+
+      if(!no_write)
+         write(err);
+      else
+         notify_fail(err);
+
+      return 0;
+   }
+   notify_ed_enter(0);
+
+   ed_msgs = m_allocate(ED_MSGS_SIZE,1);
+   if(msgs && sizeof(msgs))
+      for(i=1;i<=ED_MSGS_SIZE;i++)
+         if(member(msgs,i))
+            ed_msgs[i] = funcall(msgs[i]) || ED_STD_MSGS[i];
+         else
+            ed_msgs[i] = ED_STD_MSGS[i];
+   else
+      for(i=1;i<ED_MSGS_SIZE;i++)
+         ed_msgs[i] = ED_STD_MSGS[i];
+
+   ed_buf = allocate(SIZE);
+   ed_buf[TEXT]        = ({}) + org_txt;
+   ed_buf[ORIGINAL]    = org_txt;
+   ed_buf[OB]          = ob;
+   ed_buf[FUN]         = fun;
+   ed_buf[RESPONSIBLE] = previous_object();
+   ed_buf[START_TIME]  = time();
+   ed_buf[FROM]        = 0;
+   ed_buf[TO]          = 0;
+   ed_buf[LINE]        = 0;
+   ed_buf[LINEKEYS]    = ([]);
+   ed_buf[NUMBERS]     = 1;
+
+   write_lpc_ed_start();
+   CMD_LOOP;
+   return 1;
+}
+
+/*
+FUNKTION: in_edit
+DEKLARATION: int in_edit()
+BESCHREIBUNG:
+Liefert einen Wert !=0, wenn dieser Spieler sich im Player-Editor befindet.
+VERWEISE: edit, query_editing
+GRUPPEN: Dateien
+*/
+int in_edit()
+{
+    return (ed_buf && find_input_to(this_object(), this_object())>=0);
+}

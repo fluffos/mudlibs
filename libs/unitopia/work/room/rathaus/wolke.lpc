@@ -1,0 +1,322 @@
+// This file is part of UNItopia Mudlib.
+// -----------------------------------------------------------------------
+//  Datei:  /room/rathaus/wolke.c
+//  Autor:  Myonara 04.Okt.2014 
+// -----------------------------------------------------------------------
+// Beschreibung: Der Versammlungsraum fuer Pantheonstreffen mit Spielern.
+// -----------------------------------------------------------------------
+// Aenderungen:
+//  $Log: wolke.c,v $
+//  Revision 1.4  2016/09/03 14:14:06  myonara
+//  Neue Befehle Moderator,pause,weiter...
+//
+//  Revision 1.3  2016/01/13 17:58:15  myonara
+//  forbidden_comm+Co zum anders sagen. infos fuer anfliegende wizp...
+//
+//  Revision 1.2  2014/11/11 16:22:38  myonara
+//  Bugfixes.
+//
+//  Revision 1.1  2014/10/18 09:21:29  myonara
+//  Wolke und Co eingebaut, gesteuert ueber /apps/umfragen_db
+//
+//
+// 
+
+inherit "/i/tools/security";
+inherit "/i/room";
+
+#include <invis.h>
+#include <level.h>
+#include <message.h>
+#include <misc.h>
+#include <move.h>
+#include <notify_fail.h>
+#include <room_types.h>
+#include <umfragen.h>
+
+private mapping wizplayer = ([]);
+private mapping moderator = ([]);
+private int pause = 0;
+
+private int hat_uiko(object pl)
+{
+    if (!living(pl))
+    {
+        return 0;
+    }
+    object * ua = filter(all_inventory(pl), (: $1->id("uiko") :) );
+    return sizeof(ua) > 0;
+}
+
+string ecke_long(mapping vitem, object wer)
+{
+    if (hat_uiko(wer))
+    {
+        return wrap("Die Ecke ist leer, der UIKO sitzt Dir schon auf der "
+                "Schulter.");
+    }
+    else if (touch(UMFRAGE_MASTER)->ist_uiko_aktiv())
+    {
+        return wrap("Der Umfrage- und Ideenkobold bemerkt und erwidert Deinen "
+                "Blick und moechte von Dir aufgenommen werden.");
+    }
+    else
+    {
+        return wrap("Leider ist kein Umfrage- und Ideenkobold mehr da, "
+            "versuch es bitte spaeter nochmal.");
+    }
+}
+
+int invis_uiko(mapping vitem)
+{
+    object who = TP;
+    //send_message_to(({find_player("myonara")}), MT_DEBUG, MA_UNKNOWN,
+    //    wrap(sprintf("%Q %Q",vitem, who)));
+    return (hat_uiko(who)||!touch(UMFRAGE_MASTER)->ist_uiko_aktiv()) 
+           ? V_INVIS : V_VIS;
+}
+
+private void secure_ghost(object pl)
+{
+    if (objectp(pl))
+    {
+        pl->close_con();
+    }
+}
+
+string nimm_uiko(mapping was)
+{
+    object ob;
+    if(TP && (TP==PO))
+    {
+        if (hat_uiko(TP))
+        {
+            return wrap("Du hast bereits einen Umfrage- und Ideenkobold.");
+        }
+        if (!touch(UMFRAGE_MASTER)->ist_uiko_aktiv())
+        {
+            return wrap("Leider ist kein Umfrage- und Ideenkobold mehr da, "
+                "versuch es bitte spaeter nochmal.");
+        }
+        if (guestp(TP))
+        {
+            return wrap("Gaesten ist der Uiko nicht zu Diensten.");
+        }
+        ob = clone_object(UMFRAGE_AUTOLOAD);
+        if (TP->query_ghost())
+        {
+            TP->open_con();
+            call_out(#'secure_ghost,0,TP);
+        }
+        ob->move(TP, MOVE_ERR_REMOVE);
+        if (TP->query_ghost())
+        {
+            secure_ghost(TP);
+            remove_call_out(#'secure_ghost);
+        }
+        
+        if (!objectp(ob)) {
+            return wrap("Du kannst den UIKO nicht nehmen, "
+                    "evtl. zuviel dabei?");
+        }
+        return wrap("Du nimmst "+einen(ob)+".");
+    }
+    else
+    {
+        return wrap("Abfrage durch ein Tool zum Nehmen des UIKO.");
+    }
+}
+
+void notify_moved_in(object wer, object woher, string dir, int wie)
+{
+  wer->add_controller(({"forbidden_comm","forbidden_seele"}));
+  if (wizp(wer) && !wizplayer[wer])
+  {
+      wizplayer[wer] = 1;
+      send_message_to(wer, MT_NOISE, MA_COMM, wrap(
+"Bitte in der goldenen Wolke bei der Versammlung auf unnoetigen Scroll "
+"verzichten. Bitte respektvoll miteinander diskutieren." ));
+  }
+  if (IS_INVIS(wer))
+  {
+      send_message_to(wer, MT_NOISE, MA_COMM, wrap(
+"Bitte in der goldenen Wolke sichtbar machen." ));
+  }
+}
+
+void notify_moved_out(object wer, object wohin, string dir, int wie)
+{
+  wer->delete_controller(({"forbidden_comm","forbidden_seele"}));
+}
+
+int forbidden_seele(object wer, mixed wen, string what, string
+                 adverb, int align, int flags, int msg_typ_wer, int
+                 msg_typ_wen, int msg_typ_andere)
+{
+  if(present(wer)) // Zur Sicherheit
+  {
+    if (pause && !adminp(TP) && !member(moderator,TP_RN))
+    {
+          send_message_to(wer, MT_NOISE, MA_COMM, wrap(
+            "Pause ist aktiviert, Deine Kommunikation ist gesperrt." )); 
+        return 1;
+    }
+    return 0;
+  }
+  if (wer) wer->delete_controller(({"forbidden_seele"}));
+}
+
+int forbidden_comm(object wer,mixed wen,string what,string adverb,int flags,
+                   int msg_typ_wer,int msg_typ_wen,int msg_typ_andere)
+{
+  if(present(wer)) // Zur Sicherheit
+  {
+    adverb = space(adverb)-"\n";
+      if (IS_INVIS(wer))
+      {
+          send_message_to(wer, MT_NOISE, MA_COMM, wrap(
+    "Bitte in der goldenen Wolke sichtbar machen, die Kommunikation entarnt "
+    "dich sowieso." )); 
+      }
+    if (pause && !adminp(TP) && !member(moderator,TP_RN))
+    {
+          send_message_to(wer, MT_NOISE, MA_COMM, wrap(
+            "Pause ist aktiviert, Deine Kommunikation ist gesperrt." )); 
+        return 1;
+    }
+    if(wen && objectp(wen))
+    {
+      send_message(MT_NOISE,MA_COMM,
+        wrap_say(RCN(wer)+" zu "+RCN(wen)+"("+what+"):",
+            adverb,80));
+    }
+    else
+    {
+      send_message(MT_NOISE,MA_COMM,wrap_say(RCN(wer)+"("+what+"):",adverb,80));
+    }
+      
+    return 1;
+  }
+  if (wer) wer->delete_controller(({"forbidden_comm"}));
+}
+
+int cmd_moderator(string str)
+{
+    if (!check_security() || !adminp(TP))
+    {
+        return 0;
+    }
+    string * split = explode(space(str)," ");
+    if (sizeof(split)!=2)
+    {
+        FAILWP("moderator [+/-] realname", FAIL_INTERNAL);
+    }
+    switch (split[0])
+    {
+        case "+":
+            if (player_exists(split[1]) && !member(moderator,split[1]))
+            {
+                moderator[split[1]] = 1;
+                send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,"Ok.\n");
+                return 1;
+            }
+            FAILWP("Spieler unbekannt oder schon Moderator.",FAIL_INTERNAL);
+        case "-":
+            if (member(moderator,split[1]))
+            {
+                m_delete(moderator,split[1]);
+                send_message_to(TP,MT_NOTIFY,MA_UNKNOWN,"Ok.\n");
+                return 1;
+            }
+            FAILWP("Spieler ist kein Moderator.",FAIL_INTERNAL);
+        default:
+            FAILWP("moderator [+/-] realname", FAIL_INTERNAL);
+    }
+}
+
+int cmd_pause(string str)
+{
+    if (!check_security() || (!adminp(TP) && !member(moderator,TP_RN)))
+    {
+        return 0;
+    }
+    pause = 1;
+    send_message(MT_NOTIFY,MA_UNKNOWN,"Pause aktiviert.\n");
+    return 1;
+}
+
+int cmd_weiter(string str)
+{
+    if (!check_security() || (!adminp(TP) && !member(moderator,TP_RN)))
+    {
+        return 0;
+    }
+    pause = 0;
+    send_message(MT_NOTIFY,MA_UNKNOWN,"Pause deaktiviert.\n");
+    return 1;
+}
+
+void init()
+{
+    add_action("cmd_moderator","moderator",-3);
+    add_action("cmd_pause","pause");
+    add_action("cmd_weiter","weiter");
+}
+
+void create()
+{
+    "*"::create();
+
+    set_short("In der Gehirnsturmwolke");
+    set_long("Du befindest dich in einer goldenen Wolke ueber "
+        "der Rathaustreppe, in der das Gesagte anders aussieht. "
+        "Und diese Wolke hat eine Ecke.");
+    init_security_for_actions();
+    
+    add_type(RT_GRABEN_VERBOTEN, 1);
+    add_type(RT_KAEMPFEN_VERBOTEN, 1);
+    add_type(RT_STEHLEN_VERBOTEN, 1);
+    add_type(RT_MAGIE_VERBOTEN, 1);
+    add_type(RT_HANDWERK_VERBOTEN, 1);
+    add_type(RT_KEIN_KOMPASS, 1);
+    add_type(RT_FLUG_LANDEPLATZ, "/room/rathaus/treppe");
+    add_type(RT_STARTRAUM, "/room/rathaus/treppe");
+    add_type(RT_KUNSTLICHT, 1);
+    add_type(RT_KEIN_VERBRAUCH,1);
+    // add_type(RT_KEIN_KURIER, 1);
+    add_type(RT_SPERRGEBIET, 1);
+    L_SET(L_DRINNEN|L_HAUS|L_SIEDLUNG);
+    set_own_light(1);
+    add_v_item( ([
+            "name" : "ecke",
+            "id" : ({ "ecke" }),
+            "gender" : "weiblich",
+            "long" : #'ecke_long,
+            "look_msg" : "",
+            ]) );
+    add_v_item( ([
+            "name" : "uiko",
+            "id" : ({ "uiko","kobold","umfragekobold","ideenkobold" }),
+            "gender" : "maennlich",
+            "long" : #'ecke_long,
+            "look_msg" : "",
+            "take" : #'nimm_uiko,
+            "take_msg" : "",
+            "invis": #'invis_uiko,
+            ]) );
+    add_exit("aufderwendeltreppe","runter");
+    add_controller(({"notify_moved_in","notify_moved_out"}));
+}
+
+int let_not_in(object move_objekt, object ursprung, string dir)
+{
+    if (!playerp(move_objekt))
+    {
+        return 1;
+    }
+    return ::let_not_in(move_objekt, ursprung, dir);
+}
+
+void abort_renewal() {}  // TODO rescue logic...
+void finish_renewal(object neu) {}
+void prepare_renewal() {}

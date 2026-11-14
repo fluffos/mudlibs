@@ -1,0 +1,156 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/udp/finger.c
+// Description: Newsreader via upd
+// Author:	Garthan (22.02.96)
+// Modified by:	Garthan (01.04.96) html_escape, reverse date thread order
+//		Freaky (29.10.97) Security-Fix: Es werden nur noch die
+//			Bretter in 'DO_EXPORT' angegeben und gecheckt
+//
+// $Log: news.c,v $
+// Revision 1.5  2006/08/03 09:54:26  gnomi
+// Absicherung gegen falsche Eingaben.
+//
+// Revision 1.4  2003/05/09 01:45:57  gnomi
+// Maximale Zeilenanzahl eingebaut.
+//
+// Revision 1.3  2002/07/04 23:07:57  gnomi
+// seteuid(getuid()) entfernt; EUID wird vom Master aus gesetzt.
+//
+// Revision 1.2  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#include <udp.h>
+#include <news.h>
+
+#define DO_EXPORT ({ "Computer", "Flohmarkt", "Medien", "Schiffe", "Smalltalk", "Spieler", "Traegerkreis" })
+// nicht exportierte Gruppen:
+#define GRUPPEN ({ "Laber_und_Flames" })
+#define HTML_PREFIX "/cgi-bin/news?news="
+
+void create()
+{
+}
+
+string html_escape(string text)
+{
+   text = implode(explode(text, ">"), "&gt;");
+   text = implode(explode(text, "<"), "&lt;");
+   return text;
+}
+
+string do_tree(string brett, string gruppe, mixed entries, int nr)
+{
+   string res;
+   int i;
+   res = "<LI><A HREF = "+HTML_PREFIX+
+	  "/"+brett+"/"+gruppe+"/"+entries[NUMMER]+">"+
+	  html_escape(entries[TITEL])+"</A>\n";
+   nr++;
+   for(i = 0; i < sizeof(entries[SUBTREE]); i++)
+      res += do_tree(brett, gruppe, entries[SUBTREE][i], &nr);
+   return res;
+}
+
+string get_news(string pfad)
+{
+   int i, artikel;
+   string res, *pfads, brett, gruppe, text;
+   mixed *bretter, *gruppen, *artikels;
+
+   pfads = explode((pfad && to_string(pfad)) || "", "/") - ({""});
+   bretter = DO_EXPORT;
+
+   res = "<TITLE>UNItopia News</TITLE>\n"
+         "<H2>UNItopia News: ";
+   if(!sizeof(pfads))
+   {
+      res += "</H2>\n";
+      res += "Folgende Newsbretter stehen zur Auswahl:\n"
+             "<UL>\n";
+      for(i = 0; i < sizeof(bretter); i++)
+         res += "<LI><A HREF = "+HTML_PREFIX+"/"+bretter[i]+">"+
+                bretter[i]+"</A>\n";
+      res += "</UL>\n";
+   }
+   else if(sizeof(pfads) == 1)
+   {
+      brett = pfads[0];
+      res += "Brett "+brett+"</H2>\n";
+      res += "Folgende Newsbretter stehen zur Auswahl:\n";
+      if(member(bretter, brett) < 0)
+         res += "Newsbrett "+brett+" existiert nicht.\n";
+      else
+      {
+	  gruppen = NEWSD->query_gruppen(brett) - GRUPPEN;
+	  res += "Folgende Gruppen stehen zur Auswahl:\n"
+		 "<UL>\n";
+	  for(i = 0; i < sizeof(gruppen); i++)
+	     res += "<LI><A HREF = "+HTML_PREFIX+
+	            "/"+brett+"/"+gruppen[i]+">"+gruppen[i]+"</A>\n";
+	  res += "</UL>\n";
+      }
+   }
+   else if(sizeof(pfads) == 2)
+   {
+      brett = pfads[0];
+      gruppe = pfads[1];
+      res += "Brett "+brett+", Gruppe "+gruppe+"</H2>\n";
+      if(member(bretter, brett) < 0)
+         res += "Newsbrett "+brett+" existiert nicht.\n";
+      else if(member(GRUPPEN, gruppe) >= 0)
+         res += "Gruppe "+gruppe+" existiert nicht.\n";
+      else
+      {
+	  if(!sizeof(artikels = NEWSD->query_artikel(brett, gruppe)))
+	     res += "Gruppe "+gruppe+" am Brett "+brett+" existiert nicht.\n";
+	  else
+	  {
+	     int nr;
+	     res += "Folgende Artikel stehen zur Auswahl:\n"
+		    "<PRE><UL>\n";
+	     for(i = sizeof(artikels); i-- && nr<200;)
+	     //for(i = 0; i < sizeof(artikels); i++)
+		res += do_tree(brett, gruppe, artikels[i], &nr);
+	     res += "</UL></PRE>";
+	  }
+      }
+   }
+   else if(sizeof(pfads) == 3)
+   {
+      brett = pfads[0];
+      gruppe = pfads[1];
+      artikel = (int) pfads[2];
+      res += "Brett "+brett+", Gruppe "+gruppe+", Artikel "+artikel+"</H2>\n";
+      if(member(bretter, brett) < 0)
+         res += "Newsbrett "+brett+" existiert nicht.\n";
+      else
+      {
+	  if(!(text = read_file(NEWSD->query_file_name(brett, gruppe, artikel))))
+	     res += "Artikel "+artikel+" existiert nicht in der Gruppe "+
+		    gruppe+" am Brett "+brett+".\n";
+	  else
+	     res += "<PRE>\n"+html_escape(text)+"</PRE>\n";
+      }
+   }
+   else
+   {
+      res += "</H2>\n"
+             "Ungueltiger Newsparameter: "+pfad+"<P>\n"
+	     "Syntax: /[&lt;brett&gt;[/&lt;gruppe&gt;[/&lt;artikel&gt;]]]\n";
+   }
+
+   return res;
+}
+
+void udp_news(mapping data)
+{
+    INETD->send_udp(data[NAME], ([
+	REQUEST: REPLY,
+	RECIPIENT: data[SENDER],
+	ID: data[ID],
+	DATA: get_news(data[DATA])
+    ]) );
+}

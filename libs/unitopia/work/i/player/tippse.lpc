@@ -1,0 +1,1343 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/player/tippse.c
+// Description: Tippse (Aliases und Kommandovervollstaendigung)
+// Author:	Freaky (03.09.92)
+// Modified by:	Freaky (23.12.93)
+//		Freaky (18.01.95) tue kann kein 'weiter' mehr
+//              Sysop  (10.95)    neue Funktionen der History:
+//                                  %<Anfangsbuchstaben>
+//                                  ^<suchtext>^<ersatz>
+//
+//              Sissi (3.1.96)    Skriptspieler werden zu Statuen
+//		Freaky (05.01.96) TIME_SLICE usw eingebaut
+//		Freaky (19.08.96) aliases ist jetzt ein Mapping
+//		Monty (10.10 96)  in modify_command Logging fuer absolute
+//				  Haertefaelle im Pantheon eingebaut
+//              Sissi (20.12.96)  Namenskuerzel von Sysop eingebaut
+//		Monty (21.03 97)  Logging verschaerft: das Environment wird
+//				  mitgeloggt.
+//              Sysop  (8.98)     Verhinderung von Endlos-tue's
+//              Sysop  (9.6.99)   Parameter $1*..$9* bei Kuerzeln
+//              Sysop  (21.6.99)  Umlaut-Umwandlung
+//              Parsec (28.10.99) Namenskuerzel: mehrere name#, 'name#,
+//                                Fehlerausgabe, no_wer nur bei entfernten,
+//                                name# expandiert auch vorn Trennzeichen
+//		Freaky (30.11.1999) \b bei filter_string rausgenommen
+//		Freaky (24.02.2000) filter_string nach convert_umlaute
+//              Parsec (16.03.2000) kuerzel xx zeigt Kuerzel / neu: unalias
+//              Parsec (13.06.2000) \ fuer Kommandos ohne Kuerzelexpansion
+//
+// $Log: tippse.c,v $
+// Revision 1.71  2015/08/26 21:40:28  gnomi
+// Anpassungen an LDMud 3.5.0
+//
+// Revision 1.70  2015/05/22 16:03:11  myonara
+// neue funktion query_aliases_count
+//
+// Revision 1.69  2013/11/19 12:12:12  sorcerer
+// Bei Kuerzeluebersicht auch akt./max. Zahl anzeigen
+//
+// Revision 1.68  2013-03-16 15:48:46  gnomi
+// Befehle von Portal-Gaesten auch merken.
+//
+// Revision 1.67  2012-12-11 21:56:57  gnomi
+// set_modify_command nur bei echten Interactive ausfuehren.
+//
+// Revision 1.66  2012-11-26 22:20:22  gnomi
+// Unterstuetzung fuer InterMUD-Portale eingebaut.
+//
+// Revision 1.65  2012-11-16 17:51:17  gnomi
+// in_mini_ed() liefert 1 auch beim WebMUD-Editor.
+//
+// Revision 1.64  2011-02-04 23:14:18  gnomi
+// Genauere Typangabe fuer restext.
+//
+// Revision 1.63  2010-07-04 12:09:08  sorcerer
+// aliases typ mixed fuer alte Savefiles
+//
+// Revision 1.62  2010-01-03 00:10:29  gnomi
+// WebMUD-Editor-Anbindung verbessert.
+//
+// Revision 1.61  2009-10-14 20:30:39  gnomi
+// Kleine Fixes zum letzten Patch.
+//
+// Revision 1.60  2009-10-14 19:48:46  gnomi
+// WebMUD-Editor statt des Mini-ED verwenden.
+//
+// Revision 1.59  2009-01-15 08:58:42  gnomi
+// Fehler im query_history_commands().
+// Kuerzel ohne Parameter auch in der History auffuehren.
+//
+// Revision 1.58  2008/01/24 22:51:19  gnomi
+// Fuer die VT100-Zeile den Originalbefehl speichern (neben der
+// kuerzel-expandierten Zeile).
+//
+// Revision 1.57  2008/01/21 14:11:39  gnomi
+// notify_ed_enter/exit erhalten einen Parameter, der angibt, ob der
+// VT100-Client voruebergehend deaktiviert werden muss.
+//
+// Revision 1.56  2008/01/16 09:34:16  gnomi
+// #-Ergaenzung findet bei Goettern auch unsichtbare und No-Wer-Goetter.
+//
+// Revision 1.55  2007/12/20 08:07:09  gnomi
+// Mini-ED: editor_status vor Aufruf von der callback-Funktion zuruecksetzen,
+// denn diese Funktion koennte eine neue ED-Sitzung starten.
+//
+// Revision 1.54  2007/12/05 10:57:49  gnomi
+// Statt query_input_pending besser find_input_to nutzen.
+//
+// Revision 1.53  2007/10/24 21:39:15  gnomi
+// Mini-Ed: editor_status auf 0 setzen, wenn der Editor verlassen wird.
+//
+// Revision 1.52  2007/08/30 20:28:13  gnomi
+// doing-Abfrage fuer laufende Tues robuster gemacht.
+// query_doing eingebaut. Anpassungen wegen wrap("").
+//
+// Revision 1.51  2007/08/11 21:32:13  gnomi
+// INPUT_PROMPT nutzen.
+//
+// Revision 1.50  2007/08/11 16:26:04  gnomi
+// Befehle vom VT100-Client auch in den Puffer aufnehmen. Eine
+// Abfragemoeglichkeit des Befehlshistories fuer den VT100-Client eingebaut.
+//
+// Revision 1.49  2006/06/25 00:07:36  gnomi
+// Wildcard fuer Kuerzel ('kuerzel g*' listet alle mit g beginnenden Kuerzel
+// auf).
+//
+// Revision 1.48  2006/01/23 23:42:23  gnomi
+// Call from destructed object...
+//
+// Revision 1.47  2005/10/20 19:33:56  gnomi
+// Indexing past string end.
+//
+// Revision 1.46  2005/04/10 01:26:44  gnomi
+// stoppe tue: doing auch auf 0 setzen.
+//
+// Revision 1.45  2004/09/17 08:38:36  gnomi
+// Beim mini_ed kann man angeben, ob bereits etwas eingegeben wurde.
+//
+// Revision 1.44  2004/07/04 00:02:27  gnomi
+// anti_script_remove-syslog rausgenommen.
+//
+// Revision 1.43  2004/04/19 22:16:27  gnomi
+// mini-ed: Temporaere Datei nur dann im /priv schreiben, wenn es ein /priv gibt.
+//
+// Revision 1.42  2004/02/18 22:33:29  gnomi
+// Funktion, um die Existenz von Kuerzeln abzufragen, eingebaut.
+//
+// Revision 1.41  2003/11/06 04:05:01  gnomi
+// 'm' als Abkuerzung fuer 'mustere'.
+//
+// Revision 1.40  2003/07/02 02:33:49  gnomi
+// Typo.
+//
+// Revision 1.39  2003/06/22 02:07:49  gnomi
+// Enzy-Gruppe geaendert.
+//
+// Revision 1.38  2003/05/21 18:49:43  gnomi
+// Typo.
+//
+// Revision 1.37  2003/02/26 04:01:59  gnomi
+// Typo.
+//
+// Revision 1.36  2003/02/15 23:13:39  sissi
+// Trenner fuer Tue selber setzbar.
+//
+// Revision 1.35  2003/02/01 02:35:30  gnomi
+// Ein %% direkt nach dem Einloggen ablehnen.
+//
+// Revision 1.34  2003/01/25 04:26:19  gnomi
+// 'stoppe tue' eingefuehrt.
+//
+// Revision 1.33  2002/11/20 04:08:06  gnomi
+// \& wird bei Kuerzeln nun auch nicht mehr als Parameter behandelt.
+//
+// Revision 1.32  2002/11/08 00:44:50  gnomi
+// Bei Kuerzeln \$1 usw. nicht ersetzen.
+//
+// Revision 1.31  2002/08/31 01:16:08  gnomi
+// mini-ed: Neuer Parameter fuer Flags. Man kann jetzt die Wrap-Laenge angeben
+// und Driver/Player/X-ED-Texte nachtraeglich umbrechen lassen.
+//
+// Revision 1.30  2002/05/16 16:29:13  sissi
+// Doppelt so viele Aliase fuer Goetter, denn Goetter haben viele
+// krueptische Befehle, die man sich net merken kann.
+//
+// Revision 1.29  2002/04/20 18:52:20  gnomi
+// Mit 'name#' findet man sich selber nur dann, wenn man der einzige ist, der
+// darauf passt.
+//
+// Revision 1.28  2002/01/20 14:58:25  sissi
+// Bei Spielern in der Todessequenz wird das login Kuerzel nicht ausgefuehrt.
+//
+// Revision 1.27  2002/01/15 03:38:29  gnomi
+// query_short umgestellt.
+//
+// Revision 1.26  2002/01/06 15:38:08  sissi
+// compare_strings robuster gemacht
+//
+// Revision 1.25  2001/12/27 02:53:47  gnomi
+// Flag DO_NO_HALT eingefuehrt, bei welchem eine delayed_action nicht
+// abgebrochen werden kann.
+//
+// Revision 1.24  2001/12/01 01:51:28  gnomi
+// Alte Einstellungsbefehle entfernt.
+// Prompt-Einstellung zum Einstellungsmenue hinzugefuegt.
+// Einige Einstellungen von "Spieler und Charakter" zu "Anzeigen" bewegt.
+//
+// Revision 1.23  2001/10/26 22:55:17  sissi
+// tues nun in regelmaessigen Abstaenden.
+//
+// Revision 1.22  2001/07/13 00:35:05  gnomi
+// command_start() zur Initialisierung der notify_fail-Prioritaeten aufrufen.
+//
+// Revision 1.21  2001/06/19 23:45:02  gnomi
+// Mini-Ed: Inner Wiz-Shell gibt es keinen Player-Ed.
+// bessere Abfrage beim Player-ED-Ende, ob der ED abgebrochen wurde.
+//
+// Revision 1.20  2001/06/09 23:44:23  gnomi
+// Mini-ED: Bei Abbruch wirklich 0 liefern.
+//
+// Revision 1.19  2001/05/08 21:35:16  gnomi
+// edit_old_command: Keine Eingaben von Spielern im Format-String von sscanf
+// verwenden.
+//
+// Revision 1.18  2001/04/29 19:08:36  gnomi
+// notify_ed_exit aufrufen.
+//
+// Revision 1.17  2001/04/28 03:40:22  gnomi
+// CVS-Log korrigiert.
+//
+// Revision 1.16  2001/04/28 03:35:43  gnomi
+// Mini-ED eingebaut.
+//
+// Revision 1.15  2001/03/22 15:06:40  sissi
+// Beim Entfernen von Kuerzeln wird einem angezeigt, was man da entfernt hat.
+//
+// Revision 1.14  2001/03/03 23:18:57  sissi
+// Beim Einloggen wird ein Alias "login" ausgefuehrt (falls man eines hat).
+//
+// Revision 1.13  2001/02/27 03:22:33  gnomi
+// Authentische Logs eingefuehrt.
+// (Und nebenbei den Tippse-Puffer auf 50 erhoeht.)
+//
+// Revision 1.12  2001/01/25 03:56:07  gnomi
+// Neues Pufferhandling (ersetzt rede/sagepuffer)
+//
+// Revision 1.11  2001/01/17 22:16:26  freaky
+// trim() bei modify_command() damit fuehrende Spaces geloescht werden.
+//
+// Revision 1.10  2000/12/28 16:24:52  gnomi
+// Ein strip() um die Befehle beim tue.
+//
+// Revision 1.9  2000/12/08 15:02:52  freaky
+// invis-Abfrage auf IS_INVIS umgebaut.
+//
+
+
+#pragma save_types
+#pragma strong_types
+
+inherit "/i/player/delay";
+
+#include <more.h>
+#include <level.h>
+#include <invis.h>
+#include <delayed_action.h>
+#include <config.h>
+#include <configuration.h>
+#include <message.h>
+#include <event.h>
+#include <editor.h>
+#include <input_to.h>
+#include <files.h>
+#include <rtlimits.h>
+#include <notify_fail.h>
+#include <portal.h>
+#include "player.h"
+
+#define MAX_HIST 50
+#define MAX_ALIASES 100
+#define COMMANDS_PER_TIME_SLICE 30
+#define TIME_SLICE 10
+#define FAIL(x) return notify_fail(x)
+#define FAILW(x) { write(x); return 0; }
+
+// Protos
+string query_real_name();
+
+// ({ Uhrzeit, expandierter Befehl, Originalbefehl })
+private nosave mixed *hist=({ ({0,0,0}) }) * MAX_HIST;
+private nosave mapping std_aliases=([
+	"n"  : "norden",	"no" : "nordosten",
+	"s"  : "sueden",	"so" : "suedosten",
+	"o"  : "osten",		"nw" : "nordwesten",
+	"w"  : "westen",	"sw" : "suedwesten",
+	"h"  : "hoch",		"r"  : "runter",
+	"a"  : "ausgang",
+	"sa" : "betrachte",
+	"sc" : "schau",
+	"b"  : "betrachte",
+	"m"  : "mustere",
+	"v"  : "verkaufe",
+	"f"  : "fuehre",
+	"se" : "senke",
+	"t"  : "toete",
+	"le" : "lege",
+	"ni" : "nimm",
+	"na" : "nimm alles",
+	"li" : "lies",
+	"i"  : "ausr",
+	"tm" : "rede",
+	]);
+private string tue_trenner;
+private nosave string comm;
+private nosave int hist_offset = -MAX_HIST;
+private nosave int hist_pos, last_time_slice, command_count;
+private mixed aliases = ([]);
+private string prompt = "> ";
+private string *log_commands;
+private nosave int doing;
+private nosave int login_command_executed;
+// so wird schummeln effektiv ausgeschlossen
+
+void set_tue_trenner (string s)
+{
+    if (previous_object() != this_object()) return;
+    tue_trenner = s;
+}
+
+string query_tue_trenner ()
+{
+    return tue_trenner || ",";
+}
+
+private string get_old_command(string cmd)
+{
+    string rest;
+    int nr, pos, i;
+
+    if (strlen(cmd) && cmd[0]=='%')
+    {
+	if(!hist[hist_pos][1])
+	    FAILW("Ich kann leider keinen passenden Befehl im Puffer finden!\n");
+	if (cmd=="%")
+	    return hist[hist_pos][1];
+	nr=1; i=1;
+	while(cmd[nr..nr+1]=="\\b")
+	    nr+=2,i++;
+	return hist[hist_pos][1][0..<i]+cmd[nr..];
+    }
+
+    if (!strlen(cmd) || ((cmd[0]<'0' || cmd[0]>'9') && cmd[0]!='-'))
+    {
+	for (i=hist_pos; i>=0; i--)
+	    if (hist[i][1] && strstr(hist[i][1], cmd, 0)==0)
+		return hist[i][1];
+	for (i=MAX_HIST-1; i>hist_pos; i--)
+	    if (hist[i][1] && strstr(hist[i][1], cmd, 0)==0)
+		return hist[i][1];
+	FAILW("Ich kann leider keinen passenden Befehl im Puffer finden!\n");
+    }
+
+    sscanf(cmd,"%d%s",nr,rest);
+    if (nr<0)
+	nr+=hist_offset+MAX_HIST;
+    if (nr<=0 || nr<=hist_offset || nr>MAX_HIST+hist_offset)
+	FAILW("Einen Befehl mit dieser Nummer gibt es im Puffer nicht!\n");
+
+    pos=nr+hist_pos-hist_offset;
+    if (pos>=MAX_HIST)
+	pos-=MAX_HIST;
+    if (rest)
+    {
+	nr=0;
+	i=1;
+	while(rest[nr..nr+1]=="\\b")
+	    nr+=2,i++;
+	return hist[pos][1][0..<i]+rest[nr..];
+    }
+    return hist[pos][1];
+}
+
+private string edit_old_command(string cmd)
+{
+    string *kommando, *teile;
+    string ergebnis;
+    int i;
+
+    kommando=explode(cmd,"^");
+    if (sizeof(kommando)==1)
+	kommando += ({""});
+
+    cmd=kommando[0];
+    if (cmd=="")
+	return 0;
+
+    i=hist_pos;
+    ergebnis=0;
+    while( i>=0 && !ergebnis )
+    {
+	if (hist[i--][1] && strstr(hist[i+1][1], cmd, 0) >= 0)
+	    ergebnis=hist[i+1][1];
+    }
+    i=MAX_HIST-1;
+    while( i>hist_pos && !ergebnis )
+    {
+	if (hist[i--][1] && strstr(hist[i+1][1], cmd, 0) >= 0)
+	    ergebnis=hist[i+1][1];
+    }
+
+    if (!ergebnis)
+	FAILW("Ich kann leider keinen passenden Befehl im Puffer finden!\n");
+
+    teile = explode(ergebnis,cmd);
+
+    ergebnis=teile[0]+kommando[1]+implode(teile[1..<1],cmd);
+    if (sizeof(kommando)>2)
+	ergebnis+=kommando[2];
+
+    if (ergebnis=="")
+	FAILW("Ich kann leider keinen passenden Befehl im Puffer finden!\n");
+    return ergebnis;
+}
+
+/*
+
+private string insert_cmd(string cmd, string str)
+{
+    string st, *stra, *strs, ret;
+    int max, nr, i;
+
+    if (sscanf(cmd,"%s$%d%s",ret,nr,st) < 2)
+	return cmd+" "+str;
+    if (nr==0)
+	return ret+str+st;
+    stra=explode(str," ");
+    max=sizeof(stra);
+    strs=regexplode(cmd,"\\$[1-9]");
+    ret="";
+    for (i=1; i<sizeof(strs); i+=2)
+    {
+	nr=strs[i][1]-49;
+	if (nr>=0 && nr<max)
+	    ret+=strs[i-1]+stra[nr];
+	else
+	    ret+=strs[i-1][0]==' '?strs[i-1][1..]:strs[i-1];
+    }
+    return ret+strs[i-1];
+}
+*/
+
+private string insert_cmd(string cmd, string str) {
+    string *stra,*strs,ret,ersetz;
+    int max,nr,i;
+
+    if (!cmd) return 0;
+    strs=regexplode(cmd,"[&$][0-9]\\*|[&$][0-9*]");
+    
+    for(i=0;i<sizeof(strs)-2;i+=2)
+	if(strlen(strs[i]) && strs[i][<1]=='\\')
+	{
+	    strs=strs[0..i-1]+({strs[i][0..<2]+strs[i+1]+strs[i+2]})+strs[i+3..<1];
+	    i-=2;
+	}
+        
+    if (sizeof(strs)<=1)
+        return strs[0]+(str=="" ? "":" ")+str;
+
+    if (str=="")
+        stra=({});
+    else
+        stra=explode(str," ");
+    max=sizeof(stra);
+    ret="";
+    for (i=1; i<sizeof(strs); i+=2) {
+        nr=strs[i][1]-49;
+        ret+=strs[i-1];
+        if (nr>=0 && nr<max)
+            ersetz=((strlen(strs[i])>2 && strs[i][2]=='*') ?
+                        implode(stra[nr..]," ") : stra[nr]);
+        else if (nr<0)
+            ersetz=str;
+        else
+            ersetz="";
+        if (ersetz=="" && ret[<1]==' ')
+            ret=ret[0..<2];
+        ret+=ersetz;
+    }
+    return ret+strs[i-1];
+}
+
+protected void add_history(string str, string orig)
+{
+    // no duplicates in history
+    if (str==hist[hist_pos][1])
+	return;
+    hist_offset++;
+    if (++hist_pos==MAX_HIST)
+	hist_pos=0;
+    hist[hist_pos]=({time(),str,orig});
+}
+
+private int check_delayed_action(string cmd)
+{
+    mixed ret;
+
+    if (in_delayed_action() && 
+        ((!(query_da_flag() & DA_OK_COMMAND) && cmd != DA_STOP_ACTION) ||
+	 ((query_da_flag() & DA_NO_HALT) && cmd == DA_STOP_ACTION)))
+    {
+    	ret = funcall(query_da_handler(),cmd);
+	if (stringp(ret))
+	{
+	    write(ret);
+	    return 1;
+	}
+	if (ret != DA_COMMAND_ALLOWED)
+	    return 1;
+    }
+}
+
+private int is_log_command(string str)
+{
+    int i;
+
+    if (!sizeof(log_commands) || !str)
+	return 0;
+    for (i=0; i<sizeof(log_commands); i++)
+	if (left(str, strlen(log_commands[i])) == log_commands[i])
+	    return 1;
+    return 0;
+}
+
+private int compare_strings(string str1, string str2)
+{
+
+    if (!str1) return 0;
+    return !strstr(str1,str2);
+    // return (sscanf(str1, str2+"%~s"));
+}
+
+int namens_kuerzel_filter(object who, object env)
+{
+// if (who == this_object()) return 0;
+   return ( !(wizp(who) && who->query_no_wer()) ||         // nicht auf Wer-Liste aber
+            (!IS_INVIS(who) && env == environment(who)) ); // sichtbare neben einem -> geht doch
+}
+
+nomask mixed modify_command(string str)
+{
+    string verb, cmd, rest, orig;
+    string *words, *names, *matching_names;
+    int i,j,k;
+
+#if 0
+    if(guestp(this_object()) && str)
+	write_file("/save/GUEST-"+(this_object()->query_real_name()),
+	    shorttimestr(time())+" > "+str+"\n");
+#endif
+
+    this_object()->set_active_prompt(0);
+    if (++command_count > COMMANDS_PER_TIME_SLICE)
+    {
+        command_count = 0;
+        if ((time() - last_time_slice < TIME_SLICE) && !lordp(this_object()))
+	{
+            remove_interactive(this_object());
+            return 1;
+        }
+        last_time_slice = time();
+    }
+    str = trim(convert_umlaute(str));
+
+    if (strlen(str) && str[0]=='^')
+    {
+	str=edit_old_command(str[1..]);
+	if (!str)
+	    return 1;
+	write(str+"\n");
+    }
+
+    orig = str;
+    
+// ' muss drinnen sein wegen sage-Kuerzel ' !!!
+// #define TRENNER_REGEXP   "[ .,;:!?()\"']"
+#define TRENNER_REGEXP   "[^a-zA-Z0-9#]"
+
+    if ( !wizardshellp(this_object()) && str && sizeof(
+        regexp( ({ " "+str+" " }),
+                TRENNER_REGEXP "[a-zA-Z][a-zA-Z]*#" TRENNER_REGEXP)) > 0 )
+    {
+	if(this_object()->query_wiz_level())
+	    names = users()->query_real_name();
+	else
+	    names =
+            map_objects( filter( users(), #'namens_kuerzel_filter,
+                                       environment( this_object())),
+                         "query_real_name");
+
+	words = regexplode( str, TRENNER_REGEXP);
+	for ( i = 0 ; i < sizeof( words) ; i += 2 )
+	    // if ( words[i][<1] == '#'  &&  words[i] != "#" )
+	    if ( sizeof( regexp( ({ words[i] }), "^[a-zA-Z][a-zA-Z]*#$")) )
+	    {
+		matching_names =
+                    filter( names, #'compare_strings,
+                                  lower_case( words[i][0..<2]));
+                switch ( sizeof( matching_names) )
+                {
+                    case 0 :
+			write("\""+words[i]+"\" nicht gefunden.\n");
+                        break ;
+                    case 1 :
+                        words[i] = capitalize(matching_names[0]);
+                        break ;
+		    case 2 :
+			// Nur 2 Woerter, aber ich bin selbst dabei
+			if ((k=member(matching_names, this_object()->query_real_name()))>=0)
+			{
+			    words[i] = matching_names[1-k];
+			    break;
+			}
+			// Fall through!
+                    default :
+			matching_names -= ({this_object()->query_real_name()});
+                        for ( k = j = 0; j < sizeof( matching_names) ; j++ )
+                            if ( present( matching_names[j], environment()) )
+                                if ( k )
+                                    k = -1;
+                                else
+                                    k = j+1;
+                        if ( k > 0 )
+                            words[i] = capitalize(matching_names[k-1]);
+                        else
+                            write("\""+words[i]+"\" ist nicht eindeutig.\n");
+		}
+	    }
+        str = implode( words, "");
+    }
+
+    if ((cmd = aliases[str]) || (cmd = std_aliases[str]))
+    {
+	cmd=regreplace(cmd,"\\\\([$&])","\\1",1);
+    	
+	if (check_delayed_action(cmd))
+	    return 1;
+
+	if (
+#if 0
+            guestp(this_object()) ||
+#endif
+            is_log_command(cmd))
+	    MASTER_OB->log_command("z.Zt in "+object_name(environment())+
+	        " ("+environment()->query_short(this_object())+")\n"+cmd);
+        this_object()->add_to_meldungspuffer("log",">",cmd);
+
+	if(!member(std_aliases, str))
+	    add_history(cmd, orig);
+
+        command_start();
+	return comm=cmd;
+    }
+
+    if (sscanf(str,"%s %s",verb,rest)!=2)
+	verb=str;
+    if (strlen(verb) && verb[0] == '%' )
+    {
+	cmd=get_old_command(verb[1..]);
+	if (!cmd)
+	    return 1;
+	if (rest)
+	    cmd+=" "+rest;
+	write(cmd+"\n");
+    }
+    else
+    {
+        if ( strlen( verb) > 1 && verb[0] == '\\' )
+	    cmd=str[1..] ;
+	else if (!(cmd = aliases[verb]) && !(cmd = std_aliases[verb]))
+	    cmd=str;
+	else if (rest)
+	    cmd=insert_cmd(cmd,rest);
+	else
+	    cmd=regreplace(cmd,"\\\\([$&])","\\1",1);
+    }
+
+    if (check_delayed_action(cmd))
+    	return 1;
+
+    if (
+#if 0
+            guestp(this_object()) ||
+#endif
+            is_log_command(cmd))
+	MASTER_OB->log_command("z.Zt in "+object_name(environment())+
+	    " ("+environment()->query_short(this_object())+")\n"+cmd);
+    this_object()->add_to_meldungspuffer("log",">",cmd);
+    if (!previous_object() || 
+	(doing!=time() && previous_object()==this_object() && (!previous_object(1) ||
+	load_name(previous_object(1)) == PORTAL_SERVER)))
+        add_history(cmd, orig);
+    command_start();
+    return comm=cmd;
+}
+
+
+nosave int alias(string str)
+{
+    int i;
+    string kurz, lang;
+
+    if ((this_player() != this_interactive())
+        || ((query_verb() != "kuerzel") && (query_verb() != "alias")
+            && (query_verb() != "aliase"))) return 1;
+    if (!str)
+    {
+	string *tmp, *out;
+	out = ({ "Deine Kuerzel"+
+                 (adminp(this_object())?":":
+                  sprintf(" (%d von maximal %d):",
+                          sizeof(aliases),
+                          (wizp(this_object())?2*MAX_ALIASES:MAX_ALIASES)))
+              });
+	tmp=sort_array(m_indices(aliases),#'<);
+	for (i=sizeof(tmp); i--; )
+	    out += explode ( wrap_say (
+	    strlen(tmp[i])>14?tmp[i]+":":left (tmp[i]+":",15),
+	    aliases[tmp[i]],0,17)[0..<2],"\n");
+	this_object()->more(out,"--Mehr--",0,M_AUTO_END);
+	return 1;
+    }
+
+    if (sscanf(trim(str),"%s %s",kurz,lang)==2)
+    {
+	if (kurz=="kuerzel")
+	{
+	    write("Auf 'kuerzel' kann man kein Kuerzel setzen.\n");
+	    return 1;
+	}
+	if (kurz=="alias")
+	{
+	    write("Auf 'alias' kann man kein Kuerzel setzen.\n");
+	    return 1;
+	}
+	for(i = 0; i < strlen(kurz); i++)
+	    if(kurz[i] < 32 || kurz[i] >= 127)
+	    {
+		write("Nur Asciizeichen sind im Kuerzel erlaubt.\n");
+		return 1;
+	    }
+	if ( adminp(this_object()) ||
+             sizeof(aliases)<MAX_ALIASES || 
+             (wizp(this_object()) && (sizeof(aliases)<2*MAX_ALIASES)) ||
+             member(aliases,kurz))
+	{
+	    aliases[kurz] = lang;
+	    write("Ok.\n");
+	    return 1;
+	}
+	write("Sorry, mehr Kuerzel gehen nicht!\n");
+	return 1;
+    }
+
+    if ( member( aliases, str) )
+        write( sprintf( "Ku%-=73s\n", "erzel "+str+":  "+ aliases[str])) ;
+    else if (member (str, '*')>=0)
+    {
+	string reg = regreplace(str, "([\\[\\]\\(\\).+])","\\\\\\1", 1);
+	string *allist;
+	reg = regreplace(reg, "\\*", ".*", 1);
+	
+	allist = regexp(m_indices(aliases), "^"+reg+"$");
+	if(sizeof(allist))
+	{
+	    string *out;
+	    out = ({ "Deine Kuerzel:" });
+	    allist=sort_array(allist,#'>);
+	    foreach(string al: allist)
+		out += explode ( wrap_say (
+		strlen(al)>14?al+":":left (al+":",15),
+		aliases[al],0,17)[0..<2],"\n");
+	    this_object()->more(out,"--Mehr--",0,M_AUTO_END);
+	    return 1;
+	}
+	else
+	    write("Keine Kuerzel gefunden.\n");
+    }
+    else
+        write(str+" ist kein Kuerzel!\n");
+    return 1;
+}
+
+
+nosave int unalias(string str)
+{
+    int i;
+
+    if ( (this_player() != this_interactive())  ||
+         ((query_verb() != "entkuerzel") && (query_verb() != "entalias") &&
+          (query_verb() != "unkuerzel") && (query_verb() != "unalias")) )
+        return 1;
+    else if ( !str )
+        write( "Welches Kuerzel soll entfernt werden?\n");
+    else if ( member(aliases,str) )
+    {
+        write(wrap("Kuerzel "+str+" fuer \""+aliases[str]+"\" entfernt."));
+	m_delete(aliases,str);
+    }
+    else
+        write(str+" ist kein Kuerzel!\n");
+    return 1;
+}
+
+
+nosave int history()
+{
+    int i;
+
+    if (hist_offset<0)
+    {
+	for (i=1; i<=hist_pos; i++)
+	    write("%"+i+"\t"+hist[i][1]+"\n");
+	return 1;
+    }
+    for (i=hist_pos+1; i<MAX_HIST; i++)
+	write("%"+(i+hist_offset-hist_pos)+"\t"+hist[i][1]+"\n");
+    for (i=0; i<=hist_pos; i++)
+	write("%"+(i+hist_offset-hist_pos+MAX_HIST)+"\t"+hist[i][1]+"\n");
+    return 1;
+}
+
+// Liefert den Befehlspuffer in einem Format, wie
+// der Puffer von /secure/event und /i/player/event.
+// Also ({Zeit, Verursacher, Text, Flag})
+nosave nomask mixed *query_history()
+{
+    int i;
+    mixed p = ({});
+
+    if (hist_offset<0)
+    {
+	for (i=1; i<=hist_pos; i++)
+	    p+=({({hist[i][0],this_object(),"%"+i+"\t"+hist[i][1]+"\n",
+		 PUFFER_NOT_INDENT})});
+	return p;
+    }
+    for (i=hist_pos+1; i<MAX_HIST; i++)
+	p+=({({hist[i][0],this_object(),"%"+(i+hist_offset-hist_pos)+"\t"+hist[i][1]+"\n",
+	     PUFFER_NOT_INDENT})});
+    for (i=0; i<=hist_pos; i++)
+	p+=({({hist[i][0],this_object(),"%"+(i+hist_offset-hist_pos+MAX_HIST)+"\t"+hist[i][1]+"\n",
+	     PUFFER_NOT_INDENT})});
+    return p;
+}
+
+protected string *query_history_commands()
+{
+    int i;
+    mixed p = ({});
+
+    if (hist_offset<0)
+	return map(hist[1..hist_pos],#'[,2);
+
+    return map(hist[hist_pos+1..MAX_HIST-1]+hist[0..hist_pos],#'[,2);
+}
+
+nomask void show_history ()
+{
+    if (!this_player() || this_player()!=this_interactive() ||
+        !previous_object() || !adminp(this_player()) ||
+        (geteuid(previous_object())!=geteuid(this_player())) ||
+        (object_name(previous_object())[0..14] != "/obj/zauberstab"))
+        return;
+    history();
+}                                                            
+
+nosave void do_it(string *cmds, int show_act)
+{
+    if (show_act)
+	write("Tue: "+cmds[0]+"\n");
+    doing=time(); // gegen Endlos-tue's
+    efun::command(strip(cmds[0]));
+    doing=0;
+    
+    if(!this_object())	// ende via tue...
+	return;
+	
+    if (sizeof(cmds)>1)
+	call_out("do_it",2,cmds[1..],show_act);
+    else
+	write("Tue beendet.\n");
+}
+
+nosave int do_cmd(string str)
+{
+    string *cmds;
+    int show_act;
+
+    if (!str)
+    {
+	if (remove_call_out("do_it")!=-1)
+	{
+	    write("Tue gestoppt.\n");
+	    return 1;
+	}
+        if (!tue_trenner)
+            FAIL("Syntax: tue [-l] cmd1,cmd2,cmd3,...\n");
+        FAIL("Dein Tue-Trenner: "+tue_trenner+"\n"
+             "Syntax: tue [-l] cmd1"+tue_trenner+"cmd2"+tue_trenner+"cmd3"+tue_trenner+"...\n");
+    }
+    if (doing==time() || find_call_out("do_it")!=-1)
+    {
+	write("Bin noch mit einem anderen Tue beschaeftigt.\n");
+	return 1;
+    }
+    cmds=explode(str,tue_trenner || ",")-({""});
+    if (sizeof(cmds))
+    {
+	if (cmds[0][0..2]=="-l ")
+	{
+	    cmds[0]=cmds[0][3..];
+	    show_act=1;
+	}
+	do_it(cmds,show_act);
+	return 1;
+    }
+    if (!tue_trenner)
+        FAIL("Syntax: tue [-l] cmd1,cmd2,cmd3,...\n");
+    FAIL("Dein Tue-Trenner: "+tue_trenner+"\n"
+         "Syntax: tue [-l] cmd1"+tue_trenner+"cmd2"+tue_trenner+"cmd3"+tue_trenner+"...\n");
+}
+
+int stop_do_cmd(string str)
+{
+    if(!str || lower_case(space(str))!="tue")
+	return notify_fail("Stoppe was?\n", FAIL_NOT_CMD);
+    if (remove_call_out("do_it")!=-1)
+        write("Tue gestoppt.\n");
+    else
+	write("Du tust derzeit nix.\n");
+    doing = 0; // Falls der Befehl einen RTE ausloeste, doing zuruecksetzen.
+    return 1;
+}
+
+/*
+FUNKTION: query_doing
+DEKLARATION: int query_doing()
+BESCHREIBUNG:
+Liefert 1 zurueck, wenn der Spieler gerade einen Befehl
+innerhalb eines Tue ausfuehrt, 0 sonst.
+GRUPPEN: spieler
+*/
+int query_doing()
+{
+    return doing == time();
+}
+
+/*
+FUNKTION: query_aliases
+DEKLARATION: mapping query_aliases()
+BESCHREIBUNG:
+Damit bekommt man ein mapping, in dem alle kuerzel eines Spielers stehen.
+Wird von der Wizard - Shell benoetigt.
+VERWEISE:
+GRUPPEN: spieler
+*/
+mapping query_aliases()
+{
+    if (!extern_call() || wizardshellp(previous_object()))
+	return aliases;
+}
+
+int query_aliases_count()
+{
+    return sizeof(aliases);
+}
+
+nosave void set_aliases(mapping al)
+{
+    if (mappingp(al))
+	aliases = al;
+}
+
+int alias_exists(string str)
+{
+    return member(aliases, str);
+}
+
+void set_prompt_string(string str);
+nosave void init_aliases()
+{
+    if (efun::interactive(this_object()))
+#if __EFUN_DEFINED__(set_modify_command)
+	set_modify_command(this_object());
+#else
+        configure_interactive(this_object(), IC_MODIFY_COMMAND, this_object());
+#endif
+    set_prompt_string(prompt);
+    if (pointerp(aliases))		// Konvertierung
+	aliases = mkmapping(aliases[0],aliases[1]);
+}
+
+/*
+FUNKTION: set_prompt_string
+DEKLARATION: void set_prompt_string(string prompt_string)
+BESCHREIBUNG:
+Mit dieser Funktion kann man einen neuen Prompt setzen.
+VERWEISE: query_prompt_string
+GRUPPEN: spieler
+*/
+void set_prompt_string(string str)
+{
+    if (!stringp(str))
+	prompt="> ";
+    else
+	prompt=str;
+    /* Garthan: naechste Zeile wegen Ende_statue mit Wicht Fehler. */
+    if (interactive(this_object()))
+	set_prompt(prompt, this_object());
+}
+
+/*
+FUNKTION: query_prompt_string
+DEKLARATION: string query_prompt_string()
+BESCHREIBUNG:
+Liefert den momentan gesetzten Prompt eines Spielers zurueck.
+VERWEISE: set_prompt_string
+GRUPPEN: spieler
+*/
+string query_prompt_string()
+{
+    return prompt;
+}
+
+nomask string query_command()
+{
+    if (object_name(previous_object()) == MASTER_OB)
+	return comm;
+}
+
+
+void execute_login_command ()
+{
+    if (login_command_executed) return;
+    // steckt der Spieler in der Todessequenz?
+    if (this_object()->query_ghost() > 0) return;
+    login_command_executed = 1;
+    if (aliases["login"])
+        efun::command ("login");
+}
+
+/*****************************************************************************
+ *     Der Mini-Editor                                                       *
+ *****************************************************************************/
+private nosave mapping editor_status;
+
+/*
+FUNKTION: in_mini_ed
+DEKLARATION: int in_mini_ed()
+BESCHREIBUNG:
+Liefert einen Wert !=0, wenn dieser Spieler sich im Mini-ed befindet.
+VERWEISE: is_editing, mini_ed
+GRUPPEN: Dateien
+*/
+int in_mini_ed()
+{
+    return (editor_status && (editor_status["webmud"] || find_input_to(this_object(), this_object())>=0));
+}
+
+/*
+FUNKTION: is_editing
+DEKLARATION: int is_editing()
+BESCHREIBUNG:
+Liefert einen Wert !=0, wenn dieser Spieler sich in irgendeinem Editor
+befindet.
+VERWEISE: in_edit, query_editing
+GRUPPEN: Dateien
+*/
+int is_editing()
+{
+    if(this_object()->in_edit()            // Player-Ed
+    || query_editing(this_object())        // Driver-Ed
+    || this_object()->has_editor_shadow()  // Xed
+    || in_mini_ed())                       // Mini-Ed
+        return 1;
+}
+
+            
+/*
+FUNKTION: mini_ed
+DEKLARATION: varargs int mini_ed(closure retfun, int which_ed, string tempfile, mapping msgs, mapping flags, string* text)
+BESCHREIBUNG:
+Ein Mini-Editor wird gestartet. Dort kann man einfach nacheinander Zeile
+fuer Zeile eingeben. Mit einem einzelnen '.' oder '**' wird der Editor beendet.
+
+Man hat folgende Befehle zur Verfuegung:
+  ~e  In den ed wechseln. (Goetter erhalten den Driver-ed mit der Datei
+      edfile, Spieler den ed aus dem /i/player/editor.c)
+  ~x  In den xed wechseln (Nur fuer Goetter, die einen Zauberstab dabei
+      haben bzw. in der Wizard-Shell)
+  ~p  Nur fuer Goetter: In den Player-Ed wechseln (nicht in der Wiz-Shell)
+  ~q  Ed abbrechen
+
+Die Parameter:
+  closure retfun      Diese Funktion nach Beendigung des Editors aufgerufen.
+                      Sie erhaelt als Parameter den Text als Array aus den
+                      einzelnen Zeilen oder 0, falls der Ed abgebrochen wurde.
+  int which_ed        Damit kann man explizit angeben, mit welchem Editor
+                      gestartet werden soll:
+                        0  Mini-Ed
+                        1  Ed (Goetter: Driver-Ed, Spieler: Player-ed)
+                        2  Player-Ed
+                        3  Xed (Nur fuer Goetter)
+  string tempfile     Eine temporaere Datei, die vom Driver-Ed editiert wird.
+                      Ist tempfile 0, so wird /w/<gott>/priv/ed.tmp genutzt.
+  mapping msgs        Meldungen fuer den Player-ed (siehe edit())
+                      Folgende Meldungen daraus nutzt der Mini-ed:
+
+     MINI_ED_ALREADY_EDITING: "Du schreibst schon einen Text.\n"
+     MINI_ED_START_TEXT:      "Gib nun den Text ein. Mit '**' oder '.'
+                               beenden, mit '~q' abbrechen.\n"
+     MINI_ED_PLAYER_INFO:     "Mit '~e' kommt man in den ED.\n"
+     MINI_ED_WIZ_INFO:        "Mit '~e' kommt man in den ED, mit ~x in den XED
+                               und mit ~p in den Player-ED.\n"
+     MINI_ED_MAX_SIZE_OVERRUN "Mehr als %d Zeilen darfst Du nicht schreiben.\n"
+
+  mapping flags       Zusaetzliche Flags:
+
+     MINI_ED_WRAP_LEN:        Bei wieviel Zeichen umgebrochen werden soll.
+                              (-1: Ueberhaupt nicht. Standard ist 79)
+     MINI_ED_FORCE_WRAP:      Bricht die Zeilen, welche in den anderen
+                              Editoren (player-ed, driver-ed, xed)
+			      eingegeben wurden, nachtraeglich um.
+			      
+  string* text        Bereits eingegebene Zeilen.
+
+Alle Angaben sind optional. Die Funktion liefert 1 bei Erfolg, 0 bei einem
+Fehler zurueck (Fehlermeldung wird per write ausgegeben.)
+VERWEISE: edit, ed, more, cat, tail, set_more_chunk, query_more_chunk,
+GRUPPEN: Dateien
+*/
+
+nosave void end_mini_ed(string *buffer)
+{
+    mapping old_status;
+    
+    // Text umbrechen
+    if(buffer && editor_status["flags"][MINI_ED_FORCE_WRAP] && 
+	editor_status["flags"][MINI_ED_WRAP_LEN]>=0)
+    {
+	int len = editor_status["flags"][MINI_ED_WRAP_LEN] || 79;
+	int maxlen = query_limits()[LIMIT_ARRAY];
+	string *ntext = ({});
+
+	foreach(string str:buffer)
+	{
+    	    string *toadd = explode(wrap(str,len)[0..<2],"\n");
+	    if(sizeof(ntext)+sizeof(toadd)>maxlen)
+	    {
+    		printf(funcall(editor_status["msgs"][MINI_ED_MAX_SIZE_OVERRUN])
+        	    || MINI_ED_STD_MSGS[MINI_ED_MAX_SIZE_OVERRUN],maxlen);
+		ntext = 0;
+		break;
+	    }
+    	    ntext += toadd;
+	}
+	buffer = ntext;
+    }
+    old_status = editor_status;
+    editor_status = 0;
+
+    funcall(old_status["retfun"], buffer);
+}
+
+nosave void end_player_ed(string *buffer, int changed)
+{
+    end_mini_ed((changed || sizeof(buffer))?buffer:0);
+}
+
+nosave void driver_ed_ends()
+{
+    string file=editor_status["tempfile"];
+    string text=read_file(file);
+    string *buffer;
+    this_object()->notify_ed_exit(1);
+    if(!text)
+    {
+        if(file_size(file)>0)
+            write("Die Datei konnte nicht eingelesen werden.\n");
+    }
+    else
+    {
+        buffer=explode(text,"\n");
+        if(buffer[<1]=="") buffer=buffer[0..<2];
+    }
+    rm(file);
+    end_mini_ed(buffer);
+}
+
+void xed_ends(string *buffer, int esc_key)
+{
+    end_mini_ed(esc_key?0:buffer);
+}
+
+private int change_to_ed(int which_ed, string* buffer)
+{
+    switch(which_ed)
+    {
+        case 1: // ED
+        case 2:  //Player-ED
+            if(wizardshellp(this_object()) || (which_ed==1 && wizp(this_object())))
+            {
+                string file;
+                if(!(file=editor_status["tempfile"]))
+                    editor_status["tempfile"]=file=
+                        "/w/"+this_object()->query_real_name()+
+			((file_size("/w/"+this_object()->query_real_name()+"/priv")==FSIZE_DIR)?"/priv/ed.tmp":"/ed.tmp");
+                if(file_size(file)!=FSIZE_NOFILE)
+                {
+                    write("Datei '"+file+"' existiert bereits!\n");
+                    return 0;
+                }
+                if(!write_file(file, buffer?implode(buffer,"\n")+"\n":""))
+                {
+                    write("Konnte die Datei '"+file+"' nicht schreiben!\n");
+                    return 0;
+                }
+                this_object()->notify_ed_enter(1);
+                ed(file, "driver_ed_ends");
+                rm(file); // Jetzt hat er's hoffentlich in den Speicher eingelesen.
+                return 1;
+            }
+            return this_object()->edit(buffer, "end_player_ed", this_object(),
+                0, editor_status["msgs"]);
+        case 3: // Xed
+            if(wizp(this_object()))
+            {
+                object xed;
+                if(wizardshellp(this_object()))
+                    xed = this_object();
+                else
+                    xed = present_clone("/obj/zauberstab",this_object());
+                if(!xed)
+                {
+                    write("Keinen XED gefunden!\n");
+                    return 0;
+                }
+                if(xed->edit_buffer(buffer||({}),#'xed_ends)<=0)
+                {
+                    write("Fehler beim Start des XED.\n");
+                    return 0;
+                }
+                return 1;
+            }
+    }
+}
+
+void mini_input_line(string str, string *buffer)
+{
+    int n;
+    mixed text;
+    
+    this_object()->set_active_prompt(0);
+    
+    if(!str) str="";
+    switch(str)
+    {
+        case "~q":
+            this_object()->notify_ed_exit(0);
+            end_mini_ed(0);
+            return;
+        case ".":
+        case "**":
+            this_object()->notify_ed_exit(0);
+            end_mini_ed(buffer);
+            return;
+        case "~x":
+        case "~p":
+            if(!wizp(this_object()))
+                break;
+        case "~e":
+            this_object()->notify_ed_exit(0);
+            if(change_to_ed(member(({"~e","~p","~x"}),str)+1, buffer))
+                return;
+            input_to("mini_input_line", INPUT_PROMPT,
+		(sizeof(buffer)+1)+((sizeof(buffer)<9)?">>":">"),
+		buffer);
+            return;
+    }
+    n=query_limits()[LIMIT_ARRAY];
+    if(editor_status["flags"][MINI_ED_WRAP_LEN]<0 || !sizeof(str))
+	text = ({str});
+    else
+	text=explode(wrap(str,editor_status["flags"][MINI_ED_WRAP_LEN]||79),"\n")[0..<2];
+    if(sizeof(buffer)+sizeof(text)>n)
+        printf(funcall(editor_status["msgs"][MINI_ED_MAX_SIZE_OVERRUN])
+            || MINI_ED_STD_MSGS[MINI_ED_MAX_SIZE_OVERRUN],n);
+    else
+        buffer+=text;
+    input_to("mini_input_line", INPUT_PROMPT,
+	(sizeof(buffer)+1)+((sizeof(buffer)<9)?">>":">"),
+	buffer);
+}
+
+#define GET_MSG(x) (funcall(msgs[x])||MINI_ED_STD_MSGS[x])
+varargs int mini_ed(closure retfun, int which_ed, string tempfile,
+    mapping msgs, mapping flags, string *buffer)
+{
+    string err;
+    if(this_object()!=this_player()) // Was soll man da als Fehler ausgeben?
+        return 0;
+
+    if(!msgs) msgs=([]);
+    if(!flags) flags=([]);
+
+    if(is_editing())
+    {
+        write(GET_MSG(MINI_ED_ALREADY_EDITING));
+        return 0;
+    }
+
+    // Parameter speichern
+    editor_status=(["retfun":retfun,
+                    "tempfile":tempfile,
+                    "msgs":msgs,
+		    "flags":flags]);
+
+    if(this_object()->uses_webmud() &&
+      !this_object()->query_client_option(CLIENT_WEBMUD_NO_EDIT) &&
+       this_object()->webmud_edit(GET_MSG(MINI_ED_NAME),
+           function void(string str)
+           {
+               string *restext;
+               if(str)
+               {
+                   if(sizeof(str) && str[<1]=='\n')
+                       str = str[0..<2];
+                   restext = explode(str, "\n");
+               }
+               end_mini_ed(restext);
+           }, sizeof(buffer) ? implode(buffer,"\n")+"\n" : ""))
+    {
+        editor_status["webmud"] = 1;
+        return 1;
+    }
+
+    if(!which_ed)
+    {
+        this_object()->notify_ed_enter(0);
+        write(GET_MSG(MINI_ED_START_TEXT));
+        if(wizp(this_object()))
+            write(GET_MSG(MINI_ED_WIZ_INFO));
+        else
+            write(GET_MSG(MINI_ED_PLAYER_INFO));
+        input_to("mini_input_line", INPUT_PROMPT,
+	    (sizeof(buffer)+1)+((sizeof(buffer)<9)?">>":">"),
+	    buffer||({}));
+        return 1;
+    }
+    else
+        return change_to_ed(which_ed, buffer);
+}

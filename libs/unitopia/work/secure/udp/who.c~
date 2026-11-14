@@ -1,0 +1,196 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/secure/udp/who.c
+// Description:	Handles a UDP-Who-Request
+// Author:	Freaky (01.10.94)
+// Modified by:	Freaky (02.03.96) Statistik auch fuer WWW
+//		Freaky (08.12.97) HTML im short unterbinden
+//
+// $Log: who.c,v $
+// Revision 1.17  2014/03/31 22:20:37  gnomi
+// Native-Mode-Hinweis entfernt (zur besseren Formatierung).
+//
+// Revision 1.16  2013/08/06 18:51:30  sorcerer
+// www. vor unitopia.de im Web-Who
+//
+// Revision 1.15  2010-09-18 21:01:15  sorcerer
+// neutrale Formulierung Spielende in wer-Liste
+//
+// Revision 1.14  2010-01-05 13:50:24  sorcerer
+// wer: no_wer und invis zaehlen, nicht zeigen
+//
+// Revision 1.13  2009-11-10 12:21:35  sorcerer
+// no_wer Goetter/Testies wieder komplett raus
+//
+// Revision 1.12  2009-11-06 09:18:39  sorcerer
+// unnoetige users()-Aufrufe raus
+//
+// Revision 1.11  2009-11-05 22:30:15  sorcerer
+// Invis ignorieren und alle zaehlen
+//
+// Revision 1.10  2005/05/26 01:07:19  gnomi
+// Personen nach ihrem angezeigten Namen (statt Real-Namen) sortieren.
+//
+// Revision 1.9  2002/07/04 23:07:57  gnomi
+// seteuid(getuid()) entfernt; EUID wird vom Master aus gesetzt.
+//
+// Revision 1.8  2002/07/04 22:29:22  gnomi
+// Bessere Formatierung, wenn der real_name nur ein Teil des Namens ist.
+//
+// Revision 1.7  2002/04/20 18:49:53  gnomi
+// Anzeige der Spielerzahl in der kurzen Wer-Liste korrigiert.
+//
+// Revision 1.6  2002/01/01 18:27:59  sissi
+// query_short's mit mehr als 78 Zeichen werden jetzt sauber abgeschnitten
+// bei nem Leerzeichen und es wird "..." drangehaengt.
+//
+// Revision 1.5  2001/03/25 01:55:22  sissi
+// "short" - Anforderungen an die who - Liste von anderen Muds aus
+// werden nun erfuellt.
+//
+// Revision 1.4  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+#include <udp.h>
+#include <apps.h>
+#include <level.h>
+#include <invis.h>
+#include <config.h>
+
+#define WIDTH 61
+#define LINE "+-------------------------------------------------------------+\n"
+#define HEADER \
+    header+center("Uptime: "+format_seconds(query_up_time()),WIDTH)+"|\n"+LINE
+
+string header;
+
+void create()
+{
+    header = LINE +
+	"|" + center(MUD_NAME,WIDTH) + "|\n|" +
+	center(HOST_NAME " (" __HOST_IP_NUMBER__ ") " +
+#ifdef UNItopia
+	"23"
+#else
+	query_mud_port()
+#endif
+	,WIDTH) + "|\n|" +
+	center("Gamedriver: LDMud "+__VERSION__,WIDTH) +
+	"|\n|";
+
+    return;
+}
+
+string volk_eintrag(object ob)
+{
+    string short, name;
+    int l;
+
+    short = ob->query_short();
+    short = implode(explode(short,"&"),"&amp;");
+    short = implode(explode(short,"<"),"&lt;");
+    short = implode(explode(short,">"),"&gt;");
+    name = ob->query_cap_name();
+
+    if (lower_case(name) == ob->query_real_name() ||
+	sizeof(regexp(({lower_case(name)}),"\\<"+ob->query_real_name()+"\\>")))
+    {
+	l = strlen(regreplace(lower_case(short),"\\<"+lower_case(name)+"\\>.*","",0));
+	if(l==strlen(short))
+    	    l = strstr(short,name);
+	if (l < 0)
+	    l = strstr(lower_case(short),lower_case(name));
+        if (l >= 0)
+    	    return "<LI>" + short[0..l-1] + "<A HREF = \"http://www." HOST_NAME 
+		   "/cgi-bin/fing?name=" + ob->query_real_name() + "\">" + name + "</A>" +
+		   short[l+strlen(name)..];
+    }
+
+    return "<LI>" + short;
+}
+
+void udp_who(mapping data)
+{
+    string *ret, snd;
+    int short, idle, anz;
+    object *list;
+    
+    list = users();
+    anz = sizeof(list);
+
+    list = sort_array(filter(list, (: !IS_INVIS($1) &&
+                                      !($1->query_no_wer() &&
+                                        (wizp($1) || testplayerp($1))) &&
+                                      $1->query_short() :)),
+                      (: to_string($1->query_name()) > 
+                         to_string($2->query_name()) :));
+
+    if (data["HTML"])
+    {
+	ret = map(list, #'volk_eintrag);
+	snd="<HTML>\n<HEAD>\n<TITLE>Die Liste der Leute, die gerade in "
+	    MUD_NAME " eingeloggt sind</TITLE>\n</HEAD>\n<BODY>\n<PRE>\n"+
+	    HEADER+"</PRE>\n"
+	    "<H1>Folgende Leute sind gerade in UNItopia eingeloggt:</H1>\n"
+	    "<UL>\n"+
+	    implode(ret, "\n")+
+	    "\n</UL>\n<B>Insgesamt "+anz+" Spielende"+
+            (anz-sizeof(list)?", "+(anz-sizeof(list))+" davon unsichtbar."
+                             :".")+
+            "\n<BR>\n"
+            "Heute waren bisher "
+            +STATISTIK->query_sum_users()+
+            " Leute in " MUD_NAME ", maximal "
+            +STATISTIK->query_max_users()
+            +" gleichzeitig.\n<BR>\nAm "
+            +timestr(STATISTIK->query_max_users_ever_time())
+            +" waren " + STATISTIK->query_max_users_ever() +
+            " Spielende gleichzeitig da.\n</B>\n<HR>\n<ADDRESS>"+MUD_NAME+
+	    " (<A HREF=\"mailto:"+EMAIL+"\">"+EMAIL+"</A>)</ADDRESS>\n"+
+	    "</BODY>\n</HTML>\n";
+    }
+    else
+    {
+        if (data[DATA]) {
+            if (strstr (data[DATA],"short") >= 0) short = 1;
+            if (strstr (data[DATA],"idle") >= 0) idle = 1;
+        }
+	ret = map_objects(list, short ? "query_cap_name" : "query_short");
+        if (short)
+            ret = explode(sprintf("%#-78s",implode(ret,"\n")),"\n");
+        else
+            for (int i = sizeof (ret); i--; )
+                if (strlen (ret[i]) > 78) {
+                    int j = 75;
+                    while (j && (ret[i][j] != ' ')) j--;
+                    ret[i] = ret[i][0..j-1]+"...";
+                }
+
+	snd=HEADER+"\n"+
+	    implode(ret, "\n")+"\n\nInsgesamt "+anz+" Spielende"+
+            (anz-sizeof(list)?", "+(anz-sizeof(list))+" davon unsichtbar."
+                             :".")+
+            "\n"
+	    +(short ? "" :
+             "Heute waren bisher "
+             +STATISTIK->query_sum_users()+
+             " Leute in " MUD_NAME ", maximal "
+             +STATISTIK->query_max_users()
+             +" gleichzeitig.\nAm "
+             +timestr(STATISTIK->query_max_users_ever_time())
+             +" waren "
+             +STATISTIK->query_max_users_ever()+
+             " Spielende gleichzeitig da.\n");
+    }
+
+    INETD->send_udp(data[NAME], ([
+	REQUEST: REPLY,
+	RECIPIENT: data[SENDER],
+	ID: data[ID],
+	DATA: snd
+	]) );
+
+    return;
+}

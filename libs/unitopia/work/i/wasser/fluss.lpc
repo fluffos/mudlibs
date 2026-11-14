@@ -1,0 +1,647 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        fluss.c
+// Description: Ein Fluss, der es gestattet an Vitems zu trinken und
+//              Flaschen zu fuellen. Eine Dokumentation dazu ist in
+// Author:      Jafar & Yellow
+// Modified by: Jafar, 9.7.96
+//              Man kann jetzt die Meldungen, warum man nicht trinken oder
+//              eine Flasche fuellen kann, frei setzen.
+//
+//              Jafar, 26.02.97
+//              Geister koennen nicht trinken.
+//
+//              Jafar, 04.11.97
+//              virus_look in die Dokumentation aufgenommen.
+//
+//              Jafar, 31.03.98
+//              Puralform wird jetzt ueberall beruecksichtigt.
+//              Fix fuer die Umstellung in den Vitems. Die Mapping der Vitems
+//              enthalten keine Id mehr, wenn sie mit dem Namen
+//              uebereinstimmt.
+//
+// $Log: fluss.c,v $
+// Revision 1.18  2010-12-18 12:51:45  sorcerer
+// fail-Prioritaeten fuer drink_action
+//
+// Revision 1.17  2005/05/06 22:59:56  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.16  2004/11/27 21:23:40  gnomi
+// add_hp-Aenderung: add_hp-Aufrufe angepasst.
+//
+// Revision 1.15  2003/10/17 22:48:45  sissi
+// Leerzeichen zuviel bei handgemachter well-success-msg entfernt.
+//
+// Revision 1.14  2003/09/20 02:07:51  gnomi
+// forbidden_drink_water: Man kann nun auch 0 als Meldung fuer alle anderen
+// angeben.
+//
+// Revision 1.13  2003/07/25 04:08:55  gnomi
+// Bei Konkatenation von Meldungen Leerzeichen einfuegen.
+//
+// Revision 1.12  2003/01/25 04:24:52  gnomi
+// No-List-Leute geben wieder Meldungen von sich.
+//
+// Revision 1.11  2003/01/24 01:23:01  gnomi
+// Doku zu drink_action korrigiert.
+//
+// Revision 1.10  2003/01/04 02:29:05  gnomi
+// 0 als virus_look zulassen.
+//
+// Revision 1.9  2002/11/20 04:03:04  gnomi
+// forbidden_drin_water-Controller eingebaut.
+//
+// Revision 1.8  2002/06/15 15:42:32  gnomi
+// message -> water_message (war ich nicht)
+// Hinweis auf /p/jafar/doc entfernt.
+//
+// Revision 1.7  2001/12/16 07:26:47  gnomi
+// messages virtual inheriten.
+//
+// Revision 1.6  2001/04/24 21:45:08  gnomi
+// Doku: Deklarationen in einer Zeile schreiben.
+//
+// Revision 1.5  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+
+/*
+
+Soll aus Vitems getrunken werden koennen, muessen sie die Ids '# well #' und
+'# water #' tragen. Danach werden neben den allgemeinen Eintraegen in Brunnen
+noch folgende beruecksichtigt
+
+  water_id               - Id des dazugehoerenden Wassers
+  well_success_msg       - Meldungen fuer erfolgreiches Trinken ('water
+  well_other_success_msg   wird durch das Wasser ersetzt)
+  well_failure_msg       - Meldungen fuer erfolgloses Trinken ('water
+  well_other_failure_msg   wird durch das Wasser ersetzt)
+  well_fill_msg          - Meldungen fuer das Fuellen von Flaschen
+  well_other_fill_msg      ('bottle und 'water werden durch Flasche
+                           und Wasser ersetzt)
+
+und in denen fuer Wasser
+
+  well_id                 - Id des dazugehoerenden Brunnens (optional)
+  water_amount            - Wasspunkte pro Schluck (vorgegeben 40)
+  water_strength          - Alkoholgehalt pro Schluck (vorgegeben 0)
+  water_healing           - einmalige Heilung pro Schluck (vorgegeben 0)
+  water_success_msg       - Meldungen fuer erfolgreiches Trinken
+  water_other_success_msg
+  water_failure_msg       - Meldungen fuer erfolgloses Trinken
+  water_other_failure_msg
+  water_adjektiv          - Adjektive, wenn das Wasser geklont wird
+  water_fill_msg          - Meldungen fuer das Fuellen von Flaschen
+  water_other_fill_msg      ('bottle wird durch Flasche ersetzt)
+
+Ueber water_adjektiv kann man die Adjektive bestimmen, die das Wasser erhaelt,
+wenn man es abfuellt. Dabei gibt es die Moeglichkeiten
+
+  n                - die ersten n Adjektive des Vitems, bei n == 0 keines
+ ({a, b})         - alle Adjektive vom a-ten bis zum b-ten des Vitems
+ "gruen"          - ein einzelnes Adjektiv
+ ({"gruen", ...}) - eine Liste von Adjektiven
+
+In den Vitems fuer trinkbares Wasser koennen noch Informationen fuer einen
+Virus abgelegt werden. Ist der Name eines Virus angegeben, werden noch folgende
+Eintraege beruecksichtigt (mehr dazu in /obj/virus.c)
+
+  virus_name                 - Name des Virus
+  virus_type                 - Virustyp (gift, krankheit, seuche, fluch)
+  virus_infection_chance     - Infizierungswahrscheinlichkeit  beim Trinken
+  virus_infection_msg        - Meldungen bei einer Infizierung
+  virus_other_infection_msg
+  virus_str                  - AP-Abzug pro Minute
+  virus_min                  - ab dieser AP-Grenze ist der Spieler geheilt
+  virus_dur                  - Verweildauer des Virus
+  virus_chance               - Ansteckungswahrscheinlichkeit bei Seuchen
+  virus_immun_time           - Dauer der Immunisierung
+  virus_look                 - Extra-Beschreibung eines Erkrankten
+  virus_heal_msg             - Meldung bei einer Heilung
+  virus_messages             - Meldungen beim Krankheitsverlauf
+  virus_shadow_path          - Dateiname eines Shadows, der waehrend der
+                               Lebensdauer des Virus aufrecht erhalten wird
+
+Soll aus den Vitems nicht getrunken, den Spielern aber ein Grund dafuer
+mitgeteilt werden, muessen sie die Ids '# no_well #' und '# no_water #' tragen.
+Danach werden in Vitems fuer Brunnen noch folgende Eintraege beruecksichtigt
+
+  well_no_drink_reason  - Warum kann man aus dem Brunnen nicht trinken?
+                          (water wird durch das Wasser ersetzt)
+  well_no_fill_reason   - Warum kann man am Brunnen nichts fuellen? (water
+                          wird durch Wasser, bottle durch die Flasche ersetzt)
+
+sowie in den Vitems fuer Brunnen die Eintraege
+
+  water_no_drink_reason - Warum kann man das Wasser nicht trinken?
+  water_no_fill_reason  - Warum kann man mit dem Wasser nichts fuellen?
+                          (bottle wird durch die Flasche ersetzt)
+
+*/
+
+#pragma save_types
+#pragma strong_types
+#pragma verbose_errors
+
+virtual inherit "/i/item/messages";
+
+#include <add_hp.h>
+#include <deklin.h>
+#include <move.h>
+#include <wasser.h>
+#include <message.h>
+#include <notify_fail.h>
+#include <invis.h>
+
+/*
+FUNKTION: query_success_message
+DEKLARATION: string query_success_message(mapping well, mapping water, int infected)
+BESCHREIBUNG:
+query_success_message setzt die Meldung fuer den Spieler aus dem Teil
+des Brunnens (sofern das Wasser nicht einzeln ist und dem Teil des Wassers
+zusammen, wenn er trinkt. Enthaelt infected einen Wert ungleich 0 und ist
+fuer das Wasser ein Virus angegeben, wird zusaetzlich noch eine Infektions-
+Meldung ans Ende angehaengt. Ist eine der Meldungen in den Vitems nicht
+angegeben, werden Default-Meldungen verwendet.
+VERWEISE: query_other_success_message, query_failure_message,
+query_other_failure_message
+GRUPPEN: wasser
+*/
+varargs string query_success_message(mapping well, mapping water, int infected)
+{
+   string message;
+
+
+   if (well) {
+     if (well["well_success_msg"]) {
+       message = closure_to_string(mixed_to_closure(well["well_success_msg"], ({'water})), ({water}));
+       if (message [<1] != 10) message += " ";
+     }
+     else
+       message = "Du trinkst einen kraeftigen Schluck " +
+           wen(water, ART_KEINS) + " aus " + dem(well) + ". ";
+   } else
+     message = "Du trinkst einen Schluck von " + dem(water) + ". ";
+
+   if (water["water_success_msg"])
+     message += closure_to_string(mixed_to_closure(water["water_success_msg"]))+" ";
+
+   if (infected && water["virus_infection_msg"])
+     message += closure_to_string(mixed_to_closure(water["virus_infection_msg"]))+" ";
+
+   return message[0..<2];
+}
+
+
+/*
+FUNKTION: query_other_success_message
+DEKLARATION: string query_other_success_message(mapping well, mapping water, int infected)
+BESCHREIBUNG:
+query_other_success_message setzt die Meldung fuer die Umstehenden aus dem Teil
+des Brunnens (sofern das Wasser nicht einzeln ist und dem Teil des Wassers
+zusammen, wenn ein Spieler trinkt. Enthaelt infected einen Wert ungleich 0 und
+ist fuer das Wasser ein Virus angegeben, wird zusaetzlich noch eine Infektions-
+Meldung ans Ende angehaengt. Ist eine der Meldungen in den Vitems nicht
+angegeben, werden Default-Meldungen verwendet.
+VERWEISE: query_success_message, query_failure_message,
+query_other_failure_message
+GRUPPEN: wasser
+*/
+varargs string query_other_success_message(mapping well, mapping water, int infected)
+{
+   string message;
+
+
+   if (well)
+     if (well["well_other_success_msg"])
+       message = closure_to_string(mixed_to_closure(well["well_other_success_msg"], ({'water})), ({water}))+" ";
+     else
+       message = Der(OBJ_TP) + " trinkt einen kraeftigen Schluck " +
+           wen(water, ART_KEINS) + " aus " + dem(well) + ". ";
+   else
+     message = Der(OBJ_TP) + " trinkt einen Schluck von " + dem(water) + ". ";
+
+   if (water["water_other_success_msg"])
+     message += closure_to_string(mixed_to_closure(water["water_other_success_msg"]))+" ";
+
+   if (infected && water["virus_other_infection_msg"])
+     message += closure_to_string(mixed_to_closure(water["virus_other_infection_msg"]))+" ";
+
+   return message[0..<2];
+}
+
+
+/*
+FUNKTION: query_failure_message
+DEKLARATION: string query_failure_message(mapping well, mapping water)
+BESCHREIBUNG:
+query_failure_message setzt die Meldung fuer den Spieler aus dem Teil
+des Brunnens (sofern das Wasser nicht einzeln ist und dem Teil des Wassers
+zusammen, wenn er etwas nicht trinken kann (zuviel Wasserpunkte oder zuviel
+Alkoholpunkte). Ist eine der Meldungen in den Vitems nicht angegeben, werden
+Default-Meldungen verwendet.
+VERWEISE: query_success_message, query_other_success_message,
+query_other_failure_message
+GRUPPEN: wasser
+*/
+string query_failure_message(mapping well, mapping water)
+{
+   string message;
+
+
+   if (well && well["well_failure_msg"])
+     message = closure_to_string(mixed_to_closure(well["well_failure_msg"], ({'water})), ({water}))+" ";
+   else
+     message = "";
+
+   if (water["water_failure_msg"])
+     message += closure_to_string(mixed_to_closure(water["water_failure_msg"]))+" ";
+
+   if ((message-" ") == "")
+     return "Du bekommst von " + dem(water) + " nichts mehr runter.";
+   else
+     return message[0..<2];
+}
+
+
+/*
+FUNKTION: query_other_failure_message
+DEKLARATION: string query_other_failure_message(mapping well, mapping water)
+BESCHREIBUNG:
+query_other_failure_message setzt die Meldung fuer die Umstehenden aus dem Teil
+des Brunnens (sofern das Wasser nicht einzeln ist und dem Teil des Wassers
+zusammen, wenn ein Spieler etwas nicht trinken kann (zuviel Wasserpunkte oder
+zuviel Alkoholpunkte). Ist eine der Meldungen in den Vitems nicht angegeben,
+werden Default-Meldungen verwendet.
+VERWEISE: query_success_message, query_other_success_message,
+query_other_failure_message
+GRUPPEN: wasser
+*/
+string query_other_failure_message(mapping well, mapping water)
+{
+   string message ;
+
+
+   if (well && well["well_other_failure_msg"])
+     message = closure_to_string(mixed_to_closure(well["well_other_failure_msg"], ({'water})), ({water}))+" ";
+   else
+     message = "";
+
+   if (water["water_other_failure"])
+     message += closure_to_string(mixed_to_closure(water["water_other_failure_msg"]))+" ";
+
+   return message[0..<2];
+}
+
+/*
+FUNKTION: query_no_drink_reason
+DEKLARATION: string query_no_drink_reason(mapping well, mapping water)
+BESCHREIBUNG:
+query_no_drink_reason liefert zu den Vitems fuer ein Paar von Brunnen und
+Wasser oder einzelnes Wasser/einzelne Brunnen den Grund zurueck, warum davon
+nicht getrunken werden kann. In den Closures der Vitems fuer Brunnen steht der
+Bezeichner water fuer das Wasser im Brunnen.
+VERWEISE: query_no_fill_reason (flasche)
+GRUPPEN: wasser
+*/
+string query_no_drink_reason(mapping well, mapping water)
+{
+   if (well)
+     if (well["well_no_drink_reason"])
+       return closure_to_string(mixed_to_closure(well["well_no_drink_reason"], ({'water})), ({water}));
+     else if (water)
+       return "Du kannst " + den(water) + " aus " + dem(well) + " nicht "
+           "trinken.";
+     else
+       return "Du kannst aus " + dem(well) + " nichts trinken.";
+   else if (water["water_no_drink_reason"])
+     return closure_to_string(mixed_to_closure(water["water_no_drink_reason"]));
+   else
+     return "Du kannst " + den(water) + " nicht trinken.";
+}
+
+
+// Meldungen an den Spieler und die Umstehenden ausgeben. Ist der Spieler
+// unsichtbar oder die Meldung fuer die Umstehenden leer, so wird sie
+// unterdrueckt.
+
+void wasser_message(string player, string others)
+{
+   if (!this_player()) return;
+   
+   if (player != "")
+     this_player()->send_message_to(this_player(), MT_LOOK|MT_NOTIFY, MA_DRINK,
+       wrap(player));
+       
+   if (!IS_INVIS(this_player()) && others != "")
+     this_player()->send_message(MT_LOOK, MA_DRINK, wrap(others));
+}
+
+
+/*
+FUNKTION: heal_player
+DEKLARATION: void heal_player(int amount)
+BESCHREIBUNG:
+heal_player fuellt mit der angegebenen Punktzahl zuerst die HPs, dann die
+SPs von this_player() auf.
+VERWEISE:
+GRUPPEN: wasser
+*/
+void heal_player(int amount)
+{
+   int hp_needed, hp_get, sp_get;
+
+   if (amount <= 0)
+     return;
+
+   hp_needed = this_player()->query_max_hp() - this_player()->query_hp();
+
+   if (amount > hp_needed) {
+     hp_get = hp_needed;
+     sp_get = amount - hp_needed;
+   }else {
+     hp_get = amount;
+     sp_get = 0;
+   }
+
+   this_player()->add_hp(hp_get, ([ AH_HEAL_TYPE: AH_HEAL_MEDIC ]));
+   this_player()->add_sp(sp_get);
+}
+
+
+/*
+FUNKTION: drink_action
+DEKLARATION: void drink_action(mapping well, mapping water)
+BESCHREIBUNG:
+Die Funktion wird beim Trinken von drink_command aufgerufen. Sie ist fuer die
+Auswirkungen des Wassers (Heilung, Erhoehen der Wasserpunkte und des
+Alkoholgehalts, ...) verantwortlich. Kann der Spieler das Wasser trinken,
+werden die entsprechenden Werte aktualisiert, evtl. wird der Spieler mit einem
+Virus infiziert, eine Erfolgsmeldung wird ausgegeben und ein Wert ungleich 0
+zurueck gegeben. Kann der Spieler das Wasser nicht trinken, wird eine
+entsprechende Fehlermeldung ausgegeben.
+Diese Funktion liefert 1 zurueck, wenn sie sich fuer zustaendig befand und
+entsprechende (Erfolgs- oder auch Misserfolgs-)Meldungen ausgegeben hat.
+Ansonsten (im notify_fail-Falle) wird 0 zurueckgeliefert.
+VERWEISE: drink_command
+GRUPPEN: wasser
+*/
+int drink_action(mapping well, mapping water)
+{
+   int strength,
+       healing,
+       amount,
+       infected;
+   object virus;
+   mixed fail;
+
+   // Geister koennen nicht trinken
+
+   if (this_player()->query_ghost()) {
+     notify_fail("In deinem vergeistigten Zustand ist das nicht moeglich.\n",
+                 FAIL_INTERNAL);
+     return 0;
+   }
+
+   fail = this_player()->forbidden("drink_water", water, well, this_player())
+       || (well && this_object()->forbidden("drink_water_well", water, well, this_player()))
+       || this_object()->forbidden("drink_water_self", water, well, this_player());
+   if(fail)
+   {
+      if(stringp(fail))
+         fail = ({fail});
+      if(pointerp(fail))
+      {
+         if(sizeof(fail)>1)
+            this_player()->send_message(MT_LOOK, MA_DRINK, fail[1] && wrap(fail[1]),
+               wrap(fail[0]), this_player());
+         else if(sizeof(fail)==1)
+            this_player()->send_message_to(this_player(), MT_LOOK|MT_FEEL,
+               MA_DRINK, wrap(fail[0]));
+      }
+      else // Hmm, es wurde halt verboten. Also muessen wir fuer
+           // die Meldung sorgen. (Auf diese Notloesung sollte man sich
+	   // nicht verlassen.)
+      {
+         this_player()->send_message_to(this_player(), MT_LOOK|MT_FEEL, MA_DRINK,
+	    wrap(query_no_drink_reason(well, water)));
+      }
+      return 1;
+   }
+
+   // Eigenschaften des Wassers
+
+   if (member(water, "water_strength"))
+     strength = water["water_strength"];
+   else
+     strength = STRENGTH;
+
+   if (member(water, "water_healing"))
+     healing = water["water_healing"];
+   else
+     healing = HEALING;
+
+   if (member(water, "water_amount"))
+     amount = water["water_amount"];
+   else
+     amount = AMOUNT;
+
+   // kann der Spieler noch etwas davon trinken?
+
+   if ((amount > 0 && this_player()->has_enough_wp(amount)) ||
+       (strength > 0 && this_player()->has_enough_alc(strength))) {
+     wasser_message(query_failure_message(well, water),
+             query_other_failure_message(well, water));
+     return 1;
+   } else {
+
+     // Wasserpunkte, Alkohol und einmalige Heilung
+
+     this_player()->add_wp(amount);
+
+     if (strength != 0)
+       this_player()->add_alc(strength);
+
+     if (healing > 0)
+       heal_player(healing);
+
+     // ist ein Virus vorhanden, den Spieler je nach
+     // Ansteckungsgefahr infizieren
+
+     if (water["virus_name"] &&
+             (!member(water, "virus_infection_chance") ||
+              random(100) < water["virus_infection_chance"])) {
+       virus = clone_object("/obj/virus");
+       virus->set_virus_name(water["virus_name"]);
+
+       if (water["virus_type"])
+         virus->set_virus_type(water["virus_type"]);
+       if (member(water, "virus_str"))
+         virus->set_virus_str(water["virus_str"]);
+       if (member(water, "virus_min"))
+         virus->set_virus_min(water["virus_min"]);
+       if (member(water, "virus_dur"))
+	 virus->set_virus_dur(water["virus_dur"]);
+       if (member(water, "virus_chance"))
+	 virus->set_virus_chance(water["virus_chance"]);
+       if (member(water, "virus_immun_time"))
+	 virus->set_virus_immun_time(water["virus_immun_time"]);
+       if (member(water, "virus_look"))
+	 virus->set_virus_look(water["virus_look"]);
+       if (water["virus_heal_msg"])
+         virus->set_virus_heal_msg(water["virus_heal_msg"]);
+       if (water["virus_messages"])
+         virus->set_virus_messages(water["virus_messages"]);
+       if (water["virus_shadow_path"])
+         virus->set_virus_shadow_path(water["virus_shadow_path"]);
+
+       if (virus->move(this_player()) == MOVE_OK)
+         infected = 1;
+       else {
+         write(wrap("Da hast du ja noch einmal Glueck gehabt. Weiss der "
+             "Teufel, warum du verschont bleibst."));
+         virus->remove();
+       }
+     }
+
+     wasser_message(query_success_message(well, water, infected),
+             query_other_success_message(well, water, infected));
+     this_player()->notify("drink_water",water,well,this_player());
+     if(well) this_object()->notify("drink_water_well",water,well,this_player());
+     this_object()->notify("drink_water_self",water,well,this_player());
+   }
+
+   return 1;
+}
+
+
+/*
+FUNKTION: drink_command
+DEKLARATION: int drink_command(string s)
+BESCHREIBUNG:
+drink_command ist der Parser fuer die Trinkbefehle. Er akzeptiert
+
+   trinke wasser
+   trinke aus brunnen
+   trinke wasser aus brunnen
+
+Wird einer davon erkannt und kann man von den entsprechenden Vitems trinken,
+so wird mit ihnen drink_action aufgerufen. Geht das Trinken nicht, wird mit
+query_no_drink_reason der Grund ermittelt und dem Spieler mitgeteilt.
+VERWEISE: drink_action, query_no_drink_reason
+GRUPPEN: wasser
+*/
+int drink_command(string s)
+{
+   string water_str, well_str;
+   mapping water, well, vitem;
+   int deny;
+
+
+
+   if (!strlen(s))
+     return notify_fail("Was moechtest du trinken?\n");
+
+   s = lower_case(trim(s));
+
+   // in Wasser- und Brunnentext aufteilen
+
+   if (sscanf(s, "aus %s", well_str) != 1 &&
+       sscanf(s, "%s aus %s", water_str, well_str) != 2)
+     water_str = s;
+
+   if (well_str) {
+
+     // gibt es den angegebenen Brunnen?
+
+     if (this_object()->here(well_str, 0, &well) == "") {
+
+       // ist es ein Brunnen, kann man auch daraus trinken?
+
+       if (!member(well, "id") ||
+           (member(well["id"], "# well #") < 0 &&
+            !(deny = (member(well["id"], "# no_well #") >= 0)))) {
+         notify_fail(wrap("Aus " + dem(well) + " kann man nichts trinken."));
+         return 0;
+       }
+
+       // falls vorhanden, zugehoeriges Wasser bestimmen
+
+       if (well["water_id"] &&
+           !(water = this_object()->query_v_item(({well["water_id"]}))))
+         raise_error("Vitem fuer Wasser in '" + well["name"] + "' ist "
+             "nicht vorhanden.\n");
+
+       if (water_str) {
+
+         // gehoert das angegebene Wasser zum Brunnen?
+
+         if (!water ||
+             this_object()->here(water_str, well["water_id"]) != "") {
+           if (this_object()->here(water_str, 0, &vitem) != "")
+             notify_fail(wrap(capitalize(water_str) + " nicht gefunden."));
+           else if (!water)
+             notify_fail(wrap(Der(well) + " enthaelt " +
+                 wen(vitem, ART_KEIN) + "."));
+           else
+             notify_fail(wrap(Der(well) + " enthaelt " +
+                 wen(vitem, ART_KEIN) + ", sondern " +
+                 wen(water, ART_KEINS) + "."));
+
+           return 0;
+         }
+       }
+     } else {
+       notify_fail(wrap(capitalize(well_str) + " nicht gefunden."));
+       return 0;
+     }
+
+     // ein echter Brunnen braucht Wasser
+
+     if (!deny && !water)
+       raise_error("Brunnen '" + well["name"] + "' hat kein Wasser.\n");
+   } else if (water_str) {
+
+     // gibt es das angegebene Wasser?
+
+     if (this_object()->here(water_str, 0, &water) == "") {
+
+       // ist es Wasser, kann man auch davon trinken?
+
+       if (!member(water, "id") ||
+           (member(water["id"], "# water #") < 0 &&
+            !(deny = (member(water["id"], "# no_water #") >= 0)))) {
+         notify_fail(wrap(Den(water) + " kann man nicht trinken."));
+         return 0;
+       }
+
+       // falls vorhanden, den zugehoerigen Brunnen bestimmen
+
+       if (water["well_id"] &&
+           !(well = this_object()->query_v_item(({water["well_id"]}))))
+         raise_error("Vitem fuer Brunnen in '" + water["name"] + "' ist "
+             " nicht vorhanden.\n");
+     } else {
+       notify_fail(wrap(capitalize(water_str) + " nicht gefunden."));
+       return 0;
+     }
+   }
+
+   // kann man aus dem Brunnen nicht trinken, eine Meldung ausgeben
+   // ansonsten das Trinken ausfuehren
+
+   if (deny) {
+     write(wrap(query_no_drink_reason(well, water)));
+     return 1;
+   } else
+     return drink_action(well, water);
+}
+
+// Trink-Befehl anmelden
+
+void init()
+{
+    add_action("drink_command", "trinke", -5);
+}

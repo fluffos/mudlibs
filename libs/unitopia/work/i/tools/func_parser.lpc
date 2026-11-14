@@ -1,0 +1,91 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:	/i/tools/func_parser.c
+// Description: Umwandeln von Format-Strings in Closures
+// Author:      Garthan (23.12.93)
+// Modified by:	Freaky (22.05.2000) do_fun_call() verbessert
+//
+// $Log: func_parser.c,v $
+// Revision 1.8  2014/01/21 00:40:07  myonara
+// defines gegen PFade getauscht fuer simul_efun und backup-
+//
+// Revision 1.7  2001/06/12 00:18:07  gnomi
+// Der Bettler ist umgezogen.
+//
+// Revision 1.6  2000/07/10 14:15:12  sissi
+// Verweis auf /i/monster/rollen im Kommentar korrigiert.
+//
+// Revision 1.5  2000/06/19 22:05:29  freaky
+// func_parser(): $fun() wird jetzt als fun(0) aufgerufen und nicht mehr
+// als fun("")
+//
+
+/*
+ * der func_parser parst Strings nach Funktionsaufrufen, fuehrt selbige
+ * durch, setzt das Ergebnis in den String anstelle des Aufrufs ein und
+ * gibt ihn zurueck.
+ *
+ * Funktionsaufrufe werden an einem fuehrenden $ und einer abschliessenden )
+ * erkannt.
+ *
+ * zB:      "$Der()", "$seinem()",
+ *          "$/d/Vaniorh/Tadmor/Strassen/npc/bettler->query_name()"
+ *          "$/d/Vaniorh/Tadmor/Laeden/npc/connor->set_title(der Schotte)"
+ */
+ 
+#pragma save_types
+
+#include <apps.h>
+
+/*
+ * do_fun_call und do_efun_call koennen durch eigene Routinen ueberlagert
+ * werden (/i/tools/rollen.c macht es zB)
+ */
+mixed do_fun_call(mixed ob, string funktion, varargs mixed *parameter)
+{
+    if ((sizeof(parameter) == 1) && pointerp(parameter[0]))
+	parameter = parameter[0];
+    return apply(#'call_other,CLOSURE_CONTAINER,"do_call",
+	    ob,funktion,parameter);
+}
+
+mixed do_efun_call(string funktion, varargs mixed *parameter)
+{
+    object ob;
+
+    if ((sizeof(parameter) == 1) && pointerp(parameter[0]))
+	parameter = parameter[0];
+    ob = find_object("/secure/simul_efun/simul_efun") || find_object("/secure/simul_efun/backup/simul_efun");
+    return apply(#'call_other,ob,funktion,parameter);
+}
+
+string func_parser(string str)
+{
+    string *parts, param, fun, ob, out;
+    int a;
+    mixed ret;
+
+    if (!str)
+	return 0;
+    parts = regexplode(str,"\\$[^\\(]*\\([^\\)]*\\)");
+    out = "";
+
+    for (a = 0; a < sizeof(parts); a++)
+    {
+	param = fun = ob = 0; 
+	if (sscanf(parts[a],"$%s(%s)",fun,param))
+	{
+	    if (sscanf(fun,"%s->%s",ob,fun) == 2)
+		ret = do_fun_call(ob,fun,strlen(param) && param);
+	    else
+		ret = do_efun_call(fun,strlen(param) && param);
+	}
+	else
+	    ret = 0;
+	if (ret && stringp(ret))
+	    out += ret;
+	else
+	    out += parts[a];
+    }
+    return out;
+}

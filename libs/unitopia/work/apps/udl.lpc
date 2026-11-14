@@ -1,0 +1,595 @@
+// This file is part of the UNItopia MUDLIB
+// ========================================
+// file:   /apps/udl.c
+// author: Jesaia
+// date:   25.04.00
+// description:
+// udl steht fuer UNItopiaDescriptionLanguage, eine HTML aehnliche Sprache um
+// Raeume und Objekte zu beschreiben. Hier im ULD-Master sind 
+// alle TAG Handler Funktionalitaeten drin.
+
+// UID: Apps
+
+//
+// $Log: udl.c,v $
+// Revision 1.14  2003/06/19 22:42:56  gnomi
+// Doku korrigiert.
+//
+// Revision 1.13  2002/10/17 12:49:28  freaky
+// functio nach func wegen ldmud-3.3
+//
+// Revision 1.12  2001/10/05 20:56:39  freaky
+// Sichtbarkeit von Redefinitionen korrigiert.
+//
+// Revision 1.11  2001/06/22 23:54:42  gnomi
+// Nicht direkt auf die globalen Variablen des LPC-Parsers zugreifen. *erroet*
+//
+// Revision 1.10  2001/05/30 17:51:51  jesaia
+// Auf <TAG> </TAG> Style gewechselt.
+//
+// Revision 1.9  2001/04/09 21:39:16  gnomi
+// Es wird ein Define __UDL_PARSER__ definiert, damit koennen bestimmte
+// Abschnitte in .h-Dateien ausgeblendet werden (siehe misc.h)
+//
+// Revision 1.8  2001/04/08 21:31:27  freaky
+// Den uid-Eintrag nach vorne verschoben, damit man ihn leichter findet.
+//
+// Revision 1.7  2000/12/12 23:16:11  jesaia
+// Einbau von udl_build_const(). Womit auch Constanten ausgewerte werden
+// koennen.
+//
+// Revision 1.6  2000/12/11 14:14:28  freaky
+// LOG-Tag eingebaut.
+//
+
+protected functions inherit "/i/tools/lpc_parser";
+#include <error.h>
+
+// PROTOTYPE
+string get_tag_content(string tag,string udl_desc);
+
+
+private mapping udl_handler=([]);
+private mapping constants=([]);
+
+//Aus dem Mapping konstanten des LPC-Parsers ([Name: Lambda]) wird ein
+////Mapping ([Name: Wert]) gebastelt.
+private void convert_constants()
+{
+  foreach(string name,mixed wert:query_konstanten())
+      constants+=([name:funcall(lambda(0,wert))]);
+}
+
+int check_content(string content)
+{
+    if (content =="")
+	return 0;
+    return 1;
+}
+
+int udl_build_const(string str)
+{
+    //Erstmal String in die Teile zwischen dem | zerlegen.
+    string *consts=map(explode(str,"|"),#'strip)-({""});
+    //Sind unbekannte Konstanten darunter?
+    string *err=filter(consts,(:!member($2,$1):),constants);
+    if(sizeof(err))
+    {
+      if(sizeof(err)==1)
+            do_error("Unbekannte Konstante '"+err[0]+"'\n");
+       else
+            do_error(wrap("Unbekannte Konstanten "
+                     +liste(map(err,(:"'"+$1+"'":)))+"."));
+    }
+    else
+    {
+      int back;
+      foreach(string c:consts)
+            back|=constants[c];
+      return back;
+    }
+}
+/*
+FUNKTION: udl_build_string
+DEKLARATION: string udl_build_string (string udl_desc)
+BESCHREIBUNG:
+Der String udl_desc wird von ueberzaehligen Lehrzeichen und Zeilenumbruechen
+gereinigt, und zurueck gegeben.
+VERWEISE:
+GRUPPEN: UDL
+*/
+string udl_build_string(string udl_desc)
+{
+    mixed *lines;
+    int counter;
+    string RC;
+
+    lines = explode(udl_desc,"\n");
+/*    for (counter=sizeof(lines);counter--;)
+    {
+        lines[counter]=trim(lines[counter]);
+    }
+*/
+    lines = map(lines,#'trim);
+    lines -= ({""}); 
+    RC = implode(lines," ");
+    RC = regreplace(RC,"<BR>","\n",1);
+    return RC;
+}
+
+/*
+FUNKTION: udl_build_array
+DEKLARATION: mixed *udl_build_array(string udl_desc)
+BESCHREIBUNG:
+Der String wird in ein Array zerleget, und zwar sind "\n" und "," die Trenn-
+zeichen.
+VERWEISE:
+GRUPPEN: UDL
+*/
+mixed *udl_build_array(string udl_desc)
+{
+    mixed *RC;
+    int counter;
+    string dummy;
+    dummy = regreplace(udl_desc,"\n",",",1);    
+    RC=explode(dummy,",");
+/*    for(counter=sizeof(RC);counter--;)
+    {
+       RC[counter]=trim(RC[counter]);
+    }
+*/
+    RC=map(RC,#'trim);
+    RC -= ({""}); 
+    return ({})+RC;
+}    
+
+/*
+FUNTKION: udl_build_int_array
+DEKLARATION int *udl_build_int_array(string udl_desc)
+BESCHREIBUNG:
+Auf nem String wird ein integer Array gemacht.
+VERWEISE:
+GRUPPEN: UDL
+*/
+int *udl_build_int_array(string udl_desc)
+{
+/*    int *RC;
+    int counter;
+    mixed *PreRC;
+    PreRC = udl_build_array(udl_desc);
+    RC=allocate(sizeof(PreRC));
+    for (counter = 0;counter<sizeof(PreRC);counter++)
+    {
+	RC[counter]=to_int(PreRC[counter]);
+    }
+    return ({})+RC;
+
+   */
+    return map(udl_build_array(udl_desc),#'to_int);
+}
+int check_udl_tag(string tag)
+{
+    return member(udl_handler,tag);
+}
+
+/* 
+FUNKTON: udl_build_mapping
+DEKLARATION: mapping udl_build_mapping(string description, mixed KeyList)
+BESCHREIBUNG:
+Aus der description wird basierend auf den Definitionen der KeyList ein
+Mapping zusammen gebaut.
+VERWEISE:
+GRUPPEN: UDL
+*/
+
+mapping udl_build_mapping(string description, mixed KeyList)
+{
+     mapping parameter, RC;
+     int counter;
+     string single_desc;
+     RC = ([]); 
+     for (counter=0;counter< sizeof(KeyList);counter++)
+     {
+     //paramer um parameter abtasten...          ;
+        parameter = KeyList[counter];
+        single_desc=get_tag_content(parameter["name"],description);
+        if(single_desc == "")
+	{
+	    if (parameter["ignore_default"] == 0)
+              RC = RC+ ([parameter["name"]:parameter["default"] ]);
+	}
+	else
+        {
+           switch(parameter["type"])
+           {
+             case "string":
+             RC=RC + ([parameter["name"] : udl_build_string(single_desc)]);
+	     break;
+            case "int":
+             RC=RC + ([parameter["name"] : to_int(udl_build_string(
+			     single_desc)) ]);
+	    break;
+            case "stringarray":
+             RC=RC + ([parameter["name"] : udl_build_array(single_desc) ]);
+	     break;
+            case "intarray":
+             RC=RC + ([parameter["name"] : udl_build_int_array(single_desc) ]);
+	     break;
+            case "mapping":
+             RC=RC + ([parameter["name"] : udl_build_mapping(single_desc,
+             parameter["KeyList"]) ]);
+             break; 
+	    case "const":
+	     RC=RC + ([parameter["name"] : udl_build_const(single_desc) ]);
+	   }
+        }
+     }
+     return RC;
+}
+
+/*
+FUNKTION: add_udl_tag
+DEKLARATION: int add_udl_tag(string tag, string func, mapping parameter)
+BESCHREIBUNG:
+Der Taghandler bekommt hier den Tag definiert, func ist die Funktion, die
+im UDL Master aufgerufen wird, und das mapping parameter enthaelt informationen
+die, in der Funktion verarbeiten werden.
+Diese Funktion ist Privat, weil nur der Master in seinem create neue
+TAGs deklariert.
+VERWEISE:
+GRUPPEN: UDL
+*/
+private int add_udl_tag(string tag, string func, mixed parameter)
+{
+    if (check_udl_tag(tag))
+	return 0;
+    udl_handler=udl_handler +([tag:({func,parameter})]);
+    return 1;
+}
+
+mapping query_udl_handler()
+{
+    return ([])+udl_handler;
+}
+/*
+FUNKTION: get_tag_content
+DEKLARATION: string get_tag_content(string tag, string udl_desc)
+BESCHREIBUNG:
+Hier wird ein Tag analysiert, und das was zwischen <<TAG>> und <</TAG>>
+steht wieder zurueck gegeben.
+VERWEISE:
+GRUPPEN: UDL
+*/
+string get_tag_content(string tag,string udl_desc)
+{
+    int StartPoint,EndPoint;
+
+    StartPoint = strstr(udl_desc,"<"+tag+">");
+    EndPoint = strstr(udl_desc,"</"+tag+">");
+
+    if (StartPoint == -1)
+    {
+//	do_error("Tag: "+tag+" nicht gefunden.");
+	return "";
+    }
+    if (EndPoint == -1)
+    {
+	do_error("Tag: "+tag+" hat keinen EndTag.");
+        return "";
+    }
+    if (EndPoint < StartPoint)
+    {  
+       do_error("Tag: "+tag+" hat den Endtag vor dem StartTag.");
+      return ""; 
+    }
+    return udl_desc[StartPoint+strlen("<"+tag+">")..EndPoint-1];
+}
+/*
+FUNKTION: get_tag
+DEKLARATION: int get_tag(string udl_desc, object ob)
+BESCHREIBUNG:
+Als hier wird der aktuelle String auf die kombination << analsysiert, und
+das was zwischen << und >> steht auf einen bestehende TAG Definition unter-
+sucht. Falls etwas gefunden wird, wird der gesammte string zwischen 
+<<tag>> und <</tag>> der Funktion in der Tag Definition uebergeben und
+dort wird dann alles weitere gemacht.
+VERWEISE:
+GRUPPEN: UDL
+*/
+int get_tag(string udl_desc,object ob)
+{
+    string tag;
+    string desc,single_desc;
+    int StartPoint, EndPoint,counter;
+    mixed result;
+    mapping parameter;
+    StartPoint = strstr(udl_desc,"<",0);
+    if (StartPoint == -1)
+	return strlen(udl_desc);
+    EndPoint = strstr(udl_desc[StartPoint..],">");
+    tag=udl_desc[StartPoint+1..StartPoint+EndPoint-1];
+    if (member(udl_handler,tag)==1)
+    {
+	StartPoint=StartPoint+EndPoint+1;
+	EndPoint=strstr(udl_desc[StartPoint..],"</"+tag+">");
+	if (EndPoint == -1)
+	{
+	    do_error("Keinen EndTag zu "+tag+" gefunden.");
+	    return strlen(udl_desc);
+	}
+// So nun verarbeiten wir diesen String
+	desc = udl_desc[StartPoint..EndPoint-1+StartPoint];
+	if (mappingp(udl_handler[tag][1]))
+        {
+        // Bingo wir haben ne SimpleFunction, das wird ziemlich einfach
+	   parameter= udl_handler[tag][1];
+	   switch(parameter["type"])
+	   {
+	      case "string":
+                call_other(ob,udl_handler[tag][0],
+			udl_build_string(desc));
+	            break;
+	      case "int":
+		  call_other(ob,udl_handler[tag][0],
+		        to_int(udl_build_string(desc)));
+	           break;
+	      case "stringarray":
+		  call_other(ob,udl_handler[tag][0],
+			  udl_build_array(desc));
+	           break;
+	      case "intarray":
+		  call_other(ob,udl_handler[tag][0],
+			  udl_build_int_array(desc));
+	           break;
+	      case "mapping":
+		  call_other(ob,udl_handler[tag][0],
+			  udl_build_mapping(desc,parameter["KeyList"]));
+	           break; 
+              case "const":
+                  call_other(ob,udl_handler[tag][0],
+                          udl_build_const(desc));
+                   break; 
+	   }
+	}
+        else
+	if (pointerp(udl_handler[tag][1]))
+	{
+           result=allocate(sizeof(udl_handler[tag][1]));
+	   for (counter=0;counter< sizeof(udl_handler[tag][1]);counter++)
+	   {	
+           //paramer um parameter abtasten...	       ;
+	       parameter = udl_handler[tag][1][counter];
+               single_desc=get_tag_content(parameter["name"],desc);
+               if(single_desc == "")
+		   if (parameter["ignore_default"] == 0)
+		       result[counter]= parameter["default"];
+	           else
+		       result[counter]=0;
+	       else
+	       {
+		  switch(parameter["type"])
+		  {
+		    case "string":
+		         result[counter]=udl_build_string(single_desc);
+		         break;
+	            case "int":
+	                 result[counter]=to_int(udl_build_string(single_desc));
+		         break;
+	            case "stringarray":
+	                 result[counter]=udl_build_array(single_desc);
+		         break;
+	            case "intarray":
+	                 result[counter]=udl_build_int_array(single_desc);
+		         break;
+	            case "mapping":
+	                 result[counter]=udl_build_mapping(single_desc,
+				 parameter["KeyList"]);
+		         break;
+                    case "const":
+                         result[counter]=udl_build_const(single_desc);
+                         break; 
+                    }
+	       }
+	   }
+	  apply(#'call_other,ob,udl_handler[tag][0],result);
+	}	
+	else
+	{
+	   //Der Tag hat nur die Funktion die aufgerufen wird, ohne
+	   //Parameter
+	    call_other(ob,udl_handler[tag][0]);
+	}
+	return StartPoint+EndPoint+strlen("</"+tag+">");
+    }
+    if (tag == "#UDLBASIC_TYPE#")
+	return StartPoint+EndPoint+strlen("</"+tag+">");
+    do_error("Keine gueltiger definition: "+tag);
+    return strlen(udl_desc);
+}
+/*
+FUNKTION: process_udl
+DEKLARATION: int process_udl(string udl_desc, object ob)
+BESCHREIBUNG:
+Hier wird der Udl String analysiert und zwar ueber die Funktion get_tag.
+VERWEISE:
+GRUPPEN: UDL
+*/
+int process_udl(string udl_desc,object ob)
+{
+    int index;
+    int totalChars;
+
+    totalChars = strlen(udl_desc);
+    index = 0;
+    do
+    {
+         index=index+get_tag(udl_desc[index..totalChars],ob);
+    }
+    while (index < totalChars);
+    return 1;
+}
+
+/*
+FUNKTION: read_udl_file
+DEKLARATION: int read_udl_file(string filename, object ob)
+BESCHREIBUNG:
+Diese Funkton wird aufgerufen sobald ein Objekt vom Master als UDL
+objekt erkannt wird. Dabei wird das File eingelesen und Proccess - UDL
+durchgereicht.
+VERWEISE:
+GRUPPEN: UDL
+*/
+int read_udl_file(string filename,object ob)
+{
+    string fullfilepath, udl_desc;
+
+    fullfilepath = abs_path(filename) + ".udl";
+    udl_desc = read_file(fullfilepath);
+    if (!udl_desc || udl_desc == "")
+    {
+	do_error("Kein Inhalt im File: " + fullfilepath + "\n");
+	return 0;
+    }
+    return process_udl(udl_desc,ob);
+}
+
+void create()
+{
+//  Fuer die Konstantenauswertung
+    string *sys_files;
+
+    ::create();
+    clear_konstanten();
+    // Damit kann man einige Defines in den Header-Dateien auskommentieren.
+    add_define("__UDL_PARSER__");
+    sys_files = get_dir("/sys/*.h");
+    foreach (string sys_filename : sys_files[0..<2])
+    {
+        read_include("/sys/"+sys_filename);
+    }
+    read_include(sys_files[<1],#'convert_constants);
+    // Mald die wichtigen Dinge...
+    add_udl_tag("long","set_long",(["type":"string"]));
+    add_udl_tag("short","set_short",(["type":"string"]));
+    add_udl_tag("smell","set_smell",
+	    (["type":"string"])); 
+    add_udl_tag("read","set_read",(["type":"string"])); 
+    add_udl_tag("noise","set_noise",(["type":"string"]));
+    add_udl_tag("name","set_name",(["type":"string"]));
+    add_udl_tag("feel","set_feel",(["type":"string"]));
+    add_udl_tag("gender","set_gender",
+	    (["type":"string"]));
+    add_udl_tag("id","set_id",(["type":"stringarray"]));
+    add_udl_tag("add_id","add_id",
+	    (["type":"stringarray"]));
+    add_udl_tag("plural_id","set_plural_id",
+	    (["type":"stringarray"]));
+    add_udl_tag("material","set_material",
+	    (["type":"stringarray"]));
+    add_udl_tag("add_material","add_material",
+	    (["type":"stringarray"]));
+    add_udl_tag("class_id","set_class_id",
+	    (["type":"stringarray"]));
+    add_udl_tag("plural","set_plural",
+	    (["type":"int"]));
+    add_udl_tag("personal","set_personal",
+	                (["type":"int"]));
+    add_udl_tag("eigen","set_eigen",
+	               (["type":"int"])); 
+    add_udl_tag("hidden_until_next_move","set_hidden_until_next_move",
+	               (["type":"int"]));
+    add_udl_tag("weight","set_weight",
+	                (["type":"int"]));
+    add_udl_tag("add_v_item","add_v_item",
+	                (["type":"mapping",
+			  "KeyList":({
+			  (["name":"name",
+			    "type":"string",
+			    "ignore_default":1,
+			    "default":""]),
+			  (["name":"long",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"noise",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"smell",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"read",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"feel",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"look_msg",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"hear_msg",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"smell_msg",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"read_msg",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"feel_msg",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"take",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"take_msg",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"attack",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"attack_msg",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"gender",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"adjektiv",
+			    "type":"stringarray",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"id",
+			    "type":"stringarray",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"soul",
+			    "type":"string",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"plural",
+			    "type":"int",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"far",
+			    "type":"int",
+			    "ignore_default":1,
+                            "default":""]),
+			  (["name":"living",
+			    "type":"int",
+			    "ignore_default":1,
+                            "default":""])
+			  })]));
+} 

@@ -1,0 +1,1529 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /i/monster/monster.c
+// Description: Monster,NPC Spezifisches
+// Modified by:	Garthan	(18.10.94) query_aggressive() fehlte.
+//              Garthan	(27.01.95) test_aggression, test_all_aggressions,
+//                                 init, set_aggressive.
+// 		Garthan	(16.07.95) removed add_hp, wird von hands.c gemacht
+//              Zandru  (22.12.95) neu: set/query_eatable_corpse() etc.
+//                                 siehe auch "/p/zandru/obj/braten/kadaver.lpc"
+//              Sissi   (14.08.96) add_init_ob, delete_init_ob, init
+//              Sissi   (05.02.97) notify_shown, set/query_shown_ob
+//              Mammi   (03.04.98) compute_kill_skill()
+//              Parsec  (24.09.99) Kommunikationskram aus Seele nach voice
+//              Kurdel  (07.11.99) no_push
+//              Parsec  (04.01.00) exec_command an Stellen wo Objekte
+//                                 angesprochen werden verwendet
+//                                 pick-Bug weg (Lebewesen haben das gestoert)
+//              Sissi   (05.06.00) Anzieh- und Auszieh add action aus
+//                                 Kleidung aufgenommen
+//
+//
+// $Log: monster.c,v $
+// Revision 1.79  2015/07/27 17:18:28  myonara
+// Monster schiessen im Heartbeat und co.
+//
+// Revision 1.78  2013-05-13 17:52:24  myonara
+// query_npc_name eingefuehrt.
+//
+// Revision 1.77  2011-12-18 17:31:13  sorcerer
+// braten_name komplett raus
+//
+// Revision 1.76  2011-12-10 14:43:20  sorcerer
+// query_braten_name deprecated
+//
+// Revision 1.75  2011-11-16 21:21:44  sorcerer
+// eatable_corpse ist mapping mit Infos
+//
+// Revision 1.74  2010-08-09 17:45:33  sorcerer
+// return-Type von forbidden korrigiert
+//
+// Revision 1.73  2010-07-13 19:12:33  sorcerer
+// Returntyp von query_erf_tod_message korrigiert
+//
+// Revision 1.72  2009-08-03 20:26:48  gnomi
+// set_notify_shown_ob & Co. ausgebaut (veraltet und nicht mehr verwendet).
+//
+// Revision 1.71  2009-03-20 07:53:55  gnomi
+// Wenn der Verteidigungsmodus ausgeschaltet ist, hat die Attack-List keine
+// Bedeutung.
+//
+// Revision 1.70  2008-09-18 07:21:35  gnomi
+// query_start_random() nur einmal pro Versuch aufrufen und zwar von
+// start_random_activity() aus. start_random_activity() liefert keinen
+// Wert zurueck, daher aus if-Bedingung rausgenommen.
+//
+// Revision 1.69  2008-05-19 14:22:45  gnomi
+// Bugfix zum letzten Patch (-> domain2map).
+//
+// Revision 1.68  2008-05-19 14:21:29  gnomi
+// set_dead_ob: Name durch map2domain jagen.
+//
+// Revision 1.67  2008/01/21 14:07:59  gnomi
+// attack-delay-Abfrage korrigiert.
+// query_random_pick[_modus] eingebaut.
+//
+// Revision 1.66  2007/08/30 20:21:36  gnomi
+// Typo.
+//
+// Revision 1.65  2007/08/20 18:14:08  gnomi
+// nosave variables -> nosave variables
+//
+// Revision 1.64  2007/02/14 18:36:40  gnomi
+// Typos.
+//
+// Revision 1.63  2006/05/01 00:39:45  gnomi
+// query_erf_tod_message aus Kompatibilitaetsgruenden varargs deklariert.
+//
+// Revision 1.62  2006/04/20 21:39:28  gnomi
+// set/query_erf_tod_message aktualisiert.
+//
+// Revision 1.61  2006/01/13 08:19:48  gnomi
+// Ein paar inherits virtual gemacht.
+//
+// Revision 1.60  2005/06/03 20:34:58  menaures
+// Niflheim: Pick-Flags, mit denen man Fuehren/Anziehen verhindern kann
+//
+// Revision 1.59  2005/05/06 22:59:53  gnomi
+// Ueberfluessige #ifdefs entfernt.
+//
+// Revision 1.58  2005/03/27 20:29:19  menaures
+// query_natural_weapon() eingefuehrt
+//
+// Revision 1.57  2005/01/05 21:52:41  gnomi
+// random_activities im call_out-Modus automatisch starten.
+//
+// Revision 1.56  2004/11/27 21:15:23  gnomi
+// add_hp-Aenderung: add_hp()- und die()-Ueberlagerung und -Aufrufe angepasst
+//
+// Revision 1.55  2004/09/17 08:37:20  gnomi
+// Doku zu initialize: Klargestellt, was der Level ist.
+//
+// Revision 1.54  2004/09/02 18:41:09  gnomi
+// test_aggression etwas aufgeraeumt.
+// agg_toeste: Nicht angreifen, wenn wir schon gegen denjenigen kaempfen.
+//
+// Revision 1.53  2004/07/19 21:13:29  gnomi
+// Letzten Befehl als Debug-Infos ausgeben.
+//
+// Revision 1.52  2004/05/26 21:42:39  gnomi
+// stop_all_fights stoppt auch call_outs von test_aggression. (Verzoegerter
+// Angriff bei aggressiven Monstern.)
+//
+
+#pragma save_types
+#pragma strong_types
+
+/*
+ * Wie macht man ein Monster ?
+ *
+ *       Man schaut zuerst in /doc/funktionsweisen/monster nach...
+ */
+
+virtual inherit "/i/move";
+inherit "/i/tools/move_msg";
+inherit "/i/message";
+
+inherit "/i/living/body";
+inherit "/i/living/command";
+inherit "/i/living/die";
+inherit "/i/living/eyes";
+inherit "/i/living/face";
+inherit "/i/living/hands";
+inherit "/i/living/legs";
+inherit "/i/living/nose";
+inherit "/i/living/ears";
+inherit "/i/living/sp";
+inherit "/i/living/stats";
+inherit "/i/living/voice";
+nosave variables inherit "/i/monster/communicate";
+nosave variables inherit "/i/tools/chat";
+nosave variables inherit "/i/tools/rollen";
+inherit "/i/monster/kampagne";
+inherit "/i/monster/random_start";
+nosave variables inherit "/i/monster/accept_objects";
+
+#include <move.h>
+#include <stats.h>
+#include <config.h>
+#include <rollen.h>
+#include <message.h>
+#include <object_stats.h>
+#include <apps.h>
+#include <level.h>
+#include <landschaft.h>
+#include <commands.h>
+#include <misc.h>
+#include <add_hp.h>
+#include <monster.h>
+#include "funs.h"
+
+private int aggressive;
+private int* attack_delay = ({0,0});
+private int random_pick;
+private int pick_flag;
+private int armour_level;
+private int eyes_open;
+private int turn_heart_beat_off = 1;
+private int echomode;
+
+private mapping eatable_corpse; // ([]) -> besonderer kadaver.c statt leiche.c
+
+private string dead_ob;
+private string notify_soul_ob;
+private object *to_notify_on_init;
+
+private string *attack_list;
+private string *no_attack_list;
+private nosave string comm;
+private nosave object *known_inv=({});
+private string initial_race;	// Der Name, mit dem das Monster initialisiert
+				// wurde (initialize())
+private nosave mixed erf_tod_message;
+
+int command(string str)
+{
+    return efun::command(comm=str);
+}
+
+nomask mixed modify_command(string str)
+{
+    command_start();
+    return 0;
+}
+/*
+FUNKTION: set_npc_name
+DEKLARATION: void set_npc_name(string name)
+BESCHREIBUNG:
+Hiermit setzt man fuer NPCs einen Mudweit eindeutigen Namen.
+Man kann diesen NPC dann mit find_living(name) finden.
+
+Achtung: Diese Funktion setzt nicht den wirklichen Namen des NPCs.
+         Dies muss man mit set_name immer noch machen.
+VERWEISE: initialize efun::find_living efun::set_living_name
+GRUPPEN: monster
+*/
+void set_npc_name(string name)
+{
+    set_living_name(name);
+}
+
+/*
+FUNKTION: query_npc_name
+DEKLARATION: string query_npc_name()
+BESCHREIBUNG:
+Hiermit fragt man fuer diesen NPC den Mudweit eindeutigen Namen,
+welcher mit set_npc_name gesetzt wurde.
+VERWEISE: set_npc_name efun::query_living_name
+GRUPPEN: monster
+*/
+string query_npc_name()
+{
+    return query_living_name(this_object());
+}
+
+void raumcontroller(string controller, varargs mixed *args)
+{
+    switch(controller)
+    {
+	case "notify_invis": 
+            //object player, int alt, int neu
+	    if(sizeof(args) && objectp(args[0]) && living(args[0]))
+		call_out("test_aggression", 0, args[0]);
+	    break;
+	case "notify_moved_in": 
+            // object who, object old_room, string dir, int way
+ 	    if(sizeof(args) && objectp(args[0]) && living(args[0]))
+                this_object()->test_aggression(args[0]);
+	    break;
+    }
+}
+
+
+#define ADD { if (environment()) \
+    environment()->add_controller(({"notify_invis","notify_moved_in"}), \
+				    #'raumcontroller); }
+#define DELETE if (environment()) \
+    environment()->delete_controller(({"notify_invis","notify_moved_in"}), \
+				    #'raumcontroller)
+
+// Prototyp:
+void delete_attack_list(string name);
+
+private void monsterkilledcontroller(string dummy, object wer, object moerder, object leiche)
+// von notify("killed",usw) aufgerufen, siehe notify_killed
+{
+    if (wer && attack_list && sizeof (attack_list) && playerp (wer))
+        delete_attack_list(wer->query_real_name());
+}
+
+/*
+FUNKTION: init_monster
+DEKLARATION: deprecated varargs void init_monster(string name, int level, int num_hands, int hp, int sp, int weapon_level, int arm_level)
+BESCHREIBUNG:
+Diese Funktion bitte nicht mehr verwenden, da sie durch 'initialize'
+abgeloest wurde. Mit initialize wird die Rasse angegeben und das Monster
+mit den entsprechenden Werten versehen, der Name ist hingegen anschliessend
+mit set_name (und evntl. set_npc_name) zu setzen.
+VERWEISE: initialize
+GRUPPEN: monster
+*/
+deprecated varargs void init_monster(string str, int level, int num_hands,
+			  int hp, int sp, int weapon_level, int arm_level)
+{
+    str = lower_case(str);
+    set_name(str);
+    set_id( ({str}) );
+
+#ifdef NEW_STATS
+    MONSTER_MASTER->init_monster(this_object(), str, level * 5);
+    if (MONSTER_MASTER->get_living_name(str))
+	set_living_name(str);
+#else
+    set_living_name(str);
+    if (level < 1)
+	init_stats(5);
+    else if (level > 20)
+	init_stats(100);
+    else
+	init_stats(level*5);
+
+#endif
+
+    update_max_hp();
+    update_max_sp();
+    update_max_encumbrance();
+
+    if (sp > 0)
+	set_max_sp(sp);
+    set_sp(query_max_sp());
+
+    if (hp > 0)
+	set_max_hp(hp);
+    set_hp(query_max_hp());
+
+    if (num_hands > 0)
+	set_num_hands(num_hands);
+
+    if (weapon_level > 0)
+    {
+	set_min_damage(weapon_level);
+	set_max_damage(weapon_level);
+    }
+
+    if (arm_level >= 0)
+	armour_level = arm_level;
+}
+
+void set_initial_race(string str)
+{
+    initial_race = str;
+}
+
+string query_initial_race()
+{
+    return initial_race;
+}
+
+/*
+FUNKTION: initialize
+DEKLARATION: varargs void initialize(string rasse [, int level ] )
+BESCHREIBUNG:
+Mit dieser Funktion Initialisiert man das Monster.
+Das Monster wird als Monster der Rasse 'rasse' und dem Level 'level'
+innerhalb der Rassendefinition initialisiert.
+
+Alle zur Verfuegung stehenden Rassen sind in /nosave/adm/MONSTER_DEFS
+definiert, weitere koennen bei den Admins beantragt werden.
+Der Level laeuft von 0 (keinerlei Ausdauer, Staerke etc.)
+bis 100 (fuer diese Rasse maximale Stats).
+VERWEISE: give_hp, give_sp, give_hands, give_weapon_level, give_armour_level
+GRUPPEN: monster
+*/
+varargs void initialize(string str, int level)
+{
+    str = lower_case(str);
+    set_name(str);
+    set_id(str);
+#ifdef NEW_STATS
+    set_initial_race(str);
+    MONSTER_MASTER->init_monster(this_object(), str, level);
+    if (MONSTER_MASTER->get_living_name(str))
+	set_living_name(str);
+#else
+    set_living_name(str);
+    init_stats(level);
+    update_max_hp();
+    update_max_sp();
+    update_max_encumbrance();
+    set_sp(query_max_sp());
+    set_hp(query_max_hp());
+#endif
+}
+
+/*
+FUNKTION: give_hp
+DEKLARATION: void give_hp(int hp)
+BESCHREIBUNG:
+Mit dieser Funktion gibt man an, wieviele Ausdauer-Punkte das Monster
+haben soll. Dabei wird der aktuelle und maximale Wert auf die angegebene
+Anzahl gesetzt.
+VERWEISE: initialize, give_sp, give_hands, give_weapon_level, give_armour_level
+          set_hp, add_hp, query_hp, query_max_hp
+GRUPPEN: monster, kampf
+*/
+void give_hp(int hp) {
+    set_max_hp(hp);
+    set_hp(query_max_hp());
+}
+
+/*
+FUNKTION: give_sp
+DEKLARATION: void give_sp(int sp)
+BESCHREIBUNG:
+Mit dieser Funktion gibt man an, wieviele Zauber-Punkte das Monster
+haben soll. Dabei wird der aktuelle und maximale Wert auf die angegebene
+Anzahl gesetzt.
+VERWEISE: initialize, give_hp, give_hands, give_weapon_level, give_armour_level
+          set_sp, query_sp, query_max_sp
+GRUPPEN: monster, zaubern
+*/
+void give_sp(int sp) {
+    set_max_sp(sp);
+    set_sp(query_max_sp());
+}
+
+/*
+FUNKTION: give_hands
+DEKLARATION: void give_hands(int hands)
+BESCHREIBUNG:
+Mit dieser Funktion gibt man an, wieviele Haende das Monster haben soll.
+Die Anzahl der Haende zeigt an, wieviele Waffen das Monster fuehren kann,
+und gegen wieviele Spieler das Monster kaempfen kann.
+VERWEISE: initialize, give_sp, give_hp, give_weapon_level, give_armour_level
+          query_num_hands
+GRUPPEN: monster, kampf
+*/
+void give_hands(int num) {
+    if (num > 0)
+	set_num_hands(num);
+}
+
+/*
+FUNKTION: give_weapon_level
+DEKLARATION: void give_weapon_level(int level)
+BESCHREIBUNG:
+Mit dieser Funktion gibt man an, wie stark das Monster OHNE Waffe kaempfen
+kann.
+VERWEISE: initialize, give_sp, give_hp, give_hands, give_armour_level
+GRUPPEN: monster, kampf
+*/
+void give_weapon_level(int level)
+{
+    if (level > 0)
+    {
+	set_min_damage(level);
+	set_max_damage(level);
+    }
+}
+
+/*
+FUNKTION: give_armour_level
+DEKLARATION: void give_armour_level(int level)
+BESCHREIBUNG:
+Mit dieser Funktion gibt man an, wie gut das Monster geschuetzt ist.
+Wenn das Monster zusaetzlich noch eine Ruestung an hat, wird der Schutz noch
+besser.
+VERWEISE: initialize, give_sp, give_hp, give_hands, give_weapon_level
+          query_armour_level
+GRUPPEN: monster, kampf
+*/
+void give_armour_level(int level)
+{
+    if (level >= 0)
+	armour_level = level;
+}
+
+/*
+FUNKTION: query_natural_weapon
+DEKLARATION: mapping query_natural_weapon(int hand)
+BESCHREIBUNG:
+Diese Funktion sucht nach einer passenden natuerlichen Waffe fuer 'hand'.
+Bei 'hand' handelt es sich um die Nummer der Hand, mit der zugeschlagen
+werden soll (Zaehlweise beginnt bei 0). 
+
+Standardmaessig liefert diese Funktion das Mapping eines V-Items zurueck,
+welches die ID "natural#weapon" besitzt und zur Hand passt. Das ist genau
+das 'hand'te V-Item, oder falls es nicht genug gibt, das erste.
+
+Bei Bedarf kann man die Funktion auch ueberlagern. Wichtig ist, dass das
+zurueckgelieferte Mapping mit Grammatikfunktionen verwendet werden kann.
+
+Liefert die Funktion 0 zurueck, wird "mit blossen Haenden" gekaempft.
+VERWEISE: 
+GRUPPEN: spieler, monster, haende, kampf
+*/
+mapping query_natural_weapon(int hand)
+{
+    return
+        this_object()->query_v_item(({(["name":   "natural#weapon",
+                                        "nummer": hand+1])}))
+        || this_object()->query_v_item( ({"natural#weapon"}) );
+}
+
+
+protected void add_actions()
+{
+    "*"::add_actions();
+    add_action("echo_command",      "echo");
+}
+
+void create()
+{
+    seteuid(getuid());
+    enable_commands();
+    set_name("monster");
+    set_id( ({ "monster" }) );
+    set_gender("saechlich");
+    set_long("Du siehst nichts Besonderes.\n");
+    set_weight(30);
+    set_msg_in("$Ein() naehert sich $dir().");
+    set_msg_out("$Der() entfernt sich $dir().");
+    set_mmsg_in("$Ein() erscheint in einer Rauchwolke.");
+    set_mmsg_out("$Der() verschwindet in einer Rauchwolke.");
+    set_reattack(1);
+    set_message_filter(MT_MASK);
+    set_material (({"biologisch"}));
+    set_sp_name("Zauberpunkte");
+    set_sp_short_name("ZP");
+    set_transparent(1);
+    add_controller("notify_killed",#'monsterkilledcontroller);
+
+    "*"::create();
+    add_actions();
+}
+
+/*
+FUNKTION: do_command
+DEKLARATION: int do_command(string befehl)
+BESCHREIBUNG:
+do_command laesst das Monster das Kommando befehl ausfuehren.
+
+Statt do_command kann immer exec_command verwendet werden.
+do_command sollte nicht verwendet werden, wenn durch Kommando befehl
+andere Objekte angesprochen werden sollen.
+Beispielsweise:
+  do_command("knuddel ork")    besser:  exec_command("knuddel", ork_ob)
+  Siehe exec_command.
+
+VERWEISE: exec_command, command
+GRUPPEN: monster
+*/
+int do_command(string str)
+{
+    if (str)
+	return command(str);
+}
+
+varargs int add_hp(int hps, mapping infos)
+{
+    if (hps<0 && find_call_out("heal_slowly")<0)
+	call_out("heal_slowly",random(120));
+    return ::add_hp(hps, infos);
+}
+
+void add_sp(int sp)
+{
+    if (sp<0 && find_call_out("heal_slowly")<0)
+	call_out("heal_slowly",random(120));
+    return ::add_sp(sp);    
+}
+
+void heal_slowly()
+{
+    add_hp(120/(HEALING_TIME*2), ([
+	AH_HEAL_TYPE: AH_HEAL_NORMAL,
+    ]));
+    add_sp(120/(HEALING_TIME*2));
+    if (query_hp() < query_max_hp() || query_sp() < query_max_sp())
+	call_out("heal_slowly", 120);
+}
+
+void pick()
+{
+    object ob;
+
+    if (random_pick && environment())
+	if (random(100) < random_pick)
+       	{
+	    ob = first_inventory(environment());
+	    while (ob)
+	    {
+		if ( exec_command("nimm", ob) &&
+                     environment(ob) == this_object() ) // move hat geklappt
+	       	{
+		    if (ob->query_weapon() && !(pick_flag & PICK_NO_WIELD))
+			exec_command("fuehre", ob);
+
+		    else if (ob->query_cloth() && !(pick_flag & PICK_NO_WEAR))
+			exec_command("ziehe", ob, "an");
+
+		    return;
+		}
+		ob = next_inventory(ob);
+	    }
+	}
+}
+
+void heart_beat()
+{
+    handle_attack();
+    if(!this_object())
+        return;
+        
+    if (query_in_fight())
+    {
+	pick();
+	return;
+    }
+
+    if (in_rolle() && query_rollen_modus() == R_SOUFFLEUR)
+    {
+	rolle();
+	return;
+    }
+
+    if (in_kampagne())
+    {
+	do_step();
+	return;
+    }
+
+    if (query_random_modus() == "heart_beat")
+	start_random_activity();
+
+    if (player_present(environment()))
+    {
+	handle_chat();
+	pick();
+	return;
+    }
+
+    if (turn_heart_beat_off)
+	set_heart_beat(0);
+
+    if (find_call_out("heal_slowly")<0)
+	heal_slowly();
+}
+
+void rolle_beendet(string str)
+{
+  kampagne::rolle_beendet(str);
+}
+
+/*
+FUNKTION: set_turn_heart_beat_off
+DEKLARATION: void set_turn_heart_beat_off(int a)
+BESCHREIBUNG:
+Mit dieer Funktion kann man setzen, ob der heart-beat abgeschaltet
+werden soll, wenn sich kein Spieler mehr in der Umgebung des Monsters
+befindet. Standard ist 1.
+VERWEISE: query_turn_heart_beat_off
+GRUPPEN: monster, kampf
+*/
+void set_turn_heart_beat_off(int a) { turn_heart_beat_off = a != 0; }
+
+/*
+FUNKTION: query_turn_heart_beat_off
+DEKLARATION: int query_turn_heart_beat_off()
+BESCHREIBUNG:
+Mit dieser Funktion kann man abfragen, ob der heart-beat abgeschaltet
+werden soll, wenn sich kein Spieler mehr in der Umgebung des Monsters
+befindet.
+VERWEISE: set_turn_heart_beat_off
+GRUPPEN: monster, kampf
+*/
+int query_turn_heart_beat_off() { return turn_heart_beat_off; }
+
+
+int set_hb(int i)
+{
+    return set_heart_beat(i);
+}
+
+/*
+FUNKTION: set_notify_soul_ob
+DEKLARATION: deprecated void set_notify_soul_ob(object ob)
+BESCHREIBUNG:
+
+DIESE FUNKTION IST VERALTET UND SOLLTE NICHT MEHR VERWENDET WERDEN!
+Bitte stattdessen notify_seele und add_controller zur Anmeldung
+verwenden.
+
+Wird ein Objekt gesetzt, so werden die notify_soul() und soul_command()
+Funktion der Seele an dieses Objekt weitergereicht. Clones werden nicht
+angenommen, prinzipiell sollte hier der Raum, in dem das Monster geclont
+wurde, gesetzt werden.
+VERWEISE: set_dead_ob, query_notify_soul_ob_file
+GRUPPEN: monster
+*/
+deprecated void set_notify_soul_ob(object ob)
+{
+    if (clonep(ob))
+        return;
+    notify_soul_ob = object_name(ob);
+}
+
+/*
+FUNKTION: query_notify_soul_ob_file
+DEKLARATION: deprecated string query_notify_soul_ob_file()
+BESCHREIBUNG:
+
+DIESE FUNKTION IST VERALTET UND SOLLTE NICHT MEHR VERWENDET WERDEN!
+Bitte stattdessen notify_seele und query_controller zur Abfrage
+der Controller verwenden.
+
+Hier kann man den Filenamen des Objekts abfragen, an das die Funktionen
+notify_soul() und soul_command() der Seele weitergereicht werden,
+VERWEISE: set_notify_soul_ob, query_dead_ob_file
+GRUPPEN: monster
+*/
+deprecated string query_notify_soul_ob_file() { return notify_soul_ob; }
+
+void notify_soul(object who, string what, string adverb)
+{
+    if (notify_soul_ob)
+	touch(notify_soul_ob)->notify_soul(who, what, adverb);
+}
+
+int soul_command(object who, string what, string adverb)
+{
+    if (notify_soul_ob)
+	return touch(notify_soul_ob)->soul_command(who, what, adverb);
+}
+
+/*
+FUNKTION: monster_died
+DEKLARATION: void monster_died(object monster, object moerder)
+BESCHREIBUNG:
+Diese Funktion wird im angemeldeten dead-ob (siehe set_dead_ob) aufgerufen,
+wenn das Monster stirbt (und zwar weil der boese 'moerder' is umgebracht
+hat). 'moerder' kann dabei auch 0 sein.
+
+Spaeter wird dann auch noch design_corpse aufgerufen.
+VERWEISE: set_dead_ob, query_dead_ob_file, design_corpse
+GRUPPEN: monster, kampf
+*/
+/*
+FUNKTION: set_dead_ob
+DEKLARATION: void set_dead_ob(mixed ob)
+BESCHREIBUNG:
+Wenn dieser Funktion ein Objekt uebergeben wird, so wird in diesem Objekt die
+Funktion 'monster_died(object monster, object enemy)' aufgerufen, wenn das
+Monster stirbt.
+Es wird der Objekt-Pointer auf das Monster uebergeben. Ausserdem wird
+noch eine Routine 'design_corpse(object corpse) aufgerufen, in der die Leiche
+noch ein wenig designed werden kann.
+VERWEISE: query_dead_ob_file, set_notify_soul_ob, monster_died, design_corpse
+GRUPPEN: monster, kampf
+*/
+void set_dead_ob(mixed ob)
+{
+    if (stringp(ob))
+	dead_ob = domain2map(ob) || ob;
+    else
+	dead_ob = object_name(ob);
+}
+
+/*
+FUNKTION: design_corpse
+DEKLARATION: void design_corpse(object corpse)
+BESCHREIBUNG:
+Diese Funktion wird in dem mit 'set_dead_ob(object ob)' gesetzten
+Objekt aufgerufen, wenn das Monster stirbt. Uebergeben wird die Leiche,
+die man dann noch etwas designen kann.
+VERWEISE: set_dead_ob, monster_died, query_dead_ob_file, set_notify_soul_ob
+GRUPPEN: monster, kampf
+*/
+
+string query_dead_ob()
+{
+    return dead_ob;
+}
+
+/*
+FUNKTION: compute_kill_skill
+DEKLARATION: nomask int compute_kill_skill()
+BESCHREIBUNG:
+Liefert die EP zurueck, die das Monster im Sterben an seinen Moerder
+abgibt.
+VERWEISE: die
+GRUPPEN: monster, kampf, spieler
+*/
+
+nomask int compute_kill_skill()
+{
+    int tmp, hand_dam, i, dam;
+    object *ho;
+
+    hand_dam = compute_damage();
+    ho = query_hand_objects();
+    for (i = sizeof(ho); i--; )
+        if (!ho[i] || (tmp = ho[i]->compute_damage()) <= 0)
+            dam += hand_dam;
+        else
+            dam += tmp;
+
+    dam /= sizeof(ho)||1; // set_num_hands(0) abfangen!
+
+    return (this_object()->query_armour_level() + 1) * query_max_hp() * dam;
+}
+
+/*
+FUNKTION: query_dead_ob_file
+DEKLARATION: string query_dead_ob_file()
+BESCHREIBUNG:
+Liefert den Filenamen des Objekts, das mit set_dead_ob() gesetzt wurde
+(falls es gesetzt wurde).
+VERWEISE: set_dead_ob, query_notify_soul_ob_file, design_corpse
+GRUPPEN: monster, kampf
+*/
+string query_dead_ob_file() { return dead_ob; }
+
+nosave varargs void die(mapping infos)
+{
+    object ob = infos && infos[AH_ATTACKER];
+
+    if (objectp(ob))
+    {
+	int level,skill,tmp;
+
+	level = compute_kill_skill();
+	if (level <= BEGIN_GROSSWILD)
+	{
+	    skill = level/TEILER_KLEINGETIER;
+	    ob->add_skill_points(({"skill","getoetet","kleingetier"}),
+				 skill);
+	}
+	else
+	{
+	    skill = level/TEILER_GROSSWILD;
+	    tmp = BEGIN_GROSSWILD/TEILER_KLEINGETIER;
+	    if (skill < tmp)
+		skill = tmp;
+	    ob->add_skill_points(({"skill","getoetet","grosswild"}),
+				 skill);
+	}
+	ob->add_kill(this_object()->query_race(),
+	    this_object()->query_name(), level);
+    }
+
+    if (dead_ob)
+	touch(dead_ob)->monster_died(this_object(),objectp(ob) && ob);
+    die::die(infos);
+}
+
+/*
+FUNKTION: test_aggression
+DEKLARATION: int test_aggression(object player)
+BESCHREIBUNG:
+Testet den Spieler 'player' im Raum des Monsters und greift ihn gegebenfalls
+an. Liefert 1, wenn der Spieler angegriffen wurde, sonst 0.
+Wird vom init() des Monster aufgerufen, wenn ein Spieler in die Umgebung
+des Monsters kommt, um zu entscheiden, ob dieser angegriffen werden soll.
+Massgebend ist der aggression Status, der Verteidigungsmodus und die
+attack_list/no_attack_list des Monsters. Es werden nur interaktive
+Objekte (Spieler) angegriffen.
+VERWEISE: set_aggressive, query_aggressive, test_all_aggressions
+          set_no_attack_list, set_attack_list, set_reattack
+GRUPPEN: monster, kampf
+*/
+
+// Eigene Funktion dafuer, damit stop_all_fights den call_out
+// finden und vernichten kann.
+private void agg_toete(object who)
+{
+    if(who && !query_in_fight(who))
+	exec_command("toete", who);
+}
+
+// For internal use only. Interface may change.
+protected int is_aggressive_against(object player)
+{
+    string name;
+    if(objectp(player) && interactive(player) &&  // Es muss ein interaktiver
+      (name = player->query_real_name()) &&      // Spieler sein
+      (!wizp(player) || player->query_wants_to_get_attacked_by_monsters()) &&
+      ((attack_list && member(attack_list, name) >= 0 &&           // Entweder in attack_list
+        this_object()->query_reattack() != REATTACK_DONT) ||       // und Verteidigungsmodus ist an.
+       (this_object() && this_object()->query_aggressive() &&      // oder generell aggressiv
+       (!no_attack_list || member(no_attack_list, name) < 0))))    // und nicht in no_attack_list
+        return 1;
+}
+
+#ifdef MONSTER_SCHIESSEN_IM_HEARTBEAT
+void check_delayed_aggression(object player)
+{
+    if(player && present(player,environment(this_object())) &&
+       is_aggressive_against(player) && !query_in_fight(player))
+    {
+        // Mit einer fuer den Heart-Beat zugelassenen Waffe oder den Haenden
+        // kaempfen?
+        int ff=free_fight();
+        if(ff>=0)
+        {
+            attack(player, query_hand_objects()[ff], ff);
+        }
+    }
+}
+
+int test_aggression(object player)
+{
+    if(player && present(player,environment(this_object())) &&
+       is_aggressive_against(player) && !query_in_fight(player))
+    {
+        int agg = TO->query_attack_delay()[aggressive?0:1];
+
+        // Mit einer fuer den Heart-Beat zugelassenen Waffe oder den Haenden
+        // kaempfen?
+        int ff=free_fight();
+        if(ff>=0)
+            if(agg<0)
+            {
+                attack(player, query_hand_objects()[ff], ff);
+                return 1;
+            }
+            else
+                call_out("check_delayed_aggression", agg, player);
+    }
+}
+#else // MONSTER_SCHIESSEN_IM_HEARTBEAT
+
+int test_aggression(object player)
+{
+    if(is_aggressive_against(player) && !query_in_fight(player))
+    {
+	int agg = this_object()->query_attack_delay()[aggressive?0:1];
+        if(agg<0)
+    	    return exec_command( "toete", player);
+	else
+	    call_out(#'agg_toete, agg, player);
+    }
+}
+#endif // MONSTER_SCHIESSEN_IM_HEARTBEAT
+
+void stop_all_fights()
+{
+    hands::stop_all_fights();
+    while(remove_call_out(#'agg_toete)!=-1);
+#ifdef MONSTER_SCHIESSEN_IM_HEARTBEAT
+    while(remove_call_out("check_delayed_aggression")!=-1); 
+        // myonara: Sicherheitsnadel...
+#endif // MONSTER_SCHIESSEN_IM_HEARTBEAT
+}
+
+/*
+FUNKTION: test_all_aggressions
+DEKLARATION: int test_all_aggressions(void)
+BESCHREIBUNG:
+Testet alle Spieler im Raum durch und greift diese an, als wenn sie gerade
+den Raum betreten haetten, vorausgesetzt das Monster ist aggressiv, etc.
+Liefert die Zahl der angegriffenen Spieler.
+VERWEISE: set_aggressive, query_aggressive, test_aggression
+GRUPPEN: monster, kampf
+*/
+
+int test_all_aggressions()
+{
+   object *obs;
+   int i, res;
+
+   if(environment())
+      for(i = sizeof(obs = all_inventory(environment())); i--;)
+         if(this_object()->test_aggression(obs[i]))
+            res++;
+   return res;
+}
+
+/*
+FUNKTION: set_aggressive
+DEKLARATION: void set_aggressive(int flag)
+BESCHREIBUNG:
+Mit dieser Funktion kann man einstellen, ob das Monster agressiv ist, d.h. dass
+es einen Spieler angreift, wenn dieser den Raum betritt, oder nicht.
+Wenn flag 1 ist, dann ist es agressiv, bei 0 nicht.
+Beim Setzen von 1 greift das Monster sogleich an, wenn Spieler im Raum sind.
+Beim Setzen von 0 beendet es den Kampf mit allen Spielern im Raum.
+VERWEISE: query_aggressive, attackiere_command, schiesse_command, werfe_command
+GRUPPEN: monster, kampf
+*/
+void set_aggressive(int i)
+{
+   if(aggressive = i)
+   {
+      test_all_aggressions();
+      ADD
+   }
+   else
+   {
+      stop_all_fights();
+      if(!sizeof(attack_list)) DELETE;
+   }
+}
+
+/*
+FUNKTION: query_aggressive
+DEKLARATION: int query_aggressive()
+BESCHREIBUNG:
+Mit dieser Funktion kann man abfragen, ob ein NPC oder Monster von Natur
+aus angriffslustig ist oder nicht. Gegenstueck zu set_aggressive
+VERWEISE: set_aggressive, attackiere_command, schiesse_command, werfe_command
+GRUPPEN: monster, kampf
+*/
+int query_aggressive() { return aggressive; }
+
+/*
+FUNKTION: set_attack_delay
+DEKLARATION: void set_attack_delay(int aggressive, int attack_list)
+BESCHREIBUNG:
+Damit setzt man die Verzoegerung fuer einen Angriff des NPCs.
+Der erste Wert aggressive gibt die Dauer in Sekunden fuer einen Angriff wegen
+query_aggressive() und der zweite Wert attack_list fuer einen Angriff, weil
+der Gegner auf der Angriffsliste steht. Ein Wert < 0 bedeutet einen sofortigen
+Angriff, Werte >= 0 einen Angriff ueber call_out.
+VERWEISE: set_aggressive, add_attack_list
+GRUPPEN: monster, kampf
+*/
+void set_attack_delay(int agg, int al)
+{
+    attack_delay = ({agg,al});
+}
+
+/*
+FUNKTION: query_attack_delay
+DEKLARATION: int *query_attack_delay()
+BESCHREIBUNG:
+Liefert die mit set_attack_delay gesetzten Werte in einem Array zurueck.
+Der erste Wert des Arrays entspricht dem 1. Parameter von set_attack_delay,
+der 2. Wert entsprechend dem 2. Parameter.
+VERWEISE: set_aggressive, add_attack_list
+GRUPPEN: monster, kampf
+*/
+int *query_attack_delay()
+{
+    return copy(attack_delay);
+}
+
+/*
+FUNKTION: set_erf_tod_message
+DEKLARATION: void set_erf_tod_message(mixed erf_tod_message)
+BESCHREIBUNG:
+Damit setzt man die Meldung, die der Spieler bei 'erf tod' erhaelt, wenn
+er von diesem Monster umgebracht und keine explizite Meldung bei add_hp
+uebergeben wurde. Die Meldung kann auch eine Pseudoclosure oder Closure sein.
+Ebenfalls erlaubt ist ein Mapping so, wie es von query_erf_tod_message
+zurueckgeliefert wird. Dort sind ebenfalls Pseudoclosures oder Closures
+erlaubt. (Das Opfer ist OBJ_TP, der Taeter ist OBJ_TO.)
+
+Zum Beispiel:
+  set_erf_tod_message("Du wurdest von $dem(OBJ_TO) erschlagen.");
+  set_erf_tod_message("Eine Mueckenschwarm hat Dich ueberfallen.");
+  set_erf_tod_message( ([
+    AH_ERF_TOD: "Du wurdest von $dem(OBJ_TO) ueberrollt.",
+    AH_ERF_TOD_OTHER: "$Der(OBJ_TP) wurde vo $dem(OBJ_TO) ueberrollt.",
+    AH_ERF_RETTUNG: "Beinahe ueberrollte $ein(OBJ_TO) $den(OBJ_TP)." ]));
+  
+VERWEISE: query_erf_tod_message, add_hp
+GRUPPEN: monster, kampf
+*/
+void set_erf_tod_message(mixed message)
+{
+    if(mappingp(message))
+	erf_tod_message = map(message, (: mixed_to_closure($2, ({'tp}), 0, 1) :));
+    else
+	erf_tod_message = mixed_to_closure(message, ({'tp}), 0, 1);
+}
+
+// Bereits in /i/player/player dokumentiert.
+// varargs aus hysterischen Gruenden.
+varargs mixed query_erf_tod_message(object victim, mapping infos)
+{
+    mapping vicmap;
+    
+    if(!victim)
+	// Aus Kompatibilitaetsgruenden: letzter Spieler im caller_stack.
+	victim = (filter(caller_stack(1),#'playerp)+({this_player()}))[0];
+    	
+    if(mappingp(erf_tod_message))
+	return map(erf_tod_message, (: closure_to_string($2, $3) :),
+	    ({([
+		"name": victim->query_real_name(),
+		"cap_name": victim->query_real_cap_name(),
+		"gender": victim->query_real_gender(),
+		"personal": 1,
+	    ])}));
+    else
+	return erf_tod_message && closure_to_string(erf_tod_message,
+	    ({([
+		"name": victim->query_real_name(),
+		"cap_name": victim->query_real_cap_name(),
+		"gender": victim->query_real_gender(),
+		"personal": 1,
+	    ])}));
+}
+
+/*
+FUNKTION: set_init_ob
+DEKLARATION: deprecated void set_init_ob(object ob)
+BESCHREIBUNG:
+Diese Funktion ist veraltet, stattdessen sollte add_init_ob benutzt werden.
+Wenn dieser Funktion ein Objekt uebergeben wird, so wird in diesem Objekt die
+Funktion 'monster_init(...)' aufgerufen, wenn ein Lebewesen den gleichen Raum
+betritt bzw. das Monster einen Raum betritt, in welchem sich Lebewesen
+befinden. Es werden der Objekt-Pointer auf das Monster sowie ein Objekt-Zeiger
+auf das sich naehernde Lebewesen uebergeben.
+VERWEISE: add_init_ob, delete_init_ob, monster_init, player_init
+GRUPPEN: monster
+*/
+
+deprecated void set_init_ob(object ob)
+{
+    if (objectp (ob)) to_notify_on_init = ({ob});
+    else to_notify_on_init = 0;
+}
+
+// doku siehe /i/player/player.c
+
+void add_init_ob (object was)
+{
+    if (!objectp (was)) return;
+    if (!to_notify_on_init)
+        to_notify_on_init = ({was});
+    else if (member(to_notify_on_init,was) == -1)
+            to_notify_on_init += ({was});
+}
+
+void delete_init_ob (object was)
+{
+    if (!objectp (was) || !to_notify_on_init)
+        return;
+    to_notify_on_init -= ({was});
+}
+
+void init()
+{
+    int i;
+    :: init ();
+    if (to_notify_on_init) {
+        to_notify_on_init -= ({0});
+        for (i = sizeof (to_notify_on_init) - 1; i >= 0; i--)
+            to_notify_on_init[i]->monster_init (this_object(),this_player());
+    }
+    set_heart_beat(1);
+    //this_object()->test_aggression(this_player());
+}
+
+/*
+FUNKTION: set_random_pick
+DEKLARATION: varargs void set_random_pick(int percent, int flag)
+BESCHREIBUNG:
+Mit dieser Funktion kann man einstellen, ob das Monster zufaellig Sachen
+aufheben soll. Falls moeglich, werden die Sachen angezogen bzw. gefuehrt.
+
+'percent' ist die Chance in Prozent (0-100), mit der etwas aufgehoben wird.
+'flag' ist ein Bitfeld mit folgenden ver-|-baren Moeglichkeiten:
+
+    PICK_NO_WEAR    - Aufgehobene Kleidung soll nicht angezogen werden
+    PICK_NO_WIELD   - Aufgehobene Waffen sollen nicht gefuehrt werden
+    PICK_ONLY       - Sachen nur aufheben, sonst nichts machen.
+
+Die Flags sind in monster.h definiert.
+VERWEISE: query_random_pick, query_random_pick_modus
+GRUPPEN: monster
+*/
+varargs void set_random_pick(int r, int f)
+{
+    random_pick = r;
+    pick_flag = f;
+}
+
+/*
+FUNKTION: query_random_pick
+DEKLARATION: int query_random_pick()
+BESCHREIBUNG:
+Liefert die mit set_random_pick gesetzte Wahrscheinlichkeit, dass
+der NPC etwas aufhebt.
+VERWEISE: set_random_pick, query_random_pick_mdus
+GRUPPEN: monster
+*/
+int query_random_pick() { return random_pick; }
+
+/*
+FUNKTION: query_random_pick_modus
+DEKLARATION: int query_random_pick_modus()
+BESCHREIBUNG:
+Liefert die mit set_random_pick gesetzte Flags darueber, was der
+NPC mit den aufgehobenen Sachen macht.
+VERWEISE: set_random_pick, query_random_pick
+GRUPPEN: monster
+*/
+int query_random_pick_modus() { return pick_flag; }
+
+/*
+FUNKTION: set_attack_list
+DEKLARATION: void set_attack_list(string *names)
+BESCHREIBUNG:
+Mit dieser Funktion kann man eine Liste von Namen angeben, die das Monster
+angreifen soll, wenn sie sich im gleichen Raum befinden.
+VERWEISE: add_attack_list, delete_attack_list, set_no_attack_list
+GRUPPEN: monster, kampf
+*/
+void set_attack_list(string *names) {
+  if((attack_list = names) && sizeof(attack_list))
+    ADD
+  else
+    if (!this_object()->query_aggressive())
+      DELETE;
+}
+
+/*
+FUNKTION: query_attack_list
+DEKLARATION: string *query_attack_list()
+BESCHREIBUNG:
+Mit dieser Funktion kann man eine Liste von Namen abfragen, die das Monster
+angreift, wenn sie sich im gleichen Raum befinden.
+VERWEISE: set_no_attack_list, set_attack_list
+GRUPPEN: monster, kampf
+*/
+string *query_attack_list() { return attack_list; }
+
+/*
+FUNKTION: add_attack_list
+DEKLARATION: void add_attack_list(string name)
+BESCHREIBUNG:
+Mit dieser Funktion kann man zu der Liste von Namen, die das Monster
+angreifen soll, wenn sie sich im gleichen Raum befinden, einen
+weiteren Namen hinzufuegen.
+VERWEISE: set_attack_list, delete_attack_list
+GRUPPEN: monster, kampf
+*/
+void add_attack_list(string name) {
+    if (!attack_list)
+	attack_list = ({name});
+    else
+	attack_list = (attack_list-({name}))+({name});
+    ADD
+}
+
+/*
+FUNKTION: delete_attack_list
+DEKLARATION: void delete_attack_list(string name)
+BESCHREIBUNG:
+Mit dieser Funktion kann man aus der Liste von Namen, die das Monster
+angreifen soll, wenn sie sich im gleichen Raum befinden, einen
+Namen loeschen.
+VERWEISE: set_attack_list, add_attack_list
+GRUPPEN: monster, kampf
+*/
+void delete_attack_list(string name) {
+    if (attack_list)
+	attack_list -= ({name});
+    if (!(attack_list && sizeof(attack_list)) && !this_object()->query_aggressive())
+	DELETE;
+}
+
+/*
+FUNKTION: set_no_attack_list
+DEKLARATION: void set_no_attack_list(string *names)
+BESCHREIBUNG:
+Mit dieser Funktion kann man eine Liste von Namen angeben, die das Monster
+NICHT angreifen soll.
+VERWEISE: set_attack_list
+GRUPPEN: monster, kampf
+*/
+void set_no_attack_list(string *names) { no_attack_list = names; }
+
+/*
+FUNKTION: query_armour_level
+DEKLARATION: int query_armour_level()
+BESCHREIBUNG:
+Mit dieser Funktion kann man die Ruestungs-Starke des Monsters abfragen.
+VERWEISE: give_armour_level
+GRUPPEN: monster, kampf
+*/
+int query_armour_level() { return armour_level; }
+
+int remove()
+{
+    if (aggressive || sizeof(attack_list))
+	DELETE;
+    return ::remove();
+}
+
+nosave void second_life(object corpse)
+{
+    if (dead_ob && corpse)
+	dead_ob->design_corpse(corpse);
+
+    set_heart_beat(0);
+    remove();
+}
+
+
+/* Monster koennen beliebig viel Alkohol vertragen, essen und trinken. */
+
+int add_alc(int i) { return 1; }
+int add_fp(int i) { return 1; }
+int add_wp(int i) { return 1; }
+
+int query_enable_cleanup()
+{
+  if (query_hp() < query_max_hp())
+    return 0;
+  return move::query_enable_cleanup();
+}
+
+/*
+FUNKTION: new_inv
+DEKLARATION: object *new_inv()
+BESCHREIBUNG:
+Diese Routine gibt alle Objekte zurueck, die seit dem letzten Aufruf von
+new_inv() ins Monster gekommen sind. Hierbei ist das neueste immer an erster
+Stelle der Liste. Beispiele findet man im /i/gasthof/wirt.c und im
+/d/Vaniorh/uluji/uluji.c .
+VERWEISE: parse_conversation
+GRUPPEN: monster
+*/
+object *new_inv() {
+    object *inv, *new_inv;
+    int a;
+
+    inv = all_inventory(this_object());
+    new_inv = ({});
+    // Reihenfolge wesentlich!
+    for (a=0; a < sizeof(inv); a++)
+	if (member(known_inv,inv[a]) < 0)
+	    new_inv += ({ inv[a] });
+
+    known_inv = inv;
+    return new_inv;
+}
+
+nomask string query_command()
+{
+    return comm;
+}
+
+int echo_command(string str)
+{
+   if(!str)
+   {
+      notify_fail("Echo <text>\n");
+      return 0;
+   }
+   str=wrap(str);
+   write(str);
+   say(str);
+   return 1;
+}
+
+void set_eyes_open(int i)
+{
+   eyes_open = i;
+}
+
+int query_eyes_open()
+{
+   return eyes_open;
+}
+
+void just_moved()
+{
+   if(eyes_open)
+      ::just_moved();
+      
+   start_activity_call_outs();
+}
+
+/*
+FUNKTION: set_eatable_corpse
+DEKLARATION: void set_eatable_corpse(int|mapping bratbar)
+BESCHREIBUNG:
+Wird dieser Funktion 1 oder ein Mapping uebergeben, so wird beim Tode des
+Monsters "/p/Npc/obj/kadaver" oder bratbar["kadaver_file"] statt
+"/obj/leiche.lpc" (Default) verwendet.
+Der Kadaver ist fuer Tiere gedacht, die essbar sind... Der Tierkoerper laesst
+sich dann an einem Lagerfeuer braten, solange er noch frisch ist.
+
+HINWEIS: Die Tiere sollten ein "sinnvolles" Gewicht gesetzt bekommen.
+Ueber die Schluessel des Mappings bratbar lassen sich auch Details zum 
+Kadaver und Braten setzen.
+-> Fuer naehere Hinweise siehe /p/INFO/Enzyclopedia/doku/braten_kadaver
+VERWEISE: query_eatable_corpse
+GRUPPEN: monster, nahrung
+*/
+void set_eatable_corpse(mixed bratbar)
+{
+   if (mappingp(bratbar)) 
+       eatable_corpse=bratbar;
+   else if (intp(bratbar))
+       eatable_corpse=(bratbar?([]):0);
+   else
+       raise_error("Invalid argument 1 to set_eatable_corpse()!\n");
+}
+
+/*
+FUNKTION: query_eatable_corpse
+DEKLARATION: mapping query_eatable_corpse()
+BESCHREIBUNG:
+Liefert zurueck, ob dieses Monster beim Sterben eine essbare Leiche (Kadaver)
+hinterlaesst (statt "/obj/leiche"). Wenn ja, wird ein Mapping geliefert, 
+das zusaetzliche Informationen zu dem Kadaver enthalten kann. 
+Der Kadaver wird aus "/p/Npc/obj/kadaver" erzeugt, es sei denn, der 
+Schluessel "kadaver_file" ist definitert.
+Alle Schluessel siehe /p/INFO/Enzyclopedia/doku/braten_kadaver.
+Der Kadaver ist fuer Tiere gedacht, die essbar sind... Der Tierkoerper laesst
+sich dann an einem Lagerfeuer braten, solange er noch frisch ist.
+VERWEISE: set_eatable_corpse
+GRUPPEN: monster, nahrung
+*/
+mapping query_eatable_corpse()
+{
+  return eatable_corpse;
+}
+
+varargs int move(mixed ziel, int wie, string out, string in)
+{
+  int result;
+  if (aggressive || sizeof(attack_list))
+    DELETE;
+  result = ::move(ziel, wie, out, in);
+  if ((aggressive || sizeof(attack_list)) && environment())
+  {
+    ADD;
+    test_all_aggressions();
+  }
+  return result;
+}
+
+// Dummy-Funktionen aus Kompatibilitaetsgruenden
+void notify_invis(object player, int alt, int neu) {}
+void notify_moved_in(object who, object old_room, string dir, int way) {}
+
+void notify(string message, varargs mixed data)
+{
+  int hand;
+  data = expand(data);
+  switch (message)
+  {
+    case "weapon_fail" :
+      if ((data[1] && (data[1] == "broken"))
+          &&(data[0] && (hand=member(query_hand_objects(), data[0]))>=0)) {
+         unwield(data[0], hand, 0);
+        if (sizeof(data)<3 || data[2]!=this_object())
+           test_all_aggressions();
+      }
+      break;
+  }
+  return ::notify(message, data);
+}
+
+mixed forbidden(string message, varargs mixed * data)
+{
+  object weapon;
+  mixed *hands;
+  int raumtyp;
+  data = expand(data);
+  switch (message)
+  {
+    case "attack" :
+    case "my_attack" :
+      if (weapon=cond_present("waffe", this_object(), "query_broken"))
+        notify("weapon_fail", weapon, "broken", this_object());
+      break;
+    case "wield" : return
+      (objectp(data[0]) && (data[0]->query_broken() &&
+      (sizeof(hands=query_hand_enemies())>data[1]) && hands[data[1]])!=0)
+      || ::forbidden(message, data);
+    case "push_me" :
+      if (::forbidden(message, data)) return 1;
+      data[0]->send_message(MT_LOOK|MT_NOISE,MA_UNKNOWN,
+        Der(data[0])+" stemmt sich gegen "+den()+
+        ", aber "+er()+" wehrt sich!\n",
+        Der(data[0])+" versucht, Dich weg zu schubsen!\n",
+        this_object());
+      if ((raumtyp = environment()->query_type(LANDSCHAFT)) &&
+          (raumtyp & (L_WASSER | L_FLIESSEND | L_UNTERWASSER)) == raumtyp)
+        data[0]->send_message(MT_LOOK|MT_NOISE,MA_UNKNOWN,
+          "Plitsch, platsch, Du wirst ganz nassgespritzt!\n","",this_object());
+      data[0]->notify_message(wrap(Der()+" weigert sich, sich von Dir "+
+        "umeinanderschieben zu lassen!"), MA_MOVE);
+      return 1;
+
+  }
+  return ::forbidden(message, data);
+}
+
+#ifdef LOG_OBJECT_STATS
+void log_object_stats()
+{
+   OBJECT_STATS->add_object_stats(OS_MONSTER, this_object(),
+      ({
+         query_name(),
+         query_weight(),
+	 query_hp(),
+	 query_sp(),
+	 query_armour_level(),
+         query_align(),
+	 query_aggressive(),
+	 query_stat(0),
+	 query_stat(1),
+	 query_stat(2),
+	 query_stat(3),
+      }));
+}
+#endif
+
+// Fake-Skill Alle Monster kaempfen gut.
+int get_one_skill(string *path)
+{
+    if (sizeof(path) > 2)
+	if (path[1] == "offensiv" || path[1] == "defensiv")
+	    return AVERAGE_EXPERIENCE;
+}
+
+
+// -------- echomode fuer Kommunikation -------------------
+
+void set_echomode( int i)
+{
+    echomode = i;
+}
+
+int query_echomode()
+{
+    return echomode;
+}
+
+/*
+FUNKTION: query_commander
+DEKLARATION: string query_commander()
+BESCHREIBUNG:
+Ein NPC, welcher von einem Spieler gesteuert werden kann, muss eine solche
+Funktion haben, welche dann den real_cap_name des Spielers zurueckliefert,
+der diesen NPC steuert.
+GRUPPEN: monster
+*/
+
+mapping query_debug_info()
+{
+    mapping info = ::query_debug_info();
+    
+    if(info)
+	info["Befehl"] = comm;
+    else
+	info = ([ "Befehl": comm ]);
+    
+    return info;
+}

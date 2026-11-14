@@ -1,0 +1,1698 @@
+// This file is part of UNItopia Mudlib.
+// -----------------------------------------------------------------------
+//  Datei:  /apps/umfragen_db.c
+//  Autor:  Myonara 27.Sep.2014 
+// -----------------------------------------------------------------------
+// Beschreibung: Der Master fuer alle Umfrage-Aktivitaeten.
+// -----------------------------------------------------------------------
+
+// Userid fuer  /apps/umfragen_db setzen:
+// UID: Apps
+
+// Aenderungen:
+//  $Log: umfragen_db.c,v $
+//  Revision 1.13  2016/05/23 03:37:40  myonara
+//  und gleich ein bugfix zu vorherigem Patch grmpf
+//
+//  Revision 1.12  2016/05/23 03:34:38  myonara
+//  Folgefehler nach init_database Fehlerschlag vermiden,
+//  der Rueckgabewert wird nun abgefangen.
+//
+//  Revision 1.11  2015/12/19 20:12:37  myonara
+//  debuglog optimiert, query_database_description
+//
+//  Revision 1.10  2014/11/09 14:29:27  myonara
+//  Debugausgaben deaktiviert
+//
+//  Revision 1.9  2014/11/09 14:23:38  myonara
+//  Funktionen fuer gelesen/ungelesene Beitraege
+//
+//  Revision 1.8  2014/11/01 14:43:26  myonara
+//  Diskussionen und Ignorieren ergaenzt
+//
+//  Revision 1.7  2014/10/30 17:42:10  myonara
+//  Ergaenzung Diksussion und Beitraege
+//
+//  Revision 1.6  2014/10/19 07:07:12  myonara
+//  Auswertungen und get_aktuelle_idee
+//
+//  Revision 1.5  2014/10/16 18:00:58  myonara
+//  Suchfilter fuer UI_OPT_UMFRAGE_OFFEN
+//
+//  Revision 1.4  2014/10/16 16:56:06  myonara
+//  Features and Bugfixes again :)
+//
+//  Revision 1.3  2014/10/05 19:44:53  myonara
+//  Jede Menge Features und Bug Fixes
+//
+//  Revision 1.2  2014/10/04 11:17:54  myonara
+//  Einbaufertig
+//
+//  Revision 1.1  2014/10/03 16:58:33  myonara
+//  Neuerstellung fuer Umfrage- und Ideenkobold.
+//
+// 
+
+inherit "/i/tools/security";
+inherit "/i/tools/build_table";
+inherit "/i/tools/debuglog_db";
+inherit "/i/item/message";
+
+#include <config.h>
+#include <database.h>
+#include <error.h>
+#include <level.h>
+#include <message.h>
+#include <misc.h>
+#include <room_types.h>
+#include <security.h>
+
+#include <umfragen.h>
+#define RETENTION_DAYS 30
+#define PDBG(x) send_message_to( ({find_player("myonara") }), \
+                    MT_DEBUG, MA_UNKNOWN, wrap(x))
+
+int ist_diskussion_ungelesen(int d_id, string wer);
+                    
+int query_all_access(object pl)
+{
+    return adminp(pl); // || MAY_WRITE(load_name(), pl);
+}
+
+public string query_database_description()
+{
+    return "Diese Datenbank dient zur Verwaltung von Ideen und Umfragen. "
+    "Zum Verwalten gibt es /room/rathaus/obj/uiko. " 
+    "Fuer Admins gibt es speziell die Lfuns sql und db_get_table.";
+}
+
+private void init_db()
+{
+    int flag = 0;
+    if (!init_debuglog(UMFRAGE_DBFILE, RETENTION_DAYS))
+    {
+        raise_error("Datenbank "+UMFRAGE_DBFILE
+            +" konnte nicht geoeffnet werden.\n");
+    }
+    db_debug(0,0,DB_DBG_CREATE); // Anlegen falls nicht vorhanden
+    debuglog("Start Initialisierung Umfrage-Master", DB_DBGLVL_INFO, 0,
+        "init_db"); // applikations log
+    db_debug("Start Initialisierung Umfrage-Master", DB_DBGLVL_INFO, 
+        DB_DBG_BUFFER_MSG); // erstmal nur buffern im db-log
+    if (db_check_table("umfragen") == -1)
+    {
+        db_debug("Tabelle umfragen anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS umfragen ("
+            "u_id INTEGER CONTRAINT pk_umfragen PRIMARY KEY, frage TEXT, "
+            "ersteller TEXT, status INTEGER, "
+            "i_id INTEGER, pantheon INTEGER )");
+        if (query_db_error()) 
+        {
+            db_debug("Tabelle umfragen anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle umfragen konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+        setup_counter("u_id",0);
+    }
+    if (db_check_table("antworten") == -1)
+    {
+        db_debug("Tabelle antworten anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS antworten ("
+            "u_id INTEGER, a_id INTEGER CONTRAINT pk_antworten PRIMARY KEY, "
+            "antwort TEXT)");
+        if (query_db_error()) 
+        {
+            db_debug("Tabelle antworten anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle antworten konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+        setup_counter("a_id", 0);
+    }
+    if (db_check_table("erhebung") == -1)
+    {
+        db_debug("Tabelle erhebung anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS erhebung ("
+            "u_id INTEGER, a_id INTEGER, pantheon INTEGER, "
+            "e_id INTEGER CONTRAINT pk_erhebung PRIMARY KEY, wer TEXT)");
+        if (query_db_error())
+        {
+            db_debug("Tabelle erhebung anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle erhebung konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+        setup_counter("e_id", 0);
+    }
+    if (db_check_table("ideen") == -1)
+    {
+        db_debug("Tabelle ideen anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS ideen ("
+            "i_id INTEGER CONTRAINT pk_ideen PRIMARY KEY, titel TEXT, "
+            "inhalt TEXT, ersteller TEXT, status INTEGER, pantheon INTEGER)");
+        if (query_db_error())
+        {
+            db_debug("Tabelle ideen anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle ideen konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+        setup_counter("i_id", 0);
+    }
+    if (db_check_table("nachrichten") == -1)
+    {
+        db_debug("Tabelle nachrichten anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS nachrichten ("
+            "n_id INTEGER CONTRAINT pk_nachrichten PRIMARY KEY, "
+            "von TEXT, an TEXT, wann INTEGER, was TEXT, id INTEGER, "
+            "status TEXT, kategorie TEXT, nachricht TEXT)");
+        if (query_db_error())
+        {
+            db_debug("Tabelle nachrichten anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle nachrichten konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+        setup_counter("n_id", 0);
+    }
+    if (db_check_table("updates") == -1)
+    {
+        db_debug("Tabelle updates anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS updates ("
+            "version INTEGER CONTRAINT pk_updates PRIMARY KEY, "
+            "wann INTEGER, was TEXT)");
+        if (query_db_error())
+        {
+            db_debug("Tabelle updates anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle updates konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+        setup_counter("version", 0);
+    }
+    if (db_check_table("diskussion") == -1)
+    {
+        db_debug("Tabelle diskussion anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS diskussion ("
+            "d_id INTEGER CONTRAINT pk_updates PRIMARY KEY, "
+            "was TEXT, id INTEGER, pantheon INTEGER, status INTEGER)");
+        if (query_db_error())
+        {
+            db_debug("Tabelle diskussion anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle diskussion konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+        setup_counter("d_id", 0);
+    }
+    if (db_check_table("diskussionsbeitraege") == -1)
+    {
+        db_debug("Tabelle diskussionsbeitraege anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS diskussionsbeitraege ("
+            "b_id INTEGER CONTRAINT pk_updates PRIMARY KEY, d_id INTEGER, "
+            "wann INTEGER, wer TEXT, titel TEXT, inhalt TEXT)");
+        if (query_db_error())
+        {
+            db_debug("Tabelle diskussionsbeitraege anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle diskussionsbeitraege konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+        setup_counter("b_id", 0);
+    }
+    if (db_check_table("userinfo") == -1)
+    {
+        db_debug("Tabelle userinfo anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS userinfo ("
+            "wer TEXT CONTRAINT pk_updates PRIMARY KEY, "
+            "first_time INTEGER, last_time INTEGER)");
+        if (query_db_error())
+        {
+            db_debug("Tabelle userinfo anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle userinfo konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+    }
+    if (db_check_table("userignore") == -1)
+    {
+        db_debug("Tabelle userignore anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS userignore ("
+            "wer TEXT, was TEXT, id INTEGER )");
+        if (query_db_error())
+        {
+            db_debug("Tabelle userignore anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle userignore konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+    }
+    if (db_check_table("gelesen") == -1)
+    {
+        db_debug("Tabelle gelesen anlegen", 
+            DB_DBGLVL_INFO, DB_DBG_BUFFER_MSG);
+        flag++;
+        db_query("CREATE TABLE IF NOT EXISTS gelesen ("
+            "wer TEXT, was TEXT, id INTEGER )");
+        if (query_db_error())
+        {
+            db_debug("Tabelle gelesen anlegen fehlgeschlagen", 
+                DB_DBGLVL_ERROR, DB_DBG_FLUSH_BUFFER);
+            raise_error("Tabelle gelesen konnte nicht "
+                    "erstellt werden:"+query_db_error());
+        }
+    }
+    if (flag)
+        db_debug(sprintf("Initialisierung %d beendet.",flag),DB_DBGLVL_INFO, 
+            DB_DBG_FLUSH_BUFFER); // nur schreiben, wenn Tabellen angelegt.
+    else
+        db_debug(0,0, DB_DBG_DELETE_BUFFER);// ansonsten buffer loeschen
+}
+
+private int check_userinfo(string wer)
+{
+    mixed *r = db_query("SELECT last_time FROM userinfo WHERE wer = ?",wer);
+    return (sizeof(r) > 0);
+}
+
+private int check_status(int st)
+{
+    switch (st)
+    {
+    case UMFRAGE_S_NEU:
+    case UMFRAGE_S_STANDARD:
+    case UMFRAGE_S_BEREIT:
+    case UMFRAGE_S_AKTIV:
+    case UMFRAGE_S_OFFEN:
+    case UMFRAGE_S_BEENDET:
+    case UMFRAGE_S_ABGELEHNT:
+    case UMFRAGE_S_ARCHIVIERT:
+        return 1;
+    }
+    return 0;
+}
+
+private int check_u_id(int u_id, int* valid_status)
+{
+    mixed * result = db_query("SELECT status FROM umfragen WHERE u_id = ?",u_id);
+    if (query_db_error())
+        return 0;
+    int st = get_one_int(result);
+    return (!pointerp(valid_status) && st > 0)
+           || (member(valid_status,st)!=-1);
+}
+
+int add_umfrage(string frage, string ersteller, int st,
+        int i_id, int pantheon)
+{
+    if (!check_security() || !check_status(st) || !stringp(frage)
+        ||!stringp(ersteller) || !find_player(ersteller) || i_id < 0
+        || pantheon < 0 || pantheon > 1)
+    {
+        return 0;
+    }
+    int u_id;
+    mixed * result = 
+        db_query("SELECT u_id FROM umfragen WHERE status = 0 LIMIT 1");
+    if (sizeof(result))
+    {
+        u_id = get_one_int(result);
+        if (u_id <= 0) 
+            return 0;
+        db_query("UPDATE umfragen "
+            "(SET frage = ?, ersteller = ?, status = ?, i_id = ?, "
+            "pantheon = ? WHERE u_id = ? ",
+            frage,ersteller,st,i_id,pantheon,u_id);
+    }
+    else
+    {
+        u_id = increment_counter("u_id");
+        if (u_id <= 0) 
+            return 0;
+        db_query("INSERT INTO umfragen "
+            "(u_id,frage,ersteller,status,i_id,pantheon) "
+            "VALUES (?,?,?,?,?,?)",u_id,frage,ersteller,st,i_id,pantheon);
+    }
+    if (query_db_error()) 
+        return 0;
+    return u_id;
+}
+
+int add_antwort(int u_id, string antwort)
+{
+    if (!check_security() || !stringp(antwort))
+    {
+        return 0;
+    }
+    if (!check_u_id(u_id, ({UMFRAGE_S_NEU, 
+                            UMFRAGE_S_STANDARD, 
+                            UMFRAGE_S_BEREIT,
+                            }) ) )
+    {
+        return 0;
+    }
+    int a_id = increment_counter("a_id");
+    if (a_id <= 0) 
+        return 0;
+    db_query("INSERT INTO antworten "
+        "(u_id,a_id,antwort) "
+        "VALUES (?,?,?)",u_id,a_id,antwort);
+    if (query_db_error()) 
+        return 0;
+    return a_id;
+}
+
+int copy_antworten(int from_u_id, int to_u_id)
+{
+    if (!check_security())
+    {
+        return 0;
+    }
+    if (!check_u_id(from_u_id, 0) || !check_u_id(to_u_id, ({
+                            UMFRAGE_S_NEU, 
+                            })))
+    {
+        return 0;
+    }
+    // nicht wenn schon antworten existieren
+    mixed * result = db_query("SELECT a_id FROM antworten WHERE u_id = ?", 
+            to_u_id);
+    if (query_db_error() || sizeof(result))  
+        return 0;
+    // nicht wenn keine Antworten bei der quelle existieren
+    result = db_query("SELECT antwort FROM antworten WHERE u_id = ?", 
+            from_u_id);
+    if (query_db_error() || !sizeof(result))  
+        return 0;
+    //PDBG(sprintf("copy_antworten %Q %Q",result,
+    //        filter(result, (: add_antwort($2, $1[0]) :), to_u_id) ));
+    return 1;
+}
+
+int hat_gewaehlt(int u_id, string wer)
+{
+    if (!check_security() || !stringp(wer) || !player_exists(wer))
+    {
+        return 0;
+    }
+    if (!check_u_id(u_id, 0 ) )
+    {
+        return 0;
+    }
+    mixed * result = 
+        db_query("SELECT a_id FROM erhebung WHERE u_id = ? AND wer = ?",
+            u_id,wer);
+    if (sizeof(result)==1)
+    {
+        return get_one_int(result);
+    }
+    return 0;
+}
+
+int add_erhebung(int a_id, string wer, int pantheon)
+{
+    int e_id, delete_flag;
+    if (!check_security() || !stringp(wer) || !find_player(wer)
+            || pantheon < 0 || pantheon > 1)
+    {
+        return 0;
+    }
+    mixed r1 = db_query("SELECT u_id FROM antworten WHERE a_id = ?",a_id);
+    int u_id = get_one_int(r1);
+    if (!check_u_id(u_id, ({UMFRAGE_S_AKTIV }) ) )
+    {
+        return 0;
+    }
+    // vorherige Auswahl loeschen:
+    delete_flag = (a_id == hat_gewaehlt(u_id,wer));
+    db_query("UPDATE erhebung SET u_id = 0, wer = '', a_id = 0, pantheon = 0 "
+             "WHERE u_id = ? AND wer = ?", u_id, wer);
+    if (delete_flag)
+    {
+        return a_id;
+    }
+    // freie e_id suchen
+    mixed * result = 
+        db_query("SELECT e_id FROM erhebung WHERE u_id = 0 LIMiT 1");
+    if (sizeof(result))
+    {
+        e_id = get_one_int(result);
+        if (e_id <= 0) 
+            return 0;
+        db_query("DELETE FROM erhebung WHERE e_id = ?",e_id); // freigeben
+    }
+    else
+    {
+        e_id = increment_counter("e_id"); // neue e_id
+        if (e_id <= 0) 
+            return 0;
+    }
+    db_query("INSERT INTO erhebung "
+        "(u_id,a_id,e_id,wer,pantheon) "
+        "VALUES (?,?,?,?,?)",u_id,a_id,e_id,wer,pantheon); // neu einfuegen
+    if (query_db_error()) 
+        return 0;
+    return a_id;
+}
+
+private int get_erhebung_pro_antwort(int a_id)
+{
+    mixed r = db_query("SELECT COUNT(e_id) FROM erhebung WHERE a_id = ?",
+            a_id);
+    if (query_db_error() || r == 0) 
+        return 0;
+    return get_one_int(r);
+}
+
+private string get_erhebung_pro_umfrage(int u_id)
+{
+    mixed r = db_query("SELECT a_id FROM antworten WHERE u_id = ?",u_id);
+    string result = "";
+    if (query_db_error() || r == 0) 
+        return "";
+    for (int i=0;i<sizeof(r);i++)
+    {
+        result += sprintf("%03d.",get_erhebung_pro_antwort(r[i][0]));
+    }
+    return strlen(result)?result[..<2]: "";
+}
+
+mixed * get_erhebung_alle_ideen(mapping options)
+{
+    string q;
+    if (!check_security())
+    {
+        return 0;
+    }
+    options ||= ([]);
+    q = "SELECT u.u_id, u.i_id, i.titel FROM umfragen u, ideen i ";
+    q+= "WHERE u.i_id = i.i_id AND u.i_id > 0 ";
+    q+= "AND u.status >= ? AND u.status <= ? ";
+    if (options[UI_OPT_PANTHEON] == 0)
+    {
+        q+= "AND u.pantheon = 0 AND i.pantheon = 0 ";
+    } else if (options[UI_OPT_PANTHEON] == -1)
+    {
+        q+= "AND (u.pantheon = 1 OR i.pantheon = 1) ";
+    }
+    mixed r = db_query(q, UMFRAGE_S_AKTIV, UMFRAGE_S_OFFEN);
+    if (query_db_error() || r == 0 || !sizeof(r)) 
+        return 0;
+    mixed * result = map(r, (: 
+        ({ get_erhebung_pro_umfrage($1[0]),$1[0],$1[1],$1[2] }) :) );
+    return sort_array(result, (: $1[0] < $2[0] :) );
+}
+
+string * get_auswertung_prozent(int u_id)
+{
+    if (!check_security())
+    {
+        return 0;
+    }
+    if (!check_u_id(u_id, ({UMFRAGE_S_AKTIV,UMFRAGE_S_BEENDET,
+            UMFRAGE_S_ARCHIVIERT }) ) )
+    {
+        return 0;
+    }
+    mixed * r1 = db_query(
+        "SELECT COUNT(e_id) FROM erhebung WHERE u_id = ?",u_id);
+    int total = get_one_int(r1);
+    if (total==0) 
+    {
+        return ({ "Keine Stimmen." });
+    }
+    mixed * r2 = db_query(
+        "SELECT COUNT(e.e_id), a.a_id, a.antwort "
+        "FROM antworten a LEFT JOIN erhebung e "
+        "WHERE e.a_id=a.a_id AND a.u_id = ? "
+        "GROUP BY a.a_id, a.antwort ",
+        u_id);
+    if (query_db_error()) 
+        return ({ query_db_error() });
+    return map(r2, (: sprintf("%s=%.1f",$1[2],(100.0*$1[0])/(1.0*$2)) :), 
+                total );
+}
+
+int add_idee(string titel, string inhalt, string ersteller, int st, 
+             int pantheon)
+{
+    if (!check_security() || !check_status(st) || !stringp(titel)
+        ||!stringp(inhalt) || pantheon < 0 || pantheon > 1
+        ||!stringp(ersteller) || !find_player(ersteller) )
+    {
+        return 0;
+    }
+    int i_id;
+    mixed * result = 
+        db_query("SELECT i_id FROM ideen WHERE status = 0 LIMIT 1");
+    if (sizeof(result))
+    {
+        i_id = get_one_int(result);
+        if (i_id <= 0) 
+            return 0;
+        db_query("UPDATE ideen "
+            "(SET titel = ?, inhalt = ?, ersteller = ?, "
+            "status = ?, pantheon = ? "
+            "WHERE i_id = ? ", titel, inhalt, ersteller, st, pantheon, i_id);
+    }
+    else
+    {
+        i_id = increment_counter("i_id");
+        if (i_id <= 0) 
+            return 0;
+        db_query("INSERT INTO ideen "
+            "(i_id,titel,inhalt,ersteller,status,pantheon) "
+            "VALUES (?,?,?,?,?,?)",i_id,titel,inhalt,ersteller,st,pantheon);
+    }
+    if (query_db_error()) 
+        return 0;
+    return i_id;
+}
+
+int aktiviere_idee_und_umfrage(int i_id, int u_id)
+{
+    if (!check_security())
+    {
+        return 0;
+    }
+    // TODO transaktionskontrolle und fehlerbehandlung.
+    db_query("UPDATE umfragen SET status = ? WHERE u_id = ? AND i_id = ?",
+                UMFRAGE_S_BEREIT, u_id, i_id);
+    db_query("UPDATE ideen SET status = ? WHERE i_id = ?",
+                UMFRAGE_S_BEREIT, i_id);
+    return 1;
+}
+
+int aktualisiere_ideen_status(int i_id, int st)
+{
+    if (!check_security() || !check_status(st))
+    {
+        return 0;
+    }
+    db_query("UPDATE ideen SET status = ? WHERE i_id = ?",
+                st, i_id);
+    return 1;
+}
+
+int aktualisiere_umfragen_status(int u_id, int st)
+{
+    if (!check_security() || !check_status(st))
+    {
+        return 0;
+    }
+    db_query("UPDATE umfragen SET status = ? WHERE u_id = ?",
+                st, u_id);
+    return 1;
+}
+
+mixed get_ideen_diskussion(mapping options)
+{
+    mixed * r1, *r2;
+    string q;
+    int last_i_id,i_id, u_id, i, *st_arr;
+    if (!check_security())
+    {
+        return 0;
+    }
+    options ||= ([]);
+    if (options[UI_OPT_COUNTALL])
+    {
+        q = "SELECT COUNT(*) ";
+    }
+    else
+    {
+        q = "SELECT i.i_id, d.d_id, i.titel, d.pantheon ";
+    }
+    q+= "FROM ideen i LEFT JOIN diskussion d ";
+    if (intp(i_id = options[UI_OPT_I_ID]) && i_id > 0)
+    {
+        if (options[UI_OPT_PANTHEON] == 0)
+        {
+            q+= "ON (i.i_id = d.id AND d.was ='ideen' AND d.pantheon = 0 "
+                    "AND i.status <= d.status) ";
+            q+= "WHERE i.i_id = "+i_id+" ";
+        }
+        else
+        {
+            q+= "WHERE d.id = i.i_id AND d.was ='ideen' "; 
+            q+= "AND i.i_id = "+i_id+" ";
+        }
+    }
+    else
+    {
+        return 0; // Falscher Aufruf...
+    }
+    if (pointerp(options[UI_OPT_STATUS]) 
+        && sizeof(st_arr =options[UI_OPT_STATUS]) )
+    {
+        q+= "AND i.status IN (";
+         for (i=0; i< sizeof(st_arr); i++)
+         {
+            if (i>0) q+=",";
+            q+=st_arr[i];
+         }
+         q+= ") ";
+    }
+    if (pointerp(options[UI_OPT_STATUS]) 
+        && sizeof(st_arr =options[UI_OPT_STATUS]) )
+    {
+        q+= "AND d.status IN (";
+         for (i=0; i< sizeof(st_arr); i++)
+         {
+            if (i>0) q+=",";
+            q+=st_arr[i];
+         }
+         q+= ") ";
+    }
+    if (stringp(options[UI_OPT_SUCHFILTER]))
+    {
+        q+= "AND (i.titel LIKE '%"+options[UI_OPT_SUCHFILTER]+"%' ";
+        q+= "OR i.inhalt LIKE '%"+options[UI_OPT_SUCHFILTER]+"%') ";
+    }
+    if (stringp(options[UI_OPT_ERSTELLER]))
+    {
+        q+= "AND (u.ersteller = '"+options[UI_OPT_ERSTELLER];
+        q+= "' OR i.ersteller = '"+options[UI_OPT_ERSTELLER]+"') ";
+    }
+    if (!options[UI_OPT_COUNTALL])
+    {
+        // sortieren nach erhebung, titel,
+        q+= "ORDER BY i.i_id, d.d_id ";
+        if (options[UI_OPT_LIMIT] > 0)
+        {
+            q+= "LIMIT "+options[UI_OPT_LIMIT]+" ";
+        }
+        if (options[UI_OPT_OFFSET] > 0)
+        {
+            q+= "OFFSET "+options[UI_OPT_OFFSET]+" ";
+        }
+    }
+    r1 = db_query(q);
+    //PDBG(sprintf("get_ideen_diskussion: %s => %Q",q,r1));
+    if (query_db_error()) 
+        return 0;
+    if (options[UI_OPT_COUNTALL])
+    {
+        return get_one_int(r1);
+    }
+    r2 = ({ });
+    foreach( mixed line : r1) // i.i_id, d.d_id, i.titel, d.pantheon
+    {
+        if (line[1] > 0)
+        {
+            r2 += ({ ({ "Diskussion", line[0], 
+                         (line[3]?"Pantheon":"Spieler")
+                         +(ist_diskussion_ungelesen(line[1], TP_RN)?
+                            " ungelesen":""),
+                         line[1] }) });
+                                          // U,i_id,p/s,d_id
+        }
+    }
+    //PDBG(sprintf("get_ideen_diskussion: ===> %Q",r2));
+    return r2;
+}
+
+mixed get_ideen_wahl(mapping options)
+{
+    mixed * r1, *r2;
+    string q;
+    int last_i_id,i_id, u_id, i, *st_arr;
+    if (!check_security())
+    {
+        return 0;
+    }
+    options ||= ([]);
+    if (options[UI_OPT_COUNTALL])
+    {
+        q = "SELECT COUNT(*) ";
+    }
+    else
+    {
+        q = "SELECT i.i_id, u.u_id, i.titel, u.frage ";
+    }
+    q+= "FROM ideen i LEFT JOIN umfragen u ";
+    if (intp(i_id = options[UI_OPT_I_ID]) && i_id > 0)
+    {
+        if (options[UI_OPT_PANTHEON] == 0)
+        {
+            q+= "ON (u.i_id = i.i_id AND u.pantheon = 0) ";
+            q+= "WHERE i.i_id = "+i_id+" ";
+        }
+        else
+        {
+            q+= "WHERE u.i_id = i.i_id "; 
+            q+= "AND i.i_id = "+i_id+" ";
+        }
+    }
+    else if (intp(u_id = options[UI_OPT_U_ID]) && u_id > 0)
+    {
+        q+= "WHERE u.i_id = i.i_id "; 
+        q+= "AND u.u_id = "+u_id+" ";
+        if (options[UI_OPT_PANTHEON] == 0)
+        {
+            q+= "AND u.pantheon = 0 AND i.pantheon = 0 ";
+        }
+    }
+    else
+    {
+        return 0; // Falscher Aufruf...
+    }
+    if (pointerp(options[UI_OPT_STATUS]) 
+        && sizeof(st_arr =options[UI_OPT_STATUS]) )
+    {
+        q+= "AND i.status IN (";
+         for (i=0; i< sizeof(st_arr); i++)
+         {
+            if (i>0) q+=",";
+            q+=st_arr[i];
+         }
+         q+= ") ";
+    }
+    if (pointerp(options[UI_OPT_STATUS]) 
+        && sizeof(st_arr =options[UI_OPT_STATUS]) )
+    {
+        q+= "AND u.status IN (";
+         for (i=0; i< sizeof(st_arr); i++)
+         {
+            if (i>0) q+=",";
+            q+=st_arr[i];
+         }
+         q+= ") ";
+    }
+    if (stringp(options[UI_OPT_SUCHFILTER]))
+    {
+        q+= "AND (i.titel LIKE '%"+options[UI_OPT_SUCHFILTER]+"%' ";
+        q+= "OR i.inhalt LIKE '%"+options[UI_OPT_SUCHFILTER]+"%') ";
+    }
+    if (stringp(options[UI_OPT_ERSTELLER]))
+    {
+        q+= "AND (u.ersteller = '"+options[UI_OPT_ERSTELLER];
+        q+= "' OR i.ersteller = '"+options[UI_OPT_ERSTELLER]+"') ";
+    }
+    if (!options[UI_OPT_COUNTALL])
+    {
+        // sortieren nach erhebung, titel,
+        q+= "ORDER BY u.i_id, u.u_id ";
+        if (options[UI_OPT_LIMIT] > 0)
+        {
+            q+= "LIMIT "+options[UI_OPT_LIMIT]+" ";
+        }
+        if (options[UI_OPT_OFFSET] > 0)
+        {
+            q+= "OFFSET "+options[UI_OPT_OFFSET]+" ";
+        }
+    }
+    r1 = db_query(q);
+    //PDBG(sprintf("get_ideen_wahl: %s => %Q",q,r1));
+    if (query_db_error()) 
+        return 0;
+    if (options[UI_OPT_COUNTALL])
+    {
+        r2 = get_ideen_diskussion(options);
+        return get_one_int(r1) + pointerp(r2) ? sizeof(r2) : 0;
+    }
+    r2 = ({ });
+    last_i_id = 0;
+    foreach( mixed line : r1) // u.i_id, u.u_id, i.titel, u.frage
+    {
+        if (last_i_id != line[0])
+        {
+            last_i_id = line[0];
+            r2 += ({ ({ "Idee", line[0], line[2], 0 }) });  // I,i_id,titel,0
+        }
+        if (line[1] > 0)
+        {
+            r2 += ({ ({ "Umfrage", line[0], line[3], line[1] }) });
+                                                          // U,i_id,frage,u_id
+        }
+    }
+    r1 = get_ideen_diskussion(options);
+    if (pointerp(r1)&&sizeof(r1))
+    {
+        r2 += r1;
+    }
+    //PDBG(sprintf("get_ideen_wahl: ===> %Q",r2));
+    return r2;
+}
+
+int toggle_ignore_idee(int i_id, string wer)
+{
+    mixed * r1;
+    string q;
+    if (!check_security())
+    {
+        return 0;
+    }
+    q = "SELECT COUNT(*) FROM userignore ";
+    q+= "WHERE wer = ? AND id = ? AND was ='ideen' ";
+    r1 = db_query(q,wer,i_id);
+    if (get_one_int(r1)>0)
+    {
+        q = "DELETE FROM userignore WHERE wer = ? AND id = ? ";
+        q+= "AND was = 'ideen' ";
+        db_query(q,wer,i_id);
+        return -1;
+    }
+    else
+    {
+        q = "INSERT INTO userignore (wer,was,id) VALUES (?,'ideen',?) ";
+        db_query(q,wer,i_id);
+        return 1;
+    }
+}
+
+private string get_ideen_wahl_query(mapping options, string prefix)
+{
+    string q, *st_arr;
+    int i;
+    q = prefix;
+    if (stringp(options[UI_OPT_ERSTELLER]))
+    {
+        q+= "AND i.ersteller = '"+options[UI_OPT_ERSTELLER]+"' ";
+    }
+    else if (options[UI_OPT_PANTHEON] == 0)
+    {
+        q+= "AND i.pantheon = 0 ";
+    }
+    if (options[UI_OPT_OHNE_DISKUSSION] == 1)
+    {
+        q+= "AND i.i_id NOT IN (SELECT DISTINCT id FROM diskussion ";
+        q+= "WHERE was = 'ideen') ";
+    }
+    else if (options[UI_OPT_DISKUSSION] == 1)
+    {
+        q+= "AND i.i_id IN (SELECT DISTINCT id FROM diskussion ";
+        q+= "WHERE was = 'ideen') ";
+    }
+    if (options[UI_OPT_IGNORELIST] == 0)
+    {
+        q+= "AND i.i_id NOT IN (SELECT DISTINCT id FROM userignore ";
+        q+= "WHERE was = 'ideen' AND wer = '"+TP_RN+"') ";        
+    }
+    else if (options[UI_OPT_IGNORELIST] == 2)
+    {
+        q+= "AND i.i_id IN (SELECT DISTINCT id FROM userignore ";
+        q+= "WHERE was = 'ideen' AND wer = '"+TP_RN+"') ";        
+    }
+    if (options[UI_OPT_UMFRAGE_OFFEN] == 1)
+    {
+        q+= "AND i.i_id IN (SELECT i_id FROM umfragen ";
+        q+= "WHERE u_id NOT IN (SELECT U_ID FROM erhebung ";
+        q+= "WHERE wer = '"+TP_RN+"')) ";
+    }
+    if (stringp(options[UI_OPT_SUCHFILTER]))
+    {
+        q+= "AND (i.titel LIKE '%"+options[UI_OPT_SUCHFILTER]+"%' ";
+        q+= "OR i.inhalt LIKE '%"+options[UI_OPT_SUCHFILTER]+"%') ";
+    }
+    if (pointerp(options[UI_OPT_STATUS]) 
+        && sizeof(st_arr =options[UI_OPT_STATUS]) )
+    {
+        q+= "AND i.status IN (";
+         for (i=0; i< sizeof(st_arr); i++)
+         {
+            if (i>0) q+=",";
+            q+=st_arr[i];
+         }
+         q+= ") ";
+    }
+    if (stringp(options[UI_OPT_I_ID]))
+    {
+        q+= "AND i.i_id = "+options[UI_OPT_I_ID]+" ";
+    }
+    return q;
+}
+
+mixed get_ideen_wahl_uebersicht(mapping options)
+{
+    mixed * r1, *r2;
+    string q;
+    int last_i_id, * st_arr, i;
+    if (!check_security())
+    {
+        return 0;
+    }
+    options ||= ([]);
+    if (options[UI_OPT_COUNTALL])
+    {
+        q = "SELECT COUNT(*) ";
+    }
+    else
+    {
+        q = "SELECT i.i_id, i.titel ";
+    }
+    q+= "FROM ideen i ";
+    q+= "WHERE 1 ";
+    q = get_ideen_wahl_query(options, q);
+    if (!options[UI_OPT_COUNTALL])
+    {
+        // sortieren nach erhebung, titel,
+        q+= "ORDER BY i.i_id ";
+        if (options[UI_OPT_LIMIT] > 0)
+        {
+            q+= "LIMIT "+options[UI_OPT_LIMIT]+" ";
+        }
+        if (options[UI_OPT_OFFSET] > 0)
+        {
+            q+= "OFFSET "+options[UI_OPT_OFFSET]+" ";
+        }
+    }
+    r1 = db_query(q);
+    //PDBG(sprintf("get_ideen_wahl_uebersicht: %s => %Q",q,r1));
+    if (query_db_error()) 
+        return 0;
+    if (options[UI_OPT_COUNTALL])
+    {
+        return get_one_int(r1);
+    }
+    
+    return r1;
+}
+
+string * get_idee(int i_id)
+{
+    mixed * r1;
+    string q;
+    //PDBG(sprintf("get_idee(%d)",i_id));
+    if (!check_security() || i_id <= 0)
+    {
+        return 0;
+    }
+    q = "SELECT i.titel, i.inhalt ";
+    q+= "FROM ideen i ";
+    q+= "WHERE i.i_id = "+i_id+" ";
+    r1 = db_query(q);
+    //PDBG(sprintf("get_idee: %s => %Q",q,r1));
+    if (query_db_error() || sizeof(r1)!=1) 
+        return 0;
+    return ({ r1[0][0], r1[0][1] });
+}
+
+int get_ideen_status(int i_id)
+{
+    mixed * r1;
+    string q;
+    //PDBG(sprintf("get_idee(%d)",i_id));
+    if (!check_security() || i_id <= 0)
+    {
+        return -1;
+    }
+    q = "SELECT i.status ";
+    q+= "FROM ideen i ";
+    q+= "WHERE i.i_id = "+i_id+" ";
+    r1 = db_query(q);
+    //PDBG(sprintf("get_idee: %s => %Q",q,r1));
+    if (query_db_error() || sizeof(r1)!=1) 
+        return -1;
+    return get_one_int(r1);
+}
+
+int get_ideen_pantheon(int i_id)
+{
+    mixed * r1;
+    string q;
+    //PDBG(sprintf("get_idee(%d)",i_id));
+    if (!check_security() || i_id <= 0)
+    {
+        return -1;
+    }
+    q = "SELECT i.pantheon ";
+    q+= "FROM ideen i ";
+    q+= "WHERE i.i_id = "+i_id+" ";
+    r1 = db_query(q);
+    //PDBG(sprintf("get_idee: %s => %Q",q,r1));
+    if (query_db_error() || sizeof(r1)!=1) 
+        return -1;
+    return get_one_int(r1);
+}
+
+string get_ideen_ersteller(int i_id)
+{
+    mixed * r1;
+    string q;
+    //PDBG(sprintf("get_idee(%d)",i_id));
+    if (!check_security() || i_id <= 0)
+    {
+        return 0;
+    }
+    q = "SELECT i.ersteller ";
+    q+= "FROM ideen i ";
+    q+= "WHERE i.i_id = "+i_id+" ";
+    r1 = db_query(q);
+    //PDBG(sprintf("get_idee: %s => %Q",q,r1));
+    if (query_db_error() || sizeof(r1)!=1) 
+        return 0;
+    return r1[0][0];
+}
+
+string get_umfrage(int u_id)
+{
+    mixed * r1;
+    string q;
+    if (!check_security() || u_id <= 0)
+    {
+        return 0;
+    }
+    q = "SELECT u.frage ";
+    q+= "FROM umfragen u ";
+    q+= "WHERE u.u_id = "+u_id;
+    r1 = db_query(q);
+    if (query_db_error() || sizeof(r1)!=1) 
+        return 0;
+    return r1[0][0];
+}
+
+int get_umfragen_status(int u_id)
+{
+    mixed * r1;
+    string q;
+    if (!check_security() || u_id <= 0)
+    {
+        return -1;
+    }
+    q = "SELECT u.status ";
+    q+= "FROM umfragen u ";
+    q+= "WHERE u.u_id = "+u_id;
+    r1 = db_query(q);
+    if (query_db_error() || sizeof(r1)!=1) 
+        return 1;
+    return r1[0][0];
+}
+
+int get_umfragen_pantheon(int u_id)
+{
+    mixed * r1;
+    string q;
+    if (!check_security() || u_id <= 0)
+    {
+        return -1;
+    }
+    q = "SELECT u.pantheon ";
+    q+= "FROM umfragen u ";
+    q+= "WHERE u.u_id = "+u_id;
+    r1 = db_query(q);
+    if (query_db_error() || sizeof(r1)!=1) 
+        return 1;
+    return r1[0][0];
+}
+
+string get_umfragen_ersteller(int u_id)
+{
+    mixed * r1;
+    string q;
+    if (!check_security() || u_id <= 0)
+    {
+        return 0;
+    }
+    q = "SELECT u.ersteller ";
+    q+= "FROM umfragen u ";
+    q+= "WHERE u.u_id = "+u_id;
+    r1 = db_query(q);
+    if (query_db_error() || sizeof(r1)!=1) 
+        return 0;
+    return r1[0][0];
+}
+
+mixed * get_antworten(int u_id)
+{
+    mixed * r1;
+    string q;
+    if (!check_security() || u_id <= 0)
+    {
+        return 0;
+    }
+    q = "SELECT a.a_id, a.antwort ";
+    q+= "FROM antworten a ";
+    q+= "WHERE a.u_id = "+u_id+" ";
+    q+= "ORDER BY a.a_id ";
+    r1 = db_query(q);
+    //PDBG(sprintf("get_antworten: (%Q)\n%s => %Q",query_db_error(),q,r1));
+    if (query_db_error() || sizeof(r1)<1) 
+        return 0;
+    return r1; 
+}
+
+// -----------------------------------------------------------------
+int aktualisiere_diskussion_status(int d_id, int st)
+{
+    if (!check_security() || !check_status(st))
+    {
+        return 0;
+    }
+    db_query("UPDATE diskussion SET status = ? WHERE d_id = ?",
+                st, d_id);
+    return 1;
+}
+
+
+
+private int check_diskussion_was(string was)
+{
+    switch (was)
+    {
+    case "ideen": return 1;
+    default:      return 0;
+    }
+}
+
+private int check_d_id(int d_id, int* valid_status)
+{
+    mixed * result = 
+            db_query("SELECT status FROM diskussion WHERE d_id = ?",
+            d_id);
+    if (query_db_error())
+        return 0;
+    int st = get_one_int(result);
+    return (!pointerp(valid_status) && st > 0)
+           || (member(valid_status,st)!=-1);
+}
+
+
+int add_diskussion(string was, int id, int pantheon, int st)
+{
+    mixed * r1;
+    string q;
+    int d_id;
+    if (!check_security() || !check_diskussion_was(was) || id <= 0 
+            || pantheon < 0 || pantheon > 1 || !check_status(st))
+    {
+        return 0;
+    }
+    q = "SELECT COUNT(d_id) FROM diskussion ";
+    q+= "WHERE was = ? AND id = ? AND pantheon = ? ";
+    r1 = db_query(q,was,id,pantheon);
+    if (query_db_error()) 
+    {
+        return -2; // DB oder Queryfehler.
+    }
+    if (get_one_int(r1) == 1)
+    {
+        return -1; // schon vorhanden.
+    }
+    // TODO geloeschte Diskussion wiederverwenden.
+    d_id = increment_counter("d_id");
+    q = "INSERT INTO diskussion(d_id, was, id, pantheon, status) ";
+    q+= "VALUES (?,?,?,?,?) ";
+    db_query(q,d_id,was,id,pantheon,st);
+    if (query_db_error()) 
+    {
+        return -2; // DB oder Queryfehler.
+    }
+    return 1; // alles ok.
+}
+
+int add_diskussionsbeitrag(int d_id, string wer, string titel, string inhalt)
+{
+    string q;
+    int b_id;
+    if (!check_security() || d_id < 0 || !stringp(wer) || !stringp(titel)
+            || !stringp(inhalt))
+    {
+        return 0;
+    }
+    if (!check_d_id(d_id, ({
+                UMFRAGE_S_BEREIT, 
+                UMFRAGE_S_AKTIV, 
+                UMFRAGE_S_OFFEN}) ))
+    {
+        return -1; // d_id kein gueltiger Status
+    }
+    // TODO geloeschte Eintraege wiederverwenden
+    b_id = increment_counter("b_id");
+    q = "INSERT INTO diskussionsbeitraege ";
+    q+= "(b_id, d_id, wann, wer, titel, inhalt) ";
+    q+= "VALUES (?, ?, ?, ?, ?, ?) ";
+    db_query(q, b_id, d_id, time(), wer, titel, inhalt);
+    if (query_db_error()) 
+    {
+        return -2; // DB oder Queryfehler.
+    }
+    return 1; // alles ok.
+}
+
+int delete_diskussionsbeitrag(int b_id)
+{
+    if (!check_security() || b_id <= 0)
+    {
+        return 0;
+    }
+    string q = "UPDATE diskussionsbeitrag ";
+    q+= "SET d_id = 0, status = ? WHERE b_id = ? ";
+    db_query(q, UMFRAGE_S_GELOESCHT, b_id);
+    if (query_db_error()) 
+    {
+        return 0; // DB oder Queryfehler.
+    }
+    return 1; // alles ok.
+}
+
+int ist_idee_ungelesen(mapping options, string wer)
+{
+    string q,*st_arr;
+    mixed r1;
+    int i;
+    if (!check_security())
+    {
+        return 0;
+    }
+    options ||= ([]);
+    q = "SELECT COUNT(b.b_id) ";
+    q+= "FROM ideen i, diskussion d, diskussionsbeitraege b ";
+    q+= "WHERE i.i_id = d.id AND d.was ='ideen' AND b.d_id = d.d_id ";
+    if (member(options,UI_OPT_I_ID))
+    {
+        q+= "AND i.i_id = "+options[UI_OPT_I_ID]+" ";
+    }
+    else
+    {
+        return 0; // id muss angegeben sein.
+    }
+    if (options[UI_OPT_PANTHEON] == 0)
+    {
+        q+= "AND d.pantheon = 0 ";
+    }
+    if (pointerp(options[UI_OPT_STATUS]) 
+        && sizeof(st_arr =options[UI_OPT_STATUS]) )
+    {
+        q+= "AND d.status IN (";
+        for (i=0; i< sizeof(st_arr); i++)
+        {
+            if (i>0) q+=",";
+            q+=st_arr[i];
+        }
+        q+= ") ";
+    }
+    q+= "AND b.b_id NOT IN (SELECT id FROM gelesen ";
+    q+= "WHERE was ='beitraege' AND wer = '"+wer+"') ";
+    r1 = db_query(q);
+    //PDBG(sprintf("ist_idee_ungelesen %s=>%Q",q,r1));
+    return !query_db_error() && (get_one_int(r1) > 0);
+}
+
+int ist_diskussion_ungelesen(int d_id, string wer)
+{
+    string q;
+    mixed r1;
+    int count1,count2;
+    if (!check_security())
+    {
+        return 0;
+    }
+    q = "SELECT COUNT(b.b_id) FROM diskussionsbeitraege b ";
+    q+= "WHERE b.d_id = ? ";
+    count1 = get_one_int(db_query(q,d_id));
+    //PDBG(sprintf("ist_diskussion_ungelesen %s=>%Q",q,query_db_error()));
+    q = "SELECT COUNT(g.id) FROM gelesen g ";
+    q+= "WHERE g.was = 'beitraege' AND g.id IN ";
+    q+= "(SELECT b.b_id FROM diskussionsbeitraege b WHERE b.d_id = ?) ";
+    q+= "AND g.wer = ? ";
+    count2 = get_one_int(db_query(q,d_id,wer));
+    //PDBG(sprintf("ist_diskussion_ungelesen %s=>%Q",q,query_db_error()));
+    //PDBG(sprintf("ist_diskussion_ungelesen %d %d",count1,count2));
+    return count1 > count2;
+}
+
+int ist_beitrag_ungelesen(int b_id, string wer)
+{
+    string q;
+    mixed r1;
+    if (!check_security())
+    {
+        return 0;
+    }
+    q = "SELECT b.b_id, g.wer FROM diskussionsbeitraege b ";
+    q+= "LEFT JOIN gelesen g ON (b.b_id = g.id AND g.was ='beitraege' ";
+    q+= "AND g.wer = ?) WHERE b.b_id = ? ";
+    r1 = db_query(q,wer,b_id);
+    //PDBG(sprintf("ist_beitrag_ungelesen %s=>%Q",q,r1));
+    return !sizeof(r1) || r1[0][1] == 0;
+}
+
+int update_gelesen(mapping options, string wer)
+{
+    string q;
+    mixed r1;
+    if (!check_security() || !stringp(wer))
+    {
+        return 0;
+    }
+    q = "INSERT INTO gelesen (wer, was, id) ";
+    if (member(options, UI_OPT_B_ID)) 
+    {
+        q+= "VALUES ('"+wer+"', 'beitraege', "+options[UI_OPT_B_ID] +") ";
+    }
+    else if (member(options, UI_OPT_D_ID)) 
+    {
+        q+= "SELECT '"+wer+"', 'beitraege', b.b_id ";
+        q+= "FROM diskussionsbeitraege b ";
+        q+= "WHERE b.d_id = "+options[UI_OPT_D_ID]+" ";
+        q+= "AND b.b_id NOT IN (SELECT g.id FROM gelesen g ";
+        q+= "WHERE wer ='"+wer+"' AND was = 'beitraege') ";
+    }
+    else if (member(options, UI_OPT_I_ID)) 
+    {
+        q+= "SELECT '"+wer+"', 'beitraege', b.b_id ";
+        q+= "FROM diskussionsbeitraege b ";
+        q+= "WHERE b.d_id IN (SELECT d.d_id FROM diskussion d ";
+        q+= "WHERE id = "+options[UI_OPT_I_ID]+" AND was ='ideen') ";
+        q+= "AND b.b_id NOT IN (SELECT g.id FROM gelesen g ";
+        q+= "WHERE wer ='"+wer+"' AND was = 'beitraege') ";
+    }
+    else 
+    {
+        q+= "SELECT '"+wer+"', 'beitraege', b.b_id ";
+        q+= "FROM diskussionsbeitraege b ";
+        q+= "WHERE b.d_id IN (SELECT d.d_id FROM diskussion d ";
+        q+= "WHERE id IN (SELECT i.i_id FROM ideen i WHERE 1 ";
+        q = get_ideen_wahl_query(options, q);
+        q+= ") AND was ='ideen') ";
+        q+= "AND b.b_id NOT IN (SELECT g.id FROM gelesen g ";
+        q+= "WHERE wer ='"+wer+"' AND was = 'beitraege') ";
+    }
+    db_query(q);
+    if (query_db_error())
+    {
+        //PDBG(sprintf("update_gelesen %s=>%Q",q,query_db_error()));
+        return 0;
+    }
+    return 1;
+}
+
+int update_ungelesen(mapping options, string wer)
+{
+    string q;
+    mixed r1;
+    if (!check_security() || !stringp(wer))
+    {
+        return 0;
+    }
+    q = "DELETE FROM gelesen WHERE wer ='"+wer+"' AND was ='beitraege' ";
+    if (member(options, UI_OPT_B_ID)) 
+    {
+        q+= "AND id = "+options[UI_OPT_B_ID] +" ";
+    }
+    else if (member(options, UI_OPT_D_ID)) 
+    {
+        q+= "AND id IN (SELECT b.b_id FROM diskussionsbeitraege b ";
+        q+= "WHERE b.d_id = "+options[UI_OPT_D_ID]+") ";
+    }
+    else if (member(options, UI_OPT_I_ID)) 
+    {
+        q+= "AND id IN (SELECT b.b_id FROM diskussionsbeitraege b ";
+        q+= "WHERE b.d_id IN (SELECT d.d_id FROM diskussion d ";
+        q+= "WHERE id = "+options[UI_OPT_I_ID]+" AND was ='ideen')) ";
+    }
+    else 
+    {
+        q+= "AND id IN (SELECT b.b_id FROM diskussionsbeitraege b ";
+        q+= "WHERE b.d_id IN (SELECT d.d_id FROM diskussion d ";
+        q+= "WHERE was ='ideen' AND id IN (SELECT i.i_id FROM ideen i WHERE 1 ";
+        q = get_ideen_wahl_query(options, q);
+        q+= "))) ";
+    }
+    db_query(q);
+    if (query_db_error())
+    {
+        //PDBG(sprintf("update_ungelesen %s=>%Q",q,query_db_error()));
+        return 0;
+    }
+    return 1;
+}
+
+mixed get_diskussionsbeitraege(mapping options)
+{
+    string q;
+    int d_id = options[UI_OPT_D_ID];
+    mixed r1,r2;
+    if (!check_security())
+    {
+        return 0;
+    }
+    if (!check_d_id(d_id, ({
+                UMFRAGE_S_BEREIT, 
+                UMFRAGE_S_AKTIV, 
+                UMFRAGE_S_OFFEN,
+                UMFRAGE_S_BEENDET,
+                UMFRAGE_S_ABGELEHNT}) ))
+    {
+        return 0; // d_id kein gueltiger Status
+    }
+    if (options[UI_OPT_COUNTALL])
+    {
+        q = "SELECT COUNT(*) ";
+    }
+    else
+    {
+        q = "SELECT b.b_id, b.wann, b.wer, b.titel ";
+    }
+    q+= "FROM diskussionsbeitraege b, diskussion d ";
+    q+= "WHERE b.d_id = "+d_id+" AND b.d_id = d.d_id ";
+    if (options[UI_OPT_PANTHEON] == 0)
+    {
+        q+= "AND d.pantheon = 0 ";
+    }
+    if (!options[UI_OPT_COUNTALL])
+    {
+        // sortieren nach erhebung, titel,
+        q+= "ORDER BY b.wann ";
+        if (options[UI_OPT_LIMIT] > 0)
+        {
+            q+= "LIMIT "+options[UI_OPT_LIMIT]+" ";
+        }
+        if (options[UI_OPT_OFFSET] > 0)
+        {
+            q+= "OFFSET "+options[UI_OPT_OFFSET]+" ";
+        }
+    }
+    r1 = db_query(q);
+    //PDBG(sprintf("get_diskussionsbeitraege %s=>%Q",q,r1));
+    if (query_db_error()) 
+        return 0;
+    if (options[UI_OPT_COUNTALL])
+    {
+        return get_one_int(r1);
+    }
+    return r1;
+}
+
+private string * get_beitragsheader(int d_id)
+{
+    mixed * r1;
+    string q;
+    if (d_id <= 0)
+    {
+        return ({ });
+    }
+    q = "SELECT d.pantheon, d.status, i.titel, i.status ";
+    q+= "FROM diskussion d, ideen i ";
+    q+= "WHERE i.i_id = d.id AND d.was ='ideen' AND d.d_id = "+d_id;
+    r1 = db_query(q);
+    //PDBG(sprintf("get_beitragsheader %s => %Q",q,r1));
+    if (query_db_error() || sizeof(r1)!=1)
+    {
+        return ({});
+    }
+    return ({ sprintf("Idee: %s",r1[0][2]),
+              sprintf("Diskussion: %s",
+                        r1[0][0]?"Pantheon":"Spieler+Pantheon") });
+}
+
+string * get_beitrag(int b_id)
+{
+    mixed * r1;
+    string q;
+    //PDBG(sprintf("get_beitrag(%d)",b_id));
+    if (!check_security() || b_id <= 0)
+    {
+        return 0;
+    }
+    q = "SELECT b.inhalt, b.d_id, b.titel ";
+    q+= "FROM diskussionsbeitraege b ";
+    q+= "WHERE b.b_id = "+b_id+" ";
+    r1 = db_query(q);
+    //PDBG(sprintf("get_beitrag: %s => %Q",q,r1));
+    if (query_db_error() || sizeof(r1)!=1) 
+        return 0;
+    return get_beitragsheader(r1[0][1])
+            +({"Titel:"+r1[0][2]})
+            +explode(r1[0][0],"\n");
+}
+
+// -----------------------------------------------------------------
+int ist_uiko_aktiv()
+{
+    return get_db_info("uiko_aktiv") == "aktiv";
+}
+
+int set_uiko_status(int an)
+{
+    if (!check_security() || an < 0 || an > 1)
+    {
+        return 0;
+    }
+    return set_db_info("uiko_aktiv", an?"aktiv":"inaktiv");
+}
+
+int ist_wolke_aktiv()
+{
+    return get_db_info("wolke_aktiv") == "aktiv";
+}
+
+
+int set_wolke_status(int an)
+{
+    if (!check_security() || an < 0 || an > 1)
+    {
+        return 0;
+    }
+    return set_db_info("wolke_aktiv", an?"aktiv":"inaktiv");
+}
+
+int set_aktuelle_idee(int i_id)
+{
+    if (!check_security() || i_id < 0)
+    {
+        return 0;
+    }
+    return set_db_info("aktuelle_idee", to_string(i_id));
+}
+
+mixed get_aktuelle_idee(mapping options)
+{
+    string tmp = get_db_info("aktuelle_idee");
+    int i_id = 0;
+    if (stringp(tmp))
+    {
+        i_id = to_int(tmp);
+    }
+    if (i_id <= 0)
+    {
+        return 0;
+    }
+    return get_ideen_wahl(options + ([ UI_OPT_I_ID : i_id ]));
+}
+
+int add_update(string inhalt)
+{
+    if (!check_security() || !stringp(inhalt))
+    {
+        return 0;
+    }
+    int version = increment_counter("version");
+    if (version <= 0) 
+        return 0;
+    db_query("INSERT INTO updates "
+        "(version, wann, was) "
+        "VALUES (?,?,?)",version,time(),inhalt);
+    if (query_db_error()) 
+        return 0;
+    // TODO nachricht...
+    return 1; 
+}
+
+int get_current_version()
+{
+    mixed result = db_query("SELECT MAX(version) FROM updates");
+    if (query_db_error()) 
+        return 0;
+    return get_one_int(result);
+}
+
+string * get_diff_version(int since)
+{
+    mixed *r = db_query(
+        "SELECT was FROM updates WHERE version > ? ORDER BY version",
+        since);
+    if (query_db_error() || r == 0) 
+        return 0;
+    return map(r, (: $1[0] :));
+}
+
+
+// -----------------------------------------------------------------
+
+int sql(string sql)
+{
+    mixed * m;
+    if (!check_security(CHECK_ERROR)) {
+        //META_D_WARN("sql() security2 failed.",0,"statistik");
+        return 0;
+    }
+    if (!TI || !wizp(TI) || !query_all_access(TI)) {
+        //META_D_WARN("sql() security1 failed.",TI,"statistik");
+        return 0;
+    }
+
+    m = db_query(sql||"");
+    
+    if(!m) send_message_to(TP,MT_NOTIFY,MA_USE,
+       wrap("Es gab keine Rueckgabe."));
+    else if(!pointerp(m)) send_message_to(TP,MT_NOTIFY,MA_USE,
+       wrap(sprintf("Der Rueckgabewert war: '%O'",m)));
+    else if(sizeof(m)==0) send_message_to(TP,MT_NOTIFY,MA_USE,
+       wrap("Die Tabelle ist (noch) leer."));
+    else 
+       TP->more (map(
+  build_table ( transpose_array(map(m,(: map($1,(: to_string($1) :)) :))),
+                      ({"|","-"})
+                ), (: space($1) :))
+       );
+    if(query_db_error()) 
+       send_message_to(TP,MT_NOTIFY,MA_USE,
+          wrap("Es gab folgenden Fehler: "+ query_db_error()));
+    return 1;
+}
+
+int tablelist(string str)
+{
+    check_security(CHECK_ERROR);
+    string tb = space(str);
+    if (tb == "") {
+        return sql("SELECT name FROM sqlite_master WHERE type = 'table'");
+    } else {
+        return sql("SELECT sql FROM sqlite_master WHERE NAME = '"+tb+"'");
+    }
+}
+
+// -----------------------------------------------------------------
+
+string * dbglog()
+{
+    db_debug(0,0,DB_DBG_FLUSH_BUFFER);
+    return query_all_dbg_messages(DB_DBG_FLUSH_BUFFER);
+}
+
+void create()
+{
+    init_security_trust_mudlib();
+    init_security_for_actions();
+    add_security_condition((: return adminp($1); :));
+    add_security_condition(UMFRAGE_AUTOLOAD "#");
+    
+    init_db();
+}
+
+void abort_renewal() {}
+void finish_renewal(object neu) {}
+void prepare_renewal() {}

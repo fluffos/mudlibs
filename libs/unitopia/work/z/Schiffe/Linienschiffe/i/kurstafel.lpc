@@ -1,0 +1,325 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:    /i/schiff/kurstafel.c
+// Description: Die Faehrenkapitaene (/i/schiff/kapitaen.c) tragen hier ihre
+//              Abfahrtszeiten ein.
+//
+// Revision 1.8  2002/12/12 17:41:00  menaures
+// Zahlenausgabe in eigene Funktion ausgelagert (fuer Gallien)
+// Faehren unterstuetzen jetzt auch nicht-runde Routen
+//
+// Revision 1.7  2002/07/14 01:58:00  gnomi
+// Bei "ungewiss" keine Umrechnung in neues Anzeigeformat vornehmen.
+//
+// Revision 1.6  2002/05/26 17:44:29  sissi
+// Textanzeige statt Digitalanzeige;
+// nur die Abfahrt des naechsten Schiffes statt die Abfahrt des naechsten
+// und uebernaechsten oder des letzten und naechsten.
+//
+// Revision 1.5  2002/01/24 21:39:33  freaky
+// query_ships() eingebaut.
+//
+// Revision 1.4  2002/01/20 19:52:08  gnomi
+// Von /obj/ nach /i/schiff umgezogen, damit man sie inheriten kann.
+//
+// Revision 1.3  2002/01/13 04:50:18  freaky
+// query_long() umgestellt.
+//
+// Revision 1.2  2001/01/30 23:59:01  sissi
+// Bergeweise CVS Log Eintraege eingetragen.
+// Hoffentlich nirgends doppelt und nirgends zu wenig.
+//
+//
+//  wyvern  (20.10.2005)    3. Parameter bei query_read ergaenzt
+//  wyvern  (12.02.2012)    ../i/wait - inherit mit Anin gebaut und vorbereitet
+//                          zum Einbau
+//  wyvern  (18.02.2012)    notify_ship_arrive/depart_here hinzu, 
+//                          DEBUGGER auf PDBG umgestellt
+//  wyvern  (19.02.2012)    Kurstafelspezifische Funktionen in wait_kurstafel 
+//                          ausgelagert
+//  wyvern  (10.03.2012)    Hinweis auf Syntax als v_item Schnitzerei hinzu
+//                          misc.h rein
+//  Sorcerer (19.04.2012)   Screenreadergerechte Tafelanzeige
+//
+//  Sissi    (22.01.2014)   Tafel sortiert nun die Abfahrtszeiten der
+//                          Schiffe nach der Abfahrtszeit.
+//
+
+#define PDBG_GROUP "Schiffe:Kurstafel"
+#define PDBG_LEVEL -21
+#include <p/debugger.h>
+
+#include <misc.h>
+
+inherit "/i/install";
+inherit "/i/item";
+inherit "/z/Schiffe/Linienschiffe/i/wait_kurstafel";
+
+mixed *eintraege = ({});
+
+string *stundentext = ({"null","eins","zwei","drei","vier","fuenf",
+  "sechs","sieben","acht","neun","zehn","elf","zwoelf"});
+
+void add_ship(string name, string dest, string abfahrt1, string abfahrt2)
+{
+    L_PDBG_FUN(PDBG_LEVEL,"add_ship",({TO, 
+                          ENV(TO) && ENV(TO)->query_type("hafen"),
+                          name, dest, abfahrt1, abfahrt2}));
+
+    int a, found;
+
+    if (!name || name == "" ||
+      !dest || dest == "" ||
+      !abfahrt1 || abfahrt1 == "" ||
+      !abfahrt2 || abfahrt2 == "")
+    return;
+
+    for (a=0; a<sizeof(eintraege); a++)
+    if (eintraege[a][0] == CAP(name) &&
+      eintraege[a][1] == CAP(dest))
+    {
+        eintraege[a][2] = abfahrt1;
+        eintraege[a][3] = abfahrt2;
+            eintraege[a][4] = vtime() - eintraege[a][5];
+            eintraege[a][5] = vtime();
+        found = 1;
+        break;
+    }
+
+    if (!found) {
+    eintraege += ({({CAP(name),CAP(dest),abfahrt1,abfahrt2,0,vtime()})});
+    }
+
+    // Eintraege filtern (Schiffe, die nie ankommen, rauswerfen):
+    if(pointerp(eintraege))
+      eintraege = filter(eintraege, (: !($1[4] && $2 > ($1[5] + $1[4]*2)) :), vtime());
+
+    L_PDBG_FUN(PDBG_LEVEL,"eintraege",({TO, 
+                           ENV(TO) && ENV(TO)->query_type("hafen"),
+                           eintraege}));
+
+}
+
+mixed *query_ships()
+{
+    return eintraege;
+}
+
+void set_ships(mixed *s)
+{
+    eintraege = s;
+}
+
+void delete_ship(int nummer)
+{
+    nummer--;
+    if (nummer < sizeof(eintraege) && nummer >= 0) {
+    if (sizeof(eintraege) == 1)
+        eintraege = ({});
+    else if (nummer == 0)
+        eintraege = eintraege[1..];
+    else if (nummer == sizeof(eintraege)-1)
+        eintraege = eintraege[0..<2];
+    else
+        eintraege = eintraege[0..nummer-1] + eintraege[nummer+1..<1];
+    }
+}
+
+/*
+FUNKTION: query_time_string
+DEKLARATION: string query_time_string(int stunden, int minuten)
+BESCHREIBUNG:
+Fuer die Zeitanzeige der Kurstafel wird diese Funktion mit Stunden, Minuten
+aufgerufen. Sie kann zur Ausgabe stilgerechter Zeiten (z.B. roemische
+Zahlen in Gallien) ueberlagert werden.
+VERWEISE:
+GRUPPEN: schiff
+*/
+string query_time_string(int stunden, int minuten)
+{
+    string sUhr, sUhrP1;
+
+    int iMinuten = minuten;
+    int iStunde = stunden;
+
+    if (iStunde > 12) iStunde -= 12;
+    if (iStunde == 0) iStunde = 12;
+    sUhr = stundentext[iStunde];
+    iStunde++;
+    if (iStunde == 13) iStunde = 1;
+    sUhrP1 = stundentext[iStunde];
+    if (iMinuten <  5) return "um "+sUhr;
+    if (iMinuten > 55) return "um "+sUhrP1;
+    if (iMinuten < 10) return "kurz nach "+sUhr;
+    if (iMinuten > 50) return "kurz vor "+sUhrP1;
+    if (iMinuten < 21) return "viertel nach "+sUhr;
+    if (iMinuten > 41) return "viertel vor "+sUhrP1;
+    if (iMinuten < 26) return "kurz vor halb "+sUhrP1;
+    if (iMinuten > 36) return "kurz nach halb "+sUhrP1;
+    return "um halb "+sUhrP1;
+}
+
+nosave string get_time_display (string sZeit1, string sZeit2)
+{
+    string sNow, sShow, sUhr, sUhrP1;
+    int iMinuten, iStunde;
+    sNow = vtimestr (vtime(),1);
+    sNow = sNow[0..1]+" Uhr "+sNow[3..4];
+    if (sNow <= sZeit1)
+        if (sZeit1 < sZeit2)
+            sShow = sZeit1;
+        else
+            if (sNow < sZeit2) sShow = sZeit2;
+            else sShow = sZeit1;
+    else
+        if (sZeit2 < sNow) sShow = sZeit2;
+        else
+            if (sZeit1 < sZeit2) sShow = sZeit2;
+            else sShow = sZeit1;
+    if(sShow == "ungewiss")
+    return sShow;
+
+    iMinuten = (sShow [7] - '0') * 10 + sShow[8] - '0';
+    iStunde = (sShow[0] - '0') * 10 + sShow[1] - '0';
+
+    return query_time_string(iStunde, iMinuten);
+}
+
+int sort_abfahrtszeiten (mixed x, mixed y)
+{
+    string sNow, sx, sy, zeit1, zeit2;
+    sNow = vtimestr (vtime(),1);
+    sNow = sNow[0..1]+" Uhr "+sNow[3..4];
+    zeit1 = x[2];
+    zeit2 = x[3];
+    sy = sNow;
+    sy = sNow;
+    if (sNow <= zeit1)
+        if (zeit1 < zeit2)
+            sx = zeit1;
+        else
+            if (sNow < zeit2) sx = zeit2;
+            else sx = zeit1;
+    else
+        if (zeit2 < sNow) sx = zeit2;
+        else
+            if (zeit1 < zeit2) sx = zeit2;
+            else sx = zeit1;
+    zeit1 = y[2];
+    zeit2 = y[3];
+    if (sNow <= zeit1)
+        if (zeit1 < zeit2)
+            sy = zeit1;
+        else
+            if (sNow < zeit2) sx = zeit2;
+            else sy = zeit1;
+    else
+        if (zeit2 < sNow) sy = zeit2;
+        else
+            if (zeit1 < zeit2) sy = zeit2;
+            else sy = zeit1;
+    if (sx < sy) return -1;
+    if (sx == sy) return 0;
+    return 1;
+}
+
+string query_long (object who)
+{
+    string out, headerline, vborder, hborder;
+    int a, ls, lh, la, len;
+
+    if (who && who->query_no_ascii_art())
+        vborder = " ";
+    else
+        vborder = "|";
+
+    ls = 28;
+    lh = 17;
+    la = 25;
+    headerline = vborder+" "+center("Schiff",ls)+
+    " "+center("Zielhafen",lh)+
+    " "+center("Abfahrt",la)+
+    " "+vborder+"\n";
+    len = strlen(headerline);
+
+    if (vborder == " ") 
+        hborder = "\n";
+    else
+        hborder = "+"+copies("-",len-3)+"+\n";
+
+    out = hborder+
+    vborder+copies(" ",len-3)+vborder+"\n"+
+    vborder+center("K U R S T A F E L",len-3)+vborder+"\n"+
+    vborder+copies(" ",len-3)+vborder+"\n"+
+    headerline+
+    vborder+copies(" ",len-3)+vborder+"\n";
+
+    eintraege = sort_array(eintraege,#'sort_abfahrtszeiten);
+
+    if (sizeof(eintraege) <= 0)
+    out += vborder+center("Schiffsverkehr vorlaeufig eingestellt",len-3)+
+           vborder+"\n";
+    else
+        for (a=0; a<sizeof(eintraege); a++)
+            out += vborder+" "
+            +center(eintraege[a][0],ls)+" "
+            +center(eintraege[a][1],lh)+" "
+            +center(get_time_display (
+            eintraege[a][2],eintraege[a][3]),
+              la)+" "+vborder+"\n";
+
+    out += vborder+copies(" ",len-3)+vborder+"\n"+hborder;
+    return out;
+}
+
+varargs string query_read(string parse_rest, string str,object leser)
+{
+    // ich hasse die Meldung: da gibt es nichts zu lesen, vor allem an Tafeln.
+    // .\\onty
+
+    return query_long(leser||TP);
+}
+
+void create() {
+    "*"::create();
+    
+    set_id(({"tafel","kurstafel"}));
+    set_name("kurstafel");
+    set_gender("weiblich");
+    set_short("Eine Kurstafel");
+    set_material( ({"holz"}) );
+    set_feel("Deine Haende gleiten ueber das rauhe Holz und ertasten eine "
+             "seltsame Schnitzerei. Sind das Buchstaben?");
+    set_hafen_version(1);
+    
+if(clonep()) {
+        add_v_item_master(load_name());
+    }
+    else {
+        add_v_item( ([
+            "name":  "schnitzerei",
+            "id":    ({"inschrift","schnitzerei","buchstaben"}),
+            "gender":"weiblich",
+            "long":  "Da hat jemand tatsaechlich am Rand etwas eingeschnitzt. "
+                     "Es ist schwer zu entziffern, aber offensichtlich lautet "
+                     "die Botschaft: \"Du kannst von hier aus auf ein Schiff "
+                     "warten oder auch zu einem Hafen reisen.\"",
+            "read":  "\"Du kannst von hier aus auf ein Schiff warten oder "
+                     "auch zu einem Hafen reisen.\"",
+            "feel":  "Du befuehlst die einzelnen, ungelenken Buchstaben und "
+                     "kommst zu dem Schluss, dass es sich hierbei wohl um eine "
+                     "eher stuemperhafte Schnitzerei ohne Wert handelt."
+        ]) );
+    }
+}
+
+void reset()
+{
+    // Eintraege filtern (Schiffe, die nie ankommen, rauswerfen):
+    if(pointerp(eintraege))
+      eintraege = filter(eintraege, (: !($1[4] && $2 > ($1[5] + $1[4]*2)) :), vtime());
+}
+
+void init(){
+    "*"::init();
+}

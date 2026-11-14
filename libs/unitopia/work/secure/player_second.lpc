@@ -1,0 +1,892 @@
+// This file is part of UNItopia Mudlib.
+// ----------------------------------------------------------------
+// File:        /secure/player_second.c
+// Description: Verwaltung fuer Spieler-Zweities und Goetter-Spielies.
+//              Diese Daten koennen nur von Admins eingesehen werden.
+// Author:      Menaures (27.10.2003ff)
+//
+// ENZY: KEINE
+//
+// $Log: player_second.c,v $
+// Revision 1.6  2015/08/25 19:26:03  gnomi
+// Alte Funktion ersetzt.
+//
+// Revision 1.5  2006/12/30 15:29:03  menaures
+// Unbenutzte Codeteile entfernt
+//
+// Revision 1.4  2004/07/21 19:05:33  menaures
+// Diverse alte Aenderungen einfach mal commited. Braucht mal einen Cleanup.
+//
+// Revision 1.3  2003/11/06 23:02:35  menaures
+// CHECK_PASS -> PASSWD_CHECK (Makro nach passwd.h umgezogen)
+//
+// Revision 1.2  2003/11/05 21:08:03  menaures
+// CHECK_PASS zur Passwortueberpruefung verwenden.
+//
+// Revision 1.1  2003/11/04 03:22:49  menaures
+// Master zur Verwaltung der Zweities.
+//
+
+/*
+HINWEIS:
+Oeffentliche Fehlermeldungen (raise_error) duerfen keinerlei Daten, die auf
+bestimmte Spieler rueckschliessen lassen, enthalten (Spielernamen, PIDs, ...).
+Diese Informationen sind stattdessen im PID_LOG_FILE unterzubringen.
+*/
+
+/* --- Includes: --- */
+#include <apps.h>
+#include <config.h>
+#include <input_to.h>
+#include <level.h>
+#include <message.h>
+#include <misc.h>
+#include <passwd.h>
+
+/* --- Defines: --- */
+#define MAX_CACHE      1000     // Anzahl der Keys, ab der Cache geleert wird.
+
+#define PID_MAX_FILE    "/var/adm/PID_MAX"
+#define PID_LOG_FILE    "/var/adm/PID_LOG"
+#define PID_DIR         "/var/players/"
+#define PID_SUB_DIR     ({"0","1","2","3","4","5","6","7","8","9"})
+#define PID_FILE(id)    (intp(id) && id > 0 && \
+                         sprintf(PID_DIR "%d/%'0'10d", id % 10, id))
+#define PID_LOG(id, x)  write_file(PID_LOG_FILE, sprintf("[%s] %10'0'd: %s\n", \
+                                shorttimestr(time()), id, x))
+#define PID_ERR_LOG(x)  write_file(PID_LOG_FILE, sprintf("[%s] FEHLER: %s\n", \
+                                shorttimestr(time()), x))
+
+#define SECURE(x, y) \
+{ \
+    mixed sv = (x); \
+\
+    if(!( (extern_call() == 0) || \
+          (PO && ( \
+              (playerp(PO)) || \
+              (TP == TI && adminp(TP) && geteuid(PO) == geteuid(TP)) || \
+              (sv != 0 && ( \
+                  (sv == PO) || \
+                  (pointerp(sv) && ( \
+                      (member(sv, PO) != -1) || \
+                      (member(sv, object_name(PO)) != -1) || \
+                      (member(sv, load_name(PO)) != -1) \
+                  ) ) \
+              ) ) \
+        ) ) ) ) \
+    { \
+        y; \
+    } \
+}
+
+/* --- Globale Variablen: --- */
+private string password;
+private int pid;
+private mapping wiz_cache = ([:1]); // Cache fuer get_wiz_of
+private mapping pid_cache = ([:1]); // Cache fuer query_pid/query_second_char
+
+/* --- Prototypen: --- */
+public int is_second(int id, string name);
+public string get_wiz_of(int id);
+
+/* --- Debugging: --- */
+// #define DEBUG(x) (write_file("/var/adm/player_second.debug.log", wrap(x)))
+#define DEBUG(x) (0)
+
+public mixed query_wiz_cache()
+{
+    SECURE(0, raise_error("Illegal call for query_wiz_cache()\n"));
+    return wiz_cache;
+}
+
+public mixed query_pid_cache()
+{
+    SECURE(0, raise_error("Illegal call for query_pid_cache()\n"));
+    return pid_cache;
+}
+
+
+/* --- Funktionen: --- */
+
+default private functions;
+
+/*
+FUNKTION: get_unique_pid
+DEKLARATION: private int get_unique_pid()
+BESCHREIBUNG:
+Die Funktion erzeugt eine eindeutige PID, die noch nie zuvor einem
+anderen Spieler zugeordnet wurde. Der Rueckgabewert ist eine Zahl > 0.
+Technisch wird es so geloest, dass die Zahl bei jedem Aufruf um 1 erhoeht
+wird. Die zuletzt zurueckgelieferte Zahl wird in PID_MAX_FILE gespeichert.
+VERWEISE:
+GRUPPEN:
+*/
+private int get_unique_pid()
+{
+    DEBUG("get_unique_pid()");
+
+    int id;
+
+    if(file_size(PID_MAX_FILE) > 0)
+    {
+        id = restore_value(read_file(PID_MAX_FILE)) + 1;
+
+        // Um 1 erhoehtes PID_MAX_FILE schreiben.
+        if(rm(PID_MAX_FILE) && write_file(PID_MAX_FILE, save_value(id)))
+        {
+            PID_LOG(id, "created");
+            return id;
+        }
+
+        PID_ERR_LOG("PID_MAX_FILE kann nicht ueberschrieben werden! ("+id+")");
+        raise_error("PID_MAX_FILE kann nicht ueberschrieben werden!\n");
+    }
+
+    // PID_MAX_FILE existiert nicht. Unique PID ermitteln.
+    // (Dieser Fall sollte nur bei der ersten Abfrage auftreten.)
+    foreach(string sub : PID_SUB_DIR)
+    {
+        // Groesste existierende PID ermitteln.
+        id = max(id, max(map(get_dir(PID_DIR+sub+"/*"), #'to_int)));
+    }
+
+    // Um 1 erhoehen, um neue, unbenutzte, maximale PID zu erhalten.
+    id += 1;
+
+    PID_ERR_LOG("PID_MAX_FILE fehlerhaft. Ermittelte PID: "+id);
+
+    if(write_file(PID_MAX_FILE, save_value(id)))
+    {
+        PID_LOG(id, "created");
+        return id;
+    }
+
+    PID_ERR_LOG("PID_MAX_FILE kann nicht geschrieben werden! ("+id+")");
+    raise_error("PID_MAX_FILE kann nicht geschrieben werden!\n");
+}
+
+/*
+FUNKTION: set_pid
+DEKLARATION: private void set_pid(string name, int id)
+BESCHREIBUNG:
+Setzt die PID des Spielers 'name' auf 'id'.
+Hierbei wird in jedem Fall das Playerfile des Spielers geschrieben,
+und (falls eingeloggt) im Spielerobjekt die Funktion set_pid aufgerufen.
+VERWEISE:
+GRUPPEN:
+*/
+private void set_pid(string name, int id)
+{
+    DEBUG(sprintf("set_pid(%#Q, %#Q)", name, id));
+
+    if(find_player(name))
+    {
+        // Spieler eingeloggt, bekommt die PID gesetzt.
+        find_player(name)->set_pid(id);
+    }
+
+    // Playerfile muss in jedem Fall zusaetzlich geschrieben werden,
+    // falls der Spieler aus irgendeinem Grund seine neue PID nicht
+    // mehr speichert (z.B. durch Crash).
+    if(!player_exists(name))
+    {
+        if(id)
+        {
+            PID_ERR_LOG(name+" existiert gar nicht...");
+            raise_error("set_pid: "+name+" existiert gar nicht...\n");
+        }
+
+        // Bei id == 0 macht es nichts, wenn es nicht gesetzt
+        // werden kann.
+
+        return;
+    }
+
+    if(!write_file(PLAYER_FILE(name)+".o", "pid "+id+"\n"))
+    {
+        // Wir koennen das Playerfile nicht schreiben.
+        // Das ist extrem schlecht, da unsere Struktur so inkonsistent wird.
+        PID_ERR_LOG("Playerfile von "+name+" kann nicht geschrieben werden!");
+
+        // PID aus PID_LOG_FILE muss manuell nachgetragen werden.
+        raise_error("Playerfile kann nicht geschrieben werden!\n"
+                    "Dieser Fehler MUSS sofort behoben werden!\n");
+    }
+
+    // Cache fuellen
+    pid_cache[name] = id;
+
+    if(GOETTER_REGISTER->is_wiz(name))
+    {
+        wiz_cache[id] = name;
+    }
+}
+
+/*
+FUNKTION: save_pid
+DEKLARATION: private void save_pid(int id, string * names)
+BESCHREIBUNG:
+Speichert die Zweitieliste zur Player-ID 'id' in das zugehoerige PID_FILE.
+Das alte PID_FILE (sofern vorhanden) wird hierbei ueberschrieben.
+VERWEISE:
+GRUPPEN:
+*/
+private void save_pid(int id, string * names)
+{
+    DEBUG(sprintf("save_pid(%#Q, %#Q)", id, names));
+
+    string file = PID_FILE(id);
+    closure kick;
+
+    if(!pointerp(names) || sizeof(names) < 2)
+    {
+        // Namensliste braucht mindestens 2 Eintraege.
+        raise_error("Bad arg 2 to save_pid\n");
+    }
+
+    names = sort_array(names, #'>);
+
+    if((file_size(file) > 0 && !rm(file)) ||
+       !write_file(file, save_value(names)))
+    {
+        PID_ERR_LOG("PID_FILE ("+id+") kann nicht geschrieben werden! "
+                    "Aufruf: "+sprintf("save_pid(%#Q, %#Q)", id, names));
+        raise_error("PID_FILE kann nicht geschrieben werden!\n");
+    }
+
+    // PID auch in den Spielern setzen.
+    map(names, #'set_pid, id);
+
+    // Cachen:
+    pid_cache[id] = names;
+    PID_LOG(id, "set "+implode(names, " "));
+}
+
+/*
+FUNKTION: restore_pid
+DEKLARATION: private string * restore_pid(int id)
+BESCHREIBUNG:
+Laedt die Zweitieliste der Player-ID 'id' und liefert die Namen
+als String-Array zurueck.
+VERWEISE:
+GRUPPEN:
+*/
+private string * restore_pid(int id)
+{
+    DEBUG(sprintf("restore_pid(%#Q)", id));
+
+    string file = PID_FILE(id);
+    string * names;
+
+    if(member(pid_cache, id))
+    {
+        return pid_cache[id];
+    }
+
+    if(file_size(file) > 0)
+    {
+        return pid_cache[id] = restore_value(read_file(file));
+    }
+
+    PID_ERR_LOG("restore_pid: PID "+id+" existiert nicht.");
+    raise_error("restore_pid: Uebergebene PID existiert nicht.\n");
+}
+
+/*
+FUNKTION: check_pid
+DEKLARATION: private int check_pid(string name, int id)
+BESCHREIBUNG:
+Es wird geprueft, ob die Namensliste zur PID 'id' auch wirklich den
+angegebenen Namen enthaelt, also ob der Spieler 'name' rechtmaessiger
+Eigentuemer seiner PID ist.
+
+Der Rueckgabewert ist fortan als PID von name zu verwenden.
+Es handelt sich hierbei um eine Zahl >= 0.
+VERWEISE:
+GRUPPEN:
+*/
+private int check_pid(string name, int id)
+{
+    DEBUG(sprintf("check_pid(%#Q, %#Q)", name, id));
+
+    id = abs(id); // PID konnte im Playerfile mal negativ sein!
+
+    if(id > 0 && !is_second(id, name))
+    {
+        // PID des Spielers ist ungueltig.
+        PID_ERR_LOG("Spieler "+name+" hat ungueltige PID: "+id);
+        set_pid(name, 0);
+    }
+
+    return id;
+}
+
+/*
+FUNKTION: query_pid
+DEKLARATION: public int query_pid(string name)
+BESCHREIBUNG:
+Die Player-ID von <name> wird zurueckgeliefert.
+Ist <name> eingeloggt, wird die Information direkt vom Spielerobjekt
+abgefragt. Ansonsten wird das entsprechende Playerfile geladen.
+VERWEISE:
+GRUPPEN:
+*/
+public int query_pid(string name)
+{
+    int id;
+
+    SECURE(({WAHLEN}), raise_error("Illegal call to query_pid()\n"));
+
+    DEBUG(sprintf("query_pid(%#Q)", name));
+
+    if(member(pid_cache, name))
+    {
+        return pid_cache[name];
+    }
+
+    if(find_player(name))
+    {
+        pid_cache[name] = find_player(name)->query_pid();
+        return pid_cache[name];
+    }
+
+    if(!restore_object(PLAYER_FILE(name)))
+    {
+        PID_ERR_LOG("restore_object auf "+name+" fehlgeschlagen.");
+        raise_error("query_pid: Could not restore playerfile.\n");
+    }
+
+    // Pruefen, ob die PID auch gueltig ist.
+    id = check_pid(name, pid);
+
+    // PID cachen:
+    pid_cache[name] = id;
+
+    password = 0; // Variablen nullen.
+    pid = 0;
+
+    return id;
+}
+
+/*
+FUNKTION: new
+DEKLARATION: void new(string a, string b)
+BESCHREIBUNG:
+Charakter A hat B als Zweitie angemeldet. A und B haben noch keine Nummer.
+Eine neue, einzigartige Spielernummer wird gezogen. Diese wird A und B
+zugeteilt. Eine zugehoerige Namensliste, die A und B enthaelt, wird erstellt.
+VERWEISE:
+GRUPPEN:
+*/
+private void new(string a, string b)
+{
+    DEBUG(sprintf("new(%#Q, %#Q)", a, b));
+
+    int id;
+    string wiz;
+
+    // Unique PID ermitteln und Logeintrag.
+    PID_LOG(0, "new "+a+" "+b);
+    id = get_unique_pid();
+
+    // Neue Namensliste speichern.
+    save_pid(id, ({a, b}));
+}
+
+/*
+FUNKTION: add
+DEKLARATION: void add(int id, string * names)
+BESCHREIBUNG:
+Fuegt die Namen aus dem uebergebenen Array zu der Spielernummer <nr> hinzu.
+VERWEISE:
+GRUPPEN:
+*/
+private void add(int id, string * names)
+{
+    DEBUG(sprintf("add(%#Q, %#Q)", id, names));
+
+    string wiz;
+
+    PID_LOG(id, "add "+implode(names, " "));
+    names = (restore_pid(id) - names) + names;
+    save_pid(id, names);
+}
+
+/*
+FUNKTION: sub
+DEKLARATION: void sub(int nr, string name)
+BESCHREIBUNG:
+Der Charakter name tritt aus der Zweitieliste 'id' aus.
+Dies ist nur moeglich, wenn name geloescht wurde.
+Die Nummer wird geloescht, wenn sich nur noch ein Name in ihr befindet.
+VERWEISE:
+GRUPPEN:
+*/
+private void sub(int id, string name)
+{
+    DEBUG(sprintf("sub(%#Q, %#Q)", id, name));
+
+    string * names;
+
+    PID_LOG(id, "sub "+name);
+
+    names = restore_pid(id) - ({name});
+
+    if(sizeof(names) > 1)
+    {
+        save_pid(id, names);
+    }
+
+    else
+    {
+        if(rm(PID_FILE(id)))
+        {
+            PID_LOG(id, "deleted ("+names[0]+" remains)");
+
+            // Cache leeren:
+            m_delete(pid_cache, id);
+        }
+
+        else
+        {
+            PID_ERR_LOG("PID_FILE "+id+" kann nicht geloescht werden!");
+            raise_error("PID_FILE kann nicht geloescht werden!");
+            // PIDs muessen von Hand genullt und ausgetragen werden.
+        }
+
+        // PID des Uebriggebliebenen nullen:
+        set_pid(names[0], 0);
+    }
+
+    // PID des Geloeschten nullen:
+    set_pid(name, 0);
+}
+
+/*
+FUNKTION: join
+DEKLARATION: void join(int id_a, int id_b)
+BESCHREIBUNG:
+Fuehrt zwei bisher getrennte Zweitielisten zusammen, da ein Zweitie aus
+Liste A einen Charakter aus Liste B angemeldet hat. Die kleinere Nummer
+bleibt erhalten, die groessere wird obsolet und damit geloescht.
+VERWEISE:
+GRUPPEN:
+*/
+private void join(int id_a, int id_b)
+{
+    DEBUG(sprintf("join(%#Q, %#Q)", id_a, id_b));
+
+    string * names;
+    int min_id, max_id;
+
+    min_id = min(id_a, id_b);
+    max_id = max(id_a, id_b);
+
+    PID_LOG(min_id, "join "+max_id);
+
+    // Namensliste der groesseren ID abfragen...
+    names = restore_pid(min_id);
+
+    // ...und Namen der kleineren ID hinzufuegen.
+    add(max_id, names);
+
+    if(rm(PID_FILE(min_id)))
+    {
+         PID_LOG(min_id, "deleted");
+
+         // Caches:
+         m_delete(pid_cache, min_id);
+         wiz_cache[max_id] ||= wiz_cache[min_id];
+         m_delete(wiz_cache, min_id);
+    }
+
+    else
+    {
+        PID_ERR_LOG("PID_FILE "+min_id+" kann nicht geloescht werden!");
+        raise_error("PID_FILE kann nicht geloescht werden!");
+        // Datei sollte von Hand geloescht werden.
+    }
+}
+
+/*
+FUNKTION: register_second
+DEKLARATION: public void register_second(string name_a, string name_b)
+BESCHREIBUNG:
+Meldet name_a als Zweitie von name_b an (oder andersrum), sofern diese
+Namen nicht sowieso schon eingetragen sind. Die Funktion wird intern
+verwendet, kann jedoch von Admins auch von Hand aufgerufen werden.
+VERWEISE:
+GRUPPEN:
+*/
+public void register_second(string name_a, string name_b)
+{
+    int id_a, id_b;
+
+    SECURE(0, raise_error("Illegal call for register_second()\n"));
+
+    DEBUG(sprintf("register_second(%#Q, %#Q)", name_a, name_b));
+
+    if(name_a == name_b)
+    {
+        // Du bist dein eigener Zweitie und ich der Kaiser von China.
+        return;
+    }
+
+    // PIDs der Spieler abfragen.
+    id_a = query_pid(name_a);
+    id_b = query_pid(name_b);
+
+    if(id_a && id_b)
+    {
+        // Beide Spieler haben angemeldete Zweities.
+        if(id_a != id_b)
+        {
+            // Beide Zweitieverbaende zusammenfuehren.
+            join(id_a, id_b);
+        }
+
+        // Bei id_a == id_b waren sie schon angemeldet.
+    }
+
+    else if(id_a || id_b)
+    {
+        // Nur ein Spieler hat Zweities.
+        if(id_b == 0)
+        {
+            // name_b in id_a aufnehmen
+            add(id_a, ({name_b}));
+        }
+
+        else
+        {
+            // name_a in id_b aufnehmen
+            add(id_b, ({name_a}));
+        }
+    }
+
+    else
+    {
+        // Keiner der beiden hat Zweities.
+        new(name_a, name_b);
+    }
+}
+
+/*
+FUNKTION: pid_exists
+DEKLARATION: public int pid_exists(int id)
+BESCHREIBUNG:
+Liefert einen Wert != 0, wenn es sich bei 'id' um eine existierende Player-ID
+handelt. Ansonsten wird 0 zurueckgeliefert.
+VERWEISE:
+GRUPPEN:
+*/
+public int pid_exists(int id)
+{
+    SECURE(0, raise_error("Illegal call for pid_exists()\n"));
+
+    DEBUG(sprintf("pid_exists(%#Q)", id));
+
+    return intp(id) && id > 0 && file_size(PID_FILE(id)) > 0;
+}
+
+/*
+FUNKTION: is_second
+DEKLARATION: public int is_second(int id, string name)
+BESCHREIBUNG:
+Wenn der Spieler 'name' Teil der zur PID 'id' gehoerigen Namensliste ist,
+liefert diese Funktion einen Wert != 0 zurueck. Sie wird zur Validierung
+von gesetzten PIDs in Spielern benutzt.
+
+Diese Funktion fragt hierzu die Namensliste von der Platte ab und prueft,
+ob ein entsprechender Eintrag fuer 'name' existiert.
+
+Die Funktion ist geschuetzt.
+VERWEISE:
+GRUPPEN:
+*/
+public int is_second(int id, string name)
+{
+    // ACHTUNG:
+    // Wird zur Validierung von (player::)query_pid() aufgerufen.
+    // Funktion darf daher nicht mit query_pid() arbeiten. (Rekursion!)
+    SECURE(0, raise_error("Illegal call for is_second()\n"));
+
+    DEBUG(sprintf("is_second(%#Q, %#Q)", id, name));
+
+    return pid_exists(id) && member(restore_pid(id), name) != -1;
+}
+
+/*
+FUNKTION: check_password
+DEKLARATION: private void check_password(string pw, object spieler, string zweitie, closure callback)
+BESCHREIBUNG:
+Hilfsfunktion fuer add_second_char zur Passwortueberpruefung.
+VERWEISE: add_second_char
+GRUPPEN:
+*/
+private void check_password(string pw, object spieler, string zweitie,
+                            closure callback)
+{
+    string second_pw;
+
+    DEBUG(sprintf("check_password(%#Q, %#Q, %#Q, %#Q)", pw, spieler,
+                zweitie, callback));
+
+    // Spieler noch da und Zweitie nicht geloescht? ;-)
+    if(spieler && player_exists(zweitie))
+    {
+        if(!stringp(pw) || !strlen(pw))
+        {
+            spieler->send_message_to(spieler, MT_NOTIFY, MA_UNKNOWN,
+                "Kein Passwort angegeben.\n");
+            funcall(callback, 1);
+            return;
+        }
+
+        else if(!restore_object(PLAYER_FILE(zweitie)))
+        {
+            spieler->send_message_to(spieler, MT_NOTIFY, MA_UNKNOWN,
+                wrap("Passwort kann nicht ueberprueft werden. Dieser Fehler "
+                     "sollte nicht auftreten. Wende dich an einen Admin "
+                     "(finger admin)."));
+            funcall(callback, 1);
+            return;
+        }
+
+        second_pw = password;
+        password = 0; // Variablen nullen.
+        pid = 0;
+
+        if(!testplayerp(zweitie) // Spieler melden keine Testies an.
+           && PASSWD_CHECK(pw, second_pw))
+        {
+            register_second(spieler->query_real_name(), zweitie);
+            funcall(callback, 0);
+            return;
+        }
+
+        else
+        {
+            PID_ERR_LOG("Uebernahmeversuch "+
+                spieler->query_real_name()+" -> "+zweitie);
+
+            spieler->send_message_to(spieler, MT_NOTIFY, MA_UNKNOWN,
+                wrap("Passwort falsch! Uebernahmeversuch geloggt.\n"
+                     "Wenn "+capitalize(zweitie)+" wirklich ein Zweitie "
+                     "von dir ist, versuche es noch einmal.\n"
+                     "Ansonsten schreibe bitte eine Erklaerung an Admin."));
+            funcall(callback, 1);
+        }
+    }
+}
+
+
+/*
+FUNKTION: add_second_char
+DEKLARATION: void add_second_char(object spieler, string zweitie, closure callback)
+BESCHREIBUNG:
+Meldefunktion, die vom Einstellungen-Menue des Spielers aufgerufen wird.
+Es wird geprueft, ob 'spieler' gueltig ist (kein Testie), und ob 'zweitie'
+existiert. Danach wird eine Passworteingabe vom Spieler verlangt, um
+die Anmeldung des Zweities zu bestaetigen.
+
+Callback wird mit 1 als Paramter aufgerufen, wenn ein Fehler aufgetreten ist
+und eine dazu passende Fehlermeldung ausgegeben wurde. Ansonsten ist der
+uebergebene Paramter == 0.
+VERWEISE:
+GRUPPEN:
+*/
+public void add_second_char(object spieler, string zweitie, closure callback)
+{
+    SECURE(spieler, raise_error("Illegal call for add_second_char()\n"));
+
+    DEBUG(sprintf("add_second_char(%#Q, %#Q, %#Q)", spieler, zweitie, callback));
+
+    if("/secure/obj/login"->guest(spieler) ||
+       "/secure/obj/login"->guest(zweitie))
+    {
+        spieler->send_message_to(spieler, MT_NOTIFY, MA_UNKNOWN,
+            wrap("Gaeste sind ausschliesslich fuer Personen gedacht, "
+                 "die keinen einzigen Spielcharaktere besitzen!"));
+    }
+
+    else if(testplayerp(spieler) ||
+            (wizp(spieler) && testplayerp(zweitie)))
+    {
+        // Spieler selbst duerfen keinen direkten Testie-Test bekommen,
+        // da sie sonst herausfinden koennen, wer ein Testie ist.
+        spieler->send_message_to(spieler, MT_NOTIFY, MA_UNKNOWN,
+            "Testies werden im Register angemeldet.\n"
+            "Testies koennen keine (Spiel)zweities haben.\n");
+    }
+
+    else if(GOETTER_REGISTER->is_wiz(zweitie))
+    {
+        spieler->send_message_to(spieler, MT_NOTIFY, MA_UNKNOWN,
+            wrap("Goetter koennen nicht als Zweities angemeldet werden.\n"
+                 "Bitte melde Spielies mit deinem Gottcharakter an."));
+    }
+
+    else if(spieler->query_real_name() == zweitie)
+    {
+        spieler->send_message_to(spieler, MT_NOTIFY, MA_UNKNOWN,
+            "Dich selbst kannst du nicht als Zweitie anmelden.\n");
+    }
+
+    else if(!player_exists(zweitie))
+    {
+        spieler->send_message_to(spieler, MT_NOTIFY, MA_UNKNOWN,
+            "Es existiert kein Charakter mit diesem Namen.\n");
+    }
+
+    else if(is_second(spieler->query_pid(), zweitie))
+    {
+        spieler->send_message_to(spieler, MT_NOTIFY, MA_UNKNOWN,
+            "Diesen Zweitie hast du bereits angemeldet.\n");
+    }
+
+    else
+    {
+        input_to(#'check_password,
+            INPUT_PROMPT|INPUT_IGNORE_BANG|INPUT_NOECHO,
+            "Passwort des Zweities: ", spieler, zweitie, callback);
+        return;
+    }
+
+    funcall(callback, 1);
+}
+
+/*
+FUNKTION: query_second_chars
+DEKLARATION: varargs string * query_second_chars(mixed spieler_or_pid, int flag)
+BESCHREIBUNG:
+Die Funktion fragt die zu einem Spieler oder zu einer PID gehoerige Namensliste
+ab und liefert sie als (alphabetisch sortiertes) String-Array zurueck.
+Gibt es die Namensliste nicht oder hat der Spieler keine Zweities, wird
+stattdessen 0 zurueckgeliefert.
+
+Wird der optionale Parameter 'flag' uebergeben, und ist flag == 1, wird
+in jedem Fall ein String-Array zurueckgeliefert, auch, wenn der uebergebene
+Spieler keine Zweities hat.
+VERWEISE:
+GRUPPEN:
+*/
+public string * query_second_chars(mixed spieler)
+{
+    int id;
+
+    SECURE(({spieler, WAHLEN, "/room/rathaus/div/leo"}),
+           raise_error("Illegal call for query_second_chars()\n"));
+
+    DEBUG(sprintf("query_second_chars(%#Q)", spieler));
+
+    if(intp(spieler) && pid_exists(spieler))
+    {
+        id = spieler;
+    }
+
+    else if(objectp(spieler))
+    {
+        id = spieler->query_pid();
+        pid_cache[spieler->query_real_name()] = id;
+    }
+
+    else if(stringp(spieler))
+    {
+        id = query_pid(spieler);
+        pid_cache[spieler] = id;
+    }
+
+    if(id)
+    {
+        return restore_pid(id);
+    }
+
+    return 0;
+}
+
+/*
+FUNKTION: delete_second_char
+DEKLARATION: public void delete_second_char(string real_name)
+BESCHREIBUNG:
+Wird vom PLAYER_DELETER aufgerufen, wenn sich ein Spieler suizidet.
+VERWEISE:
+GRUPPEN:
+*/
+public void delete_second_char(string real_name)
+{
+    int id;
+
+    SECURE(({PLAYER_DELETER}),
+           raise_error("Illegal call for delete_second_char()\n"));
+
+    DEBUG(sprintf("delete_second_char(%#Q)", real_name));
+
+    id = query_pid(real_name);
+
+    if(id > 0)
+    {
+        sub(id, real_name);
+    }
+}
+
+/*
+FUNKTION: get_wiz_of
+DEKLARATION: public string get_wiz_of(int id)
+BESCHREIBUNG:
+Falls der Zweitieverbund der PID id einen Gottcharakter beinhaltet,
+so wird dessen Real-Name zurueckgeliefert. Wird von der SR-Urne 
+benoetigt, um bei der Auswertung Stimmen von Goetterspielies als 
+ungueltig zu erkennen.
+VERWEISE:
+GRUPPEN:
+*/
+public string get_wiz_of(int id)
+{
+    string * wiz;
+
+    SECURE(({WAHLEN}), raise_error("Illegal call for get_wiz_of()\n"));
+
+    if(member(wiz_cache, id))
+    {
+        return wiz_cache[id];
+    }
+
+    wiz = query_second_chars(id);
+
+    if(pointerp(wiz))
+    {
+        wiz = filter(wiz, "is_wiz", GOETTER_REGISTER);
+
+        if(sizeof(wiz))
+        {
+            wiz_cache[id] = wiz[0];
+            return wiz[0];
+        }
+    }
+}
+
+/* --- Applied LFuns: --- */
+
+public void reset()
+{
+    // Wiz-Cache leeren?
+    if(sizeof(wiz_cache) > MAX_CACHE)
+    {
+        wiz_cache = ([:1]);
+    }
+
+    // PID-Cache leeren?
+    if(sizeof(pid_cache) > MAX_CACHE)
+    {
+        pid_cache = ([:1]);
+    }
+}
+
+public int remove()
+{
+    destruct(this_object());
+    return !this_object();
+}
+
+/* --- End of file. --- */
