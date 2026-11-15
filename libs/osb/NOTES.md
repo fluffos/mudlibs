@@ -28,3 +28,7 @@
 - **`lpcc` 编译与 `lpc_warnings.py`**：17 个活跃 FluffOS `.lpc` 文件全部 `PASS`，0 warning / 0 error。
 - **原生驱动实测（临时拷贝 `/home/sunyc/.cache/lpc-scratch/osb-live`，端口 `40496`）**：注册 `testera` → 浏览 `/etc/WELCOME` 与 `mudlibs.fluffos.info` → `/d/login/entrance` `smell` → `instant` → 走遍北区码头、防御塔、造船厂、街道、城门、The Seaman's Rest（`listen song`、`read menu`）、Harbourmaster 办公室（`read map`） → `score` / `quit` → 冷重连密码验证通过；日志零报错。
 - **WASM 实测**：`node scripts/wasm_client.js /home/sunyc/src/fluffos/build-wasm/src libs/osb` 注册 `testerw` 并完整游览、退出通过。
+
+## 分桶目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/lpc_keep_letters.py --apply osb mail save/obj/brain save/obj/kerbholz save/players secure/save` 补齐 47 个缺失首字母目录，使所有字母玩家建档、邮箱、`brain`/`kerbholz` 与 `secure/save` 均可写入（修前 `lpcc_eval.py` 写 `/save/players/a/zztest` 抛 `*Wrong permissions ... No such file or directory`；修后 `ZZRES=1` PASS；`play_boot.sh` clean）。

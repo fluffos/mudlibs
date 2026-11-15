@@ -795,3 +795,7 @@ pristine + build-debug，port 40220。`scripts/play_login.py` 注册。
 - **流程**：名/确认/密码×2/性别/种族 dwarf/email/真名 → news → TMI-2 四方院子；`look`/`score`/`i`；`down` 进 Fooland；`quit`。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
 - 本轮跳过：`wilderness`/`spacemud`/`lima`（本机无 `~/src/fluffos-wilderness` / `fluffos-lima`）。
+
+## 新闻归档与驱动日志目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `data/adm/daemons/news/archives` 与 `log/driver`（`data/mail/mbox` 已有 `mail_package.lpc` 的 `mkdirs()` 按需建目录）。`lpcc_eval.py` `/data/adm/daemons/news/archives/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` clean。

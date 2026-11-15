@@ -1232,3 +1232,7 @@ pristine + build-debug（归档端口 40068，临时测试端口 49520）。`scr
   3. `system/daemon/toptend.lpc`：`topten_add()` 原写 `if (file_size(f_name) == 0)` 漏掉文件不存在（`-1`）的情况，新人进世界触发 `topten_checkplayer()` 时 `read_file()` 返回 `0` 并在 `explode(str, "\n")` 抛 `*Bad argument 1 to explode()`；改为 `file_size(f_name) <= 0`（`topten_query`/`topten_del` 同步），`read_file()` 空串时回退初始写入，并在 `topten_save()` 补 `assure_file(f_name)`。
   4. `scripts/gen_keep_dirs.py --merge` 同步补录 `scripts/wasm_keep_dirs.txt`（`data/log/*`、`data/topten`、`inherit/*`、`log/runtime`、`log/static`）。
 - **复测**：`lpcc` 编译改动的 3 个文件 0 警告；`play_login.py` 与 `mudclient.py` 完整注册进入小秦淮客寓，执行 `look`/`score`/`topten exp`（正确写出 `/data/log/s/sweepxj` 与 12 项 `/data/topten/*`），0 运行时错误。
+
+## `data/log/x` 分桶补全（2026-11-15，KB 06 §7.384）
+
+`log/runtime/system` 曾记录 `*Wrong permissions for opening file /data/log/x/xajhgate for append`（26 字母桶唯缺 `x`）。`scripts/lpc_keep_letters.py --apply xajh2 data/log` 补齐 `data/log/x`。`lpcc_eval.py` `/data/log/x/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` clean。

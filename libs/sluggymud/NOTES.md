@@ -589,3 +589,7 @@ committing -- only the 8 genuine `.lpc` fixture fixes remain staged.
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40250。`scripts/mudclient.py` 验证裸引擎欢迎语与 `who`/`eval return 2+2`（`Result = 4`）/`say hi`/`look`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 运行期日志目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 原有 0 条记录；补齐 `core/log`、`public/log`、`secure/log`。修前 `lpcc_eval.py` 错误处理器写 `/public/log/log` 直接报错 `"No such file or directory"`，修后 `/public/log/zztest` 与 `/core/log/zztest` 均 `ZZRES=1` PASS；`play_boot.sh` clean。

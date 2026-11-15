@@ -901,3 +901,7 @@ items, no shops exist to test against.
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40213。`scripts/play_login.py`（port 49213）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 系统与开放日志目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 原有 0 条记录；补齐 `d/Genesis/log`（`OPEN_LOG_DIR`）与 `syslog/log`、`syslog/log/enter`、`syslog/log/purge`。修后 `lpcc_eval.py` `file_size()` 四目录均 `-2` 存在；`play_boot.sh` clean。

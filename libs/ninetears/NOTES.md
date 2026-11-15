@@ -1036,3 +1036,7 @@ oldsys 锁甲继承 `/obj/armor`，本体是 `/obj/armour`。薄别名。证明�
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，port 40241。西语注册进入 `Plano Inmaterial`，`look`/`score`/`i`/`quit` 正常，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。
+
+## 运行期目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `banish`、`log/driver`、`log/errors`、`save/playertmp`、`save/post`、`secure/log`。`lpcc_eval.py` `/save/playertmp/zztest`、`/log/errors/zztest`、`/secure/log/zztest` 修前全 FAIL → 修后均 `ZZRES=1` PASS；`play_boot.sh` clean。

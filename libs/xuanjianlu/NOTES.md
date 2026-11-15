@@ -1695,3 +1695,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40064。`scripts/play_login.py` 注册进入游戏世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 注册队列目录 `/queue` 补全（2026-11-15，KB 06 §7.384）
+
+`adm/daemons/regid.lpc` 直接向 `/queue/register` 调用 `write_file()` 而无 `assure_file()`，未追踪空目录在干净环境抛 `*Wrong permissions ... No such file or directory`。`scripts/wasm_keep_dirs.txt` 补齐 `queue`。`lpcc_eval.py` `/queue/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` clean。

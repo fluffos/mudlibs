@@ -816,3 +816,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40244。`scripts/mudplay.py`（port 49244，波兰语注册流）建号并执行 `spojrz`/`stan`/`zakoncz`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。
+
+## 系统与开放日志目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 原有 0 条记录；补齐 `d/Standard/log`（`OPEN_LOG_DIR`）与 `syslog/log`（`master.lpc`、`purge.lpc`、`mail_gc.lpc` 写 `DESTRUCTED`/`PURGE`/`MAIL_GC`）。修后 `lpcc_eval.py` `file_size()` 两目录均 `-2` 存在；`play_boot.sh` clean。

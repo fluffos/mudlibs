@@ -729,3 +729,7 @@ pristine + build-debug，port 40255。
 
 - **流程**：新角 → `help races`/`pick human` → 低属性 `iq` → `y` → `choose`/`1`（Coalition Grunt）→ `ready` → ANSI「Is this line red」`n` → Square；`look`/`score`/`i`；`quit`「Saving...Successful.」。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。（`lima` 本轮跳过：无 `~/src/fluffos-lima` 驱动。）
+
+## 错误与个人日志目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `log/errors` 与 `log/personal`。`lpcc_eval.py` `/log/personal/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS（`/log/errors/zztest` 同 `ZZRES=1` PASS）；`play_boot.sh` clean。
