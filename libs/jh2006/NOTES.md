@@ -637,3 +637,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 pristine + build-debug，port 40128。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
 - 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 缺文件 `read_file()` 嵌套调用保护修复（2026-11-15，KB 06 §7.386）
+
+- 修复 `cmds/leitai/bwdh/npc/jingtou{1,3,4}.lpc`（`tohtml()`）：`/log/html/BIWU{1,3,4}` 尚未写入时，`explode(read_file(...), "\n")` 会抛出 `*Bad argument 1 to explode()`；现均补充 `|| ""` 保护。
+- 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to explode()`）→ 修后（3 份 `tohtml()` 均 `OK`）与 `play_boot.sh` + `play_stop.sh`（port 49128）验证。

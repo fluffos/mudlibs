@@ -1444,3 +1444,8 @@ pristine + build-debug，归档端口 40056。`scripts/play_login.py` 注册进�
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 缺文件 `read_file()` 嵌套调用保护修复（2026-11-15，KB 06 §7.386）
+
+- 修复 `cmds/wizlist.lpc`（`main()`）：`/u/lonely/wtm` 未随归档下发，直接 `explode(read_file(...), "\n")` 报错；对照同源库 `wmkj` 为 `/adm/etc/renwu` 补 `|| ""`、为 `/u/lonely/wtm` 补 `|| "#"`（保留 CRLF 格式）。
+- 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to explode()`）→ 修后（`wizlist->main()=1`）与 `play_boot.sh` + `play_stop.sh`（port 49056）验证。

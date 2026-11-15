@@ -932,3 +932,8 @@ pristine + build-debug，归档端口 40228。`scripts/play_login.py`（port 492
 ## 归档日志目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/wasm_keep_dirs.txt` 补齐 `log/archive` 与 `log/errors/archive`。`lpcc_eval.py` `/log/errors/archive/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` clean。
+
+## 缺文件 `read_file()` 嵌套调用保护修复（2026-11-15，KB 06 §7.386）
+
+- 修复 `secure/cmds/creators/ed.lpc`（`help()`）：该版本无 `sefun::read_file()` 空串兜底且归档缺失 `/doc/help/creators/editor`，`explode(read_file(...), "\n")` 报错；现补充 `|| ""` 保护。
+- 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to explode()`）→ 修后（`ed` 编译加载与 `explode(read_file(...) || "", "\n")` 返回 `1,0`）及 `play_boot.sh` + `play_stop.sh`（port 49228）验证。

@@ -558,3 +558,8 @@ pristine + build-debug，归档端口 40271。`scripts/play_login.py` 注册/连
 `global/player.lpc`（`save_me()` 在 `catch` 内保存 `/save/players/<首字母>/<name>`）、`obj/handlers/folder_handler.lpc`（`/save/mail/<首字母>/`）、`obj/handlers/board_handler.lpc`（`/save/newsrc/<首字母>/`）与 `secure/cmds/creator/banish.lpc`（`/banish/<首字母>/`）均不会按需创建首字母目录；此前 `scripts/wasm_keep_dirs.txt` 未补全这 4 组 `a..z` 分桶，导致玩家存档、信箱与 `banish` 静默失败。
 
 已在 `scripts/wasm_keep_dirs.txt` 通过 `scripts/lpc_keep_letters.py --apply` 补全 `banish`、`save/mail`、`save/newsrc`、`save/players` 的 `a..z` 分桶，以及 `d/admin/log`（`secure/master/snoop.lpc`）、`d/dist/save`、`d/dist/pumpkin/save/stables`、`log/log`、`save/mail/new_mesg/*`、`save/nomic/{cases,notes}`。pristine + build-debug 重启 `DIRS OK` 且 `play_login.py` 正常进入游戏。
+
+## 缺文件 `read_file()` 嵌套调用保护修复（2026-11-15，KB 06 §7.386）
+
+- 修复 `global/events.lpc`（`mxp_enable()` 第 2552 行）：为缺失的 `/doc/login/mxp_setup` `read_file()` 补充 `|| ""` 保护（另注：第 2550 行 `sprintf("%c...", IAC, ...)` 仍受 `%c` UTF-8 校验限制）。
+- 已通过 `lpcc_eval.py` 验证 `/global/player` 编译加载与 `replace_string(read_file(...) || "", "\n", "")` 返回 `1,0`。

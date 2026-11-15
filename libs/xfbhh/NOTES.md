@@ -780,3 +780,8 @@ pristine + build-debug，归档端口 40190。`scripts/play_login.py`（port 491
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 缺文件 `read_file()` 嵌套调用保护修复（2026-11-15，KB 06 §7.386）
+
+- 修复 `quest/skybook/flagwar/flagd.lpc`（`add_flag_round()` 与 `query_flag_round()`）：`/www/flag_round` 缺失时改用 `stringp(raw)` + `explode(raw, "\n") - ({ "" })` + `sizeof(lines) ? lines[0] : "1"` 兜底。
+- 已通过 `lpcc_eval.py` 验证 `query_flag_round()=1` 编译加载与调用通过。

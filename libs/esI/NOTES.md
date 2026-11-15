@@ -949,3 +949,8 @@ pristine + build-debug，port 40010。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40010。`scripts/mudplay.py`（port 49010，含真实姓名回车跳过提示）完成注册进入冒险者公会并执行 `look`/`score`/`quit`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。
+
+## 缺文件 `read_file()` 嵌套调用保护修复（2026-11-15，KB 06 §7.386）
+
+- 修复 `d/healer/mix.lpc`（`create()` 读 `/d/healer/mixture`）与 `d/healer/cmds/_anatomise.lpc`（`cmd_anatomise()` 读 `/d/healer/cmds/anatomise.dat`）：归档缺失这两个数据文件，原代码将 `read_file()` 直接传入 `explode()` 报错；现补充 `|| ""` 保护（保留 CRLF 格式）。
+- 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to explode()`）→ 修后（`ZZT esI=1,1`）与 `play_boot.sh` + `play_stop.sh`（port 49010）验证。
