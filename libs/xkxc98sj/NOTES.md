@@ -575,3 +575,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，gb_budai 薄别名 §6.15）
 
 `d/job/obj/gb_budai9` 继承同目录缺失的 `gb_budai`；本体在 `/d/gaibang/obj/gb_budai`（同库）。薄别名。证明：HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40126。`scripts/play_login.py` 注册进入游戏世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

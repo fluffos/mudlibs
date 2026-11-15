@@ -566,3 +566,10 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
 
 `adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug（归档端口 40120，临时测试端口 49652）。`scripts/play_login.py` 注册登录。
+
+- **已修（KB 05 §7.11）**：`adm/daemons/logind.lpc` 的 `set_visitor()` 直接 `write_file(VISITORS, ...)`（`/data/mud/MUDVISITOR`），冷树缺少 `data/mud/` 导致首连报错并被 `destruct(ob)` 断线。在 `set_visitor()` 写入前补 `assure_file(VISITORS)`（保留原文件 CRLF 行尾），并通过 `scripts/gen_keep_dirs.py --merge` 补齐 `scripts/wasm_keep_dirs.txt`（`data/mud`、`log/driver`、`log/edit`、`log/static`、`log/wiz` 等）。
+- **复测**：`lpcc` 编译 `adm/daemons/logind.lpc` 0 警告；`play_login.py` 完整注册登录，驱动 stdout 与 `debug.log` 0 错误。

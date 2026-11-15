@@ -606,3 +606,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，DAEMON + WHIP/FORK/WAIST §6.16/§6.15）
 
 (1) `pingd`/`pingtcp` 继承未定义的 `DAEMON`：本库已有 `std/cmd_m` 与 `uid.h`，`globals.h` 补 `#define DAEMON "/std/cmd_m"`。(2) `echowhip`/`steel_fork`/`icy_girth` 缺 `WHIP`/`FORK`/`WAIST`：按本库 blade/belt 形制补基类与宏。证明：9/9 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40099。`scripts/play_login.py` 注册进入游戏世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

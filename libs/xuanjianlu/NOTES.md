@@ -1691,3 +1691,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，ARMOR→/std/armor 薄别名 §6.15）
 
 `globals.h` 将 `ARMOR` 定为 `/std/armor` 而文件缺失（`armor.h` 另有 `/inherit/armor/armor`）。薄别名 `std/armor.lpc` → `inherit "/inherit/armor/armor"`。证明：`ruanwei-jia` 等 HEAD FAIL → PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40064。`scripts/play_login.py` 注册进入游戏世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

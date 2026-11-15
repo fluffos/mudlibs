@@ -645,3 +645,13 @@ pplroomd：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## 深度功能测试（2026-11-09，TASK 宏改指向 §6.16）
 
 `group_task` 继承未定义的 `TASK`（原 `#define` 已注释且路径缺 `todo/`）。改为 `#define TASK STD_DIR "todo/task"`。证明：task+group_task listcheck HEAD 1 PASS / 1 FAIL → 树 2 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug（归档端口 40024，临时测试端口 49650）。`scripts/play_login.py` 注册登录。
+
+- **已修（KB 05 §7.11 + KB 06 §7.336）**：
+  1. `secure/daemon/master.lpc`：`error_handler()` 直接写 `/log/runtime/...`，`log/runtime/` 不存在时二次报错；写入前用 `file_size`/`mkdir` 确保 `LOG_DIR` 与 `LOG_DIR "runtime"` 存在。
+  2. `system/daemon/toptend.lpc`：冷树缺少 `/data/topten/` 目录导致新人 `topten_checkplayer()` 写入 `/data/topten/age` 抛 `*Wrong permissions for opening file /data/topten/age for overwrite.`；在 `topten_save()` 补 `assure_file(f_name)`，并在 `topten_query()`/`topten_del()`/`topten_add()` 统一 `file_size(f_name) <= 0` 与空串保护。
+  3. `scripts/gen_keep_dirs.py --merge` 同步补录 `scripts/wasm_keep_dirs.txt`（`data/log/*`、`data/topten`、`inherit/*`、`log/runtime` 等）。
+- **复测**：`lpcc` 编译改动的 `master.lpc` 与 `toptend.lpc` 0 警告；`play_login.py` 完整注册进入游戏世界，驱动 stdout 与 `debug.log` 0 运行时错误。
