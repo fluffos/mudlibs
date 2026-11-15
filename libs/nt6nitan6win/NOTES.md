@@ -785,3 +785,8 @@ pristine + build-debug，port 40187。`scripts/play_login.py` 注册并执行 `l
 
 - `adm/kernel/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## 缺失与动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `adm/daemons/bugd.lpc`（`reset_buginfo()` / `list_bug()` 对缺失 `/data/bug/`）、`cmds/usr/grep.lpc`（`do_grep()`）与 `quest11/flagwar/flagd.lpc`（`remove_flag_war()` 对缺失 `/d/flagwar/`，保留 CRLF），补充 `|| ({})` 空数组兜底。
+- 已通过 `lpcc_eval.py` 全部三项探针 `PASS|PASS|PASS` 验证。

@@ -1246,3 +1246,8 @@ pristine + build-debug（归档端口 40068，临时测试端口 49520）。`scr
 
 - `secure/sefun/file.lpc` 中的 `cat()` 在缺失文件、目录或无权读取时 `read_file()` 返回 `0`，直接传入 `write()` / `message()` 后在 `receive_message()` 触发 `*Bad argument 1 to receive()`（`--head` 探针已复现确认）；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## 缺失与动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `system/daemon/taskd.lpc` 与 `secure/sefun/filter.lpc` 中未判空直接传入 `foreach` / `+=` 的 `get_dir()` 调用，补充 `|| ({})` 空数组兜底。
+- 已通过 `lpcc_eval.py` 全部探针 `PASS` 验证。

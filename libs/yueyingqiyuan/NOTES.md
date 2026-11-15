@@ -1331,3 +1331,8 @@ pristine + build-debug，归档端口 40048。`scripts/play_login.py` 注册进�
 
 - 修复 `adm/daemons/brd.lpc`（`buildroom()`）：归档缺少 `/obj/{USER_ROOM,RESTROOM,WEAPONROOM}.o` 模板，调整为先读模板并校验 `stringp(my_file)` 及 `stringp(this_file)` 后再修改当前房间。
 - 验证：`lpcc_eval.py` 修前 `--head`（`ZZ_YYQY_HEAD="*Bad argument 1 to replace_string`）→ 修后（`ZZ_YYQY_R1=0` `PASS`）。
+
+## 动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `d/obj/book/dd.lpc`（`do_grep()` 第 108 行，保留 CRLF）：对缺失或不可读目录 `get_dir(path + wild)` 返回 `0` 导致 `*Bad argument 2 to foreach`；补充 `|| ({})` 兜底。
+- 已通过 `lpcc_eval.py` 修前 FAIL → 修后 `ZZT PASS` 及 `play_boot.sh` + `play_stop.sh`（port 47306）验证。

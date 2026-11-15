@@ -503,3 +503,8 @@ pristine + build-debug，归档端口 40272。`scripts/play_login.py` 注册/连
 
 - 修复 `global/events.lpc`（`mxp_enable()` 第 2552 行）：为缺失的 `/doc/login/mxp_setup` `read_file()` 补充 `|| ""` 保护（另注：第 2550 行 `sprintf("%c...", IAC, ...)` 仍受 `%c` UTF-8 校验限制）。
 - 已通过 `lpcc_eval.py` 验证 `/global/player` 编译加载与 `replace_string(read_file(...) || "", "\n", "")` 返回 `1,0`。
+
+## 缺失或动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `cmds/report_base.lpc`（`query_patterns()` 对未附带 `/d/special/` 与 `/obj/` 调用 `filter(get_dir(...))` 抛出 `*Bad argument 1 to EFUN filter()`）、`obj/handlers/parcel.lpc`（`player_refreshed()` 对缺失 `/save/parcels/`）、`obj/misc/housing_creator.lpc`（`list_plans()` 对缺失 `/std/houses/*`）、`www/secure/file_browser.lpc`（`get_full_dir(path)`）及 `std/shops/player_shop/office_code/logging.lpc`（`_savedir + "general.log-*"`），全部补充 `|| ({})` 空数组兜底。
+- 已通过 `lpcc_eval.py` 修前 FAIL（`Bad argument 1/2 ... Got: 0`）→ 修后 `PASS|PASS|PASS|PASS` 验证。

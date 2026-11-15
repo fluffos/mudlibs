@@ -1036,3 +1036,8 @@ xinfang/chatroom：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## 深度功能测试（§10.7，2026-11-15，重测）
 
 pristine + build-debug（归档端口 `40069`，测试端口 `49069`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
+
+## 缺失与动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `system/daemon/taskd.lpc`、`system/daemon/daemon/taskd.lpc`、`secure/sefun/filter.lpc`、`secure/simul_efun/filter.lpc` 及 `system/daemon/daemon/filter.lpc` 中的未保护 `get_dir()` 消费点（保留 CRLF），补充 `|| ({})` 兜底。
+- 已通过 `lpcc_eval.py` 全部四项探针 `PASS|PASS|PASS|PASS` 及 `play_boot.sh` + `play_stop.sh`（port 47310）验证。

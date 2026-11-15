@@ -670,3 +670,8 @@ pristine + build-debug（归档端口 40024，临时测试端口 49650）。`scr
 
 - `system/daemon/mored.lpc` 的 `void start_more(object who, string msg)` 因多出 `object who` 参数绕过了原 `scripts/lpc_fix_start_more.py` 正则，传入非字符串 `msg` 时直接触发 `*Bad argument 1 to explode()`。已由更新后的 `scripts/lpc_fix_start_more.py --apply` 首行补全 `if (!stringp(msg)) return;`。
 - 验证：`lpcc_eval.py` 修前 `--head` `start_more(this_object(), 0)` 抛出 `*Bad argument 1 to explode()` → 修后 `e0=0 PASS`；`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 47206）启动验证通过。
+
+## 缺失与动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `system/daemon/taskd.lpc` 与 `secure/sefun/filter.lpc` 中未判空直接传入 `foreach` / `+=` 的 `get_dir()` 调用，补充 `|| ({})` 空数组兜底。
+- 已通过 `lpcc_eval.py` 全部探针 `PASS` 验证。

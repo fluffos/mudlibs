@@ -1175,3 +1175,8 @@ eval/lpcc 觸發之異常一貫的存疑處理原則，未在本輪確認為真�
 
 pristine + build-debug，port 40081。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
 - 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 缺失与动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `system/daemons/bug_d.lpc`（缺失 `/data/bug/`）、`system/daemons/area_d_main.lpc`（缺失 `/area/` / `AREA_ROOT`）、`system/daemons/city_d_main.lpc`（缺失 `/city/` / `CITY_ROOT` / `CITY_PATH` / `CITY_NUM_ROOM`）、`system/daemons/estate_d.lpc`（`CITY_PATH`）、`system/daemons/mail_d.lpc`（`/data/user/`）及 `system/kernel/simul_efun/path.lpc`（`deep_path_list()`），统一补充 `|| ({})` 兜底。
+- 已通过 `lpcc_eval.py` 修前 FAIL → 修后五项探针 `PASS|PASS|PASS|PASS|PASS` 及 `play_boot.sh` + `play_stop.sh`（port 47308）验证。

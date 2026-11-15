@@ -1076,3 +1076,8 @@ pristine + build-debug（归档端口 `40206`，测试端口 `49206`）。`scrip
 
 - 修复 `global/events.lpc`（`mxp_enable()` 第 2552 行）：归档缺失 `/doc/login/mxp_setup`，`replace_string(read_file("/doc/login/mxp_setup"), "\n", "")` 会抛出 `*Bad argument 1 to replace_string()`；现补充 `|| ""` 保护（另注：第 2550 行 `sprintf("%c...", IAC, ...)` 仍因 FluffOS `%c` UTF-8 校验限制先于第 2552 行失败）。
 - 已通过 `lpcc_eval.py` 验证 `/global/player` 编译加载、`replace_string(read_file(...) || "", "\n", "")` 返回 `1,0`，以及 `play_boot.sh` + `play_stop.sh`（port 49206）启动清理正常。
+
+## 缺失或动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `cmds/report_base.lpc`（`query_patterns()` 对未附带 `/d/special/` 与 `/obj/` 调用 `filter(get_dir(...))` 抛出 `*Bad argument 1 to EFUN filter()`）、`obj/handlers/parcel.lpc`（`player_refreshed()` 对缺失 `/save/parcels/`）、`obj/misc/housing_creator.lpc`（`list_plans()` 对缺失 `/std/houses/*`）、`www/secure/file_browser.lpc`（`get_full_dir(path)`）及 `std/shops/player_shop/office_code/logging.lpc`（`_savedir + "general.log-*"`），全部补充 `|| ({})` 空数组兜底。
+- 已通过 `lpcc_eval.py` 修前 FAIL（`Bad argument 1/2 ... Got: 0`）→ 修后 `PASS|PASS|PASS|PASS` 及 `play_boot.sh` + `play_stop.sh`（port 47301）验证。

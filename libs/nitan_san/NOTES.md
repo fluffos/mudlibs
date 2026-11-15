@@ -1062,3 +1062,8 @@ pristine + build-debug（归档端口 `40055`，测试端口 `49055`）。`scrip
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## 动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `adm/simul_efun/ntefun.lpc`（`deep_path_list(root)` 第 12 行）：对不存在目录调用时 `get_dir(root)` 返回 `0` 抛出 `*Bad argument 2 to foreach`；补充 `|| ({})` 兜底。
+- 已通过 `lpcc_eval.py` 修前 FAIL → 修后 `ZZT PASS cnt=86`（`/include/` 正常遍历）及 `play_boot.sh` + `play_stop.sh`（port 47307）验证。

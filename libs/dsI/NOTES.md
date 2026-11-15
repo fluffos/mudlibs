@@ -983,3 +983,8 @@ IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
 ## 深度功能测试（§10.7，2026-11-15，重测）
 
 pristine + build-debug（归档端口 `40225`，测试端口 `49225`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
+
+## 缺失目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `lib/detect.lpc` `else` 分支第 82 行：此前第 49 行已保护，但第 82 行仍在 `/verbs/spells/` 缺失时将 `get_dir()` 返回的 `0` 传入 `map()` 并触发 `spells[random(0)]` 越界；现补充 `|| ({})` 与 `if (!sizeof(spells))` 优雅回退。
+- 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to EFUN map()`）→ 修后 `ZZT detect_magic=ok` 及 `play_boot.sh` + `play_stop.sh`（port 47303）验证。

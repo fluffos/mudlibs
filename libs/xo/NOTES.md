@@ -932,3 +932,8 @@ xinfang/chatroom/pplroomd：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40023。`scripts/play_login.py`（port 49023）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 缺失与动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `system/daemon/taskd.lpc` 与 `secure/sefun/filter.lpc` 中未判空直接传入 `foreach` / `+=` 的 `get_dir()` 调用，补充 `|| ({})` 空数组兜底（含 `eventRehashTask()` 因缺失 `/system/task/` 崩溃修复及 `play_boot.sh` + `play_stop.sh` port 47309 验证）。
+- 已通过 `lpcc_eval.py` 全部探针 `PASS` 验证。

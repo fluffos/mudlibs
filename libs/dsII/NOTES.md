@@ -937,3 +937,8 @@ pristine + build-debug，归档端口 40228。`scripts/play_login.py`（port 492
 
 - 修复 `secure/cmds/creators/ed.lpc`（`help()`）：该版本无 `sefun::read_file()` 空串兜底且归档缺失 `/doc/help/creators/editor`，`explode(read_file(...), "\n")` 报错；现补充 `|| ""` 保护。
 - 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to explode()`）→ 修后（`ed` 编译加载与 `explode(read_file(...) || "", "\n")` 返回 `1,0`）及 `play_boot.sh` + `play_stop.sh`（port 49228）验证。
+
+## 缺失与动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `lib/detect.lpc`（两处分支对缺失 `/verbs/spells/` 调用 `map(get_dir(...))` 并索引 `spells[random(0)]`）与 `lib/std/book.lpc`（`eventLoadChapters()` 对动态目录 `Source` 执行 `foreach`），分别补充 `|| ({})` 与 `!sizeof(spells)` 保护。
+- 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to EFUN map()`）→ 修后 `plain`/`magic`/`book` 全部 `PASS` 验证。

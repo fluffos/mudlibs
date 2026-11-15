@@ -1271,3 +1271,8 @@ pristine + build-debug，port 40065。`scripts/play_login.py` 注册并执行 `l
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 动态目录 `get_dir()` 返回 0 保护修复（2026-11-15，KB 06 §7.391）
+
+- 修复 `cmds/usr/found.lpc`（`do_cp()` 第 122 行）：当目标目录不存在或无权读取时 `get_dir(path + wild)` 返回 `0` 并导致 `foreach` 抛出 `*Bad argument 2 to foreach`；补充 `|| ({})` 兜底。
+- 已通过 `lpcc_eval.py` 探针 `ZZT PASS`及正常目录 `/cmds/usr/` `ok2=1`、以及 `play_boot.sh` + `play_stop.sh`（port 47305） 验证。
