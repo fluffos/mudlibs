@@ -758,3 +758,9 @@ questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40121。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。
+
+## 运行时缺目录修复（KB 06 §7.384，2026-11-15）
+
+`adm/daemons/brd.lpc`（第 79 行）在帮会创建留言板时直接 `write_file("/p/residence/board/" + name + ".lpc", ...)` 且无 `assure_file()`/`mkdir()`；git 与 `scripts/wasm_keep_dirs.txt` 均无 `p/residence/board`。
+
+已在 `scripts/wasm_keep_dirs.txt` 补齐 `p/residence/board`；pristine + build-debug 启动 `DIRS OK` 且 `play_login.py` 正常进入与退出。

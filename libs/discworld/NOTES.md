@@ -1065,3 +1065,9 @@ Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplay
 ## 深度功能测试（§10.7，2026-11-15，重测）
 
 pristine + build-debug（归档端口 `40206`，测试端口 `49206`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
+
+## 运行时缺目录与按字母分桶修复（KB 06 §7.384，2026-11-15）
+
+`global/player.lpc`（`save_me()` 在 `catch` 内保存 `/save/players/<首字母>/<name>`）、`obj/handlers/folder_handler.lpc`（`/save/mail/<首字母>/`）、`obj/handlers/board_handler.lpc`（`/save/newsrc/<首字母>/`）与 `secure/cmds/creator/banish.lpc`（`/banish/<首字母>/`）均不会按需创建首字母目录；此前 `scripts/wasm_keep_dirs.txt` 未补全这 4 组 `a..z` 分桶，导致玩家存档、信箱与 `banish` 静默失败。
+
+已在 `scripts/wasm_keep_dirs.txt` 通过 `scripts/lpc_keep_letters.py --apply` 补全 `banish`、`save/mail`、`save/newsrc`、`save/players` 的 `a..z` 分桶，以及 `d/admin/log`（`secure/master/snoop.lpc`）、`log/log`。pristine + build-debug 重启 `DIRS OK` 且 `play_login.py` 正常进入游戏。

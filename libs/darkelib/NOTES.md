@@ -972,3 +972,9 @@ pristine + build-debug，port 40258。
 
 - **流程**：新角名/密码×2 → 性别/唯一 email → news pager → `read list` → `pick high-man` → 加点 `q`/`yes` → ANSI「Is this line red」`y` → Newbieville 广场；`look`/`score`/`i`/`who`；`quit`「Saving...Successful.」。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
+
+## 运行时缺目录修复（KB 06 §7.384，2026-11-15）
+
+`adm/simul_efun/log_file.lpc` 写入 `/log/*` 时无自动 `mkdir`，且 `scripts/wasm_keep_dirs.txt` 缺少 `log/errors`、`log/personal`、`d/khojem/log`（`boatswain.lpc`）、`wizards/duridian/logs`（`lich.lpc`）与 `wizards/nevin/logs`（`chemoch.lpc`）。`lpcc_eval.py` 实测写入 `/log/errors/test` 抛出 `*Wrong permissions ... No such file or directory`。
+
+已在 `scripts/wasm_keep_dirs.txt` 补齐上述 5 个运行目录（排除测试玩家临时目录）；修后 `lpcc_eval.py` 写入 `/log/errors/test` 与 `/d/khojem/log/test` 返回 `ZZT ok` `PASS`，pristine 冷启目录校验通过。

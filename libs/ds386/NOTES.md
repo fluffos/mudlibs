@@ -1152,3 +1152,9 @@ pristine + build-debug，port 40205（含先前 `log/open` keep）。
 ## 深度功能测试（§10.7，2026-11-15，重测）
 
 pristine + build-debug（归档端口 `40205`，测试端口 `49205`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
+
+## 运行时缺目录修复（KB 06 §7.384，2026-11-15）
+
+pristine + build-debug 实测发现，`config.h` 启用 `#define LOG_LOCAL_CHANS 1`，玩家发送频道消息（如 `newbie hello`）时 `/secure/daemon/chat.lpc` 的 `LogIt()` 写入 `/log/chan/newbie`，因 `scripts/wasm_keep_dirs.txt` 缺少 `log/chan` 与 `log/errors` 等目录，触发 `*Wrong permissions for opening file /log/chan/newbie for append. "No such file or directory"`（`master.lpc` 捕获后向终端双次输出 `A runtime error occurred.` 且驱动 stdout 无报错）。
+
+已在 `scripts/wasm_keep_dirs.txt` 为本馆补齐 `log/archive`、`log/chan`、`log/chan/archive`、`log/errors`、`log/errors/archive`、`log/law/*`、`log/secure` 与 `secure/log/*`。修后 pristine + build-debug 重测 `newbie hello`：正常回显 `Testchan <newbie> hello`，`/log/chan/newbie` 正常落盘，`log/runtime` 与 `log/player_errors` 均为 0 字节。

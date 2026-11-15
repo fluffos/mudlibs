@@ -672,3 +672,9 @@ questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40148。`scripts/play_login.py` 注册进入游戏世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 运行时缺目录修复（KB 06 §7.384，2026-11-15）
+
+`quest/npc/chousha.h` 的 `chousha_begin()` 直接 `write_file("/quest/chousha/fam1", ...)` 且无 `assure_file()`；`lpcc_eval.py` 实测抛出 `*Wrong permissions for opening file /quest/chousha/fam1 for overwrite. "No such file or directory"`。
+
+已在 `scripts/wasm_keep_dirs.txt` 补齐 `quest/chousha`；修后 `lpcc_eval.py` 写入 `/quest/chousha/fam1` 返回 `ZZT ok` `PASS`，pristine + build-debug 登录复测正常。

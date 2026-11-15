@@ -256,3 +256,9 @@ hylib/dtxy) stay confirmed duplicates.
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug（归档端口 40196，临时测试端口 49741）。`scripts/mudclient.py` 走 `new` 注册并在 `q` 退出大事记分页后进入「三国演义玩家天赋设置」界面，驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 运行时缺目录修复（KB 06 §7.384，2026-11-15）
+
+本馆原在 `scripts/wasm_keep_dirs.txt` 中无任何条目；邮件邮箱（`secure/obj/mailbox.lpc`：`/data/mail/mbox/%c/%s`）与玩家宅邸（`daemons/restart_d.lpc`、`sgdomain/home/control.lpc`：`/data/home/%c/%s`）均按首字母分桶写入且不自动建目录，而 git 仅追踪少数几个字母子目录，新ID信箱/家园写入直接失败。
+
+已在 `scripts/wasm_keep_dirs.txt` 通过 `scripts/lpc_keep_letters.py --apply` 补全 `data/home`、`data/mail/mbox` 的 `a..z` 字母分桶，并补齐 `data/mail/mesg`、`data/secure/daemons`、`log`、`recycle`、`trans/tmp`（`wish.lpc`）。pristine 冷启目录校验全部存在。
