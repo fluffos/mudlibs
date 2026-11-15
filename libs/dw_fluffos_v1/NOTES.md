@@ -548,3 +548,7 @@ pristine + build-debug，port 40271（`heartbeat interval msec : 2000`，`NO_TIM
 ## NTFS 路径规范化（2026-11-14，#30）
 
 `cmds/living/{:_,"_}.lpc` 改名 `colon_.lpc`/`quote_.lpc` 并在 `secure/command.lpc` 保留前导 `:`/`"` 分发；`doc/lpc/->` 改名 `call_other`；大小写重名文档改名 `*_uc`/`*_old`；清理 RCS `.in.*.c.`。重启动与 `lpcc_eval` 实测 `colon_` / `quote_` PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40271。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

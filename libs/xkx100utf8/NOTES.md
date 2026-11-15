@@ -220,3 +220,7 @@ pristine + build-debug，port 40275（`work/` 子模块需先 init）。
 - **流程**：新号 → `y` → 「秦风」→ 密码×2 → 出生地 `3` → 膂力/悟性/根骨 `20`×3 → 同意 `y` → 性格 `0` → email → `m` → 落在南浔镇（区组 3 内随机城）；`look`/`score`/`quit` 正常。
 - 夜幕下「天色太黑了，你看不清明显的出路」，`east`/`west` 为「什么？」——夜间无灯不显示出口（内容/时段，非新编程缺陷）。驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。
 - 2026-11-14 变基至 `87232ba8` 后复测：`lpc_warnings.py xkx100utf8` 12184 个可编译文件零警告，改动 3 个文件 `lpcc` 全过；`play_boot.sh` + `play_login.py`（port 49275）及 `wasm_client.js` 均正常注册并进入游戏。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40275。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

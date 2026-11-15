@@ -527,3 +527,7 @@ pristine + build-debug，port 40109。
 
 - **流程**：双密码 → 类型 5 → `m` → 世外桃源；`register`/`decide` → `west`/`out` 阎罗殿 → `wash` → `born 扬州人氏`（规则 pager）→ 客店（店小二）；`look`/`score`；`quit`「欢迎下次再来！」。任务心跳旁听约 25s 无 `*Error`/`执行时段错误`。
 - 本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40109。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

@@ -488,3 +488,7 @@ pristine + build-debug，port 40272（`heartbeat interval msec : 2000`）。
 ## NTFS 路径规范化（2026-11-14，#30）
 
 `cmds/living/:_.lpc` 改名 `colon_.lpc` 并在 `secure/command.lpc` 保留前导 `:` 分发；清理 RCS `.in.*.c.`。重启动 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40272。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

@@ -658,3 +658,7 @@ functionally re-tested live on this lib.
 `north` 会客厅/`south` 回休息室 → `who`/`save`/`quit` → 重连再进厅。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40013。`scripts/mudplay.py` 选 `1`（utf-8）以 `fluffos`/`Mud@2026` 登录入巫师休息室，执行 `look`/`score`/`north`/`south`/`quit`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。

@@ -662,3 +662,7 @@ pristine + build-debug，port 40286。
 
 - **流程**：新角名/密码×2 → Temple yard（Tim the Enchanter）；`look`/`score`；`east` Hall of Races → `west` → `south` Market Square → `west`×2 Common Shop，`list` 见 torch；`quit`「Saving …」。重连回 yard，`look`/`score`/`quit` 正常。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40286。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

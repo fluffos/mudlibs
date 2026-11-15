@@ -256,3 +256,7 @@ pristine + build-debug，port 40287。
 ## NTFS 路径规范化（2026-11-14，#30）
 
 `bin/help.lpc` 与 `bin/nohelp.lpc` 将 `"con"`/`":"` 映射为 `"constitution"`/`"emote"` 后移除 `help/{con,:}.hlp`；清理同内容 `OK.lpc`；`doc/README` 改 `README_uc`。重启动 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40287。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

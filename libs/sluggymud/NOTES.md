@@ -585,3 +585,7 @@ committing -- only the 8 genuine `.lpc` fixture fixes remain staged.
 覆盖：欢迎语 → `who` → `eval return 2+2` → `say` → `look` 兜底 `Beg your pardon?` → `quit` → 重连。
 
 驱动 stdout：无 warning、无 Error。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40250。`scripts/mudclient.py` 验证裸引擎欢迎语与 `who`/`eval return 2+2`（`Result = 4`）/`say hi`/`look`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

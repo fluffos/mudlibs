@@ -634,3 +634,7 @@ pristine + build-debug，port 40211（`work/` 子模块需先 `git submodule upd
 - **流程**：ID → `y` → 姓「秦」名「风」→ 管理/普通密码×2 → `m` → 公怖栏任意键 → 泥潭注册室 `reg <email>` → 生命之谷 `choose 1`/`washto 20 20 20 20`（自动投胎）→ 古村世界之树；`east` 青石小路/`west` 回树；新建号 `quit` 半小时门闸选 `n`。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
 - 2026-11-14 变基至 `9d882fd9` 后复测：pristine + `build-debug`（port 49211）与 `wasm_client.js` 均正常完成注册并进入古村世界之树；`lpc_warnings.py nt7` 全库复扫可编译文件 29502 个。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40211。`scripts/mudplay.py` 走完纯字母 ID `qant` 双密码注册（`reg` → `choose 1` → `washto 20 20 20 20`）进入古村世界之树，执行 `look`/`east`/`west`/`quit`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。

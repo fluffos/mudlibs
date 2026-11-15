@@ -398,3 +398,7 @@ pristine + build-debug，port 40277。
 ## NTFS 路径规范化（2026-11-14，#30）
 
 `open/EXAMPLES/` 改名 `EXAMPLES_old/` 并同步 4 处自引用；`save/logs/` 时间戳冒号改 `-`；保留 `HUD`/`level_list` 实读的大写 `SORT_*`，将未用的小写 `sort_*` 改 `.old`；清理同内容 `ALTS`。重启动 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40277。`scripts/mudplay.py` 走完注册建角（`qanir`/`hint`/`male`/`human`/`none`）至 Adventurers' guild，执行 `look`/`north`/`south`/`score`/`quit`（正常存档），驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

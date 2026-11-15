@@ -642,3 +642,7 @@ An `add_action("fn", "verb")` whose function is defined neither by the object, n
 `say`/`save`（letter bucket `Make dir /players/t` 为既有提示）→ `quit` → 重连密码接受。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40263。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

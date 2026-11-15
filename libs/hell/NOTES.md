@@ -531,3 +531,7 @@ pristine + build-debug，port 40114。
 - **流程**：英文名 → 姓/名 → 管理密码×2 → 普通密码×2 → 类型 5 → 性别 m → 世外桃源；`register a@b.com`/`decide` → east 陆天抒/`out` 阎罗殿；`wash`/`born 扬州人氏`（规则 pager 后）入扬州客店；`look`/`score`/`i`/`quit`。
 - 控制台无 `*Error` / Wrong permissions / Too deep。本轮无新编程缺陷。
 - **观察**：会话中心跳式 `HH:MM:SS>` 时间戳刷屏（与 GLOBAL_MONITOR/提示相关），不挡指令；非本轮新缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40114。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

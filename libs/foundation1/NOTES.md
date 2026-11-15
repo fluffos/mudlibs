@@ -632,3 +632,7 @@ The code of this lib writes logs into 1 subdirectory of `log/`: `log/chan` (`sec
 原生树手启（无 systemd user bus），端口 40248。注册 `fntestaa` → 洞穴 `look`/`status`/`inventory`/`who`/`say` → `help colour` → `mail` 空信箱。
 
 **编程缺陷（KB 06 §7.379）：** 空信箱下 IIPS 的 `s`/`S` 走 `save_letter`，`__Current == -1`，索引 `__BoxInfo[-1]` 触发 `*Array index must be positive or zero`（`/log/runtime`）。加 `letter < 0 || letter >= sizeof(__BoxInfo)` 守卫后改为 `No letter to save.`；同形 11 个 Descartes/DS `post.lpc` 一并修。玩家侧 `save`/`quit` 正常。Intermud `Denied write permission in save_object()` 仍为已知外连噪音（§10.7 范围外）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40248。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

@@ -611,3 +611,7 @@ pristine + build-debug，port 40132。
 
 - **流程**：英文 ID → y → 姓/名 → 管理/普通密码（须不同）→ 类型 5 → `m` → 世外桃源；`register …`/`decide` → `east` 竹屋 → `out` 阎罗殿（地藏王天书）→ `washto 20 20 20 20` → `born 扬州人氏` → 客店；`look`/`score`；`quit`「欢迎下次再来！」。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40132。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

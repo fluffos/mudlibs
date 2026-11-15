@@ -640,3 +640,7 @@ pristine + build-debug，port 40261。
 
 - **流程**：英文名确认 → 密码×2 → `/room/start`；`look`/`inventory`/`who`；`west` 进入 virtual 演示房（dictionary/internet terminal）；`news`/`help`/`quit`。
 - 控制台与 `debug.log` 无 `*Error` / Wrong permissions。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40261。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

@@ -586,3 +586,7 @@ the news pager. Fixed:
 ## `log/` keep 行补回（2026-11-10，KB 06 §7.358）
 
 `scripts/wasm_keep_dirs.txt` 里本库的 `log/*` 行曾丢失；`lpc_keep_log_dirs.py --apply` 与 `gen_keep_dirs.py --merge` 已补回父目录与子目录。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40221。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

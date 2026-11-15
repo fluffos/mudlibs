@@ -650,3 +650,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 
 驱动 stdout / `log/`：无 compile warning、无 runtime Error（仅启动时 `log/debug.log` 路径提示，§10.9）。
 未测：战斗死亡重生、经济完整环、长时间 soak。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40243。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

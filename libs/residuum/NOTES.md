@@ -596,3 +596,7 @@ base as `"/std/object.c"`; the builder now rewrites such `.c` path strings in th
 ## `log/` keep 行补回（2026-11-10，KB 06 §7.358）
 
 `scripts/wasm_keep_dirs.txt` 里本库的 `log/*` 行曾丢失；`lpc_keep_log_dirs.py --apply` 与 `gen_keep_dirs.py --merge` 已补回父目录与子目录。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40237。`scripts/mudplay.py` 注册 `qa37`/`qachar`（`human` → `download warrior` → `done`）进入 Origin Point，执行 `look`/`northeast`/`southwest`/`score`/`quit`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。

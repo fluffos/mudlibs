@@ -563,3 +563,7 @@ pristine + build-debug，port 40133。
 - **流程**：英文名 → 中文名 → 管理/普通密码×2 → 民族 1 → 性别 m → 世外桃源见神仙姐姐；`register`/`decide`；`look`/`score`/`i`/`quit`。重登有短冷却。
 - 控制台与 `debug.log` 无 `*Error` / Wrong permissions。本轮无新编程缺陷。
 - **观察**：`out` → `/d/fy/fysquare` 档案未出货，`go` 报「区域还没有连通」（既有内容缺口，README/NOTES 已记地图极薄；§10.7 不改内容出口）。会话有 `HH:MM:SS>` 心跳提示刷屏。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40133。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
