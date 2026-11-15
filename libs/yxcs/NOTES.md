@@ -1449,3 +1449,8 @@ pristine + build-debug，归档端口 40056。`scripts/play_login.py` 注册进�
 
 - 修复 `cmds/wizlist.lpc`（`main()`）：`/u/lonely/wtm` 未随归档下发，直接 `explode(read_file(...), "\n")` 报错；对照同源库 `wmkj` 为 `/adm/etc/renwu` 补 `|| ""`、为 `/u/lonely/wtm` 补 `|| "#"`（保留 CRLF 格式）。
 - 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to explode()`）→ 修后（`wizlist->main()=1`）与 `play_boot.sh` + `play_stop.sh`（port 49056）验证。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。

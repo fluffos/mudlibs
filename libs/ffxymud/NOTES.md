@@ -491,3 +491,8 @@ pristine + build-debug，port 40142。客户端版本握手（`shikongyouxia3.0`
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `adm/simul_efun/file.lpc` 中的 `cat()` 在缺失文件、目录或无权读取时 `read_file()` 返回 `0`，直接传入 `write()` / `message()` 后在 `receive_message()` 触发 `*Bad argument 1 to receive()`（`--head` 探针已复现确认）；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0，并经 `play_boot.sh` + `play_stop.sh` 实机启动通过。

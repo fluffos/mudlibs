@@ -514,3 +514,8 @@ pristine + build-debug，归档端口 40140。`scripts/play_login.py` 注册进�
 ## 注册队列目录 `/queue` 补全（2026-11-15，KB 06 §7.384）
 
 `adm/daemons/regid.lpc` 直接向 `/queue/register` 调用 `write_file()` 而无 `assure_file()`，未追踪空目录在干净环境抛 `*Wrong permissions ... No such file or directory`。`scripts/wasm_keep_dirs.txt` 补齐 `queue`。`lpcc_eval.py` `/queue/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` clean。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `adm/simul_efun/message.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。

@@ -620,3 +620,8 @@ pristine + build-debug，port 40217。
 
 - **流程**：`gb` → 英文名 → 姓/名 → 管理/普通密码×2 → 性别 m → 注册房间；`register` → 生命之谷盘古；`choose 1`/`washto 20 20 20 20`/`born 扬州人氏`（规则 pager）→ 客店；`look`/`score`/`i`/`quit`。
 - 控制台与 `debug.log` 无 `*Error`；`data/topten` 写出 rich/exp/…（§7.11 已修）。本轮无新编程缺陷。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。

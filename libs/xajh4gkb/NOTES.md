@@ -557,3 +557,8 @@ pristine + build-debug，归档端口 40154。`scripts/play_login.py` 注册/连
 
 - 修复 `adm/daemons/brd.lpc`（`buildroom()`）：除 `restroom.o` 与 `lianroom.o` 外其余 `/clone/room/*.o` 模板（含 `menroom.o`）缺失，调整为先读模板并校验 `stringp(my_file)` 及 `stringp(this_file)` 后再修改当前房间。
 - 验证：`lpcc_eval.py` `brd->buildroom()`（`rec=1,7` 均返回 `0` `PASS`）。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。

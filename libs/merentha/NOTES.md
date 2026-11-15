@@ -499,3 +499,8 @@ The code of this lib writes logs into 1 subdirectory of `log/`: `log/errors` (`d
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40223。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `sefun/sefun.lpc` 中的 `cat()` 在缺失文件、目录或无权读取时 `read_file()` 返回 `0`，直接传入 `write()` / `message()` 后在 `receive_message()` 触发 `*Bad argument 1 to receive()`（`--head` 探针已复现确认）；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。

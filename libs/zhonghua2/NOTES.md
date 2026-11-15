@@ -1238,3 +1238,8 @@ pristine + build-debug，归档端口 40028。`scripts/play_login.py` 注册进�
 
 - 修复 `adm/daemons/tasknpcd.lpc`：`create()` 读 `/quest/dynamic_location` 后直接 `explode(file, "\n")`，以及 `read_table()` 在 `/quest/dynamic_npc_quest` 缺失时直接 `explode(read_file(file), "\n")`，均在冷树抛出 `*Bad argument 1 to explode()`；分别补充 `stringp(file)` 与 `stringp(raw)` 空返回值保护。
 - 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to explode`）→ 修后（`ZZ_zhonghua2=0` `PASS`），并通过 `play_boot.sh` + `play_stop.sh`（port 45602）实机启动验证。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。

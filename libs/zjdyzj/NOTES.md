@@ -1037,3 +1037,8 @@ pristine + build-debug，port 40074。指间 ZJ 握手（`crypt(ZJKEY,"zj")` 挑
 pristine + build-debug（归档端口 `40074`，测试端口 `49074`）。
 
 - 使用符合本库 `adm/daemons/logind.lpc` ZJ 指剑协议握手的定制客户端验证：接收 `ver1.0,<s` 挑战串后以 `crypt("123456789abcd", s[2..3])` 应答 `qazj║Mudpass║<crypt>║qa@test.com` 完成注册并选 `m║1║沈牧` 进入游戏，执行 `l`、`score`、`quit`（返回 `欢迎下次再来！`），驱动 stdout 与日志零错误/零警告（`errs=[]`）。本轮无新编程缺陷。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。

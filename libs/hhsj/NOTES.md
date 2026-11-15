@@ -1147,3 +1147,8 @@ pristine + build-debug（归档端口 `40106`，测试端口 `49106`）。`scrip
 
 - 修复 `quest/skybook/flagwar/flagd.lpc`（`add_flag_round()` 与 `query_flag_round()`）：当 `/www/flag_round` 缺失或为空时，`explode(read_file(...), "\n")[0]` 会抛出 `*Bad argument 1 to explode()`（即便简单回退 `|| ""` 仍会在空数组 `[0]` 越界）；现改为 `stringp(raw)` + `explode(raw, "\n") - ({ "" })` + `sizeof(lines) ? lines[0] : "1"` 兜底。
 - 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to explode()`）→ 修后（`query_flag_round()=1`、`add_flag_round()=OK`）与 `play_boot.sh` + `play_stop.sh`（port 49106）验证。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `adm/kernel/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。

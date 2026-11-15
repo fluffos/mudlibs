@@ -36,3 +36,8 @@
 - **全量编译扫描**：使用 `build-debug/src/lpcc --batch libs/wxlm/config.fluffos` 扫描全部 `8,940` 个 `.lpc` 文件，0 编译错误、0 编译警告（零 `#pragma no_warnings`）。
 - **原生端验证**：`fluffos`（`Mud@2026`）在扬州醉仙客栈登录、冷重连、`look`、`score`、`update /d/city/kedian` 与 `quit` 全程无报错；另以女性临时角色（楚轻霜，关外客栈）验证注册、`look`、`hp`、`i`、`skills`、`help` 与 `quit` 正常（测试后已清理临时存档）。
 - **WASM 端验证**：通过 `scripts/wasm_client.js` 加载 `build-wasm/src` 与 `libs/wxlm` 完整启动全部预加载守护进程，使用 `fluffos` / `Mud@2026` 登录并执行 `look`、`score`、`quit`（`exit 0`，无报错），并同步生成 `scripts/wasm_keep_dirs.txt` 空目录清单。
+
+## `sefun::cat()` 缺文件与目录保护修复（2026-11-15，KB 06 §7.388）
+
+- `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
+- 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
