@@ -1454,3 +1454,8 @@ pristine + build-debug，归档端口 40056。`scripts/play_login.py` 注册进�
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## `sefun::read_file()` 截断参数修复（2026-11-15，KB 06 §7.389）
+
+- `adm/simul_efun/file.lpc` 中的 `read_file()` 仅声明单参数 `string read_file(string filename)`，两处放行分支均直接 `return efun::read_file(filename);` 并丢弃行号与行数，`feature/banghui.lpc` 的 `get_file_data("/adm/etc/wizlist")` 按行循环在 `--head` 下死循环直至触发 `Eval interrupted`；已改为 `varargs string read_file(string filename, int start_line, int number_of_lines)` 并在两处放行分支均透传三参。
+- 验证：`lpcc_eval.py` 通过 1/2/3 参测试（`a_len=3737 a2_len=3714 b_len=1 c_is0=1`）且 `new("/feature/banghui")->get_file_data("/adm/etc/wizlist")` 正常退出（`wizlist_n=-1`），`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 49306）启动验证通过。

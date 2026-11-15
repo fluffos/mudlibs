@@ -726,3 +726,8 @@ pristine + build-debug，归档端口 40039。`scripts/play_login.py` 注册并�
 
 - `adm/simul_efun/message.lpc` 中的 `cat()` 在缺失文件、目录或无权读取时 `read_file()` 返回 `0`，直接传入 `write()` / `message()` 后在 `receive_message()` 触发 `*Bad argument 1 to receive()`（`--head` 探针已复现确认）；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0，并经 `play_boot.sh` + `play_stop.sh` 实机启动通过。
+
+## `sefun::read_file()` 截断参数修复（2026-11-15，KB 06 §7.389）
+
+- `adm/simul_efun/message.lpc` 中的 `read_file()` 仅声明单参数 `string read_file(string file)` 并转调 `efun::read_file(file)`，丢弃 `start_line` 与 `number_of_lines`，导致分页/行读取（`(file, 2, 1)` 与 `(file, 999999, 1)`）在 `--head` 下均整篇返回 1078 字节且永不因越界返回 `0`；已改为 `varargs string read_file(string file, int start_line, int number_of_lines)` 并透传三参至 `efun::read_file(file, start_line, number_of_lines)`。
+- 验证：`lpcc_eval.py` 通过 1/2/3 参测试（`a_len=1078 a2_len=1059 b_len=23 c_is0=1 more=1 lang1=1 lang2=1`），`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 49300）启动验证通过。

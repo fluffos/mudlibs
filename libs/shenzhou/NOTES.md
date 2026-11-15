@@ -1532,3 +1532,8 @@ pristine + build-debug，归档端口 40066。`scripts/play_login.py` 注册并�
 
 - `adm/simul_efun/message.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## `sefun::read_file()` 补全 `varargs` 声明（2026-11-15，KB 06 §7.389）
+
+- `adm/simul_efun/message.lpc` 中的 `read_file(string file, int lines, int line)` 虽已透传三参，但缺少 `varargs` 修饰符；已统一补齐 `varargs` 声明，与全语料 `varargs string read_file(string, int, int)` 接口对齐。
+- 验证：`lpcc_eval.py` 通过 1/2/3 参测试（`a_len=1907 a2_len=1888 b_len=25 c_is0=1 more=1 lang1=1 lang2=1`），`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 49307）启动验证通过。
