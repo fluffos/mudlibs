@@ -512,3 +512,8 @@ pristine + build-debug，归档端口 40191。`scripts/play_login.py` 注册进�
 
 - `adm/simul_efun/message.lpc` 中的 `read_file()` 仅声明单参数 `string read_file(string file)` 并转调 `efun::read_file(file)`，丢弃 `start_line` 与 `number_of_lines`（`--head` 下 `(file, 2, 1)` 与 `(file, 999999, 1)` 均返回全篇 1078 字节）；已改为 `varargs string read_file(string file, int start_line, int number_of_lines)` 并透传三参至 `efun::read_file(file, start_line, number_of_lines)`。
 - 验证：`lpcc_eval.py` 通过 1/2/3 参测试（`a_len=1078 a2_len=1059 b_len=23 c_is0=1 more=1 lang1=1 lang2=1`），`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 49302）启动验证通过。
+
+## `feature/more.lpc` 多参 `start_more(0, y)` 缺字符串保护修复（2026-11-15，KB 06 §7.390）
+
+- `feature/more.lpc` 的 `void start_more(string msg, int y)` 因带第二参数 `y` 绕过了原 `scripts/lpc_fix_start_more.py` 单参正则，`msg` 为 `0` 时直接 `explode(0, "\n")` 报错。已由更新后的 `scripts/lpc_fix_start_more.py --apply` 首行补全 `if (!stringp(msg)) return;`。
+- 验证：`lpcc_eval.py` 修前 `--head` `start_more(0, 0)` 抛出 `*Bad argument 1 to explode()` (`FAIL`) → 修后 `e0=0 e1=0` `PASS`；`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 47205）启动验证通过。

@@ -665,3 +665,8 @@ pristine + build-debug（归档端口 40024，临时测试端口 49650）。`scr
 
 - `secure/sefun/file.lpc` 中的 `cat()` 在缺失文件、目录或无权读取时 `read_file()` 返回 `0`，直接传入 `write()` / `message()` 后在 `receive_message()` 触发 `*Bad argument 1 to receive()`（`--head` 探针已复现确认）；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0，并经 `play_boot.sh` + `play_stop.sh` 实机启动通过。
+
+## `system/daemon/mored.lpc` 多参 `start_more(who, 0)` 缺字符串保护修复（2026-11-15，KB 06 §7.390）
+
+- `system/daemon/mored.lpc` 的 `void start_more(object who, string msg)` 因多出 `object who` 参数绕过了原 `scripts/lpc_fix_start_more.py` 正则，传入非字符串 `msg` 时直接触发 `*Bad argument 1 to explode()`。已由更新后的 `scripts/lpc_fix_start_more.py --apply` 首行补全 `if (!stringp(msg)) return;`。
+- 验证：`lpcc_eval.py` 修前 `--head` `start_more(this_object(), 0)` 抛出 `*Bad argument 1 to explode()` → 修后 `e0=0 PASS`；`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 47206）启动验证通过。

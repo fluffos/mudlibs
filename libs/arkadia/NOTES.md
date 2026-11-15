@@ -820,3 +820,8 @@ pristine + build-debug，归档端口 40244。`scripts/mudplay.py`（port 49244�
 ## 系统与开放日志目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/wasm_keep_dirs.txt` 原有 0 条记录；补齐 `d/Standard/log`（`OPEN_LOG_DIR`）与 `syslog/log`（`master.lpc`、`purge.lpc`、`mail_gc.lpc` 写 `DESTRUCTED`/`PURGE`/`MAIL_GC`）。修后 `lpcc_eval.py` `file_size()` 两目录均 `-2` 存在；`play_boot.sh` clean。
+
+## `std/board/board_more.lpc` `more(0)` 缺字符串保护修复（2026-11-15，KB 06 §7.390）
+
+- `std/board/board_more.lpc` 的 `more(string arg, int start, string name)` 在 `start == 0` 分支直接执行 `lines = explode(arg, "\n");`，传入 `0`（如空公告/缺失文件）时抛出 `*Bad argument 1 to explode()`。已改为 `lines = stringp(arg) ? explode(arg, "\n") : ({});`，空文本按 `numlines == 0` 正常结束并清理分页器对象。
+- 验证：`lpcc_eval.py` 修前 `--head` 抛出 `*Bad argument 1 to explode()` → 修后 `more(0)` 与 `more("line1\nline2")`（各自新建实例）均 `e0=0 e1=0 PASS`；`play_boot.sh` + `play_stop.sh`（port 47209）实机启动通过。

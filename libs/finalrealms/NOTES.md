@@ -923,3 +923,8 @@ pristine + build-debug，归档端口 40216。`scripts/play_login.py`（port 492
 ## 运行期目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/wasm_keep_dirs.txt` 补齐 `banish`、`d/bf/banefall/log`、`d/mm/logs`、`d/newbie/grads/log`、`log/driver`、`log/errors`、`save/playertmp`、`save/post`、`secure/log`（修前 pristine 下 `/adm/zzeval.lpc` 与 `/secure/zzeval.lpc` 在 error_handler 写 `/log/errors/secure.err*` 与 `/save/playertmp/zztest` 均抛 `*Wrong permissions ... No such file or directory`；修后 `lpcc_eval.py` 两个探针均 `ZZRES=1` PASS）。`play_boot.sh` 与 `play_login.py`（`qafin` 进入种族大厅）均 PASS，stdout 与日志无报错。
+
+## `global/more_string.lpc` `more_string(0)` 缺类型保护修复（2026-11-15，KB 06 §7.390）
+
+- `global/more_string.lpc` 的 `more_string(mixed str, ...)` 仅检测 `if (!pointerp(str)) the_bit = explode(str,"\n");`，传入 `0`（如 `read_file()` 读不到缺失帮助/说明文件）时会触发 `*Bad argument 1 to explode() Expected: string Got: 0.`，且传入数组时也从未赋值 `the_bit`。已改为显式区分 `stringp(str)`、`pointerp(str)`，其余情况提示 `Empty String.` 并返回 `0`。
+- 验证：`lpcc_eval.py --at /secure/zzeval.lpc` 修前 `--head` 抛出 `*Bad argument 1 to explode()` → 修后 `more_string(0)` `e0=0` 返回 `0` 且 `PASS`；`play_boot.sh` + `play_stop.sh`（port 47207）实机启动通过。

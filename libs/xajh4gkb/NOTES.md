@@ -562,3 +562,8 @@ pristine + build-debug，归档端口 40154。`scripts/play_login.py` 注册/连
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## `feature/more.lpc` `start_more(0)` 缺字符串保护修复（2026-11-15，KB 06 §7.390）
+
+- 原 `scripts/lpc_fix_start_more.py` 取前 5 行时跨越了仅有 4 行的 `start_more(string msg)`，误命中紧随其后的 `start_more_file()` 内的 `if (!stringp(msg)) return;`；已通过修复括号边界后的 `scripts/lpc_fix_start_more.py --apply` 在 `start_more()` 首行插入 `if (!stringp(msg)) return;`。
+- 验证：`lpcc_eval.py` 修前 `--head` 抛出 `*Bad argument 1 to explode()` (`FAIL`) → 修后 `e0=0 e1=0` `PASS`；`lpc_format_changed.py` 零重排，且 `play_boot.sh` + `play_stop.sh`（port 47202）实机启动通过。

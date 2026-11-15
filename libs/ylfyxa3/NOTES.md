@@ -1184,3 +1184,8 @@ pristine + build-debug（归档端口 `40062`，测试端口 `49062`）。`scrip
 
 - 修复 `adm/daemons/brd.lpc`（`buildroom()`）：除 `restroom.o` 与 `lianroom.o` 外其余 `/clone/room/*.o` 模板（含 `menroom.o`）缺失，调整为先读模板并校验 `stringp(my_file)` 及 `stringp(this_file)` 后再修改当前房间。
 - 验证：`lpcc_eval.py` `brd->buildroom()`（`rec=1,7` 均返回 `0` `PASS`）。
+
+## `feature/more.lpc` `start_more(0)` 缺字符串保护修复（2026-11-15，KB 06 §7.390）
+
+- 原 `scripts/lpc_fix_start_more.py` 取前 5 行时跨越了仅有 4 行的 `start_more(string msg)`，误命中紧随其后的 `start_more_file()` 内的 `if (!stringp(msg)) return;`；已通过修复括号边界后的 `scripts/lpc_fix_start_more.py --apply` 在 `start_more()` 首行插入 `if (!stringp(msg)) return;`。
+- 验证：`lpcc_eval.py` 修前 `--head` 抛出 `*Bad argument 1 to explode()` (`FAIL`) → 修后 `e0=0 e1=0` `PASS`；`lpc_format_changed.py` 零重排，且 `play_boot.sh` + `play_stop.sh`（port 47204）实机启动通过。

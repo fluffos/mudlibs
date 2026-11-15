@@ -905,3 +905,8 @@ pristine + build-debug，归档端口 40213。`scripts/play_login.py`（port 492
 ## 系统与开放日志目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/wasm_keep_dirs.txt` 原有 0 条记录；补齐 `d/Genesis/log`（`OPEN_LOG_DIR`）与 `syslog/log`、`syslog/log/enter`、`syslog/log/purge`。修后 `lpcc_eval.py` `file_size()` 四目录均 `-2` 存在；`play_boot.sh` clean。
+
+## `obj/more.lpc` 与 `std/board/board_more.lpc` `more(0)` 缺字符串保护修复（2026-11-15，KB 06 §7.390）
+
+- `obj/more.lpc` 与 `std/board/board_more.lpc` 的 `more(string arg, int start, string name)` 在 `start == 0` 分支均直接执行 `lines = explode(arg, "\n");`，传入 `0` 时抛出 `*Bad argument 1 to explode()`。两文件均已改为 `lines = stringp(arg) ? explode(arg, "\n") : ({});`。
+- 验证：`lpcc_eval.py` 修前 `--head` 两文件均抛出 `*Bad argument 1 to explode()` → 修后 `more(0)` 与 `more("line1\nline2")`（各自新建实例）四项均为 `0` 且 `PASS`；`play_boot.sh` + `play_stop.sh`（port 47210）实机启动通过。

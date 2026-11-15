@@ -1040,3 +1040,8 @@ pristine + build-debug，port 40241。西语注册进入 `Plano Inmaterial`，`l
 ## 运行期目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/wasm_keep_dirs.txt` 补齐 `banish`、`log/driver`、`log/errors`、`save/playertmp`、`save/post`、`secure/log`。`lpcc_eval.py` `/save/playertmp/zztest`、`/log/errors/zztest`、`/secure/log/zztest` 修前全 FAIL → 修后均 `ZZRES=1` PASS；`play_boot.sh` clean。
+
+## `global/more_string.lpc` `more_string(0)` 缺类型保护修复（2026-11-15，KB 06 §7.390）
+
+- `global/more_string.lpc` 的 `more_string(mixed str, ...)` 仅检测 `if (!pointerp(str)) the_bit = explode(str,"\n");`，传入 `0`（如 `read_file()` 读不到缺失文件）时会触发 `*Bad argument 1 to explode() Expected: string Got: 0.`，且传入数组时也未赋值 `the_bit`。已改为显式区分 `stringp(str)`、`pointerp(str)`，其余情况提示 `Empty String.` 并返回 `0`。
+- 验证：`lpcc_eval.py --at /secure/zzeval.lpc` 修前 `--head` 抛出 `*Bad argument 1 to explode()` → 修后 `more_string(0)` `e0=0` 返回 `0` 且 `PASS`；`play_boot.sh` + `play_stop.sh`（port 47208）实机启动通过。
