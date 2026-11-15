@@ -1131,3 +1131,10 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug（`fluffos-wilderness` 驱动），归档端口 40251。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-15）
+
+pristine + build-debug（`fluffos-wilderness` 驱动，归档端口 `40251`，测试端口 `49251`）。
+
+- **修复（KB 06 §7.383）**：同步巡检同系 `std/menu.lpc:63`，发现与 `sanguozhi` 相同的 `protected void remove()` 问题，已改为 `void remove()`，避免 `destruct()`/`overrides` 跨对象 `remove()` 权限报错。
+- **验证**：`lpc_format_changed.py` KEEP、`lpcc --batch libs/wilderness/config.fluffos std/menu.lpc`（PASS，0 警告）、`check_ntfs_paths.py` clean；`play_boot.sh` + `play_login.py` 完成注册与 `look`/`quit`（`rc=0`、`steps=26`、`errs=[]`）。

@@ -1028,3 +1028,7 @@ pristine + build-debug，port 40236。
 ## 任务 generate NPC 基类（2026-11-10，KB 04 §6.15）
 
 同 zhongjidiyu：骨架档缺 `kungfu/class/generate/{chinese,questnpc,shennpc}`，自 zjdywzb 收入；`supply`/`explore` 对缺房 `get_object` 先 `objectp(env)`。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40236`，测试端口 `49236`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。

@@ -2493,3 +2493,9 @@ Also (2026-11-11): hy3 `logind` 在选码后立刻 `write_file("/topten/login/us
 **Fix:** `sizeof(statinfo) < 3` (mtime still at `[1]`) in `daemon/books.lpc` (brassring / dsIII / ds386 / dshakkard / riftsds; deadsouls_fluffos via `overlay/lib/daemon/books.lpc`). Swap to `SetSource` then `SetTitle` in `domains/default/obj/handbook.lpc` (same libs + dsII + overlay). Proof: pristine ds386 — before: empty Untitled index; after: full chapter list and chapter 1 text.
 **Detection:** `stat("/doc/hbook/chapter01")` sizeof 4; live `read index in handbook` on a fresh character after the book's `call_out(LoadBook, 1)`.
 
+### 7.383 Lima `std/menu.lpc`: `protected void remove()` breaks `destruct()`'s `call_other` (2 libs, 2026-11-15)
+**Symptom:** fresh character registration (after choosing talent archetype via `m_setgift`) or closing any `MENUS` menu prints on stderr: `apply() with insufficient permission: cob: secure/simul_efun, ob: sgdomain/modules/m_setgift#13, function: remove, origin: call_other, needs: public, has: protected`. Existing admin seed logins skip `m_setgift` and miss it.
+**Cause:** Lima's `secure/simul_efun/overrides.lpc` calls `catch(ob->remove(arg))` from outside the object (`call_other`) before falling back to `efun::destruct(ob)`, while `std/menu.lpc` still declares `protected void remove()`. Siblings `sgzmudsgz`, `spacemud`, and `swmud` already changed it to public `void remove()`.
+**Fix:** remove `protected` from `void remove()` in `std/menu.lpc` (`sanguozhi` upstream PR + pin bump, and `wilderness`).
+**Detection:** `grep -n "protected.*remove(" libs/*/work/std/menu.lpc`; live fresh-character flow opening/quitting any `MENUS` object.
+

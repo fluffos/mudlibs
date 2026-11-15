@@ -1148,3 +1148,7 @@ pristine + build-debug，port 40205（含先前 `log/open` keep）。
 - **缺陷**：`read index in handbook` 只有 `Untitled` 空目录；`read chapter 1` → `You can't read that in that.`。`BOOKS_D->LoadChapters` 要求 `sizeof(stat(file)) == 3`（MudOS）；FluffOS 为 4，章全部 `continue`。另 `SetTitle` 在 `SetSource("/doc/hbook")` 之前，标题记在默认 `/obj/book_source` 下。
 - **修复**：家族 `books.lpc` 改为 `sizeof(statinfo) < 3`；handbook 先 `SetSource` 再 `SetTitle`（KB 06 §7.382）。deadsouls_fluffos 走 overlay。
 - **证明**：修后 index 列出 Chapter 1–8，chapter 1 有正文；控制台安静。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40205`，测试端口 `49205`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。

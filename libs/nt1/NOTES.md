@@ -603,3 +603,9 @@ pristine + build-debug，port 40185。
 
 - **流程**：`gb` → 纯字母 ID → `y` → 姓「秦」名「风」→ 管理/普通密码×2 → 性格 `1` → 类型 `5` → `m` → 注册房 `register` → 生命之谷 `wash`/`born 扬州人氏`（规则 more `q`）→ 客店；`east` 马厩/`west` 回店；新建号 `quit` 半小时门闸选 `n`。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug / release 驱动（归档端口 `40185`，测试端口 `49185`）。
+
+- `build-debug` 下 `closed` 守护恢复 139 名离线玩家时在 ~2m15s 触发 `MemoryMax=3G` OOM（与 `play_boot.sh` 已知注释一致）；使用 `PLAY_QUIET_WAIT=2` 与常规发布驱动复测：`gb` → `qant` → `y` → 秦风 → 管理/普通密码 → `1`/`5`/`m` → `register qa@test.com` → 生命之谷 `wash` → `born 扬州人氏` → 扬州客店 `look`/`score`/`i`/`quit`/`n` 全程畅通，零 runtime error 或可修编译警告。本轮无新编程缺陷。

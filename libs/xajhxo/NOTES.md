@@ -1032,3 +1032,7 @@ xinfang/chatroom：`tell_object("ob", …)`→`tell_object(ob, …)`。
 `clone/user/amber` 继承缺失的 `/system/feature/command1`；`CHARACTER` 已有 `F_COMMAND`→`command.lpc`。薄别名会与 `nomask enable_player` 双继承冲突。删掉多余 inherit。
 
 验证：listcheck amber HEAD FAIL → PASS。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40069`，测试端口 `49069`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。

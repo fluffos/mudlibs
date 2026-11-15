@@ -1138,3 +1138,12 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 - `object *dependencies` 上写 `dependencies += ob`（标量）→ `Bad assignment ( object * vs object )`（sunshadow 的 `std/room` 已是 `+= ({ ob })`）。
 - 同形修复：`shadowgate` `std/room` 与两边 `d/deku/hhouse/inherits/test/room`；`cmds/mortal/room` 上轮已改。
 - 证明：`/std/room.lpc` listcheck 仍 PASS（HEAD/树）。
+
+## 深度功能测试（§10.7，2026-11-15）
+
+pristine + build-debug（归档端口 `40232`，测试端口 `49232`）。
+
+- **修复 1（`scripts/wasm_keep_dirs.txt` 运行期空目录缺失）**：本库此前在 `wasm_keep_dirs.txt` 中仅登记了 14 个 `log/` 目录，缺少 `adm/save/**`、`daemon/save/**`、`d/save/**` 等运行时保存目录。`std/user::setup()` 在第 1404 行调用 `init_skills(0)` 间接加载 `/daemon/world_events_d` 时，因无法写入 `/daemon/save/world_events.o.tmp` 中途抛错退出，导致新角色从未执行 `init_living()`、`basic_commands()` 与 `move(ROOM_SETTER)`，所有命令（含 `quit`）均停在 `Why?`。已将 `sunshadow` 在 `wasm_keep_dirs.txt` 补全至 137 个运行期目录（含 `adm/save`、`daemon/save`、`d/save` 及各字母分桶，剔除本地残留测试角色 `inv/<letter>/<name>`）。
+- **修复 2（`std/user.lpc` `net_dead2()` 空环境守卫）**：当玩家尚未入室（`ETO == 0`）即断线时，`net_dead2()` 第 2027 行直接调用 `file_name(ETO)` 抛出 `*Bad argument 1 to file_name() Expected: object Got: 0.`。已改为 `objectp(ETO) ? file_name(ETO) : 0`，并给第 2041 行 `message(..., ETO, exclude)` 补充 `if (objectp(ETO))` 守卫。
+- **修复 3（`std/living.lpc` `calculate_healing()` 映射初始化守卫）**：当 `healing` 尚未初始化为映射时，`calculate_healing()` 对 `healing["stuffed"]` 下标操作抛出 `*Illegal type of index`。已在函数入口补充 `if (!mapp(healing)) healing = ([]);`。
+- **验证**：`lpc_format_changed.py` KEEP、`lpcc --batch libs/sunshadow/config.fluffos std/user.lpc std/living.lpc`（PASS，0 警告）、`check_ntfs_paths.py` clean；`play_boot.sh` 复测 `qasun` 注册落入 `/d/shadowgate/setter`、`press button`、`look`、`score`、`quit` 全程畅通，驱动 stdout 与 `log/debug.log`/`debug.heavy` 均零错误（`errs=[]`）。

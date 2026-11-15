@@ -4995,3 +4995,7 @@ pristine + build-debug，port 40285。
 
 - **流程**：新号 `aohplay` / `Mud@2026`×2 → The docks（西/东出口）；`score` level 1 hp 20/20 copper 200；`west` quay / `east` 回码头；`quit`「Saving …」写 `data/a/<name>.o`；同密重登码头。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40285`，测试端口 `49285`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。

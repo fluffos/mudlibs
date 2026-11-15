@@ -1031,3 +1031,9 @@ pristine + build-debug，port 40074。指间 ZJ 握手（`crypt(ZJKEY,"zj")` 挑
 
 - **流程**：落地世外桃源 → `register`/`decide` → `west`/`out` 阎罗殿 → `pianshu msx` → `wash` → `born 中原人氏` → 悦来客栈；`look`/`score`；`quit`「欢迎下次再来！」。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40074`，测试端口 `49074`）。
+
+- 使用符合本库 `adm/daemons/logind.lpc` ZJ 指剑协议握手的定制客户端验证：接收 `ver1.0,<s` 挑战串后以 `crypt("123456789abcd", s[2..3])` 应答 `qazj║Mudpass║<crypt>║qa@test.com` 完成注册并选 `m║1║沈牧` 进入游戏，执行 `l`、`score`、`quit`（返回 `欢迎下次再来！`），驱动 stdout 与日志零错误/零警告（`errs=[]`）。本轮无新编程缺陷。

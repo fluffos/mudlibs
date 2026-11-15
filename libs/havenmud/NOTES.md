@@ -1031,3 +1031,7 @@ IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
 编程缺陷（已修，§7.358）：`ConfirmName()` 的 `log_file("players/newbies")` 在缺 `/log/players` 时抛错，注册停在 `An error occurred`（NOTES 早期虽写了占位，但 `log/` 被 gitignore，仓库与 clone 仍无此目录，且未进 `wasm_keep_dirs`）。`master_log_file()` 写前 mkdir 父目录；keep dirs 补 `log/players` 等。
 
 覆盖：注册（email/密码/性别/race `pick human`/town `pick haven`）→ 天空新手区 `look`/`inventory`/`score` → `quit` → 重连密码进入。驱动无 Wrong permissions。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40249`，测试端口 `49249`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。

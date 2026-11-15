@@ -1023,3 +1023,7 @@ pristine + build-debug，port 40073。
 
 - **流程**：双密码 → 类型 5 → `m` → 世外桃源；`register`/`decide` → `east`/`out` 阎罗殿 → `wash` → `born 扬州人氏`（规则 pager）→ 客店；`look`/`score`；`quit`「欢迎下次再来！」。约 12s 旁听无 `*Error`/`执行时段错误`。
 - 本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40073`，测试端口 `49073`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。

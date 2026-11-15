@@ -954,3 +954,10 @@ in about half of the first logins here (`copy_functions()` -> `lookup_ident()` w
 `north` 草庐（水镜先生）→ `west` 小村中心 → `quit` → 重连再进厅。
 
 驱动：无 compile warning、无 Wrong permissions。`old crypt()` 为驱动对旧口令哈希提示，非本库新缺陷。`help` 重建时有一行 `Warning base has more than one location`（玩家可见），未中断会话；未升格为本轮编程缺陷。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-15）
+
+pristine + build-debug（归档端口 `40210`，测试端口 `49210`）。
+
+- **修复（KB 06 §7.383）**：新建角色流程在 `sgdomain/modules/m_setgift` 销毁菜单时抛出 `apply() with insufficient permission ... function: remove, origin: call_other, needs: public, has: protected`。原因是 `std/menu.lpc:66` 将 `remove()` 设为 `protected void remove()`，而 `secure/simul_efun/overrides.lpc:59` 通过 `catch(ob->remove(arg))` 跨对象调用销毁方法。已改为 `void remove()`，上游 PR [`fluffos/sanguozhi#9`](https://github.com/fluffos/sanguozhi/pull/9) 已合并，pin 推进至 `80d7a95080865adcd053bbee2f5c03d2a94fd499`（同步更新 `libs/sanguozhi/meta.json` 与 `libs/sanguozhi/work`）。
+- **验证**：`format-corpus.mjs --check`（0 errors）、`lpcc --batch libs/sanguozhi/config.fluffos std/menu.lpc`（PASS，0 警告）、`check_ntfs_paths.py` clean；`play_boot.sh` + `play_login.py` 完整注册并执行 `look`/`quit` cleanly（`rc=0`、`errs=[]`）。

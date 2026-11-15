@@ -1019,3 +1019,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/adm/haras
 ## NTFS 路径规范化（2026-11-14，#30）
 
 新闻文件改用 `_` 分隔（同步改 `adm/daemons/news.lpc` 与 `cmds/adm/_setnews.lpc`）；`obj/tools/con.lpc`、`u/z/zur/std/con.lpc`、`u/b/blood/newbie/maze\` 及大小写重名文件/目录（`USER_old.lpc`/`_More_old.lpc`/`Area_old`）统一规范化。`lpcc_eval` 实测 4 条历史新闻全数解析，重启动 PASS。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40231`，测试端口 `49231`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。

@@ -1045,3 +1045,7 @@ pristine + build-debug，port 40055。
 
 - **流程**：`gb` → ID → `y` → 姓「秦」名「岭」→ 管理/普通密码×2 → `m` → 注册房 `register` → 生命之谷 `choose 1`/`washto 20 20 20 20`/`born 扬州人氏`（规则 more 页完）→ 客店；`east` 马厩/`west` 回店；新建号 `quit` 半小时门闸选 `n` 留下。
 - `data/topten` 写入正常；驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40055`，测试端口 `49055`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。

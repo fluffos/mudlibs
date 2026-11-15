@@ -1102,3 +1102,7 @@ pristine + build-debug，port 40229。
 ## handbook `stat()` 四元组（2026-11-10，KB 06 §7.382）
 
 与 ds386 同型：`BOOKS_D` `sizeof(statinfo) != 3` 跳过全部章节；handbook 先 `SetTitle` 后 `SetSource`。本轮已改 `books.lpc` + handbook 顺序。实测见 ds386。
+
+## 深度功能测试（§10.7，2026-11-15，重测）
+
+pristine + build-debug（归档端口 `40229`，测试端口 `49229`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
