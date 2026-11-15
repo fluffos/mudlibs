@@ -497,3 +497,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40191。`scripts/play_login.py` 注册进入游戏世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `cmds/std/app.lpc`（`main()`）：`/log/nosave/promotion_log.lpc` 未生成时 `read_file()` 返回 `0`，直接执行 `explode(file, "\n")` 会抛出 `*Bad argument 1 to explode()`；用 `if (stringp(file))` 包裹截尾重放逻辑。
+- 验证：`lpcc_eval.py` `load_object("/cmds/std/app")` `PASS`（`ZZ_xkm=0`）。

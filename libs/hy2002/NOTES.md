@@ -524,3 +524,8 @@ pristine + build-debug，port 40116。`scripts/play_login.py` 注册。
 
 - **流程**：GB/Big5 选 `gb` → 字母 id → 中文名 → 强密码（`Test1234`）→ 天赋 → email → 性别 → 海洋之初（newbie/oldplayer）；`look`/`score`/`i`；`quit` 存盘退出。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `adm/daemons/brd.lpc`（`buildroom()`）：归档缺少 `case 7` 模板 `/obj/JOBTWOROOM.o`（`buildjob2` 使用），原逻辑先改写当前房间再读模板并在 `replace_string(my_file, ...)` 抛出 `*Bad argument 1`；调整为先按 `rec` 读取模板并校验 `stringp(my_file)` 及 `stringp(this_file)`，模板缺失时提示并直接返回。
+- 验证：`lpcc_eval.py` 修前 `--head`（`rec=7` 报 `*Bad argument 1 to replace_string`）→ 修后（`ZZ_BRD_R7=0` `PASS`）。

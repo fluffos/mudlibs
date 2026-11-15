@@ -1236,3 +1236,8 @@ pristine + build-debug（归档端口 40068，临时测试端口 49520）。`scr
 ## `data/log/x` 分桶补全（2026-11-15，KB 06 §7.384）
 
 `log/runtime/system` 曾记录 `*Wrong permissions for opening file /data/log/x/xajhgate for append`（26 字母桶唯缺 `x`）。`scripts/lpc_keep_letters.py --apply xajh2 data/log` 补齐 `data/log/x`。`lpcc_eval.py` `/data/log/x/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` clean。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `system/menpai/autoresetd.lpc`（`AutoRoomReset()`）：归档未附带 `/etc/roomreset` 时 `read_file("/etc/roomreset")` 返回 `0` 并在 `explode(str, "\n")` 抛出 `*Bad argument 1 to explode()`；增加 `if (!stringp(str)) return;`。
+- 验证：`lpcc_eval.py` 修前 `--head`（`ZZ_XAJH2_AR="*Bad argument 1 to explode`）→ 修后（`ZZ_XAJH2=0` `PASS`），并通过 `play_boot.sh` + `play_stop.sh`（port 45604）实机启动验证。

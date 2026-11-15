@@ -30,3 +30,8 @@
 - **编译与警告**：全库 `.lpc` 经 formatter 规范化（`583` 个文件零 error、盲区扫描全清）后，对其余全部 `544/544` 个有效文件执行 `lpcc --batch` 与 `scripts/lpc_warnings.py` 扫描，全部编译并通过 `reset(0)` 初始化，`0` errors、`0` warnings、`0` `#pragma no_warnings`；将原归档中不符合 Windows/NTFS 规范的路径 `players/milamber/boardhelp/?`（改名为 `question` 并同步 `players/milamber/board.lpc`）及与文件冲突的目录 `etc/News`（改名为 `etc/NewsDir` 并同步 `obj/adstand.lpc`）修正后，`check_ntfs_paths.py` 全部通过。
 - **原生启动与实机测试**：`build/src/driver` 正常启动，登录横幅完整对齐显示 `Driver: NannyMUD/FluffOS` 与 `Hosted at: mudlibs.fluffos.info`。先后测试 `guest` 与新建角色 `testera` 注册，在教堂（`room/church`）、教堂礼拜堂（`east`）、绿地（`room/vill_green`）、村道（`vill_track` -> `vill_road1` -> `vill_road2`）、冒险者公会（`room/adv_guild`，`list` 显示任务列表与布告板）及商店（`room/shop`）间往返移动，验证 Harry NPC 主动打招呼与跟随移动、`score`/`who` 输出以及缺失南向出口（`/players/ingis/village/lane`）安全提示不崩溃；`log/debug.log` 全程无未捕获错误。
 - **WASM 验证（`scripts/wasm_client.js`）**：`build-wasm` 正常启动，登录横幅显示 `mudlibs.fluffos.info`，完成 `testerw` 新角色注册、`look`/`who`/`score` 与村镇移动（Harry 正常交互）及安全退出，无 WASM 运行期错误。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `obj/daemon/rlogind.lpc`（`query_rlogin()`）：归档未附带 `/etc/rlogins` 时 `read_file("/etc/rlogins")` 返回 `0` 并在 `explode(rl, "\n")` 抛出 `*Bad argument 1 to explode()`；增加 `if (!stringp(rl)) return 0;`。
+- 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to explode`）→ 修后（`ZZ_NANNY=0 res=0` `PASS`）。

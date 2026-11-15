@@ -565,3 +565,8 @@ pristine + build-debug，port 40197（补 `log/mud` 后）。`scripts/play_login
 
 - **流程**：`gb` → id/确认 → 中文名 → 强密码×2 → 天赋 → email/性别 → 侠客使者房（`oldplayer`/`newbie`）；`look`/`score`/`i`；`quit`。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `adm/daemons/brd.lpc`（`buildroom()`）：归档缺少 `/obj/{USER_ROOM,RESTROOM,WEAPONROOM,EATROOM,FIGHTROOM,JOBROOM,JOBTWOROOM}.o` 模板，原逻辑先改写当前房间出口后再读模板并直接 `replace_string(my_file, ...)`，导致 `*Bad argument 1 to replace_string()` 并残留死出口；调整为先读模板校验 `stringp(my_file)` 并校验 `stringp(this_file)` 后再写回。
+- 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to replace_string`）→ 修后（`ZZ_BRD_R7=0`、`ZZ_BRD_R1=0` `PASS`），并通过 `play_boot.sh` + `play_stop.sh`（port 45606）实机启动验证。

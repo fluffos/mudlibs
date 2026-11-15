@@ -1522,3 +1522,8 @@ pristine + build-debug，归档端口 40066。`scripts/play_login.py` 注册并�
 ## 注册队列目录 `/queue` 补全（2026-11-15，KB 06 §7.384）
 
 `adm/daemons/regid.lpc` 直接向 `/queue/register` 调用 `write_file()` 而无 `assure_file()`，未追踪空目录在干净环境抛 `*Wrong permissions ... No such file or directory`。`scripts/wasm_keep_dirs.txt` 补齐 `queue`。`lpcc_eval.py` `/queue/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` clean。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `cmds/std/app.lpc`（`main()`）：`/log/nosave/promotion_log.lpc` 未生成时 `read_file()` 返回 `0`，直接执行 `explode(file, "\n")` 会抛出 `*Bad argument 1 to explode()`；用 `if (stringp(file))` 包裹截尾重放逻辑。
+- 验证：`lpcc_eval.py` `load_object("/cmds/std/app")` `PASS`（`ZZ_shenzhou=0`）。

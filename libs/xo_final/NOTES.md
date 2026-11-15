@@ -655,3 +655,8 @@ pristine + build-debug（归档端口 40024，临时测试端口 49650）。`scr
   2. `system/daemon/toptend.lpc`：冷树缺少 `/data/topten/` 目录导致新人 `topten_checkplayer()` 写入 `/data/topten/age` 抛 `*Wrong permissions for opening file /data/topten/age for overwrite.`；在 `topten_save()` 补 `assure_file(f_name)`，并在 `topten_query()`/`topten_del()`/`topten_add()` 统一 `file_size(f_name) <= 0` 与空串保护。
   3. `scripts/gen_keep_dirs.py --merge` 同步补录 `scripts/wasm_keep_dirs.txt`（`data/log/*`、`data/topten`、`inherit/*`、`log/runtime` 等）。
 - **复测**：`lpcc` 编译改动的 `master.lpc` 与 `toptend.lpc` 0 警告；`play_login.py` 完整注册进入游戏世界，驱动 stdout 与 `debug.log` 0 运行时错误。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `system/menpai/autoresetd.lpc`（`AutoRoomReset()`）：归档未附带 `/etc/roomreset` 时 `read_file("/etc/roomreset")` 返回 `0` 并在 `explode(str, "\n")` 抛出 `*Bad argument 1 to explode()`；增加 `if (!stringp(str)) return;`。
+- 验证：`lpcc_eval.py` 修前 `--head`（`ZZ_XO_AR="*Bad argument 1 to explode`）→ 修后（`ZZ_XO=0` `PASS`）。

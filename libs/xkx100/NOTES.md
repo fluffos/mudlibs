@@ -522,3 +522,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40117。`scripts/play_login.py` 注册进入游戏世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `clone/misc/queryip.lpc`（`compare()` 与 `report()`）：归档缺少 `/data/ipdata.o`，`compare()` 对 `0` 执行 `line[0..15]` 抛出 `*Cannot index type 'int' using [ .. ] operator.`，且 `report()` 在 `!stringp(line)` 警告后未返回继续执行 `line[32..]`；增加 `if (!stringp(line) || strlen(line) < 32) return "小于";` 与 `report()` 提前 `return`。
+- 验证：`lpcc_eval.py` 修前 `--head`（`*Cannot index type 'int'`）→ 修后（`ZZ_X100=0/0 res="小于"` `PASS`）。

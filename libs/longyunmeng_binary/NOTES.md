@@ -331,3 +331,9 @@ pristine + build-debug，归档端口 40391。`scripts/play_login.py` 注册/连
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `d/miwudao/secret/npc/room.lpc`（`create()`）：归档未附带 `/task/room_location`，改为 `stringp(file) ? explode(file, "\n") - ({ "" }) : ({});`。
+- 修复 `adm/daemons/brd.lpc`（`buildroom()`）：改为先按 `rec` 读取房间模板并校验 `stringp(my_file)` 及 `stringp(this_file)`，再改写当前房间文件（保留 `.b` 同源源码格式）。
+- 验证：`lpcc_eval.py` 修前 `--head`（`room.lpc` 报 `*Bad argument 1 to explode`）→ 修后（`ZZ_LYMB=0/0` `PASS`）。

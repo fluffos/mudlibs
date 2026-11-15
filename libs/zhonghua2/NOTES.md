@@ -1233,3 +1233,8 @@ pristine + build-debug，归档端口 40028。`scripts/play_login.py` 注册进�
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `adm/daemons/tasknpcd.lpc`：`create()` 读 `/quest/dynamic_location` 后直接 `explode(file, "\n")`，以及 `read_table()` 在 `/quest/dynamic_npc_quest` 缺失时直接 `explode(read_file(file), "\n")`，均在冷树抛出 `*Bad argument 1 to explode()`；分别补充 `stringp(file)` 与 `stringp(raw)` 空返回值保护。
+- 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to explode`）→ 修后（`ZZ_zhonghua2=0` `PASS`），并通过 `play_boot.sh` + `play_stop.sh`（port 45602）实机启动验证。

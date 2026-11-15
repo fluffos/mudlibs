@@ -1179,3 +1179,8 @@ pristine + build-debug（归档端口 `40062`，测试端口 `49062`）。`scrip
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `adm/daemons/brd.lpc`（`buildroom()`）：除 `restroom.o` 与 `lianroom.o` 外其余 `/clone/room/*.o` 模板（含 `menroom.o`）缺失，调整为先读模板并校验 `stringp(my_file)` 及 `stringp(this_file)` 后再修改当前房间。
+- 验证：`lpcc_eval.py` `brd->buildroom()`（`rec=1,7` 均返回 `0` `PASS`）。

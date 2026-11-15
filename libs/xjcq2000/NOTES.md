@@ -1147,3 +1147,9 @@ pristine + build-debug，port 40034。`scripts/play_login.py` 注册。
 
 - 修复 `d/city/tohtml.lpc`（`writefile()`）：`/log/html/hourcount` 缺失导致 `sscanf(read_file(...), ...)` 抛出 `*Bad argument 1 to sscanf`，为 `/log/html/hourcount` 与 `/log/ppls` 的 `read_file()` 补充 `|| ""` 保护。
 - 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to sscanf`）→ 修后（`writefile()=OK`）与 `play_boot.sh` + `play_stop.sh`（port 49034）验证。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `adm/daemons/topd.lpc`（`list`/`compare`/`write_top`/`del_top`）：`/data/toplist.o` 缺失时 `read_file()` 返回 `0` 并在 `explode()`/`write_file()` 抛出 `*Bad argument 1`，全 4 个入口均补 `if (!stringp(msg)) return 0;`。
+- 修复 `adm/daemons/brd.lpc`（`buildroom()`）：归档缺少 `/obj/{USER_ROOM,RESTROOM,WEAPONROOM}.o` 模板，原逻辑先改写当前房间出口文件再读模板导致崩溃并残留死出口；调整为先读模板校验 `stringp(my_file)` 并校验 `stringp(this_file)`，模板缺失时提示并直接返回。
+- 验证：`lpcc_eval.py` 修前 `--head`（`topd` 与 `brd` 均报错）→ 修后（`ZZ_XJCQ_TOPD=0/0/0/0`、`ZZ_BRD_R7=0`、`ZZ_BRD_R1=0` `PASS`），并通过 `play_boot.sh` + `play_stop.sh`（port 45605）实机启动验证。

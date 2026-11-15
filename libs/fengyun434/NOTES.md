@@ -696,3 +696,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 pristine + build-debug，port 40011。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
 - 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `std/armor/questcloth.lpc`（`do_inset()`）：`/data/questarmor/whitecloth.lpc` 缺失时 `read_file()` 返回 `0`，直接传入 `replace_string()` 会抛出 `*Bad argument 1 to replace_string()`；增加 `if (!stringp(newfile)) return notify_fail(...)`。
+- 验证：`lpcc_eval.py` `load_object("/std/armor/questcloth")` `PASS`（`ZZ_fengyun434=0`）。

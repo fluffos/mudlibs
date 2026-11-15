@@ -782,3 +782,8 @@ pristine + build-debug，port 40107。`scripts/play_login.py` 注册并执行 `l
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `adm/daemons/{questd,taskd,questd20,taskd.ahxia,questd100,questd21,questd1}.lpc`：`create()` 中 `/d/obj/quest/dynamic_location` 或 `/quest/dynamic_location` 缺失时 `read_file()` 返回 `0`，直接传入 `explode()` 抛出 `*Bad argument 1 to explode()`；为 `create()` 的 `read_file()` 补充 `stringp(...) ? explode(..., "\n") - ({ "" }) : ({})` 保护，并在 `spread_quest()` 入口增加 `if (!sizeof(roomlines)) return 0;` 以防仅 `roomlines` 为空时在 `roomlines[random(sizeof(roomlines))]` 越界。
+- 验证：`lpcc_eval.py` 修前 `--head`（7 个文件均报 `*Bad argument 1 to explode`）→ 修后（`ZZ_HC=0/0/0/0/0/0/0` `PASS`），并通过 `play_boot.sh` + `play_stop.sh`（port 45601）实机启动验证。

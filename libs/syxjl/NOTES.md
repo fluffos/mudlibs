@@ -1225,3 +1225,8 @@ pristine + build-debug，port 40088。`scripts/play_login.py` 注册。
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 仅将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`（保留可合法为空的 `query_ban_file` 等 `== -1` 判断），补充 `write_file(f_name, str, 1)` 覆写标志与 `topten_del` 后重读空表保护，并将 `sscanf(astr, "%s(%s)%d;%*s", ...) != 3` 改为 `sscanf(astr[i], ...) < 3`。已验证 `lpcc_eval.py` 编译加载通过。
+
+## 缺文件两步 `read_file()` 保护修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `cmds/usr/hatred.lpc`（`main()`）：归档缺少 `/hate/mp_num` 与门派仇恨文件，直接执行 `sscanf(str, "%d", mp_num)` 抛出 `*Bad argument 1 to sscanf Expected: string Got: 0.`；补 `/hate/mp_num` `!stringp(str)` `notify_fail` 与循环内 `/hate/<pai>` `if (!stringp(str)) continue;`。
+- 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to sscanf`）→ 修后（`ZZ_SYXJL_HATRED=0` `PASS`）。

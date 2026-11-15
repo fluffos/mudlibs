@@ -1176,3 +1176,8 @@ pristine + build-debug，port 40052。`scripts/play_login.py` 注册并执行 `l
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 缺文件两步 `read_file()` 与缺失 cron 守卫修复（2026-11-15，KB 06 §7.387）
+
+- 修复 `adm/daemons/qqzqqjob.lpc`：归档缺 `/d/obj/quest/dynamic_location` 与 `/d/obj/quest/dynamic_quest` 导致 `create()` 在 `explode()` 抛出 `*Bad argument 1 to explode()`，此外第 42 行直接调用本库未附带的 `/adm/daemons/cron.lpc`；为 `create()` 增加 `stringp(...)` 与 `- ({ "" })` 保护、在 `spread_quest()` 增加 `if (!sizeof(roomlines)) return 0;`，并为 `cron.lpc` 调用补 `file_size("/adm/daemons/cron.lpc") > 0` 检查。
+- 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to explode`）→ 修后（`ZZ_wuhanzhan=0` `PASS`），并通过 `play_boot.sh` + `play_stop.sh`（port 45603）实机启动验证。
