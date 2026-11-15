@@ -1333,3 +1333,7 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 
 - **已修**：`include/winconf.h` 原先开启 `#define DB_SAVE 1`（而同族 `nitan6`/`nt6`/`nt6nitan6win` 均为 `#undef DB_SAVE`），导致无 MySQL 时所有新玩家在登录入口被 `DATABASE_D->query_db_status()` 拒绝断线；改为 `#undef DB_SAVE`，并将仅在 `#ifdef DB_SAVE` 分支使用的 9 个局部变量（`adm/daemons/logind.lpc` 6 个、`adm/daemons/dbased.lpc` 1 个、`cmds/usr/msg.lpc` 2 个）加 `#ifdef DB_SAVE` 守卫消除编译警告。
 - **复测**：改后完整注册（`reg`）进入生命之谷，`look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 零警告零错误。
+
+## 任务状态与向导地图目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `d/wiz`、`quest/chousha` 与 `quest/quest_jun/{meng,song}`。`lpcc_eval.py` `/quest/quest_jun/meng/zztest`（加载 `SECURITY_D` 并以 `Root` euid 测试）修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。

@@ -564,3 +564,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40274。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。
+
+## 运行期与 XML 分桶目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `d/year2k/obj/caipiao`（彩票站 `cpgirl.lpc`）、`log/{dlog,static,user,wiz}`、`web/antirobot`、`web/data` 及 `web/xmldata/{,a..z}`（`savetotxtd.lpc` 按首字母写 `.xml`）。`lpcc_eval.py` `/web/xmldata/z/zztest` 与 `/d/year2k/obj/caipiao/zztest` 修前双 FAIL → 修后均 `ZZRES=1` PASS；`play_boot.sh` 与 `play_login.py`（`qapku`）均 PASS clean。

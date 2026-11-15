@@ -919,3 +919,7 @@ pristine + build-debug，port 40216。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40216。`scripts/play_login.py`（port 49216）注册/连线并进入选族厅（`become`）验证 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 运行期目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `banish`、`d/bf/banefall/log`、`d/mm/logs`、`d/newbie/grads/log`、`log/driver`、`log/errors`、`save/playertmp`、`save/post`、`secure/log`（修前 pristine 下 `/adm/zzeval.lpc` 与 `/secure/zzeval.lpc` 在 error_handler 写 `/log/errors/secure.err*` 与 `/save/playertmp/zztest` 均抛 `*Wrong permissions ... No such file or directory`；修后 `lpcc_eval.py` 两个探针均 `ZZRES=1` PASS）。`play_boot.sh` 与 `play_login.py`（`qafin` 进入种族大厅）均 PASS，stdout 与日志无报错。

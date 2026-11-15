@@ -910,3 +910,7 @@ pristine + build-debug，port 40260。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40260。`scripts/play_login.py`（port 49260）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 运行期目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `banish`、`banish2`、`guild/thieves`、`log/log`。`lpcc_eval.py` `/banish2/zztest` 修前 FAIL（No such file or directory）→ 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。

@@ -853,3 +853,7 @@ pristine + build-debug，port 40247。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40247。`scripts/play_login.py`（port 49247）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 运行期目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `log`、`log/castle`、`wizards/gheldor/{log,save}`、`wizards/proge/armoury`（注：`secure/master.lpc` `valid_write()` 按设计拦截非向导对 `/log/` 子目录的写入）。`play_boot.sh` 重启 clean。

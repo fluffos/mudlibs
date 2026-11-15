@@ -609,3 +609,7 @@ pristine + build-debug，port 40185。
 pristine + build-debug / release 驱动（归档端口 `40185`，测试端口 `49185`）。
 
 - `build-debug` 下 `closed` 守护恢复 139 名离线玩家时在 ~2m15s 触发 `MemoryMax=3G` OOM（与 `play_boot.sh` 已知注释一致）；使用 `PLAY_QUIET_WAIT=2` 与常规发布驱动复测：`gb` → `qant` → `y` → 秦风 → 管理/普通密码 → `1`/`5`/`m` → `register qa@test.com` → 生命之谷 `wash` → `born 扬州人氏` → 扬州客店 `look`/`score`/`i`/`quit`/`n` 全程畅通，零 runtime error 或可修编译警告。本轮无新编程缺陷。
+
+## 仇杀任务状态目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `quest/chousha`（`quest/quest_jun/{meng,song}` 已有；跳过仅旧迁移指令读取的 `/data1`）。`lpcc_eval.py` `/quest/chousha/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。

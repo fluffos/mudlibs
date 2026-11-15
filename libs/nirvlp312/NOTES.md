@@ -402,3 +402,7 @@ pristine + build-debug，port 40277。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40277。`scripts/mudplay.py` 走完注册建角（`qanir`/`hint`/`male`/`human`/`none`）至 Adventurers' guild，执行 `look`/`north`/`south`/`score`/`quit`（正常存档），驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 运行期目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `closed/log`、`log/log`、`log/open`、`pa/log`、`pa/log/ip_data/names`、`pfiles/misc`、`pfiles/suicide2`、`room/housing/log`。`lpcc_eval.py` `/pfiles/suicide2/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。

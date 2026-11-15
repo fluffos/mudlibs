@@ -817,3 +817,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 pristine + build-debug，port 40115。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
 - 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 任务状态目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `quest/chousha` 与 `quest/quest_jun/{meng,song}`。`lpcc_eval.py` 写探针修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。

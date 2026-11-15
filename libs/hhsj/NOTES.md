@@ -1134,3 +1134,7 @@ pristine + build-debug，port 40106。自连握手：`id,password,x,email` → `
 ## 深度功能测试（§10.7，2026-11-15，重测）
 
 pristine + build-debug（归档端口 `40106`，测试端口 `49106`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
+
+## 任务状态与夺旗目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `quest/chousha`、`quest/quest_jun/{meng,song}` 与 `www`（`flagd.lpc` 读写 `/www/flag_round`）。`lpcc_eval.py`（加载 `SECURITY_D` 并以 `Root` euid 测试）修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。

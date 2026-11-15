@@ -889,3 +889,7 @@ avatar `pocket` 继承未定义的 `POCKETARMOUR`，而 `std.h` 仅有 `PARMOUR`
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40246。`scripts/play_login.py`（port 49246）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，`log/` 0 错误；stdout 仅启动时 `/daemon/monster_d.lpc` 提示原始压缩包缺少 `/daemon/save/monsters_unique.db` 与 `monsters_cloned.db`（原有资源缺失，非新缺陷）。
+
+## 运行期与分桶目录补全（2026-11-15，KB 06 §7.384）
+
+对比同宗 `sunshadow` 与 `debug.log` 报错（`backup_inventory` 无法保存 `/inv/backup_inv/...`），在 `scripts/wasm_keep_dirs.txt` 补齐 `adm/etc`、`adm/save/daemons`、`adm/save/letters/{0..9}`、`adm/save/{pacct,postal,users}` 各 `a..z` 分桶（含 `arrest`/`suicide`）、`d/magic/spellbook`、`d/player.village/keys`、`d/save/summons`、`d/sglib/strong/save/{,data,markers}`、`daemon/save/news/rn`、`inv/backup_inv/{,a..z}`、`log/adm`、`log/d/...` 及 4 处游戏指令实写 `realms/*/log`。`lpcc_eval.py` `/inv/backup_inv/z/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。

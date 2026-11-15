@@ -1147,3 +1147,7 @@ pristine + build-debug（归档端口 `40232`，测试端口 `49232`）。
 - **修复 2（`std/user.lpc` `net_dead2()` 空环境守卫）**：当玩家尚未入室（`ETO == 0`）即断线时，`net_dead2()` 第 2027 行直接调用 `file_name(ETO)` 抛出 `*Bad argument 1 to file_name() Expected: object Got: 0.`。已改为 `objectp(ETO) ? file_name(ETO) : 0`，并给第 2041 行 `message(..., ETO, exclude)` 补充 `if (objectp(ETO))` 守卫。
 - **修复 3（`std/living.lpc` `calculate_healing()` 映射初始化守卫）**：当 `healing` 尚未初始化为映射时，`calculate_healing()` 对 `healing["stuffed"]` 下标操作抛出 `*Illegal type of index`。已在函数入口补充 `if (!mapp(healing)) healing = ([]);`。
 - **验证**：`lpc_format_changed.py` KEEP、`lpcc --batch libs/sunshadow/config.fluffos std/user.lpc std/living.lpc`（PASS，0 警告）、`check_ntfs_paths.py` clean；`play_boot.sh` 复测 `qasun` 注册落入 `/d/shadowgate/setter`、`press button`、`look`、`score`、`quit` 全程畅通，驱动 stdout 与 `log/debug.log`/`debug.heavy` 均零错误（`errs=[]`）。
+
+## 运行期与背包备份目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `adm/etc`、`d/magic/spellbook`、`d/player.village/keys`、`d/save/summons`、`d/sglib/strong/save/{,data,markers}`、`daemon/save/news/rn`、`inv/backup_inv/{,a..z}`、`log/d/...` 及铸造/神殿捐献实写 `realms/...`。`lpcc_eval.py` `/adm/etc/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。

@@ -922,3 +922,7 @@ pristine + build-debug，port 40222。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40222。`scripts/play_login.py`（port 49222）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 运行期目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `banish`、`players`、`save/board`、`secure/log`。`lpcc_eval.py` `/save/board/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。

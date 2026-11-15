@@ -616,3 +616,7 @@ pristine + build-debug，port 40254。`scripts/play_login.py` 注册并执行 `l
 ## NTFS 路径规范化（2026-11-14，#30）
 
 两处 `inherit "std/Object"`（`largeruby.lpc`、`philosop/_cmd.lpc`）改为 `/std/object` 并移除 `std/Object.lpc`；`doc/efun/objects` 改 `objects_efun`（避 `OBJECTS/` 目录冲突）；`users/{A,P}` 并入小写字母目录；`nul` 保留文件名与尾空格/尾点旧档统一改名，公会重名旧档加 `_legacy`。重启动 PASS。
+
+## 运行期目录补全（2026-11-15，KB 06 §7.384）
+
+`scripts/wasm_keep_dirs.txt` 补齐 `adm/save/misc`、`d/guilds/{darksouls/data,owner,temp/data}`、`d/metaisland/area`、`d/standard/data`、`load/autoload`、`log/{adm,autoload,dumps,errors,lines,log/errors,personal,reports}`、`wizards/descartes/guild/news`、`wizards/ironman/waterworld/trivia/save`、`wizards/rull`、`wizards/whit/{logs,ocean/save}`（跳过 `#if` 条件隔离的 `/ftp`）。`lpcc_eval.py` `/adm/save/misc/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。
