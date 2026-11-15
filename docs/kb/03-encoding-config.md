@@ -285,8 +285,10 @@ Always launch with `cd libs/<slug> && …/driver config.fluffos`. See also
 
 A `MUD_PORT`/`PORTNO` constant checked in `master::connect()` rejects
 every connection when it doesn't match: the log looks clean, but the
-server is dead (`huoying`, `dfgsiiv13b`). Read what the constant gates.
-Some are cosmetic only.
+server is dead (`huoying`, and `dfgsiiv13b` before `b1fead83db1`, where
+`switch (port)` lacked a `default:` branch and dropped both custom test
+ports and WASM `port=0` until `MUD_PORT` and `default:` were merged after
+`case HTTP_PORT:`). Read what the constant gates. Some are cosmetic only.
 
 ### 5.4 `call_out(0) nest level : 10` copied from the testsuite config (2026-10-15)
 

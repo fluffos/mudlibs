@@ -305,9 +305,18 @@ mandates with no completion target:
   to the discovery pause above).
 
 ### 13.10 Environment gotchas
-- `node`/`emcc` missing in a subagent: PATH lives in `~/.zshenv`. A
-  stale shell snapshot
-  (`~/.claude/shell-snapshots/snapshot-zsh-*.sh`) may re-clobber it.
+- `node`/`emcc` missing in a subagent: PATH lives in `~/.zshenv` (`nvm`
+  is not installed; `node` is in `~/.local/opt/node/bin` and
+  `~/.local/node-v22.23.4/bin`, so bash subshells need `export
+  PATH="$HOME/.local/opt/node/bin:$PATH"` before running
+  `scripts/lpc_format_changed.py` or `format-corpus.mjs`). A stale shell
+  snapshot (`~/.claude/shell-snapshots/snapshot-zsh-*.sh`) may
+  re-clobber it.
+- `lpcc` takes a driver config file (`lpcc config.fluffos` from inside
+  `libs/<slug>`), never an `.lpc` path directly (passing an `.lpc` path
+  makes `lpcc` parse the LPC source as a config and fail with `*Error in
+  config file. Missing line: name`). Use `scripts/lpcc_check.sh` or pass
+  `lpcc` `-f ...` / eval after a config.
 - In LPC, `(int)` is a compile-time no-op on floats. Use `to_int()`.
 - Watch absolute RSS on long `lpcc`/driver runs; a host OOM needed a hard
   reset once.
