@@ -560,3 +560,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## §7.282 阴阳倒乱刃武器检查（2026-11-10）
 
 `kungfu/skill/yinyang-luanren.lpc`：`skill_type != "sword" || != "blade"` 恒真，`valid_learn` 永远拒。改 `&&`。对象可载入；剑/鞭表达式验证。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40274。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。

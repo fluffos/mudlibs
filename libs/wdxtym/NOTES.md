@@ -734,3 +734,7 @@ wdt / guangchang / qianmu workroom+board：补 `me`/`who`。
 ## §7.61 `message()` exclude 默认 0（2026-11-10）
 
 根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug（归档端口 40188，临时测试端口 49513）。`scripts/mudclient.py` 走指尖协议握手（`123456789abcd` → `id║密码║x║email` → `男性║1║测试` → 世外桃源），执行 `look`/`score`/`quit`，驱动 stdout 与新增 `debug.log` 行均 0 错误/警告。本轮无新编程缺陷。

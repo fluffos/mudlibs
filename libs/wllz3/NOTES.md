@@ -183,3 +183,7 @@ ouyangfeng：`tell_object("…推天式…")` → `tell_object(v1, …)`。
 ## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
 
 反编译 top_save；补 create mkdir("/topten")+assure_file(arg1)+keep。抽检注册进客店写出榜文件，无 debug.log。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40322。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。

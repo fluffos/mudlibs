@@ -1115,3 +1115,7 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
 
 create 已有；补 mkdir(DATA_DIR "topten")+keep。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40075。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。

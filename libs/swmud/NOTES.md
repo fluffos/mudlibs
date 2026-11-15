@@ -804,3 +804,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## NTFS 路径规范化（2026-11-14，#30）
 
 合并旧 `www/cgi/autodoc.lpc` 的 `.lpc` 后缀切片修复至 `WWW/cgi/autodoc.lpc` 后移除重复小写目录 `www/`（`HTTP_ROOT` 为 `/WWW`）。`fluffos-lima` 重启动 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug（`fluffos-lima` 驱动），归档端口 40227。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。

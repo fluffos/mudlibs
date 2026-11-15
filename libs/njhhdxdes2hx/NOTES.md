@@ -487,3 +487,7 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-09，master_yue 薄别名 §6.15）
 
 `class/huashan/yue` 继承缺失的 `/std/char/master_yue`；同目录 FAT 8.3 截断残留 `master~1.lpc`（`prevent_learn` + `huiyue`，岳不群专用）即其本体。薄别名。证明：HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40194。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。

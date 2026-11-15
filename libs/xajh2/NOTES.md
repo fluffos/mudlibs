@@ -1221,3 +1221,14 @@ pplroomd：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## 深度功能测试（2026-11-09，TASK 宏改指向 §6.16）
 
 `group_task` 继承未定义的 `TASK`（原 `#define` 已注释且路径缺 `todo/`）。改为 `#define TASK STD_DIR "todo/task"`。证明：task+group_task listcheck HEAD 1 PASS / 1 FAIL → 树 2 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug（归档端口 40068，临时测试端口 49520）。`scripts/play_login.py` / `scripts/mudclient.py` 注册登录。
+
+- **已修（KB 05 §7.11 + KB 06 §7.336）**：
+  1. `system/daemon/log_d.lpc`：`do_log()` 与 `do_record()` 内原 `// assure_file(file);` 被注释，首次建档写入 `/data/log/<letter>/<id>` 抛 `Wrong permissions ... No such file or directory`，取消注释恢复建目录。
+  2. `secure/daemon/master.lpc`：`error_handler()` 直接写 `/log/runtime/...`，`log/runtime/` 不存在时二次报错；写入前用 `file_size`/`mkdir` 确保 `LOG_DIR` 与 `LOG_DIR "runtime"` 存在。
+  3. `system/daemon/toptend.lpc`：`topten_add()` 原写 `if (file_size(f_name) == 0)` 漏掉文件不存在（`-1`）的情况，新人进世界触发 `topten_checkplayer()` 时 `read_file()` 返回 `0` 并在 `explode(str, "\n")` 抛 `*Bad argument 1 to explode()`；改为 `file_size(f_name) <= 0`（`topten_query`/`topten_del` 同步），`read_file()` 空串时回退初始写入，并在 `topten_save()` 补 `assure_file(f_name)`。
+  4. `scripts/gen_keep_dirs.py --merge` 同步补录 `scripts/wasm_keep_dirs.txt`（`data/log/*`、`data/topten`、`inherit/*`、`log/runtime`、`log/static`）。
+- **复测**：`lpcc` 编译改动的 3 个文件 0 警告；`play_login.py` 与 `mudclient.py` 完整注册进入小秦淮客寓，执行 `look`/`score`/`topten exp`（正确写出 `/data/log/s/sweepxj` 与 12 项 `/data/topten/*`），0 运行时错误。

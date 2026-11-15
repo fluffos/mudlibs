@@ -757,3 +757,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，inherit/tests 薄别名 §6.15）
 
 `mudlib/testsuite/single/efuns/*` 继承缺失的 `/inherit/tests`；本体在 `/mudlib/testsuite/inherit/tests`。薄别名。`/inherit/master/valid` 同形但本体仍缺 OVERRIDES_FILE/BASE，暂不别名。证明：alias+capitalize listcheck HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40037。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。

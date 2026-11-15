@@ -730,3 +730,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 深度功能测试（2026-11-09，hiccups/bboard 薄别名 §6.15）
 
 `contrib/bboard/exampleboard` 继承缺失的 `/open/hiccups/bboard`；本体在同目录 `contrib/bboard/bboard`（Hiccups@RoE）。薄别名 `open/hiccups/bboard.lpc` → `inherit "/contrib/bboard/bboard"`。证明（LIMA 系专用 lpcc）：HEAD 1 PASS / 2 FAIL → 树 3 PASS（bboard / exampleboard / 别名）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug（`fluffos-lima` 驱动），归档端口 40259。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。
