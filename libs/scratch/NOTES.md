@@ -89,3 +89,7 @@ Logs this boot:
 覆盖：连接欢迎 → `look`/`score` → 未知输入 `hello`/`who` 回显 `%O` → `quit` → 重连再 `look`/`quit`。
 
 无房间/账号/战斗（三文件 starter，设计如此）。驱动 stdout：无 warning、无 Error。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40280。`scripts/play_login.py` 连线进入 `The echo chamber` 并执行 `look`/回显（无建角流程的极简回显骨架库），驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

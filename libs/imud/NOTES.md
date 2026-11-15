@@ -300,3 +300,7 @@ this lib (live I3).
 `update`（无参 → `update what?`）→ `update /secure/commands/mudlist` → 未知命令 `look`/`quit` 兜底 `What?`（设计如此）→ 重连再 `mudlist`。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40209。`scripts/play_login.py` 连线成功并建立 `ROUTER SOCKET: 1`（仅含 `mudlist` 指令的极简骨架库），驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

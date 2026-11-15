@@ -463,3 +463,7 @@ The timer or prompt named a function one letter off the one the file defines (`i
 注册新号 → 管理员 `fluffos`/`testpass123` 进 workroom → quit。
 
 驱动：无 compile warning、无 Wrong permissions / cannot move。`old crypt()` 为驱动对旧口令哈希的提示，非本库编程缺陷。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40224。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

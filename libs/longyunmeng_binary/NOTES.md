@@ -323,3 +323,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
 
 反编译 topten_save(mixed)；补 create mkdir("/topten")+assure_file(arg1)+keep。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40391。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

@@ -447,3 +447,7 @@ pristine + build-debug，port 40242。
 
 - **流程**：GBK `n` → ID → 新号 `y` → 中文名 → 密码×2 → 性别 `m` → 茅草屋；`look`/`south` 前院/`north` 回屋；`quit`；同 ID 重登回茅草屋。
 - `score`/`i` 仍为引擎「什么？」（无对应 cmds，既有记录）。驱动 stdout / `debug.log` 无新编程错误。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40242。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

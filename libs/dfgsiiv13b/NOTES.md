@@ -504,3 +504,10 @@ finds nothing in this lib.
 `east` 广场西 / `west` 回客栈 → `save`/`quit` → 重连再进客栈/`score`/`quit`。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40144 / 临时端口 49722。
+
+- **已修**：`adm/obj/master.lpc` 的 `connect(int port)` 原 `switch (port)` 仅匹配 `case MUD_PORT:`（硬编码 `40144`）与 `case HTTP_PORT:`，缺少 `default:` 分支；在非默认端口（如 WASM `port=0` 或 `play_boot.sh` 临时端口 `49722`）下返回 `0` 并静默断开新连线。将 `case HTTP_PORT:` 置于前、`case MUD_PORT:` 与 `default:` 合并处理登录连接。
+- **复测**：`lpcc` 编译 `adm/obj/master.lpc` 0 警告；`scripts/mudclient.py` 在 `40144` 与 `49722` 均完整注册（种族 `human`）入小客栈执行 `look`/`score`/`quit`，驱动 stdout 与 `debug.log` 0 运行时错误。

@@ -330,3 +330,7 @@ pristine + build-debug，port 40283。
 
 - **流程**：新号 `mgplay` / `Mud@2026`×2 → Die beruehmte Abenteurergilde；`score` level 1 hp 20/20；`north` Hafenstrasse / `south` 回会所；`up` Foerderverein Buero / `down` 回会所；`quit`「Saving …」写 `data/m/<name>.o`；同密重登会所。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40283。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

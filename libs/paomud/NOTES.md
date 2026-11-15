@@ -106,3 +106,7 @@ Logs this boot:
 覆盖：`look`/`l`、`score`/`sc`、`hello`、`test`（命令热编译输出）、`fb`（本地 8000 副本连接失败后离开）、`quit`；二次连接同路径。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。内容天花板仍为无房间练习场（档案本色）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40281。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

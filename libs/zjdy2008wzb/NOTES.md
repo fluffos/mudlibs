@@ -498,3 +498,7 @@ pristine + build-debug，port 40110。
 
 - **流程**：纯字母 ID（数字 ID 会被拒）→ 双密码 → 类型 5 → `m` → 世外桃源；`register`/`decide` → `west`/`out` → `wash` → `born 扬州人氏`（规则 pager）→ 客店；`look`/`score`；`quit`「欢迎下次再来！」。约 15s 旁听无 `*Error`/`执行时段错误`。
 - 本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40110。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

@@ -270,3 +270,7 @@ pristine + build-debug，port 40264。
 
 - **流程**：任意名 → `/room/start`；`look`/`say`/`who`/`ls`/`rehash`；`update /cmds/who` 后 `who` 仍可用；`update /room/start` 断本连，**新连接**立刻进 startroom（§7.188）。
 - `quit`/`inventory` 等仍 `What?`（骨架未实现，既有记录）。驱动 stdout 无新编程错误。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40264。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

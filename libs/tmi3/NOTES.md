@@ -39,3 +39,7 @@
 ## §7.297 sefun `cat()` 未检查 `read_file`（2026-11-10）
 
 `adm/simul_efun/cat.lpc`：`write(read_file(file))` 在档案缺失时把 0 交给 `write`，登录横幅等会中断。改为 `write(read_file(file) || "")`。缺失路径不再报 Bad argument。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40392。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

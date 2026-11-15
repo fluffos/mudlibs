@@ -142,3 +142,7 @@
 ## §7.340 `blockade`/`recovermud` 缺 `data/keep/`（2026-11-10）
 
 `cmds/arch/blockade.lpc` 向不存在的 `data/keep/` `cp`；`recovermud.lpc` 对缺失 keep 文件 `cp` 失败且可能在解锁前中断。`blockade` 前 `mkdir("/data/keep")`，`recovermud` 对缺失 `src` `continue`（`archBAK` 同）。两命令可载入。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40393。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

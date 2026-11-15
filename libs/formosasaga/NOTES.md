@@ -268,3 +268,7 @@ python3 scripts/mudclient.py 127.0.0.1 40276 --timeout 70 --idle 8 \
 
 驱动 stdout：无 compile warning、无 runtime Error。无其他新编程缺陷。
 `who` 仍为「什麼？」（指令表无 who，既有设计）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug（归档端口 40276，临时测试端口 49740）。`scripts/mudclient.py` 选语系 `2` 注册矮人角色并登入成功，触发初始踏印 `geo:minxiong（初識）`，驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

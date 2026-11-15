@@ -338,3 +338,7 @@ xinfang：`tell_object("ob", …)`→`tell_object(ob, …)`。
 `east` 大街 / `west` 回商号 → `save`/`quit` → 重连再进商号/`score`/`quit`。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40195。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

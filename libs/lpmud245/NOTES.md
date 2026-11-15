@@ -481,3 +481,7 @@ registration, a mortal's first commands, then the same character hand-promoted t
 
 驱动 stdout：仅 §10.9 `Unable to open log file: "log/debug.log"`（启动路径）。无 compile warning、无 runtime Error。
 电梯门开着时 `push N` 显示 `Nothing happens` 为原设计（须先 `close door`）。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40262。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

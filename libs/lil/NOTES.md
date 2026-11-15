@@ -333,3 +333,7 @@ operation plus one assignment, so its absolute numbers are a little higher. The 
 `look`/`help` 兜底 `What?`（设计如此）→ `quit` → 重连再 `who`/`quit`。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40226。`scripts/play_login.py` 连线进入极简 shell（仅支持 `dest/update/ed/eval/efun/rm/say/who/quit/shutdown`），驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

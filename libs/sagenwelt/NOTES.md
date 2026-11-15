@@ -206,3 +206,7 @@ pristine + build-debug，port 40282。
 
 - **流程**：直连 catalog → `look`/`l` The Void；`score` Guest；`xyzzy` → What?；`quit`「Goodbye.»；重连同样 look/score/quit。无账号、无存档（骨架）。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。不发明 Domains 房间。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40282。`scripts/play_login.py` 连线进入 `The Void` 并执行 `look`（无建角流程的目录占位骨架库），驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

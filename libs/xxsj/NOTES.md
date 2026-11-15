@@ -179,3 +179,7 @@ real clean run, not a dead log. Cosmetic only: config
 回坊 `craft 木剑`（攻击 10→15）→ 藏经阁 `talk`/`learn 基础剑诀`（攻击 15→18）→ `quest accept 1`/`status` → `quit`。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。`go up` 在武器坊不可用（出口为 `north`）属房间设计，非 bug。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40279。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

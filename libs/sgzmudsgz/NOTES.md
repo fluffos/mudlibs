@@ -252,3 +252,7 @@ hylib/dtxy) stay confirmed duplicates.
 `west` 小村中心 / `east` 回草庐 → `save`（系统自动存）/`quit` → 重连再进草庐/`score`/`quit`。
 
 驱动 stdout：无 compile warning、无 runtime Error（仅有既有 old crypt 提示）。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug（归档端口 40196，临时测试端口 49741）。`scripts/mudclient.py` 走 `new` 注册并在 `q` 退出大事记分页后进入「三国演义玩家天赋设置」界面，驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

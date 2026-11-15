@@ -573,3 +573,7 @@ pre-rename tree); the config has three obsolete lines the driver reports (`addre
 ## handbook / BOOKS_D `stat()`（2026-11-10，KB 06 §7.382）
 
 overlay：`sizeof(statinfo) < 3` 与 `SetSource`→`SetTitle` 顺序。详见 ds386 NOTES。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40207。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

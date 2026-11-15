@@ -193,3 +193,7 @@ pristine + build-debug，port 40284。
 
 - **流程**：新号 `aoeplay` / `Mud@2026`×2 → 教堂（`look` 见坑/西门/south）；`score` level 1 hp 20/20 gold 50；`south` 村绿 / `north` 回教堂；`quit`「Saving …」写 `data/a/<name>.o`；同密重登教堂。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40284。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。

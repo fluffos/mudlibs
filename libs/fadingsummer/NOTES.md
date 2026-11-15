@@ -40,3 +40,7 @@
 ## §7.297 sefun `cat()` 未检查 `read_file`（2026-11-10）
 
 `system/simul_efun/simul_efun.lpc`：`write(read_file(file))` 在档案缺失时把 0 交给 `write`，登录横幅等会中断。改为 `write(read_file(file) || "")`。缺失路径不再报 Bad argument。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug（归档端口 40395，临时测试端口 49731）。`scripts/mudclient.py` 走 Passkey 注册流程进入 `The Void` 并执行 `look`/`quit`（`Goodbye.`），驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
