@@ -945,3 +945,7 @@ pristine + build-debug，port 40010。
 - **玩法**：`look` / `score` / `i` / `north`（东方学园）/`south` 回公会 / `east`/`west` 大街；控制台安静，无 `*Error` / Wrong permissions。
 - **观察**：部分应答相对指令慢一拍（mudplay 读窗与 ES 回显节奏），非本轮新缺陷。
 - 本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40010。`scripts/mudplay.py`（port 49010，含真实姓名回车跳过提示）完成注册进入冒险者公会并执行 `look`/`score`/`quit`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。

@@ -768,3 +768,7 @@ issues encountered.
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
 （`data/login`/`data/user` 在本库 `.gitignore` 内，管理员档未入库。）
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40235。**修复 `adm/obj/master.lpc` `connect(int port)` 缺少 `default:` 分支（KB 03 §5.3）**：原 `switch (port)` 仅匹配 `MUD_PORT`（40235）与 `HTTP_PORT`，导致非常规端口（49235）与 WASM（`port=0`）均返回 `0` 并拒收连接。将 `case HTTP_PORT:` 置于前、`case MUD_PORT:` 与 `default:` 合并。验证：`lpc_format_changed.py` 保留原格式、`lpcc --batch libs/naruto/config.fluffos adm/obj/master.lpc` PASS（0 警告），`play_boot.sh`（port 49235）+ `play_login.py` 与 `wasm_client.js`（`port=0`）均顺利连线并正常注册入场，stdout 0 错误/警告。

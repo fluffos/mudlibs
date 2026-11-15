@@ -906,3 +906,7 @@ pristine + build-debug，port 40260。
 - **发现**：新角 `getgender` 后拟迁入 `race/room` 时 `save_me` 抛 `*Could not open /p/h/NAME.o.tmp for a save.`；移动中断，落在黑暗处（Race: 0，`look` → It's too dark，`quit` 亦不存盘，重登 “Your player file has expired.”）。`work/p/{a..z}` 曾手工建过，但空目录不进 git，`wasm_keep_dirs` 未收录。
 - **修复**：`scripts/lpc_keep_letters.py --apply holymission p`（+27：`p` 与 a–z）。语料内仅本库用 `p/<letter>/`。
 - **复测**：菜单 `1` → `m` → Race room `list`/`choose human` → 教堂五出口 → `south` 绿地 → `quit`「Saving …」写 `p/h/<name>.o`；同密重登教堂，`score` Race human。无 Could not open。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40260。`scripts/play_login.py`（port 49260）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

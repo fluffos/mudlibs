@@ -666,3 +666,7 @@ The code of this lib writes logs into 5 subdirectories of `log/`: `log/adm` (`li
 **编程缺陷（KB 06 §7.358）：** 进 `/domains/Praxis/supply` 时 Horace `create`→`set_level`→`set_stats` 对非特权对象 `log_file("stats")`，sefun 改写为 `/log/open/stats`；缺 `log/open/` 目录则 `write_file` 抛错，房间加载失败，玩家停在街上并看到权限错误。已把 `log/open`（及 NOTES 曾列的其它 log/tmp/postal 空目录）写回 `scripts/wasm_keep_dirs.txt`，并在 `overlay/lib/` 放 `.gitkeep`。修复后：进店、`list`/`cost vial` 正常，`save`/`quit`/`relogin` 正常。
 
 观察：步行后 stamina 可为负（`score` 显示 `-13 (84)`）；`move_player` 每次 `add_sp(-1)` 且未见下限。未在本轮单独修。`/daemon/soul` 启动时仍有既有 parse 噪音。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40208。`scripts/play_login.py`（port 49208）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

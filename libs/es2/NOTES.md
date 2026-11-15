@@ -682,3 +682,7 @@ pristine + build-debug，port 40214。
 
 - **缺陷**：`adm/daemons/logind.lpc` 的 `get_name()` 在设中文名之前有残留 `printf("%O\n", ob);`，注册时打出 `/obj/login#N`。已注释（同 dtsl 族改法）。语料扫 live `logind.lpc`：32 库 39 处一并注释（`where` 巫师指令与 `/u/` 副本不动）。
 - **证明**：修前中文名后可见 `/obj/login#1`；修后同流程（英文名→确认→中文名→密码×2→email→性别）入雪亭饮风客栈，`look`/`score`/`i`/`east` 广场/`west` 回客栈/`quit`；回显无 object dump；控制台无 `*Error` / Wrong permissions。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40214。`scripts/play_login.py`（port 49214）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

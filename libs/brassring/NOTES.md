@@ -690,3 +690,7 @@ pristine + build-debug，port 40265（submodule-patch）。
 - **流程**：名确认 → 年满 13 → 非读屏 → 密码×2 → 性别 → email → `pick human` → 自选技能（6 主/4 次/4 小）→ news → start room；`look`/`score`/`i`；`read index in handbook` 出 8 章真标题（非 Untitled）；`enter town` 入村口；`quit`。
 - 控制台无 `*Error` / Wrong permissions。本轮无新编程缺陷（§7.358 `/log/open`、§7.382 handbook 前轮已证）。
 - **观察**：chargen 比 dsIII 多读屏/email/技能槽；年龄问「13+」答 `n` 会直接拒玩。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40265。`scripts/play_login.py`（port 49265）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

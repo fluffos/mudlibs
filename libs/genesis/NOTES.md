@@ -898,3 +898,6 @@ items, no shops exist to test against.
 
 返回登录时若存档没有种族躯体 `player_file`（本移植没有 `/d/Genesis/race/*`），`validate_playerfile()` 会走 `ghost_player->enter_new_player()`。该函数在 `enter_game()` 之前 `SECURITY->save_player()`，把仍是空的 clone 写进玩家 `.o`，把完整存档截成约 362 字节；随后 `load_player()` 读到的就是这份残档，所以 `login_time`/`login_from`/`default_start_location` 全是默认值，向导每次都看到 SERIOUS PROBLEM，凡人则被 `enter_game()` 里的凡人重置路径掩盖。`secure/login.lpc`：已有 `.o` 时改走 `swap_to_player()`；`ghost_player.lpc`：仅在文件不存在时才首次保存。证明：`fluffos`/`Mud@2026` 登录显示上次真实时间与 `localhost`，进入 `bootstrap_room`，无 SERIOUS PROBLEM；登录全程 `.o` 保持完整大小。
 
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40213。`scripts/play_login.py`（port 49213）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

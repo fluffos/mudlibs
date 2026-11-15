@@ -768,3 +768,7 @@ pristine + build-debug，port 40190。ZJ 握手：`ver1.0,<salt>` → `id,pw,x,e
 - **发现**：首次 `score` 等指令打出 `WARNING 这里发现了臭虫`；`debug.log`：`*call_other() couldn't find object '/adm/daemons/emote_d'`（`commandd`）。`emote_d.create()` 在 `restore_object(/data/emotion/emotion.o)` 失败时 `destruct(this_object())`；本库只有空的 `data/emotion/.gitkeep`，无种子存档，守护进程一加载即自毁。
 - **修复**：从同宗 `hhsj` 采纳 `data/emotion/emotion.o`；`wasm_keep_dirs` 补 `data/emotion`。
 - **复测**：`register` → `zz 1`/`xuan 1`/`choose 1`/`washto 50 50 50 50` → 世界之树；`score` 无臭虫；`debug.log` 静音。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40190。`scripts/play_login.py`（port 49190）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

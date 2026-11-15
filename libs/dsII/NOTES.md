@@ -924,3 +924,7 @@ IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
 ## handbook / BOOKS_D `stat()`（2026-11-10，KB 06 §7.382）
 
 仅 handbook 顺序（无 BOOKS_D 标题问题较轻）：`sizeof(statinfo) < 3` 与 `SetSource`→`SetTitle` 顺序。详见 ds386 NOTES。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40228。`scripts/play_login.py`（port 49228）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

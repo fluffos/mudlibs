@@ -885,3 +885,7 @@ avatar `pocket` 继承未定义的 `POCKETARMOUR`，而 `std.h` 仅有 `PARMOUR`
 ## §7.282 `_fixlevels` 职位链（2026-11-10）
 
 `cmds/adm/_fixlevels.lpc`：`position != "god" || != "arch"` 恒真，xmote 降级分支对谁都 return 0。同文件后一段已是 `&&`；前段改为 `&&`。`sunshadow` 同改。对象可载入；god neither→0 / mortal→1。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40246。`scripts/play_login.py`（port 49246）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，`log/` 0 错误；stdout 仅启动时 `/daemon/monster_d.lpc` 提示原始压缩包缺少 `/daemon/save/monsters_unique.db` 与 `monsters_cloned.db`（原有资源缺失，非新缺陷）。

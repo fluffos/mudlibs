@@ -929,3 +929,7 @@ pristine + build-debug，port 40230（submodule-patch）。
 
 - **流程**：名确认 → 年满 13 → 非读屏 → 密码×2 → 性别 → email → `pick human`（无技能槽，`SKILL_SELECTION` 未开）→ news → start room；`look`/`score`/`i`；`read index in handbook` 真章节；`enter town`；`quit`。
 - 控制台无 `*Error` / Wrong permissions。本轮无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40230。`scripts/play_login.py`（port 49230）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

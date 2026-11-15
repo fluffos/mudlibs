@@ -849,3 +849,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 重连再进/`score`/`quit`。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40003。`scripts/play_login.py`（port 49003）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

@@ -317,6 +317,9 @@ mandates with no completion target:
   makes `lpcc` parse the LPC source as a config and fail with `*Error in
   config file. Missing line: name`). Use `scripts/lpcc_check.sh` or pass
   `lpcc` `-f ...` / eval after a config.
+- `scripts/lpc_format_changed.py` reads `sys.stdin` whenever zero
+  file path arguments are supplied; always pass explicit changed file
+  paths on the command line (or pipe from `git diff --name-only`).
 - In LPC, `(int)` is a compile-time no-op on floats. Use `to_int()`.
 - Watch absolute RSS on long `lpcc`/driver runs; a host OOM needed a hard
   reset once.

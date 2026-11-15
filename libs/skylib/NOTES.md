@@ -918,3 +918,7 @@ pristine + build-debug，port 40222。
 
 - **流程**：菜单 `N` → 名确认 → 密码×2 → gender → 起始裸房；`look`/`score`/`i`；`help quit` 先前因 `save_object(/doc/helpnr/...)` 无目录抛错并令后续指令全变 `What?`。`create_nroff()` 在 `save_object` 前 `mkdir` 父目录（`[0..<1]`）；`wasm_keep_dirs` 补 `doc/helpnr`/`creatornr`/`mannr`。同形：`mofn`、`discworld`/`dw_fluffos_v1`/`v2`、`finalrealms`、`ninetears`。
 - 修后：`help quit` 出正文，随后 `look`/`score`/`i`/`quit`（「Thanks for Playing!」）正常；`doc/helpnr/.doc.helpdir.quit.o` 已写出。本轮登录后偶发 `What?`（newbie_junk / 既有 cosmetic）仍在。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40222。`scripts/play_login.py`（port 49222）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

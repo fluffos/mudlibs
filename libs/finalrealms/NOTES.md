@@ -915,3 +915,7 @@ pristine + build-debug，port 40216。
 ## NTFS 路径规范化（2026-11-14，#30）
 
 `F3.lpc`/`F5.lpc` 改名 `F3_alt.lpc`/`F5_alt.lpc` 并同步修正 `H5.lpc` 出口；`doc/driver/Platforms` 改名 `Platforms.txt`（避免与 `platforms/` 冲突），其余含非法字符与大小写重名文档/备份统一规范化。重启动 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40216。`scripts/play_login.py`（port 49216）注册/连线并进入选族厅（`become`）验证 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

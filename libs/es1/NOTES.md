@@ -876,3 +876,7 @@ pristine + build-debug，port 40239。
 - **缺陷**：`std/user.lpc` 的 `setup()` 在「上次连线」提示前有一行残留调试 `write("aadsaaaaaaaaaaaaaaaaaaaa\n\n")`，每次登录都打到玩家屏幕。不在 `raw/`；`es1_win` / `esI` 早先已删。本库删掉该行。
 - **证明**：删前注册可见 `aadsa…`；删后同流程注册（英文名→中文名→密码→性别→种族→email→RETURN）入冒险者公会，`look`/`score`/`quit` 正常，回显无 `aadsa`，控制台无 `*Error`。
 - 本轮其余玩法无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40239。`scripts/mudplay.py`（port 49239）按提示完成注册进入冒险者公会并执行 `look`/`score`/`quit`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。

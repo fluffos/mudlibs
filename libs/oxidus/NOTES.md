@@ -659,3 +659,7 @@ Bugs behind the warnings:
 手启：`reset --hard` + `apply_lib_patches`（0001–0006）+ overlay（含 `include/driver/*.h`）；删 `adm/custom/first_user` 与 `data/obj/adm/daemons/account.o` 做干净首管；端口 40256。
 
 覆盖：注册账号 `deepox`/`Mud@2026` → `n` → 角色 `elmswood` → 「You are now an admin.」落在 Developer Workroom（`home/e/elmswood/workroom.lpc` 已在）→ `look`/`score`/`who` → `square`/`east`/`west`/`home`/`save`/`quit` → `elmswood@deepox` 重连仍进 Workroom。`/log/catch` 空。无新编程缺陷。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40256。`scripts/mudplay.py`（port 49256，账户+角色双层选单注册流）建号进场并执行 `look`/`score`/`who`/`quit`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。

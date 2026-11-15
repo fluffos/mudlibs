@@ -948,3 +948,7 @@ pristine + build-debug，port 40072。
 
 - **流程**：双密码注册 → `register`/`decide` → `east`/`out` 阎罗殿 → `wash` → `born 扬州人氏`（骨架档缺城池，牛头提示失败，状态不落盘）→ `look`/`quit`；重连仍在阎罗殿。
 - **真 bug**：任务守护心跳 `new(.../questnpc|shennpc)` 时本档无 `kungfu/class/generate/`，`call_other(0)`；`supply`/`explore` 对缺房 `get_object` 得 0 后 `present(..., 0)`。自 zjdywzb 收入 `chinese`/`questnpc`/`shennpc`；`init_quest` 加 `objectp`；`supply`/`explore` 先判 `objectp(env)`（同形扫过 50+ 库）。修后心跳静默 ≥30s。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40072。`scripts/play_login.py`（port 49072）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

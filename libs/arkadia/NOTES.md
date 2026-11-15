@@ -812,3 +812,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## NTFS 路径规范化（2026-11-14，#30）
 
 `doc/help/general/?` 改名 `_qmark` 并更新 `/cmd/live/info.lpc` 映射；`doc/help/wizard/` 大小写重名旧版改名 `*_orig`。`lpcc_eval` 实测 `_qmark` 286B 可读，全库重启动 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40244。`scripts/mudplay.py`（port 49244，波兰语注册流）建号并执行 `spojrz`/`stan`/`zakoncz`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。

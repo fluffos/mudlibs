@@ -817,4 +817,4 @@ PID.
 
 ## 深度功能测试（§10.7，2026-11-14）
 
-pristine + build-debug，port 40059。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。
+pristine + build-debug，归档端口 40059。**补齐 `adm/obj/master.lpc` `connect(int port)` `default:` 分支（KB 03 §5.3）**：原 `switch (port)` 仅匹配 `MUD_PORT`（40059）与 `HTTP_PORT`，导致非常规测试端口与 WASM（`port=0`）连线失败。将 `case HTTP_PORT:` 前置并合并 `case MUD_PORT:` 与 `default:`（保持原 CRLF 换行）。验证：`lpc_format_changed.py` 0 改动、`lpcc --batch libs/huoying/config.fluffos adm/obj/master.lpc` PASS（0 警告），`play_boot.sh`（port 49059）+ `play_login.py` 与 `wasm_client.js`（`port=0`）均顺利连线并 0 错误/警告。

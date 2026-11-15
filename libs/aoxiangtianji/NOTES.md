@@ -821,3 +821,7 @@ pristine + build-debug，port 40101。
 ## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
 
 create 已有；补 mkdir(DATA_DIR "topten")+keep。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40101。`scripts/play_login.py`（port 49101）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。

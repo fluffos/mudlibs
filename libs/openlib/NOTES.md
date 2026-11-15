@@ -677,3 +677,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## NTFS 路径规范化（2026-11-14，#30）
 
 `adm/cmd/wiz/?.lpc`、`cmd/player/:.lpc` 改名 `_qmark.lpc`/`_colon.lpc`，同步更新 `cmd_d.lpc` 映射与 `adm/data/cmd_d.o`。`lpcc_eval` 与重启动 PASS。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+pristine + build-debug，归档端口 40245。`scripts/play_login.py`（port 49245）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
