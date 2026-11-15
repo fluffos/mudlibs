@@ -1175,3 +1175,7 @@ yxxcii 的 `qiu.lpc`、`qiu1.lpc`：`accept_object(object me, object ob)` 里判
 ## 深度功能测试（§10.7，2026-11-15，重测）
 
 pristine + build-debug（归档端口 `40062`，测试端口 `49062`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。

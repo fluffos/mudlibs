@@ -1221,3 +1221,7 @@ pristine + build-debug，port 40088。`scripts/play_login.py` 注册。
 
 - **已修（KB 05 §7.11）**：`adm/daemons/toptend.lpc` 在 `TOPTEN_FILE` 不存在时直接 `cp(TOPTEN_SOURCE, TOPTEN_FILE)`，归档缺 `/topten/source` 导致注册选择性别时抛 `*/topten/source: lstat failed`。补 `file_size(TOPTEN_SOURCE) < 0 ||` 守卫（同 `shiji`/`sj`）。
 - **复测**：改后注册→客店，`look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 仅将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`（保留可合法为空的 `query_ban_file` 等 `== -1` 判断），补充 `write_file(f_name, str, 1)` 覆写标志与 `topten_del` 后重读空表保护，并将 `sscanf(astr, "%s(%s)%d;%*s", ...) != 3` 改为 `sscanf(astr[i], ...) < 3`。已验证 `lpcc_eval.py` 编译加载通过。

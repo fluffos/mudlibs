@@ -1556,3 +1556,7 @@ tianzun → `ob`；shenxiang → `me`。
 ## 深度功能测试（§10.7，2026-11-15，重测）
 
 pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 中的 `file_size(...) == -1` 改为 `<= 0`，补充 `stringp()`、`explode(..., "\n") - ({ "" })` 与 `!sizeof(astr)` 空表保护，并将 `sscanf(astr, "(%s)%d;%*s", id, data) != 2` 改为 `sscanf(astr[i], "(%s)%d;%*s", id, data) < 2`（实测 FluffOS 下 `"(%s)%d;%*s"` 在并列行返回 `3`、非并列行返回 `2`）。已验证 `lpcc_eval.py` 编译加载通过。

@@ -617,3 +617,7 @@ create 已有；补 mkdir("/topten")+assure_file(f_name)+keep。
 
 pristine + build-debug，port 40127。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
 - 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 仅将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`（保留可合法为空的 `query_ban_file` 等 `== -1` 判断），补充 `write_file(f_name, str, 1)` 覆写标志与 `topten_del` 后重读空表保护，并将 `sscanf(astr, "%s(%s)%d;%*s", ...) != 3` 改为 `sscanf(astr[i], ...) < 3`。已验证 `lpcc_eval.py` 编译加载通过。

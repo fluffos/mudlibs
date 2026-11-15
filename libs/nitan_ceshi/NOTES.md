@@ -1012,3 +1012,7 @@ pristine + build-debug（归档端口 `40054`，测试端口 `49054`）。`scrip
 ## 任务状态目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/wasm_keep_dirs.txt` 补齐 `quest/chousha` 与 `quest/quest_jun/{meng,song}`。`lpcc_eval.py` 写探针修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。

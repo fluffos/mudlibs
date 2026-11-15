@@ -856,3 +856,7 @@ pristine + build-debug，port 40026。`scripts/play_login.py` 注册。
 ## NTFS 路径规范化（2026-11-14，#30）
 
 `logind.lpc` 的 `VISITORS` 宏改指 `/adm/single/mudvisitor` 并移除同内容 `MUDVISITOR`。`lpcc_eval` 与重启动 PASS。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 仅将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`（保留可合法为空的 `query_ban_file` 等 `== -1` 判断），补充 `write_file(f_name, str, 1)` 覆写标志与 `topten_del` 后重读空表保护，并将 `sscanf(astr, "%s(%s)%d;%*s", ...) != 3` 改为 `sscanf(astr[i], ...) < 3`。已验证 `lpcc_eval.py` 编译加载通过，并验证 `play_boot.sh` + `play_stop.sh` 启动停止通过。

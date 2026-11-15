@@ -1337,3 +1337,7 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 ## 任务状态与向导地图目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/wasm_keep_dirs.txt` 补齐 `d/wiz`、`quest/chousha` 与 `quest/quest_jun/{meng,song}`。`lpcc_eval.py` `/quest/quest_jun/meng/zztest`（加载 `SECURITY_D` 并以 `Root` euid 测试）修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。

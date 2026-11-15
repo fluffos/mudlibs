@@ -526,3 +526,7 @@ pristine + build-debug，归档端口 40175。`scripts/play_login.py` 注册/连
 ## 军旅任务与调试目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/wasm_keep_dirs.txt` 补齐 `debug` 与 `quest/quest_jun/song`（`junquest_song.lpc` 等直接 `write_file()` 无 `assure_file()`）。`lpcc_eval.py` `/quest/quest_jun/song/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。

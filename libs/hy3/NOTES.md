@@ -845,3 +845,7 @@ pristine + build-debug，port 40162。
 
 - **缺陷**：`logind` 选码后 `write_file("/topten/login/users", …)`；keep 只有 `topten`，缺 `topten/login`。第一次写抛错，停在裸 `>`。已把 `topten/login` 记进 `scripts/wasm_keep_dirs.txt`（KB 06 §7.358）。
 - **流程**：GB → 纯字母 id（不可含数字）→ 中文名 → 密码×2 → 天赋 `y` → email → 性别 → MOTD 翻页 → 武庙；`look`/`score`/`i`；`quit`「欢迎下次再来！」。驱动 stdout 干净。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。

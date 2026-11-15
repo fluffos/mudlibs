@@ -187,3 +187,7 @@ ouyangfeng：`tell_object("…推天式…")` → `tell_object(v1, …)`。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40322。`scripts/play_login.py` 注册并执行 `look`/`quit`，驱动 stdout 与 `debug.log` 无新增错误/警告。本轮无新编程缺陷。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `top_query`/`top_del`/`top_add` 中的 `file_size(...) == -1` 改为 `<= 0`，在 `top_del`/`top_add` 重读榜单前补充 `stringp()` 与 `- ({ "" })` / `!sizeof(v6)` 保护（空表复用原建榜语句），并修复 `top_add` 中未注释的 `sscanf(v6, "%s[%s]%d;%*s", ...) != 3`（改用 `v6[v7]` 与 `< 3`，适配 FluffOS 将 `%*s` 计入 `sscanf()` 返回值的语义）。已验证 `lpcc_eval.py` 加载、`0` 字节 `top_query`/`top_del` 对照及 `play_boot.sh` + `play_stop.sh` 启动停止通过。

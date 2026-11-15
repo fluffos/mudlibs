@@ -764,3 +764,7 @@ pristine + build-debug，归档端口 40121。`scripts/play_login.py` 注册并�
 `adm/daemons/brd.lpc`（第 79 行）在帮会创建留言板时直接 `write_file("/p/residence/board/" + name + ".lpc", ...)` 且无 `assure_file()`/`mkdir()`；git 与 `scripts/wasm_keep_dirs.txt` 均无 `p/residence/board`。
 
 已在 `scripts/wasm_keep_dirs.txt` 补齐 `p/residence/board`；pristine + build-debug 启动 `DIRS OK` 且 `play_login.py` 正常进入与退出。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。

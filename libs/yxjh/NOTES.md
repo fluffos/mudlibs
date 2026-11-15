@@ -678,3 +678,7 @@ pristine + build-debug，归档端口 40148。`scripts/play_login.py` 注册进�
 `quest/npc/chousha.h` 的 `chousha_begin()` 直接 `write_file("/quest/chousha/fam1", ...)` 且无 `assure_file()`；`lpcc_eval.py` 实测抛出 `*Wrong permissions for opening file /quest/chousha/fam1 for overwrite. "No such file or directory"`。
 
 已在 `scripts/wasm_keep_dirs.txt` 补齐 `quest/chousha`；修后 `lpcc_eval.py` 写入 `/quest/chousha/fam1` 返回 `ZZT ok` `PASS`，pristine + build-debug 登录复测正常。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。

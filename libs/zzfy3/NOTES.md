@@ -573,3 +573,7 @@ pristine + build-debug（归档端口 40120，临时测试端口 49652）。`scr
 
 - **已修（KB 05 §7.11）**：`adm/daemons/logind.lpc` 的 `set_visitor()` 直接 `write_file(VISITORS, ...)`（`/data/mud/MUDVISITOR`），冷树缺少 `data/mud/` 导致首连报错并被 `destruct(ob)` 断线。在 `set_visitor()` 写入前补 `assure_file(VISITORS)`（保留原文件 CRLF 行尾），并通过 `scripts/gen_keep_dirs.py --merge` 补齐 `scripts/wasm_keep_dirs.txt`（`data/mud`、`log/driver`、`log/edit`、`log/static`、`log/wiz` 等）。
 - **复测**：`lpcc` 编译 `adm/daemons/logind.lpc` 0 警告；`play_login.py` 完整注册登录，驱动 stdout 与 `debug.log` 0 错误。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。

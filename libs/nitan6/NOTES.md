@@ -1485,3 +1485,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，port 40019。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。

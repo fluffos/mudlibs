@@ -1021,3 +1021,7 @@ questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug（归档端口 40189，临时测试端口 49519）。`scripts/mudclient.py` 走指尖协议握手（`123456789abcd` → `id║密码║x║email` → `男性║1║测试` → 世外桃源），执行 `look`/`score`/`quit`，驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
+
+- 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过，且实测 0 字节榜单对照修复有效。
