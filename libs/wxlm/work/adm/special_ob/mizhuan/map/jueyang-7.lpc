@@ -1,0 +1,191 @@
+/**
+ * @brief 烈日焚天台 - 七品绝阳地
+ * @details 玩家可以在此处消耗200内力上限汲取1缕七品绝阳气
+ * @author Lu dexiang
+ * @date 2024-12-19
+ */
+inherit ROOM;
+int do_extract_jueyang_qi(object me, int count);
+int sense_jueyang_qi(string arg);
+int extract_jueyang_qi(string arg);
+int input_extract_count(string arg);
+int cancel_extract(string arg);
+
+void create()
+{
+    set("short", HIR "烈日焚天台" NOR);
+    set("long", HIR "这里是一处炙热无比的高台，四周烈焰滔天，炽热的阳气如潮水般涌动。"
+              "天空中仿佛有无数个太阳在燃烧，地面被烤得发红，空气都在扭曲变形。在这极阳之地，"
+              "蕴含着天地间最纯净的绝阳之气，只有意志坚强的修行者才能承受如此炽热的环境，"
+              "并从中汲取阳刚之力。" NOR);
+              
+    set("outdoors", "mizhuan");
+    set("light", 3);
+    set("no_clean_up", 0);
+    set("exits", ([
+        "west" : "/adm/special_ob/mizhuan/map/yinyang-huiju-7",
+    ]));
+    
+    set("listen_default", HIR "你听到烈火燃烧的呼呼声，仿佛有神龙在咆哮。" NOR);
+    set("smell_default", HIY "空气中弥漫着炙热的气息，让人几乎无法呼吸。" NOR);
+
+    set("action_list", ([
+        "汲取": "汲取",
+        "感悟": "感悟",
+    ]));
+}
+
+void init()
+{
+    add_action("extract_jueyang_qi", "extract");
+    add_action("extract_jueyang_qi", "汲取");
+    add_action("sense_jueyang_qi", "sense");
+    add_action("sense_jueyang_qi", "感悟");
+}
+
+// 感悟绝阳气
+int sense_jueyang_qi(string arg)
+{
+    object me = this_player();
+    int current_qi;
+    string msg;
+    
+    if (!me) return 0;
+    
+    current_qi = me->query("jueyang_qi");
+    if (!current_qi) current_qi = 0;
+    
+    msg = HIR "你静心感悟着这极阳之地的烈火，体内的绝阳之气在熊熊燃烧。\n" NOR;
+    msg += sprintf("当前你体内拥有 %s%d%s 缕七品绝阳气。\n", HIY, current_qi, NOR);
+    msg += HIW "你可以通过「汲取」命令来汲取更多的绝阳气，每次需要消耗200点内力上限。" NOR;
+    
+    tell_object(me, popup_title(msg));
+    return 1;
+}
+
+// 汲取绝阳气
+int extract_jueyang_qi(string arg)
+{
+    object me = this_player();
+    int max_neili, current_qi, extract_count;
+    string msg, confirm_msg;
+    string *buttons;
+    
+    if (!me) return 0;
+    
+    max_neili = me->query("max_neili",1);
+    current_qi = me->query("jueyang_qi");
+    if (!current_qi) current_qi = 0;
+    
+    if (max_neili < 200)
+    {
+        msg = HIR "你的内力上限不足200点，无法汲取绝阳气。" NOR;
+        tell_object(me, popup_title(msg));
+        return 1;
+    }
+    
+    extract_count = max_neili / 200;
+    
+    if (arg && sscanf(arg, "%d", extract_count) == 1)
+    {
+        if (extract_count <= 0)
+        {
+            tell_object(me, popup_title(HIR "汲取数量必须大于0。" NOR));
+            return 1;
+        }
+        
+        if (extract_count > max_neili / 200)
+        {
+            msg = sprintf(HIR "你的内力上限只有%d点，最多只能汲取%d缕绝阳气。" NOR, 
+                         max_neili, max_neili / 200);
+            tell_object(me, popup_title(msg));
+            return 1;
+        }
+        
+        return do_extract_jueyang_qi(me, extract_count);
+    }
+    
+    confirm_msg = sprintf(HIR "你感受到周围炽热的绝阳之气，准备进行汲取。\n" NOR
+                         "当前内力上限：%s%d%s 点\n"
+                         "当前绝阳气：%s%d%s 缕\n"
+                         "最多可汲取：%s%d%s 缕（每缕消耗200点内力上限）\n\n"
+                         HIM "请选择要汲取的数量：" NOR,
+                         HIY, max_neili, NOR,
+                         HIY, current_qi, NOR,  
+                         HIY, extract_count, NOR);
+    
+    buttons = ({});
+    if (extract_count >= 1) buttons += ({ "汲取1缕:汲取 1" });
+    if (extract_count >= 5) buttons += ({ "汲取5缕:汲取 5" });
+    if (extract_count >= 10) buttons += ({ "汲取10缕:汲取 10" });
+    if (extract_count >= 50) buttons += ({ "汲取50缕:汲取 50" });
+    if (extract_count >= 100) buttons += ({ "汲取100缕:汲取 100" });
+    buttons += ({ "自定义:input_extract_count" });
+    buttons += ({ "取消:cancel_extract" });
+    
+    tell_object(me, popup_comb(confirm_msg, buttons));
+    return 1;
+}
+
+// 输入自定义汲取数量
+int input_extract_count(string arg)
+{
+    object me = this_player();
+    
+    if (!me) return 0;
+    
+    tell_object(me, popup_input("请输入要汲取的绝阳气数量：", "汲取 "));
+    return 1;
+}
+
+// 取消汲取
+int cancel_extract(string arg)
+{
+    object me = this_player();
+    
+    if (!me) return 0;
+    
+    tell_object(me, popup_title("你放弃了汲取绝阳气。"));
+    return 1;
+}
+
+// 执行汲取绝阳气的动作
+int do_extract_jueyang_qi(object me, int count)
+{
+    int max_neili, current_qi, cost;
+    string msg;
+    
+    if (!me) return 0;
+    
+    max_neili = me->query("max_neili",1);
+    current_qi = me->query("jueyang_qi");
+    if (!current_qi) current_qi = 0;
+    
+    cost = count * 200;
+    
+    if (max_neili < cost)
+    {
+        msg = sprintf(HIR "你的内力上限不足%d点，无法汲取%d缕绝阳气。" NOR, cost, count);
+        tell_object(me, popup_title(msg));
+        return 1;
+    }
+    
+    // 消耗内力上限
+    me->add("max_neili", -cost);
+    
+    // 增加绝阳气
+    me->add("jueyang_qi", count);
+    current_qi += count;
+    
+    msg = sprintf(HIY "你成功汲取了%d缕七品绝阳气！\n" NOR
+                  "消耗了%d点内力上限，当前绝阳气总数：%s%d%s缕。\n"
+                  HIR "炽热的绝阳之气在你体内奔涌，让你对阴阳之道有了更深的领悟。" NOR,
+                  count, cost, HIY, current_qi, NOR);
+    
+    tell_object(me, popup_title(msg));
+    
+    // 向房间内其他人显示
+    tell_room(this_object(), sprintf(HIR "%s盘膝而坐，身周涌动着炽热的绝阳之气。" NOR, me->query("name")), ({ me }));
+    
+    return 1;
+}

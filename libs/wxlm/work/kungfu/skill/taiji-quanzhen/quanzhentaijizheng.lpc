@@ -1,0 +1,237 @@
+// quanzhentaijizheng.c 全真太极阵
+// 先天无极决群体攻击绝技
+
+inherit F_SSERVER;
+
+/**
+ * @brief 返回绝技名称
+ * @return string 绝技名称
+ */
+string query_name() { return "全真太极阵"; }
+
+/**
+ * @brief 技能类型
+ * @return string* 适用武器类型数组
+ */
+string *pfm_type() { return ({ "unarmed", "sword" }); }
+
+/**
+ * @brief 执行全真太极阵绝技
+ * @param object me 施法者
+ * @param object target 目标（可选，群体攻击会攻击所有敌人）
+ * @return int 1表示成功，0表示失败
+ * @details 群体攻击绝技，融合全真道家理念和太极阴阳变化
+ */
+int perform(object me, object target)
+{
+    object *obs;
+    object weapon;
+    string msg;
+    int ap, dp, damage, wujidaoxin_lvl, jindanmiyao_lvl;
+    int skill_level, neili_cost, i, hit_count;
+    int flag = 0;
+
+    if (environment(me)->query("no_fight"))
+        return notify_fail("这里不能打架。\n");
+
+    me->clean_up_enemy();
+    if (!me->is_fighting())
+        return notify_fail("全真太极阵只能对战斗中的对手使用。\n");
+
+    if ((int)me->query_skill("taiji-quanzhen", 1) < 200)
+        return notify_fail("你的先天无极决不够娴熟，不能使用全真太极阵。\n");
+
+    if ((int)me->query_skill("force", 1) < 200)
+        return notify_fail("你的内功修为不够，无法运用全真太极阵的奥妙。\n");
+
+    if ((int)me->query("neili") < 400)
+        return notify_fail("你现在内力不够，无法使用全真太极阵。\n");
+
+    if (!target) target = offensive_target(me);
+
+    // 获取技能等级和意境等级
+    skill_level = me->query_skill("taiji-quanzhen", 1);
+    wujidaoxin_lvl = COMBAT_D->get_skill_aoyi_level(me, "无极道心");
+    jindanmiyao_lvl = COMBAT_D->get_skill_aoyi_level(me, "金丹秘要");
+
+    weapon = me->query_temp("weapon");
+    neili_cost = 400;
+
+    // 意境影响内力消耗
+    if (wujidaoxin_lvl > 0)
+    {
+        neili_cost = neili_cost * (10 - wujidaoxin_lvl / 5) / 10;
+        if (neili_cost < 250) neili_cost = 250;
+    }
+
+    // 根据武器状态显示不同的阵法描述
+    if (weapon && weapon->query("skill_type") == "sword")
+    {
+        msg = HIY "$N" HIY "仰天长啸，手中$w" HIY "剑光大盛，脚踏天罡地煞步，施展「全真太极阵」！" +
+              "剑气纵横，形成一个巨大的太极剑阵，阴阳变化，道法自然！" NOR "\n";
+    }
+    else
+    {
+        msg = HIY "$N" HIY "仰天长啸，双手划出玄妙太极图，脚踏天罡地煞步，施展「全真太极阵」！" +
+              "拳意浩荡，形成一个巨大的太极拳阵，阴阳互济，道法自然！" NOR "\n";
+    }
+
+    message_combatd(msg, me);
+    me->add("neili", -neili_cost);
+    me->start_busy(3);
+
+    obs = me->query_enemy();
+    hit_count = 0;
+
+    for (i = 0; i < sizeof(obs); i++)
+    {
+        if (!obs[i] || !living(obs[i]) || !me->is_fighting(obs[i]))
+            continue;
+
+        // 计算攻防数值
+        if (weapon && weapon->query("skill_type") == "sword")
+        {
+            ap = me->query_skill("sword") + me->query_skill("taiji-quanzhen", 1) + me->query_skill("force");
+        }
+        else
+        {
+            ap = me->query_skill("unarmed") + me->query_skill("taiji-quanzhen", 1) + me->query_skill("force");
+        }
+
+        dp = obs[i]->query_skill("parry") + obs[i]->query_skill("force");
+
+        // 意境加成攻击力
+        if (wujidaoxin_lvl > 0)
+        {
+            ap += wujidaoxin_lvl * skill_level / 10;
+        }
+        if (jindanmiyao_lvl > 0)
+        {
+            ap += jindanmiyao_lvl * skill_level / 12;
+        }
+
+        // 群体攻击命中判定
+        if (COMBAT_D->hit_determination(me, obs[i], ap, dp))
+        {
+            hit_count++;
+            flag = 1;
+
+            // 根据武器状态计算不同伤害
+            if (weapon && weapon->query("skill_type") == "sword")
+            {
+                damage = ap + random(ap / 2) + skill_level / 2;
+                switch (random(3))
+                {
+                case 0:
+                    msg = HIR "只见剑阵之中剑气纵横，" + obs[i]->name() + HIR "被无数道剑光击中，鲜血飞溅！" NOR "\n";
+                    break;
+                case 1:
+                    msg = HIM "太极剑阵威力显现，" + obs[i]->name() + HIM "在阴阳剑气中左冲右突，身上伤痕累累！" NOR "\n";
+                    break;
+                default:
+                    msg = HIY "全真道法与太极剑意合一，" + obs[i]->name() + HIY "被阵法笼罩，剑伤遍体！" NOR "\n";
+                    break;
+                }
+            }
+            else
+            {
+                damage = ap * 4 / 5 + random(ap / 3) + skill_level / 2;
+                switch (random(3))
+                {
+                case 0:
+                    msg = HIR "只见拳阵之中拳劲如潮，" + obs[i]->name() + HIR "被无数道拳力击中，内府震荡！" NOR "\n";
+                    break;
+                case 1:
+                    msg = HIM "太极拳阵威力显现，" + obs[i]->name() + HIM "在阴阳拳劲中难以脱身，气血翻涌！" NOR "\n";
+                    break;
+                default:
+                    msg = HIY "全真道法与太极拳意合一，" + obs[i]->name() + HIY "被阵法笼罩，拳伤遍布！" NOR "\n";
+                    break;
+                }
+            }
+
+            message("vision", msg, environment(me), ({ obs[i] }));
+            tell_object(obs[i], HIR "你被全真太极阵的威力击中，感到内府剧烈震荡！" NOR "\n");
+
+            // 意境加成伤害
+            if (wujidaoxin_lvl > 0)
+            {
+                damage += wujidaoxin_lvl * skill_level / 12;
+            }
+            if (jindanmiyao_lvl > 0)
+            {
+                damage += jindanmiyao_lvl * skill_level / 15;
+            }
+
+            COMBAT_D->real_damage(me, obs[i], damage);
+
+            // 内力伤害和忙乱
+            obs[i]->add("neili", -damage / 2);
+            if (!obs[i]->is_busy())
+                obs[i]->start_busy(2);
+
+            tell_object(me, "你对" + obs[i]->name() + "施展了全真太极阵，结果" + obs[i]->name() +
+                           "受到了" + damage + "点伤害！\n");
+
+            // 意境特殊效果
+            if (wujidaoxin_lvl > 4)
+            {
+                message_combatd(HIW "无极道心深奥莫测，阵法中蕴含着玄妙真意，让" +
+                               obs[i]->name() + HIW "心神迷乱！" NOR "\n", me, obs[i]);
+                obs[i]->receive_damage("jing", wujidaoxin_lvl * 30, me);
+                obs[i]->add("neili", -wujidaoxin_lvl * 50);
+            }
+
+            if (jindanmiyao_lvl > 4)
+            {
+                message_combatd(HIB "金丹秘要运转，阵法中真气如虹，让" +
+                               obs[i]->name() + HIB "内息紊乱！" NOR "\n", me, obs[i]);
+                COMBAT_D->real_damage(me, obs[i], jindanmiyao_lvl * 25);
+                if (jindanmiyao_lvl > 6 && !obs[i]->is_busy())
+                    obs[i]->start_busy(1);
+            }
+
+            if (obs[i]->query("neili") < 0)
+                obs[i]->set("neili", 0);
+        }
+        else
+        {
+            // 未命中
+            switch (random(3))
+            {
+            case 0:
+                msg = HIG + obs[i]->name() + HIG "运功抵抗，在阵法威力下勉强支撑，但也消耗了不少内力。" NOR "\n";
+                break;
+            case 1:
+                msg = HIB + obs[i]->name() + HIB "身法灵动，在太极阵中左躲右闪，避开了大部分攻击。" NOR "\n";
+                break;
+            default:
+                msg = HIY + obs[i]->name() + HIY "内功深厚，以自身真气抵御阵法威力，勉强化解攻势。" NOR "\n";
+                break;
+            }
+            message("vision", msg, environment(me), ({ obs[i] }));
+            obs[i]->add("neili", -150);
+            tell_object(obs[i], HIG "你勉强抵御住全真太极阵的攻击，但消耗了不少内力。" NOR "\n");
+        }
+    }
+
+    if (!flag)
+    {
+        message_combatd(HIY "然而没有任何人受到$N" HIY "全真太极阵的影响。" NOR "\n", me);
+    }
+    else
+    {
+        if (weapon && weapon->query("skill_type") == "sword")
+        {
+            message_combatd(HIW "太极剑阵威力渐散，$N" HIW "收剑而立，神态淡然。" NOR "\n", me);
+        }
+        else
+        {
+            message_combatd(HIW "太极拳阵威力渐散，$N" HIW "收势而立，气定神闲。" NOR "\n", me);
+        }
+
+        tell_object(me, HIG "你成功施展了全真太极阵，共命中" + hit_count + "个目标！" NOR "\n");
+    }
+
+    return 1;
+}

@@ -1,0 +1,143 @@
+// wield.c
+
+inherit F_CLEAN_UP;
+
+int do_wield(object me, object ob);
+void record_wielded_weapon(object me, object ob);
+int auto_wield(object me);
+
+int main(object me, string arg)
+{
+	object ob, ob2, *inv;
+	int i, count;
+
+	if (! arg) return notify_fail("你要装备什么武器？\n");
+	if (userp(me) && me->is_busy() )
+		return notify_fail("你正忙着呢。\n");
+
+	if (arg == "all")
+	{
+		inv = all_inventory(me);
+		for (count = 0, i = 0; i<sizeof(inv); i++)
+		{
+			if (inv[i]->query("equipped")) continue;
+			if (inv[i]->is_item_make()&&inv[i]->item_owner()!=me->query("id")) continue;
+			if (do_wield(me, inv[i])) count ++;
+		}
+		write("Ok.\n");
+		return 1;
+	}
+
+	if (arg == "auto")
+	{
+		return auto_wield(me);
+	}
+
+	if (! objectp(ob = present(arg, me)))
+		return notify_fail("你身上没有这样东西。\n");
+
+//	if (ob->is_item_make()&&ob->item_owner()!=me->query("id"))
+//		return notify_fail("这别人的私有装备装备，你不能使用。\n");
+
+	if (ob->query("equipped"))
+	{
+		inv = all_inventory(me) - ({ ob });
+		for (count = 0, i = 0; i < sizeof(inv); i++)
+		{
+			if (! inv[i]->id(arg)) continue;
+			if (inv[i]->query("equipped")) continue;
+			if (do_wield(me, inv[i]))
+			{
+				count++;
+				break;
+			}
+		}
+		if (! count)
+			return notify_fail("你已经装备着了。\n");
+		return 1;
+	}
+
+	if(ob2=me->query_temp("weapon"))
+		me->force_me("unwield "+file_name(ob2));
+	return do_wield(me, ob);
+}
+
+int do_wield(object me, object ob)
+{
+	string str;
+	switch (ob->wield())
+	{
+	case 0:
+		return 0;
+
+	case -1:
+		return 1;
+
+	default:
+		if (! stringp(str = ob->query("wield_msg")))
+			str = "$N装备$n作武器。\n";
+
+		message_vision(str, me, ob);
+		record_wielded_weapon(me, ob);
+
+		if(!me->query_temp("shimen_zhaohuan_time"))
+		{
+			me->force_me("equip_group save " + me->query("equip_group_name"));
+			me->force_me("equip_ui");
+		}
+
+		return 1;
+	}
+}
+
+void record_wielded_weapon(object me, object ob)
+{
+	string weapon_id = ob->query("id");
+	
+	if (weapon_id)
+	{
+		me->set("wielded_weapon", weapon_id);
+	}
+}
+
+int auto_wield(object me)
+{
+	string weapon_id = me->query("wielded_weapon");
+	object ob;
+	
+	if (!weapon_id)
+	{
+		// tell_object(me, "没有记录的武器可以自动装备。\n");
+		return 0;
+	}
+	
+	ob = present(weapon_id, me);
+	if (!ob)
+	{
+		// tell_object(me, "找不到记录的武器。\n");
+		return 0;
+	}
+	
+	if (ob->query("equipped"))
+	{
+		tell_object(me, "你已经装备着 " + ob->name() + " 了。\n");
+		return 1;
+	}
+	
+	return do_wield(me, ob);
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式：wield <武器名称>
+          wield all
+          wield auto
+
+这个指令让你装备某件物品作武器，你必须拥有这样物品。
+wield all  : 装备所有可以装备的武器
+wield auto : 自动装备之前记录的武器
+
+HELP );
+    return 1;
+}

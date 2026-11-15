@@ -1,0 +1,422 @@
+// 仓库管理器：cangku_master.c
+// 功能：管理玩家的仓库数据，包括存取物品等操作
+// 作者：Lu Dexiang
+
+
+// 仓库数据：所有玩家的仓库信息
+// key: 玩家ID
+// value: 仓库物品数据
+mapping cangku_data = ([]);
+
+// 默认仓库容量
+private int default_cangku_max_size = 50;
+
+// 玩家仓库容量配置
+private mapping cangku_max_size = ([]);
+
+// 仓库索引：记录玩家仓库数据文件路径
+// key: 玩家ID
+// value: 仓库数据文件路径
+mapping cangku_index = ([]);
+
+// 函数声明
+private string get_cangku_index_path();
+private string get_cangku_data_path(string player_id);
+int load_cangku_data(string player_id);
+int save_cangku_data(string player_id);
+void save_cangku_index();
+void restore_cangku();
+void load_cangku_max_size();
+void save_cangku_max_size();
+string get_cangku_max_size_path();
+
+// 初始化函数：加载仓库数据
+void create()
+{
+    restore_cangku();
+}
+
+// 恢复所有仓库数据
+void restore_cangku()
+{
+    string index_path = get_cangku_index_path();
+
+    if (file_size(index_path) > 0)
+    {
+        cangku_index = json_decode(read_file(index_path));
+
+        if (!mapp(cangku_index))
+        {
+            error("仓库索引格式错误。\n");
+            return;
+        }
+
+        foreach (string player_id, string path in cangku_index)
+        {
+            load_cangku_data(player_id);
+        }
+
+        // 加载仓库容量
+        load_cangku_max_size();
+    }
+    else
+    {
+        assure_file(index_path);
+        save_cangku_index();
+    }
+}
+
+// 加载仓库容量
+void load_cangku_max_size()
+{
+    string max_size_path = get_cangku_max_size_path();
+    if (file_size(max_size_path) > 0)
+    {
+        cangku_max_size = json_decode(read_file(max_size_path));
+    }
+}
+
+//存储仓库容量
+void save_cangku_max_size()
+{
+    string max_size_path = get_cangku_max_size_path();
+    write_file(max_size_path, json_encode(cangku_max_size), 1);
+}
+
+// 获取仓库索引文件路径
+private string get_cangku_index_path()
+{
+    return "/data/cangku_index.json";
+}
+
+// 获取仓库数据文件路径
+string get_cangku_data_path(string player_id)
+{
+    return sprintf("/data/cangku/%c/%s.json", player_id[0], player_id);
+}
+
+// 获取仓库容量文件路径
+string get_cangku_max_size_path()
+{
+
+    if(file_size("/data/cangku_max_size.json") > 0)
+    {
+        return "/data/cangku_max_size.json";
+    }
+    else
+    {
+        assure_file("/data/cangku_max_size.json");
+        return "/data/cangku_max_size.json";
+    }
+}
+
+// 保存仓库索引
+void save_cangku_index()
+{
+    assure_file(get_cangku_index_path());
+    write_file(get_cangku_index_path(), json_encode(cangku_index), 1);
+}
+
+// 设置玩家仓库容量
+void set_cangku_max_size(object player, int size)
+{
+    string id = player->query("id");
+
+    if (!stringp(id) || id == "")
+        return;
+
+    cangku_max_size[id] = size;
+    save_cangku_max_size();
+}
+
+// 获取玩家仓库容量
+int query_cangku_max_size(object player)
+{
+    string id = player->query("id");
+
+    if (!stringp(id) || id == "")
+        return default_cangku_max_size;
+
+    return cangku_max_size[id] || default_cangku_max_size;
+}
+
+// 加载玩家仓库数据
+int load_cangku_data(string player_id)
+{
+    string data_path;
+    string json_data;
+
+    if (!stringp(player_id) || player_id == "")
+        return 0;
+
+    data_path = get_cangku_data_path(player_id);
+
+    if (file_size(data_path) > 0)
+    {
+        json_data = read_file(data_path);
+        if (!stringp(json_data) || json_data == "")
+        {
+            cangku_data[player_id] = ([]);
+            return 1;
+        }
+
+        cangku_data[player_id] = json_decode(json_data);
+
+        if (!mapp(cangku_data[player_id]))
+        {
+            error("仓库数据格式错误。\n");
+            return 0;
+        }
+
+        return 1;
+    }
+    else
+    {
+        cangku_data[player_id] = ([]);
+        return 1;
+    }
+}
+
+// 保存玩家仓库数据
+int save_cangku_data(string player_id)
+{
+    string data_path;
+
+    if (!stringp(player_id) || player_id == "")
+        return 0;
+
+    if (!mapp(cangku_data[player_id]))
+        return 0;
+
+    data_path = get_cangku_data_path(player_id);
+    assure_file(data_path);
+
+    if (undefinedp(cangku_index[player_id]))
+    {
+        cangku_index[player_id] = data_path;
+        save_cangku_index();
+    }
+
+    return write_file(data_path, json_encode(cangku_data[player_id]), 1);
+}
+
+// 检查仓库是否已满
+int is_cangku_full(object player)
+{
+    int max_size;
+    string id = player->query("id");
+
+    if (!stringp(id) || id == "")
+        return 1;
+
+    if (!mapp(cangku_data[id]))
+        load_cangku_data(id);
+
+    max_size = query_cangku_max_size(player);
+    return sizeof(cangku_data[id]) >= max_size;
+}
+
+// 查询玩家仓库物品列表
+mapping query_cangku_items(object player)
+{
+    string id = player->query("id");
+
+    if (!stringp(id) || id == "")
+        return 0;
+
+    if (!mapp(cangku_data[id]))
+        load_cangku_data(id);
+
+    return cangku_data[id];
+}
+
+// 生成物品唯一标识
+private string generate_item_id(object item, string player_id)
+{
+    string base_name;
+    string item_id;
+
+    if (!objectp(item))
+        return 0;
+
+    base_name = base_name(item);
+
+    // 不可叠加物品生成唯一ID
+    if (!item->query_amount())
+    {
+        while (1)
+        {
+            item_id = sprintf("%s_%d_%d", base_name, time(), random(1000000));
+            if (undefinedp(cangku_data[player_id][item_id]))
+                break;
+        }
+        return item_id;
+    }
+
+    // 可叠加物品使用base_name作为ID
+    return base_name;
+}
+
+// 添加物品到仓库
+int add_item(object player, object item)
+{
+    string item_id;
+    mapping item_data;
+    string player_id = player->query("id");
+
+    if (!stringp(player_id) || player_id == "" || !objectp(item))
+        return 0;
+
+    if (!mapp(cangku_data[player_id]))
+    {
+        if (!load_cangku_data(player_id))
+            cangku_data[player_id] = ([]);
+    }
+
+    if (is_cangku_full(player))
+        return 0;
+
+    item_id = generate_item_id(item, player_id);
+    if (!item_id)
+        return 0;
+
+    // 处理可叠加物品
+    if (item->query_amount())
+    {
+        if (!mapp(cangku_data[player_id][item_id]))
+        {
+            item_data = ([
+                "name"      : item->query("name"),
+                "id"        : item->query("id"),
+                "stackable" : 1,
+                "amount"    : item->query_amount(),
+                "base_name" : base_name(item),
+                "unit"      : item->query("base_unit") || item->query("unit"),
+                "bind"      : item->query("bind") || item->query("no_give") || item->query("no_drop"),
+            ]);
+            cangku_data[player_id][item_id] = item_data;
+        }
+        else
+        {
+            cangku_data[player_id][item_id]["amount"] += item->query_amount();
+        }
+    }
+    else // 处理不可叠加物品
+    {
+        item_data = ([
+            "name"      : item->query("name"),
+            "id"        : item->query("id"),
+            "stackable" : 0,
+            "amount"    : 1,
+            "base_name" : base_name(item),
+            "unit"      : item->query("base_unit") || item->query("unit"),
+            "bind"      : item->query("bind") || item->query("no_give") || item->query("no_drop"),
+        ]);
+        cangku_data[player_id][item_id] = item_data;
+    }
+
+    // 更新客户端数据
+    {
+        mapping update_data = "/cmds/usr/new_inventory_beibao"->format_item_data("cangku", item_id, cangku_data[player_id][item_id]);
+        tell_object(player, json_encode((["code": "update_obj_data", "data": update_data])) + "\n");
+    }
+    // 保存仓库数据
+    save_cangku_data(player_id);
+    return 1;
+}
+
+// 从仓库取出物品
+object take_item(object player, string item_id, int amount)
+{
+    mapping item_data;
+    object item;
+    int item_amount;
+    string player_id = player->query("id");
+
+    if (!stringp(player_id) || !stringp(item_id))
+        return 0;
+
+    if (!mapp(cangku_data[player_id]))
+        load_cangku_data(player_id);
+
+    item_data = cangku_data[player_id][item_id];
+    if (!mapp(item_data))
+        return 0;
+
+    // 处理不可叠加物品
+    if (!item_data["stackable"])
+    {
+        if (amount > 0 && amount != 1)
+            return 0;
+
+        item = new(item_data["base_name"]);
+        if (!objectp(item))
+            return 0;
+
+        // 更新客户端数据
+        {
+            mapping update_data = "/cmds/usr/new_inventory_beibao"->format_item_data("cangku", item_id, item_data, 1);
+            tell_object(player, json_encode((["code": "update_obj_data", "data": update_data])) + "\n");
+        }
+        map_delete(cangku_data[player_id], item_id);
+        save_cangku_data(player_id);
+        return item;
+    }
+
+    // 处理可叠加物品
+    item_amount = item_data["amount"];
+
+    if (amount > 0)
+    {
+
+        // 更新客户端数据
+        mapping update_data;
+
+        if (amount > item_amount)
+            return 0;
+
+        item = new(item_data["base_name"]);
+        if (!objectp(item))
+            return 0;
+
+        item->set_amount(amount);
+        item_data["amount"] -= amount;
+
+
+        if (item_data["amount"] == 0)
+        {
+            update_data = "/cmds/usr/new_inventory_beibao"->format_item_data("cangku", item_id, item_data, 1);
+            map_delete(cangku_data[player_id], item_id);
+        }
+        else
+        {
+            update_data = "/cmds/usr/new_inventory_beibao"->format_item_data("cangku", item_id, item_data);
+        }
+        tell_object(player, json_encode((["code": "update_obj_data", "data": update_data])) + "\n");
+    }
+    else
+    {
+        item = new(item_data["base_name"]);
+        if (!objectp(item))
+            return 0;
+
+        item->set_amount(item_amount);
+
+        {
+           // 更新客户端数据
+            mapping update_data = "/cmds/usr/new_inventory_beibao"->format_item_data("cangku", item_id, item_data, 1);
+            tell_object(player, json_encode((["code": "update_obj_data", "data": update_data])) + "\n");
+        }
+        map_delete(cangku_data[player_id], item_id);
+    }
+
+    save_cangku_data(player_id);
+    return item;
+}
+
+int clean_up()
+{
+    return 1;
+}
+
+// TODO: 实现其他功能，如查询仓库数据等

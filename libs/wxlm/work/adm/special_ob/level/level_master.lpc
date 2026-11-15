@@ -1,0 +1,197 @@
+/**
+ * @file level_master.c
+ * @author Lu Dexiang
+ * @brief 角色升级系统
+ * @version 1.0
+ * @date 2024-11-21
+ */
+
+  // 配置文件路径
+#define LEVEL_CONFIG_FILE "/adm/special_ob/level/level_alg.json"
+
+ inherit F_DBASE;
+ 
+ private mapping level_config;  // 存储从JSON读取的配置
+ private mapping stage_cache;   // 境界缓存
+ private int heartbeat_count = 0; // 心跳计数器
+ 
+ void create()
+ {
+     seteuid(getuid());
+     level_config = json_decode(read_file(LEVEL_CONFIG_FILE));
+     stage_cache = ([]);
+     
+     if (!level_config)
+         throw("无法加载等级配置文件");
+
+     set_heart_beat(1); // 启动心跳
+ }
+ 
+ void heart_beat()
+ {
+     heartbeat_count++;
+
+     if (heartbeat_count >= 60)
+     {
+         level_config = json_decode(read_file(LEVEL_CONFIG_FILE)); // 重新加载配置
+         heartbeat_count = 0; // 重置计数器
+     }
+ }
+ 
+ /**
+  * @brief 获取角色当前境界
+  * @param level 角色等级
+  * @return string 境界名称
+  */
+ public string get_level_stage(int level)
+ {
+     string stage;
+     
+     if (level > 1000) 
+         return "结丹期";
+         
+     // 使用缓存加速查找
+     if (stage_cache[level])
+         return stage_cache[level];
+         
+     foreach (string name, mapping data in level_config["level_stages"])
+     {
+         if (level >= data["min_level"] && level <= data["max_level"])
+         {
+             stage = name;
+             break;
+         }
+     }
+     
+     stage_cache[level] = stage;
+     return stage;
+ }
+ 
+ /**
+  * @brief 计算升级所需经验值
+  * @param level 下一角色等级
+  * @return int 所需经验值
+  */
+ public int level_up_exp(int level)
+ {
+     string stage = get_level_stage(level);
+     int base = level_config["base_exp"];
+     int factor;
+     int start_level;
+     int total_exp;
+     mapping stage_data;
+     if (level > 1000) 
+         return 0;  // 结丹期不需要经验
+         
+     stage_data = level_config["level_stages"][stage];
+     factor = stage_data["exp_factor"];
+     start_level = stage_data["min_level"];
+     
+     if (level >= 200)
+     {
+        factor = factor + (level - 200) * 2;
+     }
+
+     // 计算当前境界内的经验累积
+     // 经验 = 基础经验 * 等级 * 等级 * 等级 * 百分比系数 / 1000
+     total_exp = base *level * level * level * (factor) / 1000;
+     total_exp += (level * 100);
+
+     return to_int(total_exp);
+ }
+ 
+ /**
+  * @brief 获取当前等级的经验系数
+  * @param level 角色等级
+  * @return float 经验系数
+  */
+ public float get_exp_factor(int level)
+ {
+     string stage = get_level_stage(level);
+     if (!stage) return 0.0;
+     return level_config["level_stages"][stage]["exp_factor"];
+ }
+ 
+ /**
+  * @brief 获取升级增加的属性值
+  * @param me 角色对象
+  * @return mapping 属性增加值
+  */
+ public mapping level_up_attrs(object me)
+ {
+     int level = me->query("level");
+     string stage = get_level_stage(level);
+     mapping stage_data = level_config["level_stages"][stage];
+     
+     return ([
+         "max_qi": stage_data["qi_factor"],
+         "max_neili": stage_data["neili_factor"],
+         "max_jingli": stage_data["jingli_factor"]
+     ]);
+ }
+ 
+/**
+ * @brief 获取服务器等级上限
+ * @return int 服务器等级上限
+ */
+public int get_server_level_max()
+{
+    return 1000;
+}
+
+
+ /**
+  * @brief 处理角色升级
+  * @param me 角色对象
+  * @return void
+  */
+ public int level_up(object me)
+ {
+     int level = me->query("level");
+     mapping attrs;
+     
+     if (level >= 1000)
+         return 0;
+
+     if (level >= 300 && !me->query("opinion/ultra"))
+     {
+        // 未成为宗师，不能继续提升武道境界 
+        // tell_object(me, HIY "你尚未成为武道宗师，无法继续提升武道境界。\n" NOR);
+        return 0;
+     }
+
+     if (level >= get_server_level_max())
+     {
+        return 0;
+     }
+    
+     // 获取升级增加的属性值
+     attrs = level_up_attrs(me);
+     
+     me->add("level", 1);
+     me->add("level_max_qi", attrs["max_qi"]);
+     me->add("level_max_neili", attrs["max_neili"]);
+     me->add("level_max_jingli", attrs["max_jingli"]);
+
+     //生效属性
+     CHAR_D->setup_char(me);
+
+     //恢复所有属性eff
+     me->set("eff_qi", me->query("max_qi"));
+     me->set("eff_neili", me->query("max_neili"));
+     me->set("eff_jing", me->query("max_jing"));
+     
+     me->set("qi", me->query("max_qi"));
+     me->set("neili", me->query("max_neili"));
+     me->set("jing", me->query("max_jing"));
+     
+    //  100级以上，显示升级信息
+     if (me->query("level") >= 100)
+     {
+        tell_object(me, sprintf(HIY "\n恭喜你升到%d级，对于%s感悟更深了！\n" NOR,
+            me->query("level"), get_level_stage(me->query("level"))));
+     }
+    
+    return 1;
+ }
+

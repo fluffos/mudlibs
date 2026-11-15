@@ -1,0 +1,369 @@
+// yaomo_skill.c
+// 妖魔技能统一接口
+
+#pragma optimize
+
+#define YAOMO_D "/system/yaomo/yaomo_daemon"
+#define COMBAT_D "/adm/daemons/combatd"
+
+// 函数原型声明
+mapping* load_skills(string config_id);
+int calculate_damage(object caster, mapping skill);
+int check_condition(object caster, mapping skill, object* enemy);
+void perform_skill(object caster, mapping skill, object* targets);
+int check_cooldown(object caster, string skill_id);
+void set_cooldown(object caster, string skill_id, int cooldown);
+
+/**
+ * @brief 从JSON读取技能数据
+ * @param string config_id 妖魔配置ID
+ * @return mapping* 技能列表
+ * @details 从妖魔配置中提取技能数据
+ */
+mapping* load_skills(string config_id)
+{
+    mapping config;
+    mapping* skills;
+
+    // 从守护进程加载配置
+    config = YAOMO_D->load_yaomo_config(config_id);
+
+    if (!mapp(config))
+    {
+        return ({});
+    }
+
+    // 获取技能列表
+    skills = config["skills"];
+
+    if (!arrayp(skills))
+    {
+        return ({});
+    }
+
+    return skills;
+}
+
+/**
+ * @brief 计算技能伤害
+ * @param object caster 施法者
+ * @param mapping skill 技能数据
+ * @return int 最终伤害值
+ * @details 根据技能配置和施法者属性计算最终伤害
+ */
+int calculate_damage(object caster, mapping skill)
+{
+    int damage;
+    int level;
+    mapping damage_ratio;
+
+    // 基础伤害
+    damage = skill["base_damage"];
+
+    if (!intp(damage))
+    {
+        damage = 0;
+    }
+
+    // 获取妖魔等级
+    level = caster->query("level");
+
+    // 获取伤害加成比例
+    damage_ratio = skill["damage_ratio"];
+
+    if (mapp(damage_ratio))
+    {
+        // 等级加成
+        if (!undefinedp(damage_ratio["level"]))
+        {
+            damage += level * damage_ratio["level"];
+        }
+
+        // 臂力加成
+        if (!undefinedp(damage_ratio["str"]))
+        {
+            damage += caster->query_str() * damage_ratio["str"];
+        }
+
+        // 悟性加成
+        if (!undefinedp(damage_ratio["int"]))
+        {
+            damage += caster->query_int() * damage_ratio["int"];
+        }
+
+        // 根骨加成
+        if (!undefinedp(damage_ratio["con"]))
+        {
+            damage += caster->query_con() * damage_ratio["con"];
+        }
+
+        // 身法加成
+        if (!undefinedp(damage_ratio["dex"]))
+        {
+            damage += caster->query_dex() * damage_ratio["dex"];
+        }
+    }
+
+    return damage;
+}
+
+/**
+ * @brief 检查技能释放条件
+ * @param object caster 施法者
+ * @param mapping skill 技能数据
+ * @param object* enemy 敌人列表
+ * @return int 1表示满足条件，0表示不满足
+ * @details 检查血量百分比和敌人数量条件
+ */
+int check_condition(object caster, mapping skill, object* enemy)
+{
+    mapping condition;
+    int hp_percent;
+    int current_hp_percent;
+    int enemy_count;
+
+    condition = skill["condition"];
+
+    if (!mapp(condition))
+    {
+        return 1;
+    }
+
+    // 检查血量百分比
+    if (!undefinedp(condition["hp_percent"]))
+    {
+        hp_percent = condition["hp_percent"];
+        current_hp_percent = caster->query("eff_qi") * 100 / caster->query("max_qi");
+
+        if (current_hp_percent > hp_percent)
+        {
+            return 0;
+        }
+    }
+
+    // 检查敌人数量
+    if (!undefinedp(condition["enemy_count"]))
+    {
+        enemy_count = condition["enemy_count"];
+
+        if (!arrayp(enemy) || sizeof(enemy) < enemy_count)
+        {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/**
+ * @brief 执行技能效果
+ * @param object caster 施法者
+ * @param mapping skill 技能数据
+ * @param object* targets 目标列表
+ * @details 根据伤害类型执行不同的伤害计算
+ */
+void perform_skill(object caster, mapping skill, object* targets)
+{
+    int damage;
+    string damage_type;
+    string description;
+    string skill_name;
+    int i;
+    int len;
+
+    if (!arrayp(targets) || sizeof(targets) == 0)
+    {
+        return;
+    }
+
+    // 获取技能信息
+    skill_name = skill["name"];
+    damage_type = skill["damage_type"];
+    description = skill["description"];
+
+    // 计算伤害
+    damage = calculate_damage(caster, skill);
+
+    // 显示技能描述
+    if (stringp(description))
+    {
+        string msg;
+
+        msg = description;
+        msg = replace_string(msg, "$N", caster->name());
+
+        if (sizeof(targets) > 0 && objectp(targets[0]))
+        {
+            msg = replace_string(msg, "$n", targets[0]->name());
+        }
+
+        message_vision(HIR "\n" + msg + "\n\n" NOR, caster);
+    }
+
+    // 对所有目标造成伤害
+    len = sizeof(targets);
+    for (i = 0; i < len; i++)
+    {
+        object target;
+        int final_damage;
+
+        target = targets[i];
+
+        if (!objectp(target) || !living(target))
+        {
+            continue;
+        }
+
+        final_damage = damage;
+
+        // 根据伤害类型执行不同的伤害计算
+        if (damage_type == "perform")
+        {
+            int wound;
+
+            // 单招伤害，受护甲完整计算
+            final_damage = COMBAT_D->calc_damage(caster, target, damage);
+            wound = COMBAT_D->calc_wound(caster, target, damage / 2);
+
+            target->receive_damage("qi", final_damage, caster);
+            target->receive_wound("qi", wound, caster);
+
+            tell_object(target, HIR "你受到了 " + skill_name + " 的攻击，损失了 " + final_damage + " 点气血！\n" NOR);
+            tell_object(caster, HIG "你的 " + skill_name + " 击中了 " + target->name() + "，造成了 " + final_damage + " 点伤害！\n" NOR);
+        }
+        else if (damage_type == "ignore_armor")
+        {
+            // 真实伤害，无视护甲但仍受破甲影响
+            final_damage = COMBAT_D->real_damage(caster, target, damage);
+        }
+        else if (damage_type == "jing")
+        {
+            // 精神伤害
+            final_damage = COMBAT_D->calc_jing_damage(caster, target, damage);
+
+            if (final_damage < 1)
+            {
+                final_damage = 1;
+            }
+
+            target->receive_damage("jing", final_damage, caster);
+
+            tell_object(target, HIM "你的精神受到了 " + skill_name + " 的冲击，损失了 " + final_damage + " 点精神！\n" NOR);
+            tell_object(caster, HIC "你的 " + skill_name + " 冲击了 " + target->name() + " 的精神，造成了 " + final_damage + " 点伤害！\n" NOR);
+        }
+
+        // 设置战斗状态
+        if (target->is_busy())
+        {
+            target->interrupt_me(target, 2 + random(3));
+        }
+    }
+
+    // 设置技能冷却
+    set_cooldown(caster, skill["id"], skill["cooldown"]);
+}
+
+/**
+ * @brief 检查技能冷却时间
+ * @param object caster 施法者
+ * @param string skill_id 技能ID
+ * @return int 1表示可以释放，0表示冷却中
+ * @details 检查技能是否处于冷却中
+ */
+int check_cooldown(object caster, string skill_id)
+{
+    int cooldown_time;
+
+    cooldown_time = caster->query_temp("yaomo_skill_cd/" + skill_id);
+
+    if (!intp(cooldown_time))
+    {
+        return 1;
+    }
+
+    if (time() >= cooldown_time)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 设置技能冷却时间
+ * @param object caster 施法者
+ * @param string skill_id 技能ID
+ * @param int cooldown 冷却时间（心跳数）
+ * @details 设置技能的冷却结束时间
+ */
+void set_cooldown(object caster, string skill_id, int cooldown)
+{
+    int cooldown_time;
+
+    // 计算冷却结束时间（心跳数转换为秒）
+    cooldown_time = time() + (cooldown * 2);
+
+    caster->set_temp("yaomo_skill_cd/" + skill_id, cooldown_time);
+}
+
+/**
+ * @brief 获取可用技能
+ * @param object caster 施法者
+ * @param mapping* skills 技能列表
+ * @param object* enemy 敌人列表
+ * @return mapping 可用的技能，优先级最高
+ * @details 返回当前可以释放的优先级最高的技能
+ */
+mapping query_available_skill(object caster, mapping* skills, object* enemy)
+{
+    mapping best_skill;
+    int best_priority;
+    int i;
+    int len;
+
+    if (!arrayp(skills) || sizeof(skills) == 0)
+    {
+        return 0;
+    }
+
+    best_skill = 0;
+    best_priority = -1;
+
+    len = sizeof(skills);
+    for (i = 0; i < len; i++)
+    {
+        mapping skill;
+        int priority;
+
+        skill = skills[i];
+
+        // 检查冷却时间
+        if (!check_cooldown(caster, skill["id"]))
+        {
+            continue;
+        }
+
+        // 检查释放条件
+        if (!check_condition(caster, skill, enemy))
+        {
+            continue;
+        }
+
+        // 获取优先级
+        priority = skill["priority"];
+
+        if (!intp(priority))
+        {
+            priority = 0;
+        }
+
+        // 选择优先级最高的技能
+        if (priority > best_priority)
+        {
+            best_priority = priority;
+            best_skill = skill;
+        }
+    }
+
+    return best_skill;
+}

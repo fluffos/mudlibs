@@ -1,0 +1,487 @@
+/**
+ * @file prepare.c
+ * @author 原作者
+ * @brief 技能准备命令，用于组合特殊拳术技能
+ * @date 优化日期：2023-11-01
+ * @details 本命令允许玩家准备和组合不同的特殊拳术技能，最多可以组合两种技能
+ */
+
+inherit F_CLEAN_UP;
+
+// 函数声明
+int main(object me, string arg);
+int help(object me);
+string display_prepared_skills(object me, mapping pmap);
+string display_valid_skill_types();
+int prepare_single_skill(object me, string arg, mapping pmap);
+int prepare_two_skills(object me, string arg1, string arg2, mapping pmap);
+string find_basic_skill_type(object me, string skill_name, mapping smap);
+string *get_available_skills(object me);
+
+// 有效的技能类型映射
+mapping valid_types = 
+([
+	"finger":   "指法",
+	"hand":     "手法",
+	"cuff":     "拳法",
+	"claw":     "爪法",
+	"strike":   "掌法",
+	"unarmed":  "拳脚",
+]);
+
+/**
+ * @brief 主函数，处理prepare命令
+ * @param object me 执行命令的玩家对象
+ * @param string arg 命令参数
+ * @return int 命令执行结果，1表示成功，0表示失败
+ */
+int main(object me, string arg)
+{
+	mapping smap, pmap;
+	string *skill, basic1, basic2, arg1, arg2, arg3;
+	string msg;
+	int i;
+
+	seteuid(getuid());
+
+	smap = me->query_skill_map();
+
+	if (! mapp(smap) || sizeof(smap) == 0)
+		return notify_fail("你现在没有使用任何有效特殊技能。\n");
+
+	pmap = me->query_skill_prepare();
+	if (! pmap) pmap = ([]);
+
+	if (! arg)
+	{
+		if (! mapp(pmap) || sizeof(pmap) == 0)
+			return notify_fail("你现在没有组合任何特殊拳术技能。\n");
+
+		msg = display_prepared_skills(me, pmap);
+		
+		{
+			object pop;
+			pop = new(POP1);
+			pop->basic(msg, me, 2);
+			pop->add_button("特殊组合", "prepare ?");
+			pop->add_button("取消准备", "prepare none");
+			pop->add_button("快速切换", "prepare switch");
+			write(pop->result() + "\n");
+		}
+
+		return 1;
+	}
+	
+
+	if (arg == "?") 
+	{
+		msg = display_valid_skill_types();
+		write(popup_title(msg));
+		return 1;
+	}
+
+	if (arg == "none")
+	{
+		if (! mapp(pmap) || sizeof(pmap) == 0)
+			return notify_fail("你现在没有组合任何特殊拳术技能。\n");
+
+		skill = keys(pmap);
+		for (i = 0; i < sizeof(skill); i++)
+		{
+			me->prepare_skill(skill[i]);
+		}
+
+		me->reset_action();
+		write(("已经取消全部技能准备。\n"));
+		return 1;
+	}
+	
+	// 新增快速切换功能
+	if (arg == "switch")
+	{
+		string *available_skills = get_available_skills(me);
+		
+		if (sizeof(available_skills) == 0)
+			return notify_fail("你目前没有可用的空手类型技能可以切换。\n");
+		
+		{
+			object pop;
+			pop = new(POP1);
+			pop->basic("请选择要准备的空手技能：", me, 2);
+			
+			foreach (string skill_name in available_skills)
+			{
+				pop->add_button(to_chinese(skill_name), "prepare switch_to " + skill_name);
+			}
+			
+			pop->add_button("返回", "prepare");
+			write(pop->result() + "\n");
+		}
+		
+		return 1;
+	}
+
+	// 处理switch_to参数，用于实际切换技能
+	if (sscanf(arg, "switch_to %s", arg1) == 1)
+	{
+		me->set_temp("prepare_switch", 1);
+		// 首先取消当前准备的技能
+		me->force_me("prepare none");
+		
+		// 然后准备新的技能
+		me->force_me("prepare " + arg1);
+		me->delete_temp("prepare_switch");
+		return 1;
+	}
+
+	if (sizeof(pmap) >= 2)
+	{
+		// 使用pop1对象创建弹窗，让玩家选择是否取消当前的组合或替换
+		object pop;
+		pop = new(POP1);
+		pop->basic("你现在已经组合了两种特殊技能。\n请选择你接下来要进行的操作：", me, 2);
+		pop->add_button("查看当前组合", "prepare");
+		pop->add_button("取消当前组合", "prepare none");
+		pop->add_button("替换准备技能", "prepare switch_to " + arg);
+		write(pop->result() + "\n");
+		return 1;
+	}
+
+	basic1 = 0;
+	basic2 = 0;
+	if (sscanf(arg, "%s %s %s", arg1, arg2, arg3) >= 3)
+		return notify_fail("指令格式：prepare|bei [<技能名称一>|<技能名称二>]\n");
+
+	if (sscanf(arg, "%s %s", arg1, arg2) == 2)
+	{
+		if (sizeof(pmap) == 1)
+			return notify_fail("你已准备有一种技能了。\n");
+		else
+		{
+			if (me->query_skill_mapped(arg1))
+			{
+				basic1 = arg1;
+				arg1 = me->query_skill_mapped(arg1);
+			}
+
+			if (me->query_skill_mapped(arg2))
+			{
+				basic2 = arg2;
+				arg2 = me->query_skill_mapped(arg2);
+			}
+
+			if (! me->query_skill(arg1, 1) || ! me->query_skill(arg2, 1))
+				return notify_fail("你至少不会这两种技能其中之一。\n");
+
+			if (! SKILL_D(arg1)->valid_combine(arg2))
+				return notify_fail("这两种拳术技能不能组合。\n");
+
+			skill = keys(valid_types);
+			for (i = 0; i < sizeof(skill); i++)
+			{
+				if (! basic1 && smap[skill[i]] == arg1) basic1 = skill[i];
+				if (! basic2 && smap[skill[i]] == arg2) basic2 = skill[i];
+			}
+
+			if (! basic1 || ! basic2)
+				return notify_fail("这两种拳术尚未激发或目前不能准备。\n");
+
+			if (! valid_types[basic1])
+				return notify_fail(to_chinese(arg1) + "这种技能不需要准备。\n");
+
+			if (! valid_types[basic2])
+				return notify_fail(to_chinese(arg2) + "这种技能不需要准备。\n");
+
+			me->prepare_skill(basic1, arg1);
+			me->prepare_skill(basic2, arg2);
+
+			me->reset_action();
+			write("完成技能准备。\n");
+			return 1;
+		}		
+	}
+
+	if (sscanf(arg, "%s", arg1) == 1 && sizeof(pmap) <= 1)
+	{
+		if (me->query_skill_mapped(arg1))
+		{
+			basic1 = arg1;
+			arg1 = me->query_skill_mapped(arg1);
+		}
+
+		if (! me->query_skill(arg1, 1))
+			return notify_fail("你不会这种技能。\n");
+
+		skill = keys(pmap);
+
+
+
+		if (sizeof(pmap) == 1 &&
+		   ! SKILL_D(arg1)->valid_combine(pmap[skill[0]]))
+		{
+			object pop;
+			if (arg1 == pmap[skill[0]])
+				return notify_fail(HIR + to_chinese(arg1) + NOR + "已经作为你的空手准备武学，不必第二次准备。\n");
+			
+			pop = new(POP1);
+			pop->basic(HIR + to_chinese(arg1) + NOR + "不能和你现在已经准备的" + HIB + to_chinese(pmap[skill[0]]) + NOR + "进行组合，如果你是激发新的空手技能系统可以辅助您进行准备你可以考虑是否在战斗中使用这项新的武学。\n你可以选择取消，或者直接替换新的技能。\n"HIR"如果您对准备系统有疑问可以点击说明按钮进行了解"NOR, me, 2);
+			pop->add_button("替换", "prepare switch_to " + arg1);
+			pop->add_button("说明", "help prepare");
+			write(pop->result() + "\n");
+			return 1;
+		}
+
+		skill = keys(valid_types);
+		for (i = 0; i < sizeof(skill); i++)
+			if (! basic1 && smap[skill[i]] == arg1) basic1 = skill[i];
+
+		if (! basic1)
+			return notify_fail("这种技能尚未激发或目前不能准备。\n");
+
+		if (! valid_types[basic1])
+			return notify_fail(to_chinese(arg1) + "这种技能不需要准备。\n");
+
+		me->prepare_skill(basic1, arg1);
+
+		if (!me->query_temp("prepare_switch"))
+			me->force_me("new_skills " + basic1);
+
+		me->reset_action();
+		write("完成"HIG + to_chinese(arg1) + NOR + "技能准备。\n");
+	
+		return 1;
+	}
+	
+	return 1;
+}
+
+/**
+ * @brief 显示当前准备的技能
+ * @param object me 玩家对象
+ * @param mapping pmap 已准备的技能映射
+ * @return string 格式化的技能信息
+ */
+string display_prepared_skills(object me, mapping pmap)
+{
+	string msg;
+	string *skill;
+	
+	skill = keys(valid_types);
+	msg = "以下是你目前组合中的特殊拳术技能。\n";
+	
+	foreach (string sk in skill)
+	{
+		if (!me->query_skill(sk) || !pmap[sk]) 
+			continue;
+			
+		msg += valid_types[sk] + " (" + sk + ")" +
+			   "   " + to_chinese(pmap[sk]) + "\n";
+	}
+	
+	return msg;
+}
+
+/**
+ * @brief 显示所有可用的技能类型
+ * @return string 格式化的技能类型信息
+ */
+string display_valid_skill_types()
+{
+	string msg;
+	string *skill;
+	
+	msg = "以下是可以使用特殊拳术技能的种类：\n";
+	skill = sort_array(keys(valid_types), (: strcmp :));
+	
+	foreach (string sk in skill)
+	{
+		msg += sprintf("  %s (%s)\n", valid_types[sk], sk);
+	}
+	
+	return msg;
+}
+
+/**
+ * @brief 准备单一技能
+ * @param object me 玩家对象
+ * @param string arg 技能名称
+ * @param mapping pmap 已准备的技能映射
+ * @return int 命令执行结果，1表示成功，0表示失败
+ */
+int prepare_single_skill(object me, string arg, mapping pmap)
+{
+	string basic_skill;
+	string skill_name = arg;
+	mapping smap = me->query_skill_map();
+	string *prepared_skills;
+
+	// 检查技能是否已激发
+	if (me->query_skill_mapped(arg))
+	{
+		basic_skill = arg;
+		skill_name = me->query_skill_mapped(arg);
+	}
+
+	// 检查是否会这种技能
+	if (!me->query_skill(skill_name, 1))
+		return notify_fail("你不会这种技能。\n");
+
+	// 检查技能组合兼容性
+	prepared_skills = keys(pmap);
+	if (sizeof(pmap) == 1 && !SKILL_D(skill_name)->valid_combine(pmap[prepared_skills[0]]))
+		return notify_fail("这种技能不能于你现有技能组合。\n");
+
+	// 查找基础技能类型
+	if (!basic_skill)
+		basic_skill = find_basic_skill_type(me, skill_name, smap);
+
+	if (!basic_skill)
+		return notify_fail("这种技能尚未激发或目前不能准备。\n");
+
+	if (!valid_types[basic_skill])
+		return notify_fail(to_chinese(skill_name) + "这种技能不需要准备。\n");
+
+	// 准备技能
+	me->prepare_skill(basic_skill, skill_name);
+	me->force_me("new_skills " + basic_skill);
+	me->reset_action();
+	write("完成技能准备。\n");
+
+	return 1;
+}
+
+/**
+ * @brief 准备两种技能
+ * @param object me 玩家对象
+ * @param string arg1 第一个技能名称
+ * @param string arg2 第二个技能名称
+ * @param mapping pmap 已准备的技能映射
+ * @return int 命令执行结果，1表示成功，0表示失败
+ */
+int prepare_two_skills(object me, string arg1, string arg2, mapping pmap)
+{
+	string basic1 = 0;
+	string basic2 = 0;
+	string skill_name1 = arg1;
+	string skill_name2 = arg2;
+	mapping smap = me->query_skill_map();
+
+	// 已准备一种技能时不能再准备两种
+	if (sizeof(pmap) == 1)
+		return notify_fail("你已准备有一种技能了。\n");
+
+	// 检查技能是否已激发
+	if (me->query_skill_mapped(arg1))
+	{
+		basic1 = arg1;
+		skill_name1 = me->query_skill_mapped(arg1);
+	}
+
+	if (me->query_skill_mapped(arg2))
+	{
+		basic2 = arg2;
+		skill_name2 = me->query_skill_mapped(arg2);
+	}
+
+	// 检查是否会这两种技能
+	if (!me->query_skill(skill_name1, 1) || !me->query_skill(skill_name2, 1))
+		return notify_fail("你至少不会这两种技能其中之一。\n");
+
+	// 检查技能组合兼容性
+	if (!SKILL_D(skill_name1)->valid_combine(skill_name2))
+		return notify_fail("这两种拳术技能不能组合。\n");
+
+	// 查找基础技能类型
+	if (!basic1)
+		basic1 = find_basic_skill_type(me, skill_name1, smap);
+	
+	if (!basic2)
+		basic2 = find_basic_skill_type(me, skill_name2, smap);
+
+	if (!basic1 || !basic2)
+		return notify_fail("这两种拳术尚未激发或目前不能准备。\n");
+
+	if (!valid_types[basic1])
+		return notify_fail(to_chinese(skill_name1) + "这种技能不需要准备。\n");
+
+	if (!valid_types[basic2])
+		return notify_fail(to_chinese(skill_name2) + "这种技能不需要准备。\n");
+
+	// 准备技能
+	me->prepare_skill(basic1, skill_name1);
+	me->prepare_skill(basic2, skill_name2);
+	me->reset_action();
+	write("完成技能准备。\n");
+
+	return 1;
+}
+
+/**
+ * @brief 查找技能对应的基础技能类型
+ * @param object me 玩家对象
+ * @param string skill_name 技能名称
+ * @param mapping smap 已激发的技能映射
+ * @return string 基础技能类型，未找到则返回0
+ */
+string find_basic_skill_type(object me, string skill_name, mapping smap)
+{
+
+	if (!sizeof(smap))
+	{
+		return 0;
+	}
+
+	foreach (string type in keys(valid_types))
+	{
+		if (smap[type] == skill_name)
+			return type;
+	}
+	
+	return 0;
+}
+
+/**
+ * @brief 帮助函数，显示命令使用说明
+ * @param object me 玩家对象
+ * @return int 返回1表示成功
+ */
+int help(object me)
+{
+	string help_text = @HELP
+	由于在武学系统中，空手技能和武器技能的逻辑不一致，在武器技能上，当玩家装备了对应的兵器后，
+	系统会自动使用该技能来进行攻击，而在空手技能上，由于空手技能的多样性，则需要玩家手动选择使用，这样玩家可以更灵活的使用自己的技能，而不是由系统随机使用。
+	因此为了方便玩家使用，系统提供了准备技能的功能，玩家可以通过准备技能来选择使用哪种空手技能，
+HELP;
+
+	object pop;
+	pop = new(POP1);
+	pop->basic(help_text, me, 2);
+	pop->add_button("返回", "prepare");
+	write(pop->result() + "\n");
+	
+	return 1;
+}
+
+/**
+ * @brief 获取玩家可用的空手类型技能
+ * @param object me 玩家对象
+ * @return string* 可用的空手类型技能数组
+ */
+string *get_available_skills(object me)
+{
+	mapping smap = me->query_skill_map();
+	string *available = ({});
+	
+	if (!mapp(smap) || sizeof(smap) == 0)
+		return ({});
+		
+	foreach (string type in keys(valid_types))
+	{
+		if (smap[type] && me->query_skill(smap[type], 1) > 0)
+		{
+			available += ({ smap[type] });
+		}
+	}
+	
+	return available;
+}

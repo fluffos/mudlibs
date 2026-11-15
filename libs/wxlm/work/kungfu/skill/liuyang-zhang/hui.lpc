@@ -1,0 +1,240 @@
+/**
+ * @brief 天山六阳掌特殊招式 - 灰飞湮灭
+ * @author 武侠黎明开发组
+ * @date 2024-07-26
+ */
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+string name() { return HIR"灰飞湮灭"NOR; }
+string query_name() { return "灰飞湮灭"; }
+string *pfm_type() { return ({ "strike", }); }
+
+#include "/kungfu/skill/eff_msg.h";
+
+// 函数原型声明
+string final(object me, object target, int lvl);
+
+int perform(object me, object target)
+{
+        string msg;
+        int ap, dp, delta;
+        int damage = 0;                    // 初始化damage值为0
+        int add_dam = 100;                 // 默认附加伤害值
+        int flvl;                          // 加力值
+        int is_jifa_beiming = 0;           // 是否激发了青冥神功
+        int attack_type = UNARMED_ATTACK;  // 攻击类型
+        int new_damage;                    // 扣除内力或气血的伤害
+        int aoyi_level;                    // 意境等级
+        int base_baoji = 50;
+
+        // 选择对手
+        if (!target)
+        {
+                me->clean_up_enemy();
+                target = me->select_opponent();
+        }
+
+        // 使用条件检查
+        if (objectp(query_temp("weapon", me)))
+                return notify_fail("「灰飞湮灭」只能空手才能施展。\n");
+
+        if (!me->is_fighting(target))
+                return notify_fail("「灰飞湮灭」只能对战斗中的对手使用。\n");
+
+        if (!target || !target->is_character())
+                return notify_fail("你要对谁施展灰飞湮灭？\n");
+
+        if (!living(target))
+                return notify_fail("看清楚，那不是活人。\n");
+
+        if (me->query_skill_prepared("strike") != "liuyang-zhang")
+                return notify_fail("你还没有将天山六阳掌与逍遥折梅手互备，无法施展。\n");
+
+        if (me->query_skill_prepared("hand") != "zhemei-shou")
+                return notify_fail("你还没有将天山六阳掌与逍遥折梅手互备，无法施展。\n");
+
+        // 检查是否激发了凌波微步或九天十地唯我独尊功
+        if (me->query_skill_mapped("dodge") != "lingbo-weibu" && 
+            me->query_skill_mapped("force") != "bahuang-gong")
+                return notify_fail("你还没有激发凌波微步或九天十地唯我独尊功，无法施展。\n");
+
+        if (query("neili", me) < query("max_neili", me) / 35)
+                return notify_fail("你的真气不够，现在无法施展灰飞湮灭。\n");
+
+        // 招式描述
+        msg = HIY "$N" HIY "左手化掌，右手成刀，不停翻转向前，掌风到处，一股紫气席卷而至，将$n" HIY "四周包围。\n" NOR;
+
+        // 计算攻防值
+        ap = me->query_skill("strike") + me->query_skill("parry");
+        dp = target->query_skill("parry") + target->query_skill("force");
+        
+
+        
+        // 加力值计算
+        flvl = query("jiali", me);
+        
+        // 检查是否激发了青冥神功或九天十地唯我独尊功
+        if (me->query_skill_mapped("force") == "beiming-shengong")
+                is_jifa_beiming = 1;
+        else if (me->query_skill_mapped("force") == "bahuang-gong")
+                is_jifa_beiming = 1;
+
+        // 获取灵鹫飞羽意境等级
+        aoyi_level = COMBAT_D->get_skill_aoyi_level(me, "灵鹫飞羽");
+
+        // 取两种意境中较高的加成攻击力
+        delta = COMBAT_D->get_skill_aoyi_level(me, "自由自在");
+        delta = (delta > aoyi_level) ? delta : aoyi_level;
+
+        // PVE命中加成
+        if (!playerp(target))
+                ap = ap * 3 / 2;
+
+        // 命中判定
+        if (COMBAT_D->hit_determination(me, target, ap, dp))
+        {
+                int power_per = 0;
+                // 基础伤害计算
+                damage = damage_power(me, "strike") + damage_power(me, "dodge") / 2;
+                damage += query("jiali", me);
+                damage += damage / 400 * me->query_str();  
+                
+                // 九天十地唯我独尊功加成
+                if (me->query_skill_mapped("force") == "bahuang-gong")
+                {
+                        power_per += 30;
+                }
+                
+                // 意境伤害加成
+                if (delta) {
+                        power_per += delta;
+                }
+
+                damage += damage * power_per / 100;
+                
+                base_baoji += to_int(delta * 3.5);
+
+                if (target->query_skill("force") > me->query_skill("force") && playerp(target))
+                {
+                        base_baoji /= 2;
+                }
+
+                // 青冥神功内力迸发效果
+                if (is_jifa_beiming && random(100) <= (base_baoji))
+                {
+                        msg += HIW "刹那间，$N" HIW "只觉体内北冥真气犹如火山喷发般汹涌而出，周身"
+                               "穴位中融和了无数武学高手不同宗派的内力，顷刻间涌出，游走至双掌"
+                               "，泛出炽热的白光 ……\n" NOR;
+                        msg = sort_msg(msg);
+
+                        // 如果当前内力超过最大内力,最多将最大内力的10%转化为伤害
+                        if (me->query("neili") > me->query("max_neili") * 15 / 100)
+                        {
+                                int extra_damage;
+                                extra_damage = ((me->query("neili") > me->query("max_neili")) ? me->query("max_neili") * 10 / 100 : me->query("neili") * 10 / 100);
+                                damage += extra_damage;
+                                me->add("neili", -extra_damage);
+                        }
+
+                        add_dam = 200;
+                }
+
+                // 离开逍遥派后威力减半
+                if (!(query("family/family_name", me) || 
+                     (query("family/family_name", me) != "逍遥派") && 
+                     query("family/family_name", me) != "灵鹫宫") && 
+                    (!query("reborn/times", me) || 
+                     member_array("逍遥派", query("reborn/fams", me)) == -1))
+                {
+                        damage /= 2;
+                        add_dam /= 2;
+                }
+
+                // 执行伤害
+                msg += COMBAT_D->do_damage(me, target, attack_type, damage, add_dam,
+                                          HIR "只见风沙漫天,忽地一掌正中$n" HIR "胸口，随即"
+                                          "闷哼一声，鲜血狂喷而出。\n" NOR);
+
+                // 消耗内力
+                addn("neili", -query("max_neili", me) / 40, me);
+
+                // 扣除敌方内力或气血
+                if (target->query("neili") > me->query_skill("beiming-shengong", 1))
+                {
+                        new_damage = me->query_skill("beiming-shengong", 1); 
+                        if (new_damage < 0) 
+                                new_damage = 1;
+                        target->add("neili", -new_damage);
+                }
+                else
+                {
+                        new_damage = me->query_skill("beiming-shengong", 1); 
+                        if (new_damage < 0) 
+                                new_damage = 1;
+                        COMBAT_D->real_damage(me, target, new_damage);
+                }
+
+                // 凌波微步高级效果，有几率不会忙乱
+                if (me->query_skill("lingbo-weibu", 1) >= 300 && random(100) < 15)
+                {
+                        message_combatd(HIW "$N" HIW "默念凌波微步口诀，身法忽快，丝毫不受出招的阻碍。\n" NOR, me);
+                }
+                else
+                {
+                        me->start_busy(2);
+                }
+        } 
+        else
+        {
+                // 招式未命中
+                msg += CYN "可是$p" CYN "身法突变，左躲右闪，竟避过这招。\n" NOR;
+                
+                // 凌波微步高级效果判定
+                if (me->query_skill("lingbo-weibu", 1) >= 500 && random(100) < 45)
+                {
+                        message_combatd(HIW "$N" HIW "默念凌波微步口诀，身法忽快，丝毫不受出招的阻碍。\n" NOR, me);
+                }
+                else
+                {
+                        me->start_busy(3);
+                }
+                
+                // 消耗内力
+                addn("neili", -1500, me);
+        }
+
+        // 输出战斗信息
+        message_combatd(msg, me, target);
+
+        return 1;
+}
+
+/**
+ * @brief 灰飞湮灭的额外效果
+ * @param me 使用者
+ * @param target 目标
+ * @param lvl 等级
+ * @return string 效果描述
+ */
+string final(object me, object target, int lvl)
+{
+        // 毒素效果
+        target->affect_by("ss_poison",
+                       ([ "level"    : lvl,
+                          "id"       : query("id", me),
+                          "duration" : 120 + random(240)]));
+
+        // 1/5概率清空目标内力
+        if (random(5) == 1)
+                set("neili", 0, target);
+
+        // 使目标忙乱
+        if (!target->is_busy()) 
+                target->start_busy(2 + random(5));
+
+        return HIR "$n" HIR "只觉得一股寒气透心而过，犹如利刃穿心，难受之极。\n" NOR;
+}
+

@@ -1,0 +1,229 @@
+// kong.c 重剑破空
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+string name() { return HIC "重剑破空" NOR; }
+string query_name() { return "重剑破空"; }
+
+/**
+ * @brief 重剑破空绝技
+ * @param object me 施展者
+ * @param object target 目标
+ * @return int 1表示成功，0表示失败
+ * @details 融合剑破长空与大江东去，既有击落兵器又有重剑威力的终极绝技
+ */
+int perform(object me, object target)
+{
+    string msg;
+    object weapon, weapon2;
+    int skill, ap, dp, damage, px, md, sx;
+    int hp, hp1;
+    int jy;
+
+    int anran_level = COMBAT_D->get_skill_aoyi_level(me, "黯然隐雾");
+    int cangsung_level = COMBAT_D->get_skill_aoyi_level(me, "苍松之劲");
+    me->clean_up_enemy();
+    if (!target) target = me->select_opponent();
+
+    skill = me->query_skill("xuanming-sword", 1);
+
+    if (!me->is_fighting(target))
+        return notify_fail(name() + "只能对战斗中的对手使用。\n");
+
+    if (skill < 200)
+        return notify_fail("你的玄命剑典等级不够，无法施展" + name() + "。\n");
+
+    if (!objectp(weapon = me->query_temp("weapon")) || weapon->query("skill_type") != "sword")
+        return notify_fail("你使用的武器不对，无法施展" + name() + "。\n");
+
+    if (me->query_skill_mapped("sword") != "xuanming-sword")
+        return notify_fail("你没有激发玄命剑典，无法施展" + name() + "。\n");
+
+    if ((int)me->query_skill("force", 1) < 220)
+        return notify_fail("你的内功火候不够，难以施展" + name() + "。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    if (me->query("neili") < 1200)
+        return notify_fail("你此时的内力不足，难以施展" + name() + "。\n");
+
+    ap = attack_power(me, "sword");
+    dp = defense_power(target, "parry");
+
+    px = target->query_skill("pixie-jian", 1);
+    md = target->query_skill("kuihua-shengong", 1);
+    sx = target->query_skill("six-finger", 1);
+
+    jy = me->query_skill("xuanming-sword", 1);
+    ap = ap + me->query_skill("martial-cognize", 1);
+    dp = dp + target->query_skill("martial-cognize", 1);
+
+    // 融合独孤九剑的克制特性
+    if (px || md)
+        ap += ap / 5;
+
+    if (sx)
+        ap -= ap / 5;
+
+    // 融合大江东去的重剑特性
+    if (weapon->query_weight() > 10000)
+    {
+        ap += (weapon->query_weight() - 10000) / 80; // 重剑加成
+    }
+
+    if (me->query("character") == "光明磊落")
+    {
+        ap += ap / 10;
+    }
+
+    // PVE加成
+    if (!userp(target))
+    {
+        ap += ap / 2;
+    }
+
+    weapon2 = target->query_temp("weapon");
+
+    if (objectp(weapon2))
+    {
+        msg = HIC "$N" HIC "神态威严，双目如电，玄命剑典至高奥义「重剑破空」骤然施展！手持" + weapon->name() +
+              HIC "重若千钧，轻若鸿毛，剑意破空而出！\n" NOR
+              HIW "只见$N" HIW "身形巍然不动，一股磅礴剑气裹挟着重剑之威，直袭$n" HIW "手中兵器！\n" NOR;
+
+        me->add("neili", -300);
+
+        // 第一阶段：击落兵器判定（融合剑破长空特点）
+        if ((COMBAT_D->hit_determination(me, target, ap, dp) && random(4) == 1) || (ap / 2 > dp))
+        {
+            msg += HIR "$n" HIR "面对这重剑破空之势，手中" + weapon2->name() +
+                   HIR "竟无法把持，被剑气震得脱手飞出！\n" NOR
+                   HIC "$N" HIC "剑势不减，淡然道：「重剑无锋，大巧不工。」\n" NOR;
+
+            weapon2->unequip();
+            weapon2->move(environment(me));
+        }
+        else
+        {
+            msg += CYN "$n" CYN "全神贯注，将毕生武学汇于" + weapon2->name() + CYN "之上，勉强挡住这一击！\n" NOR;
+        }
+        message_combatd(msg, me, target);
+    }
+    else
+    {
+        msg = HIC "$N" HIC "面色凝重，眸光如电，玄命剑典终极奥义「重剑破空」威震四方！\n" NOR
+              HIW "手中" + weapon->name() + HIW "宛如开天辟地之器，剑气破空而至！\n" NOR;
+        message_combatd(msg, me, target);
+    }
+
+    // 第二阶段：主伤害判定（融合两种剑法威力）
+    msg = HIC "$N" HIC "剑式陡变，既有独孤九剑的神妙变化，又蕴玄铁重剑的磅礴威力，\n"
+          HIC "手中" + weapon->name() + HIC "化作毁天灭地之势，直指$n" HIC "周身要穴！\n" NOR;
+
+    damage = damage_power(me, "sword");
+
+    // 武器重量加成（融合大江东去特点）
+    if (weapon->query_weight() > 10000)
+    {
+        damage += (weapon->query_weight() - 10000) / 60;
+    }
+
+    // 增加2%的最大内力增伤
+    if (me->query("max_neili") > 50)
+    {
+        damage += me->query("max_neili") / 50;
+    }
+
+    damage += me->query("jiali");
+    damage += damage / 500 * me->query_str();
+
+    // 双重意境加成
+
+    if (cangsung_level > 0)
+    {
+        int cangsung_damage = cangsung_level * me->query_skill("sword", 1) / 3;
+        damage += cangsung_damage;
+        msg += HIC "刹那间，$N" HIC "的「苍松之劲」与重剑破空完美融合，剑气中蕴含万古苍松之力！\n" NOR;
+    }
+
+    if (anran_level > 0)
+    {
+        int anran_damage = anran_level * damage / 10;
+        damage += anran_damage;
+        // 致命一击判定
+        if (random(100) < anran_level * 3)
+        {
+            damage += damage * 4 / 5;
+            target->start_busy(2);
+            msg += HIR "$N" HIR "触发「黯然隐雾」极致杀意，重剑破空威力达到巅峰！\n" NOR;
+        }
+        else
+        {
+            msg += HIW "$N" HIW "的「黯然隐雾」意境笼罩四周，剑势更添阴郁杀机！\n" NOR;
+        }
+    }
+
+    damage += me->query_skill("xuanming-sword", 1);
+
+    if (!userp(target))
+    {
+        damage += damage / 2;
+    }
+
+    if (COMBAT_D->hit_determination(me, target, ap, dp))
+    {
+        msg += COMBAT_D->do_damage(me, target, REMOTE_ATTACK, damage, 350 + jy / 8,
+                                   HIR "$n" HIR "面对这集两家剑法大成的绝世一击，避无可避，挡无可挡！"
+                                   "重剑破空的威力贯穿$n" HIR "周身，鲜血如雨飞洒！\n" NOR);
+
+        // 额外伤害判定（融合大江东去的重击特点）
+        if (random(3) < 2)
+        {
+            if (damage < 0) damage = 1;
+            COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage / 2, 100,
+                               HIC "$N" HIC "剑势未竭，重剑之威再度爆发，又是一记毁灭性打击！\n" NOR);
+        }
+
+        me->start_busy(2);
+        if (!target->is_busy())
+            target->start_busy(1);
+        me->add("neili", -700);
+
+        // 减少目标内力（融合大江东去特点）
+        target->add("neili", -weapon->query_weight() / 3);
+    }
+    else
+    {
+        msg += CYN "$n" CYN "面对这毁天灭地的剑势，拼尽全力闪转腾挪，堪堪避开要害！\n" NOR;
+        me->start_busy(3);
+        me->add("neili", -600);
+        target->start_busy(1);
+    }
+    message_combatd(msg, me, target);
+
+    // 第三阶段：斩杀判定
+    hp = target->query("qi");
+    hp1 = target->query("eff_qi");
+    if (hp1 < hp) hp = hp1;
+
+    if (hp < target->query("max_qi") / 10)
+    {
+        msg = HIR "$N" HIR "见$n" HIR "已是强弩之末，眼中杀意凛然，剑尖遥指：\n" NOR
+              HIR "「玄冥合一，重剑破空！」" + weapon->name() + HIR "剑芒暴涨，如天神下凡，穿透$n" HIR "心脉！\n" NOR
+              HIR "$n" HIR "双目圆睁，在这绝世剑威下缓缓倒下。\n" NOR;
+        msg += HIC "$N" HIC "潇洒收剑，剑典神威震撼四方。\n" NOR;
+        message_combatd(msg, me, target);
+
+        if (hp < 1)
+            return 1;
+        COMBAT_D->do_damage(me, target, WEAPON_ATTACK, target->query("qi"), 100, "");
+        target->die(me);
+        return 1;
+    }
+
+    msg = HIC "$N" HIC "收剑而立，玄命剑典威震天下，身影如山岳般巍峨。\n" NOR;
+    message_combatd(msg, me, target);
+    return 1;
+}

@@ -1,0 +1,422 @@
+// go.c
+
+#include <config.h>
+
+inherit F_CLEAN_UP;
+
+mapping default_dirs = ([
+	"north":	"北方",
+	"south":	"南方",
+	"east":	 "东方",
+	"west":	 "西方",
+	"northup":      "北边",
+	"southup":      "南边",
+	"eastup":       "东边",
+	"westup":       "西边",
+	"northdown":    "北边",
+	"southdown":    "南边",
+	"eastdown":     "东边",
+	"westdown":     "西边",
+	"northeast":    "东北",
+	"northwest":    "西北",
+	"southeast":    "东南",
+	"southwest":    "西南",
+	"up":	   "上面",
+	"down":	 "下面",
+	"enter":	"里面",
+	"out":	  "外面",
+]);
+
+nosave  mapping empty_mapping = ([ ]);
+
+void create() { seteuid(getuid()); }
+string to_dir_cn(string dir) 
+{ 
+    if (undefinedp(default_dirs[dir])) 
+    return dir; 
+    return default_dirs[dir]; 
+} 
+int main(object me, string arg)
+{
+ string dest, mout, min, dir, thing_msg;
+ object env, obj, thing;
+ 
+ 
+	int result;
+ 
+	mapping exit;
+	object *f_obs, *ob;
+ 
+	mixed flee;
+	mapping my, my_temp;
+	mapping my_env, my_armor;
+
+ 
+
+	if (me && me->query_temp("array/name"))
+	{
+		SKILL_D("fanliangyi-dao")->dismiss_array(me);
+	}
+	if (! arg) return notify_fail("前方道路纵横交错，你需要选择一个明确的方向。\n");
+
+	if (me->over_encumbranced())
+		return notify_fail("沉重的负担压得你喘不过气，脚步如灌铅般沉重，无法继续前行。\n");
+
+	if (me->query_encumbrance() < 0)
+		return notify_fail("身体状态异常，一种奇怪的力量束缚着你的行动。\n");
+
+	if (me->is_busy() || me->query("doing"))
+		return notify_fail("你正专注于当前的行动，无法分心移步他处。\n");
+
+	env = environment(me);
+	if (! env) return notify_fail("你仿佛置身于虚无之中，失去了对空间的感知。\n");
+
+	if (me->is_fighting())
+	{
+		me->clean_up_enemy();
+		f_obs = me->query_enemy();
+	} else
+		f_obs = ({ });
+
+	if (arrayp(ob = env->query_temp("guarded/" + arg)))
+		f_obs += ob;
+
+	my = me->query_entire_dbase();
+	my_temp = me->query_entire_temp_dbase();
+	if (! my_temp) my_temp = empty_mapping;
+
+	my_armor = my_temp["armor"];
+	if (! my_armor) my_armor = empty_mapping;
+
+	my_env = my["env"];
+	if (! my_env) my_env = empty_mapping;
+
+	if (sizeof(f_obs))
+	{
+		int fp, gp;
+		int force_power;
+		int target_power;
+		object g_ob;
+
+		fp  = (int)me->query_skill("dodge");
+		fp += my["dex"] * 15;
+		force_power = me->query_skill("force") + my["str"] * 2;
+		if (flee = my_temp["success_flee"])
+		{
+			if (stringp(flee)) write(flee);
+			f_obs = ({ });
+		}
+		foreach (g_ob in f_obs)
+		{
+			if (! g_ob) continue;
+			if (! living(g_ob) || g_ob == me) continue;
+
+			if (g_ob->query_temp("guardfor_id") != my["id"] && !g_ob->is_fighting(me))
+				continue;
+
+			// calculate flee power & guard power
+			gp  = g_ob->query_skill("dodge");
+			gp += g_ob->query("dex", 1) * 15;
+
+			if ((fp / 2 + random(fp)) < (gp*5/6))
+			{
+				me->start_busy(1);
+				if (me->is_fighting(g_ob))
+				{
+					message_vision("$N意识到情势不妙，身形一动欲要撤离，"
+						       "却被$n眼疾手快地拦住去路。想走？"
+						       "$n冷笑道，没那么容易！\n",
+						       me, g_ob);
+					tell_object(me, "你的逃跑尝试被对方看破，陷入了更加被动的局面。\n");
+				} else
+				{
+					message_vision("$N正要迈步离去，$n突然闪身而出，"
+						       "张开双臂将其拦住：站住！要从我这里过，"
+						       "先问问我答不答应！\n",
+						       me, g_ob);
+					tell_object(me, "你的去路被人牙牙地封死了。\n");
+				}
+
+				if (userp(g_ob))
+				{
+					target_power = g_ob->query_skill("force") + g_ob->query("str") * 2;
+					if (force_power > target_power * 4)
+					{
+						message_vision("$N仰天长啸，声音如雷：蝼蚁也敢阻我去路？"
+							       "话音未落，已然一个箭步冲出，带着满身王者气势，"
+							       "将$n撞出数丈之外，重重跌在地上。\n",
+							       me, g_ob);
+						g_ob->unconcious();
+					} else
+					if (force_power > target_power * 3)
+					{
+						message_vision("$N连正眼都懒得瞧$n一眼，大步流星地往前行去，"
+							       "那股强大的气势直接将$n撞得东倒西歪，狼狈不堪。\n",
+							       me, g_ob);
+						g_ob->receive_wound("qi", 100 + random(100));
+					} else
+					if (force_power > target_power * 2)
+					{
+						message_vision("$N嘴角捕起一丝冷笑，身形如闪电般向前冲刺，"
+							       "肩膀一撞，便将$n撞得退往一旁，站立不稳。\n",
+							       me, g_ob);
+						g_ob->receive_wound("qi", 50 + random(50));
+					} else
+						return 1;
+				} else
+					return 1;
+				// 没有阻挡成功，继续前进
+			}
+		}
+	}
+	map_delete(my_temp, "success_flee");
+
+	if (! mapp(exit = env->query("exits")) || undefinedp(exit[arg]))
+	{
+		if (query_verb() == "go")
+			notify_fail("你凝望着那个方向，但只见一片茫茫，无路可通。\n");
+		return 0;
+	}
+
+	notify_fail("一股神秘的力量阻止了你的前行。\n");
+	result = env->valid_leave(me, arg);
+	if (! objectp(me))
+		return 1;
+
+	if (! result) return 0;
+	if (result < 0 || environment(me) != env)
+		return 1;
+
+	dest = exit[arg];
+	if (! (obj = find_object(dest)))
+		if (! objectp(obj = load_object(dest)))
+				return notify_fail(sprintf("通往 %s 的道路仿作被浓雾笼罩，无法探知前方的道路。\n", dest ) );
+
+	if(obj->query("owner_special")&&me->query("id")!=obj->query("owner_build")&&me->query("couple/id")!=obj->query("owner_build"))
+	{
+		return notify_fail(HIG"一层淡蓝色的结界在空气中微微波动，阻挡着你的去路——这里属于私人领地。"NOR"\n");
+	}
+
+	if(env->query("price_build")&&obj->query("door_room")&&me->query("id")!=obj->query("owner_build")&&me->query("couple/id")!=obj->query("owner_build"))
+	{
+		return notify_fail(HIG"前方的大门紧闭，门上挂着“谢绝参观”的牌子，主人显然不希望被打扰。"NOR"\n");
+	}
+
+	if(obj->query("owner_build")&&me->query_condition("killer"))
+	{
+		return notify_fail(HIM"你的身上散发着不祥的气息，这里的结界本能地排斥着你——通罉犯不可返家。"NOR"\n");
+	}
+
+	if (my_temp["is_riding"] &&
+	    arg != "north"     && arg != "south" &&
+	    arg != "east"      && arg != "west" &&
+	    arg != "northeast" && arg != "southeast" &&
+	    arg != "northwest" && arg != "southwest")
+		return notify_fail("你的座骑在这种地形前显得焦躁不安，不愿前行。\n");
+
+	if (! undefinedp(default_dirs[arg]))
+		dir = default_dirs[arg];
+	else
+	{
+		if (stringp(env->query_room_id(arg)))
+			dir = env->query_room_id(arg);
+		else
+			dir = arg;
+	}
+
+	if (me->is_fighting())
+	{
+		// 根据境界决定战斗中的移动描述
+		if (my["sanhua_done"]) // 武尊境界
+		{
+			mout = me->name() + "在激战中运转武道真意，身形瞬间模糊，如跨越虚实边界般向" + dest->short()+"("+dir + ")遁去，留下丝丝空间涟漪。\n";
+			min = me->name() + "身负无上武意踏入此地，浑身散发着令人心悸的强者气息，战意如实质般凝聚。\n";
+		}
+		else if (my["opinion/ultra"]) // 宗师境界
+		{
+			mout = me->name() + "在激战中寻得一线生机，身如惊鸿向" + dest->short()+"("+dir + ")疾掠而去，身影瞬间消失在视线中。\n";
+			min = me->name() + "浑身战意未消地闯入此地，眼中仍带着刚才激战的锐利光芒，宗师风范不减。\n";
+		}
+		else // 普通境界
+		{
+			mout = me->name() + "趁着混战之际，身形一闪向" + dest->short()+"("+dir + ")急速撤离。\n";
+			min = me->name() + "气喘吁吁地冲入此地，神情紧张地环顾四周。\n";
+		}
+	} else
+	{
+		if (objectp(thing = my_armor["cloth"]))
+			thing_msg = "身着" + thing->query("name");
+		else
+		if (userp(me))
+			thing_msg = "赤身";
+		else
+			thing_msg = "";
+
+		if (objectp(thing = my_temp["weapon"]))
+			thing_msg += "手持" + thing->query("name");
+
+		if (my["race"] == "野兽")
+		{
+			mout = me->name() + "仰天长啸，野性的呼唤在空中回荡，矫健的身躯向" + dest->short() + "("+dir + ")飞跃而去，如风中的影子般消失无踪。\n";
+			min = me->name() + "带着原始的野性气息悄然现身，敏锐的双眼扫视着周围的一切动静。\n";
+		} else
+		{
+			object riding;
+			string realm_desc_out, realm_desc_in;
+			
+			// 根据境界决定移动描述
+			if (my["sanhua_done"]) // 武尊境界
+			{
+				realm_desc_out = "身形如虚若实，每一步都踏在天地法则的节点上，向";
+				realm_desc_in = "周身散发着浑然天成的武道气息，举手投足间蕴含着深不可测的武学真谛";
+			}
+			else if (my["opinion/ultra"]) // 宗师境界  
+			{
+				realm_desc_out = "脚踏七星，身形飘逸如仙，带着宗师风范向";
+				realm_desc_in = "气度雍容，宗师风范尽显，一身武学修为已臻化境";
+			}
+			else // 普通境界
+			{
+				realm_desc_out = "身姿挺拔，步履稳健地向";
+				realm_desc_in = "神采奕奕地踏步而来，身上散发着习武之人的精气神";
+			}
+			
+			if (objectp(riding = my_temp["is_riding"]))
+			{
+				if (my["sanhua_done"]) // 武尊骑乘
+				{
+					mout = me->name() + "与胯下" + riding->name() + "心意相通，人马合一如神龙腾空，向" + dest->short() + "("+dir + ")御风而行，所过之处留下淡淡的武道真意。\n";
+					min = me->name() + thing_msg + "驾驭着" + riding->name() + "从虚空中踏出，马蹄每一步都震荡着天地，威势如山岳压顶。\n";
+				}
+				else if (my["opinion/ultra"]) // 宗师骑乘
+				{
+					mout = me->name() + "轻抚胯下" + riding->name() + "，人马合一，如一道闪电向" + dest->short() + "("+dir + ")飞驰而去，留下一道优美的弧线。\n";
+					min = me->name() + thing_msg + "与" + riding->name() + "踏着有力的节拍而来，马蹄声如战鼓般激昂，气势不凡。\n";
+				}
+				else // 普通骑乘
+				{
+					mout = me->name() + "策马扬鞭，与胯下" + riding->name() + "向" + dest->short() + "("+dir + ")疾驰而去。\n";
+					min = me->name() + thing_msg + "骑着" + riding->name() + "奔驰而至，带起一阵尘土。\n";
+				}
+			} else
+			{
+				mout = me->name() + realm_desc_out + dest->short() + "("+dir + ")而去。\n";
+				min = me->name() + thing_msg + realm_desc_in + "。\n";
+			}
+		}
+	}
+
+	if (! wizardp(me) || ! my_env["invisible"])
+	{
+		message("vision", mout, environment(me), ({me}) );
+	}
+
+#if INSTALL_EXAMINE
+	EXAMINE_D->examine_player(me);
+#endif
+
+	// move I to dest
+	me->remove_all_enemy(1);
+	map_delete(my_temp, "pending");
+	if (objectp(obj) && ! my_env["invisible"])
+	{
+		message("vision", min, dest, ({ me }));
+	}
+
+	if (load_object(dest))
+	{
+		me->move(dest);
+	}
+	else
+	{
+		me->move("/d/city/wumiao");
+		tell_object(me, "时空的裂隙突然闭合，一股神秘的力量将你拉回了武庙的庄严殿宇之中。\n");
+		log_file("go.log", "异常的room:"+dest+"\n");
+	}
+
+	if (!me)
+		return 1;
+	// if(wizardp(me))
+	// 	tell_object(me,"你来到了 "+dest->short()+" 。〔"+dest+"〕\n");
+	// else
+	// 	tell_object(me,"你来到了 "+dest->short()+" 。\n");
+//		tell_object(me,"你来到了 "+dest->short()+"＜"+localtime(time())[2]+"点"+localtime(time())[1]+"分＞。\n");
+	if (! objectp(me))
+		return 1;
+
+	if (environment(me) != env)
+	{
+		object competitor;
+		if (competitor = me->query_competitor())
+		{
+			me->lost();
+			competitor->win();
+		}
+		all_inventory(env)->follow_me(me, arg);
+	}
+	return 1;
+}
+
+void do_flee(object me)
+{
+	mapping exits;
+	string *directions;
+
+	if (! environment(me) || ! living(me)) return;
+	exits = environment(me)->query("exits");
+	if (! mapp(exits) || ! sizeof(exits)) 
+	{
+		tell_object(me,HIC"四周被紧紧包围，你的目光急切地搜寻着可能的逃生路线，却只见一片绝望。\n");
+		return;
+	}
+	directions = keys(exits);
+	tell_object(me, "危机关头，你的直觉告诉你必须立即撤离，寻找生路...\n");
+	main(me, directions[random(sizeof(directions))]);
+}
+
+nosave mapping r_dirs = ([
+	"north":	"south",
+	"south":	"north",
+	"east":	 "west",
+	"west":	 "east",
+	"northup":      "southdown",
+	"southup":      "northdown",
+	"eastup":       "westdown",
+	"westup":       "eastdown",
+	"northdown":    "southup",
+	"southdown":    "northup",
+	"eastdown":     "westup",
+	"westdown":     "eastup",
+	"northeast":    "southwest",
+	"northwest":    "southeast",
+	"southeast":    "northwest",
+	"southwest":    "northeast",
+	"up":	   "down",
+	"down":	 "up",
+	"enter":	"out",
+	"out":	  "enter",
+]);
+
+string query_reverse(string dir)
+{
+	if (undefinedp(r_dirs[dir]))
+		return 0;
+
+	return r_dirs[dir];
+}
+
+string query_chinese_dir(string dir)
+{
+	return default_dirs[dir];
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式 : go <方向>
+ 
+让你往指定的方向移动。
+ 
+HELP );
+	return 1;
+}

@@ -1,0 +1,262 @@
+int main(object me, string arg)
+{
+    string *fuben_name_list = ({ "heiyun", "cangjingge", "shitu", "damo", "baoshi", "qiu", "bamaguan", "kuihua", "yinyang", "gushengzhidi", "tianwang", "huijian" });
+    mapping enter_limit, weekly_limit, team_fuben, fuben;
+    object *team;
+    int current_week, i;
+    object member, leader;
+    
+    int single_daily_limit = 600; // 每人每天最多5次单人副本
+    int team_daily_limit   = 400; // 每人每天最多2次组队副本
+
+    enter_limit = ([
+        "heiyun" : 1,
+        "cangjingge" : 1,
+        "shitu" : 5,
+        "damo" : 1,
+        "baoshi" : 1,
+        "qiu" : 999, // 修改为一个很大的数字，实际上不限制进入次数
+        "bamaguan" : 1, // 白马关每天可进入1次
+        "kuihua" : 1, // 葵花秘境每天可进入1次
+        "yinyang" : 1, // 阴阳逆转之地每天可进入1次
+        "gushengzhidi" : 1, // 古圣之地每天可进入1次
+        "tianwang" : 1, // 四大天王副本每天可进入1次
+        "huijian" : 1, // 挥剑求道每天可进入1次
+    ]);
+
+    weekly_limit = ([
+        "heiyun" : 0,
+        "cangjingge" : 0,
+        "shitu" : 0,
+        "damo" : 0,
+        "baoshi" : 0,
+        "qiu" : 1,
+        "bamaguan" : 0, // 白马关按天计算
+        "kuihua" : 0, // 葵花秘境按天计算
+        "yinyang" : 0, // 阴阳逆转之地按天计算
+        "gushengzhidi" : 0, // 古圣之地按天计算
+        "tianwang" : 0, // 四大天王副本按天计算
+        "huijian" : 0, // 挥剑求道按天计算
+    ]);
+
+    team_fuben = ([
+        "heiyun" : 0,
+        "cangjingge" : 0,
+        "shitu" : 1,
+        "damo" : 0,
+        "baoshi" : 0,
+        "qiu" : 1,
+        "bamaguan" : 0, // 白马关是单人副本
+        "kuihua" : 0, // 葵花秘境是单人副本
+        "yinyang" : 1, // 阴阳逆转之地可组队
+        "gushengzhidi" : 0, // 古圣之地是单人副本
+        "tianwang" : 1, // 四大天王副本需要组队
+        "huijian" : 0, // 挥剑求道是单人副本
+    ]);
+
+    if (!arg)
+    {
+        return notify_fail("你要进入哪个副本？\n");
+    }
+
+    if (member_array(arg, fuben_name_list) == -1)
+    {
+        return notify_fail("没有这个副本。\n");
+    }
+
+    if (!CAN_MOVE->is_can_move(me)) {
+		return 1;
+	}
+
+    // 如果是团队副本，获取团队成员
+    if (team_fuben[arg])
+    {
+        if (!arrayp(team = me->query_team()))
+        {
+            return notify_fail("你必须组队进入这个副本。\n");
+        }
+        
+        // 检查队伍人数（非不裘副本需要2-6人）
+        if (arg == "qiu" && (sizeof(team) < 6 || sizeof(team) > 6))
+        {
+            return notify_fail("非不裘副本需要6人的队伍才能进入。\n");
+        }
+    }
+    else
+    {
+        team = ({ me });
+    }
+
+    // 获取当前周数
+    current_week = time() / (86400 * 7);
+
+    // 如果上一次副本的时间和现在的时间不是同一天或同一周，重置相应的副本次数
+    for (i = 0; i < sizeof(team); i++)
+    {
+        member = team[i];
+        // 检查队员对象是否有效
+        if (!objectp(member))
+            continue;
+        if (weekly_limit[arg])
+        {
+            if (current_week != member->query("new_fuben_api/week/" + arg))
+            {
+                member->set("new_fuben_api/week/" + arg, current_week);
+                member->delete("new_fuben_api/number/" + arg);
+                tell_object(member, "新的一周开始了，" + arg + "副本次数重置。\n");
+                if (arg == "qiu")
+                {
+                    member->delete("new_fuben_api/qiu_reward_count");
+                    tell_object(member, "非不裘副本的奖励次数已重置。\n");
+                }
+            }
+        }
+        else
+        {
+            if (time() / 86400 != member->query("new_fuben_api/time/" + arg) / 86400)
+            {
+                member->set("new_fuben_api/time/" + arg, time());
+                member->delete("new_fuben_api/number/" + arg);
+                tell_object(member, "今天是新的一天，" + arg + "副本次数重置。\n");
+            }
+        }
+
+        // 重置每日副本总次数
+        if (time() / 86400 != member->query("new_fuben_api/daily_time") / 86400)
+        {
+            member->set("new_fuben_api/daily_time", time());
+            member->delete("new_fuben_api/single_count");
+            member->delete("new_fuben_api/team_count");
+            tell_object(member, "新的一天开始了，你的副本总次数已重置。\n");
+        }
+    }
+
+    // 检查副本次数
+    for (i = 0; i < sizeof(team); i++)
+    {
+        member = team[i];
+        // 检查队员对象是否有效
+        if (!objectp(member))
+            continue;
+        if (wizardp(member))
+            continue;
+
+        if (arg != "qiu" && member->query("new_fuben_api/number/" + arg) >= enter_limit[arg])
+        {
+            if (weekly_limit[arg])
+                return notify_fail(member->name() + "本周已经进入过这个副本了,该副本每周只能进入" + enter_limit[arg] + "次。\n");
+            else
+                return notify_fail(member->name() + "今天已经进入过这个副本了,该副本每天只能进入" + enter_limit[arg] + "次。\n");
+        }
+
+        // 检查每日副本总次数
+        if (team_fuben[arg])
+        {
+            if (member->query("new_fuben_api/team_count") >= team_daily_limit && arg != "shitu")
+            {
+                return notify_fail(member->name() + "今天已经进行过" + team_daily_limit + "次组队副本，无法进入更多副本。\n");
+            }
+        }
+        else
+        {
+            if (member->query("new_fuben_api/single_count") >= single_daily_limit)
+            {
+                return notify_fail(member->name() + "今天已经进行过" + single_daily_limit + "次单人副本，无法进入更多副本。\n");
+            }
+        }
+    }
+
+    // 如果是师徒副本，额外判定
+    if (arg == "shitu")
+    {
+        if (sizeof(team) > 6)
+        {
+            return notify_fail("师傅最多可以带五个徒弟进入副本。\n");
+        }
+
+        if (sizeof(team) < 2)
+        {
+            return notify_fail("师傅最少需要一个徒弟才能进入副本。\n");
+        }
+
+        if (!me->is_team_leader())
+        {
+            tell_object(me, "你不是队长！\n");
+            return 1;
+        }
+
+        leader = me;
+
+        for (i = 0; i < sizeof(team); i++)
+        {
+            member = team[i];
+            // 检查队员对象是否有效
+            if (!objectp(member))
+                continue;
+            if (member->query("p_master/id") != leader->query("id") && member->query("id") != leader->query("id"))
+            {
+                return notify_fail("你必须和你的师傅组队进入副本。\n");
+            }
+        }
+
+        for (i = 0; i < sizeof(team); i++)
+        {
+            member = team[i];
+            // 检查队员对象是否有效
+            if (!objectp(member))
+                continue;
+            if (member->query("new_fuben_api/number/" + arg) >= 1 && member->query("id") != leader->query("id"))
+            {
+                return notify_fail(member->name() + "今天已经进入过这个副本了,该副本徒弟每天只能进入1次。\n");
+            }
+        }
+    }
+
+    if (fuben = FUBEN_D->create_fuben(me, arg))
+    {
+        for (i = 0; i < sizeof(team); i++)
+        {
+            member = team[i];
+            // 检查队员对象是否有效
+            if (!objectp(member))
+                continue;
+            member->move(fuben["enter"]);
+            if (weekly_limit[arg])
+                member->set("new_fuben_api/week/" + arg, current_week);
+            else
+                member->set("new_fuben_api/time/" + arg, time());
+            
+            if (arg == "qiu")
+            {
+                // 不增加进入次数，只在获得奖励时增加
+                member->set_temp("qiu_fuben_entered", 1);
+            }
+            else
+            {
+                member->add("new_fuben_api/number/" + arg, 1);
+            }
+
+            //记录副本进入的时间
+            member->set("fuben_" + arg + "/last_time", time());
+
+            // 统计每日副本总次数
+            if (!wizardp(member))
+            {
+                if (team_fuben[arg])
+                {
+                    //如果是师徒副本且不是队长，则不增加进入次数
+                    if (arg == "shitu" && !member->is_team_leader())
+                        continue;
+                    else
+                        member->add("new_fuben_api/team_count", 1);
+                }
+                else
+                    member->add("new_fuben_api/single_count", 1);
+            }
+        }
+
+        message_vision(CYN "$N" CYN "带领队伍进入了副本，请先查看周围具体状况"NOR"\n", me);
+    }
+
+    return 1;
+}

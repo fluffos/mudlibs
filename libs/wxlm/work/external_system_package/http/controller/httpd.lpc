@@ -1,0 +1,583 @@
+#ifdef __PACKAGE_HTTP__
+#include <net/socket.h>
+#include <socket_err.h>
+
+#define PORT 8092
+#define HTTP_CONTROLLER_PATH(c_path) "/external_system_package/http/controller/" + c_path
+
+int listen_fd;
+mapping client_parsers;
+
+void create();
+void listen_callback(int fd);
+void read_callback(int fd, mixed message);
+mixed get_client_parser(int fd);
+void destroy_client_parser(int fd);
+void handle_http_request(int fd, mapping request);
+mapping dispatch_http_request(int fd, mapping request);
+object load_http_controller(string controller_name);
+string *get_request_args(mapping request);
+string *parse_query_args(string query_string);
+string *parse_post_args(string body);
+string *parse_key_value_values(string data, int keep_raw_data);
+int check_client_ip_limit(int fd, object controller);
+int is_ip_allowed(string ip, string *ip_list);
+void send_http_response(int fd, int status_code, mapping headers, string body);
+void send_text_response(int fd, int status_code, string message);
+void send_json_response(int fd, int status_code, mixed data);
+void write_callback(int fd);
+void close_callback(int fd);
+
+/**
+ * @brief 创建HTTP守护进程
+ * @return void 无返回值
+ * @details 该函数初始化监听socket与客户端解析器映射，并开始监听固定端口。
+ */
+void create()
+{
+    client_parsers = ([]);
+    listen_fd = socket_create(STREAM, "read_callback", "close_callback");
+    if (listen_fd < 0)
+    {
+        write("创建socket失败。\n");
+        return;
+    }
+
+    if (socket_bind(listen_fd, PORT) < 0)
+    {
+        write("绑定socket失败。\n");
+        socket_close(listen_fd);
+        return;
+    }
+
+    if (socket_listen(listen_fd, "listen_callback") < 0)
+    {
+        write("监听socket失败。\n");
+        socket_close(listen_fd);
+        return;
+    }
+
+    write("HTTP守护进程正在监听端口 " + PORT + "\n");
+}
+
+/**
+ * @brief 处理新的客户端连接
+ * @param int fd 监听socket描述符
+ * @return void 无返回值
+ * @details 该函数接受客户端连接，并为连接创建独立的HTTP parser。
+ */
+void listen_callback(int fd)
+{
+    int client_fd;
+    mixed parser;
+
+    client_fd = socket_accept(fd, "read_callback", "write_callback");
+    if (client_fd < 0)
+    {
+        write("接受连接失败。\n");
+        return;
+    }
+
+    parser = http_parser_create();
+    if (!parser)
+    {
+        write("创建HTTP解析器失败。\n");
+        socket_close(client_fd);
+        return;
+    }
+
+    client_parsers[client_fd] = parser;
+}
+
+/**
+ * @brief 处理客户端数据
+ * @param int fd 客户端socket描述符
+ * @param mixed message 客户端发送的原始数据块
+ * @return void 无返回值
+ * @details 该函数将原始socket数据喂给驱动层HTTP parser，并在拿到完整请求后分发处理。
+ */
+void read_callback(int fd, mixed message)
+{
+    mixed parser;
+    mapping parse_result;
+    mixed *requests;
+
+    if (!stringp(message))
+    {
+        send_text_response(fd, 400, "错误的请求");
+        return;
+    }
+
+    parser = get_client_parser(fd);
+    if (!parser)
+    {
+        send_text_response(fd, 500, "HTTP解析器不可用");
+        return;
+    }
+
+    parse_result = http_parser_feed(parser, message);
+    if (!mapp(parse_result))
+    {
+        send_text_response(fd, 500, "HTTP解析器返回无效结果");
+        return;
+    }
+
+    if (parse_result["error"])
+    {
+        send_text_response(fd, 400, sprintf("%O", parse_result["error"]));
+        return;
+    }
+
+    requests = parse_result["requests"];
+    if (!arrayp(requests) || !sizeof(requests))
+    {
+        return;
+    }
+
+    handle_http_request(fd, requests[0]);
+}
+
+/**
+ * @brief 获取客户端对应的HTTP parser
+ * @param int fd 客户端socket描述符
+ * @return mixed 返回已存在或新创建的parser句柄
+ * @details 该函数用于保证每个客户端连接都有独立的增量解析上下文。
+ */
+mixed get_client_parser(int fd)
+{
+    mixed parser;
+
+    parser = client_parsers[fd];
+    if (parser)
+    {
+        return parser;
+    }
+
+    parser = http_parser_create();
+    if (!parser)
+    {
+        return 0;
+    }
+
+    client_parsers[fd] = parser;
+    return parser;
+}
+
+/**
+ * @brief 销毁客户端HTTP parser
+ * @param int fd 客户端socket描述符
+ * @return void 无返回值
+ * @details 该函数在连接关闭时释放对应parser并移除缓存状态。
+ */
+void destroy_client_parser(int fd)
+{
+    mixed parser;
+
+    if (!mapp(client_parsers))
+    {
+        return;
+    }
+
+    parser = client_parsers[fd];
+    if (parser)
+    {
+        http_parser_close(parser);
+    }
+
+    map_delete(client_parsers, fd);
+}
+
+/**
+ * @brief 处理单个完整HTTP请求
+ * @param int fd 客户端socket描述符
+ * @param mapping request 解析完成的请求映射
+ * @return void 无返回值
+ * @details 该函数负责调用业务分发逻辑，并根据返回值统一生成响应；若分发阶段已直接回包，则此处不再重复发送。
+ */
+void handle_http_request(int fd, mapping request)
+{
+    mapping response_data;
+    int status_code;
+    mapping headers;
+    string body;
+
+    response_data = dispatch_http_request(fd, request);
+    if (!mapp(response_data))
+    {
+        return;
+    }
+
+    status_code = response_data["status"];
+    headers = response_data["headers"];
+    body = response_data["body"];
+
+    if (!intp(status_code))
+    {
+        status_code = 500;
+    }
+
+    if (!mapp(headers))
+    {
+        headers = ([]);
+    }
+
+    if (!stringp(body))
+    {
+        body = "";
+    }
+
+    send_http_response(fd, status_code, headers, body);
+}
+
+/**
+ * @brief 分发HTTP请求到控制器
+ * @param int fd 客户端socket描述符
+ * @param mapping request 驱动解析后的请求映射
+ * @return mapping 返回包含状态码、响应头和响应体的结果映射
+ * @details 该函数完成路由、IP白名单、请求方法校验与控制器调用，尽量保持旧版httpd的业务接口兼容。
+ */
+mapping dispatch_http_request(int fd, mapping request)
+{
+    string path;
+    string controller_name;
+    string function_name;
+    string expected_method;
+    string *args;
+    object controller;
+    mixed result;
+
+    path = request["path"];
+    if (!stringp(path) || path == "")
+    {
+        return ([
+            "status": 400,
+            "headers": ([ "content-type": "text/plain; charset=UTF-8" ]),
+            "body": "无效的请求路径"
+        ]);
+    }
+
+    if (sscanf(path, "/%s/%s", controller_name, function_name) != 2)
+    {
+        return ([
+            "status": 400,
+            "headers": ([ "content-type": "text/plain; charset=UTF-8" ]),
+            "body": "无效的请求路径" + path
+        ]);
+    }
+
+    controller = load_http_controller(controller_name);
+    if (!objectp(controller))
+    {
+        return ([
+            "status": 404,
+            "headers": ([ "content-type": "text/plain; charset=UTF-8" ]),
+            "body": "未找到控制器:" + HTTP_CONTROLLER_PATH(controller_name)
+        ]);
+    }
+
+    if (!check_client_ip_limit(fd, controller))
+    {
+        return 0;
+    }
+
+    if (!function_exists(function_name, controller))
+    {
+        return ([
+            "status": 404,
+            "headers": ([ "content-type": "text/plain; charset=UTF-8" ]),
+            "body": "未找到函数:" + function_name
+        ]);
+    }
+
+    expected_method = controller->get_function_request_type(function_name);
+    if (expected_method && expected_method != request["method"])
+    {
+        return ([
+            "status": 405,
+            "headers": ([ "content-type": "text/plain; charset=UTF-8" ]),
+            "body": "方法不允许"
+        ]);
+    }
+
+    args = get_request_args(request);
+    result = call_other(controller, function_name, args...);
+    if (!result)
+    {
+        return ([
+            "status": 405,
+            "headers": ([ "content-type": "text/plain; charset=UTF-8" ]),
+            "body": base_name(controller) + "的" + function_name + "方法没有然后返回:" + result
+        ]);
+    }
+
+    return ([
+        "status": 200,
+        "headers": ([ "content-type": "application/json; charset=UTF-8" ]),
+        "body": json_encode(result)
+    ]);
+}
+
+/**
+ * @brief 加载HTTP控制器对象
+ * @param string controller_name 控制器名称
+ * @return object 返回控制器对象，失败返回0
+ * @details 该函数根据控制器名称拼接路径并调用load_object加载控制器。
+ */
+object load_http_controller(string controller_name)
+{
+    object controller;
+
+    controller = load_object(HTTP_CONTROLLER_PATH(controller_name));
+    if (!objectp(controller))
+    {
+        return 0;
+    }
+
+    return controller;
+}
+
+/**
+ * @brief 获取控制器调用参数
+ * @param mapping request 驱动解析后的请求映射
+ * @return string * 返回兼容旧接口的参数数组
+ * @details 该函数保持旧版httpd的调用约定：GET取query string值列表，POST优先取body内容，非表单body按单个原始字符串传递。
+ */
+string *get_request_args(mapping request)
+{
+    string method;
+    string query_string;
+    string body;
+
+    method = request["method"];
+    query_string = request["query_string"];
+    body = request["body"];
+
+    if (!stringp(query_string))
+    {
+        query_string = "";
+    }
+
+    if (!stringp(body))
+    {
+        body = "";
+    }
+
+    if (method == "GET")
+    {
+        return parse_query_args(query_string);
+    }
+
+    if (method == "POST")
+    {
+        if (body == "")
+        {
+            return parse_query_args(query_string);
+        }
+
+        return parse_post_args(body);
+    }
+
+    return ({});
+}
+
+/**
+ * @brief 解析GET查询字符串参数
+ * @param string query_string 原始query string
+ * @return string * 返回按原顺序提取的值列表
+ * @details 该函数保留旧版httpd只向控制器传值不传键的行为，并增加URL解码支持。
+ */
+string *parse_query_args(string query_string)
+{
+    return parse_key_value_values(query_string, 0);
+}
+
+/**
+ * @brief 解析POST请求体参数
+ * @param string body 原始请求体
+ * @return string * 返回按原顺序提取的值列表
+ * @details 该函数对表单键值对提取value列表，对非键值体保留整个body字符串。
+ */
+string *parse_post_args(string body)
+{
+    return parse_key_value_values(body, 1);
+}
+
+/**
+ * @brief 从键值串中提取顺序值列表
+ * @param string data 原始参数串
+ * @param int keep_raw_data 单个非键值参数时是否保留原文
+ * @return string * 返回提取后的参数值数组
+ * @details 该函数用于兼容旧控制器的值数组传参模式，同时使用驱动提供的url_decode处理编码内容。
+ */
+string *parse_key_value_values(string data, int keep_raw_data)
+{
+    string *args;
+    string *params;
+    string param;
+    string key;
+    string value;
+
+    args = ({});
+    if (!stringp(data) || data == "")
+    {
+        return args;
+    }
+
+    if (strsrch(data, "&") != -1)
+    {
+        params = explode(data, "&");
+        foreach (param in params)
+        {
+            if (sscanf(param, "%s=%s", key, value) == 2)
+            {
+                args += ({ url_decode(value) });
+            }
+            else
+            {
+                args += ({ "" });
+            }
+        }
+
+        return args;
+    }
+
+    if (sscanf(data, "%s=%s", key, value) == 2)
+    {
+        args += ({ url_decode(value) });
+        return args;
+    }
+
+    if (keep_raw_data)
+    {
+        args += ({ data });
+    }
+    else
+    {
+        args += ({ "" });
+    }
+
+    return args;
+}
+
+/**
+ * @brief 检查客户端IP是否允许访问
+ * @param int fd 客户端socket描述符
+ * @param object controller 目标控制器对象
+ * @return int 允许访问返回1，否则返回0
+ * @details 该函数在控制器声明IP白名单时校验来源地址，不通过时直接发送错误响应。
+ */
+int check_client_ip_limit(int fd, object controller)
+{
+    string *ip_list;
+    string source_address;
+    string ip;
+    string port;
+
+    ip_list = controller->get_limit_ip_list();
+    if (!ip_list)
+    {
+        return 1;
+    }
+
+    source_address = socket_address(fd);
+    if (sscanf(source_address, "%s %s", ip, port) != 2)
+    {
+        send_text_response(fd, 400, "无效的客户端地址");
+        return 0;
+    }
+
+    if (!is_ip_allowed(ip, ip_list))
+    {
+        send_text_response(fd, 403, "IP地址 " + ip + " 不在允许访问列表中");
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
+ * @brief 检查IP是否在白名单中
+ * @param string ip 待校验的IP地址
+ * @param string *ip_list 白名单数组
+ * @return int 存在返回1，不存在返回0
+ * @details 该函数用于封装IP白名单判断逻辑，简化主流程。
+ */
+int is_ip_allowed(string ip, string *ip_list)
+{
+    return member_array(ip, ip_list) != -1;
+}
+
+/**
+ * @brief 发送HTTP响应
+ * @param int fd 客户端socket描述符
+ * @param int status_code HTTP状态码
+ * @param mapping headers 响应头映射
+ * @param string body 响应正文
+ * @return void 无返回值
+ * @details 该函数使用驱动层http_build_response拼装标准HTTP响应并写回socket。
+ */
+void send_http_response(int fd, int status_code, mapping headers, string body)
+{
+    string response;
+
+    response = http_build_response(status_code, headers, body);
+    socket_write(fd, response);
+}
+
+/**
+ * @brief 发送文本响应
+ * @param int fd 客户端socket描述符
+ * @param int status_code HTTP状态码
+ * @param string message 文本正文
+ * @return void 无返回值
+ * @details 该函数用于返回纯文本错误信息或简单提示消息。
+ */
+void send_text_response(int fd, int status_code, string message)
+{
+    mapping headers;
+
+    headers = ([ "content-type": "text/plain; charset=UTF-8" ]);
+    send_http_response(fd, status_code, headers, message);
+}
+
+/**
+ * @brief 发送JSON响应
+ * @param int fd 客户端socket描述符
+ * @param int status_code HTTP状态码
+ * @param mixed data 需要序列化的数据
+ * @return void 无返回值
+ * @details 该函数将任意LPC值编码为JSON后输出，便于直接返回接口结果。
+ */
+void send_json_response(int fd, int status_code, mixed data)
+{
+    mapping headers;
+    string body;
+
+    headers = ([ "content-type": "application/json; charset=UTF-8" ]);
+    body = json_encode(data);
+    send_http_response(fd, status_code, headers, body);
+}
+
+/**
+ * @brief 写回完成后的回调
+ * @param int fd 客户端socket描述符
+ * @return void 无返回值
+ * @details 该函数在响应发送完成后主动关闭连接，保持当前服务端的短连接模型。
+ */
+void write_callback(int fd)
+{
+    socket_close(fd);
+}
+
+/**
+ * @brief 连接关闭回调
+ * @param int fd 已关闭的socket描述符
+ * @return void 无返回值
+ * @details 该函数释放连接关联的parser状态，并记录连接关闭日志。
+ */
+void close_callback(int fd)
+{
+    destroy_client_parser(fd);
+    write("连接已关闭。\n");
+}
+#endif

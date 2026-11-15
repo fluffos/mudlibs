@@ -1,0 +1,212 @@
+/**
+ * @file team.c
+ * @author Lu dexiang
+ * @brief 游戏中的队伍功能模块
+ * @date 2023-01-01
+ * @details 提供队伍相关的功能，包括队伍创建、管理、跟随和解散等
+ */
+
+#include <command.h>
+#include <dbase.h>
+#include <origin.h>
+
+/**
+ * @brief 队伍领袖和队伍成员变量
+ */
+nosave object leader, *team;
+
+/**
+ * @brief 设置队伍领袖
+ * @param ob 要设置为领袖的对象
+ * @return int 设置结果
+ * @throws error 如果尝试将自己设为领袖则抛出错误
+ */
+int set_leader(object ob)
+{
+	if (objectp(ob) && ob == this_object())
+		error("set_leader: Cannot set this_object() as leader.\n");
+
+	leader = ob;
+}
+
+/**
+ * @brief 查询当前队伍领袖
+ * @return object 返回队伍领袖对象
+ */
+object query_leader() { return leader; }
+
+/**
+ * @brief 跟随路径移动
+ * @param dir 移动方向
+ * @return int 移动结果
+ */
+int follow_path(string dir)
+{
+	reset_eval_cost();
+	command("go " + dir);
+}
+
+/**
+ * @brief 跟随指定对象移动
+ * @param ob 要跟随的对象
+ * @param dir 移动方向
+ * @return int 返回0表示不跟随，返回follow_path的结果表示跟随
+ * @details 如果对象是自己的领袖，则尝试跟随移动
+ *          如果领袖设置了no_follow或敏捷检定失败，则不会跟随
+ */
+int follow_me(object ob, string dir)
+{
+	object me;
+
+	me = this_object();
+	if (! living(me) || ob == me) return 0;
+
+	if (ob == leader)
+	{
+		// 跟着别人走
+		if (ob->query("env/no_follow") &&
+		    (! arrayp(team) || ob != team[0]) &&
+		    me->query_dex() / 2 + random(me->query_dex()) < ob->query_dex())
+		{
+			tell_object(me, ob->name() +
+				    "走得好快，你一疏神就跟不上了。\n");
+			return 0;
+		}
+		return follow_path(dir);
+	}
+}
+
+/**
+ * @brief 添加队伍成员
+ * @param ob 要添加的队伍成员
+ * @return int 返回1表示添加成功，返回0表示添加失败
+ * @details 如果对象已经在队伍中则添加失败
+ *          添加成功后会更新所有队伍成员的队伍信息
+ */
+int add_team_member(object ob)
+{
+	if (ob == this_object()) return 0;
+
+	if (arrayp(team))
+	{
+		team -= ({ 0 });
+		if (member_array(ob, team) == -1)
+		{
+			team += ({ ob });
+			for (int i = sizeof(team) - 1; i >= 0; i--)
+				team[i]->set_team(team);
+		} else
+			return 0;
+	} else
+	{
+		team = ({ this_object(), ob });
+		ob->set_team(team);
+	}
+
+	return 1;
+}
+
+/**
+ * @brief 检查对象是否为队伍成员
+ * @param ob 要检查的对象
+ * @return int 返回1表示是队伍成员，返回0表示不是
+ */
+int have_team_member(object ob)
+{
+	return arrayp(team) && (member_array(ob, team) != -1);
+}
+
+/**
+ * @brief 检查自己是否为队伍领袖
+ * @return int 返回1表示是队伍领袖，返回0表示不是
+ */
+int is_team_leader()
+{
+	if(!arrayp(team)) return 0;
+	if(sizeof(team)<1) return 0;
+	return team[0] == this_object();
+}
+
+/**
+ * @brief 设置队伍
+ * @param t 要设置的队伍数组
+ * @return int 设置结果
+ * @details 如果队伍数组有效且自己不是队长，则会将队长设为自己的领袖
+ */
+int set_team(object *t)
+{
+	team = t;
+	if (arrayp(t) && sizeof(t) > 1 && this_object() != t[0])
+		set_leader(t[0]);
+}
+
+/**
+ * @brief 设置队伍领袖
+ * @param ob 要设置为领袖的对象
+ * @return int 返回1表示设置成功，返回0表示设置失败
+ * @details 只有当前队伍领袖才能设置新的队伍领袖
+ *          设置成功后会更新所有队伍成员的队伍信息
+ */
+int set_team_leader(object ob)
+{
+	int i;
+	if( !arrayp(team) || sizeof(team)<1 ) return 0;
+	if (this_object()!=team[0]) return 0;	
+	team -= ({ ob });
+	team = ({ ob })+team;
+	for(i=0;i<sizeof(team);i++)
+	{
+		team[i]->set_team(team);
+	}
+	return 1;
+}
+
+/**
+ * @brief 解散队伍或移除队伍成员
+ * @param ob 要移除的队伍成员，如果为0则解散整个队伍
+ * @return int 返回1表示操作成功，返回0表示操作失败
+ * @details 如果是队长解散队伍，会清除所有成员的队伍和领袖信息
+ *          如果是队员离开队伍，会从队伍中移除该成员
+ */
+varargs int dismiss_team(object ob)
+{
+	int i;
+
+	if (! arrayp(team)) return 0;
+	
+	if (! ob)
+	{
+		team -= ({ 0 });
+		if (team[0] == this_object())
+		{
+			for (i = 1; i < sizeof(team); i++)
+			{
+				team[i]->set_team(0);
+				team[i]->set_leader(0);
+			}
+		} else
+		{
+			for (i = 0; i < sizeof(team); i++)
+			{
+				team[i]->dismiss_team(this_object());
+			}
+		}
+		team = 0;
+	} else
+	{
+		if (ob->query_leader() == team[0])
+			ob->set_leader(0);
+		team -= ({ ob });
+	}
+
+	return 1;
+}
+
+/**
+ * @brief 查询当前队伍
+ * @return object* 返回队伍成员数组
+ */
+object *query_team()
+{
+	return team;
+}

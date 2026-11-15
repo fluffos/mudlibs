@@ -1,0 +1,232 @@
+// remove.c
+
+
+inherit F_CLEAN_UP;
+
+int do_remove(object me, object ob);
+// void remove_gem_effects(object me, object ob);
+void remove_citiao_effects(object me, object ob);
+
+int main(object me, string arg)
+{
+    object ob, *inv;
+    int count = 0;
+
+    if (!arg) return notify_fail("你要脱掉什么？\n");
+
+    if (arg == "all")
+    {
+        object weapon;
+        inv = all_inventory(me);
+        foreach (ob in inv)
+        {
+            count += do_remove(me, ob);
+        }
+
+        // 武器也要卸下
+        if (objectp(weapon = me->query_temp("weapon"))) {
+            me->force_me("unwield " + weapon->query("id"));
+        }
+
+        write(count ? "你脱完了。\n" : "你什么都没有脱下来。\n");
+        return 1;
+    }
+
+    ob = present(arg, me);
+    if (!ob) return notify_fail("你身上没有这样东西。\n");
+
+    if (ob->query("equipped") != "worn")
+    {
+        inv = all_inventory(me);
+        foreach (object item in inv)
+        {
+            if (item->id(arg) && item->query("equipped") == "worn")
+            {
+                ob = item;
+                break;
+            }
+        }
+        if (ob->query("equipped") != "worn")
+            return notify_fail("你并没有装备这样东西。\n");
+    }
+
+    return do_remove(me, ob);
+}
+
+int do_remove(object me, object ob)
+{
+    string str;
+
+    if (ob->query("equipped") != "worn")
+        return notify_fail("你并没有装备这样东西。\n");
+
+    switch (ob->unequip())
+    {
+    case -1:
+        return 1;
+    case 0:
+        return 0;
+    default:
+        // remove_gem_effects(me, ob);
+        remove_citiao_effects(me, ob);  // 移除词条效果
+        str = ob->query("remove_msg");
+        if (!stringp(str))
+        {
+            switch (ob->query("armor_type"))
+            {
+            case "cloth":
+            case "armor":
+            case "surcoat":
+            case "boots":
+                str = YEL "$N将$n" YEL "脱了下来。"NOR"\n";
+                break;
+            case "bandage":
+                str = YEL "$N将$n" YEL "从伤口处拆了下来。"NOR"\n";
+                break;
+            default:
+                str = YEL "$N卸除$n" YEL "的装备。"NOR"\n";
+            }
+        }
+        if (ob->query_temp("no_wear"))
+            str += "脱下" + ob->name() + "以后你觉得舒服多了。\n";
+        message_vision(str, me, ob);
+        me->delete("equipped_items/" + ob->query("armor_type"));
+    }
+    me->force_me("equip_group save " + me->query("equip_group_name"));
+    me->force_me("equip_ui");
+    return 1;
+}
+
+// void remove_gem_effects(object me, object ob)
+// {
+//     mapping gem_effects = me->query_temp("gem_effects/" + ob->query("id"));
+
+//     mapping attr_map = BASE_HANDLE->get_gem_attr_map();
+
+//     if (!gem_effects) return;
+
+//     foreach (string attr, int value in gem_effects)
+//     {
+//         string temp_attr, msg;
+        
+//         if (undefinedp(attr_map[attr]))
+//             continue;
+
+//         if (!attr_map[attr])
+//             continue;
+
+//         temp_attr = attr_map[attr];
+
+//         if (temp_attr == "force" || temp_attr == "dodge" || temp_attr == "parry" ||
+//             temp_attr == "cuff" || temp_attr == "strike" || temp_attr == "finger" ||
+//             temp_attr == "claw" || temp_attr == "hand" || temp_attr == "unarmed" ||
+//             temp_attr == "sword" || temp_attr == "blade" || temp_attr == "throwing" ||
+//             temp_attr == "staff" ||temp_attr == "whip" || temp_attr == "club" ||
+//              temp_attr == "armor")
+//         {
+//             me->add_temp("apply/" + temp_attr, -value);
+//             msg = sprintf(HIY "你移除了%s，扣除了%d级%s。\n" NOR, attr, value, attr);
+//         }
+//         else if (temp_attr == "damage")
+//         {
+//             me->add_temp("apply/damage", -value);
+//             me->add_temp("apply/unarmed_damage", -value);
+//             msg = sprintf(HIY "你移除了攻击宝石，扣除了%d点攻击和徒手伤害。\n" NOR, value);
+//         }
+//         else
+//         {
+//             me->add_temp(temp_attr, -value);
+//             msg = sprintf(HIY "你移除了%s，扣除了%d点%s。\n" NOR, attr, value, attr);
+//         }
+//         tell_object(me, msg);
+//     }
+//     me->delete_temp("gem_effects/" + ob->query("id"));
+//     CHAR_D->setup_char(me);
+// }
+
+/**
+ * @brief 移除装备词条效果
+ * @param object me 玩家对象
+ * @param object ob 装备对象
+ */
+void remove_citiao_effects(object me, object ob)
+{
+    mapping *citiao_effects;
+    mapping citiao;
+    string attr_key;
+    int i, value;
+    
+    // 获取已记录的词条效果
+    citiao_effects = me->query_temp("citiao_effects/" + ob->query("id"));
+    if (!citiao_effects || !sizeof(citiao_effects)) return;
+    
+    // 遍历所有词条并移除效果
+    for (i = 0; i < sizeof(citiao_effects); i++) {
+        citiao = citiao_effects[i];
+        attr_key = citiao["key"];
+        value = citiao["value"];
+        
+        switch(attr_key) {
+            // 基础武功类词条
+            case "force":
+            case "dodge":
+            case "parry":
+            // 兵器类技能
+            case "sword":
+            case "blade":
+            case "staff":
+            case "hammer":
+            case "club":
+            case "whip":
+            case "dagger":
+            case "throwing":
+            case "qin":
+            // 空手类技能
+            case "unarmed":
+            case "cuff":
+            case "strike":
+            case "finger":
+            case "claw":
+            case "hand":
+                me->add_temp("apply/" + attr_key, -value);
+                break;
+                
+            // 四维属性类词条
+            case "str":
+            case "int":
+            case "con":
+            case "dex":
+                me->add_temp("apply/" + attr_key, -value);
+                break;
+                
+            // 状态属性类词条
+            case "max_qi":
+            case "max_jingli":
+            case "max_neili":
+                me->add_temp("apply/" + attr_key, -value);
+                break;
+        }
+    }
+    
+    // 清除记录的词条效果
+    me->delete_temp("citiao_effects/" + ob->query("id"));
+    
+    // 重新计算玩家属性
+    if (sizeof(citiao_effects) > 0) {
+        CHAR_D->setup_char(me);
+        
+        message_vision(sprintf(HIB "$N卸下%s，词条效果失效。" NOR "\n", 
+            ob->name()), me);
+    }
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式 : remove all | <物品名称>
+
+这个指令让你脱掉身上某件防具。
+
+HELP );
+    return 1;
+}

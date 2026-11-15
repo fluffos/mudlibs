@@ -1,0 +1,1005 @@
+
+
+// 计算成功几率
+int calculate_success_rate(int quality)
+{
+    if (quality >= 0 && quality <= 4)
+    {
+        return 10000; // 100%
+    }
+    else if (quality >= 5 && quality <= 9)
+    {
+        if (quality == 9)
+        {
+            return 1000; // 10%
+        }
+
+        return 8000 - (quality - 5) * 2000; // 80% -> 60% -> 40% -> 20% -> 10%
+    }
+    else if (quality >= 10 && quality <= 14)
+    {
+        return 500 - (quality - 10) * 100; // 5% -> 4% -> 3% -> 2% -> 1%
+    }
+    else if (quality >= 15 && quality <= 19)
+    {
+        return 50 - (quality - 15) * 10; // 0.5% -> 0.4% -> 0.3% -> 0.2% -> 0.1%
+    }
+    return 0;
+}
+
+// 计算需要的强化石数量
+int calculate_stone_count(int quality)
+{
+    if (quality >= 0 && quality <= 4)
+    {
+        return 1;
+    }
+    else if (quality >= 5 && quality <= 9)
+    {
+        return 2;
+    }
+    else if (quality >= 10 && quality <= 14)
+    {
+        return 3;
+    }
+    else if (quality >= 15 && quality <= 19)
+    {
+        return 4;
+    }
+    return 0;
+}
+
+// 判断保护符是否适用
+int is_protect_applicable(int quality, string protect_id)
+{
+    if ((protect_id == "dijibao hufu" && quality >= 5 && quality <= 9) ||
+        (protect_id == "zhongjibao hufu" && quality >= 10 && quality <= 14) ||
+        (protect_id == "gaojibao hufu" && quality >= 15 && quality <= 19) ||
+        (protect_id == "jigaojibao hufu" && quality >= 19 && quality <= 19))
+    {
+        return 1;
+    }
+    return 0;
+}
+
+void handle_failure(object equip, int quality, string protect_id)
+{
+    if (protect_id == "dijibao hufu" && quality >= 5 && quality <= 9)
+    {
+        write("强化失败，但由于使用了低级保护符，装备等级未下降。\n");
+    }
+    else if (protect_id == "zhongjibao hufu" && quality >= 10 && quality <= 14)
+    {
+        write("强化失败，但由于使用了中级保护符，装备等级未下降。\n");
+    }
+    else if (protect_id == "gaojibao hufu" && quality >= 15 && quality <= 19)
+    {
+        write("强化失败，但由于使用了高级保护符，装备等级未下降。\n");
+    }
+    else if (protect_id == "jigaojibao hufu" && quality >= 15 && quality <= 19)
+    {
+        write("强化失败，但由于使用了极高级保护符，装备等级未下降。\n");
+    }
+    else
+    {
+        if (quality >= 5 && quality <= 9)
+        {
+            equip->add("quality", -1);
+            write("强化失败，装备等级下降一级。\n");
+        }
+        else if (quality >= 10 && quality <= 14)
+        {
+            equip->add("quality", -2);
+            write("强化失败，装备等级下降二级。\n");
+        }
+        else if (quality >= 15 && quality <= 19)
+        {
+            equip->set("quality", 10);
+            write("强化失败，装备等级重置到+10。\n");
+        }
+        else
+        {
+            write("强化失败。\n");
+        }
+    }
+}
+
+/**
+ * @brief 检查等阶升级材料是否足够
+ * @param object me 玩家对象
+ * @param int material_count 每种材料需要的数量
+ * @return int 1:足够 0:不足
+ */
+int check_upgrade_materials(object me, int material_count)
+{
+    string *material_paths;
+    object material_obj;
+    int i;
+    
+    material_paths = ITEM_D->query_upgrade_materials_paths();
+    
+    for (i = 0; i < sizeof(material_paths); i++) {
+        object blueprint;
+        string material_id;
+        
+        // 加载蓝图对象获取ID
+        blueprint = load_object(material_paths[i]);
+        if (!blueprint) continue;
+        
+        material_id = blueprint->query("id");
+        material_obj = present(material_id, me);
+        if (!material_obj) {
+            return 0;
+        }
+        
+        // 检查可叠加物品的数量
+        if (material_obj->query_amount()) {
+            if (material_obj->query_amount() < material_count) {
+                return 0;
+            }
+        } else {
+            // 不可叠加物品需要检查是否有足够的个数
+            object *same_items;
+            same_items = filter_array(all_inventory(me), 
+                (: $1->query("id") == $(material_id) :));
+            if (sizeof(same_items) < material_count) {
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+/**
+ * @brief 消耗等阶升级材料
+ * @param object me 玩家对象
+ * @param int material_count 每种材料需要的数量
+ */
+void consume_upgrade_materials(object me, int material_count)
+{
+    string *material_paths;
+    object material_obj;
+    int i, j;
+    
+    material_paths = ITEM_D->query_upgrade_materials_paths();
+    
+    for (i = 0; i < sizeof(material_paths); i++) {
+        object blueprint;
+        string material_id;
+        
+        // 加载蓝图对象获取ID
+        blueprint = load_object(material_paths[i]);
+        if (!blueprint) continue;
+        
+        material_id = blueprint->query("id");
+        material_obj = present(material_id, me);
+        
+        if (material_obj && material_obj->query_amount()) {
+            // 可叠加物品直接减少数量
+            material_obj->add_amount(-material_count);
+        } else {
+            // 不可叠加物品需要逐个销毁
+            object *same_items;
+            same_items = filter_array(all_inventory(me), 
+                (: $1->query("id") == $(material_id) :));
+            for (j = 0; j < material_count && j < sizeof(same_items); j++) {
+                destruct(same_items[j]);
+            }
+        }
+    }
+}
+
+int main(object me, string arg)
+{
+    object equip, stone, protect;
+    string equip_id, stone_id, protect_id;
+    int quality, success_rate, stone_count;
+
+    if (!arg)
+    {
+        write("参数格式错误，请使用：\n");
+        write("装备id@强化石id 或 装备id@强化石id@保护符id (品质强化)\n");
+        write("装备id@升阶 (等阶升级)\n");
+        return 1;
+    }
+
+    if (arg == "select protect")
+    {
+        string *protects = ({"dijibao hufu", "zhongjibao hufu", "gaojibao hufu", "jigaojibao hufu"});
+        object *protects_obj;
+        string msg, *buttons = ({});
+
+        //过滤出来符合条件的保护符,只要元素的id在protects数组中即可
+        protects_obj = filter_array(all_inventory(me), (: member_array($1->query("id"), $(protects)) != -1 :));
+
+        if (!sizeof(protects_obj))
+        {
+            write(msg299("强化系统", "你没有任何保护符。\n"));
+            return 1;
+        }
+        msg = "请选择保护符：\n";
+
+        foreach (object obj in protects_obj)
+        {
+            buttons += ({obj->query("name") + ":qianghua select protect " + obj->query("id")});
+        }
+
+        write(popup_comb(msg, buttons));
+
+        return 1;
+    }
+
+    if (sscanf(arg, "select protect %s", protect_id) == 1)
+    {
+        protect = present(protect_id, me);
+        if (!protect)
+        {
+            write("你没有这个保护符。\n");
+            return 1;
+        }
+        me->set_temp("qianghua/protect", protect);
+        write(msg299("强化系统", "你选择了" + protect->name() + "作为保护符。\n"));
+
+        if (objectp(me->query_temp("qianghua/equip")))
+        {
+            equip_id = me->query_temp("qianghua/equip")->query("id");
+            me->delete_temp("qianghua/equip");
+            me->force_me("qianghua " + equip_id);
+        }
+    
+        return 1;
+    }
+
+    //取消保护符
+    if (arg == "cancel protect")
+    {
+        me->delete_temp("qianghua/protect");
+        write(msg299("强化系统", "你取消了保护符。\n"));
+
+        if (objectp(me->query_temp("qianghua/equip")))
+        {
+            equip_id = me->query_temp("qianghua/equip")->query("id");
+            me->delete_temp("qianghua/equip");
+            me->force_me("qianghua " + equip_id);
+        }
+
+        return 1;
+    }
+
+    // 处理等阶升级
+    if (sscanf(arg, "%s@升阶", equip_id) == 1) {
+        string current_tier, next_tier;
+        int current_quality, material_count;
+        mapping tier_config;
+        
+        equip = present(equip_id, me);
+        if (!equip) {
+            write("你没有这件装备。\n");
+            return 1;
+        }
+        
+        if (!equip->is_item_make()) {
+            write("这件装备不是可升阶的装备。\n");
+            return 1;
+        }
+        
+        if(equip->item_owner() != me->query("id")) {
+            write(equip->name() + "不需要你来操心吧！\n");
+            return 1;
+        }
+        
+        if (equip->is_weapon() || equip->is_unarmed_weapon()) {
+            write("你只能对防具进行等阶升级。\n");
+            return 1;
+        }
+        
+        current_tier = equip->query_equip_tier();
+        next_tier = ITEM_D->get_next_tier(current_tier);
+        current_quality = equip->query("quality") || 0;
+        
+        if (!next_tier) {
+            write("该装备已是最高等阶，无法继续升级。\n");
+            return 1;
+        }
+        
+        // 检查品质要求
+        if (!ITEM_D->check_quality_requirement(next_tier, current_quality)) {
+            tier_config = ITEM_D->query_tier_config(next_tier);
+            write(sprintf("品质等级不足，升级到%s需要品质等级≥%d。\n", 
+                next_tier, tier_config["quality_req"]));
+            return 1;
+        }
+        
+        material_count = ITEM_D->get_upgrade_material_count(current_tier);
+        
+        // 检查材料是否足够
+        if (!check_upgrade_materials(me, material_count)) {
+            string *material_names;
+            
+            material_names = ({"冰蚕丝", "补天石", "玄铁木", "雾隐砂"});
+            write(sprintf("材料不足，升级需要：%s各%d个。\n", 
+                implode(material_names, "、"), material_count));
+            return 1;
+        }
+        
+        // 显示升级确认界面
+        {
+            string msg;
+            string *buttons;
+            
+            msg = sprintf("确认升级装备等阶？\n\n");
+            msg += sprintf("装备：%s\n", equip->name());
+            msg += sprintf("当前等阶：%s → %s\n", current_tier, next_tier);
+            msg += sprintf("当前品质等级：%d\n", current_quality);
+            msg += sprintf("消耗材料：冰蚕丝、补天石、玄铁木、雾隐砂各%d个\n", material_count);
+            
+            buttons = ({
+                sprintf("确认升级:qianghua %s@确认升阶", equip_id),
+                "取消:look"
+            });
+            
+            write(popup_comb(msg, buttons));
+        }
+        return 1;
+    }
+    
+    // 确认等阶升级
+    if (sscanf(arg, "%s@确认升阶", equip_id) == 1) {
+        string current_tier, next_tier;
+        int current_quality, material_count;
+        
+        equip = present(equip_id, me);
+        if (!equip) {
+            write("你没有这件装备。\n");
+            return 1;
+        }
+        
+        current_tier = equip->query_equip_tier();
+        next_tier = ITEM_D->get_next_tier(current_tier);
+        current_quality = equip->query("quality") || 0;
+        material_count = ITEM_D->get_upgrade_material_count(current_tier);
+        
+        // 再次检查条件
+        if (!next_tier || !ITEM_D->check_quality_requirement(next_tier, current_quality) || 
+            !check_upgrade_materials(me, material_count)) {
+            write("升级条件不满足，升级失败。\n");
+            return 1;
+        }
+        
+        // 消耗材料
+        consume_upgrade_materials(me, material_count);
+        
+        // 升级等阶
+        equip->set_equip_tier(next_tier);
+        equip->save();
+        
+        write(sprintf("成功！%s的等阶已升级到%s。\n", equip->name(), next_tier));
+        return 1;
+    }
+    
+    // 处理词条激活
+    if (sscanf(arg, "%s@激活词条", equip_id) == 1) {
+        string tier;
+        int max_citiao, current_citiao, activate_cost;
+        object wucai_shenshi;
+        
+        equip = present(equip_id, me);
+        if (!equip) {
+            write("你没有这件装备。\n");
+            return 1;
+        }
+        
+        if (!equip->is_item_make()) {
+            write("这件装备不支持词条系统。\n");
+            return 1;
+        }
+        
+        if(equip->item_owner() != me->query("id")) {
+            write(equip->name() + "不需要你来操心吧！\n");
+            return 1;
+        }
+        
+        // 检查装备是否已穿戴
+        if (equip->query("equipped")) {
+            write("请先卸下装备再进行词条激活。\n");
+            return 1;
+        }
+        
+        if (equip->is_weapon() || equip->is_unarmed_weapon()) {
+            write("你只能对防具进行词条激活。\n");
+            return 1;
+        }
+        
+        // 检查是否已完成圣化和浸透
+        if (!equip->query("magic/imbue_ok")) {
+            write("装备需要先完成圣化与浸透后才能激活词条。\n");
+            return 1;
+        }
+        
+        tier = equip->query_equip_tier();
+        max_citiao = ITEM_D->query_max_citiao_by_tier(tier);
+        current_citiao = equip->query_citiao_count();
+        
+        if (current_citiao >= max_citiao) {
+            write(sprintf("该装备的词条已满（%d/%d），无法继续激活。\n", 
+                current_citiao, max_citiao));
+            return 1;
+        }
+        
+        activate_cost = ITEM_D->get_activate_cost(current_citiao);
+        wucai_shenshi = present("wucai shenshi", me);
+        
+        if (!wucai_shenshi || wucai_shenshi->query_amount() < activate_cost) {
+            write(sprintf("五彩神石不足，需要%d个。\n", activate_cost));
+            return 1;
+        }
+        
+        // 显示激活确认界面
+        {
+            string msg;
+            string *buttons;
+            
+            msg = sprintf("确认激活装备词条？\n\n");
+            msg += sprintf("装备：%s\n", equip->name());
+            msg += sprintf("当前等阶：%s\n", tier);
+            msg += sprintf("词条状态：%d/%d\n", current_citiao, max_citiao);
+            msg += sprintf("激活费用：五彩神石×%d\n", activate_cost);
+            
+            buttons = ({
+                sprintf("确认激活:qianghua %s@确认激活词条", equip_id),
+                "取消:look"
+            });
+            
+            write(popup_comb(msg, buttons));
+        }
+        return 1;
+    }
+    
+    // 确认激活词条
+    if (sscanf(arg, "%s@确认激活词条", equip_id) == 1) {
+        string tier;
+        int max_citiao, current_citiao, activate_cost;
+        object wucai_shenshi;
+        mapping new_citiao;
+        
+        equip = present(equip_id, me);
+        if (!equip) {
+            write("你没有这件装备。\n");
+            return 1;
+        }
+        
+        // 检查装备是否已穿戴
+        if (equip->query("equipped")) {
+            write("请先卸下装备再进行词条激活。\n");
+            return 1;
+        }
+        
+        tier = equip->query_equip_tier();
+        max_citiao = ITEM_D->query_max_citiao_by_tier(tier);
+        current_citiao = equip->query_citiao_count();
+        activate_cost = ITEM_D->get_activate_cost(current_citiao);
+        
+        wucai_shenshi = present("wucai shenshi", me);
+        
+        // 再次检查条件
+        if (current_citiao >= max_citiao || !wucai_shenshi || 
+            wucai_shenshi->query_amount() < activate_cost) {
+            write("激活条件不满足，激活失败。\n");
+            return 1;
+        }
+        
+        // 消耗五彩神石
+        wucai_shenshi->add_amount(-activate_cost);
+        
+        // 生成新词条并激活
+        new_citiao = ITEM_D->generate_random_citiao("");
+        if (new_citiao) {
+            equip->add_citiao(new_citiao);
+            equip->save();
+            
+            write(sprintf("成功激活词条：%s\n", 
+                ITEM_D->format_citiao_desc(new_citiao)));
+        } else {
+            write("词条激活失败。\n");
+        }
+        
+        return 1;
+    }
+    
+    // 词条管理界面
+    if (sscanf(arg, "%s@管理词条", equip_id) == 1) {
+        mapping *citiao_list;
+        string msg;
+        string *buttons;
+        int i;
+        
+        equip = present(equip_id, me);
+        if (!equip) {
+            write("你没有这件装备。\n");
+            return 1;
+        }
+        
+        if (!equip->is_item_make()) {
+            write("这件装备不支持词条系统。\n");
+            return 1;
+        }
+        
+        if(equip->item_owner() != me->query("id")) {
+            write(equip->name() + "不需要你来操心吧！\n");
+            return 1;
+        }
+        
+        // 检查装备是否已穿戴
+        if (equip->query("equipped")) {
+            write("请先卸下装备再进行词条管理。\n");
+            return 1;
+        }
+        
+        citiao_list = equip->query_citiao_data();
+        if (!sizeof(citiao_list)) {
+            write("该装备还没有激活任何词条。\n");
+            return 1;
+        }
+        
+        msg = sprintf("装备词条管理：%s\n\n", equip->name());
+        buttons = ({});
+        
+        for (i = 0; i < sizeof(citiao_list); i++) {
+            msg += sprintf("%d. %s\n", i + 1, 
+                ITEM_D->format_citiao_desc(citiao_list[i]));
+            
+            if (citiao_list[i]["locked"]) {
+                buttons += ({sprintf("解锁词条%d:qianghua %s@解锁词条@%d", 
+                    i + 1, equip_id, i)});
+            } else {
+                buttons += ({sprintf("锁定词条%d:qianghua %s@锁定词条@%d", 
+                    i + 1, equip_id, i)});
+            }
+        }
+        
+        // 添加刷新词条选项
+        buttons += ({sprintf("刷新词条:qianghua %s@刷新词条", equip_id)});
+        buttons += ({"返回:look"});
+        
+        write(popup_comb(msg, buttons));
+        return 1;
+    }
+    
+    // 处理词条刷新
+    if (sscanf(arg, "%s@刷新词条", equip_id) == 1) {
+        object cifu;
+        
+        equip = present(equip_id, me);
+        if (!equip) {
+            write("你没有这件装备。\n");
+            return 1;
+        }
+        
+        // 检查装备是否已穿戴
+        if (equip->query("equipped")) {
+            write("请先卸下装备再进行词条刷新。\n");
+            return 1;
+        }
+        
+        if (!equip->query_citiao_count()) {
+            write("该装备还没有激活任何词条。\n");
+            return 1;
+        }
+        
+        cifu = present("chifu", me);
+        if (!cifu || cifu->query_amount() < 1) {
+            write("词符不足，刷新词条需要1个。\n");
+            return 1;
+        }
+        
+        // 显示刷新确认界面
+        {
+            string msg;
+            string *buttons;
+            
+            msg = sprintf("确认刷新装备词条？\n\n");
+            msg += sprintf("装备：%s\n", equip->name());
+            msg += "注意：刷新后所有未锁定的词条将随机变化！\n";
+            msg += "刷新费用：词符×1\n";
+            
+            buttons = ({
+                sprintf("确认刷新:qianghua %s@确认刷新词条", equip_id),
+                "取消:look"
+            });
+            
+            write(popup_comb(msg, buttons));
+        }
+        return 1;
+    }
+    
+    // 确认刷新词条
+    if (sscanf(arg, "%s@确认刷新词条", equip_id) == 1) {
+        object cifu;
+        
+        equip = present(equip_id, me);
+        if (!equip) {
+            write("你没有这件装备。\n");
+            return 1;
+        }
+        
+        // 检查装备是否已穿戴
+        if (equip->query("equipped")) {
+            write("请先卸下装备再进行词条刷新。\n");
+            return 1;
+        }
+        
+        cifu = present("chifu", me);
+        if (!cifu || cifu->query_amount() < 1) {
+            write("词符不足，刷新失败。\n");
+            return 1;
+        }
+        
+        // 消耗词符
+        cifu->add_amount(-1);
+        
+        // 刷新未锁定的词条
+        equip->refresh_unlocked_citiao();
+        equip->save();
+        
+        write("词条刷新成功！\n");
+        
+        // 重新显示词条管理页面
+        me->force_me("qianghua " + equip_id + "@管理词条");
+        return 1;
+    }
+    
+    // 锁定词条
+    {
+        int index;
+        if (sscanf(arg, "%s@锁定词条@%d", equip_id, index) == 2) {
+            object citiao_lock;
+            
+            equip = present(equip_id, me);
+        if (!equip) {
+            write("你没有这件装备。\n");
+            return 1;
+        }
+        
+        // 检查装备是否已穿戴
+        if (equip->query("equipped")) {
+            write("请先卸下装备再进行词条锁定。\n");
+            return 1;
+        }
+        
+        if (index < 0 || index >= equip->query_citiao_count()) {
+            write("词条索引错误。\n");
+            return 1;
+        }
+        
+        citiao_lock = present("citiao suodingshi", me);
+        if (!citiao_lock || citiao_lock->query_amount() < 1) {
+            write("词条锁定石不足，锁定词条需要1个。\n");
+            return 1;
+        }
+        
+        // 消耗词条锁定石
+        citiao_lock->add_amount(-1);
+        
+        // 锁定词条
+        equip->lock_citiao(index);
+        equip->save();
+        
+            write(sprintf("词条%d已锁定。\n", index + 1));
+            return 1;
+        }
+    }
+    
+    // 解锁词条
+    {
+        int index;
+        if (sscanf(arg, "%s@解锁词条@%d", equip_id, index) == 2) {
+        equip = present(equip_id, me);
+        if (!equip) {
+            write("你没有这件装备。\n");
+            return 1;
+        }
+        
+        // 检查装备是否已穿戴
+        if (equip->query("equipped")) {
+            write("请先卸下装备再进行词条解锁。\n");
+            return 1;
+        }
+        
+        if (index < 0 || index >= equip->query_citiao_count()) {
+            write("词条索引错误。\n");
+            return 1;
+        }
+        
+        // 解锁词条 (不退还锁定石)
+        equip->unlock_citiao(index);
+        equip->save();
+        
+            write(sprintf("词条%d已解锁。\n", index + 1));
+            return 1;
+        }
+    }
+
+    if (sscanf(arg, "%s@%s@%s", equip_id, stone_id, protect_id) != 3)
+    {
+         if (sscanf(arg, "%s@%s", equip_id, stone_id) != 2)
+         {
+            equip_id = arg;
+         }
+    }
+
+
+    equip = present(equip_id, me);
+    if (!equip)
+    {
+        write("你没有这件装备。\n");
+        return 1;
+    }
+
+    
+    if (!equip->is_item_make())
+    {
+        write("这件装备不是可强化的装备。\n");
+        return 1;
+    }
+
+    if(equip->item_owner() != me->query("id"))
+    return notify_fail(equip->name() + "不需要你来操心吧！\n");
+
+    if (equip->is_weapon() || equip->is_unarmed_weapon())
+            return notify_fail("你只能在防具上使用品质强化。\n");
+
+    quality = equip->query("quality");
+
+    if (!stone_id)
+    {
+        string msg, *buttons = ({});
+        string applicable_protects = "";
+        success_rate = calculate_success_rate(quality);
+        stone_count = calculate_stone_count(quality);
+        // 判断当前适用的保护符
+        if (is_protect_applicable(quality, "dijibao hufu"))
+        {
+            applicable_protects += "低级保护符 ";
+        }
+        if (is_protect_applicable(quality, "zhongjibao hufu"))
+        {
+            applicable_protects += "中级保护符 ";
+        }
+        if (is_protect_applicable(quality, "gaojibao hufu"))
+        {
+            applicable_protects += "高级保护符 ";
+        }
+        if (is_protect_applicable(quality, "jigaojibao hufu"))
+        {
+            applicable_protects += "极高级保护符 ";
+        }
+
+        msg = "你确定要强化这件装备吗？你也可以先选择强化符。\n";
+        msg += "当前装备等级：" + quality + "\n";
+        msg += "当前需要的强化石头数量：" + stone_count + "\n";
+        msg += "当前成功率：" + (float)(to_float(success_rate) / 100.0) + "%\n";
+        msg += "当前适用的保护符：" + (applicable_protects != "" ? applicable_protects : "无") + "\n";
+        msg += "当前选择的保护符是：";
+
+        stone_id = "qianghua shi";
+
+        if (me->query_temp("qianghua/protect"))
+        {
+            msg += me->query_temp("qianghua/protect")->name() + "\n";
+            buttons += ({"取消保护符:qianghua cancel protect"});
+        }
+        else
+        {
+            msg += "无";
+            buttons += ({"选择保护符:qianghua select protect"});
+        }
+        if (me->query_temp("qianghua/protect"))
+        {
+            buttons += ({"强化装备:qianghua " + equip_id + "@" + stone_id + "@" + me->query_temp("qianghua/protect")->query("id")});
+
+        }
+        else
+        {
+            buttons += ({"强化装备:qianghua " + equip_id + "@" + stone_id});
+        }
+
+        // 设置自动强化
+        if (me->query("env/auto_qianghua"))
+        {
+            buttons += ({HIY "取消自动强化" NOR ":set auto_qianghua 0"});
+        }
+        else
+        {
+            buttons += ({HIR "设置自动强化" NOR ":set auto_qianghua 1"});
+        }
+
+        // 添加等阶升级选项
+        {
+            string current_tier, next_tier;
+            int material_count, max_citiao, current_citiao;
+            mapping tier_config;
+            
+            current_tier = equip->query_equip_tier();
+            next_tier = ITEM_D->get_next_tier(current_tier);
+            
+            if (next_tier) {
+                tier_config = ITEM_D->query_tier_config(next_tier);
+                material_count = ITEM_D->get_upgrade_material_count(current_tier);
+                
+                if (ITEM_D->check_quality_requirement(next_tier, quality)) {
+                    buttons += ({sprintf(HIC "等阶升级(%s→%s)" NOR ":qianghua %s@升阶", 
+                        current_tier, next_tier, equip_id)});
+                } else {
+                    // buttons += ({sprintf(HIC "等阶升级(%s→%s)" NOR ":qianghua %s@升阶", 
+                    //     current_tier, next_tier, equip_id)});
+                    tier_config = ITEM_D->query_tier_config(next_tier);
+                    msg += sprintf("\n" HIR "当前不可升阶，升级到%s需要品质等级≥%d" NOR "\n", 
+                        next_tier, tier_config["quality_req"]);
+                }
+            }
+            
+            // 添加词条相关选项
+            if (equip->query("magic/imbue_ok")) {
+                int activate_cost;
+                
+                max_citiao = ITEM_D->query_max_citiao_by_tier(current_tier);
+                current_citiao = equip->query_citiao_count();
+                
+                if (current_citiao < max_citiao) {
+                    activate_cost = ITEM_D->get_activate_cost(current_citiao);
+                    buttons += ({sprintf(HIY "激活词条(%d/%d)" NOR ":qianghua %s@激活词条", 
+                        current_citiao, max_citiao, equip_id)});
+                }
+                
+                if (current_citiao > 0) {
+                    buttons += ({sprintf(HIB "管理词条" NOR ":qianghua %s@管理词条", equip_id)});
+                }
+            } 
+            else {
+                msg += "\n词条功能(需完成圣化浸透开放)\n";
+            }
+        }
+
+        me->set_temp("qianghua/equip", equip);
+        write(popup_comb(msg, buttons));
+        return 1;
+    }
+
+    stone = present(stone_id, me);
+
+    if (!stone)
+    {
+        write("你没有这个强化石。\n");
+        return 1;
+    }
+
+    if (stone->query("id") != "qianghua shi")
+    {
+        write("这个物品不是强化石。\n");
+        return 1;
+    }
+
+    if (protect_id)
+    {
+        protect = present(protect_id, me);
+        if (!protect)
+        {
+            write("你没有这个保护符。\n");
+
+        // 如果有自动强化设置，停止
+        if (me->query("env/auto_qianghua"))
+        {
+            me->set("env/auto_qianghua", 0);
+            write("保护符已经消耗完毕，自动强化已停止。\n");
+        }
+
+            return 1;
+        }
+    }
+
+    quality = equip->query("quality");
+
+    if (quality >= 20)
+    {
+        write("装备已经达到最高强化等级。\n");
+        return 1;
+    }
+
+    success_rate = calculate_success_rate(quality);
+    stone_count = calculate_stone_count(quality);
+
+    if (protect_id && !is_protect_applicable(quality, protect_id))
+    {
+        write("保护符不适用于当前强化等级。\n");
+
+        // 如果有自动强化设置，停止
+        if (me->query("env/auto_qianghua"))
+        {
+            me->set("env/auto_qianghua", 0);
+            write("保护符不适用于当前强化等级，自动强化已停止。\n");
+        }
+
+        return 1;
+    }
+
+    if (protect_id == "jigaojibao hufu")
+    {
+        //最高等级的保护符提高成功率翻倍
+        success_rate *= 2;
+    }
+
+    //强化石数量是否足够
+    if (stone->query_amount() < stone_count)
+    {
+        write("强化石数量不足。\n");
+
+        // 如果有自动强化设置，停止
+        if (me->query("env/auto_qianghua"))
+        {
+            me->set("env/auto_qianghua", 0);
+            write("自动强化已停止。\n");
+        }
+
+        return 1;
+    }
+
+    if (random(10000) < success_rate || (me->query("qianghua_bd") >= 50 && equip->query("quality") >=15 ))
+    {
+        me->delete("qianghua_bd");
+        equip->add("quality", 1);
+        equip->set("armor_prop/armor",equip->apply_armor());//读取
+        write("强化成功！装备等级提升到 " + (quality + 1) + "。\n");
+        equip->save();
+    }
+    else
+    {
+        handle_failure(equip, quality, protect_id);
+    }
+
+    // destruct(stone);
+    stone->add_amount(-stone_count);
+
+    if (protect_id)
+    {
+        protect->add_amount(-1);
+        me->add("qianghua_bd",1);
+
+        if (!objectp(protect))
+        {
+            me->delete_temp("qianghua/protect");
+            write("保护符已经用完。\n");
+
+            // 如果有自动强化设置，停止
+            if (me->query("env/auto_qianghua"))
+            {
+                me->set("env/auto_qianghua", 0);
+                write("自动强化已停止。\n");
+            }
+            return 1;
+        }
+
+        if (me->query("env/auto_qianghua"))
+        {
+            // me->force_me("qianghua " + equip_id + "@" + stone_id + "@" + protect_id);
+            call_out("auto_cmd", 2, me, "qianghua " + equip_id + "@" + stone_id + "@" + protect_id);
+        }
+
+
+    }
+    else
+    {
+        if (me->query("env/auto_qianghua"))
+        {
+            // me->force_me("qianghua " + equip_id + "@" + stone_id);
+            call_out("auto_cmd", 2, me, "qianghua " + equip_id + "@" + stone_id);
+        }
+    }
+
+    return 1;
+}
+
+int auto_cmd(object me,string cmd)
+{
+    tell_object(me, "自动强化中...\n");
+    return me->force_me(cmd);
+}

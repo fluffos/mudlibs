@@ -1,0 +1,572 @@
+inherit F_SAVE;
+
+// 存储所有玩家的科举数据
+mapping players;
+
+// 题库
+nosave mixed questions;
+
+// 当前考试状态
+// 0: 未开始, 1: 院试, 2: 乡试, 3: 会试, 4: 殿试
+nosave int status;
+
+// 全局翻译 mapping
+nosave mapping type_to_chinese = ([
+    "yuan": "院试",
+    "xiang": "乡试",
+    "hui": "会试",
+    "dian": "殿试",
+]);
+
+nosave mapping processed_rewards;
+
+// 科举时间表配置
+// end_min 之后的一分钟为发奖时间
+// mapping exam_schedule = ([
+//     "reset": ([ "week": 5, "hour": 18, "min": 0 ]),
+//     "yuan":  ([ "week": 5, "hour": 19, "start_min": 0, "end_min": 15, "status": 1 ]),
+//     "xiang": ([ "week": 5, "hour": 20, "start_min": 0, "end_min": 15, "status": 2 ]),
+//     "hui":   ([ "week": 6, "hour": 19, "start_min": 0, "end_min": 15, "status": 3 ]),
+//     "dian":  ([ "week": 6, "hour": 20, "start_min": 0, "end_min": 15, "status": 4 ]),
+// ]);
+nosave mapping exam_schedule = ([
+    "reset": ([ "week": 5, "hour": 18, "min": 0 ]),
+    "yuan":  ([ "week": 5, "hour": 19, "start_min": 0, "end_min": 20, "status": 1 ]),
+    "xiang": ([ "week": 5, "hour": 20, "start_min": 0, "end_min": 15, "status": 2 ]),
+    "hui":   ([ "week": 6, "hour": 19, "start_min": 0, "end_min": 15, "status": 3 ]),
+    "dian":  ([ "week": 6, "hour": 20, "start_min": 0, "end_min": 15, "status": 4 ]),
+]);
+
+void finish_exam(object me);
+void send_question(object me);
+void process_ranking_and_rewards(string type);
+void resume_exam(object me);
+
+// 存档文件路径
+string query_save_file() { return "/data/keju_d"; }
+
+// 函数：加载题库
+void load_questions()
+{
+    string file_content = read_file("/adm/special_ob/keju/tiku.json");
+    if (!file_content)
+    {
+        log_file("keju", ctime(time()) + " - 题库文件 tiku.json 读取失败！");
+        return;
+    }
+    questions = json_decode(file_content);
+    if (!arrayp(questions))
+    {
+        log_file("keju", ctime(time()) + " - 题库文件 tiku.json 解析失败！");
+        questions = ({});
+    }
+}
+
+/**
+ * @brief 从问题库中随机获取指定数量的问题
+ * @param count 需要获取的随机问题数量
+ * @return 返回一个包含随机问题的数组，数组长度不超过问题库中的问题总数
+ * @details 该函数确保每次选择的问题都是唯一的，不会重复。当请求的问题数量超过问题库中的问题时，会自动调整为问题库中的问题总数。
+ */
+mixed get_random_questions(int count)
+{
+    mixed q_list = ({});
+    mixed q_bank = questions;
+    int total = sizeof(q_bank);
+
+    if (count > total)
+    {
+        count = total;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        int index = random(sizeof(q_bank));
+        q_list += ({ q_bank[index] });
+        q_bank = q_bank[0..index-1] + q_bank[index+1..];
+    }
+
+    return q_list;
+}
+
+void create()
+{
+    restore();
+    seteuid(getuid());
+    if (!mapp(players)) players = ([]);
+
+    questions = ({});
+    status = 0;
+    processed_rewards = ([]);
+    load_questions();
+    set_heart_beat(1);
+}
+
+// 重置所有科举数据
+void reset_keju_data()
+{
+    players = ([]);
+    processed_rewards = ([]);
+    log_file("keju", ctime(time()) + " - 科举数据已重置。\n");
+}
+
+void heart_beat()
+{
+    mixed* tm = localtime(time());
+    int week = tm[6];
+    int hour = tm[2];
+    int min = tm[1];
+    int sec = tm[0];
+    mixed *player_ids;
+
+    // 检查重置时间
+    mapping reset_time = exam_schedule["reset"];
+    if (week == reset_time["week"] && hour == reset_time["hour"] && min == reset_time["min"]) 
+    {
+        reset_keju_data();
+    }
+
+    // 检查并发奖
+    foreach (string type, mapping schedule in exam_schedule)
+    {
+        if (type == "reset") continue;
+        if (week == schedule["week"] && hour == schedule["hour"] && min == schedule["end_min"] + 1)
+        {
+            // 检查是否已经发过奖
+            if (undefinedp(processed_rewards[type]))
+            {
+                process_ranking_and_rewards(type);
+                processed_rewards[type] = 1; // 标记为已处理
+            }
+        }
+    }
+
+    // 更新当前考试状态
+    status = 0;
+    foreach (string type, mapping schedule in exam_schedule)
+    {
+        if (type == "reset") continue;
+        if (week == schedule["week"] && hour == schedule["hour"] && min >= schedule["start_min"] && min <= schedule["end_min"])
+        {
+            status = schedule["status"];
+            break;
+        }
+    }
+
+    // 监考逻辑
+    player_ids = keys(players);
+    foreach (string id in player_ids)
+    {
+        if (mapp(players[id]) && mapp(players[id]["exam_info"]) && !undefinedp(players[id]["exam_info"]["start_time"]) && undefinedp(players[id]["exam_info"]["final_score"]))
+        {
+            object p_ob = find_player(id);
+            if (p_ob && file_name(environment(p_ob)) != "/adm/special_ob/keju/map/kaochang")
+            {
+                tell_object(p_ob, "\n你似乎离开了考场，系统已为你自动交卷。\n");
+                finish_exam(p_ob);
+            }
+        }
+    }
+
+    // 定期保存
+    if (sec % 30 == 0)
+    {
+        save();
+    }
+}
+
+varargs void remove(string euid)
+{
+    save();
+}
+
+void mud_shutdown()
+{
+    save();
+}
+
+mapping query_player(string id)
+{
+    if (undefinedp(players[id]))
+    {
+        return ([]);
+    }
+    return players[id];
+}
+
+string can_apply(object me, string type)
+{
+    string id = me->query("id");
+    mapping player_data = query_player(id);
+
+    return "暂时停止开放。\n";
+
+    if (mapp(player_data) && mapp(player_data["apply_info"]) && player_data["apply_info"][type])
+    {
+        return "你已经报名过了，请勿重复报名。";
+    }
+
+    switch (type)
+    {
+        case "yuan":
+            break;
+        case "xiang":
+            if (!mapp(player_data) || player_data["identity"] != "秀才")
+                return "你尚未取得秀才功名，无法报名乡试。";
+            break;
+        case "hui":
+            if (!mapp(player_data) || player_data["identity"] != "举人")
+                return "你尚未取得举人功名，无法报名会试。";
+            break;
+        case "dian":
+            if (!mapp(player_data) || player_data["identity"] != "贡士")
+                return "你尚未取得贡士功名，无法报名殿试。";
+            break;
+        default:
+            return "你想报名什么考试？";
+    }
+
+    return "success";
+}
+
+void do_apply(object me, string type)
+{
+    string id = me->query("id");
+
+    if (undefinedp(players[id]))
+    {
+        players[id] = ([ "apply_info": ([]), "exam_info": ([]), "identity": "百姓", "title": "无" ]);
+    }
+    if (undefinedp(players[id]["apply_info"]))
+    {
+        players[id]["apply_info"] = ([]);
+    }
+
+    players[id]["apply_info"][type] = 1;
+    tell_object(me, "你成功报名了" + type_to_chinese[type] + "！\n");
+}
+
+void start_exam(object me, string type)
+{
+    string id = me->query("id");
+    int exam_status = 0;
+    int question_count = 0;
+    switch (type)
+    {
+        case "yuan": exam_status = 1; break;
+        case "xiang": exam_status = 2; break;
+        case "hui": exam_status = 3; break;
+        case "dian": exam_status = 4; break;
+    }
+
+    if (status != exam_status)
+    {
+        tell_object(me, "现在不是" + type_to_chinese[type] + "的考试时间。\n");
+        return;
+    }
+
+    if (undefinedp(players[id]) || undefinedp(players[id]["apply_info"]) || !players[id]["apply_info"][type])
+    {
+        tell_object(me, "你还没有报名参加本次" + type_to_chinese[type] + "。\n");
+        return;
+    }
+
+    // if (mapp(players[id]["exam_info"]) && players[id]["exam_info"]["start_time"] > 0)
+    // {
+    //     tell_object(me, "你已经在考场中了！\n");
+    //     return;
+    // }
+
+    switch (type)
+    {
+        case "yuan": question_count = 20; break;
+        case "xiang": question_count = 30; break;
+        case "hui": question_count = 40; break;
+        case "dian": question_count = 50; break;
+    }
+
+    players[id]["exam_info"] = ([
+        "type": type,
+        "start_time": time(),
+        "current_q": 0,
+        "score": 0,
+        "questions": get_random_questions(question_count),
+        "pre_room": file_name(environment(me))
+    ]);
+
+    me->move("/adm/special_ob/keju/map/kaochang");
+    tell_object(me, "你被传送到考场，考试现在开始！\n");
+
+    send_question(me);
+}
+
+void send_question(object me)
+{
+    string id = me->query("id");
+    mapping exam_info = players[id]["exam_info"];
+    int q_index = exam_info["current_q"];
+    mapping question = exam_info["questions"][q_index];
+
+    string msg = sprintf("第 %d 题：%s\n", q_index + 1, question["question"]);
+    string *buttons = ({});
+    // mixed *options = keys(question["options"]);
+    mixed *options = ({ "A", "B", "C", "D" });
+    
+    foreach (string opt in options)
+    {
+        msg += sprintf("  %s. %s\n", opt, question["options"][opt]);
+        buttons += ({ sprintf("%s:%s", opt, "daan " + opt) });
+    }
+
+    tell_object(me, popup_comb(msg, buttons));
+}
+
+void receive_answer(object me, string answer)
+{
+    string id = me->query("id");
+    mapping exam_info = players[id]["exam_info"];
+    int q_index = exam_info["current_q"];
+    mapping question = exam_info["questions"][q_index];
+
+    if (answer == question["answer"])
+    {
+        exam_info["score"] += 1;
+        tell_object(me, "回答正确！\n");
+    }
+    else
+    {
+        tell_object(me, "回答错误。正确答案是 " + question["answer"] + "。\n");
+    }
+
+    exam_info["current_q"] += 1;
+
+    if (exam_info["current_q"] >= sizeof(exam_info["questions"]))
+    {
+        finish_exam(me);
+    }
+    else
+    {
+        call_out("send_question", 2, me);
+    }
+}
+
+void finish_exam(object me)
+{
+    string id = me->query("id");
+    mapping exam_info;
+    int score, time_used, pass_score;
+    string type, new_identity;
+
+    if (undefinedp(players[id]) || undefinedp(players[id]["exam_info"]))
+    {
+        return;
+    }
+
+    exam_info = players[id]["exam_info"];
+    score = exam_info["score"];
+    time_used = time() - exam_info["start_time"];
+    type = exam_info["type"];
+    pass_score = 0;
+    new_identity = "";
+
+    players[id]["exam_info"]["final_score"] = score;
+    players[id]["exam_info"]["final_time"] = time_used;
+
+    tell_object(me, sprintf("考试结束！你总共答对了 %d 题，用时 %d 秒。
+", score, time_used));
+    switch (type)
+    {
+        case "yuan": pass_score = 12; new_identity = "秀才"; break;
+        case "xiang": pass_score = 21; new_identity = "举人"; break;
+        case "hui": pass_score = 32; new_identity = "贡士"; break;
+        case "dian": pass_score = 45; new_identity = "进士"; break;
+    }
+
+    if (score >= pass_score)
+    {
+        players[id]["identity"] = new_identity;
+        me->add("combat_exp", 100000);
+        tell_object(me, "恭喜你通过了" + type_to_chinese[type] + "，获得了『" + new_identity + "』的身份和 100,000 点经验奖励！\n");
+    }
+    else
+    {
+        tell_object(me, "很遗憾，你未能通过本次考试。\n");
+    }
+
+    map_delete(players[id]["exam_info"], "questions");
+    map_delete(players[id]["exam_info"], "current_q");
+
+    if (exam_info["pre_room"])
+    {
+        me->move(exam_info["pre_room"]);
+    }
+    else
+    {
+        me->move("/d/city/guangchang"); 
+    }
+}
+
+/**
+ * @brief 处理考试排名与奖励发放
+ * @param string type 考试类型标识（xiang/hui/dian），决定奖励规则和功名体系
+ * @details 
+ * 本函数实现基于考试类型的分层奖励机制，核心设计逻辑如下：
+ * 1. 排序规则：优先比较最终分数，分数相同则按完成时间排序，确保高成绩且效率优先
+ * 2. 奖励分级：前三名获得双倍奖励，10名内获得基础奖励，体现阶梯式激励
+ * 3. 功名体系：通过类型与排名组合动态生成功名，避免硬编码提升扩展性
+ * 4. 数据验证：通过UPDATE_D模块确保玩家对象有效性，防止空引用异常
+ * 5. 类型适配：针对不同考试类型配置专属功名模板，如dian类型特有三元组（状元/榜眼/探花）
+ * @brief 特别说明：本机制采用动态配置而非静态判断，允许后续扩展新的考试类型和奖励规则
+ */
+void process_ranking_and_rewards(string type)
+{
+    mixed *all_players = keys(players);
+    mixed *participants = ({});
+    string special_title = "";
+
+    foreach (string id in all_players)
+    {
+        if (mapp(players[id]["exam_info"]) && players[id]["exam_info"]["type"] == type)
+        {
+            participants += ({ players[id] + (["id": id]) });
+        }
+    }
+
+    participants = sort_array(participants, (: 
+        $2["exam_info"]["final_score"] - $1["exam_info"]["final_score"] ? 
+        $2["exam_info"]["final_score"] - $1["exam_info"]["final_score"] : 
+        $1["exam_info"]["final_time"] - $2["exam_info"]["final_time"]
+    :));
+
+    for (int i = 0; i < sizeof(participants); i++)
+    {
+        mapping p_data = participants[i];
+        object p_ob = UPDATE_D->global_find_player(p_data["id"]);
+        if (!p_ob) continue;
+
+        if (i < 3)
+        {
+            p_ob->add("combat_exp", 300000);
+            p_ob->add("potential", 500000);
+            tell_object(p_ob, "你在本次考试中名列前茅，获得额外奖励：经验 300,000，潜能 500,000！\n");
+        }
+        else if (i < 10)
+        {
+            p_ob->add("combat_exp", 200000);
+            p_ob->add("potential", 300000);
+            tell_object(p_ob, "你在本次考试中表现优异，获得额外奖励：经验 200,000，潜能 300,000！\n");
+        }
+
+        if (i == 0)
+        {
+            if (type == "xiang") special_title = "解元";
+            if (type == "hui") special_title = "会元";
+            if (type == "dian") special_title = "状元";
+        }
+        else if (i == 1 && type == "dian") special_title = "榜眼";
+        else if (i == 2 && type == "dian") special_title = "探花";
+
+        if (special_title != "")
+        {
+            p_data["title"] = special_title;
+            tell_object(p_ob, "恭喜你获得特殊功名：『" + special_title + "』！\n");
+        }
+    }
+}
+
+/**
+ * @brief 生成科举考试类型榜单
+ * @param string type 考试类型标识符（"yuan"/"xiang"/"hui"/"dian"）
+ * @return string 格式化榜单内容（包含标题、分隔线、表格及结束语）
+ * @details 该函数通过以下机制实现榜单生成：
+ * 1. 排序逻辑采用双维度比较：优先比较最终成绩，成绩相同时比较完成时间
+ * 2. 异常处理机制：当无参与者时自动生成"无人上榜"提示
+ * 3. 类型映射设计：通过switch语句实现类型标识符与榜单标题的映射转换
+ * 4. 格式化策略：采用固定宽度的字符串格式化确保输出美观性
+ * 5. 安全约束：严格限定仅处理完成考试且成绩有效的参与者
+ */
+string query_ranking_list(string type)
+{
+    mixed *all_players = keys(players);
+    mixed *participants = ({});
+    string title, result = "";
+
+    foreach (string id in all_players)
+    {
+        if (mapp(players[id]["exam_info"]) && players[id]["exam_info"]["type"] == type && !undefinedp(players[id]["exam_info"]["final_score"]))
+        {
+            participants += ({ players[id] + ([ "id": id ]) });
+        }
+    }
+    participants = sort_array(participants, (: 
+        $2["exam_info"]["final_score"] - $1["exam_info"]["final_score"] ? 
+        $2["exam_info"]["final_score"] - $1["exam_info"]["final_score"] : 
+        $1["exam_info"]["final_time"] - $2["exam_info"]["final_time"]
+    :));
+
+    switch (type)
+    {
+        case "yuan": title = "院试登科"; break;
+        case "xiang": title = "乡试捷报"; break;
+        case "hui": title = "会试金榜"; break;
+        case "dian": title = "殿试金榜"; break;
+        default: title = "科举总榜"; break;
+    }
+
+    result += sprintf("     %-48s\n", "-=" + title + "=-");
+    result += sprintf("%-10s%-18s%-10s%-10s\n", "名次", "姓名", "成绩", "用时");
+    result += "------------------------------------------------------------\n";
+
+    if (!sizeof(participants))
+    {
+        result += "  目前无人上榜。\n";
+    }
+    else
+    {
+        for (int i = 0; i < sizeof(participants); i++)
+        {
+            mapping p = participants[i];
+            result += sprintf("第%-7d%-18s%-10d%-10d\n", 
+                i + 1, 
+                p["id"],
+                p["exam_info"]["final_score"],
+                p["exam_info"]["final_time"]
+            );
+        }
+    }
+    result += "------------------------------------------------------------\n";
+    return result;
+}
+
+/**
+ * @brief 恢复科举考试答题状态
+ * @param object me 当前玩家对象
+ * @details 该函数通过三个条件链式检查实现考试状态恢复机制：
+ * 1. 验证玩家ID是否存在且绑定有效（mapp(players[id]））
+ * 2. 查找已存在的科举考试信息（mapp(players[id]["exam_info"])）
+ * 3. 确保考试处于进行中状态（存在start_time但未记录final_score）
+ * 当所有条件满足且玩家位于考场区域(/adm/special_ob/keju/map/kaochang)时，触发继续答题流程。这种设计能有效防止玩家在考试期间离开考场区域后非法恢复考试。
+ */
+void resume_exam(object me)
+{
+    string id = me->query("id");
+
+    // 检查玩家是否正在考试中 (有考试信息，但没有最终成绩)
+    if (mapp(players[id]) && mapp(players[id]["exam_info"]) && !undefinedp(players[id]["exam_info"]["start_time"]) && undefinedp(players[id]["exam_info"]["final_score"]))
+    {
+        // 检查玩家是否在考场内
+        if (file_name(environment(me)) == "/adm/special_ob/keju/map/kaochang")
+        {
+            tell_object(me, "你继续答题。\n");
+            send_question(me);
+        }
+        else
+        {
+            tell_object(me, "你不在考场内，无法继续答题。\n");
+        }
+    }
+    else
+    {
+        tell_object(me, "你当前没有正在进行的科举考试。\n");
+    }
+}

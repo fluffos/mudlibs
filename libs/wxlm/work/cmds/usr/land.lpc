@@ -1,0 +1,253 @@
+
+
+inherit F_CLEAN_UP;
+
+#define COST_ROAD 10
+#define COST_FIELD 300
+
+mapping dir = ([
+    "east" : "东面",
+    "west" : "西面",
+    "south" : "南面",
+    "north" : "北面",
+]);
+
+mapping dir2 = ([
+    "east" : "west",
+    "west" : "east",
+    "south" : "north",
+    "north" : "south",
+]);
+
+//声明各项函数
+int create_land(object me, object env, string direction, string name, string desc, string id);
+int show_direction_selection(object me);
+int handle_direction_selection(object me, object env, string direction);
+int handle_land_type_selection(object me, object env, string direction, string land_type);
+int create_road(object me, object env, string direction);
+int show_field_payment_options(object me, string direction);
+int handle_field_creation(object me, object env, string direction, string payment_type);
+
+
+
+int main(object me, string arg)
+{
+    object env;
+    string *attr;
+
+    seteuid(geteuid(me));
+    env = environment(me);
+
+    if (!env->query("is_land") && base_name(env) != "/data/hell/shui" && (!env->query("owner_build") || env->query("owner_build") != me->query("id")))
+    {
+        return notify_fail(HIY"这里不允许创建土地！只有在可创建的土地或忘川河中才能创建新的土地。"NOR"\n");
+    }
+    else
+    {
+        if (env->query("owner_build") && env->query("owner_build") == me->query("id"))
+        {
+            tell_object(me, HIY"你已经可以在自己的领地上创建土地！"NOR"\n");
+        }
+    }
+
+    if (!arg)
+    {
+        return show_direction_selection(me);
+    }
+
+    attr = explode(arg, " ");
+
+    if (sizeof(attr) == 1)
+    {
+        return handle_direction_selection(me, env, attr[0]);
+    }
+    else if (sizeof(attr) == 2)
+    {
+        return handle_land_type_selection(me, env, attr[0], attr[1]);
+    }
+    else if (sizeof(attr) == 3 && attr[1] == "field")
+    {
+        return handle_field_creation(me, env, attr[0], attr[2]);
+    }
+
+    return notify_fail("格式错误！请参考---名称："HIY"中心广场"NOR"，id："HIG"guangchang"NOR"，名字要用纯中文，英文id由小写字母或者数字组成。\n");
+}
+
+int show_direction_selection(object me)
+{
+    string str = "请选择要开垦土地的位置：";
+    string *button = ({ "北面:land north", "西面:land west", "东面:land east", "南面:land south" });
+
+    write(popup_comb(str, button));
+    return 1;
+}
+
+int handle_direction_selection(object me, object env, string direction)
+{
+    string str, *button;
+    if (!dir[direction])
+        return notify_fail(HIY"方向选择有误！！"NOR"\n");
+    if (env->query("exits/" + direction))
+        return notify_fail(HIY"此方向已有场景了不能重复创建！！"NOR"\n");
+
+    str = "请选择土地类型："ZJBR;
+    button = ({ "道路:land " + direction + " road", "耕地:land " + direction + " field" });
+
+    tell_object(me, popup_comb(str, button));
+    return 1;
+}
+
+int handle_land_type_selection(object me, object env, string direction, string land_type)
+{
+    if (land_type == "road")
+    {
+        return create_road(me, env, direction);
+    }
+    else if (land_type == "field")
+    {
+        return show_field_payment_options(me, direction);
+    }
+    return notify_fail(HIY"土地类型选择有误！！"NOR"\n");
+}
+
+int create_road(object me, object env, string direction)
+{
+    string id;
+    if (me->query("yuanbao") < COST_ROAD)
+        return notify_fail(HIY"修建道路需要" + COST_ROAD + "元宝，你的元宝不足！！"NOR"\n");
+
+    me->add("yuanbao", -COST_ROAD);
+    tell_object(me, HIG"你消耗了" + COST_ROAD + "元宝修建了一条道路。"NOR"\n");
+
+    id = me->query("id") + "_" + time();
+    create_land(me, env, direction, "泥巴路", "这个是" + me->query("name") + "出资修建的道路。", id);
+    return 1;
+}
+
+int show_field_payment_options(object me, string direction)
+{
+    string str, *button;
+    if (me->query("fields") >= 10)
+        return notify_fail(HIY"你最多只能开垦十个耕地！！"NOR"\n");
+
+    str = "请选择耕地的支付方式："ZJBR;
+    button = ({
+        COST_FIELD + "元宝:land " + direction + " field yuanbao",
+        COST_FIELD + "绑定元宝:land " + direction + " field bind_yuanbao",
+        "组合支付:land " + direction + " field mix"
+    });
+
+    tell_object(me, popup_comb(str, button));
+    return 1;
+}
+
+int handle_field_creation(object me, object env, string direction, string payment_type)
+{
+    int yuanbao_cost = 0, bind_yuanbao_cost = 0;
+    string id;
+
+    if (payment_type == "yuanbao")
+    {
+        if (me->query("yuanbao") < COST_FIELD)
+            return notify_fail(HIY"开垦耕地需要" + COST_FIELD + "元宝，你的元宝不足！！"NOR"\n");
+        yuanbao_cost = COST_FIELD;
+    }
+    else if (payment_type == "bind_yuanbao")
+    {
+        if (me->query("bind_yuanbao") < COST_FIELD)
+            return notify_fail(HIY"开垦耕地需要" + COST_FIELD + "绑定元宝，你的绑定元宝不足！！"NOR"\n");
+        bind_yuanbao_cost = COST_FIELD;
+    }
+    else if (payment_type == "mix")
+    {
+        bind_yuanbao_cost = me->query("bind_yuanbao");
+        if (bind_yuanbao_cost >= COST_FIELD)
+        {
+            bind_yuanbao_cost = COST_FIELD;
+        }
+        else
+        {
+            yuanbao_cost = COST_FIELD - bind_yuanbao_cost;
+        }
+
+
+        if (me->query("yuanbao") < yuanbao_cost)
+        {
+            return notify_fail(HIY"元宝不足，请先获取元宝！！"NOR"\n");
+        }
+
+        if (me->query("bind_yuanbao") < bind_yuanbao_cost)
+        {
+            return notify_fail(HIY"绑定元宝不足，请先获取绑定元宝！！"NOR"\n");
+        }
+
+    }
+    else
+    {
+        return notify_fail(HIY"支付方式选择有误！！"NOR"\n");
+    }
+
+    me->add("yuanbao", -yuanbao_cost);
+    me->add("bind_yuanbao", -bind_yuanbao_cost);
+
+    tell_object(me, HIG"你消耗了" + (yuanbao_cost ? yuanbao_cost + "元宝" : "") +
+                (bind_yuanbao_cost ? (yuanbao_cost ? "和" : "") + bind_yuanbao_cost + "绑定元宝" : "") +
+                "开垦了一块耕地。"NOR"\n");
+
+    id = me->query("id") + "_" + time();
+    create_land(me, env, direction, "耕地", "这个是" + me->query("name") + "开垦的耕地。", id);
+    me->add("fields", 1);
+    me->add("fields_list", ({ id }));
+
+    return 1;
+}
+
+int create_land(object me, object env, string direction, string name, string desc, string id)
+{
+    string *dirs,list, str;
+
+    dirs = explode(base_name(env), "/");
+
+    list = "//land system by 茶壶.\n";
+    list += "// " + id + ".c\n\n";
+    list += "\n";
+    list += "inherit ROOM;\n\n";
+    list += "void create()\n{\n";
+    list += "    set(\"short\",\"" + name + "\");\n";
+    list += "    set(\"long\",\"" + desc + "\");\n";
+    list += "    set(\"owner_build\",\"" + me->query("id") + "\");\n";
+    list += "    set(\"exits\", ([\n";
+    list += "        \"" + dir2[direction] + "\" : \"" + base_name(env) + "\",\n";
+    list += "    ]));\n";
+    list += "    set(\"objects\", ([\n";
+    list += "    ]));\n";
+    list += "    set(\"is_land\", 1);\n"; // 特殊标记，表示这是可创建土地的地图
+
+    //是耕地还是道路
+    if (name == "耕地")
+    {
+        list += "    set(\"land_type\", \"field\");\n";
+    }
+    else if (name == "泥巴路")
+    {
+        list += "    set(\"land_type\", \"road\");\n";
+    }
+
+    list += "    setup();\n";
+    list += "}\n\n";
+
+    str = sprintf("/d/player_land/map/%c/%s/%s", me->query("id")[0], me->query("id"), id);
+
+    if (file_size(str + ".lpc") > 0)
+        return notify_fail(HIY"同名文件已存在，请更改英文代号再次尝试！！"NOR"\n");
+
+    BUILD_D->build_file(me, str + ".lpc", list);
+
+    list = BUILD_D->get_file_code(env);
+    list = replace_string(list, "set(\"exits\", ([", "set(\"exits\", ([\n        \"" + direction + "\" : \"" + str + "\",");
+
+    BUILD_D->build_file(me, base_name(env) + ".lpc", list);
+    env->set("exits/" + direction, str);
+
+    write(HIY"生成完毕，请进入新场景通过控制台修改设定场景的其他属性..."NOR"\n");
+}

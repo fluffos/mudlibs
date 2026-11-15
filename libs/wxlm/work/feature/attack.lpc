@@ -1,0 +1,680 @@
+// attack.c - 优化后的战斗功能实现
+
+#include <dbase.h>
+#include <origin.h>
+#include <skill.h>
+#include <action.h>
+
+#define MAX_OPPONENT    4
+
+// 记录主动攻击的仇人ID列表
+string *killer = ({ });
+// 记录想要攻击的仇人ID列表
+string *want_kills = ({ });
+
+// 当前的敌人对象列表
+nosave object *enemy = ({});
+// 下一个要执行的战斗动作
+nosave mixed next_action = 0;
+// 默认的战斗动作对象
+nosave mixed default_object = 0;
+// 默认的战斗动作函数名
+nosave string default_function = 0;
+// 当前的竞争对手
+nosave object competitor = 0;
+
+// 函数声明
+/**
+ * @brief 查询敌人列表
+ * @return object* 返回包含敌人对象的数组，已过滤空对象
+ */
+object *query_enemy()  { return enemy - ({ 0 }); }
+/**
+ * @brief 查询主动攻击的仇人ID列表
+ * @return string* 返回仇人ID数组
+ */
+string *query_killer() { return killer; }
+/**
+ * @brief 查询想要攻击的仇人ID列表
+ * @return string* 返回想要攻击的仇人ID数组
+ */
+string *query_want()   { return want_kills; }
+/**
+ * @brief 查询默认的战斗动作
+ * @return mapping 返回包含默认动作对象和函数的映射
+ */
+mapping query_default_action() { return ([ default_object : default_function ]); }
+/**
+ * @brief 应用仇人ID列表
+ * @param string* ik 要应用的仇人ID数组
+ */
+void apply_killer(string *ik) { if (arrayp(ik)) killer = filter_array(ik, (: stringp :)); }
+/**
+ * @brief 应用想要攻击的仇人ID列表
+ * @param string* ik 要应用的仇人ID数组
+ */
+void apply_want(string *ik)   { if (arrayp(ik)) want_kills = filter_array(ik, (: stringp :)); }
+
+/**
+ * @brief 判断是否正在战斗
+ * @param object ob 可选参数，指定要检查的对手对象
+ * @return int 如果正在战斗则返回1，否则返回0
+ * @details 如果提供了对手对象，则检查该对象是否在敌人列表中；
+ *          否则，只要敌人列表不为空就返回1。
+ *          会特殊处理副本等战斗场景中的队伍判断。
+ */
+varargs int is_fighting(object ob)
+{
+	object *emy;
+	object env;
+	object me;
+	string ft;
+
+	me = this_object();
+	env = environment(me);
+	emy = enemy;
+
+	if(env && env->is_comb_ob())
+	{
+		ft = me->query_temp("fight_team");
+		emy = ft ? env->query_emy(ft) : ({ });
+	}
+
+	if (!emy) return 0;
+	if (!ob) return sizeof(emy) > 0;
+	return member_array(ob, emy) != -1;
+}
+
+/**
+ * @brief 判断是否正在主动攻击某个ID
+ * @param string id 要检查的对象ID
+ * @return int 如果正在主动攻击则返回1，否则返回0
+ * @details "killing"状态表示一种主动、持续的攻击意图。
+ *          如果不提供ID，则检查是否存在任何主动攻击目标。
+ */
+varargs int is_killing(string id)
+{
+	return id ? (arrayp(killer) && member_array(id, killer) != -1) : sizeof(killer) > 0;
+}
+
+/**
+ * @brief 判断是否想要攻击某个ID
+ * @param string id 要检查的对象ID
+ * @return int 如果想要攻击则返回1，否则返回0
+ * @details "want_kill"是一种攻击意向，比"killing"更弱，
+ *          通常用于标记潜在的敌对目标，但不立即触发战斗。
+ */
+varargs int is_want_kill(string id)
+{
+	return arrayp(want_kills) && member_array(id, want_kills) != -1;
+}
+
+/**
+ * @brief 更新仇人列表
+ * @details 清理`killer`和`want_kills`列表：
+ *          1. 移除所有已经离线的玩家。
+ *          2. 移除所有被动的攻击行为（即对方已经不在`want_kills`列表中）。
+ *          用于定期维护仇恨关系，避免数据陈旧。
+ */
+void update_killer()
+{
+	if (!arrayp(killer) || !arrayp(want_kills))
+	{
+		killer = ({ });
+		want_kills = ({ });
+		return;
+	}
+
+	// 移除所有离线玩家
+	want_kills = filter_array(want_kills, (: objectp(find_player($1)) :));
+
+	// 移除所有被动杀害行为
+	killer = filter_array(killer, (: member_array($1, want_kills) == -1 :));
+}
+
+/**
+ * @brief 与指定对象开始战斗
+ * @param object ob 要战斗的对象
+ * @details 这是发起战斗的基础函数，会进行一系列检查：
+ *          1. 检查目标是否有效，是否是自己，是否已在战斗。
+ *          2. 检查环境是否允许战斗。
+ *          3. 检查自身是否存活。
+ *          通过后，将目标加入敌人列表，并通知双方进入战斗状态。
+ */
+void fight_ob(object ob)
+{
+	object env;
+	mapping jsonData;
+
+	if (!ob || ob == this_object() || member_array(ob, enemy) != -1) return;
+
+	env = environment();
+	if (!env || environment(ob) != env || (env->query("no_fight") && !ob->query_condition("killer"))) return;
+	if (!living(this_object())) return;
+
+	set_heart_beat(1);
+	if (!sizeof(enemy))
+	{
+		jsonData = (["code": "fight_start"]);
+		tell_object(this_object(), json_encode(jsonData) + "\n");
+	}
+
+	enemy += ({ ob });
+	COMBAT_JSON_MSG->player_combat_cond(ob);
+	COMBAT_JSON_MSG->player_combat_cond(this_object());
+
+	if (this_object()->is_guarder() && is_killing(ob->query("id")))
+	{
+		this_object()->kill_enemy(ob);
+	}
+
+	ob->fight_ob(this_object());
+}
+
+/**
+ * @brief 追杀指定对象
+ * @param object ob 要追杀的对象
+ * @details 这是比`fight_ob`更具攻击性的行为，表示不死不休的战斗：
+ *          1. 检查环境、存活状态和保护关系。
+ *          2. 将目标ID加入`killer`列表，并通知对方。
+ *          3. 触发被保护者的援助逻辑，使其也加入战斗。
+ *          4. 调用`fight_ob`正式进入战斗。
+ */
+void kill_ob(object ob)
+{
+	object env;
+	object *guarded;
+	string ob_id;
+	string attack_msg;
+	object gob;
+
+	if (!living(this_object()) || !ob) return;
+
+	env = environment();
+	if (!env || environment(ob) != env || (env->query("no_fight") && !ob->query_condition("killer"))) return;
+
+	guarded = ob->query_temp("guarded") || ({ });
+	if (member_array(this_object(), guarded) != -1)
+	{
+		tell_object(ob, HIR "不能杀你要保护的人！" NOR "\n");
+		return;
+	}
+
+	if (query_temp("owner") == ob)
+	{
+		tell_object(this_object(), HIR "不能对你的主人下毒手。" NOR "\n");
+		return;
+	}
+
+	ob_id = ob->query("id");
+	if (!arrayp(killer)) killer = ({ });
+	if (member_array(ob_id, killer) == -1)
+	{
+		killer += ({ ob_id });
+		tell_object(ob, HIR "看起来" + this_object()->name() + HIR "想和你殊死搏斗！" NOR "\n");
+	}
+
+	foreach (gob in guarded)
+	{ 
+		if (!gob || gob == this_object() || environment(gob) != env || !living(gob) || gob->is_killing(this_object()->query("id"))) continue;
+
+		switch (random(8))
+		{
+			case 0: attack_msg = HIW "$N" HIW "一言不发，对$n" HIW "发动了攻击。" NOR "\n"; break;
+			case 1: attack_msg = HIW "$N" HIW "一声怒吼，冲上前去，看来是要和$n" HIW "拼命。" NOR "\n"; break;
+			case 2: attack_msg = HIW "$N" HIW "冷笑了一声，道：“接招吧！”说罢就对$n" HIW "发动了攻击。" NOR "\n"; break;
+			case 3: attack_msg = HIW "$N" HIW "迈上一步，挡在前面，开始和$n" HIW "进行殊死搏斗！" NOR "\n"; break;
+			case 4: attack_msg = HIW "$N" HIW "双臂一振，脸如寒水，已经向$n" HIW "接连发出数招！\n" NOR; break;
+			case 5: attack_msg = HIW "$N" HIW "深吸一口气，一招直指$n" HIW "的要害，竟然是要取人的性命！" NOR "\n"; break;
+			case 6: attack_msg = HIW "紧接着$N" HIW "已经攻上！招招进逼$n" HIW "，毫无容情余地！" NOR "\n"; break;
+			default: attack_msg = HIW "$N" HIW "飞也似的扑上前来，开始进攻$n" HIW "。" NOR "\n"; break;
+		}
+		message_vision(attack_msg, gob, this_object());
+
+		if (ob->is_want_kill(this_object()->query("id")))
+			gob->want_kill(this_object());
+		else if (ob->can_learn_from())
+			this_object()->want_kill(gob);
+
+		gob->kill_ob(this_object());
+	}
+	fight_ob(ob);
+}
+
+/**
+ * @brief 标记想要攻击的对象
+ * @param object ob 要标记的对象
+ * @details 将一个玩家对象标记为"想要攻击"的目标。
+ *          这是一种攻击意向的声明，用于在不立即开战的情况下记录仇恨。
+ *          会检查是否已经是仇恨关系，避免重复添加。
+ */
+void want_kill(object ob)
+{
+	string ob_id;
+
+	if (!playerp(ob)) return;
+
+	ob_id = ob->query("id");
+	if (is_killing(ob_id) || is_want_kill(ob_id) || ob->is_want_kill(query("id"))) return;
+
+	want_kills += ({ ob_id });
+}
+
+/**
+ * @brief 清理敌人列表
+ * @details 遍历当前的敌人列表，移除所有无效的敌人：
+ *          - 对象已销毁
+ *          - 对象不在当前环境
+ *          - 对象已死亡且不处于被追杀状态
+ *          用于在战斗间隙维护敌人列表的有效性。
+ */
+void clean_up_enemy()
+{
+	// object ob;
+
+	if (!sizeof(enemy)) return;
+
+	enemy = filter(enemy, (: objectp($1) && environment($1) == environment() && (living($1) || is_killing($1->query("id"))) :));
+
+	if (!sizeof(enemy))
+	{
+		COMBAT_JSON_MSG->query_combat_cond(this_object());
+	}
+}
+
+/**
+ * @brief 从敌人列表中选择一个对手
+ * @return object 返回一个随机选择的对手对象，失败则返回0
+ * @details 这是战斗中选择攻击目标的核心逻辑。
+ *          会考虑副本等特殊战斗场景中的队伍信息，
+ *          从有效的敌人列表中随机选取一个作为当前回合的攻击目标。
+ */
+object select_opponent()
+{
+	object env;
+	object *emy;
+	string ft;
+
+	env = environment(this_object());
+	emy = enemy;
+
+	if(env && env->is_comb_ob())
+	{
+		ft = query_temp("fight_team");
+		emy = ft ? env->query_emy(ft) : ({ });
+	}
+
+	if (!emy || !sizeof(emy)) return 0;
+
+	return emy[random(sizeof(emy))];
+}
+
+/**
+ * @brief 从敌人列表中移除指定敌人
+ * @param object ob 要移除的敌人对象
+ * @return int 成功移除返回1，否则返回0
+ * @details 用于在战斗中途（如对方逃跑、死亡）将某个对象从自己的敌人列表中移除。
+ */
+int remove_enemy(object ob)
+{
+	if (member_array(ob, enemy) == -1) return 0;
+
+	enemy -= ({ ob });
+
+	if (!sizeof(enemy))
+	{
+		if (playerp(this_object()))
+			COMBAT_JSON_MSG->query_combat_cond(this_object());
+	}
+	else
+	{
+		if (playerp(this_object()))
+			COMBAT_JSON_MSG->player_combat_cond(this_object());
+	}
+
+	return 1;
+}
+
+/**
+ * @brief 移除一个仇人
+ * @param object ob 要移除的仇人对象
+ * @return int 成功移除返回1，否则返回remove_enemy的结果
+ * @details 从`want_kills`和`killer`列表中移除指定对象的ID，
+ *          并调用`remove_enemy`将其从敌人列表中移除，
+ *          从而彻底结束与该对象的敌对状态。
+ */
+int remove_killer(object ob)
+{
+	if (playerp(ob))
+		want_kills -= ({ ob->query("id") });
+
+	if (is_killing(ob->query("id")))
+	{
+		killer -= ({ ob->query("id") });
+		remove_enemy(ob);
+		return 1;
+	}
+
+	return remove_enemy(ob);
+}
+
+/**
+ * @brief 移除所有敌人
+ * @param int force 是否强制移除，为1则无视对方的追杀状态
+ * @details 遍历敌人列表，通知所有敌人将自己从他们的敌人列表中移除，
+ *          然后将他们从自己的敌人列表中移除。
+ *          用于快速脱离战斗。
+ */
+void remove_all_enemy(int force)
+{
+	object ob;
+
+	if (!sizeof(enemy)) return;
+
+	foreach(ob in enemy)
+	{
+		if (objectp(ob) && (force || !ob->is_killing(query("id"))))
+		{
+			ob->remove_enemy(this_object());
+			enemy -= ({ ob });
+		}
+	}
+
+	enemy = filter(enemy, (: objectp($1) :));
+
+	if (!sizeof(enemy))
+	{
+		COMBAT_JSON_MSG->query_combat_cond(this_object());
+	}
+}
+
+/**
+ * @brief 移除所有想要攻击的目标
+ * @details 清空`want_kills`列表，取消所有攻击意向。
+ */
+void remove_all_want()
+{
+	want_kills = ({});
+}
+
+/**
+ * @brief 移除所有仇恨关系
+ * @details 重置所有与战斗相关的状态，包括：
+ *          - 调用`remove_all_want`清空攻击意向
+ *          - 通知所有敌人移除自己
+ *          - 清空`killer`列表
+ *          - 清空`enemy`列表
+ *          用于彻底结束所有战斗和仇恨。
+ */
+void remove_all_killer()
+{
+	object ob;
+
+	remove_all_want();
+
+	if (!arrayp(enemy)) enemy = ({ });
+
+	foreach(ob in enemy)
+	{
+		if (objectp(ob))
+		{
+			ob->remove_killer(this_object());
+			enemy -= ({ ob });
+		}
+	}
+	killer = ({ });
+	enemy = filter(enemy, (: objectp($1) :));
+}
+
+/**
+ * @brief 查询当前的竞争对手
+ * @return object 返回竞争对手对象
+ */
+object query_competitor()
+{
+	return competitor;
+}
+
+/**
+ * @brief 设置当前的竞争对手
+ * @param object ob 要设置的竞争对手对象
+ * @return object 返回设置的竞争对手对象
+ */
+object set_competitor(object ob)
+{
+	competitor = ob;
+}
+
+/**
+ * @brief 与指定对象进行竞争
+ * @param object ob 要竞争的对象
+ * @details 是一种特殊的战斗形式，通常用于比武、竞技等场景。
+ *          会互相设置对方为竞争对手，并开始战斗。
+ */
+void competition_with(object ob)
+{
+	competitor = ob;
+	fight_ob(ob);
+	ob->set_competitor(this_object());
+	ob->fight_ob(this_object());
+}
+
+/**
+ * @brief 赢得竞争
+ * @details 在竞争胜利时调用，会触发`win`重载函数，并清空竞争对手。
+ */
+void win()
+{
+	run_override("win");
+	competitor = 0;
+}
+
+/**
+ * @brief 输掉竞争
+ * @details 在竞争失败时调用，会触发`lost`重载函数，并清空竞争对手。
+ */
+void lost()
+{
+	run_override("lost");
+	competitor = 0;
+}
+
+/**
+ * @brief 查询下一个战斗动作
+ * @param int flag 标志位，如果为1则返回原始动作，否则返回执行后的结果
+ * @return mixed 返回战斗动作
+ * @details 战斗动作可以是映射或函数指针。
+ *          如果是函数指针且flag为0，会执行该函数并返回结果。
+ */
+mixed query_action(int flag)
+{
+	return (flag || !functionp(next_action)) ? next_action : (*next_action)(this_object());
+}
+
+/**
+ * @brief 设置下一个战斗动作
+ * @param mixed action 动作，可以是映射、函数指针、对象或文件名
+ * @param string fun 如果action是对象或文件名，则指定要调用的函数名
+ * @return int 设置成功返回1，失败返回0
+ * @details 提供了非常灵活的战斗动作设置方式，
+ *          可以将一个函数指针或对某个对象/文件的调用设置为下一次攻击动作。
+ *          这是实现复杂技能和战斗逻辑的基础。
+ */
+int set_action(mixed action, string fun)
+{
+	if (mapp(action) || functionp(action))
+	{
+		next_action = action;
+	}
+	else if (stringp(action) || objectp(action))
+	{
+		next_action = (: call_other, action, fun :);
+	}
+	else
+		return 0;
+
+	return 1;
+}
+
+/**
+ * @brief 设置默认的战斗动作
+ * @param mixed ob 对象或文件名
+ * @param string fun 函数名
+ * @return int 总是返回1表示成功
+ * @details 当没有通过`reset_action`设置特定动作时，会使用这里设置的默认动作。
+ *          通常是空手状态下的攻击动作。
+ */
+int set_default_action(mixed ob, string fun)
+{
+	default_object = ob;
+	default_function = fun;
+	return 1;
+}
+
+/**
+ * @brief 重置战斗动作
+ * @details 根据当前装备的武器和激发的主动技能，动态设置下一次的战斗动作。
+ *          这是实现MUD战斗系统多样性的核心机制：
+ *          1. 判断武器类型或空手状态。
+ *          2. 查找该类型下激发的主动技能。
+ *          3. 如果有对应技能，则将技能的动作设置为下一次动作。
+ *          4. 如果没有，则使用武器自带的动作或默认的空手动作。
+ */
+void reset_action()
+{
+	string type;
+	string skill;
+	object ob;
+	mapping prepare;
+
+	ob = query_temp("weapon");
+	prepare = query_skill_prepare();
+
+	if (ob)
+	{
+		type = ob->query("skill_type") == "pin" ? "sword" : ob->query("skill_type");
+	}
+	else if (!prepare || sizeof(prepare) == 0)
+		type = "unarmed";
+	else if (sizeof(prepare) == 1)
+		type = keys(prepare)[0];
+	else
+		type = keys(prepare)[query_temp("action_flag")];
+
+	skill = query_skill_mapped(type);
+	if (stringp(skill) && query_skill(skill, 1) > 0)
+	{
+		if(ob)
+			set_action((: call_other, SKILL_D(skill), "query_action", this_object(), ob :), 0);
+		else
+			set_action((: call_other, SKILL_D(skill), "query_action" :), 0);
+	}
+	else
+	{
+		if(ob)
+			set_action(ob->query("actions", 1), default_function);
+		else
+			set_action(default_object, default_function);
+	}
+}
+
+/**
+ * @brief 执行攻击动作
+ * @return int 如果成功执行攻击返回1，否则返回0
+ * @details 在心跳中被调用，是实际执行战斗的地方。
+ *          1. 检查战斗冷却时间。
+ *          2. 通过`select_opponent`选择一个对手。
+ *          3. 调用`COMBAT_D->fight`执行具体的战斗计算。
+ *          4. 设置下一次的战斗冷却。
+ */
+int attack()
+{
+	int fight_cd;
+	object opponent;
+
+	if (!query_temp("xw_fight_cd"))
+	{
+		if (query("dex") >= 30 && query("con") > 30)
+			fight_cd = 2;
+		else if (query("dex") > 50 && query("con") > 50)
+			fight_cd = 1;
+		else
+			fight_cd = 3;
+
+		opponent = select_opponent();
+
+		if (objectp(opponent))
+		{
+			set_temp("last_opponent", opponent);
+			COMBAT_D->fight(this_object(), opponent);
+			set_temp("xw_fight_cd", fight_cd);
+			call_out("delete_fight_cd", fight_cd);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/**
+ * @brief 删除战斗冷却标记
+ * @details 这是一个由`call_out`调用的辅助函数，
+ *          用于在冷却时间结束后删除临时标记，允许下一次攻击。
+ */
+void delete_fight_cd()
+{
+	delete_temp("xw_fight_cd");
+}
+
+/**
+ * @brief 初始化，处理自动战斗逻辑
+ * @details 在`init`钩子中被调用，当有其他对象进入环境时触发。
+ *          用于实现NPC或玩家的自动攻击行为：
+ *          1. 检查是否正在被追杀，如果是则反击。
+ *          2. 检查是否有世仇标记，如果是则主动攻击。
+ *          3. 如果自身是攻击性NPC，则主动攻击非玩家对象。
+ */
+void init()
+{
+	object ob;
+	object me;
+	string vendetta_mark;
+	ob = this_player();
+	me = this_object();
+
+	if (!living(me) || !ob || !living(ob) || sizeof(enemy) ||
+		(!interactive(ob) && !interactive(me))) return;
+
+	if (me->query_temp("owner") || ob->query_temp("owner") == me) return;
+
+	if (interactive(ob) && is_killing(ob->query("id")))
+	{
+		if (interactive(me) && !is_want_kill(ob->query("id")))
+		{
+			remove_killer(ob);
+			return;
+		}
+		COMBAT_D->auto_fight(me, ob, "hatred");
+		return;
+	}
+
+
+
+	vendetta_mark = me->query("vendetta_mark");
+	if (stringp(vendetta_mark) && ob->query("vendetta/" + vendetta_mark))
+	{
+		COMBAT_D->auto_fight(me, ob, "vendetta");
+		return;
+	}
+
+	if (!playerp(ob) && me->query("attitude") == "aggressive")
+	{
+		COMBAT_D->auto_fight(me, ob, "aggressive");
+		return;
+	}
+
+	//任务npc可以发布挑战令
+	if (inherits(F_QUESTER))
+	{
+		add_action("do_lingqu", "lingqu");
+	}
+}

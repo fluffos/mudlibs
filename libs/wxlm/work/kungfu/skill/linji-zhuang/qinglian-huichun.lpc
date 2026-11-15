@@ -1,0 +1,84 @@
+// qinglian-huichun.c 青莲回春
+
+
+
+inherit F_CLEAN_UP;
+
+string query_name() { return "青莲"ZJBR"回春"; }
+string *pfm_type() { return ({ "force", }); }
+
+int exert(object me, object target)
+{
+    int skill, aoyi_level, recover_qi, cost_neili;
+    int force_skill;
+    object *enemies;
+    int i;
+    int poison_chance, poison_level;
+
+    if (target != me)
+        return notify_fail("你只能对自己使用「青莲回春」。\n");
+
+    if ((int)me->query("neili") < 500)
+        return notify_fail("你的内力不足，难以施展「青莲回春」。\n");
+
+    if ((int)me->query("eff_qi") >= (int)me->query("max_qi"))
+        return notify_fail("你现在气血充盈，无需使用「青莲回春」。\n");
+
+    skill = me->query_skill("linji-zhuang", 1);
+    force_skill = me->query_skill("force");
+
+    if (skill < 120)
+        return notify_fail("你的临济十二庄修为不够，无法施展「青莲回春」。\n");
+
+    aoyi_level = COMBAT_D->get_skill_aoyi_level(me, "青莲剑意");
+
+    if (aoyi_level < 1)
+        return notify_fail("你尚未领悟「青莲剑意」，无法施展「青莲回春」。\n");
+
+    // 增强回血能力，降低内力消耗
+    recover_qi = force_skill * (2 + aoyi_level); // 意境每级增加一次倍率
+    cost_neili = 1500 - 200 * aoyi_level;        // 每级意境减少200内力消耗
+
+    if (cost_neili < 500) cost_neili = 500;
+
+    if ((int)me->query("neili") < cost_neili)
+        return notify_fail("你的内力不足，无法施展「青莲回春」。\n");
+
+    me->add("neili", -cost_neili);
+    me->receive_curing("qi", recover_qi);
+    me->receive_heal("qi", recover_qi);
+    message_vision(HIG "$N" HIG "深吸一口气，运转临济十二庄，只见体内真气流转，肌肤透出淡淡的青光。\n"
+                   "一朵晶莹剔透的青莲在$N身后隐现，散发出勃勃生机，令天地为之生辉。\n" NOR, me);
+    tell_object(me, HIY "你感到全身暖洋洋的，仿佛置身于春日的阳光下，伤势正在迅速恢复。\n" NOR);
+
+    // 对敌人施加毒素
+    enemies = all_inventory(environment(me));
+    poison_chance = 20 + aoyi_level * 5; // 基础20%，每级意境增加5%
+
+    for (i = 0; i < sizeof(enemies); i++)
+    {
+        object enemy = enemies[i];
+        if (enemy->is_character() && !enemy->is_corpse() && enemy != me)
+        {
+            if (me->is_fighting(enemy))
+            {
+                if (random(100) < poison_chance)
+                {
+                    poison_level = skill / 10 + aoyi_level * 10; // 毒素强度
+
+                    poison_level += poison_level;
+                    // 施加毒素效果
+                    enemy->apply_condition("emei_poison", poison_level / 10);
+                    enemy->set_temp("emei_poison_level", poison_level);
+
+                    tell_object(enemy, HIG "你感到一阵眩晕，仿佛有一股异样的气息侵入体内。\n" NOR);
+                }
+            }
+        }
+    }
+
+    if (me->is_fighting())
+        me->start_busy(1);
+
+    return 1;
+}

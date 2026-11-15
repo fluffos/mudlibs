@@ -1,0 +1,1746 @@
+// user.c
+
+#include <origin.h>
+#include <user.h>
+
+#include <command.h>
+
+inherit CHARACTER;
+inherit F_AUTOLOAD;
+inherit F_SAVE;
+
+// 死亡保护
+/**
+ * @brief 死亡保护检查
+ * @param object ob 攻击者对象
+ * @return int 允许攻击返回1，否则返回0
+ * @details 检查玩家间的死亡保护状态，包括保护时期检查和竞技场例外处理
+ */
+private int die_protect(object ob);
+/**
+ * @brief 取消死亡保护
+ * @param object ob 要取消保护的对象
+ * @details 清除指定对象的死亡保护信息
+ */
+private void cancle_die_protect(object ob);
+
+// 分站使用
+nosave int admin_flag = 0;	      // 是否是特殊的管理员？
+
+// 数据是否完整？
+nosave int user_cracked = 0;	    // RESTORE 时检查数据并设置该标志
+
+nosave int net_dead;		    // 标志：是否断开了连接
+nosave int last_age_set = 0;	    // 上一次更新AGE的时间
+nosave int user_say = 0;		// 一定时间以内玩家做的say-action
+nosave int user_command = 0;	    // 一定时间以内玩家发送的命令
+nosave int attach_flag = 0;	     // 是否正在和系统联络
+int	at_time = 0;		 // 在什么时间计算的
+int	ban_to = 0;		  // 在什么时间解禁玩家
+string     ban_say_msg = "";	    // 禁止说话的消息
+
+nosave string my_defeater_id;	   // 上一次打晕你的人ID
+nosave string my_killer_id;	     // 上一次杀你的人的ID
+nosave int    craze = 0;		// 愤怒
+
+#define DEFAULT_PRISON	  "/d/register/prison"
+
+// globals variables
+string  prison = 0;
+int     time_to_leave = 0;
+
+int	is_stay_in_room()	{ return 1; }
+int     is_player()		{ return clonep(); }
+string  query_prison()	  { return prison; }
+int     query_time_to_leave()   { return time_to_leave; }
+int     is_in_prison()	  { return stringp(prison); }
+int     is_net_dead()	   { return net_dead || ! interactive(this_object()); }
+
+varargs string calc_sec_id(int raw);
+
+#define MAX_COMMAND_ONE_SECTION	 30
+#define MAX_SAY_ONE_SECTION	     4
+#define BAN_SAY_PERIOD		  60
+
+int query_current_neili_limit();
+int query_neili_limit();
+int query_current_jingli_limit();
+int query_jingli_limit();
+int query_potential_limit();
+int query_experience_limit();
+
+/**
+ * @brief 判断是否为用户对象
+ * @return int 总是返回1，表示这是一个用户对象
+ */
+int is_user() { return 1; }
+
+/**
+ * @brief 判断是否具有管理权限
+ * @return int 如果具有管理权限返回1，否则返回0
+ * @details 如果是版本发布站点或是通过 PASSWD 命令设置过，则具有管理权限。
+ *          具有该权限的巫师可以使用诸如 clone、call、log、smash、copyskill等命令。
+ */
+int is_admin()  { return admin_flag == 1222; }
+
+/**
+ * @brief 创建用户对象
+ * @details 调用父类的创建函数并设置用户对象的名称和ID
+ */
+void create()
+{
+	::create();
+	set_name("使用者物件", ({ "user object", "user", "object" }) );
+}
+
+/**
+ * @brief 设置终端类型
+ * @param string term_type 终端类型字符串
+ * @details 设置用户的终端类型并发送确认消息
+ */
+void terminal_type(string term_type)
+{
+	set_temp("terminal_type", term_type);
+	message("system", "终端机型态设定为 " + term_type + "。\n", this_object());
+}
+
+/**
+ * @brief 用户对象重置函数
+ * @details 定期调用的重置函数，用于处理潜能恢复、状态更新和技能自动提升
+ *          包括潜能恢复、盗贼状态衰减、仇恨值减少和高级内功的自动提升
+ */
+void reset()
+{
+	int lv;
+
+	if ((int)query("potential") - (int)query("learned_points") < 100)
+		add("potential", 1);
+
+	if ((int)query("thief") > 0)
+		add("thief", -1);
+
+	if ((int)query("total_hatred") > 0)
+		add("total_hatred", -1);
+
+	if ((lv = query_skill("xiantian-gong", 1)) >= 60 ||
+	    (lv = query_skill("quanzhen-xinfa", 1)) >= 60)
+	{
+		if (can_improve_skill("force"))
+			improve_skill("force", lv * 20);
+
+		if (query_skill("quanzhen-xinfa", 1) >= 60 &&
+		    can_improve_skill("quanzhen-xinfa"))
+			improve_skill("quanzhen-xinfa", lv * 10);
+
+		if (query_skill("xiantian-gong", 1) >= 60 &&
+		    can_improve_skill("xiantian-gong") &&
+		    SKILL_D("xiantian-gong")->valid_learn(this_object()))
+			improve_skill("xiantian-gong", lv * 10);
+	}
+}
+
+/**
+ * @brief 获取用户数据保存文件路径
+ * @return string 保存文件的路径，失败时返回0
+ * @details 由 F_SAVE 调用以确定保存用户数据的文件名
+ */
+string query_save_file()
+{
+	string id;
+
+	id = geteuid();
+	if (! id) id = getuid();
+	if (! stringp(id)) return 0;
+	return sprintf(DATA_DIR "user/%c/%s", id[0], id);
+}
+
+/**
+ * @brief 重写set函数
+ * @param string idx 要设置的属性名
+ * @param mixed para 要设置的值
+ * @return mixed 设置的值
+ * @details 对name属性进行特殊处理，通过NAME_D来更改名字
+ */
+mixed set(string idx, mixed para)
+{
+	if (idx == "name" && clonep(this_object()) &&
+	    geteuid(this_object()))
+	{
+		NAME_D->change_name(this_object(), para, 1);
+		return para;
+	} else
+		return ::set(idx, para);
+}
+
+/**
+ * @brief 保存用户数据
+ * @return int 保存成功返回非0值，失败返回0
+ * @details 保存用户的所有数据到文件，包括自动装载信息和安全ID
+ *          如果数据不完整则拒绝保存
+ */
+int save()
+{
+	int res;
+
+	if (user_cracked)
+		// 数据不完整，不能保存
+		return 1;
+
+	if (query_temp("user_setup"))
+	{
+		save_autoload();
+		set("sec_id", calc_sec_id());   // save sec_id
+		res = ::save();
+		clean_up_autoload();		// To save memory
+	} else
+	{
+		set("sec_id", calc_sec_id());   // save sec_id
+		res = ::save();
+	}
+
+#if INSTALL_EXAMINE
+	EXAMINE_D->examine_player(me);
+#endif
+	return res;
+}
+
+/**
+ * @brief 恢复用户数据
+ * @return int 恢复成功返回非0值，失败返回0
+ * @details 从文件中恢复用户数据，包括数据完整性检查和ID设置
+ */
+int restore()
+{
+	int res;
+ 
+
+	res = ::restore();
+	if (res)
+	{
+/*
+		if (stringp(sec_id = query("sec_id")))
+		{
+			if (crypt(calc_sec_id(1), sec_id) != sec_id)
+			{
+				// 数据不完整
+				log_file("nosave/user",
+					 sprintf("%s %s's data my be corrupt.\n",
+						 log_time(), getuid()));
+				user_cracked = 1;
+				return 0;
+			}
+		} else
+		{
+			log_file("nosave/user",
+				 sprintf("%s %s lost assure key.\n",
+					 log_time(), getuid()));
+			user_cracked = 1;
+			return 0;
+		}
+*/
+		// 数据完整
+		user_cracked = 0;
+
+		set("id", getuid(this_object()));
+	}
+
+	return res;
+}
+
+/**
+ * @brief 更新玩家年龄
+ * @details 由心跳函数调用，用于更新玩家的年龄、VIP状态和监禁时间
+ *          包括VIP等级计算、年龄增长、月份计算和新手提示
+ */
+void update_age()
+{
+	int lastset;
+	int age,month;
+	int all,*lvs,delta,i;
+
+	//lvs = ({ 300, 900, 1600, 2500, 3600, 4800, 6200, 8000, 10000, 999999999 });
+	lvs = ({ 100, 400, 900, 1600, 2500, 3800, 5500, 8000, 12000, 30000, 999999999, });
+	if( !(lastset=query("zjvip/last_vip_set"))) lastset=time();
+	if(query("zjvip/times")>0)
+	{
+		all = query("zjvip/all_pay")+query("zjvip/sign_exp") + query("guanggao/total");
+		for(i=0;i<sizeof(lvs);i++)
+		{
+			if(all < lvs[i])
+			{
+				set("zjvip/level",1+i);
+				break;
+			}
+		}
+		if(query("zjvip/level")>10) set("zjvip/level",10);
+		add("zjvip/times", lastset - time());
+		if(query("zjvip/times")<=0)
+		{
+			set("zjvip/times", 0);
+			tell_object(this_object(),RED"你的VIP会员时间已到期！"NOR"\n");
+		}
+	}
+	else
+	{
+		set("zjvip/level",0);
+		set("zjvip/times", 0);
+	}
+	set("zjvip/last_vip_set",time());
+
+	if (! last_age_set)
+	{
+		last_age_set = time();
+		add("mud_age", 0);
+	}
+
+	if ((delta = (time() - last_age_set)) > 100)
+		// time too long
+		delta = 100;
+
+	if (! environment() || ! environment()->is_chat_room() || ! query("env/halt_age"))		
+	{
+		// Update age
+		add("mud_age", delta);
+		if (time_to_leave)
+			time_to_leave -= delta;
+	}
+
+	last_age_set = time();
+	age = query("age_modify") + query("mud_age") / 259200;
+	age += 14;
+	month = (query("mud_age")%259200)/21600;
+	set("month",month);
+        if (query("age") != age) {
+		set("age", age);
+		set("kar", 10+random(21));
+
+		if (query("age") > 14)
+		{
+			tell_object(this_object(), "时间过得真快，不知不觉你已经" + chinese_number(age) + "岁了，今年的运气不知道怎么样。\n");
+		}
+		else
+		{
+			tell_object(this_object(), "来自远方的" + (query("gender") ? "少年" : "少女") + "，欢迎来到这个充满江湖奇遇的世界，请先点击屏幕中央左侧的绿色的" HIG "【新手指引任务】"NOR"按钮，开始你的第一段江湖之旅吧。\n");
+		}
+	}
+}
+
+/**
+ * @brief 设置用户对象
+ * @details 初始化用户对象，包括年龄设置、自动装载恢复和任务继续
+ *          在新玩家初始化随机年龄之前先设置年龄
+ */
+void setup()
+{
+	// We want set age first before new player got initialized with
+	// random age.
+	last_age_set = 0;
+	update_age();
+
+	::setup();
+
+	// set the enable flag to enable save
+	set_temp("user_setup", 1);
+
+	restore_autoload();
+
+	if (query("doing"))
+		CLOSE_D->continue_doing(this_object());
+}
+
+/**
+ * @brief 用户断线或空闲处理
+ * @param int type 处理类型：DUMP_NET_DEAD（断线）或 DUMP_IDLE（空闲）
+ * @details 根据不同类型处理用户的断线或空闲状态
+ *          包括VIP保护、离线状态检查和强制退出处理
+ */
+void user_dump(int type)
+{
+	if(this_object()->query("pending/afk")&&this_object()->query("zjvip/times")) return;
+	if(this_object()->query("afk")&&this_object()->query("zjvip/times")) return;
+	if (environment()&&environment()->query("close_room")) return;
+	if (query_temp("pending/auto_dazuo")) return;//离线打坐
+	if (query_temp("pending/auto_research")) return;//离线研究
+	if (query_temp("pending/auto_lian")) return;//离线练习
+	if (query_temp("pending/auto_learn")) return;//离线学习
+	if (query_temp("pending/auto_study")) return;//离线读书
+	switch(type)
+	{
+	case DUMP_NET_DEAD:
+		if (environment())
+		{
+			tell_room(environment(), query("name") + "断线超过 " + NET_DEAD_TIMEOUT / 60 + " 分钟，自动退出这个世界。\n");
+		}
+		catch(command("halt"));
+		catch(command("quit"));
+		if (this_object())
+		{
+			QUIT_CMD->force_quit(this_object());
+		}
+		break;
+
+	case DUMP_IDLE:
+		if (query_temp("learned_idle_force"))
+		{
+			message_vision("$N狂笑三声，道：我终于明白了！\n",this_object());
+			tell_object(this_object(), "你经过长时间的发呆，终于对发呆神功的理解又深了一层！\n");
+			improve_skill("idle-force", 360000);
+			delete_temp("learned_idle_force");
+		} else
+			tell_object(this_object(), "对不起，您已经发呆超过 " + IDLE_TIMEOUT / 60 + " 分钟了，请下次再来。\n");
+		if (environment())
+		{
+			tell_room(environment(), "一阵风吹来，将发呆中的" + query("name") + "化为一堆飞灰，消失了。\n", ({this_object()}));
+		}
+		command("quit");
+		if (this_object() && ! query("doing"))
+		{
+			QUIT_CMD->force_quit(this_object());
+		}
+		break;
+	default:
+		return;
+	}
+}
+
+/**
+ * @brief 网络断线处理
+ * @details 当交互玩家失去与MUD的网络连接时由游戏驱动器调用
+ *          处理断线状态设置、心跳停止、连接对象清理和断线超时设置
+ */
+private void net_dead()
+{
+	object link_ob;
+
+	this_object()->remove_interactive();
+
+	if (!query("doing")&&!(environment(this_object())&&environment(this_object())->query("close_room")||query("afk")) &&!query_temp("pending/auto_dazuo")&&!query_temp("pending/auto_research") && !query_temp("pending/auto_lian") && !query_temp("pending/auto_learn")&& !query_temp("pending/auto_study"))
+		set_heart_beat(0);
+
+	if (objectp(link_ob = query_temp("link_ob")))
+	{
+		if (link_ob->query_temp("ip_number"))
+		{
+			link_ob->set("last_on", time());
+			link_ob->set("last_from",link_ob->query_temp("ip_number"));
+			link_ob->save();
+		}
+		destruct(link_ob);
+	}
+
+	net_dead = 1;
+	if (userp(this_object()) && ! query("doing")&&!(environment(this_object())&&environment(this_object())->query("close_room")))
+	{
+		call_out("user_dump", NET_DEAD_TIMEOUT, DUMP_NET_DEAD);
+		tell_room(environment(), query("name") + "断线了。\n", this_object());
+		CHANNEL_D->do_channel(this_object(), "sys", "断线了。");
+		remove_all_enemy(1);
+	} else
+	{
+		if (environment())
+			message("vision", name() + "离线了。\n",
+				environment(), ({ this_object() }));
+	}
+}
+
+/**
+ * @brief 重新连接处理
+ * @details 当断线玩家重新连接时由LOGIN_D调用
+ *          恢复心跳、清除断线状态和取消断线超时
+ */
+void reconnect()
+{
+	set_heart_beat(1);
+	net_dead = 0;
+	remove_call_out("user_dump");
+	tell_object(this_object(), "重新连接成功。\n");
+}
+
+// skill variable & function
+#define MAX_NEILI_IMPROVE       query("con")
+#define MAX_JINGLI_IMPROVE      query("con")
+
+/**
+ * @brief 查询内力上限
+ * @return int 玩家的内力上限值
+ * @details 计算玩家的最大内力上限，考虑基础功力、心法技能、天赋加成、
+ *          门派加成、三花聚顶状态和八脉通状态等多种因素
+ */
+varargs int query_neili_limit(int use_cache)
+{
+	string *skill_names;
+	mapping skills;
+	int neili_limit;
+	int base_lvl, lvl;
+	int tmp;
+	int i;
+	string fam;
+
+
+	//缓存机制
+	if (use_cache)
+	{
+		int query_neili_limit_cache = this_object()->query_temp("query_neili_limit_cache");
+
+		if (query_neili_limit_cache)
+		{
+			return this_object()->query_temp("query_neili_limit_cache");
+		}
+	}
+
+	skills = this_object()->query_skills();
+	if (! mapp(skills))
+		return 0;
+
+	skill_names = keys(skills);
+
+	base_lvl = ((int) skills["force"]) / 2; 
+	neili_limit = base_lvl * 10;
+	
+	//内功提供
+	for (i = 0; i < sizeof(skill_names); i++)
+	{
+		if (file_size(SKILL_D(skill_names[i]) + ".lpc") == -1)
+			continue;
+
+		if (! SKILL_D(skill_names[i])->valid_enable("force"))
+			continue;
+
+		lvl = (int) skills[skill_names[i]];
+		tmp = (base_lvl + lvl) * 10;
+		tmp += (int) SKILL_D(skill_names[i])->query_neili_improve(this_object());
+		if (tmp > neili_limit) neili_limit = tmp;
+	}
+
+	neili_limit += neili_limit * query("improve/neili") / 100;
+	
+	//任督二脉提供
+	if (query("breakup"))
+	{
+		neili_limit += neili_limit * 3 / 10;
+	}
+
+	//天生真气天赋技能被动效果，增加后天根骨*天赋等级系数的内力
+	//天生真气提供
+	if (query("special_skill/mystery"))
+	{
+		int *point_list = ({10,15,20,25,30,35,40,45,50,60});
+		int level;
+		int mystery_point;
+
+		level = TALNET_MASTER->query_talnet_level(this_object(),"mystery");
+
+		level--;
+
+		// 加强验证防止数组越界,因为最大内力返回函数是一个在玩家身上的重要函数。不管如何加一条验证避免出现臭虫导致心跳失活
+		if (level >= sizeof(point_list))
+			level = sizeof(point_list) - 1;
+
+		mystery_point = point_list[level];
+		neili_limit += query_con() * mystery_point;
+	}
+
+	// 三花聚顶提供
+	if (query("sanhua_done"))
+		neili_limit += 15000;
+
+	fam = query("family/family_name");
+
+	//佛门禅心提供
+	if (query("class") == "bonze" && (fam == "雪山寺" || fam == "少林派" || fam == "峨嵋派" || fam == "血刀门"))
+		neili_limit += 500;
+
+	//八脉贯通
+	if (query("bamai-tong"))
+	{
+		neili_limit += 5000;
+	}
+
+	// 武圣肝脏炼体提供
+	if (query("wusheng_bonus/max_neili"))
+	{
+		neili_limit += query("wusheng_bonus/max_neili");
+	}
+
+	//千年灵芝提供
+	neili_limit += (this_object()->query("zjvip/lingzhi_num") * 100);
+
+	if (!use_cache)
+	{
+		this_object()->set_temp("query_neili_limit_cache", neili_limit);
+	}
+
+	return neili_limit;
+}
+
+/**
+ * @brief 查询精神增益
+ * @return int 精神增益值
+ */
+int query_gain_jing()
+{
+	int gain_qi;
+	gain_qi = query("gain/max_jing");
+
+	return gain_qi;
+}
+
+/**
+ * @brief 查询气血增益
+ * @return int 气血增益值
+ * @details 计算气血增益，包括门派加成、心法加成和天赋影响
+ */
+int query_gain_qi()
+{
+	int gain_qi,x;
+	string xinfa;
+
+	gain_qi = query("gain/max_qi");
+	if(query("family/family_name")=="武当派"||query("family/family_name")=="全真教")
+		gain_qi += gain_qi/10;
+
+	if(xinfa = query_skill_mapped("xinfa"))
+	{
+		if ((x = query_skill(xinfa,1)) > 180)
+		{
+			gain_qi += gain_qi*((x-180)/5) / 100;
+		}
+	}
+
+	if (query("special_skill/ghost"))
+		gain_qi = gain_qi*7/10;
+
+	return gain_qi;
+}
+
+/**
+ * @brief 查询攻击力增益
+ * @return int 攻击力增益值
+ */
+int query_gain_damage()
+{
+	int gain_damage;
+	gain_damage= query("gain/damage");
+	return gain_damage;
+}
+
+/**
+ * @brief 查询破甲增益
+ * @return int 破甲增益值
+ */
+int query_gain_break()
+{
+	int gain_break;
+	gain_break= query("gain/break");
+	return gain_break;
+}
+
+/**
+ * @brief 查询护甲增益
+ * @return int 护甲增益值
+ * @details 包括经脉增加的护甲值和宝石增加的护甲值
+ */
+int query_gain_armor()
+{
+	int gain_armor;
+
+	//经脉增加的护甲值 + 宝石增加的护甲值
+	gain_armor= query("gain/armor") + query_temp("gain_armor");
+	return gain_armor;
+}
+
+/**
+ * @brief 查询当前内力上限
+ * @return int 当前内力上限值
+ * @details 根据当前装备的内功心法计算内力上限，
+ *          包括基础功力、心法加成、天赋效果和门派奖励
+ */
+int query_current_neili_limit()
+{
+	int neili;
+	string force;
+	string fam;
+
+	force = query_skill_mapped("force");
+	neili = (int)query_skill("force", 1) / 2 * 10;
+	if (stringp(force) && force != "")
+	{
+		neili += (int)query_skill(force, 1) * 10;
+		neili += SKILL_D(force)->query_neili_improve(this_object());
+	}    
+
+	neili += neili * query("improve/neili") / 100;
+	if (query("breakup"))
+		neili += neili * 3 / 10;
+
+	// 天生真气天赋技能被动效果，增加后天根骨*天赋等级系数的内力
+	if (query("special_skill/mystery"))
+	{
+		int *point_list = ({10,15,20,25,30,35,40,45,50,60});
+		int level;
+		int mystery_point;
+
+		level = TALNET_MASTER->query_talnet_level(this_object(),"mystery");
+
+		level--;
+
+		// 加强验证防止数组越界,因为最大内力返回函数是一个在玩家身上的重要函数。不管如何加一条验证避免出现臭虫导致心跳失活
+		if (level >= sizeof(point_list))
+			level = sizeof(point_list) - 1;
+
+		mystery_point = point_list[level]; 
+		neili += query_con() * mystery_point;
+	}
+
+	fam = query("family/family_name");
+	if (query("class") == "bonze" &&  (fam == "雪山寺" || fam == "少林派" || fam == "峨嵋派" || fam == "血刀门"))
+		neili += 500;
+
+	// 武圣肝脏炼体加成 - 内力极限
+	if (query("wusheng_bonus/max_neili"))
+	{
+		neili += query("wusheng_bonus/max_neili");
+	}
+
+	// 武圣真意加成 - 内力极限
+	if (query("zhenyi_bonus/max_neili"))
+	{
+		neili += query("zhenyi_bonus/max_neili");
+	}
+
+	return neili;
+}
+
+/**
+ * @brief 查询精力上限
+ * @return int 精力上限值
+ * @details 根据魔法点数、智力属性和提升加成计算精力上限
+ */
+int query_jingli_limit()
+{
+	int limit;
+
+	limit = ((int)query("magic_points") / 30) + query("int") * 20 +100;
+	limit += limit * query("improve/jingli") / 100;
+	if (query("animaout"))
+		limit += limit * 3 / 10;
+
+	// 武圣脾脏炼体加成 - 精力极限
+	if (query("wusheng_bonus/max_jingli"))
+	{
+		limit += query("wusheng_bonus/max_jingli");
+	}
+
+	// 武圣真意加成 - 精力极限
+	if (query("zhenyi_bonus/max_jingli"))
+	{
+		limit += query("zhenyi_bonus/max_jingli");
+	}
+
+	return limit;
+}
+
+/**
+ * @brief 查询当前精力上限
+ * @return int 当前精力上限值
+ * @details 返回精力上限，与query_jingli_limit()相同
+ */
+int query_current_jingli_limit()
+{
+	return query_jingli_limit();
+}
+/**
+ * @brief 查询潜能上限
+ * @return int 潜能上限值
+ * @details 悟性提高可以增加潜能极限，在特殊房间内潜能上限翻倍
+ */
+int query_potential_limit()
+{
+	int p;
+
+
+	p = query_int() * 30000;
+
+	if(environment(this_object())&&environment(this_object())->query("close_room"))
+	{
+		p *=2;
+	}
+
+	return (int)query("learned_points") + p;
+}
+
+/**
+ * @brief 查询实战体会上限
+ * @return int 实战体会上限值
+ * @details 阅历提高可以增加实战体会极限，根据评价分数和战斗经验计算
+ */
+int query_experience_limit()
+{
+	int p;
+
+	if (ultrap(this_object()))
+		p = 10000;
+	else
+	{
+		p = query("score");
+		if (p < 100)
+			p = p / 2;
+		else
+		if (p < 300)
+			p = p / 4 + 25;
+		else
+		if (p < 1100)
+			p = (p - 300) / 8 + 100;
+		else
+			p = (p - 1100) / 16 + 200;
+		if (p > 8000)
+			p = 8000;
+	}
+
+	p += query("combat_exp") / 2;
+	return (int)query("learned_experience") + p;
+}
+
+/**
+ * @brief 提升潜能
+ * @param int n 要提升的潜能值
+ * @return int 实际提升的潜能值
+ * @details 在潜能上限范围内提升潜能，如果达到上限则提示并返回0
+ */
+int improve_potential(int n)
+{
+	int max;
+
+	max = query_potential_limit() - query("potential");
+	if (max <= 0)
+	{
+		tell_object(this_object(),"潜能已达上限，暂时无法继续提升！\n");
+		return 0;
+	}
+	if (n > max) n = max;
+	add("potential", n);
+	return n;
+}
+
+/**
+ * @brief 提升实战体会
+ * @param int n 要提升的实战体会值
+ * @return int 实际提升的实战体会值
+ * @details 在实战体会上限范围内提升实战体会
+ */
+int improve_experience(int n)
+{
+	int max;
+
+	max = query_potential_limit() - query("experience");
+	if (max <= 0) return 0;
+	if (n > max) n = max;
+	add("experience", n);
+	return n;
+}
+
+/**
+ * @brief 判断是否可以提升内力
+ * @return int 可以提升返回1，否则返回0
+ * @details 检查内力提升次数是否未达到上限
+ */
+int can_improve_neili()
+{
+	return query("improve/neili") < MAX_NEILI_IMPROVE;
+}
+
+/**
+ * @brief 判断是否可以提升精力
+ * @return int 可以提升返回1，否则返回0
+ * @details 检查精力提升次数是否未达到上限
+ */
+int can_improve_jingli()
+{
+	return query("improve/jingli") < MAX_NEILI_IMPROVE;
+}
+
+/**
+ * @brief 提升内力上限
+ * @param int n 要提升的内力值
+ * @return int 实际提升的内力值
+ * @details 在内力上限范围内提升最大内力，会调用setup()重新计算属性
+ */
+int improve_neili(int n)
+{
+	int delta;
+	object me = this_object();
+	int my_real_neili = me->query("max_neili",1);
+
+	if ((delta = query_neili_limit() - my_real_neili) <= 0)
+		return 0;
+
+	if (n > delta) n = delta;
+	add("max_neili", n);
+	 setup();
+	return n;
+}
+
+/**
+ * @brief 提升精力上限
+ * @param int n 要提升的精力值
+ * @return int 实际提升的精力值
+ * @details 在精力上限范围内提升最大精力，会调用setup()重新计算属性
+ */
+int improve_jingli(int n)
+{
+	int delta;
+
+	if ((delta = query_jingli_limit() - query("max_jingli")) <= 0)
+		return 0;
+
+	if (n > delta) n = delta;
+	add("max_jingli", n);
+	 setup();
+	return n;
+}
+
+/**
+ * @brief 接受比试请求
+ * @param object ob 发起比试的对象
+ * @return int 接受返回1，否则返回0
+ * @details 处理玩家间的比试请求，需要双方都同意才能开始比试
+ */
+int accept_fight(object ob)
+{
+	if (query_temp("pending/fight") == ob)
+		return 1;
+
+	tell_object(this_object(), YEL "如果你愿意和对方进行比试，请你也对" +
+		    ob->name() + "("+ (string)ob->query("id")+")"+
+		    "下一次 fight 指令。"NOR"\n");
+
+	tell_object(ob, YEL "由于对方是由玩家控制的人物，你必须等对方同意才" +
+	      "能进行比试。"NOR"\n");
+
+	return 0;
+}
+
+/**
+ * @brief 接受攻击请求
+ * @param object ob 发起攻击的对象
+ * @return int 接受返回1，否则返回0
+ * @details 处理玩家间的攻击请求，包含死亡保护检查
+ */
+int accept_hit(object ob)
+{
+	if (! die_protect(ob))
+		return 0;
+
+	message_vision("$N大喝道：" + ob->name() + "，你要干什么？\n",this_object(), ob);
+	return 1;
+}
+
+/**
+ * @brief 接受杀死请求
+ * @param object ob 发起杀死的对象
+ * @return int 接受返回1，拒绝返回-1
+ * @details 处理玩家间的杀死请求，需要双方都同意才能开始PK
+ */
+int accept_kill(object ob)
+{
+	if (is_killing(ob->query("id")))
+		return 1;
+
+	if (! die_protect(ob))
+		return -1;
+
+	tell_object(this_object(), HIR "如果你要和" + ob->name() +
+		"性命相搏，请你也对这个人(" + (string)ob->query("id") +
+		")下一次 kill 指令。"NOR"\n");
+	return 1;
+}
+
+/**
+ * @brief 接受暗算攻击
+ * @param object who 发起暗算的对象
+ * @return int 接受返回1，否则返回0
+ * @details 处理暗算攻击，包含死亡保护检查和反应消息
+ */
+int accept_ansuan(object who)
+{
+	if (! die_protect(who))
+		return 0;
+
+	command(random(2) ? "say 嗯！怎么..." : "say 啊！不好！");
+	return 1;
+}
+
+/**
+ * @brief 接受偷袭攻击
+ * @param object who 发起偷袭的对象
+ * @return int 接受返回1，否则返回-1
+ * @details 处理偷袭攻击，包含死亡保护检查和随机反应消息
+ */
+int accept_touxi(object who)
+{
+	if (! die_protect(who))
+		return -1;
+
+	switch (random(2))
+	{
+	case 0:
+		message_vision("$N大吃一惊，叫道：“好你个" +
+			       RANK_D->query_rude(who) + "！真不要脸！”\n",
+			       this_object(), who);
+		break;
+
+	default:
+		message_vision("$N仓皇之间，不及说话，只得接下$n"
+			       "这一招。\n", this_object(), who);
+		break;
+	}
+
+	return 1;
+}
+
+/**
+ * @brief 死亡保护检查
+ * @param object ob 攻击者对象
+ * @return int 允许攻击返回1，否则返回0
+ * @details 检查玩家间的死亡保护状态，包括保护时期检查和竞技场例外处理
+ */
+int die_protect(object ob)
+{
+	object me = this_object();
+
+	// 只有玩家之间才有死亡保护
+	if (! userp(me) || ! userp(ob))
+		return 1;
+
+	// 在竞技场里不考虑死亡保护
+	if (me->query_temp("in_pkd"))
+		return 1;
+
+	// 去除攻击者的死亡保护信息
+	if (userp(me))
+		cancle_die_protect(ob);
+
+	// 被攻击者处于保护时期，本攻击失败
+	if (me->query("die_protect/last_dead") + me->query("die_protect/duration") > time()+7200)
+	{
+		message_vision("$N处于被保护时期，$n不能进行攻击。\n",me, ob);
+		return 0;
+	}
+
+	return 1;
+}
+
+void cancle_die_protect(object ob)
+{
+	ob->delete("die_protect");
+}
+
+/**
+ * @brief 自动执行命令
+ * @return int 执行成功返回1
+ * @details 执行玩家设置的自动命令，最多执行5条命令
+ */
+int auto_cmd()
+{
+	string *sss,str;
+	object me;
+	int i,max;
+	me = this_object();
+
+	if(!me->query("env/sign1")||!stringp(str = me->query("env/sign5"))) return 1;
+	sss = explode(str,";");
+	max = sizeof(sss);
+	if(max>5) max = 5;
+	for(i=0;i<max;i++)
+	{
+		me->force_me(sss[i]);
+	}
+	return 1;
+}
+
+/**
+ * @brief 拒绝命令检查
+ * @return int 拒绝返回1，允许返回0
+ * @details 检查玩家命令频率，防止命令刷屏，对巫师和未出生玩家有特殊处理
+ */
+int reject_command()
+{
+	int t;
+
+	if (wizardp(this_object()))
+		return 0;
+
+	t = time() & 0xFFFFFFFE;
+	if (at_time != t)
+	{
+		at_time = t;
+		user_command = 1;
+		user_say = 0;
+	} else
+		user_command++;
+
+	if (user_command > MAX_COMMAND_ONE_SECTION)
+	{
+		user_command = 0;
+		if (! query("born"))
+			// not born yet
+			return 0;
+		return 1;
+	}
+
+	return 0;
+}
+
+/**
+ * @brief 设置禁言时间
+ * @param int ban_period 禁言时长（秒）
+ * @param string msg 禁言提示消息
+ * @details 设置玩家的禁言结束时间和提示消息
+ */
+void ban_say_until(int ban_period, string msg)
+{
+	int t;
+
+	t = time();
+	if (ban_to > t)
+		ban_to += ban_period;
+	else
+		ban_to = t + ban_period;
+	ban_say_msg = msg;
+}
+
+/**
+ * @brief 禁言检查
+ * @param int raw 是否原始检查
+ * @return int 被禁言返回1，否则返回0
+ * @details 检查玩家是否被禁言，包括监狱状态检查和发言频率控制
+ */
+int ban_say(int raw)
+{
+	int t;
+
+	if (wizardp(this_object()))
+		return 0;
+
+	if (is_in_prison())
+	{
+		notify_fail("你省省吧，好好做你的牢，少折腾。\n");
+		return 1;
+	}
+
+	t = time() & 0xFFFFFFFE;
+	if (ban_to > t)
+	{
+		notify_fail(ban_say_msg + "，请于" +
+			    appromix_time(ban_to - t) + "以后再尝试。\n");
+		return 1;
+	}
+
+	if (! raw)
+		return 0;
+
+	if (at_time != t)
+	{
+		at_time = t;
+		user_say = 1;
+		user_command  = 0;
+	} else
+		user_say++;
+
+	if (user_say > MAX_SAY_ONE_SECTION)
+	{
+		ban_say_until(BAN_SAY_PERIOD, "系统禁止你送出信息");
+		notify_fail(HIR "由于你发布的信息太多，因此系统暂时"
+			    "禁止你发出信息。"NOR"\n");
+		return 1;
+	}
+
+	return 0;
+}
+
+/**
+ * @brief 允许发言
+ * @param int n 减少的禁言时间（秒），0表示完全解除禁言
+ * @details 减少或清除玩家的禁言时间
+ */
+void permit_say(int n)
+{
+	if (ban_to <= time())
+		return;
+
+	if (! n)
+		ban_to = 0;
+	else
+		ban_to -= n;
+
+	if (ban_to <= time())
+		tell_object(this_object(), "你可以继续发布信息了！\n");
+}
+
+/**
+ * @brief 将玩家送入监狱
+ * @param object ob 执行者对象
+ * @param string p 监狱路径
+ * @param int time 监禁时间（分钟）
+ * @details 处理玩家入狱的所有流程，包括刑期计算、位置移动和状态设置
+ */
+void get_into_prison(object ob, string p, int time)
+{
+	object me;
+
+	me = this_object();
+	if (! p) p = prison;
+	if (! p) p = DEFAULT_PRISON;
+
+	if (prison && base_name(environment()) == p)
+	{
+		time_to_leave += time * 60;
+		if (ob && time)
+			CHANNEL_D->do_channel(find_object(MASTER_OB), "rumor",
+				"听说" + query("name") + "的刑期被" +
+				ob->query("name") + "加长了" +
+				appromix_time(time * 60) + "。");
+		return;
+	}
+
+	if (prison && prison == p && base_name(environment()) != prison)
+	{
+		p->catch_back(me);
+		me->set("startroom", prison);
+		me->move(prison);
+		message_vision("“啪”的一声，$N狠狠的摔倒了地上。\n", me);
+		if (living(me))
+			me->enable_player();
+
+		CHANNEL_D->do_channel(find_object(MASTER_OB), "rumor",
+			"听说" + query("name") + "越狱潜逃，结果被抓"
+			"回去了。");
+
+		save();
+		return;
+	}
+
+	p->catch_ob(me);
+
+	if (ob)
+	{
+		CHANNEL_D->do_channel(find_object(MASTER_OB), "rumor",
+			"听说" + query("name") + "被" + ob->query("name") +
+			"送进了" + p->short() + HIM "，禁闭" +
+			appromix_time(time * 60) + "。");
+	}
+
+	me->set("startroom", prison);
+	me->move(p);
+	prison = p;
+	time_to_leave += time * 60;
+	save();
+
+	message_vision("“啪”的一声，$N重重的摔倒了地上。\n", me);
+	me->set("jing", 1);
+	me->set("eff_jing", 1);
+	me->set("qi", 1);
+	me->set("eff_qi", 1);
+	me->set("jingli", 0);
+	me->set("neili", 0);
+	me->receive_damage("jing", 0);
+	if (living(me))
+		me->enable_player();
+}
+
+/**
+ * @brief 离开监狱
+ * @param object ob 执行者对象
+ * @param int time 减少的刑期时间（分钟）
+ * @details 处理玩家出狱的所有流程，包括刑期减少、状态恢复和频道通知
+ */
+void leave_prison(object ob, int time)
+{
+	object me;
+
+	me = this_object();
+	if (time)
+	{
+		time_to_leave -= time * 60;
+		if (time_to_leave > 0)
+		{
+			if(ob)
+				CHANNEL_D->do_channel(find_object(MASTER_OB), "rumor","听说" + query("name") + "的刑期被" +
+					ob->query("name") + "缩短了" + appromix_time(time * 60) + "。");
+			else
+				CHANNEL_D->do_channel(find_object(MASTER_OB), "rumor","听说" + query("name") + "的刑期被缩短了" + appromix_time(time * 60) + "。");
+			return;
+		}
+	}
+
+	time_to_leave = 0;
+
+	if (! prison->free_ob(me))
+		return;
+
+	prison = 0;
+
+	if (living(me))
+		me->enable_player();
+	else
+		me->revive();
+	save();
+
+	if (ob)
+		CHANNEL_D->do_channel(find_object(MASTER_OB), "rumor",
+			"听说" + query("name") + "被" + ob->name() +
+			"提前释放了。");
+	else
+		CHANNEL_D->do_channel(find_object(MASTER_OB), "rumor",
+			"听说" + query("name") + "已经刑满释放了。");
+}
+
+varargs void die(object killer)
+{
+	if (prison)
+	{
+		set_temp("die_reason", "惨死在监狱中");
+		clear_condition(0);
+		receive_damage("qi", 0);
+		if (living(this_object()))
+			enable_player();
+	}
+	
+	::die(killer);
+	save();
+}
+
+/**
+ * @brief 更新监狱状态
+ * @details 定期检查监狱内玩家的状态，处理刑期到期和越狱检查
+ */
+void update_in_prison()
+{
+	object me;
+
+	me = this_object();
+	me->set("qi", 0);
+	me->set("jing", 0);
+	me->set("neili", 0);
+
+	if (! living(me))
+		return;
+
+	if (time_to_leave > 0)
+	{
+		if (environment() && base_name(environment()) != prison)
+		{
+			// escape from prison?
+			get_into_prison(0, 0, 0);
+		}
+		return;
+	}
+
+	leave_prison(0, 0);
+}
+
+int is_attach_system()
+{
+	return attach_flag;
+}
+
+// start attaching
+int attach_system()
+{
+	attach_flag = 1;
+}
+
+// stop, deatched
+int detach_system()
+{
+	attach_flag = 0;
+}
+
+string command_verb()
+{
+	return query_verb();
+}
+
+#define CRAZE_LIMIT_1   7000    // for 光明磊落
+#define CRAZE_LIMIT_2   5000    // for 心狠手辣
+
+// 愤怒气息
+int query_craze() { return craze; }
+
+// 最大的愤怒气息
+int query_max_craze()
+{
+	switch (query("character"))
+	{
+	case "光明磊落" :
+		return CRAZE_LIMIT_1;
+
+	case "心狠手辣" :
+		return CRAZE_LIMIT_2;
+	default:
+		return 0;
+	}
+}
+
+// 现在是否处于最愤怒的状态
+int is_most_craze()
+{
+	return (craze > 0) && (craze >= query_max_craze());
+}
+
+// 因为被打倒而震怒
+void craze_of_defeated(string defeater_id)
+{
+	my_defeater_id = defeater_id;
+}
+
+// 因为被击毙而震怒
+void craze_of_die(string killer_id)
+{
+	my_killer_id = killer_id;
+	craze = query_max_craze();
+}
+
+// 愤怒的攻击对手后调用这个函数清除对象
+void craze_defeated(string enemy_id)
+{
+	if (enemy_id == my_defeater_id)
+		my_defeater_id = 0;
+
+	if (enemy_id == my_killer_id)
+		my_killer_id = 0;
+}
+
+// 是否憎恨某人
+int is_hating(string enemy_id)
+{
+	if (enemy_id == my_defeater_id ||
+	    enemy_id == my_killer_id)
+		return 1;
+
+	return 0;
+}
+
+// 提升愤怒，返回提升的有效值
+int improve_craze(int amount)
+{
+	int limit;
+
+	if (amount < 0)
+		error("error: improve_craze amount to be less than 0\n");
+
+	limit = query_max_craze();
+	craze += amount;
+	if (craze > limit)
+	{
+		amount += limit - craze;
+		craze = limit;
+	}
+	return amount;
+}
+
+// 消耗愤怒，返回消耗的有效值
+int cost_craze(int n)
+{
+	if (n < 0)
+		error("error: improve_craze amount to be less than 0\n");
+
+	if (n > craze)
+	{
+		n = craze;
+		craze = 0;
+	} else
+		craze -= n;
+	return n;
+}
+
+// 编辑文件
+void edit_file(string file)
+{
+	ed(file);
+}
+
+int is_vip()
+{
+	return query("zjvip/times")>0;
+}
+
+// 是否是结拜兄弟？
+int is_brother(mixed ob)
+{
+	string id;
+
+	if (stringp(ob))
+		id = ob;
+	else
+	if (objectp(ob))
+		id = ob->query("id");
+	else
+		return 0;
+
+	// 是否是普通结拜兄弟
+	if (query("brothers/" + id))
+		return 1;
+
+	// 是否是结盟的兄弟
+	return 0;
+}
+
+// 计算完整性数据和
+string calc_sec_id(int raw)
+{
+	mapping my;
+	string *list;
+	string key;
+	int sum;
+	string str;
+	int i;
+
+	sum = 0;
+
+	// 累计所有的数据
+	if (mapp(my = query_entire_dbase()))
+	{
+		foreach (key in keys(my) - ({ "sec_id" }))
+		{
+			sum += sizeof(key);
+			if (intp(my[key]))
+				sum += my[key];
+			else
+				sum += sizeof(my[key]);
+		}
+	}
+	
+	// 累计所有的武功技能
+	
+	if (mapp(my = query_skills()))
+	{
+		foreach (key in keys(my))
+		{
+			sum += sizeof(key);
+			if (intp(my[key]))
+				sum += my[key];
+			else
+				sum += sizeof(my[key]);
+		}
+	}
+	// 累计所有携带的物品
+	if (arrayp(list = query_autoload_info()))
+	{
+		foreach (key in list)
+		{
+			sum += sizeof(key);
+			if (stringp(key))
+				for (i = 0; i < strlen(key); i++) sum += key[i];
+		}
+	}
+	
+	// 转化成字符串
+	str = sprintf("%d", sum);
+	str[0] = (sum % 26) + 'a';
+
+	if (! raw) str = crypt(str, 0);
+	return str;
+}
+
+string query_info()
+{
+	string msg;
+	int dexp, dpot, dmar, dage, dquest, dt;
+
+	if (wiz_level(this_object()) > 0)
+		return 0;
+
+	msg = "";
+	if (query("chblk_on"))
+	{
+		if (stringp(query("chblk_by")))
+			msg += "频道已经被 " + query("chblk_by") + " 关闭。\n";
+		else
+			msg += "频道被关闭中。\n";
+	}
+
+	dexp = query("combat_exp") - query("last_examine/combat_exp");
+	dpot = query("potential") - query("last_examine/potential");
+	dmar = query("experience") - query("last_examine/experience");
+	dage = query("mud_age") - query("last_examine/mud_age");
+	dquest = query("all_quest") - query("last_examine/all_quest");
+	dt = time() - query("last_examine/time");
+	if (dquest < 0) dquest += 1000;
+
+	if (dt > 60)
+	{
+		msg += sprintf("自上次检查 %s 以来：\n"
+			       "连线时间增加了 %s。\n"
+			       "师门任务完成了 %d 个。\n"
+			       "平均每分钟获得经验速度：%d\n"
+			       "平均每分钟获得潜能速度：%d\n"
+			       "平均每分钟获得体会速度：%d\n",
+			       appromix_time(dt),
+			       appromix_time(dage),
+			       dquest,
+			       dexp * 60 / dt, dpot * 60 / dt, dmar * 60 /dt);
+	}
+
+	return msg;
+}
+
+/**
+ * @brief 记录内力详细信息
+ * @param object ob 玩家对象
+ * @details 构建并记录内力加成的详细信息，用于显示给玩家查看
+ */
+private void record_neili_details(object ob)
+{
+    mapping neili_details = ([
+        "词条": ob->query("citiao_effects/neili"),
+        "称号": ob->query("titlea/max_neili"),
+        "秘传": ob->query("mizhuan_power/attribute/max_neili"),
+        "雾雨灵茶": ob->query("wuyu/max_neili"),
+        "武圣真意": ob->query("zhenyi_bonus/max_neili"),
+        "临时": ob->query_temp("max_neili"),
+		"装备": ob->query_temp("apply/max_neili"),
+    ]);
+    
+    // 检查是否有封存内力
+    int base_neili = ob->query("max_neili", 1);
+    int neili_limit = ob->query_neili_limit();
+    if (base_neili > neili_limit)
+    {
+        neili_details["封存内力【不可用】"] = base_neili - neili_limit;
+    }
+
+	if (ob->query("sanhua_done"))
+	{
+		neili_details["雾雨灵茶"] = ob->query("wuyu/max_neili") * 3;
+	}
+	else if (ob->query("opinion/ultra"))
+	{
+		neili_details["雾雨灵茶"] = ob->query("wuyu/max_neili") * 18 / 10;
+	} else
+	{
+		neili_details["雾雨灵茶"] = ob->query("wuyu/max_neili");
+
+	}
+
+
+    
+    // 一次性写入所有内力相关数据
+    ob->set_temp("race_human/neili", neili_details);
+}
+
+/**
+ * @brief 更新内力详细信息（公共接口）
+ * @details 供外部调用，用于主动更新内力详细信息显示
+ */
+void update_neili_details()
+{
+    record_neili_details(this_object());
+}
+
+/**
+ * @brief 计算内力额外加成值（优化版本）
+ * @param int record_details 是否记录详细信息，默认为0（不记录）
+ * @return int 返回内力的额外加成总值
+ * @details 优化版本，减少重复的query调用，提高性能。详细信息记录功能已分离
+ */
+private varargs int calculate_neili_bonus(int record_details)
+{
+    int bonus = 0;
+    object ob = this_object();
+    int temp_val;
+    
+    // 直接累加各项加成，避免创建mapping
+    if (temp_val = ob->query("citiao_effects/neili"))
+        bonus += temp_val;
+    
+    if (temp_val = ob->query("titlea/max_neili"))
+        bonus += temp_val;
+    
+    if (temp_val = ob->query("mizhuan_power/attribute/max_neili"))
+        bonus += temp_val;
+    
+    if (temp_val = ob->query("wuyu/max_neili"))
+	{
+		if (ob->query("sanhua_done"))
+		{
+			bonus += temp_val * 3;
+		} else if (ob->query("opinion/ultra"))
+		{
+			bonus += temp_val * 18 / 10;
+
+		} else
+		{
+			bonus += temp_val;
+		}
+	}
+    
+    if (temp_val = ob->query("zhenyi_bonus/max_neili"))
+        bonus += temp_val;
+    
+    if (temp_val = ob->query_temp("max_neili"))
+        bonus += temp_val;
+    
+	if (temp_val = ob->query_temp("apply/max_neili"))
+        bonus += temp_val;
+    
+    // 只有在明确要求记录详细信息时才调用记录函数
+    if (record_details && bonus > 0)
+    {
+        record_neili_details(ob);
+    }
+    
+    return bonus;
+}
+
+/**
+ * @brief 重写query函数，加入内力临时参数的处理
+ * @param string prop 要查询的属性名
+ * @param int raw 是否返回原始值（不加临时加成）
+ * @return mixed 属性值
+ * @details 优化版本，减少不必要的计算和函数调用，提高高频调用的性能
+ */
+varargs mixed query(string prop, int raw)
+{
+    int base_value, temp_value, neili_limit;
+
+    // 如果要求原始值，直接返回父类结果
+    if (raw)
+    {
+        return ::query(prop, raw);
+    }
+
+    // 对于非max_neili属性，直接返回父类结果，避免不必要的处理
+    if (prop != "max_neili")
+    {
+        return char::query(prop, 1);
+    }
+
+    // 以下专门处理max_neili属性
+    base_value = char::query(prop, 1);
+
+    // 检查是否需要限制内力上限（只有当基础值可能超限时才计算limit）
+    if (base_value > 50000) // 预设一个合理的阈值，避免每次都调用query_neili_limit
+    {
+        neili_limit = query_neili_limit(1);//这里使用缓存的数值
+        if (base_value > neili_limit)
+        {
+            base_value = neili_limit;
+        }
+    }
+
+    // 计算临时加成
+    temp_value = calculate_neili_bonus();
+    
+    return temp_value ? base_value + temp_value : base_value;
+}
+
+mixed add(string prop,int raw)
+{
+	if (prop == "combat_exp" && raw > 0)
+	{
+		F_LEVEL->improve_level(this_object());
+	}
+
+	char::add(prop,raw);
+}

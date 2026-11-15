@@ -1,0 +1,401 @@
+// learn.c
+
+#include <skill.h>
+
+inherit F_CLEAN_UP;
+
+int can_learn(object me, string skill);
+int check_study_family(object me, object ob);
+
+string *reject_msg = ({
+    "抱拳道：在下武功粗浅,岂敢妄言指教阁下。\n",
+    "拱手道：言文武，在下不过江湖后辈,愧不敢称师。阁下过谦了。\n", 
+    "抱手道：再下不过学得一些皮毛,怎敢班门弄斧。\n",
+});
+
+void create() 
+{ 
+    seteuid(getuid()); 
+}
+
+int main(object me, string arg)
+{
+    object where, ob;
+    string *args, skill, teacher;
+    mixed flag;
+    int master_skill, my_skill, times, i, single_point, next_my_skill;
+    int up_point, t, remaining_times,total_pot = 0;
+    int loop_times = 10; // 每次执行提升的最大等级数
+    mapping learn_map;
+
+    where = environment(me);
+    t = time();
+
+    if (where->query("pigging"))
+        return notify_fail("你还是专心拱猪吧！\n");
+
+    if (me->is_busy())
+        return notify_fail("你现在正忙着呢。\n");
+
+    if (!arg || (i = sizeof(args = explode(arg, " "))) < 2)
+        return notify_fail("指令格式：learn|xue <某人> <技能> <次数>\n");
+
+    i--;
+    if (i >= 2 && sscanf(args[i], "%d", times) && times)
+        i--;
+    else
+        return notify_fail(INPUTTXT("请输入学习次数（每次请教提升1级，请注意潜能消耗）：", "learn " + arg + " $txt#") + "\n");
+
+    // 每次请教不得大于200次
+    if (times > 10)
+        return notify_fail("你一次最多只能请教10次。\n");
+
+    skill = args[i--];
+    if (args[i] == "about" && i >= 1)
+        i--;
+    teacher = implode(args[0..i], " ");
+
+    if (me->is_fighting())
+        return notify_fail("临阵磨枪来不及啦。\n");
+
+    if (!(ob = present_in_famliy_ob(teacher, environment(me))) || !ob->is_character())
+        return notify_fail("你要向谁求教？\n");
+
+    if (!living(ob))
+        return notify_fail("嗯....你得先把" + ob->name() + "弄醒再说。\n");
+
+    if (!me->is_apprentice_of(ob) &&
+        (me->query("family/family_name") != ob->query("family/family_name") ||
+         me->query("family/generation") > ob->query("family/generation") ||
+         me->query("family/generation") < 1 ||
+         !ob->can_learn_from() ||
+         playerp(ob)) &&
+        !check_study_family(me, ob))
+    {
+        switch (ob->recognize_apprentice(me, skill))
+        {
+            case 0:
+                return notify_fail(ob->name() + reject_msg[random(sizeof(reject_msg))]);
+            case -1:
+                return 1;
+        }
+    }
+
+    if (!(master_skill = ob->query_skill(skill, 1)))
+        return notify_fail("这项技能你恐怕必须找别人学了。\n");
+
+    if (stringp(flag = ob->query("no_teach/" + skill)))
+    {
+        // message_vision(CYN "$N" CYN "摇摇头，说道：" + flag + ""NOR"\n", ob);
+        tell_object(me, CYN + ob->name() + CYN "摇摇头，说道：" + flag + ""NOR"\n");
+        return 1;
+    }
+    else if (intp(flag) && flag)
+    {
+        if (flag != -1)
+            write(CYN + ob->name() + CYN "说道：对不起，" + to_chinese(skill) + "可不能随便传授。"NOR"\n");
+        return 1;
+    }
+
+    if ((me->query_skill(skill, 1) + times) > 200 && SKILL_D(skill)->type() == "martial")
+    {
+        write(msg299("学习失败", "你的「" + to_chinese(skill) + "」无法从" + ob->name() + "那里学到那么多了(武学通过请教的提升最多到200级，后续需要通过研究提升)。"));
+
+        // 如果当前的等级小于200级，说明玩家输入的次数 + 当前等级大于200级，这个时候进行新的提示。
+        if (me->query_skill(skill, 1) < 200)
+        {
+            write(msg299("提示", "你当前的等级是" + chinese_number(me->query_skill(skill, 1)) + "级，你最多只能继续请教" + chinese_number(200 - me->query_skill(skill, 1)) + "次。"));
+        }
+
+        return 1;
+    }
+
+    if (me->is_apprentice_of(ob) &&
+        SKILL_D(skill)->type() == "martial" &&
+        me->query_skill(skill, 1) >= SKILL_D(skill)->valid_learn_level())
+    {
+        write(msg299("学习提示", ob->name() + "说：嗯.... 你的" + to_chinese(skill) + "功力已经是非同凡响了，我就不再教你，你自己多研究吧。"));
+        return 1;
+    }
+    
+    my_skill = me->query_skill(skill, 1);
+    if (my_skill >= master_skill)
+        return notify_fail(msg299("学习失败", "这项技能你的程度已经不输你师父了。"));
+
+    if (my_skill >= (int)(master_skill - me->query("betrayer/times") * 2))
+        return notify_fail(msg299("学习失败", ob->name() + "皱了皱眉头，不禁想起你过去的叛师经历。"));
+
+    if (!can_learn(me, skill))
+        return 0;
+
+    notify_fail("依你目前的能力，没有办法学习这种技能。\n");
+    if (!SKILL_D(skill)->valid_learn(me)) return 0;
+
+    if (!my_skill)
+    {
+        me->set_skill(skill, 0);
+    }
+
+    if (ob->query("env/no_teach"))
+    {
+        write(msg299("学习失败", "但是" + ob->name() + "现在并不准备回答你的问题。"));
+        return 1;
+    }
+
+    tell_object(ob, sprintf("%s向你请教有关「%s」的问题。\n", me->name(), to_chinese(skill)));
+
+    if (!me->can_improve_skill(skill))
+    {
+        write(msg299("学习失败", "也许是武道境界的差距，你对" + ob->name() + "的回答总是无法领会。"));
+        return 1;
+    }
+
+    me->set_temp("time/learn", t);
+
+    learn_map = mapp(me->query_learned()) ? copy(me->query_learned()) : ([]);
+    if (undefinedp(learn_map[skill]))
+    {
+        learn_map[skill] = 0;
+    }
+
+    if (me->query("potential") - me->query("learned_points") < 100)
+    {
+        write(msg299("学习失败", "你的潜能不够学习这么多次数了\n"));
+        return 1;
+    }
+
+    // 预先检查留学门派的潜能倍数
+    if (check_study_family(me, ob))
+    {
+        object mgr;
+        string ob_family;
+        int priority, estimated_pot;
+
+        mgr = load_object("/adm/special_ob/multi_family/multi_family_master");
+        ob_family = ob->query("family/family_name");
+
+        if (mgr && ob_family)
+        {
+            priority = mgr->get_family_priority(me, ob_family);
+            if (priority > 1)
+            {
+                // 估算潜能需求（简单估算）
+                estimated_pot = 100 * times * priority; // 粗略估算
+
+                write(msg299("学习提示", sprintf("这是你的第%d个门派，潜能消耗将为正常的%d倍！预估本次学习需要潜能约：%d点", priority, priority, estimated_pot)));
+
+                if (me->query("potential") - me->query("learned_points") < estimated_pot)
+                {
+                    write(msg299("学习提示", sprintf("你的潜能可能不足以支持本次学习（当前可用:%d，预估需要:%d）",
+                        me->query("potential") - me->query("learned_points"), estimated_pot)));
+                }
+            }
+        }
+    }
+
+    remaining_times = times;
+    up_point = 0;
+
+    while ((remaining_times > 0 && loop_times > 0))
+    {
+        // 如果技能等级超过师父,跳出循环
+        if (my_skill >= master_skill)
+        {
+            write(msg299("学习提示", "你的" + to_chinese(skill) + "已经不输你师父了。"));
+            break;
+        }
+
+        // 检查是否可以继续提升
+        if (!me->can_improve_skill(skill)) {
+            write(msg299("学习失败", "你感觉此项武功已经到了瓶颈，若想更进一步恐怕需要在实战中寻找突破之机。"));
+            break;
+        }
+
+        if (me->query("potential") - me->query("learned_points") < 100)
+        {
+            write(msg299("学习失败", "你的潜能不够学习这么多次了"));
+            break;
+        }
+
+        single_point = me->query_int() + my_skill / 4;
+        single_point /= 4;
+        single_point += 5;
+        single_point *= 2;
+
+        next_my_skill = my_skill + 1;
+
+        {
+            int need_exp,need_pot;
+
+            // 重置线程评估成本，防止中断
+            reset_eval_cost();
+
+            // 如果技能等级超过师父,跳出循环
+            if (my_skill >= master_skill)
+            {
+                write(msg299("学习失败", "你的" + to_chinese(skill) + "已经不输你师父了。"));
+                break;
+            }
+
+            need_exp = me->query_next_level_exp(skill);
+            need_exp++;
+            need_pot = need_exp / single_point;
+
+            // 如果是通过留学门派学习，应用潜能消耗倍数
+            if (check_study_family(me, ob))
+            {
+                object mgr;
+                string ob_family;
+                int priority;
+                
+                mgr = load_object("/adm/special_ob/multi_family/multi_family_master");
+                ob_family = ob->query("family/family_name");
+                
+                if (mgr && ob_family)
+                {
+                    priority = mgr->get_family_priority(me, ob_family);
+                    if (priority > 1)
+                    {
+                        need_pot *= priority; // 应用倍数
+                    }
+                }
+            }
+
+            if (me->query("potential") - me->query("learned_points") < need_pot)
+            {
+                write(msg299("学习失败", "你的潜能不够学习这么多次了"));
+                break;
+            }
+
+            me->improve_skill(skill, need_exp);
+            me->add("learned_points", need_pot);
+            up_point += need_exp;
+            total_pot += need_pot;
+        }
+
+        remaining_times--;
+        loop_times--;
+        my_skill = me->query_skill(skill, 1);
+    }
+
+
+    // 当前技能等级和潜能消耗信息
+    write(msg299("学习：",sprintf(HIC "你当前的「%s」等级为%d级，耗费潜能总计:%d。"NOR"", to_chinese(skill), me->query_skill(skill, 1), total_pot)));
+    
+    // 如果是通过留学门派学习，记录学习信息
+    if (check_study_family(me, ob) && up_point > 0)
+    {
+        object mgr;
+        mapping record_result;
+        string ob_family;
+        
+        mgr = load_object("/adm/special_ob/multi_family/multi_family_master");
+        ob_family = ob->query("family/family_name");
+        
+        if (mgr && ob_family)
+        {
+            record_result = mgr->record_skill_learning(me, ob_family, skill, ob->query("name"), me->query_skill(skill, 1));
+            
+        }
+    }
+    
+    return 1;
+}
+
+int can_learn(object me, string skill)
+{
+    string skill_name;
+    mapping skills;
+    string mskill;
+
+    if (stringp(mskill = SKILL_D(skill)->main_skill()) && mskill != skill && me->query_skill(mskill, 1) > 0)
+        return notify_fail(msg299("学习失败", "你现在没有必要再单独学习" + to_chinese(skill) + "了。"));
+
+    skills = me->query_skills();
+    if (!mapp(skills))
+        return 1;
+
+    if (!SKILL_D(skill)->valid_enable("force") || SKILL_D(skill)->valid_force("*"))
+        return 1;
+
+    foreach (skill_name in keys(skills))
+    {
+        if (file_size(SKILL_D(skill_name) + ".lpc") == -1)
+        {
+            continue;
+        }
+
+        if (!SKILL_D(skill_name)->valid_enable("force") ||
+            skill_name == skill)
+            continue;
+
+        if (!SKILL_D(skill_name)->valid_force(skill))
+            return notify_fail(msg299("学习失败", "你不散了" + to_chinese(skill_name) + "，怎么学习" + to_chinese(skill) + "？"));
+    }
+
+    return 1;
+}
+
+int check_study_family(object me, object ob)
+{
+    object mgr;
+    mapping family_info;
+    string ob_family;
+    string key;
+    mixed val;
+    
+    // 检查基本条件
+    if (!me || !ob) return 0;
+    if (playerp(ob)) return 0;
+    if (!ob->can_learn_from()) return 0;
+    
+    // 获取NPC的门派
+    ob_family = ob->query("family/family_name");
+    if (!ob_family) return 0;
+    
+    // 加载多门派管理器
+    mgr = load_object("/adm/special_ob/multi_family/multi_family_master");
+    if (!mgr) return 0;
+    
+    // 获取玩家的门派信息
+    family_info = mgr->get_family_info(me);
+    if (!mapp(family_info) || !mapp(family_info["family_info"])) return 0;
+    
+    // 检查所有门派槽位
+    foreach (key, val in family_info["family_info"])
+    {
+        if (!val) continue;
+        
+        // 如果是mapping类型，检查family_name
+        if (mapp(val) && val["family_name"] == ob_family)
+            return 1;
+        
+        // 如果是string类型，直接比较
+        if (stringp(val) && val == ob_family)
+            return 1;
+            
+        // 如果val本身是mapping类型的主门派信息，检查family_name
+        if (mapp(val) && mapp(val["family"]) && val["family"]["family_name"] == ob_family)
+            return 1;
+    }
+    
+    return 0;
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式 : learn|xue <某人> [about] <技能> <次数>
+ 
+这个指令可以让你向别人请教有关某一种技能的疑难问题，当然，你请教的对象在这
+项技能上的造诣必须比你高，而你经由这种方式学习得来的技能也不可能高於你所请
+教的人，然而因为这种学习方式相当於一种「经验的传承」，因此学习可以说是熟悉
+一种新技能最快的方法。
+
+此外学习也需要消耗一些精力，而消耗的精力跟你自己、与你学习对象的悟性有关。
+
+其他相关指令 : apprentice, practice, skills, study
+HELP
+    );
+    return 1;
+}

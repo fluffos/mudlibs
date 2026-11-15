@@ -1,0 +1,176 @@
+/**
+ * @file hongbaod.c
+ * @author Lu dexiang
+ * @brief 红包系统守护进程
+ * @version 1.0
+ * @date 2024-01-20
+ */
+
+
+
+inherit F_DBASE;
+
+// 红包状态
+private nosave int is_active = 0;
+// 活动开始时间
+private nosave int start_time = 0;
+// 活动持续时间(秒)
+private nosave int duration = 600;
+// 已领取玩家列表
+private nosave mapping received_players = ([]);
+// 红包奖励物品列表
+private nosave string *reward_items = ({
+    "/clone/vip/dan_chongmai4",    // 极品冲脉丹
+    "/clone/vip/jinsha",           // 金砂
+    "/clone/vip/dan_jiuzhuan",     // 九转金丹
+    "/clone/aoyi_book/aoyi_book",  // 意境卷轴
+    "/clone/baiyi/onecard",        // 单抽卡片
+});
+void start_hongbao();
+void end_hongbao();
+// 活动时间表 (小时)
+private nosave int *activity_hours = ({12, 18,21});
+// private nosave int *activity_hours = ({12, 19, 21});
+
+void create()
+{
+    seteuid(getuid());
+    set("channel_id", "红包系统");
+    
+    //1737302400后再启动心跳
+    if (time() < 1737302400) {
+        return;
+    }
+    
+    // 启动心跳
+    set_heart_beat(1);
+}
+
+// 检查是否到达活动时间
+private int should_start_activity()
+{
+    mixed *local_time;
+    int hour;
+    
+    local_time = localtime(time());
+    hour = local_time[2]; // localtime返回的数组中索引2为小时
+    
+    // 检查当前小时是否在活动时间内，且分钟为0
+    foreach (int activity_hour in activity_hours) {
+        if (hour == activity_hour && local_time[1] == 0)
+            return 1;
+    }
+    
+    return 0;
+}
+
+// 心跳函数
+void heart_beat()
+{
+    // 检查是否需要开始活动
+    if (!is_active && should_start_activity()) {
+        start_hongbao();
+        return;
+    }
+    
+    // 检查是否需要结束活动
+    if (is_active && (time() - start_time >= duration)) {
+        end_hongbao();
+    }
+}
+
+// 开始红包活动
+void start_hongbao()
+{
+    if (is_active)
+        return;
+        
+    is_active = 1;
+    start_time = time();
+    received_players = ([]);
+    
+    CHANNEL_D->do_channel(this_object(), "chat", 
+        HIR "红包雨来啦！大家快来抢红包啦！点击"ZJURL("cmds:hongbao")+"_抢_"NOR"字即可参与！" NOR);
+}
+
+// 结束红包活动
+void end_hongbao()
+{
+    is_active = 0;
+    received_players = ([]);
+    
+    CHANNEL_D->do_channel(this_object(), "chat", 
+        HIR "本次红包雨活动已结束，感谢大家参与！" NOR);
+}
+
+// 获取红包
+mixed get_hongbao(object who)
+{
+    int chance, amount;
+    string msg;
+    object ob;
+    
+    if (!is_active)
+        return "现在没有红包可以领取哦！";
+        
+    if (!who || !userp(who))
+        return "参数错误！";
+        
+    if (!nullp(received_players[who->query("id")]))
+        return "您已经领过红包了，留点机会给别人吧！";
+        
+    if (time() - start_time > duration)
+        return "红包活动已经结束了！";
+        
+    // 记录领取
+    received_players[who->query("id")] = 1;
+    
+    // 随机概率
+    chance = random(100);
+    
+    if (chance < 80) {
+        // 小红包 80%
+        amount = 1 + random(10);
+        msg = HIY "恭喜获得" + amount + "个绑定元宝！" NOR;
+        who->add("bind_yuanbao", amount);
+        
+    } else if (chance < 95) {
+        // 中红包 15%
+        amount = 10 + random(41);
+        msg = HIY "恭喜获得" + amount + "个绑定元宝！" NOR;
+        who->add("bind_yuanbao", amount);
+        
+    } else if (chance < 97) {
+        // 大红包 2%
+        amount = 50 + random(151);
+        msg = HIY "恭喜获得" + amount + "个绑定元宝！" NOR;
+        who->add("bind_yuanbao", amount);
+        
+    } else {
+        // 特制红包 3%
+        ob = new_bind(reward_items[random(sizeof(reward_items))]);
+        if (!ob->move(who)) {
+            destruct(ob);
+            return "您的背包已满，请清理后再来！";
+        }
+        msg = HIM "恭喜获得稀有道具：" + ob->name() + "！" NOR;
+    }
+    
+    CHANNEL_D->do_channel(this_object(), "chat", 
+        who->query("name") + "抢到了一个红包，" + msg);
+        
+    return 1;
+}
+
+// 查询红包状态
+int query_is_active()
+{
+    return is_active;
+}
+
+// 重置系统
+void reset()
+{
+    is_active = 0;
+    received_players = ([]);
+} 

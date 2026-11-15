@@ -1,0 +1,129 @@
+// 每日任务守护进程 - daily_taskd.c
+inherit F_DBASE;
+inherit F_SAVE;
+
+void clear_daily_flags();
+
+void create()
+{
+    seteuid(ROOT_UID);
+    set("channel_id", "每日守护进程");
+    CHANNEL_D->do_channel( this_object(), "sys", "每日守护进程已经启动。");
+    set_heart_beat(60); // 心跳间隔为 60 秒
+}
+
+void heart_beat()
+{
+    int hour;
+    mixed *lt;
+
+    // 获取当前时间
+    lt = localtime(time());
+    hour = lt[2]; // 当前小时（24 小时制）
+
+    // 如果当前时间是凌晨五点，且未清除标记
+    if (hour == 5 && !query("has_cleared"))
+    {
+        mixed err;
+
+        // 使用catch捕获异常
+        if (err = catch(clear_daily_flags()))
+        {
+            CHANNEL_D->do_channel( this_object(), "sys", "清除失败：" + err);
+
+            //清除失败立即， 停下心跳
+            set_heart_beat(0);
+        }
+        else    
+        {
+            // CHANNEL_D->do_channel( this_object(), "sys", "清除成功：" + ctime(time()));
+            set("has_cleared", 1);
+        }
+    }
+    // 如果时间已过，重置标记，等待下一次清除
+    else if (hour != 5 && query("has_cleared"))
+    {
+        delete("has_cleared");
+    }
+}
+
+void clear_daily_flags()
+{
+    object *users_list;
+    string *online_ids;
+    string *login_dirs;
+    string *login_files;
+    string id;
+    object player_ob;
+    // int i;
+
+    seteuid(getuid());
+
+    // 重置评估成本，防止超时
+    reset_eval_cost();
+
+    // 获取所有在线玩家列表
+    users_list = users();
+    online_ids = map_array(users_list, (: $1->query("id") :));
+
+    // 清除在线玩家的每日任务标记
+    foreach (object user in users_list)
+    {
+        if (objectp(user) && playerp(user))
+        {
+            user->delete("escort_today");
+            // 如有其他每日任务标记，也在此清除
+            // user->delete("another_daily_task_flag");
+        }
+    }
+
+    // 获取所有玩家的登录档案文件列表
+    login_dirs = get_dir(DATA_DIR + "login/");
+
+    foreach (string dir in login_dirs)
+    {
+        if (file_size(DATA_DIR + "login/" + dir) == -2) // 检查是否为目录
+        {
+            login_files = get_dir(DATA_DIR + "login/" + dir + "/*.o");
+
+            // 遍历所有离线玩家的档案文件
+            foreach (string login_file in login_files)
+            {
+                string *parts;
+
+                // 重置评估成本，防止超时
+                reset_eval_cost();
+
+                // 提取玩家ID
+                parts = explode(login_file, "/");
+                id = replace_string(parts[<1], ".o", "");
+
+                // 检查玩家是否在线，若在线则跳过
+                if (member_array(id, online_ids) != -1)
+                    continue;
+
+                // 创建并加载玩家对象，由于global_find_player_manual不会自动析构，所以需要手动析构
+                player_ob = UPDATE_D->global_find_player_manual(id);
+
+                if (!player_ob)
+                    continue;
+
+                // 删除每日任务标记
+                player_ob->delete("escort_today");  
+                
+                // 析构临时对象
+                UPDATE_D->global_destruct_player(player_ob,1);
+
+                // 检查对象是否被正常析构
+                if (objectp(player_ob))
+                {
+                    CHANNEL_D->do_channel( this_object(), "sys", "离线玩家每日任务标记清除失败：" + id);
+                }
+
+            }
+        }
+    }
+
+    // 记录日志
+    log_file("daily_task", sprintf("%s：已清除所有玩家的每日任务标记。\n", ctime(time())));
+}

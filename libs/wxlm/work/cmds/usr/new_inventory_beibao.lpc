@@ -1,0 +1,176 @@
+// 作者：Lu Dexiang
+// 功能：新版背包系统
+inherit F_CLEAN_UP;
+
+//物品分类过滤器
+mapping items_dict = ([
+    "绑定": (: $1->query("bind") || $1->query("no_give") || (stringp($1->query("no_drop"))||$1->query("no_drop")) :),
+    "通用": (: !$1->query("bind") && !$1->query("no_give") && !$1->query("no_drop") :),
+]);
+
+// 函数声明
+private int sort_obj(object obj1, object obj2);
+private string generate_combined_inventory(object ob);
+private mapping generate_base_ui();
+private string generate_json_response(mapping data);
+private string get_item_classify(object item);
+private mapping *get_item_cmds(object item);
+private mapping *get_cangku_cmds(string item_id);
+private mapping format_item_data(string inv_type, mixed item_data, mixed item_info);
+
+// 生成基础UI结构
+private mapping generate_base_ui() {
+    mapping result;
+    
+    result = ([
+        "data": ([
+            "context": ({})
+        ])
+    ]);
+    return result;
+}
+
+// 获取物品分类
+private string get_item_classify(object item) {
+    if (evaluate(items_dict["绑定"], item))
+        return "绑定";
+    if (evaluate(items_dict["通用"], item))
+        return "通用";
+    return "no_classify";
+}
+
+// 生成JSON响应
+private string generate_json_response(mapping data) {
+    return json_encode((["code": "beibao_system", "data": data]));
+}
+
+// 物品排序函数
+private int sort_obj(object obj1, object obj2) {
+    if (obj1->query("yuanbao") > obj2->query("yuanbao"))
+        return -1;
+    if (obj1->query("yuanbao") == obj2->query("yuanbao"))
+        return 0;
+    return 1;
+}
+
+//返回一个物品的命令组
+private mapping *get_item_cmds(object item) {
+    mapping *cmds = ({});
+
+    // 如果物品有使用效果
+    if (item->query("only_do_effect")) {
+        cmds = ({
+            (["cmd": "use " + file_name(item), "text": "使用"]),
+        });
+    }
+    else
+    {
+        // cmd为空的使用
+        cmds += ({
+            (["cmd": "", "text": "使用"]),
+        });
+    }
+
+    //存仓
+    cmds += ({
+        (["cmd": "cangku 存 " + file_name(item), "text": "交换"]),
+    });
+    //丢弃
+    cmds += ({
+        (["cmd": "drop " + file_name(item), "text": "丢弃"]),
+    });
+
+    return cmds;
+}
+
+//仓库的命令组
+private mapping *get_cangku_cmds(string item_id) {
+    mapping *cmds = ({});
+    //取仓
+    cmds += ({
+        (["cmd": "cangku 取 " + item_id, "text": "交换"]),
+
+        //仓库也需要使用和丢弃的命令组。但是cmd为空
+        (["cmd": "", "text": "使用"]),
+        (["cmd": "", "text": "丢弃"]),
+    });
+
+    return cmds;
+}
+
+// 格式化物品数据
+varargs public mapping format_item_data(string inv_type, mixed item_data, mixed item_info,int is_destruct)
+{
+    mapping result = ([]);
+    
+    if (inv_type == "beibao") {
+        object item = item_data;
+        string item_name = item->query("name");
+            
+        result = ([
+            "cmd": "look " + item->query("id"),
+            "text": item_name,
+            "unique_id": file_name(item),
+            "amount": is_destruct ? 0 : (item->query_amount() || 1),
+            "classify": get_item_classify(item),
+            "cmds": get_item_cmds(item),
+            "bind": evaluate(items_dict["绑定"], item),
+            "inv_type": "beibao",
+            "yuanbao": item->query("yuanbao"),
+        ]);
+    } else if (inv_type == "cangku") {
+        string item_id = item_data;
+        mapping item = item_info;
+        
+        result = ([
+            "cmd": "cangku 取 " + item_id,
+            "text": item["name"],
+            "unique_id": item_id,
+            "amount": is_destruct ? 0 : (item["amount"]),
+            "bind": stringp(item["bind"]) || item["bind"],
+            "classify": item["bind"] ? "绑定" : "通用",
+            "cmds": get_cangku_cmds(item_id),
+            "inv_type": "cangku",
+        ]);
+    }
+    
+    return result;
+}
+
+// 生成合并的背包和仓库内容
+private string generate_combined_inventory(object ob) {
+    mapping result;
+    object *inv;
+    mapping items;
+    
+    result = generate_base_ui();
+    
+    // 处理背包物品
+    inv = all_inventory(ob);
+    if (sizeof(inv) > 0) {
+        inv = sort_array(inv, (: sort_obj :));
+        foreach (object item in inv) {
+            result["data"]["context"] += ({ format_item_data("beibao", item) });
+        }
+    }
+    
+    // 处理仓库物品
+    items = "/adm/special_ob/player/cangku/cangku_master"->query_cangku_items(ob);
+    if (mapp(items) && sizeof(items) > 0) {
+        foreach (string key in keys(items)) {
+            result["data"]["context"] += ({ format_item_data("cangku", key, items[key]) });
+        }
+    }
+    
+    return generate_json_response(result);
+}
+
+// 主函数
+int main(object me, string arg) {
+    string json_result;
+    
+    json_result = generate_combined_inventory(me);
+    tell_object(me, json_result + "\n");
+    // log_file("new_inventory.log", json_result);
+    return 1;
+}

@@ -1,0 +1,202 @@
+mapping fd_to_msg;
+mapping fd_to_obj;
+int main(object me,string arg);
+
+private nosave string *skill_type_list = ({
+    "force",//基本内功
+    "dodge",//基本轻功
+    "parry",//基本招架
+	"unarmed",//基本拳脚
+	"cuff",//基本拳法
+	"strike",//基本掌法
+	"finger",//基本指法
+	"hand",//基本手法
+	"claw",//基本爪法
+	"sword",//基本剑法
+	"blade",//基本刀法
+	"staff",//基本丈法
+	"hammer",//基本锤法
+	"club",//基本长兵
+	"whip",//基本鞭法
+	"qin",//基本琴法
+});
+
+void on_read(int fd, string msg)
+{
+    fd_to_msg[fd] += sprintf("%s", msg);
+}
+
+void on_write(int fd)
+{
+    debug_message(sprintf("on_write: %d \n", fd));
+}
+
+void on_close(int fd)
+{
+
+    string msg = fd_to_msg[fd];
+    fd_to_obj[fd]->set("desc_player", msg);
+    // tell_object(fd_to_obj[fd], msg + "\n");
+    map_delete(fd_to_msg, fd);
+    map_delete(fd_to_obj, fd);
+}
+
+/**
+ * @brief 生成古风武侠人物形象描述
+ * @param object me 角色对象
+ * @return string 格式化后的描述字符串（用逗号分隔各部分）
+ * @details 
+ * 本函数通过三阶段生成机制实现：
+ * 1. 基础框架采用用户提供的古风描写模板，确保符合武侠世界观
+ * 2. 动态数据采集包含九大维度：宗师成就、武学境界、门派归属、技能特长、门派地位、江湖称号、性格特征、性别属性、基础信息
+ * 3. 数据处理包含三重转换：数值转汉字、技能名优化、格式标准化
+ * 
+ * 特别处理逻辑说明：
+ * - 数字强制转换为汉字书写（如九品而非9级）
+ * - 技能展示采用三优四舍原则（取前三大精修技能）
+ * - 五绝判定结合门派数据和称号体系双重验证
+ * - 消除所有非必要标点（替换换行符为逗号，删除空格）
+ * - 确保不出现括号等现代标示符号
+ */
+string desc_msg(object me)
+{
+    // 改进提示词：强调写作视角、行文要求与用词规范，引导 AI 生成更生动的古风描述
+    string msg = @DESC
+    【人物描写任务】请以武侠MUD江湖为背景，根据以下角色信息，以有江湖气血的文笔写成一段120-150字的人物形象连贯描述。
+
+    要求：
+    1）行文流畅，避免列表罗列
+    2）巧用比喻描写人物形象
+    3）所有数字均以汉字书写
+    4）正文中不出现括号及提示语
+    5）自然融入关键信息且尽量避免遗漏
+    6）不得描写与人物无关的描述词
+
+    示例：令弧冲身材较瘦，长的浓眉阔眼，气宇暄昂，在同门中排行老大，是华山派年轻一代中的顶尖好手。
+
+    备注：武学境界九品最低，一品最高。
+DESC;
+
+    msg += "1.是否达成宗师：" + (me->query("opinion/ultra") ? "已达成" : "未达成") + "\n";
+
+    {
+        string *level_stage = ({"九品", "八品", "七品", "六品", "五品", "四品", "三品", "二品", "一品", "超凡"});
+        string level_name_ify;
+        int level_num;
+
+        level_num = me->query("level")/100;
+
+        if (level_num >= 9)
+        {
+            level_name_ify = "超凡";
+        }
+        else
+        {
+            level_name_ify = level_stage[level_num];
+        }
+
+        msg += "2.武学境界：" + level_name_ify + "\n";
+    }
+
+    msg += "3.门派：" + (me->query("family/family_name") ? me->query("family/family_name") : "无门无派") + "\n";
+
+    if (sizeof(me->query_skills()) > 0 && sizeof(me->query_skill_map()) > 0)
+    {
+        string skill_name_str = "";
+        string *good_at_skill_name_list = ({});
+        mapping map_skill_list = me->query_skill_map();
+
+        good_at_skill_name_list = sort_array(keys(map_skill_list), (: $1 > $2 :));
+
+        if (sizeof(good_at_skill_name_list) > 3)
+            good_at_skill_name_list = good_at_skill_name_list[0..3];
+        
+
+        foreach (string skill_name in good_at_skill_name_list)
+        {
+            if (!nullp(map_skill_list[skill_name])) {
+                skill_name_str += replace_string(to_chinese(skill_name), "基本", "") + "(" + to_chinese(map_skill_list[skill_name]) + ")、";
+            } else {
+                skill_name_str += replace_string(to_chinese(skill_name), "基本", "") + "、";
+            }
+        }
+
+        // 去掉最后一个顿号
+        if (strlen(skill_name_str) > 0)
+            skill_name_str = skill_name_str[0..<1];
+
+        msg += "4.擅长：" + skill_name_str + "\n";
+    }
+    else
+    {
+        msg += "4.擅长：什么武功也不会\n";
+    }
+
+    if (me->query("family/family_name"))
+    {
+        msg += "5.门派地位：" + FAMILY_D->query_family_player_title(me) + "\n";
+    }
+
+    {
+            // 检查是否是五绝，如果是则全服通报
+            string *wujue = ({"中神通", "东邪", "西毒", "南帝", "北丐"});
+            string wujue_title = RANK_D->query_rank(me);
+            
+            foreach (string title in wujue)
+            {
+                    if (FAMILY_D->query_lunjian_leader(title) == me->query("id"))
+                    {
+                            wujue_title = title;
+                            break;
+                    }
+            }
+
+            msg += "6.江湖地位：" + wujue_title + "\n";
+    }
+
+    msg += "7.性格：" + me->query("character") + "\n";
+
+    msg += "8.性别：" + me->query("gender") + "\n";
+
+    msg += "9:姓名：" + me->query("name") + "\n";
+
+    msg = replace_string(msg, "\n", ",");
+    msg = replace_string(msg, " ", "");
+    return msg;
+}
+
+int set_player_desc(object me)
+{
+    main(me,"man_desc.py " + desc_msg(me));
+    return 1;
+}
+
+int main(object me,string arg)
+{
+    int fd;
+    int CMD = 3;
+    if(__ARCH__ == "Microsoft Windows") CMD = 2;
+
+    // arg = "man_desc.py " + desc_msg(me);
+
+    if (__ARCH__ == "Microsoft Windows") {
+        buffer xxx = string_encode(arg,"gbk");
+        arg = read_buffer(xxx);
+    }
+
+    fd = external_start(CMD, arg, "on_read", "on_write", "on_close");
+
+    if (!fd_to_msg)
+    {
+        fd_to_msg = ([ ]);
+    }
+    if (!fd_to_obj)
+    {
+        fd_to_obj = ([ ]);
+    }
+
+    fd_to_msg[fd] = "";
+    fd_to_obj[fd] = me;
+
+    return 1;
+}

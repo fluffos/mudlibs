@@ -1,0 +1,38 @@
+# 武侠黎明 (wxlm) — 移植笔记
+
+- 来源：`https://github.com/lude2001/wxlm`（Issue `#31`），炎黄 / 地狱（指文游之终极地狱）系武侠 MUD。
+- 编号：**199**，端口：**40404**，托管方式：`vendored`。
+
+## 1. 源码清理与编码转换
+
+- 运行 `convert_lib.sh` 将全部源码由 GB18030/UTF-8 统一转换为 UTF-8 并将 `.c` 规范为 `.lpc`，清理上游携带的 `.duchang.c.swp`、`.gitattributes`、`familyd.c.bak` 及扫描产物 `trace_lpcc.json`。
+- `convert_lib.sh` 全局替换 `static->nosave` 误伤了部分非修饰符文本，已逐一还原：
+  - `include/globals.h` 第 18–24 行 `#ifndef __SENSIBLE_MODIFIERS__` 块（被改写为 `#define static nosave`）；
+  - `system/baoshi_huishou.lpc`、`clone/vip/wusheng_book.lpc`、`clone/vip/equipment_opener.lpc`、`clone/baoshi/equipment_opener.lpc` 中路径字符串字面量 `"nosave/"` 还原为 `"static/"`；
+  - `include/net/ftpdsupp.h` 中的 `dot_match` 原型改用 `protected int`。
+- 使用 FluffOS 驱动自带 `src/include/runtime_config.h` 替换陈旧的 `include/runtime_config.h`。
+- 经 `scripts/check_ntfs_paths.py -v libs/wxlm` 验证：`non_utf8=0`、`illegal=0`、`case_file_dups=0`、`case_dir_dups=0`、`file_vs_dir=0`。
+
+## 2. 编译警告清理与驱动 / WASM 兼容
+
+- **JSON 仿真函数与 HTTP 包守卫**：从 `libs/fy2005` 引入 `adm/simul_efun/json.lpc` 并补充 `json_format(string str)`，在 `adm/single/simul_efun.lpc` 中启用 `#include "/adm/simul_efun/json.lpc"`；对 `external_system_package/http/controller/{httpd,http_send}.lpc` 及 `adm/single/simul_efun.lpc` 中的 HTTP 入口加上 `#ifdef __PACKAGE_HTTP__`。
+- **`.c` → `.lpc` 后缀长度切片修复**：将 `adm/daemons/eventd.lpc`、`adm/daemons/storyd.lpc`、`adm/daemons/bossd.lpc`、`adm/daemons/autonpc.lpc`、`adm/npc/luban.lpc`（第 1521、2752 行）、`adm/special_ob/tianfu/obj/ganwu_tu.h`（第 40 行）、`cmds/adm/wizgo.lpc`（第 36–37 行）、`adm/single/importer.lpc`（第 555–556 行）与 `cmds/adm/to_man_json.lpc`（第 124 行）的 `[0..<3]` / 后缀剥离修正为 `[0..<5]` 或 `replace_string()`。
+- **浮点 / 整型与格式串告警**：使用 `to_int()` 修正 `adm/simul_efun/atoi.lpc:30`、`adm/simul_efun/nt.lpc:900`、`d/bangpai/farm/farm.lpc:70`、`d/bangpai/plant/plant.lpc:39`、`inherit/condition/poison.lpc:369`、`kungfu/skill/gandanqinxin.lpc:157,169`、`kungfu/skill/liuyang-zhang/hui.lpc:118`、`kungfu/skill/weizhuang_guidao/guiying_shan.lpc:49`；`cmds/arch/config.lpc:102` 改用 `__MUD_IP__`；`adm/daemons/network/dns_master.lpc:237` 将 `||PORT:%s||` 改为 `||PORT:%d||`；移除 `cmds/skill/citiao_rf.lpc:165` 与 `cmds/wiz/more.lpc:19-20` 的未使用局部变量；`system/wusheng/zhenyi/test_baodi.lpc` 引入 `zhenyi_config.h` 并补充 `query_zhenyi_level`/`add_zhenyi_to_bag` 委派封装。
+- **外部服务与 WASM 兼容**：
+  - `adm/daemons/dbd.lpc` 加入 `#ifdef __PACKAGE_DB__` 并在 `db_host == "xxxxxxxx密码示例"` 时跳过 `connect()` 与心跳轮询；
+  - `adm/special_ob/qq_msg/server.lpc` 将 `create()` 中的 `int ret;` 移入 `#else` 分支（`#ifndef __PACKAGE_SOCKETS__` 提前返回），消除 WASM 预加载时的未使用变量警告；
+  - 对 31+ 个新增/修改 `.lpc` 文件以 `format-corpus.mjs --check` 验证零格式化报错（未改动的原始文件保留原有排版风格）。
+
+## 3. 登录流程、UTF-8 姓氏检验与品牌标记
+
+- `adm/etc/welcome` 添加 `═══ FluffOS Mudlibs 典藏 · https://mudlibs.fluffos.info ═══`。
+- `adm/daemons/named.lpc`：针对 UTF-8 汉字将 `NAME_HEAD` 改为 `strlen(name) >= 3 ? name[0..2] : name[0..0]`，避免 1 字节截断破坏中文姓氏，并在 `invalid_new_name()` 中使用 `pcre_match(name, "^\\p{Han}{1,4}$")` 验证纯汉字长度。
+- `adm/daemons/logind.lpc`：将 `check_legal_name()` 改为 `pcre_match(name, "^\\p{Han}{2,4}$")`；在保留原 `║` 分隔协议及 `ldx123`/`zds123`/`demo7788` 分流逻辑的同时，为标准 telnet 与浏览器网页端新增交互式登录与创角流程（`interactive_id`、`interactive_get_passwd`、`interactive_new_passwd`、`interactive_confirm_passwd`、`interactive_reg_gender`、`interactive_reg_name`、`interactive_reg_born`），使网页端与普通客户端均能完成注册、选出生地并入世。
+- `scripts/write_play_page.sh`：将 `ZJ_PROTOCOL` 判定收紧为同时检测 `zjmud.h` 与 `logind.lpc` 中的 `ver1.0` 握手标志（真 ZJ 库 `dtxyzjb`、`hhsj`、`shujian3`、`wdxtym`、`wxddym`、`xfbhh`、`zjdyzj`、`zjmudhell` 保持 `true`，`wxlm` 为 `false`）。
+- 预建管理员账号 `fluffos` / `Mud@2026`（柳随风，扬州出生地，并在 `adm/etc/wizlist` 写入 `fluffos (admin)`）。
+
+## 深度功能测试（§10.7，2026-11-14）
+
+- **全量编译扫描**：使用 `build-debug/src/lpcc --batch libs/wxlm/config.fluffos` 扫描全部 `8,940` 个 `.lpc` 文件，0 编译错误、0 编译警告（零 `#pragma no_warnings`）。
+- **原生端验证**：`fluffos`（`Mud@2026`）在扬州醉仙客栈登录、冷重连、`look`、`score`、`update /d/city/kedian` 与 `quit` 全程无报错；另以女性临时角色（楚轻霜，关外客栈）验证注册、`look`、`hp`、`i`、`skills`、`help` 与 `quit` 正常（测试后已清理临时存档）。
+- **WASM 端验证**：通过 `scripts/wasm_client.js` 加载 `build-wasm/src` 与 `libs/wxlm` 完整启动全部预加载守护进程，使用 `fluffos` / `Mud@2026` 登录并执行 `look`、`score`、`quit`（`exit 0`，无报错），并同步生成 `scripts/wasm_keep_dirs.txt` 空目录清单。

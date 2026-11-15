@@ -1,0 +1,135 @@
+#include <room.h>
+inherit ROOM;
+
+void create()
+{
+    set("short", "众生深渊");
+    set("long", @LONG
+这里是一片虚无缥缈的空间，四周弥漫着浓重的黑暗，仿佛置身于无尽的深渊之中。
+你能感受到自己内心深处的波动，贪婪、嗔怒、愚痴三种执念正在此处具现化。
+唯有直面内心的魔障，战胜心中的贪嗔痴，才能达成五气朝元。
+远处似乎有一道微弱的光芒(深渊出口)。
+LONG );
+
+    set("item_desc", ([
+        "深渊出口" : (: call_other, __FILE__, "check_leave_desc" :)
+    ]));
+
+    set("no_fight", 0);
+    set("no_clean", 1);
+    setup();
+
+    // 30分钟后检查房间是否还有玩家，没有则自动销毁
+    call_out("check_auto_destruct", 1800);
+}
+
+void init()
+{
+    add_action("do_leave", "leave");
+}
+
+/**
+ * @brief 检查是否可以离开深渊并返回描述
+ * @return string 弹窗内容
+ */
+string check_leave_desc()
+{
+    object me = this_player();
+    string msg;
+
+    if (!me)
+        return "这里似乎有一道微弱的光芒...\n";
+
+    if (me->query("wuqi_done"))
+    {
+        msg = "你已达成五气朝元，可以离开深渊了。\n";
+        return popup_comb(msg, "离开深渊:leave");
+    }
+    else
+    {
+        msg = "深渊的出口被一股神秘的力量封锁着。\n"
+              "你必须战胜内心的贪嗔痴三魔，才能打开封印离开此地。\n";
+        return msg;
+    }
+}
+
+/**
+ * @brief 玩家尝试离开深渊
+ * @param string arg 参数
+ * @return int 1表示成功处理命令
+ */
+int do_leave(string arg)
+{
+    object me = this_player();
+    object room = environment(me);
+
+    if (!me->query("wuqi_done"))
+    {
+        tell_object(me, "你尚未战胜心魔，无法离开此地。\n");
+        return 1;
+    }
+
+    tell_object(me, HIY "\n一道金光闪过，你从深渊中醒来...\n\n" NOR);
+    me->move("/d/yinlong_shan/shanjiao");
+    message_vision(HIG "$N身上散发着淡淡的金光，缓缓睁开双眼。\n" NOR, me);
+
+    // 延迟销毁房间，确保玩家已经离开
+    if (objectp(room))
+        call_out("destruct_room", 1, room);
+
+    return 1;
+}
+
+/**
+ * @brief 销毁深渊房间
+ * @param object room 房间对象
+ */
+void destruct_room(object room)
+{
+    object *obs;
+
+    if (!objectp(room))
+        return;
+
+    // 清理房间内的所有对象
+    obs = all_inventory(room);
+    if (sizeof(obs) > 0)
+    {
+        foreach (object ob in obs)
+        {
+            if (objectp(ob))
+                destruct(ob);
+        }
+    }
+
+    // 销毁房间
+    destruct(room);
+}
+
+/**
+ * @brief 检查是否需要自动销毁房间
+ */
+void check_auto_destruct()
+{
+    object *obs;
+    int has_player;
+
+    // 检查房间内是否有玩家
+    obs = all_inventory(this_object());
+    has_player = 0;
+
+    foreach (object ob in obs)
+    {
+        if (userp(ob))
+        {
+            has_player = 1;
+            break;
+        }
+    }
+
+    // 如果没有玩家，销毁房间
+    if (!has_player)
+    {
+        destruct_room(this_object());
+    }
+}

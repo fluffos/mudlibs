@@ -1,0 +1,248 @@
+/**
+ * @file jifen_shop.c
+ * @author 系统
+ * @brief 九月秋季限时积分商店
+ * @version 1.0
+ * @date 2025-09-01
+ */
+
+// 函数原型声明
+void show_main_shop(object me);
+int exchange_item(object me, string item_id, int quantity);
+mapping get_shop_items();
+
+// 活动时间定义
+#define ACTIVITY_START 1756629606  // 2025-09-01 00:00:00
+#define ACTIVITY_END   1758098406  // 2025-09-16 23:59:59
+
+/**
+ * @brief 检查是否在活动期间
+ * @return int 1-在活动期间，0-不在活动期间
+ */
+int is_in_activity_period()
+{
+    return (time() >= ACTIVITY_START && time() <= ACTIVITY_END);
+    // return 1; // 测试期间可以打开此行
+}
+
+// 商店物品配置
+mapping shop_items = ([
+    // 1000积分物品
+    "wucai_shenshi" : ([ "name" : "五彩神石", "path" : "/clone/baiyi/wucai_shenshi", "cost" : 1000 ]),
+    "aoyi_book" : ([ "name" : "意境卷轴", "path" : "/clone/aoyi_book/aoyi_book", "cost" : 1000 ]),
+    "purple_zhenyi" : ([ "name" : "紫色真意自选宝箱", "path" : "/clone/box/zhenyi/purple_zixuan_box", "cost" : 1000 ]),
+    
+    // 800积分物品
+    "yellow_zhenyi" : ([ "name" : "黄色真意自选宝箱", "path" : "/clone/box/zhenyi/yellow_zixuan_box", "cost" : 800 ]),
+    "fangju_material_2" : ([ "name" : "防具材料自选宝箱", "path" : "/clone/box/fangju_zixuan_box", "cost" : 800, "quantity" : 2 ]),
+    "chongmai_10" : ([ "name" : "冲脉丹自选宝箱", "path" : "/clone/box/chongmai/chongmai_zixuan_box", "cost" : 800, "quantity" : 10 ]),
+    "lianti_5" : ([ "name" : "炼体丹自选宝箱", "path" : "/clone/box/wuzang/lianti_dan_zixuan_box", "cost" : 800, "quantity" : 5 ]),
+    
+    // 500积分物品
+    "chongmai_8" : ([ "name" : "冲脉丹自选宝箱", "path" : "/clone/box/chongmai/chongmai_zixuan_box", "cost" : 500, "quantity" : 8 ]),
+    "lianti_3" : ([ "name" : "炼体丹自选宝箱", "path" : "/clone/box/wuzang/lianti_dan_zixuan_box", "cost" : 500, "quantity" : 3 ]),
+    "red_zhenyi" : ([ "name" : "红色真意自选宝箱", "path" : "/clone/box/zhenyi/red_zixuan_box", "cost" : 500 ]),
+    
+    // 50积分物品
+    "wuyu_5" : ([ "name" : "雾雨灵茶", "path" : "/clone/vip/dan_wuyu", "cost" : 50, "quantity" : 5 ]),
+    "guiyuan_5" : ([ "name" : "五藏归元丹", "path" : "/clone/vip/dan_guiyuan", "cost" : 50, "quantity" : 5 ]),
+    "jiuzhuan_5" : ([ "name" : "九转金丹", "path" : "/clone/vip/dan_jiuzhuan", "cost" : 50, "quantity" : 5 ]),
+    "mizhuan_5" : ([ "name" : "秘传自选宝箱", "path" : "/clone/box/mizhuan_zixuan_box", "cost" : 50, "quantity" : 5 ]),
+    
+    // 10积分物品
+    "fake_jiuzhuan" : ([ "name" : "九转金丹(假)", "path" : "/system/shexing/obj/fake_jiuzhuan", "cost" : 10 ]),
+    "puti_5" : ([ "name" : "菩提子", "path" : "/clone/gift/new_puti-zi", "cost" : 10, "quantity" : 5 ]),
+    "fushougao_5" : ([ "name" : "福寿膏", "path" : "/clone/gift/fushougao", "cost" : 10, "quantity" : 5 ]),
+    "lingzhi_5" : ([ "name" : "千年灵芝", "path" : "/clone/vip/lingzhi", "cost" : 10, "quantity" : 5 ]),
+    "dex_dan" : ([ "name" : "火红仙丹", "path" : "/clone/vip/dan_dex", "cost" : 10 ]),
+    "int_dan" : ([ "name" : "醍醐仙丹", "path" : "/clone/vip/dan_int", "cost" : 10 ]),
+    "str_dan" : ([ "name" : "神力丸", "path" : "/clone/vip/dan_str", "cost" : 10 ]),
+    "con_dan" : ([ "name" : "洗髓丹", "path" : "/clone/vip/dan_con", "cost" : 10 ]),
+    "cifu_10" : ([ "name" : "词符", "path" : "/clone/vip/cifu", "cost" : 10, "quantity" : 10 ]),
+]);
+
+/**
+ * @brief 主函数入口
+ * @param object me 玩家对象
+ * @param string arg 参数
+ * @return int 执行结果
+ */
+int main(object me, string arg)
+{
+    string item_id;
+    int quantity = 1;
+    
+    if (!arg)
+    {
+        show_main_shop(me);
+        return 1;
+    }
+
+    if (sscanf(arg, "%s %d", item_id, quantity) != 2)
+    {
+        item_id = arg;
+        quantity = 1;
+    }
+
+    return exchange_item(me, item_id, quantity);
+}
+
+/**
+ * @brief 显示商店主界面
+ * @param object me 玩家对象
+ */
+void show_main_shop(object me)
+{
+    string msg;
+    int current_jifen;
+    string *buttons = ({});
+    
+    current_jifen = me->query("jiuyue_autumn_jifen");
+    
+    msg = HIY "【九月秋季限时积分商店】\n" NOR;
+    msg += sprintf(HIC "当前限时积分：%d\n" NOR, current_jifen);
+    
+    if (is_in_activity_period())
+    {
+        msg += HIG "活动进行中，快来兑换心仪物品！\n" NOR;
+    }
+    else
+    {
+        msg += HIR "活动已结束，限时积分将转换为贡献积分\n" NOR;
+    }
+    
+    msg += "──────────────────────────\n";
+    
+    // 1000积分物品
+    msg += HIR "【1000积分物品】\n" NOR;
+    msg += "五彩神石、意境卷轴、紫色真意自选宝箱\n\n";
+    
+    // 800积分物品  
+    msg += HIY "【800积分物品】\n" NOR;
+    msg += "黄色真意自选宝箱、防具材料自选宝箱×2\n";
+    msg += "冲脉丹宝箱×10、炼体丹自选宝箱×5\n\n";
+    
+    // 500积分物品
+    msg += HIM "【500积分物品】\n" NOR;
+    msg += "冲脉丹宝箱×8、炼体丹自选宝箱×3\n";
+    msg += "红色真意自选宝箱\n\n";
+    
+    // 50积分物品
+    msg += HIC "【50积分物品】\n" NOR;
+    msg += "雾雨灵茶×5、五藏归元丹×5、九转金丹×5\n";
+    msg += "秘传自选宝箱×5\n\n";
+    
+    // 10积分物品
+    msg += HIG "【10积分物品】\n" NOR;
+    msg += "九转金丹(假)、菩提子×5、福寿膏×5\n";
+    msg += "千年灵芝×5、四大属性丹、词符×10\n";
+    
+    msg += "──────────────────────────\n";
+
+    // 构建按钮
+    buttons = ({
+        "1000积分:jifen_shop_category 1000",
+        "800积分:jifen_shop_category 800", 
+        "500积分:jifen_shop_category 500",
+        "50积分:jifen_shop_category 50",
+        "10积分:jifen_shop_category 10",
+        "返回:limited_draw"
+    });
+
+    tell_object(me, popup_comb(msg, buttons));
+}
+
+/**
+ * @brief 兑换物品
+ * @param object me 玩家对象
+ * @param string item_id 物品ID
+ * @param int quantity 兑换数量
+ * @return int 执行结果
+ */
+int exchange_item(object me, string item_id, int quantity)
+{
+    mapping item_info;
+    object item;
+    int current_jifen, total_cost, i;
+    string msg;
+    
+    if (!shop_items[item_id])
+    {
+        write(popup_comb("无效的物品ID！", ({"返回:jifen_shop"})));
+        return 1;
+    }
+    
+    item_info = shop_items[item_id];
+    current_jifen = me->query("jiuyue_autumn_jifen");
+    total_cost = item_info["cost"] * quantity;
+    
+    if (current_jifen < total_cost)
+    {
+        msg = HIR "【兑换失败】\n" NOR;
+        msg += sprintf("积分不足！需要%d积分，当前只有%d积分。\n", total_cost, current_jifen);
+        write(popup_comb(msg, ({"返回:jifen_shop"})));
+        return 1;
+    }
+    
+    // 检查背包空间
+    if (sizeof(all_inventory(me)) >= 390)
+    {
+        msg = HIR "【兑换失败】\n" NOR;
+        msg += "背包空间不足，请先整理背包！\n";
+        write(popup_comb(msg, ({"返回:jifen_shop"})));
+        return 1;
+    }
+    
+    // 扣除积分
+    me->add("jiuyue_autumn_jifen", -total_cost);
+    
+    // 创建物品
+    for (i = 0; i < quantity; i++)
+    {
+        item = new_bind(item_info["path"]);
+        if (objectp(item))
+        {
+            // 处理数量
+            int item_quantity = item_info["quantity"] || 1;
+            if (item_quantity > 1 && item->query("base_unit"))
+            {
+                item->set_amount(item_quantity);
+            }
+            else if (item_quantity > 1)
+            {
+                // 不可叠加物品需要循环创建
+                item->move(me);
+                for (int j = 1; j < item_quantity; j++)
+                {
+                    object extra_item = new_bind(item_info["path"]);
+                    if (extra_item) extra_item->move(me);
+                }
+                continue; // 跳过下面的move
+            }
+            
+            item->move(me);
+        }
+    }
+    
+    msg = HIY "【兑换成功】\n" NOR;
+    msg += sprintf("恭喜您兑换了%d个%s！\n", quantity, item_info["name"]);
+    msg += sprintf("消耗%d限时积分\n", total_cost);
+    msg += sprintf(HIC "当前剩余积分：%d\n" NOR, me->query("jiuyue_autumn_jifen"));
+    
+    write(popup_comb(msg, ({"继续兑换:jifen_shop", "返回抽奖:limited_draw"})));
+    
+    // 记录日志
+    log_file("jifen_shop", sprintf("%s %s(%s) 兑换了%d个%s，消耗%d积分\n", 
+        ctime(time()), me->name(), me->query("id"), quantity, item_info["name"], total_cost));
+    
+    return 1;
+}
+
+/**
+ * @brief 获取商店物品配置
+ * @return mapping 商店物品映射
+ */
+mapping get_shop_items()
+{
+    return shop_items;
+}

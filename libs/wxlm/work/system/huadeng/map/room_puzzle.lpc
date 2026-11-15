@@ -1,0 +1,177 @@
+/**
+* @file room_puzzle.c
+* @author Lu dexiang
+* @brief 花灯寻梦活动机关房间
+* @version 1.0
+* @date 2024-02-11
+*
+* @copyright Copyright (c) 2024
+*
+*/
+
+inherit "/system/huadeng/map/room_base";
+
+// 机关状态
+private int puzzle_solved = 0;
+// 机关类型
+private string puzzle_type;
+// 机关答案
+private mixed puzzle_answer;
+
+// 预先函数声明
+private void setup_puzzle();
+private string look_sign();
+
+void create()
+{
+    
+    // 随机选择机关类型
+    string *types = ({"color", "number", "word"});
+    ::create();
+    
+    // 修改房间描述
+    set("long", @LONG
+    这里的布置颇为特别，几盏造型独特的花灯排列成某种特定的图案。地上刻着
+    一些奇怪的符号，墙上挂着一块写满文字的牌子。这里似乎隐藏着某种机关，
+    需要仔细观察才能发现其中的奥秘。
+LONG);
+    
+    
+    puzzle_type = types[random(sizeof(types))];
+    
+    // 初始化机关
+    setup_puzzle();
+    
+    // 设置房间特有的物品描述
+    set("item_desc", ([
+    "花灯" : "这些花灯排列成特定的图案，似乎暗示着什么。\n",
+    "灯" : "这些花灯排列成特定的图案，似乎暗示着什么。\n",
+    "牌子" : (: look_sign :),
+    ]));
+}
+
+// 初始化机关
+private void setup_puzzle()
+{
+    switch(puzzle_type) {
+        case "color":
+        {
+            string *colors = ({"红", "黄", "蓝", "绿", "紫"});
+            puzzle_answer = colors[random(sizeof(colors))];
+            break;
+        }
+        case "number":
+        {
+            puzzle_answer = 1 + random(9);
+            break;
+        }
+        case "word":
+        {
+            string *words = ({"春", "夏", "秋", "冬", "福"});
+            puzzle_answer = words[random(sizeof(words))];
+            break;
+        }
+    }
+}
+
+// 查看牌子
+string look_sign()
+{
+    string msg = "牌子上写着：\n";
+    string hint;
+    
+    switch(puzzle_type) {
+        case "color":
+        msg += "    寻找与此处气息相合的颜色，方可开启机关。\n";
+        hint = "红、黄、蓝等";
+        break;
+        case "number":
+        msg += "    数灯而行，寻找正确的数字。\n";
+        hint = "1-9";
+        break;
+        case "word":
+        msg += "    花灯所示，藏有玄机，需道出其中真意。\n";
+        hint = "春、夏等";
+        break;
+    }
+    
+    if(puzzle_solved)
+        return popup_comb(msg + "\n这个机关已经被解开了。", ({"返回:look"}));
+    else
+        return popup_comb(msg + "\n提示：可以尝试输入" + hint,
+    ({"回答:answer_huadeng", "返回:look"}));
+}
+
+void init()
+{
+    ::init();
+    add_action("do_answer", "answer_huadeng");
+}
+
+int do_answer(string arg)
+{
+    object me = this_player();
+    object ob;
+    
+    if(!arg)
+    {
+        return notify_fail(popup_input("你要回答什么？", "answer_huadeng "));
+    }
+        // return notify_fail("你要回答什么？\n");
+
+    
+    if(puzzle_solved)
+        return notify_fail("这个机关已经被解开了。\n");
+    
+    // 检查答案
+
+    if(stringp(puzzle_answer) && arg == puzzle_answer ||
+    intp(puzzle_answer) && to_int(arg) == puzzle_answer) {
+        // 解开机关
+        puzzle_solved = 1;
+        
+        // 奖励玩家
+        ob = new_bind("/clone/aoyi_book/aoyi_book_canye");
+        ob->move(me);
+        
+        message_vision(HIY"$N说出了正确的答案，机关随即开启！"NOR"\n", me);
+        tell_object(me, HIY"你获得了一张" + ob->query("name") + "！"NOR"\n");
+        
+        // 额外奖励绑定元宝
+        me->add("yuanbao", 10);
+        tell_object(me, HIY"你获得了10点绑定元宝！"NOR"\n");
+        
+        return 1;
+    }
+    
+    message_vision("$N说出了一个答案，但似乎不太对。\n", me);
+    return 1;
+}
+
+// 重写搜索函数
+int do_search(string arg)
+{
+    object me = this_player();
+    
+    if(!puzzle_solved) {
+        tell_object(me, "这里似乎有机关，得先解开机关才能搜索。\n");
+        return 1;
+    }
+
+     //检查是否已经被搜索过
+     if(query("huadeng/search"))
+     {
+         return notify_fail("这里已经被搜索过了。\n");
+     }
+    
+    if(random(100) < 20) { // 20%的概率获得意境卷轴残页
+        object ob = new_bind("/clone/vip/tianfu_ganwu_suipian");
+        ob->move(me);
+        tell_object(me, HIY"你在花灯下发现了一张" + ob->query("name") + "！"NOR"\n");
+        //设置已经被搜索过了
+        set("huadeng/search", 1);
+        return 1;
+    }
+    
+    return ::do_search(arg);
+}

@@ -1,0 +1,551 @@
+// yaomo_npc.c
+// 妖魔 NPC 基类
+inherit NPC;
+
+#define YAOMO_D "/system/yaomo/yaomo_daemon"
+#define YAOMO_SKILL "/system/yaomo/skills/yaomo_skill"
+#define COMBAT_D "/adm/daemons/combatd"
+
+// 妖魔配置数据
+private mapping yaomo_config;
+
+// 妖魔技能列表
+private mapping* yaomo_skills;
+
+// 函数原型声明
+void setup_yaomo(mapping config);
+void setup_attributes(mapping config);
+void setup_combat_attributes(mapping config);
+void setup_basic_skills(mapping config);
+void load_yaomo_skills(string config_id);
+void cast_skill(object* enemy);
+void die();
+void heart_beat();
+
+/**
+ * @brief NPC创建函数
+ */
+void create()
+{
+    set("can_speak", 1);
+    set("is_yaomo", 1);
+
+    yaomo_config = ([]);
+    yaomo_skills = ({});
+}
+
+/**
+ * @brief 根据配置初始化妖魔
+ * @param mapping config 配置数据
+ * @details 根据JSON配置设置妖魔的所有属性
+ */
+void setup_yaomo(mapping config)
+{
+
+    if (!mapp(config))
+    {
+        error("YAOMO_NPC: 配置数据无效。\n");
+        return;
+    }
+
+    // 保存配置
+    yaomo_config = config;
+
+    // 设置基础信息
+    set_name(config["name"], config["name_id"]);
+
+    if (stringp(config["title"]))
+    {
+        set("title", config["title"]);
+    }
+
+    if (stringp(config["long"]))
+    {
+        set("long", config["long"]);
+    }
+
+    set("gender", config["gender"]);
+    set("age", config["age"]);
+    set("attitude", config["attitude"]);
+    set("level", config["level"]);
+
+    // 设置属性
+    setup_attributes(config);
+
+    // 设置战斗属性
+    setup_combat_attributes(config);
+
+    // 设置基础技能
+    setup_basic_skills(config);
+
+    // 加载妖魔技能
+    load_yaomo_skills(config["id"]);
+
+    // 设置为妖魔类型
+    set("race", "妖魔");
+    set("combat_exp", config["level"] * 100000);
+    setup();
+}
+
+/**
+ * @brief 设置基础四维属性
+ * @param mapping config 配置数据
+ * @details 根据配置设置臂力、悟性、根骨、身法
+ */
+void setup_attributes(mapping config)
+{
+    mapping base_attr;
+
+    base_attr = config["base_attributes"];
+
+    if (!mapp(base_attr))
+    {
+        return;
+    }
+
+    if (!undefinedp(base_attr["str"]))
+    {
+        set("str", base_attr["str"]);
+    }
+
+    if (!undefinedp(base_attr["int"]))
+    {
+        set("int", base_attr["int"]);
+    }
+
+    if (!undefinedp(base_attr["con"]))
+    {
+        set("con", base_attr["con"]);
+    }
+
+    if (!undefinedp(base_attr["dex"]))
+    {
+        set("dex", base_attr["dex"]);
+    }
+}
+
+/**
+ * @brief 设置战斗属性
+ * @param mapping config 配置数据
+ * @details 根据配置和等级计算气血、精神、内力、加力
+ */
+void setup_combat_attributes(mapping config)
+{
+    mapping combat_attr;
+    int level;
+    int qi;
+    int jing;
+    int neili;
+    int jiali;
+
+    level = config["level"];
+    combat_attr = config["combat_attributes"];
+
+    if (!mapp(combat_attr))
+    {
+        // 使用默认值
+        qi = level * 5000;
+        jing = level * 500;
+        neili = level * 100;
+        jiali = level * 10;
+    }
+    else
+    {
+        qi = combat_attr["qi"];
+        jing = combat_attr["jing"];
+        neili = combat_attr["neili"];
+        jiali = combat_attr["jiali"];
+    }
+
+    set("max_qi", qi);
+    set("eff_qi", qi);
+    set("qi", qi);
+
+    set("max_jing", jing);
+    set("eff_jing", jing);
+    set("jing", jing);
+
+    set("max_neili", neili);
+    set("neili", neili);
+
+    set("jiali", jiali);
+}
+
+/**
+ * @brief 设置基础技能
+ * @param mapping config 配置数据
+ * @details 妖魔只需要三个基础技能：内功、轻功、招架
+ */
+void setup_basic_skills(mapping config)
+{
+    mapping basic_skills;
+    int level;
+    int skill_level;
+
+    level = config["level"];
+    basic_skills = config["basic_skills"];
+
+    if (!mapp(basic_skills))
+    {
+        // 使用默认值：等级 × 10
+        skill_level = level * 10;
+        set_skill("force", skill_level);
+        set_skill("dodge", skill_level);
+        set_skill("parry", skill_level);
+    }
+    else
+    {
+        if (!undefinedp(basic_skills["force"]))
+        {
+            set_skill("force", basic_skills["force"]);
+        }
+
+        if (!undefinedp(basic_skills["dodge"]))
+        {
+            set_skill("dodge", basic_skills["dodge"]);
+        }
+
+        if (!undefinedp(basic_skills["parry"]))
+        {
+            set_skill("parry", basic_skills["parry"]);
+        }
+    }
+}
+
+/**
+ * @brief 加载妖魔技能
+ * @param string config_id 妖魔配置ID
+ * @details 从技能接口加载技能列表
+ */
+void load_yaomo_skills(string config_id)
+{
+    yaomo_skills = YAOMO_SKILL->load_skills(config_id);
+}
+
+/**
+ * @brief 心跳函数
+ * @details 处理战斗AI和技能释放
+ */
+void heart_beat()
+{
+    object* enemy;
+
+    ::heart_beat();
+
+    if (!living(this_object()))
+    {
+        return;
+    }
+
+    // 获取敌人列表
+    enemy = query_enemy();
+
+    if (!arrayp(enemy) || sizeof(enemy) == 0)
+    {
+        return;
+    }
+
+    // 尝试释放技能
+    cast_skill(enemy);
+
+}
+
+/**
+ * @brief 选择并释放技能
+ * @param object* enemy 敌人列表
+ * @details 根据优先级和条件选择合适的技能释放
+ */
+void cast_skill(object* enemy)
+{
+    mapping skill;
+
+    if (!arrayp(yaomo_skills) || sizeof(yaomo_skills) == 0)
+    {
+        return;
+    }
+
+    // 获取可用技能
+    skill = YAOMO_SKILL->query_available_skill(this_object(), yaomo_skills, enemy);
+
+    if (!mapp(skill))
+    {
+        return;
+    }
+
+    // 执行技能
+    YAOMO_SKILL->perform_skill(this_object(), skill, enemy);
+}
+
+
+/**
+ * @brief 处理妖魔死亡事件，包括确定击杀者、发放奖励和物品掉落
+ * @param object last_damage_from_ob 造成最后一次伤害的对象
+ * @return void 无返回值
+ * @details 该函数实现了妖魔死亡时的完整处理流程。首先通过三级优先级机制确定击杀者：
+ * 优先级1是造成最高伤害的对象，优先级2是最后一次伤害来源，优先级3是从敌人列表中随机选择。
+ * 确定击杀者后，会根据配置向击杀者发放经验值和潜能，并处理物品掉落（包括概率判断）。
+ * 最后广播死亡消息，清理妖魔身上的所有物品，并延迟删除妖魔对象。
+ * 这种设计确保了妖魔死亡时奖励分配的公平性和游戏体验的连贯性。
+ */
+void die(object last_damage_from_ob)
+{
+    object* all_inv;
+    mapping drops;
+    int exp;
+    int potential;
+    mapping* items;
+    int i;
+    int len;
+    string max_damage_id;
+    mapping damage_record;
+    object killer;
+
+    // 优先级1: 尝试获取造成最高伤害的对象
+    // if (!objectp(killer))
+    {
+        max_damage_id = query_max_damage_from();
+        if (stringp(max_damage_id))
+        {
+            // 从伤害记录中获取详细信息
+            damage_record = query_damage_record();
+            if (mapp(damage_record))
+            {
+                // 尝试在当前环境中查找该ID的对象
+                object* inv;
+                object* enemies;
+                int j;
+
+                // 先从敌人列表中查找
+                enemies = query_enemy();
+                if (arrayp(enemies))
+                {
+                    for (j = 0; j < sizeof(enemies); j++)
+                    {
+                        if (objectp(enemies[j]) && enemies[j]->query("id") == max_damage_id)
+                        {
+                            killer = enemies[j];
+                            break;
+                        }
+                    }
+                }
+
+                // 如果还没找到，尝试在环境中查找
+                if (!objectp(killer) && objectp(environment()))
+                {
+                    inv = all_inventory(environment());
+                    if (arrayp(inv))
+                    {
+                        for (j = 0; j < sizeof(inv); j++)
+                        {
+                            if (objectp(inv[j]) && inv[j]->query("id") == max_damage_id)
+                            {
+                                killer = inv[j];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 优先级2: 使用最后一次伤害来源
+    if (!objectp(killer))
+        killer = last_damage_from_ob || query_last_damage_from();
+
+    // 优先级3: 从敌人列表中随机选择
+    if (!objectp(killer))
+    {
+        object *enemies = query_enemy();
+        if (arrayp(enemies) && sizeof(enemies))
+            killer = enemies[random(sizeof(enemies))];
+    }
+
+    if (!objectp(killer) || !userp(killer))
+    {
+        ::die();
+        return;
+    }
+
+    // 获取掉落配置
+    drops = yaomo_config["drops"];
+
+    if (mapp(drops))
+    {
+        // 发放经验
+        exp = drops["exp"];
+        if (intp(exp) && exp > 0)
+        {
+            killer->add("combat_exp", exp);
+            tell_object(killer, HIG "你击败了" + name() + "，获得了 " + exp + " 点经验！\n" NOR);
+        }
+
+        // 发放潜能
+        potential = drops["potential"];
+        if (intp(potential) && potential > 0)
+        {
+            killer->add("potential", potential);
+            tell_object(killer, HIC "你击败了" + name() + "，获得了 " + potential + " 点潜能！\n" NOR);
+        }
+
+        // 处理物品掉落
+        items = drops["items"];
+        if (arrayp(items) && sizeof(items) > 0)
+        {
+            len = sizeof(items);
+
+            for (i = 0; i < len; i++)
+            {
+                mapping item;
+                string item_path;
+                int chance;
+                int amount;
+                object item_ob;
+
+                item = items[i];
+
+                if (!mapp(item))
+                {
+                    continue;
+                }
+
+                item_path = item["path"];
+                chance = item["chance"];
+                amount = item["amount"];
+
+                // 判断掉落概率
+                if (random(100) >= chance)
+                {
+                    continue;
+                }
+
+                // 创建物品
+                if (!stringp(item_path))
+                {
+                    continue;
+                }
+
+                catch(item_ob = new_bind(item_path));
+
+                if (objectp(item_ob))
+                {
+                    // 如果是可叠加物品，设置数量
+                    if (item_ob->query_amount())
+                    {
+                        item_ob->set_amount(amount);
+                    }
+
+                    // 直接移动到玩家身上
+                    item_ob->move(killer);
+                    tell_object(killer, HIY + name() + " 掉落了" + item_ob->short() + "！\n" NOR);
+                }
+            }
+        }
+    }
+
+    // 广播死亡消息
+    message_vision(HIR "\n$N发出一声凄厉的嚎叫，轰然倒地，化作一团黑气消散了！\n\n" NOR, this_object());
+
+    // 清理所有物品
+    all_inv = all_inventory(this_object());
+    if (arrayp(all_inv))
+    {
+        len = sizeof(all_inv);
+        for (i = 0; i < len; i++)
+        {
+            if (objectp(all_inv[i]))
+            {
+                destruct(all_inv[i]);
+            }
+        }
+    }
+
+    // 延迟删除妖魔对象
+    call_out("destruct_yaomo", 1);
+}
+
+/**
+ * @brief 删除妖魔对象
+ * @details 延迟删除，避免立即删除导致的问题
+ */
+void destruct_yaomo()
+{
+    if (objectp(this_object()))
+    {
+        destruct(this_object());
+    }
+}
+
+/**
+ * @brief 查询妖魔配置
+ * @return mapping 妖魔配置数据
+ */
+mapping query_yaomo_config()
+{
+    return yaomo_config;
+}
+
+/**
+ * @brief 查询妖魔技能列表
+ * @return mapping* 妖魔技能列表
+ */
+mapping* query_yaomo_skills()
+{
+    return yaomo_skills;
+}
+
+/**
+ * @brief 接受战斗
+ * @param object who 挑战者
+ * @return int 1表示接受，0表示拒绝
+ * @details 妖魔根据态度决定是否接受战斗
+ */
+int accept_fight(object who)
+{
+    string attitude;
+
+    attitude = query("attitude");
+
+    if (attitude == "aggressive")
+    {
+        command("say 哼！胆敢挑衅本尊，找死！");
+        kill_ob(who);
+        return 1;
+    }
+
+    return ::accept_fight(who);
+}
+
+/**
+ * @brief 接受攻击
+ * @param object who 攻击者
+ * @return int 1表示接受，0表示拒绝
+ * @details 妖魔被攻击时自动反击
+ */
+int accept_hit(object who)
+{
+    string attitude;
+
+    attitude = query("attitude");
+
+    if (attitude == "aggressive")
+    {
+        command("say 找死！");
+        kill_ob(who);
+        return 1;
+    }
+
+    return ::accept_hit(who);
+}
+
+/**
+ * @brief 接受杀死
+ * @param object who 攻击者
+ * @return int 1表示接受
+ * @details 妖魔被杀死时的处理
+ */
+int accept_kill(object who)
+{
+    command("say 今日便让你见识本尊的真正实力！");
+    return 1;
+}

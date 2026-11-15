@@ -1,0 +1,288 @@
+// practice.c
+
+
+#include <command.h>
+
+inherit F_CLEAN_UP;
+int special_add(object me,string skill);
+
+void create() { seteuid(getuid()); }
+
+void auto_lian(object me,string skill,int times)
+{
+	if(!me||!me->query_temp("pending/auto_lian"))
+	{
+		return;
+	}
+
+	if(me->is_busy())
+	{
+		call_out("auto_lian",1,me,skill,times);
+		return;
+	}
+
+	message("vision",me->name()+"盘膝坐下，开始自动练习。\n",environment(me),({me}));
+
+	// 最大内力小于100，终止
+	if (me->query("max_neili")<100)
+	{
+		tell_object(me,"你的最大内力不足100，内力质量不足以自动恢复气血，强行练习有昏迷危险，已为您终止，请先提升内力。\n");
+		me->delete_temp("pending/auto_lian");
+		return;
+	}
+
+	else if(me->query("neili") < me->query("max_neili"))
+	{
+		// 我是否有内丹药力，如果有neidan_number则消耗内丹
+		if (me->query("neidan_number") > 0)
+		{
+			me->add("neili",me->query("max_neili"));
+			me->add("neidan_number",-me->query("max_neili"));
+
+			if (me->query("neidan_number") < 0)
+			{
+				me->set("neidan_number",0);
+			}
+
+			tell_object(me,HIR"你运转内力，消耗内丹，恢复内力。\n"NOR);
+		}
+		else
+		//如果我拥有qiankun lingbei并且经验少于1000000，自动使用
+		if (present("qiankun lingbei",me) && me->query("combat_exp")<3000000)
+		{
+			me->force_me("use qiankun lingbei");
+		}
+		else
+		//如果我有huxin dan并且经验少于200万，自动使用
+		if (present("huxin dan",me) && me->query("combat_exp")<2000000 &&!me->query_condition("medicine"))
+		{
+			me->force_me("use huxin dan");
+		}
+		else
+		{
+			me->force_me("dazuo " + (me->query("max_qi") - 1));
+		}
+
+        me->force_me("exert recover");
+        me->force_me("exert regenerate");
+
+		call_out("auto_lian",2,me,skill,times);
+	}
+	else if( (int)me->query("qi") < me->query("eff_qi"))
+	{
+		if (SKILL_D("force/recover")->exert(me, me))
+		{
+            me->force_me("exert regenerate");
+			if( (int)me->query("qi") *100/ me->query("eff_qi")<90)
+			{
+				tell_object(me,"气血不足，等待恢复中。。。\n");
+				call_out("auto_lian",2,me,skill,times);
+			}
+			else
+			{
+				call_out("auto_lian",2,me,skill,times);
+			}
+		}
+		else
+		{
+			tell_object(me,"气血不足，休息中(如果频繁出现此消息请查看自身是否有伤势，有伤势请先治疗)。。。\n");
+			call_out("auto_lian",5,me,skill,times);
+		}
+	}
+	else
+	{
+		tell_object(me,"托管中，继续练习。。。。。。\n");
+		me->force_me("lian "+skill+" "+times);
+	}
+}
+
+int main(object me, string arg)
+{
+	object where = environment(me);
+	string skillname;
+	string base_skname;
+	int skill, skill_basic, times, i;
+	int t = time();
+
+	// message("vision",me->name()+"测试222222。\n",environment(me),({me}));
+
+	if (where->query("pigging"))
+		return notify_fail("你还是专心拱猪吧！\n");
+
+	if (me->is_busy())
+		return notify_fail("你现在正忙着呢。\n");
+
+	if (t == me->query_temp("time/practice"))
+		return notify_fail("你刚刚才练习过（如果你要连续练习，可以指明练习的次数）。\n");
+
+	if (me->is_fighting())
+		return notify_fail("你已经在战斗中了，学一点实战经验吧。\n");
+
+	if ((environment(me)->query("no_learn") || environment(me)->query("no_fight")) && !environment(me)->query("bangpai_room"))
+		return notify_fail("你无法在这个地方安心练习。\n");
+
+	if (! arg) return (__DIR__"enable")->main(me, arg);
+
+	if ((sscanf(arg, "%s %d", base_skname, times) != 2))
+	{
+		base_skname = arg;
+		times = 100;
+		// return notify_fail(INPUTTXT("请输入练习次数：","lian "+arg+" $txt#")+"\n");
+	}
+
+	times = 100;
+	    
+	if (times < 1 || times > 1000000)
+		return notify_fail("练习次数必须大于1次，但不能超过1000000次。\n");
+
+	if (! stringp(skillname = me->query_skill_mapped(base_skname)))
+		return notify_fail("你只能练习用 enable 指定的特殊技能。\n");
+
+	skill_basic = me->query_skill(base_skname, 1);
+	skill = me->query_skill(skillname, 1);
+	if (skill < 1)
+		return notify_fail("你好像还没有学过这项技能吧？最好先去请教别人。\n");
+
+	if (skill_basic < 1)
+		return notify_fail("你对这方面的技能还是一窍不通，最好从先从基本学起。\n");
+
+	if (skill_basic <= skill)
+		return notify_fail("你的" + to_chinese(base_skname) + "火候不够，难以继续提升你" + to_chinese(skillname) + "的水平。\n");
+
+	notify_fail("你现在不能练习这项技能。\n");
+	if (! SKILL_D(skillname)->valid_learn(me)) return 0;
+
+	if (! XUE_CMD->can_learn(me, skillname))
+		return 0;
+
+	notify_fail("你试着练习" + to_chinese(skillname) + "，但是并没有任何进步。\n");
+	if (! me->can_improve_skill(skillname))
+		return notify_fail("也许是缺乏实战经验，你的练习总没法进步。\n");
+
+	me->set_temp("pending/auto_lian",1);
+	me->set_temp("time/practice", t);
+
+	for (i = 0; i < times; i++)
+	{
+		int tmpi;
+		tmpi = (skill_basic / 5 + 1);
+		if(where->query("practice_room"))
+		{
+			if(me->query_condition("db_exp"))
+				tmpi *= 2;
+			else
+				tmpi = tmpi*6/5;
+		}
+		if (SKILL_D(skillname)->practice_skill(me))
+		{
+
+			if (special_add(me,base_skname) > 0)
+				tmpi += special_add(me,base_skname) * tmpi / 100;
+
+			me->improve_skill(skillname, tmpi,skill_basic > skill? 0: 1);
+		}
+		else
+		{ 
+			break;
+		}
+	}
+
+	if (i == 0)
+	{
+		// 通常为0的情况是武器不对，直接返回0，这个时候会调用practice_skill的信息
+		return 0;
+	}
+
+	write(HIC "你试着把" + to_chinese(skillname) + "练了" + chinese_number(i)+"趟。"NOR"\n");
+	
+	if (me->query_temp("pending/auto_lian"))
+	{
+		call_out("auto_lian",1,me,base_skname,100);
+	}
+
+
+	return 1;
+}
+
+int special_add(object me,string skill)
+{
+	mapping vip_privileges;
+	string *s1 = ({
+		"unarmed",//基本拳脚
+		"cuff",//基本拳法
+		"strike",//基本掌法
+		"finger",//基本指法
+		"hand",//基本手法
+		"claw",//基本爪法
+		"sword",//基本剑法
+		"blade",//基本刀法
+		"staff",//基本丈法
+		"hammer",//基本锤法
+		"club",//基本棍法
+		"whip",//基本鞭法
+	});
+	int vip_level = "/cmds/usr/new_fanli"->get_vip_level(me);
+	int d = 0;
+    
+	// 检查练习速度BUFF
+	mapping practice_buff = me->query("practice_buff");
+	
+	// 获取vip等级 根据vip等级 增加练习速度   
+	// 根据VIP等级增加练习速度
+    vip_privileges = "/cmds/usr/new_fanli"->get_vip_privileges();
+    if (vip_level > 0 && vip_level <= sizeof(vip_privileges))
+    {
+        d += vip_privileges[vip_level]["practice_speed"];
+    }
+
+
+	// 处理天生灵巧的练习速度逻辑
+	if (skill == "dodge" && me->query("special_skill/tian_sheng_ling_qiao"))
+	{
+		int level = TALNET_MASTER->query_talnet_level(me, "tian_sheng_ling_qiao");
+		d += 20 * level;
+	}
+
+	// 处理招架好手的练习速度逻辑
+	if (skill == "parry" && me->query("special_skill/zhao_jia_hao_shou"))
+	{
+		int level = TALNET_MASTER->query_talnet_level(me, "zhao_jia_hao_shou");
+		d += 20 * level;
+	}
+
+	if (practice_buff && time() < practice_buff["end_time"])
+	{
+		int buff_effect = practice_buff["effect"];
+		d = (d > buff_effect) ? d : buff_effect;
+	}
+
+	foreach (string skill_id in s1)
+	{
+		if (!SKILL_D(skill)->valid_enable(skill_id) && skill_id != skill)
+			continue;
+
+		if (TALNET_MASTER->query_talnet_level(me,"t" + skill_id))
+		{
+			return 15 * TALNET_MASTER->query_talnet_level(me,"t" + skill_id) + d;
+		}
+	}
+
+    
+   return d;
+}
+
+int help(object me)
+{
+	write(@TEXT
+指令格式：practice|lian <技能种类> <次数>
+
+这个指令让你练习某个种类的技能，这个技能必须是经过 enable 的专业技能。
+
+如果你对这方面的基本技能够高，可以经由练习直接升级，而且升级的上限只跟
+你基本技能的等级有关，换句话说，勤加练习是使你的所学「青出于蓝胜于蓝」
+的唯一途径，当然，在这之前你必须从实际运用中获得足够的经验以提升你的基
+本技能。
+TEXT );
+	return 1;
+}
+

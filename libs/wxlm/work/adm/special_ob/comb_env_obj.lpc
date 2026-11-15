@@ -1,0 +1,112 @@
+
+
+mixed present_obj_list(string obj_id,object env);
+
+//全局变量，用来存储一个环境中所有指定物品的列表
+mixed *obj_list = ({});
+int obj_amount = 0;
+
+void destruct_self()
+{
+    destruct(this_object());
+}
+
+varargs void create(string obj_id,object env)
+{
+    if (obj_id && env)
+    {
+        present_obj_list(obj_id,env);
+    }
+
+    //1秒后自动销毁
+    call_out("destruct_self", 1);
+}
+
+//获取一个环境中所有指定物品的列表
+//其中obj_id是物品的id，env是查询的环境
+mixed present_obj_list(string obj_id,object env)
+{
+    object *env_objs = all_inventory(env);
+
+
+    if (!sizeof(env_objs))
+    {
+        return 0;
+    }
+
+    obj_list = ({ });
+
+    foreach(object obj in env_objs)
+    {
+        if(obj->query("id") == obj_id)
+        {
+            obj_list += ({ obj });
+            obj_amount += obj->query_amount();
+        }
+    }
+
+	if (!sizeof(obj_list) || obj_amount == 0)
+	{
+		return 0;
+	}
+
+    return obj_list;
+}
+
+//返回所有可叠加物品的数量
+int query_amount()
+{
+    return obj_amount;
+}
+
+/**
+ * @brief 扣除一个环境中指定物品的数量。
+ * 
+ * 详细描述：
+ * 比如我有两个同一id的可叠加物品，我扣除10个，那么有物品A和物品B，
+ * 假设物品A足够10个，那么物品A会扣除10个，物品B会扣除0个。
+ * 如果物品A不够10个，那么物品A会扣除所有物品A的数量，物品B会扣除10-物品A数量的数量。
+ * 
+ * @param obj_id  物品的id
+ * @param amount  需要扣除的数量
+ * @param env     物品所在的环境
+ * @return int    实际扣除的物品数量，如果环境内没有该物品则返回0
+ */
+int deduct_amount(int amount)
+{
+    int deduct_amount;
+    int remaining_amount;
+    object obj;
+
+
+    if (!obj_list)
+    {
+        return 0;
+    }
+
+    deduct_amount = 0;
+    remaining_amount = amount;
+
+    foreach (obj in obj_list)
+    {
+        if (remaining_amount <= 0)
+        {
+            break; // 如果剩余需要扣除的数量为0，则跳出循环
+        }
+
+        if (obj->query_amount() >= remaining_amount)
+        {
+            obj->add_amount(-remaining_amount);
+            deduct_amount += remaining_amount;
+            remaining_amount = 0;
+        }
+        else
+        {
+            deduct_amount += obj->query_amount();
+            remaining_amount -= obj->query_amount();
+            obj->add_amount(-obj->query_amount());
+        }
+    }
+
+    return deduct_amount;
+}

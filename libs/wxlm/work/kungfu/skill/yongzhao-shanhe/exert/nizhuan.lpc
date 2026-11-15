@@ -1,0 +1,118 @@
+// nizhuan.c 逆转乾坤
+
+inherit F_CLEAN_UP;
+
+/**
+ * @brief 获取绝技名称
+ * @return string 绝技显示名称
+ */
+string query_name() { return "逆转"ZJBR"乾坤"; }
+
+/**
+ * @brief 逆转乾坤内功绝技
+ * @param object me 使用者
+ * @param object target 目标对象
+ * @return int 1表示成功，0表示失败
+ * @details 利用阴阳转换之道，吸取敌人内力补充自身，逆转战局
+ */
+int exert(object me, object target)
+{
+    int skill;
+    int my_force, target_force;
+    int absorb_amount;
+    int mo_level;
+    string msg;
+
+    if (!target)
+    {
+        me->clean_up_enemy();
+        target = me->select_opponent();
+    }
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail("「逆转乾坤」只能对战斗中的对手使用。\n");
+
+    if ((int)me->query("neili") < 400)
+        return notify_fail("你的内力不够。\n");
+
+    if (me->query_skill("yongzhao-shanhe", 1) < 240)
+        return notify_fail("你的永照山河经修为不够，无法施展「逆转乾坤」。\n");
+
+    if (me->query_skill_mapped("force") != "yongzhao-shanhe")
+        return notify_fail("你现在没有激发永照山河经为内功，难以施展「逆转乾坤」。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    skill = me->query_skill("force");
+    mo_level = COMBAT_D->get_skill_aoyi_level(me, "魔血染刀");
+
+    message_combatd(HIM "$N" HIM "双手画圆，阴阳二气在掌心流转，顿时"
+                    HIW "乾坤逆转" HIM "，要将$n" HIM "的内力挪移过来！\n" NOR, me, target);
+
+    me->add("neili", -400);
+    me->start_busy(2);
+
+    // 计算内功对比
+    my_force = me->query_skill("force") + me->query("max_neili") / 50;
+    target_force = target->query_skill("force") + target->query("max_neili") / 50;
+
+    // 魔血染刀意境增强吸取能力
+    if (mo_level > 0)
+    {
+        my_force += mo_level * 20;
+        message_combatd(HIR "$N" HIR "体内魔血染刀奥义运转，吸取之力大增！\n" NOR, me, target);
+    }
+
+    if (my_force > target_force / 2 + random(target_force))
+    {
+        // 成功吸取内力
+        absorb_amount = (my_force - target_force) / 3 + skill / 5;
+
+        // 限制吸取量
+        if (absorb_amount > target->query("neili"))
+            absorb_amount = target->query("neili");
+
+        if (absorb_amount > me->query("max_neili") / 5)
+            absorb_amount = me->query("max_neili") / 5;
+
+        // 魔血染刀增加吸取量
+        if (mo_level > 0)
+        {
+            absorb_amount += mo_level * 10;
+        }
+
+        target->add("neili", -absorb_amount);
+        me->add("neili", absorb_amount * 3 / 4); // 转换损耗
+
+        msg = HIB "$N" HIB "乾坤逆转，阴阳挪移，$n" HIB "的内力被强行吸取过来！\n"
+              "「$n" HIB "失去" + absorb_amount + "点内力，$N" HIB "获得" + absorb_amount * 3 / 4 + "点内力」\n" NOR;
+
+        // 额外效果：如果吸取成功，有几率造成对方忙乱
+        if (absorb_amount > 100 && random(3) == 0)
+        {
+            target->start_busy(2 + mo_level / 3);
+            msg += HIY "$n" HIY "内力被夺，一时间气息不稳，动作迟缓！\n" NOR;
+        }
+
+        message_combatd(msg, me, target);
+
+        // 确保内力不超限
+        if (me->query("neili") > me->query("max_neili"))
+            me->set("neili", me->query("max_neili"));
+
+        if (target->query("neili") < 0)
+            target->set("neili", 0);
+    }
+    else
+    {
+        msg = HIG "$n" HIG "内功深厚，稳如磐石，$N" HIG "的逆转乾坤竟然无法撼动分毫！\n" NOR;
+        message_combatd(msg, me, target);
+
+        // 失败惩罚
+        me->add("neili", -100);
+        me->start_busy(1);
+    }
+
+    return 1;
+}

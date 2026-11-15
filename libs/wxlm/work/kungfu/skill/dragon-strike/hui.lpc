@@ -1,0 +1,247 @@
+/**
+ * @file hui.c
+ * @author Lu dexiang
+ * @brief 镇岳锁龙劲之「降龙有悔」绝招
+ * @version 1.0
+ * @date 2024-03-20
+ */
+
+#include <combat.h>
+inherit F_SSERVER;
+
+// 技能配置
+nosave mapping SKILL_CONFIG = ([
+    "name": ([ 
+        "zh": "降龙有悔",
+        "en": "dragon regret strike"
+    ]),
+    "requirements": ([
+        "force": 150,        // 内功要求
+        "dragon-strike": 150, // 镇岳锁龙劲要求
+        "max_neili": 5000,   // 最大内力要求
+        "neili_cost": 1000   // 内力消耗
+    ]),
+    "attack": ([
+        "first": ([  // 第一掌
+            "str_factor": 5,    // 膂力加成
+            "damage_ratio": 75   // 伤害比例
+        ]),
+        "second": ([ // 第二掌
+            "str_factor": 5,    // 膂力加成
+            "damage_ratio": 85   // 伤害比例
+        ]),
+        "third": ([  // 第三掌
+            "str_factor": 5,    // 膂力加成
+            "damage_ratio": 95   // 伤害比例
+        ])
+    ])
+]);
+
+string name() { return HIR "降龙有悔" NOR; }
+string query_name() { return "降龙有悔"; }
+string *pfm_type() { return ({ "strike", }); }
+
+// 检查使用条件
+private int check_conditions(object me, object target)
+{
+    mapping requirements = SKILL_CONFIG["requirements"];
+    
+    if (!target || !me->is_fighting(target))
+        return notify_fail(name() + "只能对战斗中的对手使用。\n");
+
+    if (query_temp("weapon", me) || query_temp("secondary_weapon", me))
+        return notify_fail(name() + "只能空手使用。\n");
+
+    if (me->query_skill("force") < requirements["force"])
+        return notify_fail("你内功修为不够，难以施展" + name() + "。\n");
+
+    if (query("max_neili", me) < requirements["max_neili"])
+        return notify_fail("你内力修为不够，难以施展" + name() + "。\n");
+
+    if (me->query_skill("dragon-strike", 1) < requirements["dragon-strike"])
+        return notify_fail("你镇岳锁龙劲火候不够，难以施展" + name() + "。\n");
+
+    if (me->query_skill_mapped("strike") != "dragon-strike")
+        return notify_fail("你没有激发镇岳锁龙劲，难以施展" + name() + "。\n");
+
+    if (me->query_skill_prepared("strike") != "dragon-strike")
+        return notify_fail("你没有准备镇岳锁龙劲，难以施展" + name() + "。\n");
+
+    if (query("neili", me) < requirements["neili_cost"])
+        return notify_fail("你现在真气不够，难以施展" + name() + "。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    return 1;
+}
+
+/**
+ * @brief 计算攻击力
+ * @param object me 攻击者
+ * @param object target 目标
+ * @param string phase 攻击阶段("first", "second", "third")
+ * @return int 计算后的攻击力
+ * @details 根据不同阶段的配置计算攻击力，包括膂力、悟性、根骨等加成
+ */
+private int calc_attack_power(object me, object target, string phase)
+{
+    int ap = attack_power(me, "strike");
+    mapping attack = SKILL_CONFIG["attack"][phase];
+    
+    // 膂力加成（所有阶段都有）
+    ap += me->query_str() * attack["str_factor"];
+
+    // 后天膂力或角力比拼成功增加20%命中
+    if (me->query_str() > target->query_str() || 
+        COMBAT_D->judge_power(me, target))
+    {
+        ap += ap / 5;
+    }
+
+    // PVE命中增强50%
+    if (!userp(target))
+    {
+        ap += ap / 5;
+    }
+
+    
+    return ap;
+}
+
+// 计算伤害值
+private int calc_damage(object me,object target)
+{
+    int damage = damage_power(me, "strike");
+    // 每层意境增伤10%
+    int aoyi_level = COMBAT_D->get_skill_aoyi_level(me, "龙战于野");
+    damage += query("jiali", me);
+
+    if (aoyi_level)
+    {
+        // 赋予降龙击，造成伤害：(掌法激发等级 / 6 + 后天臂力) * 根本法激发等级
+        int strike_level = me->query_skill("strike");
+        int str = me->query_str();
+        
+        // 计算额外伤害
+        int extra_damage = (strike_level / 6 + str) * aoyi_level;
+        
+        // 将额外伤害加入总伤害
+        damage += extra_damage;
+        
+        tell_object(me, HIY "你的「龙战于野」意境融入降龙有悔招式中，掌力中蕴含着如同巨龙般的威势，形成了强大的「降龙击」，威力更盛！\n" NOR);
+
+
+    }
+
+    //pve伤害增加20%
+    if (!playerp(target))
+    {
+        damage += damage / 5;
+    }
+
+    return damage;
+}
+
+// 执行单次攻击
+private void do_attack(object me, object target, int ap, int dp, int damage, 
+                      string phase, string success_msg, string fail_msg)
+{
+    string msg;
+    mapping attack = SKILL_CONFIG["attack"][phase];
+
+    if (COMBAT_D->hit_determination(me,target,ap,dp))
+    {
+        msg = COMBAT_D->do_damage(me, target, UNARMED_ATTACK, damage, 
+                                attack["damage_ratio"], success_msg);
+    }
+    else
+    {
+        msg = fail_msg;
+    }
+    
+    message_combatd(msg, me, target);
+}
+
+int perform(object me, object target)
+{
+    int ap, dp, damage;
+
+    if (!target) target = offensive_target(me);
+    if (!check_conditions(me, target)) return 0;
+
+    // 计算基础伤害值
+    damage = calc_damage(me,target);
+    
+    // 第一掌
+    ap = calc_attack_power(me, target, "first");
+    dp = defense_power(target, "parry") + 
+         target->query_str() * SKILL_CONFIG["attack"]["first"]["str_factor"];
+
+    message_combatd(sort_msg(HIW "\n忽然间$N" HIW "身形激进，左手一划，右手呼的一掌，便"
+                   "向$n" HIW "击去，正是镇岳锁龙劲「" NOR + HIY "降龙有悔" NOR
+                   + HIW "」一招，力自掌生之际说到便到，以排山倒海之势向$n" HIW
+                   "狂涌而去，当真石破天惊，威力无比。\n" NOR), me, target);
+
+    do_attack(me, target, ap, dp, damage, "first",
+             HIR "$p" HIR "一楞，只见$P" HIR "身形一闪，已晃至自己跟前，躲闪不及，被击个正中。\n:内伤@?",
+             HIC "$p" HIC "气贯双臂，凝神应对，游刃有余，$P" HIC "掌力如泥牛入海，尽数卸去。\n" NOR);
+
+    // 第二掌
+    ap = calc_attack_power(me, target, "second");
+    dp = defense_power(target, "parry") + 
+         target->query_str() * SKILL_CONFIG["attack"]["second"]["str_factor"];
+
+    message_combatd(sort_msg(HIW "\n$N" HIW "一掌既出，身子已然抢到离$n" HIW "三四丈之外"
+                   "，后掌推前掌，两股掌力道合并，又是一招「" NOR + HIY "降龙有悔" NOR 
+                   + HIW "」攻出，掌力犹如怒潮狂涌，势不可当。霎时$n" HIW "便觉气息窒滞，立足不稳。\n" NOR), 
+                   me, target);
+
+    do_attack(me, target, ap, dp, damage, "second",
+             HIR "只听$p" HIR "一声惨嚎，被$P" HIR "一掌击中胸前，“喀嚓喀嚓”断了几根肋骨。?",
+             HIC "$p" HIC "气贯双臂，凝神应对，游刃有余，$P" HIC "掌力如泥牛入海，尽数卸去。\n" NOR);
+
+    // 第三掌
+    ap = calc_attack_power(me, target, "third");
+    dp = defense_power(target, "force") + 
+         target->query_str() * SKILL_CONFIG["attack"]["third"]["str_factor"];
+
+    message_combatd(sort_msg(HIW "\n紧跟着$N" HIW "一声暴喝，右掌斜斜挥出，前招掌力未消"
+                   "，此招掌力又到，竟然又攻出一招「" NOR + HIY "降龙有悔" NOR
+                   + HIW "」，掌夹风势，势如破竹，便如一堵无形气墙，向前疾冲而去。$n" 
+                   HIW "只觉气血翻涌，气息沉浊。\n" NOR), me, target);
+
+    do_attack(me, target, ap, dp, damage, "third",
+             HIR "结果$p" HIR "躲闪不及，$P" HIR "的掌劲顿时穿胸而过，“哇”的喷出一大口鲜血。\n:内伤@?",
+             HIC "$p" HIC "见这招来势凶猛，身形疾退，瞬间飘出三丈，脱出$P" HIC "掌力之外。\n" NOR);
+
+    // 消耗内力并进入忙乱状态
+    addn("neili", -(400 + random(600)), me);
+    me->start_busy(2 + random(2));
+    
+    return 1;
+}
+
+// 技能说明
+string query_txt()
+{
+    return @DESC
+招式简介：
+「降龙有悔」是镇岳锁龙劲中的一种高深技巧，通过连续三次掌击，对敌人造成巨大伤害。
+此招要求施术者具有深厚的内功修为与足够的膂力支撑。
+
+施展条件：
+1. 镇岳锁龙劲等级 240+
+2. 内功等级 260+
+3. 最大内力 5000+
+4. 当前内力 1000+
+5. 必须空手
+6. 目标必须存活且在战斗中
+
+特殊效果：
+1. 「龙战于野」意境每层增伤10%
+2. 角力成功时攻击力+20%
+3. PVE时命中+10%
+
+DESC;
+}

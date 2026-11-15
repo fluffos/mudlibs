@@ -1,0 +1,144 @@
+// /clone/baoshi/armor_opener.c
+
+
+inherit COMBINED_ITEM;
+
+void create()
+{
+    set_name(HIW "防具开孔符" NOR, ({"armor opener", "opener", "fu"}));
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", "这是一张神奇的符箓，可以给防具开孔。\n");
+        set("unit", "张");
+        set("base_unit", "张");
+        set("base_weight", 1);
+        set("base_value", 10000);
+        set("yuanbao", 100);
+        set("no_bind_shop", 1);//绑定商城不能购买
+        set("no_sell", 1);
+        set("no_drop", 1);
+        set("no_shop", 1);
+        set("no_give", 1);
+        set("action_list", ([
+            "选择防具" : "open_armor",
+        ]));
+    }
+    set_amount(1);
+    setup();
+}
+
+int do_open_armor(string arg)
+{
+    object me = this_player();
+    object obj;
+    mapping hole_info;
+    int holes, quality, enhance;
+    string msg;
+
+    return notify_fail("效果已取消。\n");
+
+    if (!arg)
+    {
+        object *inv = filter(all_inventory(me), (: $1->is_item_make() && !$1->is_unarmed_weapon() && !$1->is_weapon() :));
+        if (!sizeof(inv))
+            return notify_fail("你身上没有可以开孔的自制防具。\n");
+
+        msg = ZJOBLONG"请选择要开孔的防具：\n"ZJOBACTS2+ZJMENUF(3,3,10,30);
+        for (int i = 0; i < sizeof(inv); i++)
+        {
+            msg += sprintf("%s:open_armor %s", inv[i]->name(), inv[i]->query("id"));
+            if (i < sizeof(inv) - 1) msg += ZJSEP;
+        }
+        write(msg + "\n");
+        return 1;
+    }
+
+    if (!(obj = present(arg, me)))
+        return notify_fail("你身上没有这件防具。\n");
+
+    if (!obj->is_item_make() || obj->is_unarmed_weapon() || obj->is_weapon())
+        return notify_fail("开孔符只能用于自制防具。\n");
+
+    if(obj->item_owner() != me->query("id"))
+        return notify_fail(obj->name() + "不需要你来操心吧！\n");
+
+    hole_info = obj->query("hole_info") || ([]);
+    holes = hole_info["holes"] || 0;
+    quality = obj->query("quality") || 0;
+    enhance = obj->new_armor_level() || 0;
+
+    if (holes >= 5)
+        return notify_fail("这件防具已经开了5个孔，无法再开了。\n");
+
+    switch (holes)
+    {
+    case 0:
+        hole_info["holes"] = 1;
+        hole_info["max_level"] = 1;
+        break;
+    case 1:
+        if (quality < 5 || enhance < 3)
+            return notify_fail("防具品质需要强化到5级，强化等级需要达到3级才能开第二个孔。\n");
+        hole_info["holes"] = 2;
+        hole_info["max_level"] = 3;
+        break;
+    case 2:
+        if (quality < 10 || enhance < 5)
+            return notify_fail("防具品质需要强化到10级，强化等级需要达到5级才能开第三个孔。\n");
+        hole_info["holes"] = 3;
+        hole_info["max_level"] = 5;
+        break;
+    case 3:
+        if (quality < 15 || enhance < 7)
+            return notify_fail("防具品质需要强化到15级，强化等级需要达到7级才能开第四个孔。\n");
+        hole_info["holes"] = 4;
+        hole_info["max_level"] = 7;
+        break;
+    case 4:
+        if (quality < 20 || enhance < 9)
+            return notify_fail("防具品质需要强化到20级，强化等级需要达到9级才能开第五个孔。\n");
+        hole_info["holes"] = 5;
+        hole_info["max_level"] = 10;
+        break;
+    }
+
+    obj->set("hole_info", hole_info);
+
+    message_vision(HIW "$N" HIW "将一张$n" HIW "贴在" + obj->name() + HIW "上，只见白光闪烁，" + obj->name() + HIW "上多了一个孔！\n" NOR, me, this_object());
+    tell_object(me, HIG "你的" + obj->name() + HIG "现在有了 " + hole_info["holes"] + " 个孔。\n" NOR);
+
+    // 保存防具数据
+    obj->save();
+
+    // 记录日志
+    log_file("static/armor_open", sprintf("%s %s opened hole %d on %s (%s)\n", 
+             ctime(time()), me->query("name"), holes + 1, obj->name(), file_name(obj)));
+
+    add_amount(-1);
+    if (query_amount() < 1)
+        destruct(this_object());
+
+    return 1;
+}
+
+void init()
+{
+    add_action("do_open_armor", "open_armor");
+}
+
+string query_autoload() { return query_amount() + ""; }
+
+void autoload(string param)
+{
+    int amt = atoi(param);
+    if (amt > 0)
+        set_amount(amt);
+}
+
+string query_long()
+{
+    string str = query("long");
+    str += "当前剩余数量：" + query_amount() + "张。\n";
+    return str;
+}

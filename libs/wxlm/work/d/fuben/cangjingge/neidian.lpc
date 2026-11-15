@@ -1,0 +1,119 @@
+// Room: neidian.c
+
+inherit ROOM;
+
+int do_interact(string arg);
+
+void create()
+{
+    set("short", "藏经阁内殿");
+    set("long", @LONG
+这里是藏经阁的内殿，四周墙壁全部是精致的红木书架，上面摆满了各种经书和武
+学秘籍。殿内光线柔和，几缕阳光透过雕花窗棂照射进来，尘埃在光束中缓缓飘动。
+空气中弥漫着檀香和古旧纸张的气息，令人心神宁静。正中央放置着一个青铜香炉，
+香烟袅袅上升。一位年迈的扫地僧人正在殿内静静地打扫，看似平凡，却给人一种
+深不可测的感觉。据传，藏经阁内收藏着少林寺数百年来的珍贵典籍和武功秘要，
+能在此获得机缘的人，必能在武学之路上更进一步。
+LONG
+    );
+    set("exits", ([
+        "south" : __DIR__"qiandian",
+    ]));
+    set("objects", ([
+        __DIR__"npc/saodi_sengren": 1,
+    ]));
+    set("action_list", ([
+        "寻宝" : "interact map",
+    ]));
+    setup();
+}
+
+int valid_leave(object me, string dir)
+{
+    object *inv;
+    int i;
+
+    if (dir == "south")
+    {
+        inv = all_inventory(environment(me));
+        for (i = 0; i < sizeof(inv); i++)
+        {
+            if (inv[i]->query("id") == "saodi sengren")
+            {
+                return notify_fail("扫地僧人轻轻一拂袖，挡在你面前道：施主稍候，老衲尚有一事相询。\n");
+            }
+        }
+    }
+    return ::valid_leave(me, dir);
+}
+
+void init()
+{
+    add_action("do_interact", "interact");
+}
+
+int do_interact(string arg)
+{
+    object me = this_player();
+    int exp = 60000;
+    int potential = 30000;
+    int start_time;
+
+    if (!arg || arg != "map")
+    {
+        return notify_fail("你要和什么交互？\n");
+    }
+
+    if (query_temp("interact/寻宝"))
+    {
+        return notify_fail("你仔细搜寻了一番，发现这里的宝物已经被取走了。\n");
+    }
+
+    if (!present("saodi sengren", environment(me)))
+    {
+        // 获取开始时间
+        start_time = me->query("fuben_cangjingge/last_time");
+
+        if (random(100) < 30)
+        {
+            string *book_list = ({ "/clone/fuzhu_book/shaolin-fuzhu-shenfa-book" });
+            object book;
+
+            book = new_bind(book_list[random(sizeof(book_list))]);
+
+            if (book)
+            {
+                if (!me->query("fuzhu_book/" + book->query("id")))
+                {
+                    tell_object(me, HIY "在你翻阅经书时，一本泛着金光的" + book->name() + HIY "突然从书架上掉落下来！\n" NOR);
+                    //设定一个标记，如果我获得过这本书不再获得
+                    me->set("fuzhu_book/" + book->query("id"),1);
+                    book->move(me);
+                }
+                else
+                {
+                    destruct(book);
+                }
+            }
+        }
+        tell_object(me, HIC "你在藏经阁内仔细搜寻，发现了许多武学心得和佛法精要。\n"
+                       "经过一番参悟，你获得了" + exp + "点经验和" + potential + "点潜能！\n" NOR);
+        // me->add("combat_exp", exp);
+        FUBEN_D->add_exp(me, exp);
+        me->add("potential", potential);
+        set_temp("interact/寻宝", 1);
+
+        // 记录副本监控日志
+        MONITOR_MASTER->monitor_fuben_log(me, "藏经阁副本", start_time, time(), potential, exp);
+
+        // 传送玩家回扬州客店
+        me->move("/d/city/kedian");
+        tell_object(me, "一阵祥云笼罩，你被传送回了扬州客店。\n");
+    }
+    else
+    {
+        return notify_fail("扫地僧人目光如电，冷冷道：未经允许，擅动经书者，重罚！\n");
+    }
+
+    return 1;
+}

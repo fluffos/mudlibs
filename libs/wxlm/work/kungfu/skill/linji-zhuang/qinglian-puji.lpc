@@ -1,0 +1,112 @@
+// qinglian-puji.c 青莲普济
+
+
+
+inherit F_CLEAN_UP;
+
+string query_name() { return "青莲"ZJBR"普济"; }
+string *pfm_type() { return ({ "force", }); }
+
+int exert(object me, object target)
+{
+    int skill, aoyi_level, recover_qi, cost_neili;
+    int force_skill;
+    object *team, *enemies;
+    int i;
+    int poison_chance, poison_level;
+
+    if ((int)me->query("neili") < 1000)
+        return notify_fail("你的内力不足，难以施展「青莲普济」。\n");
+
+    skill = me->query_skill("linji-zhuang", 1);
+    force_skill = me->query_skill("force");
+
+    if (skill < 150)
+        return notify_fail("你的临济十二庄修为不够，无法施展「青莲普济」。\n");
+
+    aoyi_level = COMBAT_D->get_skill_aoyi_level(me, "青莲剑意");
+
+    if (aoyi_level < 2)
+        return notify_fail("你的「青莲剑意」修为不够，无法施展「青莲普济」。\n");
+
+    team = me->query_team();
+    if (!team || sizeof(team) < 2)
+        return notify_fail("你没有组队或队伍中只有你一人，无法施展「青莲普济」。\n");
+
+    // 增强回血能力，提高恢复值
+    recover_qi = (force_skill * 3) * (100 + aoyi_level * 10) / 100; // 基础值提升，意境每级增加10%
+
+    cost_neili = 500 + 300 * sizeof(team);
+
+    if ((int)me->query("neili") < cost_neili)
+        return notify_fail("你的内力不足，无法施展「青莲普济」。\n");
+
+    me->add("neili", -cost_neili);
+
+    message_vision(HIG "$N" HIG "双手合十，闭目凝神，口中默念真言，身周缓缓升起片片青莲。\n"
+                   "青莲摇曳，散发出莹莹碧光，将整个队伍笼罩在慈悲的光芒之中。\n" NOR, me);
+
+    // 治疗队友
+    for (i = 0; i < sizeof(team); i++)
+    {
+        if (team[i] && environment(team[i]) == environment(me))
+        {
+            int max_qi = team[i]->query("max_qi");
+
+            if ((int)team[i]->query("eff_qi") < max_qi)
+            {
+                team[i]->receive_curing("qi", recover_qi);
+                team[i]->receive_heal("qi", recover_qi);
+                tell_object(team[i], HIY "你感受到一股暖流涌入体内，仿佛置身于青莲盛开的仙境，"
+                                    "伤势逐渐愈合，气息也更加顺畅。\n" NOR);
+            }
+
+            // 添加防护效果
+            team[i]->set_temp("emei_huifu_buff", 1);
+            call_out("remove_emei_huifu_buff", 30, team[i]);
+            tell_object(team[i], HIC "一层淡淡的青色光芒环绕在你周身，形成一道护体罡气，增加了你的防御力（持续30秒）。\n" NOR);
+        }
+    }
+
+    // 对敌人施加毒素
+    enemies = all_inventory(environment(me));
+    poison_chance = 30 + aoyi_level * 5; // 基础30%，每级意境增加5%
+
+    for (i = 0; i < sizeof(enemies); i++)
+    {
+        object enemy = enemies[i];
+        if (enemy->is_character() && !enemy->is_corpse() && enemy != me && (!team || member_array(enemy, team) == -1))
+        {
+            if (me->is_fighting(enemy))
+            {
+                if (random(100) < poison_chance)
+                {
+                    poison_level = skill / 10 + aoyi_level * 10; // 毒素强度
+
+                    poison_level += poison_level;
+                    // 施加毒素效果
+                    enemy->apply_condition("emei_poison", poison_level / 10);
+                    enemy->set_temp("emei_poison_level", poison_level);
+
+                    tell_object(enemy, HIG "你感到一阵眩晕，仿佛有一股异样的气息侵入体内。\n" NOR);
+                }
+            }
+        }
+    }
+
+    if (me->is_fighting())
+        me->start_busy(2);
+    else
+        me->start_busy(1);
+
+    return 1;
+}
+
+void remove_emei_huifu_buff(object player)
+{
+    if (player && player->query_temp("emei_huifu_buff"))
+    {
+        player->delete_temp("emei_huifu_buff");
+        tell_object(player, MAG "环绕在你周身的青色光芒逐渐消散，护体罡气的效果已经结束。\n" NOR);
+    }
+}

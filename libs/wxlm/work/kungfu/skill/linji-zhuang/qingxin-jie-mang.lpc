@@ -1,0 +1,101 @@
+// qingxin-jie-mang.c 清心解忙
+
+
+
+inherit F_CLEAN_UP;
+
+string query_name() { return "清心"ZJBR"解忙"; }
+string *pfm_type() { return ({ "force", }); }
+
+int exert(object me, object target)
+{
+    int skill, aoyi_level, cost_neili;
+    object *team;
+    int i, team_size;
+
+    if ((int)me->query("neili") < 500)
+        return notify_fail("你的内力不足，难以施展「清心解忙」。\n");
+
+    skill = me->query_skill("linji-zhuang", 1);
+
+    if (skill < 150)
+        return notify_fail("你的临济十二庄修为不够，无法施展「清心解忙」。\n");
+
+    aoyi_level = COMBAT_D->get_skill_aoyi_level(me, "青莲剑意");
+
+    if (aoyi_level < 2)
+        return notify_fail("你的「青莲剑意」修为不够，无法施展「清心解忙」。\n");
+
+    team = me->query_team();
+    if (!team || sizeof(team) < 2)
+        return notify_fail("你没有组队或队伍中只有你一人，无法施展「清心解忙」。\n");
+
+    cost_neili = 500;
+
+    if ((int)me->query("neili") < cost_neili)
+        return notify_fail("你的内力不足，无法施展「清心解忙」。\n");
+
+    //仅战斗中可用
+    if (!me->is_fighting())
+        return notify_fail("仅在战斗中可用。\n");
+
+    me->add("neili", -cost_neili);
+
+    message_vision(HIG "$N" HIG "微闭双目，心中默念清心诀，顿时身周浮现出朵朵青莲，散发出幽幽清香。\n"
+                   "清香扑鼻，令人心神宁静，杂念全消。\n" NOR, me);
+
+    team_size = sizeof(team);
+    for (i = 0; i < team_size; i++)
+    {
+        if (team[i] && environment(team[i]) == environment(me))
+        {
+            mixed busy_status = team[i]->query_busy();
+            if (intp(busy_status) && busy_status > 0)
+            {
+                int reduce_busy = busy_status;
+                int max_reduce = me->query("neili") / 100;
+
+                if (reduce_busy > max_reduce)
+                    reduce_busy = max_reduce;
+
+                if (reduce_busy > 0)
+                {
+                    int no_cost_chance = aoyi_level * 10;  // 每级意境10%概率不消耗内力
+                    int actual_cost = reduce_busy * 100;
+
+                    if (random(100) < no_cost_chance)
+                    {
+                        actual_cost = 0;
+                        tell_object(me, HIY "你的「青莲剑意」运用娴熟，本次化解忙乱没有消耗内力。\n" NOR);
+                    }
+
+                    if (actual_cost > 0)
+                    {
+                        me->add("neili", -actual_cost);
+                    }
+
+                    tell_object(team[i], HIC "你感受到一股清新之气涤荡心扉，困扰你的忙乱感顿时烟消云散。\n" NOR);
+                    team[i]->interrupt_me(team[i], reduce_busy);
+                    tell_object(me, HIG "你为" + team[i]->name() + "化解了" + chinese_number(reduce_busy) + "秒的忙乱。\n" NOR);
+
+                }
+                else
+                {
+                    tell_object(me, HIR "你的内力不足，无法为" + team[i]->name() + "化解忙乱。\n" NOR);
+                    break;  // 内力不足，停止继续化解
+                }
+            }
+            else
+            {
+                tell_object(team[i], HIC "你感受到一股清新之气涤荡心扉，但似乎没有什么特别的效果。\n" NOR);
+            }
+        }
+    }
+
+    if (me->is_fighting())
+        me->start_busy(2);
+    else
+        me->start_busy(1);
+
+    return 1;
+}

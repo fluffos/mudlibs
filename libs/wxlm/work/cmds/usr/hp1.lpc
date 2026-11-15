@@ -1,0 +1,283 @@
+/**
+ * 文件名: hp1.c
+ * 作者: Lu dexiang
+ * 说明: 显示玩家状态信息的命令
+ * 创建日期: 2023-12-20
+ */
+
+
+
+inherit F_CLEAN_UP;
+
+// 函数声明
+private string status_color(int current, int max);
+private string get_player_base_info(object ob);
+private void process_auto_recovery(object me);
+private void display_player_status(object me);
+private void process_special_skills(object me);
+private void check_new_player_quest(object me);
+
+/**
+ * 获取玩家基本信息
+ * @param ob 玩家对象
+ * @return string JSON格式的玩家信息
+ */
+private string get_player_base_info(object ob)
+{
+    mapping info;
+    string base_msg;
+
+    info = ([
+        "code": "man_base_info",
+        "data": ([
+            "type": playerp(ob) ? "player" : "npc",
+            "gender": ob->query("gender"),
+            "per": ob->query_per(),
+            "nickname": ob->query("nickname") || "",
+            "title": ob->query("title") || "",
+            "base_id": file_name(ob),
+            "state": "me",
+            "vip": "/cmds/usr/new_fanli"->get_vip_level(ob),
+            "avatarId": HEAD_IMAGE_MASTER->query_head_image_status(ob),
+        ])
+    ]);
+
+    base_msg = json_encode(info);
+    return base_msg;
+}
+
+/**
+ * 处理自动恢复功能
+ * @param me 玩家对象
+ */
+private void process_auto_recovery(object me)
+{
+    int reduce;
+    
+    if (me->is_fighting()) 
+        return;
+
+    // 处理血丹恢复
+    if (me->query("xuedan_number") > 0 && me->query("qi") < me->query("max_qi"))
+    {
+        reduce = me->query("max_qi") - me->query("qi");
+        me->set("qi", me->query("max_qi"));
+        me->set("eff_qi", me->query("max_qi"));
+        me->add("xuedan_number", -reduce);
+
+        if (me->query("xuedan_number") <= 0)
+            me->delete("xuedan_number");
+
+        tell_object(me, HIY"你血丹药力运转，气血恢复了。"NOR"\n");
+    }
+
+    // 处理内丹恢复
+    if (me->query("neidan_number") > 0 && me->query("neili") < me->query("max_neili"))
+    {
+        reduce = me->query("max_neili") - me->query("neili");
+        me->set("neili", me->query("max_neili"));
+        me->add("neidan_number", -reduce);
+
+        if (me->query("neidan_number") <= 0)
+            me->delete("neidan_number");
+
+        tell_object(me, HIY"你内丹药力运转，内力恢复了。"NOR"\n");
+    }
+}
+
+/**
+ * 显示玩家状态信息
+ * @param me 玩家对象
+ */
+private void display_player_status(object me)
+{
+    mapping my;
+    string sp;
+    mixed busy;
+    mapping jsonData;
+	string base_status = "";
+
+    my = copy(me->query_entire_dbase());
+
+	{
+		// 显示基础状态栏
+		sp = ZJHPTXT + ZJMENUF(5,5,28,45) + sprintf("%s:100/100:%s", my["name"], "#000000");
+		sp += "║" + sprintf("气血.%d:%d/%d/%d:%s:%s", my["qi"], my["qi"], my["eff_qi"], my["max_qi"], "#99FF0000", "exert recover");
+		sp += "║" + sprintf("内力.%d:%d/%d/%d:%s", my["neili"], my["neili"], me->query("max_neili"), me->query_neili_limit(1), "#990066FF");
+		sp += "║" + sprintf("精神.%d:%d/%d/%d:%s:%s", my["jing"], my["jing"], my["eff_jing"], my["max_jing"], "#996600CC", "exert regenerate");
+		sp += "║" + sprintf("精力.%d:%d/%d/%d:%s", my["jingli"], my["jingli"], my["max_jingli"], me->query_current_jingli_limit(), "#99006600");
+		sp += "║" + sprintf("怒气.%d:%d/%d:%s", me->query_craze(), me->query_craze(), me->query_max_craze(), "#99990000");
+		sp += "║" + sprintf("食物.%d:%d/%d:%s", my["food"], my["food"], me->max_food_capacity(), "#99FF6600");
+		sp += "║" + sprintf("饮水.%d:%d/%d:%s", my["water"], my["water"], me->max_water_capacity(), "#990000FF");
+		sp += "║" + sprintf("经验.%d:%d/%d:%s", my["combat_exp"], my["combat_exp"], F_LEVEL->level_max_exp(me), "#99FF0066");
+		sp += "║" + sprintf("潜能.%d:%d/%d/%d:%s", my["potential"]-my["learned_points"], my["potential"]-my["learned_points"], me->query_potential_limit()-my["potential"], me->query_potential_limit(), "#99FF00FF");
+        //头像状态
+		sp += "║" + sprintf("头像.%s", HEAD_IMAGE_MASTER->query_head_image_status(me));
+        //头像性别
+        sp += "║" + sprintf("性别.%s", HEAD_IMAGE_MASTER->query_head_image_gender(me));
+		sp += "\n";
+
+        base_status = sp;
+
+        if (me->query_temp("base_status") != sp)
+        {
+            tell_object(me, sp);
+            me->set_temp("base_status", base_status);
+        }
+		// 显示详细信息
+		// title_msg = me->query("title") || "普通百姓";
+		// title_msg += ":" + me->query("name") + "\n";
+		// title_msg += sprintf("经验：%d/%d\n", my["combat_exp"], F_LEVEL->level_max_exp(me));
+		// title_msg += sprintf("潜能：%d/%d\n", my["potential"]-my["learned_points"], me->query_potential_limit());
+		// title_msg += sprintf("性别：%s\n", my["gender"]);
+		// title_msg += sprintf("元宝：%d   绑定元宝：%d\n", my["yuanbao"], my["bind_yuanbao"]);
+		// title_msg += sprintf("存款：%d文铜钱\n", my["balance"]);
+		// title_msg = replace_string(title_msg, "\n", ZJBR);
+		// write(ESC + "310" + title_msg + "\n");
+
+
+	}
+
+    // 显示忙碌状态
+    busy = me->query_busy();
+
+	// if (busy)
+	{
+		jsonData = (["code": "杂乱信息", "busy": functionp(busy) ? "持续工作中" : ((intp(busy) && busy > 1) ? busy + "秒" : "空闲")]);
+		tell_object(me, json_encode(jsonData) + "\n");
+	}
+}
+
+/**
+ * 处理特殊技能效果
+ * @param me 玩家对象
+ */
+private void process_special_skills(object me)
+{
+    int renzengguiyan_level;
+    int damage;
+    object *enemies;
+    
+    if (!me->is_fighting() || !me->query("special_skill/ren_zeng_gui_yan") || 
+        time() - me->query_temp("renzengguiyan_cd") <= 5)
+        return;
+
+    renzengguiyan_level = TALNET_MASTER->query_talnet_level(me, "ren_zeng_gui_yan");
+    damage = ({100,200,300,400,500,600,700,800,900,1000})[renzengguiyan_level - 1];
+    
+    if (me->query_per() < 0)
+        damage += (-me->query_per()) * 50;
+
+    enemies = me->query_enemy();
+    foreach (object enemy in enemies)
+    {
+        if (!objectp(enemy))
+        {
+            continue;
+        }
+
+        enemy->receive_damage("qi", damage, me);
+        tell_object(enemy, HIR + me->name() + "的容貌让你感到极度厌恶，你不由得心神不宁，无法专心战斗。\n" NOR);
+    }
+    
+    me->set_temp("renzengguiyan_cd", time());
+    tell_object(me, HIR "你的容貌让所有对手感到极度厌恶，对方不由得心神不宁，无法专心战斗。\n" NOR);
+}
+
+/**
+ * 检查新手任务完成情况
+ * @param me 玩家对象
+ */
+private void check_new_player_quest(object me)
+{
+    int quest_id;
+    
+    if (me->query("new_player_quest_complete"))
+        return;
+
+    quest_id = me->query("new_player_quest/stage");
+    
+    if ("/cmds/quest/new_player_quest"->check_quest_complete(me, quest_id))
+    {
+        "/cmds/quest/new_player_quest"->on_quest_stage_complete(me, quest_id);
+    }
+}
+
+/**
+ * 主函数入口
+ */
+int main(object me, string arg)
+{
+    object ob;
+    mapping my;
+    string *attrs;
+
+    seteuid(getuid(me));
+    ob = me;
+    my = ob->query_entire_dbase();
+
+    if (my["max_jing"] < 1 || my["max_qi"] < 1)
+	{
+        return notify_fail("无法察看" + ob->name(1) + "的状态。\n");
+	}
+
+    if (arg &&arg == "hp")
+    {
+        me->delete_temp("base_status");
+        display_player_status(me);
+        return 1;
+    }
+
+    // 特殊玩家处理
+    if (me->query("id") == "demo222")
+    {
+        if (!me->query("env/keep_idle"))
+            me->set("env/keep_idle", 1);
+
+        // 设置最低气血和精神值
+        attrs = ({"qi", "eff_qi", "jing", "eff_jing"});
+        foreach (string attr in attrs)
+            if (my[attr] < 1000000)
+                my[attr] = 1000000;
+    }
+
+    process_auto_recovery(me);
+    display_player_status(me);
+    process_special_skills(me);
+
+    
+    {
+        string base_msg = get_player_base_info(me);
+        
+        if (me->query_temp("base_msg") != base_msg)
+        {
+            tell_object(me, base_msg+ "\n");
+            me->set_temp("base_msg", base_msg);
+        }
+    }
+
+    check_new_player_quest(me);
+
+    //斗折蛇形头像的被动效果，战斗时每3秒恢复3%气血
+    HEAD_IMAGE_MASTER->on_fight_start_heal(me);
+
+    return 1;
+}
+
+/**
+ * 帮助信息
+ */
+int help(object me)
+{
+    write(@HELP
+指令格式：hp
+         hp <对象名称>     (巫师专用)
+
+这个指令可以显示你或指定对象(含怪物)的精、气、神数值。
+
+参见：score
+HELP );
+    return 1;
+}
+
+

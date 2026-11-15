@@ -1,0 +1,140 @@
+/**
+ * @file mohist.c
+ * @author Lu dexiang
+ * @brief 白马关墨家守卫
+ * @version 1.0
+ * @date 2024-07-01
+ */
+
+inherit NPC;
+
+varargs void create()
+{
+    set_name("墨家守卫", ({ "mohist", "shouwei" }));
+    set("gender", "男性");
+    set("age", 30 + random(20));
+    set("long", "这是一位墨家精锐守卫，身着黑色劲装，手持墨家兵器，眼神锐利。\n");
+
+    setup();
+}
+
+
+varargs void die(object player)
+{
+    object me, who;
+    mixed other_ob;
+    int level = 1;
+    object env = environment();
+    object aoyi_canye;
+    int exp_reward;
+    int pot_reward;
+    me = this_object();
+    
+    // 获取当前层数
+    if (env && env->query("number_use"))
+    {
+        level = env->query("number_use");
+    }
+    
+    // 确定击杀者
+    who = env->query("player");
+    if (!objectp(who))
+    {
+        if (undefinedp(player) || !objectp(player))
+        {
+            who = me->query_last_damage_from();
+        }
+        else
+        {
+            who = player;
+        }
+    }
+    
+    if (!objectp(who))
+    {
+        ::die();
+        return;
+    }
+    
+    // 自动执行下一步命令
+    if (other_ob = AUTO_QUEST->is_not_player(me))
+    {
+        AUTO_QUEST->auto_cmd(who, "kill " + other_ob->query("id"));
+    }
+    else
+    {
+        AUTO_QUEST->auto_cmd(who, "north");
+    }
+    
+    if (!objectp(who) || !playerp(who))
+    {
+        ::die();
+        return;
+    }
+    
+    // 奖励玩家
+    // 经验和潜能奖励，随层数增加
+    exp_reward = 1000 + level * 50;
+    pot_reward = 2000 + level * 20;
+    
+    who->add("potential", pot_reward);
+    tell_object(who, HIY "你击败了墨家守卫，获得了" + exp_reward + "点经验和" + pot_reward + "点潜能。\n" NOR);
+    FUBEN_D->add_exp(who, exp_reward);
+    // 极低概率掉落意境卷轴残页（约1%的概率）
+    if (random(90) == 0)
+    {
+        aoyi_canye = new_bind("/clone/aoyi_book/aoyi_book_canye");
+        aoyi_canye->move(who);
+        tell_object(who, HIY "你从墨家守卫身上找到了一张" + aoyi_canye->query("name") + "！\n" NOR);
+    }
+    
+    if (random(25) == 0)
+    {
+        aoyi_canye = new_bind("/clone/baoxiang/baima-baozang");
+        aoyi_canye->move(who);
+        tell_object(who, HIY "你从墨家守卫身上找到了一个" + aoyi_canye->query("name") + "！\n" NOR);
+    }
+
+    // 如果是最后一层，给予额外奖励
+    if (level == env->query("number"))
+    {
+        int bonus_exp = 10000 + random(1000);
+        int bonus_pot = 10000 + random(500);
+        
+        who->add("potential", bonus_pot);
+        tell_object(who, HIY "恭喜你通关白马关副本，获得额外奖励：" + bonus_exp + "点经验和" + bonus_pot + "点潜能！\n" NOR);
+        FUBEN_D->add_exp(who, bonus_exp);
+
+        // 最终关卡有更高概率掉落意境卷轴残页（约5%的概率）
+        if (random(10) == 0)
+        {
+            aoyi_canye = new_bind("/clone/aoyi_book/aoyi_book_canye");
+            aoyi_canye->move(who);
+            tell_object(who, HIY "你从最终守卫身上找到了一张" + aoyi_canye->query("name") + "！\n" NOR);
+        }
+        
+        // 墨家大统领特殊掉落：防具紫选盒
+        if (me->query("name") == "墨家大统领"||me->query("name") == "墨家传人")
+        {
+            string box_key = "bamaguan_fangju_box_count";
+            int box_count = who->query(box_key) || 0;
+            object fangju_box;
+            
+            // 20%概率获得防具紫选盒，或者保底机制（5次必得）
+            if (random(5) == 0 || box_count >= 4)
+            {
+                fangju_box = new_bind("/clone/box/fangju_zixuan_box");
+                fangju_box->move(who);
+                tell_object(who, HIR "你击败了墨家大统领，获得了一个" + fangju_box->query("name") + "！\n" NOR);
+                who->delete(box_key); // 重置计数
+            }
+            else
+            {
+                who->set(box_key, box_count + 1);
+                tell_object(who, HIY "你击败了墨家大统领，但这次没有获得防具紫选盒。（" + (box_count + 1) + "/5）\n" NOR);
+            }
+        }
+    }
+    
+    ::die();
+}

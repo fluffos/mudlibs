@@ -1,0 +1,208 @@
+/**
+ * @file mudinfo.c
+ * @author Lu dexiang
+ * @brief MUD系统信息查看命令
+ * @version 1.0.0
+ */
+
+inherit F_CLEAN_UP;
+
+#define SCALE   (1.0/10.0)
+#define STATUS  "持续开发中......"
+#define DIVIDER " ─────────────────────────\n"
+#define INFO_FORMAT "%-12s:%s\n"
+
+// 函数声明
+private string memory_expression(int m);
+private string format_uptime();
+private int count_players();
+private void display_object_stats(object *objs, string title);
+private void display_room_stats(object *objs);
+nosave private string ver_msg = "1.0.0";
+nosave private string mud_name = MUD_NAME;
+nosave private string version = __VERSION__;
+
+void create() 
+{ 
+    seteuid(getuid(this_object())); 
+}
+
+/**
+ * @brief 显示对象统计信息
+ * @param objs 要统计的对象数组
+ * @param title 统计标题
+ */
+private void display_object_stats(object *objs, string title)
+{
+    mapping stats = ([]);
+    string *top_three = ({"无", "无", "无"});
+    int *top_counts = ({0, 0, 0});
+    
+    foreach (object ob in objs) {
+		string file;
+        if (!ob) continue;
+        file = explode(file_name(ob), "#")[0];
+        stats[file] = stats[file] ? stats[file] + 1 : 1;
+    }
+
+    // 获取前三名
+    foreach (string key, int count in stats) {
+        if (count <= 1) continue;
+        
+        for (int i = 0; i < 3; i++) {
+            if (count > top_counts[i]) {
+                // 移动现有排名
+                for (int j = 2; j > i; j--) {
+                    top_three[j] = top_three[j-1];
+                    top_counts[j] = top_counts[j-1];
+                }
+                // 插入新排名
+                top_three[i] = key;
+                top_counts[i] = count;
+                break;
+            }
+        }
+    }
+
+    write(DIVIDER);
+    write(sprintf(INFO_FORMAT, title, ""));
+    for (int i = 0; i < 3; i++) {
+        if (top_counts[i] > 0) {
+            write(sprintf(INFO_FORMAT, 
+                sprintf("%d.%s", i+1, top_three[i]),
+                sprintf("%d个物件", top_counts[i])));
+        }
+    }
+}
+
+/**
+ * @brief 显示房间统计信息
+ * @param objs 要统计的对象数组
+ */
+private void display_room_stats(object *objs)
+{
+    mapping room_stats = ([]);
+    
+    write(DIVIDER);
+    write(sprintf(INFO_FORMAT, "人多的房间", ""));
+
+    foreach (object ob in objs) {
+		int size;
+
+        if (!ob->is_room()) continue;
+        
+        size = sizeof(all_inventory(ob));
+        if (size > 100) {
+            room_stats[file_name(ob)] = size;
+        }
+    }
+
+    foreach (string room, int count in room_stats) {
+        write(sprintf(INFO_FORMAT, room, 
+            sprintf("%d个物件", count)));
+    }
+}
+
+/**
+ * @brief 主函数，显示MUD系统信息
+ */
+int main(object me) 
+{
+    float cpu_usage;
+    mapping rusage;
+    object *all_objects, *hearts;
+    
+    if (time() - me->query_temp("scan_time") < 10 && !wizardp(me)) {
+        return notify_fail("系统繁忙中，请稍候……\n");
+    }
+    
+    reset_eval_cost();
+    
+    all_objects = objects();
+    hearts = heart_beats();
+    rusage = rusage();
+    cpu_usage = SCALE * (rusage["utime"] + rusage["stime"]) / uptime();
+
+    // 显示基本信息
+    // write(NOR + WHT "\n\t\t         .__________ 系 统 资 讯 __________\n");
+    write(DIVIDER);
+    write(sprintf(INFO_FORMAT, "游戏识别名称", mud_name));
+    // write(sprintf(INFO_FORMAT, "界面系统版本", version));
+    write(sprintf(INFO_FORMAT, "游戏运行版本", "Version " + ver_msg));
+    write(sprintf(INFO_FORMAT, "CPU使用率", sprintf("%.2f%%", cpu_usage)));
+    write(sprintf(INFO_FORMAT, "系统负载", query_load_average()));
+    write(sprintf(INFO_FORMAT, "内存使用", memory_expression(memory_info())));
+    write(sprintf(INFO_FORMAT, "在线人数", sprintf("%d人", sizeof(users()))));
+    write(sprintf(INFO_FORMAT, "注册总数", sprintf("%d人", count_players())));
+    write(sprintf(INFO_FORMAT, "物件总数", sprintf("%d个", sizeof(all_objects))));
+    write(sprintf(INFO_FORMAT, "心跳总数", sprintf("%d个", sizeof(hearts))));
+    write(sprintf(INFO_FORMAT, "延迟调用", sprintf("%d个", sizeof(call_out_info()))));
+    write(sprintf(INFO_FORMAT, "运行时间", format_uptime()));
+    write(sprintf(INFO_FORMAT, "系统状态", STATUS));
+
+    // 巫师可见的详细统计
+    if (wizardp(me)) {
+        display_object_stats(all_objects, "载入最多对象");
+        display_object_stats(hearts, "心跳最多对象");
+        display_room_stats(all_objects);
+    }
+    
+    me->set_temp("scan_time", time());
+    return 1;
+}
+
+/**
+ * @brief 格式化内存显示
+ */
+private string memory_expression(int m)
+{
+    float mem = to_float(m);
+    if (mem < 1024) return sprintf("%d bytes", m);
+    if (mem < 1024*1024) return sprintf("%.2f KB", mem / 1024);
+    return sprintf("%.2f MB", mem / (1024*1024));
+}
+
+/**
+ * @brief 统计玩家数量
+ */
+private int count_players()
+{
+    int count = 0;
+    string *dir = get_dir(DATA_DIR + "login/");
+    
+    foreach (string d in dir) {
+        string *ppls = get_dir(DATA_DIR + "login/" + d + "/");
+        count += sizeof(ppls);
+    }
+    return count;
+}
+
+/**
+ * @brief 格式化运行时间
+ */
+private string format_uptime()
+{
+    return CHINESE_D->chinese_period(uptime());
+}
+
+/**
+ * @brief 帮助信息
+ */
+int help() 
+{
+    write(@HELP
+指令格式：mudinfo
+
+这个指令将显示MUD系统的详细信息，包括：
+- 系统基本信息（版本、名称等）
+- 资源使用情况（CPU、内存等）
+- 在线统计信息
+- 系统运行状态
+
+巫师可以看到更详细的统计信息。
+HELP
+    );
+    return 1;
+}
+
+

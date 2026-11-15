@@ -1,0 +1,275 @@
+/**
+ * @file dbase.c
+ * @author Lu Dexiang
+ * @brief 数据库系统核心文件，用于处理对象的属性存储和访问
+ * @version 1.0
+ * @date 2024-01-01
+ * 
+ * @details 该模块实现了对象属性的存储、查询、修改和删除等基本操作，
+ * 是游戏中几乎所有对象的基础功能模块。
+ */
+
+//#include <dbase.h>
+
+inherit F_TREEMAP;
+
+mapping dbase;
+nosave mapping tmp_dbase;
+
+nosave mixed default_ob;
+
+/**
+ * @brief 查询默认对象
+ * @return mixed 默认对象
+ */
+mixed query_default_object() { return default_ob; }
+
+/**
+ * @brief 设置默认对象
+ * @param mixed ob 要设置的默认对象
+ */
+void set_default_object(mixed ob)
+{
+	if( !geteuid() ) seteuid(getuid());
+	default_ob = ob;
+	ob->add("no_clean_up", 1);
+}
+
+/**
+ * @brief 设置对象属性
+ * @param string prop 属性名
+ * @param mixed data 属性值
+ * @return mixed 设置后的属性值
+ * @details 设置对象的永久属性，支持多级属性路径（如"a/b/c"）
+ */
+mixed set(string prop, mixed data)
+{
+	string name,*props;
+ 
+
+	if( !mapp(dbase) ) dbase = ([]);
+
+	if( strsrch(prop, '/')!=-1 )
+	{
+		props = explode(prop, "/");
+		if(props[0]=="exits")
+		{
+			if(stringp(name=data->query("short")))
+				tell_room(this_object(),ZJEXIT+props[1]+":"+name+"\n");
+		}
+		return _set( dbase, explode(prop, "/"), data );
+	}
+
+	if (objectp(this_object()) && living(this_object()))
+	{
+		if (this_object()->is_fighting())
+		{
+			//告诉我自己的状态，并且把我的状态告诉对手
+			COMBAT_JSON_MSG->player_combat_cond(this_object());
+	
+	
+			foreach (object obj in this_object()->query_enemy())
+			{
+				COMBAT_JSON_MSG->players_combat_cond(obj);
+			}
+	
+		}
+	}
+
+	dbase[prop] = data;
+
+	return dbase[prop];
+}
+
+/**
+ * @brief 查询对象属性
+ * @param string prop 属性名
+ * @param int raw 是否返回原始值（不执行函数）
+ * @return mixed 属性值
+ * @details 查询对象的永久属性，支持多级属性路径
+ */
+varargs mixed query(string prop, int raw)
+{
+	mixed data;
+
+	if( !mapp(dbase) ) return 0;
+
+	if( undefinedp(dbase[prop]) && (strsrch(prop, '/')!=-1) )
+		data = _query(dbase, explode(prop, "/"));
+	else
+		data = dbase[prop];
+
+	if( undefinedp(data) && default_ob )
+		data = default_ob->query(prop, 1);
+
+	if( raw ) return data;
+
+	return evaluate( data, this_object() );
+}
+
+/**
+ * @brief 删除对象属性
+ * @param string prop 属性名
+ * @return int 是否成功删除
+ * @details 删除对象的永久属性，支持多级属性路径
+ */
+int delete(string prop)
+{
+	string *props;
+
+	if( !mapp(dbase) ) return 0;
+
+	if( strsrch(prop, '/')!=-1 )
+	{
+		props = explode(prop, "/");
+		if(props[0]=="exits")
+		{
+			tell_room(this_object(),ZJEXITRM+props[1]+"\n");
+		}
+		return _delete(dbase, props);
+	}
+	else {
+		map_delete(dbase, prop);
+		return 1;
+	}
+}
+
+/**
+ * @brief 增加对象属性值
+ * @param string prop 属性名
+ * @param mixed data 要增加的值
+ * @return mixed 增加后的属性值
+ * @details 对数值型属性进行增加操作
+ */
+mixed add(string prop, mixed data)
+{
+	mixed old;
+/* 修改回来了 经验潜能复原
+	if(prop=="combat_exp"||prop=="potential")
+		data = data*5;
+*/
+	if( !mapp(dbase) || !(old = query(prop, 1)) )
+		return set(prop, data);
+
+	if( functionp(old) )
+		error("dbase: add() - called on a function type property.\n");
+
+	return set(prop, old + data);
+}
+
+/**
+ * @brief 查询整个数据库
+ * @return mapping 完整的数据库映射
+ */
+mapping query_entire_dbase()
+{
+	return dbase;
+}
+
+/**
+ * @brief 设置临时属性
+ * @param string prop 属性名
+ * @param mixed data 属性值
+ * @return mixed 设置后的属性值
+ * @details 设置对象的临时属性，这些属性在对象重新加载后会丢失
+ */
+mixed set_temp(string prop, mixed data)
+{
+	if( !mapp(tmp_dbase) ) tmp_dbase = ([]);
+
+	if( strsrch(prop, '/')!=-1 )
+		return _set( tmp_dbase, explode(prop, "/"), data );
+
+	return tmp_dbase[prop] = data;
+}
+
+/**
+ * @brief 查询临时属性
+ * @param string prop 属性名
+ * @param int raw 是否返回原始值（不执行函数）
+ * @return mixed 属性值
+ * @details 查询对象的临时属性，支持多级属性路径
+ */
+varargs mixed query_temp(string prop, int raw)
+{
+	mixed data;
+
+	if( !mapp(tmp_dbase) ) return 0;
+
+	if( strsrch(prop, '/')!=-1 )
+		data = _query(tmp_dbase, explode(prop, "/"));
+	else
+		data = tmp_dbase[prop];
+
+	if( functionp(data) && !raw )
+		return (*data)( this_object() );
+	else 
+		return data;
+}
+
+/**
+ * @brief 删除临时属性
+ * @param string prop 属性名
+ * @return int 是否成功删除
+ * @details 删除对象的临时属性，支持多级属性路径
+ */
+int delete_temp(string prop)
+{
+	if( !mapp(tmp_dbase) ) return 0;
+
+	if( strsrch(prop, '/')!=-1 )
+		return _delete(tmp_dbase, explode(prop, "/"));
+	else {
+		map_delete(tmp_dbase, prop);
+		return 1;
+	}
+}
+
+/**
+ * @brief 增加临时属性值
+ * @param string prop 属性名
+ * @param mixed data 要增加的值
+ * @return mixed 增加后的属性值
+ * @details 对临时数值型属性进行增加操作
+ */
+mixed add_temp(string prop, mixed data)
+{
+	mixed old;
+
+	if( !mapp(tmp_dbase) || !(old = query_temp(prop, 1)) )
+		return set_temp(prop, data);
+
+	if( functionp(old) )
+		error("dbase: add_temp() - called on a function type property.\n");
+
+	return set_temp(prop, old + data);
+}
+
+/**
+ * @brief 查询整个临时数据库
+ * @return mapping 完整的临时数据库映射
+ */
+mapping query_entire_temp_dbase()
+{
+//	if( (previous_object() != this_object())
+//	&&	(geteuid(previous_object()) != ROOT_UID) )
+//		error("dbase: query_entire_temp_dbase() - must has root euid or be this_object().\n");
+
+	return tmp_dbase;
+}
+
+/**
+ * @brief 设置整个数据库
+ * @param mapping data 要设置的数据库映射
+ * @details 只有root权限的对象才能调用此函数
+ */
+nomask void set_dbase(mapping data)
+{
+	if (! is_root(previous_object()))
+		return;
+
+	if (! mapp(data))
+		return;
+
+	dbase = data;
+}

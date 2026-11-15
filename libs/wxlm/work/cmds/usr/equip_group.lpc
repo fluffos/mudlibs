@@ -1,0 +1,180 @@
+// 作者：Assistant
+// 功能：装备套路组合系统
+inherit F_CLEAN_UP;
+
+#define MAX_GROUPS 3  // 最大套路数量
+
+// 保存玩家的装备套路数据
+varargs private void save_group_data(object me, string need_group_name)
+{
+    mapping equip_data = ([]);
+    object weapon;
+    string group_name;
+
+    if (!need_group_name) {
+        group_name = "套路一";
+    }
+    else {
+        group_name = need_group_name;
+    }
+    
+    // 保存武器信息
+    if (objectp(weapon = me->query_temp("weapon"))) {
+        equip_data["weapon"] = weapon->query("id");
+    }
+    
+    if (me->query_temp("armor")) {
+        // 保存防具信息
+        foreach (string type in keys(me->query_temp("armor"))) {
+            object armor = me->query_temp("armor/" + type);
+            if (objectp(armor)) {
+                equip_data[type] = armor->query("id");
+            }
+        }
+    }
+
+
+    
+    me->set("equip_groups/" + group_name, equip_data);
+    me->save();
+}
+
+// 读取玩家的装备套路数据
+private mapping load_group_data(object me, string group_name) {
+    if (!stringp(me->query("id")))
+        return ([]);
+        
+    return me->query("equip_groups/" + group_name);
+}
+
+// 保存当前装备为指定套路
+int save_current_group(object me, string group_name) {
+
+    if (!group_name || group_name == "" || !stringp(group_name)) {
+        tell_object(me, "请指定套路名称。\n");
+        return 1;
+    }
+
+    save_group_data(me, group_name);
+    return 1;
+}
+
+/**
+ * @brief 切换到指定装备������
+ * 
+ * @param me 玩家对象
+ * @param group_name 要切换到的套路名称
+ * @return int 成功返回1，失败返回0
+ */
+int switch_to_group(object me, string group_name) {
+    mapping equip_data;
+    object ob;
+    mixed old_group_data;
+    string old_group_name;
+    
+    if (!group_name || group_name == "") {
+        tell_object(me, "请指定套路名称。\n");
+        return 1;
+    }
+    
+    if (group_name == me->query("equip_group_name")) {
+        tell_object(me, "当前已处于装备套路：" + group_name + "\n");
+        return 1;
+    }
+    
+    //保存旧套路数据，防止切换时数据丢失
+    old_group_name = me->query("equip_group_name");
+    old_group_data = me->query("equip_groups/" + old_group_name);
+
+    // 防止切换套路时装备界面刷新,设置临时变量
+    me->set_temp("no_equip_ui", 1);
+
+    // 先卸下所有装备
+    me->force_me("remove all");
+        
+    // 读取新套路数据
+    equip_data = load_group_data(me, group_name);
+    
+    // 立即保存切换套路的索引
+    me->set("equip_group_name", group_name);
+
+    if (!mapp(equip_data) || sizeof(equip_data) == 0) {
+        tell_object(me, "已切换到装备套路：" + group_name + "，但没有装备数据。\n");
+    } else {
+        // 穿戴装备
+        foreach (string type, string id in equip_data) {
+            if (type != "weapon") {
+                ob = present(id, me);
+                if (ob) {
+                    me->force_me("wear " + id);
+                }
+            }
+        }
+        
+        // 装备武器
+        if (equip_data["weapon"]) {
+            ob = present(equip_data["weapon"], me);
+            if (ob) {
+                me->force_me("wield " + equip_data["weapon"]);
+            }
+        }
+    }
+
+    // 恢复旧套路数据
+    me->set("equip_groups/" + old_group_name, old_group_data);
+    
+    tell_object(me, "已切换到装备套路：" + group_name + "\n");
+
+    // 恢复装备界面刷新
+    me->delete_temp("no_equip_ui");
+    me->force_me("equip_ui");
+    return 1;
+}
+
+// 列出所有已保存的套路
+int list_groups(object me) {
+    mapping groups = me->query("equip_groups");
+    string msg = "已保存的装备套路：\n";
+    
+    if (!mapp(groups) || sizeof(groups) == 0) {
+        tell_object(me, "还没有保存任何装备套路。\n");
+        return 1;
+    }
+    
+    foreach (string name, mapping data in groups) {
+        msg += sprintf("  %s (%d件装备)\n", name, sizeof(data));
+    }
+    
+    tell_object(me, msg);
+    return 1;
+}
+
+int main(object me, string arg) {
+    mixed cmd, group_name;
+    
+    if (!arg || arg == "") {
+        return list_groups(me);
+    }
+    
+    if (sscanf(arg, "%s %s", cmd, group_name) != 2) {
+        tell_object(me, "指令格式：equip_group <save|switch> <套路名称>\n");
+        return 1;
+    }
+
+    if (group_name != "套路一" && group_name != "套路二" && group_name != "套路三") {
+        me->set("equip_group_name", "套路一");
+    }
+    
+    switch (cmd) {
+        case "save":
+            return save_current_group(me, group_name);
+        case "switch":
+            return switch_to_group(me, group_name);
+        default:
+            tell_object(me, "未知的命令。使用方法：\n" +
+                "equip_group save <套路名称>  - 保存当前装备为指定套路\n" +
+                "equip_group switch <套路名称> - 切换到指定套路\n" +
+                "equip_group                   - 列出所有套路\n");
+            return 1;
+    }
+}

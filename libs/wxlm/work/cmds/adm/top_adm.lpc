@@ -1,0 +1,171 @@
+/**
+ * @file top_adm.c
+ * @author Lu dexiang
+ * @brief 管理员查看在线玩家属性排行命令
+ * @details 提供不同的参数，输出排行当前在线所有玩家的最大气血，最大内力，最大精神
+ * @version 1.0.0
+ * @date 2024-03-05
+ */
+
+inherit F_CLEAN_UP;
+
+
+
+// 函数声明
+int help(object me);
+private string get_top_list(object *users, string type);
+private int sort_by_hp(object ob1, object ob2);
+private int sort_by_mp(object ob1, object ob2);
+private int sort_by_sp(object ob1, object ob2);
+
+/**
+ * @brief 主函数，处理命令参数并显示排行榜
+ * @param me 执行命令的玩家
+ * @param arg 命令参数，可以是 hp(气血)、mp(内力)、sp(精神)
+ * @return int 命令执行结果
+ */
+int main(object me, string arg)
+{
+    object *users;
+    string result;
+
+    if (!wizardp(me)) {
+        return notify_fail("只有巫师才能使用此命令。\n");
+    }
+
+    users = filter_array(users(), (: userp($1) :));
+    
+    if (!sizeof(users)) {
+        return notify_fail("当前没有玩家在线。\n");
+    }
+
+    if (!arg || arg == "") {
+        write("请指定要查看的排行类型：hp(气血)、mp(内力)、sp(精神)\n");
+        return help(me);
+    }
+
+    switch (lower_case(arg)) {
+        case "hp":
+            result = get_top_list(users, "hp");
+            break;
+        case "mp":
+            result = get_top_list(users, "mp");
+            break;
+        case "sp":
+            result = get_top_list(users, "sp");
+            break;
+        case "all":
+            result = get_top_list(users, "hp") + "\n" +
+                     get_top_list(users, "mp") + "\n" +
+                     get_top_list(users, "sp");
+            break;
+        default:
+            write("未知的排行类型：" + arg + "\n");
+            return help(me);
+    }
+
+    write(result);
+    return 1;
+}
+
+/**
+ * @brief 生成指定类型的排行榜
+ * @param users 玩家对象数组
+ * @param type 排行类型：hp(气血)、mp(内力)、sp(精神)
+ * @return string 格式化的排行榜字符串
+ */
+private string get_top_list(object *users, string type)
+{
+    string title, result = "";
+    int i;
+
+    switch (type) {
+        case "hp":
+            title = HIR "在线玩家最大气血排行榜" NOR;
+            users = sort_array(users, (: sort_by_hp :));
+            break;
+        case "mp":
+            title = HIC "在线玩家最大内力排行榜" NOR;
+            users = sort_array(users, (: sort_by_mp :));
+            break;
+        case "sp":
+            title = HIY "在线玩家最大精神排行榜" NOR;
+            users = sort_array(users, (: sort_by_sp :));
+            break;
+        default:
+            return "未知的排行类型：" + type + "\n";
+    }
+
+    result += title + "\n";
+    result += "──────────────────────────────────────────────────────────────────────────\n";
+    result += sprintf("%-6s %-5s     %-15s %-5s\n", "排名", "玩家", "门派", "数值");
+    result += "──────────────────────────────────────────────────────────────────────────\n";
+
+    for (i = 0; i < sizeof(users) && i < 20; i++) {
+        string value;
+        
+        if (type == "hp") {
+            value = "" + users[i]->query("max_qi");
+        } else if (type == "mp") {
+            value = "" + users[i]->query("max_neili");
+        } else if (type == "sp") {
+            value = "" + users[i]->query("max_jing");
+        }
+        
+        result += sprintf("%-6d %-15s %-15s %-5s\n", 
+                         i + 1,
+                         users[i]->query("name"),
+                         users[i]->query("family/family_name") || "无门派",
+                         value);
+    }
+    
+    result += "──────────────────────────────────────────────────────────────────────────\n";
+    return result;
+}
+
+/**
+ * @brief 按最大气血排序
+ */
+private int sort_by_hp(object ob1, object ob2)
+{
+    return ob2->query("max_qi") - ob1->query("max_qi");
+}
+
+/**
+ * @brief 按最大内力排序
+ */
+private int sort_by_mp(object ob1, object ob2)
+{
+    return ob2->query("max_neili") - ob1->query("max_neili");
+}
+
+/**
+ * @brief 按最大精神排序
+ */
+private int sort_by_sp(object ob1, object ob2)
+{
+    return ob2->query("max_jing") - ob1->query("max_jing");
+}
+
+/**
+ * @brief 帮助信息
+ */
+int help(object me)
+{
+    write(@HELP
+指令格式：top_adm <类型>
+
+这个指令可以列出当前在线玩家的属性排行榜。
+
+可用的类型参数：
+  hp   - 显示最大气血排行
+  mp   - 显示最大内力排行
+  sp   - 显示最大精神排行
+  all  - 显示所有三种排行
+
+示例：
+  top_adm hp   - 显示最大气血排行
+  top_adm all  - 显示所有排行
+HELP);
+    return 1;
+}

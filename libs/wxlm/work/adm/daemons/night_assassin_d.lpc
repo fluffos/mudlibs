@@ -1,0 +1,231 @@
+// night_assassin_d.c
+// 夜间刺客主控精灵
+
+inherit F_DBASE;
+inherit F_SAVE;
+
+
+#include <command.h>
+#include <localtime.h>
+#include "/kungfu/class/npc_utils.lpc"
+
+#define ASSASSIN_SAVE "/data/npc/night_assassin"
+#define REFRESH_INTERVAL 3600 // 每小时检查一次
+
+nosave object assassin = 0;
+nosave int last_check_time = 0;
+mapping assassin_data = ([]);
+
+void create();
+void heart_beat();
+void create_night_assassin();
+void assassin_die(object killer);
+void assassin_steal_data(object player);
+void update_assassin_data(mapping data);
+string query_save_file();
+int clean_up();
+int do_spawn_assassin(object me);
+void create_initial_template();
+
+void create()
+{
+    seteuid(getuid());
+    set("channel_id", "夜间刺客精灵");
+    CHANNEL_D->do_channel(this_object(), "sys", "夜间刺客系统已经启动。");
+    
+    // 检查是否存在存档文件，如果不存在则创建初始模板
+    // if (file_size(ASSASSIN_SAVE + ".o") == -1)
+    // {
+    //     create_initial_template();
+    // }
+    
+    restore();
+    set_heart_beat(1);
+}
+
+// 新增函数：创建初始模板
+void create_initial_template()
+{
+    int avg_level = NPC_UTILS->get_avg_skill_level(5);
+    mapping avg_attributes = NPC_UTILS->get_avg_attributes(5);
+    
+    // 创建一个临时的刺客对象来初始化数据
+    object temp_assassin = new("/kungfu/class/night_assassin");
+    temp_assassin->init_assassin(avg_level, avg_attributes);
+    
+    // 获取初始化后的数据
+    assassin_data = ([]);
+    
+    // 复制基本属性
+    assassin_data["str"] = temp_assassin->query("str");
+    assassin_data["int"] = temp_assassin->query("int");
+    assassin_data["con"] = temp_assassin->query("con");
+    assassin_data["dex"] = temp_assassin->query("dex");
+    
+    assassin_data["max_qi"] = temp_assassin->query("max_qi");
+    assassin_data["eff_qi"] = temp_assassin->query("eff_qi");
+    assassin_data["qi"] = temp_assassin->query("qi");
+    assassin_data["max_jing"] = temp_assassin->query("max_jing");
+    assassin_data["eff_jing"] = temp_assassin->query("eff_jing");
+    assassin_data["jing"] = temp_assassin->query("jing");
+    assassin_data["max_neili"] = temp_assassin->query("max_neili");
+    assassin_data["neili"] = temp_assassin->query("neili");
+    assassin_data["combat_exp"] = temp_assassin->query("combat_exp");
+    assassin_data["jiali"] = temp_assassin->query("jiali");
+    
+    // 复制技能
+    assassin_data["skills"] = temp_assassin->query_skills();
+    
+    // 复制技能映射
+    assassin_data["skill_map"] = temp_assassin->query_skill_map();
+    
+    // 复制已准备的技能
+    assassin_data["skill_prepare"] = temp_assassin->query_skill_prepare();
+    
+    // 销毁临时对象
+    destruct(temp_assassin);
+    
+    // 保存初始模板数据
+    save();
+    
+    CHANNEL_D->do_channel(this_object(), "sys", "夜间刺客初始模板已创建。");
+}
+
+void heart_beat()
+{
+    int current_time = time();
+    mixed *local;
+
+    // 每分钟检查一次
+    if (current_time - last_check_time < 60)
+        return;
+
+    last_check_time = current_time;
+    local = localtime(current_time);
+
+    // 每天23:50后生成一个刺客，且每天只生成一次
+    if (local[LT_HOUR] == 23 && local[LT_MIN] >= 50 && !query("assassin_generated"))
+    {
+        create_initial_template();
+        remove_call_out("create_night_assassin");
+        call_out("create_night_assassin", 1);
+        set("assassin_generated", 1); // 标记当天已生成刺客
+        save(); // 保存标记
+    }
+
+    // 次日凌晨重置标记
+    if (local[LT_HOUR] == 0 && local[LT_MIN] == 0)
+    {
+        delete("assassin_generated");
+        save();
+    }
+
+    // ... 其他心跳处理保持不变 ...
+}
+
+void create_night_assassin()
+{
+    object *city_rooms;
+    object city_room;
+    string *city_dirs = get_dir("/d/city/");
+
+    city_rooms = filter_array(map_array(city_dirs, (: "/d/city/" + $1 :)), (: load_object($1) :));
+    if (sizeof(city_rooms) == 0)
+    {
+        CHANNEL_D->do_channel(this_object(), "sys", "无法找到合适的城市房间，夜间刺客创建失败。");
+        return;
+    }
+    city_room = city_rooms[random(sizeof(city_rooms))];
+    // tell_object(find_player("demo222"), "city_room: " + city_room + "\n");
+    assassin = new("/kungfu/class/night_assassin");
+    if (!objectp(assassin))
+    {
+        CHANNEL_D->do_channel(this_object(), "sys", "无法创建夜间刺客对象。");
+        return;
+    }
+
+    // 判断是否有存档数据（现在应该总是有数据）
+    if (mapp(assassin_data) && sizeof(assassin_data) > 0)
+    {
+        // 使用存档数据初始化刺客
+        assassin->init_from_data(assassin_data);
+    }
+    else
+    {
+        // 这种情况理论上不应该发生，但为了安全起见，我们保留这个分支
+        int new_avg_level = NPC_UTILS->get_avg_skill_level(5);
+        mapping new_avg_attributes = NPC_UTILS->get_avg_attributes(5);
+        assassin->init_assassin(new_avg_level, new_avg_attributes);
+        assassin_data = ([
+            "str" : assassin->query("str"),
+            "int" : assassin->query("int"),
+            "con" : assassin->query("con"),
+            "dex" : assassin->query("dex"),
+            // ... 其他属性保持不变 ...
+        ]);
+        save();
+    }
+
+    assassin->move(city_room);
+    
+    message("vision", HIR "一个神秘的刺客出现在黑夜中！\n" NOR, environment(assassin));
+    CHANNEL_D->do_channel(this_object(), "rumor", "听说夜间刺客出现在城市中，大家小心！");
+
+    assassin->start_move();
+}
+
+void assassin_die(object killer)
+{
+    if (objectp(assassin))
+    {
+        destruct(assassin);
+        assassin = 0;
+    }
+    assassin_data = ([]);
+    save();
+}
+
+void assassin_steal_data(object player)
+{
+    mapping increase;
+
+    if (!objectp(assassin) || !objectp(player))
+        return;
+
+    increase = assassin->calculate_increase(player);
+    assassin->apply_increase(increase);
+    assassin_data = assassin->query_entire_dbase();
+    save();
+}
+
+void update_assassin_data(mapping data)
+{
+    assassin_data = data;
+    save();
+}
+
+string query_save_file()
+{
+    return ASSASSIN_SAVE;
+}
+
+int clean_up()
+{
+    return 1;
+}
+
+int do_spawn_assassin(object me)
+{
+    if (!wizardp(me))
+        return notify_fail("只有巫师才能手动生成夜间刺客。\n");
+
+    if (objectp(assassin) && environment(assassin))
+    {
+        tell_object(me, "夜间刺客已经存在，无法再次生成。\n");
+        return 1;
+    }
+
+    create_night_assassin();
+    tell_object(me, "夜间刺客已手动生成。\n");
+    return 1;
+}

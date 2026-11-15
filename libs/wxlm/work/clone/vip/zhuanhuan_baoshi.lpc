@@ -1,0 +1,188 @@
+// /clone/baoshi/zhuanhuan_baoshi.c
+
+
+inherit COMBINED_ITEM;
+
+void create()
+{
+    set_name(HIY "宝石转换符" NOR, ({"gem conversion talisman", "conversion talisman", "talisman"}));
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", "这是一张神奇的符咒，可以将同等级、同颜色的宝石转换为其他属性的宝石。\n"
+                    "使用方法：convert_gem 选择要转换的宝石\n");
+        set("base_unit", "张");
+        set("base_value", 10000);
+        set("base_weight", 1);
+        set("no_sell", 1);
+        set("yuanbao", 1000);
+        set("no_bind_shop", 1);//绑定商城不能购买
+        set("no_drop", 1);
+        set("no_give", 1);
+        set("action_list", ([
+            "转换宝石" : "convert_gem",
+        ]));
+    }
+    set_amount(1);
+    setup();
+}
+
+void init()
+{
+    add_action("do_convert_gem", "convert_gem");
+}
+
+int do_convert_gem_final(string arg)
+{
+    object me, source_gem, target_gem;
+    string source_id, target_attr, color, level;
+    mapping gem_types, color_types;
+    int convert_count, source_amount, talisman_amount;
+    int is_batch = 0;
+
+    me = this_player();
+
+    if (sscanf(arg, "%s to %s batch", source_id, target_attr) == 2)
+    {
+        is_batch = 1;
+    }
+    else if (sscanf(arg, "%s to %s", source_id, target_attr) != 2)
+    {
+        return notify_fail("格式错误，请使用：convert_gem <宝石ID> to <目标属性> [batch]\n");
+    }
+
+    source_gem = present(source_id, me);
+    if (!source_gem)
+        return notify_fail("你身上没有这个宝石。\n");
+
+    if (!source_gem->query("gem_type") || !source_gem->query("level"))
+        return notify_fail("这不是一个有效的宝石。\n");
+
+    gem_types = source_gem->query("gem_types");
+    color_types = source_gem->query("color_types");
+
+    if (!gem_types[target_attr])
+        return notify_fail("无效的目标属性。\n");
+
+    color = source_gem->query("color");
+    level = sprintf("%d", source_gem->query("level"));
+
+    if (member_array(target_attr, color_types[color]) == -1)
+        return notify_fail("不能将这种颜色的宝石转换为该属性。\n");
+
+    if (target_attr == source_gem->query("gem_type"))
+        return notify_fail("宝石已经是这个属性了。\n");
+
+    source_amount = source_gem->query_amount();
+    talisman_amount = query_amount();
+    
+    if (is_batch)
+    {
+        convert_count = (source_amount < talisman_amount) ? source_amount : talisman_amount;
+    }
+    else
+    {
+        convert_count = 1;
+    }
+
+    if (convert_count > talisman_amount)
+    {
+        return notify_fail("你的宝石转换符数量不足，无法完成转换。\n");
+    }
+
+    for (int i = 0; i < convert_count; i++)
+    {
+        target_gem = new("/clone/baoshi/" + target_attr + "_baoshi_" + to_int(level));
+        if (!target_gem)
+        {
+            tell_object(me, "转换失败，目标宝石不存在。\n");
+            return 1;
+        }
+
+        target_gem->set_amount(1);
+        if (!target_gem->move(me))
+        {
+            destruct(target_gem);
+            tell_object(me, "转换失败，无法将宝石给予玩家。\n");
+            return 1;
+        }
+
+        if (source_gem->query_amount() > 1)
+            source_gem->add_amount(-1);
+        else
+        {
+            destruct(source_gem);
+            source_gem = 0;
+        }
+
+        add_amount(-1);
+
+        if (!source_gem || query_amount() == 0)
+        {
+            break;
+        }
+    }
+
+    message_vision("$N小心翼翼地将" + name() + "贴在宝石上，只见一道光芒闪过，" + 
+                   convert_count + "颗宝石完成了转换。\n", me);
+
+    return 1;
+}
+
+int do_convert_gem(string arg)
+{
+    object me, source_gem;
+    string source_id, target_attr, color, level, msg;
+    mapping gem_types, color_types;
+
+    me = this_player();
+    
+    if (!arg)
+    {
+        msg = ZJOBLONG"请选择要转换的宝石：\n";
+        msg += ZJOBACTS2+ZJMENUF(3,3,10,30);
+        foreach (object gem in all_inventory(me))
+        {
+            if (gem->query("gem_type") && gem->query("level"))
+            {
+                msg += sprintf("%s:convert_gem %s", gem->name(), file_name(gem)) + ZJSEP;
+            }
+        }
+        tell_object(me, msg + "\n");
+        return 1;
+    }
+
+    if (sscanf(arg, "%s to %s", source_id, target_attr) == 2)
+    {
+        return do_convert_gem_final(arg);
+    }
+
+    source_gem = present(arg, me);
+    if (!source_gem)
+        return notify_fail("你身上没有这个宝石。\n");
+
+    if (!source_gem->query("gem_type") || !source_gem->query("level"))
+        return notify_fail("这不是一个有效的宝石。\n");
+
+    gem_types = source_gem->query("gem_types");
+    color_types = source_gem->query("color_types");
+    
+    if (!gem_types || !color_types)
+        return notify_fail("宝石数据错误，请联系管理员。\n");
+
+    color = source_gem->query("color");
+    level = sprintf("%d", source_gem->query("level"));
+
+    msg = ZJOBLONG"请选择要转换成的宝石类型：\n";
+    msg += ZJOBACTS2+ZJMENUF(3,3,10,30);
+    foreach (string attr, string name in gem_types)
+    {
+        if (member_array(attr, color_types[color]) != -1 && attr != source_gem->query("gem_type"))
+        {
+            msg += sprintf("%s(单个):convert_gem %s to %s", name, arg, attr) + ZJSEP;
+            msg += sprintf("%s(批量):convert_gem %s to %s batch", name, arg, attr) + ZJSEP;
+        }
+    }
+    tell_object(me, msg + "\n");
+    return 1;
+}

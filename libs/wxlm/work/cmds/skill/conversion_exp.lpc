@@ -1,0 +1,136 @@
+// conversion_exp.c
+// Created by Lu dexiang 2024/03/26
+// 将经验转换为灵慧和实战体会
+
+
+inherit F_CLEAN_UP;
+
+#define EXP_TO_MAGIC 300      // 300点经验转换为1点灵慧
+#define EXP_TO_EXPERIENCE 80  // 80点经验转换为1点实战体会
+#define MAX_DAILY_EXP 500000  // 每天最多转换50w经验
+
+private string *magic_msg = ({
+    "你盘膝而坐，运转心法，将多年战斗经验化为灵慧精华。",
+    "你在修心阵中静坐，感悟武学真谛，顿觉灵台清明。",
+    "你凝神聚气，将浑厚的战斗经验化作灵慧之光。",
+    "你运转心法，只觉灵台一片空明，战斗经验化作点点灵光。",
+    "你在修心阵中参悟武道，将战斗经验升华为灵慧真意。"
+});
+
+private string *experience_msg = ({
+    "你在修心阵中回顾战斗经历，将点点滴滴化为实战真意。",
+    "你细细体会过往战斗，将经验凝练为实战精要。",
+    "你在修心阵中沉思，将战斗经验化作实战体会。",
+    "你闭目凝神，将战斗经验转化为实战真谛。",
+    "你静心参悟，将战斗经验升华为实战精髓。"
+});
+
+private void check_daily_reset(object me)
+{
+    int last_time;
+    
+    last_time = me->query("conversion_exp/last_time");
+    if (!last_time)
+    {
+        me->set("conversion_exp/last_time", time());
+        return;
+    }
+    
+    if (!is_same_day(last_time, time()))
+    {
+        me->delete("conversion_exp/daily_amount");
+        me->set("conversion_exp/last_time", time());
+        
+    }
+}
+
+int main(object me, string arg)
+{
+    int amount, exp_cost;
+    int daily_converted;
+    string type;
+    object pop;
+    
+    // 检查是否需要重置每日记录
+    check_daily_reset(me);
+    
+    if (!arg)
+    {
+        // 显示转换界面
+        daily_converted = me->query("conversion_exp/daily_amount");
+        if (!daily_converted) daily_converted = 0;
+        
+        pop = new(POP1);
+        pop->basic(HIB "【 修心阵 】\n" NOR +
+                  HIR "修心阵乃天工开物之法，可将战斗经验升华为灵慧或实战体会。\n" NOR +
+                  "今日已转化：" + daily_converted + "\n"
+                  "尚可转化：" + (MAX_DAILY_EXP - daily_converted) + "\n"
+                  "转化比例：\n"
+                  "  灵慧：三百点战斗经验可化一缕灵慧\n"
+                  "  实战：八十点战斗经验可悟一分实战真意\n", 2);
+                  
+        // 添加转换按钮
+        if (daily_converted < MAX_DAILY_EXP)
+        {
+            pop->add_button("凝练灵慧", "conversion_exp magic");
+            pop->add_button("参悟实战", "conversion_exp experience");
+        }
+        
+        write(pop->result() + "\n");
+        return 1;
+    }
+    
+    if (arg == "magic" || arg == "experience")
+    {
+        string prompt = arg == "magic" ? "欲凝练几许灵慧：" : "欲参悟几分实战：";
+        write(popup_input(prompt, "conversion_exp " + arg + " "));
+        return 1;
+    }
+    
+    if (sscanf(arg, "%s %d", type, amount) != 2)
+        return notify_fail("格式错误，请重新选择。\n");
+        
+    if (amount <= 0)
+        return notify_fail("数量须得大于零。\n");
+        
+    // 计算所需经验
+    if (type == "magic")
+        exp_cost = amount * EXP_TO_MAGIC;
+    else if (type == "experience")
+        exp_cost = amount * EXP_TO_EXPERIENCE;
+    else
+        return notify_fail("转化类型错误，请重新选择。\n");
+        
+    // 检查今日是否超出限制
+    daily_converted = me->query("conversion_exp/daily_amount");
+    if (!daily_converted) daily_converted = 0;
+    
+    if (daily_converted + exp_cost > MAX_DAILY_EXP)
+        return notify_fail("今日修心已至极限，需得明日再来。\n");
+        
+    // 检查经验是否足够
+    if (me->query("combat_exp") < exp_cost)
+        return notify_fail("战斗经验不足，尚需" + exp_cost + "点经验。\n");
+        
+    // 执行转换
+    if (type == "magic")
+    {
+        me->add("combat_exp", -exp_cost);
+        me->add("magic_points", amount);
+        me->add("conversion_exp/daily_amount", exp_cost);
+        
+        tell_object(me, HIG + magic_msg[random(sizeof(magic_msg))] + "\n" NOR);
+        tell_object(me, HIY "你将" + exp_cost + "点战斗经验化为" + amount + "点灵慧。\n" NOR);
+    }
+    else if (type == "experience")
+    {
+        me->add("combat_exp", -exp_cost);
+        me->add("experience", amount);
+        me->add("conversion_exp/daily_amount", exp_cost);
+        
+        tell_object(me, HIG + experience_msg[random(sizeof(experience_msg))] + "\n" NOR);
+        tell_object(me, HIY "你将" + exp_cost + "点战斗经验化为" + amount + "点实战体会。\n" NOR);
+    }
+    
+    return 1;
+}

@@ -1,0 +1,122 @@
+// /kungfu/skill/gaoshan-liushui/qingxin.c
+
+
+#include <combat.h>
+
+#define QINGXIN "「" HIC "清心静气" NOR "」"
+
+inherit F_SSERVER;
+
+string query_name() { return "清心静气"; }
+
+int perform(object me, object target)
+{
+    object weapon;
+    int skill, ap, dp, hit_chance;
+    string msg;
+    int cooldown;
+    int yijing_level;  // 添加变量定义
+    int base_note_chance, note_chance;
+
+    if (! target)
+        target = offensive_target(me);
+
+    if (! target || ! me->is_fighting(target))
+        return notify_fail(QINGXIN "只能对战斗中的对手使用。\n");
+
+    if (! objectp(weapon = me->query_temp("weapon")) ||
+        weapon->query("skill_type") != "qin")
+        return notify_fail("你必须手持琴才能施展" QINGXIN "。\n");
+
+    if ((int)me->query_skill("gaoshan-liushui", 1) < 100)
+        return notify_fail("你的高山流水琴法不够娴熟，还不会使用" QINGXIN "。\n");
+
+    if ((int)me->query_skill("force") < 150)
+        return notify_fail("你的内功修为不够，难以施展" QINGXIN "。\n");
+
+    if ((int)me->query_skill("yinlv", 1) < 100)
+        return notify_fail("你的音律修养不够，无法施展" QINGXIN "。\n");
+
+    if (me->query("neili") < 200)
+        return notify_fail("你现在真气不够，难以施展" QINGXIN "。\n");
+
+    // 检查冷却时间
+    if (cooldown = me->query_cooldown("gaoshan_qingxin"))
+        return notify_fail("你刚刚使用过" QINGXIN "，还需等待" + cooldown + "秒。\n");
+
+    if (target->query_temp("gaoshan_qingxin"))
+        return notify_fail("对方已经处于" QINGXIN "的影响下了。\n");
+
+    skill = me->query_skill("gaoshan-liushui", 1);
+
+    msg = HIC "$N" HIC "轻抚手中" + weapon->name() + HIC "，弹奏出一曲「清心静气」，\n"
+              "悠扬的琴音似乎有安神静气之效。\n" NOR;
+
+    ap = me->query_skill("gaoshan-liushui", 1) + me->query_skill("qin");
+    dp = target->query_skill("dodge") + target->query_skill("parry",1);
+
+    // 计算命中率
+    hit_chance = 50 + (ap - dp) / 20;
+    
+    // 确保命中率在10%到90%之间
+    if (hit_chance < 10)
+        hit_chance = 10;
+    else if (hit_chance > 90)
+        hit_chance = 90;
+
+    // 获取意境等级
+    yijing_level = me->query("skill_aoyi/有我神像");
+
+    // 计算获得音符的几率
+    base_note_chance = 35;  // 原始获得音符的概率为35%
+    note_chance = base_note_chance + yijing_level * 5;  // 每级意境增加5%
+
+    // 确保音符获取概率不超过100%
+    if (note_chance > 100)
+        note_chance = 100;
+
+    // 获得音符的机会
+    if (random(100) < note_chance)
+    {
+        if (random(2) == 0)  // 50%概率获得火音符，50%概率获得冰音符
+        {
+            me->add_temp("huoyin_count", 1);
+            tell_object(me, HIR "你在琴音中感受到了温和的火焰之力，凝聚出一枚火音符！\n" NOR);
+        }
+        else
+        {
+            me->add_temp("bingyin_count", 1);
+            tell_object(me, HIB "你在琴音中感受到了清凉的寒冰之气，凝聚出一枚冰音符！\n" NOR);
+        }
+    }
+    else
+    {
+        msg += CYN "可是$n" CYN "轻功卓绝，及时避开了琴音的影响。\n" NOR;
+        me->add("neili", -50);
+    }
+
+    message_combatd(msg, me, target);
+
+    if (! target->is_busy())
+        target->start_busy(2);
+
+    // 设置新的冷却时间
+    cooldown = me->set_cooldown("gaoshan_qingxin", 8);
+    
+    // 提醒用户冷却时间
+    tell_object(me, HIC "你的" QINGXIN "进入了" + cooldown + "秒冷却时间。\n" NOR);
+
+    return 1;
+}
+
+void remove_effect(object target)
+{
+    int amount;
+    if (amount = target->query_temp("gaoshan_qingxin"))
+    {
+        target->add_temp("apply/attack", amount);
+        target->add_temp("apply/dodge", amount);
+        target->delete_temp("gaoshan_qingxin");
+        tell_object(target, HIC "你感觉琴音的影响逐渐消退，恢复了正常。\n" NOR);
+    }
+}

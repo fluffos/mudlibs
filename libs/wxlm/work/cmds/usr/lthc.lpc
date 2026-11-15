@@ -1,0 +1,181 @@
+
+inherit F_CLEAN_UP;
+
+void display_synthesis_info(object me, string dan_id, string arg, mapping name_list);
+void handle_synthesis(object me, string dan_id, int could_dan, mapping path);
+void handle_submission(object me, string arg, string dan_id);
+
+/**
+ * @brief 炼体丹合成主函数
+ * @param object me 玩家对象
+ * @param string arg 命令参数
+ * @return int 执行结果
+ * @details 提供炼体丹合成功能，2个初级合成1个中级，2个中级合成1个高级
+ */
+int main(object me, string arg)
+{
+    mapping path = ([
+        "中级炼体丹": "/system/wusheng/obj/zhongji_lianti_dan",
+        "高级炼体丹": "/system/wusheng/obj/gaoji_lianti_dan",
+    ]);
+
+    mapping name_list = ([
+        "chuji lianti dan": "基础炼体丹",
+        "zhongji lianti dan": "中级炼体丹",
+        "gaoji lianti dan": "高级炼体丹",
+    ]);
+
+    if (arg)
+    {
+        string dan_id;
+        int number;
+
+        if (sscanf(arg, "%s confirm", dan_id) == 1)
+        {
+            int my_dan = me->query("lthc_dan/" + dan_id);
+            int could_dan = (int)(my_dan / 2);
+
+            if (my_dan < 2)
+            {
+                return notify_fail("你没有足够的材料合成。\n");
+            }
+
+            if (my_dan < 2 * could_dan)
+            {
+                return notify_fail("你的材料不足以合成。\n");
+            }
+
+            handle_synthesis(me, dan_id, could_dan, path);
+            return 1;
+        }
+
+        if (sscanf(arg, "%s submit %s", arg, dan_id) == 2)
+        {
+            handle_submission(me, arg, dan_id);
+            return 1;
+        }
+
+        if (sscanf(arg, "%s %d", arg, number) == 2)
+        {
+            write(INPUTTXT("你想合成个" + arg + "？" ZJBR "请确认你的背包空间足够。", "lthc " + arg + " $txt#") + "\n");
+            return 1;
+        }
+
+        if (arg == "中级炼体丹")
+        {
+            dan_id = "chuji lianti dan";
+        }
+        else if (arg == "高级炼体丹")
+        {
+            dan_id = "zhongji lianti dan";
+        }
+        else
+        {
+            return notify_fail("暂时没有这种丹药合成。\n");
+        }
+
+        display_synthesis_info(me, dan_id, arg, name_list);
+    }
+    else
+    {
+        string msg = ZJOBLONG "你要执行什么操作？\n" ZJOBACTS2;
+        msg += "合成中级炼体丹:lthc 中级炼体丹" ZJSEP;
+        msg += "合成高级炼体丹:lthc 高级炼体丹\n";
+        write(msg);
+    }
+
+    return 1;
+}
+
+/**
+ * @brief 显示合成信息界面
+ * @param object me 玩家对象
+ * @param string dan_id 丹药ID
+ * @param string arg 目标丹药名称
+ * @param mapping name_list 名称映射表
+ */
+void display_synthesis_info(object me, string dan_id, string arg, mapping name_list)
+{
+    string msg;
+    string *button = ({});
+    int my_dan = me->query("lthc_dan/" + dan_id);
+    int could_dan = (int)(my_dan / 2);
+    object *inv = filter_array(all_inventory(me), (: $1->query("id") == $(dan_id) :));
+
+    msg = sprintf("你当前的合成信息：\n共提交%s:%d颗\n可合成%s:%d颗\n请选择需要提交的材料，注意一经提交化为丹液，无法退回。", name_list[dan_id], my_dan, arg, could_dan);
+
+    if (!sizeof(inv))
+    {
+        msg += "\n" HIR "你没有对应的材料。" NOR;
+    }
+    else
+    {
+        foreach (object ob in inv)
+        {
+            button += ({ sprintf("%s(%d颗):lthc %s submit %s", ob->query("name"), ob->query_amount(), file_name(ob), arg) });
+        }
+    }
+
+     button += ({ sprintf("确认合成:lthc %s confirm", dan_id) });
+     button += ({ "返回:lthc" });
+
+     tell_object(me, popup_comb(msg, button));
+}
+
+/**
+ * @brief 处理合成逻辑
+ * @param object me 玩家对象
+ * @param string dan_id 材料丹药ID
+ * @param int could_dan 可合成数量
+ * @param mapping path 路径映射
+ */
+void handle_synthesis(object me, string dan_id, int could_dan, mapping path)
+{
+    string result_id;
+    object dan2;
+
+    if (dan_id == "chuji lianti dan")
+    {
+        result_id = "中级炼体丹";
+    }
+    else if (dan_id == "zhongji lianti dan")
+    {
+        result_id = "高级炼体丹";
+    }
+
+    me->add("lthc_dan/" + dan_id, -2 * could_dan);
+    dan2 = new_bind(path[result_id], me);
+    dan2->set_amount(could_dan);
+    dan2->move(me);
+
+     tell_object(me, pop_final("合成成功，获得" + could_dan + "枚" + dan2->query("name") + "。"));
+}
+
+/**
+ * @brief 处理材料提交
+ * @param object me 玩家对象
+ * @param string arg 物品参数
+ * @param string dan_id 目标丹药ID
+ */
+void handle_submission(object me, string arg, string dan_id)
+{
+    object ob = present(arg, me);
+
+    if (!objectp(ob) || ob->query_amount() < 1)
+    {
+          tell_object(me, "你没有对应的材料。\n");
+          return;
+    }
+
+    // 检查是否为炼体丹类型
+    if (!ob->query("wusheng_dan_type"))
+    {
+          tell_object(me, "这不是炼体丹，无法用于合成。\n");
+          return;
+    }
+
+    me->add("lthc_dan/" + ob->query("id"), ob->query_amount());
+    destruct(ob);
+    me->force_me("lthc " + dan_id);
+    tell_object(me, pop_final("提交成功，你的合成信息已更新。"));
+}

@@ -1,0 +1,113 @@
+#include <login.h>
+
+#define RequestType(f_name, http_type) string f_name = http_type;
+
+inherit "/external_system_package/http/base.lpc";
+
+/**
+ * @brief 处理修改密码的POST请求 (玩家在线版)
+ * @param string userid 用户ID
+ * @param string old_password 原密码
+ * @param string new_password 新密码
+ * @return mapping 包含操作结果的映射 (code, msg)
+ */
+RequestType(change_password, "POST")
+public mapping change_password(string userid, string old_password, string new_password)
+{
+    mapping result = ([]);
+    object user, link_ob;
+    // string user_file; // 不再需要
+
+    // 基础验证
+    if (!userid || !old_password || !new_password)
+    {
+        result["code"] = 400; // Bad Request
+        //返回具体缺少哪一项
+        if (!userid)
+        {
+            result["msg"] = "缺少用户ID参数";
+        }
+        else if (!old_password)
+        {
+            result["msg"] = "缺少原密码参数";
+        }
+        else if (!new_password)
+        {
+            result["msg"] = "缺少新密码参数";
+        }
+        return result;
+    }
+
+    if (strlen(new_password) < 6)
+    {
+        result["code"] = 400;
+        result["msg"] = "新密码长度不能少于6位";
+        return result;
+    }
+
+    // 查找在线玩家对象
+    user = UPDATE_D->global_find_player(userid);
+    if (!objectp(user))
+    {
+        result["code"] = 404; // Not Found
+        result["msg"] = "玩家不在线或不存在";
+        return result;
+    }
+
+    link_ob = user->query_temp("link_ob");
+    if (!objectp(link_ob))
+    {
+        // 理论上在线玩家总应该有link_ob，但以防万一
+        result["code"] = 500; // Internal Server Error
+        result["msg"] = "无法获取玩家连接对象";
+        return result;
+    }
+
+    // 验证原密码
+    if (crypt(old_password, link_ob->query("password")) != link_ob->query("password"))
+    {
+        // 不需要destruct link_ob，它属于玩家
+        result["code"] = 403; // Forbidden
+        result["msg"] = "原密码错误";
+        return result;
+    }
+
+    // 更新密码 (使用与cmds/usr/changepasswd.c相同的crypt salt)
+    link_ob->set("password", crypt(new_password, 0));
+
+    // 保存连接对象数据
+    if (!link_ob->save())
+    {
+        result["code"] = 500;
+        result["msg"] = "保存用户连接数据失败";
+        return result;
+    }
+
+    // 不需要destruct link_ob
+
+    // 记录日志
+    log_file("changepw_http", sprintf("%s：%s(%s) 通过HTTP接口修改了密码\n",
+                                       ctime(time()), "未知操作者", userid)); // 注意：这里仍然无法直接获取操作者信息
+
+    result["code"] = 200; // OK
+    result["msg"] = "密码修改成功";
+
+    // 如果玩家在线，通知玩家密码被修改为xxx
+    if (objectp(user))
+    {
+        tell_object(user, HIR "你的密码已修改为：" + new_password + NOR "\n");
+    }
+
+    return result;
+}
+
+/**
+ * (可选) 如果需要限制IP地址，可以在这里实现
+ * string *get_limit_ip_list()
+ * {
+ *     return ({
+ *         // "允许的IP地址",
+ *         "127.0.0.1",
+ *     });
+ * }
+ */

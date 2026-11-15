@@ -1,0 +1,300 @@
+#define DUANWU_D "/adm/special_ob/duanwu/duanwu_master"
+#define GUOQING_D "/adm/daemons/guoqingd"
+
+inherit F_DBASE;
+varargs int des_fuben(string fuben_sn, int indx);
+
+mapping fuben_list = ([
+	"cangjingge": ([
+		"name": "藏经阁",
+		"time": 1800,
+		"team": 1,
+	]),
+	"shitu": ([
+		"name": "师徒副本",
+		"time": 1800,
+		"team": 6,
+	]),
+	"damo": ([
+		"name": "大漠黑塔副本",
+		"time": 1800,
+		"team": 1,
+	]),
+	"baoshi": ([
+		"name": "宝石矿洞",
+		"time": 1800,
+		"team": 1,
+	]),
+	"qiu": ([
+		"name": "非不裘副本",
+		"time": 600,  // 10分钟
+		"team": 6,    // 最多6人的组队副本
+	]),
+	"bamaguan": ([
+		"name": "白马关",
+		"time": 3600,
+		"team": 1,
+	]),
+	"kuihua": ([
+		"name": "葵花秘境",
+		"time": 3600,
+		"team": 1,
+	]),
+	"yinyang": ([
+		"name": "阴阳逆转之地",
+		"time": 1200,  // 20分钟
+		"team": 6,     // 允许组队
+	]),
+	"gushengzhidi": ([
+		"name": "古圣之地",
+		"time": 1800,  // 30分钟
+		"team": 1,     // 单人副本
+	]),
+	"tianwang": ([
+		"name": "四大天王",
+		"time": 3600,  // 60分钟
+		"team": 6,     // 组队副本
+	]),
+	"huijian": ([
+		"name": "挥剑求道",
+		"time": 1800,  // 30分钟
+		"team": 1,     // 单人副本
+	]),
+]);
+
+mapping fuben_open;
+mapping fuben_where;
+
+void create()
+{
+	seteuid(ROOT_UID);
+	set("channel_id", "副本精灵");
+	CHANNEL_D->do_channel( this_object(), "sys", "副本系统已经启动。");
+	fuben_open = ([]);
+	fuben_where = ([]);
+	set_heart_beat(30);
+}
+
+void heart_beat()
+{
+	string *fuben, name;
+	int i, time;
+ 
+ 
+ 
+	
+	fuben = keys(fuben_open);
+	for(i=0;i<sizeof(fuben);i++)
+	{
+		name = fuben_open[fuben[i]]["name"];
+		time = fuben_open[fuben[i]]["time"];
+		if((time()-time)>=fuben_list[name]["time"])
+			des_fuben(fuben[i]);
+	}
+}
+
+mixed create_fuben(object me, string name)
+{
+	string *files,*dirs,fuben_sn,*list;
+	object room;
+	mapping fb;
+	int i,j,k;
+
+	if(!mapp(fuben_list[name]))
+	{
+		tell_object(me,"创建失败，无此副本！\n");
+		return 0;
+	}
+	files = get_dir("/d/fuben/"+name+"/");
+	list = ({});
+	fb = ([]);
+	fuben_sn = sprintf("%s_%d",me->query("id"),time());
+	for(i=0;i<sizeof(files);i++)
+	{
+		if(file_size("/d/fuben/"+name+"/"+files[i])>0)
+		{
+			room = new("/d/fuben/"+name+"/"+files[i]);
+
+			if (!objectp(room))
+			{
+				tell_object(me,"创建副本："+ ("/d/fuben/"+name+"/"+files[i]) + "失败！\n");
+			}
+
+			room->set("fuben_sn",fuben_sn);
+			list += ({ file_name(room) });
+			if(files[i]=="enter.lpc")
+			{
+				room->set("exits/out",base_name(environment(me)));
+				fb["enter"] = file_name(room);
+			}
+		}
+	}
+	
+	for(i=0;i<sizeof(list);i++)
+	{
+		if(room=find_object(list[i]))
+		{
+
+			//没有出口跳过
+			if(!room->query("exits"))
+				continue;
+
+			dirs = keys(room->query("exits"));
+			for(j=0;j<sizeof(dirs);j++)
+			{
+				for(k=0;k<sizeof(list);k++)
+				{
+					if (strsrch(list[k], room->query("exits/"+dirs[j])+"#")==0) {
+						
+						room->set("exits/"+dirs[j], list[k]);
+						
+						if (room->query("anniu_hide"))
+						{
+							//设置暗室备用的room
+							if (dirs[j] == "down") {
+								room->set("bei_path", list[k]);
+								room->delete("exits/down");
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if(fuben_where[base_name(environment(me))])
+		fuben_where[base_name(environment(me))] += ({ fuben_sn });
+	else
+		fuben_where[base_name(environment(me))] = ({ fuben_sn });
+
+	fb["files"] = list;
+	fb["owner"] = me->query("id");
+	fb["time"] = time();
+	fb["name"] = name;
+	fb["where"] = base_name(environment(me));
+	fuben_open[fuben_sn] = fb;
+
+	// 添加这个条件语句来重置宝石副本的状态
+	if (name == "baoshi")
+	{
+		me->delete("baoshi_fuben");
+	}
+
+	log_file("fuben_d/fuben", sprintf("%s %s %s\n", me->query("name") + "("+me->query("id")+")", 
+		"创建了"+name,
+		"位置"+fb["where"]));
+	return fb;
+}
+
+string *query_where(string where)
+{
+	if(fuben_where[where]&&sizeof(fuben_where[where]))
+		return fuben_where[where];
+	else
+		return 0;
+}
+
+mapping query_info(string fuben)
+{
+	mapping info;
+
+	if(!mapp(info=fuben_open[fuben]))
+		return 0;
+
+	info["cname"] = fuben_list[info["name"]]["name"];
+	info["team"] = fuben_list[info["name"]]["team"];
+	return info;
+}
+
+varargs int des_fuben(string fuben_sn, int indx)
+{
+	mapping info;
+	string *list;
+	object room,*inv;
+	int i,j;
+
+	info = fuben_open[fuben_sn];
+	list = info["files"];
+	for(i=0;i<sizeof(list);i++)
+	{
+		if(!objectp(room = find_object(list[i]))) continue;
+		inv = all_inventory(room);
+		for(j=0;j<sizeof(inv);j++)
+		{
+			if(playerp(inv[j]))
+			{ 
+				if (!indx)
+					tell_object(inv[j],HIG"你在"+fuben_list[info["name"]]["name"]+"内呆得太久了，不得不退了出来。"NOR"\n");
+				else
+					tell_object(inv[j],HIG"你感觉"+fuben_list[info["name"]]["name"]+"内太恐怖了，还是先撤离吧。"NOR"\n");
+				
+				inv[j]->move(info["where"]);
+			}
+		}
+		destruct(room);
+	}
+	fuben_where[info["where"]] -= ({ fuben_sn });
+	map_delete(fuben_open, fuben_sn);
+	if (sizeof(fuben_where[info["where"]]) < 1)
+		map_delete(fuben_where, info["where"]);
+	
+	return 1;
+}
+
+//副本添加经验的接口
+varargs int add_exp(object me, int exp,int type)
+{
+
+	int add_exp = exp;
+
+	add_exp += add_exp / 2;
+
+	//经验低于1亿
+	if (me->query("combat_exp") < 2_0000_0000)
+	{
+		add_exp = exp * 3;
+		tell_object(me, HIG "【经验追赶】你当前经验低于2亿，经验生效300%，实际获得经验" + add_exp + "点！\n" NOR);
+	}
+	//经验低于3亿
+	else if (me->query("combat_exp") < 4_0000_0000)
+	{
+		add_exp = exp * 2;
+		//经验追赶中，等级低于300，经验生效200%，实际获得经验xxx
+		tell_object(me, HIG "【经验追赶】你当前经验低于4亿，经验生效200%，实际获得经验" + add_exp + "点！\n" NOR);
+	}
+
+	//如果是黎明会员额外获得10%经验
+	if (is_liming_vip(me))
+	{
+		add_exp += exp / 10;
+		tell_object(me, HIG "【黎明会员】你额外获得了" + exp / 10 + "点经验！\n" NOR);
+	}
+
+	// 国庆活动期间副本经验加速20%
+	if (GUOQING_D->is_in_activity_period())
+	{
+		add_exp += exp / 5;
+		tell_object(me, HIG "【国庆活动】副本经验加速20%，额外获得了" + exp / 5 + "点经验！\n" NOR);
+	}
+
+	refresh_time(me,"jiuyue_autumn_jifen_time");
+
+	if (!type && !random(2) && me->query("jiuyue_autumn_jifen_time/number") < 100)
+	{
+		me->add("jiuyue_autumn_jifen",1);
+		me->add("jiuyue_autumn_jifen_time/number",1);
+		me->set("jiuyue_autumn_jifen_time/last_time", time());
+		tell_object(me, HIG "【限时积分活动】你获得了1点限时积分！\n" NOR);
+	}
+
+	// 统计全服经验累计（国庆活动）
+	if (GUOQING_D->is_in_activity_period())
+	{
+		GUOQING_D->add_server_exp(add_exp);
+	}
+
+	me->add("combat_exp", add_exp);
+	return add_exp;
+}
+
+

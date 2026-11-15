@@ -1,0 +1,304 @@
+/**
+ * @brief 海月剑谱 - 古剑传说的特殊奖励
+ * @details 记载海月剑法精髓的古老剑谱，可以提升剑法技能和内力修为
+ */
+
+// haiyue_jianpu.c
+// 海月剑谱 - 故事系统特殊奖励
+
+inherit COMBINED_ITEM;
+
+/**
+ * @brief 函数原型声明
+ */
+string *get_sword_moves();
+void give_mastery_bonus(object me);
+void give_special_insight(object me);
+int check_study_requirement(object me);
+int check_study_cooldown(object me);
+void set_study_cooldown(object me);
+void setup();
+/**
+ * @brief 设置物品数量
+ */
+void setup()
+{
+    set_amount(1);
+    ::setup();
+}
+
+void create()
+{
+    set_name(HIW "海月剑谱" NOR, ({"haiyue jianpu", "jianpu", "sword manual"}));
+    
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", 
+            "这是一本用特殊材质制成的古老剑谱，封面镶嵌着淡蓝色的宝石，在光线照射下\n"
+            "闪烁着如海水般的光芒。剑谱中记载着上古名剑'海月'的剑法精髓，剑招如行云\n"
+            "流水，变化万千。每一页都绘有精美的剑式图解，配以古文注解，字里行间透露\n"
+            "着深奥的剑道哲理。据说修习此剑法者，剑气如潮，威力无穷。\n"
+        );
+        
+        set("base_unit", "本");
+        set("base_weight", 2);
+        set("base_value", 8000);
+        set("yuanbao", 800);
+        
+        set("material", "paper");
+        set("no_sell", 1);
+        set("treasure", 1);
+        set("only_do_effect", 1);
+        
+        set("min_sword_level", 50);
+        set("min_force_level", 60);
+        
+        set("story_reward", "gujian_chuanshuo");
+        set("reward_type", "haiyue_sword_manual");
+        set("study_times", 15);
+    }
+    setup();
+}
+
+/**
+ * @brief 玩家使用海月剑谱时的效果
+ * @param object me 使用者
+ * @return int 使用结果，1表示成功，0表示失败
+ */
+int do_effect(object me)
+{
+    int studied_times;
+    int study_times;
+    int skill_gain;
+    int pot_cost;
+    string *sword_moves;
+    string move_desc;
+    
+    if (!me) return 0;
+    
+    // 检查使用需求
+    if (!check_study_requirement(me)) {
+        return 1;
+    }
+    
+    // 检查学习间隔
+    if (!check_study_cooldown(me)) {
+        tell_object(me, "你刚才已经学习过了，需要休息一下才能继续领悟。\n");
+        return 1;
+    }
+    
+    studied_times = me->query("haiyue_jianpu/studied_times");
+    study_times = query("study_times");
+    
+    // 检查学习次数
+    if (studied_times >= study_times) {
+        tell_object(me, "这本海月剑谱你已经完全掌握了，无法再从中学到更多。\n");
+        return 1;
+    }
+    
+    // 计算潜能消耗
+    pot_cost = 1000 + studied_times * 200;
+    if (me->query("potential") < pot_cost) {
+        tell_object(me, sprintf("你的潜能不足（需要%d点），无法继续学习。\n", pot_cost));
+        return 1;
+    }
+    
+    // 计算技能提升
+    skill_gain = 1 + random(2);
+    
+    // 扣除潜能
+    me->add("potential", -pot_cost);
+    
+    // 提升技能
+    me->improve_skill("sword", skill_gain * 100);
+    
+    // 随机获得特殊剑招领悟
+    if (random(3) == 0) {
+        give_special_insight(me);
+    }
+    
+    // 更新学习次数和冷却
+    me->add("haiyue_jianpu/studied_times", 1);
+    set_study_cooldown(me);
+    
+    // 获取剑招描述
+    sword_moves = get_sword_moves();
+    move_desc = sword_moves[studied_times % sizeof(sword_moves)];
+    
+    // 显示效果
+    tell_object(me, sprintf(
+        "%s\n"
+        "%s你专心研读海月剑谱，领悟了一招剑法：%s\n"
+        "%s你的剑法技能提升了 %d 级，消耗潜能 %d 点。%s\n"
+        "剩余学习次数：%d/%d\n",
+        HIW + repeat_string("=", 50) + NOR,
+        HIC, move_desc, NOR,
+        HIY, skill_gain, pot_cost, NOR,
+        study_times - studied_times - 1, study_times
+    ));
+    
+    // 如果学完了，给予最终奖励
+    if (studied_times + 1 >= study_times) {
+        give_mastery_bonus(me);
+    }
+    
+    add_amount(-1);
+    return 1;
+}
+
+/**
+ * @brief 检查学习需求
+ * @param object me 玩家对象
+ * @return int 1表示满足需求，0表示不满足
+ */
+int check_study_requirement(object me)
+{
+    int current_sword;
+    int current_force;
+    
+    current_sword = me->query_skill("sword", 1);
+    current_force = me->query_skill("force", 1);
+    
+    if (current_sword < query("min_sword_level")) {
+        tell_object(me, sprintf("你的剑法等级太低（当前%d，需要%d），无法理解剑谱的奥秘。\n",
+                               current_sword, query("min_sword_level")));
+        return 0;
+    }
+    
+    if (current_force < query("min_force_level")) {
+        tell_object(me, sprintf("你的内功等级太低（当前%d，需要%d），无法驾驭这种剑法。\n",
+                               current_force, query("min_force_level")));
+        return 0;
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 检查学习冷却时间
+ * @param object me 玩家对象
+ * @return int 1表示可以学习，0表示仍在冷却
+ */
+int check_study_cooldown(object me)
+{
+    int last_study_time;
+    int cooldown_time;
+    
+    last_study_time = me->query("story_book_cooldown/haiyue_jianpu");
+    cooldown_time = 1800;
+    
+    return (!last_study_time || time() - last_study_time >= cooldown_time);
+}
+
+/**
+ * @brief 设置学习冷却时间
+ * @param object me 玩家对象
+ */
+void set_study_cooldown(object me)
+{
+    me->set("story_book_cooldown/haiyue_jianpu", time());
+}
+
+/**
+ * @brief 给予特殊领悟奖励
+ * @param object me 玩家对象
+ */
+void give_special_insight(object me)
+{
+    string *insights;
+    string insight;
+    
+    insights = ({
+        "你突然领悟了'潮汐剑意'的精髓，攻击力略有提升！",
+        "你感悟到了'海月同辉'的奥秘，内力运转更加顺畅！",
+        "你掌握了'波涛汹涌'的变化，剑法连击几率增加！",
+        "你理解了'月落西山'的意境，防御力有所提升！"
+    });
+    
+    insight = insights[random(sizeof(insights))];
+    
+    // 根据领悟给予不同奖励
+    switch(random(4)) {
+        case 0: // 攻击力提升
+            me->add("str", 1);
+            break;
+        case 1: // 内力提升
+            me->add("max_neili", 100);
+            me->add("neili", 100);
+            break;
+        case 2: // 敏捷提升
+            me->add("dex", 1);
+            break;
+        case 3: // 体质提升
+            me->add("con", 1);
+            break;
+    }
+    
+    tell_object(me, sprintf("%s%s%s\n", HIR, insight, NOR));
+}
+
+/**
+ * @brief 获取剑招描述数组
+ * @return string* 剑招描述数组
+ */
+string *get_sword_moves()
+{
+    return ({
+        "海潮起伏：剑势如潮水般连绵不绝，一浪高过一浪",
+        "月影摇曳：剑光如月影般飘忽不定，难以捉摸",
+        "潮汐相融：将攻击与防御完美融合，刚柔并济",
+        "海月同辉：剑气如月光洒向大海，覆盖面极广",
+        "深海寂静：剑法收敛内蕴，蓄势待发的致命一击",
+        "月落西山：剑势由盛转衰，却在最后爆发惊人威力",
+        "海天一色：剑招浑然天成，与天地自然融为一体",
+        "潮退露礁：看似平淡的剑招中隐藏着致命杀机",
+        "月圆月缺：剑法变化如月相盈亏，循环往复",
+        "海纳百川：包容万象的剑意，能化解各种攻击",
+        "晓月如钩：细腻精准的剑招，专击敌人要害",
+        "波澜壮阔：气势磅礴的连续攻击，势如破竹",
+        "海市蜃楼：虚实难分的剑法，让敌人无法判断真假",
+        "月白风清：清雅出尘的剑招，如清风明月般纯净",
+        "海底捞月：高深莫测的终极剑招，传说威力无穷"
+    });
+}
+
+/**
+ * @brief 给予完全掌握奖励
+ * @param object me 玩家对象
+ */
+void give_mastery_bonus(object me)
+{
+    int bonus_exp;
+    int bonus_pot;
+    
+    bonus_exp = 5000;
+    bonus_pot = 2000;
+    
+    me->add("combat_exp", bonus_exp);
+    me->add("potential", bonus_pot);
+    me->add("max_neili", 500);
+    me->add("neili", 500);
+    
+    me->set("title/haiyue_master", 1);
+    
+    tell_object(me, sprintf(
+        "%s\n"
+        "你已经完全掌握了海月剑法的精髓，成为了真正的海月剑法大师！\n"
+        "完成奖励：经验 %d 点，潜能 %d 点，内力上限增加 500 点\n"
+        "你获得了特殊称号：海月剑法传人\n"
+        "%s\n",
+        HIR + repeat_string("=", 50) + NOR,
+        bonus_exp, bonus_pot,
+        HIR + repeat_string("=", 50) + NOR
+    ));
+}
+
+/**
+ * @brief 查询自动加载信息
+ * @return string 数量信息
+ */
+string query_autoload() 
+{ 
+    return query_amount() + ""; 
+}

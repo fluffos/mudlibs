@@ -1,0 +1,323 @@
+// dan_tihuan.c - 元素替换丹
+inherit COMBINED_ITEM;
+
+// 函数原型声明
+int select_skill(string skill_id);
+int select_source_element(string arg);
+int select_target_element(string arg);
+mapping get_skill_elements(object me, string skill_id);
+int do_element_replace(object me, string skill_id, string source_element, string target_element);
+
+void setup()
+{
+    set_amount(1);
+    ::setup();
+}
+
+void create()
+{
+    set_name(HIY "元素替换丹" NOR, ({ "tihuan dan", "tihuan", "dan" }));
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", "一粒散发着五彩斑斓光芒的丹药，能够将一个元素转换成另外一个元素。\n");
+        set("base_unit", "粒");
+        set("base_value", 100000);
+        set("yuanbao", 100);
+        set("only_do_effect", 1);
+        set("base_weight", 1);
+    }
+    setup();
+}
+
+void init()
+{
+    add_action("select_skill", "select_skill");
+    add_action("select_source_element", "select_source_element");
+    add_action("select_target_element", "select_target_element");
+}
+
+/**
+ * @brief 丹药使用效果
+ * @param object me 使用者对象
+ * @return int 是否成功使用
+ * @details 显示可以替换元素的武学列表
+ */
+int do_effect(object me)
+{
+    string msg = "请选择要替换元素的武学：\n";
+    string *options = ({});
+    mapping skills = me->query_skills();
+    mapping elements = me->query("wuxue_elements_wuxing");
+
+    if (!elements || !sizeof(elements))
+    {
+        tell_object(me, "你还没有解锁任何元素，无法使用此丹药。\n");
+        return 1;
+    }
+
+    foreach (string skill in keys(elements))
+    {
+        mapping skill_elements;
+        int element_count = 0;
+
+        if (!skills[skill]) continue;
+
+        skill_elements = elements[skill];
+        if (!skill_elements) continue;
+
+        // 计算该武学的元素总数（排除顺序数组）
+        foreach (string key in keys(skill_elements))
+        {
+            if (key != "顺序" && skill_elements[key] > 0)
+                element_count++;
+        }
+
+        // 只有拥有至少1个元素的武学才能进行替换
+        if (element_count > 0)
+        {
+            options += ({ to_chinese(skill) + ":select_skill " + skill });
+        }
+    }
+
+    if (sizeof(options) == 0)
+    {
+        tell_object(me, "你没有可以替换元素的武学。\n");
+        return 1;
+    }
+
+    write(popup_comb(msg, options));
+    return 1;
+}
+
+/**
+ * @brief 选择要替换元素的武学
+ * @param string skill_id 武学ID
+ * @return int 处理结果
+ * @details 显示该武学拥有的元素列表供选择
+ */
+int select_skill(string skill_id)
+{
+    object me = this_player();
+    mapping skill_elements;
+    string msg = "请选择要替换的元素：\n";
+    string *options = ({});
+
+    if (!me->query_skill(skill_id))
+    {
+        tell_object(me, "你没有学习过这个武学。\n");
+        return 1;
+    }
+
+    skill_elements = get_skill_elements(me, skill_id);
+    if (!skill_elements)
+    {
+        tell_object(me, "这个武学没有解锁任何元素。\n");
+        return 1;
+    }
+
+    // 显示拥有的元素（数量大于0的）
+    foreach (string element in ({ "金", "木", "水", "火", "土" }))
+    {
+        if (skill_elements[element] > 0)
+        {
+            options += ({ element + "(" + skill_elements[element] + "个):select_source_element " + skill_id + " " + element });
+        }
+    }
+
+    if (sizeof(options) == 0)
+    {
+        tell_object(me, "这个武学没有可替换的元素。\n");
+        return 1;
+    }
+
+    write(popup_comb(msg, options));
+    return 1;
+}
+
+/**
+ * @brief 选择源元素（要被替换的元素）
+ * @param string arg 参数字符串，格式为"skill_id element_type"
+ * @return int 处理结果
+ * @details 显示目标元素列表供选择
+ */
+int select_source_element(string arg)
+{
+    object me = this_player();
+    mapping skill_elements;
+    string msg = "请选择要转换成的目标元素：\n";
+    string *options = ({});
+    string *params;
+    string skill_id, element_type;
+
+    // 解析参数
+    if (!arg)
+    {
+        tell_object(me, "参数错误。\n");
+        return 1;
+    }
+
+    params = explode(arg, " ");
+    if (sizeof(params) != 2)
+    {
+        tell_object(me, "参数格式错误。\n");
+        return 1;
+    }
+
+    skill_id = params[0];
+    element_type = params[1];
+
+    skill_elements = get_skill_elements(me, skill_id);
+    if (!skill_elements)
+    {
+        tell_object(me, "你在" + to_chinese(skill_id) + "中没有解锁任何元素。\n");
+        return 1;
+    }
+
+    // 确保元素类型在mapping中存在并且数量大于0
+    if (!skill_elements[element_type] || skill_elements[element_type] <= 0)
+    {
+        tell_object(me, sprintf("你在%s中没有%s元素。\n", to_chinese(skill_id), element_type));
+        return 1;
+    }
+
+    // 显示所有可选择的目标元素（不包括源元素本身）
+    foreach (string target_element in ({ "金", "木", "水", "火", "土" }))
+    {
+        if (target_element != element_type)
+        {
+            options += ({ target_element + ":select_target_element " + skill_id + " " + element_type + " " + target_element });
+        }
+    }
+
+    write(popup_comb(msg, options));
+    return 1;
+}
+
+/**
+ * @brief 选择目标元素并执行替换
+ * @param string arg 参数字符串，格式为"skill_id source_element target_element"
+ * @return int 处理结果
+ * @details 执行元素替换操作
+ */
+int select_target_element(string arg)
+{
+    object me = this_player();
+    string *params;
+    string skill_id, source_element, target_element;
+
+    // 解析参数
+    if (!arg)
+    {
+        tell_object(me, "参数错误。\n");
+        return 1;
+    }
+
+    params = explode(arg, " ");
+    if (sizeof(params) != 3)
+    {
+        tell_object(me, "参数格式错误。\n");
+        return 1;
+    }
+
+    skill_id = params[0];
+    source_element = params[1];
+    target_element = params[2];
+
+    if (do_element_replace(me, skill_id, source_element, target_element))
+    {
+        tell_object(me, HIC "你服下元素替换丹，感到体内元气重新排列组合。\n" NOR);
+        tell_object(me, HIY "你的" + to_chinese(skill_id) + "武学中的一个" + source_element + "元素已转换为" + target_element + "元素。\n" NOR);
+
+        add_amount(-1);
+        return 1;
+    }
+    else
+    {
+        tell_object(me, "元素替换失败。\n");
+        return 1;
+    }
+}
+
+/**
+ * @brief 获取指定武学的元素信息
+ * @param object me 玩家对象
+ * @param string skill_id 武学ID
+ * @return mapping 元素信息映射
+ * @details 返回该武学的元素分布情况
+ */
+mapping get_skill_elements(object me, string skill_id)
+{
+    mapping elements = me->query("wuxue_elements_wuxing");
+
+    if (!elements || !elements[skill_id])
+        return 0;
+
+    return elements[skill_id];
+}
+
+/**
+ * @brief 执行元素替换操作
+ * @param object me 玩家对象
+ * @param string skill_id 武学ID
+ * @param string source_element 源元素
+ * @param string target_element 目标元素
+ * @return int 是否替换成功
+ * @details 将源元素转换为目标元素，并更新顺序记录
+ */
+int do_element_replace(object me, string skill_id, string source_element, string target_element)
+{
+    mapping elements, skill_elements;
+    string *element_order;
+    int source_pos = -1;
+
+    elements = me->query("wuxue_elements_wuxing");
+    if (!elements || !elements[skill_id])
+        return 0;
+
+    skill_elements = elements[skill_id];
+
+    // 检查源元素是否存在
+    if (skill_elements[source_element] <= 0)
+        return 0;
+
+    // 获取元素顺序数组
+    element_order = copy(skill_elements["顺序"]);
+    if (!element_order)
+        element_order = ({});
+
+    // 在顺序数组中找到第一个源元素的位置
+    for (int i = 0; i < sizeof(element_order); i++)
+    {
+        if (element_order[i] == source_element)
+        {
+            source_pos = i;
+            break;
+        }
+    }
+
+    // 执行替换
+    skill_elements[source_element]--;
+    skill_elements[target_element]++;
+
+    // 更新顺序数组（如果找到了源元素的位置）
+    if (source_pos >= 0)
+    {
+        element_order[source_pos] = target_element;
+        skill_elements["顺序"] = element_order;
+    }
+    else
+    {
+        // 如果没找到，说明顺序数组可能有问题，重新添加到末尾
+        element_order += ({ target_element });
+        skill_elements["顺序"] = element_order;
+    }
+
+    // 保存更新后的元素信息
+    elements[skill_id] = skill_elements;
+    me->set("wuxue_elements_wuxing", elements);
+
+    return 1;
+}
+
+string query_autoload() { return query_amount() + ""; }

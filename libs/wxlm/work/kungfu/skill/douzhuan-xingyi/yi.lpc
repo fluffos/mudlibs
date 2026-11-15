@@ -1,0 +1,162 @@
+// yi.c 移星换斗
+// by Lu dexiang
+#include <combat.h>
+inherit F_SSERVER;
+
+// 函数预声明
+int exert_effect(object me, object target, int ap, int dp, int aoyi_level);
+int check_condition(object me, object target);
+string apply_damage(object me, object target, int damage, string msg); // 修改这里
+string get_target_name(object target, object der);
+
+string query_name() { return "移星换斗"; }
+
+int perform(object me, object target)
+{
+    object weapon;
+    string msg;
+    int ap, dp;
+    int aoyi_level;
+
+    // 检查基本条件
+    if (check_condition(me, target))
+        return 0;
+
+    // 初始化战斗信息
+    me->clean_up_enemy();
+    if (!target) target = offensive_target(me);
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail("「移星换斗」只能对战斗中的对手使用。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    // 检查是否是慕容世家
+    if (me->query("family/family_name") != "慕容世家")
+    {
+        return notify_fail("你不是慕容世家弟子，不能使用移星换斗。\n");
+    }
+
+    msg = HIM "$N" HIM "运起紫徽心法，内力自气海穴出，经由"
+          "任督二脉奔流而出，巧妙的牵引着$n" HIM "的招式！\n";
+
+    // 计算攻击和防御
+    ap = me->query_skill("parry") / 2 + me->query_skill("force") / 2;
+    dp = target->query_skill("force") / 2 + target->query_skill("parry") / 2;
+
+    weapon = target->query_temp("weapon");
+
+    if (weapon && weapon->query("skill_type") == "pin"  && !playerp(me))
+    {
+        ap -= ap / 5;
+    }
+    me->start_busy(2);
+    me->add("neili", -50);
+    aoyi_level = COMBAT_D->get_skill_aoyi_level(me, "紫燕穿云");
+
+    // 应用效果
+    return exert_effect(me, target, ap, dp, aoyi_level);
+}
+
+// 检查条件
+int check_condition(object me, object target)
+{
+    if (userp(me) && !me->query("can_perform/douzhuan-xingyi/yi"))
+    {
+        return notify_fail("你还不会使用移星换斗。\n");
+    }
+
+    if ((int)me->query_skill("douzhuan-xingyi", 1) < 100)
+    {
+        return notify_fail("你的移星换斗不够娴熟，不会使用绝招。\n");
+    }
+
+    if (me->query("neili") < 60)
+    {
+        return notify_fail("你现在真气不够，无法使用「移星换斗」。\n");
+    }
+    return 0;
+}
+
+// 应用效果
+int exert_effect(object me, object target, int ap, int dp, int aoyi_level)
+{
+    string msg;
+    int damage;
+    int i;
+    
+    msg = HIM "$N" HIM "运起紫徽心法，内力自气海穴出，经由"
+          "任督二脉奔流而出，巧妙的牵引着$n" HIM "的招式！\n";
+
+	if (!playerp(target))
+	{
+		ap = ap * 3 / 2;
+	}
+
+    if (COMBAT_D->hit_determination(me,target,ap,dp))
+    {
+        damage = me->query("max_qi") / 16;
+
+        // if (damage >= target->query("max_neili") / 2)
+        // {
+        //     damage = target->query("max_neili") / 2;
+        // }
+
+        if (aoyi_level > 0)
+        {
+            damage += me->query("max_jing") / 50 * aoyi_level;
+            msg += HIW "$N" HIW "触发「星云倒挂」效果，精神力化作无形劲气附着于招式之上！\n" NOR;
+            msg += HIM "只见$N" HIM "双手划出一道奇异轨迹，精神力凝聚成丝丝缕缕的紫气，直透$n" HIM "心脉！\n" NOR;
+        }
+
+		if (!playerp(target))
+		{
+			damage *= 2;
+		}
+
+        msg = apply_damage(target, me, damage, msg);
+        // msg = apply_damage(target, me, damage, msg);
+    }
+    else
+    {
+        // The enemy has defense
+        msg += CYN "然而$p" CYN "内功深厚，并没有被$P"
+               CYN "这巧妙的劲力所带动。" NOR "\n";
+    }
+
+    message_combatd(msg, me, target);
+
+    {
+        // Target attack my enemy
+        for (i = 0; i < COMBAT_D->query_base_attack_number(me,query_name()); i++)
+        {
+            if (!target->is_busy())
+                target->start_busy(1);
+            COMBAT_D->do_attack(me, target, target->query_temp("weapon"));
+        }
+    }
+    return 1;
+}
+
+// 应用伤害
+string apply_damage(object target, object me, int damage, string msg)
+{
+	// 不再使用receive_damage伤害接口，使用战斗精灵的接口，但是第五个参数保留100%伤害。
+	msg += COMBAT_D->do_damage(me, target, UNARMED_ATTACK, damage, 100,
+	HIR "结果$p" HIR "一招击出，正好打在自己的"
+	"要害上，不禁一声惨叫，摔跌开去。" NOR "\n");
+    
+
+    return msg;
+}
+
+// 获取目标名称
+string get_target_name(object target, object der)
+{
+    string name;
+    name = der->name();
+    if (name == target->name())
+        name = "另一个" + name;
+    return name;
+}

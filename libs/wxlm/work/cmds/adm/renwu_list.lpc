@@ -1,0 +1,114 @@
+// int main(object me, string arg)
+// {
+//     // 遍历/d/所有目录/目录下的所有文件，如果这个文件继承了ROOM，那么查询这个room的objects属性，如果不为空，则提取这个属性的所有key。
+//     // 然后读取这些对象的名字，按照对象分组，并且记录一下这些对象所在的位置。
+//     // 最后打印所有对象所处的地方的地址
+//     // 最终效果类似于：  
+//     //  "小青": ({ "/d/baituo/yaofang" }),
+//     // "门卫": ({ "/d/baituo/ximen", "/d/baituo/damen" }),
+//     // "农民": ({ "/d/baituo/xijie", "/d/baituo/xiaolu2" }),
+// }
+
+int main(object me, string arg)
+{
+    string *dirs, *files, file, dir;
+    mapping npc_locations = ([]);
+    object room;
+    mapping objs;
+    string *keys, npc_name;
+
+    seteuid(getuid());
+
+    dirs = get_dir("/d/");
+    
+    foreach (dir in dirs)
+    {
+
+        // dir是否是一个目录
+        if (file_size("/d/" + dir + "/") != -2)
+        continue;
+
+        files = get_dir("/d/" + dir + "/");
+
+        
+        foreach (file in files)
+        {
+            if (file[<2..<1] != ".lpc")
+                continue;
+
+            file = "/d/" + dir + "/" + file;
+
+            if (!inherits(ROOM, load_object(file)))
+                continue;
+
+            room = find_object(file);
+            if (!room)
+                room = load_object(file);
+
+            if (!room)
+                continue;
+
+            objs = room->query("objects");
+            if (!mapp(objs) || sizeof(objs) == 0)
+                continue;
+
+            keys = keys(objs);
+            foreach (string key in keys)
+            {
+
+                // 如果没有这个对象，则跳过
+                if (!objectp(load_object(key)))
+                continue;
+
+                // 是否继承了NPC
+                if (!inherits(NPC, load_object(key)))
+                continue;
+
+                npc_name = filter_color(key->query("name"));
+                if (!npc_name || npc_name == "")
+                    continue;
+
+                if (!npc_locations[npc_name])
+                    npc_locations[npc_name] = ({});
+
+                npc_locations[npc_name] += ({ file });
+            }
+        }
+    }
+
+    write(sprintf("%O\n", npc_locations));
+
+    keys = sort_array(keys(npc_locations), 1);
+    {
+        string result = "";
+        foreach (string key in keys)
+        {
+            string locations = "";
+            foreach (string loc in npc_locations[key])
+            {      
+                // 移除.c后缀
+                string trimmed_loc = loc[0..<3];
+                locations += sprintf("\"%s\", ", trimmed_loc);
+
+            }
+            
+            if (locations != "")
+            {
+                locations = locations[0..<3]; // 移除最后的逗号和空格
+            }
+            result += sprintf("    \"%s\": ({ %s }),\n", key, locations);
+        }
+    
+        // 移除最后一个逗号
+        if (result != "")
+        {
+            result = result[0..<3] + "\n";
+        }
+    
+        // 写入文件
+        write_file("/u/renwu.txt", result, 1);
+    
+        write("NPC 位置信息已保存到 /u/renwu.txt\n");
+    }
+    return 1;
+}

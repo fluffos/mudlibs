@@ -1,0 +1,260 @@
+// wujiguiyi.c 无极归一
+// 先天无极决终极绝技
+
+inherit F_SSERVER;
+
+/**
+ * @brief 返回绝技名称
+ * @return string 绝技名称
+ */
+string query_name() { return "无极归一"; }
+
+/**
+ * @brief 技能类型
+ * @return string* 适用武器类型数组
+ */
+string *pfm_type() { return ({ "unarmed", "sword" }); }
+
+/**
+ * @brief 执行无极归一终极绝技
+ * @param object me 施法者
+ * @param object target 目标
+ * @return int 1表示成功，0表示失败
+ * @details 终极奥义，将太极、剑法、全真道法完美融合的最强攻击
+ */
+int perform(object me, object target)
+{
+    object weapon;
+    string msg;
+    int wujidaoxin_lvl, jindanmiyao_lvl;
+    int skill_level, neili_cost, force_level;
+
+    if (!target) target = offensive_target(me);
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail("无极归一只能对战斗中的对手使用。\n");
+
+    if ((int)me->query_skill("taiji-quanzhen", 1) < 280)
+        return notify_fail("你的先天无极决修为不足，无法使用无极归一。\n");
+
+    if ((int)me->query_skill("force", 1) < 280)
+        return notify_fail("你的内功修为不够，无法运用无极归一的终极奥义。\n");
+
+    if ((int)me->query("max_neili") < 5000)
+        return notify_fail("你的内力修为不足，无法承受无极归一的巨大消耗。\n");
+
+    if ((int)me->query("neili") < 800)
+        return notify_fail("你现在内力不够，无法使用无极归一。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    // 获取技能等级和意境等级
+    skill_level = me->query_skill("taiji-quanzhen", 1);
+    force_level = me->query_skill("force", 1);
+    wujidaoxin_lvl = COMBAT_D->get_skill_aoyi_level(me, "无极道心");
+    jindanmiyao_lvl = COMBAT_D->get_skill_aoyi_level(me, "金丹秘要");
+
+    weapon = me->query_temp("weapon");
+    neili_cost = 800;
+
+    // 意境影响内力消耗（终极绝技消耗仍然很大）
+    if (wujidaoxin_lvl > 0)
+    {
+        neili_cost = neili_cost * (10 - wujidaoxin_lvl / 8) / 10;
+        if (neili_cost < 500) neili_cost = 500;
+    }
+
+    // 终极绝技的华丽开场
+    msg = HIR "$N" HIR "缓缓闭目，全身气势开始凝聚，天地间似乎都静止了下来..." NOR "\n";
+    message_combatd(msg, me);
+    me->start_busy(1);
+
+    call_out("wujiguiyi_step2", 1, me, target, weapon, skill_level, force_level,
+             wujidaoxin_lvl, jindanmiyao_lvl, neili_cost);
+
+    return 1;
+}
+
+/**
+ * @brief 无极归一第二阶段
+ */
+void wujiguiyi_step2(object me, object target, object weapon, int skill_level,
+                    int force_level, int wujidaoxin_lvl, int jindanmiyao_lvl, int neili_cost)
+{
+    string msg;
+
+    if (!me || !target || !me->is_fighting(target))
+        return;
+
+    if (weapon && weapon->query("skill_type") == "sword")
+    {
+        msg = HIM "$N" HIM "猛然睁眼，手中$w" HIM "光芒万丈，剑意、拳意、道意三者合一，" +
+              "施展终极奥义「无极归一」！剑气冲天，震动九霄！" NOR "\n";
+    }
+    else
+    {
+        msg = HIM "$N" HIM "猛然睁眼，双手散发无尽光芒，拳意、剑意、道意三者合一，" +
+              "施展终极奥义「无极归一」！拳劲浩荡，天地变色！" NOR "\n";
+    }
+
+    message_combatd(msg, me);
+    me->add("neili", -neili_cost);
+
+    call_out("wujiguiyi_attack", 1, me, target, weapon, skill_level, force_level,
+             wujidaoxin_lvl, jindanmiyao_lvl);
+}
+
+/**
+ * @brief 无极归一攻击阶段
+ */
+void wujiguiyi_attack(object me, object target, object weapon, int skill_level,
+                     int force_level, int wujidaoxin_lvl, int jindanmiyao_lvl)
+{
+    int ap, dp, damage, critical_hit = 0;
+    string msg;
+
+    if (!me || !target || !me->is_fighting(target))
+    {
+        if (me) me->start_busy(2);
+        return;
+    }
+
+    // 计算终极攻击力
+    if (weapon && weapon->query("skill_type") == "sword")
+    {
+        ap = me->query_skill("sword") + me->query_skill("unarmed") / 2 + skill_level + force_level;
+    }
+    else
+    {
+        ap = me->query_skill("unarmed") + me->query_skill("sword") / 2 + skill_level + force_level;
+    }
+
+    dp = target->query_skill("parry") + target->query_skill("force");
+
+    // 终极意境加成
+    if (wujidaoxin_lvl > 0)
+    {
+        ap += wujidaoxin_lvl * skill_level / 6;
+        // 无极道心带来致命一击几率
+        if (wujidaoxin_lvl > 5 && random(10) < wujidaoxin_lvl - 3)
+        {
+            critical_hit = 1;
+        }
+    }
+    if (jindanmiyao_lvl > 0)
+    {
+        ap += jindanmiyao_lvl * skill_level / 8;
+        // 金丹秘要增强威力
+        if (jindanmiyao_lvl > 5)
+        {
+            ap += jindanmiyao_lvl * 20;
+        }
+    }
+
+    if (COMBAT_D->hit_determination(me, target, ap, dp))
+    {
+        // 完全命中
+        damage = ap * 3 + random(ap) + skill_level * 2 + force_level;
+
+        if (weapon && weapon->query("skill_type") == "sword")
+        {
+            msg = HIW "$n" HIW "面对$N" HIW "的终极剑意完全无法抵挡，剑光洞穿一切防御！" NOR "\n";
+        }
+        else
+        {
+            msg = HIW "$n" HIW "面对$N" HIW "的终极拳意完全无法抵挡，拳劲摧枯拉朽！" NOR "\n";
+        }
+
+        if (critical_hit)
+        {
+            damage = damage * 3 / 2;
+            msg += HIR "这一击蕴含无极道心的至高境界，威力更是惊天动地！" NOR "\n";
+        }
+    }
+    else
+    {
+        // 部分命中
+        damage = ap * 2 + random(ap / 2) + skill_level + force_level / 2;
+
+        if (weapon && weapon->query("skill_type") == "sword")
+        {
+            msg = HIY "$n" HIY "勉强抵御$N" HIY "的终极剑意，但仍然受到重创！" NOR "\n";
+        }
+        else
+        {
+            msg = HIY "$n" HIY "勉强抵御$N" HIY "的终极拳意，但仍然受到重创！" NOR "\n";
+        }
+    }
+
+    message_combatd(msg, me, target);
+
+    // 终极伤害效果
+    COMBAT_D->real_damage(me, target, damage);
+
+    // 巨额内力损失
+    target->add("neili", -damage);
+    if (target->query("neili") < 0)
+        target->set("neili", 0);
+
+    // 长时间忙乱
+    if (!target->is_busy())
+    {
+        target->start_busy(2 + random(2));
+    }
+
+    // 精神冲击
+    target->receive_damage("jing", (damage / 3 + me->query("max_jing") / 3), me);
+    // 显示造成的伤害
+    message_combatd(HIW "$N" HIW "的无极归一终极奥义对$n" HIW "造成了" + (damage / 3 + me->query("max_jing") / 3) + "点精神伤害！" NOR "\n", me, target);
+
+    // 终极意境效果
+    if (wujidaoxin_lvl > 6)
+    {
+        message_combatd(HIW "无极道心的终极奥义显现，" + target->name() + HIW "心神被彻底震慑，造成" + (wujidaoxin_lvl * 50) + "点精神伤害！" NOR "\n", me, target);
+        target->receive_damage("jing", wujidaoxin_lvl * 50, me);
+        target->add("neili", -wujidaoxin_lvl * 100);
+    }
+
+    if (jindanmiyao_lvl > 6)
+    {
+        message_combatd(HIB "金丹秘要的终极真气爆发，" + target->name() + HIB "内府遭受毁灭性打击！" NOR "\n", me, target);
+        COMBAT_D->real_damage(me, target, jindanmiyao_lvl * 40);
+    }
+
+    tell_object(me, HIG "你成功施展了无极归一终极奥义，对" + target->name() +
+                   "造成了" + damage + "点巨额伤害！" NOR "\n");
+    tell_object(target, HIR "你被无极归一的终极威力击中，感到天旋地转，几乎站立不稳！" NOR "\n");
+
+    // 终极绝技的后遗症
+    me->start_busy(3 + random(2));
+    me->add("neili", -200); // 额外消耗
+    me->receive_damage("jing", 100); // 精神消耗
+
+    // 终极招式的收尾
+    call_out("wujiguiyi_finish", 1, me, weapon);
+}
+
+/**
+ * @brief 无极归一收尾阶段
+ */
+void wujiguiyi_finish(object me, object weapon)
+{
+    string msg;
+
+    if (!me) return;
+
+    if (weapon && weapon->query("skill_type") == "sword")
+    {
+        msg = HIW "$N" HIW "缓缓收剑，剑光逐渐敛去，天地间的异象也慢慢平息，" +
+              "但那股震撼人心的剑意仍在空中回荡不散..." NOR "\n";
+    }
+    else
+    {
+        msg = HIW "$N" HIW "缓缓收势，拳劲逐渐消散，天地间的异象也慢慢平息，" +
+              "但那股震撼人心的拳意仍在空中回荡不散..." NOR "\n";
+    }
+
+    message_combatd(msg, me);
+    tell_object(me, HIM "你感到体内三门武学的精华完全融合，达到了前所未有的境界！" NOR "\n");
+}

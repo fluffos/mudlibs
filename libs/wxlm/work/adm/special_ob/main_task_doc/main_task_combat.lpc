@@ -1,0 +1,246 @@
+/**
+ * @file main_task_combat.c
+ * @brief 主线任务战斗模块实现
+ * @author Lu dexiang
+ * @date 2024-06-01
+ */
+
+
+#include "h/main_task_config.h"
+#include "h/main_task_combat.h"
+
+// 主模块对象
+mixed main_task_master = MAIN_TASK_MASTER;
+
+// 初始化函数
+void create()
+{
+    seteuid(getuid());
+}
+
+/**
+ * @brief 将玩家传送到战斗房间
+ * @param room 原始房间对象
+ * @param me 玩家对象
+ * @param npc 战斗npc对象
+ * @details 创建一个新的战斗房间,并将玩家传送过去
+ */
+object move_to_combat_room(object room, object me, object npc)
+{
+    object combat_room, new_npc;
+    // 创建战斗房间
+    combat_room = new("/adm/special_ob/main_task_doc/map/combat_room", room);
+
+    // 创建新的npc
+    new_npc = new(base_name(npc));
+
+    // 将新的npc移动到战斗房间
+    new_npc->move(combat_room);
+
+    // 将玩家移动到战斗房间
+    me->move(combat_room);
+
+    // 互相攻击
+    me->kill_ob(new_npc);
+    new_npc->kill_ob(me);
+
+    tell_object(me, "主线任务战斗开始！\n");
+
+    return new_npc;
+}
+
+/**
+ * @brief 将玩家移动到切磋房间
+ * @param object room 原始房间
+ * @param object me 玩家对象
+ * @param string family 门派名称
+ * @param int power 战斗力
+ * @param string template_path NPC模板路径，如果为0则使用默认设置
+ * @return object 创建的切磋房间对象
+ */
+object move_to_spar_room(object room, object me, string family, int power, string template_path)
+{
+    object spar_room;
+    object npc;
+    
+    if (!objectp(room) || !objectp(me))
+        return 0;
+    
+    // 创建切磋房间
+    spar_room = new("/adm/special_ob/main_task_doc/map/spar_room");
+    if (!objectp(spar_room))
+        return 0;
+    
+    // 初始化切磋房间
+    spar_room->create(room);
+    
+    // 创建NPC
+    if (template_path && template_path != "0")
+        npc = NPC_COMBAT_TPS->create_family_npc(family, power, template_path);
+    else
+        npc = NPC_COMBAT_TPS->create_family_npc(family, power);
+    
+    if (!objectp(npc))
+    {
+        destruct(spar_room);
+        return 0;
+    }
+    
+    // 将NPC移动到切磋房间
+    npc->move(spar_room);
+    
+    // 将玩家移动到切磋房间
+    me->move(spar_room);
+    
+    // 开始切磋
+    spar_room->start_spar(me, npc);
+    
+    return spar_room;
+}
+
+/**
+ * @brief 开始切磋任务
+ * @param object me 玩家对象
+ * @param int quest_id 任务ID
+ * @return int 1表示成功，0表示失败
+ */
+public int start_spar_quest(object me, int quest_id)
+{
+    mapping quest_target;
+    object room;
+    
+    if (!objectp(me))
+        return 0;
+    
+    // 检查任务ID是否有效
+    if (!main_task_config[quest_id])
+    {
+        tell_object(me, "无效的任务ID。\n");
+        return 0;
+    }
+    
+    // 检查是否是切磋任务
+    quest_target = main_task_config[quest_id]["quest_target"];
+    if (!quest_target || quest_target["type"] != "spar")
+    {
+        tell_object(me, "这不是一个切磋任务。\n");
+        return 0;
+    }
+    
+    // 检查玩家当前任务
+    if (main_task_master->get_player_current_quest(me) != quest_id)
+    {
+        tell_object(me, "这不是你当前的任务。\n");
+        return 0;
+    }
+    
+    // 检查任务是否已完成
+    if (me->query("new_main_task/target_num") > 0)
+    {
+        tell_object(me, "你已经完成了这个切磋任务。\n");
+        return 0;
+    }
+    
+    // 获取当前房间
+    room = environment(me);
+    if (!objectp(room))
+        return 0;
+    
+    // 创建切磋房间并开始切磋
+    move_to_spar_room(room, me, quest_target["family"], quest_target["power"], quest_target["template_path"]);
+    
+    return 1;
+}
+
+/**
+ * @brief 开始击杀任务
+ * @param object me 玩家对象
+ * @param int quest_id 任务ID
+ * @return int 1表示成功，0表示失败
+ */
+public int start_kill_quest(object me, int quest_id)
+{
+    mapping quest_target;
+    object room, npc;
+    
+    if (!objectp(me))
+        return 0;
+    
+    // 检查任务ID是否有效
+    if (!main_task_config[quest_id])
+    {
+        tell_object(me, "无效的任务ID。\n");
+        return 0;
+    }
+    
+    // 检查是否是击杀任务
+    quest_target = main_task_config[quest_id]["quest_target"];
+    if (!quest_target || quest_target["type"] != "kill")
+    {
+        tell_object(me, "这不是一个击杀任务。\n");
+        return 0;
+    }
+    
+    // 检查玩家当前任务
+    if (main_task_master->get_player_current_quest(me) != quest_id)
+    {
+        tell_object(me, "这不是你当前的任务。\n");
+        return 0;
+    }
+    
+    // 获取当前房间
+    room = environment(me);
+    if (!objectp(room))
+        return 0;
+    
+    // 如果任务配置了family和power，则使用NPC_COMBAT_TPS创建NPC
+    {
+        // 创建战斗房间并开始战斗
+        object combat_room = new("/adm/special_ob/main_task_doc/map/combat_room", room);
+        int is_joint = quest_target["is_joint"];
+        int num = quest_target["num"];
+
+
+        // 将玩家移动到战斗房间
+        me->move(combat_room);
+
+
+        //非联合击杀，则一次只生成一个NPC
+        if (!is_joint)
+        {
+            num = 1;
+        }
+        for (int i = 0; i < num; i++)
+        {
+            // 使用NPC_COMBAT_TPS创建NPC
+            npc = NPC_COMBAT_TPS->create_family_npc(
+                quest_target["family"], 
+                quest_target["power"], 
+                quest_target["template_path"]
+            );
+        
+            if (!objectp(npc))
+            {
+                destruct(combat_room);
+                tell_object(me, "创建NPC失败，请联系管理员。\n");
+                return 0;
+            }
+            
+            // 设置NPC名称为任务目标名称
+            npc->set_name(quest_target["name"], ({ "task target", "target" }));
+            
+            // 将NPC移动到战斗房间
+            npc->move(combat_room);
+            
+            // 互相攻击
+            me->kill_ob(npc);
+            npc->kill_ob(me);
+        }
+
+        
+        
+        tell_object(me, HIR"主线任务战斗开始！你需要击败" + quest_target["name"] + "！\n"NOR);
+        
+        return 1;
+    }
+} 

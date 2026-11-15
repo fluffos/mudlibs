@@ -1,0 +1,282 @@
+/**
+ * @file huadengd.c
+ * @author Lu dexiang
+ * @brief 花灯寻梦活动守护进程
+ * @version 1.0
+ * @date 2024-02-11
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
+inherit F_DBASE;
+#define ACTIVITY_START 1739289600  // 2025-02-12 00:00:00
+#define ACTIVITY_END   1739894400  // 2025-02-19 00:00:00
+// 活动状态
+nosave int activity_status = 0;
+// 房间列表
+nosave mapping room_list = ([]);
+// 房间总数
+nosave int total_rooms = 80;
+// 活动开始时间
+nosave int start_time = 0;
+// 活动持续时间(秒)
+nosave int duration = 2700; // 45分钟
+
+// 方向数组
+nosave string *dirs = ({"east", "west", "south", "north"});
+nosave string *opposite_dirs = ({"west", "east", "north", "south"});
+
+//预先函数声明
+int query_activity_status();
+void start_activity();
+void end_activity();
+void generate_maze();
+private void setup_exits(object room, int index);
+private string get_random_direction(mapping existing_exits);
+private string get_opposite_direction(string dir);
+void heart_beat();
+private void generate_maze_dfs(int current_index, int *visited);
+void recycle_all_map();
+
+void create() 
+{
+    seteuid(getuid());
+    set("channel_id", "花灯系统");
+    
+    // return;
+    // 设置定时检查
+    // set_heart_beat(10);
+    recycle_all_map();
+    // heart_beat();
+
+}
+
+
+//回收所有地图
+void recycle_all_map()
+{
+    object *rooms = ({});
+    string *room_base_name = ({"room_normal","room_combat","room_puzzle","room_special"});
+    foreach(string room_name in room_base_name) {
+        rooms += children("/system/huadeng/map/" + room_name);
+    }
+
+    CHANNEL_D->do_channel(this_object(), "sys", 
+    HIW"【花灯寻梦】开始回收所有地图,共计" + sizeof(rooms) + "个。"NOR);
+
+    foreach(object room in rooms) {
+        destruct(room);
+    }
+}
+
+// 心跳函数
+void heart_beat()
+{
+    mixed *local;
+    int hour;
+    
+
+    return;
+
+    // 检查是否在活动期间
+    // if(time() < ACTIVITY_START || time() > ACTIVITY_END) {
+    //     // end_activity();
+    //     return;
+    // }
+
+    local = localtime(time());
+    hour = local[2]; // 当前小时
+    
+    // 检查是否需要开启活动
+    if(hour >= 19 && hour < 22 && local[1] == 0 && !activity_status) {
+        start_activity();
+    }
+    // 检查是否需要关闭活动
+    if(activity_status && (time() - start_time) >= duration) {
+        end_activity();
+    }
+}
+
+// 开启活动
+void start_activity()
+{
+    activity_status = 1;
+    start_time = time();
+    
+    // 生成迷宫
+    generate_maze();
+    
+    CHANNEL_D->do_channel(this_object(), "chat", 
+        HIW"【花灯寻梦】活动开启了！请到扬州西南方草地上方的活动入口参加。"NOR);
+}
+
+// 结束活动
+void end_activity()
+{
+    activity_status = 0;
+    room_list = ([]);
+    
+    CHANNEL_D->do_channel(this_object(), "chat", 
+        HIW"【花灯寻梦】活动结束了，感谢大家的参与！"NOR);
+    recycle_all_map();
+}
+
+// 生成迷宫
+void generate_maze()
+{
+    int i;
+    int *visited;
+    
+    // 先创建所有房间
+    for(i = 0; i < total_rooms; i++) {
+        string room_type;
+        object room;
+        
+        if(i < 40) room_type = "normal";
+        else if(i < 60) room_type = "combat";
+        else if(i < 75) room_type = "puzzle";
+        else room_type = "special";
+        
+        room = new("/system/huadeng/map/room_" + room_type);
+        if(room) {
+            room_list[i] = room;
+        }
+    }
+    
+    // 初始化访问数组
+    visited = allocate(total_rooms);
+    
+    // 从0号房间开始生成迷宫
+    generate_maze_dfs(0, visited);
+    
+    // 随机添加一些额外的连接，增加迷宫复杂度
+    for(i = 0; i < total_rooms / 4; i++) {
+        int room1 = random(total_rooms);
+        int room2 = random(total_rooms);
+        
+        if(room1 != room2 && 
+           sizeof(room_list[room1]->query("exits")) < 4 && 
+           sizeof(room_list[room2]->query("exits")) < 4) {
+            string dir = get_random_direction(room_list[room1]->query("exits"));
+            if(dir) {
+                mapping exits = room_list[room1]->query("exits");
+                if(!exits) exits = ([]);
+                exits[dir] = file_name(room_list[room2]);
+                room_list[room1]->set("exits", exits);
+                
+                exits = room_list[room2]->query("exits");
+                if(!exits) exits = ([]);
+                exits[get_opposite_direction(dir)] = file_name(room_list[room1]);
+                room_list[room2]->set("exits", exits);
+            }
+        }
+    }
+}
+
+// 深度优先搜索生成迷宫
+private void generate_maze_dfs(int current_index, int *visited)
+{
+    int i, next_index;
+    int *dirs_order = allocate(4);
+    mapping exits;
+    
+    // 标记当前房间已访问
+    visited[current_index] = 1;
+    
+    // 随机打乱方向顺序
+    for(i = 0; i < 4; i++)
+        dirs_order[i] = i;
+    for(i = 3; i > 0; i--) {
+        int j = random(i + 1);
+        int temp = dirs_order[i];
+        dirs_order[i] = dirs_order[j];
+        dirs_order[j] = temp;
+    }
+    
+    // 遍历四个方向
+    for(i = 0; i < 4; i++) {
+
+        next_index = -1;
+        
+        // 根据方向计算下一个房间索引
+        switch(dirs_order[i]) {
+            case 0: // east
+                if((current_index + 1) < total_rooms && (current_index + 1) % 10 != 0)
+                    next_index = current_index + 1;
+                break;
+            case 1: // west
+                if((current_index - 1) >= 0 && current_index % 10 != 0)
+                    next_index = current_index - 1;
+                break;
+            case 2: // south
+                if((current_index + 10) < total_rooms)
+                    next_index = current_index + 10;
+                break;
+            case 3: // north
+                if((current_index - 10) >= 0)
+                    next_index = current_index - 10;
+                break;
+        }
+        
+        // 如果下一个房间有效且未访问
+        if(next_index != -1 && !visited[next_index]) {
+            // 连接两个房间
+            exits = room_list[current_index]->query("exits");
+            if(!exits) exits = ([]);
+            exits[dirs[dirs_order[i]]] = file_name(room_list[next_index]);
+            room_list[current_index]->set("exits", exits);
+            
+            exits = room_list[next_index]->query("exits");
+            if(!exits) exits = ([]);
+            exits[opposite_dirs[dirs_order[i]]] = file_name(room_list[current_index]);
+            room_list[next_index]->set("exits", exits);
+            
+            // 继续生成迷宫
+            generate_maze_dfs(next_index, visited);
+        }
+    }
+}
+
+// 获取随机方向
+private string get_random_direction(mapping existing_exits)
+{
+    string *available_dirs = ({"east", "west", "south", "north"});
+    available_dirs = filter_array(available_dirs, (: !$2[$1] :), existing_exits);
+    return sizeof(available_dirs) ? available_dirs[random(sizeof(available_dirs))] : 0;
+}
+
+// 获取相反方向
+private string get_opposite_direction(string dir)
+{
+    mapping opposite = ([
+        "east" : "west",
+        "west" : "east",
+        "south" : "north",
+        "north" : "south"
+    ]);
+    return opposite[dir];
+}
+
+// 获取随机房间
+object get_random_room()
+{
+    if(!sizeof(room_list)) return 0;
+    return room_list[random(sizeof(room_list))];
+}
+
+// 查询活动状态
+int query_activity_status()
+{
+    return activity_status;
+}
+
+// 重置玩家每日次数
+void reset_player_times()
+{
+    object *users = users();
+    foreach(object user in users) {
+        user->set("huadeng/free_times", 3);
+        user->delete("huadeng/extra_times");
+    }
+} 

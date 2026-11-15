@@ -1,0 +1,175 @@
+/**
+ * @brief 愚人节整蛊命令
+ * @author Lu dexiang
+ * @date 2023-04-01
+ * @details 该命令用于在愚人节活动期间使用整蛊道具对其他玩家或NPC进行整蛊
+ */
+
+inherit F_CLEAN_UP;
+int help(object me);
+// 获取活动系统对象
+private object get_system()
+{
+    object system;
+    
+    system = find_object("/system/fool_day/fool_day_system");
+    if (!system)
+    {
+        system = load_object("/system/fool_day/fool_day_system");
+        if (!system)
+            return 0;
+    }
+    
+    return system;
+}
+
+// 命令入口
+int main(object me, string arg)
+{
+    object system, target, item;
+    string target_id, item_id;
+    string popup_msg;
+    string *buttons;
+    mapping fool_items;
+    
+    // 获取活动系统
+    system = get_system();
+    if (!system)
+    {
+        write("愚人节活动系统暂时无法使用，请稍后再试。\n");
+        return 1;
+    }
+    
+    // 解析参数
+    if (!arg)
+    {
+        return help(me);
+    }
+    
+    if (sscanf(arg, "%s==%s", target_id, item_id) != 2)
+    {
+        // 只提供了目标ID，没有提供道具ID
+        target_id = arg;
+        
+        // 查找目标对象
+        if (target_id == "me" || target_id == me->query("id"))
+            target = me;
+        else
+            target = present(target_id, environment(me));
+        
+        if (!target)
+        {
+            write("你要整蛊谁？\n");
+            return 1;
+        }
+        
+        // 不能整蛊自己
+        if (target == me)
+        {
+            write("你不能整蛊自己！\n");
+            return 1;
+        }
+        
+        // 显示弹窗让玩家选择整蛊道具
+        popup_msg = HIY"【愚人节整蛊活动】\n"NOR;
+        popup_msg += "\n你准备对" + target->name() + "使用整蛊道具，请选择要使用的道具：\n";
+        
+        // 创建按钮数组
+        buttons = ({});
+        fool_items = system->query_fool_items();
+        
+        foreach (string id, string name in fool_items)
+        {
+            // 检查玩家是否拥有该道具
+            if (present(id, me))
+            {
+                buttons += ({ name + ":" + "fool_man " + target_id + "==" + id });
+            }
+        }
+        
+        // 添加取消按钮
+        buttons += ({ "取消:look" });
+        
+        // 如果玩家没有任何整蛊道具
+        if (sizeof(buttons) == 1)
+        {
+            write("你没有任何整蛊道具可以使用！\n");
+            return 1;
+        }
+        
+        // 显示弹窗
+        tell_object(me, popup_comb(popup_msg, buttons));
+        return 1;
+    }
+    
+    // 查找目标对象
+    if (target_id == "me" || target_id == me->query("id"))
+        target = me;
+    else
+        target = present(target_id, environment(me));
+    
+    if (!target)
+    {
+        write("你要整蛊谁？\n");
+        return 1;
+    }
+    
+    // 不能整蛊自己
+    if (target == me)
+    {
+        write("你不能整蛊自己！\n");
+        return 1;
+    }
+    
+    // 检查是否有该整蛊道具
+    item = present(item_id, me);
+    if (!item)
+    {
+        write("你没有这个整蛊道具！\n");
+        return 1;
+    }
+    
+    // 检查该道具是否是整蛊道具
+    if (!item->query("fool_item"))
+    {
+        write("这不是整蛊道具！\n");
+        return 1;
+    }
+    
+    // 检查是否可以使用该整蛊道具
+    if (!system->can_use_fool_item(me, target, item_id))
+    {
+        return 1;
+    }
+    
+    
+    item->add_amount(-1);
+    
+    // 执行整蛊效果
+    system->do_fool(me, target, item_id);
+    
+    return 1;
+}
+
+// 帮助信息
+int help(object me)
+{
+    object system;
+    string msg;
+    
+    // 获取活动系统
+    system = get_system();
+    if (!system)
+    {
+        write("愚人节活动系统暂时无法使用，请稍后再试。\n");
+        return 1;
+    }
+    
+    msg = HIY "【愚人节整蛊活动】\n" NOR;
+    msg += system->query_fool_day_status();
+    msg += "\n" HIW "说明：整蛊有50%的成功率，失败会通知对方。\n"
+           "      整蛊只能对在线且非忙乱状态的对象使用。\n" NOR;
+    
+    write(msg);
+    return 1;
+}

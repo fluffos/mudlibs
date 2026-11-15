@@ -1,0 +1,197 @@
+// tianshanjuejing.c 天山绝境
+// 我自逍遥决终极绝技 - 最强单体攻击
+
+#include <combat.h>
+
+/**
+ * @brief 绝技名称显示
+ * @return string 带颜色的绝技名称
+ */
+string name() { return HIR "天山绝境" NOR; }
+
+/**
+ * @brief 绝技名称查询
+ * @return string 绝技名称
+ */
+string query_name() { return "天山绝境"; }
+
+/**
+ * @brief 绝技激发类型
+ * @return string* 激发类型数组
+ */
+string *pfm_type() { return ({ "strike", "hand" }); }
+
+inherit F_SSERVER;
+
+/**
+ * @brief 绝技执行函数
+ * @param object me 施招者
+ * @param object target 目标
+ * @return int 1成功，0失败
+ * @details 终极绝技，集六阳掌威力与折梅手控制于一体
+ */
+int perform(object me, object target)
+{
+	int damage, ap, dp, final_damage, busy_time;
+	int aoyi_lingjiu, aoyi_ziyou;
+	string msg;
+
+	// 选择目标
+	if (! target)
+	{
+		me->clean_up_enemy();
+		target = me->select_opponent();
+	}
+	if (! target || ! me->is_fighting(target))
+		return notify_fail(name() + "只能对战斗中的对手使用。\n");
+
+	// 检查武器状态
+	if( query_temp("weapon", me) || query_temp("secondary_weapon", me) )
+		return notify_fail(name() + "只能空手施展。\n");
+
+	// 检查技能等级
+	if ((int)me->query_skill("tianshan-yinyang", 1) < 280)
+		return notify_fail("你的我自逍遥决还未达到大成境界，难以施展" + name() + "。\n");
+
+	// 检查基本内功等级
+	if ((int)me->query_skill("force", 1) < 280)
+		return notify_fail("你的内功修为不足，难以施展" + name() + "。\n");
+
+	// 检查最大内力
+	if( query("max_neili", me) < 5000 )
+		return notify_fail("你的内力修为不足，难以施展" + name() + "。\n");
+
+	// 检查内力
+	if( query("neili", me) < 800 )
+		return notify_fail("你现在真气不足，难以施展" + name() + "。\n");
+
+	// 检查目标状态
+	if (! living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+	// 获取意境等级
+	aoyi_lingjiu = COMBAT_D->get_skill_aoyi_level(me, "灵鹫飞羽");
+	aoyi_ziyou = COMBAT_D->get_skill_aoyi_level(me, "自由自在");
+
+	// 施招消息 - 终极奥义的震撼描述
+	msg = HIR "$N" HIR "长啸一声，将我自逍遥决运转至极限状态，天地为之变色，\n"
+	      HIR "「天山绝境」终极奥义施展而出！左掌聚六阳之威，右手含折梅之妙，\n"
+	      HIR "掌主手辅，阴阳无极，这是天山派武学的最高境界！" NOR "\n";
+
+	// 消耗内力
+	addn("neili", -800, me);
+
+	// 计算攻击力 - 终极奥义的强大威力
+	ap = me->query_skill("tianshan-yinyang", 1) * 3 / 2;
+	ap += me->query_skill("strike") * 6 / 5;  // 六阳掌威力为主导
+	ap += me->query_skill("hand") * 4 / 5;    // 折梅手精妙为辅助
+	ap += me->query_skill("force");
+	ap += me->query("max_neili") / 20;
+
+	dp = target->query_skill("parry") + target->query_skill("dodge") + target->query_skill("force") + target->query_skill("max_neili") / 20 + target->query_str();
+
+	// 意境适度加成攻击力
+	if (aoyi_lingjiu > 0)
+	{
+		ap += aoyi_lingjiu * 5;  // 从8降低到5
+		msg += HIW "$N" HIW "灵鹫飞羽意境达到巅峰，身形如神鹤翱翔九天！" NOR "\n";
+	}
+
+	if (aoyi_ziyou > 0)
+	{
+		ap += aoyi_ziyou * 4;  // 从6降低到4
+		msg += HIB "$N" HIB "自由自在意境臻至化境，心神合一，天人合一！" NOR "\n";
+	}
+
+	// PVE强化
+	if (!playerp(target))
+		ap = ap * 3 / 2;
+
+	// 命中判定
+	if (COMBAT_D->hit_determination(me, target, ap, dp))
+	{
+		// 基础伤害计算 - 大幅提升终极威力
+		damage = me->query_skill("tianshan-yinyang", 1) * 10;
+		damage += me->query_skill("strike") * 6; 
+		damage += me->query_skill("hand") * 5;  
+		damage += me->query("jiali") * 5; 
+		damage += me->query("max_neili") / 8; 
+
+		// 意境加成（进一步降低依赖）
+		if (aoyi_lingjiu > 0)
+		{
+			damage += damage / 25 * aoyi_lingjiu;
+		}
+
+		if (aoyi_ziyou > 0)
+		{
+			damage += damage / 30 * aoyi_ziyou; 
+		}
+
+		// 终极奥义额外威力加成
+		final_damage = damage * (120 + me->query_skill("tianshan-yinyang", 1) / 10) / 100;
+
+		// 控制时间计算 - 折梅手的精妙控制
+		busy_time = 3 + me->query_skill("tianshan-yinyang", 1) / 60;
+		if (busy_time > 8) busy_time = 8;
+
+		// 意境适度延长控制时间
+		if (aoyi_lingjiu > 0)
+			busy_time += aoyi_lingjiu / 8; 
+		if (aoyi_ziyou > 0)
+			busy_time += aoyi_ziyou / 10; 
+		if (busy_time > 12) busy_time = 12;
+
+		// 特殊效果判定
+		if (random(10) < 3 && me->query_skill("tianshan-yinyang", 1) > 350)
+		{
+			// 30%几率触发秒杀效果（仅对NPC）
+			if (!playerp(target) && target->query("qi") < target->query("max_qi") / 3)
+			{
+				msg += HIR "$N" HIR "天山绝境达到出神入化境界，一击必杀！" NOR "\n";
+				final_damage = -1;  // 直接秒杀
+			}
+		}
+
+		// 应用终极伤害
+		if (final_damage == -1)
+		{
+			msg += COMBAT_D->do_damage(me, target, UNARMED_ATTACK, final_damage, 100,
+			                          HIR "$n" HIR "在天山绝境的无上威势下，五脏六腑尽碎，"
+			                          HIR "当场毙命！" NOR ":秒杀@?");
+			target->die(me);
+
+			// 成功施招忙乱
+			me->start_busy(2 + random(3));
+		}
+		else
+		{
+			msg += COMBAT_D->do_damage(me, target, UNARMED_ATTACK, final_damage, 95,
+			                          HIR "$n" HIR "被天山绝境的恐怖威力所震，六阳掌劲如天火焚身，"
+			                          HIR "折梅手法封锁经脉，痛不欲生！" NOR ":重伤@?");
+
+			// 强力控制效果（仅在目标未死亡时执行）
+			if (objectp(target) && !target->is_busy() && random(2))
+			{
+				target->start_busy(busy_time);
+				target->add("neili", -(target->query("max_neili") / 5));  // 大幅削减内力
+				msg += HIM "$n" HIM "被天山绝境的终极之力所震慑，真气逆转，动弹不得！" NOR "\n";
+			}
+
+			// 成功施招忙乱
+			me->start_busy(2 + random(3));
+		}
+	}
+	else
+	{
+		// 未命中 - 终极绝技失败
+		msg += CYN "$n" CYN "在千钧一发之际避开了$N" CYN "这招天山绝境的致命一击！" NOR "\n";
+		me->start_busy(4 + random(2));
+	}
+
+	// 施招后的震撼效果
+	msg += HIY "天地为之变色，四周劲风呼啸，这就是我自逍遥决的最高奥义——天山绝境！" NOR "\n";
+
+	message_vision(msg, me, target);
+	return 1;
+}

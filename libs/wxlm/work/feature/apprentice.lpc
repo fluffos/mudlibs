@@ -1,0 +1,130 @@
+/**
+ * @brief 角色师徒关系处理模块
+ * @file apprentice.c
+ * @author Lu dexiang
+ * @date 未知
+ * @details 该模块负责处理游戏中的师徒关系，包括收徒、拜师等功能
+ */
+
+#include <dbase.h>
+
+/**
+ * @brief 检查当前对象是否是指定对象的弟子
+ * @param object ob 要检查的师父对象
+ * @return int 是否是弟子关系，1为是，0为否
+ * @details 通过比较当前对象的师父ID和名称与指定对象的ID和名称来判断
+ */
+int is_apprentice_of(object ob)
+{
+	mapping family = query("family");
+	
+	if (!mapp(family)) return 0;
+
+	return (family["master_id"] == ob->query("id") &&
+			family["master_name"] == ob->query("name")) ? 1 : 0;
+}
+
+/**
+ * @brief 分配弟子的称号和权限
+ * @param string title 称号
+ * @param int privs 权限
+ * @return void
+ * @details 根据弟子的代数设置不同的称号，如开山祖师、传人等
+ */
+void assign_apprentice(string title, int privs)
+{
+	mapping family = query("family");
+	string new_title;
+
+	if (!mapp(family)) return;
+
+	family["title"] = title;
+	family["privs"] = privs;
+
+	if (userp(this_object()) || !query("title"))
+	{
+		switch (family["generation"])
+		{
+			case 0:
+				new_title = family["family_name"] + family["title"];
+				break;
+			case 1:
+				new_title = family["family_name"] + "开山祖师";
+				break;
+			default:
+				new_title = sprintf("%s第%s代%s", family["family_name"],
+								   chinese_number(family["generation"]), family["title"]);
+				break;
+		}
+		set("title", new_title);
+	}
+}
+
+/**
+ * @brief 创建家族并初始化
+ * @param string family_name 家族名称
+ * @param int generation 代数
+ * @param string title 称号
+ * @return void
+ * @details 创建一个新的家族，设置家族名称和代数，并分配称号和权限
+ */
+void create_family(string family_name, int generation, string title)
+{
+	mapping family = allocate_mapping(6);
+
+	family["family_name"] = family_name;
+	family["generation"] = generation;
+
+	set("family", family);
+
+	// priv = -1 表示所有权限
+	assign_apprentice(title, -1);
+}
+
+/**
+ * @brief 招收弟子
+ * @param object ob 要招收的弟子对象
+ * @return int 是否成功招收，1为成功，0为失败
+ * @details 将指定对象设置为当前对象的弟子，包括设置师父信息、家族信息和称号等
+ *          如果当前对象没有家族信息或者指定对象已经是弟子，则招收失败
+ */
+int recruit_apprentice(object ob)
+{
+	mapping my_family;
+	mapping family;
+
+	my_family = query("family");
+	if (!mapp(my_family) || ob->is_apprentice_of(this_object()))
+		return 0;
+
+	// 统一弟子的职业
+	if (stringp(query("class")) && 
+	   (ob->query("class") != "bonze") &&
+	   (ob->query("class") != "eunach") &&
+	   (query("class") != "bonze") &&
+	   (query("class") != "eunach"))
+	{
+		ob->set("class", query("class"));
+	}
+
+	family = allocate_mapping(sizeof(my_family));
+	family["master_id"] = query("id");
+	family["master_name"] = query("name");
+	family["family_name"] = my_family["family_name"];
+	family["generation"] = my_family["generation"] + 1;
+	family["enter_time"] = time();
+
+	if (query("inherit_title"))
+	{
+		ob->set("title", query("inherit_title"));
+	}
+	else
+	{
+		family["title"] = (query("born_family") != "没有") ? "传人" : "弟子";
+		ob->set("title", family["title"]);
+	}
+
+	ob->set("family", family);
+	ob->assign_apprentice(family["title"], 0);
+	return 1;
+}

@@ -1,0 +1,409 @@
+
+#include <command.h>
+
+#define DUANWU_D "/adm/special_ob/duanwu/duanwu_master"
+
+inherit NPC;
+
+// 定义常用的按钮组合
+#define BTN_JOIN_FACTION ({"查看派系分配:ask xianzi about 派系"})
+#define BTN_CHECK_MATERIAL ({"查询材料:ask xianzi about 材料"})
+#define BTN_MAKE_ZONGZI ({"制作粽子:make zongzi"})
+#define BTN_LOOK_NPC ({"返回:look xianzi"})
+
+string ask_faction();
+string ask_material();
+string ask_make();
+string ask_exchange();
+
+// 辅助函数：生成未加入派系的提示
+string no_faction_tip()
+{
+    return popup_comb("你还没有加入任何派系，请先选择一个派系。", BTN_JOIN_FACTION);
+}
+
+// 辅助函数：生成材料不足的提示
+string no_material_tip()
+{
+    return popup_comb("你的材料不足，无法制作粽子。", BTN_CHECK_MATERIAL);
+}
+
+void create()
+{
+        set_name(HIG "粽子仙子" NOR, ({ "zongzi xianzi", "xianzi", "zongzi" }));
+        set("long", "一位身着翠绿衣裙的美丽仙子，她正在忙着准备端午节的粽子。\n"
+                    "你可以向她询问「" HIY "派系" NOR "」、「" HIY "材料" NOR "」或「" HIY "制作" NOR "」。\n");
+        set("gender", "女性");
+        set("age", 18);
+        set("attitude", "peaceful");
+        set("shen_type", 1);
+        set("per", 30);
+        set("str", 3000);
+        set("int", 30);
+        set("con", 30);
+        set("dex", 30000);
+
+        set("max_qi", 1000000000000);
+        set("max_jing", 10000000000);
+        set("neili", 10000000000);
+        set("max_neili", 100000000);
+        set("combat_exp", 500000);
+
+        set("inquiry", ([
+                "端午节" : "端午节可是个好日子，咱们要包粽子、赛龙舟，好不热闹呢！",
+                "派系" : (: ask_faction :),
+                "材料" : (: ask_material :),
+                "制作" : (: ask_make :),
+                "兑换" : (: ask_exchange :),
+        ]));
+
+        setup();
+        carry_object("/clone/cloth/female1-cloth")->wear();
+}
+
+void init()
+{
+        add_action("do_join", "join");
+        add_action("do_make", "make");
+        add_action("do_exchange", "exchange");
+}
+
+// 询问派系
+string ask_faction()
+{
+        object me = this_player();
+        string faction;
+        
+        faction = DUANWU_D->query_faction(me);
+        
+        if (faction != "无")
+        {
+                return popup_title("你已经加入了" + faction + "，不能再更换了。");
+        }
+        
+        return popup_comb("端午节有甜粽派和咸粽派之争！\n" +
+                      "为了保持两派平衡，系统会自动分配你的派系。\n" + 
+                      "如果两派人数相等，则随机分配。\n" +
+                      "请选择加入一个派系：",
+                        ({
+                            "参与派系分配:join fenpai"
+                        }));
+}
+
+// 询问材料
+string ask_material()
+{
+        object me = this_player();
+        string faction, msg;
+        int count;
+        // 材料ID与材料名称必须一一对应
+        string *needed_materials, *needed_material_names;
+        int i;
+        
+        faction = DUANWU_D->query_faction(me);
+        
+        if (faction == "无")
+        {
+                return no_faction_tip();
+        }
+        
+        // 根据派系确定所需材料
+        if (faction == "甜粽派")
+        {
+            // 甜粽需要：糯米、红枣、鲜肉
+            needed_materials = ({"nuomi", "hongzao", "xianrou"});
+            needed_material_names = ({"糯米", "红枣", "鲜肉"});
+        }
+        else // 咸粽派
+        {
+            // 咸粽需要：糯米、鲜肉、蛋黄
+            needed_materials = ({"nuomi", "xianrou", "danhuang"});
+            needed_material_names = ({"糯米", "鲜肉", "蛋黄"});
+        }
+        
+        msg = "制作粽子需要以下材料：\n";
+        
+        // 显示派系所需的材料
+        for (i = 0; i < sizeof(needed_materials); i++)
+        {
+                // 获取材料数量
+                count = DUANWU_D->query_material(me, needed_materials[i]);
+                
+                // 使用对应的材料名称
+                msg += needed_material_names[i] + "：" + count + "个\n";
+        }
+        
+        if (faction == "甜粽派")
+                msg += "\n" + HIG + "甜粽需要糯米、红枣和鲜肉各1个。" + NOR;
+        else
+                msg += "\n" + HIY + "咸粽需要糯米、鲜肉和蛋黄各1个。" + NOR;
+                
+        msg += "\n收集好所有材料后，可以制作粽子。";
+        msg += "\n" + HIR + "特别提示：每制作3个粽子，将额外获得1个秘宝粽子！" + NOR;
+        
+        return popup_comb(msg, 
+                        ({
+                            "制作粽子:make zongzi",
+                            "返回:look xianzi"
+                        }));
+}
+
+// 询问制作
+string ask_make()
+{
+        object me = this_player();
+        string faction;
+        
+        faction = DUANWU_D->query_faction(me);
+        
+        if (faction == "无")
+        {
+                return no_faction_tip();
+        }
+        
+        return popup_comb("收集好所有材料后，可以制作粽子。\n" +
+                      "每制作一次粽子，你将获得1点活动积分和1株艾草，还有其他奖励哦！\n" +
+                      HIR "特别提示：每制作3个粽子，将额外获得1个秘宝粽子！" NOR,
+                      ({
+                          "查看材料:ask xianzi about 材料",
+                          "制作粽子:make zongzi"
+                      }));
+}
+
+// 询问兑换
+string ask_exchange()
+{
+        object me = this_player();
+        int aicao_count;
+
+        aicao_count = me->query("duanwu_huodong/obj/ai_cao"); // 假设艾草数量存储在这里
+        if (!aicao_count) aicao_count = 0;
+
+        return popup_comb(sprintf("你目前拥有 %d 株艾草。
+
+你可以使用艾草兑换以下物品：
+" HIR "15 株艾草" NOR " 兑换一匹 伊犁马
+" HIY "1 株艾草" NOR " 兑换一个 秘宝粽子", aicao_count),
+                        ({
+                            "兑换伊犁马:exchange yilima",
+                            "兑换秘宝粽子:exchange mibao_zongzi",
+                            "返回:look xianzi"
+                        }));
+}
+
+// 加入派系
+int do_join(string arg)
+{
+        object me = this_player();
+        int result;
+        
+        if (!arg)
+        {
+                tell_object(me, popup_comb("请选择加入派系：",
+                                       ({
+                                           "参与派系分配:join fenpai"
+                                       })));
+                return 1;
+        }
+        
+        if (DUANWU_D->query_faction(me) != "无")
+        {
+                tell_object(me, popup_title("你已经加入了一个派系，不能再更换了。"));
+                return 1;
+        }
+        
+        // 系统自动分配派系
+        result = DUANWU_D->faction_distribution(me);
+        
+        if (result == 0)
+        {
+                tell_object(me, popup_title("派系分配失败，请稍后再试。"));
+                return 1;
+        }
+        
+        if (result == 1)
+        {
+                message_vision(HIG "$N" HIG "被分配到了甜粽派，从今以后要为甜粽派争光！\n" NOR, me);
+                tell_object(me, popup_comb(HIC "【系统提示】：你已成功加入甜粽派，现在可以开始收集材料制作粽子了。" NOR,
+                                      ({
+                                          "查询材料:ask xianzi about 材料",
+                                          "制作粽子:ask xianzi about 制作"
+                                      })));
+        }
+        else
+        {
+                message_vision(HIY "$N" HIY "被分配到了咸粽派，从今以后要为咸粽派争光！\n" NOR, me);
+                tell_object(me, popup_comb(HIC "【系统提示】：你已成功加入咸粽派，现在可以开始收集材料制作粽子了。" NOR,
+                                      ({
+                                          "查询材料:ask xianzi about 材料",
+                                          "制作粽子:ask xianzi about 制作"
+                                      })));
+        }
+        
+        return 1;
+}
+
+// 制作粽子
+int do_make(string arg)
+{
+        object me = this_player();
+        object mibao;
+        string faction;
+        int result;
+        int count;
+        
+        if (!arg || arg != "zongzi")
+        {
+                tell_object(me, popup_comb("你要制作什么？",
+                                      ({
+                                          "制作粽子:make zongzi"
+                                      })));
+                return 1;
+        }
+        
+        faction = DUANWU_D->query_faction(me);
+        
+        if (faction == "无")
+        {
+                tell_object(me, no_faction_tip());
+                return 1;
+        }
+        
+        // 检查并制作粽子
+        result = DUANWU_D->make_zongzi(me);
+        
+        if (result == -1)
+        {
+                tell_object(me, no_faction_tip());
+                return 1;
+        }
+        else if (result == -2)
+        {
+                tell_object(me, no_material_tip());
+                return 1;
+        }
+        else if (result == 1)
+        {
+                string reward_msg = HIY "你品尝了一个%s粽，获得了2000点经验、2000点潜能和1个绑定元宝！\n" NOR +
+                                  HIC "【系统提示】：你获得了1点活动积分和1株艾草。\n" NOR;
+                                  
+                string *reward_btns = ({
+                    "再制作一个:make zongzi",
+                    "查询材料:ask xianzi about 材料",
+                    "返回:look xianzi"
+                });
+                
+                // 增加制作粽子计数
+                if (!me->query("duanwu_huodong/zongzi_count"))
+                    me->set("duanwu_huodong/zongzi_count", 0);
+                me->add("duanwu_huodong/zongzi_count", 1);
+                
+                // 获取当前计数
+                count = me->query("duanwu_huodong/zongzi_count");
+                
+                // 检查是否达到3的倍数
+                if (count % 3 == 0)
+                {
+                    // 创建秘宝粽子
+                    mibao = new_bind("/adm/special_ob/duanwu/obj/mibao_zongzi");
+                    
+                    if (mibao)
+                    {
+                        // 尝试移动到玩家背包
+                        if (mibao->move(me))
+                        {
+                            reward_msg += HIR "【额外奖励】恭喜你制作了" + chinese_number(count) + 
+                                        "个粽子，获得了一个秘宝粽子！\n" NOR;
+                        }
+                        else
+                        {
+                            // 如果背包已满，放在地上
+                            mibao->move(environment(me));
+                            reward_msg += HIR "【额外奖励】恭喜你制作了" + chinese_number(count) + 
+                                        "个粽子，获得了一个秘宝粽子！但是你的背包已满，秘宝粽子掉在了地上。\n" NOR;
+                        }
+                    }
+                }
+                
+                if (faction == "甜粽派")
+                {
+                        message_vision(HIG "$N" HIG "将收集到的材料交给$n" HIG "，" +
+                                    "$n" HIG "熟练地包出了一个香甜可口的甜粽。\n" NOR, me, this_object());
+                        tell_object(me, popup_comb(sprintf(reward_msg, "甜"), reward_btns));
+                }
+                else
+                {
+                        message_vision(HIY "$N" HIY "将收集到的材料交给$n" HIY "，" +
+                                    "$n" HIY "熟练地包出了一个香气四溢的咸粽。\n" NOR, me, this_object());
+                        tell_object(me, popup_comb(sprintf(reward_msg, "咸"), reward_btns));
+                }
+                
+                return 1;
+        }
+        
+        return 0;
+}
+
+// 执行兑换
+int do_exchange(string arg)
+{
+        object me = this_player();
+        object item;
+        int aicao_count;
+        string item_name;
+        string item_id;
+        int cost;
+
+        if (!arg || (arg != "yilima" && arg != "mibao_zongzi"))
+        {
+                tell_object(me, popup_comb("你要兑换什么？",
+                                      ({
+                                          "兑换伊犁马:exchange yilima",
+                                          "兑换秘宝粽子:exchange mibao_zongzi",
+                                          "返回:look xianzi"
+                                      })));
+                return 1;
+        }
+
+        aicao_count = me->query("duanwu_huodong/obj/ai_cao"); // 假设艾草数量存储在这里
+        if (!aicao_count) aicao_count = 0;
+
+        if (arg == "yilima")
+        {
+            item_name = "伊犁马";
+            item_id = "/adm/special_ob/duanwu/obj/yilima";
+            cost = 15;
+        } else if (arg == "mibao_zongzi")
+        {
+            item_name = "秘宝粽子";
+            item_id = "/adm/special_ob/duanwu/obj/mibao_zongzi";
+            cost = 1;
+        }
+        else
+        {
+                return 1;
+        }
+
+        if (aicao_count < cost)
+        {
+                tell_object(me, popup_title(sprintf("你的艾草不足，兑换%s需要 %d 株艾草，你只有 %d 株。", item_name, cost, aicao_count)));
+                return 1;
+        }
+
+        // 执行兑换
+        me->add("duanwu_huodong/obj/ai_cao", -cost); // 扣除艾草
+        item = new_bind(item_id); // 创建绑定物品
+        if (item->move(me))
+        {
+            tell_object(me, popup_title(sprintf("你成功兑换了%s！消耗了 %d 株艾草。", item_name, cost)));
+            message_vision(sprintf("$N用%s株艾草向$n兑换了一%s%s。\n", chinese_number(cost), item->query("unit"), item->name()), me, this_object());
+        }
+        else
+        {
+             // 理论上上面已经检查了背包空间，这里作为备用处理
+             destruct(item);
+             tell_object(me, popup_title("兑换失败，请稍后再试。"));
+        }
+
+        return 1;
+}

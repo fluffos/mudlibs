@@ -1,0 +1,354 @@
+
+#include <command.h>
+
+#define LONGZHOU_D "/adm/special_ob/duanwu/longzhou_master"
+
+inherit NPC;
+
+// 定义常用的按钮组合
+#define BTN_REGISTER ({"报名参赛:register longzhou"})
+#define BTN_START_RACE ({"开始比赛:start race"})
+#define BTN_LOOK_NPC ({"返回:look zhangguan"})
+
+string ask_longzhou();
+string ask_rule();
+string ask_team();
+string ask_rank();
+
+void create()
+{
+    set_name(HIY "龙舟赛场管理员" NOR, ({ "longzhou zhangguan", "zhangguan", "guanli" }));
+    set("long", "一位身材魁梧的中年男子，他是龙舟赛事的总管理员。\n"
+                "你可以向他询问「" HIY "龙舟" NOR "」、「" HIY "规则" NOR "」、「" HIY "队伍" NOR "」或「" HIY "排名" NOR "」。\n");
+    set("gender", "男性");
+    set("age", 45);
+    set("attitude", "peaceful");
+    set("shen_type", 1);
+    set("per", 24);
+    set("str", 30);
+    set("int", 30);
+    set("con", 30);
+    set("dex", 30);
+
+    set("max_qi", 3000);
+    set("max_jing", 3000);
+    set("neili", 3000);
+    set("max_neili", 3000);
+    set("combat_exp", 1000000);
+
+    set("inquiry", ([
+        "龙舟" : (: ask_longzhou :),
+        "规则" : (: ask_rule :),
+        "队伍" : (: ask_team :),
+        "排名" : (: ask_rank :),
+    ]));
+
+    setup();
+    carry_object("/clone/cloth/cloth")->wear();
+}
+
+void init()
+{
+    add_action("do_register", "register");
+    add_action("do_start", "start");
+}
+
+// 询问龙舟比赛
+string ask_longzhou()
+{
+    
+    return popup_comb(HIY "欢迎参加端午龙舟竞渡活动！\n" NOR +
+                  "龙舟竞渡是我国传统的端午节活动，寓意着勇往直前、团结协作的精神。\n" +
+                  "本次活动需要组成4人队伍参赛，完成比赛后还有丰厚奖励！\n" +
+                  "你可以询问我关于「规则」「队伍」「排名」等信息。",
+                  ({
+                      "了解规则:ask zhangguan about 规则",
+                      "查看队伍:ask zhangguan about 队伍",
+                      "查看排名:ask zhangguan about 排名",
+                      "报名参赛:register longzhou"
+                  }));
+}
+
+// 询问规则
+string ask_rule()
+{
+    
+    return popup_comb(HIY "【龙舟竞渡规则】\n" NOR +
+                  "1. 参赛者需要组成4人队伍进行报名。\n" +
+                  "2. 每个队员可以独立进行比赛，不需要同时在场。\n" +
+                  "3. 比赛全程600米，分为三个赛段，每段200米。\n" +
+                  "4. 比赛过程中，每隔3秒会弹出操作提示。\n" +
+                  "5. 根据教练的口令，选择正确的动作（划桨、鼓劲、蹬舟）。\n" +
+                  "6. 选择正确，龙舟前进5米，连续五次正确加速前进20米；选择错误，龙舟不前进。\n" +
+                  "7. 每天晚上10点结算一次排名，根据排名发放奖励。\n" +
+                  "8. 冠军队伍奖励：秘宝粽子×5，绑定元宝×200，经验潜能×50000，艾草×5\n" +
+                  "   亚军队伍奖励：秘宝粽子×4，绑定元宝×150，经验潜能×50000，艾草×4\n" +
+                  "   季军队伍奖励：秘宝粽子×3，绑定元宝×100，经验潜能×40000，艾草×3\n" +
+                  "   4-5名奖励：秘宝粽子×2，绑定元宝×50，经验潜能×30000，艾草×2\n" +
+                  "   参与奖励：秘宝粽子×1，绑定元宝×50，经验潜能×20000，艾草×1",
+                  ({
+                      "报名参赛:register longzhou",
+                      "返回:look zhangguan"
+                  }));
+}
+
+// 询问队伍
+string ask_team()
+{
+    object me = this_player();
+    string team_id, msg;
+    string *members;
+    int rank;
+    int i;
+    object player;
+    
+    team_id = LONGZHOU_D->query_player_team(me);
+    
+    if (!team_id)
+    {
+        return popup_comb(HIY "你目前还没有加入任何龙舟队伍。\n" NOR +
+                      "你需要组队后再来报名参加龙舟竞渡活动。\n" +
+                      "队伍需要4人，请确保你的队伍已经组满人员。",
+                      ({
+                          "报名参赛:register longzhou",
+                          "返回:look zhangguan"
+                      }));
+    }
+    
+    members = LONGZHOU_D->query_team_members(team_id);
+    
+    msg = HIY "【你的龙舟队伍】\n" NOR;
+    msg += "队伍成员：\n";
+    
+    for (i = 0; i < sizeof(members); i++)
+    {
+        msg += chinese_number(i+1) + "、" + members[i];
+        
+        // 检查是否已完成比赛
+        player = UPDATE_D->global_find_player(members[i]); // 尝试获取在线玩家对象
+        if (!player) player = CHAR_D->restore_char(members[i]); // 尝试加载离线玩家对象
+
+        if (player && LONGZHOU_D->check_player_challenge_status(player))
+            msg += "（已完成比赛）";
+        else if (player && player->query_temp("longzhou_racing")) // 这个状态可能只在玩家在线时准确
+            msg += "（正在比赛中）";
+        else
+            msg += "（未比赛）";
+            
+        msg += "\n";
+    }
+    
+    // 显示队伍排名
+    rank = LONGZHOU_D->get_team_rank(team_id);
+    if (rank)
+    {
+        msg += "\n当前队伍排名：第" + chinese_number(rank) + "名";
+    }
+    else
+    {
+        msg += "\n当前队伍排名：暂无排名";
+    }
+    
+    return popup_comb(msg,
+                  ({
+                      "开始比赛:start race",
+                      "返回:look zhangguan"
+                  }));
+}
+
+// 询问排名
+string ask_rank()
+{
+    mapping rankings = LONGZHOU_D->get_team_rankings();
+    string *teams = keys(rankings);
+    string msg;
+    int i, j;
+    string *members;
+
+    // 按排名排序
+    teams = sort_array(teams, (: $(rankings)[$1] < $(rankings)[$2] ? -1 : 1 :));
+    
+    msg = HIY "【龙舟竞渡排行榜】\n" NOR;
+    
+    if (!sizeof(teams))
+    {
+        msg += "目前还没有队伍完成比赛，暂无排名。\n";
+    }
+    else
+    {
+        for (i = 0; i < sizeof(teams) && i < 10; i++)
+        {
+            members = LONGZHOU_D->query_team_members(teams[i]);
+            msg += "第" + chinese_number(i+1) + "名：";
+            
+            if (sizeof(members) > 0)
+            {
+                msg += UPDATE_D->global_find_player(members[0])->name() + "队 (";
+                for (j = 0; j < sizeof(members) && j < 4; j++)
+                {
+                    if (j > 0) msg += "、";
+                    msg += UPDATE_D->global_find_player(members[j])->name();
+                }
+                msg += ")\n";
+            }
+            else
+            {
+                msg += teams[i] + "\n";
+            }
+        }
+    }
+    
+    // 提醒结算时间
+    msg += "\n排名将于每晚10点结算，并发放奖励。";
+    
+    return popup_comb(msg, BTN_LOOK_NPC);
+}
+
+// 处理报名
+int do_register(string arg)
+{
+    object me = this_player();
+    object *team_members;
+    int result;
+    object member;
+    
+    if (!arg || arg != "longzhou")
+    {
+        tell_object(me, "你要报名参加什么活动？\n");
+        return 1;
+    }
+    
+    // 检查是否已经有队伍
+    if (LONGZHOU_D->query_player_team(me))
+    {
+        tell_object(me, popup_comb(HIR "你已经加入了一个龙舟队伍，不能重复报名！\n" NOR,
+                               ({
+                                   "查看队伍:ask zhangguan about 队伍",
+                                   "开始比赛:start race"
+                               })));
+        return 1;
+    }
+    
+    // 检查是否组队
+    if (!me->query_team())
+    {
+        tell_object(me, popup_comb(HIR "你需要先组成一个4人队伍才能报名参加龙舟竞渡！\n" NOR,
+                               ({
+                                   "返回:look zhangguan"
+                               })));
+        return 1;
+    }
+    
+    // 获取队伍成员
+    team_members = me->query_team();
+    
+    // 检查队伍人数
+    if (sizeof(team_members) != 4)
+    {
+        tell_object(me, popup_comb(HIR "龙舟竞渡需要4人队伍，你的队伍人数不符合要求！\n" NOR +
+                               "当前队伍人数：" + sizeof(team_members) + "人",
+                               ({
+                                   "返回:look zhangguan"
+                               })));
+        return 1;
+    }
+    
+    // 检查是否由队长报名
+    if (!me->is_team_leader())
+    {
+        tell_object(me, popup_comb(HIR "只有队长才能为队伍报名参加龙舟竞渡！\n" NOR,
+                               ({
+                                   "返回:look zhangguan"
+                               })));
+        return 1;
+    }
+    
+    // 报名队伍
+    result = LONGZHOU_D->register_team(me, team_members);
+    
+    if (result == -1)
+    {
+        tell_object(me, popup_comb(HIR "队伍中有成员已经加入了其他龙舟队伍，报名失败！\n" NOR,
+                               ({
+                                   "返回:look zhangguan"
+                               })));
+        return 1;
+    }
+    else if (result == 1)
+    {
+        message_vision(HIY "$N" HIY "带领队伍成功报名参加了龙舟竞渡活动！\n" NOR, me);
+        
+        // 通知所有队员
+        foreach (member in team_members)
+        {
+            if (member != me)
+            {
+                tell_object(member, HIY "你的队伍已由队长" + me->name() + "报名参加了龙舟竞渡活动！\n" NOR);
+            }
+        }
+        
+        tell_object(me, popup_comb(HIC "【系统提示】：报名成功！现在你和队友可以随时开始挑战。\n" NOR +
+                               "挑战结果会记录并计入队伍总成绩，每个队员可以随时独立参与挑战。\n" +
+                               "每晚10点结算排名并发放奖励。",
+                               ({
+                                   "开始比赛:start race",
+                                   "查看队伍:ask zhangguan about 队伍"
+                               })));
+        return 1;
+    }
+    
+    tell_object(me, popup_comb(HIR "报名失败，请稍后再试！\n" NOR, BTN_LOOK_NPC));
+    return 1;
+}
+
+// 开始比赛
+int do_start(string arg)
+{
+    object me = this_player();
+    object race_entrance;
+    
+    if (!arg || arg != "race")
+    {
+        tell_object(me, "你要开始什么？\n");
+        return 1;
+    }
+    
+    // 检查是否有队伍
+    if (!LONGZHOU_D->query_player_team(me))
+    {
+        tell_object(me, popup_comb(HIR "你还没有加入龙舟队伍，请先报名！\n" NOR, BTN_REGISTER));
+        return 1;
+    }
+    
+    // 检查玩家是否已经完成了本轮比赛
+    if (LONGZHOU_D->check_player_challenge_status(me))
+    {
+        tell_object(me, popup_comb(HIR "你已经完成了本轮的龙舟竞渡，成绩已记录。请等待下一轮活动开启或成绩结算！\n" NOR, BTN_LOOK_NPC));
+        return 1;
+    }
+    
+    // 检查是否在比赛中
+    if (me->query_temp("longzhou_racing"))
+    {
+        // 如果已经在比赛中，清除旧状态并提示
+        tell_object(me, popup_comb(HIY "你当前似乎有未完成的比赛，系统将为你清除旧的比赛记录并重新开始。\n" NOR, BTN_LOOK_NPC));
+        // 调用 yunhe_wai.c 中的函数来清除状态
+        load_object("/adm/special_ob/duanwu/map/yunhe_wai")->reset_player_race_status(me);
+    }
+    
+    // 获取入口地图
+    race_entrance = load_object("/adm/special_ob/duanwu/map/yunhe_wai");
+    
+    if (!race_entrance)
+    {
+        tell_object(me, popup_comb(HIR "比赛场地出现问题，请稍后再试！\n" NOR, BTN_LOOK_NPC));
+        return 1;
+    }
+    
+    message_vision("$N准备好装备，登上了一艘龙舟，准备开始挑战！\n", me);
+    
+    // 开始比赛
+    race_entrance->start_longzhou_race(me);
+    
+    return 1;
+} 

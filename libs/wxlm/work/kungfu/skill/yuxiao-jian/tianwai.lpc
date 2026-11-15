@@ -1,0 +1,131 @@
+// tianwai.c 天外清音
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+/**
+ * @brief 查询技能名称
+ * @return string 返回技能名称"天外清音"
+ */
+string query_name()
+{
+	return "天外清音";
+}
+
+/**
+ * @brief 移除天外清音的debuff效果
+ * @param object target 目标对象
+ * @details 6秒后自动移除降低的身法和招架效果
+ */
+void remove_tianwai_debuff(object target)
+{
+	int restore_value;
+
+	if (!target) return;
+
+	restore_value = target->query_temp("tianwai_restore_value");
+	if (!restore_value) return;
+
+	target->add_temp("apply/dodge", restore_value);
+	target->add_temp("apply/parry", restore_value);
+	target->delete_temp("tianwai_debuff");
+	target->delete_temp("tianwai_restore_value");
+
+	if (environment(target))
+		tell_object(target, HIW "天外仙音渐弱渐远，你的心神逐渐安定，身法重归自然。" NOR "\n");
+}
+
+/**
+ * @brief 执行天外清音技能
+ * @param object me 施展技能的玩家对象
+ * @return int 返回1表示成功，0表示失败
+ * @details 天外清音是云箫剑法的特殊招式，需要碧波神功120级以上
+ */
+int perform(object me)
+{
+	string msg;
+	object weapon, target;
+	int skill, ap, dp, qi_wound, lvl;
+
+	if (!target)
+	{
+		me->clean_up_enemy();
+		target = me->select_opponent();
+	}
+
+	if (!target || !me->is_fighting(target))
+		return notify_fail("「天外清音」只能对战斗中的对手使用。\n");
+
+	if (!objectp(weapon = me->query_temp("weapon")) ||
+	    (string)weapon->query("skill_type") != "sword")
+		return notify_fail("「天外清音」必须以剑为引，方能奏出仙音。\n");
+
+	if (me->query_skill("bibo-shengong", 1) < 120)
+		return notify_fail("你的碧波神功修为不足，难以引动天外仙音！\n");
+
+	skill = me->query_skill("yuxiao-jian", 1);
+
+	if (skill < 100)
+		return notify_fail("你的云箫剑法造诣尚浅，无法领悟「天外清音」的奥妙！\n");
+
+	if (me->query("neili") < 200)
+		return notify_fail("你的内力不足，无法催动「天外清音」！\n");
+
+	if (!living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+	if (target->query_temp("tianwai_debuff"))
+		return notify_fail("对方仍沉醉在天外仙音的余韵中，无需再次施展。\n");
+
+	msg = HIW "$N" HIW "轻抚" + weapon->name() + HIW "，剑身微震发出清越琴音，" NOR
+	      HIC "§" HIW "天外清音" HIC "§" NOR HIW "悠然而起……" NOR "\n";
+	msg += HIW "只见剑光如流水般轻柔飘逸，却又蕴含着天外之音的神秘力量，"
+	       "剑影翩然如舞，直指$n要害！" NOR "\n";
+
+	ap = me->query_skill("sword") + me->query_skill("chuixiao-jifa");
+	dp = target->query_skill("force") + target->query_skill("martial-cognize");
+	if (dp < 1) 
+		dp = 1;
+	
+	if (COMBAT_D->hit_determination(me, target, ap, dp))
+	{
+		me->add("neili", -180);
+		qi_wound = (int)me->query_skill("sword") +
+			   (int)me->query_skill("bibo-shengong", 1);
+		qi_wound = qi_wound * 2 / 3 + random(qi_wound / 3);
+		msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, qi_wound, 66,
+					   HIB "$n" HIB "只听得天外仙音阵阵，心神为之摇曳，"
+					   "仿佛置身云端，恍惚间剑气已透体而过！"NOR"\n");
+		target->receive_wound("qi", qi_wound / 2, me);
+		message_combatd(msg, me, target);
+
+		lvl = me->query_skill("chuixiao-jifa");
+		target->add_temp("apply/dodge", -lvl / 2);
+		target->add_temp("apply/parry", -lvl / 2);
+		target->set_temp("tianwai_debuff", 1);
+		target->set_temp("tianwai_restore_value", lvl / 2);
+
+		target->start_call_out((: call_other, __FILE__, "remove_tianwai_debuff", target :), 6);
+
+		for (int i = 0; i < COMBAT_D->query_base_attack_number(me, query_name()); i++)
+		{
+			if (me->is_fighting(target))
+				COMBAT_D->do_attack(me, target, weapon, 0);
+			else
+				break;
+		}
+
+		me->start_busy(1 + random(3));
+	} 
+	else
+	{
+		me->add("neili", -70);
+		msg += HIG "可是$n" HIG "心如止水，不为天音所动，"
+		       "轻描淡写间已将$N的剑势化解于无形。"NOR"\n";
+		message_combatd(msg, me, target);
+		me->start_busy(2);
+	}
+
+	return 1;
+}

@@ -1,0 +1,195 @@
+// wuji.c 无极阴阳
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+#define WUJI "「" HIW "无极阴阳" NOR "」"
+
+/**
+ * @brief 获取绝技名称
+ * @return string 绝技显示名称
+ */
+string query_name() { return "无极"ZJBR"阴阳"; }
+
+/**
+ * @brief 无极阴阳外功绝技
+ * @param object me 使用者
+ * @param object target 目标对象
+ * @return int 1表示成功，0表示失败
+ * @details 阴阳无极，太极生两仪，九阴九阳交替攻击，连环不绝
+ */
+int perform(object me, object target)
+{
+    string msg;
+    int ap, dp;
+    int damage;
+    int guang_level, mo_level;
+    int attack_times;
+
+    object weapon;
+    string skill_type, skill_name;
+    if (!target)
+    {
+        me->clean_up_enemy();
+        target = me->select_opponent();
+    }
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail(WUJI "只能对战斗中的对手使用。\n");
+
+
+    weapon = me->query_temp("weapon");
+
+    // 判断武器类型和对应的技能
+    if (!weapon)
+    {
+        // 空手：拳脚
+        skill_type = "unarmed";
+        skill_name = "拳脚";
+        if (me->query_skill_mapped("unarmed") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为拳脚，难以施展" WUJI "。\n");
+        if (me->query_skill_prepared("unarmed") != "yongzhao-shanhe")
+            return notify_fail("你现在没有准备使用永照山河经，难以施展" WUJI "。\n");
+    }
+    else if (weapon->query("skill_type") == "sword")
+    {
+        // 持剑：剑法
+        skill_type = "sword";
+        skill_name = "剑法";
+        if (me->query_skill_mapped("sword") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为剑法，难以施展" WUJI "。\n");
+    }
+    else if (weapon->query("skill_type") == "blade")
+    {
+        // 持刀：刀法
+        skill_type = "blade";
+        skill_name = "刀法";
+        if (me->query_skill_mapped("blade") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为刀法，难以施展" WUJI "。\n");
+    }
+    else
+    {
+        return notify_fail(WUJI "只能空手、持剑或持刀施展。\n");
+    }
+
+    if (me->query_skill("yongzhao-shanhe", 1) < 200)
+        return notify_fail("你的永照山河经还不够娴熟，难以施展" WUJI "。\n");
+
+    if (me->query_skill_mapped("force") != "yongzhao-shanhe")
+        return notify_fail("你现在没有激发永照山河经为内功，难以施展" WUJI "。\n");
+
+    if (me->query("neili") < 500)
+        return notify_fail("你的内力不够，难以施展" WUJI "。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    // 获取意境等级
+    guang_level = COMBAT_D->get_skill_aoyi_level(me, "光明圣火");
+    mo_level = COMBAT_D->get_skill_aoyi_level(me, "魔血染刀");
+
+    if (!weapon)
+        msg = HIW "$N" HIW "身形一转，太极生两仪，阴阳无极之意涌现，"
+              "左手九阴，右手九阳，向$n" HIW "连环攻去！\n" NOR;
+    else
+        msg = HIW "$N" HIW "手中" + weapon->name() + HIW "一抖，太极生两仪，阴阳无极之意涌现，"
+              "九阴九阳之力灌注兵刃，向$n" HIW "连环攻去！\n" NOR;
+
+    message_combatd(msg, me, target);
+
+    // 根据武器类型计算AP/DP，确保公平对应
+    ap = me->query_skill("force") + me->query_skill(skill_type) + me->query_con();
+
+    // DP也相应调整，保持公平性
+    if (skill_type == "unarmed")
+        dp = target->query_skill("force") + target->query_skill("dodge") + target->query_con();
+    else
+        dp = target->query_skill("force") + target->query_skill("parry") + target->query_con();
+
+    // 意境对AP的加成
+    if (mo_level > 0)
+    {
+        ap += mo_level * 15; // 增强魔血染刀对AP的加成
+        message_combatd(HIR "$N" HIR "体内魔血染刀奥义激发，攻势更加凶猛！\n" NOR, me, target);
+    }
+
+    if (!userp(target))
+    {
+        ap = ap * 3 / 2;
+    }
+
+    me->add("neili", -300);
+
+    // 计算连击次数（比九阳神功hun.c略多）
+    attack_times = 2 + me->query_skill("yongzhao-shanhe", 1) / 80;
+
+    // 光明圣火对连击次数的加成
+    if (guang_level > 0)
+    {
+        attack_times += guang_level / 5;
+        message_combatd(HIY "$N" HIY "体内光明圣火奥义运转，攻击连绵不绝！\n" NOR, me, target);
+    }
+
+    if (!COMBAT_D->hit_determination(me, target, ap, dp))
+    {
+        msg = HIY "然而$n" HIY "全力抵挡，终于将$N" HIY
+              "发出的阴阳二气拨开。\n" NOR;
+        me->start_busy(3);
+    }
+    else
+    {
+        me->add("neili", -200);
+        me->start_busy(1);
+
+        // 根据武器类型计算伤害（空手威力最强）
+        damage = me->query_skill("force") + me->query_skill(skill_type);
+
+        if (skill_type == "unarmed")
+        {
+            // 空手：威力最强
+            damage += me->query("max_neili") / 12;
+            damage += me->query("jiali"); // 加力全额
+        }
+        else
+        {
+            // 持械：威力稍弱
+            damage += me->query("max_neili") / 15;
+            damage += me->query("jiali") * 4 / 5; // 加力80%
+        }
+
+        // 意境伤害加成
+        if (guang_level > 0)
+        {
+            damage += damage * guang_level * 6 / 100;
+        }
+
+        if (mo_level > 0)
+        {
+            damage += damage * mo_level * 4 / 100;
+        }
+
+        if (!userp(target))
+        {
+            damage = damage * 3 / 2;
+        }
+
+        // 第一击：九阴之力
+        msg = HIC "$n" HIC "躲闪不及，被九阴之力击中，寒气入体！\n" NOR;
+        COMBAT_D->real_damage(me, target, damage * 3 / 4);
+
+        // 第二击：九阳之力
+        msg += HIR "紧接着九阳之力跟至，$n" HIR "又被阳刚之气震伤！\n" NOR;
+        COMBAT_D->real_damage(me, target, damage * 3 / 4);
+
+        // 如果有额外连击
+        if (attack_times > 2)
+        {
+            msg += HIW "阴阳交替，连击不绝，$n" HIW "连连受创！\n" NOR;
+            COMBAT_D->real_damage(me, target, damage / 2 * (attack_times - 2));
+        }
+    }
+
+    message_combatd(msg, me, target);
+    return 1;
+}

@@ -1,0 +1,276 @@
+// 种植系统守护程序
+
+inherit F_DBASE;
+
+mapping planted_crops = ([]);  // 存储所有种植的作物信息
+
+//函数声明
+void add_crop(string owner_id, string land_path, string crop_type, int plant_time);
+void remove_crop(string owner_id, string land_path);
+mixed get_crop_info(string owner_id, string land_path);
+void update_grow_time(string owner_id, string land_path, int time);
+void set_crop_mature(string owner_id, string land_path);
+void set_fertilized(string owner_id, string land_path);
+void heart_beat();
+int get_mature_time(string crop_type);
+string get_crop_stage(string owner_id, string land_path);
+int get_crop_growth_percent(string owner_id, string land_path);
+int can_harvest(string owner_id, string land_path);
+mixed harvest_crop(string owner_id, string land_path);
+void save_planted_crops();
+void load_planted_crops();
+void auto_save();
+
+// 定义作物信息数据结构
+private nosave mapping crop_data = ([
+    "葡萄树" : ([
+        "seed_file" : "/clone/plant/obj/putao_seed",
+        "harvest_file" : "/clone/vip/putao",
+        "mature_time" : 5 * 3600,  // 5小时
+        "amount":10,//产出数量
+    ]),
+    "人参果树" : ([
+        "seed_file" : "/clone/plant/obj/renshen_seed",
+        "harvest_file" : "/clone/plant/obj/renshen_fruit",
+        "mature_time" : 6 * 3600,  // 6小时
+        "amount":1,//产出数量
+    ]),
+    "悟心树" : ([
+        "seed_file" : "/clone/plant/obj/wuxin_seed",
+        "harvest_file" : "/clone/plant/obj/wuxin_flower",
+        "mature_time" : 12 * 3600,  // 12小时
+        "amount":1,//产出数量
+    ]),
+]);
+
+void create()
+{
+    seteuid(getuid());
+    set("channel_id", "种植精灵");
+    CHANNEL_D->do_channel(this_object(), "sys", "种植系统已启动。");
+    
+    // 加载之前保存的种植数据
+    load_planted_crops();
+    
+    // 设置心跳，用于更新作物生长状态
+    set_heart_beat(5);  // 每10秒进行一次更新
+    
+    // 启动自动保存
+    call_out("auto_save", 300);  // 每5分钟自动保存一次
+}
+
+// 添加新种植的作物
+void add_crop(string owner_id, string land_path, string crop_type, int plant_time)
+{
+    string key;
+
+    key = owner_id + ":" + land_path;
+    planted_crops[key] = ([
+        "owner_id"   : owner_id,
+        "land_path"  : land_path,
+        "crop_type"  : crop_type,
+        "plant_time" : plant_time,
+        "grow_time"  : 0,
+        "is_mature"  : 0,
+        "is_fertilized" : 0,
+    ]);
+    
+    if (!objectp(find_object(land_path)))
+    {
+        load_object(land_path);
+    }
+}
+
+// 移除作物
+void remove_crop(string owner_id, string land_path)
+{
+    string key;
+
+    key = owner_id + ":" + land_path;
+    map_delete(planted_crops, key);
+}
+
+// 获取作物信息
+mixed get_crop_info(string owner_id, string land_path)
+{
+    string key;
+
+    key = owner_id + ":" + land_path;
+
+    if (undefinedp(planted_crops[key]))
+    {
+        return 0;
+    }
+
+    return planted_crops[key];
+}
+
+// 更新作物生长时间
+void update_grow_time(string owner_id, string land_path, int time)
+{
+    string key;
+
+    key = owner_id + ":" + land_path;
+    if (planted_crops[key])
+    {
+        planted_crops[key]["grow_time"] += time;
+    }
+}
+
+// 设置作物成熟状态
+void set_crop_mature(string owner_id, string land_path)
+{
+    string key;
+
+    key = owner_id + ":" + land_path;
+    if (planted_crops[key])
+    {
+        planted_crops[key]["is_mature"] = 1;
+    }
+}
+
+// 设置施肥状态
+void set_fertilized(string owner_id, string land_path)
+{
+    string key;
+
+    key = owner_id + ":" + land_path;
+    if (planted_crops[key])
+    {
+        planted_crops[key]["is_fertilized"] = 1;
+    }
+}
+
+// 心跳函数
+void heart_beat()
+{
+    string key, crop_type;
+    int mature_time;
+    mapping crop;
+    
+    foreach (key, crop in planted_crops)
+    {
+        if (!crop["is_fertilized"] || crop["is_mature"]) continue;  // 未施肥或已成熟的作物不生长
+        
+        crop_type = crop["crop_type"];
+        mature_time = get_mature_time(crop_type);
+        
+        update_grow_time(crop["owner_id"], crop["land_path"], 10);
+        
+        if (crop["grow_time"] >= mature_time)
+        {
+            set_crop_mature(crop["owner_id"], crop["land_path"]);
+        }
+    }
+}
+
+// 获取作物成熟时间（秒）
+int get_mature_time(string crop_type)
+{
+    if (member_array(crop_type, keys(crop_data)) == -1)
+        return 0;
+    return crop_data[crop_type]["mature_time"];
+}
+
+// 获取作物当前生长阶段
+string get_crop_stage(string owner_id, string land_path)
+{
+    mapping crop;
+    int grow_percent;
+
+    crop = get_crop_info(owner_id, land_path);
+    if (!crop) return "无作物";
+    
+    grow_percent = crop["grow_time"] * 100 / get_mature_time(crop["crop_type"]);
+    
+    if (grow_percent < 25) return "幼苗期";
+    else if (grow_percent < 50) return "生长期";
+    else if (grow_percent < 75) return "开花期";
+    else if (grow_percent < 100) return "结果期";
+    else return "成熟期";
+}
+
+// 获取作物生长百分比
+int get_crop_growth_percent(string owner_id, string land_path)
+{
+    mapping crop;
+
+    crop = get_crop_info(owner_id, land_path);
+    if (!crop) return 0;
+    
+    return crop["grow_time"] * 100 / get_mature_time(crop["crop_type"]);
+}
+
+// 检查是否可以收获
+int can_harvest(string owner_id, string land_path)
+{
+    mapping crop;
+
+    crop = get_crop_info(owner_id, land_path);
+    if (!crop) return 0;
+    
+    return crop["is_mature"];
+}
+
+// 收获作物
+mixed harvest_crop(string owner_id, string land_path)
+{
+    mapping crop;
+    string crop_type;
+
+    crop = get_crop_info(owner_id, land_path);
+    if (!crop || !crop["is_mature"]) return 0;
+    
+    crop_type = crop["crop_type"];
+    remove_crop(owner_id, land_path);
+    
+    // 这里可以根据作物类型返回相应的收获物品
+    switch (crop_type)
+    {
+        case "葡萄树": return "/clone/vip/putao";
+        case "人参果树": return "/clone/plant/obj/renshen_fruit";
+        case "悟心树": return "/clone/plant/obj/wuxin_flower";
+        default: return 0;
+    }
+}
+
+// 获取种子文件路径
+string get_seed_file(string crop_type)
+{
+    if (member_array(crop_type, keys(crop_data)) == -1)
+        return 0;
+    return crop_data[crop_type]["seed_file"];
+}
+
+// 获取可种植的作物列表
+string *get_plantable_crops()
+{
+    return keys(crop_data);
+}
+
+// 保存种植数据
+void save_planted_crops()
+{
+    save_object("/data/plantd_data");
+}
+
+// 加载种植数据
+void load_planted_crops()
+{
+    restore_object("/data/plantd_data");
+}
+
+// 定期保存数据的函数
+void auto_save()
+{
+    save_planted_crops();
+    call_out("auto_save", 300);  // 每5分钟保存一次
+}
+
+// 获取作物产出数量
+int get_crop_amount(string crop_type)
+{
+    if (member_array(crop_type, keys(crop_data)) == -1)
+        return 0;
+    return crop_data[crop_type]["amount"];
+}

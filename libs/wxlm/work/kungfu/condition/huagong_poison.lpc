@@ -1,0 +1,98 @@
+// huagong_poison.c 化功大法毒
+
+#include <condition.h>
+
+inherit F_CLEAN_UP;
+
+string name() { return "huagong_poison"; }
+
+string chinese_name() { return "化功大法剧毒"; }
+
+string update_msg_others()
+{
+    return HIR "$N" HIR "突然面色发黑，脚步蹒跚，看来是内伤发作了.\n" NOR;
+}
+
+string update_msg_self()
+{
+    return HIR "你只觉体内真气乱窜，四肢无力，原来是化功大法的毒性发作了！\n" NOR;
+}
+
+int dispel(object me, object ob, mapping cnd)
+{
+    int force_skill = me->query_skill("force");
+
+    // 需要特定的内功或者非常深厚的内力才能解毒
+    if (me->query_skill_mapped("force") != "beiming-shengong" &&
+        me->query_skill_mapped("force") != "yijinjing" &&
+        force_skill < 300)
+    {
+        tell_object(me, "你试图为" + ob->name() + "解毒，却发现对方体内的毒素异常霸道，你的内力一触即散.\n");
+        tell_object(ob, me->name() + "将内力缓缓输入你体内，但你感觉毫无起色.\n");
+        return -1;
+    }
+
+    if (me->query("neili") < 1000)
+    {
+        tell_object(me, "你的内力不足，无法驱散" + chinese_name() + ".\n");
+        return -1;
+    }
+
+    // 消耗内力，移除状态
+    me->add("neili", -500);
+    me->start_busy(2);
+    ob->clear_condition("huagong_poison");
+    tell_object(ob, "你感到一股精纯的内力注入体内，将化功剧毒缓缓逼出.\n");
+    tell_object(me, "你运起内力，帮助" + ob->name() + "解除了体内的化功剧毒.\n");
+
+    return 1;
+}
+
+int update_condition(object me, mapping cnd)
+{
+    int duration = cnd["duration"];
+    int level = cnd["level"];
+
+    if (duration < 1)
+    {
+        tell_object(me, "你体内的化功大法余毒终于散尽了.\n");
+        return 0;
+    }
+
+    if (!living(me))
+    {
+        message("vision", me->name() + "痛苦地哼了一声.\n", environment(me), me);
+    }
+    else
+    {
+        tell_object(me, update_msg_self());
+        message("vision", update_msg_others(), environment(me), me);
+    }
+
+    // 化功效果
+    me->receive_wound("qi", level / 10 + random(level / 10));
+    me->receive_damage("qi", level / 5 + random(level / 5));
+    if (me->query("neili") > level)
+        me->add("neili", -level);
+    
+    // 核心：削减内力上限
+    // if (me->query("max_neili") > 1)
+        // me->add("max_neili", -1);
+
+    if (me->query("max_neili") < 1 || me->query("neili") < 0)
+    {
+        me->set_temp("die_reason", "化功大法毒气发作，内力衰竭而死");
+        me->die();
+        return 0;
+    }
+
+    cnd["duration"]--;
+    me->apply_condition("huagong_poison", cnd);
+
+    return CND_CONTINUE;
+}
+
+string query_type(object me)
+{
+    return "poison";
+}

@@ -1,0 +1,244 @@
+/**
+ * @file map.c
+ * @author Lu dexiang
+ * @brief PK竞技场地图
+ * @version 1.0
+ * @date 2024-03-19
+ */
+
+
+inherit ROOM;
+
+// 战斗超时时间（秒）
+#define FIGHT_TIMEOUT 120
+
+void create()
+{
+    set("short", HIR "【PK竞技场】" NOR);
+    set("long", @LONG
+这里是PK竞技场，四周布置着坚固的围栏，地面铺着特制的青石板。
+场地的四个角落各有一根巨大的石柱，上面刻着古朴的符文，似乎具有某种
+神秘的力量。这里是专门用来进行PK比赛的场所，参与者将在这里一决高下。
+
+    注意：战斗将在两分钟后自动结束，气血或精神百分比低的一方将被判定为失败。
+LONG);
+    
+    setup();
+    
+    // 设置心跳
+    set_heart_beat(1);
+}
+
+// 初始化玩家状态
+private void init_player(object me)
+{
+    // 记录原始状态
+    me->set_temp("backup/killer", me->query_killer());
+    me->set_temp("backup/want", me->query_want());
+    me->set_temp("in_pkd", 1);
+    me->set("backup/condition", me->query_condition());
+    
+    // 清除状态
+    me->clear_condition();
+    
+    // 恢复状态
+    me->set("eff_qi", me->query("max_qi"));
+    me->set("qi", me->query("max_qi"));
+    me->set("eff_jing", me->query("max_jing"));
+    me->set("jing", me->query("max_jing"));
+    me->set("neili", me->query("max_neili"));
+    
+    // 设置战斗相关函数
+    me->set_override("unconcious", (: call_other, this_object(), "check_out" :));
+    me->set_override("die", (: call_other, this_object(), "check_out" :));
+    me->set_override("quit", (: call_other, this_object(), "check_quit" :));
+
+}
+
+// 恢复玩家状态
+private void restore_status(object me)
+{
+    mapping cnd;
+    string *ks;
+    
+    if (!me) return;
+    
+    me->delete_temp("in_pkd");
+    me->delete_override("unconcious");
+    me->delete_override("die");
+    me->delete_override("quit");
+    me->remove_all_enemy(1);
+    me->remove_all_killer();
+    me->clear_condition();
+    
+    // 恢复原始状态
+    cnd = me->query("backup/condition");
+    me->delete("backup/condition");
+    if (mapp(cnd)) {
+        ks = keys(cnd);
+        foreach (string k in ks) {
+            me->apply_condition(k, cnd[k]);
+        }
+    }
+    
+    // 恢复气血等状态
+    me->set("eff_qi", me->query("max_qi"));
+    me->set("qi", me->query("max_qi"));
+    me->set("eff_jing", me->query("max_jing"));
+    me->set("jing", me->query("max_jing"));
+    me->set("neili", me->query("max_neili"));
+}
+
+// 开始战斗
+void start_fight()
+{
+    object p1 = query("player1");
+    object p2 = query("player2");
+    
+    if (!p1 || !p2) return;
+    
+    // 初始化玩家状态
+    init_player(p1);
+    init_player(p2);
+    
+    // 设置战斗开始时间
+    set("start_time", time());
+    
+    // 开始战斗
+    message_vision(HIY "\n$N" HIY "和$n" HIY "相对而立，战斗一触即发！\n\n" NOR, p1, p2);
+    p1->kill_ob(p2);
+    p2->kill_ob(p1);
+}
+
+// 检查玩家状态
+private int check_player_state(object me)
+{
+    int qi_percent = me->query("qi") * 100 / me->query("max_qi");
+    int jing_percent = me->query("jing") * 100 / me->query("max_jing");
+    
+    return qi_percent < jing_percent ? qi_percent : jing_percent;
+}
+
+// 判定胜负
+private void determine_winner()
+{
+    object p1 = query("player1");
+    object p2 = query("player2");
+    object winner, loser;
+    int p1_state, p2_state;
+    
+    if (!p1 || !p2) return;
+    
+    p1_state = check_player_state(p1);
+    p2_state = check_player_state(p2);
+    
+    if (p1_state > p2_state) {
+        winner = p1;
+        loser = p2;
+    } else if (p2_state > p1_state) {
+        winner = p2;
+        loser = p1;
+    } else {
+        // 平局情况下，随机决定胜负
+        if (random(2)) {
+            winner = p1;
+            loser = p2;
+        } else {
+            winner = p2;
+            loser = p1;
+        }
+    }
+    
+    message_vision(HIY "\n$N" HIY "获得了胜利！\n" NOR, winner);
+    
+    // 恢复状态
+    restore_status(winner);
+    restore_status(loser);
+    
+    // 处理比赛结果
+    "/system/match_pk/pk_master"->handle_match_result(winner, loser);
+    
+    // 如果是机器人，则销毁
+    if(winner->query_temp("is_robot"))
+        destruct(winner);
+    if(loser->query_temp("is_robot"))
+        destruct(loser);
+}
+
+// 玩家晕倒或死亡时的处理
+int check_out(object me)
+{
+    object winner;
+    
+    if (!me) return 0;
+    
+    if (me == query("player1"))
+        winner = query("player2");
+    else if (me == query("player2"))
+        winner = query("player1");
+    else
+        return 0;
+        
+    message_vision(HIR "\n$N" HIR "倒下了！\n" NOR, me);
+    
+    // 恢复状态
+    restore_status(me);
+    restore_status(winner);
+    
+    // 处理比赛结果
+    "/system/match_pk/pk_master"->handle_match_result(winner, me);
+    
+    // 如果是机器人，则销毁
+    if(winner->query_temp("is_robot"))
+        destruct(winner);
+    if(me->query_temp("is_robot"))
+        destruct(me);
+    
+    return 1;
+}
+
+// 禁止玩家退出
+int check_quit(object me)
+{
+    tell_object(me, "比赛中不能退出！\n");
+    return 1;
+}
+
+void heart_beat()
+{
+    int passed_time;
+    object *players;
+    if (!query("start_time")) return;
+    
+    passed_time = time() - query("start_time");
+    
+    //剩下一个人
+    players = all_inventory(this_object());
+
+    // 修改过滤条件，包含真实玩家和机器人NPC
+    players = filter_array(players, (: playerp($1) || $1->query_temp("is_robot") :));
+
+    if (sizeof(players) == 0) {
+        destruct(this_object());
+        return;
+    }
+
+    if (sizeof(players) == 1) {
+        object old_env;
+        if (objectp(old_env = players[0]->query_temp("old_env")))
+            players[0]->move(old_env);
+        return;
+    }
+
+    // 检查是否超时
+    if (passed_time >= FIGHT_TIMEOUT) {
+        tell_room(this_object(),HIR "\n时间到！\n" NOR);
+        determine_winner();
+    }
+}
+
+// 禁止玩家离开
+int valid_leave(object me, string dir)
+{
+    return notify_fail("比赛中不能离开！\n");
+}

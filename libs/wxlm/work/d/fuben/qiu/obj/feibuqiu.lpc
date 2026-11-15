@@ -1,0 +1,425 @@
+inherit NPC;
+
+void create();
+void init();
+void check_team();
+void start_mechanism2();
+void start_mechanism3();
+void start_mechanism4();
+void casting_batianjue_di();
+void check_clone_existence(object clone);
+object select_target();
+void create_light_balls();
+void check_light_balls();
+
+void create()
+{
+    int qi, attribute, exp, armor, damage;
+
+    ::create();
+
+    set_name("非不裘", ({ "fei buqiu", "fei", "buqiu" }));
+    set("long", "非不裘，江湖中神秘的高手，身怀绝技，无人能敌。传闻他曾是一位隐世高人的弟子，因不满师门规矩而叛出，自创一派，横行江湖。其武功诡异莫测，令人难以捉摸。");
+    set("gender", "男性");
+    set("age", 45);
+    set("attitude", "aggressive");
+
+    qi = 3500000;
+    attribute = 50;
+    exp = 500000000;
+    armor = 2000;
+    damage = 2000;
+
+    set("max_qi", qi);
+    set("eff_qi", qi);
+    set("qi", qi);
+    set("max_jing", qi/2);
+    set("eff_jing", qi/2);
+    set("jing", qi/2);
+
+    // 设定内力为10w
+    set("max_neili", 100000);
+    set("neili", 100000);
+
+    set("str", attribute);
+    set("int", attribute);
+    set("con", attribute);
+    set("dex", attribute);
+
+    set("combat_exp", exp);
+
+    set_temp("apply/armor", armor);
+    set_temp("apply/damage", damage);
+
+    set_skill("force", 300);
+    set_skill("dodge", 300);
+    set_skill("parry", 300);
+    set_skill("sword", 300);
+    set_skill("strike", 300);
+
+    setup();
+    carry_object("/clone/weapon/changjian")->wield();
+    carry_object("/clone/cloth/cloth")->wear();
+	if (clonep())
+    {
+    call_out("start_mechanism2", 45);
+    call_out("start_mechanism4", 60);
+        call_out("start_mechanism3", 1);
+    }
+}
+
+void init()
+{
+    object me = this_player();
+    
+    ::init();
+    if (interactive(me))
+    {
+        kill_ob(me);
+    }
+    add_action("do_hit", "hit");
+    add_action("do_kill", "kill");
+    add_action("do_touxi", "touxi");
+    add_action("do_persuade", "persuade");
+    
+    check_team();
+}
+
+int do_hit(string arg)
+{
+    object me = this_player();
+    if (arg && present(arg, environment()) == this_object())
+    {
+        message_vision("$N正准备对$n出手，却发现$n的气势如山似海，不由得退缩了。\n", me, this_object());
+        return 1;
+    }
+    return 0;
+}
+
+int do_kill(string arg)
+{
+    return do_hit(arg);
+}
+
+int do_touxi(string arg)
+{
+    object me = this_player();
+    if (arg && present(arg, environment()) == this_object())
+    {
+        message_vision("$N想偷袭$n，但$n早有防备，轻松避了。\n", me, this_object());
+        return 1;
+    }
+    return 0;
+}
+
+int do_persuade(string arg)
+{
+    object me = this_player();
+    if (arg && present(arg, environment()) == this_object())
+    {
+        message_vision("$N试图劝说$n放下屠刀，但$n冷笑一声，根本不为所动。\n", me, this_object());
+        return 1;
+    }
+    return 0;
+}
+
+void check_team()
+{
+    object *team = all_inventory(environment());
+    int has_shaolin = 0, has_emei = 0;
+    int extra_damage = 0, extra_armor = 0;
+
+    foreach (object player in team)
+    {
+        if (player->query("family/family_name") == "少林派")
+            has_shaolin = 1;
+        if (player->query("family/family_name") == "峨嵋派")
+            has_emei = 1;
+    }
+
+    if (!has_shaolin)
+    {
+        extra_damage = 20000;
+        add_temp("apply/damage", extra_damage);
+        message_vision(HIR"非不裘怒吼道：一群江湖小虾米，没有少林在也敢挑衅我！$N已进入狂暴状态，基础伤害增加" + extra_damage + "！\n"NOR, this_object());
+    }
+
+    if (!has_emei)
+    {
+        extra_armor = 30000;
+        add_temp("apply/armor", extra_armor);
+        message_vision(HIY"非不裘冷笑道：一群江湖虾米，没有峨眉师在，你顶得住吗！你拿什么顶？！\n"NOR, this_object());
+    }
+
+}
+
+void start_mechanism2()
+{
+    object clone, target;
+    int qi, exp, damage, armor;
+
+    remove_call_out("start_mechanism2");
+    call_out("start_mechanism2", 45);
+
+    clone = new("/d/fuben/qiu/obj/feibuqiu_c");
+    target = select_target();
+
+    // 是否在战斗中
+    if (!this_object()->is_fighting())
+    return;
+
+    // 当前地图物品（包括玩家和npc）太多超过5个
+    if (sizeof(filter_array(all_inventory(environment()), (: !userp($1) :))) >= 5)
+        return;
+
+    clone->set_name("非不裘的分身", ({ "fei fenshen", "fenshen" }));
+    clone->set("long", "这是非不裘的分身，实力不容小觑。");
+    clone->set("is_fenshen", 1);  // 添加这行来标记分身
+
+    qi = query("max_qi") / 3;
+    exp = query("combat_exp") / 3;
+    damage = query_temp("apply/damage") / 3;
+    armor = query_temp("apply/armor") / 3;
+
+    clone->set("max_qi", qi);
+    clone->set("eff_qi", qi);
+    clone->set("qi", qi);
+    clone->set("combat_exp", exp);
+    clone->set_temp("apply/damage", damage);
+    clone->set_temp("apply/armor", armor);
+
+    clone->move(environment(this_object()));
+
+    if (objectp(target))
+    {
+        clone->kill_ob(target);
+        message_vision(HIM"非不裘凝聚出一个分身，向$N发起猛烈的攻击！\n"NOR, target);
+    }
+
+    call_out("check_clone_existence", 30, clone);
+}
+
+object select_target()
+{
+    object *players = filter_array(all_inventory(environment()), (: userp($1) :));
+    object *shaolin_players;
+    object target;
+
+    if (sizeof(players) == 0)
+        return 0;
+
+    // 过滤少林派玩家
+    shaolin_players = filter_array(players, (: $1->query("family/family_name") == "少林派" :));
+
+    // 如果有少林派玩家，选择第一个
+    if (sizeof(shaolin_players) > 0)
+    {
+        target = shaolin_players[0];
+    }
+    // 如果没有少林派玩家，选择经验值最高的玩家
+    else
+    {
+        // 如果只有一个玩家，直接选择该玩家
+        if (sizeof(players) == 1)
+        {
+            target = players[0];
+        }
+        else
+        {
+            players = sort_array(players, (: $1->query("combat_exp") - $2->query("combat_exp") :));
+            target = players[<1];  // 选择经验值最高的玩家
+        }
+    }
+
+    return target;
+}
+
+void check_clone_existence(object clone)
+{
+    if (objectp(clone) && environment(clone) == environment())
+    {
+        start_mechanism2();
+    }
+}
+
+void start_mechanism3()
+{
+    if (query("qi") <= query("max_qi") * 0.5)
+    {
+        remove_call_out("start_mechanism3");
+        message_vision(HIW"房间中突然出现了三个黑色光球和三个白色光球！\n"NOR, this_object());
+        create_light_balls();
+        call_out("check_light_balls", 10);
+    }
+    else
+    {
+        remove_call_out("start_mechanism3");
+        call_out("start_mechanism3", 1);
+    }
+}
+
+void create_light_balls()
+{
+    int i;
+    object light_ball;
+
+    for (i = 0; i < 3; i++)
+    {
+        light_ball = new("/d/fuben/qiu/obj/black_ball");
+        light_ball->move(environment(this_object()));
+
+        light_ball = new("/d/fuben/qiu/obj/white_ball");
+        light_ball->move(environment(this_object()));
+    }
+}
+
+void check_light_balls()
+{
+    object *balls = filter_array(all_inventory(environment()), (: $1->query("is_light_ball") :));
+
+    if (sizeof(balls) > 0)
+    {
+        message_vision(HIR"未消失光球突然爆炸，强大的冲击波席卷了整个房间！\n"NOR, this_object());
+
+        foreach (object player in filter_array(all_inventory(environment()), (: userp($1) :)))
+        {
+            int max_qi = player->query("max_qi");
+            player->set("max_qi", max_qi * 0.2);
+            player->receive_wound("qi", max_qi * 0.8);
+            tell_object(player, HIR"你被爆炸的冲击波击中，感到生命之力迅速流失！\n"NOR);
+        }
+    }
+}
+
+void start_mechanism4()
+{
+    remove_call_out("start_mechanism4");
+    call_out("start_mechanism4", 60);
+
+    message_vision(HIY"非不裘高喊道：尝尝吾之愤怒吧！\n"NOR, this_object());
+    call_out("casting_batianjue_di", 3);
+}
+
+void casting_batianjue_di()
+{
+    object *players = filter_array(all_inventory(environment()), (: userp($1) :));
+    object target;
+
+    if (sizeof(players) == 0)
+        return;
+
+    target = players[random(sizeof(players))];
+
+    if (!target->query_temp("emei_huifu_buff"))
+    {
+        message_vision(HIR"非不裘对着$N释放了霸天绝地，$N瞬间被强大的力量吞噬！\n"NOR, target);
+        target->receive_damage("qi", target->query("max_qi") * 0.8);  // 造成80%最大气血的伤害
+        if (target->query("qi") < 0) target->die();
+    }
+    else
+    {
+        message_vision(HIG"$N被峨眉的回血神功所保护，成功抵挡了非不裘的霸天绝地！\n"NOR, target);
+        target->delete_temp("emei_huifu_buff");  // 使用后移除buff
+    }
+}
+
+void die()
+{
+    object *players;
+    object me = this_object();
+    int i;
+    int exp = 50000;        // 基础经验
+    int potential = 100000; // 基础潜能
+    int start_time;          // 开始时间
+
+    // 检查是否是分身
+    if (query("name") == "非不裘的分身")
+    {
+        message_vision(HIR "\n$N" HIR "发出一声惨叫，化作一道黑烟消散在空气中。\n" NOR, me);
+        destruct(this_object());
+        return;
+    }
+
+    message_vision(HIR "\n$N" HIR "发出一声惨叫，身体缓缓倒下，化作一道黑烟消散在空气中。\n" NOR, me);
+    message_vision(HIC "\n随着非不裘的死亡，整个副本开始崩塌，你们必须立即离开！\n" NOR, me);
+
+    players = filter_array(all_inventory(environment(me)), (: userp($1) :));
+
+    for (i = 0; i < sizeof(players); i++)
+    {
+        if (players[i]->query_temp("qiu_fuben_entered") && 
+            players[i]->query("new_fuben_api/qiu_reward_count") < 1)
+        {
+            // 获取开始时间
+            start_time = players[i]->query("fuben_qiu/last_time");
+
+            tell_object(players[i], HIG "\n恭喜你们成功击杀了非不裘，获得了丰厚的奖励！\n" NOR);
+            tell_object(players[i], HIY "你获得了：\n" NOR);
+            tell_object(players[i], HIY "  " + exp + " 点经验\n" NOR);
+            tell_object(players[i], HIY "  " + potential + " 点潜能\n" NOR);
+            tell_object(players[i], HIY "  300绑定元宝\n" NOR);
+            // players[i]->add("combat_exp", exp);
+            FUBEN_D->add_exp(players[i], exp);
+            players[i]->add("potential", potential);
+            // 100绑定元宝
+            players[i]->add("bind_yuanbao", 300);
+            players[i]->add("new_fuben_api/qiu_reward_count", 1);
+
+            // 记录副本监控日志
+            MONITOR_MASTER->monitor_fuben_log(players[i], "非不裘副本", start_time, time(), potential, exp);
+
+            // 参考 dugu-baozang.c 的写法简化领悟"霸天绝地录"逻辑
+            // 假设 MIZHUAN_MASTER 是一个已定义的宏或全局对象，指向 /adm/special_ob/mizhuan/mizhuan_master.c
+            if (!MIZHUAN_MASTER->has_mizhuan(players[i], "霸天绝地录"))
+            {
+                // 检查学习条件：5% 几率 或 机缘点达到 15 (保底)
+                // players[i]->query("mizhuan_jiyuan/霸天绝地录") 获取的是此轮增加前的机缘点数
+                if (random(100) < 5 || players[i]->query("mizhuan_jiyuan/霸天绝地录") >= 15)
+                {
+                    if (MIZHUAN_MASTER->add_mizhuan(players[i], "霸天绝地录"))
+                    {
+                        players[i]->delete("mizhuan_jiyuan/霸天绝地录"); // 成功领悟后清除机缘点
+                    }
+                    // 如果 add_mizhuan 返回0（例如因其他条件限制不能学习），机缘点不会被清除，
+                    // 下次满足条件时会再次尝试。
+                }
+                else // 未通过几率学习，且当前机缘点不足15
+                {
+                    // 确保机缘点不超过保底值。如果当前是14点，增加后变为15点。
+                    // 下次击败非不裘时，将通过 >= 15 的条件触发保底学习。
+                    if (players[i]->query("mizhuan_jiyuan/霸天绝地录") < 15)
+                    {
+                        players[i]->add("mizhuan_jiyuan/霸天绝地录", 1);
+                        tell_object(players[i], HIM "你感觉对「霸天绝地录」的领悟又加深了一层，距离完全掌握似乎不远了。(机缘: " + players[i]->query("mizhuan_jiyuan/霸天绝地录") + "/15)\n" NOR);
+                    }
+                }
+            }
+        }
+        else if (players[i]->query("new_fuben_api/qiu_reward_count") >= 1)
+        {
+            tell_object(players[i], HIY "你本周已经获得过非不裘副本的奖励，本次不再获得奖励。\n" NOR);
+        }
+        players[i]->delete_temp("qiu_fuben_entered");
+    }
+
+    call_out("destroy_fuben", 30);  // 30秒后销毁副本
+
+    ::die();
+}
+
+void destroy_fuben()
+{
+    object *players;
+    int i;
+
+    players = filter_array(all_inventory(environment(this_object())), (: userp($1) :));
+
+    for (i = 0; i < sizeof(players); i++)
+    {
+        tell_object(players[i], HIR "\n副本即将崩塌，你被传送出副本！\n" NOR);
+        players[i]->move("/d/city/guangchang");
+        tell_object(players[i], "你眼前一花，发现自己已经回到了扬州广场。\n");
+    }
+
+    // 这里可以添加销毁副本的代码，具体实现取决于你的副本系统
+}

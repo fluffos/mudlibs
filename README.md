@@ -426,12 +426,13 @@ classes it's found.
 | 190 | `fadingsummer` | Lore of the Fading Summer | `archives/fadingsummer-0.2.tgz (SourceForge fadingsummer 0.2)` | 40395 | WASM playable |
 | 191 | `mofn` | Middle of Nowhere | `archives/mofn-cvs.zip (SourceForge CVS snapshot)` | 40396 | noboot |
 | 192 | `heaven7` | Heaven7 | `mudbytes_mar302010.zip / 10000/heaven7_2v07.tar.gz (Heaven7 v2.07)` | 40397 | WASM playable |
-| 193 | `nanny` | NannyMUD | `https://ftp.lysator.liu.se/pub/lpmud/nannymud/nannylib.tgz` | 40398 | WASM playable |
-| 194 | `tamedhon` | Tamedhon | `https://codeberg.org/td-mudlib` | 40399 | WASM playable |
-| 195 | `swlpc` | Shattered World (SWLPC 0.9.1) | `http://www.shattered.org/ (mlib-0.9.1.tar.bz2)` | 40400 | WASM playable |
-| 196 | `osb` | One Step Beyond | `osb-lib-030218.tar.gz` | 40401 | WASM playable |
-| 197 | `unitopia` | UNItopia | `http://www.unitopia.de/pub/UNItopia/mudlib.tar.gz` | 40402 | WASM playable |
-| 198 | `silberland` | SilberLand | `https://codeberg.org/lycis/silberland-mudlib` | 40403 | WASM playable |
+| 193 | `nanny` | NannyMUD | `nannylib.tgz (1996-03-29 Lysator FTP snapshot)` | 40398 | WASM playable |
+| 194 | `tamedhon` | Tamedhon | `td-mudlib.zip (Codeberg Tamedhon open-source mudlib, GPLv3)` | 40399 | WASM playable |
+| 195 | `swlpc` | Shattered World (SWLPC 0.9.1) | `mlib-0.9.1.tar.bz2 (Shattered World Core Mudlib 0.9.1, GPLv2)` | 40400 | WASM playable |
+| 196 | `osb` | One Step Beyond | `osb-lib-030218.tar.gz (One Step Beyond 2003-02-18 mudlib snapshot)` | 40401 | WASM playable |
+| 197 | `unitopia` | UNItopia | `unitopia-mudlib.tar.gz (UNItopia MUDlib public release, Universität Stuttgart)` | 40402 | WASM playable |
+| 198 | `silberland` | SilberLand | `silberland-mudlib (https://codeberg.org/lycis/silberland-mudlib, commit 3a80c370)` | 40403 | WASM playable |
+| 199 | `wxlm` | 武侠黎明 | `wxlm (https://github.com/lude2001/wxlm)` | 40404 | WASM playable |
 | 901 | `discworld` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | 40206 | WASM playable |
 | 901-1 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | 40271 | WASM playable |
 | 901-2 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | 40272 | WASM playable |

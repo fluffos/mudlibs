@@ -1,0 +1,368 @@
+// 刻字系统主控文件
+// 负责管理玩家在房间的刻字记录和相关功能
+inherit F_DBASE;
+
+#define KEZI_DATA_FILE "/data/kezi/kezi_data.json"
+#define PLAYER_KEZI_FILE "/data/kezi/player_kezi.json"
+void save_player_kezi_data(string player_id, mapping player_data);
+
+void create()
+{
+    // 确保数据目录存在
+    if (file_size("/data/kezi/") == -1)
+        assure_file("/data/kezi/kezi_data.json");
+}
+
+// 获取房间刻字数据
+mapping query_room_kezi_data(string room_file)
+{
+    mapping all_data;
+    string json_str;
+    
+    if (file_size(KEZI_DATA_FILE) == -1)
+        return ([]);
+        
+    json_str = read_file(KEZI_DATA_FILE);
+    if (!json_str) return ([]);
+    
+    catch {
+        all_data = json_decode(json_str);
+    };
+    
+    if (!mapp(all_data))
+        all_data = ([]);
+        
+    if (!all_data[room_file])
+        all_data[room_file] = ([]);
+        
+    return all_data[room_file];
+}
+
+// 获取玩家刻字数据
+mapping query_player_kezi_data(string player_id)
+{
+    mapping all_data;
+    string json_str;
+    
+    if (file_size(PLAYER_KEZI_FILE) == -1)
+        return ([ "count": 0, "last_time": 0 ]);
+        
+    json_str = read_file(PLAYER_KEZI_FILE);
+    if (!json_str) return ([ "count": 0, "last_time": 0 ]);
+    
+    catch {
+        all_data = json_decode(json_str);
+    };
+    
+    if (!mapp(all_data))
+        all_data = ([]);
+        
+    if (!all_data[player_id])
+        all_data[player_id] = ([ "count": 0, "last_time": 0 ]);
+    
+    // 处理旧数据格式
+    if (all_data[player_id]["last_date"] && !all_data[player_id]["last_time"]) {
+        all_data[player_id]["last_time"] = time();
+        save_player_kezi_data(player_id, all_data[player_id]);
+    }
+        
+    return all_data[player_id];
+}
+
+// 保存房间刻字数据
+void save_room_kezi_data(string room_file, mapping room_data)
+{
+    mapping all_data;
+    string json_str;
+    
+    if (file_size(KEZI_DATA_FILE) > -1) {
+        json_str = read_file(KEZI_DATA_FILE);
+        if (json_str) {
+            catch {
+                all_data = json_decode(json_str);
+            };
+        }
+    }
+    
+    if (!mapp(all_data))
+        all_data = ([]);
+        
+    all_data[room_file] = room_data;
+    
+    json_str = json_encode(all_data);
+    write_file(KEZI_DATA_FILE, json_str, 1);
+}
+
+// 保存玩家刻字数据
+void save_player_kezi_data(string player_id, mapping player_data)
+{
+    mapping all_data;
+    string json_str;
+    
+    if (file_size(PLAYER_KEZI_FILE) > -1) {
+        json_str = read_file(PLAYER_KEZI_FILE);
+        if (json_str) {
+            catch {
+                all_data = json_decode(json_str);
+            };
+        }
+    }
+    
+    if (!mapp(all_data))
+        all_data = ([]);
+        
+    all_data[player_id] = player_data;
+    
+    json_str = json_encode(all_data);
+    write_file(PLAYER_KEZI_FILE, json_str, 1);
+}
+
+// 检查玩家是否能够刻字
+string check_can_kezi(object me)
+{
+    string player_id;
+    mapping player_data;
+    int last_time;
+    
+    if (!me) return "无效的玩家对象。";
+    
+    // 检查等级
+    if (!me->query("opinion/ultra")) {
+        return "你还不是宗师，还无法在此留下武学感悟。";
+    }
+
+    //当前环境是否克隆环境，如果是不允许刻字
+    if (clonep(environment(me))) {
+        return "这里可不能随便刻字。";
+    }
+
+    
+    player_id = me->query("id");
+    player_data = query_player_kezi_data(player_id);
+    last_time = player_data["last_time"];
+    
+    // 检查今日是否已刻字
+    if (last_time > 0 && is_same_day(last_time, time())) {
+        return "你今日已经刻过字了，明日再来吧。";
+    }
+    
+    return 0; // 可以刻字
+}
+
+// 执行刻字操作
+int do_kezi(object me, string content)
+{
+    string player_id, player_name, room_file;
+    int now;
+    mapping room_data, player_data;
+    mapping new_kezi;
+    string *kezi_list;
+    
+    if (!me || !content) return 0;
+    
+    player_id = me->query("id");
+    player_name = me->query("name");
+    room_file = file_name(environment(me));
+    now = time();
+    
+    // 获取当前房间刻字数据
+    room_data = query_room_kezi_data(room_file);
+    if (!room_data["kezi_list"])
+        room_data["kezi_list"] = ({});
+        
+    kezi_list = room_data["kezi_list"];
+    
+    // 创建新的刻字记录
+    new_kezi = ([
+        "id": player_id,
+        "name": player_name,
+        "content": content,
+        "date": CHINESE_D->chinese_date(now),
+        "timestamp": now
+    ]);
+    
+    // 添加到刻字列表，限制最多保存50条
+    kezi_list += ({ new_kezi });
+    if (sizeof(kezi_list) > 50) {
+        kezi_list = kezi_list[sizeof(kezi_list)-50..];
+    }
+    room_data["kezi_list"] = kezi_list;
+    
+    // 保存房间数据
+    save_room_kezi_data(room_file, room_data);
+    
+    // 更新玩家数据
+    player_data = query_player_kezi_data(player_id);
+    player_data["count"] = player_data["count"] + 1;
+    player_data["last_time"] = now;
+    // 为了兼容性，保留last_date字段
+    player_data["last_date"] = CHINESE_D->chinese_date(now);
+    save_player_kezi_data(player_id, player_data);
+    
+    // 给予奖励
+    me->add("magic_points", 100);
+    me->add("combat_exp", 10000);
+    me->add("ganwu_lianshen", 1);
+    
+    return 1;
+}
+
+// 删除玩家刻字
+int delete_kezi(string player_id, string room_file, int timestamp)
+{
+    mapping room_data;
+    mixed *kezi_list, *new_kezi_list = ({});
+    int i, found = 0;
+    
+    // 获取房间刻字数据
+    room_data = query_room_kezi_data(room_file);
+    if (!room_data["kezi_list"])
+        return 0;
+        
+    kezi_list = room_data["kezi_list"];
+    
+    // 查找并删除指定刻字
+    for (i = 0; i < sizeof(kezi_list); i++) {
+        mapping kezi = kezi_list[i];
+        
+        // 跳过要删除的刻字
+        if (kezi["id"] == player_id && kezi["timestamp"] == timestamp) {
+            found = 1;
+            continue;
+        }
+        
+        new_kezi_list += ({ kezi });
+    }
+    
+    if (!found) return 0;
+    
+    // 更新房间数据
+    room_data["kezi_list"] = new_kezi_list;
+    save_room_kezi_data(room_file, room_data);
+    
+    return 1;
+}
+
+// 获取玩家在特定房间的刻字列表
+mixed *query_player_kezi_in_room(string player_id, string room_file)
+{
+    mapping room_data;
+    mixed *kezi_list, *my_kezi_list = ({});
+    int i;
+    
+    room_data = query_room_kezi_data(room_file);
+    if (!room_data["kezi_list"])
+        return ({});
+        
+    kezi_list = room_data["kezi_list"];
+    
+    // 筛选玩家的刻字
+    for (i = 0; i < sizeof(kezi_list); i++) {
+        mapping kezi = kezi_list[i];
+        
+        if (kezi["id"] == player_id) {
+            my_kezi_list += ({ kezi });
+        }
+    }
+    
+    // 按时间倒序排列
+    my_kezi_list = sort_array(my_kezi_list, (: ((mapping)$2)["timestamp"] - ((mapping)$1)["timestamp"] :));
+    
+    return my_kezi_list;
+}
+
+// 获取房间原始刻字数据
+mixed *query_room_raw_kezi_list(string room_file)
+{
+    mapping room_data;
+    
+    room_data = query_room_kezi_data(room_file);
+    if (!room_data["kezi_list"])
+        return ({});
+        
+    return room_data["kezi_list"];
+}
+
+// 获取房间刻字列表
+string *query_room_kezi_list(string room_file)
+{
+    mapping room_data;
+    string *result = ({});
+    mixed *kezi_list;
+    int i;
+    
+    room_data = query_room_kezi_data(room_file);
+    if (!room_data["kezi_list"])
+        return ({});
+        
+    kezi_list = room_data["kezi_list"];
+    
+    for (i = sizeof(kezi_list) - 1; i >= 0; i--) {
+        mapping kezi = kezi_list[i];
+        string line;
+        
+        line = sprintf("%s %s 留字：%s", 
+            kezi["date"], 
+            kezi["name"], 
+            kezi["content"]);
+            
+        result += ({ line });
+    }
+    
+    return result;
+}
+
+// 获取玩家刻字统计
+mapping query_player_kezi_stats(string player_id)
+{
+    return query_player_kezi_data(player_id);
+}
+
+// 清理过期数据（可选功能，清理30天前的刻字）
+void clean_old_kezi()
+{
+    mapping all_data;
+    string json_str;
+    string *rooms;
+    int current_time, cutoff_time;
+    
+    current_time = time();
+    cutoff_time = current_time - 30 * 24 * 3600; // 30天前
+    
+    if (file_size(KEZI_DATA_FILE) == -1) return;
+    
+    json_str = read_file(KEZI_DATA_FILE);
+    if (!json_str) return;
+    
+    catch {
+        all_data = json_decode(json_str);
+    };
+    
+    if (!mapp(all_data)) return;
+    
+    rooms = keys(all_data);
+    
+    foreach (string room in rooms) {
+        mapping room_data = all_data[room];
+        mixed *kezi_list;
+        mixed *new_list = ({});
+        int i;
+        
+        if (!room_data["kezi_list"]) continue;
+        
+        kezi_list = room_data["kezi_list"];
+        
+        for (i = 0; i < sizeof(kezi_list); i++) {
+            mapping kezi = kezi_list[i];
+            if (kezi["timestamp"] > cutoff_time) {
+                new_list += ({ kezi });
+            }
+        }
+        
+        room_data["kezi_list"] = new_list;
+        all_data[room] = room_data;
+    }
+    
+    json_str = json_encode(all_data);
+    write_file(KEZI_DATA_FILE, json_str, 1);
+} 

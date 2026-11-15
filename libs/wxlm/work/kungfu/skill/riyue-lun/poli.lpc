@@ -1,0 +1,132 @@
+/**
+ * @brief 破立决 - 日月轮法的高级招式
+ * @details 破而后立，蓄势一击，以沉重的锤击破坏敌人防御
+ */
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+/**
+ * @brief 招式名称
+ * @return string 招式名称
+ */
+string query_name() { return "破而"ZJBR"后立"; }
+
+/**
+ * @brief 招式类型
+ * @return string[] 支持的武器类型
+ */
+string *pfm_type() { return ({ "hammer", }); }
+
+/**
+ * @brief 执行破立决招式
+ * @param me 使用者
+ * @param target 目标
+ * @return int 1-成功，0-失败
+ */
+int perform(object me, object target)
+{
+	object weapon;
+	string msg;
+	int ap, dp;
+	int damage;
+	int skill_level, force_level;
+
+	if (userp(me) && !me->query("can_perform/riyue-lun/poli"))
+		return notify_fail("你还不会运用「破立决」这一绝技。\n");
+
+	if (!target) target = offensive_target(me);
+
+	if (!target || !me->is_fighting(target))
+		return notify_fail("「破立决」只能对战斗中的对手使用。\n");
+
+	if (!objectp(weapon = me->query_temp("weapon")) ||
+	    (string)weapon->query("skill_type") != "hammer")
+		return notify_fail("你必须使用锤类武器才能施展「破立决」。\n");
+
+	skill_level = (int)me->query_skill("hammer");
+	force_level = (int)me->query_skill("force");
+
+	if (skill_level < 120)
+		return notify_fail("你的日月轮法还不够精深，无法施展「破立决」。\n");
+
+	if (force_level < 180)
+		return notify_fail("你的内功修为不够深厚，无法支撑「破立决」的巨大消耗。\n");
+
+	if (me->query("neili") < 400)
+		return notify_fail("你的内力不足，无法施展「破立决」。\n");
+
+	if (me->query_skill_mapped("hammer") != "riyue-lun")
+		return notify_fail("你没有激发日月轮法，无法施展「破立决」。\n");
+
+	if (!living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧。\n");
+
+	msg = HIY "$N" HIY "深吸一口气，昂首长吟：「破而后立，万物归元！」\n" NOR +
+	      HIR "$N" HIR "手举" + weapon->name() + HIR "，蓄势待发，周身真气汹涌，" +
+	      HIR "然后带着破天之势向$n" HIR "砸下！\n" NOR;
+
+	// 攻击力计算：技能+内功+体质加成
+	ap = skill_level + force_level + (me->query("str") + me->query("con")) * 8;
+	dp = target->query_skill("parry") + target->query_skill("force") + target->query("dex") * 16;
+
+	if (dp < 1) dp = 1;
+
+	// 对非玩家目标加成
+	if (!userp(target)) {
+		ap = ap * 3 / 2;
+	}
+
+	if (COMBAT_D->hit_determination(me,target,ap,dp))
+	{
+		me->add("neili", -300);
+		
+		// 伤害计算，更加稳定且强力
+		damage = skill_level + force_level + me->query_str() * 15 + random(skill_level);
+		damage += damage * COMBAT_D->get_skill_aoyi_level(me, "雪域圣光") / 10;
+		// 对非玩家目标伤害加成
+		if (!userp(target)) {
+			damage = damage * 2;
+		}
+		
+		// 附加破甲效果
+		if (random(3) == 0 && living(target)) {
+			int armor_reduce = skill_level / 5;
+			int duration = 8 + random(7);
+			target->add_temp("apply/armor", -armor_reduce);
+			target->set_temp("poli_armor_reduce", armor_reduce);
+			target->start_call_out((: call_other, __FILE__, "restore_armor", target, armor_reduce :), duration);
+			tell_object(target, HIR "你的护甲被这一击破坏了！\n" NOR);
+		}
+		
+		msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 180,
+				   HIR "$n" HIR "被$N" HIR "这破天裂地的一击正中，骨骼尽断，狂喷鲜血！" NOR "\n");
+		me->start_busy(2);
+
+	} else {
+		msg += HIC "但见$p" HIC "身形一闪，惊险躲过了$P" HIC "这破天一击！" NOR "\n";
+		me->add("neili", -150);
+		me->start_busy(3);
+	}
+	
+	message_combatd(msg, me, target);
+	return 1;
+}
+
+/**
+ * @brief 恢复护甲值
+ * @param target 目标对象
+ * @param armor_value 要恢复的护甲值
+ */
+void restore_armor(object target, int armor_value)
+{
+	if (!target) return;
+	
+	if (armor_value > 0) {
+		target->add_temp("apply/armor", armor_value);
+		target->delete_temp("poli_armor_reduce");
+		if (living(target))
+			tell_object(target, HIB "你的护甲逐渐恢复正常。\n" NOR);
+	}
+}

@@ -1,0 +1,251 @@
+// challenge_d.c - 挑战管理器
+
+inherit F_DBASE;
+
+// 函数声明
+void start_challenge(object me, string target_id);
+object create_challenge_npc(string target_id);
+void check_result(object me, object npc, object room);
+void remove_challenge(object me, object npc);
+void add_hidden_score(object me, int score);
+void update_ranking();
+
+// 存储玩家的隐藏积分
+mapping player_scores = ([]);
+
+void start_challenge(object me, string target_id)
+{
+    object npc;
+    object room;
+
+    if (!me || !userp(me)) return;
+
+    // 检查玩家是否有挑战次数
+    if (me->query("challenge_times") <= 0)
+    {
+        tell_object(me, "你今天的挑战次数已用完，请明天再来。\n");
+        return;
+    }
+
+    // 创建挑战 NPC
+    npc = create_challenge_npc(target_id);
+    if (!objectp(npc))
+    {
+        tell_object(me, "无法创建挑战对象，可能对方没有存档或存档损坏。\n");
+        return;
+    }
+
+    // 创建挑战房间
+    room = new("/d/challenge/challenge_room");
+    if (!objectp(room))
+    {
+        destruct(npc);
+        return;
+    }
+
+    // 将玩家和 NPC 移动到房间
+    me->move(room);
+    npc->move(room);
+
+    // 设置战斗关系
+    me->fight_ob(npc);
+    npc->fight_ob(me);
+
+    // 扣除挑战次数
+    me->add("challenge_times", -1);
+
+    // 通知玩家挑战开始
+    tell_object(me, "挑战开始！\n");
+
+    // 开始检查战斗结果
+    call_out("check_result", 1, me, npc, room);
+}
+
+object create_challenge_npc(string target_id)
+{
+    object npc;
+    object tmp_user,user_temp;
+    string err;
+    mapping data, skills,data_temp;
+
+    // 定义 NPC 模板
+    npc = new("/clone/npc/challenge_npc");
+    if (!objectp(npc)) return 0;
+
+    // 创建临时用户对象
+    tmp_user = new(USER_OB);
+    tmp_user->set("id", target_id);
+
+    // 读取玩家存档
+    err = catch(tmp_user->restore());
+    if (err)
+    {
+        destruct(npc);
+
+        tell_object(find_player("demodemo"), err +"无法创建挑战对象1。\n");
+
+        destruct(tmp_user);
+        return 0;
+    }
+
+    user_temp = LOGIN_D->make_body(tmp_user);
+
+    if (err = catch(user_temp->restore()))
+    {
+        destruct(npc);
+        destruct(tmp_user);
+        
+        tell_object(find_player("demodemo"), err +"无法创建挑战对象2。\n");
+
+        return 0;
+    }
+
+    // 获取玩家的完整数据
+    data_temp = copy(user_temp->query_entire_dbase());
+
+    //移除password
+    map_delete(data_temp, "password");
+
+    data = npc->query_entire_dbase();
+    // data = data_temp;
+
+    foreach (string key in keys(data_temp))
+    {
+
+        data[key] = data_temp[key];
+
+        if (key == "id" || key == "name")
+        {
+            continue;
+        }
+    }
+
+    npc->set_name(data["name"] +"镜像", ({ data["id"] +"_copy" }));
+
+    CHAR_D->setup_human(npc);
+
+
+    // 复制技能
+    skills = tmp_user->query_skills();
+    // if (mapp(skills))
+    // {
+    //     npc->set_skills(skills);
+    // }
+
+    // 复制技能映射和准备
+    // npc->set_skill_map(tmp_user->query_skill_map());
+    // npc->set_skill_prepare(tmp_user->query_skill_prepare());
+
+    // 复制装备（包括武器和防具）
+    // inv = all_inventory(tmp_user);
+    // for (i = 0; i < sizeof(inv); i++)
+    // {
+    //     item = inv[i];
+    //     if (!objectp(item)) continue;
+
+    //     new_item = new(base_name(item));
+    //     if (new_item)
+    //     {
+    //         new_item->set_entire_dbase(item->query_entire_dbase());
+    //         new_item->move(npc);
+    //         if (item->query("equipped"))
+    //         {
+    //             new_item->wear();
+    //             if (new_item->query("weapon_prop"))
+    //                 npc->wield(new_item);
+    //         }
+    //     }
+    // }
+
+    // 设置自动战斗标志
+    npc->set("auto_perform", 1);
+
+    // 设置特殊状态（如冲脉、宝石等）
+    npc->set("reborn", tmp_user->query("reborn"));
+    npc->set("meridian", tmp_user->query("meridian"));
+    npc->set("gems", tmp_user->query("gems"));
+
+    npc->setup();
+    npc->reset_action();
+
+    // 销毁临时对象
+    destruct(tmp_user);
+    destruct(user_temp);
+
+    return npc;
+}
+
+void check_result(object me, object npc, object room)
+{
+    if (!me || !npc || !room) return;
+
+    if (!living(me) || me->query("qi") <= 0)
+    {
+        // 玩家失败
+        tell_object(me, "你在挑战中失败了！\n");
+        add_hidden_score(me, -10); // 失败扣除积分
+        remove_challenge(me, npc);
+        return;
+    }
+
+    if (!living(npc) || npc->query("qi") <= 0)
+    {
+        // 玩家胜利
+        tell_object(me, "你在挑战中取得了胜利！\n");
+        add_hidden_score(me, 10); // 胜利增加积分
+        remove_challenge(me, npc);
+        return;
+    }
+
+    // 持续检查
+    call_out("check_result", 1, me, npc, room);
+}
+
+void remove_challenge(object me, object npc)
+{
+    object room;
+
+    if (objectp(me))
+    {
+        me->move("/d/city/guangchang");
+        me->remove_all_enemy(1);
+        me->remove_all_killer();
+    }
+
+    if (objectp(npc))
+    {
+        npc->remove_all_enemy(1);
+        npc->remove_all_killer();
+        destruct(npc);
+    }
+
+    if (objectp(environment(me)))
+    {
+        room = environment(me);
+        if (room && function_exists("is_challenge_room", room))
+        {
+            destruct(room);
+        }
+    }
+}
+
+// 增加或扣除玩家的隐藏积分
+void add_hidden_score(object me, int score)
+{
+    string id = me->query("id");
+    if (!player_scores[id])
+        player_scores[id] = 0;
+
+    player_scores[id] += score;
+    if (player_scores[id] < 0)
+        player_scores[id] = 0;
+}
+
+// 更新排行榜（每周日晚上11点调用）
+void update_ranking()
+{
+    // 根据 player_scores 中的积分，更新排行榜
+    // 可以将数据保存到一个文件或使用 RANK_D 进行处理
+    // 清空本周积分
+    player_scores = ([]);
+}

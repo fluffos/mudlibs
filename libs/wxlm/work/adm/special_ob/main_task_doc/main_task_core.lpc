@@ -1,0 +1,563 @@
+/**
+ * @file main_task_core.c
+ * @brief 主线任务核心管理模块实现
+ * @author Lu dexiang
+ * @date 2024-06-01
+ */
+
+
+#include "h/main_task_config.h"
+#include "h/main_task_core.h"
+
+// 主模块对象
+mixed main_task_master = MAIN_TASK_MASTER;
+
+// ================ 基础功能函数 ================
+
+/**
+ * @brief 初始化函数
+ */
+void create()
+{
+    seteuid(getuid());
+}
+
+/**
+ * @brief 清除任务标记
+ * @param object me 玩家对象
+ * @return int 1表示成功
+ * @details 清除任务进度相关的标记，但保留任务完成和奖励发放的记录
+ */
+int clear_quest_mark(object me)
+{
+    me->delete("new_main_task/target_name");
+    me->delete("new_main_task/target_num");
+    me->delete("new_main_task/spar_finished");
+    me->delete("new_main_task/collect_items");
+    // 不清除 finished_quest_id 和 rewarded_quest_id，保留任务完成和奖励发放的记录
+    return 1;
+}
+
+// ================ 任务信息查询函数 ================
+
+/**
+ * @brief 获取玩家当前的任务编号
+ * @param object me 玩家对象
+ * @return int 当前任务编号，如果玩家没有任务则返回0
+ */
+int get_player_current_quest(object me)
+{
+    int quest_id;
+
+    quest_id = me->query("new_main_task/quest_id");
+    
+    if (!intp(quest_id) || quest_id < 0)
+        return 0;
+
+    return quest_id;
+}
+
+/**
+ * @brief 获取玩家已完成的最新任务编号
+ * @param object me 玩家对象
+ * @return int 已完成的任务编号，未完成任何任务返回0
+ */
+int get_player_finished_quest(object me)
+{
+    return me->query("new_main_task/finished_quest_id");
+}
+
+/**
+ * @brief 判断任务是否为切磋任务
+ * @param int quest_id 任务ID
+ * @return int 1表示是切磋任务，0表示不是
+ */
+public int is_spar_quest(int quest_id)
+{
+    if (!main_task_config[quest_id] || !main_task_config[quest_id]["quest_target"])
+        return 0;
+        
+    return main_task_config[quest_id]["quest_target"]["type"] == "spar";
+}
+
+/**
+ * @brief 判断任务是否为击杀任务
+ * @param int quest_id 任务ID
+ * @return int 1表示是击杀任务，0表示不是
+ */
+public int is_kill_quest(int quest_id)
+{
+    if (!main_task_config[quest_id] || !main_task_config[quest_id]["quest_target"])
+        return 0;
+        
+    return main_task_config[quest_id]["quest_target"]["type"] == "kill";
+} 
+
+/**
+ * @brief 判断任务是否为收集任务
+ * @param int quest_id 任务ID
+ * @return int 1表示是收集任务，0表示不是
+ */
+public int is_collect_quest(int quest_id)
+{
+    if (!main_task_config[quest_id] || !main_task_config[quest_id]["quest_target"])
+        return 0;
+        
+    return main_task_config[quest_id]["quest_target"]["type"] == "collect";
+}
+
+// ================ 任务条件检查函数 ================
+
+/**
+ * @brief 检查玩家是否满足任务的开始条件
+ * @param me 玩家对象
+ * @param quest_id 任务ID
+ * @return 1表示满足条件,0表示不满足条件
+ */
+int check_quest_requirements(object me, int quest_id)
+{
+    mixed requirements;
+    
+    if (!main_task_config[quest_id])
+        return 0;
+    
+    // 如果任务没有need要求和地点，则直接返回1
+    if (nullp(main_task_config[quest_id]["quest_start_need"]) && !main_task_config[quest_id]["quest_place"])
+        return 1;
+
+    // 检查属性要求
+    if (!nullp(main_task_config[quest_id]["quest_start_need"]) && main_task_config[quest_id]["quest_start_need"])
+    {
+        requirements = main_task_config[quest_id]["quest_start_need"];
+    
+        if (mapp(requirements["attribute"]))
+        {
+            foreach (string attr, int value in requirements["attribute"])
+            {
+                if (me->query(attr) < value)
+                    return 0;
+            }
+        }
+    }
+
+    // 检查玩家是否在任务地点  
+    if (main_task_config[quest_id]["quest_place"])
+    {
+        object env = environment(me);
+        if (base_name(env) != main_task_config[quest_id]["quest_place"]["base_name"])
+            return 0;
+    }
+
+    return 1;
+}
+
+/**
+ * @brief 检查玩家是否已完成当前任务
+ * @param object me 玩家对象
+ * @return int 0:未完成 1:已完成
+ */
+int check_player_finished_quest(object me)
+{
+    int quest_id;
+    int quest_target_num;
+    string quest_target_type;
+
+    quest_id = get_player_current_quest(me);
+
+    // 如果任务已经完成，则直接返回
+    if (me->query("new_main_task/finished_quest_id") == quest_id)
+        return 1;
+
+    quest_target_num = me->query("new_main_task/target_num");
+    quest_target_type = main_task_config[quest_id]["quest_target"]["type"];
+
+    // 根据任务类型检查完成条件
+    if (quest_target_type == "kill")
+    {
+        if (quest_target_num >= main_task_config[quest_id]["quest_target"]["num"])
+        {
+            me->set("new_main_task/finished_quest_id", quest_id);
+            clear_quest_mark(me);
+            return 1;
+        }
+    }
+    else if (quest_target_type == "talk")
+    {
+        me->set("new_main_task/finished_quest_id", quest_id);
+        clear_quest_mark(me);
+        return 1;
+    }
+    else if (quest_target_type == "spar")
+    {
+        if (me->query("new_main_task/spar_finished"))
+        {
+            me->set("new_main_task/finished_quest_id", quest_id);
+            clear_quest_mark(me);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+// ================ 任务管理函数 ================
+
+/**
+ * @brief 发布任务
+ * @param object me 玩家对象
+ * @param int quest_id 任务编号
+ * @return int 0:发布失败 1:发布成功
+ */
+int issue_quest(object me, int quest_id)
+{
+    string task_type;
+
+    // 检查任务编号是否有效
+    if (!mapp(main_task_config[quest_id]))
+        return 0;
+        
+    // 设置当前任务编号
+    me->set("new_main_task/quest_id", quest_id);
+    
+    task_type = main_task_config[quest_id]["quest_target"]["type"];
+    
+    // 根据任务类型初始化任务数据
+    if (task_type == "kill")
+    {
+        me->set("new_main_task/target_name", main_task_config[quest_id]["quest_target"]["name"]);
+        me->set("new_main_task/target_num", 0);
+    }
+    else if (task_type == "collect")
+    {
+        // 初始化收集物品进度
+        mapping items = main_task_config[quest_id]["quest_target"]["items"];
+        mapping collect_progress = ([]);
+        
+        foreach (string item_name, mapping item_info in items)
+        {
+            collect_progress[item_info["id"]] = 0;
+        }
+        
+        me->set("new_main_task/collect_items", collect_progress);
+    }
+
+    return 1;
+}
+
+/**
+ * @brief 处理已完成任务的后续流程
+ * @param object me 玩家对象
+ * @param int quest_id 当前任务ID
+ * @return int 1表示成功
+ */
+private int handle_completed_quest(object me, int quest_id)
+{
+    int next_quest_id = quest_id + 1;
+    
+    // 给予奖励（只有在未发放过奖励时才发放）
+    if (me->query("new_main_task/rewarded_quest_id") != quest_id)
+    {
+        main_task_master->give_quest_reward(me);
+    }
+    
+    // 清除任务标记
+    clear_quest_mark(me);
+    
+    // 检查下一个任务是否存在
+    if (mapp(main_task_config[next_quest_id]))
+    {
+        // 弹出弹窗询问玩家是否开始新任务
+        string msg = sprintf(HIG"恭喜你完成了任务「%s」！\n"NOR, main_task_config[quest_id]["name"]);
+        msg += sprintf("你要开始下一个任务「%s」吗？\n", main_task_config[next_quest_id]["name"]);
+        
+        // 检查玩家是否满足下一个任务的要求
+        if (!main_task_master->check_quest_requirements(me, next_quest_id))
+        {
+            msg += HIR"注意：你目前不满足该任务的开始条件。\n"NOR;
+            
+            // 显示任务要求
+            if (mapp(main_task_config[next_quest_id]["quest_start_need"]) && 
+                mapp(main_task_config[next_quest_id]["quest_start_need"]["attribute"]))
+            {
+                foreach (string attr, int value in main_task_config[next_quest_id]["quest_start_need"]["attribute"])
+                {
+                    msg += sprintf(HIR"%s需求：%d，当前：%d\n"NOR, 
+                        to_chinese(attr), value, me->query(attr));
+                }
+            }
+            
+            // 显示任务地点要求
+            if (main_task_config[next_quest_id]["quest_place"])
+            {
+                msg += sprintf("任务地点：%s，当前地点：%s\n", 
+                    main_task_config[next_quest_id]["quest_place"]["chinese_name"], 
+                    environment(me)->query("short"));
+                msg += HIB"提示：如果你在任务地点所处城市或者山川的附近，可以点击下方的寻路按钮寻路，但距离过远则无法寻路到指定地点。\n"NOR;
+            }
+        }
+        
+        // 创建弹窗
+        {
+            object pop1 = new(POP1);
+            pop1->basic(msg, 2);
+            pop1->add_button("开始新任务", "main_task start " + next_quest_id);
+            
+            // 添加寻路按钮
+            if (main_task_config[next_quest_id]["quest_place"])
+            {
+                pop1->add_button("寻路", "walk " + load_object(main_task_config[next_quest_id]["quest_place"]["base_name"])->query("short"));
+            }
+            tell_object(me, pop1->result() + "\n");
+        }
+    }
+    else
+    {
+        // 如果没有下一个任务，显示完成所有任务的消息
+        tell_object(me, HIG"恭喜你完成了所有主线任务！\n"NOR);
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 处理击杀类任务的提交
+ * @param object me 玩家对象
+ * @param int quest_id 任务ID
+ * @return int 1表示成功
+ */
+private int handle_kill_quest_submission(object me, int quest_id)
+{
+    int target_num = main_task_config[quest_id]["quest_target"]["num"];
+    int current_num = me->query("new_main_task/target_num");
+    
+    if (current_num >= target_num)
+    {
+        // 设置任务完成标记
+        me->set("new_main_task/finished_quest_id", quest_id);
+        tell_object(me, HIG "恭喜你完成了任务！\n" NOR);
+        
+        // 再次提交任务
+        submit_quest(me);
+        return 1;
+    }
+    else
+    {
+        // 显示任务未完成信息
+        string kill_msg = sprintf(HIR"你还没有完成任务，需要击败 %s %d 个。\n"NOR, 
+            main_task_config[quest_id]["quest_target"]["name"], 
+            (target_num - current_num));
+        
+        string *buttons = ({
+            "开始战斗:main_task start_kill " + quest_id,
+            "稍后再说:look"
+        });
+        
+        tell_object(me, popup_comb(kill_msg, buttons));
+        return 1;
+    }
+}
+
+/**
+ * @brief 处理切磋类任务的提交
+ * @param object me 玩家对象
+ * @param int quest_id 任务ID
+ * @return int 1表示成功
+ */
+private int handle_spar_quest_submission(object me, int quest_id)
+{
+    int current_num = me->query("new_main_task/target_num");
+    
+    if (current_num > 0)
+    {
+        // 设置任务完成标记
+        me->set("new_main_task/finished_quest_id", quest_id);
+        tell_object(me, HIG "恭喜你完成了切磋任务！\n" NOR);
+        
+        // 再次提交任务
+        submit_quest(me);
+        return 1;
+    }
+    else
+    {
+        string spar_msg = sprintf(HIR"你需要与%s的高手切磋并获胜才能完成任务。\n", 
+            main_task_config[quest_id]["quest_target"]["family"]);
+        string *button = ({
+            "开始切磋:main_task start_spar " + quest_id,
+            "稍后再说:look"
+        });
+        tell_object(me, popup_comb(spar_msg, button));
+        return 1;
+    }
+}
+
+/**
+ * @brief 处理对话类任务的提交
+ * @param object me 玩家对象
+ * @param int quest_id 任务ID
+ * @return int 1表示成功
+ */
+private int handle_talk_quest_submission(object me, int quest_id)
+{
+    // 对话任务直接完成
+    me->set("new_main_task/finished_quest_id", quest_id);
+    tell_object(me, HIG "恭喜你完成了任务！\n" NOR);
+    
+    // 再次提交任务
+    submit_quest(me);
+    return 1;
+}
+
+/**
+ * @brief 处理收集类任务的提交
+ * @param object me 玩家对象
+ * @param int quest_id 任务ID
+ * @return int 1表示成功
+ */
+private int handle_collect_quest_submission(object me, int quest_id)
+{
+    mapping items = main_task_config[quest_id]["quest_target"]["items"];
+    mapping collect_progress = copy(me->query("new_main_task/collect_items"));
+    int finished = 1;
+    string missing_items = "";
+    
+    // 更新收集进度
+    foreach (string item_name, mapping item_info in items)
+    {
+        string item_id = item_info["id"];
+        int required_num = item_info["num"];
+        
+        // 检查玩家身上是否有足够的物品
+        object *obs = filter_array(all_inventory(me), (: $1->query("id") == $(item_id) :));
+        int total_amount = 0;
+        
+        foreach (object ob in obs)
+        {
+            // 计算物品数量，考虑可堆叠物品
+            int amount = ob->query_amount() ? ob->query_amount() : 1;
+            total_amount += amount;
+            
+            // 如果已经达到或超过需求数量，跳出循环
+            if (total_amount >= required_num)
+                break;
+        }
+        
+        // 更新收集进度
+        collect_progress[item_id] = total_amount;
+        
+        // 检查是否缺少物品
+        if (total_amount < required_num)
+        {
+            finished = 0;
+            missing_items += sprintf("%s(还需%d个) ", item_name, (required_num - collect_progress[item_id]));
+        }
+    }
+    
+    // 保存更新后的进度
+    me->set("new_main_task/collect_items", collect_progress);
+    
+    if (finished)
+    {
+        // 从玩家身上扣除物品
+        foreach (string item_name, mapping item_info in items)
+        {
+            string item_id = item_info["id"];
+            int required_num = item_info["num"];
+            
+            // 查找并扣除物品
+            object *obs = filter_array(all_inventory(me), (: $1->query("id") == $(item_id) :));
+            int total_amount = 0;
+            
+            foreach (object ob in obs)
+            {
+                int amount = ob->query_amount() ? ob->query_amount() : 1;
+                
+                if (total_amount + amount <= required_num)
+                {
+                    // 如果物品数量不超过需求，直接销毁整个物品
+                    total_amount += amount;
+                    destruct(ob);
+                }
+                else
+                {
+                    // 如果物品数量超过需求，只减少需要的部分
+                    int need = required_num - total_amount;
+                    if (ob->query_amount())
+                    {
+                        ob->set_amount(amount - need);
+                    }
+                    else
+                    {
+                        destruct(ob);
+                    }
+                    total_amount = required_num;
+                    break;
+                }
+            }
+        }
+        
+        // 设置任务完成标记
+        me->set("new_main_task/finished_quest_id", quest_id);
+        tell_object(me, HIG "恭喜你完成了收集任务！\n" NOR);
+        
+        // 再次提交任务
+        submit_quest(me);
+        return 1;
+    }
+    else
+    {
+        string collect_msg = sprintf(HIR"你还没有收集齐所需物品：%s\n"NOR, missing_items);
+        tell_object(me, popup_title(collect_msg));
+        return 1;
+    }
+}
+
+/**
+ * @brief 提交任务
+ * @param object me 玩家对象
+ * @return int 1表示成功，0表示失败
+ */
+public int submit_quest(object me)
+{
+    int quest_id;
+    string quest_target_type;
+    
+    if (!objectp(me))
+        return 0;
+    
+    quest_id = get_player_current_quest(me);
+    
+    if (!quest_id)
+    {
+        tell_object(me, "你当前没有任务。\n");
+        return 0;
+    }
+    
+    // 检查任务是否已完成
+    if (me->query("new_main_task/finished_quest_id") == quest_id)
+    {
+        return handle_completed_quest(me, quest_id);
+    }
+    
+    // 获取任务类型
+    quest_target_type = main_task_config[quest_id]["quest_target"]["type"];
+    
+    // 根据任务类型处理提交
+    if (quest_target_type == "kill")
+    {
+        return handle_kill_quest_submission(me, quest_id);
+    }
+    else if (quest_target_type == "spar")
+    {
+        return handle_spar_quest_submission(me, quest_id);
+    }
+    else if (quest_target_type == "talk")
+    {
+        return handle_talk_quest_submission(me, quest_id);
+    }
+    else if (quest_target_type == "collect")
+    {
+        return handle_collect_quest_submission(me, quest_id);
+    }
+
+    return 0;
+}

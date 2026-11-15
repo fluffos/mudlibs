@@ -1,0 +1,139 @@
+// /kungfu/skill/bainiao-chaofeng/chaofeng.c
+
+
+#include <combat.h>
+
+#define CHAOFENG "「" HIY "百鸟朝凤" NOR "」"
+string query_name() { return CHAOFENG; }
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+    object weapon, *obs;
+    int damage, skill, hit_chance;
+    string msg;
+    int i, count;
+    int yinlv_level;    // 音律等级
+    int base_chance;    // 音符获取基础概率
+    int attack_times;   // 攻击次数
+    int times;          // 攻击计数器
+
+    if (! target) target = offensive_target(me);
+
+    if (! target || ! me->is_fighting(target))
+        return notify_fail(CHAOFENG "只能对战斗中的对手使用。\n");
+
+    if (! objectp(weapon = me->query_temp("weapon")) ||
+        weapon->query("skill_type") != "qin")
+        return notify_fail("你必须手持琴才能施展" CHAOFENG "。\n");
+
+    if ((int)me->query_skill("bainiao-chaofeng", 1) < 120)
+        return notify_fail("你的百鸟朝凤琴法不够娴熟，还不会使用" CHAOFENG "。\n");
+
+    if ((int)me->query_skill("force") < 180)
+        return notify_fail("你的内功修为不够，难以施展" CHAOFENG "。\n");
+
+    if ((int)me->query_skill("yinlv", 1) < 120)
+        return notify_fail("你的音律修养不够，无法施展" CHAOFENG "。\n");
+
+    if (me->query("neili") < 300)
+        return notify_fail("你现在真气不够，难以施展" CHAOFENG "。\n");
+
+    if (me->query_cooldown("bainiao_chaofeng"))
+        return notify_fail("你刚刚使用过" CHAOFENG "，需要等待片刻才能再次使用。\n");
+
+    skill = me->query_skill("bainiao-chaofeng", 1) + me->query_skill("qin");
+
+    msg = HIY "$N" HIY "双手在" + weapon->name() + HIY "上轻抚，奏响了" CHAOFENG "，\n"
+              "琴音如百鸟齐鸣，化作无形剑气席卷四周！\n" NOR;
+    
+    message_vision(msg, me);
+
+    me->add("neili", -300);
+
+    // 获取我的对手的所有生物
+    obs = me->query_enemy();
+    obs = filter_array(obs, (: living($1) && $1 != $(me) && !$1->query("not_living") :));
+
+    // 如果目标不在obs中，将其添加进去
+    if (member_array(target, obs) == -1) {
+        obs += ({ target });
+    }
+
+    //如果对手超过3个，只取前3个
+    if (sizeof(obs) > 3) {
+        obs = obs[0..2];
+    }
+
+    count = 0;
+    
+    // 计算攻击次数，基于音律等级
+    attack_times = 1;
+    if (sizeof(obs) == 1) {
+        yinlv_level = me->query_skill("yinlv", 1);
+        if (yinlv_level >= 200) attack_times = 3;
+        else if (yinlv_level >= 150) attack_times = 2;
+    }
+    
+    for (i = 0; i < sizeof(obs); i++) {
+        if (! obs[i] || environment(obs[i]) != environment(me)) continue;
+        
+        // 对单个目标进行多次攻击
+        for (times = 0; times < attack_times; times++) {
+            hit_chance = obs[i]->query_skill("force") + obs[i]->query_skill("parry",1);
+
+            if (!playerp(target)) {
+                hit_chance = hit_chance * 2 /3;
+            }
+
+            if (skill / 2 + random(skill) + me->query_skill("yinlv", 1) / 2 > hit_chance) {
+                damage = skill;
+                damage += me->query_skill("yinlv", 1) * 2;
+
+                //pve伤害x2
+                if (!playerp(obs[i])) {
+                    damage *= 2;
+                }
+                
+                // 后续攻击伤害递减
+                if (times > 0) {
+                    damage = damage * (4 - times) / 4;
+                }
+                
+                msg = COMBAT_D->do_damage(me, obs[i], WEAPON_ATTACK, damage, 100,
+                                          HIR "$n" HIR "被琴音所慑，心神大乱，"
+                                          "无法躲避，受到了严重的内伤！\n" NOR);
+                
+                // 根据音律等级计算获取音符的基础概率
+                base_chance = 30 + yinlv_level / 4; // 基础30%，每4级音律增加1%概率
+                
+                // 限制最高概率为80%
+                if (base_chance > 80) base_chance = 80;
+                
+                if (random(100) < base_chance) {
+                    if (random(2) == 0) {
+                        me->add_temp("huoyin_count", 1);
+                        tell_object(me, HIR "你在琴音中感受到了强烈的火焰之力，凝聚出一枚火音符！\n" NOR);
+                    } else {
+                        me->add_temp("bingyin_count", 1);
+                        tell_object(me, HIB "你在琴音中感受到了凛冽的寒冰之气，凝聚出一枚冰音符！\n" NOR);
+                    }
+                }
+            } else {
+                msg = CYN "$n" CYN "识破了$N" CYN "的琴音攻击，轻巧地避开了。\n" NOR;
+            }
+            message_vision(msg, me, obs[i]);
+            count++;
+        }
+    }
+
+    if (count == 0) {
+        write("周围没有可以攻击的目标。\n");
+    }
+
+    // 设置冷却时间为10秒
+    me->set_cooldown("bainiao_chaofeng", 10);
+  
+
+    return 1;
+}

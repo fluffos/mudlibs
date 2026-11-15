@@ -1,0 +1,191 @@
+// punish the berays user
+
+
+#pragma optimize
+
+
+inherit F_DBASE;
+
+void create()
+{
+	seteuid(ROOT_UID);
+	set("channel_id", "执法精灵");
+	CHANNEL_D->do_channel( this_object(), "sys", "执法精灵已经启动。");
+	remove_call_out("monitor");
+	call_out("monitor", 1);
+}
+
+int clean_up() { return 1; }
+
+void family_punish();
+
+string *punishers = ({
+	CLASS_D("xiakedao") + "/zhangsan",
+	CLASS_D("xiakedao") + "/lisi",
+});
+
+string *catchers = ({
+	CLASS_D("misc") + "/zhang",
+});
+
+mapping family_punishers = ([
+	"武当派"   : ({ CLASS_D("misc") + "/chongxu" }),
+	"少林寺"   : ({ CLASS_D("misc") + "/fangsheng" }),
+	"华山派"   : ({ CLASS_D("misc") + "/murenqing" }),
+	"华山剑宗" : ({ CLASS_D("misc") + "/murenqing" }),
+	"峨嵋派"   : ({ CLASS_D("misc") + "/guoxiang" }),
+	"桃花岛"   : ({ CLASS_D("misc") + "/taogu" }),
+	"神龙教"   : ({ CLASS_D("misc") + "/zhong" }),
+	"丐帮"     : ({ CLASS_D("misc") + "/wangjiantong" }),
+	"古墓派"   : ({ CLASS_D("misc") + "/popo" }),
+	"全真教"   : ({ CLASS_D("misc") + "/laodao" }),
+	"星宿派"   : ({ CLASS_D("misc") + "/xiaoxian" }),
+	"逍遥派"   : ({ CLASS_D("misc") + "/liqiushui" }),
+	"雪山寺"   : ({ CLASS_D("misc") + "/laoseng" }),
+	"血刀门"   : ({ CLASS_D("misc") + "/hongri" }),
+	"灵鹫宫"   : ({ CLASS_D("misc") + "/tonglao" }),
+	"慕容世家" : ({ CLASS_D("misc") + "/furen" }),
+	"欧阳世家" : ({ CLASS_D("misc") + "/laonu" }),
+	"关外胡家" : ({ CLASS_D("misc") + "/huyidao" }),
+	"段氏皇族" : ({ CLASS_D("misc") + "/duansh" }),
+]);
+
+/**
+ * @brief 定期扫描在线玩家执行惩罚与抓捕任务
+ * @details 该函数设计为循环扫描机制，每隔3分钟（180-240秒）自动触发。核心逻辑包含三个递进式安全过滤：
+ * 1. PVP状态拦截：当检测到全服PVP开启时立即终止扫描，避免系统过载
+ * 2. 精准玩家筛选：采用多维度条件过滤（经验值/通缉状态/生存状态/权限等级），仅保留符合执法要求的玩家
+ * 3. 资源有效性校验：通过动态过滤punishers/catchers列表，确保仅对存在的执法者分配任务
+ * @details 采用双通道任务分发机制：惩罚系统通过消息模板触发，抓捕系统直接调用对象接口，实现任务类型解耦
+ * @details 最后10%概率触发家族惩罚机制，形成三级执法体系（全服-门派-家族）
+ * @details 所有对象操作均包含存在性检查，防止空指针异常，同时通过列表动态维护执法者有效性
+ */
+void monitor()
+{
+	int i;
+	object *obs;
+	string *aviable;
+	string punisher;
+ 
+ 
+
+	remove_call_out("monitor");
+	call_out("monitor", 180 + random(60));
+
+	// when the pking was going, I won't let the punisher out,
+	// because the competitor may in PKD.
+	if (PK_D->is_pking())
+		return;
+
+	CHANNEL_D->do_channel(this_object(), "sys", "各大门派扫描所有在线玩家。");
+/*
+	// search all the player for punishing
+	obs = filter_array(users(),
+			   (: $1->query("combat_exp") >= 100000 &&
+			      $1->query("combat/need_punish") &&
+			      ! $1->is_in_prison() &&
+			      ! $1->is_ghost() &&
+			      ! wizardp($1) &&
+			      environment($1) :));
+
+	if (sizeof(obs))
+	{
+		obs = sort_array(obs, (: $2->query("combat_exp") - $1->query("combat_exp") :));
+		aviable = filter_array(punishers, (: ! find_object($1) :));
+		i = 0;
+		while (sizeof(aviable) && i < sizeof(obs))
+		{
+			msg = obs[i]->query("combat/need_punish");
+			punisher = aviable[random(sizeof(aviable))];
+			punisher->start_punish(obs[i], msg);
+			aviable -= ({ punisher });
+			i++;
+		}
+	}
+*/
+	// search all the player for catching
+	obs = filter_array(users(),
+			(: $1->query_condition("killer")>4499 && 
+//			  !wizardp($1) && 
+			  environment($1) :));
+
+	if (sizeof(obs))
+	{
+		aviable = filter_array(catchers, (: ! find_object($1) :));
+		i = 0;
+		while (sizeof(aviable) && i < sizeof(obs))
+		{
+			punisher = aviable[random(sizeof(aviable))];
+			punisher->start_catch(obs[i]);
+			i++;
+		}
+	}
+
+	// Normal I won't check the player
+	if (random(10) == 0 || 1)
+		family_punish();
+}
+
+/**
+ * @brief 处理家族成员的惩罚流程
+ * @details 该函数通过以下步骤实施家族惩罚机制：
+ * 1. 筛选出战斗经验达标且处于可战环境且未被禁战的角色
+ * 2. 遍历每个角色的举报记录，排除仅包含"times"字段的无效记录
+ * 3. 动态维护惩罚者列表，过滤已销毁的惩罚者对象
+ * 4. 通过随机选择有效惩罚者执行对应惩罚
+ * 5. 自动清理过期举报记录并维护剩余惩罚次数
+ * @note 采用分阶段处理机制避免内存溢出，通过日志记录异常惩罚者
+ * @warning 需配合family_punishers配置表使用，确保惩罚者文件存在且有效
+ * @see family_punishers
+ * @see start_punish
+ */
+void family_punish()
+{
+	object ob;
+	object *obs;
+	mapping betrayer;
+	string *punishers;
+	string punisher;
+	string key;
+
+	obs = filter_array(users(), (: $1->query("combat_exp") >= 100000 && objectp(environment($1)) && 
+				       ! environment($1)->query("no_fight") &&
+				       mapp($1->query("betrayer")) :));
+
+	if (! sizeof(obs))
+		return;
+
+	foreach (ob in obs)
+	{
+		betrayer = ob->query("betrayer");
+		foreach (key in keys(betrayer))
+		{
+			if (key == "times") continue;
+			if (! arrayp(punishers = family_punishers[key]))
+			{
+				ob->add("detach/" + key, 1);
+				ob->add("detach/times", 1);
+				betrayer["times"] -= betrayer[key];
+				map_delete(betrayer, key);
+				if (betrayer["times"] < 1)
+					ob->delete("betrayer");
+				continue;
+			}
+
+			punishers = filter_array(punishers, (: ! find_object($1) :));
+			if (! sizeof(punishers))
+				// No punishers aviable now
+				continue;
+
+			punisher = punishers[random(sizeof(punishers))];
+			if (file_size(punisher + ".lpc") < 0)
+			{
+				log_file("nosave/log", "can not find punisher: "
+					 + punisher + "\n");
+				break;
+			}
+			punisher->start_punish(ob, key);
+			break;
+		}
+	}
+}

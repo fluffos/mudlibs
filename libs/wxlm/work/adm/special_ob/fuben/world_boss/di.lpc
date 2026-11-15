@@ -1,0 +1,353 @@
+inherit NPC;
+
+void create()
+{
+	set_name("太玄-地", ({ "taixuan di", "di" }));
+	set("title", HIY "太玄-地" NOR);
+	set("gender", "男性");
+	set("age", 60);
+	set("long","这是个由天地之间溢散的太玄之气凝聚而成的精怪。\n");
+
+	set("int", 30);
+	set("str", 25);
+	set("con", 30);
+	set("dex", 25);
+
+	set("qi", 1000000);
+	set("max_qi", 1000000);
+	set("jing", 1000000);
+	set("max_jing", 1000000);
+	set("neili", 35000);
+	set("max_neili", 35000);
+	set("jiali", 250);
+	set("combat_exp", 5000000000);
+	set("score", 20000000);
+	set("worldboss", 1);
+
+	set_skill("force", 300);
+	set_skill("taixuan-gong", 300);
+	set_skill("dodge", 300);
+	set_skill("taixuan-gong", 300);
+	set_skill("unarmed", 300);
+	set_skill("taixuan-gong", 300);
+	set_skill("parry", 300);
+
+	map_skill("force", "taixuan-gong");
+	map_skill("dodge", "taixuan-gong");
+	map_skill("unarmed", "taixuan-gong");
+	map_skill("parry", "taixuan-gong");
+
+	set("chat_chance_combat", 120);
+	set("chat_msg_combat", ({
+		(: exert_function, "powerup" :),
+		(: perform_action, "unarmed.taixuan" :),
+	}) );
+
+	setup();
+
+	carry_object("/clone/misc/cloth")->wear();
+
+	// 20分钟后，自我销毁，并设定一个参数
+	call_out("destruct_me", 2400);
+	set("destructing_time", time() + 2400);
+}
+
+private void init_player(object me)
+{
+	me->set("backup/condition", me->query_condition());
+    me->clear_condition();
+}
+
+void kill_ob(object ob)
+{
+	// 如果一个玩家要攻击我，停止他的其他kill战斗
+	object *killer_list;
+	//获取对手boss
+	object *boss_list;
+	//获取对手boss的敌人数量
+	int enemy_number = 0;
+
+
+	//如果我的敌人列表中，不是玩家过滤掉
+	killer_list = this_object()->query_enemy();
+
+	killer_list = filter_array(killer_list, (: userp($1) :));
+
+	boss_list = filter_array(children("/adm/special_ob/fuben/world_boss/tian"), (: clonep($1) :));
+
+	foreach (object boss in boss_list)
+	{
+		if (objectp(boss))
+		{
+			enemy_number += sizeof(killer_list);
+			break;
+		}
+	}
+
+	if (userp(ob))
+	{
+		int number = 0;
+		object target_boss;
+
+
+		//如果我当的玩家敌人超过3个，提示ob，当前你不能助战太玄-天攻击太玄地
+		foreach (object killer in killer_list)
+		{
+			number++;
+		}
+
+		if (number > enemy_number)
+		{
+			tell_object(ob, HIR "太玄阵营战人数需对等，当前你选择参与的阵营的人数为" + chinese_number(enemy_number) + "，另一方阵营人数为" + chinese_number(number) + "，你只能选择另一方,战斗终止,你被传送回泰山的月观峰。\n" NOR);
+			ob->move("/d/taishan/yueguan");
+			// 停止战斗
+			if (ob->is_fighting())
+			{
+				ob->remove_all_killer();
+				ob->remove_all_want(1);
+				COMBAT_JSON_MSG->query_combat_cond(ob);
+			}
+			return;
+		}
+
+		//设定我的伤害值和命中值敌人数量 * 200
+		set_temp("apply/damage", number * 200);
+		set_temp("apply/unarmed_damage", number * 200);
+		set_temp("apply/attack", number * 200);
+
+		// 当前玩家的zt_time_world参数，如果大于当前时间，提示ob，当前你不能助战，每次退出战斗后，需要等待30秒才能助战
+		if (ob->query_temp("zt_time_world") > time())
+		{
+			tell_object(ob, HIR "你当前不能助战，每次退出战斗后，需要等待30秒才能助战。\n" NOR);
+			// 停止战斗
+			if (ob->is_fighting())
+			{
+				ob->remove_all_killer();
+				ob->remove_all_want(1);
+				COMBAT_JSON_MSG->query_combat_cond(ob);
+			}
+			return;
+		}
+
+
+		ob->remove_all_killer();
+
+		// 如果我被攻击力，那么助战我的人，也会被攻击力
+		// 先找到当前地图中是否存在taixuan di，如果存在，那么助战的人，也会被攻击力
+		target_boss = present("taixuan tian", environment(this_object()));
+
+		if (objectp(target_boss))
+		{
+			object *enemy_list;
+			// 攻击target_boss的所有敌人
+			enemy_list = target_boss->query_enemy();
+
+			// 过滤掉非玩家的敌人
+			enemy_list = filter_array(enemy_list, (: userp($1) :));
+
+			// 一个数组执行函数，那么数组中的每一个元素都会执行这个函数
+			enemy_list->kill_ob(ob);
+
+			// 告诉ob，被那些助战我的人攻击了
+			foreach (object enemy in enemy_list)
+			{
+				tell_object(ob, HIR "你对" +this_object()->query("name") + "发起挑战，被助战他的" + enemy->name(1) + "攻击了。\n" NOR);
+			}
+		}
+
+	}
+
+	//提示ob，我还有多少时间遁走(destruct_me)，请抓紧时间，计算destroying_time - time()，然后还有多少分钟，多少秒遁走
+
+	if (this_object()->query("destructing_time") - time() > 0)
+	{
+		int time;
+		int minute;
+		int second;
+
+		time = this_object()->query("destructing_time") - time();
+
+		minute = time / 60;
+		second = time % 60;
+
+		tell_object(ob, HIR "太玄-地还有" + chinese_number(minute) + "分钟" + chinese_number(second) + "秒遁走，请抓紧时间。\n" NOR);
+	}
+
+	if (userp(ob))
+	{
+		init_player(ob);
+	}
+
+	::kill_ob(ob);
+}
+
+
+varargs void die(object me)
+{
+	object killer_list;
+	object player;
+	object *boss_list;
+
+	if (! objectp(me))
+	{
+		player = this_object()->query_last_damage_from();
+	}
+	else
+	{
+		player = me;
+	}
+
+	// 检查我死亡之前有那些敌人, 记录下来，检查当前地图上的所有玩家
+	killer_list = this_object()->query_enemy();
+
+	//过滤掉非玩家的敌人
+	killer_list = filter_array(killer_list, (: userp($1) :));
+
+	// 过滤掉和我不在同一地点的敌人
+	killer_list = filter_array(killer_list, (: environment($1) == environment($2) :), this_object());
+
+	if (sizeof(killer_list))
+	{
+
+		//遍历所有的敌人，给予奖励
+		foreach (object killer in killer_list)
+		{
+			int  probability = random(100);
+			// 每一个玩家有10%的概率获得3点jiuzhuan，30%的概率获得2点，60%的概率获得1点
+
+			// 检查是否为宗师，宗师无法获得任何奖励
+			if (ultrap(killer))
+			{
+				tell_object(killer, HIR "作为武道宗师，你已超脱凡俗，无需这些俗世奖励。\n" NOR);
+				continue;
+			}
+
+			//如果killer有now_time/time参数，并且now_time/time除以86400小于time()/86400，清空now_time
+
+			if (killer->query("now_time_fuben/time") && (killer->query("now_time_fuben/time") / 86400) < (time() / 86400))
+			{
+				// 今天是新的一天，可以获得奖励
+				tell_object(killer, HIG "今天是新的一天，可以继续获得九转金丹奖励。\n" NOR);
+				killer->delete("now_time_fuben/jiuzhuan");
+			}
+
+			// 必定奖励太玄宝藏
+			{
+				object taixuan_baozang;
+				taixuan_baozang = new_bind("/clone/baoxiang/taixuan-baozang");
+				if (taixuan_baozang)
+				{
+					taixuan_baozang->move(killer);
+					tell_object(killer, HIG "你获得了1个" + taixuan_baozang->name() + "。\n" NOR);
+				}
+			}
+
+			// 如果我一天获取超过了10个九转金丹，那么不再给予九转金丹子奖励
+			if (killer->query("now_time_fuben/jiuzhuan") >= 10)
+			{
+				tell_object(killer, HIG "你今天已经获得了超过3个九转金丹了，不再获得九转金丹奖励。\n" NOR);
+			}
+			else
+			if (random(10) >= 5)
+			{
+				if (probability < 10)
+				{
+					object ob;
+					ob = new_bind("/clone/vip/dan_jiuzhuan");
+					ob->move(killer);
+					tell_object(killer, HIG "你获得了1个" + ob->name() + "。\n" NOR);
+					killer->add("now_time_fuben/jiuzhuan",3);
+				}
+				else 
+				{
+					object ob = new_bind("/clone/vip/putao1");
+					ob->move(killer);
+					tell_object(killer, HIG "你获得了1个" + ob->name() + "。\n" NOR);
+				}
+			}
+
+			// 设定now_time/time参数
+			killer->set("now_time_fuben/time",time());
+
+			// 每一个玩家有获得1w经验，2w潜能
+			killer->add("potential",20000);
+			killer->add("combat_exp",5000);
+			// 每一个玩家有获得10绑定元宝
+			killer->add("bind_yuanbao",10);
+			tell_object(killer,HIM"你获得了10绑定元宝。"NOR"\n");
+			tell_object(killer, HIG "你获得了5000点经验，2w点潜能。\n" NOR);
+			tell_object(killer, HIG "你的阵营在本次太玄论武获胜了！\n" NOR);
+
+		}
+
+	}
+
+	// 找到所有的/adm/speical_ob/fuben/world_boss/tian,让他们执行destruct_me
+	boss_list = filter_array(children("/adm/special_ob/fuben/world_boss/tian"), (: clonep($1) :));
+
+	foreach (object boss in boss_list)
+	{
+		boss->destruct_me();
+	}
+
+	if (!objectp(player))
+	{
+		::die();
+		return;
+	}
+
+	::die(player);
+}
+
+// 自我销毁
+void destruct_me()
+{
+	// 检查所有我敌对敌人，clean_up_enemy
+	object *enemy_list;
+
+	enemy_list = this_object()->query_enemy();
+
+
+
+	// 清空所有战斗clean_up_enemy
+
+	if (sizeof(enemy_list) > 0)
+	{
+		foreach (object enemy in enemy_list)
+		{
+
+			if (!objectp(enemy))
+			{
+				continue;
+			}
+
+			enemy->remove_all_killer();
+			COMBAT_JSON_MSG->query_combat_cond(enemy);
+
+			// 如果我还没到销毁时间而被销毁，说明敌方阵营在本次战斗中输了，给予安慰奖
+
+			if (this_object()->query("destructing_time") - time() > 0)
+			{
+				// 每一个玩家有获得8000安慰奖励潜能，5000经验。
+				enemy->add("potential",8000);
+				enemy->add("combat_exp",5000);
+				// 每一个玩家有获得10绑定元宝
+				enemy->add("bind_yuanbao",10);
+				tell_object(enemy,HIM"你获得了10绑定元宝。"NOR"\n");
+				tell_object(enemy, HIG "你获得了8000点潜能，5000点经验的安慰奖。\n" NOR);
+					tell_object(enemy, HIG "你的阵营本次太玄论武中失败了！\n" NOR);
+			}
+		}
+	}
+
+	this_object()->remove_all_killer();
+
+	message_vision(HIR "\n$N" HIR "化为一道红光，消失了。\n" NOR, this_object());
+	destruct(this_object());
+}
+
+// 一旦我昏迷，直接die
+void unconcious()
+{
+	die();
+}

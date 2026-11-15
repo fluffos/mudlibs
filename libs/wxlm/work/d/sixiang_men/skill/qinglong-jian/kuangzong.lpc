@@ -1,0 +1,104 @@
+// kuangzong.c 青龙天罡枪法 狂纵枪舞
+
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+string query_name() { return "狂纵枪舞"; }
+string *pfm_type() { return ({ "club", }); }
+
+int perform(object me, object target)
+{
+    object weapon;
+    string msg;
+    int ap, dp;
+    int count, attack_times;
+    int busy = 0;
+
+    // if (userp(me) && ! me->query("can_perform/qinglong-jian/kuangzong"))
+    //     return notify_fail("你还不会使用狂纵枪舞。\n");
+
+    if (! target) target = offensive_target(me);
+
+    if (! target || ! me->is_fighting(target))
+        return notify_fail("狂纵枪舞只能对战斗中的对手使用。\n");
+
+    if (! objectp(weapon = me->query_temp("weapon")) ||
+        (string)weapon->query("skill_type") != "club")
+        return notify_fail("你使用的武器不对。\n");
+
+    if ((int)me->query_skill("qinglong-jian", 1) < 100)
+        return notify_fail("你的青龙天罡枪法不够娴熟，不能使用狂纵枪舞。\n");
+
+    if ((int)me->query_skill("sixiang-shengong", 1) < 100)
+        return notify_fail("你的四象神功修为不够，无法领会狂纵枪舞的奥秘。\n");
+
+    if ((int)me->query("neili", 1) < 500)
+        return notify_fail("你现在真气不够，不能使用狂纵枪舞。\n");
+
+    if (me->query_skill_mapped("club") != "qinglong-jian")
+        return notify_fail("你没有激发青龙天罡枪法，不能使用狂纵枪舞。\n");
+
+    if (! living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    msg = HIY "$N" HIY "运转四象神功，使出青龙天罡枪法中的绝招「狂纵枪舞」，" +
+          weapon->name() + HIY "如狂风骤雨般向$n" HIY "连续刺出！"NOR"\n";
+
+    ap = me->query_skill("sixiang-shengong", 1) + me->query_skill("club");
+    dp = target->query_skill("force") + target->query_skill("parry", 1);
+    if (dp < 1) dp = 1;
+    
+    if (COMBAT_D->hit_determination(me,target,ap,dp))
+    {
+        int max_times;
+        me->start_busy(3);
+        if (! target->is_busy())
+            target->start_busy(1);
+        
+        // 计算攻击次数，每500内力一次，但不超过内力的30%
+        attack_times = me->query("neili") / 500;
+        max_times = me->query("neili") * 3 / 10 / 500;  // 30%的上限
+        if (attack_times > max_times)
+            attack_times = max_times;
+        
+        msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, ap / 2 + random(ap / 2), 66,
+                       HIR "$n" HIR "躲闪不及，被$N" HIR "的枪势击中，顿时鲜血直流！"NOR"\n");
+        message_combatd(msg, me, target);
+        
+        count = me->query_skill("sixiang-shengong", 1) / 5;
+        me->add_temp("apply/attack", count);
+        
+        for (int i = 0; i < attack_times; i++)
+        {
+            if (me->is_fighting(target))
+            {
+                COMBAT_D->do_attack(me, target, weapon);
+                me->add("neili", -500);
+                
+                if (random(10) == 1 && ! target->is_busy())
+                {
+                    busy++;
+                }
+            }
+            else
+                break;
+        }
+        
+        if (! target->is_busy())
+        {
+            target->start_busy(busy);
+        }
+        
+        me->add_temp("apply/attack", -count);
+    } 
+    else
+    {
+        me->start_busy(2);
+        msg += CYN "可是$n" CYN "看破了$N" CYN "的企图，巧妙地避开了这次攻击。"NOR"\n";
+        message_combatd(msg, me, target);
+    }
+
+    return 1;
+}

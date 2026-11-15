@@ -1,0 +1,122 @@
+inherit ROOM;
+
+void create()
+{
+    set("short", "武学堂");
+    set("long", @LONG
+这里是白帝城的武学堂，是弟子们学习武功理论的地方。宽敞的大厅里摆放着几
+排桌椅，前方有一个讲台。墙上挂着各种武功要诀图解，还有一些名家手书的心法
+口诀。这里经常有长老授课，传授武学精髓。
+
+靠墙处摆放着一张古色古香的七弦琴，据说此琴乃是伏羲所制，名为绿绮。
+琴身上刻有"知音"二字，相传曾为伯牙抚奏，琴声绕梁三日不绝。
+LONG );
+    set("exits", ([
+        "southwest" : __DIR__"square",
+    ]));
+    set("objects", ([
+        __DIR__"npc/xiangxiu" : 1,
+    ]));
+
+    //禁止战斗
+    set("no_fight", 1);
+
+    set("item_desc", ([
+        "琴" : "这是一张古琴，你可以尝试弹奏(tanqin)它\n"
+        ZJOBACTS2+ZJMENUF(3,3,10,30)"弹奏:tanqin\n"
+    ]));
+    setup();
+}
+
+void init()
+{
+    add_action("do_tanqin", "tanqin");
+}
+
+int do_tanqin(string arg)
+{
+    object me = this_player();
+    int cost;
+
+    if (me->is_busy())
+        return notify_fail("你现在正忙着呢。\n");
+
+    if (me->is_fighting())
+        return notify_fail("战斗中弹琴？你想死吗？\n");
+
+    if (me->query("jing") < me->query("max_jing") * 7 / 10)
+        return notify_fail("你精神不济，无法专心弹琴。\n");
+
+    if (me->query_skill("yinlv", 1) < 50)
+        return notify_fail("你的音律修为尚浅，还不能弹奏这张神琴。\n");
+
+    if (! arg || ! sscanf(arg, "%d", cost))
+        return notify_fail(popup_input("你要花费多少潜能学习，输入一个数字：", "tanqin "));
+        // return notify_fail("你要花多少潜能进行琴道修炼？\n");
+
+    if (cost >= me->query("potential") - me->query("learned_points"))
+        return notify_fail("你现在没有这么多的潜能！\n");
+
+    if (cost < 100)
+        return notify_fail("至少要花一百点潜能才能有所进步。\n");
+
+    message_vision(HIY "$N" HIY "轻抚古琴，指尖流连于琴弦之上。\n" NOR, me);
+    tell_room(environment(me), HIC "只听得琴声如清泉流淌，潺潺不绝。\n" NOR);
+
+    me->set_temp("pending/tanqin", 1);
+    me->set_temp("potential_cost", cost);
+    me->set_short_desc("正专心致志地弹奏古琴。");
+    me->start_busy((:call_other, __FILE__, "tanqin" :),
+                   (:call_other, __FILE__, "halt_tanqin" :));
+    return 1;
+}
+
+int tanqin(object me)
+{
+    int cost;
+    object *obs;
+
+    cost = me->query_temp("potential_cost");
+    if (cost > 0)
+    {
+        cost = random(cost) + 1;
+        if (cost > 3) cost = 3;
+    } else
+        cost = 0;
+
+    cost = cost * 5;
+
+    me->improve_skill("yinlv", me->query_int() / 5 +
+                      random(me->query_skill("yinlv", 1) * cost));
+    me->add("learned_points", cost);
+
+    if (random(10) == 0) {
+        tell_room(environment(me), HIW "忽然间，琴声变得高亢激昂，如大江东去，气势磅礴！\n" NOR);
+        obs = all_inventory(environment(me));
+        for (int i = 0; i < sizeof(obs); i++) {
+            if (obs[i] != me && obs[i]->is_character() && !obs[i]->is_fighting()) {
+                obs[i]->receive_heal("qi", 5 + random(5));
+                obs[i]->add("neili", 5 + random(5));
+                tell_object(obs[i], MAG "你听着悠扬的琴声，只觉得精神为之一振。\n" NOR);
+            }
+        }
+    }
+
+    if (me->add_temp("potential_cost", -cost) > 0)
+        return 1;
+
+    me->set_temp("pending/tanqin", 0);
+    me->set_short_desc(0);
+    message_vision(HIY "$N" HIY "弹琴完毕，面露微笑，缓缓站起身来。\n" NOR, me);
+    return 0;
+}
+
+int halt_tanqin(object me)
+{
+    tell_object(me, "你停止了弹琴。\n");
+    tell_room(environment(me), me->name() + "停止了弹琴。\n", me);
+    me->set_temp("pending/tanqin", 0);
+    me->delete_temp("potential_cost");
+    me->set_short_desc(0);
+    return 1;
+}

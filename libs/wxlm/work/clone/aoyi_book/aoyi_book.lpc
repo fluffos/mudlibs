@@ -1,0 +1,274 @@
+
+
+#define AOYI_D "/adm/daemons/aoyid"
+inherit COMBINED_ITEM;
+
+string query_autoload() { return query_amount() + ""; }
+
+void autoload(string param)
+{
+	int amt;
+
+	if (sscanf(param, "%d", amt) == 1)
+		set_amount(amt);
+}
+
+void setup()
+{
+	set_amount(1);
+	::setup();
+}
+
+void create()
+{
+	set_name(HIR "意境卷轴" NOR, ({"aoyi_book"}));
+	if (clonep())
+		set_default_object(__FILE__);
+	else {
+		set("long", "这是一本意境卷轴，记录无数意境的奥秘。\n");
+		set("base_unit", "卷");
+		set("no_shop", 1);
+		set("no_drop", 1);
+		set("no_give", 1);
+		set("base_value", 50000);
+		set("base_weight", 1);
+		set("only_do_effect", 1);
+	}
+	setup();
+}
+
+void init()
+{
+	add_action("do_choose_aoyi","choose_aoyi");
+	add_action("do_choose_aoyi_query","choose_aoyi_query");
+}
+
+/**
+    * @brief 卷轴使用效果函数，显示多门派意境选择界面
+    * @param object me 玩家对象
+    * @return int 返回1表示成功
+    * @details 调用意境守护进程获取玩家所有门派的可用意境列表并显示选择界面，包含完整错误处理
+    */
+int do_effect(object me)
+{
+	mapping all_families;
+	string *families, *available_yi, msg;
+	string *yi_buttons;
+
+	// 输入验证
+	if (!me || !objectp(me))
+	{
+		return 1;
+	}
+
+	// 检查意境守护进程是否可用
+	if (!AOYI_D)
+	{
+		tell_object(me, popup_title("意境系统暂时不可用，请稍后再试。"));
+		return 1;
+	}
+
+	// 获取玩家所有门派信息
+	all_families = 0;
+	catch(all_families = AOYI_D->get_player_all_families(me));
+
+	if (!mapp(all_families))
+	{
+		tell_object(me, popup_title("无法获取门派信息，请稍后再试。"));
+		return 1;
+	}
+
+	// 检查门派信息是否有效
+	families = all_families["families"];
+	if (!arrayp(families) || !sizeof(families))
+	{
+		string error_msg;
+
+		error_msg = "请先加入一个门派。";
+		if (all_families["warning"])
+		{
+			error_msg += "\n系统提示：" + all_families["warning"];
+		}
+		tell_object(me, popup_title(error_msg));
+		return 1;
+	}
+
+	// 获取可用意境列表
+	available_yi = 0;
+	catch(available_yi = AOYI_D->get_available_genbenfa_list(me));
+
+	if (!arrayp(available_yi) || !sizeof(available_yi))
+	{
+		string error_msg;
+
+		error_msg = "暂无可学习的意境。";
+		if (all_families["warning"])
+		{
+			error_msg += "\n系统提示：" + all_families["warning"];
+		}
+		tell_object(me, popup_title(error_msg));
+		return 1;
+	}
+
+	// 构建显示信息
+	msg = HIC"你可以学习的意境：\n"NOR;
+	msg += "你当前的门派：" + implode(families, "、") + "\n";
+
+	if (all_families["warning"])
+	{
+		msg += HIY"系统提示：" + all_families["warning"] + NOR + "\n";
+	}
+
+	msg += "\n";
+
+	yi_buttons = ({});
+
+	// 安全处理意境按钮生成
+	foreach (string yi_name in available_yi)
+	{
+		string family_tag, yi_type, color_tag;
+
+		if (!stringp(yi_name) || yi_name == "")
+			continue;
+
+		// 确定意境类型和门派归属
+		{
+			mapping center_mapping;
+			string family_name;
+
+			center_mapping = AOYI_D->get_center_yi_family_name_list();
+			if (!mapp(center_mapping))
+				continue;
+
+			family_name = center_mapping[yi_name];
+			if (!stringp(family_name))
+				continue;
+
+			if (family_name == "通用")
+			{
+				yi_type = "遗训";
+				family_tag = "通用";
+				color_tag = HIB;
+			}
+			else
+			{
+				yi_type = "根本法";
+				family_tag = family_name;
+				color_tag = HIR;
+			}
+
+			yi_buttons += ({sprintf("%s%s%s[%s-%s]:choose_aoyi_query %s",
+				color_tag, yi_name, NOR, yi_type, family_tag, yi_name)});
+		}
+	}
+
+	if (!sizeof(yi_buttons))
+	{
+		tell_object(me, popup_title("意境数据异常，无法显示可学习意境。"));
+		return 1;
+	}
+
+	tell_object(me, popup_comb(msg, yi_buttons));
+	return 1;
+}
+
+int do_choose_aoyi_query(string arg)
+{
+	object me = this_player();
+	mixed result;
+	
+	if (!arg)
+	{
+		return 1;
+	}
+
+	result = AOYI_D->get_second_aoyi_desc(arg);
+	tell_object(me, result);
+
+	return 1;
+	
+}
+
+/**
+    * @brief 选择并学习意境
+    * @param string arg 意境名称
+    * @return int 返回1表示成功
+    * @details 根据意境名称确定对应门派，然后调用守护进程进行意境学习
+    */
+int do_choose_aoyi(string arg)
+{
+	mapping center_mapping;
+	string yi_family;
+	object me = this_player();
+	mixed result;
+	string family_name;
+	mapping all_families;
+	string *available_families;
+
+	if (!arg)
+	{
+		return 1;
+	}
+
+	if (!me)
+	{
+		return 1;
+	}
+
+	// 获取玩家所有门派信息
+	all_families = AOYI_D->get_player_all_families(me);
+
+	if (!mapp(all_families) || !arrayp(all_families["families"]))
+	{
+		tell_object(me, popup_title("无法获取门派信息。"));
+		return 1;
+	}
+
+	available_families = all_families["families"];
+
+	// 根据意境名称确定对应的门派
+
+	center_mapping = AOYI_D->get_center_yi_family_name_list();
+	if (!mapp(center_mapping))
+	{
+		tell_object(me, popup_title("意境数据异常，无法确定门派归属。"));
+		return 1;
+	}
+
+	yi_family = center_mapping[arg];
+	if (!stringp(yi_family))
+	{
+		tell_object(me, popup_title("未知的意境类型。"));
+		return 1;
+	}
+
+	if (yi_family == "通用")
+	{
+		// 遗训意境，使用主门派
+		family_name = all_families["main_family"];
+	}
+	else
+	{
+		// 根本法意境，查找对应门派
+		family_name = yi_family;
+	}
+
+	if (!family_name || family_name == "")
+	{
+		tell_object(me, popup_title("无法确定意境对应的门派。"));
+		return 1;
+	}
+
+	// 调用意境学习
+	result = AOYI_D->lingwu(me, family_name, arg);
+	if (stringp(result))
+	{
+		tell_object(me, result);
+	}
+	else if (result == 1)
+	{
+		add_amount(-1);
+	}
+
+	return 1;
+}

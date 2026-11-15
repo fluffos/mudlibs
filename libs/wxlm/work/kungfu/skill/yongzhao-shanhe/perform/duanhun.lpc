@@ -1,0 +1,187 @@
+// duanhun.c 神照断魂
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+#define DUANHUN "「" HIY "神照断魂" NOR "」"
+
+/**
+ * @brief 获取绝技名称
+ * @return string 绝技显示名称
+ */
+string query_name() { return "神照"ZJBR"断魂"; }
+
+/**
+ * @brief 神照断魂外功绝技
+ * @param object me 使用者
+ * @param object target 目标对象
+ * @return int 1表示成功，0表示失败
+ * @details 神照经霸道内劲，直达魂魄，无视防御的致命一击
+ */
+int perform(object me, object target)
+{
+    string msg;
+    int ap, dp;
+    int damage;
+    int guang_level;
+
+    object weapon;
+    string skill_type, skill_name;
+    if (!target)
+    {
+        me->clean_up_enemy();
+        target = me->select_opponent();
+    }
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail(DUANHUN "只能对战斗中的对手使用。\n");
+
+
+    weapon = me->query_temp("weapon");
+
+    // 判断武器类型和对应的技能
+    if (!weapon)
+    {
+        // 空手：拳脚
+        skill_type = "unarmed";
+        skill_name = "拳脚";
+        if (me->query_skill_mapped("unarmed") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为拳脚，难以施展" DUANHUN "。\n");
+        if (me->query_skill_prepared("unarmed") != "yongzhao-shanhe")
+            return notify_fail("你现在没有准备使用永照山河经，难以施展" DUANHUN "。\n");
+    }
+    else if (weapon->query("skill_type") == "sword")
+    {
+        // 持剑：剑法
+        skill_type = "sword";
+        skill_name = "剑法";
+        if (me->query_skill_mapped("sword") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为剑法，难以施展" DUANHUN "。\n");
+    }
+    else if (weapon->query("skill_type") == "blade")
+    {
+        // 持刀：刀法
+        skill_type = "blade";
+        skill_name = "刀法";
+        if (me->query_skill_mapped("blade") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为刀法，难以施展" DUANHUN "。\n");
+    }
+    else
+    {
+        return notify_fail(DUANHUN "只能空手、持剑或持刀施展。\n");
+    }
+
+    if (me->query_skill("yongzhao-shanhe", 1) < 220)
+        return notify_fail("你的永照山河经还不够娴熟，难以施展" DUANHUN "。\n");
+
+    if (me->query_skill_mapped("force") != "yongzhao-shanhe")
+        return notify_fail("你现在没有激发永照山河经为内功，难以施展" DUANHUN "。\n");
+
+    if (me->query("neili") < 600)
+        return notify_fail("你的内力不够，难以施展" DUANHUN "。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    // 获取光明圣火意境等级
+    guang_level = COMBAT_D->get_skill_aoyi_level(me, "光明圣火");
+
+    if (!weapon)
+        msg = HIY "$N" HIY "双目精光暴涨，神照经内劲透体而出，金光万道，"
+              "掌心凝聚出一团" HIW "耀眼光球" HIY "，直取$n" HIY "魂魄！\n" NOR;
+    else
+        msg = HIY "$N" HIY "双目精光暴涨，神照经内劲透体而出，手中" + weapon->name() +
+              HIY "金光万道，凝聚出" HIW "耀眼光华" HIY "，直取$n" HIY "魂魄！\n" NOR;
+
+    message_combatd(msg, me, target);
+
+    // 根据武器类型计算AP/DP，确保公平对应
+    ap = me->query_skill("force") + me->query_skill(skill_type) + me->query_con();
+
+    // DP也相应调整，保持公平性
+    if (skill_type == "unarmed")
+        dp = target->query_skill("force") + target->query_skill("dodge") + target->query_con();
+    else
+        dp = target->query_skill("force") + target->query_skill("parry") + target->query_con();
+
+    // 光明圣火意境增强命中
+    if (guang_level > 0)
+    {
+        ap += guang_level * 20; // 增强光明圣火对AP的加成
+        message_combatd(HIY "$N" HIY "体内光明圣火奥义运转，神照之力更加恐怖！\n" NOR, me, target);
+    }
+
+    if (!userp(target))
+    {
+        ap = ap * 3 / 2;
+    }
+
+    me->add("neili", -400);
+
+    if (!COMBAT_D->hit_determination(me, target, ap, dp))
+    {
+        msg = HIY "然而$n" HIY "关键时刻凝神抵挡，险险避开了这致命一击！\n" NOR;
+        me->start_busy(3);
+    }
+    else
+    {
+        me->add("neili", -200);
+        me->start_busy(2);
+
+        // 根据武器类型计算伤害（空手威力最强）
+        damage = me->query_skill("force") + me->query_skill(skill_type);
+
+        if (skill_type == "unarmed")
+        {
+            // 空手：威力最强
+            damage += me->query("max_neili") / 12;
+            damage += me->query("jiali"); // 加力全额
+        }
+        else
+        {
+            // 持械：威力稍弱
+            damage += me->query("max_neili") / 15;
+            damage += me->query("jiali") * 4 / 5; // 加力80%
+        }
+
+        damage *= 2; // 基础倍数
+
+        // 光明圣火意境伤害加成
+        if (guang_level > 0)
+        {
+            damage += damage * guang_level * 15 / 100; // 提升到每层+15%伤害
+        }
+
+        // 大成永照山河经(300级以上)额外增伤
+        if (me->query_skill("yongzhao-shanhe", 1) >= 300)
+        {
+            damage += damage * 60 / 100; // 60%增伤，比九阳神功高一些
+        }
+
+        if (!userp(target))
+        {
+            damage = damage * 3 / 2;
+        }
+
+        // 神照断魂的特殊效果：精神攻击
+        target->receive_damage("jing", damage / 4, me);
+        target->receive_wound("jing", damage / 8, me);
+
+        msg = HIY "$n" HIY "被神照断魂击中，金光透体而入，"
+              "不但身体受创，连神魂都受到重创！\n" NOR;
+
+        // 使用真实伤害
+        COMBAT_D->real_damage(me, target, damage);
+
+        // 额外效果：有几率造成恐惧状态
+        if (guang_level > 0 && random(100) < guang_level * 8)
+        {
+            target->start_busy(2 + guang_level / 3);
+            msg += HIW "$n" HIW "被神照之力震慑，一时间心神恍惚！\n" NOR;
+        }
+    }
+
+    message_combatd(msg, me, target);
+    return 1;
+}

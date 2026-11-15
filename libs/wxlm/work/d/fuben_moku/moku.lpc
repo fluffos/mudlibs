@@ -1,0 +1,344 @@
+inherit ROOM;
+
+#include <localtime.h>
+
+int start_moku_fuben(object who);
+void end_fuben_moku(object me, object moku);
+private void init_player(object me);
+int check_out(object me);
+private void restore_status(object me);
+void trigger_mist_event(object me);
+void end_mist_effect(object me, int effect_type);
+
+// 幻境迷雾相关变量
+int mist_active = 0;     // 迷雾是否激活
+int mist_effect_type = 0; // 迷雾效果类型
+int killed_xuemo = 0;    // 已击杀的怪物数量
+
+void create()
+{
+	set("short", "幽冥幻境");
+	set("long", @LONG
+幽冥幻境，一个充满神秘与诡异的地下世界。踏入此地，首先映入眼帘的是四周
+弥漫的淡蓝色雾气，如同薄纱般笼罩着整个空间。雾气中时而闪烁着幽蓝的光点，
+仿佛是无数灵魂在游荡。地面铺着古老的青石，上面刻有神秘的符文，每当有人踩
+踏，符文便会发出微弱的光芒。
+
+这里曾是古代一位神秘高手的修炼之地，传说中高手修炼的秘术可以操控生死，
+驱使鬼神。但随着高手的失踪，这片幻境逐渐被遗忘，成为了各种妖魔鬼怪聚集的
+场所。空气中弥漫着一股阴冷的气息，让人不寒而栗。
+
+远处隐约可见几座残破的石像，它们的眼睛似乎在注视着每一个闯入者。石像
+周围散落着一些古老的武器残骸，诉说着曾经发生过的激烈战斗。传闻，幻境深处
+隐藏着一份神秘的宝藏，引得无数英雄豪杰前往探险，但鲜有人能全身而退。
+LONG);
+	
+	set("action_list", ([
+		"离开副本" : "likai",
+		]));
+	
+	set("no_magic", 1);
+	set("no_clean_up_fb", 1);
+	
+	setup();
+}
+
+void init()
+{
+	add_action("do_likai", "likai");
+}
+
+int do_likai(string arg)
+{
+	if(!arg)
+		return notify_fail(ZJOBLONG + "你确定要离开幽冥幻境？离开后本次挑战将结束。\n" ZJOBACTS2 + "确定离开:likai y\n取消:cancel\n");
+	
+	if(arg == "y")
+	{
+		tell_object(this_player(), HIY "你深吸一口气，运转内力抵抗幻境的侵蚀，缓步离开了幽冥幻境。\n" NOR);
+		remove_call_out("end_fuben_moku");
+		restore_status(this_player());
+		this_player()->move("d/city/kedian");
+		tell_object(this_player(), "你回到了扬州客店。\n");
+	}
+	destruct(this_object());
+	return 1;
+}
+
+int start_fuben_moku(object who)
+{
+	object xuemo;
+	
+	if (!objectp(who))
+		return 0;
+	
+	// 检查是否已经进入过副本
+	if (who->query("fuben_moku/last_time") && is_same_day(time(), who->query("fuben_moku/last_time")))
+	{
+		tell_object(who, HIR "【幽冥幻境】由于幻境中邪恶能量过于强大，一天内只能进入一次！\n" NOR);
+		return 0;
+	}
+	
+	tell_object(who, HIC "你深吸一口气，踏入了幽冥幻境的大门...\n" NOR);
+	tell_object(who, HIB "一股阴冷的气息扑面而来，你感觉周围的空气变得凝重，仿佛有无数双眼睛在暗处注视着你。\n" NOR);
+	tell_object(who, HIC "【幻境规则】你需要在60分钟内击败10个怪物才能通过挑战。\n" NOR);
+	tell_object(who, HIC "【特殊机制】幻境中可能会出现特殊事件，请做好准备！\n" NOR);
+	
+	// 初始化已击杀怪物数量
+	killed_xuemo = 0;
+	
+	// 设置玩家
+	set("player", who);
+	
+	// 创建第一个怪物
+	xuemo = new(__DIR__"xuemo");
+	xuemo->set("xuemo", 1);
+	xuemo->move(this_object());
+	
+	// 设置玩家最后进入时间
+	who->set("fuben_moku/last_time", time());
+	
+	// 确保玩家移动到房间
+	who->move(this_object());
+	
+	// 触发幻境迷雾事件
+	call_out("trigger_mist_event", 60 + random(120), who);
+	
+	call_out("end_fuben_moku", 3600, who, this_object());
+	init_player(who);
+	
+	return 1;
+}
+
+void end_fuben_moku(object me, object moku)
+{
+	if (sscanf(base_name(environment(me)), __DIR__"%*s"))
+	{
+		restore_status(me);
+		me->move("d/city/kedian");
+		tell_object(me, HBRED+HIY"【幻境结束】挑战时间已到，你未能在规定时间内完成挑战！\n"NOR);
+		tell_object(me, HIY"一阵天旋地转，你被传送回了扬州客店。\n"NOR);
+	}
+	destruct(moku);
+}
+
+private void init_player(object me)
+{
+	me->set_override("unconcious", (: call_other, __FILE__, "check_out" :));
+    me->set_override("die", (: call_other, __FILE__, "check_out" :));
+	me->set("backup/condition", me->query_condition());
+    me->clear_condition();
+}
+
+int check_out(object me)
+{
+    object ob;
+    mapping my;
+    string msg;
+    string room;
+
+    room = base_name(environment(me)) + ".lpc";
+    if( room !=  __FILE__)
+    {
+            return 0;
+    }
+	
+    my = me->query_entire_dbase();
+    my["eff_qi"] = my["max_qi"];
+    my["eff_jing"] = my["max_jing"];
+    my["qi"] = 1;
+    my["jing"] = 1;
+
+    tell_object(me, HIR "\n你被幻境中的怪物重创，眼前一阵模糊...这下完了！\n" NOR);
+    if( ob = me->query_last_damage_from() )
+            msg = WHT "\n$N被" + ob->name(1) + "打成重伤，被幻境之力排斥出去！\n\n" NOR;
+    else
+            msg = WHT "\n$N身受重伤，被幻境之力排斥出去！\n\n" NOR;
+
+    message_vision(msg, me);
+
+    restore_status(me);
+    me->move("d/city/kedian");
+    message("vision", "一道蓝光闪过，" + me->name() + "从光芒中跌落出来，一副半死不活的样子。\n", 
+            environment(me), ({ me }));
+    tell_object(me, "你感到一股强大的力量将你排斥出幻境，重重地摔在了地上。\n");
+    if( !living(me) )
+            me->revive();
+
+    return 1;
+}
+
+
+void restore_status(object me)
+{
+	mapping cnd;
+	string *ks;
+	int i;
+	
+    me->delete_override("unconcious");
+    me->delete_override("die");
+    me->clear_condition();
+    cnd = me->query("backup/condition");
+    if (! mapp(cnd)) return;
+    
+	ks = keys(cnd);
+	for (i = 0; i < sizeof(ks); i++)
+		me->apply_condition(ks[i], cnd[ks[i]]);
+    me->receive_damage("qi", 0);
+}
+
+// 幻境迷雾事件触发
+void trigger_mist_event(object me)
+{
+	if (!objectp(me) || !me->is_character() || me->is_corpse() || !present(me, this_object()))
+		return;
+	
+	// 如果已经有迷雾效果，先结束它
+	if (mist_active)
+	{
+		end_mist_effect(me, mist_effect_type);
+	}
+	
+	// 随机选择一种迷雾效果
+	mist_effect_type = 1 + random(4);
+	mist_active = 1;
+	
+	switch(mist_effect_type)
+	{
+		case 1: // 削弱迷雾 - 减弱怪物能力
+			tell_object(me, HIC "\n【幻境迷雾】一阵淡蓝色的迷雾在幻境中弥漫开来...\n" +
+			               "你感觉到周围的怪物似乎变得迟缓了，它们的攻击力下降了！\n" NOR);
+			
+			// 减弱所有怪物
+			{
+				object *obs = all_inventory(this_object());
+				foreach (object ob in obs)
+				{
+					if (ob->is_character() && !ob->is_player() && ob->query("xuemo"))
+					{
+						ob->add_temp("apply/attack", -30);
+						ob->add_temp("apply/defense", -30);
+						ob->add_temp("apply/damage", -20);
+					}
+				}
+			}
+			break;
+			
+		case 2: // 增强迷雾 - 增强怪物能力
+			tell_object(me, HIR "\n【幻境迷雾】一阵血红色的迷雾在幻境中弥漫开来...\n" +
+			               "你感觉到周围的怪物变得更加凶猛，它们的攻击力提升了！\n" NOR);
+			
+			// 增强所有怪物
+
+			{
+				object *obs = all_inventory(this_object());
+				foreach (object ob in obs)
+				{
+					if (ob->is_character() && !ob->is_player() && ob->query("xuemo"))
+					{
+						ob->add_temp("apply/attack", 30);
+						ob->add_temp("apply/defense", 30);
+						ob->add_temp("apply/damage", 20);
+					}
+				}
+			}
+			break;
+			
+		case 3: // 治愈迷雾 - 恢复玩家生命
+			tell_object(me, HIG "\n【幻境迷雾】一阵翠绿色的迷雾在幻境中弥漫开来...\n" +
+			               "你感觉到一股温暖的能量涌入体内，恢复了你的生命力！\n" NOR);
+			
+			{
+				// 恢复玩家生命
+				int heal = me->query("max_qi") / 3;
+				me->receive_heal("qi", heal);
+				tell_object(me, HIG "你恢复了" + heal + "点生命值！\n" NOR);
+			}
+			break;
+			
+		case 4: // 混乱迷雾 - 使玩家和怪物都陷入忙碌
+			tell_object(me, HIY "\n【幻境迷雾】一阵金黄色的迷雾在幻境中弥漫开来...\n" +
+			               "你感觉到一阵眩晕，周围的怪物也似乎陷入了混乱！\n" NOR);
+			
+			// 使玩家和怪物都陷入忙碌
+			me->start_busy(3);
+			{
+				object *obs = all_inventory(this_object());
+				foreach (object ob in obs)
+				{
+					if (ob->is_character() && !ob->is_player() && ob->query("xuemo"))
+					{
+						ob->start_busy(5);
+					}
+				}
+			}
+			break;
+	}
+	
+	// 设置迷雾效果持续时间
+	call_out("end_mist_effect", 30 + random(30), me, mist_effect_type);
+	
+	// 安排下一次迷雾事件
+	call_out("trigger_mist_event", 120 + random(180), me);
+}
+
+// 结束幻境迷雾效果
+void end_mist_effect(object me, int effect_type)
+{
+	if (!objectp(me) || !me->is_character() || me->is_corpse())
+		return;
+	
+	mist_active = 0;
+	
+	switch(effect_type)
+	{
+		case 1: // 结束削弱迷雾
+			if (present(me, this_object()))
+				tell_object(me, HIC "\n【幻境迷雾】淡蓝色的迷雾逐渐散去，怪物恢复了原有的力量。\n" NOR);
+			
+			{
+				// 恢复所有怪物
+				object *obs = all_inventory(this_object());
+				foreach (object ob in obs)
+				{
+					if (ob->is_character() && !ob->is_player() && ob->query("xuemo"))
+					{
+						ob->add_temp("apply/attack", 30);
+						ob->add_temp("apply/defense", 30);
+						ob->add_temp("apply/damage", 20);
+					}
+				}
+			}
+
+			break;
+			
+		case 2: // 结束增强迷雾
+			if (present(me, this_object()))
+				tell_object(me, HIR "\n【幻境迷雾】血红色的迷雾逐渐散去，怪物恢复了原有的力量。\n" NOR);
+			
+			// 恢复所有怪物
+			{
+				object *obs = all_inventory(this_object());
+				foreach (object ob in obs)
+				{
+					if (ob->is_character() && !ob->is_player() && ob->query("xuemo"))
+					{
+						ob->add_temp("apply/attack", -30);
+						ob->add_temp("apply/defense", -30);
+						ob->add_temp("apply/damage", -20);
+					}
+				}
+			}
+			break;
+			
+		case 3: // 结束治愈迷雾
+			if (present(me, this_object()))
+				tell_object(me, HIG "\n【幻境迷雾】翠绿色的迷雾逐渐散去，温暖的能量消失了。\n" NOR);
+			break;
+			
+		case 4: // 结束混乱迷雾
+			if (present(me, this_object()))
+				tell_object(me, HIY "\n【幻境迷雾】金黄色的迷雾逐渐散去，你的头脑恢复了清醒。\n" NOR);
+			break;
+	}
+}

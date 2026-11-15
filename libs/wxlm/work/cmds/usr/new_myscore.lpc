@@ -1,0 +1,623 @@
+
+
+
+//函数声明
+mapping *myscore_attribute_man(object me);
+mapping *myscore_attribute_yueli(object me);
+mapping *myscore_status(object me);
+mapping *myscore_bamai(object me);
+mapping *myscore_function(object me);
+string display_attr(int gift, int value);
+string status_color(int current, int max);
+string chinese_space(int count);
+string number_space(int count);
+
+/**
+ * @brief 生成指定个数的等宽中文空格
+ * @param int count 空格个数
+ * @return string 返回等宽中文空格字符串
+ * @details 使用\u3000字符，每个字符等于一个中文字符的宽度
+ */
+string chinese_space(int count)
+{
+    string result;
+    int i;
+    
+    result = "";
+    for (i = 0; i < count; i++)
+    {
+        result += "\u3000";
+    }
+    return result;
+}
+
+/**
+ * @brief 生成指定个数的等宽数字空格
+ * @param int count 空格个数
+ * @return string 返回等宽数字空格字符串
+ * @details 使用\u2007（等宽数字空格）来生成指定个数的等宽空格，用于数字对齐
+ */
+string number_space(int count)
+{
+    string result;
+    int i;
+    
+    result = "";
+    for (i = 0; i < count; i++) {
+        result += "\u2007";
+    }
+    return result;
+}
+
+/**
+ * @brief 将数字格式化为固定宽度的字符串
+ * @param int num 要格式化的数字
+ * @param int width 目标宽度（字符数）
+ * @return string 返回固定宽度的数字字符串
+ * @details 将数字转换为字符串，然后在后面添加等宽数字空格以达到指定宽度
+ */
+string format_number_width(int num, int width)
+{
+    string num_str;
+    int num_len, spaces_needed;
+    
+    num_str = sprintf("%d", num);
+    num_len = strlen(num_str);
+    spaces_needed = width - num_len;
+    
+    if (spaces_needed > 0) {
+        return num_str + number_space(spaces_needed);
+    }
+    return num_str;
+}
+
+/**
+ * @brief 将中文字符串格式化为固定宽度
+ * @param string str 要格式化的中文字符串
+ * @param int width 目标宽度（中文字符数）
+ * @return string 返回固定宽度的中文字符串
+ * @details 计算中文字符串的显示宽度，然后在后面添加等宽中文空格以达到指定宽度
+ */
+string format_chinese_width(string str, int width)
+{
+    int str_width, spaces_needed;
+    
+    // 简单估算：假设每个中文字符占2个宽度，英文字符占1个宽度
+    // 这里使用strlen作为近似计算，实际可能需要更精确的计算
+
+    str_width = strlen(filter_color(str));
+    spaces_needed = width - str_width;
+    
+    if (spaces_needed > 0) {
+        return str + chinese_space(spaces_needed);
+    }
+    return str;
+}
+
+mapping oprank = ([
+	"宗师"     : HIW "宗师境界  ",
+	"登峰造极" : HIY "★★★★☆",
+	"超凡脱俗" : HIY "★★★★  ",
+	"臻至化境" : HIR "★★★☆  ",
+	"炉火纯青" : HIR "★★★    ",
+	"已有大成" : HIC "★★☆    ",
+	"非同凡响" : HIC "★★      ",
+	"出类拔萃" : HIG "★☆      ",
+	"身手不凡" : HIG "★	",
+	"已有小成" : HIM "☆	",
+]);
+
+//对应的函数指针
+mapping funcs = ([
+    "人物属性":(:myscore_attribute_man:),
+    "江湖阅历":(:myscore_attribute_yueli:),
+    "健康状态":(:myscore_status:),
+    "奇经八脉":(:myscore_bamai:),
+	"随身功能":(:myscore_function:),
+]);
+
+// 固定按钮如何排序
+mapping sortButtons = ([
+    "人物属性":({"角色系统:uplv","成就称号:querytitles","礼包兑换:libao_duihuan","元素词条:citiao_rf","贡献系统:new_fanli"}),
+    "江湖阅历":({"闭关通脉:breakup explain","元婴出世:animaout explain","武学修养:derive","在线保持:set keep_idle 1"}),
+    "健康状态":({"疗伤:all_recover","疗疾:exert dispel","放弃经验:abandon exp","删档:suicide"}),
+    "奇经八脉":({"五脏炼体:wusheng_wuzang","武圣真意:wusheng_zhenyi","冲脉:beat","冲脉丹合成:cmhc"}),
+	"随身功能":({"商城:shop","战斗设置:set combatd","玩家排行:new_tops","队伍信息:team","贡献兑换:new_fanli"})
+]);
+
+//倒序
+string *firstButtonsSort = ({"随身功能","奇经八脉","健康状态","江湖阅历","人物属性"});
+
+
+
+int main(object me, string arg)
+{
+    mapping jsonDatas = ([]);
+    mapping *data = ({});
+    mixed msg;
+
+    // 强制执行每日任务检查
+    // me->force_me("day_quest");
+
+    // 构建每个面板的数据
+    foreach (string key in firstButtonsSort)
+    {
+        mapping panelData = ([]);
+        // 构建二级按钮
+        mapping *secondButtons = ({});
+        // 获取面板内容
+        msg = evaluate(funcs[key], me);
+        
+
+        foreach (string btn in sortButtons[key])
+        {
+            mapping temp = ([]);
+            string *tempArr = explode(btn, ":");
+            temp += (["name":tempArr[0]]);
+            temp += (["cmd":tempArr[1]]);
+            secondButtons += ({temp});
+        }
+
+        // 组装单个面板的完整数据
+        panelData += ([
+            "type": key,
+            "msg": msg,
+            "buttons": secondButtons,
+        ]);
+        
+        data += ({panelData});
+    }
+
+    // 构建最终的JSON响应
+    jsonDatas = ([
+        "code": "myscore",
+        "data": data
+    ]);
+
+
+
+    write(replace_string(json_encode(jsonDatas), "\n", ZJBR) + "\n");
+    // 输出为日志
+    // write_file("/log/myscore",json_encode(jsonDatas),1);
+    return 1;
+}
+
+
+/**
+ * @brief 显示玩家人物属性信息
+ * @param object me 玩家对象
+ * @return mapping* 返回包含人物属性信息的数据数组
+ * @details 展示玩家的个人信息、人物属性和五行造化等基础信息
+ */
+mapping *myscore_attribute_man(object me)
+{
+    object ob;
+    mapping my, mci, elements, data;
+    mapping *data_list;
+    string line, race;
+
+    ob = me;
+    my = ob->query_entire_dbase();
+    mci = my["combat"] || ([]);
+    data_list = ({});
+
+    seteuid(getuid(me));
+
+    // 个人信息
+    data = (["title":"个人信息"]);
+    line = "";
+    line += sprintf(HIY "  【姓名】    ：" HIG "%s\n" NOR, ob->query("name"));
+    line += sprintf(HIY "  【称谓】    ：" HIC "%s\n" NOR, RANK_D->query_rank(ob));
+    line += sprintf(HIY "  【头衔】    ：" HIW "%s\n" NOR, ZJURL("cmds:title") + ob->query("title") + NOR);
+
+    if (playerp(ob))
+    {
+        race = (ob->query("gender") == "无性") ? "阉人" : ob->query("gender");
+        line += sprintf(HIY "  【年岁】    ：" HIG "%s载", chinese_number(ob->query("age")));
+        if(ob->query("month"))
+            line += sprintf("%s月", chinese_number(ob->query("month")));
+        line += sprintf(" %s\n" NOR, race);
+    }
+    else
+    {
+        line += sprintf(HIY "  【描述】    ：" HIC "此乃一%s%s载之%s%s\n" NOR, 
+            ob->query("unit"), 
+            chinese_number(ob->query("age")), 
+            ob->query("gender"), 
+            ob->query("race"));
+    }
+
+    if (mapp(my["family"]))
+    {
+        line += sprintf(HIY "  【恩师】    ：" HIG "%s\n" NOR,
+            my["family"]["master_name"] || "尚未拜师");
+        line += sprintf(HIY "  【职位】    ：" HIM "%s\n" NOR,
+            FAMILY_D->query_family_player_title(ob));
+    }
+    else
+        line += sprintf(HIY "  【恩师】    ：" HIR "尚未拜师\n" NOR);
+
+    // 添加武历（精简版武道历程，点击查看详情）
+    line += sprintf(HIY "  " + ZJURL("cmds:wudao_licheng") + "【武历】" + NOR + "    ：");
+
+    // 显示最新境界
+    if (ob->query("wuqi_done"))
+        line += HIR "五气朝元\n" NOR;
+    else if (ob->query("sanhua_done"))
+        line += HIR "三花聚顶\n" NOR;
+    else if (ob->query("opinion/ultra"))
+        line += HIY "宗师境界\n" NOR;
+    else
+        line += HIC "暂无成就\n" NOR;
+
+    data["msg"] = line;
+    data_list += ({data});
+
+    // 人物属性
+    data = (["title":"人物属性"]);
+    line = sprintf(HIY "  【膂力】    ：" HIC "[先天：%2d]" HIG " (后天：%2d)\n" NOR, 
+        my["str"], ob->query_str());
+    line += sprintf(HIY "  【悟性】    ：" HIC "[先天：%2d]" HIG " (后天：%2d)\n" NOR,
+        my["int"], ob->query_int());
+    line += sprintf(HIY "  【根骨】    ：" HIC "[先天：%2d]" HIG " (后天：%2d)\n" NOR,
+        my["con"], ob->query_con());
+    line += sprintf(HIY "  【身法】    ：" HIC "[先天：%2d]" HIG " (后天：%2d)\n" NOR,
+        my["dex"], ob->query_dex());
+
+    data["msg"] = line;
+    data_list += ({data});
+
+    // 五行造化
+    data = (["title":"五行造化"]);
+    elements = COMBAT_D->count_unlocked_elements(ob);
+    line = sprintf(HIY "  【金行】    ：" HIW "%d" NOR "%s" HIY "【木行】    ：" HIG "%d" NOR "%s" HIY "【水行】：" HIB "%d\n" NOR,
+        elements["金"], chinese_space(3), elements["木"], chinese_space(3), elements["水"]);
+    line += sprintf(HIY "  【火行】    ：" HIR "%d" NOR "%s" HIY "【土行】    ：" HIW "%d\n" NOR,
+        elements["火"], chinese_space(3), elements["土"]);
+    
+    data["msg"] = line;
+    data_list += ({data});
+    
+    return data_list;
+}
+
+/**
+ * @brief 显示玩家江湖阅历信息
+ * @param object me 玩家对象
+ * @return mapping* 返回包含江湖阅历信息的数据数组
+ * @details 展示玩家的江湖阅历、武道境界、武道评价、江湖羁绊和会员信息等
+ */
+mapping *myscore_attribute_yueli(object me)
+{
+    object ob;
+    mapping my, data;
+    mapping *data_list;
+    string line, born_place;
+    string unarmed_opinion, weapon_opinion, force_opinion, dodge_opinion;
+    string gender_special_name, is_po, is_couple;
+
+    ob = me;
+    my = ob->query_entire_dbase();
+    data_list = ({});
+
+    seteuid(getuid(me));
+
+    // 江湖阅历
+    data = (["title":"江湖阅历"]);
+    line = "";
+
+    if (playerp(ob))
+    {
+        line += sprintf(HIY "  【贡%s献】：" HIC "%s" NOR "%s" HIY "【签到经验】：" HIC "%d\n" NOR, 
+            chinese_space(2), format_number_width(ob->query("zjvip/all_pay"), 8), chinese_space(3), ob->query("zjvip/sign_exp"));
+
+        line += sprintf(HIY "  【元%s宝】：" HIW "%s" NOR "%s" HIY "【钱庄存款】：" HIW "%d\n" NOR,
+            chinese_space(2), format_number_width(ob->query("yuanbao"), 8), chinese_space(3), (int)ob->query("balance"));
+
+        line += sprintf(HIY "  【戾%s气】：" HIR "%s" NOR "%s" HIY "【江湖威望】：" HIM "%d\n" NOR,
+            chinese_space(2), format_number_width(my["total_hatred"], 8), chinese_space(3), my["weiwang"]);
+
+        line += sprintf(HIY "  【天赋点数】：" HIG "%s" NOR "%s" HIY "【技能点数】：" HIG "%d\n" NOR,
+            format_number_width(ob->query("tianfu_point"), 8), chinese_space(3), ob->query("skill_point"));
+    }
+
+    line += sprintf(HIY "  【%s%s气】：" "%s%s" NOR "%s" HIY "【灵%s慧】：" HIC "%d\n" NOR,
+        my["shen"] >= 0 ? "正": "邪",
+        chinese_space(2),
+        my["shen"] >= 0 ? HIG : HIR,
+        format_number_width(my["shen"], 8),
+        chinese_space(3),
+        chinese_space(2),
+        my["magic_points"] - my["magic_learned"]);
+
+    line += sprintf(HIY "  【江湖阅历】：" HIM "%s" NOR "%s" HIY "【门派贡献】：" HIM "%d\n" NOR,
+        format_number_width(my["score"], 8), chinese_space(3), my["gongxian"]);
+    line += sprintf(HIY "  【死亡次数】：" HIR "%s" NOR "%s" HIY "【杀敌次数】：" HIG "%d\n" NOR,
+        format_number_width(me->query("combat/dietimes"), 8), chinese_space(3),
+        me->query("combat/MKS") + me->query("combat/PKS"));
+
+    line += sprintf(HIY "  【整蛊成功】：" HIW "%s" NOR "%s" HIY "【灵蛇珠子】：" HIW "%d\n" NOR,
+        format_number_width(ob->query("foolday_success"), 8), chinese_space(3), ob->query("head_suipian"));
+
+    data["msg"] = line;
+    data_list += ({data});
+
+    // 武道境界
+    data = (["title":"武道境界"]);
+    line = sprintf(HIY "  【闭关通脉】：" "%s%s" NOR "%s" HIY "【元婴出世】：" "%s%s\n" NOR,
+        my["breakup"] ? HIG : HIR,
+        my["breakup"] ? "○ 已完成" : "× 未完成",
+        chinese_space(3),
+        my["animaout"] ? HIG : HIR,
+        my["animaout"] ? "○ 已完成" : "× 未完成");
+    line += sprintf(HIY "  【三花聚顶】：" "%s%s" NOR "%s" HIY "【五气朝元】：" "%s%s\n" NOR,
+        ob->query("sanhua_done") ? HIG : HIR,
+        ob->query("sanhua_done") ? "○ 已完成" : "× 未完成",
+        chinese_space(3),
+        ob->query("wuqi_done") ? HIG : HIR,
+        ob->query("wuqi_done") ? "○ 已完成" : "× 未完成");
+
+    data["msg"] = line;
+    data_list += ({data});
+
+    // 武道评价
+    data = (["title":"武道评价"]);
+    unarmed_opinion = ob->query("opinion/unarmed") || "无评价";
+    weapon_opinion = ob->query("opinion/weapon") || "无评价";
+    force_opinion = ob->query("opinion/force") || "无评价";
+    dodge_opinion = ob->query("opinion/dodge") || "无评价";
+    
+    line = sprintf(HIY "  【拳脚功夫】：" HIC "%s" NOR "%s" HIY "【兵器运用】：" HIC "%s\n" NOR,
+        format_chinese_width(unarmed_opinion, 4), chinese_space(3), weapon_opinion);
+    line += sprintf(HIY "  【内家功夫】：" HIC "%s" NOR "%s" HIY "【轻身功夫】：" HIC "%s\n" NOR,
+        format_chinese_width(force_opinion, 4), chinese_space(3), dodge_opinion);
+
+    data["msg"] = line;
+    data_list += ({data});
+
+    // 江湖羁绊
+    data = (["title":"江湖羁绊"]);
+    line = "";
+    if (playerp(ob))
+    {
+        gender_special_name = ob->query("gender") == "男性" ? "元阳" : "元阴";
+        is_po = (int)ob->query("sex/times") ? HIR "流失" NOR : HIG "尚存" NOR;
+        is_couple = ob->query("couple/name") || HIR "未婚" NOR;
+        if (ob->query("couple/name"))
+            is_couple = HIG + is_couple + NOR;
+
+        line += sprintf(HIY "  "+ZJURL("cmds:marriage_system") +"【江湖姻缘】"NOR"：" "%s" NOR "%s" HIY "【精气%s】：" "%s\n" NOR,
+            format_chinese_width(is_couple, 4), chinese_space(3), gender_special_name, is_po);
+    }
+    
+    born_place = my["born_family"] && my["born_family"] != "没有" ? 
+                           my["born_family"] : (stringp(my["born"]) ? my["born"] : "");
+        
+    if(born_place != "")
+            line += sprintf(HIY "  【天%s性】：" HIG "%s" NOR "%s" HIY "【出生地点】：" HIG "%s\n" NOR, 
+                chinese_space(2), format_chinese_width(my["character"], 4), chinese_space(3), format_chinese_width(born_place, 4));
+    // tell_object(me,sprintf("%d-%d\n",strlen(format_chinese_width(my["character"], 4)),strlen(format_chinese_width(is_couple, 4))));
+    data["msg"] = line;
+    data_list += ({data});
+
+    // 会员信息
+    if ((int)ob->query("zjvip/times") > 0 || is_liming_vip(ob))
+    {
+        data = (["title":"会员信息"]);
+        line = HIY "  【体验会员】：" HIG + time_to_str(ob->query("zjvip/times"), 6) + NOR "\n";
+        if(is_liming_vip(ob))
+        {
+            line += HIY "  【黎明会员】：" HIW + time_to_str(ob->query("real_vip/times") - time(), 6) + NOR "\n";
+        }
+        data["msg"] = line;
+        data_list += ({data});
+    }
+
+    return data_list;
+}
+
+mapping *myscore_status(object me)
+{
+	object ob;
+	int craze;
+	mapping my;
+	string str;
+    mapping *data_list = ({});
+    mapping data;
+	
+	seteuid(getuid());
+	ob = me;
+	my = ob->query_entire_dbase();
+	
+    // 个人信息
+    data = (["title":"状态信息"]);
+	str = (HIY"【等级】    ："+HIG+ob->query("level")+NOR"级\n");
+	
+	str += sprintf(HIR + ZJURL("cmds:hp_race qi") + "【气血】"NOR"    ：%s%d/%d/%d%s(%d%%)\n"NOR,
+		status_color(my["qi"], my["eff_qi"]),
+		my["qi"], my["eff_qi"], my["max_qi"],
+		status_color(my["eff_qi"], my["max_qi"]),
+		my["eff_qi"]*100/(my["max_qi"]));
+	str += sprintf(HIR"【锻体】    ：%d重\n"NOR, my["niliu_qi"]);
+	
+    ob->set_temp("race_human/qi/五藏归元丹", ob->query("wucang/max_qi"));
+
+	str += sprintf(HIR + ZJURL("cmds:hp_race neili") + "【内力】"NOR"    ：%s%d/%d(+%d)"NOR"\n",
+		status_color(my["neili"], my["max_neili"]), 
+		my["neili"], ob->query("max_neili"), ob->query("jiali"));
+   
+	str += sprintf(HIR + ZJURL("cmds:hp_race jing") + "【精神】"NOR"    ：%s%d/%d/%d%s(%d%%)\n"NOR,
+		status_color(my["jing"], my["eff_jing"]),
+		my["jing"], my["eff_jing"], my["max_jing"],
+		status_color(my["eff_jing"], my["max_jing"]),
+		my["eff_jing"]*100/my["max_jing"]);
+		
+	str += sprintf(HIR"【精力】    ：%s%d/%d(+%d)"NOR"\n",
+		status_color(my["jingli"], my["max_jingli"]),
+		my["jingli"], my["max_jingli"],
+		my["jiajing"]);
+		
+	// str += sprintf(CYN"【饥饿】    ：%s%d/%d[%d%%]\n"NOR,
+	// 	status_color(my["food"], ob->max_food_capacity()),
+	// 	my["food"], ob->max_food_capacity(),
+	// 	my["food"]*100/ob->max_food_capacity());
+		
+	// str += sprintf(CYN"【口渴】    ：%s%d/%d[%d%%]\n"NOR,
+	// 	status_color(my["water"], ob->max_water_capacity()),
+	// 	my["water"], ob->max_water_capacity(),
+	// 	my["water"]*100/ob->max_water_capacity());
+
+    data["msg"] = str;
+    data_list += ({data});
+		
+	data = (["title":"潜力信息"]);
+	str = sprintf(CYN"【潜能】       ：%s%d/%d(max)%s"NOR"\n",
+		HIY,
+		(int)ob->query("potential") - (int)ob->query("learned_points"),
+		(int)ob->query_potential_limit() - (int)ob->query("learned_points"),
+		ob->query("potential_pool") ? 
+		("\n【潜能池】   ：" + (ob->query("potential_pool") - ob->query("potential_pool_use"))) : "");
+
+		
+	str += sprintf(CYN"【修为】       ：%s%d/%d(up)"NOR"\n",
+		HIM, my["combat_exp"], LEVEL_MASTER->level_up_exp(ob->query("level") + 1));
+		
+	str += sprintf(CYN"【武道积分】：%d点"NOR"\n", ob->query("wudao_jl/score"));
+
+	// 经脉负荷
+	str += sprintf(HIY"【经脉负荷】：%d/%d\n"NOR,ob->query("jingmai_fuhe"),ob->query("max_jingmai_fuhe"));
+
+	if (craze = ob->query_craze())
+	{
+		if (ob->is_most_craze())
+		{ 
+			str += (HIR"【怒气】    "+NOR);
+			str += sprintf("%s", ob->query("character") == "光明磊落" ? 
+				MAG"      竖发冲冠  ( burning 燃烧怒气 )"+NOR+"\n" :
+				HIM"      怒火中烧  ( burning 燃烧怒气 )"+NOR+"\n");
+		}
+		else
+		{
+			str += sprintf(HIR"【怒气】    ：%d/%d(+%d)\n",
+				craze, ob->query_max_craze(),
+				ob->query("jianu"));
+		}
+	} 
+	else
+	{
+		str += sprintf(HIC"【心境】       ：心平气和  波澜不惊\n"+NOR);
+	}
+	 
+	// 显示实战体会信息
+	str += sprintf(HIC"【实战体会】：%s%d/%d"NOR"\n",
+		HIM,
+		my["experience"] - my["learned_experience"],
+		ob->query_experience_limit() - my["learned_experience"]);
+	
+	// 显示内力极限信息
+	str += sprintf(HIC"【内力极限】：%s%d"NOR"\n",
+		HIM,
+		ob->query_neili_limit());
+	
+	// 显示精力极限信息
+	str += sprintf(HIC"【精力极限】：%s%d"NOR"\n",
+		HIM,
+		ob->query_jingli_limit());
+
+    // str += "【艾草】:" + me->query("duanwu_huodong/obj/ai_cao") + "\n";
+     
+    data["msg"] = str;
+    data_list += ({data});
+
+	return data_list;
+}
+
+// 优化排版并简化描述
+mapping *myscore_bamai(object me)
+{
+    string line = "";
+    mapping *data_list = ({});
+    mapping data;
+
+    data = (["title":"状态增益脉"]);
+    line = sprintf(HIY "【冲%s脉】增添伤害%s%d\n" NOR, chinese_space(2), chinese_space(1), me->query("gain/damage"));
+    line += sprintf(HIC "【带%s脉】增添气血%s%d\n" NOR, chinese_space(2), chinese_space(1), me->query("gain/max_qi"));
+    
+    data["msg"] = line;
+    data_list += ({data});
+
+    data = (["title":"武学增益脉"]);
+    line = sprintf(HIW "【阳跷脉%s】增添%s%s%d\n" NOR, chinese_space(1), 
+            me->query("meridian/ap") ? replace_string(to_chinese(me->query("meridian/ap")),"基本","") : "武学",
+            chinese_space(1), me->query("gain/attack"));
+    line += sprintf(HIM "【阴跷脉%s】增添%s%s%d\n" NOR,chinese_space(1),
+            me->query("meridian/dp") ? replace_string(to_chinese(me->query("meridian/dp")),"基本","") : "武学", 
+            chinese_space(1), me->query("gain/defense"));
+    
+    data["msg"] = line;
+    data_list += ({data});
+
+    data = (["title":"战斗增益脉"]);
+    line = sprintf(HIR "【阳维脉%s】增添暴击%s%d\n" NOR, chinese_space(1), chinese_space(1),me->query("gain/2ap"));
+    line += sprintf(HIG "【阴维脉%s】化解暴击%s%d\n" NOR, chinese_space(1),chinese_space(1), me->query("gain/2dp"));
+    
+    line += sprintf(HIY "【手三阳经】增添破甲%s%d\n" NOR, chinese_space(1), me->query("gain/break"));
+    line += sprintf(HIC "【手三阴经】增添护体%s%d\n" NOR, chinese_space(1), me->query("gain/armor")); 
+    line += sprintf(HIW "【足三阳经】化解攻势%s%d\n" NOR, chinese_space(1), me->query("gain/busy"));
+    
+    data["msg"] = line;
+    data_list += ({data});
+
+    return data_list;
+}
+
+mapping *myscore_function(object me)
+{
+    mapping *data_list = ({});
+    mapping data;
+    string line = "";
+    
+    data = (["title":"游戏货币"]);
+    line += sprintf(HIY "绑定元宝：%d\n" NOR, me->query("bind_yuanbao"));
+    line += sprintf(HIY "元%s宝：%d\n" NOR, chinese_space(2), me->query("yuanbao"));
+    line += sprintf(HIY "钱庄存款：%d\n" NOR, me->query("balance"));
+    data["msg"] = line;
+    data_list += ({data});
+
+    data = (["title":"贡献信息"]);
+    line = "";
+    line += sprintf(HIY "贡%s献：%d\n" NOR, chinese_space(2), me->query("zjvip/all_pay"));
+    line += sprintf(HIY "签到经验：%d\n" NOR, me->query("zjvip/sign_exp"));
+    line += sprintf(HIY "贡献积分：%d\n" NOR, me->query("contribution_points"));
+    data["msg"] = line;
+    data_list += ({data});
+
+    return data_list;
+}
+
+string display_attr(int gift, int value)
+{
+	if (value > gift)
+		return sprintf(HIY "%3d" NOR, value);
+	else
+	if (value < gift)
+		return sprintf(CYN "%3d" NOR, value);
+	else
+		return sprintf("%3d", value);
+}
+
+string status_color(int current, int max)
+{
+	int percent;
+
+	if (max) percent = current * 100 / max;
+	else percent = 100;
+
+	if (percent > 100) return HIC;
+	if (percent >= 90) return HIG;
+	if (percent >= 60) return HIY;
+	if (percent >= 30) return YEL;
+	if (percent >= 10) return HIR;
+	return RED;
+}
+

@@ -1,0 +1,56 @@
+// drive.c
+//
+// 可以驾驶的物品
+
+#include <dbase.h>
+
+int is_transport() { return 1; }
+
+/**
+ * @brief 设置指定对象的拥有者临时变量
+ * @param object me 要设置拥有者的对象，必须为有效对象实例
+ * @details 使用set_temp存储临时数据是Mud系统推荐做法，相比全局变量具有以下优势：
+ * 1. 数据生命周期与对象绑定，自动销毁时清理
+ * 2. 避免全局变量竞争和污染问题
+ * 3. 允许多个对象共享独立的数据存储
+ * @note 临时变量存储的数据仅在对象存在时有效，适合短期状态管理
+ */
+void set_owner(object me)
+{
+	set_temp("owner", me);
+}
+
+/**
+ * @brief 查询指定物体的拥有者信息
+ * @return integer 拥有者临时变量值，若不存在则返回 0
+ * @details 该函数通过读取物体的临时变量"owner"来获取拥有者标识，这种设计使得拥有者信息与物体实例紧密关联，确保在物体被销毁或转移时拥有者信息能自动同步更新
+ */
+object query_owner()
+{
+	return query_temp("owner");
+}
+
+/**
+ * @brief 检查对象是否有驾驶权限
+ * @param object me 请求驾驶的玩家或对象
+ * @return int 1允许驾驶 0拒绝驾驶
+ * @details 该函数采用双重验证机制确保驾驶权限控制：
+ * 1. 首先通过query_owner()验证当前物品是否存在合法拥有者，防止空引用错误
+ * 2. 次要验证条件包含两个维度：
+ *    - 物品拥有者与驾驶者身份一致（拥有者本人驾驶）
+ *    - 物品当前环境与驾驶者所在环境相同（允许同环境下操作）
+ * 3. 当验证失败时，使用notify_fail格式提示"这是[拥有者名称]的车..."，既保持原有错误处理风格又明确责任归属
+ * 4. 返回值设计遵循LPC标准：1表示允许操作继续执行，0表示需要终止当前操作
+ */
+int can_drive_by(object me)
+{
+	object owner;
+
+	if (! objectp(owner = query_owner()))
+		return 1;
+
+	if (owner == me || environment(owner) != environment())
+		return 1;
+
+	return notify_fail("这是" + owner->name() + "的车，你乱动什么？\n");
+}

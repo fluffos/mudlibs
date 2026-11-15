@@ -1,0 +1,183 @@
+// 种植指令
+#define PLANTD "/adm/daemons/plantd"
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+    object env, seed;
+    mapping crop_info;
+    string str, *button;
+
+    env = environment(me);
+    
+    if (!env->query("land_type") || env->query("land_type") != "field")
+    {
+        return notify_fail("这里不是耕地，无法进行种植操作。\n");
+    }
+
+    crop_info = PLANTD->get_crop_info(me->query("id"), base_name(env));
+
+    //不是土地主人无法种植
+    if (env->query("owner_build") != me->query("id"))
+    {
+        return notify_fail("你不能在这里种植。\n");
+    }
+
+    if (!arg || arg == "")
+    {
+        str = "种植系统操作：\n";
+        if (!crop_info)
+        {
+            string *plantable_crops = PLANTD->get_plantable_crops();
+            button = map(plantable_crops, (: "种植"+$1+":plant seed "+$1 :));
+        }
+        else
+        {
+            str += "作物类型：" + crop_info["crop_type"] + "\n";
+            str += "生长阶段：" + PLANTD->get_crop_stage(me->query("id"), base_name(env)) + "\n";
+            str += "生长进度：" + PLANTD->get_crop_growth_percent(me->query("id"), base_name(env)) + "%\n";
+            str += "施肥状态：" + (crop_info["is_fertilized"] ? "已施肥" : "未施肥") + "\n";
+
+            button = ({
+                "查看详情:plant info",
+                "施肥:plant fertilize",
+                // PLANTD->can_harvest(me->query("id"), base_name(env)) ? "收获:plant harvest" : "尚未成熟"
+            });
+
+            if (PLANTD->can_harvest(me->query("id"), base_name(env)))
+            {
+                button += ({
+                    "收获:plant harvest"
+                });
+            }
+            else
+            {
+                str += "作物尚未成熟，无法收获。\n";
+            }
+        }
+        tell_object(me, popup_comb(str, button));
+        return 1;
+    }
+
+    if (arg == "info")
+    {
+        if (!crop_info)
+            return notify_fail("这块土地上没有种植任何作物。\n");
+        
+        str = "作物详细信息：\n";
+        str += "作物类型：" + crop_info["crop_type"] + "\n";
+        str += "生长阶段：" + PLANTD->get_crop_stage(me->query("id"), base_name(env)) + "\n";
+        str += "生长进度：" + PLANTD->get_crop_growth_percent(me->query("id"), base_name(env)) + "%\n";
+        str += "施肥状态：" + (crop_info["is_fertilized"] ? "已施肥" : "未施肥") + "\n";
+        str += "种植时间：" + ctime(crop_info["plant_time"]) + "\n";
+
+        tell_object(me, popup_comb(str, ({"返回:plant"})));
+        return 1;
+    }
+
+    if (arg == "fertilize")
+    {
+        object fertilizer;
+        
+        if (!crop_info)
+            return notify_fail("这块土地上没有种植任何作物。\n");
+        
+        if (crop_info["is_fertilized"])
+            return notify_fail("这株作物已经施过肥了。\n");
+        
+        fertilizer = present("plant fertilizer", me);
+        if (!fertilizer)
+            return notify_fail("你没有肥料。\n");
+        
+        if (fertilizer->query_amount() < 1)
+            return notify_fail("你的肥料不足。\n");
+        
+        fertilizer->add_amount(-1);
+        PLANTD->set_fertilized(me->query("id"), base_name(env));
+        tell_object(me, popup_comb("你给作物施了肥，它看起来更加茁壮了。", ({"返回:plant"})));
+        return 1;
+    }
+
+    if (arg == "harvest")
+    {
+        mixed harvest;
+        if (!PLANTD->can_harvest(me->query("id"), base_name(env)))
+            return notify_fail("作物还没有成熟，不能收获。\n");
+        
+        harvest = PLANTD->harvest_crop(me->query("id"), base_name(env));
+        if (harvest)
+        {
+            object item;
+            int amount;
+            
+            if (harvest != "/clone/vip/putao")
+                item= new(harvest);
+            else
+                item = new_bind(harvest);
+
+            // 检查复制对象是否正常
+            if (!objectp(item))
+            {
+                write("复制对象异常，请联系巫师。\n");
+                return 1;
+            }
+        
+            amount = PLANTD->get_crop_amount(crop_info["crop_type"]);
+            if (amount > 1)
+            {
+                item->set_amount(amount);
+            }
+
+            tell_object(me, popup_comb("你收获" + amount + "个" + item->query("name") + "。", ({"返回:plant"})));
+            item->move(me);
+        }
+        else
+        {
+            tell_object(me, popup_comb("收获失败，可能是作物已经被收获或出现了问题。", ({"返回:plant"})));
+        }
+        return 1;
+    }
+
+    if (sscanf(arg, "seed %s", arg) == 1)
+    {
+        string seed_file;
+        if (crop_info)
+            return notify_fail("这块土地已经种植了作物，请先收获或清理。\n");
+        
+        seed_file = PLANTD->get_seed_file(arg);
+        if (!seed_file)
+            return notify_fail("无效的作物类型。可选择：" + implode(PLANTD->get_plantable_crops(), "、") + "。\n");
+        
+        // 检查玩家是否有对应的种子
+        seed = present(seed_file->query("id"), me);
+        if (!seed || seed->query_amount() < 1)
+            return notify_fail("你没有" + arg + "的种子。\n");
+        
+        // 消耗种子
+        seed->add_amount(-1);
+        
+        PLANTD->add_crop(me->query("id"), base_name(env), arg, time());
+        tell_object(me, popup_comb("你在这块土地上种下了" + arg + "。", ({"返回:plant"})));
+        return 1;
+    }
+
+    return notify_fail("无效的种植指令。\n");
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式：plant
+          plant seed <作物类型>
+          plant info
+          plant fertilize
+          plant harvest
+
+这个指令用于管理你的种植园。你可以种植新作物、查看作物信息、给作物施肥，以及在作物成熟时收获。
+
+注意：每块土地一次只能种植一种作物，收获或清理后才能重新种植。
+HELP
+    );
+    return 1;
+}

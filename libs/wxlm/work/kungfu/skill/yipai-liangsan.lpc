@@ -1,0 +1,182 @@
+// yipai-liangsan.c
+
+
+
+inherit SHAOLIN_SKILL;
+
+mapping *action = ({
+([      "action": "$N一掌拍向$n，没有什么章法",
+	"force" : 100,
+	"attack": -50,
+	"dodge" : -50,
+	"parry" : -50,
+	"damage": -50,
+	"lvl"   : 0,
+	"damage_type" : "内伤"
+]),
+([      "action": "$N深深吸了一口气，双掌划了一个圈子，缓缓拍向$n，掌力有如排山倒海一般",
+	"force" : 700,
+	"attack": 400,
+	"dodge" : -20,
+	"parry" : 30,
+	"damage": 300,
+	"lvl"   : 150,
+	"damage_type" : "内伤"
+]),
+});
+
+int valid_enable(string usage) { return usage == "strike"; }
+
+int valid_learn(object me)
+{
+	if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+		return notify_fail("练一拍两散必须空手。\n");
+
+	if ((int)me->query_skill("force") < 200)
+		return notify_fail("你的内功火候不够，不能强行修习一拍两散。\n");
+
+	if ((int)me->query("max_neili") < 2500)
+		return notify_fail("你的内力还不够强，无法修习一拍两散。\n");
+
+	if ((int)me->query_skill("strike", 1) < (int)me->query_skill("yipai-liangsan", 1))
+		return notify_fail("你的基本掌法火候水平有限，无法领会更高深的一拍两散。\n");
+
+	return 1;
+}
+
+string query_skill_name(int level)
+{
+	int i;
+	for (i = sizeof(action); i > 0; i--)
+		if (level >= action[i - 1]["lvl"])
+			return action[i - 1]["skill_name"];
+}
+
+mapping query_action(object me, object weapon)
+{
+ int  level;
+	level = (int) me->query_skill("yipai-liangsan", 1);
+	if (level < action[1]["lvl"])
+		return action[0];
+
+	return action[1];
+}
+
+int practice_skill(object me)
+{
+	if (me->query_temp("weapon") ||
+	    me->query_temp("secondary_weapon"))
+		return notify_fail("你必须空手练习！\n");
+
+	if ((int)me->query("qi") < 300)
+		return notify_fail("你的体力太低了。\n");
+
+	if ((int)me->query("neili") < 300)
+		return notify_fail("你的内力不够练一拍两散。\n");
+
+	me->receive_damage("qi", 100);
+	me->add("neili", -100);
+	return 1;
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+	int ap,dp;
+	if (damage_bonus < 100) return 0;
+
+	if (me->query("jiali") < 50 || me->query("neili") < 300)
+		return 0;
+
+	// 如果不是少林派弟子，只有25%的几率触发
+	if (me->query("family/family_name") != "少林派" && random(4) != 1)
+		return 0;
+
+	//随机的内功命中通式
+	ap = me->query_skill("force");
+	dp = victim->query_skill("force");
+
+	//如果是npc额外增加20%的命中
+	if (!playerp(victim))
+		dp += dp / 5;
+
+	if (ap / 2 + random(ap) < dp)
+	{
+		
+		return HIR "$N" HIR "一声暴喝，一掌击向$n" HIR "，$n" HIR "但是看破了$N" HIR "的企图，轻轻一闪，躲过了这一击。\n";
+	}
+
+	me->start_busy(2);
+
+	damage_bonus += me->query_temp("yipai_buff");
+	me->delete_temp("yipai_buff");
+
+	damage_bonus = damage_bonus * 3 / 4;
+
+	// 如果是npc，增伤害50%
+	if (!playerp(victim))
+		damage_bonus += damage_bonus / 2;
+
+	if (damage_bonus < 1)
+		damage_bonus = 1;
+
+	if (playerp(victim))
+	{
+		victim->receive_damage("qi", damage_bonus, me);
+	}
+	else
+	{
+		victim->receive_wound("qi", damage_bonus, me);
+	}
+
+	if (victim->query("neili") < 200)
+		victim->set("neili", 0);
+	else
+		victim->add("neili", -100);
+
+	return HIR "$n" HIR "接下$N" HIR "这一掌，一时间只觉得浑身乏力。"NOR"\n";
+}
+
+int valid_combine(string combo) { return combo == "duoluoye-zhi"; }
+
+string query_description()
+{
+    string msg;
+
+    msg = HIY "【一拍两散】" ZJBR NOR;
+    msg += WHT "一拍两散是一门少林派秘传的高深掌法，威力巨大但极其简单。" ZJBR;
+    msg += "此掌法只有两招，但内含极深厚的内力和爆发力，可瞬间重创对手。" ZJBR ZJBR;
+
+    msg += HIY "〖学习要求〗" ZJBR NOR;
+    msg += "  基本内功等级：200级" ZJBR;
+    msg += "  最大内力：2500点" ZJBR ZJBR;
+
+    msg += HIY "〖激发类型〗" ZJBR NOR;
+    msg += "  掌法 (strike)" ZJBR ZJBR;
+
+    msg += HIY "〖可配合武功〗" ZJBR NOR;
+    msg += "  多罗叶指 (duoluoye-zhi)" ZJBR ZJBR;
+
+    msg += HIY "〖练习要求〗" ZJBR NOR;
+    msg += "  气血消耗：100点" ZJBR;
+    msg += "  内力消耗：100点" ZJBR ZJBR;
+
+    msg += HIY "〖招式详解〗" ZJBR NOR;
+    msg += "  一拍两散只有两招，第一招攻击性不强，第二招威力极大。" ZJBR;
+    msg += "  需达到150级技能等级才能使用第二招，威力远超第一招。" ZJBR ZJBR;
+
+    msg += HIY "〖被动效果〗" ZJBR NOR;
+    msg += "  此掌法蕴含强大内劲，在战斗中有机会对敌人造成额外伤害：" ZJBR;
+    msg += "  1. 触发条件：加力值不低于50点且当前内力不低于300点" ZJBR;
+    msg += "  2. 命中率：(使用者内功有效激发 / 2 + 随机值) > 目标内功有效激发" ZJBR;
+    msg += "  3. 额外伤害：基础伤害 * 3 / 4" ZJBR;
+    msg += "  4. 额外效果：消耗目标100点内力" ZJBR;
+    msg += "  5. 少林弟子触发几率100%，非少林弟子触发几率25%" ZJBR ZJBR;
+
+    msg += HIR "【注意事项】" ZJBR NOR;
+    msg += "1. 一拍两散需要空手修炼" ZJBR;
+    msg += "2. 基本掌法的等级不能低于一拍两散的等级" ZJBR;
+    msg += "3. 加力后被动效果触发几率更高" ZJBR;
+    msg += "4. 触发被动效果后会使自身忙乱2秒\n";
+
+    return msg;
+}

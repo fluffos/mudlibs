@@ -1,0 +1,258 @@
+// linji-zhuang.c 临济十二庄
+
+inherit FORCE;
+
+string *parry_msg = ({
+    HIC "$n" HIC "身形微动，内力流转，轻描淡写地化解了$N的攻势。\n" NOR,
+    HIC "$n" HIC "运转临济十二庄，周身一股柔和的力量，将$N的攻击化于无形。\n" NOR,
+    HIC "$n" HIC "双手合十，体内真气涌动，$N的招式仿佛击在棉花上一样，无处着力。\n" NOR,
+    HIC "$n" HIC "微微一笑，脚步轻移，巧妙地避开了$N的攻击。\n" NOR,
+    HIC "$n" HIC "气定神闲，内力护体，将$N的招式尽数化解。\n" NOR,
+});
+
+int valid_enable(string usage)
+{
+    return usage == "force" || usage == "parry";
+}
+
+int valid_force(string force)
+{
+    return force == "emei-xinfa";
+}
+
+int query_neili_improve(object me)
+{
+	int lvl;
+	int scale;
+
+	if (me->query("sex"))
+		return 0;
+
+	lvl = (int)me->query_skill("linji-zhuang", 1);
+	if (lvl >= 250) scale = 17; else scale = 21;
+	return lvl * lvl * 15 * scale / 100 / 200 + 500;
+}
+
+int valid_learn(object me)
+{
+    int nf, nh, np;
+
+    nf = (int)me->query_skill("force", 1);
+    nh = (int)me->query_skill("linji-zhuang", 1);
+    np = (int)me->query_skill("mahayana", 1);
+
+    if (me->query("gender") != "女性")
+        return notify_fail("你非女子，不能练习临济十二庄。\n");
+
+    if (np <= nh && np < 200)
+        return notify_fail("你的大乘涅磐功修为不够，无法领会更高深的临济十二庄。\n");
+
+    if (nf < 40)
+        return notify_fail("你的基本内功火候还不够，无法领会临济十二庄。\n");
+
+    return 1;
+}
+
+int practice_skill(object me)
+{
+    return notify_fail("临济十二庄只能用学(learn)的来增加熟练度。\n");
+}
+
+string query_parry_msg(object weapon)
+{
+    return parry_msg[random(sizeof(parry_msg))];
+}
+
+mixed valid_damage(object attacker, object me, int damage, object weapon)
+{
+    mixed result;
+    int ap, dp, skill, aoyi_level;
+    int poison_chance, poison_level;
+
+    skill = me->query_skill("linji-zhuang", 1);
+    aoyi_level = COMBAT_D->get_skill_aoyi_level(me, "青莲剑意");
+
+    if (skill < 100 || !living(me))
+        return;
+
+    ap = attacker->query_skill("force") + attacker->query_skill("parry") / 2;
+
+    dp = me->query_skill("force") + me->query_skill("parry") / 2;
+
+    if (ap / 2 + random(ap) < dp)
+    {
+
+        damage = damage * 3 / 4;
+
+        result = ([ "damage" : -damage ]);
+
+        result += ([ "msg" : HIC "$n" HIC "运转临济十二庄，内力回旋，如太极般卸去了$N的攻势，反而使$N感到一股反震之力。\n" NOR ]);
+
+
+
+        // 只有峨嵋派弟子，才能触发反震效果
+        if (me->query("family/family_name") == "峨嵋派")
+        {
+        // 反震伤害，按照一定比例反弹给攻击者
+            attacker->receive_damage("qi", damage / 2, me);
+            attacker->receive_wound("qi", damage / 4, me);
+        }
+
+
+
+        // 招架挂毒效果
+        poison_chance = 20 + aoyi_level * 5; // 基础20%，每级意境增加5%
+        if (random(100) < poison_chance  && me->query("family/family_name") == "峨嵋派")
+        {
+            poison_level = skill / 10 + aoyi_level * 10; // 毒素强度
+
+            // 施加毒素效果
+            attacker->apply_condition("emei_poison", poison_level / 10);
+            attacker->set_temp("emei_poison_level", poison_level);
+
+            result += ([ "msg" : HIG "$n" HIG "趁机运起「青莲毒焰」，一股淡淡的青色雾气悄然笼罩$N。\n" NOR ]);
+        }
+
+        return result;
+    }
+    else
+    {
+        return;
+    }
+}
+
+string query_description()
+{
+    string msg;
+
+    msg = HIY "【临济十二庄】" ZJBR NOR;
+    msg += "峨眉派高级内功心法，源自禅宗临济宗，讲究内外兼修，动静结合，尤擅激发潜力，疗伤续命。" ZJBR ZJBR; // 基本介绍
+
+    msg += HIY "〖学习要求〗" ZJBR NOR; // valid_learn
+    msg += "  性别必须为 " HIY "女性" NOR "。" ZJBR;
+    msg += "  大乘涅磐功等级需高于等于临济十二庄等级（或大乘涅磐功等级达到 " HIY "200" NOR " 级）。" ZJBR;
+    msg += "  基本内功等级不低于 " HIY "40" NOR " 级。" ZJBR ZJBR;
+
+    msg += HIY "〖激发类型〗" ZJBR NOR; // valid_enable
+    msg += "  内功（force）。" ZJBR;
+    msg += "  招架（parry）。" ZJBR ZJBR;
+
+    msg += HIY "〖练习要求〗" ZJBR NOR; // practice_skill
+    msg += "  临济十二庄只能通过学习（learn）提升等级，无法通过练习（practice）提升。" ZJBR ZJBR;
+
+    msg += HIY "〖攻防特效/被动效果〗" ZJBR NOR; // valid_damage, query_neili_improve, query_effect_parry
+    msg += "  " HIM "内力上限提升" NOR "：" ZJBR;
+    msg += "    提升值为 " HIY "(临济十二庄等级 ^ 2 * 15 * 系数 / 100 / 200) + 500" NOR " 点。" ZJBR;
+    msg += "    等级低于 " HIY "250" NOR " 级时系数为 " HIY "21" NOR "，不低于 " HIY "250" NOR " 级时系数为 " HIY "17" NOR "。" ZJBR;
+    msg += "    仅对 " HIY "女性" NOR " 角色生效。" ZJBR;
+    msg += "  " HIC "招架效果提升" NOR "：" ZJBR;
+    msg += "    根据临济十二庄等级提升招架成功率，等级越高效果越好。" ZJBR;
+    msg += "    等级 " HIY "100-149" NOR "：提升 " HIY "50" NOR "。" ZJBR;
+    msg += "    等级 " HIY "150-199" NOR "：提升 " HIY "80" NOR "。" ZJBR;
+    msg += "    等级 " HIY "200+" NOR "：提升 " HIY "100" NOR "。" ZJBR;
+    msg += "  " HIM "卸力反震与毒伤" NOR "（招架或受击触发）：" ZJBR; // valid_damage
+    msg += "    需要临济十二庄等级不低于 " HIY "100" NOR " 级且角色存活。" ZJBR;
+    msg += "    判定条件：攻击者的(内功激发等级 + 招架激发等级 / 2) / 2 + 随机(攻击者的(内功激发等级 + 招架激发等级 / 2)) < 防御者的(内功激发等级 + 招架激发等级 / 2)。" ZJBR;
+    msg += "    成功触发效果：" ZJBR;
+    msg += "      1. 完全抵消本次伤害。" ZJBR;
+    msg += "      2. " HIY "反震伤害" NOR "：对攻击者造成 (原伤害 / 2) 的气血伤害和 (原伤害 / 4) 的气血内伤，仅峨眉弟子有效。" ZJBR;
+    msg += "      3. " HIG "附加毒伤" NOR "（青莲毒焰）：" ZJBR;
+    msg += "         触发几率：基础 " HIY "20%" NOR "，每级「青莲剑意」增加 " HIY "5%" NOR "。" ZJBR;
+    msg += "         毒素强度：(临济十二庄等级 / 10) + (「青莲剑意」等级 * 10)。" ZJBR;
+    msg += "         使目标中 " HIG "emei_poison" NOR " 状态，强度为 (毒素强度 / 10)。" ZJBR ZJBR;
+
+    msg += HIY "〖特殊招式〗" ZJBR NOR; // perform/exert
+
+    msg += HIC "  临济桩功 (powerup)" ZJBR NOR; // powerup.c
+    msg += "    使用要求：" ZJBR;
+    msg += "      当前内力不低于 " HIB "200" NOR " 点。" ZJBR;
+    msg += "      未处于 " HIC "powerup" NOR " 状态。" ZJBR;
+    msg += "    效果描述：" ZJBR;
+    msg += "      提升自身战斗力，效果持续时间与内功激发等级相关（(内功激发等级 / 2) 秒）。" ZJBR;
+    msg += "      增加临时攻击力：" HIY "(内功激发等级 / 2)" NOR " 点。" ZJBR;
+    msg += "      增加临时闪避力：" HIY "内功激发等级" NOR " 点。" ZJBR;
+    msg += "      增加临时伤害力：" HIY "女性为 (内功激发等级 / 2)，男性为 (内功激发等级 / 3)" NOR " 点，最高 " HIY "150" NOR " 点。" ZJBR;
+    msg += "    消耗与代价：" ZJBR;
+    msg += "      消耗内力 " HIB "200" NOR " 点。" ZJBR;
+    msg += "      若在战斗中使用，则忙乱 " HIR "2" NOR " 秒。" ZJBR ZJBR;
+
+    msg += HIG "  青莲回春 (qinglian-huichun)" ZJBR NOR; // qinglian-huichun.c
+    msg += "    使用要求：" ZJBR;
+    msg += "      只能对自己使用。" ZJBR;
+    msg += "      当前内力不低于 " HIB "500" NOR " 点。" ZJBR;
+    msg += "      当前有效气血低于最大气血。" ZJBR;
+    msg += "      临济十二庄等级不低于 " HIY "120" NOR " 级。" ZJBR;
+    msg += "      「青莲剑意」奥义等级不低于 " HIY "1" NOR " 级。" ZJBR;
+    msg += "    效果描述：" ZJBR;
+    msg += "      恢复自身气血，恢复量为 " HIY "(内功激发等级 * (2 + 「青莲剑意」等级))" NOR " 点。" ZJBR;
+    msg += "      对周围战斗中的敌人施加 " HIG "青莲毒焰" NOR " 效果：" ZJBR;
+    msg += "         触发几率：基础 " HIY "20%" NOR "，每级「青莲剑意」增加 " HIY "5%" NOR "。" ZJBR;
+    msg += "         毒素强度：((临济十二庄等级 / 10) + (「青莲剑意」等级 * 10)) * 2。" ZJBR;
+    msg += "         使目标中 " HIG "emei_poison" NOR " 状态，强度为 (毒素强度 / 10)。" ZJBR;
+    msg += "    消耗与代价：" ZJBR;
+    msg += "      消耗内力：基础 " HIB "1500" NOR " 点，每级「青莲剑意」减少 " HIB "200" NOR " 点，最低消耗 " HIB "500" NOR " 点。" ZJBR;
+    msg += "      若在战斗中使用，则忙乱 " HIR "1" NOR " 秒。" ZJBR ZJBR;
+
+    msg += HIB "  青莲普济 (qinglian-puji)" ZJBR NOR; // qinglian-puji.c
+    msg += "    使用要求：" ZJBR;
+    msg += "      当前内力不低于 " HIB "1000" NOR " 点。" ZJBR;
+    msg += "      临济十二庄等级不低于 " HIY "150" NOR " 级。" ZJBR;
+    msg += "      「青莲剑意」奥义等级不低于 " HIY "2" NOR " 级。" ZJBR;
+    msg += "      必须处于组队状态且队伍人数至少为 " HIY "2" NOR " 人。" ZJBR;
+    msg += "    效果描述：" ZJBR;
+    msg += "      为同场景内所有有效气血未满的队友恢复气血。" ZJBR;
+    msg += "      基础恢复量为 " HIY "(内功激发等级 * 3)" NOR " 点，每级「青莲剑意」额外提升 " HIY "10%" NOR " 的恢复量。" ZJBR;
+    msg += "      为同场景内所有队友施加 " HIC "护体罡气" NOR " 状态，提升防御力，持续 " HIY "30" NOR " 秒（临时状态 " HIC "emei_huifu_buff" NOR "）。" ZJBR;
+    msg += "      对周围战斗中的敌人施加 " HIG "青莲毒焰" NOR " 效果：" ZJBR;
+    msg += "         触发几率：基础 " HIY "30%" NOR "，每级「青莲剑意」增加 " HIY "5%" NOR "。" ZJBR;
+    msg += "         毒素强度：((临济十二庄等级 / 10) + (「青莲剑意」等级 * 10)) * 2。" ZJBR;
+    msg += "         使目标中 " HIG "emei_poison" NOR " 状态，强度为 (毒素强度 / 10)。" ZJBR;
+    msg += "    消耗与代价：" ZJBR;
+    msg += "      消耗内力：基础 " HIB "500" NOR " 点，队伍中每多一人额外消耗 " HIB "300" NOR " 点。" ZJBR;
+    msg += "      若在战斗中使用，忙乱 " HIR "2" NOR " 秒；否则忙乱 " HIR "1" NOR " 秒。" ZJBR ZJBR;
+
+    msg += HIM "  清心解忙 (qingxin-jie-mang)" ZJBR NOR; // qingxin-jie-mang.c
+    msg += "    使用要求：" ZJBR;
+    msg += "      当前内力不低于 " HIB "500" NOR " 点。" ZJBR;
+    msg += "      临济十二庄等级不低于 " HIY "150" NOR " 级。" ZJBR;
+    msg += "      「青莲剑意」奥义等级不低于 " HIY "2" NOR " 级。" ZJBR;
+    msg += "      必须处于组队状态且队伍人数至少为 " HIY "2" NOR " 人。" ZJBR;
+    msg += "    效果描述：" ZJBR;
+    msg += "      为同场景内所有处于忙乱状态的队友解除忙乱。" ZJBR;
+    msg += "      可解除的忙乱秒数上限为 (当前内力 / 100) 秒。" ZJBR;
+    msg += "      为单个队友解除忙乱时，每秒需要消耗内力 " HIB "100" NOR " 点。" ZJBR;
+    msg += "      有 (「青莲剑意」等级 * 10)% 的几率在解除忙乱时不消耗内力。" ZJBR;
+    msg += "      如果内力不足以完全解除某个队友的忙乱，则停止为后续队友解除。" ZJBR;
+    msg += "    消耗与代价：" ZJBR;
+    msg += "      基础消耗内力 " HIB "500" NOR " 点。" ZJBR;
+    msg += "      根据实际解除的忙乱秒数消耗额外内力（见效果描述）。" ZJBR;
+    msg += "      若在战斗中使用，忙乱 " HIR "2" NOR " 秒；否则忙乱 " HIR "1" NOR " 秒。" ZJBR;
+
+    return msg;
+}
+
+string exert_function_file(string func)
+{
+    return __DIR__"linji-zhuang/" + func;
+}
+
+string perform_action_file(string action)
+{
+    return __DIR__"linji-zhuang/" + action;
+}
+
+int query_effect_parry(object attacker, object me)
+{
+    int skill;
+
+    skill = me->query_skill("linji-zhuang", 1);
+
+    if (skill < 100)
+        return 0;
+    else if (skill < 150)
+        return 50;
+    else if (skill < 200)
+        return 80;
+    else
+        return 100;
+}

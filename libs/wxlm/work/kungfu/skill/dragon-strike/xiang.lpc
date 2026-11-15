@@ -1,0 +1,154 @@
+/**
+ * @file xiang.c
+ * @author Lu dexiang
+ * @brief 镇岳锁龙劲之「龙翔九天」绝招
+ * @version 1.0
+ * @date 2024-03-20
+ */
+
+#include <combat.h>
+inherit F_SSERVER;
+
+string query_name() { return "龙翔九天"; }
+
+ // 技能配置
+nosave mapping SKILL_CONFIG = ([
+	"name": ([ 
+		"zh": "龙翔九天",
+		"en": "dragon soaring nine heavens"
+	]),
+	"requirements": ([
+		"family": "丐帮",
+		"max_neili": 1000,   // 最大内力要求
+		"current_neili": 500, // 当前内力要求
+		"current_qi": 300,    // 当前气血要求
+		"dragon-strike": 80, // 镇岳锁龙劲要求
+		"force": 150          // 内功要求
+	]),
+	"attack": ([
+		"str_factor": 10,     // 力量加成系数
+		"dex_factor": 10,     // 身法加成系数
+	])
+]);
+ 
+
+ string *pfm_type() { return ({ "strike", }); }
+ 
+ // 检查使用条件
+ private int check_conditions(object me, object target)
+ {
+	 mapping requirements = SKILL_CONFIG["requirements"];
+	 
+	 if (!target)
+	 {
+		 me->clean_up_enemy();
+		 target = me->select_opponent();
+	 }
+	 
+	 if (userp(me) && query("family/family_name", me) != requirements["family"])
+	 {
+		 write("你不是" + requirements["family"] + "弟子，无法使用" + SKILL_CONFIG["name"]["zh"] + "。\n");
+		 return 0;
+	 }
+	 
+	 if (!target || !me->is_fighting(target))
+		 return notify_fail(SKILL_CONFIG["name"]["zh"] + "只能在战斗中对对手使用。\n");
+  
+	 if (query_temp("weapon", me) || query_temp("secondary_weapon", me))
+		 return notify_fail(SKILL_CONFIG["name"]["zh"] + "只能空手使用。\n");
+		 
+	 if (query("max_neili", me) < requirements["max_neili"])
+		 return notify_fail("你的内力修为还不够，无法施展" + SKILL_CONFIG["name"]["zh"] + "。\n");
+ 
+	 if (query("neili", me) < requirements["current_neili"])
+		 return notify_fail("你的真气不够！\n");
+ 
+	 if (query("qi", me) < requirements["current_qi"])
+		 return notify_fail("你的气血不够！\n");
+ 
+	 if (me->query_skill("dragon-strike", 1) < requirements["dragon-strike"])
+		 return notify_fail("你的镇岳锁龙劲火候不够，无法使用" + SKILL_CONFIG["name"]["zh"] + "！\n");
+ 
+	 if (me->query_skill("force") < requirements["force"])
+		 return notify_fail("你的内功修为不够，无法使用" + SKILL_CONFIG["name"]["zh"] + "！\n");
+ 
+	 if (me->query_skill_prepared("strike") != "dragon-strike")
+		 return notify_fail("你现在没有准备使用镇岳锁龙劲，无法使用" + SKILL_CONFIG["name"]["zh"] + "！\n");
+ 
+	 if (!living(target))
+		 return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+ 
+	 return 1;
+ }
+ 
+ // 计算攻击力和防御力
+ private mapping calc_power(object me, object target)
+ {
+	 mapping attack = SKILL_CONFIG["attack"];
+	 int ap = me->query_skill("strike") + me->query("str") * attack["str_factor"];
+	 int dp = target->query_skill("parry") + target->query("dex") * attack["dex_factor"];
+	 
+	 return ([ "attack_power": ap, "defense_power": dp ]);
+ }
+ 
+ int perform(object me, object target)
+ {
+	 string msg;
+	 int count, i;
+	 mapping power;
+	 int total_rounds;
+
+	 if (! target) target = offensive_target(me);
+
+	 if (!check_conditions(me, target)) return 0;
+ 
+	 power = calc_power(me, target);
+ 
+	 msg = HIY "$N" HIY "深吸一口气，跨前一步，双掌猛然翻滚，缤纷而出，宛如一条神龙攀蜒于九天之上！"NOR"\n";
+	 
+	 if (power["attack_power"] / 2 + random(power["attack_power"]) > power["defense_power"])
+	 {
+		 count = power["attack_power"] / 10;
+
+		 // pve额外加成20%
+		 if (!userp(target))
+		 {
+			 count += count / 5;
+		 }
+
+		 msg += HIR "$n" HIR "面对$P" HIR "这排山倒海攻势，完全无法抵挡，唯有退后。"NOR"\n";
+	 } 
+	 else
+	 {
+		 msg += HIC "$n" HIC "凝神应战，竭尽所能化解$P" HIC "这几掌。"NOR"\n";
+		 count = 0;
+	 }
+ 
+	 message_vision(msg, me, target);
+	 me->add_temp("apply/attack", count*2);
+ 
+	 me->add("neili", -300);
+	 me->add("qi", -100);
+ 
+	 // 额外攻击轮数，考虑意境加成
+	 total_rounds = COMBAT_D->query_base_attack_number(me,query_name());
+ 
+	 for (i = 0; i < total_rounds; i++)
+	 {
+		 if (!me->is_fighting(target))
+			 break;
+		 
+		 // 随机使目标忙碌
+		 if (random(5) < 2 && !target->is_busy())
+			 target->start_busy(1);
+ 
+		 COMBAT_D->do_attack(me, target, 0, 0);
+	 }
+	 
+	 target->interrupt_me(target, 1);
+ 
+	 me->start_busy(1 + random(5));
+	 me->add_temp("apply/attack", -count*2);
+ 
+	 return 1;
+ }

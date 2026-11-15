@@ -1,0 +1,118 @@
+// /clone/shizhe/menpai_challenge.c
+
+
+inherit ITEM;
+
+void create()
+{
+    set_name(HIY "门派挑战令" NOR, ({"menpai tiaozhan ling", "tiaozhan ling", "ling"}));
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("unit", "块");
+        set("long", "这是一块用于挑战各大门派的令牌。你可以使用它来开始门派挑战。\n");
+        set("value", 10);
+        set("no_sell", 1);
+        set("no_drop", 1);
+        set("no_give", 1);
+    }
+    set_weight(1);
+    set("action_list",([
+        "挑战":"tiaozhan 门派挑战令",
+    ]));
+    setup();
+}
+
+void init()
+{
+   
+    add_action("do_tiaozhan", "tiaozhan");
+}
+
+int do_tiaozhan(string arg)
+{
+    object me = this_player();
+    string *all_fam, str;
+    mapping challenged_fams, fb;
+    int i;
+
+    if (!arg)
+        return notify_fail("你要挑战什么？\n");
+
+    if (me->is_busy())
+        return notify_fail("你现在正忙着呢。\n");
+
+    if (me->is_fighting())
+        return notify_fail("战斗中无法使用门派挑战令！\n");
+
+    all_fam = MENPAI_CHALLENGE_D->query("challengeable_families");
+    challenged_fams = me->query("menpai_challenged");
+
+    if (!challenged_fams)
+        challenged_fams = ([]);
+
+    if (arg == "门派挑战令")
+    {
+        str = ZJOBLONG"请选择你要挑战的门派：\n"ZJOBACTS2+ZJMENUF(3,3,10,30);
+        for (i = 0; i < sizeof(all_fam); i++)
+        {
+            if (challenged_fams[all_fam[i]])
+                str += HIR + all_fam[i] + NOR ":look";
+            else
+                str += all_fam[i] + ":tiaozhan " + all_fam[i];
+            
+            if (i < (sizeof(all_fam) - 1)) 
+                str += ZJSEP;
+        }
+        tell_object(me, str + "\n");
+        return 1;
+    }
+    else if (member_array(arg, all_fam) != -1)
+    {
+        string menpai_pinyin;
+        if (challenged_fams[arg])
+        {
+            tell_object(me, "你已经挑战过" + arg + "了,不能重复挑战。\n");
+            return 1;
+        }
+
+        menpai_pinyin = MENPAI_CHALLENGE_D->get_menpai_path(arg);
+        if (!menpai_pinyin)
+        {
+            tell_object(me, "无法识别的门派名称。\n");
+            return 1;
+        }
+
+        me->set_temp("menpai_challenge/"+ menpai_pinyin,1);
+        tell_object(me, "你开始了对" + arg + "的挑战！\n");
+        
+        // 创建并进入副本
+        fb = MENPAI_FUBEN_D->create_menpai_fuben(me, menpai_pinyin);
+       
+        if (mapp(fb))
+        {
+            if (MENPAI_FUBEN_D->enter_menpai_fuben(me, fb["id"]))
+            {
+                if (fb["time"] == time())
+                {
+                    tell_object(me, "你成功创建并进入了" + arg + "的挑战副本。\n");
+                }
+                else
+                {
+                    tell_object(me, "你重新进入了之前创建的" + arg + "挑战副本。\n");
+                }
+            }
+            else
+            {
+                tell_object(me, "进入副本失败，请稍后再试。\n");
+            }
+        }
+        else
+        {
+            tell_object(me, "创建副本失败，请稍后再试。\n");
+        }
+        return 1;
+    }
+
+    return notify_fail("你要挑战哪个门派？\n");
+}

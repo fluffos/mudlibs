@@ -1,0 +1,553 @@
+#ifdef __PACKAGE_HTTP__
+#include <net/socket.h>
+#include <socket_err.h>
+
+inherit F_DBASE;
+
+#define HTTP_PORT 80
+#define REQUEST_TIMEOUT 30
+
+private nosave mapping connections;
+
+void create();
+varargs int http_get(string host, string path, function callback, mapping headers, int port);
+varargs int http_post(string host, string path, string data, function callback, mapping headers, int port);
+int create_http_connection(string host, string path, string method, string data, function callback, mapping headers, int port);
+mapping create_connection_state(string host, string path, string method, string data, function callback, mapping headers, int port);
+string build_http_request(string method, string host, string path, string data, mapping headers, int port);
+int has_header(mapping headers, string header_name);
+void write_callback(int sock);
+void read_callback(int sock, mixed message);
+mapping build_response_data(mapping parsed_response, string raw_response);
+mapping build_fallback_response(string raw_response, mixed parse_error);
+void timeout_callback(int sock);
+void finish_request(int sock, mapping response_data, int should_close_socket);
+void cleanup_connection(int sock);
+void close_callback(int sock);
+mapping get_all_data();
+void test_request();
+
+/**
+ * @brief 初始化HTTP发送控制器
+ * @return void 无返回值
+ * @details 该函数设置对象权限并初始化连接状态映射，用于后续管理所有出站HTTP请求。
+ */
+void create()
+{
+    seteuid(getuid());
+    connections = ([]);
+}
+
+/**
+ * @brief 发送HTTP GET请求
+ * @param string host 目标主机地址
+ * @param string path 请求路径
+ * @param function callback 响应完成后的回调函数
+ * @param mapping headers 自定义请求头映射
+ * @param int port 目标端口，未传时默认80
+ * @return int 创建并发起请求成功返回1，失败返回0
+ * @details 该函数创建一个短连接HTTP GET请求，并在收到完整响应后将结果交给回调函数。
+ */
+varargs int http_get(string host, string path, function callback, mapping headers, int port)
+{
+    return create_http_connection(host, path, "GET", "", callback, headers, port);
+}
+
+/**
+ * @brief 发送HTTP POST请求
+ * @param string host 目标主机地址
+ * @param string path 请求路径
+ * @param string data 请求体内容
+ * @param function callback 响应完成后的回调函数
+ * @param mapping headers 自定义请求头映射
+ * @param int port 目标端口，未传时默认80
+ * @return int 创建并发起请求成功返回1，失败返回0
+ * @details 该函数创建一个短连接HTTP POST请求，默认按JSON正文补齐必要请求头。
+ */
+varargs int http_post(string host, string path, string data, function callback, mapping headers, int port)
+{
+    return create_http_connection(host, path, "POST", data, callback, headers, port);
+}
+
+/**
+ * @brief 创建并发起HTTP连接
+ * @param string host 目标主机地址
+ * @param string path 请求路径
+ * @param string method 请求方法
+ * @param string data 请求体内容
+ * @param function callback 响应完成后的回调函数
+ * @param mapping headers 自定义请求头映射
+ * @param int port 目标端口
+ * @return int 创建并连接成功返回1，失败返回0
+ * @details 该函数负责建立socket、创建响应解析器、保存连接上下文并发起TCP连接。
+ */
+int create_http_connection(string host, string path, string method, string data, function callback, mapping headers, int port)
+{
+    int sock;
+    mapping connection_state;
+
+    if (!stringp(host) || host == "" || !stringp(path) || path == "")
+    {
+        return 0;
+    }
+
+    if (!intp(port) || port <= 0)
+    {
+        port = HTTP_PORT;
+    }
+
+    if (!stringp(data))
+    {
+        data = "";
+    }
+
+    sock = socket_create(STREAM, "read_callback", "close_callback");
+    if (sock < 0)
+    {
+        return 0;
+    }
+
+    connection_state = create_connection_state(host, path, method, data, callback, headers, port);
+    if (!mapp(connection_state))
+    {
+        socket_close(sock);
+        return 0;
+    }
+
+    connections[sock] = connection_state;
+    if (socket_connect(sock, host + " " + port, "read_callback", "write_callback") < 0)
+    {
+        cleanup_connection(sock);
+        socket_close(sock);
+        return 0;
+    }
+
+    call_out("timeout_callback", REQUEST_TIMEOUT, sock);
+    return 1;
+}
+
+/**
+ * @brief 创建连接状态映射
+ * @param string host 目标主机地址
+ * @param string path 请求路径
+ * @param string method 请求方法
+ * @param string data 请求体内容
+ * @param function callback 响应完成后的回调函数
+ * @param mapping headers 自定义请求头映射
+ * @param int port 目标端口
+ * @return mapping 返回完整的连接状态映射，失败返回0
+ * @details 该函数集中初始化请求报文、响应解析器和原始缓冲区，便于统一管理连接生命周期。
+ */
+mapping create_connection_state(string host, string path, string method, string data, function callback, mapping headers, int port)
+{
+    mapping connection_state;
+    mixed parser;
+    string request;
+
+    parser = http_response_parser_create();
+    if (!parser)
+    {
+        return 0;
+    }
+
+    request = build_http_request(method, host, path, data, headers, port);
+    connection_state = ([
+        "host": host,
+        "path": path,
+        "method": method,
+        "data": data,
+        "port": port,
+        "callback": callback,
+        "headers": headers,
+        "request": request,
+        "parser": parser,
+        "raw_response": ""
+    ]);
+
+    return connection_state;
+}
+
+/**
+ * @brief 构建HTTP请求报文
+ * @param string method 请求方法
+ * @param string host 目标主机地址
+ * @param string path 请求路径
+ * @param string data 请求体内容
+ * @param mapping headers 自定义请求头映射
+ * @param int port 目标端口
+ * @return string 返回拼装后的HTTP/1.1请求字符串
+ * @details 该函数在保留自定义请求头的同时，自动补齐Host、Connection和POST常用正文头部。
+ */
+string build_http_request(string method, string host, string path, string data, mapping headers, int port)
+{
+    string request;
+    string key;
+    string value;
+    string host_header;
+
+    request = sprintf("%s %s HTTP/1.1\r\n", method, path);
+    host_header = host;
+    if (port != HTTP_PORT)
+    {
+        host_header = sprintf("%s:%d", host, port);
+    }
+
+    if (!mapp(headers) || !has_header(headers, "host"))
+    {
+        request += sprintf("Host: %s\r\n", host_header);
+    }
+
+    if (!mapp(headers) || !has_header(headers, "connection"))
+    {
+        request += "Connection: close\r\n";
+    }
+
+    if (method == "POST")
+    {
+        if (!mapp(headers) || !has_header(headers, "content-length"))
+        {
+            request += sprintf("Content-Length: %d\r\n", sizeof(string_encode(data, "utf-8")));
+        }
+
+        if (!mapp(headers) || !has_header(headers, "content-type"))
+        {
+            request += "Content-Type: application/json; charset=utf-8\r\n";
+        }
+    }
+
+    if (mapp(headers))
+    {
+        foreach (key, value in headers)
+        {
+            request += sprintf("%s: %s\r\n", key, value);
+        }
+    }
+
+    request += "\r\n";
+    if (method == "POST")
+    {
+        request += data;
+    }
+
+    return request;
+}
+
+/**
+ * @brief 检查请求头是否已存在
+ * @param mapping headers 请求头映射
+ * @param string header_name 目标请求头名称
+ * @return int 存在返回1，不存在返回0
+ * @details 该函数按不区分大小写的方式检查请求头，避免自动补头时重复写入。
+ */
+int has_header(mapping headers, string header_name)
+{
+    string key;
+
+    if (!mapp(headers) || !stringp(header_name))
+    {
+        return 0;
+    }
+
+    foreach (key in keys(headers))
+    {
+        if (lower_case(key) == lower_case(header_name))
+        {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 发送请求报文到目标socket
+ * @param int sock 客户端socket描述符
+ * @return void 无返回值
+ * @details 该函数在连接建立后写出完整HTTP请求报文。
+ */
+void write_callback(int sock)
+{
+    mapping connection_state;
+
+    connection_state = connections[sock];
+    if (!mapp(connection_state) || !stringp(connection_state["request"]))
+    {
+        return;
+    }
+
+    socket_write(sock, connection_state["request"]);
+}
+
+/**
+ * @brief 处理目标服务器返回的数据块
+ * @param int sock 客户端socket描述符
+ * @param mixed message 服务器返回的原始数据块
+ * @return void 无返回值
+ * @details 该函数将响应数据喂给驱动层响应解析器，在拿到完整响应后立即完成回调并关闭连接。
+ */
+void read_callback(int sock, mixed message)
+{
+    mapping connection_state;
+    mapping parse_result;
+    mixed *responses;
+    mapping response_data;
+
+    connection_state = connections[sock];
+    if (!mapp(connection_state))
+    {
+        return;
+    }
+
+    if (!stringp(message))
+    {
+        response_data = build_fallback_response("", "收到的响应数据不是字符串");
+        finish_request(sock, response_data, 1);
+        return;
+    }
+
+    connection_state["raw_response"] += message;
+    parse_result = http_response_parser_feed(connection_state["parser"], message);
+    if (!mapp(parse_result))
+    {
+        response_data = build_fallback_response(connection_state["raw_response"], "响应解析器返回无效结果");
+        finish_request(sock, response_data, 1);
+        return;
+    }
+
+    if (parse_result["error"])
+    {
+        response_data = build_fallback_response(connection_state["raw_response"], parse_result["error"]);
+        finish_request(sock, response_data, 1);
+        return;
+    }
+
+    responses = parse_result["responses"];
+    if (!arrayp(responses) || !sizeof(responses))
+    {
+        return;
+    }
+
+    response_data = build_response_data(responses[0], connection_state["raw_response"]);
+    finish_request(sock, response_data, 1);
+}
+
+/**
+ * @brief 生成结构化响应结果
+ * @param mapping parsed_response 驱动解析出的响应映射
+ * @param string raw_response 原始响应字符串
+ * @return mapping 返回对外回调使用的响应映射
+ * @details 该函数在保留原始数据的同时，为旧调用方保留status/body字段，并补充结构化状态码信息。
+ */
+mapping build_response_data(mapping parsed_response, string raw_response)
+{
+    mapping response_data;
+    string version;
+    int status_code;
+    string reason;
+    mapping headers;
+    string body;
+
+    version = parsed_response["version"];
+    status_code = parsed_response["status_code"];
+    reason = parsed_response["reason"];
+    headers = parsed_response["headers"];
+    body = parsed_response["body"];
+
+    if (!stringp(version))
+    {
+        version = "HTTP/1.1";
+    }
+
+    if (!stringp(reason))
+    {
+        reason = "";
+    }
+
+    if (!mapp(headers))
+    {
+        headers = ([]);
+    }
+
+    if (!stringp(body))
+    {
+        body = "";
+    }
+
+    response_data = ([
+        "status": sprintf("%s %d %s", version, status_code, reason),
+        "version": version,
+        "status_code": status_code,
+        "reason": reason,
+        "headers": headers,
+        "body": body,
+        "raw_response": raw_response
+    ]);
+
+    return response_data;
+}
+
+/**
+ * @brief 生成兜底响应结果
+ * @param string raw_response 当前已接收的原始响应
+ * @param mixed parse_error 解析错误信息
+ * @return mapping 返回兜底错误响应映射
+ * @details 当响应解析失败或连接提前结束时，该函数返回兼容旧回调结构的错误结果。
+ */
+mapping build_fallback_response(string raw_response, mixed parse_error)
+{
+    mapping response_data;
+
+    response_data = ([
+        "status": "HTTP/1.1 0 PARSE_ERROR",
+        "status_code": 0,
+        "reason": sprintf("%O", parse_error),
+        "headers": ([]),
+        "body": raw_response,
+        "raw_response": raw_response,
+        "error": parse_error
+    ]);
+
+    return response_data;
+}
+
+/**
+ * @brief 处理请求超时
+ * @param int sock 客户端socket描述符
+ * @return void 无返回值
+ * @details 该函数在超时时返回错误结果并主动关闭连接，避免请求状态长期残留。
+ */
+void timeout_callback(int sock)
+{
+    mapping connection_state;
+    mapping response_data;
+
+    connection_state = connections[sock];
+    if (!mapp(connection_state))
+    {
+        return;
+    }
+
+    response_data = build_fallback_response(connection_state["raw_response"], "HTTP请求超时");
+    finish_request(sock, response_data, 1);
+}
+
+/**
+ * @brief 完成请求并回调上层
+ * @param int sock 客户端socket描述符
+ * @param mapping response_data 最终响应结果
+ * @param int should_close_socket 是否主动关闭socket
+ * @return void 无返回值
+ * @details 该函数负责只回调一次，然后清理连接状态，并在需要时主动关闭socket。
+ */
+void finish_request(int sock, mapping response_data, int should_close_socket)
+{
+    mapping connection_state;
+    function callback;
+
+    connection_state = connections[sock];
+    if (!mapp(connection_state))
+    {
+        return;
+    }
+
+    callback = connection_state["callback"];
+    cleanup_connection(sock);
+
+    if (functionp(callback))
+    {
+        evaluate(callback, response_data);
+    }
+
+    if (should_close_socket)
+    {
+        socket_close(sock);
+    }
+}
+
+/**
+ * @brief 清理连接状态
+ * @param int sock 客户端socket描述符
+ * @return void 无返回值
+ * @details 该函数释放响应解析器并删除连接缓存，确保请求结束后不残留状态。
+ */
+void cleanup_connection(int sock)
+{
+    mapping connection_state;
+    mixed parser;
+
+    if (!mapp(connections))
+    {
+        return;
+    }
+
+    connection_state = connections[sock];
+    if (!mapp(connection_state))
+    {
+        return;
+    }
+
+    parser = connection_state["parser"];
+    if (parser)
+    {
+        http_response_parser_close(parser);
+    }
+
+    map_delete(connections, sock);
+}
+
+/**
+ * @brief 处理连接关闭事件
+ * @param int sock 客户端socket描述符
+ * @return void 无返回值
+ * @details 若连接在解析完成前关闭，该函数会返回兜底结果；已完成的请求则只做清理。
+ */
+void close_callback(int sock)
+{
+    mapping connection_state;
+    mapping response_data;
+
+    connection_state = connections[sock];
+    if (!mapp(connection_state))
+    {
+        return;
+    }
+
+    response_data = build_fallback_response(connection_state["raw_response"], "连接在完整响应前关闭");
+    finish_request(sock, response_data, 0);
+}
+
+/**
+ * @brief 获取当前所有连接状态
+ * @return mapping 返回当前连接状态映射
+ * @details 该函数主要用于调试和观察当前出站HTTP请求的内部状态。
+ */
+mapping get_all_data()
+{
+    return connections;
+}
+
+/**
+ * @brief 测试HTTP请求发送功能
+ * @return void 无返回值
+ * @details 该函数包含GET和POST请求示例，便于在开发阶段快速验证出站请求流程。
+ */
+void test_request()
+{
+    http_get("api.example.com", "/data",
+        function(mapping response) {
+            write("状态: " + response["status"] + "\n");
+            write("响应内容: " + response["body"] + "\n");
+        },
+        ([ "User-Agent": "MUD Client" ])
+    );
+
+    http_post("api.example.com", "/submit",
+        "name=test&value=123",
+        function(mapping response) {
+            write("状态: " + response["status"] + "\n");
+            write("响应内容: " + response["body"] + "\n");
+        },
+        ([ "User-Agent": "MUD Client" ])
+    );
+}
+#endif

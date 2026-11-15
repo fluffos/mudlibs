@@ -1,0 +1,472 @@
+inherit NPC;
+
+void end_fuben(object me);
+void xuemo_pfm();
+void create_treasure_box(object who);
+
+#include "fuben_init_skills.h"
+
+void create()
+{
+	// 鬼影刺客：这些潜行于暗处的怪物，擅长伏击和快速攻击，他们的身影如同幽灵一般难以捉摸。
+// 魔纹石像：古老的石像被邪恶力量赋予了生命，它们的身体上刻有神秘的符文，能够施放强大的攻击。
+// 幽魂夜行者：被诅咒的灵魂，只能在夜晚游荡，它们发出的悲鸣声能够迷惑人心，削弱敌人的意志。
+// 血煞巨魔：这些巨大的魔物以其强大的物理攻击和再生能力而著称，即使受伤也能迅速恢复。
+	mapping name_list = ([
+		"鬼影刺客" : "guiying",
+		"魔纹石像" : "mowen",
+		"幽魂夜行者" : "youhun",
+		"血煞巨魔" : "xuesha",
+	]);
+
+	mapping desc = ([
+		"guiying" : "这些潜行于暗处的怪物，擅长伏击和快速攻击，他们的身影如同幽灵一般难以捉摸。",
+		"mowen" : "古老的石像被邪恶力量赋予了生命，它们的身体上刻有神秘的符文，能够施放强大的攻击。",
+		"youhun" : "被诅咒的灵魂，只能在夜晚游荡，它们发出的悲鸣声能够迷惑人心，削弱敌人的意志。",
+		"xuesha" : "这些巨大的魔物以其强大的物理攻击和再生能力而著称，即使受伤也能迅速恢复。",
+	]);
+
+	string *names = keys(name_list);
+	string id, desc_str,name;
+	name = names[random(sizeof(names))];
+	id = name_list[name];
+	desc_str = desc[id];
+	
+	set_name(name, ({id}));
+	set("long", desc_str);
+	set("combat_exp", 100000);
+	set("shen",-10000);
+	
+	// 重新调整血量-鬼影刺客血量2w，魔纹石像血量3w，幽魂夜行者血量2w，血煞巨魔血量4w
+	if (id == "guiying")
+	{
+		set("max_qi", 20000);
+		set("qi", 20000);
+	}
+	else if (id == "mowen")
+	{
+		set("max_qi", 30000);
+		set("qi", 30000);
+	}
+	else if (id == "youhun")
+	{
+		set("max_qi", 20000);
+		set("qi", 20000);
+	}
+	else if (id == "xuesha")
+	{
+		set("max_qi", 40000);
+		set("qi", 40000);
+	}
+	set("max_neili", 20000);
+	set("neili", 20000);
+	set("max_jing", 10000);
+	set("jing", 10000);
+	
+	set("chat_chance_combat", 30);//每秒释放技能的概率为30%
+	set("chat_msg_combat", ({
+		(: xuemo_pfm :),
+	}));
+	set_temp("apply/attack", 150);
+	set_temp("apply/defense", 150);
+	set_temp("apply/damage", 100);
+	set_temp("apply/unarmed_damage", 100);
+	set_temp("apply/armor", 200);
+
+	setup();
+}
+
+
+//当前环境上是否有玩家
+mixed get_player()
+{
+	object *inv;
+	if (sizeof(inv = filter_array(all_inventory(environment()), (:playerp($1):))))
+	{
+		return inv[0];
+	}
+	else
+	{
+		return 0;
+	}
+	
+}
+
+// 重新加入一个怪物
+int new_create_guai(object me,object env)
+{
+	object ob;
+	init_npc(me, (ob = new(__FILE__)));
+	ob->move(environment(me));
+	return 1;
+}
+
+
+varargs void die(object player)
+{
+	object me, who, gift;
+	int start_time;          // 开始时间
+	int base_exp = 30000;    // 基础经验
+	int base_pot = 15000;    // 基础潜能
+	string str;
+	int killed;
+	string *death_msgs;
+	int finish_time;
+
+	me = this_object();
+	who = environment(this_object())->query("player");
+
+
+	// 血量高于20%无法被处决
+	if (me->query("qi") >= me->query("max_qi") / 5 && me->query("jing") >= me->query("max_jing") / 5)
+	{
+		tell_object(who, HIR "【战斗提示】" + me->query("name") + "血量和精神同时高于20%，无法被处决。\n" NOR);
+		return;
+	}
+
+	if (!objectp(who))
+	{
+		if (undefinedp(player) || !objectp(player))
+		{
+			who = me->query_last_damage_from();
+		}
+		else
+		{
+			who = player;
+		}
+
+	}
+
+	if (!objectp(who))
+	{
+		if  (!objectp(who = get_player()))
+		{
+			::die();
+			return;
+		}
+	}
+	
+	if (!playerp(who))
+	{
+	    write(query("xuemo") + "出错，请联系管理员处理。\n");
+	    ::die();
+	}
+	
+	// 添加怪物死亡描述
+	death_msgs = ({
+		"$N发出一声凄厉的惨叫，身体化为一团黑雾消散在空气中。",
+		"$N不甘地挣扎着，最终被你的攻击击穿要害，倒地不起。",
+		"$N的身体开始崩解，化为点点幽蓝光芒消失在幻境中。",
+		"随着你的致命一击，$N发出一声哀嚎，身体如同沙粒般散落。",
+		"$N的身体被你的攻击撕裂，化为一团黑色的能量消散在空气中。",
+		"$N痛苦地扭曲着身体，最终在你的攻击下化为一缕青烟。",
+		"$N发出最后的嘶吼，身体逐渐变得透明，最终消失不见。",
+		"你的攻击穿透了$N的防御，它的身体如同玻璃般碎裂开来。",
+		"$N的身体开始崩溃，化为无数光点消散在幽冥幻境中。",
+		"随着一声巨响，$N的身体爆裂开来，化为一团黑雾消散。"
+	});
+	
+	// 随机选择一条死亡描述
+	message_vision("\n" + death_msgs[random(sizeof(death_msgs))] + "\n", me);
+	
+	// 更新击杀数量
+	environment(me)->add("killed_xuemo", 1);
+	
+	// 显示当前进度
+	killed = environment(me)->query("killed_xuemo");
+	tell_object(who, HIC "\n【幻境进度】你已经击败了" + killed + "个怪物，还需击败" + (10 - killed) + "个怪物。\n" NOR);
+	
+	// 血魔共鸣机制 - 当击杀第5个怪物时
+	if (killed == 5)
+	{
+		// 创建一个新的更强大的怪物
+		object stronger_mob = new(__FILE__);
+		tell_object(who, HIR "\n【血魔共鸣】随着第五个怪物的倒下，幻境中的邪恶能量开始聚集！\n" +
+		                 "剩余的怪物变得更加强大，它们的眼中闪烁着危险的光芒...\n" NOR);
+		
+		stronger_mob->set("xuemo", killed + 1);
+		
+		// 增强怪物属性
+		stronger_mob->add("str", 5);
+		stronger_mob->add("dex", 5);
+		stronger_mob->add("con", 5);
+		stronger_mob->add("int", 5);
+		
+		// 增加攻击、防御和伤害
+		stronger_mob->add_temp("apply/attack", 50);
+		stronger_mob->add_temp("apply/defense", 50);
+		stronger_mob->add_temp("apply/damage", 50);
+		stronger_mob->add("max_qi", stronger_mob->query("max_qi") * 1.5);
+		stronger_mob->set("qi", stronger_mob->query("max_qi"));
+		stronger_mob->add("max_jing", stronger_mob->query("max_jing") * 1.5);
+		stronger_mob->set("jing", stronger_mob->query("max_jing"));
+		
+		// 设置共鸣标记
+		stronger_mob->set("resonance", 1);
+		
+		// 修改名称以表明它更强大
+		stronger_mob->set("name", HIR + stronger_mob->query("name") + "【共鸣】" + NOR);
+		
+		// 将怪物移动到玩家所在的环境
+		stronger_mob->move(environment(me));
+	}
+	// 血魔共鸣机制 - 当击杀第8个怪物时
+	else if (killed == 8)
+	{
+		// 创建一个新的最终BOSS
+		object final_boss = new(__FILE__);
+		tell_object(who, HIR "\n【血魔共鸣·终焉】随着第八个怪物的倒下，幻境中的邪恶能量达到顶峰！\n" +
+		"最后的怪物吸收了所有的能量，变得异常强大！准备好面对终极挑战吧！\n" NOR);
+
+		final_boss->set("xuemo", killed + 1);
+		
+		// 大幅增强怪物属性
+		final_boss->add("str", 10);
+		final_boss->add("dex", 10);
+		final_boss->add("con", 10);
+		final_boss->add("int", 10);
+		
+		// 增加攻击、防御和伤害
+		final_boss->add_temp("apply/attack", 100);
+		final_boss->add_temp("apply/defense", 100);
+		final_boss->add_temp("apply/damage", 100);
+		final_boss->add("max_qi", final_boss->query("max_qi") * 2);
+		final_boss->set("qi", final_boss->query("max_qi"));
+		final_boss->add("max_jing", final_boss->query("max_jing") * 2);
+		final_boss->set("jing", final_boss->query("max_jing"));
+		
+		// 设置共鸣标记
+		final_boss->set("resonance", 2);
+		
+		// 修改名称以表明它是最终BOSS
+		final_boss->set("name", HIR + "幽冥之主【终焉】" + NOR);
+		
+		// 将怪物移动到玩家所在的环境
+		final_boss->move(environment(me));
+	}
+	else if (killed < 10)
+	{
+		// 创建下一个怪物
+		object next_mob = new(__FILE__);
+		next_mob->set("xuemo", killed + 1);
+		next_mob->move(environment(me));
+	}
+	
+	// 如果怪物有共鸣标记，增加额外奖励
+	if (me->query("resonance"))
+	{
+		int resonance_level = me->query("resonance");
+		int extra_exp = 5000 * resonance_level;
+		int extra_pot = 2500 * resonance_level;
+		
+
+		tell_object(who, HIY "【共鸣奖励】你击败了强化怪物，获得额外的" + 
+		extra_exp + "点经验和" + extra_pot + "点潜能！\n" NOR);
+
+		FUBEN_D->add_exp(who, extra_exp);
+		who->add("potential", extra_pot);
+	}
+	
+	// 随机掉落宝箱，概率为30%
+	if (random(10) < 3)
+	{
+		create_treasure_box(who);
+	}
+	
+	if (me->query("xuemo") >= 10)
+	{
+		str = HIC "【幻境完成】" NOR + "恭喜你成功通过幽冥幻境的挑战！\n\n" + 
+              HIY "【获得奖励】" NOR + "你获得了";
+              
+		gift = new("/clone/money/silver");
+		gift->set_amount(1000);
+		gift->move(who);
+		who->add("bind_yuanbao", 20);
+		FUBEN_D->add_exp(who, base_exp);
+		who->add("potential", base_pot);
+		
+		str += HIW + "20" + NOR + "枚绑定元宝、" + 
+		       HIW + "1000" + NOR + "两白银、" + 
+		       HIW + base_exp + NOR + "点经验和" + 
+		       HIW + base_pot + NOR + "点潜能！";
+		
+		// 获取开始时间
+		start_time = who->query("fuben_moku/last_time");
+		finish_time = time() - start_time;
+
+		//记录最低的一次通关时间
+		if (!who->query("fuben_finish_time/moku") || who->query("fuben_finish_time/moku") > finish_time)
+		{
+			who->set("fuben_finish_time/moku", finish_time);
+			str += "\n\n" + HIC + "【新纪录】" + NOR + "你创造了个人最快通关记录：" + 
+                   HIW + CHINESE_D->chinese_time(finish_time) + NOR + "！";
+		}
+		else
+		{
+			str += "\n\n" + "你的最快通关记录是：" + HIW + CHINESE_D->chinese_time(who->query("fuben_finish_time/moku")) + NOR;
+		}
+		
+		str += "\n\n" + HIM + "一道耀眼的光芒闪过，你击败了最后一个怪物，幽冥幻境的大门缓缓打开，你成功完成了挑战！\n" + NOR;
+		
+		tell_object(who, str);
+		__DIR__"moku"->restore_status(who);
+		who->move("/d/city/guangchang");
+
+		// 记录副本监控日志
+		MONITOR_MASTER->monitor_fuben_log(who, "幽冥秘境", start_time, time(), base_pot, base_exp);
+
+		::die();
+		return;
+	}
+	else
+	{
+		// 不再使用new_create_guai函数，因为我们已经在上面的代码中创建了新怪物
+		::die();
+		return;
+	}
+	
+	::die();
+}
+
+// 添加幽冥宝箱相关函数
+void create_treasure_box(object who)
+{
+	string box_name;
+	
+	// 随机决定宝箱类型
+	int box_type = random(10);
+	
+	if (box_type < 6) // 60%概率普通宝箱
+	{
+		// 随机奖励
+		int reward_type = random(3);
+
+		box_name = "普通幽冥宝箱";
+		tell_object(who, HIC "\n【幻境奖励】怪物倒下后，一个" + box_name + "出现在地上！\n" NOR);
+		
+
+		switch(reward_type)
+		{
+			case 0: // 经验
+				tell_object(who, HIY "你打开宝箱，获得了5000点经验！\n" NOR);
+				FUBEN_D->add_exp(who, 5000);
+				break;
+				
+			case 1: // 潜能
+				who->add("potential", 2500);
+				tell_object(who, HIY "你打开宝箱，获得了2500点潜能！\n" NOR);
+				break;
+				
+			case 2: // 绑定元宝
+				who->add("bind_yuanbao", 2);
+				tell_object(who, HIY "你打开宝箱，获得了2个绑定元宝！\n" NOR);
+				break;
+		}
+	}
+	else if (box_type < 9) // 30%概率稀有宝箱
+	{
+		// 随机奖励
+		int reward_type = random(3);
+		box_name = HIM "稀有幽冥宝箱" NOR;
+		tell_object(who, HIC "\n【幻境奖励】怪物倒下后，一个" + box_name + "出现在地上！\n" NOR);
+		
+		switch(reward_type)
+		{
+			case 0: // 经验
+				tell_object(who, HIY "你打开宝箱，获得了10000点经验！\n" NOR);
+				FUBEN_D->add_exp(who, 10000);
+				break;
+				
+			case 1: // 潜能
+				who->add("potential", 5000);
+				tell_object(who, HIY "你打开宝箱，获得了5000点潜能！\n" NOR);
+				break;
+				
+			case 2: // 绑定元宝
+				who->add("bind_yuanbao", 5);
+				tell_object(who, HIY "你打开宝箱，获得了5个绑定元宝！\n" NOR);
+				break;
+		}
+	}
+	else // 10%概率传说宝箱
+	{
+		// 随机奖励
+		int reward_type = random(3);
+		box_name = HIR "传说幽冥宝箱" NOR;
+		tell_object(who, HIC "\n【幻境奖励】怪物倒下后，一个" + box_name + "出现在地上！\n" NOR);
+		
+		switch(reward_type)
+		{
+			case 0: // 经验
+				tell_object(who, HIY "你打开宝箱，获得了20000点经验！\n" NOR);
+				FUBEN_D->add_exp(who, 20000);
+				break;
+				
+			case 1: // 潜能
+				who->add("potential", 10000);
+				tell_object(who, HIY "你打开宝箱，获得了10000点潜能！\n" NOR);
+				break;
+				
+			case 2: // 绑定元宝
+				who->add("bind_yuanbao", 10);
+				tell_object(who, HIY "你打开宝箱，获得了10个绑定元宝！\n" NOR);
+				break;
+		}
+	}
+}
+
+void xuemo_pfm()
+{
+    object who = select_opponent();
+	
+
+	// 如果没有目标
+	if (!who)
+	{
+		return;
+	}
+
+    if (random(2))
+    {
+		// 鬼影刺客，发动6连击(鬼影连刺)
+		if (query("name") == "鬼影刺客")
+		{
+			for (int i = 0; i < 6; i++)
+			{
+				//如果有武器
+				if (query_temp("weapon"))
+					COMBAT_D->do_attack(this_object(), who, query_temp("weapon"));
+				else
+					COMBAT_D->do_attack(this_object(), who, 0, 0);
+			}
+
+			//xxx释放了
+			tell_object(who,"鬼影刺客发动了鬼影连刺！\n");
+		}
+		// 魔纹雕像石像发动攻击，一次性减少敌方1200-3000血量
+		else if (query("name") == "魔纹石像")
+		{
+			int damage = 1200 + random(1800);
+			who->receive_damage("qi", damage, this_object());
+			who->receive_wound("qi", damage, this_object());
+			tell_object(who, "魔纹石像发动了魔纹撞击，你受到了" + damage + "点伤害！\n");
+		}
+		// 幽魂夜行者发动攻击，对地方造成2-5秒忙乱
+		else if (query("name") == "幽魂夜行者")
+		{
+			int busy_time = 2 + random(3);
+			who->start_busy(busy_time);
+			tell_object(who, "幽魂夜行者发动了幽魂悲鸣，你被迷惑了" + busy_time + "秒！\n");
+		}
+		// 血煞巨魔发动再生，回复自身20-30%的血量
+		else if (query("name") == "血煞巨魔")
+		{
+			int heal = query("max_qi") * (20 + random(10)) / 100;
+			add("qi", heal);
+			add("eff_qi", heal);
+			if (query("qi") > query("max_qi"))
+				set("qi", query("max_qi"));
+			tell_object(who, "血煞巨魔发动了再生，回复了" + heal + "点血量！\n");
+		}
+	}
+}

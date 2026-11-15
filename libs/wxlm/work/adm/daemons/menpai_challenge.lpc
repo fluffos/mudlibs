@@ -1,0 +1,216 @@
+// 文件: /adm/daemons/menpai_challenge.c
+
+
+
+inherit F_DBASE;
+
+// 函数声明
+void create();
+int can_get_challenge_letter(object me);
+object get_challenge_letter(object me);
+void handle_challenge_result(object challenger, object target, int success);
+void give_tianshu(object me);
+string get_random_unreceived_tianshu(object me);
+void record_challenge_success(object challenger, object target);
+int can_enter_wulin_meeting(object me);
+
+// 变量声明
+string *tianshus;
+string *challengeable_families;
+mapping menpai_paths;
+
+void create()
+{
+    // 定义天书列表
+    tianshus = ({
+        "fei", "tian", "xue", "shu", "zi",
+        "she", "sha", "lian", "ping", "jing",
+        "hong", "bai", "lu", "yan"
+    });
+
+    // 定义可挑战的门派列表
+    challengeable_families = ({
+        "少林派", "武当派", "峨眉派", "华山派",
+        "丐帮", "全真教", "古墓派", "星宿派",
+        "逍遥派", "灵鹫宫", "雪山派", "血刀门",
+        "明教", "神龙教"
+    });
+
+    menpai_paths = ([
+        "少林派" : "shaolin",
+        "武当派" : "wudang",
+        "峨眉派" : "emei",
+        "华山派" : "huashan",
+        "丐帮" : "gaibang",
+        "全真教" : "quanzhen",
+        "古墓派" : "gumu",
+        "星宿派" : "xingxiu",
+        "逍遥派" : "xiaoyao",
+        "灵鹫宫" : "lingjiu",
+        "雪山派" : "xueshan",
+        "血刀门" : "xuedao",
+        "明教" : "mingjiao",
+        "神龙教" : "shenlong"
+    ]);
+
+    seteuid(getuid());
+    set("channel_id", "门派挑战系统");
+    CHANNEL_D->do_channel(this_object(), "sys", "门派挑战系统已经启动。");
+}
+
+// 获取门派列表
+string *query(string what)
+{
+    if (what == "challengeable_families")
+        return challengeable_families;
+    return 0;
+}
+
+// 检查玩家是否有资格领取挑战书
+int can_get_challenge_letter(object me)
+{
+    // 检查玩家是否为长老
+    if (me->query("family/generation") > 3)
+        return 0;
+    
+    // 其他条件检查...
+    
+    return 1;
+}
+
+// 获取挑战书
+object get_challenge_letter(object me)
+{
+    object letter;
+    
+    if (!can_get_challenge_letter(me))
+        return 0;
+    
+    letter = new("/obj/challenge_letter");
+    letter->set_owner(me);
+    
+    return letter;
+}
+
+// 处理挑战结果
+void handle_challenge_result(object challenger, object target, int success)
+{
+    if (success)
+    {
+        // 给予天书奖励
+        give_tianshu(challenger);
+        
+        // 记录挑战成功
+        record_challenge_success(challenger, target);
+    }
+    else
+    {
+        // 处理挑战失败的情况
+    }
+}
+
+// 给予天书奖励
+void give_tianshu(object me)
+{
+    string tianshu;
+    object ob;
+    
+    // 获取未获得的随机天书
+    tianshu = get_random_unreceived_tianshu(me);
+    
+    if (!tianshu)
+    {
+        tell_object(me, "你已经获得了所有的天书！\n");
+        return;
+    }
+    
+    ob = new("/clone/tianshu/" + tianshu + "_book");
+    if (ob)
+    {
+        ob->move(me);
+        me->set("tianshu/" + tianshu, 1); // 记录已获得的天书
+        tell_object(me, HIY "恭喜你获得了" + ob->name() + "！\n" NOR);
+    }
+    else
+    {
+        tell_object(me, "天书奖励发放失败，请联系管理员。\n");
+    }
+}
+
+// 获取随机未获得的天书
+string get_random_unreceived_tianshu(object me)
+{
+    string *unreceived = filter_array(tianshus, (: !$(me)->query("tianshu/" + $1) :));
+    
+    if (sizeof(unreceived) == 0)
+        return 0;
+    
+    return unreceived[random(sizeof(unreceived))];
+}
+
+// 记录挑战成功
+void record_challenge_success(object challenger, object target)
+{
+    challenger->set("challenged/" + target->query("family/family_name"), 1);
+    
+    // 检查是否已经挑战成功所有门派
+    if (sizeof(filter_array(challengeable_families, (: $(challenger)->query("challenged/" + $1) :))) == sizeof(challengeable_families))
+    {
+        tell_object(challenger, HIR "恭喜你已经成功挑战了所有门派的掌门！你现在可以开启武林大会副本了！\n" NOR);
+        challenger->set("can_enter_wulin_meeting", 1);
+    }
+}
+
+// 检查是否可以开启武林大会副本
+int can_enter_wulin_meeting(object me)
+{
+    return me->query("can_enter_wulin_meeting");
+}
+
+// 在 menpai_challenge.c 中添加
+
+void challenge_menpai(object me, string family)
+{
+    mapping fb;
+    string fuben_sn;
+
+    if (me->query("menpai_challenged/" + family))
+    {
+        tell_object(me, "你已经挑战过" + family + "了，不能重复挑战。\n");
+        return;
+    }
+
+    fb = MENPAI_FUBEN_D->create_menpai_fuben(me, family);
+    if (fb)
+    {
+        fuben_sn = fb["fuben_sn"];
+        tell_object(me, "你开始了对" + family + "的挑战！\n");
+        MENPAI_FUBEN_D->enter_menpai_fuben(me, fuben_sn);
+    }
+    else
+    {
+        tell_object(me, "创建副本失败，请稍后再试。\n");
+    }
+}
+
+// 在 menpai_challenge.c 中添加
+
+void complete_challenge(object me, string family)
+{
+    me->set("menpai_challenged/" + family, 1);
+    tell_object(me, HIG "恭喜你成功挑战了" + family + "！\n" NOR);
+    give_tianshu(me);
+    // 检查是否完成所有门派的挑战
+    if (sizeof(me->query("menpai_challenged")) == sizeof(challengeable_families))
+    {
+        tell_object(me, HIY "恭喜你已经成功挑战了所有门派！\n" NOR);
+        me->set("can_enter_wulin_meeting", 1);
+        // 这里可以添加特殊奖励代码
+    }
+}
+
+// 添加一个新的函数来获取门派路径
+string get_menpai_path(string menpai)
+{
+    return menpai_paths[menpai] || menpai;
+}

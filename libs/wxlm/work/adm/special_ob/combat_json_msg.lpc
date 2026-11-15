@@ -1,0 +1,427 @@
+
+//这个函数用于返回一个对象的，血量，内力，精神,
+mapping ob_combat_cond(object ob)
+{
+    mapping data = ([]);
+
+    if( !ob ) return data;
+
+    //qi,eff_qi,max_qi,neili,eff_neili,max_neili,jing,eff_jing,max_jing
+    data["qi"] = ob->query("qi");
+    data["eff_qi"] = ob->query("eff_qi");
+    data["max_qi"] = ob->query("max_qi");
+    data["neili"] = ob->query("neili");
+    data["eff_neili"] = ob->query("eff_neili");
+    data["max_neili"] = ob->query("max_neili");
+    data["jing"] = ob->query("jing");
+    data["eff_jing"] = ob->query("eff_jing");
+    data["max_jing"] = ob->query("max_jing");
+
+    data["name"] = ob->name();
+
+    // 自动吃药的逻辑
+    //env/auto_huinei env/auto_huijing env/auto_huinei
+    //如果对象身上有这些参数，并且对应的值的百分比小于这个值就自动吃药,执行指令，auto_eat
+    if (ob->query("env/auto_huinei") && ob->query("max_qi") > 0 && ob->query("eff_qi") * 100 / ob->query("max_qi") < ob->query("env/auto_huinei"))
+    {
+        ob->force_me("use zaohua dan");
+    }
+    else if (ob->query("env/auto_huijing") && ob->query("max_jing") > 0 && ob->query("eff_jing") * 100 / ob->query("max_jing") < ob->query("env/auto_huijing"))
+    {
+        ob->force_me("use hui jingdan"); 
+    }
+    else if (ob->query("env/auto_huiqi") && ob->query("max_neili") > 0 && ob->query("neili") * 100 / ob->query("max_neili") < ob->query("env/auto_huiqi"))
+    {
+        ob->force_me("use sheng qisan");
+    }
+
+    if (intp(ob->query_busy()))
+    {
+        data["name"] += sprintf("(%d)", ob->query_busy());
+    }
+
+    data["id"] = file_name(ob);
+
+    return data;
+}
+
+//这个函数用于返回玩家目前战斗对象的，血量，内力，精神,玩家的战斗对象支持多人，所以返回的是一个数组
+mapping *ob_combat_cond_array(object ob)
+{
+    mapping *data = ({});
+    object *enemy;
+    int i;
+
+    if( !ob ) return data;
+
+    enemy = ob->query_enemy();
+    if( !arrayp(enemy) || !sizeof(enemy) ) return data;
+
+    for(i=0; i<sizeof(enemy); i++)
+    {
+        data += ({ ob_combat_cond(enemy[i]) });
+    }
+
+    return data;
+}
+
+//返回一个药品的名称,数量，吃药命令
+mapping medicide_cond(object ob)
+{
+    mapping data = ([]);
+
+    if( !ob ) return data;
+
+    if (!ob->query("combat_medicine")) return data;
+
+    data["name"] = ob->name();
+    data["amount"] = ob->query_amount();
+    data["command"] = "use " + file_name(ob);
+    data["path"] = file_name(ob);
+
+    return data;
+    
+}
+
+//返回一个药品的名称,数量，吃药命令
+mapping medicide_cond_auto(object ob)
+{
+    mapping data = ([]);
+
+    if( !ob ) return data;
+
+    if (!ob->query("combat_medicine")) return data;
+
+    data["name"] = ob->name();
+    // data["command"] = "use " + file_name(ob);
+    data["command"] = "use " + ob->query("id");
+    data["path"] = file_name(ob);
+
+    return data;
+    
+}
+
+//返回一个药品的名称,数量，吃药命令,玩家身上的药品支持多个，所以返回的是一个数组
+mapping *medicide_cond_array(object ob)
+{
+    mapping *data = ({});
+    object *inv;
+    int i;
+
+    if( !ob ) return data;
+
+    inv = all_inventory(ob);
+    if( !arrayp(inv) || !sizeof(inv) ) return data;
+
+    for(i=0; i<sizeof(inv); i++)
+    {
+        if (inv[i]->query("combat_medicine"))
+        {
+            data += ({ medicide_cond(inv[i]) });
+        }
+    }
+
+    return data;
+}
+
+//返回一个药品的名称,数量，吃药命令,玩家身上的药品支持多个，所以返回的是一个数组
+mapping *medicide_cond_array_auto(object ob)
+{
+    mapping *data = ({});
+    object *inv;
+    int i;
+
+    if( !ob ) return data;
+
+    inv = all_inventory(ob);
+    if( !arrayp(inv) || !sizeof(inv) ) return data;
+
+    for(i=0; i<sizeof(inv); i++)
+    {
+        if (inv[i]->query("combat_medicine"))
+        {
+            data += ({ medicide_cond_auto(inv[i]) });
+        }
+    }
+
+    return data;
+}
+
+varargs mixed *skill_pfm_cond(object ob,int is_auto)
+{
+   
+   mapping skills = ob->query_skill_map();
+   mixed *data = ({});//data实际上是一个二维数组
+   string *use_skills = ({});//玩家使用的技能
+   mapping *buttons = ({});//玩家的通用技能按钮
+
+   //主动天赋技能
+   string *tianfu_list = TALNET_MASTER->initiactiveSpecialList();
+
+
+  foreach (string tianfu_name in tianfu_list)
+  {
+    string data_name;
+
+    data_name = ("/kungfu/special/" + tianfu_name)->name();
+
+    if (ob->query("special_skill/" + tianfu_name))
+    {
+        buttons += ({ (["name":data_name,"command":"special " + tianfu_name + " use"]) });
+    }
+
+  }
+
+  if (ob->query_skill("guzheng-jifa") || ob->query_skill("tanqin-jifa") || ob->query_skill("chuixiao-jifa"))
+  {
+    buttons += ({ (["name":"演奏曲子","command":"play"]) });
+  }
+
+  // 博弈设置
+  buttons += ({ (["name":"博弈设置","command":"boyi_set"]) });
+
+  if (ob->query_skill("zuoyou-hubo"))
+  {
+    buttons += ({ (["name":"互搏设置","command":"hubo_skill"]) });
+    buttons += ({ (["name":"互搏释放","command":"hubo_skill use"]) });
+  }
+
+
+    buttons += ({ (["name":"内功回血","command":"exert recover"]) });
+    buttons += ({ (["name":"内功回精","command":"exert regenerate"]) });
+
+    if (!is_auto)
+    {
+        buttons += ({ (["name":"内功加力设置","command":"enforce"]) });
+        buttons += ({ (["name":"空手技能设置","command":"prepare switch"]) });
+    }
+    
+    buttons += ({ (["name":"点到为止","command":"halt"]) });
+    buttons += ({ (["name":"积蓄怒气","command":"berserk"]) });
+    buttons += ({ (["name":"释放怒气","command":"burning"]) });
+
+   //write("准备技能:" + json_encode(me->query_skill_prepare()) + "\n");
+
+   if (!sizeof(skills))
+    {
+        return data;
+    }
+
+    // 遍历buttons，如果没有path的key，就加上path的key，值为command的值
+    foreach(mapping button in buttons)
+    {
+        if (undefinedp(button["path"]))
+        {
+            button["path"] = button["command"];
+        }
+    }
+
+    // 合并按钮
+    data += ({ buttons });
+    
+   foreach(mixed key in keys(ob->query_skill_map()))
+   {
+        string skill = skills[key];
+        mixed *pfms = SKILL_D(skill)->skill_pfms(key);
+
+        if (member_array(skill, use_skills) == -1 && pfms != ({ }))
+        {
+            use_skills += ({ skill });
+        }
+        else
+        {
+            continue;
+        }
+    
+      data += ({ pfms });
+   }
+
+
+
+
+   //如果data里面有空数组则过滤掉
+    data = filter_array(data, (: sizeof($1) :));
+
+    return data;
+}
+
+string skill_pfm_json(object ob)
+{
+    mixed *data = skill_pfm_cond(ob);
+    string json = "";
+
+    if (!sizeof(data))
+    {
+        return json;
+    }
+
+    json = json_encode(data);
+
+    return json + "\n";
+}
+
+void player_combat_cond(object ob)
+{
+    // 优化1: 提前声明所有变量
+    mapping jsonData = ([]);
+    mapping *other_buttons = ({});
+    object *room_obj_list, *enemy_list;
+    int is_pve;
+    object enemy;
+    
+    // 优化2: 提前检查基础条件
+    if (!userp(ob) || !ob->is_fighting())
+        return;
+    
+    // 优化3: 减少重复计算，缓存enemy_list
+    enemy_list = ob->query_enemy();
+    if (!arrayp(enemy_list) || !sizeof(enemy_list))
+        return;
+        
+    jsonData["me_combat_cond_array"] = ({ ob_combat_cond(ob) });
+    
+    // 优化4: 使用cached_enemy_list减少重复调用
+    room_obj_list = filter_array(all_inventory(environment(ob)), (: living($1) && $1 != $(ob) :));
+    
+    // 优化5: 简化队友判断逻辑
+    foreach (object room_obj in room_obj_list) 
+    {
+        if (room_obj->is_fighting(ob))
+            continue;
+            
+        foreach (enemy in enemy_list) 
+        {
+            if (!objectp(enemy))
+            {
+                room_obj->remove_killer(ob);
+                continue;
+            }
+            
+            if (enemy->is_fighting(room_obj)) 
+            {
+                jsonData["me_combat_cond_array"] += ({ ob_combat_cond(room_obj) });
+                break;
+            }
+        }
+    }
+    
+    // 优化6: 简化PVE判断
+    is_pve = sizeof(filter_array(enemy_list, (: !playerp($1) :))) > 0;
+    ob->set_temp("combat_is_pve", is_pve);
+    
+    jsonData["enemy_combat_cond_array"] = ob_combat_cond_array(ob);
+    jsonData["medicide_cond_array"] = medicide_cond_array(ob);
+    jsonData["skill_pfm_cond"] = skill_pfm_cond(ob);
+
+    other_buttons += ({ (["name":"逃跑","command":"taopao"]) });
+    jsonData["other"] = other_buttons;
+
+    jsonData["code"] = "战斗页面";
+
+    tell_object(ob,json_encode(jsonData) + "\n");
+}
+
+void players_combat_cond(mixed obs)
+{
+    int i;
+
+    if( !arrayp(obs) || !sizeof(obs) ) return;
+
+    for(i=0; i<sizeof(obs); i++)
+    {
+        if (playerp(obs[i]))
+        {
+            player_combat_cond(obs[i]);
+        }
+
+    }
+
+}
+
+//恢复所有血量和精神，内力
+void recover_all_combat_cond(object ob)
+{
+
+
+    int is_pve = ob->query_temp("combat_is_pve");
+
+    //不是pve战斗，则不恢复
+    if (!is_pve)
+    {
+        return;
+    }
+
+    ob->delete_temp("combat_is_pve");
+
+    //query("zjvip/times")小于1，则不恢复
+    if (ob->query("zjvip/times") < 1)
+    {
+        return;
+    }
+
+    // 如果temp/recover_all_combat_cond_cd大于当前时间，则不恢复
+    if (ob->query_temp("recover_all_combat_cond_cd") > time())
+    {
+        return;
+    }
+
+    ob->set("qi", ob->query("max_qi"));
+    ob->set("eff_qi", ob->query("max_qi"));
+    ob->set("jing", ob->query("max_jing"));
+    ob->set("eff_jing", ob->query("max_jing"));
+
+
+    if (ob->query("neili") < ob->query("max_neili"))
+    {
+        ob->set("neili", ob->query("max_neili"));
+    }
+
+     // 解除所有中毒状态
+    ob->set_temp("nopoison", 3);
+
+    {
+        int cd_time = 60;
+
+        if (is_liming_vip(ob))
+        {
+            cd_time = 30;
+        }
+
+        tell_object(ob, "作为月卡用户，pve战斗结束后已经为您恢复了所有血量、精神、内力、解除中毒状态。【CD:" + cd_time + "秒】\n");
+
+        ob->set_temp("recover_all_combat_cond_cd", time() + cd_time);
+    }
+}
+
+void query_combat_cond(object ob)
+{
+    mapping jsonData = ([]);
+		
+    if (!ob->is_fighting())
+    {
+        jsonData["code"] = "fight_end";
+
+        if (!sizeof(ob->query_enemy()))
+        {
+            recover_all_combat_cond(ob);
+        }
+
+        tell_object(ob,json_encode(jsonData) + "\n"); 
+    }
+    else if (!sizeof(ob->query_enemy()))
+    {
+        jsonData["code"] = "fight_end";
+        recover_all_combat_cond(ob);
+        tell_object(ob,json_encode(jsonData) + "\n");
+    }
+    else
+    {
+
+        jsonData["code"] = "fight_ing";
+        tell_object(ob,json_encode(jsonData) + "\n"); 
+    }
+
+
+}
+
+

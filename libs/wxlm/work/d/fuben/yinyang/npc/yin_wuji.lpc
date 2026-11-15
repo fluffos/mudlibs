@@ -1,0 +1,174 @@
+
+inherit NPC;
+
+void create();
+int do_reward(object me);
+void destroy_fuben();
+void die();
+
+void create()
+{
+    ::create();
+    set_name("阴无极", ({ "yin wuji", "yin", "wuji" }));
+    set("long", @LONG
+阴无极是至阴之地的守护者，周身环绕着淡淡的蓝色光晕，仿佛不食人
+间烟火。他面容清癯，眉宇间透出一股超然物外的气质。据说他精通九
+阴真经，武功深不可测，通晓武学中的至阴玄理。
+LONG );
+    set("title", HIC "阴柔至尊" NOR);
+    set("gender", "男性");
+    set("age", 92);
+    set("no_get", 1);
+    set("shen_type", 1);
+    set("attitude", "aggressive");
+
+    set("str", 40);
+    set("int", 40);
+    set("con", 40);
+    set("dex", 40);
+
+    set("qi", 3000000);
+    set("max_qi", 3000000);
+    set("jing", 1500000);
+    set("max_jing", 1500000);
+    set("neili", 200000);
+    set("max_neili", 200000);
+    set("jiali", 500);
+
+    set("combat_exp", 50000000);
+    
+    // 复制黄裳的技能设定，提升到600级
+    set_skill("unarmed", 600);
+    set_skill("finger", 600);
+    set_skill("claw", 600);
+    set_skill("strike", 600);
+    set_skill("hand", 600);
+    set_skill("cuff", 600);
+    set_skill("parry", 600);
+    set_skill("dodge", 600);
+    set_skill("xinfa", 600);
+    set_skill("force", 600);
+    set_skill("jiuyin-shengong", 600);
+    set_skill("martial-cognize", 600);
+    set_skill("literate", 300);
+
+    map_skill("xinfa", "jiuyin-shengong");
+    map_skill("force", "jiuyin-shengong");
+    map_skill("parry", "jiuyin-shengong");
+    map_skill("unarmed", "jiuyin-shengong");
+    
+    set_temp("apply/attack", 300);
+    set_temp("apply/damage", 300);
+    set_temp("apply/unarmed_damage", 300);
+    set_temp("apply/armor", 300);
+    
+    set("chat_chance_combat", 120);
+    set("chat_msg_combat", ({
+        (: command("perform unarmed.yin") :),
+        (: command("perform parry.zhen") :),
+        (: command("yun powerup") :),
+        (: command("yun recover") :),
+    }));
+    
+    setup();
+    carry_object("/clone/cloth/cloth")->wear();
+}
+
+void init()
+{
+    object me = this_player();
+    
+    ::init();
+    if (interactive(me))
+    {
+        kill_ob(me);
+    }
+}
+
+void die()
+{
+    object *players;
+    object me = this_object();
+    int i;
+    int exp = 100000;        // 基础经验
+    int potential = 50000;   // 基础潜能
+    int start_time;
+    
+    message_vision(HIC "\n$N" HIC "发出一声长叹，蓝色的光晕缓缓消散，化作一缕阴气消逝于无形。\n" NOR, me);
+    message_vision(HIC "\n随着阴无极的死亡，至阴之地开始崩塌，你们必须立即离开！\n" NOR, me);
+    
+    players = filter_array(all_inventory(environment(me)), (: userp($1) :));
+    
+    for (i = 0; i < sizeof(players); i++)
+    {
+        if (players[i]->query_temp("yinyang_path") == "east")
+        {
+            // 获取开始时间
+            start_time = players[i]->query("fuben_yinyang/last_time");
+            
+            tell_object(players[i], HIG "\n恭喜你击败了阴无极，获得了丰厚的奖励！\n" NOR);
+            tell_object(players[i], HIY "你获得了：\n" NOR);
+            tell_object(players[i], HIY "  " + exp + " 点经验\n" NOR);
+            tell_object(players[i], HIY "  " + potential + " 点潜能\n" NOR);
+            
+            // 添加经验和潜能
+            FUBEN_D->add_exp(players[i], exp);
+            players[i]->add("potential", potential);
+            
+            // 标记已获得奖励
+            players[i]->set("new_fuben_api/yinyang_yin_reward", 1);
+            
+            // 记录副本监控日志
+            MONITOR_MASTER->monitor_fuben_log(players[i], "阴无极副本", start_time, time(), potential, exp);
+            
+            {
+                object ob;
+                
+                if (random(2))
+                {
+                    ob = new_bind("/clone/vip/dan_wuyu");
+                    tell_object(players[i], HIY "  一杯" + ob->name() + NOR HIY "！\n" NOR);
+                }
+                else
+                {
+                    ob = new_bind("clone/vip/dan_guiyuan.lpc");
+                    tell_object(players[i], HIY "  一颗" + ob->name() + NOR HIY "！\n" NOR);
+                }
+                ob->move(players[i]);
+            }
+            
+            // 掉落阴无极宝藏
+            {
+                object box;
+                box = new_bind("/clone/baoxiang/yinwuji-baozang");
+                if (box)
+                {
+                    box->move(players[i]);
+                    tell_object(players[i], HIY "  一个" + box->name() + NOR HIY "！\n" NOR);
+                }
+            }
+        }
+        
+        // 清除临时标记
+        players[i]->delete_temp("yinyang_path");
+    }
+    
+    call_out("destroy_fuben", 30);  // 30秒后销毁副本
+    
+    ::die();
+}
+
+void destroy_fuben()
+{
+    object *players;
+    int i;
+    
+    players = filter_array(all_inventory(environment(this_object())), (: userp($1) :));
+    
+    for (i = 0; i < sizeof(players); i++)
+    {
+        tell_object(players[i], HIR "\n至阴之地崩塌，你被传送出副本！\n" NOR);
+        players[i]->move("/d/city/guangchang");
+        tell_object(players[i], "你眼前一花，发现自己已经回到了扬州广场。\n");
+    }
+}

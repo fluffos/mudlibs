@@ -1,0 +1,341 @@
+
+#include <command.h>
+
+#define DUANWU_D "/adm/special_ob/duanwu/duanwu_master"
+
+inherit NPC;
+int do_viewrank(string arg);
+
+void create()
+{
+        set_name("屈原", ({ "qu yuan", "qu", "yuan" }));
+        set("long", "这是一位面容憔悴、形容枯槁的文士，但眼神中依然透着坚毅的光芒。他就是伟大的爱国诗人屈原。");
+        set("gender", "男性");
+        set("age", 47);
+        set("attitude", "peaceful");
+        set("shen_type", 1);
+        set("str", 25);
+        set("int", 35);
+        set("con", 28);
+        set("dex", 25);
+
+        set("max_qi", 800000000);
+        set("max_jing", 5000000000);
+        set("neili", 1000000000);
+        set("max_neili", 10000000000);
+        set("jiali", 20);
+        set("combat_exp", 15000000000000);
+
+        set_skill("force", 600000);
+        set_skill("dodge", 600000);
+        set_skill("parry", 600000);
+        set_skill("unarmed", 600000);
+        set_skill("literate", 200); // 屈原文学造诣高
+
+        set("inquiry", ([
+                "端午节" : "端午节是为了纪念我而设立的节日，感谢后人对我的怀念。",
+                "签到" : popup_comb("端午节艾草辟邪，你可以向我签到领取艾草。",({"签到:qiandao"})),
+                "在线奖励" : popup_comb("端午活动期间，在线时长达到要求即可领取奖励。",({"领取奖励:onlinereward"})),
+                "积分排行" : (: do_viewrank :),
+                // "积分" : (: do_view_myjifen :),
+        ]));
+
+        // 为了让NPC能够被简单地look，通常需要一个setup
+        setup();
+}
+
+void init()
+{
+        add_action("do_qiandao", "qiandao");
+        add_action("do_onlinereward", "onlinereward");
+        add_action("do_viewrank", "viewrank");
+        add_action("do_view_myjifen", "jifen");
+}
+
+// 查看自己的积分
+int do_view_myjifen()
+{
+        object me = this_player();
+        int jifen;
+        
+        if (!me)
+                return 0;
+                
+        jifen = DUANWU_D->query_jifen(me);
+        
+        tell_object(me, popup_title(HIG "【端午活动】" HIY "你当前的积分为：" + jifen + " 分\n" NOR));
+        return 1;
+}
+
+// 查看积分排行榜
+int do_viewrank(string arg)
+{
+        object me = this_player();
+        string *top_ids;
+        string faction;
+        string msg = "";
+        object user;
+        int i, jifen, my_jifen, my_rank = 0;
+        
+        if (!me)
+                return 0;
+                
+        // 获取排行榜前10名
+        top_ids = DUANWU_D->query_jifen_top(10);
+        
+        if (!sizeof(top_ids))
+        {
+                tell_object(me, popup_title(HIG "【端午活动积分排行榜】\n" NOR + 
+                                      "目前还没有玩家获得积分，快去参与活动吧！"));
+                return 1;
+        }
+        
+        msg = HIG "【端午活动积分排行榜】\n" NOR;
+        msg += HIY "排名\t玩家\t\t派系\t\t个人积分\t\t派系积分\n" NOR;
+        msg += "---------------------------------------------------------------\n";
+        
+        for (i = 0; i < sizeof(top_ids); i++)
+        {
+                // 尝试获取玩家对象
+                user = UPDATE_D->global_find_player(top_ids[i]);
+                
+                // 获取玩家派系和积分
+                faction = "未知";
+                if (user)
+                {
+                        faction = DUANWU_D->query_faction(user);
+                }
+                
+                // 从存储中获取积分
+                jifen = DUANWU_D->query_jifen(user || top_ids[i]);
+                
+                // 格式化显示
+                if (user)
+                {
+                        msg += sprintf("%d\t%-10s\t\t%-6s\t\t%4d\t\t\t%3d\n", 
+                                      i + 1, 
+                                      user->query("name"), 
+                                      faction, 
+                                      jifen,
+                                      user->query("duanwu_huodong/zongzi_count")
+                                      );
+                }
+                else
+                {
+                        msg += sprintf("%d\t%s\t%s\t%d\n", 
+                                      i + 1, 
+                                      top_ids[i], 
+                                      faction, 
+                                      jifen);
+                }
+                
+                // 如果是当前玩家，记录排名
+                if (user == me || top_ids[i] == me->query("id"))
+                {
+                        my_rank = i + 1;
+                }
+        }
+        
+        // 显示玩家自己的排名
+        my_jifen = DUANWU_D->query_jifen(me);
+        
+        if (my_jifen > 0)
+        {
+                if (my_rank == 0)
+                {
+                        // 玩家不在前10名
+                        msg += "\n" + HIW "你的积分：" + my_jifen + "，排名未进入前10。" NOR;
+                }
+                else
+                {
+                        // 玩家在前10名
+                        msg += "\n" + HIW "恭喜！你的积分：" + my_jifen + "，当前排名第" + chinese_number(my_rank) + "名！" NOR;
+                }
+        }
+        else
+        {
+                msg += "\n" + HIW "你还没有获得积分，快去参与活动吧！" NOR;
+        }
+        
+        tell_object(me, popup_comb(msg, 
+                              ({
+                                  "查询我的积分:jifen",
+                                  "返回:look qu yuan"
+                              })));
+        
+        return 1;
+}
+
+int do_qiandao(string arg)
+{
+        object me = this_player();
+        int last_time, now_time;
+        string time_str;
+        int ai_cao;
+
+        if (!me)
+                return 0;
+                
+        // 获取当前时间和上次签到时间
+        now_time = time();
+        last_time = me->query("duanwu_huodong/last_qiandao");
+        
+        // 使用is_same_day函数检查是否已经在今天签到过
+        if (last_time && is_same_day(last_time, now_time))
+        {
+                time_str = CHINESE_D->chinese_date(last_time);
+                tell_object(me, name() + "说道：" + RANK_D->query_respect(me) + 
+                            "，你今天已经签到过了，请明天再来。\n");
+                return 1;
+        }
+        
+        // 更新签到时间
+        me->set("duanwu_huodong/last_qiandao", now_time);
+        
+        // 添加艾草属性，注意艾草不是实际物品
+        me->add("duanwu_huodong/obj/ai_cao", 1);
+        
+        // 获取当前艾草数量用于显示
+        ai_cao = me->query("duanwu_huodong/obj/ai_cao");
+        
+        message_vision(HIY "$N" HIY "向$n" HIY "行了一礼，恭敬地签到。\n" NOR, me, this_object());
+        tell_object(me, name() + "说道：" + RANK_D->query_respect(me) + 
+                    "，感谢你前来签到，我已为你送上一株艾草。\n" +
+                    HIG "【系统提示】：你当前拥有" + chinese_number(ai_cao) + "株艾草。\n" NOR);
+                    
+        return 1;
+}
+
+int do_onlinereward(string arg)
+{
+        object me = this_player();
+        int onlinetime, reward_stage;
+        int exp_reward, pot_reward, ai_cao_reward;
+        string msg = "";
+        int last_reward_time, now_time;
+        
+        if (!me)
+                return 0;
+                
+        // 获取当前时间和上次领取奖励时间
+        now_time = time();
+        last_reward_time = me->query("duanwu_huodong/last_online_reward");
+        
+        // 获取玩家当前在线时间（分钟）
+        onlinetime = me->query("online_time") / 60;
+        
+        // 获取玩家已领取的奖励阶段（0表示未领取，1表示已领取30分钟奖励，依此类推）
+        reward_stage = me->query("duanwu_huodong/online_reward_stage");
+        if (!reward_stage) reward_stage = 0;
+        
+        // 如果是新的一天，重置奖励状态
+        if (last_reward_time && !is_same_day(last_reward_time, now_time))
+        {
+                me->delete("duanwu_huodong/online_reward_stage");
+                reward_stage = 0;
+                tell_object(me, HIC "【系统提示】：新的一天开始了，你可以重新领取在线奖励！\n" NOR);
+        }
+        else if (last_reward_time && reward_stage >= 3)
+        {
+                // 如果在同一天已经领取了所有奖励，提示玩家明天再来
+                tell_object(me, name() + "说道：" + RANK_D->query_respect(me) + 
+                          "，你今天已经领取了所有在线奖励，请明天再来。\n");
+                return 1;
+        }
+        
+        // 检查在线时间是否足够
+        if (onlinetime < 30)
+        {
+                tell_object(me, name() + "说道：" + RANK_D->query_respect(me) + 
+                          "，你的在线时间不足30分钟，无法领取奖励。\n" +
+                          "当前在线时间：" + onlinetime + "分钟\n");
+                return 1;
+        }
+        
+        exp_reward = 0;
+        pot_reward = 0;
+        ai_cao_reward = 0;
+        
+        // 根据在线时间和已领取阶段决定可领取的奖励
+        // 一次性给予所有未领取阶段的累计奖励
+        if (onlinetime >= 30 && reward_stage < 1)
+        {
+                // 第一阶段奖励
+                exp_reward += 2000;
+                pot_reward += 1000;
+                ai_cao_reward += 1;
+                msg += HIG "第一阶段奖励(30分钟)：\n" +
+                       "经验：2000\n" +
+                       "潜能：1000\n" +
+                       "艾草：1株\n" NOR;
+        }
+        
+        if (onlinetime >= 60 && reward_stage < 2)
+        {
+                // 第二阶段奖励
+                exp_reward += 5000;
+                pot_reward += 2500;
+                ai_cao_reward += 1;
+                msg += HIG "第二阶段奖励(60分钟)：\n" +
+                       "经验：5000\n" +
+                       "潜能：2500\n" +
+                       "艾草：1株\n" NOR;
+        }
+        
+        if (onlinetime >= 120 && reward_stage < 3)
+        {
+                // 第三阶段奖励
+                exp_reward += 10000;
+                pot_reward += 5000;
+                ai_cao_reward += 1;
+                msg += HIG "第三阶段奖励(120分钟)：\n" +
+                       "经验：10000\n" +
+                       "潜能：5000\n" +
+                       "艾草：1株\n" NOR;
+        }
+        
+        // 如果有奖励需要发放
+        if (exp_reward > 0 || pot_reward > 0 || ai_cao_reward > 0)
+        {
+                // 更新玩家的经验、潜能和艾草
+                me->add("combat_exp", exp_reward);
+                me->add("potential", pot_reward);
+                me->add("duanwu_huodong/obj/ai_cao", ai_cao_reward);
+                
+                // 更新玩家的奖励阶段
+                if (onlinetime >= 120)
+                        me->set("duanwu_huodong/online_reward_stage", 3);
+                else if (onlinetime >= 60)
+                        me->set("duanwu_huodong/online_reward_stage", 2);
+                else if (onlinetime >= 30)
+                        me->set("duanwu_huodong/online_reward_stage", 1);
+                
+                // 更新上次领取奖励的时间
+                me->set("duanwu_huodong/last_online_reward", now_time);
+                
+                message_vision(HIY "$N" HIY "从$n" HIY "处领取了在线奖励。\n" NOR, me, this_object());
+                tell_object(me, name() + "说道：" + RANK_D->query_respect(me) + 
+                          "，感谢你对端午活动的支持！\n");
+                
+                // 显示总的奖励汇总
+                tell_object(me, HIC "【奖励汇总】\n" +
+                          "经验：" + exp_reward + "\n" +
+                          "潜能：" + pot_reward + "\n" +
+                          "艾草：" + ai_cao_reward + "株\n" NOR);
+                
+                // 如果已达到最高阶段，重置在线时间，但不重置奖励状态（每天只能领一次所有奖励）
+                if (onlinetime >= 120 || me->query("duanwu_huodong/online_reward_stage") >= 3)
+                {
+                        me->set("online_time", 0);
+                        tell_object(me, HIC "【系统提示】：你已领取所有阶段奖励，在线时间已重置。明天可再次领取奖励！\n" NOR);
+                }
+        }
+        else
+        {
+                // 已领取当前可获得的所有奖励
+                tell_object(me, name() + "说道：" + RANK_D->query_respect(me) + 
+                          "，你已经领取了当前可获得的所有奖励，请继续在线以获得更多奖励。\n");
+        }
+        
+        return 1;
+}

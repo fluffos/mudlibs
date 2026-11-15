@@ -1,0 +1,775 @@
+/**
+ * @brief master.c - 游戏核心主控对象
+ * @details 这个文件定义了 MUD 驱动程序所需的核心接口和回调函数，
+ *          负责处理连接、对象编译、错误处理、权限验证等关键功能。
+ * @author MUDOS (基础结构), Lu dexiang (修改与注释)
+ * @date YYYY-MM-DD (最后修改日期)
+ */
+#pragma optimize
+
+
+#include <config.h>
+#include <localtime.h>
+
+/**
+ * @brief 处理新的玩家连接
+ * @details 当有新玩家连接到游戏时，驱动程序会调用此函数。
+ *          它负责创建并返回一个新的登录对象 (LOGIN_OB)。
+ * @return object 新创建的登录对象，如果创建失败则返回 0 并销毁自身。
+ */
+object connect()
+{
+	object login_ob;
+	mixed err;
+   
+	err = catch(login_ob = new(LOGIN_OB));
+
+	if (err)
+	{
+		write("现在有人正在修改使用者连线部份的程式，请待会再来。\n");
+		write(err);
+		destruct(this_object());
+	}
+	return login_ob;
+}
+
+/**
+ * @brief 编译虚拟对象
+ * @details 用于加载 MUDOS 的"虚拟"对象。
+ *          驱动程序在尝试加载一个不存在的物理文件时调用此函数。
+ *          本函数尝试通过 VIRTUAL_D 处理虚拟路径，并特殊处理 /clone/baoshi/ 路径下的对象。
+ * @param string file 驱动程序尝试加载的文件路径。
+ * @return object 如果 mudlib 希望将某个对象与文件名关联，则返回该对象；否则返回 0。
+ */
+mixed compile_object(string file)
+{
+	object daemon;
+
+	// 特殊处理宝石对象，交由 base_handle 处理
+	if (strsrch(file, "/clone/baoshi/") != -1)
+    {
+        return call_other("/clone/baoshi/base_handle", "get_gem_obj", file);
+    }
+
+    // 尝试通过 VIRTUAL_D 处理虚拟对象
+	if (daemon = find_object(VIRTUAL_D))
+		return daemon->compile_object(file);
+	else
+		return 0;
+}
+
+/**
+ * @brief 处理驱动程序崩溃
+ * @details 当驱动程序遇到段错误、总线错误等严重问题时调用此函数。
+ *          它会记录崩溃信息，并尝试保存所有在线玩家的数据（如果开启了 INSTALL_CRASH_SAVE）。
+ * @param string error 驱动程序报告的错误信息。
+ * @param object command_giver 引发崩溃时正在执行命令的玩家对象 (可能为 0)。
+ * @param object current_object 引发崩溃时正在执行代码的对象 (可能为 0)。
+ * @note 此函数是 protected，只能被驱动程序或 master 对象自身调用。
+ */
+protected void crash(string error, object command_giver, object current_object)
+{
+#if INSTALL_CRASH_SAVE
+	object ob;
+	string dump_dir;
+	string user;
+	string flogin, fuser;
+	mixed lt;
+#endif
+
+	efun::shout("系统核心发出一声惨叫：哇—哩—咧—\n");
+	efun::shout("系统核心告诉你：要当机了，自己保重吧！\n");
+	log_file("nosave/CRASHES", MUD_NAME + " crashed on: " + ctime(time()) +
+		 ", error: " + error + "\n");
+	if (command_giver)
+		log_file("nosave/CRASHES",
+			 sprintf( "this_player: %O\n", command_giver));
+	if (current_object)
+		log_file("nosave/CRASHES",
+			 sprintf( "this_object: %O\n", current_object));
+
+#if INSTALL_CRASH_SAVE
+    // 获取当前时间并构造备份目录路径
+	lt = localtime(time());
+	lt[LT_MON]++;
+	dump_dir = sprintf(DUMP_DIR "%d-%d-%d/", lt[LT_YEAR], lt[LT_MON], lt[LT_MDAY]);
+
+    // 遍历所有在线玩家
+	foreach (ob in users())
+	{
+		reset_eval_cost();
+
+		// 获取玩家 ID
+		user = geteuid(ob);
+		if (! stringp(user))
+			continue;
+
+        // 构造玩家数据文件路径
+		flogin = "login/" + user[0..0] + "/" + user + __SAVE_EXTENSION__;
+		fuser  = "user/"  + user[0..0] + "/" + user + __SAVE_EXTENSION__;
+
+        // 如果玩家数据文件存在，则备份到 dump 目录
+		if (file_size(DATA_DIR + flogin) > 0 &&
+		    file_size(DATA_DIR + fuser) > 0)
+		{
+			assure_file(dump_dir + flogin); // 确保备份目录存在
+			assure_file(dump_dir + fuser);
+			cp(DATA_DIR + flogin, dump_dir + flogin);
+			cp(DATA_DIR + fuser,  dump_dir + fuser);
+			log_file("nosave/dump",
+				 sprintf("backup user(%s) to dump\n", user));
+		}
+        // 尝试保存玩家当前状态
+		ob->save();
+	}
+#endif
+}
+
+/**
+ * @brief 读取并更新配置文件列表
+ * @details 读取指定的列表文件，忽略以 '#' 开头的行和空行。
+ *          通常用于读取 preload 或 domains 等配置文件。
+ * @param string file 要读取的文件路径。
+ * @return string* 包含文件中有效行的字符串数组。
+ * @note 此函数必须声明为 protected 以防止安全漏洞。
+ */
+protected string *update_file(string file)
+{
+	string *list;
+	string str;
+	int i;
+
+	str = read_file(file);
+	if (!str)
+		return ({});
+
+	list = explode(str, "\n");
+	for (i = 0; i < sizeof(list); i++)
+		if (list[i][0] == '#') // 忽略注释行
+			list[i] = 0;
+
+	list -= ({ 0 }); // 移除空元素
+	return list;
+}
+
+/**
+ * @brief MUD 启动时最后调用的函数
+ * @details 驱动程序在加载完所有基本对象后调用此函数。
+ *          它负责读取 preload 配置文件并返回需要预加载的对象列表。
+ * @param int load_empty 驱动程序传递的标志，通常未使用。
+ * @return string* 需要预加载的文件路径列表。
+ */
+string *epilog(int load_empty)
+{
+	string *items;
+
+	items = update_file(CONFIG_DIR + "preload");
+	return items;
+}
+
+/**
+ * @brief 预加载指定的文件
+ * @details 尝试加载一个对象到内存中，如果对象已加载或文件不存在则不执行任何操作。
+ *          通常由 epilog 返回的列表驱动调用。
+ * @param string file 需要预加载的文件路径 (不含 .c 后缀)。
+ */
+void preload(string file)
+{
+	if (objectp(find_object(file))) // 对象已加载
+		return;
+
+	if (file_size(file + ".lpc") == -1) // 源文件不存在
+		return;
+
+	catch(load_object(file)); // 尝试加载，忽略错误
+}
+
+
+/**
+ * @brief 记录编译时错误或警告信息
+ * @details 驱动程序在编译 LPC 代码时遇到错误或警告时调用此函数。
+ *          将错误信息写入 log_error 文件，警告信息写入 log 文件。
+ *          同时会调用 LINT_D 记录编译错误，并可能通知当前玩家。
+ * @param string file 发生错误的文件路径。
+ * @param string message 错误或警告的具体信息。
+ */
+void log_error(string file, string message)
+{
+    if (strsrch(message, "Warning") == -1) // 判断是错误还是警告
+    {
+        // 记录错误日志
+        efun::write_file(LOG_DIR + "log_error", "-------------------------------------------------------------------\n" + message);
+
+        // 如果是玩家触发的编译，则通知玩家
+		if (this_player(1))
+		{
+			efun::write("-------------------------------------------------------------------\n" + "编译时段错误：" + replace_string(message, "\"", "“")+"\n");
+		}
+
+        // 调用 LINT_D 记录错误
+		call_other(LINT_D, "set_err", file, replace_string(message, "\"", "“"));
+
+    }
+    else
+    {
+        // 记录警告日志 (如果需要)
+        // efun::write_file(LOG_DIR + "log", message);
+        // call_other(LINT_D, "set_err", file, replace_string(message, "\"", "“"));
+    }
+}
+
+
+/**
+ * @brief 保存玩家的 ed 编辑器设置
+ * @details ed 编辑器调用此函数来保存指定玩家的个性化设置。
+ *          设置保存在玩家家目录下的 .edrc 文件中。
+ * @param object who 需要保存设置的玩家对象。
+ * @param int code 代表编辑器设置的整数代码。
+ * @return int 如果保存成功返回 1，否则返回 0。
+ */
+int save_ed_setup(object who, int code)
+{
+	string file;
+  
+	if (! intp(code))
+		return 0;
+
+	file = user_path(getuid(who)) + ".edrc";
+	rm(file); // 先删除旧文件
+	return write_file(file, code + "");
+}
+
+/**
+ * @brief 读取玩家的 ed 编辑器设置
+ * @details ed 编辑器调用此函数来读取指定玩家的个性化设置。
+ * @param object who 需要读取设置的玩家对象。
+ * @return int 返回代表编辑器设置的整数代码，如果文件不存在或读取失败则返回 0。
+ */
+int retrieve_ed_setup(object who)
+{
+	string file;
+	    int code;
+  
+	file = user_path(getuid(who)) + ".edrc";
+	if (file_size(file) <= 0)
+		return 0;
+
+	sscanf(read_file(file), "%d", code);
+	return code;
+}
+
+/**
+ * @brief 处理对象环境被销毁的情况
+ * @details 当一个对象（通常是房间）被销毁时，驱动程序会对该环境中
+ *          的每一个对象调用此函数。主要用于处理玩家所在环境消失的情况，
+ *          将玩家移动到安全地点 (VOID_OB)。
+ * @param object ob 环境中存在的对象。
+ */
+void destruct_env_of(object ob)
+{
+	if (! userp(ob)) return; // 只处理玩家对象
+	tell_object(ob, "你所存在的空间被毁灭了。\n");
+	ob->move(VOID_OB);
+}
+
+/**
+ * @brief 将相对路径转换为绝对路径 (用于 ed)
+ * @details ed 编辑器调用此函数来解析文件路径。
+ *          它会根据玩家当前的 CWD (当前工作目录) 来解析相对路径。
+ * @param string file 需要解析的文件路径 (可能为相对路径)。
+ * @return string 解析后的绝对路径。
+ */
+string make_path_absolute(string file)
+{
+	file = resolve_path((string)this_player()->query("cwd"), file);
+	return file;
+}
+
+/**
+ * @brief 获取 ed 编辑器中断时的自动保存文件名
+ * @details 当玩家在 ed 编辑器中断开连接时，驱动程序调用此函数
+ *          来决定自动保存的文件名，以避免覆盖原始文件。
+ * @param string fname 原始文件名。
+ * @return string 附加了时间戳的自动保存文件名。
+ */
+string get_save_file_name(string fname)
+{
+	return fname + "." + time();
+}
+
+/**
+ * @brief 获取 ROOT_UID
+ * @details 返回系统中定义的 ROOT_UID。
+ * @return string ROOT_UID 字符串。
+ */
+string get_root_uid()
+{
+	return ROOT_UID;
+}
+
+/**
+ * @brief 获取 BACKBONE_UID
+ * @details 返回系统中定义的 BACKBONE_UID。
+ * @return string BACKBONE_UID 字符串。
+ */
+string get_bb_uid()
+{
+	return BACKBONE_UID;
+}
+
+/**
+ * @brief 获取文件对应的创建者 ID
+ * @details 代理调用 SIMUL_EFUN_OB 中的同名函数。
+ * @param string str 文件路径。
+ * @return string 创建者 ID。
+ */
+string creator_file(string str)
+{
+	return (string)call_other(SIMUL_EFUN_OB, "creator_file", str);
+}
+
+/**
+ * @brief 获取文件对应的域 (Domain) ID
+ * @details 代理调用 SIMUL_EFUN_OB 中的同名函数。
+ * @param string str 文件路径。
+ * @return string 域 ID。
+ */
+string domain_file(string str)
+{
+	return (string)call_other(SIMUL_EFUN_OB, "domain_file", str);
+}
+
+/**
+ * @brief 获取文件对应的作者 ID
+ * @details 代理调用 SIMUL_EFUN_OB 中的同名函数。
+ * @param string str 文件路径。
+ * @return string 作者 ID。
+ */
+string author_file(string str)
+{
+	return (string)call_other(SIMUL_EFUN_OB, "author_file", str);
+}
+
+/**
+ * @brief 生成标准格式的运行时错误追踪信息 (JSON 格式)
+ * @details 将驱动程序提供的错误信息映射表格式化为易于阅读和分析的 JSON 字符串。
+ *          包含了错误类型、信息、位置、对象、玩家信息、调用堆栈等。
+ * @param mapping error 驱动程序传递的错误信息映射表。
+ * @param int caught 标记错误是否被 catch 语句捕获 (1 表示是，0 表示否)。
+ * @param int count 此错误发生的次数 (由 error_handler 传入)。
+ * @return string 格式化后的 JSON 错误追踪信息字符串。
+ */
+string standard_trace(mapping error, int caught, int count)
+{
+        int i, s;
+        string res, prog;
+        object me;
+        mixed *cmds;
+		mapping error_info;
+
+		error_info = ([
+			"错误类型": "执行时段错误",
+			"错误信息": error["error"],
+			"程序": error["program"],
+			"行号": error["line"],
+			"物件": error["object"] ? file_name(error["object"]) : "未知物件",
+			"拦截": caught ? "是" : "否",
+            "触发次数": count // 添加触发次数信息
+		]);
+        // 如果错误发生在玩家身上,记录玩家相关信息
+        if (!error["object"] && (me = this_player())) {
+
+				error_info["玩家"] = sprintf("%s(%s) - %O  所在环境：%O\n",
+								me->name(1), me->query("id"), me, environment(me));
+                
+                // 记录玩家可用指令
+                cmds = me->query_commands();
+                if (sizeof(cmds)) {
+						error_info["指令"] = ({
+
+						});
+
+						for (i = 0; i < sizeof(cmds); i++) {
+							error_info["指令"] += ({
+								sprintf("%-15s  %2d %O\n",
+										cmds[i][0], cmds[i][1], cmds[i][2])
+							});
+						}
+                }
+
+                // 记录最后执行的指令
+				error_info["最后执行的指令"] = me->query_last_input();
+        }
+
+        // 处理错误追踪信息
+        s = sizeof(error["trace"]);
+        i = 0;
+        
+        // 过滤聊天和消息相关的错误追踪 (避免刷屏)
+        if (!this_player(1) && this_player()) {
+                for (; i < s; i++) {
+                        prog = "/" + error["trace"][i]["program"];
+                        if (!sscanf(prog, "/cmds/chat/%*s") &&
+                            prog != "/clone/user/chatter.lpc" &&
+                            prog != F_COMMAND)
+                                break;
+                }
+
+				error_info["消息相关追踪"] = prog;
+        }
+
+
+		error_info["追踪"] = ({});
+        // 记录调用堆栈
+        for (; i < s; i++) {
+
+				mapping trace_err;
+
+				trace_err = ([
+					"呼叫程序": error["trace"][i]["program"],
+					"呼叫函数": error["trace"][i]["function"],
+					"呼叫行号": error["trace"][i]["line"],
+				]);
+
+				if (error["trace"][i]["object"]) {
+					trace_err["呼叫物件"] = file_name(error["trace"][i]["object"]);
+				}
+
+				// 蓝图对象还是复制对象
+				if (error["trace"][i]["object"] && clonep(error["trace"][i]["object"])) {
+					trace_err["对象类型"] = "复制对象";
+				} else {
+					trace_err["对象类型"] = "蓝图对象";
+				}
+
+				error_info["追踪"] += ({ trace_err });
+        }
+
+		res = json_encode(error_info);
+		res = json_format(res);
+		res += "\n";
+		res = "-------------------------------------------------------------------\n" + res;
+        return res;
+}
+
+/**
+ * @brief MUDLib 的运行时错误处理器
+ * @details 当游戏运行时发生 LPC 错误时，驱动程序会调用此函数。
+ *          它负责缓存错误、记录日志、通知玩家和巫师，并与 LINT_D 交互。
+ *          对于首次出现的错误，会记录详细信息并通知 LINT_D；对于重复错误，
+ *          仅增加计数并在 debug 频道提示。
+ * @param mapping error 驱动程序传递的错误信息映射表。
+ * @param int caught 标记错误是否被 catch 语句捕获 (1 表示是，0 表示否)。
+ * @return string 返回格式化的错误追踪信息 (对于首次错误) 或重复错误标识。
+ */
+string error_handler(mapping error, int caught)
+{
+    object lint_d;
+
+    lint_d = find_object(LINT_D);
+    if (lint_d)
+    {
+        // 将错误处理委托给 LINT_D
+        return lint_d->handle_runtime_error(error, caught);
+    }
+    else
+    {
+        // LINT_D 未加载时的备用处理
+        string fallback_trace = standard_trace(error, caught, 1); // 假设次数为 1
+        string log_msg = "LINT_D not found! Fallback log:\n" + fallback_trace;
+        
+        // 尝试写入日志
+        efun::write_file(LOG_DIR + "debug.log", log_msg);
+        
+        // 尝试通知玩家
+        if (this_player(1)) 
+        {
+            tell_object(this_player(1), "LINT_D 未加载，错误处理可能不完整。\n" + replace_string(fallback_trace, "\"", "“"));
+        }
+        else if (this_player())
+        {
+             if(wizardp(this_player())) 
+                tell_object(this_player(), "LINT_D 未加载，错误处理可能不完整。\n" + replace_string(fallback_trace, "\"", "“"));
+        }
+        
+        return fallback_trace;
+    }
+}
+
+/**
+ * @brief 验证一个对象是否可以 shadow 另一个对象
+ * @details 控制 shadow() efun 的使用权限。
+ *          只有 ROOT_UID 或位于 /shadow/ 目录下的对象可以 shadow 其他对象。
+ * @param object ob 被尝试 shadow 的对象。
+ * @return int 如果允许 shadow 返回 1，否则返回 0。
+ */
+int valid_shadow(object ob)
+{
+	object pre;
+
+	pre = previous_object(); // 获取调用 shadow() 的对象
+	if (geteuid(pre) == ROOT_UID ||
+	    sscanf(file_name(pre), "/shadow/%*s"))
+	{
+		return 1; // 允许
+	}
+
+    // 记录非法 shadow 尝试
+	log_file("shadow", sprintf("%O try to shadow %O failed.\n", pre, ob));
+	return 0; // 不允许
+}
+
+/**
+ * @brief 验证 simul_efun 是否可以被 efun:: 前缀覆盖
+ * @details 此函数在对象编译时被驱动程序调用，控制哪些 simul_efun
+ *          可以被同名的 efun 覆盖 (通过 `efun::name()` 调用原始 efun)。
+ * @param string file 尝试覆盖 simul_efun 的文件路径。
+ * @param string name 被尝试覆盖的 simul_efun 名称。
+ * @return int 如果允许覆盖返回 1，否则返回 0。
+ * @note 特殊规则：
+ *         - SIMUL_EFUN_OB 或 MASTER_OB 可以覆盖任何 simul_efun。
+ *         - move_object 只能由 F_MOVE 或 F_COMMAND 定义。
+ *         - destruct 只能由 /adm/simul_efun/ 下的文件定义。
+ */
+int valid_override( string file, string name )
+{
+	// simul_efun 或 master 自身总是有权限覆盖
+	if (file == SIMUL_EFUN_OB || file == MASTER_OB)
+		return 1;
+
+	// 强制使用 F_MOVE 或 F_COMMAND 中的 move_object
+	if ((name == "move_object") && file != F_MOVE && file != F_COMMAND)
+		return 0;
+
+    // 限制 destruct 的重载
+	if ((name == "destruct") && ! sscanf(file, "/adm/simul_efun/%s", file))
+		return 0;
+
+	// 其他 simul_efun 默认允许覆盖 (可根据需要添加更多保护)
+	return 1;
+}
+
+/**
+ * @brief 验证一个对象是否可以设置其 euid
+ * @details 控制 seteuid() efun 的使用权限。
+ *          实际的验证逻辑委托给 SECURITY_D 执行。
+ * @param object ob 尝试设置 euid 的对象。
+ * @param string str 尝试设置的目标 euid。
+ * @return int 如果允许设置返回 1，否则返回 0。
+ */
+int valid_seteuid(object ob, string str)
+{
+	if (find_object(SECURITY_D))
+		return (int)SECURITY_D->valid_seteuid( ob, str );
+	return 1; // 默认允许 (如果 SECURITY_D 不存在)
+}
+
+/**
+ * @brief 验证 socket 相关 efun 的使用权限
+ * @details 控制 socket_create, socket_bind, socket_listen, socket_accept,
+ *          socket_connect, socket_write, socket_close, socket_release,
+ *          socket_acquire, socket_address, socket_status 等 efun 的调用。
+ * @param object eff_user 发起调用的对象的有效用户对象。
+ * @param string fun 被调用的 socket 函数名称。
+ * @param mixed *info 相关参数数组 (具体内容取决于 fun)。
+ * @return int 如果允许调用返回 1，否则返回 0。
+ * @note 当前实现简单地允许所有调用，实际应用中应根据需要添加更严格的权限控制。
+ */
+int valid_socket(object eff_user, string fun, mixed *info)
+{
+	return 1;
+}
+
+/**
+ * @brief 验证一个 LPC->C 编译的对象是否可以使用内联汇编 (asm { })
+ * @details 控制内联汇编的使用权限。
+ * @param string file 包含内联汇编的代码文件路径。
+ * @return int 如果允许使用返回 1，否则返回 0。
+ * @note 当前实现允许所有文件使用，实际应用中可能需要限制。
+ */
+int valid_asm(string file)
+{
+	return 1;
+}
+
+/**
+ * @brief 验证一个文件是否允许被编译
+ * @details 控制 load_object() 或 clone_object() 是否可以编译指定文件。
+ * @param string file 尝试编译的文件路径。
+ * @return int 如果文件有效且允许编译返回 1，否则返回 0。
+ * @note 使用 file_valid() 检查文件路径的有效性。
+ */
+int valid_compile(string file)
+{
+	return file_valid(file) == 1;
+}
+
+/**
+ * @brief 验证是否允许使用 set_hide() efun
+ * @details 控制隐藏对象或查看隐藏对象的能力。
+ * @param object who 调用 set_hide() 的对象。
+ * @return int 如果允许使用返回 1，否则返回 0。
+ * @note 当前实现允许所有对象使用。
+ */
+int valid_hide(object who)
+{
+	return 1;
+}
+
+/**
+ * @brief 验证一个由驱动程序加载的对象是否应该存在
+ * @details 控制哪些对象可以在加载后继续存在。
+ *          主要用于确保 clone出来的对象必须继承 F_MOVE。
+ * @param object ob 被加载的对象。
+ * @return int 如果对象有效允许存在返回 1，否则返回 0。
+ */
+int valid_object(object ob)
+{
+    // 蓝图对象总是有效的
+    // clone 对象必须继承 F_MOVE (具备移动能力)
+	return (! clonep(ob)) || inherits(F_MOVE, ob);
+}
+
+/**
+ * @brief 验证是否允许使用 link() efun 创建硬链接
+ * @details 控制文件系统硬链接的创建权限。
+ * @param string original 原始文件路径。
+ * @param string reference 链接文件路径。
+ * @return int 如果允许创建返回 1，否则返回 0。
+ * @note 当前实现禁止创建任何硬链接。
+ */
+int valid_link(string original, string reference)
+{
+	return 0;
+}
+
+/**
+ * @brief 验证一个对象是否可以保存其二进制镜像
+ * @details 控制 save_binary() efun 的使用权限。
+ * @param string filename 尝试保存的二进制文件名。
+ * @return int 如果允许保存返回 1，否则返回 0。
+ * @note 当前实现允许所有对象保存二进制文件。
+ */
+int valid_save_binary(string filename)
+{
+	return 1;
+}
+
+/**
+ * @brief 验证写文件权限
+ * @details 控制 write_file(), rm(), rmdir(), mkdir(), save_object() 等
+ *          涉及文件写入或修改的操作权限。
+ *          实际的验证逻辑委托给 SECURITY_D 执行。
+ * @param string file 目标文件路径。
+ * @param mixed user 发起调用的对象或用户标识。
+ * @param string func 调用函数名称 (如 "write_file")。
+ * @return int 如果允许写入返回 1，否则返回 0。
+ */
+int valid_write(string file, mixed user, string func)
+{
+	object ob;
+
+	if (ob = find_object(SECURITY_D))
+		return (int)ob->valid_write(file, user, func);
+
+	return 0; // 默认禁止 (如果 SECURITY_D 不存在)
+}
+
+/**
+ * @brief 验证读文件权限
+ * @details 控制 read_file(), file_size(), get_dir(), restore_object(),
+ *          file_stat() 等涉及文件读取的操作权限。
+ *          实际的验证逻辑委托给 SECURITY_D 执行。
+ * @param string file 目标文件路径。
+ * @param mixed user 发起调用的对象或用户标识。
+ * @param string func 调用函数名称 (如 "read_file")。
+ * @return int 如果允许读取返回 1，否则返回 0。
+ */
+int valid_read(string file, mixed user, string func)
+{
+	object ob;
+
+	if (ob = find_object(SECURITY_D))
+		return (int)ob->valid_read(file, user, func);
+
+	return 1; // 默认允许 (如果 SECURITY_D 不存在)
+}
+
+/**
+ * @brief 获取对象的名称 (如果对象存在)
+ * @details 安全地获取对象的名称，避免因对象不存在而出错。
+ * @param object ob 需要获取名称的对象。
+ * @return string 如果对象存在，返回其名称；否则返回 0。
+ */
+string object_name(object ob)
+{
+	if (ob) return ob->name();
+    // 如果 ob 为 0，隐式返回 0
+}
+
+/**
+ * @brief master 对象创建时的初始化函数
+ * @details 当 master 对象首次加载时调用。
+ */
+void create()
+{
+	write("master: loaded successfully.\n");
+    // 可以在这里添加更多的初始化逻辑
+}
+
+/**
+ * @brief 检查并预加载守护进程 (Daemons)
+ * @details 读取 preload 列表并尝试加载其中定义的所有守护进程。
+ *          通常在游戏启动或需要重新加载守护进程时调用。
+ */
+void check_daemons()
+{
+	string *sp;
+	int i;
+
+	sp = epilog(0); // 获取 preload 列表
+	if (! sp) return;
+
+    // 遍历列表并预加载每个文件
+	for (i = 0; i < sizeof(sp); i++)
+		if (stringp(sp[i])) preload(sp[i]);
+}
+
+/**
+ * @brief 验证 efun::bind() 的合法性
+ * @details 控制一个对象是否可以将一个函数绑定到另一个对象上。
+ *          实际的验证逻辑委托给 SECURITY_D 执行。
+ * @param object binder 发起绑定的对象。
+ * @param object old_owner 函数当前绑定的对象。
+ * @param object new_owner 尝试将函数绑定到的新对象。
+ * @return int 如果允许绑定返回 1，否则返回 0。
+ */
+int valid_bind(object binder, object old_owner, object new_owner)
+{
+	object ob;
+
+	if (ob = find_object(SECURITY_D))
+		return (int)ob->valid_bind(binder, old_owner, new_owner);
+
+	return 1; // 默认允许 (如果 SECURITY_D 不存在)
+}
+
+
+/**
+ * @brief 验证数据库操作的合法性
+ * @details 控制数据库相关 efun (如 db_connect, db_close, db_exec 等) 的使用。
+ *          特别地，当 func 为 "connect" 时，应返回数据库密码。
+ * @param object caller 发起数据库操作的对象。
+ * @param string func 被调用的数据库函数名称。
+ * @param mixed *info 相关参数数组。
+ * @return mixed 如果 func 是 "connect"，返回数据库密码 (string)；
+ *               对于其他合法的数据库操作，返回 1 (int)；
+ *               如果操作非法，返回 0 (int)。
+ */
+mixed valid_database(object caller, string func, mixed *info)
+{
+    if (func == "connect")
+        return "Asd123___"; // 返回 mysql 数据库密码
+    else
+        return 1; // 允许其他数据库操作
+}

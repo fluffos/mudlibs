@@ -1,0 +1,209 @@
+inherit ITEM;
+#include "ganwu_tu.h"
+int process_ganwu(object me);
+int do_xunlu(string arg);
+void execute_walk(object me, string where);
+void create()
+{
+	set_name(HIY "感悟图" NOR, ({ "ganwu tu" }));
+	set("long", "一张启灵大师给予的感悟图。\n");
+	set("unit", "张");
+	set("value", 10);
+	set("only_do_effect", 1);
+	set("weight", 10);
+	set("action_list",([
+		"自动寻路":"xunlu",
+	])
+	);
+	setup();
+}
+
+
+int do_xunlu(string arg)
+{
+    object me = this_player();
+    string where, walk_cmd;
+
+    if (me->is_busy())
+        return notify_fail("你正忙着呢。\n");
+
+    if (!query("where"))
+        return notify_fail("感悟图上没有标注任何地点。\n");
+
+    where = query("where");
+    walk_cmd = room_place2[query("map")];
+
+	// if (! environment(me)->query("outdoors")&& !wizardp(me) ) 
+	// return notify_fail("在房间里不能乱跑！\n");
+
+    if (!walk_cmd)
+        return notify_fail("无法找到对应的寻路命令。\n");
+
+    // 执行寻路命令
+    me->force_me(walk_cmd);
+
+    // 1秒后执行walk命令
+    call_out("execute_walk", 1, me, where);
+
+    return 1;
+}
+
+int auto_pop(object me)
+{
+	string title,cmd;
+
+	// 如果还在忙乱中，则继续延迟1秒呼叫
+	if (me->is_busy())
+	{
+		call_out("auto_pop",1,me);
+		return 1;
+	}
+
+	title = "你是否要使用感悟图?";
+	cmd = "确认:use " + file_name(this_object());
+
+	tell_object(me,popup_comb(title,cmd));
+
+	return 1;
+}
+
+void execute_walk(object me, string where)
+{
+	int random_time = 1 + random(5);
+
+    if (!objectp(me) || !environment(me))
+        return;
+
+	if (environment(me)->query("short") == "空中") 
+	{
+		call_out("execute_walk", 1, me, where);
+		return;
+	}
+
+	tell_object(me,"你目前到达了" + query("map") + "。\n");
+
+    // me->force_me("walk " + where);
+	me->move(where);
+	//随机1-5秒忙乱并提示你长途奔波，有些疲惫，需要休息一会
+	tell_object(me,"你长途奔波，有些疲惫，但是终于赶到了目的地,但你需要休息一会，休息结束会自动询问您是否使用感悟图。\n");
+	me->start_busy(random_time);
+	//延时呼叫自动弹窗是否使用感悟图
+	call_out("auto_pop",2,me);
+
+}
+
+
+int do_effect(object me)
+{
+	if (me->is_busy())
+		return notify_fail("你正忙着呢。\n");
+	
+	if (me->query("ganwu_quest/already")) {
+		tell_object(me,"你已经完成任务了，请返回提交感悟图。\n");
+		return 1;
+	}
+
+	// 如果我没有领取任务且我拥有感悟图，则销毁感悟图
+	if (!me->query("ganwu_quest/start")) {
+		tell_object(me,"你没有领取任务，无法使用感悟图,已经自动清除。\n");
+		destruct(this_object());
+		return 1;
+	}
+
+	if (me->query_temp("ganwu_quest/process")) {
+		tell_object(me,"你正在感悟中，请等待完成。\n");
+		return 1;
+	}
+
+	message_vision(CYN "$N" CYN "拿着一张" + name() + CYN "，开始对比着观察四周。"NOR"\n", me);
+	
+	if (!query("where")) {
+		tell_object(me,"你拿着感悟图左看右看，发现这张感悟图原来是假的。\n");
+		return 1;
+	}
+
+	if(base_name(environment(me))!=query("where"))
+	{
+		tell_object(me,popup_comb("你对照感悟图在这里仔细搜索了一阵，结果却毫无收获。不妨试试寻路找到指定地点。","寻路:xunlu"));
+		return 1;
+	}
+
+	me->set_temp("ganwu_quest/process", 30 + random(31));//感悟时间随机30-60秒
+	process_ganwu(me);
+	return 1;
+}
+
+void init()
+{	
+	do_copy();
+	add_action("do_xunlu", "xunlu");
+}
+
+int query_autoload() { return 1; }
+
+int process_ganwu(object me)
+{
+	int process;
+	int random_msg; // 随机3条感悟描述信息
+
+
+	//如果感悟地点不是任务地点，则停止感悟
+	if(base_name(environment(me))!=query("where"))
+	{
+		tell_object(me,"你离开了感悟地点，感悟失败。\n");
+		me->delete_temp("ganwu_quest/process");
+		return 1;
+	}
+
+	// 感悟进行的过程中随机3条描述信息
+	random_msg = random(3);
+
+	switch (random_msg) {
+	case 1:
+		tell_object(me, HIG "你对着感悟图，感悟其中的奥秘，你感觉到一股神秘的力量正在涌入你的大脑。\n" NOR);
+		break;
+	case 2:
+		tell_object(me, HIG "你对着感悟图，领略天赋的奥秘，开发你的潜能。\n" NOR);
+		break;
+	case 3:
+		tell_object(me, HIG "你对着感悟图，略有所悟，你感觉到你的潜能正在慢慢的被开发。\n" NOR);
+		break;
+	}
+
+	me->add_temp("ganwu_quest/process", -1);
+
+	process = me->query_temp("ganwu_quest/process");
+
+	if (process <= 0) {
+		object ob;
+
+		tell_object(me, HIG "你对着感悟图，终于感悟完毕，你感觉到你的潜能已经被完全开发。\n" NOR);
+		me->set("ganwu_quest/already", 1);
+		me->delete_temp("ganwu_quest/process");
+
+		// 20%概率获得一本天赋技能书，必定获得1个天赋感悟碎片
+		if (random(10) < 2) {
+			ob = new_bind("/clone/vip/book_tianfu");
+			ob->move(me);
+			tell_object(me, HIG "你获得了一本天赋技能书。\n" NOR);
+		}
+
+		ob = new_bind("/clone/vip/tianfu_ganwu_suipian");
+		ob->set_amount(10);
+		ob->move(me);
+		tell_object(me, HIG "你获得了十个天赋感悟碎片。\n" NOR);
+
+		me->save();
+
+		// 是否返回启灵大师处
+
+		tell_object(me,popup_comb("感悟完成。是否返回启灵大师处？","返回:fly chafang"));
+		
+	}
+	else
+	{
+		call_out("process_ganwu", 1, me);
+	}
+
+	return 1;
+}

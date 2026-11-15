@@ -1,0 +1,518 @@
+/**
+ * @file limited_draw.c
+ * @author 系统
+ * @brief 九月秋季限时抽奖系统
+ * @version 1.0
+ * @date 2025-09-01
+ */
+
+#define DEBUGGER "no-one"
+#define PITY_LIMIT 100    // 保底次数
+#define DAILY_LIMIT 50   // 每日抽奖次数限制
+
+// 稀有度颜色
+#define COLOR_ULTIMATE  HIR  // 终极奖励 (红色)
+#define COLOR_TREASURE  HIY  // 珍藏奖励 (黄色)
+#define COLOR_EPIC      HIM  // 史诗奖励 (品红)  
+#define COLOR_RARE      HIC  // 稀有奖励 (青色)
+#define COLOR_COMMON    HIG  // 普通奖励 (绿色)
+
+// 活动时间定义
+#define ACTIVITY_START 1756629606  // 2025-09-01 00:00:00
+#define ACTIVITY_END   1758098406  // 2025-09-16 23:59:59
+
+// 函数原型声明
+void show_main_ui(object me);
+void show_prize_pool(object me);
+mapping do_single_draw(object me);
+int process_single_draw(object me, string currency_type);
+int process_ten_draw(object me, string currency_type);
+int check_daily_limit(object me);
+int is_in_activity_period();
+
+/**
+ * @brief 检查是否在活动期间
+ * @return int 1-在活动期间，0-不在活动期间
+ */
+int is_in_activity_period()
+{
+    return (time() >= ACTIVITY_START && time() <= ACTIVITY_END);
+    // return 1; // 测试期间可以打开此行
+}
+
+/**
+ * @brief 检查每日抽奖次数限制
+ * @param object me 玩家对象
+ * @return int 1-可以抽奖，0-已达限制
+ */
+int check_daily_limit(object me)
+{
+    int last_draw_time = me->query("limited_last_draw_time");
+    int today_draws = me->query("limited_today_draws");
+
+    if (time() / 86400 != last_draw_time / 86400)
+    {
+        me->set("limited_today_draws", 0);
+        today_draws = 0;
+    }
+
+    if (today_draws >= DAILY_LIMIT)
+        return 0;
+
+    return 1;
+}
+
+// 物品类型及其对应的权重
+mapping item_types = ([
+    "ultimate_list": 0.5,    // 终极奖励 0.5%
+    "treasure_list": 2,      // 珍藏奖励 2%
+    "epic_list": 4,          // 史诗奖励 4%
+    "rare_list": 10,         // 稀有奖励 10%
+    "common_list": 83.5,     // 普通奖励 83.5%
+]);
+
+// 物品列表配置
+mapping items = ([
+    "ultimate_list": ({
+        "/clone/aoyi_book/aoyi_book",
+        "/clone/baiyi/wucai_shenshi",
+    }),
+    "treasure_list": ({
+        "/clone/box/fangju_zixuan_box",
+        "/clone/box/zhenyi/yellow_zixuan_box",
+        ({ "/clone/baiyi/citiao_suodingshi", 50 }),  // 词条锁定石×50
+    }),
+    "epic_list": ({
+        "/clone/box/zhenyi/red_zixuan_box",
+        ({ "/clone/box/chongmai/chongmai_zixuan_box", 3 }),      // 冲脉丹自选宝箱×3
+        ({ "/clone/box/mizhuan_zixuan_box", 10 }),               // 秘传自选宝箱×10
+        ({ "/clone/box/wuzang/wuzang_zixuan_box", 3 }),          // 五脏材料自选宝箱×3
+    }),
+    "rare_list": ({
+        "/clone/vip/dan_guiyuan",
+        "/clone/vip/dan_wuyu",
+        "/clone/vip/dan_jiuzhuan",
+        ({ "/clone/vip/cifu", 30 }),                             // 词符×30
+        ({ "/clone/vip/putao1", 30 }),                           // 神奇葡萄×30
+    }),
+    "common_list": ({
+        "/clone/gift/new_puti-zi",
+        "/system/shexing/obj/fake_jiuzhuan",
+        "/clone/vip/fushougao",
+        "/clone/vip/lingzhi",
+        "/clone/vip/dan_dex",
+        "/clone/vip/dan_int",
+        "/clone/vip/dan_str",
+        "/clone/vip/dan_con",
+        ({ "/clone/vip/cifu", 10 }),                             // 词符×10
+        ({ "/clone/vip/yixun_tu", 5 }),                          // 先学遗训图谱×5
+    }),
+]);
+
+/**
+ * @brief 主函数入口
+ * @param object me 玩家对象
+ * @param string arg 参数
+ * @return int 执行结果
+ */
+int main(object me, string arg)
+{
+    if (!is_in_activity_period())
+    {
+        write(popup_comb("九月秋季限时抽奖活动已结束！", ({"确定:look"})));
+        return 1;
+    }
+
+    if (!arg)
+    {
+        show_main_ui(me);
+        return 1;
+    }
+
+    // if (!check_daily_limit(me) && arg != "show_pool")
+    // {
+    //     write(popup_comb("你今日的抽奖次数已达上限，请明天再来！", ({"确定:look"})));
+    //     return 1;
+    // }
+
+    switch(arg)
+    {
+        case "yuanbao":
+        case "bind_yuanbao":
+        case "one":
+            return process_single_draw(me, arg);
+        case "yuanbao_sl":
+        case "bind_yuanbao_sl":
+        case "ten":
+            return process_ten_draw(me, arg);
+        case "show_pool":
+            show_prize_pool(me);
+            return 1;
+        default:
+            write(popup_comb("参数错误。", ({"返回:limited_draw"})));
+            return 1;
+    }
+    return 1;
+}
+
+/**
+ * @brief 显示主界面
+ * @param object me 玩家对象
+ */
+void show_main_ui(object me)
+{
+    string msg;
+    object one_card, ten_card;
+    int one_card_amount = 0, ten_card_amount = 0;
+    string* buttons;
+    int jifen;
+    
+    one_card = present("one card", me);
+    ten_card = present("ten card", me);
+
+    if (objectp(one_card)) one_card_amount = one_card->query_amount();
+    if (objectp(ten_card)) ten_card_amount = ten_card->query_amount();
+
+    jifen = me->query("jiuyue_autumn_jifen");
+
+    msg = HIR"【九月秋季限时抽奖】"NOR"\n";
+    msg += "──────────────────────────\n";
+    msg += "奖池当前有百分之零点五的几率抽到"HIR"终极奖励"NOR"\n百分之二的概率抽到"HIY"珍藏奖励"NOR"\n百分之四的概率抽到"HIM"史诗奖励"NOR"\n百分之十的概率抽到"HIC"稀有奖励"NOR"\n百分之八十三点五的概率抽到"HIG"普通奖励"NOR"。\n";
+    msg += "──────────────────────────\n";
+    msg += "1000元宝十连，2000绑定元宝十连。\n";
+    msg += HIR"活动期间：2025年9月1日 - 2025年9月15日"NOR"\n";
+    msg += HIY"每次抽奖可获得1点限时积分！"NOR"\n";
+    msg += "──────────────────────────\n";
+    msg += sprintf("元宝: %-10d 绑定元宝: %d\n", me->query("yuanbao"), me->query("bind_yuanbao"));
+    msg += sprintf("单抽卡: %-8d 十连抽卡: %d\n", one_card_amount, ten_card_amount);
+    msg += sprintf("限时积分: %-6d 今日已抽: %d / %d 次\n", jifen, me->query("limited_today_draws"), DAILY_LIMIT);
+    msg += sprintf("保底累计: "HIY"%d"NOR" / %d 次\n", me->query("limited_draw_count"), PITY_LIMIT);
+    msg += "──────────────────────────\n";
+
+    buttons = ({
+        "元宝十连:limited_draw yuanbao_sl", "绑元十连:limited_draw bind_yuanbao_sl",
+        "使用单抽卡:limited_draw one", "使用十连卡:limited_draw ten",
+        "查看奖池:limited_draw show_pool", "积分商店:jifen_shop"
+    });
+
+    tell_object(me, popup_comb(msg, buttons));
+}
+
+/**
+ * @brief 处理单次抽奖奖励生成
+ * @param object me 玩家对象
+ * @return mapping 奖励信息
+ */
+mapping do_single_draw(object me)
+{
+    string item_type, item_path, item_name, item_color;
+    int total_weight = 0, current_weight = 0, random_num, quantity = 1;
+    mapping prize;
+    mixed *item_list, item_info;
+    
+    me->add("limited_draw_count", 1);
+
+    // 检查保底
+    if (me->query("limited_draw_count") >= PITY_LIMIT)
+    {
+        item_type = "ultimate_list";
+    }
+    else
+    {
+        // 按权重随机选择类型
+        foreach (string type in keys(item_types))
+            total_weight += to_int(item_types[type] * 10); // 乘以10避免浮点数
+
+        random_num = random(total_weight);
+
+        foreach (string type in keys(item_types))
+        {
+            current_weight += to_int(item_types[type] * 10);
+            if (random_num < current_weight)
+            {
+                item_type = type;
+                break;
+            }
+        }
+    }
+
+    item_list = items[item_type];
+    item_info = item_list[random(sizeof(item_list))];
+    
+    // 处理数量信息
+    if (arrayp(item_info))
+    {
+        item_path = item_info[0];
+        quantity = item_info[1];
+    }
+    else
+    {
+        item_path = item_info;
+        quantity = 1;
+    }
+
+    // 设置颜色
+    switch(item_type)
+    {
+        case "ultimate_list": item_color = COLOR_ULTIMATE; break;
+        case "treasure_list": item_color = COLOR_TREASURE; break;
+        case "epic_list": item_color = COLOR_EPIC; break;
+        case "rare_list": item_color = COLOR_RARE; break;
+        default: item_color = COLOR_COMMON; break;
+    }
+
+    // 获取物品名称
+    item_name = call_other(item_path, "query", "name");
+    if (!item_name) item_name = "未知物品";
+    
+    if (quantity > 1)
+        item_name += sprintf("×%d", quantity);
+
+    prize = ([
+        "name" : item_name,
+        "id"   : item_path,
+        "type" : item_type,
+        "color": item_color,
+        "quantity": quantity
+    ]);
+
+    return prize;
+}
+
+/**
+ * @brief 处理单次抽奖流程
+ * @param object me 玩家对象
+ * @param string currency_type 货币类型
+ * @return int 执行结果
+ */
+int process_single_draw(object me, string currency_type)
+{
+    mapping prize;
+    object ob;
+
+    switch(currency_type)
+    {
+        case "one":
+            ob = present("one card", me);
+            if (!objectp(ob) || ob->query_amount() < 1) {
+                write(popup_comb("单抽卡不足！", ({"确定:limited_draw"})));
+                return 1;
+            }
+            ob->add_amount(-1);
+            break;
+        default:
+            write(popup_comb("限时抽奖只支持卡片抽奖！", ({"确定:limited_draw"})));
+            return 1;
+    }
+
+    me->set("limited_last_draw_time", time());
+    me->add("limited_today_draws", 1);
+    me->add("jiuyue_autumn_jifen", 1);  // 增加限时积分
+
+    prize = do_single_draw(me);
+
+    // 创建物品
+    ob = new_bind(prize["id"]);
+    if (objectp(ob))
+    {
+        if (prize["quantity"] > 1 && ob->query("base_unit"))
+        {
+            ob->set_amount(prize["quantity"]);
+            ob->move(me);
+        }
+        else if (prize["quantity"] > 1)
+        {
+            // 不可叠加物品需要循环创建
+            ob->move(me);
+            for (int i = 1; i < prize["quantity"]; i++)
+            {
+                object extra_ob = new_bind(prize["id"]);
+                if (extra_ob) extra_ob->move(me);
+            }
+        }
+        else
+        {
+            ob->move(me);
+        }
+        
+        log_file("limited_draw", sprintf("%s %s(%s) 抽到物品 %s\n", ctime(time()), me->name(), me->query("id"), prize["name"]));
+        
+        if (prize["type"] == "ultimate_list" || prize["type"] == "treasure_list")
+        {
+            CHANNEL_D->do_channel(this_object(), "rumor", me->name() + "在九月限时抽奖中抽到了珍稀物品【" + prize["color"] + prize["name"] + NOR + "】!");
+        }
+    }
+    
+    // 重置保底
+    if (prize["type"] == "ultimate_list")
+    {
+        me->set("limited_draw_count", 0);
+    }
+
+    tell_object(me, popup_comb("恭喜您获得：\n\n" + prize["color"] + "【" + prize["name"] + "】" + NOR + "\n\n获得1点限时积分！", ({"确定:limited_draw"})));
+    return 1;
+}
+
+/**
+ * @brief 处理十连抽奖逻辑  
+ * @param object me 玩家对象
+ * @param string currency_type 货币类型
+ * @return int 执行结果
+ */
+int process_ten_draw(object me, string currency_type)
+{
+    mapping prize;
+    object ob;
+    string* results = ({});
+    string msg = "十连抽结果：\n\n";
+    string log_msg = "";
+
+    switch(currency_type)
+    {
+        case "yuanbao_sl":
+            if (me->query("yuanbao") < 1000) {
+                write(popup_comb("元宝不足！", ({"确定:limited_draw"})));
+                return 1;
+            }
+            me->add("yuanbao", -1000);
+            break;
+        case "bind_yuanbao_sl":
+            if (me->query("bind_yuanbao") < 2000) {
+                write(popup_comb("绑定元宝不足！", ({"确定:limited_draw"})));
+                return 1;
+            }
+            me->add("bind_yuanbao", -2000);
+            break;
+        case "ten":
+            ob = present("ten card", me);
+            if (!objectp(ob) || ob->query_amount() < 1) {
+                write(popup_comb("十连抽卡不足！", ({"确定:limited_draw"})));
+                return 1;
+            }
+            ob->add_amount(-1);
+            break;
+    }
+
+    me->set("limited_last_draw_time", time());
+    me->add("limited_today_draws", 10);
+    me->add("jiuyue_autumn_jifen", 10);  // 增加10点限时积分
+
+    for (int i = 0; i < 10; i++)
+    {
+        prize = do_single_draw(me);
+
+        // 创建物品
+        ob = new_bind(prize["id"]);
+        if (objectp(ob))
+        {
+            if (prize["quantity"] > 1 && ob->query("base_unit"))
+            {
+                ob->set_amount(prize["quantity"]);
+                ob->move(me);
+            }
+            else if (prize["quantity"] > 1)
+            {
+                // 不可叠加物品需要循环创建
+                ob->move(me);
+                for (int j = 1; j < prize["quantity"]; j++)
+                {
+                    object extra_ob = new_bind(prize["id"]);
+                    if (extra_ob) extra_ob->move(me);
+                }
+            }
+            else
+            {
+                ob->move(me);
+            }
+            
+            log_msg += sprintf("%s %s(%s) 抽到物品 %s\n", ctime(time()), me->name(), me->query("id"), prize["name"]);
+            
+            if (prize["type"] == "ultimate_list" || prize["type"] == "treasure_list")
+            {
+                CHANNEL_D->do_channel(this_object(), "rumor", me->name() + "在九月限时抽奖中抽到了珍稀物品【" + prize["color"] + prize["name"] + NOR + "】!");
+            }
+        }
+        
+        // 重置保底
+        if (prize["type"] == "ultimate_list")
+        {
+            me->set("limited_draw_count", 0);
+        }
+        
+        results += ({ prize["color"] + "【" + prize["name"] + "】" + NOR });
+    }
+
+    if (strlen(log_msg) > 0)
+    {
+        log_file("limited_draw", log_msg);
+    }
+
+    for (int i = 0; i < sizeof(results); i++)
+    {
+        msg += sprintf("%d. %s\n", i + 1, results[i]);
+    }
+    
+    msg += "\n获得10点限时积分！";
+
+    tell_object(me, popup_comb(msg, ({"确定:limited_draw"})));
+    return 1;
+}
+
+/**
+ * @brief 显示奖池信息
+ * @param object me 玩家对象
+ */
+void show_prize_pool(object me)
+{
+    string str = "     九月限时抽奖奖池"NOR"\n";
+    str += "──────────────────────────\n";
+    
+    str += COLOR_ULTIMATE + "终极奖励 (0.5%)\n" + NOR;
+    foreach (mixed item in items["ultimate_list"])
+        str += "  " + call_other(item, "query", "name") + "\n";
+    
+    str += COLOR_TREASURE + "\n珍藏奖励 (2%)\n" + NOR;
+    foreach (mixed item in items["treasure_list"])
+    {
+        if (arrayp(item))
+            str += "  " + call_other(item[0], "query", "name") + sprintf("×%d", item[1]) + "\n";
+        else
+            str += "  " + call_other(item, "query", "name") + "\n";
+    }
+    
+    str += COLOR_EPIC + "\n史诗奖励 (4%)\n" + NOR;
+    foreach (mixed item in items["epic_list"])
+    {
+        if (arrayp(item))
+            str += "  " + call_other(item[0], "query", "name") + sprintf("×%d", item[1]) + "\n";
+        else
+            str += "  " + call_other(item, "query", "name") + "\n";
+    }
+    
+    str += COLOR_RARE + "\n稀有奖励 (10%)\n" + NOR;
+    foreach (mixed item in items["rare_list"])
+    {
+        if (arrayp(item))
+            str += "  " + call_other(item[0], "query", "name") + sprintf("×%d", item[1]) + "\n";
+        else
+            str += "  " + call_other(item, "query", "name") + "\n";
+    }
+    
+    str += COLOR_COMMON + "\n普通奖励 (83.5%)\n" + NOR;
+    foreach (mixed item in items["common_list"])
+    {
+        if (arrayp(item))
+            str += "  " + call_other(item[0], "query", "name") + sprintf("×%d", item[1]) + "\n";
+        else
+            str += "  " + call_other(item, "query", "name") + "\n";
+    }
+
+    str += "──────────────────────────\n";
+    str += HIY"保底机制：累计抽取100次必得终极奖励！"NOR"\n";
+
+    tell_object(me, popup_comb(str, "返回:limited_draw"));
+}
+
+// 外部查询函数
+mapping query_items() { return items; }
+int query_is_active() { return is_in_activity_period(); }

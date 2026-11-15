@@ -1,0 +1,572 @@
+#include <room.h>
+inherit ROOM;
+#define OUTROOM "/d/fuben/qianchipu/qianchipu"
+#define WUJUE_UI "/d/lunjian/wujue_iml/wujue_iml_ui"
+
+#define LUNJIAN_TURN		7
+#define LUNJIAN_USER_MIN	5
+
+string *total = ({});
+int turn = 0;
+mapping allusers = ([]);
+mapping lunjian_sign_time = FAMILY_D->query_non_ultra_lunjian_sign_time();
+
+private void init_player(object me);
+private void message_competition(string msg);
+private void auto_check();
+private void restore_status(object me);
+int check_win(object me);
+int check_out(object me);
+int calculate_survival_rate(object player);
+public void show_wujue_animation(string *list_id);
+
+void create()
+{
+	set("short", "华山之巅(新秀组)");
+	set("long", "这里是华山之巅，也是天下群雄争夺武林至尊的竞技之地(新秀组)。");
+	set("exits", ([
+		"south" : OUTROOM,
+		"west" : __DIR__"enter", // 通往宗师组的出口
+		"north" : __DIR__"wuzun_enter", // 通往武尊组的出口
+	]));
+	set("no_fight",1);
+	set("no_fly",1);
+	set("objects",([
+	]));
+	set("action_list",([
+		"华山论剑":"jjsign",
+		"称号奖励":"lunjiangift",
+		"积分兑换":"ljshop",
+	]));
+	setup();
+}
+
+void init()
+{
+	add_action("ljshop","ljshop");
+	add_action("jjsign","jjsign");
+	add_action("lunjiangift","lunjiangift");
+}
+
+/**
+ * @brief 新秀组论剑积分商店
+ * @param arg string 商店操作参数
+ * @return int 操作结果
+ * @details 提供高级兑换物品，使用新秀组论剑积分系统
+ *          新增兑换物品：黄色真意自选箱(45积分)，意境捐赠(30积分)，冲脉丹自选箱(23积分)，防御材料自选箱(15积分)
+ */
+int ljshop(string arg)
+{
+	string *list,str,file,price;
+	int i,yuanbao;
+	object me,ob;
+	mapping goods,times;
+	string *button_list = ({});
+
+	me = this_player();
+	goods = ([
+		"/clone/vip/jinsha":1,
+		"/clone/vip/putao1":1,
+		"/clone/vip/book_wuliang":1,
+		"/clone/baiyi/tencard":15,
+		"/clone/box/zhenyi/yellow_zixuan_box":45,
+		"/clone/aoyi_book/aoyi_book":30,
+		"/clone/box/chongmai/chongmai_zixuan_box":23,
+		"/clone/box/fangju_zixuan_box":15,
+	]);
+	times = ([
+		"/clone/lunjian/wujueling":1,
+	]);
+	list = keys(goods);
+	if (! arg)
+	{
+		str = "你目前有" + me->query("lunjian/pot") + "论剑积分，请选择您想兑换的道具：\n";
+		
+		for(i=0; i<sizeof(list); i++)
+		{
+			file = list[i];
+			if(!goods[file] || file_size(file+".lpc") < 0) continue;
+			yuanbao = goods[file];
+			price = yuanbao + "积分";
+			button_list += ({sprintf("%s(%s):ljshop look %s", file->query("name"), price, file)});
+		}
+		
+		tell_object(me, popup_comb(str, button_list));
+		return 1;
+	}
+	else if (sscanf(arg,"look %s",file)==1)
+	{
+		if(file_size(file+".lpc")<0||!goods[file])
+			return notify_fail(popup_title(HIR"兑换列表中没有这个道具！"NOR));
+
+		yuanbao = goods[file];
+		price = yuanbao+"积分";
+		str = "【" + file->query("name") + "】　　价格：" + price + NOR + "\n";
+		str += "一一一一一一一一一一一一一一一一一一一一一一一\n";
+		if(times[file])
+			str += HIR"此物品每个玩家限兑换" + times[file] + "次"NOR "\n";
+		str += file->long();
+		
+		button_list = ({"兑换:ljshop buy " + file, "返回:ljshop"});
+		tell_object(me, popup_comb(str, button_list));
+		return 1;
+	}
+	else if (sscanf(arg,"buy %s",file)==1)
+	{
+		if(file_size(file+".lpc")<0||!goods[file])
+			return notify_fail(popup_title(HIR"兑换列表中没有这个道具！"NOR));
+
+		yuanbao = goods[file];
+
+		if(times[file])
+		{
+			if(me->query("lunjian/duihuan/"+file->query("id")) >= times[file])
+				return notify_fail(popup_title(HIR"此物品每个玩家只能兑换"+times[file]+"次！"NOR));
+			me->add("lunjian/duihuan/"+file->query("id"),1);
+		}
+		if(me->query("lunjian/pot") < yuanbao)
+			return notify_fail(popup_title(HIR"你的兑换积分不足，多参加参加论剑活动把！"NOR));
+		me->add("lunjian/pot",-yuanbao);
+		ob = new_bind(file);
+		log_ufile(me,"pay/lunjian", "兑换了"+ob->short()+"。\n");
+		tell_object(me, popup_title("你成功兑换到了"+ob->short()+"。"NOR));
+		ob->move(me);
+		return 1;
+	}
+	else
+		return notify_fail(popup_title(HIR"你想干什么？"NOR));
+
+	return 1;
+}
+
+int valid_leave(object me, string dir)
+{
+	if(allusers[me->query("id")])
+	{
+		tell_object(me,"你离开了华山之巅，如果下一轮比赛不在场的话你将失去一次晋级机会。\n");
+	}
+	return ::valid_leave(me, dir);
+}
+
+int lunjiangift()
+{
+	object me;
+	string str;
+	
+	me = this_player();
+	str = FAMILY_D->bouns_lunjian_leader(me);
+	tell_object(me,str);
+	return 1;
+}
+
+int jjsign()
+{
+	int now = time();
+	object me = this_player();
+
+	if(localtime(now)[6]!=lunjian_sign_time["day"]||localtime(now)[2]!=lunjian_sign_time["hour"]||localtime(now)[1]>lunjian_sign_time["pre"])
+	
+		return notify_fail(ZJOBLONG"报名时间："+lunjian_sign_time["hour"]+":00-"+lunjian_sign_time["hour"]+":10。\n");
+
+	if (time() < 1719806400)
+	{
+		tell_object(me,"华山论剑活动本周暂不开启。\n");
+		return 1;
+	
+	}
+	
+	// 检查是否为非宗师
+	if (me->query("opinion/ultra"))
+		return notify_fail("你已经是武道宗师，请到宗师组参加华山论剑。\n");
+
+	if (allusers[me->query("id")])
+		return notify_fail("你已经报过名了，目前报名人数："+sizeof(allusers)+"。\n");
+
+	allusers[me->query("id")]=1;
+	tell_object(me,"报名成功，请在此稍后，"+(lunjian_sign_time["hour"]+"点"+(lunjian_sign_time["pre"] + 1)) +"分自动进入竞技场中。\n");
+	set_heart_beat(1);
+	return 1;
+}
+
+int sort_total(string user1,string user2)
+{
+	return (int)allusers[user2]-(int)allusers[user1];
+}
+
+private void auto_check()
+{
+	object tmp1,tmp2,*inv,*rooms,ob;
+	string name,msg;
+	string *us,room;
+	int i;
+
+	rooms = children("/d/lunjian/non_ultra_jingji");
+	if(!sizeof(rooms))
+	{
+		total = sort_array(keys(allusers),(: sort_total :));
+		us = filter_array(total, (: find_player($1)&&present(find_player($1),$(this_object())) :));
+		if(sizeof(us)<1 || turn >= LUNJIAN_TURN)
+		{
+			if(allusers[total[0]]<2)
+			{
+				msg = "听说非宗师华山论剑死的死、逃的逃，未能决出【新秀武林至尊】！";
+				message_competition(msg);
+			}
+			else
+			{
+				if(ob = find_player(total[0]))
+					name = ob->query("name");
+				else
+					name = TOP_D->get_name(total[0]);
+				msg = "非宗师华山论剑圆满结束，" + name + "获得【新秀中神通】的称号！";
+				FAMILY_D->set_non_ultra_lunjian_leader("中神通",total[0]);
+				message_competition(msg);
+
+				if(sizeof(total)>1)
+				{
+					if(ob = find_player(total[1]))
+						name = ob->query("name");
+					else
+						name = TOP_D->get_name(total[1]);
+					msg = name + "获得【新秀东邪】的称号！";
+					FAMILY_D->set_non_ultra_lunjian_leader("东邪",total[1]);
+					message_competition(msg);
+				}
+
+				if(sizeof(total)>2)
+				{
+					if(ob = find_player(total[2]))
+						name = ob->query("name");
+					else
+						name = TOP_D->get_name(total[2]);
+					msg = name + "获得【新秀西毒】的称号！";
+					FAMILY_D->set_non_ultra_lunjian_leader("西毒",total[2]);
+					message_competition(msg);
+				}
+
+				if(sizeof(total)>3)
+				{
+					if(ob = find_player(total[3]))
+						name = ob->query("name");
+					else
+						name = TOP_D->get_name(total[3]);
+					msg = name + "获得【新秀南帝】的称号！";
+					FAMILY_D->set_non_ultra_lunjian_leader("南帝",total[3]);
+					message_competition(msg);
+				}
+
+				if(sizeof(total)>4)
+				{
+					if(ob = find_player(total[4]))
+						name = ob->query("name");
+					else
+						name = TOP_D->get_name(total[4]);
+					msg = name + "获得【新秀北丐】的称号！";
+					FAMILY_D->set_non_ultra_lunjian_leader("北丐",total[4]);
+					message_competition(msg);
+					// 显示五绝动画
+					show_wujue_animation(total[0..4]);
+				}
+
+				set_heart_beat(0);
+				delete("pre_start");
+				delete("start");
+			}
+			allusers = ([]);
+			turn = 0;
+			return;
+		}
+		while(sizeof(us)>1)
+		{
+			tmp1 = find_player(us[0]);
+			us -= ({ tmp1->query("id") });
+			tmp2 = find_player(us[0]);
+			us -= ({ tmp2->query("id") });
+			init_player(tmp1);
+			init_player(tmp2);
+			room = new("/d/lunjian/non_ultra_jingji");
+			tmp1->move(room);
+			tmp2->move(room);
+			tmp1->kill_ob(tmp2);
+			tmp2->kill_ob(tmp1);
+		}
+		if(sizeof(us))
+		{
+			ob = find_player(us[0]);
+			ob->add("lunjian/pot",1);
+			allusers[us[0]] += 1;
+			tell_object(ob,"你在本轮竞技中幸运轮空，自动晋级，请等待下一轮匹配。\n");
+			log_ufile(ob,"lunjian","轮空晋级，积分增加1。\n");
+		}
+		turn++;
+		return;
+	}
+	for (i = 0; i < sizeof(rooms); i++)
+	{
+		inv = filter_array(all_inventory(rooms[i]),(: playerp($1) :));
+
+		// 如果房间没有生存时间，则设置一个生存时间
+		if(!rooms[i]->query("exist_time"))
+		{
+			rooms[i]->set("exist_time",time());
+		}
+
+		if(!sizeof(inv))
+		{
+			destruct(rooms[i]);
+		}
+		else if(sizeof(inv)==1)
+		{
+			allusers[inv[0]->query("id")]++;
+			inv[0]->add("lunjian/pot",1);
+			log_ufile(inv[0],"lunjian","胜利晋级，积分增加1。\n");
+			check_win(inv[0]);
+		}  
+		// 如果时间到了，判定生存率,1分钟后
+		else if (time() - rooms[i]->query("exist_time") >= 60)
+		{
+			// 时间到了判定生存率
+			// 计算玩家的生存率
+			int rate1, rate2;
+			rate1 = calculate_survival_rate(inv[0]);
+			rate2 = calculate_survival_rate(inv[1]);
+
+			if (rate1 > rate2)
+			{
+				//失败者直接死亡
+				check_out(inv[1]);
+			}
+			else if (rate1 < rate2)
+			{
+				//失败者直接死亡
+				check_out(inv[0]);
+			}
+			else
+			{
+				//生存率相同，随机判定
+				if (random(2))
+				{
+					//失败者直接死亡
+					check_out(inv[1]);
+				}
+				else
+				{
+					//失败者直接死亡
+					check_out(inv[0]);
+				}
+			}
+		}
+		else 
+		{
+			// 时间未到，继续等待,提示双方距离结束时间还有多少秒
+			tell_object(inv[0], "距离结束时间还有" + (rooms[i]->query("exist_time") + 60 - time()) + "秒。\n");
+			tell_object(inv[1], "距离结束时间还有" + (rooms[i]->query("exist_time") + 60 - time()) + "秒。\n");
+		}
+	}
+}
+
+private void init_player(object me)
+{
+	tell_object(me, HIY "你来到了华山论剑的比武场..."NOR"\n");
+	me->set_override("unconcious", (: call_other, __FILE__, "check_out" :));
+	me->set_override("die", (: call_other, __FILE__, "check_out" :));
+	me->set_override("quit", (: call_other, __FILE__, "check_quit" :));
+	me->set_temp("in_pkd", 1);
+
+	me->set("backup/condition", me->query_condition());
+	me->clear_condition();
+}
+
+private void message_competition(string msg)
+{
+	CHANNEL_D->do_channel(this_object(), "rumor", msg);
+}
+
+private void restore_status(object me)
+{
+	mapping my;
+	mapping cnd;
+	string *ks;
+	int i;
+
+	me->delete_temp("in_pkd");
+	me->delete_override("unconcious");
+	me->delete_override("die");
+	me->delete_override("quit");
+	me->remove_all_enemy(1);
+	me->remove_all_killer();
+	me->clear_condition();
+	me->receive_damage("qi", 0);
+	me->apply_killer(me->query_temp("backup/killer"));
+	me->apply_want(me->query_temp("backup/want"));
+
+	cnd = me->query("backup/condition");
+	me->delete("backup/condition");
+	me->delete_temp("block_msg/all");
+	if (! mapp(cnd)) return;
+	ks = keys(cnd);
+	for (i = 0; i < sizeof(ks); i++)
+		me->apply_condition(ks[i], cnd[ks[i]]);
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+}
+
+void heart_beat()
+{
+ int now = time();
+	object tmp1,tmp2,room,*inv;
+	string msg;
+
+	room = this_object();
+
+	if(!query("pre_start")&&localtime(now)[1]==lunjian_sign_time["pre"])
+	{
+		set("pre_start",1);
+		tell_room(this_object(),"1分钟后将进入竞技场，请做好准备。。。\n");
+	}
+	else if(!query("start")&&localtime(now)[1]==(lunjian_sign_time["pre"]+1))
+	{
+		set("start",1);
+		inv = filter_array(all_inventory(this_object()), (: playerp($1)&&$(allusers)[$1->query("id")] :));
+		if(sizeof(inv)<LUNJIAN_USER_MIN)
+		{
+			msg = "听说本次非宗师华山论剑参与人数太少，活动未能成功进行！";
+			message_competition(msg);
+			delete("pre_start");
+			delete("start");
+			set_heart_beat(0);
+			return;
+		}
+		while(sizeof(inv)>1)
+		{
+			tmp1 = inv[random(sizeof(inv))];
+			inv -= ({ tmp1 });
+			tmp2 = inv[random(sizeof(inv))];
+			inv -= ({ tmp2 });
+			init_player(tmp1);
+			init_player(tmp2);
+			room = new("/d/lunjian/non_ultra_jingji");
+			room->set("exist_time",time());
+			tmp1->move(room);
+			tmp2->move(room);
+			tmp1->kill_ob(tmp2);
+			tmp2->kill_ob(tmp1);
+		}
+		if(sizeof(inv))
+		{
+			allusers[inv[0]->query("id")] += 1;
+			tell_object(inv[0],"你在本轮竞技中幸运轮空，自动晋级，请等待下一轮匹配。\n");
+		}
+	}
+	else if(localtime(now)[1]>lunjian_sign_time["pre"])
+	{
+		auto_check();
+	}
+}
+
+int check_quit(object me)
+{
+ 
+	mapping my;
+ 
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+
+	if(me->is_busy())
+		me->interrupt_me(me,me->query_busy());
+
+	restore_status(me);
+
+	tell_object(me, "你逃出了竞技场。\n");
+
+	me->move(this_object());
+	message("vision", "只见" + me->name() + "慌里慌张的跑了出来。\n",environment(me), ({ me }));
+	return 1;
+}
+
+int check_out(object me)
+{
+ 
+	mapping my;
+ 
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+
+	tell_object(me, HIR "\n你觉得眼前一阵模糊...这下完了！"NOR"\n");
+
+	if(me->is_busy())
+		me->interrupt_me(me,me->query_busy());
+
+	restore_status(me);
+	me->move(this_object());
+	message("vision", "一个黑影倏的窜了出来，随即就是啪的一声，就见" + me->name() +"摔倒了地上，一副半死不活的样子。\n", environment(me), ({ me }));
+	tell_object(me, "半昏半迷中，你觉得被人拎了起来，又重重的摔倒了地上。\n");
+	if (! living(me))
+		me->revive();
+	return 1;
+}
+
+int check_win(object me)
+{
+ 
+	mapping my;
+ 
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+
+	tell_object(me, HIR "\n你在本轮论剑中获胜晋级！"NOR"\n");
+
+	if(me->is_busy())
+		me->interrupt_me(me,me->query_busy());
+
+	restore_status(me);
+	me->move(this_object());
+
+	return 1;
+}
+
+// 计算玩家的生存率
+int calculate_survival_rate(object player)
+{
+    int qixue = player->query("eff_qi") * 100;
+    int max_qi = player->query("max_qi");
+    int jingshen = player->query("eff_jing") * 100 / player->query("max_jing");
+
+    if (max_qi == 0) max_qi = 1; // 优化点：避免除零错误
+
+    qixue /= max_qi;
+    return qixue < jingshen ? qixue : jingshen;
+}
+
+// 显示五绝动画
+public void show_wujue_animation(string *list_id)
+{
+    string json_data = WUJUE_UI->generate_non_ultra_wujue_animation_data(list_id);
+
+	//所有玩家都显示五绝动画
+	foreach(object player in users())
+	{
+
+        // 如果是宗师跳过
+        if(player->query("opinion/ultra"))
+            continue;
+
+		tell_object(player, json_data + "\n");
+	}
+} 

@@ -1,0 +1,174 @@
+// combined_item.c
+
+#include <dbase.h>
+#include <name.h>
+
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_MOVE;
+inherit F_NAME;
+
+// 作者: Lu Dexiang
+// 用途: 可堆叠物品基类
+// 最后修改: 2024-11-16
+
+private int DEFAULT_BASE_WEIGHT = 1;
+private int MAX_WEIGHT_LIMIT = 10000000;
+
+void setup()
+{
+    if (!query("unit"))
+        set("unit", "些");
+
+    if (query("base_weight") < DEFAULT_BASE_WEIGHT)
+        set("base_weight", DEFAULT_BASE_WEIGHT);
+}
+
+int query_amount() { return query("amount"); }
+
+private void destruct_me() { destruct(this_object()); }
+
+void set_amount(int v)
+{
+    int base_weight;
+    
+    base_weight = query("base_weight");
+    
+    if (base_weight < DEFAULT_BASE_WEIGHT)
+    {
+        base_weight = DEFAULT_BASE_WEIGHT;
+        set("base_weight", DEFAULT_BASE_WEIGHT);
+    }
+    
+    if (v <= 0)
+    {
+        destruct(this_object());
+        return;
+    }
+    
+    if (MAX_WEIGHT_LIMIT / base_weight < v)
+    {
+        error("combine:set_amount too many.\n");
+        return;
+    }
+    
+    set("amount", v);
+    set_weight(v * base_weight);
+    
+    if (!query("money_id"))
+        set("value", v * (int)query("base_value"));
+}
+
+void add_amount(int v)
+{ 
+    object env;
+
+    if (!objectp(env = environment(this_object())))
+    return;
+
+    set_amount(query("amount") + v); 
+
+    if (userp(env))
+    {
+        mapping update_obj_data;
+        
+        update_obj_data = "/cmds/usr/new_inventory_beibao"->format_item_data("beibao", this_object());
+        tell_object(env, json_encode((["code": "update_obj_data", "data": update_obj_data])) + "\n");
+    }
+
+
+}
+
+string short()
+{
+    return query_amount() + query("base_unit") + ::short();
+}
+
+void clean_me()
+{
+    object env;
+    
+    env = environment();
+
+    if (env->is_character())
+    {
+        remove_call_out("clean_me");
+        return;
+    }
+
+    destruct(this_object());
+    return;
+}
+
+varargs int move(mixed dest, int silent)
+{
+    object env;
+    object *inv;
+    string file;
+    int total;
+    int max;
+
+
+
+    if (!::move(dest, silent))
+        return 0;
+        
+    env = environment();
+    if (!objectp(env))
+        return 1;
+        
+    if (env->is_room())
+        return 1;
+        
+    file = base_name(this_object());
+    inv = all_inventory(env);
+    total = query_amount();
+    max = MAX_WEIGHT_LIMIT / query("base_weight");
+    
+    foreach (object item in inv)
+    {
+        if (item == this_object())
+            continue;
+            
+        if (base_name(item) == file && total + item->query_amount() <= max)
+        {
+            total += item->query_amount();
+            destruct(item);
+        }
+    }
+    
+    set_amount(total);
+
+    {
+        mapping update_obj_data;
+        
+        update_obj_data = "/cmds/usr/new_inventory_beibao"->format_item_data("beibao", this_object());
+        tell_object(env, json_encode((["code": "update_obj_data", "data": update_obj_data])) + "\n");
+    }
+    return 1;
+}
+
+int can_combine_to(object env)
+{
+    object item;
+    string file;
+
+    file = base_name(this_object());
+    foreach (item in all_inventory(env))
+        if (base_name(item) == file)
+            return 1;
+
+    return 0;
+}
+
+int value() { return query_amount() * (int)query("base_value"); }
+
+string query_autoload() { return query_amount() + ""; }
+
+void autoload(string param)
+{
+    int amt;
+
+    if (sscanf(param, "%d", amt) == 1)
+        set_amount(amt);
+}

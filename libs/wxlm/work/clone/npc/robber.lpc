@@ -1,0 +1,156 @@
+// 劫匪 NPC - robber.c
+
+inherit NPC;
+
+void init_robber(object me);
+void carry_equipments_from_player(object me);
+void destroy_equipments();
+void die();
+
+void create()
+{
+    set_name("劫匪", ({ "jie fei", "robber", "fei" }));
+    set("long", "这是一个凶神恶煞的劫匪，专门打劫过往的镖车。\n");
+    set("gender", "男性");
+    set("age", 35);
+
+    set("attitude", "aggressive");
+
+    setup();
+}
+
+void init()
+{
+    object me = this_player();
+
+    // 如果进入的玩家是目标玩家
+    if (me->query("id") == query("target"))
+    {
+        // 如果还未初始化劫匪，则进行初始化
+        if (!query("initialized"))
+        {
+            init_robber(me);
+            set("initialized", 1);
+        }
+
+        // 开始战斗
+        kill_ob(me);
+    }
+}
+
+void init_robber(object me)
+{
+    int exp, skill_level;
+    mapping skills;
+    string *skill_names;
+    int i;
+
+    // 设置目标玩家
+    set("target", me->query("id"));
+
+    // 动态调整劫匪的战斗经验，比玩家高10%
+    exp = me->query("combat_exp") * 110 / 100;
+    set("combat_exp", exp);
+
+    // 动态调整劫匪的基本属性，比玩家高10%
+    set("str", me->query("str") * 110 / 100);
+    set("int", me->query("int") * 110 / 100);
+    set("con", me->query("con") * 110 / 100);
+    set("dex", me->query("dex") * 110 / 100);
+    set("max_qi", me->query("max_qi") * 110 / 100);
+    set("eff_qi", query("max_qi"));
+    set("qi", query("max_qi"));
+    set("max_neili", me->query("max_neili") * 110 / 100);
+    set("neili", query("max_neili"));
+
+    // 复制玩家的技能，技能等级略高
+    skills = me->query_skills();
+    if (mapp(skills))
+    {
+        skill_names = keys(skills);
+        for (i = 0; i < sizeof(skill_names); i++)
+        {
+            skill_level = skills[skill_names[i]] * 110 / 100;
+            set_skill(skill_names[i], skill_level);
+
+            // 设置激发的技能
+            if (me->query_skill_mapped(skill_names[i]))
+            {
+                map_skill(skill_names[i], me->query_skill_mapped(skill_names[i]));
+            }
+        }
+    }
+
+    // 设置劫匪的装备，与玩家相同
+    // carry_equipments_from_player(me);
+
+    // 准备战斗
+    set("jiali", me->query("jiali")); // 内力加力
+    setup();
+}
+
+
+void heart_beat()
+{
+    object me = find_player(query("target"));
+    object biaoche;
+
+    ::heart_beat();
+
+    if (!me || environment(me) != environment())
+        return;
+
+    // 如果玩家气血为0，表示被击败
+    if (me->query("qi") < 1)
+    {
+        // 玩家被击败，通知镖车减少耐久度
+        biaoche = present("biao che", environment(me));
+        if (objectp(biaoche))
+        {
+            biaoche->reduce_durability();
+            tell_object(me, HIR "你被劫匪击败，镖车受到了损害！\n" NOR);
+        }
+
+        // 将玩家昏迷处理
+        me->unconcious();
+
+        // 劫匪离开或消失
+        destroy_equipments(); // 销毁装备
+        destruct(this_object());
+    }
+}
+
+void die()
+{
+    object me;
+
+    me = find_player(query("target"));
+
+    if (objectp(me))
+    {
+        tell_object(me, HIG "你成功击败了劫匪，继续护送镖车前进。\n" NOR);
+    }
+
+    destroy_equipments(); // 销毁装备
+
+    // 防止生成尸体
+    set("no_corpse", 1);
+
+    ::die();
+}
+
+// 销毁劫匪身上的所有装备
+void destroy_equipments()
+{
+    object *inv;
+    int i;
+
+    inv = all_inventory(this_object());
+    for (i = 0; i < sizeof(inv); i++)
+    {
+        if (objectp(inv[i]))
+        {
+            destruct(inv[i]);
+        }
+    }
+}

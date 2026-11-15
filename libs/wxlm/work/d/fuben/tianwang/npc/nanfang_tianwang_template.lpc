@@ -1,0 +1,311 @@
+inherit NPC;
+
+void create();
+void die();
+void init();
+void heart_beat();
+void zhuque_fire_skill(object *enemy);
+
+/**
+ * @brief 南方火尊模板文件
+ * @details 设置武当派技能，用于create_family_npc的模板参数
+ */
+void create()
+{
+    ::create();
+    
+    set_name("南方火尊", ({ "nanfang huozun", "huozun", "nanfang", "huo zun" }));
+    set("title", HIR "南方火尊" NOR);
+    set("long", @LONG
+南方火尊，武林中传说的火系武学大家。他身着红色武袍，身材修长，
+手持一把烈焰长剑，内力精纯火热。他将武当真传融入火系武学，剑法如
+朱雀翱翔，刚柔并济，烈焰与太极完美结合。
+
+他的周身环绕着红色的火焰真气，那是朱雀火功的至高境界。作为武林
+中的火系宗师，他的武功已臻化境，火焰与太极的奥妙在他手中融会贯通。
+想要从他这里领悟到朱雀火功的真谛，必须要有超凡的火系天赋。
+
+LONG );
+    
+    // 关键设置：指定门派技能为武当派
+    set("npc_combat_tps_family", "武当派");
+    
+    set("gender", "男性");
+    set("age", 8888);
+    set("no_get", 1);
+    set("shen_type", 1);
+    set("attitude", "aggressive");
+    
+    // 基础属性会被create_family_npc的战斗力计算覆盖
+    set("str", 50);
+    set("int", 50);
+    set("con", 50);
+    set("dex", 50);
+    
+    // 这些数值会被战斗力计算和手动设置覆盖
+    set("qi", 100000);
+    set("max_qi", 100000);
+    set("jing", 50000);
+    set("max_jing", 50000);
+    set("neili", 10000);
+    set("max_neili", 10000);
+    set("jiali", 1000);
+    set("combat_exp", 1000000);
+    
+    setup();
+}
+
+/**
+ * @brief 初始化函数，玩家进入时自动攻击
+ */
+void init()
+{
+    object me = this_player();
+    
+    ::init();
+    
+    if (interactive(me))
+    {
+        call_out("start_fight", 1, me);
+    }
+}
+
+/**
+ * @brief 开始战斗的延迟函数
+ * @param object me 玩家对象
+ */
+void start_fight(object me)
+{
+    if (!me || environment(me) != environment(this_object()))
+        return;
+        
+    message_vision(HIR "\n$N" HIR "缓缓站起，红色火焰真气冲天而起，威严地注视着前来的挑战者。\n" NOR, this_object());
+    message_vision(HIY "南方火尊朗声说道：\"既然来此，就让我见识一下你的火系造诣如何！\"\n" NOR, this_object());
+    
+    kill_ob(me);
+}
+
+/**
+ * @brief 心跳函数，触发特殊技能
+ */
+void heart_beat()
+{
+    object *enemy;
+    int current_hp_percent;
+    
+    ::heart_beat();
+    
+    // 获取当前血量百分比
+    current_hp_percent = query("qi") * 100 / query("max_qi");
+    
+    // 获取所有敌人
+    enemy = query_enemy();
+    enemy = filter_array(enemy, (: userp($1) :));
+    
+    if (sizeof(enemy) > 0)
+    {
+        // 血量低于50%时，有概率释放朱雀烈焰
+        if (current_hp_percent < 50 && random(4) == 0)
+        {
+            zhuque_fire_skill(enemy);
+        }
+    }
+}
+
+/**
+ * @brief 朱雀烈焰技能
+ * @param object *enemy 敌人列表
+ */
+void zhuque_fire_skill(object *enemy)
+{
+    string msg;
+    
+    catch {
+        msg = HIR "$N" HIY "双手结印，朱雀烈焰从天而降，火光冲天！"NOR"\n";
+        message_vision(msg, this_object());
+        
+        foreach (object ob in enemy)
+        {
+            if (objectp(ob) && living(ob))
+            {
+                ob->receive_damage("qi", 35000, this_object());
+                ob->receive_wound("qi", 17500, this_object());
+                tell_object(ob, HIR "朱雀烈焰灼烧着你的身体，炽热难耐！"NOR"\n");
+                
+                // 对低等级玩家造成额外伤害
+                if (ob->query("level") < 600)
+                {
+                    ob->receive_damage("qi", 55000, this_object());
+                    ob->receive_wound("qi", 27500, this_object());
+                    tell_object(ob, HIR "火尊的烈焰让你如坠炼狱！"NOR"\n");
+                }
+            }
+        }
+    };
+}
+
+/**
+ * @brief 天王死亡处理函数
+ * @details 实现秘传领悟、奖励发放和进度记录
+ */
+void die()
+{
+    object *players;
+    object me = this_object();
+    string tianwang_name = "nanfang";
+    string mizhuan_name = "朱雀秘传";
+    int i;
+    int exp = 200000;        // 基础经验20万
+    int potential = 250000;  // 基础潜能25万  
+    int start_time;
+    
+    message_vision(HIR "\n$N" HIR "仰天长啸，红色的神焰渐渐熄灭，化作漫天火花飘向南方。\n" NOR, me);
+    message_vision(HIY "\"太极阴阳，刚柔并济...朱雀秘传的玄妙，你已有资格掌握！\"\n" NOR, me);
+    
+    players = filter_array(all_inventory(environment(me)), (: userp($1) :));
+    
+    for (i = 0; i < sizeof(players); i++)
+    {
+        // 获取开始时间
+        start_time = players[i]->query("fuben_tianwang/last_time");
+        
+        tell_object(players[i], HIG "\n恭喜你击败了南方增长天王，获得了丰厚的奖励！\n" NOR);
+        tell_object(players[i], HIY "你获得了：\n" NOR);
+        tell_object(players[i], HIY "  " + exp + " 点经验\n" NOR);
+        tell_object(players[i], HIY "  " + potential + " 点潜能\n" NOR);
+        
+        // 添加经验和潜能
+        FUBEN_D->add_exp(players[i], exp);
+        players[i]->add("potential", potential);
+        
+        // 记录击败状态
+        players[i]->set("tianwang_defeated/" + tianwang_name, 1);
+        
+        // 尝试领悟朱雀秘传
+        {
+            int chance = 4;  // 4%概率
+            string progress_key = "mizhuan_progress/" + mizhuan_name;
+            int fail_count = players[i]->query(progress_key);
+            
+            if (random(100) < chance || fail_count >= 25) {
+                // 领悟秘传
+                if (MIZHUAN_MASTER->add_mizhuan(players[i], mizhuan_name)) {
+                    tell_object(players[i], HIY "  " + HIR + "【朱雀秘传】" + HIY + " - 恭喜领悟八极秘传！\n" NOR);
+                    players[i]->delete(progress_key);
+                } else {
+                    players[i]->add(progress_key, 1);
+                    tell_object(players[i], HIB "  机缘不足，未能领悟朱雀秘传（" + (players[i]->query(progress_key)) + "/25）\n" NOR);
+                }
+            } else {
+                players[i]->add(progress_key, 1);
+                tell_object(players[i], HIB "  机缘不足，未能领悟朱雀秘传（" + (players[i]->query(progress_key)) + "/25）\n" NOR);
+            }
+        }
+        
+        // 20%概率掉落真意（600-700级）
+        if (random(100) < 20)
+        {
+            int zhenyi_level;
+            
+            // 真意等级范围：600-700级，不超过玩家等级
+            zhenyi_level = 600 + random(101);
+            if (zhenyi_level > players[i]->query("level"))
+                zhenyi_level = players[i]->query("level");
+                
+            if (zhenyi_level >= 100)
+            {
+                tell_object(players[i], HIR "南方火尊的武学真意化作了传承传授给了你！\n" NOR);
+                // 调用真意系统
+                if (ZHENYI_MASTER)
+                    ZHENYI_MASTER->drop_zhenyi_with_boost(players[i], zhenyi_level);
+            }
+        }
+        
+        // 奖励基础炼体丹
+        {
+            object lianti_dan;
+            
+            lianti_dan = new_bind("/system/wusheng/obj/chuji_lianti_dan", players[i]);
+            if (lianti_dan)
+            {
+                lianti_dan->move(players[i]);
+                tell_object(players[i], HIW "  基础炼体丹 x1\n" NOR);
+            }
+        }
+        
+        // 记录副本监控日志
+        if (start_time)
+            MONITOR_MASTER->monitor_fuben_log(players[i], "南方火尊", start_time, time(), potential, exp);
+        
+        // 检查是否击败了全部天王
+        {
+            string *tianwang_list = ({ "dongfang", "nanfang", "xifang", "beifang" });
+            int all_defeated = 1;
+            int j;
+            
+            for (j = 0; j < sizeof(tianwang_list); j++)
+            {
+                if (!players[i]->query("tianwang_defeated/" + tianwang_list[j]))
+                {
+                    all_defeated = 0;
+                    break;
+                }
+            }
+            
+            if (all_defeated)
+            {
+                tell_object(players[i], HIM "\n\n=== 四象传承完成 ===\n" NOR);
+                tell_object(players[i], HIM "恭喜！你已经击败了全部四大天王！\n" NOR);
+                tell_object(players[i], HIM "额外奖励：\n" NOR);
+                tell_object(players[i], HIY "  " + "300000" + " 点经验\n" NOR);
+                tell_object(players[i], HIY "  " + "350000" + " 点潜能\n" NOR);
+                
+                // 发放终极奖励
+                FUBEN_D->add_exp(players[i], 300000);
+                players[i]->add("potential", 350000);
+                
+                // 额外奖励中级炼体丹
+                {
+                    object zhongji_lianti_dan;
+                    
+                    zhongji_lianti_dan = new_bind("/system/wusheng/obj/zhongji_lianti_dan", players[i]);
+                    if (zhongji_lianti_dan)
+                    {
+                        zhongji_lianti_dan->move(players[i]);
+                        tell_object(players[i], HIG "  中级炼体丹 x1\n" NOR);
+                    }
+                }
+                
+                // 清理击败标记，允许再次挑战
+                players[i]->delete("tianwang_defeated");
+                
+                tell_object(players[i], HIW "四象传承已重置，你可以再次挑战四大天王！\n" NOR);
+            }
+        }
+    }
+    
+    call_out("destroy_fuben", 30);  // 30秒后销毁副本房间
+    
+    ::die();
+}
+
+/**
+ * @brief 销毁副本房间
+ */
+void destroy_fuben()
+{
+    object *players;
+    object room = environment(this_object());
+    int i;
+    
+    if (!room) return;
+    
+    players = filter_array(all_inventory(room), (: userp($1) :));
+    
+    for (i = 0; i < sizeof(players); i++)
+    {
+        tell_object(players[i], HIR "\n天王殿开始崩塌，你被传送出副本！\n" NOR);
+        players[i]->move("/d/city/guangchang");
+        tell_object(players[i], "你眼前一花，发现自己已经回到了扬州广场。\n");
+    }
+}

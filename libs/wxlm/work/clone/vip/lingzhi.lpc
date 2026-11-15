@@ -1,0 +1,95 @@
+inherit COMBINED_ITEM;
+
+void setup()
+{
+	set_amount(1);
+	::setup();
+}
+void create()
+{
+	set_name(HIC"千年灵芝"NOR, ({"ling zhi"}));
+	if( clonep() )
+		set_default_object(__FILE__);
+	else {
+		set("base_value", 100000);
+		set("yuanbao", 20);
+        set("no_sell",1);
+		set("base_unit", "株");
+		set("long","这是一株千年灵芝，服用灵芝能增加100点内力修为！注：第一限制：从开服日期起算，每天只能服用一次，第二限制：玩家等级每两级可以吃一次。\n");
+		set("only_do_effect", 1); // 标识该物品可以使用
+	}
+	setup();
+}
+
+// 单次使用函数
+int do_effect(object me) {
+    int times;
+    if (!me) return 0;
+    times = SHENGXIAN_D->query_start_time(); 
+
+    if ((time() - times) / 86400 + 1 <= me->query("zjvip/lingzhi_num"))
+        return notify_fail("你今天已经服用过千年灵芝了，明天再来吧。（第一限制：从开服日期起算，每天只能服用一次）\n");
+
+		//灵芝使用次数不得大于玩家等级的一半
+	if (me->query("zjvip/lingzhi_num") >= me->query("level") / 2)
+		return notify_fail("以你目前的修为境界来看，服用千年灵芝恐怕会爆体而亡。（第二限制：玩家等级每两级可以吃一次灵芝）\n");
+		
+    me->add("max_neili", 100);
+    me->add("zjvip/lingzhi_num", 1);
+    message_vision("$N服用了一株千年灵芝，感觉内力有所提升。\n", me);
+    add_amount(-1);
+    return 1;
+}
+
+// 批量使用函数
+int do_effect_more(object me, int amount) {
+    int times;
+    int daily_can_use, level_can_use, final_can_use;
+    int current_day;
+    
+    if (!me) return 0;
+    if (amount <= 0) return 0;
+    if (query_amount() < amount) {
+        write("你没有足够的" + name() + "。\n");
+        return 0;
+    }
+
+    times = SHENGXIAN_D->query_start_time();
+
+    // 计算第一限制：每日限制可以服用的数量
+    current_day = (time() - times) / 86400 + 1;
+    daily_can_use = current_day - me->query("zjvip/lingzhi_num");  // 当前天数减去已服用次数
+    if (daily_can_use < 0) daily_can_use = 0;
+
+    // 计算第二限制：等级限制可以服用的数量
+    level_can_use = me->query("level") / 2 - me->query("zjvip/lingzhi_num");
+    
+    // 取两个限制的最小值
+    final_can_use = (daily_can_use < level_can_use) ? daily_can_use : level_can_use;
+    
+    // 检查是否还能服用
+    if (final_can_use <= 0) {
+        if (daily_can_use <= 0) {
+            return notify_fail("你今天已经服用过千年灵芝了，明天再来吧。（第一限制：从开服日期起算，每天只能服用一次）\n");
+        } else if (level_can_use <= 0) {
+            return notify_fail("以你目前的修为境界来看，服用千年灵芝恐怕会爆体而亡。（第二限制：玩家等级每两级可以吃一次灵芝）\n");
+        }
+    }
+
+    // 限制实际使用数量
+    if (amount > final_can_use) {
+        if (final_can_use == daily_can_use && daily_can_use < level_can_use) {
+            write(sprintf("由于每日限制，你今天最多只能服用%d株千年灵芝。\n", final_can_use));
+        } else {
+            write(sprintf("以你目前的修为境界，最多只能再服用%d株千年灵芝。\n", final_can_use));
+        }
+        amount = final_can_use;
+    }
+
+    me->add("max_neili", 100 * amount);
+    me->add("zjvip/lingzhi_num", amount);
+    message_vision(sprintf("$N服用了%d株千年灵芝，感觉内力有所提升。\n", amount), me);
+    add_amount(-amount);
+    return 1;
+}
+

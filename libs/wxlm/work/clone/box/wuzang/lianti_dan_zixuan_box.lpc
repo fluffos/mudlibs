@@ -1,0 +1,206 @@
+// lianti_dan_zixuan_box.c 炼体丹自选宝箱
+// 继承自COMBINED_ITEM，允许玩家自选四种炼体丹
+inherit COMBINED_ITEM;
+
+// 函数原型声明
+mapping get_dan_info(string dan_type);
+int do_select(string arg);
+int do_effect(object me);
+void init();
+
+/**
+ * @brief 设置物品基本属性
+ */
+void setup()
+{
+    set_amount(1);
+    ::setup();
+}
+
+/**
+ * @brief 创建炼体丹自选宝箱
+ */
+void create()
+{
+    set_name(HIY "炼体丹自选宝箱" NOR, ({"lianti dan zixuan box", "zixuan box", "box"}));
+    set_weight(500);
+    
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", "这是一个精美的宝箱，里面装着各种练体丹。\n"
+                   "你可以从中选择一种练体丹(三选一)：\n"
+                   HIW "低级练体丹" NOR "×20个(适用于初炼期1-20级)\n"
+                   HIG "中级练体丹" NOR "×10个(适用于小成期21-50级)\n"
+                   HIY "高级练体丹" NOR "×5个(适用于大成期51-80级)\n"
+                   "使用方法：select_dan <类型>\n"
+                   "可选类型：chuji(低级)、zhongji(中级)、gaoji(高级)\n");
+        set("base_value", 50000);
+        set("no_sell", 1);
+        set("base_unit", "个");
+        set("only_do_effect", 1);
+    }
+    setup();
+}
+
+/**
+ * @brief 初始化函数，添加命令
+ */
+void init()
+{
+    add_action("do_select", "select_dan");
+}
+
+/**
+ * @brief 获取炼体丹信息
+ * @param string dan_type 炼体丹类型
+ * @return mapping 炼体丹信息映射
+ */
+mapping get_dan_info(string dan_type)
+{
+    mapping dan_configs = ([
+        "chuji": ([
+            "name": HIW "低级练体丹" NOR,
+            "file": "/system/wusheng/obj/chuji_lianti_dan",
+            "desc": "适用于初炼期(1-20级)，提升10%炼体成功率",
+            "stage": "初炼期",
+            "level_range": "1-20级",
+            "amount": 20
+        ]),
+        "zhongji": ([
+            "name": HIG "中级练体丹" NOR,
+            "file": "/system/wusheng/obj/zhongji_lianti_dan",
+            "desc": "适用于小成期(21-50级)，提升10%炼体成功率",
+            "stage": "小成期",
+            "level_range": "21-50级",
+            "amount": 10
+        ]),
+        "gaoji": ([
+            "name": HIY "高级练体丹" NOR,
+            "file": "/system/wusheng/obj/gaoji_lianti_dan",
+            "desc": "适用于大成期(51-80级)，提升10%炼体成功率",
+            "stage": "大成期",
+            "level_range": "51-80级",
+            "amount": 5
+        ])
+    ]);
+    
+    return dan_configs[dan_type];
+}
+
+/**
+ * @brief 处理玩家选择炼体丹
+ * @param string arg 选择的炼体丹类型
+ * @return int 1表示成功处理
+ */
+int do_select(string arg)
+{
+    object me = this_player();
+    mapping dan_info;
+    object dan_obj;
+    string *valid_types = ({"chuji", "zhongji", "gaoji"});
+    int amount;
+    
+    if (!me || !objectp(me))
+        return 0;
+        
+    if (!arg)
+    {
+        tell_object(me, "请指定要选择的练体丹类型。\n"
+                       "可选类型：chuji(低级)、zhongji(中级)、gaoji(高级)\n");
+        return 1;
+    }
+    
+    if (member_array(arg, valid_types) == -1)
+    {
+        tell_object(me, "无效的练体丹类型。\n"
+                       "可选类型：chuji(低级)、zhongji(中级)、gaoji(高级)\n");
+        return 1;
+    }
+    
+    dan_info = get_dan_info(arg);
+    if (!dan_info)
+    {
+        tell_object(me, "获取练体丹信息失败。\n");
+        return 1;
+    }
+    
+    // 创建炼体丹对象
+    dan_obj = new(dan_info["file"]);
+    if (!dan_obj)
+    {
+        tell_object(me, "创建练体丹失败。\n");
+        return 1;
+    }
+    
+    // 根据类型设置不同数量
+    amount = dan_info["amount"];
+    dan_obj->set_amount(amount);
+    
+    if (dan_obj->move(me))
+    {
+        tell_object(me, sprintf("你从宝箱中取出了 %s × %d个。\n"
+                               "适用阶段：%s(%s)\n"
+                               "效果：%s\n",
+                               dan_info["name"],
+                               amount,
+                               dan_info["stage"],
+                               dan_info["level_range"],
+                               dan_info["desc"]));
+        
+        // 消耗宝箱
+        add_amount(-1);
+        
+        
+        return 1;
+    }
+    else
+    {
+        tell_object(me, "你的负重不够，无法获得练体丹。\n");
+        destruct(dan_obj);
+        return 1;
+    }
+}
+
+/**
+ * @brief 使用宝箱的效果处理
+ * @param object me 使用者
+ * @return int 1表示成功处理
+ */
+int do_effect(object me)
+{
+    string msg, *buttons;
+    
+    if (!me || !objectp(me))
+        return 0;
+    
+    msg = HIY "≡ 炼体丹自选宝箱 ≡\n" NOR;
+    msg += "请选择你需要的练体丹类型(三选一)：\n\n";
+    
+    msg += HIW "【低级练体丹】" NOR "\n";
+    msg += "适用阶段：初炼期(1-20级)\n";
+    msg += "效果：提升10%炼体成功率\n";
+    msg += "获得数量：20个\n\n";
+    
+    msg += HIG "【中级练体丹】" NOR "\n";
+    msg += "适用阶段：小成期(21-50级)\n";
+    msg += "效果：提升10%炼体成功率\n";
+    msg += "获得数量：10个\n\n";
+    
+    msg += HIY "【高级练体丹】" NOR "\n";
+    msg += "适用阶段：大成期(51-80级)\n";
+    msg += "效果：提升10%炼体成功率\n";
+    msg += "获得数量：5个\n\n";
+    
+    msg += HIB "提示：" NOR "练体丹用于武圣之躯系统，可提升炼体成功率。\n";
+    msg += "不同等级的练体丹适用于不同的炼体阶段。\n";
+    
+    buttons = ({
+        "选择低级练体丹×20:select_dan chuji",
+        "选择中级练体丹×10:select_dan zhongji",
+        "选择高级练体丹×5:select_dan gaoji"
+    });
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}

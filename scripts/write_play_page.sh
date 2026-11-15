@@ -98,7 +98,7 @@ print(json.dumps(dirs))
 # work/include/zjmud.h (the protocol's own header, defining ZJKEY and the
 # ESA/ZJSEP/... message-framing macros) only exists in libs that actually
 # use it, so this self-maintains if another one ever turns up.
-if [ -f "$LIB/work/include/zjmud.h" ] || [ -f "$LIB/work/lib/include/zjmud.h" ]; then ZJ_PROTOCOL=true; else ZJ_PROTOCOL=false; fi
+if { [ -f "$LIB/work/include/zjmud.h" ] || [ -f "$LIB/work/lib/include/zjmud.h" ]; } && grep -qs 'ver1\.0' "$LIB/work/adm/daemons/logind.lpc" 2>/dev/null; then ZJ_PROTOCOL=true; else ZJ_PROTOCOL=false; fi
 
 MUDLIB_SUBDIR=$(python3 -c '
 import json, sys

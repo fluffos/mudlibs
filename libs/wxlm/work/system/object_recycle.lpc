@@ -1,0 +1,150 @@
+/**
+ * @file object_recycle.c
+ * @author Lu dexiang
+ * @brief 基于生存时间的对象回收管理类
+ * @version 1.0
+ * @date 2023-12-20
+ */
+
+
+
+// 默认生存时间(秒)
+#define DEFAULT_LIFETIME 3600
+
+private mapping lifetime = ([]);       // 对象生存时间
+private mapping create_time = ([]);    // 对象创建时间
+private mapping last_reset = ([]);     // 最后重置时间
+
+void create()
+{
+    // 启动定期检查
+    set_heart_beat(1);
+}
+
+/**
+ * @brief 注册对象到回收系统
+ * @param obj 要管理的对象
+ * @param life_seconds 生存时间(秒)
+ * @return int 是否注册成功
+ */
+public int register_object(object obj, int life_seconds)
+{
+    int now;
+    
+    if (!obj || !objectp(obj))
+        return 0;
+        
+    if (life_seconds < 1)
+        life_seconds = DEFAULT_LIFETIME;
+        
+    now = time();
+    lifetime[obj] = life_seconds;
+    create_time[obj] = now;
+    last_reset[obj] = now;
+    
+    return 1;
+}
+
+/**
+ * @brief 重置对象的生存时间
+ * @param obj 目标对象
+ * @return int 是否重置成功
+ */
+public int reset_lifetime(object obj)
+{
+    if (!obj || !objectp(obj) || !lifetime[obj])
+        return 0;
+        
+    last_reset[obj] = time();
+    return 1;
+}
+
+/**
+ * @brief 修改对象的生存时间
+ * @param obj 目标对象
+ * @param new_lifetime 新的生存时间(秒)
+ * @return int 是否修改成功
+ */
+public int set_lifetime(object obj, int new_lifetime)
+{
+    if (!obj || !objectp(obj) || new_lifetime < 1)
+        return 0;
+        
+    lifetime[obj] = new_lifetime;
+    return 1;
+}
+
+/**
+ * @brief 获取对象剩余生存时间
+ * @param obj 目标对象
+ * @return int 剩余秒数,-1表示对象无效
+ */
+public int query_remaining_time(object obj)
+{
+    int passed, total;
+    
+    if (!obj || !objectp(obj) || !lifetime[obj])
+        return -1;
+        
+    total = lifetime[obj];
+    passed = time() - last_reset[obj];
+    
+    return total - passed;
+}
+
+/**
+ * @brief 检查并清理超时对象
+ */
+private void check_objects()
+{
+    object obj;
+    int current_time = time();
+    
+    foreach (obj in keys(lifetime))
+    {
+        // 检查对象是否有效
+        if (!obj || !objectp(obj))
+        {
+            map_delete(lifetime, obj);
+            map_delete(create_time, obj);
+            map_delete(last_reset, obj);
+            continue;
+        }
+        
+        // 检查是否超时
+        if (current_time - last_reset[obj] > lifetime[obj])
+        {
+            // 销毁对象
+            destruct(obj);
+            map_delete(lifetime, obj);
+            map_delete(create_time, obj);
+            map_delete(last_reset, obj);
+        }
+    }
+}
+
+/**
+ * @brief 心跳函数
+ */
+void heart_beat()
+{
+    check_objects();
+}
+
+/**
+ * @brief 获取对象信息
+ * @param obj 目标对象
+ * @return mapping 对象信息,包含生存时间、创建时间等
+ */
+public mapping query_object_info(object obj)
+{
+    if (!obj || !objectp(obj) || !lifetime[obj])
+        return 0;
+        
+    return ([
+        "lifetime"    : lifetime[obj],
+        "create_time" : create_time[obj],
+        "last_reset"  : last_reset[obj],
+        "remaining"   : query_remaining_time(obj)
+    ]);
+}

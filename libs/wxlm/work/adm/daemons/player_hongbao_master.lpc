@@ -1,0 +1,365 @@
+/**
+ * @file player_hongbao_master.c
+ * @author Lu dexiang
+ * @brief 玩家红包系统守护进程
+ * @version 1.0
+ * @date 2024-01-20
+ */
+
+inherit F_DBASE;
+
+// 红包类型定义
+nosave mapping HONGBAO_TYPES = ([
+    "喜气红包" : ([
+        "cost" : 10,           // 售价
+        "min_amount" : 100,     // 最小金额
+        "max_amount" : 1000,    // 最大金额
+        "max_users" : 10,       // 最大抢红包人数
+        "special_ratio" : ({})  // 特殊比例
+    ]),
+    "福禄红包" : ([
+        "cost" : 30,
+        "min_amount" : 1000,
+        "max_amount" : 3000,
+        "max_users" : 20,
+        "special_ratio" : ({20}) // 20%大额红包
+    ]),
+    "财神红包" : ([
+        "cost" : 50,
+        "min_amount" : 3000,
+        "max_amount" : 10000,
+        "max_users" : 50,
+        "special_ratio" : ({20, 15}) // 20%和15%大额红包
+    ]),
+    "至尊红包" : ([
+        "cost" : 100,
+        "min_amount" : 10000,
+        "max_amount" : 999999,
+        "max_users" : 100,
+        "special_ratio" : ({25, 15, 10}) // 25%,15%,10%大额红包
+    ])
+]);
+
+// 活跃红包列表
+private nosave mapping active_hongbaos = ([]);
+private int calculate_amount(mapping hongbao);
+
+// 玩家红包记录
+private mapping player_records = ([]);
+
+// 初始化玩家记录
+private void init_player_record(string id)
+{
+    if (!player_records[id]) {
+        player_records[id] = ([
+            "sent" : ([]),      // 发出的红包记录
+            "received" : ([]),  // 收到的红包记录
+            "total_sent" : 0,   // 总发送金额
+            "total_received" : 0 // 总接收金额
+        ]);
+    }
+}
+
+// 记录发送红包
+private void record_sent_hongbao(string id, mapping hongbao_info)
+{
+    init_player_record(id);
+    player_records[id]["sent"][hongbao_info["id"]] = ([
+        "type" : hongbao_info["type"],
+        "amount" : hongbao_info["total_amount"],
+        "num" : hongbao_info["total_packets"],
+        "time" : time()
+    ]);
+    player_records[id]["total_sent"] += hongbao_info["total_amount"];
+}
+
+// 记录接收红包
+private void record_received_hongbao(string id, mapping hongbao, int amount)
+{
+    init_player_record(id);
+    player_records[id]["received"][hongbao["id"]] = ([
+        "type" : hongbao["type"],
+        "sender" : hongbao["sender_name"],
+        "amount" : amount,
+        "time" : time()
+    ]);
+    player_records[id]["total_received"] += amount;
+}
+
+// 获取玩家红包记录
+mapping query_player_records(string id)
+{
+    init_player_record(id);
+    return player_records[id];
+}
+
+// 清理过期记录
+void clean_expired_records()
+{
+    int expire_time = time() - 7 * 86400; // 7天前
+    
+    foreach (string id, mapping record in player_records) {
+        // 清理发送记录
+        foreach (string hongbao_id, mapping info in record["sent"]) {
+            if (info["time"] < expire_time) {
+                map_delete(record["sent"], hongbao_id);
+            }
+        }
+        
+        // 清理接收记录
+        foreach (string hongbao_id, mapping info in record["received"]) {
+            if (info["time"] < expire_time) {
+                map_delete(record["received"], hongbao_id);
+            }
+        }
+    }
+}
+
+void create()
+{
+    seteuid(getuid());
+    set("channel_id", "玩家红包系统");
+}
+
+// 创建红包
+mixed create_hongbao(object who, string type, int total_amount, int num_packets, string password)
+{
+    string hongbao_id;
+    mapping hongbao_info, type_info;
+    
+    if (!who || !userp(who))
+        return "参数错误！";
+        
+    if (!mapp(HONGBAO_TYPES[type]))
+        return "不存在的红包类型！";
+        
+    type_info = HONGBAO_TYPES[type];
+    
+    if (total_amount < type_info["min_amount"] || total_amount > type_info["max_amount"])
+        return sprintf("红包金额必须在%d-%d之间,%d不好装进去啊！", type_info["min_amount"], type_info["max_amount"],total_amount);
+        
+    if (num_packets < 1 || num_packets > type_info["max_users"])
+        return sprintf("红包个数必须在1-%d之间！", type_info["max_users"]);
+        
+    if (who->query("yuanbao") < total_amount + type_info["cost"])
+        return "您的元宝不足！";
+        
+    // 扣除元宝
+    who->add("yuanbao", -(total_amount + type_info["cost"]));
+    
+    // 生成红包ID
+    hongbao_id = sprintf("%s_%d", who->query("id"), time());
+    
+    // 创建红包信息
+    hongbao_info = ([
+        "id" : hongbao_id,
+        "type" : type,
+        "sender" : who->query("id"),
+        "sender_name" : who->query("name"),
+        "total_amount" : total_amount,
+        "remaining_amount" : total_amount,
+        "total_packets" : num_packets,
+        "remaining_packets" : num_packets,
+        "special_ratio" : type_info["special_ratio"],
+        "receivers" : ([]),
+        "create_time" : time(),
+        "password" : password,  // 新增口令字段
+    ]);
+    
+    active_hongbaos[hongbao_id] = hongbao_info;
+    record_sent_hongbao(who->query("id"), hongbao_info);
+    
+    // 发送红包消息
+    CHANNEL_D->do_channel(this_object(), "chat", 
+        sprintf(HIR "%s发放了一个%s，共%d个红包，总额%d元宝！%s%s快来抢吧！"
+            "点击"ZJURL("cmds:player_hongbao qiang %s")ZJSIZE(15)"抢红包"NOR,
+            who->query("name"), type, num_packets, total_amount,
+            password ? sprintf("（口令红包，口令：%s）", password) : "",  // 显示口令内容
+            password ? ZJBR : "",  // 如果是口令红包则换行显示
+            hongbao_id));
+            
+    return 1;
+}
+
+// 领取红包
+mixed get_hongbao(object who, string hongbao_id, string password)
+{
+    mapping hongbao;
+    int amount;
+    string msg;
+    
+    if (!who || !userp(who))
+        return "参数错误！";
+        
+    if (!mapp(active_hongbaos[hongbao_id]))
+        return "红包已过期(或被抢完了)！";
+        
+    hongbao = active_hongbaos[hongbao_id];
+    
+    // 检查口令
+    if (hongbao["password"] && hongbao["password"] != password)
+        return "红包口令不正确！";
+    
+    if (hongbao["receivers"][who->query("id")])
+        return "您已经抢过这个红包了！";
+        
+    if (hongbao["remaining_packets"] <= 0)
+        return "红包已被抢完了！";
+        
+    // 计算红包金额
+    amount = calculate_amount(hongbao);
+    
+    // 记录领取信息
+    hongbao["receivers"][who->query("id")] = ([
+        "name" : who->query("name"),
+        "amount" : amount,
+        "time" : time()
+    ]);
+    
+    hongbao["remaining_amount"] -= amount;
+    hongbao["remaining_packets"] -= 1;
+    
+    // 发放元宝
+    who->add("yuanbao", amount);
+    record_received_hongbao(who->query("id"), hongbao, amount);
+    
+    // 发送消息
+    msg = sprintf(HIR "%s抢到了%s发放的%s，获得%d元宝！\n" NOR,
+        who->query("name"), hongbao["sender_name"], 
+        hongbao["type"], amount);
+    tell_object(who, msg);
+    // CHANNEL_D->do_channel(this_object(), "chat", msg);
+    
+    // 检查是否已抢完
+    if (hongbao["remaining_packets"] <= 0) {
+        string detail = "";
+        mapping receivers = hongbao["receivers"];
+        mixed *sorted_receivers;
+        int index = 1;
+        // 将领取记录转换为数组，方便排序
+        sorted_receivers = values(map(receivers, (: $2 + (["id":$1]) :)));
+        
+        // 按照金额从大到小排序
+        sorted_receivers = sort_array(sorted_receivers, (: $2["amount"] - $1["amount"] :));
+        
+        // 生成领取详情
+        foreach (mapping info in sorted_receivers) {
+            
+            detail += sprintf("%d.%s：%d元宝"ZJBR, 
+                index,
+                info["name"], 
+                info["amount"]);
+
+            index++;
+        }
+        
+        CHANNEL_D->do_channel(this_object(), "chat", 
+            sprintf(HIR "%s发放的%s已被抢完！"ZJBR
+                "红包领取详情："ZJBR"%s" NOR + "\n",
+                hongbao["sender_name"], 
+                hongbao["type"],
+                detail));
+                
+        map_delete(active_hongbaos, hongbao_id);
+    }
+    
+    return 1;
+}
+
+// 计算红包金额
+private int calculate_amount(mapping hongbao)
+{
+    int amount, min_amount = 1;
+    int remaining_amount = hongbao["remaining_amount"];
+    int remaining_packets = hongbao["remaining_packets"];
+    float *special_ratio = hongbao["special_ratio"];
+    
+    // 如果只有一个红包，直接返回剩余金额
+    if (remaining_packets == 1) {
+        return remaining_amount;
+    }
+    
+    // 处理特殊比例红包
+    if (sizeof(special_ratio) > 0 && remaining_packets == hongbao["total_packets"]) {
+        foreach (float ratio in special_ratio) {
+            if (remaining_packets == hongbao["total_packets"]) {
+                amount = to_int(hongbao["total_amount"] * ratio / 100.0);
+                return amount;
+            }
+        }
+    }
+    
+    // 保证每个红包最少1元宝
+    remaining_amount -= remaining_packets;
+    
+    // 随机分配剩余金额
+    amount = min_amount + random(to_int(remaining_amount / remaining_packets * 2));
+    if (amount > remaining_amount - (remaining_packets - 1))
+        amount = remaining_amount - (remaining_packets - 1);
+        
+    return amount;
+}
+
+// 查询红包信息
+mapping query_hongbao(string hongbao_id)
+{
+    return active_hongbaos[hongbao_id];
+}
+
+// 清理过期红包
+void clean_expired_hongbao()
+{
+    int now = time();
+    object sender;
+    
+    foreach (string id, mapping info in active_hongbaos) {
+        if (now - info["create_time"] > 3600) { // 1小时后过期
+            // 如果还有剩余元宝，退还给发送者
+            if (info["remaining_amount"] > 0) {
+                // 尝试查找发送者
+                sender = UPDATE_D->global_find_player(info["sender"]);
+                if (sender) {
+                    // 在线直接发还元宝
+                    sender->add("yuanbao", info["remaining_amount"]);
+                    tell_object(sender, sprintf(HIY "您发送的红包已过期，剩余%d元宝已退还。\n" NOR,
+                        info["remaining_amount"]));
+                }
+            }
+            
+            // 发送系统消息
+            CHANNEL_D->do_channel(this_object(), "chat",
+                sprintf(HIR "%s发放的%s已过期！剩余%d个红包未被领取。" NOR,
+                    info["sender_name"],
+                    info["type"],
+                    info["remaining_packets"]));
+                    
+            // 删除过期红包
+            map_delete(active_hongbaos, id);
+        }
+    }
+}
+
+
+// 查询所有未过期红包
+mapping query_active_hongbaos()
+{
+    mapping result = ([]);
+    int now = time();
+    
+    foreach (string id, mapping info in active_hongbaos) {
+        // 只返回未过期的红包
+        if (now - info["create_time"] <= 3600) {
+            result[id] = ([
+                "id" : id,
+                "type" : info["type"],
+                "sender_name" : info["sender_name"],
+                "total_amount" : info["total_amount"],
+                "remaining_packets" : info["remaining_packets"],
+                "total_packets" : info["total_packets"],
+                "password" : info["password"],
+                "create_time" : info["create_time"],
+            ]);
+        }
+    }
+    return result;
+}

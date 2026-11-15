@@ -1,0 +1,109 @@
+// chard.c
+#pragma optimize
+
+
+#define HUMAN_RACE "/adm/daemons/race/human"
+#define BEAST_RACE "/adm/daemons/race/beast"
+#define MONSTER_RACE "/adm/daemons/race/monster"
+#define YAOMO_RACE "/adm/daemons/race/yaomo"
+ 
+void create() { seteuid(getuid()); }
+ 
+/**
+ * @brief 初始化角色基本属性和种族特性
+ * @param ob 要初始化的角色对象
+ * @return 无返回值
+ * @details 该函数负责设置角色的种族、基本属性如精神、气、神等，并根据种族调用相应的初始化函数。
+ *          同时确保角色拥有合理的初始状态，包括设置最大负重和更新战斗状态。
+ */
+void setup_char(object ob)
+{
+	string race;
+	mapping my;
+ 
+	if (! stringp(race = ob->query("race")))
+	{
+		race = "人类";
+		ob->set("race", "人类");
+	}
+
+	my = ob->query_entire_dbase();
+
+	switch(race)
+	{
+	case "人类":
+		HUMAN_RACE->setup_human(ob);
+		break;
+	case "妖魔":
+		YAOMO_RACE->setup_yaomo(ob);
+		break;
+	case "野兽":
+		BEAST_RACE->setup_beast(ob);
+		break;
+	default:
+		error("Chard: undefined race " + race + ".\n");
+	}
+ 
+	if (undefinedp(my["jing"]))
+		my["jing"] = my["max_jing"];
+	if (undefinedp(my["qi"]))
+		my["qi"] = my["max_qi"];
+ 
+	if (undefinedp(my["eff_jing"]) || my["eff_jing"] > my["max_jing"])
+		my["eff_jing"] = my["max_jing"];
+	if (undefinedp(my["eff_qi"]) || my["eff_qi"] > (my["max_qi"]))
+		my["eff_qi"] = my["max_qi"];
+ 
+	if (undefinedp(my["shen_type"])) my["shen_type"] = 0;
+ 
+	if (undefinedp(my["shen"]))
+	{
+		if (userp(ob))	
+			my["shen"] = 0;
+		else
+			my["shen"] = my["shen_type"] * my["combat_exp"] / 10;
+	}
+ 
+	if (! ob->query_max_encumbrance())
+	{
+		ob->set_max_encumbrance((20000 + ob->query("str") * 2000 + ob->query_str() * 300) * 2);
+	}
+ 
+	ob->reset_action();
+	ob->update_killer();
+}
+ 
+/**
+ * @brief 为被击败的角色创建尸体对象
+ * @param victim 被击败的角色对象，将成为尸体的来源
+ * @param killer 击败角色的对象，用于记录击杀信息
+ * @return object 创建的尸体对象，如果创建失败则返回0
+ * @details 该函数用于在角色被击败后生成相应的尸体，保留角色的物品和状态信息。
+ *          尸体对象会继承原角色的部分属性，并记录击杀信息，供后续处理如搜刮、埋葬等交互使用。
+ *          函数设计为可变参数形式，允许在某些情况下不指定击杀者。
+ */
+varargs object make_corpse(object victim, object killer)
+{
+ 
+ object corpse;
+/*
+	if (victim->is_ghost())
+	{
+		inv = all_inventory(victim);
+		inv->owner_is_killed(killer);
+		inv -= ({ 0 });
+		i = sizeof(inv);
+		while(i--)
+		{
+			if(inv[i]->query("owner_id")||inv[i]->query("owner")) continue;
+			inv[i]->move(environment(victim));
+		}
+		return 0;
+	}
+*/
+//	if( base_name(victim)!="/clone/user/user" ) return 0;
+
+	corpse = new(CORPSE_OB);
+	corpse->make_corpse(victim, killer);
+	return corpse;
+}

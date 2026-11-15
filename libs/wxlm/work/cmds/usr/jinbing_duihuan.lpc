@@ -1,0 +1,149 @@
+
+
+inherit F_CLEAN_UP;
+
+#define EXP_RATE 100    // 100积分兑换1000经验
+#define POT_RATE 100    // 100积分兑换500潜能
+#define MAX_DAILY_EXCHANGE 10000 // 每日最大兑换积分
+
+
+int do_exchange(object me, string type, int amount);
+
+int main(object me, string arg)
+{
+    int score, daily_exchanged;
+    mapping data;
+    string msg;
+    object pop;
+
+    data = JINBING_D->query_player_data(me->query("id"));
+    if (!data || data["score"] <= 0)
+        return notify_fail("你没有可兑换的积分\n");
+
+    score = data["score"];
+    daily_exchanged = JINBING_D->query_daily_exchange(me->query("id"));
+
+    pop = new(POP1);
+    msg = sprintf(HIY "金兵积分兑换\n" NOR
+                  "当前积分：%d\n"
+                  "今日已兑换：%d\n"
+                  "今日剩余可兑换：%d\n"
+                  "兑换比例：\n"
+                  "  经验：100积分 = 1000经验\n"
+                  "  潜能：100积分 = 500潜能\n",
+                  score, daily_exchanged, MAX_DAILY_EXCHANGE - daily_exchanged);
+
+    pop->basic(msg, 2);
+
+    // 添加经验兑换按钮
+    if (score >= 100 && daily_exchanged < MAX_DAILY_EXCHANGE)
+    {
+        pop->add_button("兑换1000经验", "jinbing_duihuan exp 100");
+        if (score >= 1000 && daily_exchanged + 1000 <= MAX_DAILY_EXCHANGE)
+            pop->add_button("兑换10000经验", "jinbing_duihuan exp 1000");
+        pop->add_button("自定义兑换经验", "jinbing_duihuan custom_exp");
+    }
+
+    // 添加潜能兑换按钮
+    if (score >= 100 && daily_exchanged < MAX_DAILY_EXCHANGE)
+    {
+        pop->add_button("兑换500潜能", "jinbing_duihuan pot 100");
+        if (score >= 1000 && daily_exchanged + 1000 <= MAX_DAILY_EXCHANGE)
+            pop->add_button("兑换5000潜能", "jinbing_duihuan pot 1000");
+        pop->add_button("自定义兑换潜能", "jinbing_duihuan custom_pot");
+    }
+
+    // 如果有参数，则执行兑换操作
+    if (arg)
+    {
+        string type;
+        int amount;
+
+        if (arg == "custom_exp")
+        {
+            write(popup_input("请输入要兑换经验的积分数量：", "jinbing_duihuan exp "));
+            return 1;
+        }
+
+        else if (arg == "custom_pot")
+        {
+            write(popup_input("请输入要兑换潜能的积分数量：", "jinbing_duihuan pot "));
+            return 1;
+        }
+
+
+
+        if (sscanf(arg, "%s %d", type, amount) != 2)
+            return notify_fail("格式错误，请重新选择。\n");
+
+        return do_exchange(me, type, amount);
+    }
+
+    msg = pop->result();
+    write(msg + "\n");
+    return 1;
+}
+
+int do_exchange(object me, string type, int amount)
+{
+    int score, daily_exchanged, gain;
+    mapping data;
+
+    if (type != "exp" && type != "pot")
+        return notify_fail("兑换类型错误，请重新选择。\n");
+
+    if (amount <= 0)
+        return notify_fail("兑换数量必须大于0\n");
+
+    data = JINBING_D->query_player_data(me->query("id"));
+    if (!data || data["score"] <= 0)
+        return notify_fail("你没有可兑换的积分\n");
+
+    score = data["score"];
+    daily_exchanged = JINBING_D->query_daily_exchange(me->query("id"));
+
+    if (daily_exchanged + amount > MAX_DAILY_EXCHANGE)
+        return notify_fail("超出每日兑换上限，请减少兑换数量。\n");
+
+    if (amount > score)
+        return notify_fail("积分不足，请减少兑换数量。\n");
+
+    if (type == "exp")
+    {
+        gain = amount * 1000 / EXP_RATE;
+        me->add("combat_exp", gain);
+        tell_object(me, HIY "你消耗了 " + amount + " 点积分，获得了 " + gain + " 点经验\n" NOR);
+    }
+    else if (type == "pot")
+    {
+        gain = amount * 500 / POT_RATE;
+        me->add("potential", gain);
+        tell_object(me, HIY "你消耗了 " + amount + " 点积分，获得了 " + gain + " 点潜能\n" NOR);
+    }
+
+    JINBING_D->add_player_score(me->query("id"), -amount);
+    JINBING_D->update_daily_exchange(me->query("id"), amount);
+
+    // 兑换完成后，重新调用本命令以刷新界面
+    return main(me, 0);
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式: jinbing_duihuan
+
+这个指令可以让你将金兵入侵活动中获得的积分兑换成经验或潜能。
+使用此命令会打开一个交互界面，你可以在其中选择要兑换的类型和数量。
+
+兑换比例：
+  经验 - 100积分 = 1000经验
+  潜能 - 100积分 = 500潜能
+
+每天最多可以兑换10000积分。
+
+你还可以选择自定义兑换数量，系统会弹出输入框让你输入具体的积分数。
+
+HELP );
+    return 1;
+}

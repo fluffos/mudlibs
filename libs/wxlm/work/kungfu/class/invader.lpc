@@ -1,0 +1,258 @@
+// invader.c
+// 入侵者 NPC 模板
+
+inherit NPC;
+
+
+
+// 函数声明
+void create();
+void init();
+void set_strength(int level);
+void die(object killer);
+void set_factions(string _invader_faction, string _target_faction);
+int is_target_faction(object ob);
+void random_move();
+
+// 变量声明
+string invader_faction;
+string target_faction;
+
+void create()
+{
+    set_name("神秘入侵者", ({ "invader" }));
+    set("long", "这是一个神秘的入侵者，正对你露出狰狞的笑容。\n");
+    set("gender", "男性");
+    set("age", 25 + random(10));
+    set("attitude", "aggressive");
+
+    // 基础属性
+    set("str", 20);
+    set("int", 20);
+    set("con", 20);
+    set("dex", 20);
+
+    // 战斗属性将在稍后根据实力等级设置
+
+    setup();
+
+    if (clonep())
+    {
+        set("chat_chance", 30);
+        set("chat_msg", ({
+            (: random_move :),
+        }));
+        keep_heart_beat();
+    }
+}
+
+void init()
+{
+    object ob;
+    ::init();
+    if (interactive(ob = this_player()) && is_target_faction(ob))
+    {
+        remove_call_out("kill_ob");
+        call_out("kill_ob", 1, ob);
+    }
+}
+
+void set_strength(int level)
+{
+    mapping my;
+
+    my = query_entire_dbase();
+
+    // 根据传入的等级设置属性和技能
+    my["max_qi"] = level * 15 + 1000;
+    my["max_jing"] = level * 10 + 800;
+    my["max_neili"] = level * 20 + 1500;
+    my["eff_qi"] = my["max_qi"];    // 设置有效气血为最大值
+    my["eff_jing"] = my["max_jing"]; // 设置有效精神为最大值
+    my["neili"] = my["max_neili"];
+    my["qi"] = my["max_qi"];
+    my["jing"] = my["max_jing"];
+    my["jiali"] = level / 2;
+    my["combat_exp"] = level * 10000 + 500000;
+
+    // 设置基础技能
+    set_skill("force", level + 50);
+    set_skill("dodge", level + 50);
+    set_skill("parry", level + 50);
+    set_skill("sword", level + 50);
+    set_skill("unarmed", level + 50);
+
+    // 随机选择武功并设置
+    switch (random(3))
+    {
+    case 0:
+        set_skill("hunyuan-yiqi", level + 50);
+        set_skill("shaolin-shenfa", level + 50);
+        set_skill("damo-jian", level + 50);
+        map_skill("force", "hunyuan-yiqi");
+        map_skill("dodge", "shaolin-shenfa");
+        map_skill("parry", "damo-jian");
+        map_skill("sword", "damo-jian");
+        break;
+    case 1:
+        set_skill("taiji-shengong", level + 50);
+        set_skill("tiyunzong", level + 50);
+        set_skill("taiji-jian", level + 50);
+        map_skill("force", "taiji-shengong");
+        map_skill("dodge", "tiyunzong");
+        map_skill("parry", "taiji-jian");
+        map_skill("sword", "taiji-jian");
+        break;
+    default:
+        set_skill("xiantian-gong", level + 50);
+        set_skill("jinyan-gong", level + 50);
+        set_skill("quanzhen-jian", level + 50);
+        map_skill("force", "xiantian-gong");
+        map_skill("dodge", "jinyan-gong");
+        map_skill("parry", "quanzhen-jian");
+        map_skill("sword", "quanzhen-jian");
+        break;
+    }
+
+    // 装备武器
+    carry_object("/clone/weapon/changjian")->wield();
+
+    // 穿戴装备
+    carry_object("/clone/misc/cloth")->wear();
+
+    // 确保状态满
+    my["eff_qi"] = my["max_qi"];
+    my["eff_jing"] = my["max_jing"];
+    my["qi"] = my["max_qi"];
+    my["jing"] = my["max_jing"];
+    my["neili"] = my["max_neili"];
+}
+
+void set_factions(string _invader_faction, string _target_faction)
+{
+    invader_faction = _invader_faction;
+    target_faction = _target_faction;
+    set("invader_faction", invader_faction);
+    set("target_faction", target_faction);
+    set("long", query("long") + "这个入侵者来自" + invader_faction + "，正在入侵" + target_faction + "。\n");
+}
+
+void die(object killer)
+{
+    // 给击杀者奖励（仅限于被入侵门派的玩家）
+    if (killer && userp(killer) && killer->query("family/family_name") == target_faction)
+    {
+        int exp = 500 + random(500);
+        int pot = 200 + random(200);
+
+        killer->add("combat_exp", exp);
+        killer->add("potential", pot);
+        tell_object(killer, sprintf("你击败了来自%s的入侵者，保卫了%s，获得了经验和潜能的奖励！\n",
+            invader_faction, target_faction));
+    }
+
+    message_vision(sprintf("$N倒在地上，死了。这个来自%s的入侵者被成功击退！\n", invader_faction), this_object());
+    destruct(this_object());
+}
+
+// 开始移动，调用 random_move()
+void start_moving()
+{
+   
+    if (!environment() || is_fighting())
+    {
+        
+        // 如果环境不存在或正在战斗，延迟5秒后再尝试移动
+        call_out("start_moving", 5);
+        return;
+    }
+
+    random_move();
+    
+    // 每10-20秒随机移动一次
+    call_out("start_moving", 10 + random(10));
+}
+
+// 随机移动
+void random_move()
+{
+    mapping exits;
+    string *dirs;
+    string dir;
+
+    if (!environment() || is_fighting()) return;
+
+    exits = environment()->query("exits");
+    if (!mapp(exits) || sizeof(exits) == 0) return;
+
+    dirs = keys(exits);
+    if (sizeof(dirs) == 0) return;
+
+    dir = dirs[random(sizeof(dirs))];
+    command("go " + dir);
+}
+
+// 判断对象是否属于目标门派
+int is_target_faction(object ob)
+{
+    if (!ob || !objectp(ob)) return 0;
+
+    // 检查玩家
+    if (userp(ob) && ob->query("family/family_name") == target_faction)
+        return 1;
+
+    // 检查 NPC
+    if (!userp(ob) && ob->query("family/family_name") == target_faction)
+        return 1;
+
+    return 0;
+}
+
+// 遇到目标门派的玩家或 NPC，自动攻击
+int accept_fight(object ob)
+{
+    if (is_target_faction(ob))
+    {
+        kill_ob(ob);
+        return 1;
+    }
+    return 0;
+}
+
+void heart_beat()
+{
+    object ob;
+    ::heart_beat();
+
+    if (environment() && !is_fighting())
+    {
+        ob = present(target_faction, environment());
+        if (ob && living(ob) && !ob->is_fighting(this_object()))
+        {
+            message_vision("$N大喝一声：" + ob->name() + "，受死吧！\n", this_object());
+            kill_ob(ob);
+            ob->fight_ob(this_object());
+        }
+    }
+}
+
+// 自动检查并攻击敌人
+void auto_check_enemy()
+{
+    object *obs;
+    int i;
+
+    if (!environment() || is_fighting()) return;
+
+    obs = all_inventory(environment());
+    for (i = 0; i < sizeof(obs); i++)
+    {
+        if (is_target_faction(obs[i]) && living(obs[i]) && !obs[i]->is_fighting(this_object()))
+        {
+            message_vision("$N大喝一声：" + obs[i]->name() + "，受死吧！\n", this_object());
+            kill_ob(obs[i]);
+            obs[i]->fight_ob(this_object());
+            break;
+        }
+    }
+}

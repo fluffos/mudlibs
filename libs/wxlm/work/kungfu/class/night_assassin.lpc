@@ -1,0 +1,236 @@
+// night_assassin.c
+// 夜间刺客
+
+inherit NPC;
+inherit F_UNIQUE;
+
+
+
+void create();
+void init();
+void init_assassin(int level, mapping attributes);
+void init_from_data(mapping data);
+void set_strength(int level);
+void set_skills(int level);
+void random_move();
+int is_target_player(object ob);
+void auto_check_enemy();
+void die();
+mapping calculate_increase(object player);
+void apply_increase(mapping increase);
+void start_move();
+void set_attributes(mapping attributes);
+void create()
+{
+    set_name(HIW "夜间刺客" NOR, ({ "night assassin", "assassin" }));
+    set("long", "这是一个神秘的刺客，穿梭于黑夜之中，令人胆寒。\n");
+    set("gender", "男性");
+    set("age", 35);
+    set("attitude", "aggressive");
+
+    setup();
+
+    set("chat_chance", 90);
+    set("chat_msg", ({
+        (: random_move :),
+        (: auto_check_enemy :),
+    }));
+
+    keep_heart_beat();
+}
+
+void init()
+{
+    object ob;
+
+    ::init();
+    if (interactive(ob = this_player()) && is_target_player(ob))
+    {
+        "adm/daemons/night_assassin_d"->assassin_steal_data(ob);
+        kill_ob(ob);
+    }
+}
+
+void init_assassin(int level, mapping attributes)
+{
+    set_strength(level);
+    set_attributes(attributes);
+    set_skills(level);
+}
+
+void init_from_data(mapping data)
+{
+    if (!mapp(data))
+        return;
+
+    // 设置基本属性
+    set("str", data["str"]);
+    set("int", data["int"]);
+    set("con", data["con"]);
+    set("dex", data["dex"]);
+    set("max_qi", data["max_qi"]);
+    set("eff_qi", data["eff_qi"]);
+    set("qi", data["qi"]);
+    set("max_jing", data["max_jing"]);
+    set("eff_jing", data["eff_jing"]);
+    set("jing", data["jing"]);
+    set("max_neili", data["max_neili"]);
+    set("neili", data["neili"]);
+    set("combat_exp", data["combat_exp"]);
+    set("jiali", data["jiali"]);
+
+    // 设置技能
+    if (mapp(data["skills"]))
+    {
+        foreach (string skill, int level in data["skills"])
+        {
+            set_skill(skill, level);
+        }
+    }
+
+    // 设置技能映射
+    if (mapp(data["skill_map"]))
+    {
+        foreach (string skill, string mapped_skill in data["skill_map"])
+        {
+            map_skill(skill, mapped_skill);
+        }
+    }
+
+    // 设置已准备的技能
+    if (mapp(data["skill_prepare"]))
+    {
+        foreach (string skill, string prepared_skill in data["skill_prepare"])
+        {
+            prepare_skill(skill, prepared_skill);
+        }
+    }
+
+    setup();
+}
+
+void set_strength(int level)
+{
+    set("max_qi", level * 20 + 5000);
+    set("eff_qi", query("max_qi"));
+    set("qi", query("max_qi"));
+    set("max_jing", level * 10 + 3000);
+    set("eff_jing", query("max_jing"));
+    set("jing", query("max_jing"));
+    set("max_neili", level * 15 + 4000);
+    set("neili", query("max_neili"));
+    set("combat_exp", level * 10000 + 1000000);
+    set("jiali", level / 2);
+}
+
+void set_skills(int level)
+{
+    set_skill("force", level);
+    set_skill("dodge", level);
+    set_skill("parry", level);
+    set_skill("blade", level);
+    set_skill("unarmed", level);
+    set_skill("lingxu-bu", level);
+    set_skill("wuhu-duanmendao", level);
+    set_skill("jiuyang-shengong", level);
+
+    map_skill("force", "jiuyang-shengong");
+    map_skill("dodge", "lingxu-bu");
+    map_skill("parry", "wuhu-duanmendao");
+    map_skill("blade", "wuhu-duanmendao");
+    map_skill("unarmed", "jiuyang-shengong");
+
+    prepare_skill("unarmed", "jiuyang-shengong");
+}
+
+void random_move()
+{
+    mapping exits;
+    string *dirs, dir;
+
+    if (!environment() || is_fighting()) return;
+
+    exits = environment()->query("exits");
+    if (!mapp(exits) || sizeof(exits) == 0) return;
+
+    dirs = keys(exits);
+    dir = dirs[random(sizeof(dirs))];
+    command("go " + dir);
+}
+
+int is_target_player(object ob)
+{
+    return userp(ob) && ob->query("combat_exp") > 3000000;
+}
+
+void auto_check_enemy()
+{
+    object *obs;
+    int i;
+
+    if (!environment() || is_fighting()) return;
+
+    obs = all_inventory(environment());
+    for (i = 0; i < sizeof(obs); i++)
+    {
+        if (is_target_player(obs[i]) && living(obs[i]) && !obs[i]->is_fighting(this_object()))
+        {
+            message_vision(HIR "$N冷笑一声：敢在夜晚行走，找死！\n" NOR, this_object());
+            "adm/daemons/night_assassin_d"->assassin_steal_data(obs[i]);
+            kill_ob(obs[i]);
+            obs[i]->fight_ob(this_object());
+            break;
+        }
+    }
+}
+
+void die()
+{
+    object killer = query_last_damage_from();
+    "adm/daemons/night_assassin_d"->assassin_die(killer);
+    ::die();
+}
+
+mapping calculate_increase(object player)
+{
+    mapping increase = ([]);
+
+    // 四维属性增加
+    increase["str"] = player->query("str") / 10;
+    increase["int"] = player->query("int") / 10;
+    increase["con"] = player->query("con") / 10;
+    increase["dex"] = player->query("dex") / 10;
+
+    // ... 其他属性增加保持不变 ...
+
+    return increase;
+}
+
+void apply_increase(mapping increase)
+{
+
+    // 四维属性增加
+    add("str", increase["str"]);
+    add("int", increase["int"]);
+    add("con", increase["con"]);
+    add("dex", increase["dex"]);
+
+    // ... 其他属性增加保持不变 ...
+}
+
+void start_move()
+{
+    remove_call_out("random_move");
+    call_out("random_move", 10 + random(20));
+}
+// 设置夜行客的属性
+void set_attributes(mapping attributes)
+{
+    if (!mapp(attributes))
+        return;
+
+    foreach (string attr, mixed value in attributes)
+    {
+        set(attr, value);
+    }
+}

@@ -1,0 +1,174 @@
+/**
+ * @brief 一锤定音 - 日月轮法终极绝招
+ * @details 以巨大代价换取终结敌人的可能性，对血量低的目标有终结效果
+ */
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+/**
+ * @brief 招式名称
+ * @return string 招式名称
+ */
+string query_name() { return "一锤"ZJBR"定音"; }
+
+/**
+ * @brief 招式类型
+ * @return string[] 支持的武器类型
+ */
+string *pfm_type() { return ({ "hammer", }); }
+
+/**
+ * @brief 执行一锤定音招式
+ * @param me 使用者
+ * @param target 目标
+ * @return int 1-成功，0-失败
+ */
+int perform(object me, object target)
+{
+	object weapon;
+	string msg;
+	int ap, dp;
+	int damage;
+	int target_hp_percent;
+	int skill_level;
+	int force_level;
+
+	if (!target) target = offensive_target(me);
+
+	if (!target || !me->is_fighting(target))
+		return notify_fail("「一锤定音」只能对战斗中的对手使用。\n");
+
+	if (!objectp(weapon = me->query_temp("weapon")) ||
+	    (string)weapon->query("skill_type") != "hammer")
+		return notify_fail("你必须使用锤类武器才能施展「一锤定音」。\n");
+
+	skill_level = (int)me->query_skill("hammer");
+	force_level = (int)me->query_skill("force");
+
+	if (skill_level < 250)
+		return notify_fail("你的日月轮法还不够精深，无法施展「一锤定音」。\n");
+
+	if (force_level < 280)
+		return notify_fail("你的内功修为不足，无法驾驭「一锤定音」的巨大消耗。\n");
+
+	if (me->query("neili") < 5000)
+		return notify_fail("你的内力不够，无法施展「一锤定音」。\n");
+
+	if (me->query("eff_qi") < me->query("max_qi") * 20 / 100 || me->query("qi") < me->query("max_qi") * 20 / 100)
+		return notify_fail("你的气血不足，强行施展可能会伤及自身。\n");
+
+	if (me->query_skill_mapped("hammer") != "riyue-lun")
+		return notify_fail("你没有激发日月轮法，无法施展「一锤定音」。\n");
+
+	// 检查冷却时间
+	if (me->query_temp("yichui_cooldown") > time())
+		return notify_fail(sprintf("你需要休息 %d 秒后才能再次使用「一锤定音」。\n", 
+			me->query_temp("yichui_cooldown") - time()));
+
+	if (!living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+	// 计算目标血量百分比
+	target_hp_percent = target->query("qi") * 100 / target->query("max_qi");
+
+	msg = HIR "$N" HIR "深吸一口气，运转全身功力，将" + weapon->name() + 
+	      HIR "高高举过头顶！\n" +
+	      HIR "刹那间，天地为之色变，$N" HIR "身周涌现出日月同辉的奇景！\n" +
+	      HIM "$N" HIM "一声暴喝：「一锤定音！」，带着开天辟地之势向$n" + 
+	      HIM "当头砸下！\n" NOR;
+
+	// 攻击力计算：技能等级 + 内功等级 + 臂力加成
+	ap = skill_level + force_level + me->query("str") * 10;
+	dp = target->query_skill("dodge") + target->query_skill("force") + target->query("dex") * 10;
+
+	// 对非玩家目标加成
+	if (!userp(target)) {
+		ap = ap * 3 / 2;
+	}
+
+	// 固定消耗内力和气血
+	me->add("neili", -5000);
+	me->receive_damage("qi", me->query("max_qi") * 25 / 100,target);
+	me->receive_wound("qi", me->query("max_qi") * 25 / 100,target);
+
+    if (COMBAT_D->hit_determination(me,target,ap,dp))
+	{
+		// 基础伤害极高
+		damage = skill_level * 2 + force_level + me->query_str() * 25 + random(skill_level);
+		damage += damage * COMBAT_D->get_skill_aoyi_level(me, "雪域圣光") / 10;
+		// 对血量低的目标额外伤害
+		if (target_hp_percent < 40) {
+			damage = damage * 2;
+			msg += HIY "这一锤正好击中$n" HIY "的要害，$p" HIY "顿时血如泉涌！\n" NOR;
+			
+			// 血量极低时可能直接终结
+			if (target_hp_percent < 20) {
+				target->set("qi", 1);
+				target->set("jing", 1);
+				msg += HIM "$n" HIM "在这毁天灭地的一击下，生机瞬间消散！\n" NOR;
+			}
+		}
+
+		msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 180,
+			HIR "$n" HIR "被这惊天一击震得七窍流血，内脏俱裂，几乎站立不稳！" NOR "\n");
+
+		// 附加debuff效果
+		if (living(target)) {
+			int attack_debuff = skill_level / 10;
+			int dodge_debuff = skill_level / 8;
+			int parry_debuff = skill_level / 8;
+			int duration = 10 + random(10);
+			
+			target->add_temp("apply/attack", -attack_debuff);
+			target->add_temp("apply/dodge", -dodge_debuff);
+			target->add_temp("apply/parry", -parry_debuff);
+			target->set_temp("yichui_attack_debuff", attack_debuff);
+			target->set_temp("yichui_dodge_debuff", dodge_debuff);
+			target->set_temp("yichui_parry_debuff", parry_debuff);
+			target->start_call_out((: call_other, __FILE__, "remove_debuff", target, attack_debuff, dodge_debuff, parry_debuff :), duration);
+			
+			tell_object(target, HIR "你感到全身气血翻涌，功力大损！\n" NOR);
+		}
+
+		me->start_busy(3 + random(4));
+	} else {
+		msg += HIC "但见$p" HIC "眼疾手快，险险避开了$P" HIC "这毁天灭地的一击！\n" NOR;
+		me->start_busy(4 + random(3));
+	}
+
+	// 设置冷却时间
+	me->set_temp("yichui_cooldown", time() + 5);
+
+	message_combatd(msg, me, target);
+	return 1;
+}
+
+/**
+ * @brief 移除debuff效果
+ * @param target 目标对象
+ * @param attack_debuff 攻击debuff值
+ * @param dodge_debuff 闪避debuff值
+ * @param parry_debuff 招架debuff值
+ */
+void remove_debuff(object target, int attack_debuff, int dodge_debuff, int parry_debuff)
+{
+	if (!target) return;
+	
+	if (attack_debuff > 0) {
+		target->add_temp("apply/attack", attack_debuff);
+		target->delete_temp("yichui_attack_debuff");
+	}
+	if (dodge_debuff > 0) {
+		target->add_temp("apply/dodge", dodge_debuff);
+		target->delete_temp("yichui_dodge_debuff");
+	}
+	if (parry_debuff > 0) {
+		target->add_temp("apply/parry", parry_debuff);
+		target->delete_temp("yichui_parry_debuff");
+	}
+	
+	if (living(target))
+		tell_object(target, HIB "你体内的伤势逐渐稳定下来。\n" NOR);
+}

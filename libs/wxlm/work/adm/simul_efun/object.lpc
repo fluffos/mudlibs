@@ -1,0 +1,384 @@
+/**
+ * @file object.c
+ * @author Lu dexiang
+ * @brief 对象操作相关的模拟外部函数
+ */
+
+/**
+ * @brief 判断一个对象是否是特殊招式
+ * @param object ob 要判断的对象
+ * @return int 1:是特殊招式 0:不是特殊招式
+ */
+ int is_special_skill(object ob)
+ {
+
+	//是否继承了F_SSERVER
+	if(inherits(F_SSERVER,ob))
+	{
+		return 1;
+	}
+
+	//是否拥有exert函数
+	if(function_exists("exert",ob))
+	{
+		return 1;
+	}
+
+    return 0;
+ }
+
+/**
+ * @brief 生成一个绑定物品
+ * @param string path 物品路径，必须以/开头
+ * @return object 生成的绑定物品对象
+ * @details 该函数会在/common/bind_obj目录下生成一个绑定物品的文件，
+ *          如果文件不存在则根据reference模板创建，如果已经存在则从中new返回
+ */
+object new_bind(string path)
+{
+    string new_path;
+    object obj;
+
+    new_path = "/common/bind_obj" + replace_string(path,".lpc","") + ".lpc";
+
+    if (file_size(new_path) == -1)
+    {
+        string str;
+        assure_file(new_path);
+        str = read_file("/common/bind_obj/reference");
+        str = replace_string(str,"path",path);
+        write_file(new_path,str,1);
+    }
+
+    obj = new(new_path);
+    return obj;
+}
+
+/**
+ * @brief 获取对象的唯一标识ID
+ * @param object ob 要获取ID的对象，默认为previous_object()
+ * @return int 对象的唯一标识ID
+ */
+varargs int getoid(object ob)
+{
+	int id;
+
+	if (!ob) ob = previous_object();
+	sscanf(file_name(ob), "%*s#%d", id);
+	return id;
+}
+
+/**
+ * @brief 获取文件的所有者
+ * @param string file 文件路径
+ * @return string 文件所有者的用户名，如果不存在则返回0
+ */
+string file_owner(string file)
+{
+	string name, rest, dir;
+
+	if (file[0] != '/')
+	{
+		file = "/" + file;
+	}
+	if (sscanf(file, "/u/%s/%s/%s", dir, name, rest) == 3)
+	{
+		return name;
+	}
+	return 0;
+}
+
+/**
+ * @brief 获取文件所属的域
+ * @param string file 文件路径
+ * @return string 域名称，如果不在任何域中则返回ROOT_UID
+ */
+string domain_file(string file)
+{
+	string domain;
+
+	if (sscanf(file, "/d/%s/%*s", domain))
+		return domain;
+
+	return ROOT_UID;
+}
+
+/**
+ * @brief 获取文件的创建者
+ * @param string file 文件路径
+ * @return string 创建者的身份标识
+ */
+string creator_file(string file)
+{
+	string *path;
+
+	path = explode(file, "/") - ({ 0 });
+	switch (path[0])
+	{
+		case "adm":
+			if (file == SIMUL_EFUN_OB) return "MudOS";
+			else return ROOT_UID;
+		case "cmds":
+		case "shadow":
+			return ROOT_UID;
+		case "u":
+			if (sizeof(path) >= 3) return path[1];
+		case "d":
+			return "Domain";
+		case "clone":
+			return "Clone";
+		case "feature":
+			return "Feature";
+		case "kungfu":
+			return "Kungfu";
+		case "inherit":
+			return "Inherit";
+		default:
+			return "Unknow";
+	}
+}
+
+/**
+ * @brief 获取文件的作者
+ * @param string file 文件路径
+ * @return string 作者的用户名，如果不存在则返回ROOT_UID
+ */
+string author_file(string file)
+{
+	string name;
+
+	if (sscanf(file, "/u/%*s/%s/%*s", name))
+		return name;
+	return ROOT_UID;
+}
+
+/**
+ * @brief 检查对象是否具有root权限
+ * @param mixed ob 要检查的对象或字符串
+ * @return int 1:具有root权限 0:没有root权限
+ */
+int is_root(mixed ob)
+{
+	if (stringp(ob))
+		return (SECURITY_D->get_status(ob) == "(admin)");
+
+	if (objectp(ob))
+	{
+		if (geteuid(ob) == ROOT_UID)
+			// Root object want to execute
+			return 1;
+
+		return (SECURITY_D->get_status(geteuid(ob)) == "(admin)");
+	}
+
+	return 1;
+}
+
+/**
+ * @brief 销毁一个对象
+ * @param object ob 要销毁的对象
+ */
+void destruct(object ob)
+{
+	if (ob)
+	{
+		if (previous_object()) ob->remove(geteuid(previous_object()));
+		else 
+		{
+			mixed err;
+			catch(err = ob->remove(0));
+		}
+	}
+
+	if(environment(ob))
+	{
+		if (userp(environment(ob)))
+		{
+			mapping update_obj_data;
+			
+			update_obj_data = "/cmds/usr/new_inventory_beibao"->format_item_data("beibao", ob,0,1);
+			tell_object(environment(ob), json_encode((["code": "update_obj_data", "data": update_obj_data])) + "\n");
+		}
+
+		tell_room(environment(ob),remove_world_object_button("look "+file_name(ob)) + "\n");
+	}
+
+	efun::destruct(ob);
+}
+
+/**
+ * @brief 强制销毁一个对象（不执行remove）
+ * @param object ob 要销毁的对象
+ */
+void compulsion_destruct(object ob)
+{
+	efun::destruct(ob);
+}
+
+/**
+ * @brief 判断一个对象是否为玩家对象
+ * @param object ob 要判断的对象
+ * @return int 1:是玩家对象 0:不是玩家对象
+ */
+int playerp(object ob)
+{
+	return ob&&ob->is_player();
+}
+
+/**
+ * @brief 在指定环境中查找对象
+ * @param mixed str 要查找的对象ID或对象
+ * @param object ob 查找的环境对象
+ * @return object 找到的对象，如果没找到则返回0
+ */
+object present(mixed str, object ob)
+{
+	object obj;
+	//什么意思呢？优先查找环境中的物品。
+	if(!ob&&previous_object())
+	{
+		//测试语句： tell_object(find_player("demodemo"),sprintf("present:%O\n",previous_object()));
+		//这条逻辑也不对，如果强制ob = 环境对象，那么原有对象的调用者就会被忽略，这个逻辑是不对的。
+		//这里新增一条处理语句
+		if (objectp(efun::present(str,previous_object())))
+		{
+			return efun::present(str,previous_object());
+		}
+
+		ob = environment(previous_object());
+	}
+
+	if(stringp(str)&&(obj=find_object(str)))
+	{
+		if(ob)
+		{
+			 return efun::present(obj,ob);
+		}
+		else
+		{
+			//  return efun::present(obj);
+			 //这个逻辑其实不正确为什么呢？按照present只有一个参数时会查找previous_object()中的物品，如果从外部模拟函数库中调用
+			 //那么实际的调用者会是simul_efun，所以这个逻辑是不对的。
+			 //这里应该是返回efun::present(obj,previous_object());，意思是调用模拟函数库此函数的具体对象
+			 return efun::present(obj,previous_object());
+		}
+	}
+
+	if(ob)
+	{
+		 return efun::present(str,ob);
+	}
+	else
+	{
+		//  return efun::present(str);
+		return efun::present(str,previous_object());
+	}
+}
+
+/**
+ * @brief 获取所有玩家ID（包括不在线的玩家）
+ * @return string* 玩家ID数组
+ */
+string *all_player_id()
+{
+    string *player_ids = ({});
+    string *dirs = get_dir("/data/user/");
+
+    foreach (string dir in dirs)
+    {
+        string *files = get_dir("/data/user/" + dir + "/");
+        player_ids += files;
+    }
+
+	//过滤掉.o后缀
+	player_ids = map_array(player_ids, (: $1[0..<3] :));
+
+    return player_ids;
+}
+
+/**
+ * @brief 获取人物的基本信息
+ * @param object ob 要获取信息的对象
+ * @return string JSON格式的基本信息字符串
+ */
+string get_man_base_info(object ob)
+{
+    mapping info = ([
+        "code": "man_base_info", // 信息代码，固定为 "man_base_info"
+        "data": ([
+            "type": userp(ob) ? "player" : "npc", // "type": 类型，"player" 代表玩家，"npc" 代表 NPC
+            "gender": HEAD_IMAGE_MASTER->query_head_image_gender(ob), // "gender": 性别，取值为 "男性" 或 "女性"
+            "per": ob->query_per(), // "per": 人物的容貌，取 query_per() 的值
+            "nickname": ob->query("nickname") ? ob->query("nickname") : "", // "nickname": 人物的绰号，没有则填空字符串 ""
+            "title": ob->query("title") ? ob->query("title") : "", // "title": 人物的头衔，没有则填空字符串 ""
+			"state" : "other",
+            "base_id": file_name(ob), // "base_id": 人物的基本 ID，取 file_name(ob) 的值
+			"vip":"/cmds/usr/new_fanli"->get_vip_level(ob),
+			"avatarId": HEAD_IMAGE_MASTER->query_head_image_status(ob),
+        ])
+    ]);
+
+    return json_encode(info);
+}
+
+/**
+ * @brief 在环境中查找组合物品对象
+ * @param string obj_id 物品ID
+ * @param object env 环境对象
+ * @return object 找到的组合物品对象，如果没找到则返回0
+ */
+object present_comb(string obj_id,object env)
+{
+    object comb_env_obj = new("/adm/special_ob/comb_env_obj");
+    
+    if (!comb_env_obj->present_obj_list(obj_id,env))
+    {
+        return 0;
+    }
+
+    return comb_env_obj;
+}
+
+/**
+ * @brief 在门派环境中查找或加载指定ID的对象
+ * @param string obj_id 要查找的对象ID
+ * @param object env 查找对象的环境
+ * @return mixed 找到的对象，如果未找到则返回0
+ * @details 该函数首先在指定环境中查找对象，如果未找到则尝试通过门派守护进程加载门派人物对象。
+ *          这样设计是为了确保即使在当前环境中不存在，也能获取到必要的门派相关对象。
+ */
+mixed present_in_famliy_ob(string obj_id,object env)
+{
+    object ob = present(obj_id,env);
+
+	//查找一个对象，可以是门派人物
+    if (ob)
+    {
+        return ob;
+    }
+	else
+	{
+		string man_path;
+
+		if (man_path = FAMILY_D->obtain_man_ob(obj_id))
+		{
+			return load_object(man_path);
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * @brief 检查指定对象是否为有效的黎明会员
+ * @param object ob 需要检查会员状态的对象
+ * @return int 如果对象是有效的黎明会员返回1，否则返回0
+ * @details 该函数通过比较对象存储的会员到期时间与当前系统时间来判断会员状态是否有效。
+ *          使用real_vip/times属性存储会员到期时间戳，确保会员状态检查的准确性。
+ */
+int is_liming_vip(object ob)
+{
+	//获取对象的是否是黎明会员(计算时间)
+    return ob->query("real_vip/times") > time();
+}
+

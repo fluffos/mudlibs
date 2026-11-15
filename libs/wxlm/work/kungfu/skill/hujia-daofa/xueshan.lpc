@@ -1,0 +1,109 @@
+// xueshan.c 雪山飞狐
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+string query_name() { return "雪山"ZJBR"飞狐"; }
+
+int perform(object me, object target)
+{
+	object weapon;
+    int damage;
+	string msg;
+	int ap, dp;
+ 
+    if (! target) target = offensive_target(me);
+
+	if (! target || ! me->is_fighting(target))
+        return notify_fail("「雪山飞狐」只能对战斗中的对手使用。\n");
+ 
+	if (! objectp(weapon = me->query_temp("weapon")) ||
+        weapon->query("skill_type") != "blade")
+		return notify_fail("你使用的武器不对。\n");
+
+    if ((int)me->query_skill("hujia-daofa", 1) < 150)
+        return notify_fail("你的胡家刀法不够娴熟，无法使用「雪山飞狐」。\n");
+
+    if ((int)me->query("neili") < 800)
+        return notify_fail("你的内力不够！\n");
+
+    if ((int)me->query_skill("force") < 250)
+		return notify_fail("你的内功火候不够！\n");
+
+	if (me->query_skill_mapped("blade") != "hujia-daofa")
+        return notify_fail("你没有激发胡家刀法，无法使用「雪山飞狐」！\n");
+
+
+    msg = HIW "$N" HIW "深吸一口气，施展出胡家刀法的绝学「雪山飞狐」，手中" + weapon->name() +
+          HIW "化作一道白光，疾刺向$n！" NOR "\n";
+
+
+    ap = me->query_skill("blade") + me->query_skill("force") + me->query("str") * 10;
+    dp = target->query_skill("dodge") + target->query_skill("force") + target->query("dex") * 10;
+
+    me->add("neili", -600);
+    me->start_busy(3);
+
+    //pve命中 * 50%
+    if (!playerp(target))
+    {
+        ap = ap * 15 / 10;
+    }
+		
+    if (COMBAT_D->hit_determination(me,target,ap,dp))
+    {
+        int aoyi_level, overflow_bonus;
+        damage = (ap * 3) + random(ap);
+
+        //pve伤害x1.5
+        if (!playerp(target))
+        {
+            damage = damage * 15 / 10;
+		}
+
+		//溢出奥义等级伤害加成
+		aoyi_level = COMBAT_D->get_skill_aoyi_level(me, "胡马嘶风");
+		if (aoyi_level > 10)
+		{
+			overflow_bonus = (aoyi_level - 10) * 5;
+			damage += damage * overflow_bonus / 100;
+			msg += HIY "$N" HIY "的胡马嘶风奥义登峰造极，溢出的" + chinese_number(aoyi_level - 10) +
+				   "级奥义为此招增加了" + overflow_bonus + "%的伤害！"NOR"\n";
+		}
+
+        //获得一缕刀气
+        if (me->query_temp("hujia_daoqi") < 8 + aoyi_level)
+        {
+            me->add_temp("hujia_daoqi", 1);
+            msg += HIC "$N" HIC "的刀势凝聚出一缕刀气[" +sprintf("%d/8", me->query_temp("hujia_daoqi")) + "]！"NOR"\n";
+
+            if ((random(10) + 1) < aoyi_level)
+            {
+                msg += HIC "由于$N对胡马嘶风意境感悟颇深,多获得了1缕刀气，$N" HIC "的刀势再次凝聚出一缕刀气[" +sprintf("%d/8", me->query_temp("hujia_daoqi")) + "]！"NOR"\n";
+                me->add_temp("hujia_daoqi", 1);
+            }
+
+        }
+
+        //如果藏气，每一缕藏入刀中的刀气增加25%伤害
+        if (me->query_temp("hujia_cangqi") > 0)
+        {
+            damage += damage * me->query_temp("hujia_cangqi") * 25 / 100;
+			msg += HIC "$N" HIC "逼出藏在刀中的" + chinese_number(me->query_temp("hujia_cangqi")) + "缕刀气，刀势更显凌厉，伤害系数增加" + (me->query_temp("hujia_cangqi") * 15) + "%！"NOR"\n";
+            me->delete_temp("hujia_cangqi");
+        }
+
+        msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 150,
+                                   RED "$n" RED "完全被$N" RED "的刀势所压制，"
+                                   "无法躲避，被狠狠地击中胸口，鲜血狂喷！" NOR "\n");
+    }
+    else
+	{
+        msg += CYN "$n" CYN "情急之下，身形急退，勉强避开了$N"
+               CYN "这一招！" NOR "\n";
+	}
+
+	message_combatd(msg, me, target);
+	return 1;
+}

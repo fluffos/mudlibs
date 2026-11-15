@@ -1,0 +1,402 @@
+// 头像管理系统
+// Created by Lu dexiang
+int apply_head_image_attribute(object player, string head_id);
+void remove_head_image_attribute(object player);
+// 构建vip头像列表
+mapping status_list = ([
+    "vip_0-3" : "VIP 0-3",
+    "vip_4-6" : "VIP 4-6", 
+    "vip_7-9" : "VIP 7-9",
+    "vip_10"  : "VIP 10"
+]);
+
+//mapping 其他游戏头像，key为头像id，value头像名称
+//银蛇居士
+//玄嗤蛇君
+//碧鳞墨客
+mapping other_game_head_image = ([
+    "yinshe_jushi" : "青蛇三尺",
+    "xuanchi_shejun" : "蛇珠雀环",
+    "bilin_moke" : "斗折蛇形",
+]);
+
+//头像兑换价格
+mapping game_head_image_price_list = ([
+    "yinshe_jushi" : ([
+        "need_par":"head_suipian",
+        "price":200,
+    ]),
+    "xuanchi_shejun": ([
+        "need_par":"head_suipian",
+        "price":200,
+    ]),
+    "bilin_moke" : ([
+        "need_par":"head_suipian",
+        "price":200,
+    ]),
+]);
+
+//头像属性加成列表，头像在兑换时可以从列表中选择一个属性加成
+mapping head_image_attribute_list = ([
+    "yinshe_jushi" : ([
+        "unarmed":30,//基本拳脚
+        "cuff":30,//基本拳法
+        "strike":30,//基本掌法
+        "finger":30,//基本指法
+        "hand":30,//基本手法
+        "claw":30,//基本爪法
+        "sword":30,//基本剑法
+        "blade":30,//基本刀法
+        "staff":30,//基本丈法
+        "hammer":30,//基本锤法
+        "club":30,//基本长兵
+        "whip":30,//基本鞭法
+        "dagger":30,//基本短兵
+        "force":30,//基本内功
+        "dodge":30,//基本轻功
+        "parry":30,//基本招架
+        "throwing":30,//基本暗器
+        "force":30,//基本内功
+        "dodge":30,//基本轻功
+        "parry":30,//基本招架
+    ]),
+    "xuanchi_shejun": ([
+        "str":10,
+        "int":10,
+        "dex":10,
+        "con":10,
+    ]),
+    "bilin_moke" : ([
+        "per":10,
+    ]),
+]);
+
+//头像材料名称
+mapping head_image_material_name = ([
+    "head_suipian":"灵蛇珠",
+]);
+
+//返还头像性别，如果不是女性就是男性
+string query_head_image_gender(object player)
+{
+    if (player->query("gender") == "女性")
+        return "女性";
+    return "男性";
+}
+
+/**
+ * 检查指定头像状态是否可用
+ * @param object player 玩家对象
+ * @param string status 头像状态
+ * @return int 是否可用
+ */
+int check_head_image_available(object player, string status)
+{
+    int vip_level;
+    mapping level_range = ([
+        "vip_0-3":({0,3}),
+        "vip_4-6":({4,6}),
+        "vip_7-9":({7,9}),
+        "vip_10":({10,10}),
+    ]);
+    
+    if (!status || member_array(status, keys(status_list)) == -1)
+        return 0;
+        
+    vip_level = "/cmds/usr/new_fanli"->get_vip_level(player);
+    
+    // return (vip_level >= level_range[status][0] && vip_level <= level_range[status][1]) || vip_level >= level_range[status][1];
+    return vip_level >= level_range[status][0];
+}
+
+//设置头像状态
+int set_head_image_status(object player, string status_code)
+{
+    // 判断是否是可用的头像状态
+    if (check_head_image_available(player, status_code) || player->query("game_head_image/" + status_code))
+    {
+        player->set("head_image_status", status_code);
+        
+        // 移除旧头像的属性加成
+        remove_head_image_attribute(player);
+
+        // 应用新头像的属性加成
+        apply_head_image_attribute(player, status_code);
+        return 1;
+    }
+    
+    // 如果不满足条件，设置为默认状态
+    // player->set("head_image_status", "vip_0-3");
+    return 0;
+}
+
+//获取头像状态
+string query_head_image_status(object player)
+{
+    return player->query("head_image_status") || "vip_0-3";
+}
+
+//获取所有可用的头像数据
+/**
+ * 获取所有可用的头像数据
+ * @param object player 玩家对象
+ * @return mapping 头像数据列表
+ */
+mapping get_all_head_image_data(object player)
+{
+    mapping result = ([]);
+    mapping data = ([]);
+    mixed *avatars = ({});
+    string current_status = query_head_image_status(player);
+    string gender = query_head_image_gender(player);
+    
+    //vip头像
+    foreach(string status, string requirement in status_list)
+    {
+        mapping avatar = ([]);
+
+        avatar["id"] = status;
+        avatar["unlockRequirement"] = requirement;
+        avatar["sex"] = gender;
+        avatar["available"] = check_head_image_available(player, status) ? "true" : "false";
+        //是否可以兑换,否
+        avatar["canExchange"] = "false";
+        avatars += ({avatar});
+    }
+    
+    //检查其他游戏头像
+    foreach(string head_id, string head_name in other_game_head_image)
+    {
+        mapping avatar = ([]);
+        
+        avatar["id"] = head_id;
+        //该字段需要返回头像名称，头像解锁条件
+        avatar["unlockRequirement"] = sprintf("头像名称:%s-头像解锁条件:需要%s:%d/%d", head_name, head_image_material_name[game_head_image_price_list[head_id]["need_par"]], player->query(game_head_image_price_list[head_id]["need_par"]), game_head_image_price_list[head_id]["price"]);
+        avatar["sex"] = gender;
+        avatar["available"] = player->query("game_head_image/" + head_id) ? "true" : "false";
+        
+        //是否可以兑换,是
+        avatar["canExchange"] = "true";
+
+        avatars += ({avatar});
+    }
+
+    data["current"] = current_status;
+    data["avatars"] = avatars;
+    result["code"] = "headimage_list";
+    result["data"] = data;
+    
+    return result;
+}
+
+/**
+ * 兑换头像
+ * @param object player 玩家对象
+ * @param string head_id 头像ID
+ * @return int 兑换结果，1表示成功，0表示失败
+ */
+int exchange_head_image(object player, string head_id)
+{
+    mapping price_info;
+    int current_amount;
+    
+    // 检查头像是否在兑换列表中
+    if (nullp(game_head_image_price_list[head_id]))
+        return 0;
+    
+    price_info = game_head_image_price_list[head_id];
+    
+    // 获取玩家当前拥有的资源数量
+    current_amount = player->query(price_info["need_par"]);
+    
+    // 检查玩家是否有足够的资源
+    if (current_amount < price_info["price"])
+        return 0;
+    
+    // 扣除资源并设置头像
+    player->add(price_info["need_par"], -price_info["price"]);
+    player->set("game_head_image/" + head_id, 1);
+    
+    return 1;
+}
+
+/**
+ * 获取可兑换头像列表
+ * @param object player 玩家对象
+ * @return mapping 可兑换头像列表及相关信息
+ */
+mapping get_exchangeable_head_images(object player)
+{
+    mapping result = ([]);
+    
+    foreach (string head_id, mapping price_info in game_head_image_price_list)
+    {
+        // 如果玩家已拥有该头像则跳过
+        if (player->query("game_head_image/" + head_id))
+            continue;
+            
+        result[head_id] = ([
+            "name": other_game_head_image[head_id],
+            "need_par": price_info["need_par"],
+            "price": price_info["price"],
+            "current": player->query(price_info["need_par"]),
+        ]);
+    }
+    
+    return result;
+}
+
+/**
+ * 获取头像的中文名称
+ * @param string head_id 头像ID
+ * @return string 头像中文名称，如果不存在返回空字符串
+ */
+string query_head_image_name(string head_id)
+{
+    // 先检查是否是VIP头像
+    if (member_array(head_id, keys(status_list)) != -1)
+        return status_list[head_id];
+        
+    // 再检查是否是其他游戏头像
+    if (member_array(head_id, keys(other_game_head_image)) != -1)
+        return other_game_head_image[head_id];
+        
+    return "";
+}
+
+/**
+ * 获取头像可选属性列表
+ * @param string head_id 头像ID
+ * @return mapping 属性列表
+ */
+mapping query_head_image_attributes(string head_id)
+{
+    if (member_array(head_id, keys(head_image_attribute_list)) != -1)
+        return head_image_attribute_list[head_id];
+    return ([]);
+}
+
+/**
+ * 设置头像属性加成
+ * @param object player 玩家对象
+ * @param string head_id 头像ID
+ * @param string attr 选择的属性
+ * @return int 是否设置成功
+ */
+int set_head_image_attribute(object player, string head_id, string attr)
+{
+    mapping attrs;
+    
+    if (!player->query("game_head_image/" + head_id))
+        return 0;
+        
+    attrs = query_head_image_attributes(head_id);
+    if (!sizeof(attrs) || nullp(attrs[attr]))
+        return 0;
+        
+    // 记录玩家选择的属性和数值
+    player->set("head_image_attribute_list/" + head_id, ([
+        "type": attr,
+        "value": attrs[attr],
+    ]));
+    
+    return 1;
+}
+
+/**
+ * 检查是否需要选择属性加成
+ * @param object player 玩家对象
+ * @param string head_id 头像ID
+ * @return int 是否需要选择属性
+ */
+int need_select_attribute(object player, string head_id)
+{
+    mapping attrs;
+    
+    // 检查是否拥有该头像
+    if (!player->query("game_head_image/" + head_id))
+        return 0;
+        
+    // 检查是否有可选属性
+    attrs = query_head_image_attributes(head_id);
+    if (!sizeof(attrs))
+        return 0;
+        
+    // 检查是否已经选择过属性
+    if (!nullp(player->query("head_image_attribute_list/" + head_id)))
+        return 0;
+        
+    return 1;
+}
+
+/**
+ * 应用头像属性加成
+ * @param object player 玩家对象
+ * @param string head_id 头像ID
+ * @return int 是否成功应用属性
+ */
+int apply_head_image_attribute(object player, string head_id)
+{
+    mapping attr_info;
+    string attr_type;
+    int attr_value;
+    
+    // 清除之前的所有头像属性加成
+    remove_head_image_attribute(player);
+    
+    // 检查是否拥有该头像
+    if (!player->query("game_head_image/" + head_id))
+        return 0;
+        
+    // 获取玩家选择的属性信息
+    attr_info = player->query("head_image_attribute_list/" + head_id);
+    if (!mapp(attr_info))
+        return 0;
+        
+    attr_type = attr_info["type"];
+    attr_value = attr_info["value"];
+    
+    // 设置新的属性加成
+    player->set("head_image_attribute/" + attr_type, attr_value);
+    
+    return 1;
+}
+
+/**
+ * 移除所有头像属性加成
+ * @param object player 玩家对象
+ */
+void remove_head_image_attribute(object player)
+{
+    // 删除所有头像相关属性
+    player->delete("head_image_attribute");
+}
+
+// 在战斗开始时，调用此函数，斗折蛇形头像的被动效果，战斗时每3秒恢复3%气血
+void on_fight_start_heal(object player)
+{
+
+
+    if (!player->query("game_head_image/bilin_moke"))
+        return;
+
+    if (player->is_fighting() && player->query_temp("bilin_moke_cd") < time())
+    {
+        player->receive_heal("qi", player->query("max_qi") * 3 / 100);
+        player->receive_curing("qi", player->query("max_qi") * 3 / 100);
+
+        //如果气血大于最大气血，则设置为最大气血
+        if (player->query("eff_qi") > player->query("max_qi"))
+        {
+            player->set("eff_qi", player->query("max_qi"));
+            player->set("qi", player->query("max_qi"));
+        }
+
+        //设置cd
+        player->set_temp("bilin_moke_cd", 3 + time());
+        //提示玩家蛇行蜕变效果触发
+        tell_object(player, HIY "你感到自己正在触发蛇行蜕变的能力，气血开始缓慢恢复。\n" NOR);
+    }
+}
+
+

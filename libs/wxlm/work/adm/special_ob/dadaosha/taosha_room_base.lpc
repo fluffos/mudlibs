@@ -1,0 +1,429 @@
+/**
+ * @brief 群雄逐鹿活动基础房间
+ * @author 陆德翔
+ * @date 2023-08-01
+ * @details 群雄逐鹿活动中所有房间的基础类，提供基本功能
+ */
+
+
+
+inherit ROOM;
+
+// 函数原型声明
+void setup_room(mapping room_data);
+string query_room_id();
+mixed query_coordinates();
+void set_items_in_room(string *items);
+string *query_items();
+void remove_item(string item);
+int has_item(string item);
+mapping query_room_data();
+void set_map_name(string name);
+string query_map_name();
+void announce_to_room(string msg);
+string simple_coord_name();
+
+// 全局变量声明
+private string room_id;      // 房间ID
+private mixed coordinates;   // 房间坐标 [x, y]
+private string *room_items;  // 房间内物品列表
+private string map_name;     // 所属地图名称
+private mapping room_data;   // 房间原始数据
+
+/**
+ * @brief 创建时调用的函数
+ */
+void create()
+{
+    set("no_clean_up", 1);
+    set("outdoors", "dadaosha");
+
+    //标识这是一个群雄逐鹿副本
+    set("dadaosha_room", 1);
+    set("out_room", "/adm/special_ob/dadaosha/enter");
+
+    room_items = ({});
+}
+
+/**
+ * @brief 设置房间基础数据
+ * @param mapping data 房间数据
+ */
+void setup_room(mapping data)
+{
+    if (!data || !mapp(data))
+        return;
+    
+    room_data = data;
+    
+    // 设置基本信息
+    if (stringp(data["id"]))
+        room_id = data["id"];
+    
+    if (arrayp(data["coordinates"]) && sizeof(data["coordinates"]) == 2)
+        coordinates = data["coordinates"];
+    
+    // 设置房间名称和描述
+    if (stringp(data["short"]))
+        set("short", data["short"]);
+    
+    if (stringp(data["long"]))
+        set("long", data["long"]);
+    
+    // 设置出口
+    if (mapp(data["exits"]))
+    {
+        foreach (string dir, mixed dest in data["exits"])
+        {
+            if (arrayp(dest) && sizeof(dest) == 2)
+            {
+                // 出口为坐标形式，将在地图管理器中处理
+                continue;
+            }
+            else if (stringp(dest))
+            {
+                // 直接设置出口到指定文件
+                set("exits/" + dir, dest);
+            }
+        }
+    }
+    
+    // 设置物品
+    if (arrayp(data["items"]))
+    {
+        set_items_in_room(data["items"]);
+    }
+}
+
+/**
+ * @brief 查询房间ID
+ * @return string 房间ID
+ */
+string query_room_id()
+{
+    return room_id;
+}
+
+/**
+ * @brief 查询房间坐标
+ * @return mixed 房间坐标 [x, y]
+ */
+mixed query_coordinates()
+{
+    return coordinates;
+}
+
+/**
+ * @brief 设置房间内物品
+ * @param string *items 物品列表
+ */
+void set_items_in_room(string *items)
+{
+    // 更新房间内可见的物品
+    mapping ob_list = ([]);
+    if (!arrayp(items))
+        return;
+    
+    room_items = items;
+    
+    foreach (string item in room_items)
+    {
+        ob_list[item] = "这是一个" + item + "。";
+    }
+    
+    set("item_desc", ob_list);
+}
+
+/**
+ * @brief 查询房间内物品
+ * @return string* 物品列表
+ */
+string *query_items()
+{
+    return room_items;
+}
+
+/**
+ * @brief 从房间移除物品
+ * @param string item 物品名称
+ */
+void remove_item(string item)
+{
+    // 更新房间内可见的物品
+    mapping ob_list = ([]);
+    if (!stringp(item) || !arrayp(room_items))
+        return;
+    
+    room_items -= ({ item });
+    
+    foreach (string it in room_items)
+    {
+        ob_list[it] = "这是一个" + it + "。";
+    }
+    
+    set("item_desc", ob_list);
+}
+
+/**
+ * @brief 检查房间是否有指定物品
+ * @param string item 物品名称
+ * @return int 1:有 0:没有
+ */
+int has_item(string item)
+{
+    if (!stringp(item) || !arrayp(room_items))
+        return 0;
+    
+    return member_array(item, room_items) != -1;
+}
+
+/**
+ * @brief 查询房间原始数据
+ * @return mapping 房间数据
+ */
+mapping query_room_data()
+{
+    return room_data;
+}
+
+/**
+ * @brief 设置地图名称
+ * @param string name 地图名称
+ */
+void set_map_name(string name)
+{
+    if (stringp(name))
+        map_name = name;
+}
+
+/**
+ * @brief 查询地图名称
+ * @return string 地图名称
+ */
+string query_map_name()
+{
+    return map_name;
+}
+
+/**
+ * @brief 返回简短的坐标名称，用于显示
+ * @return string 坐标名称，格式如 (3,4)
+ */
+string simple_coord_name()
+{
+    if (!arrayp(coordinates) || sizeof(coordinates) != 2)
+        return "";
+    
+    return "(" + coordinates[0] + "," + coordinates[1] + ")";
+}
+
+/**
+ * @brief 向房间中所有玩家广播消息
+ * @param string msg 消息内容
+ */
+void announce_to_room(string msg)
+{
+    object *obs;
+    
+    if (!stringp(msg) || msg == "")
+        return;
+    
+    // 获取房间内所有玩家
+    obs = all_inventory(this_object());
+    obs = filter_array(obs, (: userp($1) && living($1) :));
+    
+    if (sizeof(obs) > 0)
+    {
+        foreach (object ob in obs)
+        {
+            tell_object(ob, HIG "【群雄逐鹿】" NOR + msg + "\n");
+        }
+    }
+}
+
+/**
+ * @brief 房间初始化
+ */
+void init()
+{
+    //玩家kill当前地图所有玩家
+    object *obs = all_inventory(this_object());
+    // 进入房间后忙乱1秒
+
+    //如果不在忙乱状态，则忙乱1秒
+    if (!this_player()->is_busy())
+    {
+        this_player()->start_busy(1);
+    }
+
+    obs = filter_array(obs, (: playerp($1) && $1 != this_player() :));
+
+    foreach (object ob in obs)
+    {
+        ob->kill_ob(this_player());
+    }
+
+    // 添加群雄逐鹿特有命令
+    add_action("do_search", "search");
+    add_action("do_pick", "pick");
+    add_action("do_check", "check");
+}
+
+/**
+ * @brief 搜索房间
+ */
+int do_search(string arg)
+{
+    object me = this_player();
+    
+    if (!me || !living(me))
+        return 0;
+    
+    if (sizeof(room_items) < 1)
+    {
+        tell_object(me, "你仔细搜索了一番，但是什么也没发现。\n");
+        return 1;
+    }
+    
+    tell_object(me, "你在房间里发现了以下物品：\n");
+    
+    foreach (string item in room_items)
+    {
+        tell_object(me, "  " + item + "\n");
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 拾取物品
+ */
+int do_pick(string arg)
+{
+    object me = this_player();
+    
+    if (!me || !living(me))
+        return 0;
+    
+    if (!arg)
+    {
+        tell_object(me, "你要拾取什么物品？\n");
+        return 1;
+    }
+    
+    if (sizeof(room_items) < 1 || member_array(arg, room_items) == -1)
+    {
+        tell_object(me, "这里没有这样物品。\n");
+        return 1;
+    }
+    
+    // 这里应该创建物品对象并给予玩家，但暂时只实现移除功能
+    tell_object(me, "你拾起了" + arg + "。\n");
+    remove_item(arg);
+    
+    return 1;
+}
+
+/**
+ * @brief 查看当前位置和活动信息
+ */
+int do_check(string arg)
+{
+    object me = this_player();
+    string info;
+    int remaining_time;
+    
+    if (!me || !living(me))
+        return 0;
+    
+    // 获取活动剩余时间
+    if (stringp(map_name) && objectp(find_object("/adm/special_ob/dadaosha/map_manage")))
+    {
+        remaining_time = find_object("/adm/special_ob/dadaosha/map_manage")->query_remaining_time(map_name);
+    }
+    
+    info = HIY "【群雄逐鹿信息】\n" NOR;
+    info += "当前地图：" + (stringp(map_name) ? map_name : "未知") + "\n";
+    info += "当前位置：" + simple_coord_name() + " - " + query("short") + "\n";
+    
+    if (remaining_time > 0)
+    {
+        info += "活动剩余时间：" + remaining_time / 60 + "分" + remaining_time % 60 + "秒\n";
+    }
+    else
+    {
+        info += "当前无活动进行中。\n";
+    }
+    
+    tell_object(me, info);
+    return 1;
+}
+
+varargs void remove(string euid)
+{
+    // 当前房间的所有玩家传送回入口
+    object *obs = all_inventory(this_object());
+    obs = filter_array(obs, (: playerp($1) :));
+    foreach (object ob in obs)
+    {
+        ob->move("/adm/special_ob/dadaosha/enter");
+        tell_object(ob, HIG "【群雄逐鹿】" NOR + "你被传送回入口了。\n");
+    }
+    
+}
+
+// 心跳函数，随机三种效果，减少玩家气血1%,内力1%,精神1%
+void heart_beat()
+{
+
+    object *obs = all_inventory(this_object());
+    
+    // 过滤出所有在线玩家
+    obs = filter_array(obs, (: playerp($1) :));
+    
+    if (!sizeof(obs))
+        return;
+    
+    //只有1/3的概率触发
+    if (random(3) != 0)
+        return;
+
+    // 对每个玩家应用随机效果
+    foreach (object ob in obs)
+    {
+        // 随机选择一种效果
+        int effect = random(3);
+        int damage;
+        
+        switch (effect)
+        {
+            case 0: // 减少气血1%
+                damage = ob->query("max_qi") / 100;
+                if (damage > 0)
+                {
+                    ob->receive_damage("qi", damage);
+                    tell_object(ob, HIR"你感到一阵虚弱，气血减少了一些。\n"NOR);
+                }
+                break;
+                
+            case 1: // 减少内力1%
+                damage = ob->query("max_neili") / 100;
+                if (damage > 0)
+                {
+                    ob->add("neili", -damage);
+                    tell_object(ob, HIB"你感到内力不稳，流失了一些。\n"NOR);
+                }
+                break;
+                
+            case 2: // 减少精神1%
+                damage = ob->query("max_jing") / 100;
+                if (damage > 0)
+                {
+                    ob->receive_damage("jing", damage);
+                    tell_object(ob, HIM"你感到精神恍惚，精力减少了一些。\n"NOR);
+                }
+                break;
+        }
+    }
+    
+}

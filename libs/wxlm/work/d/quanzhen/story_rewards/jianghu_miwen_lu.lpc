@@ -1,0 +1,227 @@
+/**
+ * @brief 江湖秘闻录 - 迷雾山庄奇遇的特殊奖励
+ * @details 记录江湖奇闻异事的神秘典籍，可以提升玩家的见识和智慧
+ */
+
+// jianghu_miwen_lu.c
+// 江湖秘闻录 - 故事系统特殊奖励
+
+inherit COMBINED_ITEM;
+
+// 函数原型声明
+void setup();
+void create();
+int do_effect(object me);
+int check_daily_use_limit(object me);
+void record_daily_use(object me);
+string *get_story_texts();
+void give_completion_bonus(object me);
+/**
+ * @brief 设置物品数量
+ */
+void setup()
+{
+    set_amount(1);
+    ::setup();
+}
+
+/**
+ * @brief 初始化江湖秘闻录的基本属性
+ */
+void create()
+{
+    set_name(HIW "江湖秘闻录" NOR, ({"jianghu miwen lu", "miwen lu", "book"}));
+    
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", 
+            "这是一本装帧精美的古籍，封面用上等丝绸包裹，绣着神秘的云纹图案。\n"
+            "书中记载着各种江湖奇闻异事，从古剑传说到邪修秘闻，从名医奇术到\n"
+            "武林秘史，应有尽有。翻开书页，仿佛能听到那些惊心动魄的故事在耳\n"
+            "边娓娓道来。这本书不仅能增长见识，还蕴含着某种玄奥的力量。\n"
+        );
+        
+        set("base_unit", "本");
+        set("base_weight", 3);
+        set("base_value", 5000);
+        set("yuanbao", 500);
+        
+        set("material", "paper");
+        set("no_sell", 1);
+        set("treasure", 1);
+        set("only_do_effect", 1);
+        
+        set("story_reward", "wushan_qiyu");
+        set("reward_type", "mystery_book");
+        set("use_times", 10);
+    }
+    setup();
+}
+
+/**
+ * @brief 玩家使用江湖秘闻录时的效果
+ * @param object me 使用者
+ * @return int 使用结果，1表示成功，0表示失败
+ */
+int do_effect(object me)
+{
+    int used_times;
+    int use_times;
+    int exp_gain;
+    int pot_gain;
+    string *story_texts;
+    string story_text;
+    
+    if (!me) return 0;
+    
+    // 检查使用间隔（每天最多使用10次）
+    if (!check_daily_use_limit(me)) {
+        tell_object(me, "今天你已经阅读够多了，明天再继续吧。\n");
+        return 1;
+    }
+    
+    used_times = me->query("jianghu_miwen_lu/used_times") || 0;
+    use_times = query("use_times") || 10;
+    
+    // 检查使用次数
+    if (used_times >= use_times) {
+        tell_object(me, "这本江湖秘闻录你已经读完了，其中的故事都烂熟于心。\n");
+        return 1;
+    }
+    
+    // 随机选择一个故事片段
+    story_texts = get_story_texts();
+    story_text = story_texts[random(sizeof(story_texts))];
+    
+    // 计算奖励
+    exp_gain = 800 + random(400);
+    pot_gain = 400 + random(200);
+    
+    // 给予奖励
+    me->add("combat_exp", exp_gain);
+    me->add("potential", pot_gain);
+    
+    // 更新使用次数
+    me->add("jianghu_miwen_lu/used_times", 1);
+    record_daily_use(me);
+    
+    // 显示效果
+    tell_object(me, sprintf(
+        "%s你从江湖秘闻录中读到了一个精彩的故事，若有所悟。%s\n"
+        "%s%s%s\n"
+        "%s你获得了 %d 点经验和 %d 点潜能。%s\n"
+        "剩余阅读次数：%d/%d\n",
+        HIC, NOR,
+        HIC, story_text, NOR,
+        HIY, exp_gain, pot_gain, NOR,
+        (use_times - used_times - 1 > 0) ? (use_times - used_times - 1) : 0, use_times
+    ));
+    
+    // 如果用完了，给予最终奖励
+    if (used_times + 1 >= use_times) {
+        give_completion_bonus(me);
+        add_amount(-1);
+    }
+    else
+    {
+        do_effect(me);
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 检查每日使用限制
+ * @param object me 玩家对象
+ * @return int 1表示可以使用，0表示已达上限
+ */
+int check_daily_use_limit(object me)
+{
+    int last_use_time;
+    int daily_uses;
+    
+    last_use_time = me->query("story_book_daily/miwen_lu_time");
+    daily_uses = me->query("story_book_daily/miwen_lu_uses");
+    
+    // 如果不是同一天，重置使用次数
+    if (!is_same_day(last_use_time, time())) {
+        me->set("story_book_daily/miwen_lu_uses", 0);
+        daily_uses = 0;
+    }
+    
+    return (daily_uses < 10);  // 每天最多10次
+}
+
+/**
+ * @brief 记录每日使用情况
+ * @param object me 玩家对象
+ */
+void record_daily_use(object me)
+{
+    me->set("story_book_daily/miwen_lu_time", time());
+    me->add("story_book_daily/miwen_lu_uses", 1);
+}
+
+/**
+ * @brief 获取故事文本数组
+ * @return string* 故事文本数组
+ */
+string *get_story_texts()
+{
+    return ({
+        "书中记载：相传武当山上有一神秘洞府，内藏太极真经，但入口被七星阵法守护，"
+        "唯有心境纯净之人方能进入...",
+        
+        "某页写道：昆仑山巅有一奇花，名为雪莲王，千年一开，服之可增甲子功力，"
+        "但此花有九头雪狮守护，常人难以接近...",
+        
+        "这里提到：江南有一神医，医术通神，能活死人肉白骨，但此人行踪不定，"
+        "只在月圆之夜现身救人，从不收取分文...",
+        
+        "书中描述：东海之外有一座仙岛，岛上仙气缭绕，住着隐世高人，据说掌握着"
+        "失传已久的御风之术，能凌虚而行...",
+        
+        "某段记录：黑木崖下有一地下宫殿，传说是前朝皇室的秘密宝库，但宫殿中"
+        "机关重重，无数江湖豪杰葬身其中...",
+        
+        "书页间夹着一张纸条：得此书者，若能参透其中奥秘，必有大机缘降临，"
+        "切记善用所学，勿为恶事..."
+    });
+}
+
+/**
+ * @brief 给予完成奖励
+ * @param object me 玩家对象
+ */
+void give_completion_bonus(object me)
+{
+    int bonus_exp;
+    int bonus_pot;
+    
+    bonus_exp = 3000;
+    bonus_pot = 1500;
+    
+    me->add("combat_exp", bonus_exp);
+    me->add("potential", bonus_pot);
+    me->add("shen", 1000);
+    
+    tell_object(me, sprintf(
+        "%s\n"
+        "你已经完全读完了江湖秘闻录，对江湖的理解更加深刻！\n"
+        "完成奖励：经验 %d 点，潜能 %d 点，神性 1000 点\n"
+        "%s\n",
+        HIR + repeat_string("=", 50) + NOR,
+        bonus_exp, bonus_pot,
+        HIR + repeat_string("=", 50) + NOR
+    ));
+}
+
+/**
+ * @brief 查询自动加载信息
+ * @return string 数量信息
+ */
+string query_autoload() 
+{ 
+    return query_amount() + ""; 
+}

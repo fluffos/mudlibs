@@ -1,0 +1,219 @@
+// updates.c
+// Update announcement command
+#define HISTORY_D "/adm/daemons/history_updated"
+
+inherit F_CLEAN_UP;
+
+// Function declarations
+int main(object me, string arg);
+private int do_list(object me, int page);
+private int do_view(object me, string id);
+private int do_read(object me, string id);
+
+/**
+ * @brief Main command handler
+ * @param object me Player object
+ * @param string arg Command arguments
+ * @return int 1 on success, 0 on failure
+ */
+int main(object me, string arg)
+{
+        string cmd, param;
+
+        if (!arg)
+                return do_list(me, 1);
+
+        // Parse command: read/view/page number
+        if (sscanf(arg, "%s %s", cmd, param) == 2)
+        {
+                if (cmd == "read")
+                        return do_read(me, param);
+                if (cmd == "view")
+                        return do_view(me, param);
+                if (cmd == "page")
+                        return do_list(me, to_int(param));
+        }
+
+        // Single parameter
+        if (sscanf(arg, "%d", cmd) == 1)
+                return do_list(me, to_int(arg));
+
+        return do_view(me, arg);
+}
+
+/**
+ * @brief Display announcement list
+ * @param object me Player object
+ * @param int page Page number
+ * @return int 1 on success
+ */
+private int do_list(object me, int page)
+{
+        string *update_ids, msg, *buttons;
+        mapping updates, update_info;
+        int total, total_pages, start, end, i;
+        int per_page;
+
+        per_page = 10;
+
+        if (page < 1)
+                page = 1;
+
+        // Get all announcements
+        update_ids = HISTORY_D->query_update_list();
+        if (!arrayp(update_ids) || !sizeof(update_ids))
+        {
+                write(popup_title("暂无公告。"));
+                return 1;
+        }
+
+        updates = HISTORY_D->query_all_updates();
+        total = sizeof(update_ids);
+        total_pages = (total + per_page - 1) / per_page;
+
+        if (page > total_pages)
+                page = total_pages;
+
+        start = (page - 1) * per_page;
+        end = start + per_page - 1;
+        if (end >= total)
+                end = total - 1;
+
+        // Build message
+        msg = sprintf(HIC"【更新公告列表】"HIY"第%d/%d页"NOR"\n\n", page, total_pages);
+
+        buttons = ({});
+
+        // Show announcements
+        for (i = start; i <= end; i++)
+        {
+                string id, status_mark;
+
+                id = update_ids[i];
+                update_info = updates[id];
+
+                if (!mapp(update_info))
+                        continue;
+
+                // Check read status
+                if (HISTORY_D->is_read(me, id))
+                        status_mark = HIG"[已读]"NOR;
+                else
+                        status_mark = HIY"[未读]"NOR;
+
+                msg += sprintf("%s %s\n", status_mark,
+                        ZJURL("cmds:updates view " + id) + HIR + update_info["title"] + NOR);
+                msg += sprintf("  版本：%s | 时间：%s\n\n",
+                        update_info["version"],
+                        ctime(update_info["time"]));
+        }
+
+        // Add navigation buttons
+        if (page > 1)
+                buttons += ({ sprintf("上一页:updates page %d", page - 1) });
+
+        if (page < total_pages)
+                buttons += ({ sprintf("下一页:updates page %d", page + 1) });
+
+        write(popup_comb(msg, buttons));
+        return 1;
+}
+
+/**
+ * @brief View specific announcement details
+ * @param object me Player object
+ * @param string id Announcement ID
+ * @return int 1 on success
+ */
+private int do_view(object me, string id)
+{
+        mapping update_info;
+        string msg, *buttons;
+
+        if (!id)
+        {
+                write(popup_title("请指定公告ID。"));
+                return 1;
+        }
+
+        // Get announcement details
+        update_info = HISTORY_D->query_update(id);
+        if (!mapp(update_info))
+        {
+                write(popup_title("公告不存在。"));
+                return 1;
+        }
+
+        // Build message
+        msg = sprintf(HIC"【%s】"NOR"\n\n", update_info["title"]);
+        msg += sprintf(HIY"版本：%s"NOR"\n", update_info["version"]);
+        msg += sprintf("发布时间：%s\n", ctime(update_info["time"]));
+
+        if (HISTORY_D->is_read(me, id))
+                msg += HIG"状态：已读"NOR"\n\n";
+        else
+                msg += HIY"状态：未读"NOR"\n\n";
+
+        msg += "─────────────────────────\n";
+        msg += update_info["content"];
+        msg += "\n─────────────────────────";
+
+        // Build buttons
+        buttons = ({});
+
+        if (!HISTORY_D->is_read(me, id))
+                buttons += ({ sprintf("标记已读:updates read %s", id) });
+
+        buttons += ({ "返回列表:updates" });
+
+        write(popup_comb(msg, buttons));
+        return 1;
+}
+
+/**
+ * @brief Mark announcement as read
+ * @param object me Player object
+ * @param string id Announcement ID
+ * @return int 1 on success
+ */
+private int do_read(object me, string id)
+{
+        mapping update_info;
+
+        if (!id)
+        {
+                write(popup_title("请指定公告ID。"));
+                return 1;
+        }
+
+        // Check if announcement exists
+        update_info = HISTORY_D->query_update(id);
+        if (!mapp(update_info))
+        {
+                write(popup_title("公告不存在。"));
+                return 1;
+        }
+
+        // Mark as read
+        HISTORY_D->mark_read(me, id);
+
+        write(popup_title("已标记为已读。"));
+        return 1;
+}
+
+/**
+ * @brief Command help information
+ * @return mixed Help text array
+ */
+mixed help(object me)
+{
+        return ([
+                "cmd": "updates",
+                "desc": "查看更新公告",
+                "usage": ({
+                        "updates - 查看公告列表",
+                        "updates <公告ID> - 查看指定公告详情",
+                        "updates read <公告ID> - 标记公告为已读"
+                })
+        ]);
+}

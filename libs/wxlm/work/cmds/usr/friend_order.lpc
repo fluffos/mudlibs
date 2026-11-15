@@ -1,0 +1,254 @@
+
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+
+int main(object me, string arg)
+{
+    string target, nickname;
+    object who;
+    string message;
+
+    if (!arg || arg == "")
+        return help(me);
+        
+    // 处理好友列表查看命令
+    if (arg == "list")
+    {
+        string *friends = FRIEND_MASTER->query_friends(me->query("id"));
+        mapping notify_data = ([]);
+        mixed friend_list = ({});
+        
+        if (!sizeof(friends))
+        {
+            notify_data = ([
+                "code" : "friend_list",
+                "count" : 0,
+                "friends" : ({})
+            ]);
+            write(json_encode(notify_data) + "\n");
+            return 1;
+        }
+        
+        foreach (string friend in friends)
+        {
+            mapping friend_info = ([]);
+            object friend_ob = UPDATE_D->global_find_player(friend);
+            
+            friend_info["id"] = friend;
+            friend_info["nickname"] = FRIEND_MASTER->query_friend_nickname(me->query("id"), friend);
+            friend_info["online"] = userp(friend_ob) ? 1 : 0;
+            
+            if (objectp(friend_ob))
+            {
+                friend_info["name"] = friend_ob->query("name");
+            }
+
+            friend_info["avatarId"] = HEAD_IMAGE_MASTER->query_head_image_status(friend_ob);
+
+            //性别
+            friend_info["sex"] = HEAD_IMAGE_MASTER->query_head_image_gender(friend_ob);
+            friend_list += ({friend_info});
+        }
+
+        if (sizeof(friend_list) < 1)
+        {
+            notify_data = ([
+                "code" : "friend_list",
+                "count" : 0,
+                "friends" : "[]",
+            ]);
+            write(json_encode(notify_data) + "\n");
+            return 1;
+        }
+        
+        notify_data = ([
+            "code" : "friend_list",
+            "count" : sizeof(friend_list),
+            "friends" : friend_list
+        ]);
+        
+        write(json_encode(notify_data) + "\n");
+        return 1;
+    }
+    
+    // 处理待处理申请列表查看命令
+    if (arg == "requests")
+    {
+        string *requests = FRIEND_MASTER->query_requests(me->query("id"));
+        mapping notify_data = ([]);
+        mixed request_list = ({});
+        
+        if (!sizeof(requests))
+        {
+            notify_data = ([
+                "code" : "friend_requests",
+                "count" : 0,
+                "friends" : ({})
+            ]);
+            write(json_encode(notify_data) + "\n");
+            return 1;
+        }
+        
+        foreach (string req in requests)
+        {
+            mapping request_info = ([]);
+            object req_ob = UPDATE_D->global_find_player(req);
+
+            if (!objectp(req_ob))
+            {
+                continue;
+            }
+            
+            request_info["id"] = req;
+            if (playerp(req_ob))
+            {
+                request_info["name"] = req_ob->query("name");
+                request_info["online"] = 1;
+            }
+            else
+            {
+                request_info["online"] = 0;
+            }
+
+            request_info["avatarId"] = HEAD_IMAGE_MASTER->query_head_image_status(req_ob);
+            request_info["sex"] = HEAD_IMAGE_MASTER->query_head_image_gender(req_ob);
+            
+            request_list += ({request_info});
+        }
+
+        if (sizeof(request_list) < 1)
+        {
+            notify_data = ([
+                "code" : "friend_requests",
+                "count" : 0,
+                "friends" : "[]",
+            ]);
+            write(json_encode(notify_data) + "\n");
+            return 1;
+        }
+        
+        notify_data = ([
+            "code" : "friend_requests",
+            "count" : sizeof(request_list),
+            "friends" : request_list
+        ]);
+        
+        write(json_encode(notify_data) + "\n");
+        return 1;
+    }
+    
+    // 处理添加好友命令
+    if (sscanf(arg, "add %s", target) == 1)
+    {
+        if (!objectp(who = UPDATE_D->global_find_player(target)))
+            return notify_fail("玩家不存在。\n");
+            
+        if (FRIEND_MASTER->request_friend(me->query("id"), target))
+        {
+            mapping notify_data = ([
+                "code" : "friend_request_sent",
+                "target" : target,
+                "time" : time()
+            ]);
+            write(json_encode(notify_data) + "\n");
+            who->force_me("friend_order requests");
+            write("已发送好友申请给 " + who->query("name") + "\n");
+            return 1;
+        }
+        return notify_fail("好友申请无效。\n");
+    }
+    
+    // 处理接受好友申请命令
+    if (sscanf(arg, "accept %s", target) == 1)
+    {
+        if (FRIEND_MASTER->accept_friend_request(me->query("id"), target))
+        {
+            mapping notify_data = ([
+                "code" : "friend_request_accept_success",
+                "target" : target,
+                "time" : time()
+            ]);
+            write(json_encode(notify_data) + "\n");
+            me->force_me("friend_order list");
+            me->force_me("friend_order requests");
+            return 1;
+        }
+        return notify_fail("接受好友申请失败。\n");
+    }
+    
+    // 处理拒绝好友申请命令
+    if (sscanf(arg, "reject %s", target) == 1)
+    {
+        if (FRIEND_MASTER->reject_friend_request(me->query("id"), target))
+        {
+            mapping notify_data = ([
+                "code" : "friend_request_reject_success",
+                "target" : target,
+                "time" : time()
+            ]);
+            write(json_encode(notify_data) + "\n");
+            return 1;
+        }
+        return notify_fail("拒绝好友申请失败。\n");
+    }
+    
+    // 处理设置好友昵称命令
+    if (sscanf(arg, "nickname %s %s", target, nickname) == 2)
+    {
+        if (FRIEND_MASTER->set_friend_nickname(me->query("id"), target, nickname))
+        {
+            mapping notify_data = ([
+                "code" : "friend_nickname_set",
+                "target" : target,
+                "nickname" : nickname,
+                "time" : time()
+            ]);
+            write(json_encode(notify_data) + "\n");
+            return 1;
+        }
+        return notify_fail("设置好友昵称失败。\n");
+    }
+    
+
+    if (sscanf(arg, "send %s $send$ %s", target, message) == 2)
+    {
+        // 检查是否是好友关系
+        if (!FRIEND_MASTER->is_friend(me->query("id"), target))
+            return notify_fail("对方不是你的好友。\n");
+            
+        if (FRIEND_MASTER->send_message(me->query("id"), target, message))
+        {
+            // mapping notify_data = ([
+            //     "code" : "friend_message_sent",
+            //     "target" : target,
+            //     "message" : message,
+            //     "time" : time()
+            // ]);
+            // write(json_encode(notify_data) + "\n");
+            return 1;
+        }
+        return notify_fail("发送消息失败。\n");
+    }
+    
+    return help(me);
+}
+
+int help(object me)
+{
+    write(@HELP
+好友系统命令，可以进行如下操作：
+
+friend_order add <玩家id>     - 添加好友
+friend_order accept <玩家id>  - 接受好友申请
+friend_order reject <玩家id>  - 拒绝好友申请
+friend_order list            - 查看好友列表
+friend_order requests        - 查看待处理的好友申请
+friend_order nickname <好友id> <昵称> - 设置好友备注
+friend_order send <好友id> $send$ <消息内容> - 发送消息给好友
+
+HELP
+    );
+    return 1;
+}

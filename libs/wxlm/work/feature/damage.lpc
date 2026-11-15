@@ -1,0 +1,1058 @@
+/**
+ * @file damage.c
+ * @author Lu dexiang
+ * @brief 角色伤害处理系统
+ * @version 1.0
+ * @date 2023-01-01
+ * 
+ * @details 本文件实现了游戏中角色受伤、治疗、昏迷和死亡等相关功能。
+ * 包括伤害计算、伤害记录、生命恢复等核心战斗机制。
+ */
+
+#include <dbase.h>
+#include <move.h>
+#include <login.h>
+#include <action.h>
+#include <condition.h>
+
+nosave object last_damage_from = 0;
+nosave string last_damage_name = 0;
+nosave object defeated_by      = 0;
+nosave string defeated_by_who  = 0;
+nosave mapping damage_record   = 0;
+void no_die(object me);
+
+/**
+ * @brief 获取最后一次伤害来源对象
+ * @return object 最后一次伤害来源对象
+ */
+object query_last_damage_from() { return last_damage_from; }
+
+/**
+ * @brief 获取最后一次伤害来源名称
+ * @return string 最后一次伤害来源名称
+ */
+string query_last_damage_name() { return last_damage_name; }
+
+/**
+ * @brief 获取击败当前对象的对象
+ * @return object 击败当前对象的对象
+ */
+object query_defeated_by()      { return defeated_by; }
+
+/**
+ * @brief 获取击败当前对象的名称
+ * @return string 击败当前对象的名称
+ */
+string query_defeated_by_who()  { return defeated_by_who; }
+
+/**
+ * @brief 记录伤害来源信息
+ * @param object who 伤害来源对象
+ * @param string name 伤害来源名称
+ * @param int damage 伤害值
+ * @details 将伤害来源的信息累加记录到damage_record中
+ */
+void record_damage(object who, string name, int damage)
+{
+	string id;
+
+	// 无效的伤害值不记录
+	if (damage <= 0)
+		return;
+
+	// 如果没有伤害来源对象，但有名称，使用名称作为ID
+	if (!objectp(who))
+	{
+		if (!stringp(name))
+			return;
+		id = name;
+	}
+	else
+	{
+		id = who->query("id");
+		if (!stringp(id))
+			return;
+		// 如果没有传入名称，从对象获取
+		if (!stringp(name))
+			name = who->name(1);
+	}
+
+	// 初始化damage_record
+	if (!mapp(damage_record))
+		damage_record = ([]);
+
+	// 累加伤害记录
+	if (!mapp(damage_record[id]))
+	{
+		damage_record[id] = ([
+			"name": name,
+			"damage": damage
+		]);
+	}
+	else
+	{
+		damage_record[id]["damage"] += damage;
+	}
+}
+
+/**
+ * @brief 查询所有伤害记录
+ * @return mapping 所有伤害来源的记录
+ */
+mapping query_damage_record()
+{
+	return damage_record;
+}
+
+/**
+ * @brief 查询特定伤害来源的记录
+ * @param string id 伤害来源的ID
+ * @return mapping 该来源的伤害记录
+ */
+mapping query_damage_from(string id)
+{
+	if (!mapp(damage_record))
+		return 0;
+	return damage_record[id];
+}
+
+/**
+ * @brief 获取造成最高伤害的来源ID
+ * @return string 造成最高伤害的来源ID
+ */
+string query_max_damage_from()
+{
+	string max_id, id;
+	int max_damage;
+
+	if (!mapp(damage_record) || !sizeof(damage_record))
+		return 0;
+
+	max_damage = 0;
+	foreach (id in keys(damage_record))
+	{
+		if (damage_record[id]["damage"] > max_damage)
+		{
+			max_damage = damage_record[id]["damage"];
+			max_id = id;
+		}
+	}
+
+	return max_id;
+}
+
+/**
+ * @brief 清除所有伤害记录
+ * @details 清空damage_record映射表
+ */
+void clear_damage_record()
+{
+	damage_record = 0;
+}
+
+
+int ghost = 0;
+int PVP_DAMAGE_SCALE = 70;
+int PVP_WOUND_SCALE  = 60;
+
+/**
+ * @brief 检查对象是否处于鬼魂状态
+ * @return int 如果是鬼魂返回1，否则返回0
+ */
+int is_ghost() { return ghost; }
+
+//新增数据，用于计算玩家在某一阶段是否没有受到任何伤害
+int time_damage = 0;
+//是否开启受伤计算
+int is_on_damage = 0; //默认关闭
+
+/**
+ * @brief 设置是否开启受伤计算
+ * @param int flag 1表示开启，0表示关闭
+ * @details 如果关闭计算，会清空已记录的伤害值
+ */
+void set_on_damage(int flag)
+{
+	is_on_damage = flag;
+
+	// 如果关闭了计算，清空记录
+	if (!flag)
+	{
+		time_damage = 0;
+	}
+}
+
+/**
+ * @brief 获取当前记录的受伤值
+ * @return int 当前记录的受伤值
+ */
+int query_time_damage()
+{
+	return time_damage;
+}
+
+/**
+ * @brief 处理角色受到的伤害
+ * @param string type 伤害类型，如"qi"或"jing"
+ * @param int damage 伤害值
+ * @param object who 伤害来源对象
+ * @return int 实际造成的伤害值
+ * @details 处理角色受到的直接伤害，包括伤害计算、伤害减免和特殊效果处理
+ */
+varargs int receive_damage(string type, int damage, object who)
+{
+    int val;
+
+    // 使用外部对象来处理详细的运行逻辑
+    // 使用ref传引用
+    damage = COMBAT_D->combat_process_damage(this_object(),type, damage, who, 0, ref last_damage_name, ref last_damage_from);
+
+    // 根据临时变量reduce_damage来减少百分比伤害
+    if (intp(query_temp("reduce_damage")))
+    {
+        damage = damage * (100 - query_temp("reduce_damage")) / 100;
+    }
+
+    // 处理刺猬身的被动效果
+    COMBAT_D->process_ciwei_shen(this_object(), who, damage);
+
+    // 处理反击宝石效果
+    COMBAT_D->process_counter_damage(this_object(), who);
+
+    val = (int)query(type) - damage;
+
+    if (val >= 0)
+    {
+        set(type, val);
+    }
+    else
+    {
+        set(type, -1);
+    }
+
+    set_heart_beat(1);
+
+    // 记录伤害来源
+    if (damage > 0)
+        record_damage(who, last_damage_name, damage);
+
+    return damage;
+}
+
+/**
+ * @brief 处理角色受到的创伤
+ * @param string type 创伤类型，如"qi"或"jing"
+ * @param int damage 创伤值
+ * @param object who 伤害来源对象
+ * @return int 实际造成的创伤值
+ * @details 处理角色受到的持久创伤，影响角色的有效生命值上限
+ */
+varargs int receive_wound(string type, int damage, object who)
+{
+    int val;
+
+	//使用外部对象来处理详细的运行逻辑
+    damage = COMBAT_D->combat_process_damage(this_object(),type, damage, who, 1,ref last_damage_name, ref last_damage_from);
+
+    val = (int)query("eff_" + type) - damage;
+
+    if (val >= 0) set("eff_" + type, val);
+    else
+    {
+        set( "eff_" + type, -1 );
+        val = -1;
+    }
+
+    if ((int)query(type) > val) set(type, val);
+
+    set_heart_beat(1);
+
+    // 如果玩家开启了受伤计算，则计算玩家在某一阶段是否受到了伤害
+    if(is_on_damage && damage > 0)
+    {
+        time_damage += damage;
+    }
+
+    // 记录伤害来源
+    if (damage > 0)
+        record_damage(who, last_damage_name, damage);
+
+    return damage;
+}
+
+/**
+ * @brief 处理角色的生命值恢复
+ * @param string type 恢复类型，如"qi"或"jing"
+ * @param int heal 恢复值
+ * @return int 实际恢复的数值
+ * @details 恢复角色的当前生命值，但不超过有效生命值上限
+ */
+int receive_heal(string type, int heal)
+{
+	int val;
+
+	if (heal < 0) error("F_DAMAGE: 恢复值为负值。\n");
+	if (type != "jing" && type != "qi")
+		error("F_DAMAGE: 恢复种类错误( 只能是 jing, qi 其中之一 )。\n");
+
+	val = (int)query(type) + heal;
+
+	if (val > (int)query("eff_" + type))
+		set(type, (int)query("eff_" + type));
+	else set(type, val);
+
+	return heal;
+}
+
+/**
+ * @brief 处理角色的有效生命值恢复
+ * @param string type 恢复类型，如"qi"或"jing"
+ * @param int heal 恢复值
+ * @return int 实际恢复的数值
+ * @details 恢复角色的有效生命值上限，但不超过最大生命值
+ */
+int receive_curing(string type, int heal)
+{
+	int max, val;
+
+	if (heal < 0) error("F_DAMAGE: 恢复值为负值。\n");
+	if (type != "jing" && type != "qi")
+		error("F_DAMAGE: 恢复种类错误( 只能是 jing, qi 其中之一 )。\n");
+
+	val = (int)query("eff_" + type);
+	if(type == "qi")
+		max = (int)query("max_" + type);
+	else if(type == "jing")
+		max = (int)query("max_" + type);
+	else
+		max = (int)query("max_" + type);
+
+	if (val + heal > max)
+	{
+		set("eff_" + type, max);
+		return max - val;
+	} else
+	{
+		set("eff_" + type, val + heal);
+		return heal;
+	}
+}
+
+/**
+ * @brief 统计被当前对象击败的玩家数量
+ * @return int 被击败的玩家数量
+ * @details 清理已不存在或已恢复的对象，返回有效的被击败玩家数量
+ */
+int dps_count()
+{
+	int i;
+	object *dp;
+
+	dp = query_temp("defeat_player");
+	if (! dp) return 0;
+	for (i = 0; i < sizeof(dp); i++)
+		if (dp[i] && living(dp[i])) dp[i] = 0;
+	dp -= ({ 0 });
+	set_temp("defeat_player", dp);
+	return sizeof(dp);
+}
+
+/**
+ * @brief 记录被当前对象击败的玩家
+ * @param object ob 被击败的玩家对象
+ * @details 只有当前对象想要杀死目标时才会记录
+ */
+void record_dp(object ob)
+{
+	object *dp;
+
+	if (! this_object()->is_want_kill(ob->query("id")))
+		// only if I want kill ob, I will record it.
+		return;
+
+	dp = query_temp("defeat_player");
+	if (! dp) dp = ({ });
+	dp += ({ ob });
+	set_temp("defeat_player", dp);
+}
+
+/**
+ * @brief 移除被当前对象击败的玩家记录
+ * @param object ob 要移除的玩家对象，如果为0则移除所有记录
+ */
+void remove_dp(object ob)
+{
+	object *dp;
+
+	if (! ob)
+	{
+		// remove all player defeated by me
+		delete_temp("defeat_player");
+		return;
+	}
+
+	dp = query_temp("defeat_player");
+	if (! dp) return;
+	dp -= ({ ob, 0 });
+	set_temp("defeat_player", dp);
+}
+
+/**
+ * @brief 处理角色昏迷状态
+ * @details 当角色生命值过低时进入昏迷状态，包括竞争处理、骑乘处理和奖励计算
+ */
+void unconcious()
+{
+	object me;
+	object ob;
+ 
+	object riding;
+	string applyer;
+	string owner_id;
+	int n;
+ 
+ 
+
+	me = this_object();
+	if (! living(me)) return;
+	if (wizardp(me) && query("env/immortal")) return;
+
+	// I am lost if in competition with others
+	if (objectp(ob = me->query_competitor()) && ! ob->is_killing(me->query("id")))
+	{
+		ob->win();
+		me->lost();
+	}
+
+	if (me->is_busy()) me->interrupt_me();
+
+	if (run_override("unconcious")) return;
+
+	if (userp(me)&&environment(me)->query("out_room"))
+	{
+		if(me->query("qi")<1) me->set("qi",1);
+		if(me->query("eff_qi")<1) me->set("eff_qi",1);
+		if(me->query("jing")<1) me->set("jing",1);
+		if(me->query("eff_jing")<1) me->set("eff_jing",1);
+
+		// 检查环境是否存在no_die函数,function_exists() 
+		if (function_exists("no_die", environment(me)))
+		{
+			environment(me)->no_die(me);
+		}
+		else
+		{
+			no_die(me);
+		}
+
+		me->move(environment(me)->query("out_room"));
+		return;
+	}
+
+	if (! last_damage_from && (applyer = query_last_applyer_id()))
+	{
+		last_damage_from = UPDATE_D->global_find_player(applyer);
+		last_damage_name = query_last_applyer_name();
+	}
+
+	defeated_by_who = last_damage_name;
+	if (defeated_by = last_damage_from)
+	{
+  
+
+		// 如果此人有主，则算主人打晕的
+		if (objectp(defeated_by->query_temp("owner")))
+		{
+			defeated_by = defeated_by->query_temp("owner");
+			defeated_by_who = defeated_by->name(1);
+		} else
+		if (stringp(owner_id = defeated_by->query_temp("owner_id")))
+		{
+			defeated_by = UPDATE_D->global_find_player(owner_id);
+			if (objectp(defeated_by))
+				defeated_by_who = defeated_by->name(1);
+		}
+
+		if (query("qi") < 0 || query("jing") < 0)
+			COMBAT_D->winner_reward(defeated_by, me);
+
+		// 如果对方有意杀害我，则我愤怒，并且对方累积杀气。
+		if (playerp(me) && defeated_by->is_want_kill(me->query("id")))
+		{
+			defeated_by->record_dp(me);
+			me->craze_of_defeated(defeated_by->query("id"));
+			n = 100 + random(100) + me->query_skill("force");
+			if (n > defeated_by->query_skill("force"))
+				n = defeated_by->query_skill("force") / 2 +
+				    random(defeated_by->query_skill("force") / 2);
+			defeated_by->add("total_hatred", n);
+		}
+	}
+
+	me->remove_all_enemy(0);
+
+	// notice the write_prompt function: do not show prompt
+	me->clear_written();
+
+	message("vision", HIR "\n你的眼前一黑，进入昏死状态...."NOR"\n",me);
+	
+	me->disable_player(" <昏迷不醒>");
+	me->delete_temp("sleeped");
+	 
+	if (objectp(riding = me->query_temp("is_riding")))
+	{
+		message_vision("$N一头从$n上面栽了下来！\n",
+			      me, riding);
+		me->delete_temp("is_riding");
+		riding->delete_temp("is_rided_by");
+		riding->move(environment(me));
+	}
+
+	set("jing", 0);
+	set("qi", 0);
+//	set_temp("block_msg/all", 1);
+
+	call_out("revive", 15);//15秒后清醒
+	COMBAT_D->announce(me, "unconcious");
+
+	// remove the user if loaded by updated
+	UPDATE_D->global_destruct_player(defeated_by, 1);
+}
+
+/**
+ * @brief 使角色从昏迷状态恢复
+ * @param int quiet 是否安静恢复，不显示消息
+ * @details 恢复角色的行动能力，清除昏迷状态
+ */
+varargs void revive(int quiet)
+{
+ 
+	object me;
+	object env;
+
+	me = this_object();
+
+	remove_call_out("revive");
+	env = environment();
+	if (env)
+	{
+		while (env->is_character() && environment(env))
+			env = environment(env);
+		if (env != environment())
+			me->move(env);
+	}
+	delete("disable_type");
+	set_temp("block_msg/all", 0);
+	me->enable_player();
+
+	// write the prompt
+	me->write_prompt();
+
+	if (objectp(defeated_by))
+		defeated_by->remove_dp(me);
+
+	if (! quiet)
+	{
+		defeated_by = 0;
+		defeated_by_who = 0;
+		COMBAT_D->announce(this_object(), "revive");
+		message("vision", HIY "\n慢慢地你终于又有了知觉...."NOR"\n",
+			me);
+	}
+
+	last_damage_from = 0;
+	last_damage_name = 0;
+}
+
+/**
+ * @brief 恢复角色的所有生命值和能量值
+ * @param object me 要恢复的角色对象
+ * @details 用于特殊场景下防止角色死亡的情况
+ */
+void no_die(object me)
+{
+    //真血eff
+    me->set("eff_qi", me->query("max_qi"));
+    //真气eff
+    me->set("eff_jing", me->query("max_jing"));
+    //内力eff
+    me->set("eff_neili", me->query("max_neili"));
+
+    // 虚血
+    me->set("qi", me->query("max_qi"));
+    me->set("jing", me->query("max_jing"));
+    me->set("neili", me->query("max_neili"));
+}
+
+/**
+ * @brief 处理角色死亡逻辑
+ * 
+ * @param killer 杀死角色的对象
+ * @details 处理角色死亡的全部流程，包括竞争处理、尸体生成、奖惩计算和玩家复活等
+ */
+varargs void die(object killer)
+{
+	object me, corpse, room, riding, dob, ob, kuilei, tmp_load;
+	string dob_name, killer_name, applyer;
+	int direct_die, time;
+
+	me = this_object();
+
+	// 检查对象是否有效
+	if (!objectp(me))
+		return;
+
+	me->delete_temp("sleeped");
+	me->delete("last_sleep");
+
+	// 处理竞争者逻辑
+	if (ob = me->query_competitor())
+	{
+		ob->win();
+		me->lost();
+	}
+
+	//如果死亡对象是npc，并且可以被刷新，则刷新
+	if (!playerp(me) && query("is_refreshable") && !environment(this_object())->query("is_combat_room"))
+	{
+		environment(this_object())->replace_npc(me, environment(this_object())->make_inventory(base_name(me)));
+		message_vision("又一名$N走了过来。\n", me);
+	}
+
+
+	// 如果是巫师且拥有不朽环境，直接返回
+	if (wizardp(me) && query("env/immortal"))
+	{
+		delete_temp("die_reason");
+		return;
+	}
+
+	// 中断忙碌状态
+	if (me->is_busy()) 
+		me->interrupt_me();
+
+	// 检查是否有覆写die函数
+	if (run_override("die")) 
+		return;
+
+	// 处理有外部房间的用户死亡逻辑
+	if (userp(me) && environment(me)->query("out_room"))
+	{
+		if (!living(me)) 
+		{
+			revive(1);
+		}
+
+		me->set("qi",me->query("max_qi"));
+		me->set("eff_qi", me->query("max_qi"));
+		me->set("jing", me->query("max_jing"));
+		me->set("eff_jing", me->query("max_jing"));
+
+		// environment(me)是否存在no_die函数,function_exists() 
+		if (function_exists("no_die", environment(me)))
+		{
+			environment(me)->no_die(me);
+		}
+		else
+		{
+			no_die(me);
+		}
+
+		// 是字符串类型还是数字类型
+		if (stringp(environment(me)->query("out_room")))
+		{
+			me->move(environment(me)->query("out_room"));
+		}
+		else
+		{
+			me->move("/d/city/guangchang");
+		}
+
+		//确定是否在活动地图中
+		if (environment(me)->query("dadaosha_room"))
+		{
+			//如果是并且找的到killer或者last_damage_from，则增加击杀数
+			if (killer || last_damage_from)
+			{
+				"/adm/special_ob/dadaosha/map_manage"->add_kill_count(killer || last_damage_from);
+			}
+		}
+		
+		return;
+	}
+
+	// 处理"tishen kuilei"物品使用
+	if (me->query("combat_exp") >= 5000000 && (kuilei = present("tishen kuilei", me)))
+	{
+		kuilei->add_amount(-1);
+		me->set_temp("kuilei_used", 1);
+		me->add("kuilei_used", 1);
+	}
+
+	// 获取最后伤害来源
+	if (!last_damage_from && (applyer = query_last_applyer_id()))
+	{
+		tmp_load = UPDATE_D->global_find_player(applyer);
+		last_damage_from = tmp_load;
+		last_damage_name = query_last_applyer_name();
+	}
+
+	// 确定杀手信息
+	if (!killer)
+	{
+		killer = last_damage_from;
+		killer_name = last_damage_name;
+	}
+	else
+	{
+		killer_name = killer->name(1);
+	}
+
+	//如果死亡对象是npc，并且是任务目标，则增加任务进度
+	if (!playerp(me) && killer && killer->query("new_main_task/target_name") == filter_color(me->query("name")))
+	{
+		killer->add("new_main_task/target_num", 1);
+		// MAIN_TASK_MASTER->show_quest_progress(killer, killer->query("main_task/start_num"));
+	}
+
+	// 记录是否直接死亡
+	if (!living(me))
+	{
+		direct_die = 0;
+		if (userp(me) || playerp(me))
+			revive(1);
+		else
+			me->delete("disable_type");
+	}
+	else
+	{
+		direct_die = 1;
+	}
+
+	// 处理奖励
+	if (direct_die && killer)
+		COMBAT_D->winner_reward(killer, me);
+
+	// 处理骑乘状态
+	if ((riding = me->query_temp("is_riding")))
+	{
+		message_vision("$N一头从$n上面栽了下来！\n", me, riding);
+		me->delete_temp("is_riding");
+		riding->delete_temp("is_rided_by");
+		riding->move(environment(me));
+	}
+
+	// 设置死亡原因
+	dob = defeated_by;
+	dob_name = defeated_by_who;
+	if (!query_temp("die_reason"))
+	{
+		if (userp(me) && dob_name && killer_name && 
+			(dob_name != killer_name || dob != killer))
+		{
+			set_temp("die_reason", "被" + dob_name + "打晕以后，被" + 
+								(dob_name == killer_name ? "另一个" : "") + 
+								killer_name + "趁机杀掉了");
+		}
+		else if (userp(me) && killer_name && !killer)
+		{
+			set_temp("die_reason", "被" + killer_name + HIM "杀害了");
+		}
+	}
+
+	// 处理逃跑逻辑
+	if (COMBAT_D->player_escape(killer, me))
+	{
+		UPDATE_D->global_destruct_player(tmp_load, 1);
+		return;
+	}
+
+	// 宣告死亡类型
+	if (me->query_temp("kuilei_used"))
+		COMBAT_D->announce(me, "kuilei");
+	else
+		COMBAT_D->announce(me, "dead");
+
+	// 设置杀手ID
+	if (objectp(killer))
+		set_temp("my_killer", killer->query("id"));
+
+	// 处理杀手奖励
+	COMBAT_D->killer_reward(killer, me);
+
+	// 移除加载的玩家
+	UPDATE_D->global_destruct_player(tmp_load, 1);
+
+	// 更新战斗死亡次数
+	if (!me->query_temp("kuilei_used"))
+		me->add("combat/dietimes", 1);
+
+	// 生成尸体
+	if (!me->query_temp("kuilei_used") && !query("no_corpse"))
+	{
+		corpse = CHAR_D->make_corpse(me, killer);
+		if (objectp(corpse))
+		{
+			corpse->move(environment());
+		}
+		else
+		{
+			message_vision("$N死后，尸体化作一团黑烟，消失不见了。\n", me);
+		}
+	}
+
+	// 清理击败者信息
+	defeated_by = 0;
+	defeated_by_who = 0;
+	me->remove_all_killer();
+	all_inventory(environment())->remove_killer(me);
+
+	// 清除伤害记录
+	clear_damage_record();
+
+	// 解散团队
+	me->dismiss_team();
+
+	// 处理用户与非用户死亡逻辑
+	if (userp(me) || playerp(me))
+	{
+		if (me->is_busy())
+			me->interrupt_me();
+		me->set("jing", 1);
+		me->set("eff_jing", 1);
+		me->set("qi", 1);
+		me->set("eff_qi", 1);
+
+		if (me->query_temp("kuilei_used"))
+		{
+			me->move("/d/city/wumiao");
+			me->delete_temp("kuilei_used");
+		}
+		else
+		{
+			ghost = 1;
+			me->move(DEATH_ROOM);
+			DEATH_ROOM->start_death(me);
+		}
+
+		me->delete_temp("die_reason");
+		me->craze_of_die(killer ? killer->query("id") : 0);
+
+		// 设置死亡保护
+		me->set("die_protect/last_dead", time());
+		me->set("die_protect/duration", 2 * 60 * 60);
+	}
+	else
+	{
+		if ((room = me->query("resetroom")) && !clonep(room))
+		{
+			time = me->query("load_time") || 900;
+			room->load_npc(base_name(me), time);
+		}
+		destruct(me);
+	}
+}
+
+/**
+ * @brief 使角色从鬼魂状态恢复
+ * @details 重置角色的鬼魂状态，恢复有效生命值和精力值
+ */
+void reincarnate()
+{
+	ghost = 0;
+	set("eff_jing", query("max_jing"));
+	set("eff_qi", query("max_qi"));
+}
+
+/**
+ * @brief 获取角色的最大食物容量
+ * @return int 角色的最大食物容量
+ * @details 基于角色的力量属性计算
+ */
+int max_food_capacity() { return query("str") * 10 + 100; }
+
+/**
+ * @brief 获取角色的最大饮水容量
+ * @return int 角色的最大饮水容量
+ * @details 基于角色的力量属性计算
+ */
+int max_water_capacity() { return query("str") * 10 + 100; }
+
+/**
+ * @brief 获取角色每心跳恢复的气血值
+ * @return int 每心跳恢复的气血值
+ * @details 基础恢复值加上词条效果和武圣心脏炼体效果
+ */
+int heart_recover_qi()
+{
+	int recover = 1 + query("citiao_effects/recover_qi");
+	
+	// 武圣心脏炼体加成 - 气血恢复速度
+	if (query("wusheng_bonus/qi_recover"))
+	{
+		recover += query("wusheng_bonus/qi_recover");
+	}
+	
+	return recover;
+}
+
+/**
+ * @brief 获取角色每心跳恢复的精力值
+ * @return int 每心跳恢复的精力值
+ * @details 基础恢复值加上词条效果
+ */
+int heart_recover_jing()
+{
+    return  1 + query("citiao_effects/recover_jing");
+}
+
+/**
+ * @brief 获取角色每心跳恢复的内力值
+ * @return int 每心跳恢复的内力值
+ * @details 基础恢复值加上武圣肝脏炼体效果
+ */
+int heart_recover_neili()
+{
+	int recover = 0;
+	
+	// 武圣肝脏炼体加成 - 内力恢复速度
+	if (query("wusheng_bonus/neili_recover"))
+	{
+		recover += query("wusheng_bonus/neili_recover");
+	}
+	
+	return recover;
+}
+
+/**
+ * @brief 角色自动恢复生命值、精力等属性的方法
+ * @return int 更新标记
+ * @details 处理角色的自然恢复，包括生命值、精力、内力等属性的恢复，以及守卫状态的处理
+ */
+int heal_up()
+{
+    int update_flag = 0;
+    object me = this_object();
+    mapping my = query_entire_dbase();
+    mixed guard;
+    int is_user = playerp(me);
+    int scale = living(me) ? 1 : 4;
+	// 随机显示守卫动作
+	string *guard_msgs = ({
+		"$N紧张的盯着四周来往的行人。\n",
+		"$N打了个哈欠，随即振作精神继续观察附近情况。\n", 
+		"$N左瞅瞅，右看看，不放过一个可疑的人物。\n",
+		"$N打起精神细细的观察周围。\n"
+	});
+    // 清除nopoison状态
+    if (query_temp("nopoison"))
+        delete_temp("nopoison");
+
+    // 处理监狱状态
+    if (me->is_in_prison()) {
+        me->update_in_prison();
+        return 1;
+    }
+
+    // 只有在非聊天室且非特殊状态下才进行恢复
+    if (! is_user || (environment() && ! environment()->is_chat_room() && 
+        (! stringp(my["doing"]) && interactive(me)))) {
+        
+        // 基础消耗
+        if (my["water"] > 50) {
+            my["water"] -= 1;
+            update_flag++;
+        }
+        if (my["food"] > 50) {
+            my["food"] -= 1;
+            update_flag++;
+        }
+
+        // 水分不足时停止恢复
+        if (my["water"] < 1 && is_user)
+            return update_flag;
+
+        // 处理守卫状态
+        if ((guard = me->query_temp("guardfor")) && 
+            (! objectp(guard) || ! guard->is_character())) {
+            
+            // 精神不足时取消守卫
+            if (my["jing"] * 100 / my["max_jing"] < 50) {
+                tell_object(me, "你觉得太累了，需要放松放松了。\n");
+                command("guard cancel");
+                return update_flag;
+            }
+
+            // 守卫消耗精神值
+            my["jing"] -= 30 + random(20);
+            
+
+            message_vision(guard_msgs[random(sizeof(guard_msgs))], me);
+            
+            update_flag++;
+            return update_flag;
+        }
+
+        // 恢复精神值
+        my["jing"] += is_user ? heart_recover_jing() : (my["con"] + my["max_jingli"] / 10) / scale;
+
+		if (my["eff_jing"] < my["max_jing"])
+		{
+			//每回合恢复量
+			int single_heal = 1;
+			single_heal += heart_recover_jing();
+			my["eff_jing"] += single_heal;
+			update_flag++;
+		}
+
+        if (my["jing"] >= my["eff_jing"]) {
+            my["jing"] = my["eff_jing"];
+        } else {
+            update_flag++;
+        }
+
+        // 恢复气血值
+		{
+
+			if (my["eff_qi"] < my["max_qi"])
+			{
+				//每回合恢复量
+				int single_heal = 1;
+				single_heal += heart_recover_qi();
+				my["eff_qi"] += single_heal;
+				update_flag++;
+			}
+
+            my["qi"] += is_user ? heart_recover_qi() : (my["con"] * 2 + my["max_neili"] / 20) / scale;
+
+            if (my["qi"] >= my["eff_qi"]) {
+                my["qi"] = my["eff_qi"];
+            } else {
+                update_flag++;
+            }
+        }
+
+        // 食物不足时停止恢复
+        if (my["food"] < 1 && is_user)
+            return update_flag;
+
+        // 恢复精力值
+        if (my["max_jingli"] && my["jingli"] < my["max_jingli"]) {
+            my["jingli"] += my["con"] + (int)me->query_skill("force") / 6;
+            if (my["jingli"] > my["max_jingli"])
+                my["jingli"] = my["max_jingli"];
+            update_flag++;
+        }
+
+        // 恢复内力值
+        if (my["max_neili"] && my["neili"] < my["max_neili"]) {
+            my["neili"] += my["con"] * 2 + (int)me->query_skill("force") / 3 + me->heart_recover_neili();
+            if (my["neili"] > my["max_neili"])
+                my["neili"] = my["max_neili"];
+            update_flag++;
+        }
+    }
+
+    return update_flag;
+}

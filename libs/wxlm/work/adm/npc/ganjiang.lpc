@@ -1,0 +1,1059 @@
+inherit NPC;
+inherit F_NOCLONE;
+
+// 如果字符串被设置成这个值，表示输入的字符串具有非法的格式
+#define	ILLEGAL_STR	"."
+// 在convert时看看要不要去掉彩色
+#define	NOCOLOR		1
+#define COLORABLE	0
+
+private int	ask_me();				// 显示定做信息
+private int	show_order();				// 显示规则信息
+private int	start_work(object me, object ob);	// 开始工作
+private int	prepare_make(object me, object ob);	// 开始打造
+private void	clear_data();				// 清除 ganjiang, moye, player 的临时变量并去除粗坯对象
+private string  create_file(object item_temp);
+private int     save_item_file(string filename, string content);
+private void    tell_rules(object me);
+private void    waiting(object me, object ob, object moye);
+private string	converts(string arg, int max_len, int nocolor);
+private string  prop_segment(mapping p, string path);
+private int     save_item_file(string filename, string content);
+private int     legal_chinese(string str);
+void confirm_make(string arg, object ob, object me);
+
+void create()
+{
+	seteuid(getuid());
+
+	set_name("干将", ({ "gan jiang", "ganjiang", "gan" }));
+	set("long", "他身形魁梧，面容刚毅，双目炯炯有神，透出一股凌厉的气势。他便是那传说中的铸剑大师，一生铸就无数神兵利器，令江湖人士闻名色变。\n" );
+
+	set("nickname", HIR "剑仙" NOR);
+	set("gender", "男性");
+	set("attitude", "friendly");
+	set("icon","05005");
+	set("age", 1535);
+	set("shen_type", 0);
+
+	set("str", 1000);
+
+	set("inquiry", ([
+		"打造" : (: ask_me :),
+		"原料" : "铸剑之道，贵在精料。神兵利器需玄铁寒冰，护具则需天蚕龙筋。此等天材地宝，可遇不可求也。",
+		"定金" : "区区五两黄金，不过聊表诚意。若要交定金，还请与内子商议。",
+		"退货" : "既是我夫妇铸造之物，自当负责。你且将物件交予我看。",
+		"规则" : (: show_order :),
+			
+	]));
+
+	setup();
+
+	set("startroom", "/d/item/xiaowu");
+	check_clone();
+	if (! this_object()) return;
+
+	carry_object("/clone/misc/cloth")->wear();
+}
+
+void init()
+{
+	add_action("do_name", "name");
+	add_action("do_desc", "desc");
+	add_action("do_wieldmsg", "wieldmsg");
+	add_action("do_unwield", "removemsg");
+	add_action("do_finish", "finish");
+	add_action("do_help", "help");
+	add_action("do_discard", "discard");
+	add_action("do_all_steps_to", "allsteps");
+}
+
+// 发出提示信息
+private int ask_me()
+{
+	message_vision("干将凝视$N片刻，缓缓道：铸剑之事，还请与内子商议。\n", this_player());
+	return 1;
+}
+
+int accept_object(object me, object ob)
+{
+	if (me->name(1) == "莫邪")
+	{
+		if (me->query("id") != "mo ye")
+		{
+			command ("kick " + me->query("id"));
+			message_vision("$N冷冷一笑，对$n说道："
+				       "狂徒！竟敢冒充我妻子！\n",
+				       this_object(), me);
+			return 1;
+		}
+		start_work(ob->query("item/owner"), ob);
+		return 1;
+	}
+
+	if (ob->query("item_origin"))
+	{
+		message_vision("干将对$N说：原料之事还请先与内子商议。\n", me);
+		return 0;
+	} else
+	if (ob->is_item_make())
+	{
+		if (ob->item_owner() != me->query("id"))
+		{
+			command("heng");
+			command("say 这不是你的东西，我岂能收下？");
+			destruct(ob);
+			return 1;
+		}
+		message_vision("$N叹了口气，对$n说道：既是不满意，那便退掉(discard)吧。\n",
+			       this_object(), me);
+		return 0;
+	}
+
+	message_vision("干将摇头道：这些物件还是请你自己收好。\n", me);
+	return 0;
+}
+
+private int start_work(object me, object ob)
+{
+	remove_call_out("prepare_make");
+	call_out("prepare_make", 1, me, ob);
+	set_temp("item/making", ob);
+	set_temp("item/player", me);
+	me->set_temp("item/status", "waiting");
+	return 1;
+}
+
+private int prepare_make(object me, object ob)
+{
+	message_vision(HIC "\n$N沉声道：好，让我开炉炼制！"NOR"\n", this_object());
+	message_vision(HIM "$N接过莫邪手中的" + ob->name() +
+		       HIM "，随手抛入炉中，顿时炉火大盛，" HIR "赤焰" HIM "冲天。\n" +
+		       "$N凝视炉火，口中念念有词：天地之精华，日月之光辉......"NOR"\n" , this_object());
+	remove_call_out("work_step_1");
+	call_out("work_step_1", 2, me, ob);
+	return 1;
+}
+
+private void execute_step(int step, object me, object ob)
+{
+    string *messages = ({
+        HIG "炉火渐渐转为碧绿，火苗跳动不息，整间屋子热气逼人，可干将莫邪却似浑然不觉。"NOR"\n",
+        RED "炉火渐渐暗淡，化作一片赤红，仿佛在酝酿着什么......"NOR"\n",
+        HIW "$N左手持蛟龙剪，一扬手已将" + ob->name() +
+        HIW "取出，右手持金刚锤专注地锤炼，\n渐渐地，" + ob->name() +
+        HIW "在干将手下化作" + ob->query("item/ctype") +
+        HIW "的形状。"NOR"\n",
+        HIC "$N一声长啸，将" + ob->query("item/ctype") +
+        HIC "投入水池，只听'嗤嗤'作响，水汽弥漫，笼罩四周。"NOR"\n",
+        HIW "$N缓缓从水池中取出炼成的" + ob->query("item/ctype") +
+        HIW "，凝神观察，满意地点头道：不错，不错。"NOR"\n"
+    });
+
+    int *delays = ({ 6, 3, 5, 3, 2 });
+
+    if (step < sizeof(messages))
+    {
+        message_vision(messages[step], this_object());
+        remove_call_out("execute_step");
+        call_out("execute_step", delays[step], step + 1, me, ob);
+    }
+
+    if (step == 0 && objectp(me) && environment(me) == environment())
+    {
+        me->set_temp("item/can_help", 1);
+        message_vision(HIW "$N对$n说道：若要此物更臻完美，需得注入内力相助。你可愿意？\n\n", this_object(), me);
+		me->force_me("help");
+
+    }
+    else if (step == 1 && objectp(me))
+    {
+        me->delete_temp("item/can_help");
+    }
+    else if (step == 5)
+    {
+        object moye;
+        if (! objectp(moye = present("mo ye", environment(this_object()))))
+        {
+            message_vision(HIW "干将环顾四周，叹道：咦，莫邪何在？"
+                           "罢了罢了，此事作罢。\n"
+                           "干将将炼好的物件重新投入炉中，化作灰烬。"NOR"\n", this_object());
+            if (objectp(me))
+                me->delete_temp("item");
+            if (objectp(ob) && present(ob, this_object()))
+                destruct(ob);
+            delete_temp("item");
+            return;
+        }
+        if (! objectp(me))
+            me = find_player(ob->query("item/owner_id"));
+        if (! objectp(me) || environment(me) != environment())
+        {
+            message_vision(HIW "$N皱眉道：客人怎么不见了？罢了罢了。\n"
+                           "$N将炼好的物件重新投入炉中，化作灰烬。"NOR"\n", this_object());
+            if (objectp(me))
+                me->delete_temp("item");
+            if (objectp(ob) && present(ob, this_object()))
+                destruct(ob);
+            delete_temp("item");
+            moye->delete_temp("item");
+            return;
+        }
+        moye->set_temp("item/status", "waiting");
+        me->set_temp("item/status", "inputing");
+        message_vision("$N对$n说道：一" + ob->query("item/unit") + "好" +
+                       ob->query("item/ctype") + NOR "还需一个响亮的名字，你可为它取个名。\n", this_object(), me);
+        tell_rules(me);
+        ob->set("item/long", "");
+        ob->set("item/wield_msg", "");
+        ob->set("item/wear_msg", "");
+        ob->set("item/unwield_msg", "");
+        ob->set("item/remove_msg", "");
+        ob->set("item/owner_name", me->query("name"));
+        ob->set("item/owner_id", me->query("id"));
+        set_temp("item/waited", 6);
+        remove_call_out("waiting");
+        call_out("waiting", 240, me, ob, moye);
+    }
+}
+
+private int work_step_1(object me, object ob)
+{
+    execute_step(0, me, ob);
+    return 1;
+}
+
+int do_help(string arg)
+{
+	object me;
+	object ob;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "waiting")
+	{
+		return notify_fail("干将正专心致志地锻造，没空理你。\n");
+	}
+	if (! me->query_temp("item/can_help"))
+	{
+		if (arg) return 0;
+		write("现在还不是你出手相助的时候。\n", me);
+		return 1;
+	}
+	if (me->query("neili") < 200 || me->query("max_neili") < 200)
+	{
+		message_vision(HIR "$N" HIR "长啸一声，双手搭上炉边，正欲注入内力，突然面色苍白，摇摇欲坠..."NOR"\n", me);
+		tell_object(me, RED "你感觉内力不济。"NOR"\n");
+		me->set("neili", 0);
+		return 1;
+	}
+	message_vision(HIR "$N" HIR "长啸一声，双手搭上炉边，源源不断的内力注入炉中，刹那间，炉火沸腾，"
+		       "一道" HIW "白光" HIR "冲天而起。"NOR"\n", me);
+
+	ob = query_temp("item/making");
+	ob->add("item/point", ob->query("item/point") * 6 / 5);
+	me->delete_temp("item/can_help");
+	me->add("max_neili", -200);
+	me->add("neili", -200);
+	tell_object(me,"你的最大内力减少了200点，但是打造品质增加了"+ob->query("item/point") * 6 / 5+"点。\n");
+	return 1;
+}
+
+private int show_order()
+{
+	object me;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+	{
+		message_vision("$N冷冷地看了$n一眼，不发一言。\n",this_object(), me);
+		return 1;
+	}
+
+	tell_rules(me);
+	return 1;
+}
+
+void tell_rules(object me)
+{
+	tell_object(me, ZJOBLONG"干将在你耳边低声道："ZJBR
+			"为此物取个响亮的名字，其他信息若无特别要求，便依老夫默认。"
+			"若要自定，需谨记以下规矩：\n"ZJOBACTS2
+			"命名(必须有):name"ZJSEP
+			"描述(可　选):desc"ZJSEP      
+			"装备时描述(可　选):wieldmsg"ZJSEP
+			"收起时描述(可　选):unwieldmsg"ZJSEP
+			"结束设定:finish\n"
+		);
+}
+
+void waiting(object me, object ob, object moye)
+{
+	if (! objectp(me))
+		me = find_player(ob->query("item/owner_id"));
+
+	if (! objectp(me))
+	{
+		message_vision("$N叹了口气说道：这人怎么就走了？罢了罢了。\n", this_object());
+		if (objectp(moye))
+			moye->delete_temp("item");
+
+		delete_temp("item");
+		destruct(ob);
+		return;
+	}
+
+	if (add_temp("item/waited", -1) <= 0)
+	{
+		// 等待超时
+		if (objectp(moye))
+			moye->delete_temp("item");
+
+		log_file("nosave/item", sprintf("%s %s do timeout when make item of %s\n",
+				 log_time(), log_id(me),
+				 (ob ? filter_color(ob->name(1)) : "???")));
+		if (objectp(ob) && present(ob, this_object()))
+			destruct(ob);
+
+		me->delete_temp("item");
+		delete_temp("item");
+		if (in_input(me)) return;
+		if (environment(me) == environment())
+		{
+			message_vision("$N皱眉道：磨磨蹭蹭，成何体统？此事作罢！\n",this_object());
+			return;
+		}
+		message_vision("$N皱眉对$n道：你这般磨蹭，莫非是戏耍于我？定金恕不退还！\n",this_object(), me);
+		return;
+	}
+
+	if (environment(me) != environment())
+	{
+		message_vision("$N疑惑地说道：奇怪，人怎么不见了？且再等等。\n", this_object());
+	} else
+	if (! in_input(me))
+	{
+		message_vision(HIR "$N" HIR "催$n" HIR
+			       "道：还不快些？莫要磨蹭，否则此事便就此作罢，定金也不退还。"NOR"\n",this_object(), me);
+	}
+
+	remove_call_out("waiting");
+	call_out("waiting", 300, me, ob, moye);
+}
+
+private void clear_data()
+{
+	object me;
+	object ob;
+	object moye;
+
+	if (objectp(moye = present("mo ye",environment(this_object()))))
+		moye->delete_temp("item");
+
+	if (objectp(ob = query_temp("item/making")))
+		destruct(ob);
+
+	if (objectp(me = query_temp("item/player")))
+		me->delete_temp("item");
+
+	delete_temp("item");
+	remove_call_out("waiting");
+}
+
+int prompt_input()
+{
+    write(INPUTTXT("请输入想设定的【中文名字 英文名字】：", "name $txt#") + "\n");
+    return 1;
+}
+
+varargs int invalid_name(string message, int kick)
+{
+    if (kick)
+    {
+        command("kick " + this_player()->query("id"));
+        command("say " + message);
+    }
+    else
+    {
+        message_vision("$N摇摇头，对$n道：" + message + "\n", this_object(), this_player());
+    }
+    write(INPUTTXT("请重新输入想设定的【中文名字 英文名字】：", "name $txt#") + "\n");
+    return 1;
+}
+
+int do_name(string arg)
+{
+    object me;
+    object ob;
+    string sname, sid;
+
+    me = this_player();
+    if (me->query_temp("item/status") != "inputing")
+        return notify_fail("你还没武器胚子呢！\n");
+
+    if (!arg)
+        return prompt_input();
+
+    if (sscanf(arg, "%s %s", sname, sid) != 2)
+	{
+		sname = arg;
+		sid = me->query("id") + "-" + time();
+		// return prompt_input();
+	}
+
+    if ((sname = converts(sname, 14, COLORABLE)) == ILLEGAL_STR ||
+        (sid = converts(sid, 30, NOCOLOR)) == ILLEGAL_STR)
+        return prompt_input();
+
+    if (!sname || !sid)
+        return invalid_name("此物还需一个响亮的名字！");
+
+    if (file_size(ITEM_DIR + me->query("id")[0..0] + "/" + me->query("id") + "-" + sid + ".lpc") != -1)
+        return invalid_name("此代号已被使用，还请另选一个！");
+
+    if (sid == me->query("id"))
+        return invalid_name("代号不可与你同名，还请另选一个！");
+
+    if (!is_chinese(filter_color(sname)))
+        return invalid_name("名字须得用中文字！", 1);
+
+	
+    // if (!is_legal_id(sid))
+    //     return invalid_name("英文代号必须全部用小写英文才可以！");
+
+    if (strlen(filter_color(sname)) < 2)
+        return invalid_name("名字至少得两个字！");
+
+    if (strlen(sid) < 3)
+        return invalid_name("代号至少得三个字符！");
+
+    if (sname[0] == 27 && sname[4] == 'm')
+        sname = NOR + sname;
+
+    ob = query_temp("item/making");
+    ob->set("item/name", sname);
+    ob->set("item/id", sid);
+
+    write("名字：" CYN + sname + "    代号：" CYN + sid + NOR "\n");
+    return 1;
+}
+
+
+
+int do_desc(string arg)
+{
+	object ob;
+	object me;
+	string chk;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+		return notify_fail("你还没武器胚子呢！\n");
+
+	ob = query_temp("item/making");
+	if (! ob->query("item/name"))
+	{
+		message_vision("$N瞪了$n一眼道：连名字都没有，何谈其他？\n",this_object(), me);
+		return 1;
+	}
+
+	if (! arg)
+	{
+		write("参照格式：一把锋利的$n\\n它在阳光下闪闪发光 -- 其中\\n表示换行，$n代表道具。\n");
+		write(INPUTTXT("请输入想设定的【描述】：","desc $txt#")+"\n");
+		return 1;
+	}
+
+	if ((arg = converts(arg, 200, COLORABLE)) == ILLEGAL_STR)
+		return 1;
+
+	arg = replace_string(arg, "$N", me->name(1));
+
+	chk = filter_color(arg);
+	if (strlen(chk) >= 1 && chk[0..0] == "你" || strsrch(chk, "\\n你") != -1)
+	{
+		write(INPUTTXT("请输入想设定的【描述】：","desc $txt#")+"\n");
+		return notify_fail("对不起，描述不能以“你”字打头。\n");
+	}
+
+	chk = replace_string(chk, " ", "");
+	chk = replace_string(chk, "\\n", "");
+	chk = replace_string(chk, "$n", "");
+	if (! legal_chinese(chk))
+	{
+		write(INPUTTXT("请输入想设定的【描述】：","desc $txt#")+"\n");
+		return notify_fail("对不起，描述必须使用汉字和系统规定可以使用的代表符号。\n");
+	}
+
+	arg = replace_string(arg, "$n", ob->query("item/name"));
+	arg = replace_string(arg, "\\n", "\n");
+	arg = chinese_desc(arg);
+	ob->set("item/long", arg);
+	write(CYN "当你观察它的时候将会出现下列描述："NOR"\n" + arg + "\n");
+	return 1;
+}
+
+int do_wieldmsg(string arg)
+{
+	object ob;
+	object me;
+	string chk;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+		return notify_fail("你还没武器胚子呢！\n");
+
+	ob = query_temp("item/making");
+	if (! ob->query("item/name"))
+	{
+		message_vision("$N瞪了$n一眼道：连名字都没有，何谈其他？\n",this_object(), me);
+		return 1;
+	}
+
+	if (! arg)
+	{
+		write("参照格式：$N伸手一抖，抽出一把锋利长剑。 -- 其中$N表示你自己，$n代表道具。\n");
+		write(INPUTTXT("请输入想设定的【装备描述】：","wieldmsg $txt#")+"\n");
+		return 1;
+	}
+
+	if ((arg = converts(arg, 200, COLORABLE)) == ILLEGAL_STR)
+	{
+		write(INPUTTXT("格式错误，请重新输入想设定的【装备描述】：","wieldmsg $txt#")+"\n");
+		return 1;
+	}
+
+	chk = filter_color(arg);
+	if (strlen(chk) >= 1 && chk[0..0] == "你" || strsrch(chk, "\\n你") != -1)
+	{
+		write(INPUTTXT("请输入想设定的【装备描述】：","wieldmsg $txt#")+"\n");
+		return notify_fail("对不起，描述不能以“你”字打头。\n");
+	}
+
+	chk = replace_string(chk, " ", "");
+	chk = replace_string(chk, "\\n", "");
+	chk = replace_string(chk, "$N", "");
+	chk = replace_string(chk, "$n", "");
+	if (! legal_chinese(chk))
+	{
+		write(INPUTTXT("请输入想设定的【装备描述】：","wieldmsg $txt#")+"\n");
+		return notify_fail("对不起，描述必须使用汉字和系统规定可以使用的代表符号。\n");
+	}
+
+	// 这里不区分武器还是装备，在生成文件时自动选择一条信息
+	arg = chinese_desc(arg);
+	arg = replace_string(arg, me->name(1), "$N");
+	ob->set("item/wear_msg", arg);
+	ob->set("item/wield_msg", arg);
+	arg = replace_string(arg, "\\n", "\n");
+	arg = replace_string(arg, "$N", me->name(1));
+	arg = replace_string(arg, "$n", ob->query("item/name"));
+	write(CYN "当你装备它的时候将会出现下列描述："NOR"\n" + arg + "\n");
+	return 1;
+}
+
+int do_unwield(string arg)
+{
+	object ob;
+	object me;
+	string chk;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+		return notify_fail("你还没武器胚子呢！\n");
+
+	ob = query_temp("item/making");
+	if (! ob->query("item/name"))
+	{
+		message_vision("$N瞪了$n一眼道：连名字都没有，何谈其他？\n",
+			       this_object(), me);
+		return 1;
+	}
+
+	if (! arg)
+	{
+		write("参考格式：$N随手一挥，$n已入鞘内。 -- 其中$N表示你自己，$n代表道具。\n");
+		write(INPUTTXT("请输入想设定的【收回描述】：","unwieldmsg $txt#")+"\n");
+		return 1;
+	}
+
+	if ((arg = converts(arg, 200, COLORABLE)) == ILLEGAL_STR)
+	{
+		write(INPUTTXT("格式错误，请重新输入想设定的【收回描述】：","unwieldmsg $txt#")+"\n");
+		return 1;
+	}
+
+	chk = filter_color(arg);
+	if (strlen(chk) >= 1 && chk[0..0] == "你" || strsrch(chk, "\\n你") != -1)
+	{
+		write(INPUTTXT("请重新输入想设定的【收回描述】：","unwieldmsg $txt#")+"\n");
+		return notify_fail("对不起，描述不能以“你”字打头。\n");
+	}
+
+	chk = replace_string(chk, " ", "");
+	chk = replace_string(chk, "\\n", "");
+	chk = replace_string(chk, "$N", "");
+	chk = replace_string(chk, "$n", "");
+	if (! legal_chinese(chk))
+	{
+		write(INPUTTXT("请重新输入想设定的【收回描述】：","unwieldmsg $txt#")+"\n");
+		return notify_fail("对不起，描述必须使用汉字和系统规定可以使用的代表符号。\n");
+	}
+
+	// 这里不区分武器还是装备，在生成文件时自动选择一条信息
+	arg = chinese_desc(arg);
+	arg = replace_string(arg, me->name(1), "$N");
+	ob->set("item/unwield_msg", arg);
+	ob->set("item/remove_msg", arg);
+	arg = replace_string(arg, "\\n", "\n");
+	arg = replace_string(arg, "$N", me->query("name"));
+	arg = replace_string(arg, "$n", ob->query("item/name"));
+	write(CYN "当你收回它的时候将会出现下列描述："NOR"\n" + arg + "\n");
+	return 1;
+}
+
+// 判断是否是合法的汉字
+private int legal_chinese(string str)
+{
+	return is_chinese(str);
+}
+
+// 转换字符串中的颜色标志
+private string converts(string arg, int max_len, int no_color)
+{
+	int i;
+
+	// 去除字符串中的空格，引号，避免被别人利用做破坏
+	arg = replace_string(arg, " ", ""); 
+	arg = replace_string(arg, "\"", "'");
+
+	for (i = 0; i < strlen(arg) - 1; i++)
+	{
+		if (arg[i] == '\\' && arg[i + 1] != 'n')
+		{
+			write("字符'\\'后面只能跟随n字符表示回车！\n");
+			return ILLEGAL_STR;
+		}
+	}
+
+	arg = replace_string(arg, ",", "，");
+	arg = replace_string(arg, ":", "：");
+	arg = replace_string(arg, "?", "？");
+
+	if (no_color)
+	{
+		arg = replace_string(arg, "$BLK$", "");
+		arg = replace_string(arg, "$RED$", "");
+		arg = replace_string(arg, "$GRN$", "");
+		arg = replace_string(arg, "$YEL$", "");
+		arg = replace_string(arg, "$BLU$", "");
+		arg = replace_string(arg, "$MAG$", "");
+		arg = replace_string(arg, "$CYN$", "");
+		arg = replace_string(arg, "$WHT$", "");
+		arg = replace_string(arg, "$HIR$", "");
+		arg = replace_string(arg, "$HIG$", "");
+		arg = replace_string(arg, "$HIY$", "");
+		arg = replace_string(arg, "$HIB$", "");
+		arg = replace_string(arg, "$HIM$", "");
+		arg = replace_string(arg, "$HIC$", "");
+		arg = replace_string(arg, "$HIW$", "");
+		arg = replace_string(arg, "$NOR$", "");
+	} else
+	{
+		arg = replace_string(arg, "$BLK$", BLK);
+		arg = replace_string(arg, "$RED$", RED);
+		arg = replace_string(arg, "$GRN$", GRN);
+		arg = replace_string(arg, "$YEL$", YEL);
+		arg = replace_string(arg, "$BLU$", BLU);
+		arg = replace_string(arg, "$MAG$", MAG);
+		arg = replace_string(arg, "$CYN$", CYN);
+		arg = replace_string(arg, "$WHT$", WHT);
+		arg = replace_string(arg, "$HIR$", HIR);
+		arg = replace_string(arg, "$HIG$", HIG);
+		arg = replace_string(arg, "$HIY$", HIY);
+		arg = replace_string(arg, "$HIB$", HIB);
+		arg = replace_string(arg, "$HIM$", HIM);
+		arg = replace_string(arg, "$HIC$", HIC);
+		arg = replace_string(arg, "$HIW$", HIW);
+		arg = replace_string(arg, "$NOR$", NOR);
+		if (strlen(arg) < strlen(NOR) ||
+		    arg[strlen(arg) - strlen(NOR)..<1] != NOR)
+		{
+			// append NOR at tail
+			arg += NOR;
+		}
+	}
+	if (strlen(arg) > max_len + 30 ||
+	    strlen(filter_color(arg)) > max_len)
+	{
+		write("对不起，这个字符串太长了，请不要输入超过" + chinese_number(max_len) +
+		      "个字符长的字符串。\n");
+		// 表示非法的输入
+		return ILLEGAL_STR;
+	}
+	return arg;
+}
+
+int do_finish(string arg)
+{
+	object me;
+	object ob;
+	object moye;
+	string msg;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+		return notify_fail("你还没武器胚子呢！\n");
+
+	if (! objectp(ob = query_temp("item/making")))
+	{
+		// 数据不对，可能是由于BUG造成，也可能是因为干将被update过
+		write("系统故障：数据不一致，你无法完成炼制道具！\n");
+		me->delete_temp("item");
+		delete_temp("item");
+		if (objectp(moye = present("mo ye",environment(this_object()))))
+			moye->delete_temp("item");
+
+		// 返回失败，停止进行
+		return 0;
+	}
+	
+	if (! ob->query("item/name"))
+	{
+		message_vision("$N瞪了$n一眼，说道：你怎么能不给它起个"
+			       "名字？你要是不想要了就算了！\n",
+			       this_object(), me);
+		return 1;
+	}
+
+	if (! ob->query("item/id"))
+	{
+		message_vision("$N瞪了$n一眼，说道：你怎么能不给它起个"
+			       "代号？你要是不想要了就算了！\n",
+			       this_object(), me);
+		return 1;
+	}
+
+	if(arg == "y")
+	{
+		// call_out("confirm_make",1,"y",ob,me);
+		confirm_make("y", ob, me);
+		return 1;
+	}
+	// 显示 player 输入的信息
+	msg = sprintf("干将对$N说：你的道具描述如下，请看看有没有错。\n");
+	message_vision(msg, me);
+	// 私有信息
+	msg = sprintf("道具名字：%s   道具英文代号：%s\n\n",
+		      ob->query("item/name"), ob->query("item/id"));
+	if (ob->query("item/long") != "")
+		msg += sprintf(CYN "外观描述如下：" NOR "\n%s\n\n", ob->query("item/long"));
+	else
+		msg += "采用缺省的外观描述。\n";
+
+	if (ob->query("item/wield_msg") != "")
+		msg += sprintf(CYN "装备时描述如下：" NOR "\n%s\n\n",
+			       replace_string(ob->query("item/wield_msg"), "\\n", "\n"));
+	else
+		msg += "装备时采用缺省的描述。\n";
+
+	if (ob->query("item/unwield_msg") != "")
+		msg += sprintf(CYN "收回时描述如下：" NOR "\n%s\n\n",
+			       replace_string(ob->query("item/unwield_msg"), "\\n", "\n"));
+	else
+		msg += "收回时采用缺省的描述。\n";
+		// msg += "如果没有问题，就可以"ZJURL("cmds:finish y")+ZJSIZE(22)+CYN"确认"NOR"继续了。\n";
+	msg = replace_string(msg, "$N", me->query("name"));
+	msg = replace_string(msg, "$n", ob->query("item/name"));
+
+	me->force_me("finish y");
+	
+	tell_object(me, msg);
+
+	return 1;
+}
+
+void confirm_make(string arg, object ob, object me)
+{
+	object moye;
+	string item_filename;
+
+	if (! objectp(query_temp("item/making")))
+	{
+		command("kick " + me->query("id"));
+		command("say 你太磨蹭了，这生意我不做了，恕不退货！");
+		return;
+	}
+
+	if (arg != "y" && arg != "Y")
+	{
+		message_vision("$N对道：那你还是再看看吧！\n", this_object());
+		return;
+	}
+
+	message_vision("$N对$n说道：好，马上就好！\n",
+		       this_object(), me);
+	if (item_filename = create_file(ob))
+	{
+		// clear the old item's data
+		DBASE_D->set_object_data(ob, 0);
+		  destruct(ob);
+		catch(call_other(item_filename, "???"));
+		ob = find_object(item_filename);
+		if (! ob)
+		{
+			message_vision("$N一呆，对$n道：抱歉抱歉！出了一些问题！\n",
+				       this_object(), me);
+		} else
+		{
+			ob->move(me, 1);
+			ob->save();	     // Create the record in dbase
+			message_vision("$N把" + ob->query("name") + "交给了$n。\n",
+				       this_object(), me);
+tell_object(me,HIR"系统提示：只有开光后的装备才可以保存并召唤(summon)，隔壁的张天师提供开光服务。"NOR"\n");
+			log_file("nosave/item", sprintf("%s %s created  %s(%s) point(%d)\n",
+				 log_time(), log_id(me),
+				 filter_color(ob->name(1)), ob->query("id"),ob->query("point")));
+		}
+	}
+
+	if (objectp(moye = present("mo ye", environment())))
+		moye->delete_temp("item");
+
+	me->delete_temp("item");
+	delete_temp("item");
+	remove_call_out("waiting");
+}
+
+private string read_template(string file)
+{
+    string content;
+    if (file_size(file) > 0)
+    {
+        content = read_file(file);
+    }
+    return content;
+}
+
+private string replace_placeholders(string template, mapping info, object item_temp, string ih, int is_weapon)
+{
+    template = replace_string(template, "{inherit}", ih);
+    template = replace_string(template, "{name}", info["name"]);
+    template = replace_string(template, "{id}", info["id"]);
+    template = replace_string(template, "{weight}", sprintf("%d", item_temp->query_weight() * item_temp->query("item/wscale") / 100));
+    template = replace_string(template, "{unit}", info["unit"]);
+    template = replace_string(template, "{long}", info["long"]);
+    template = replace_string(template, "{value}", sprintf("%d", info["value"]));
+    template = replace_string(template, "{point}", sprintf("%d", info["point"]));
+    template = replace_string(template, "{material}", item_temp->query("material_attrib"));
+
+    if (is_weapon)
+    {
+        template = replace_string(template, "{wield_msg}", info["wield_msg"]);
+        template = replace_string(template, "{unwield_msg}", info["unwield_msg"]);
+        template = replace_string(template, "{stype}", info["stype"]);
+        template = replace_string(template, "{prop_segment}", prop_segment(info["prop"], ""));
+    }
+    else
+    {
+        template = replace_string(template, "{wear_msg}", info["wear_msg"]);
+        template = replace_string(template, "{remove_msg}", info["remove_msg"]);
+        template = replace_string(template, "{armor_prop}", info["prop"] ? prop_segment(info["prop"], "") : "set(\"armor_prop/armor\", apply_armor());");
+    }
+
+    return template;
+}
+
+private string generate_weapon_file(object item_temp, mapping info, string ih)
+{
+    string template = read_template("/adm/npc/item_template/weapon_template.txt");
+    return replace_placeholders(template, info, item_temp, ih, 1);
+}
+
+private string generate_armor_file(object item_temp, mapping info, string ih)
+{
+    string template = read_template("/adm/npc/item_template/armor_template.txt");
+    return replace_placeholders(template, info, item_temp, ih, 0);
+}
+
+private string create_file(object item_temp)
+{
+    string buf; // 生成文件的缓冲区
+    string filename;
+    mapping info;
+    string ih;
+    string id;
+
+    // 生成文件名
+    id = item_temp->query("item/owner_id");
+    filename = ITEM_DIR + id[0..0] + "/" + id + 
+               "-" + item_temp->query("item/id") + ".lpc";
+    if (file_size(filename) != -1)
+    {
+        write("无法生成档案，请通知巫师处理。\n");
+        return 0;
+    }
+    assure_file(filename);
+	buf = "";
+    info = item_temp->query("item");
+    ih = up_case(info["stype"]);
+
+    if (info["type"] == "weapon")
+    {
+        buf += generate_weapon_file(item_temp, info, ih);
+    }
+    else
+    {
+        buf += generate_armor_file(item_temp, info, ih);
+    }
+
+    buf += sprintf("string long() { return query(\"long\") + item_long(); }\n");
+    if (save_item_file(filename, buf) == 1)
+        return filename;
+    return 0;
+}
+
+// add mapping
+private string prop_segment(mapping p, string path)
+{
+	string buf;
+	string *ks;
+	int i;
+
+	buf = "";
+	if (! p) return buf;
+
+	ks = keys(p);
+	for (i = 0; i < sizeof(ks); i++)
+	{
+		// check the paramter's type
+		if (mapp(p[ks[i]]))
+		{
+			path += ks[i] + "/";
+			buf += prop_segment(p[ks[i]], path);
+		} else
+			buf += sprintf("\tset(\"%s\", %s);\n",
+				       path + ks[i], (string)p[ks[i]]);
+	}
+
+	return buf;
+}
+
+// filename 是写入文档的名称，已经包含有路径
+// content 是写入文档的内容
+private int save_item_file(string filename, string content)
+{
+	rm(filename);
+	if (write_file(filename, content))
+	{
+		return 1;
+	} else
+	{
+		write("写入档案(" + filename + ")时出错，请通知巫师处理。\n");
+		return 0;
+	}
+}
+
+int do_discard(string arg)
+{
+	object money;
+	object ob;
+	object me;
+	int n;
+
+	if (! arg)
+		return notify_fail("你去退回什么东西？\n");
+
+	me = this_player();
+	if (! objectp(ob = present(arg, me)))
+		return notify_fail("你身上没有这种东西。\n");
+
+	message_vision("$n拿出一" + ob->query("unit") + ob->name() +
+		       "对$N说：“这个东西我想退掉了...”\n",
+		       this_object(), me);
+
+	if (! ob->is_item_make())
+	{
+		command("heng");
+		command("say 这不是我这里出来的东西，我可不能负责。");
+		return 1;
+	}
+
+	if (ob->item_owner() != me->query("id"))
+	{
+		command("kick " + me->query("id"));
+		command("say 你拿了别人的东西还敢来我这里？以为我是傻子？");
+		return 1;
+	}
+
+	if (ob->weapon_level() >= 10000)
+	{
+		message_vision("$N眼睛一瞪，对$n道：“它已非凡品，岂能销毁？”\n", this_object(), me);
+		return 1;
+	}
+
+	command("sigh");
+	command("say 一千多年来还没有什么人嫌我的货色不好的，算了！算了！");
+	message_vision("$N接过$n递过来的" + ob->name() + "，随手"
+		       "扔进了火炉，呆呆的望了半晌。\n",
+		       this_object(), me);
+	command("say 你既然不满意我的东西，我也不能收你的钱，"
+		"这些算是我退回给你的！");
+	n = (ob->query("value") * 8 / 10 + 9999) / 10000;
+	if (! n)
+	{
+		money = new("/clone/money/silver");
+		money->set_amount(1);
+	} else
+	{
+		money = new("/clone/money/gold");
+		money->set_amount(n);
+	}
+	message_vision("$N拿出一些" + money->name() + "交给"
+		       "$n。\n", this_object(), me);
+	log_file("nosave/item", sprintf("%s %s discard  %s(%s)\n",
+				log_time(), log_id(me),
+				filter_color(ob->name(1)), ob->query("id")));
+	me->delete("can_summon/" + ob->query("id"));
+	rm(base_name(ob) + ".lpc");
+	DBASE_D->clear_object(ob);
+	money->move(me, 1);
+	return 1;
+}
+
+varargs int do_all_steps(string name_arg, string desc_arg, string wieldmsg_arg, string unwieldmsg_arg)
+{
+    object me = this_player();
+    if (me->query_temp("item/status") != "inputing")
+        return notify_fail("你还没武器胚子呢！\n");
+
+    // Step 1: Name
+    if (!do_name(name_arg))
+        return notify_fail("命名失败，请检查输入。\n");
+
+    // Step 2: Description
+    if (desc_arg && !do_desc(desc_arg))
+        return notify_fail("描述设置失败，请检查输入。\n");
+
+    // Step 3: Wield Message
+    if (wieldmsg_arg && !do_wieldmsg(wieldmsg_arg))
+        return notify_fail("装备描述设置失败，请检查输入。\n");
+
+    // Step 4: Unwield Message
+    if (unwieldmsg_arg && !do_unwield(unwieldmsg_arg))
+        return notify_fail("收回描述设置失败，请检查输入。\n");
+
+    // Step 5: Finish
+	me->force_me("finish");
+    // if (!do_finish())
+    //     return notify_fail("结束设定失败，请检查输入。\n");
+
+    return 1;
+}
+
+int do_all_steps_to(string arg)
+{
+	//根据@分割参数,有几个传入几个
+	string *args = explode(arg, "@");
+
+	return do_all_steps(args...);
+}

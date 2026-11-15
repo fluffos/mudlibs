@@ -1,0 +1,183 @@
+// jingshen.c 惊神汹涌
+
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+string name() { return "惊神汹涌"; }
+string query_name() { return "惊神汹涌"; }
+string *pfm_type() { return ({ "finger", }); }
+int perform(object me, object target)
+{
+        string msg;
+        int skill, skill2;
+        int damage;
+
+        int i;
+        i = me->query_skill("six-finger", 1);
+
+        if (! target)
+        {
+                me->clean_up_enemy();
+                target = me->select_opponent();
+        }
+
+        if (! me->is_fighting(target))
+                return notify_fail("「惊神汹涌」只能对战斗中的对手使用。\n");
+
+        if (me->query_skill_mapped("finger") != "six-finger")
+                return notify_fail("你没有激发六脉神剑，无法施展「惊神汹涌」。\n");
+
+        if (me->query_skill_prepared("finger") != "six-finger")
+                return notify_fail("你没有准备使用六脉神剑，无法施展「惊神汹涌」。\n");
+
+        skill = me->query_skill("six-finger", 1);
+        skill2 = me->query_skill("sun-finger", 1);
+        if (skill < 200)
+                return notify_fail("你的六脉神剑修为有限，无法使用「惊神汹涌」！\n");
+
+        if (skill2 < 200)
+                return notify_fail("你的一阳指修为有限，无法使用「惊神汹涌」！\n");
+
+        if (me->query_skill("force") < 400)
+                return notify_fail("你的内功火候不够，难以施展「惊神汹涌」！\n");
+
+        if( query("max_neili", me)<5000 )
+                return notify_fail("你的内力修为没有达到那个境界，无法运转内力形成「惊神汹涌」！\n");
+
+        if( query_temp("weapon", me) )
+                return notify_fail("你必须是空手才能施展「惊神汹涌」！\n");
+
+        if( query("neili", me)<500 )
+                return notify_fail("你的真气不够，现在无法施展「惊神汹涌」！\n");
+
+        msg = HIY "$N" HIY "十指连动，忽伸忽缩，或点或按，空中气流激荡，剑气自"
+              HIY "$N" HIY "指中汹涌而出，惊震四方！！\n"
+               HIR "六剑连出，剑气回荡，直割得$n眉毛削落，脸面生痛，再也不能前进半分！\n" NOR; 
+
+        message_combatd(msg, me,target);
+
+        damage = skill + skill2;
+        damage /= 5;
+
+        //pve伤害加成 x 2
+        if (!playerp(target))
+        {
+            damage = damage * 2;
+        }
+
+        addn_temp("apply/attack", i, me);
+        addn_temp("apply/unarmed_damage", damage, me);
+
+        while (1)
+        {
+                int ap, dp;
+
+                string *finger_names = ({
+                    HIC "-------------------------少冲剑 \n"NOR,
+                    HIW "-------------------------少泽剑 \n"NOR,
+                    HIY "------------------------ 中冲剑 \n"NOR,
+                    HIG "-------------------------关冲剑 \n"NOR,
+                    HIM "-------------------------商阳剑 \n"NOR,
+                    HIR "-------------------------少商剑 \n"NOR
+                });
+                
+                for (int j = 0; j < sizeof(finger_names); j++)
+                {
+                    msg = finger_names[j];
+                    message_combatd(msg, me, target);
+                    COMBAT_D->do_attack(me, target, 0, 0);
+                }
+
+                if (COMBAT_D->query_base_attack_number(me,query_name()) > 1)
+                {
+                    for (int j = 0; j < COMBAT_D->query_base_attack_number(me,query_name()); j++)
+                    {
+                        COMBAT_D->do_attack(me, target, 0, 0);
+                    }
+                }
+
+                if (!objectp(target) || !me->is_fighting(target))
+                        break;
+                
+                ap = me->query_skill("finger") + me->query("int")*10;
+                dp = target->query_skill("parry")+ target->query("int")*10;
+
+                // 克制独孤九剑
+                if (target->query_skill("lonely-sword", 1))
+                {
+                        ap += ap / 10;
+                }
+
+                //pve命中增加30%
+                if (!playerp(target))
+                {
+                    ap += ap * 30 / 100;
+                }
+
+                if (COMBAT_D->hit_determination(me,target,ap,dp))
+                {
+                        int single_damage;
+
+                        msg = HIY"$N使出六脉神剑最强绝技『六脉归宗』，真气急运九大周天，内力汹涌滂湃，\n"
+                        HIR"刹时间数股炽热刚猛的剑气自指中射出！！无数迅雷疾风相互冲撞激之际，\n"
+                        HIW"竟然汇集成一束凌厉无匹的剑柱，宛如一条白色巨蟒,闪电般疾射向$n！！！\n";
+
+                        single_damage = me->query_skill("finger") + me->query_skill("sun-finger");
+                        single_damage *= 6;
+                        single_damage += me->query("jiali");
+                        single_damage += COMBAT_D->get_skill_aoyi_level(me, "段氏神悟") * single_damage / 10;
+        
+			msg += COMBAT_D->do_damage(me, target, UNARMED_ATTACK, single_damage, 100,
+                                HIR "$p" HIR "只觉得胸前一阵剧痛，鲜血"
+                                "自创口激射而出，眼前顿时一黑！"NOR"\n");
+                        
+  
+                }
+                else
+                {
+                        msg += CYN "可是$p" CYN "内功颇为深厚，轻轻将剑气化解于无形。"NOR"\n";
+                }
+
+                message_combatd(msg, me, target);
+                break;
+        }
+
+        addn_temp("apply/attack", -i, me);
+        addn_temp("apply/unarmed_damage", -damage, me);
+        addn("neili", -800, me);
+        me->start_busy(3);
+        return 1;
+}
+
+string query_txt()
+{
+        return @DESC
+武学解析：惊神汹涌
+技能概述
+“惊神汹涌”是一门源自六脉神剑与一阳指结合的高级指法技能，属于顶尖武学之一。此招要求施术者具备深厚的内力基础以及高超的指法技巧，同时需要在战斗状态下针对特定敌人施展。
+施展条件
+必须在战斗中使用。
+六脉神剑技能至少200级。
+一阳指技能至少200级。
+内功技能不低于400级。
+最大内力至少5000点。
+当前内力至少500点。
+施展者必须空手，不能持有任何武器。
+技能效果
+当满足所有条件后，施展者会释放出一波强大的剑气，通过手指连续发出，形成六脉神剑特有的剑气风暴。此技能分为两部分：
+六剑连发：分别对应少冲、少泽、中冲、关冲、商阳、少商六大剑气，每一剑都会造成一次平攻伤害。
+六脉归宗：如果所有条件持续满足，并且目标未脱离战斗，施术者会聚集全身内力，释放终极一击“六脉归宗”（指法激发等级和敌方招架激发等级等同1/2概率触发），该攻击具有极高的伤害输出。
+技能机制
+每次平攻伤害基于施术者的基础指法技能和一阳指技能等级总和除以5进行加成。
+终极一击“六脉归宗”的伤害是两个结合技能等级总和乘以6，再加上施术者的附加伤害和意境层（每层10%）数“段氏神悟”带来的加成。
+施展完毕后，施术者会损失800点内力并陷入3秒的忙乱状态。
+特殊机制
+“惊神汹涌”能够克制独孤九剑，当目标掌握独孤九剑时，施术者的攻击命中会额外提升10%。
+使用示例
+当满足所有条件时，玩家可以尝试使用“惊神汹涌”来对敌人造成毁灭性的打击。此技能在对抗单个敌人时特别有效，尤其是在面对精通独孤九剑的高手时，能够发挥出意想不到的效果。
+注意事项
+由于“惊神汹涌”消耗大量内力并且会使施术者暂时失去行动能力，因此在使用前请确保周围环境安全，以免被其他敌人趁机攻击。此外，考虑到技能的高消耗，建议在战斗中合理规划内力的使用，以确保关键时刻能够成功施展此技能。
+DESC;
+}

@@ -1,0 +1,324 @@
+/**
+ * @brief 武林盟主令
+ * @author AI Assistant
+ * @date 2025-09-03
+ * @details 群雄逐鹿活动中的特殊道具，持有者可获得经验和潜能奖励
+ */
+
+inherit ITEM;
+
+// 函数原型声明
+void create();
+varargs int move(mixed dest, int raw);
+void start_heartbeat();
+void stop_heartbeat(); 
+void heart_beat();
+int check_activity_status();
+void give_holder_reward();
+int extra_look();
+
+// 全局变量声明
+private object map_manager;         // 地图管理器引用
+private object current_holder;      // 当前持有者
+private int heartbeat_count;        // 心跳计数器
+private int yuanbao_count;          // 元宝计数器
+
+void create()
+{
+    set_name("武林盟主令", ({"wulin mengzhu ling", "mengzhu ling", "token"}));
+    
+    set("short", HIR "武林盟主令" NOR);
+    set("long", @LONG
+这是一块金光闪闪的令牌，上面刻着"武林盟主"四个大字，散发着威严的气息。
+传说持有此令者可号令武林，获得巨大的力量加持。令牌表面还雕刻着各种
+神秘的符文，似乎蕴含着某种特殊的魔力。
+
+在群雄逐鹿活动中，持有此令可获得丰厚的奖励。
+LONG);
+
+    set("unit", "块");
+    set("value", 0);
+    set("weight", 1);
+    
+    // 设置特殊属性
+    set("no_sell", 1);
+    set("no_drop", 1);
+    set("no_cun", 1);
+    set("magic", 1);
+    set("treasure", 1);
+    
+    // 初始化变量
+    current_holder = 0;
+    heartbeat_count = 0;
+    yuanbao_count = 0;
+    
+    // 获取地图管理器引用
+    map_manager = find_object("/adm/special_ob/dadaosha/map_manage");
+    if (!map_manager)
+        map_manager = load_object("/adm/special_ob/dadaosha/map_manage");
+        
+    start_heartbeat();
+}
+
+/**
+ * @brief 重载move函数实现拾取逻辑
+ * @param mixed dest 目标位置
+ * @param int raw 是否原始移动
+ * @return int 移动成功返回1，失败返回0
+ */
+varargs int move(mixed dest, int raw)
+{
+    object old_env;
+    object new_holder;
+    int result;
+    
+    old_env = environment();
+    
+    // 如果目标是玩家，进行拾取检查
+    if (objectp(dest) && playerp(dest) && !raw)
+    {
+        // 检查是否在活动中
+        if (!check_activity_status())
+        {
+            tell_object(dest, "武林盟主令散发出强烈的光芒，你无法拾取！\n");
+            return 0;
+        }
+        
+        // 检查是否已经有其他持有者
+        if (objectp(current_holder) && living(current_holder) && current_holder != dest)
+        {
+            tell_object(dest, "武林盟主令已被" + current_holder->query("name") + "持有！\n");
+            return 0;
+        }
+    }
+    
+    // 执行实际的移动
+    result = ::move(dest, raw);
+    
+    // 移动成功后的处理
+    if (result)
+    {
+        new_holder = environment();
+        
+        // 如果移动到玩家身上
+        if (objectp(new_holder) && living(new_holder))
+        {
+            current_holder = new_holder;
+            
+            tell_object(new_holder, HIY "你成功拾取了武林盟主令！感受到强大的力量在体内涌动...\n" NOR);
+            if (objectp(old_env))
+                tell_room(old_env, HIY + new_holder->query("name") + "拾取了武林盟主令！\n" NOR, ({new_holder}));
+            
+            // 通知地图管理器令牌被拾取
+            if (objectp(map_manager))
+                map_manager->on_token_picked(new_holder);
+        }
+        // 如果移动到房间（被丢弃）
+        else if (objectp(new_holder) && new_holder->query("dadaosha_room"))
+        {
+            if (objectp(current_holder))
+            {
+                tell_object(current_holder, HIR "武林盟主令从你手中滑落！\n" NOR);
+                tell_room(new_holder, HIR "武林盟主令掉落在地上！\n" NOR);
+            }
+            
+            // 通知地图管理器令牌被丢弃
+            if (objectp(map_manager))
+                map_manager->on_token_dropped(new_holder);
+                
+            current_holder = 0;
+        }
+    }
+    
+    return result;
+}
+
+/**
+ * @brief 启动心跳
+ */
+void start_heartbeat()
+{
+    set_heart_beat(1);  // 每秒一次心跳
+}
+
+/**
+ * @brief 停止心跳
+ */
+void stop_heartbeat()
+{
+    set_heart_beat(0);
+}
+
+/**
+ * @brief 心跳函数
+ */
+void heart_beat()
+{
+    object env;
+    
+    heartbeat_count++;
+    yuanbao_count++;
+    
+    // 检查活动状态，如果不是活动时间则销毁
+    if (!check_activity_status())
+    {
+        if (objectp(current_holder))
+        {
+            tell_object(current_holder, HIR "活动已经结束，武林盟主令化为光点消散了...\n" NOR);
+        }
+        destruct(this_object());
+        return;
+    }
+    
+    env = environment();
+    
+    // 检查当前环境和持有者状态
+    if (objectp(env) && living(env))
+    {
+        // 被玩家持有
+        if (current_holder != env)
+        {
+            current_holder = env;
+            // 通知地图管理器持有者变更
+            if (objectp(map_manager))
+                map_manager->on_token_holder_changed(current_holder);
+        }
+        
+        // 给予持有者奖励
+        give_holder_reward();
+    }
+    else if (objectp(env) && env->query("dadaosha_room"))
+    {
+        // 在地面上，清空当前持有者
+        if (objectp(current_holder))
+        {
+            current_holder = 0;
+            // 通知地图管理器令牌被丢弃
+            if (objectp(map_manager))
+                map_manager->on_token_dropped(env);
+        }
+    }
+}
+
+/**
+ * @brief 检查活动状态
+ * @return int 1:活动中 0:非活动时间
+ */
+int check_activity_status()
+{
+    mixed active_status;
+    
+    if (!objectp(map_manager))
+    {
+        map_manager = find_object("/adm/special_ob/dadaosha/map_manage");
+        if (!map_manager)
+            return 0;
+    }
+    
+    // 检查是否有活动在进行（这是主要条件）
+    active_status = map_manager->query_active_status();
+    return (sizeof(active_status) > 0);
+}
+
+/**
+ * @brief 给持有者发放奖励
+ */
+void give_holder_reward()
+{
+    if (!objectp(current_holder) || !living(current_holder))
+        return;
+        
+    // 每次心跳给予800经验和500潜能
+    current_holder->add("combat_exp", 1000);
+    current_holder->add("potential", 1000);
+    
+    // 每10秒给予1绑定元宝
+    if (yuanbao_count >= 10)
+    {
+        yuanbao_count = 0;
+        current_holder->add("yuanbao", 5);
+        tell_object(current_holder, HIY "持有武林盟主令到达10回合，你获得了5元宝！\n" NOR);
+    }
+    
+    // 通知地图管理器记录持有时间
+    if (objectp(map_manager))
+        map_manager->record_token_holding_time(current_holder);
+}
+
+/**
+ * @brief 额外查看信息
+ * @return int 成功返回1
+ */
+int extra_look()
+{
+    object me;
+    
+    me = this_player();
+    
+    if (objectp(current_holder))
+    {
+        tell_object(me, HIW "当前持有者：" + current_holder->query("name") + "\n" NOR);
+    }
+    else
+    {
+        tell_object(me, HIW "当前无人持有\n" NOR);  
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 查询当前持有者
+ * @return object 当前持有者对象
+ */
+object query_holder()
+{
+    return current_holder;
+}
+
+/**
+ * @brief 设置当前持有者
+ * @param object holder 持有者对象
+ */
+void set_holder(object holder)
+{
+    current_holder = holder;
+}
+
+/**
+ * @brief 重置令牌状态
+ */
+void reset_token()
+{
+    current_holder = 0;
+    heartbeat_count = 0;
+    yuanbao_count = 0;
+}
+
+// 禁止玩家主动丢弃 - 重载do_drop动作
+int do_drop(string arg)
+{
+    if (environment() == this_player())
+    {
+        tell_object(this_player(), "武林盟主令与你产生了神秘的联系，无法丢弃！\n");
+        return 1;
+    }
+    
+    return 0;
+}
+
+// 重载init函数添加drop动作
+void init()
+{
+    add_action("do_drop", "drop");
+    add_action("do_drop", "throw");
+}
+
+// 当玩家死亡或离开地图时自动回收
+varargs void remove(string euid)
+{
+    if (objectp(map_manager))
+    {
+        catch(map_manager->on_token_destroyed(current_holder));
+    }
+}

@@ -1,0 +1,142 @@
+// rizhao.c 日照山河
+
+inherit F_CLEAN_UP;
+
+/**
+ * @brief 获取绝技名称
+ * @return string 绝技显示名称
+ */
+string query_name() { return "日照"ZJBR"山河"; }
+
+/**
+ * @brief 移除效果的函数
+ * @param object me 使用者
+ * @param int amount 移除的数值
+ * @details 当绝技效果结束时调用
+ */
+void remove_effect(object me, int amount);
+
+/**
+ * @brief 日照山河内功绝技
+ * @param object me 使用者
+ * @param object target 目标对象
+ * @return int 1表示成功，0表示失败
+ * @details 神照经金光与永照之力结合，护体真气+反伤效果
+ */
+int exert(object me, object target)
+{
+    int skill;
+    int guang_level;
+
+    if (target != me)
+        return notify_fail("你只能用日照山河来保护自己。\n");
+
+    if ((int)me->query("neili") < 300)
+        return notify_fail("你的内力不够。\n");
+
+    if ((int)me->query_temp("rizhao"))
+        return notify_fail("你已经在运功中了。\n");
+
+    if (me->query_skill("yongzhao-shanhe", 1) < 220)
+        return notify_fail("你的永照山河经修为不够，无法施展「日照山河」。\n");
+
+    if (me->query_skill_mapped("force") != "yongzhao-shanhe")
+        return notify_fail("你现在没有激发永照山河经为内功，难以施展「日照山河」。\n");
+
+    skill = me->query_skill("force");
+    me->add("neili", -300);
+    me->receive_damage("qi", 0);
+
+    // 获取光明圣火意境等级
+    guang_level = COMBAT_D->get_skill_aoyi_level(me, "光明圣火");
+
+    message_combatd(HIY "$N" HIY "运起神照经心法，体内永照之力与金光交相辉映，"
+                    "霎时" HIW "金光万道" HIY "，如日照山河，护体真气坚如磐石！\n" NOR, me);
+
+    // 基础护体效果（比九阳神功shield略高）
+    me->add_temp("apply/armor", skill * 3 / 5);
+    me->add_temp("apply/parry", skill / 5);
+    me->add_temp("apply/dodge", skill / 6);
+
+    // 光明圣火意境加成
+    if (guang_level > 0)
+    {
+        me->add_temp("apply/armor", guang_level * 10);
+        me->add_temp("apply/parry", guang_level * 3);
+        message_combatd(HIY "$N" HIY "体内光明圣火奥义运转，护体金光更加耀眼！\n" NOR, me);
+    }
+
+    me->set_temp("rizhao", 1);
+    me->set_temp("rizhao_level", skill + guang_level * 5); // 反伤等级
+
+    // 持续时间：基础时间 + 光明圣火加成
+    me->start_call_out((: call_other, __FILE__, "remove_effect", me, skill :),
+                       skill / 3 + guang_level * 2);
+
+    if (me->is_fighting()) me->start_busy(2);
+
+    return 1;
+}
+
+/**
+ * @brief 移除日照山河效果
+ * @param object me 使用者
+ * @param int amount 技能等级数值
+ * @details 移除所有临时属性加成
+ */
+void remove_effect(object me, int amount)
+{
+    int guang_level;
+
+    if ((int)me->query_temp("rizhao"))
+    {
+        guang_level = COMBAT_D->get_skill_aoyi_level(me, "光明圣火");
+
+        me->add_temp("apply/armor", -(amount * 3 / 5 + guang_level * 10));
+        me->add_temp("apply/parry", -(amount / 5 + guang_level * 3));
+        me->add_temp("apply/dodge", -(amount / 6));
+        me->delete_temp("rizhao");
+        me->delete_temp("rizhao_level");
+        tell_object(me, "你的日照山河护体真气逐渐消散，金光收敛。\n");
+    }
+}
+
+/**
+ * @brief 日照山河反伤效果
+ * @param object attacker 攻击者
+ * @param object me 防御者
+ * @param int damage 伤害值
+ * @return int 反伤伤害值
+ * @details 当受到攻击时触发反伤效果
+ */
+int shield_effect(object attacker, object me, int damage)
+{
+    int rizhao_level;
+    int counter_damage;
+    int guang_level;
+
+    if (!me->query_temp("rizhao"))
+        return 0;
+
+    rizhao_level = me->query_temp("rizhao_level");
+    guang_level = COMBAT_D->get_skill_aoyi_level(me, "光明圣火");
+
+    // 计算反伤伤害
+    counter_damage = damage / 5 + rizhao_level / 10;
+
+    // 光明圣火增加反伤
+    if (guang_level > 0)
+    {
+        counter_damage += guang_level * 5;
+    }
+
+    if (counter_damage > 0 && living(attacker))
+    {
+        message_combatd(HIY "$N" HIY "身上金光一闪，日照山河的护体真气反震，"
+                        "$n" HIY "被金光所伤！\n" NOR, me, attacker);
+        COMBAT_D->real_damage(me, attacker, counter_damage);
+        return counter_damage;
+    }
+
+    return 0;
+}

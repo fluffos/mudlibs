@@ -1,0 +1,100 @@
+// huangbang.c 金榜
+// by ices-y 2024-07-25
+
+inherit ROOM;
+
+#define KEJU_D "/adm/special_ob/keju/keju_d"
+
+void create()
+{
+    set("short", "金榜");
+    set("long", @LONG
+这里是专门用来张贴科举结果的金榜。从院试到殿试，所有
+通过者的姓名和成绩都会在这里一一列出，供天下学子瞻仰。
+你可以查看不同考试的榜单，有功名者还可在此每日签到。
+LONG);
+
+    set("exits", (([
+        "east": "/d/changan/bridge2",
+    ])));
+	set("action_list", (([
+		HIC"查看榜单"NOR : "kan bang",
+		HIC"每日签到"NOR : "qiandao",
+	])));
+    set("no_fight", 1);
+    setup();
+}
+
+void init()
+{
+    add_action("do_kan", "kan");
+    add_action("do_kan_bang", "kan_bang");
+    add_action("do_qiandao", "qiandao");
+}
+
+int do_kan(string arg)
+{
+    // 使用 popup_comb 让玩家选择看哪个榜
+    string msg = "请选择你要查看的榜单：";
+    string *buttons = ({
+        "院试:kan_bang yuan",
+        "乡试:kan_bang xiang",
+        "会试:kan_bang hui",
+        "殿试:kan_bang dian"
+    });
+
+    if (!arg || arg != "bang")
+    {
+        return notify_fail("你要看什么？\n");
+    }
+
+    tell_object(this_player(), popup_comb(msg, buttons));
+    return 1;
+}
+
+int do_kan_bang(string type)
+{
+    string list = KEJU_D->query_ranking_list(type);
+    tell_object(this_player(), popup_title(list));
+    return 1;
+}
+
+int do_qiandao(string arg)
+{
+    object me = this_player();
+    string id = me->query("id");
+    mapping p_data = KEJU_D->query_player(id);
+    string identity = p_data["identity"];
+    string title = p_data["title"];
+    int last_qiandao_day = me->query("keju/last_qiandao_day");
+    int today = localtime(time())[7];
+    int xueshi_reward = 0;
+
+    if (last_qiandao_day == today)
+    {
+        tell_object(me, "你今天已经签过到了，明天再来吧。\n");
+        return 1;
+    }
+
+    switch (identity)
+    {
+        case "秀才": xueshi_reward = 1; break;
+        case "举人": xueshi_reward = 2; break;
+        case "贡士": xueshi_reward = 3; break;
+        case "进士": xueshi_reward = 4; break;
+        default:
+            tell_object(me, "你尚未取得功名，无法在此签到。\n");
+            return 1;
+    }
+
+    if (title == "解元" || title == "会元" || title == "状元" || title == "榜眼" || title == "探花")
+    {
+        xueshi_reward += 1;
+    }
+
+    me->set("keju/last_qiandao_day", today);
+    me->add("keju/xueshi", xueshi_reward); // 假设玩家对象有学识(xueshi)属性
+    tell_object(me, sprintf("签到成功！你获得了 %d 点学识。\n", xueshi_reward));
+
+    return 1;
+}

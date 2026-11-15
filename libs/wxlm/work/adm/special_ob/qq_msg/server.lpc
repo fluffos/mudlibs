@@ -1,0 +1,218 @@
+#include <net/socket.h>
+#include <socket_err.h>
+inherit F_DBASE;
+nosave int socket_fd;
+nosave mapping socket_info = ([]);
+
+// IP白名单列表
+nosave string *allowed_ips = ({
+    "127.0.0.1",    // 本地测试
+    "localhost",    // 本地测试
+    "xxxxxxxx密码示例",   // 示例IP，请根据实际需求修改
+    "192.168.2.182",
+    "xxxxxxxx密码示例"
+});
+
+/**
+ * 从地址字符串中提取IP地址
+ * @param addr 完整地址字符串(格式如: "192.168.1.1 8080")
+ * @return IP地址部分
+ */
+private string extract_ip(string addr)
+{
+    string *parts;
+    if (!addr || addr == "") return "";
+    
+    parts = explode(addr, " ");
+    if (sizeof(parts) < 1) return "";
+    
+    return parts[0];
+}
+
+/**
+ * 检查IP是否在白名单中
+ * @param addr 需要检查的完整地址(格式如: "192.168.1.1 8080")
+ * @return 如果IP在白名单中返回1，否则返回0
+ */
+private int is_ip_allowed(string addr)
+{
+    string ip;
+    if (!addr || addr == "") return 0;
+    
+    ip = extract_ip(addr);
+    return member_array(ip, allowed_ips) != -1;
+}
+
+/**
+ * 添加允许的IP地址
+ * @param ip 要添加的IP地址
+ * @return 成功返回1，失败返回0
+ */
+public int add_allowed_ip(string ip)
+{
+    if (!ip || ip == "") return 0;
+    if (member_array(ip, allowed_ips) != -1) return 0;
+    
+    allowed_ips += ({ip});
+    return 1;
+}
+
+/**
+ * 移除允许的IP地址
+ * @param ip 要移除的IP地址
+ * @return 成功返回1，失败返回0
+ */
+public int remove_allowed_ip(string ip)
+{
+    if (!ip || ip == "") return 0;
+    if (member_array(ip, allowed_ips) == -1) return 0;
+    
+    allowed_ips -= ({ip});
+    return 1;
+}
+
+void create()
+{
+    seteuid(getuid());
+	// set("channel_id", "【QQ群】");
+    set("channel_id", "");
+#ifndef __PACKAGE_SOCKETS__
+    return;
+#else
+    int ret;
+    CHANNEL_D->do_channel(this_object(), "sys", "【QQ群】信息监听已经启动。");
+    // 创建socket并开始监听
+    socket_fd = socket_create(STREAM, "read_callback", "close_callback");
+    if (socket_fd < 0) {
+        log_file("socket", "Socket创建失败: " + socket_fd + "\n");
+        return;
+    }
+
+    // 绑定端口
+    ret = socket_bind(socket_fd, 9981);
+    if (ret < 0) {
+        log_file("socket", "端口绑定失败: " + ret + "\n");
+        socket_close(socket_fd);
+        socket_fd = -1;
+        return;
+    }
+
+    // 开始监听
+    ret = socket_listen(socket_fd, "listen_callback");
+    if (ret < 0) {
+        log_file("socket", "监听失败: " + ret + "\n");
+        socket_close(socket_fd);
+        socket_fd = -1;
+        return;
+    }
+
+    set_heart_beat(60);
+#endif
+}
+
+#ifdef __PACKAGE_SOCKETS__
+void listen_callback(int fd)
+{
+    int new_fd;
+    string client_addr, client_ip;
+    
+    new_fd = socket_accept(fd, "read_callback", "write_callback");
+    if (new_fd < 0) {
+        log_file("socket", "接受连接失败: " + new_fd + "\n");
+        return;
+    }
+    
+    // 获取客户端地址
+    client_addr = socket_address(new_fd);
+    client_ip = extract_ip(client_addr);
+    
+    if (!is_ip_allowed(client_addr)) {
+        log_file("socket", "未授权的IP尝试连接: " + client_ip + "\n");
+        socket_close(new_fd);
+        return;
+    }
+    
+    socket_info[new_fd] = ([
+        "fd": new_fd,
+        "buffer": "",
+        "time": time(),
+        "ip": client_ip
+    ]);
+    
+    log_file("socket", "接受来自 " + client_ip + " 的新连接\n");
+}
+
+void read_callback(int fd, mixed message)
+{
+    if (!socket_info[fd]) return;
+    
+    socket_info[fd]["buffer"] += message;
+    socket_info[fd]["time"] = time();
+    
+    // 这里处理收到的消息
+    // log_file("socket_msg", "收到消息: " + message + "\n");
+    CHANNEL_D->do_channel(this_object(),"chat",message); 
+}
+
+void write_callback(int fd)
+{
+    // 当socket准备好写入时的回调
+}
+
+void close_callback(int fd)
+{
+    // 清理连接信息
+    map_delete(socket_info, fd);
+}
+
+// 发送消息的函数
+varargs int send_message(int fd, string msg)
+{
+    if (!socket_info[fd]) return 0;
+    
+    return socket_write(fd, msg);
+}
+
+// 清理函数
+void clean_up()
+{
+    int *fds;
+    int i;
+    
+    fds = keys(socket_info);
+    for (i = 0; i < sizeof(fds); i++) {
+        if (time() - socket_info[fds[i]]["time"] > 300) { // 5分钟超时
+            socket_close(fds[i]);
+            map_delete(socket_info, fds[i]);
+        }
+    }
+}
+
+void heart_beat()
+{
+    int ret;
+    //socket是否异常关闭，如果关闭了重启
+    if (socket_fd < 0) {
+        socket_fd = socket_create(STREAM, "read_callback", "close_callback");
+        
+        ret = socket_bind(socket_fd, 9981);
+        if (ret < 0) {
+            log_file("socket", "端口绑定失败: " + ret + "\n");
+            socket_close(socket_fd);
+            return;
+        }
+    
+        ret = socket_listen(socket_fd, "listen_callback");
+        if (ret < 0) {
+            log_file("socket", "监听失败: " + ret + "\n");
+            socket_close(socket_fd);
+            socket_fd = -1;
+            return;
+        }
+    }
+    
+
+
+}
+#endif
+

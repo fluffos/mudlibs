@@ -1,0 +1,347 @@
+// who.c
+
+#include <net/dns.h>
+#include <mudlib.h>
+#include <tomud.h>
+#define ENGLISH_MUD_NAME INTERMUD_MUD_NAME
+#define CHALLENGE_D "/adm/daemons/challenge_d.lpc"
+inherit F_CLEAN_UP;
+int sort_challenge_score(string user1, string user2);
+void create();
+nosave int busy=0;
+void create() { seteuid(getuid()); }
+
+int sort_exp(string user1, string user2) {
+    return (int)TOP_D->query_user(user2 + "/combat_exp") - (int)TOP_D->query_user(user1 + "/combat_exp");
+}
+
+int sort_gold(string user1, string user2) {
+    return (int)TOP_D->query_user(user2 + "/gold") - (int)TOP_D->query_user(user1 + "/gold");
+}
+
+int sort_pay(string user1, string user2) {
+    return (int)TOP_D->query_user(user2 + "/all_pay") - (int)TOP_D->query_user(user1 + "/all_pay");
+}
+
+int sort_per(string user1, string user2) {
+    return (int)TOP_D->query_user(user2 + "/per") - (int)TOP_D->query_user(user1 + "/per");
+}
+
+int sort_PKS(string user1, string user2) {
+    return (int)TOP_D->query_user(user2 + "/PKS") - (int)TOP_D->query_user(user1 + "/PKS");
+}
+
+// 武力值排序函数
+int sort_combat_power(string user1, string user2) {
+    return (int)TOP_D->query_user(user2 + "/combat_power") - (int)TOP_D->query_user(user1 + "/combat_power");
+}
+
+// 名师殿堂排序函数
+int sort_daoshi_exp(string user1, string user2) {
+    return (int)TOP_D->query_user(user2 + "/daoshi_exp") - (int)TOP_D->query_user(user1 + "/daoshi_exp");
+}
+
+int sort_shimen(string user1, string user2) {
+    int m1 = (user1 == "player") ? TOP_D->query_user(user1 + "/shimen") / 7 : TOP_D->query_user(user1 + "/shimen");
+    int m2 = (user2 == "player") ? TOP_D->query_user(user2 + "/shimen") / 7 : TOP_D->query_user(user2 + "/shimen");
+    return m2 - m1;
+}
+
+//按照低的通关时间排序从低到高，0为未能通关
+int sort_caoren(string user1, string user2)
+{
+    int t1 = TOP_D->query_user(user1 + "/fuben_finish_time/caoren");
+    int t2 = TOP_D->query_user(user2 + "/fuben_finish_time/caoren");
+
+    // 如果两个玩家都没有通关记录,则认为相等
+    if (!t1 && !t2)
+        return 0;
+    
+    // 如果只有一个玩家有通关记录,有记录的排在前面
+    if (!t1) return 1;
+    if (!t2) return -1;
+
+    // 按照通关时间从低到高排序
+    return t1 - t2;
+}
+
+// 魔窟通关时间从低到高排序
+//按照低的通关时间排序从低到高，0为未能通关
+int sort_moku(string user1, string user2)
+{
+    int t1 = TOP_D->query_user(user1 + "/fuben_finish_time/moku");
+    int t2 = TOP_D->query_user(user2 + "/fuben_finish_time/moku");
+
+    // 如果两个玩家都没有通关记录,则认为相等
+    if (!t1 && !t2)
+        return 0;
+    
+    // 如果只有一个玩家有通关记录,有记录的排在前面
+    if (!t1) return 1;
+    if (!t2) return -1;
+
+    // 按照通关时间从低到高排序
+    return t1 - t2;
+}
+
+// string *ranking_order = ({
+//     "修为", "挑战积分","财富", "积分", "容貌", "杀气", "师门", "宗师", "尊者", "潜龙", "木剑砺锋", "魔窟",
+//     "门派入侵", "门派防守", "门派威望"
+// });
+string *ranking_order = ({
+    "修为", "武艺", "名师殿堂",
+    // "挑战积分","财富", "积分", "容貌", "杀气", "师门",
+     "宗师", "尊者", "潜龙", "木剑砺锋", "魔窟",
+    // "门派入侵", "门派防守", "门派威望"
+});
+
+mapping ranking_info = ([
+    "挑战积分": (["sort_func": (: sort_challenge_score :), "desc": "积分", "key": "/challenge_score"]),
+    "财富": (["sort_func": (: sort_gold :), "desc": "财富", "key": "/gold"]),
+    "积分": (["sort_func": (: sort_pay :), "desc": "积分", "key": "/all_pay"]),
+    "容貌": (["sort_func": (: sort_per :), "desc": "评价", "key": "/per"]),
+    "杀气": (["sort_func": (: sort_PKS :), "desc": "杀气", "key": "/PKS"]),
+    "师门": (["sort_func": (: sort_shimen :), "desc": "本周师门次数", "key": "/shimen"]),
+    "宗师": (["sort_func": 0, "desc": "宗师积分", "key": ""]),
+    "尊者": (["sort_func": 0, "desc": "尊者积分", "key": ""]),
+    "潜龙": (["sort_func": 0, "desc": "潜龙积分", "key": ""]),
+    "修为": (["sort_func": (: sort_exp :), "desc": "经验", "key": "/combat_exp"]),
+    "武艺": (["sort_func": (: sort_combat_power :), "desc": "武力", "key": "/combat_power"]),
+    "名师殿堂": (["sort_func": (: sort_daoshi_exp :), "desc": "授业值", "key": "/daoshi_exp"]),
+    "木剑砺锋": (["sort_func": (: sort_caoren :), "desc": "通关时间", "key": "/fuben_finish_time/caoren"]),
+    "魔窟": (["sort_func": (: sort_moku :), "desc": "通关时间", "key": "/fuben_finish_time/moku"]),
+    "门派入侵": (["func": "query_all_invasions", "desc": "入侵次数"]),
+    "门派防守": (["func": "query_all_defenses", "desc": "防守次数"]),
+    "门派威望": (["func": "query_all_prestiges", "desc": "门派威望"]),
+]);
+
+// 需要使用时间转换为字符串的排行
+string *time_ranking = ({
+    "木剑砺锋",
+    "魔窟",
+});
+
+// 排序函数
+int sort_challenge_score(string user1, string user2) {
+    return (int)CHALLENGE_D->query_player_score(user2) - (int)CHALLENGE_D->query_player_score(user1);
+}
+
+string generate_json_ranking(string type, string *all_users, function sort_func, string point_desc, string point_key, int page, int page_size) {
+    mapping result = ([
+        "title": "排行榜",
+        "w": "700",
+        "h": "100",
+        "close": ({
+            (["cmd": "myscore 随身功能", "text": "关闭"])
+        }),
+        "toggle": ({}),
+        "data":([])
+    ]);
+    // 分页逻辑
+    int start = (page - 1) * page_size;
+    int end = start + page_size;
+
+    // 动态生成 toggle 内容
+    foreach (string key in ranking_order) {
+        if (ranking_info[key]) {
+            result["toggle"] += ({ (["cmd": "new_tops " + key, "text": key + "榜"]) });
+        }
+    }
+
+    result["data"] = ([
+        "title": type + "榜" + "根据" + point_desc + "排行",
+        "context": ({})
+    ]);
+
+    if (point_desc == "修为")
+    {
+        result["data"]["title"] += ",当前平均追赶经验值:" + SHENGXIAN_D->query_combat_exp();
+    }
+
+    reset_eval_cost();
+    if (point_key != "") {
+        all_users = filter_array(all_users, (: TOP_D->query_user($1 + $(point_key)) > 10 :));
+    }
+    if (!sizeof(all_users)) {
+        result["data"]["title"] += "目前无人上榜";
+
+        result = ([
+            "code":"导航弹窗",
+            "data":result
+        ]);
+
+        return json_encode(result);
+    }
+
+    if (sort_func != 0) {
+        all_users = sort_array(all_users, sort_func);
+    }
+
+
+    if (end > sizeof(all_users)) {
+        end = sizeof(all_users);
+    }
+
+    for (int i = start; i < end; i++) {
+        string user_name;
+        mixed user_point;
+        if (type == "宗师" || type == "尊者" || type == "潜龙") {
+            user_name = FAMILY_D->query_wudao_chinese_name(all_users[i]);
+            user_point = FAMILY_D->query_fight_point(all_users[i], type);
+        } else {
+            user_name = TOP_D->get_name(all_users[i]);
+            user_point = TOP_D->query_user(all_users[i] + point_key);
+        }
+
+        if (member_array(type, time_ranking) != -1 && intp(user_point)) {
+            user_point = time_to_str(user_point);
+        }
+
+        result["data"]["context"] += ({
+            (["cmd": "look " + all_users[i], "text": GRN"第"+(i+1)+"名 - "+user_name+NOR+ZJBR+YEL+point_desc+user_point+NOR])
+        });
+    }
+
+    // 添加分页按钮
+    if (page > 1) {
+        result["close"] += ({ (["cmd": "new_tops " + type + " " + (page - 1), "text": "上一页"]) });
+    }
+    if (end < sizeof(all_users)) {
+        result["close"] += ({ (["cmd": "new_tops " + type + " " + (page + 1), "text": "下一页"]) });
+    }
+
+    result = ([
+        "code":"导航弹窗",
+        "data":result
+    ]);
+
+    return json_encode(result);
+}
+
+string generate_faction_ranking(string type, mapping data, int page, int page_size) {
+    string *factions;
+    int start,end;
+    mapping result = ([
+        "title": "门派排行榜",
+        "w": "700",
+        "h": "100",
+        "close": ({
+            (["cmd": "myscore 随身功能", "text": "关闭"])
+        }),
+        "toggle": ({}),
+        "data":([])
+    ]);
+
+    // 动态生成 toggle 内容
+    foreach (string key in ranking_order) {
+        if (ranking_info[key]) {
+            result["toggle"] += ({ (["cmd": "new_tops " + key, "text": key + "榜"]) });
+        }
+    }
+
+    result["data"] = ([
+        "title": type + "排行榜",
+        "context": ({})
+    ]);
+
+    // 获取所有门派并排序
+    factions = keys(data);
+    factions = sort_array(factions, (: $(data)[$2] - $(data)[$1] :));
+
+    // 分页逻辑
+    start = (page - 1) * page_size;
+    end = start + page_size;
+    if (end > sizeof(factions))
+        end = sizeof(factions);
+
+    if (start >= end)
+    {
+        result["data"]["title"] += "暂无数据";
+    }
+    else
+    {
+        for (int i = start; i < end; i++)
+        {
+            string faction_id = factions[i];
+            mapping faction_info = FACTION_D->query_faction(faction_id);
+            string faction_name = faction_info["name"];
+            mixed value = data[faction_id];
+            result["data"]["context"] += ({
+                (["cmd": "look " + faction_id, "text": GRN"第"+(i+1)+"名 - "+faction_name+NOR+ZJBR+YEL+type+"："+value+NOR])
+            });
+        }
+    }
+
+    // 添加分页按钮
+    if (page > 1) {
+        result["close"] += ({ (["cmd": "new_tops " + type + " " + (page - 1), "text": "上一页"]) });
+    }
+    if (end < sizeof(factions)) {
+        result["close"] += ({ (["cmd": "new_tops " + type + " " + (page + 1), "text": "下一页"]) });
+    }
+
+    result["is_cmd"] = "new_tops " + type;
+
+    result = ([
+        "code":"导航弹窗",
+        "data":result
+    ]);
+
+    return json_encode(result);
+}
+
+int main(object me, string arg) {
+    string type;
+    string *all_users;
+    string json_result;
+    int page;
+    int page_size = 10; // 每页显示的用户数量
+
+    if (!arg) {
+        arg = "修为";
+    } 
+
+    if (sscanf(arg, "%s %d", type, page) != 2) {
+        type = arg;
+        page = 1;
+    }
+
+    if (member_array(type, keys(ranking_info)) == -1) {
+        return notify_fail("暂无" + type + "类排行！！！\n");
+    }
+    
+
+    // 处理门派排行榜
+    if (type == "门派入侵" || type == "门派防守" || type == "门派威望") {
+        string func = ranking_info[type]["func"];
+        mapping data = call_other(FACTION_D, func);
+        // if (!sizeof(data)) {
+        //     return notify_fail("暂无" + type + "排行数据！！！\n");
+        // }
+        json_result = generate_faction_ranking(ranking_info[type]["desc"], data, page, page_size);
+        tell_object(me, json_result + "\n");
+        return 1;
+    }
+
+    all_users = TOP_D->all_users();
+    if (!all_users) {
+        return notify_fail("暂无排行数据！！！\n");
+    }
+
+    if (type == "宗师" || type == "尊者" || type == "潜龙") {
+        reset_eval_cost();
+        all_users = FAMILY_D->query_fight_classify()[type];
+        // if (!sizeof(all_users)) {
+        //     return notify_fail("暂无" + type + "排行数据！！！\n");
+        // }
+        json_result = generate_json_ranking(type, all_users, ranking_info[type]["sort_func"], type + "积分：", "", page, page_size);
+    } else {
+        if (type == "积分" && !SECURITY_D->valid_grant(me, "(admin)")) {
+            return notify_fail("你无权查看积分排行！\n");
+        }
+        json_result = generate_json_ranking(type, all_users, ranking_info[type]["sort_func"], ranking_info[type]["desc"], ranking_info[type]["key"], page, page_size);
+    }
+
+    tell_object(me, json_result + "\n");
+    return 1;
+}

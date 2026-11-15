@@ -1,0 +1,227 @@
+
+inherit F_CLEAN_UP;
+
+// 每天下午1点-2点开启武道交流大会活动。
+// 武道交流大会规则：
+// 举行地点：扬州武道场。
+// 玩法介绍：
+// （1）侠客们可以和其他侠客进行武道交流，在武道场点击任意一名侠客，然后点击武学交流。
+// （2）每次交流获得200-300点经验，250-300点潜能。
+// （3）每次交流有25%概率受到武学同道的熏陶，任意武学技能熟练度增加5000-10000点，如果受到熏陶的武学被请教的同道也掌握，触发状态：志同道合，熟练度额外增加2000。
+// （4）每次交流有机会触发顿悟状态，顿悟状态下收到熏陶的武学等级增加1-2级。（顿悟状态取决于后天悟性，概率为3000分之后天悟性）。
+// （5）每次交流获得1点武道交流积分。
+// （6）交流积分超过1000次可以兑换稀有成就：武道大师，永久增加研究效率10%。超过5000次可以兑换获得传奇成就：泰山北斗，研究效率永久增加20%。
+
+int kungfu_communication(object me,object player);
+int halt_wding(object me);
+int wding(object me,object player);
+int auto_jiaoliu(object me,object player);
+
+int main(object me, string arg)
+{
+    object env,other_player;
+    string *skills;
+
+
+    if (!is_current_hour(20))
+    {
+        write("现在不是武道交流大会时间(每天晚上8点到9点)，请稍后再来。\n");
+        return 1;
+    }
+
+    if (!arg)
+    {
+        write("你要和谁交流？\n");
+        return 1;
+    }
+
+    env = environment(me);
+
+    if (env->query("short") != "武道场")
+    {
+        write("你只能在武道场里交流。\n");
+        return 1;
+    }
+
+    if (me->query("wudao_jl/last_time") && time() < me->query("wudao_jl/last_time"))
+    {
+        write("你刚刚交流过，现在还不能再次交流，还是先休息会吧,冷却：" + (me->query("wudao_jl/last_time") - time()) + "秒。\n");
+        return 1;
+    }
+
+    skills = me->query_skills();
+    other_player = present(arg, env);
+
+    if (!sizeof(skills))
+    {
+        write("你现在还没有掌握任何武学技能，你拿什么和其他同道交流？。\n");
+        return 1;
+    }
+
+    if (me->is_busy())
+    {
+        write("你现在正忙着呢。\n");
+        return 1;
+    }
+
+    if (me->query_temp("pending/wudao"))
+    {
+        write("你正在和别人交流，请稍候。\n");
+        return 1;
+    }
+
+    if (!playerp(other_player))
+    {
+        write("你只能和武学同道交流，不能和npc交流。\n");
+        return 1;
+    }
+
+
+    me->set_temp("pending/wudao", 1);
+    me->start_busy(bind((:call_other, __FILE__, "wding",me,other_player :), me),bind((:call_other, __FILE__, "halt_wding" :), me));
+
+    return 1;
+}
+
+int wding(object me,object player)
+{
+    object env;
+    string msg;
+
+    env = environment(me);
+
+    if (!objectp(player) || environment(player) != env)
+    {
+        me->delete_temp("pending/wudao");
+        tell_object(me, "你要和谁交流？\n");
+        return 1;
+    }
+
+    switch (me->query_temp("pending/wudao"))
+    {
+        case 1:
+            msg = sprintf(HIG"%s和%s进行了武学交流,各自发表了在武学上的独到见解"NOR"。\n",me->name(),player->name());
+            break;
+        case 2:
+            msg = sprintf("%s略有所思，似乎开始有了一些感悟。\n",me->name());
+            break;
+        case 3:
+            msg = sprintf(HIY"%s和%s进一步探讨,各自展示了在武学上的独门绝技"NOR"。\n",me->name(),player->name());
+            break;
+    }
+
+    if (me->query_temp("pending/wudao") <= 3)
+    {
+        me->add_temp("pending/wudao",1);
+        tell_object(me,msg);
+        return 1;
+    }
+    else
+    {
+        kungfu_communication(me,player);
+        return 0;
+    }
+
+
+
+    return 0;
+}
+
+
+int kungfu_communication(object me,object player)
+{
+    string *skills;
+    string choose_skill;
+    int combat_exp,potential,skill_exp,skill_level;
+    string msg;
+
+    skills = keys(me->query_skills());
+
+    choose_skill = skills[random(sizeof(skills))];
+
+    combat_exp = 200 + random(100);
+    potential = 250 + random(50);
+    skill_exp = 5000 + random(5000);
+
+    msg = sprintf("你和%s进行了武学交流。\n",player->name());
+
+    if (random(100) < 25)
+    {
+        if (player->query_skill(choose_skill,1))
+        {
+            msg += sprintf("你和%s的交流触发了状态：志同道合,奖励熟练度额外增加2000。\n",player->name());
+            skill_exp += 2000;
+        }
+
+        msg += sprintf("你受到了%s的熏陶，%s的熟练度增加了%d点。\n",player->name(),to_chinese(choose_skill),skill_exp);
+
+        if (me->can_improve_skill(choose_skill))
+        {
+            me->improve_skill(choose_skill,skill_exp);
+        }
+        else
+        {
+            msg += sprintf("但你感觉自己缺乏实战经验，难以继续提升%s。\n",to_chinese(choose_skill));
+        }
+    }
+
+    if (random(10000) < me->query_int() * 3 && me->can_improve_skill(choose_skill))
+    {
+        skill_level = 1 + random(2);
+        msg += sprintf("你和%s的交流触发了状态：顿悟。\n",player->name());
+        msg += sprintf("你受到了%s的熏陶，%s的等级增加了%d级。\n",player->name(),to_chinese(choose_skill),skill_level);
+        //显示等级从多少到多少
+        msg += sprintf("%s的等级从%d级增加到%d级。\n",to_chinese(choose_skill),me->query_skill(choose_skill,1),me->query_skill(choose_skill,1) +  skill_level);
+        me->set_skill(choose_skill, (me->query_skill(choose_skill,1) +  skill_level));
+    }
+
+    msg += sprintf("你获得了%d点经验，%d点潜能,1点武道交流积分。\n",combat_exp,potential);
+    msg += sprintf("你将在60秒后再次进行武道交流，如果离开武道场，自动结束交流。\n");
+    me->add("combat_exp",combat_exp);
+    me->add("potential",potential);
+    me->add("wudao_jl/score",1);
+    me->delete_temp("pending/wudao");
+    me->set("wudao_jl/last_time",time() + 60);
+
+    tell_object(me,popup_title(msg));
+    // 61秒后自动冷却时间交流
+    call_out("auto_jiaoliu",61,me,player);
+
+
+    return 1;
+}
+
+int halt_wding(object me)
+{
+	object env;
+
+	env = environment(me);
+	me->delete_temp("pending/wudao");
+	tell_object(me, "你放弃了交流。\n");
+	message("vision", me->name() + "舒展了一下腰，叹了口气。\n", env, ({ me }));
+	return 1;
+}
+
+int auto_jiaoliu(object me,object player)
+{
+
+
+    if (!objectp(player) || !objectp(me))
+    {
+        return 0;
+    }
+
+    // 是否在武道场，是否在同一地点
+    if (environment(me) != environment(player))
+    {
+        return 0;
+    }
+
+    //是否在武道场
+    if (environment(me)->query("short") != "武道场")
+    {
+        return 0;
+    }
+
+    me->force_me("jiaoliu_wd " + player->query("id"));
+}

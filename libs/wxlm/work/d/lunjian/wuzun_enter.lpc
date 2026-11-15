@@ -1,0 +1,631 @@
+#include <room.h>
+inherit ROOM;
+#define OUTROOM "/d/fuben/qianchipu/qianchipu"
+#define WUJUE_UI "/d/lunjian/wujue_iml/wujue_iml_ui"
+
+#define LUNJIAN_TURN		7
+#define LUNJIAN_USER_MIN	5
+
+string *total = ({});
+int turn = 0;
+mapping allusers = ([]);
+mapping lunjian_sign_time = FAMILY_D->query_wuzun_lunjian_sign_time();
+
+private void init_player(object me);
+private void message_competition(string msg);
+private void auto_check();
+private void restore_status(object me);
+int check_win(object me);
+int check_out(object me);
+int calculate_survival_rate(object player);
+public void show_wujue_animation(string *list_id);
+
+/**
+ * @brief 创建武尊组华山论剑入口房间
+ * @return void
+ * @details 初始化房间属性，设置描述信息和出口，配置操作菜单
+ */
+void create()
+{
+	set("short", "华山之巅(武尊组)");
+	set("long", "这里是华山之巅，也是天下群雄争夺武林至尊的竞技之地(武尊组)。只有达到散花境界的武尊才能参与武魁之战。");
+	set("exits", ([
+		"south" : OUTROOM,
+		"west" : __DIR__"enter", // 通往宗师组
+		"east" : __DIR__"non_ultra_enter", // 通往新秀组
+	]));
+	set("no_fight",1);
+	set("no_fly",1);
+	set("objects",([
+	]));
+	set("action_list",([
+		"武魁之战":"jjsign",
+		"称号奖励":"lunjiangift",
+		"积分兑换":"ljshop",
+	]));
+	setup();
+}
+
+void init()
+{
+	add_action("ljshop","ljshop");
+	add_action("jjsign","jjsign");
+	add_action("lunjiangift","lunjiangift");
+}
+
+/**
+ * @brief 武尊组积分商店
+ * @param arg string 商店操作参数
+ * @return int 操作结果
+ * @details 提供高级兑换物品，使用独立的武尊组积分系统
+ *          新增兑换物品：黄色真意自选箱(30积分)，意境捐赠(20积分)，冲脉丹自选箱(15积分)，防御材料自选箱(10积分)
+ */
+int ljshop(string arg)
+{
+	string *list,str,file,price;
+	int i,yuanbao;
+	object me,ob;
+	mapping goods,times;
+	string *button_list = ({});
+
+	me = this_player();
+	goods = ([
+		"/clone/vip/jinsha":1,
+		"/clone/vip/putao1":1,
+		"/clone/vip/book_wuliang":1,
+		"/clone/baiyi/tencard":10,
+		"/clone/box/zhenyi/yellow_zixuan_box":30,
+		"/clone/aoyi_book/aoyi_book":20,
+		"/clone/box/chongmai/chongmai_zixuan_box":15,
+		"/clone/box/fangju_zixuan_box":10,
+	]);
+	times = ([
+		"/clone/lunjian/wujueling":1,
+	]);
+	list = keys(goods);
+	if (! arg)
+	{
+		str = "你目前有" + me->query("wuzun_lunjian/pot") + "武魁积分，请选择您想兑换的道具：\n";
+		
+		for(i=0; i<sizeof(list); i++)
+		{
+			file = list[i];
+			if(!goods[file] || file_size(file+".lpc") < 0) continue;
+			yuanbao = goods[file];
+			price = yuanbao + "积分";
+			button_list += ({sprintf("%s(%s):ljshop look %s", file->query("name"), price, file)});
+		}
+		
+		tell_object(me, popup_comb(str, button_list));
+		return 1;
+	}
+	else if (sscanf(arg,"look %s",file)==1)
+	{
+		if(file_size(file+".lpc")<0||!goods[file])
+			return notify_fail(popup_title(HIR"兑换列表中没有这个道具！"NOR));
+
+		yuanbao = goods[file];
+		price = yuanbao+"积分";
+		str = "【" + file->query("name") + "】　　价格：" + price + NOR + "\n";
+		str += "一一一一一一一一一一一一一一一一一一一一一一一\n";
+		if(times[file])
+			str += HIR"此物品每个玩家限兑换" + times[file] + "次"NOR "\n";
+		str += file->long();
+		
+		button_list = ({"兑换:ljshop buy " + file, "返回:ljshop"});
+		tell_object(me, popup_comb(str, button_list));
+		return 1;
+	}
+	else if (sscanf(arg,"buy %s",file)==1)
+	{
+		if(file_size(file+".lpc")<0||!goods[file])
+			return notify_fail(popup_title(HIR"兑换列表中没有这个道具！"NOR));
+
+		yuanbao = goods[file];
+
+		if(times[file])
+		{
+			if(me->query("wuzun_lunjian/duihuan/"+file->query("id")) >= times[file])
+				return notify_fail(popup_title(HIR"此物品每个玩家只能兑换"+times[file]+"次！"NOR));
+			me->add("wuzun_lunjian/duihuan/"+file->query("id"),1);
+		}
+		if(me->query("wuzun_lunjian/pot") < yuanbao)
+			return notify_fail(popup_title(HIR"你的兑换积分不足，多参加参加武魁之战吧！"NOR));
+		me->add("wuzun_lunjian/pot",-yuanbao);
+		ob = new_bind(file);
+		log_ufile(me,"pay/wuzun_lunjian", "兑换了"+ob->short()+"。\n");
+		tell_object(me, popup_title("你成功兑换到了"+ob->short()+"。"NOR));
+		ob->move(me);
+		return 1;
+	}
+	else
+		return notify_fail(popup_title(HIR"你想干什么？"NOR));
+
+	return 1;
+}
+
+/**
+ * @brief 处理离开房间事件
+ * @param me object 玩家对象
+ * @param dir string 离开方向
+ * @return int 是否允许离开
+ * @details 如果玩家已报名，离开时给予提示
+ */
+int valid_leave(object me, string dir)
+{
+	if(allusers[me->query("id")])
+	{
+		tell_object(me,"你离开了华山之巅，如果下一轮比赛不在场的话你将失去一次晋级机会。\n");
+	}
+	return ::valid_leave(me, dir);
+}
+
+/**
+ * @brief 领取武尊组五绝奖励
+ * @return int 操作结果
+ * @details 调用FAMILY_D的奖励发放函数
+ */
+int lunjiangift()
+{
+	object me;
+	string str;
+	
+	me = this_player();
+	str = FAMILY_D->bouns_lunjian_leader(me);
+	tell_object(me,str);
+	return 1;
+}
+
+/**
+ * @brief 武魁之战报名
+ * @return int 报名结果
+ * @details 检查武尊身份、报名时间等条件，允许符合条件的玩家报名参加武魁之战
+ */
+int jjsign()
+{
+	int now = time();
+	object me = this_player();
+
+	if(localtime(now)[6]!=lunjian_sign_time["day"]||localtime(now)[2]!=lunjian_sign_time["hour"]||localtime(now)[1]>lunjian_sign_time["pre"])
+	
+		return notify_fail(ZJOBLONG"报名时间："+lunjian_sign_time["hour"]+":00-"+lunjian_sign_time["hour"]+":10。\n");
+
+	if (time() < 1719806400)
+	{
+		tell_object(me,"武魁之战活动本周暂不开启。\n");
+		return 1;
+	
+	}
+	
+	// 检查是否为武尊（散花境界）
+	if (!me->query("sanhua_done"))
+		return notify_fail("你尚未达到散花境界，不能参加武魁之战。只有武尊才能参与最高级别的论剑竞技。\n");
+
+	if (allusers[me->query("id")])
+		return notify_fail("你已经报过名了，目前报名人数："+sizeof(allusers)+"。\n");
+
+	allusers[me->query("id")]=1;
+	tell_object(me,"报名成功，请在此稍后，"+(lunjian_sign_time["hour"]+"点"+(lunjian_sign_time["pre"] + 1)) +"分自动进入竞技场中。\n");
+	set_heart_beat(1);
+	return 1;
+}
+
+int sort_total(string user1,string user2)
+{
+	return (int)allusers[user2]-(int)allusers[user1];
+}
+
+/**
+ * @brief 自动检查比赛状态和结果
+ * @return void
+ * @details 管理比赛进程，分配对手，判定胜负，决出最终五绝
+ */
+private void auto_check()
+{
+	object tmp1,tmp2,*inv,*rooms,ob;
+	string name,msg;
+	string *us,room;
+	int i;
+
+	rooms = children("/d/lunjian/wuzun_jingji");
+	if(!sizeof(rooms))
+	{
+		total = sort_array(keys(allusers),(: sort_total :));
+		us = filter_array(total, (: find_player($1)&&present(find_player($1),$(this_object())) :));
+		if(sizeof(us)<1 || turn >= LUNJIAN_TURN)
+		{
+			if(allusers[total[0]]<2)
+			{
+				msg = "听说武魁之战死的死、逃的逃，未能决出【武魁武林至尊】！";
+				message_competition(msg);
+			}
+			else
+			{
+				if(ob = find_player(total[0]))
+					name = ob->query("name");
+				else
+					name = TOP_D->get_name(total[0]);
+				msg = "武魁之战圆满结束，" + name + "获得【武魁中神通】的称号！";
+				FAMILY_D->set_wuzun_lunjian_leader("中神通",total[0]);
+				message_competition(msg);
+
+				if(sizeof(total)>1)
+				{
+					if(ob = find_player(total[1]))
+						name = ob->query("name");
+					else
+						name = TOP_D->get_name(total[1]);
+					msg = name + "获得【武魁东邪】的称号！";
+					FAMILY_D->set_wuzun_lunjian_leader("东邪",total[1]);
+					message_competition(msg);
+				}
+
+				if(sizeof(total)>2)
+				{
+					if(ob = find_player(total[2]))
+						name = ob->query("name");
+					else
+						name = TOP_D->get_name(total[2]);
+					msg = name + "获得【武魁西毒】的称号！";
+					FAMILY_D->set_wuzun_lunjian_leader("西毒",total[2]);
+					message_competition(msg);
+				}
+
+				if(sizeof(total)>3)
+				{
+					if(ob = find_player(total[3]))
+						name = ob->query("name");
+					else
+						name = TOP_D->get_name(total[3]);
+					msg = name + "获得【武魁南帝】的称号！";
+					FAMILY_D->set_wuzun_lunjian_leader("南帝",total[3]);
+					message_competition(msg);
+				}
+
+				if(sizeof(total)>4)
+				{
+					if(ob = find_player(total[4]))
+						name = ob->query("name");
+					else
+						name = TOP_D->get_name(total[4]);
+					msg = name + "获得【武魁北丐】的称号！";
+					FAMILY_D->set_wuzun_lunjian_leader("北丐",total[4]);
+					message_competition(msg);
+					// 显示五绝动画
+					show_wujue_animation(total[0..4]);
+				}
+
+				set_heart_beat(0);
+				delete("pre_start");
+				delete("start");
+			}
+			allusers = ([]);
+			turn = 0;
+			return;
+		}
+		while(sizeof(us)>1)
+		{
+			tmp1 = find_player(us[0]);
+			us -= ({ tmp1->query("id") });
+			tmp2 = find_player(us[0]);
+			us -= ({ tmp2->query("id") });
+			init_player(tmp1);
+			init_player(tmp2);
+			room = new("/d/lunjian/wuzun_jingji");
+			tmp1->move(room);
+			tmp2->move(room);
+			tmp1->kill_ob(tmp2);
+			tmp2->kill_ob(tmp1);
+		}
+		if(sizeof(us))
+		{
+			ob = find_player(us[0]);
+			ob->add("wuzun_lunjian/pot",1);
+			allusers[us[0]] += 1;
+			tell_object(ob,"你在本轮竞技中幸运轮空，自动晋级，请等待下一轮匹配。\n");
+			log_ufile(ob,"wuzun_lunjian","轮空晋级，积分增加1。\n");
+		}
+		turn++;
+		return;
+	}
+	for (i = 0; i < sizeof(rooms); i++)
+	{
+		inv = filter_array(all_inventory(rooms[i]),(: playerp($1) :));
+
+		// 如果房间没有生存时间，则设置一个生存时间
+		if(!rooms[i]->query("exist_time"))
+		{
+			rooms[i]->set("exist_time",time());
+		}
+
+		if(!sizeof(inv))
+		{
+			destruct(rooms[i]);
+		}
+		else if(sizeof(inv)==1)
+		{
+			allusers[inv[0]->query("id")]++;
+			inv[0]->add("wuzun_lunjian/pot",1);
+			log_ufile(inv[0],"wuzun_lunjian","胜利晋级，积分增加1。\n");
+			check_win(inv[0]);
+		}  
+		// 如果时间到了，判定生存率,1分钟后
+		else if (time() - rooms[i]->query("exist_time") >= 60)
+		{
+			// 时间到了判定生存率
+			// 计算玩家的生存率
+			int rate1, rate2;
+			rate1 = calculate_survival_rate(inv[0]);
+			rate2 = calculate_survival_rate(inv[1]);
+
+			if (rate1 > rate2)
+			{
+				//失败者直接死亡
+				check_out(inv[1]);
+			}
+			else if (rate1 < rate2)
+			{
+				//失败者直接死亡
+				check_out(inv[0]);
+			}
+			else
+			{
+				//生存率相同，随机判定
+				if (random(2))
+				{
+					//失败者直接死亡
+					check_out(inv[1]);
+				}
+				else
+				{
+					//失败者直接死亡
+					check_out(inv[0]);
+				}
+			}
+		}
+		else 
+		{
+			// 时间未到，继续等待,提示双方距离结束时间还有多少秒
+			tell_object(inv[0], "距离结束时间还有" + (rooms[i]->query("exist_time") + 60 - time()) + "秒。\n");
+			tell_object(inv[1], "距离结束时间还有" + (rooms[i]->query("exist_time") + 60 - time()) + "秒。\n");
+		}
+	}
+}
+
+/**
+ * @brief 初始化参赛玩家状态
+ * @param me object 玩家对象
+ * @return void
+ * @details 设置比赛相关的特殊状态和覆盖函数
+ */
+private void init_player(object me)
+{
+	tell_object(me, HIY "你来到了武魁之战的比武场..."NOR"\n");
+	me->set_override("unconcious", (: call_other, __FILE__, "check_out" :));
+	me->set_override("die", (: call_other, __FILE__, "check_out" :));
+	me->set_override("quit", (: call_other, __FILE__, "check_quit" :));
+	me->set_temp("in_pkd", 1);
+
+	me->set("backup/condition", me->query_condition());
+	me->clear_condition();
+}
+
+/**
+ * @brief 发送竞技消息
+ * @param msg string 消息内容
+ * @return void
+ * @details 通过谣言频道广播武魁之战相关消息
+ */
+private void message_competition(string msg)
+{
+	CHANNEL_D->do_channel(this_object(), "rumor", msg);
+}
+
+/**
+ * @brief 恢复玩家状态
+ * @param me object 玩家对象
+ * @return void
+ * @details 清理比赛状态，恢复玩家正常属性和状态
+ */
+private void restore_status(object me)
+{
+	mapping my;
+	mapping cnd;
+	string *ks;
+	int i;
+
+	me->delete_temp("in_pkd");
+	me->delete_override("unconcious");
+	me->delete_override("die");
+	me->delete_override("quit");
+	me->remove_all_enemy(1);
+	me->remove_all_killer();
+	me->clear_condition();
+	me->receive_damage("qi", 0);
+	me->apply_killer(me->query_temp("backup/killer"));
+	me->apply_want(me->query_temp("backup/want"));
+
+	cnd = me->query("backup/condition");
+	me->delete("backup/condition");
+	me->delete_temp("block_msg/all");
+	if (! mapp(cnd)) return;
+	ks = keys(cnd);
+	for (i = 0; i < sizeof(ks); i++)
+		me->apply_condition(ks[i], cnd[ks[i]]);
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+}
+
+/**
+ * @brief 心跳函数，管理比赛进程
+ * @return void
+ * @details 控制比赛开始时间，处理报名和匹配逻辑
+ */
+void heart_beat()
+{
+ int now = time();
+	object tmp1,tmp2,room,*inv;
+	string msg;
+
+	room = this_object();
+
+	if(!query("pre_start")&&localtime(now)[1]==lunjian_sign_time["pre"])
+	{
+		set("pre_start",1);
+		tell_room(this_object(),"1分钟后将进入竞技场，请做好准备。。。\n");
+	}
+	else if(!query("start")&&localtime(now)[1]==(lunjian_sign_time["pre"]+1))
+	{
+		set("start",1);
+		inv = filter_array(all_inventory(this_object()), (: playerp($1)&&$(allusers)[$1->query("id")] :));
+		if(sizeof(inv)<LUNJIAN_USER_MIN)
+		{
+			msg = "听说本次武魁之战参与人数太少，活动未能成功进行！";
+			message_competition(msg);
+			delete("pre_start");
+			delete("start");
+			set_heart_beat(0);
+			return;
+		}
+		while(sizeof(inv)>1)
+		{
+			tmp1 = inv[random(sizeof(inv))];
+			inv -= ({ tmp1 });
+			tmp2 = inv[random(sizeof(inv))];
+			inv -= ({ tmp2 });
+			init_player(tmp1);
+			init_player(tmp2);
+			room = new("/d/lunjian/wuzun_jingji");
+			room->set("exist_time",time());
+			tmp1->move(room);
+			tmp2->move(room);
+			tmp1->kill_ob(tmp2);
+			tmp2->kill_ob(tmp1);
+		}
+		if(sizeof(inv))
+		{
+			allusers[inv[0]->query("id")] += 1;
+			tell_object(inv[0],"你在本轮竞技中幸运轮空，自动晋级，请等待下一轮匹配。\n");
+		}
+	}
+	else if(localtime(now)[1]>lunjian_sign_time["pre"])
+	{
+		auto_check();
+	}
+}
+
+int check_quit(object me)
+{
+ 
+	mapping my;
+ 
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+
+	if(me->is_busy())
+		me->interrupt_me(me,me->query_busy());
+
+	restore_status(me);
+
+	tell_object(me, "你逃出了竞技场。\n");
+
+	me->move(this_object());
+	message("vision", "只见" + me->name() + "慌里慌张的跑了出来。\n",environment(me), ({ me }));
+	return 1;
+}
+
+int check_out(object me)
+{
+ 
+	mapping my;
+ 
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+
+	tell_object(me, HIR "\n你觉得眼前一阵模糊...这下完了！"NOR"\n");
+
+	if(me->is_busy())
+		me->interrupt_me(me,me->query_busy());
+
+	restore_status(me);
+	me->move(this_object());
+	message("vision", "一个黑影倏的窜了出来，随即就是啪的一声，就见" + me->name() +"摔倒了地上，一副半死不活的样子。\n", environment(me), ({ me }));
+	tell_object(me, "半昏半迷中，你觉得被人拎了起来，又重重的摔倒了地上。\n");
+	if (! living(me))
+		me->revive();
+	return 1;
+}
+
+int check_win(object me)
+{
+ 
+	mapping my;
+ 
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+
+	tell_object(me, HIR "\n你在本轮武魁之战中获胜晋级！"NOR"\n");
+
+	if(me->is_busy())
+		me->interrupt_me(me,me->query_busy());
+
+	restore_status(me);
+	me->move(this_object());
+
+	return 1;
+}
+
+/**
+ * @brief 计算玩家的生存率
+ * @param player object 玩家对象
+ * @return int 生存率百分比
+ * @details 根据气血和精神状态计算玩家的生存能力
+ */
+int calculate_survival_rate(object player)
+{
+    int qixue = player->query("eff_qi") * 100;
+    int max_qi = player->query("max_qi");
+    int jingshen = player->query("eff_jing") * 100 / player->query("max_jing");
+
+    if (max_qi == 0) max_qi = 1; // 优化点：避免除零错误
+
+    qixue /= max_qi;
+    return qixue < jingshen ? qixue : jingshen;
+}
+
+/**
+ * @brief 显示武尊组五绝动画
+ * @param list_id string* 五绝持有者ID数组
+ * @return void
+ * @details 为所有武尊玩家展示五绝动画效果，逻辑与其他组保持一致
+ */
+public void show_wujue_animation(string *list_id)
+{
+    string json_data = WUJUE_UI->generate_wuzun_wujue_animation_data(list_id);
+
+	// 所有武尊玩家都显示五绝动画
+	foreach(object player in users())
+	{
+        // 只有武尊才能看到武尊组的五绝动画
+        if(!player->query("sanhua_done"))
+            continue;
+
+		tell_object(player, json_data + "\n");
+	}
+}

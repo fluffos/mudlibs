@@ -1,0 +1,299 @@
+// storyd.c
+
+
+
+inherit F_DBASE;
+inherit F_SAVE;
+
+// 初始化BOSS系统
+#define REFRESH_INTERVAL	10 * 3600
+
+string *story_name;
+mapping history;
+int     last_update = 0;
+
+nosave mapping interval;
+nosave object  running_story;
+nosave int flag;
+nosave int yitian_flag;
+nosave int tulong_flag;
+nosave int step;
+nosave int is_tou_world_boss = 0;
+int    filter_listener(object ob);
+
+void init_story();
+void go_on_process(object ob);
+varargs void start_story(string sname);
+void heart_beat();
+
+string query_save_file()
+{
+	return DATA_DIR "bossd";
+}
+
+void create()
+{
+	seteuid(ROOT_UID);
+	set("channel_id", "BOSS精灵");
+	CHANNEL_D->do_channel( this_object(), "sys", "BOSS系统已经启动。");
+
+	// 恢复BOSS发生状况
+	restore();
+
+	if (! arrayp(story_name))
+		init_story();
+
+	if (! mapp(history))
+		history = ([ ]);
+
+	interval = ([ ]);
+	set_heart_beat(20);
+	// heart_beat();
+}
+
+int query_next_update()
+{
+	return last_update + REFRESH_INTERVAL - time();
+}
+
+void init_story()
+{
+	CHANNEL_D->do_channel(this_object(), "sys", "BOSS系统更新所有BOSS。");
+	story_name = get_dir("/adm/daemons/boss/" + "*.lpc");
+	story_name = map_array(story_name, (: $1[0..<5] :));
+
+	last_update = time();
+}
+
+int delete_tou_world_boss()
+{
+	is_tou_world_boss = 0;
+	return 1;
+}
+
+int tou_world_boss()
+{
+	object ob1,ob2,dugu,zhang_sanfeng;
+	int now_time = time();
+	int r;
+
+	int next_time;
+
+	// 如果现在不是早上10点/11点/12点	下午14点/15点/16点/17点	晚上19点/20 点/21点/22点的那么就return 0;
+	r = localtime(now_time)[2];
+
+	if (r != 10 && r != 11 && r != 12 && r != 14 && r != 15 && r != 16 && r != 17 && r != 19 && r != 20 && r != 21 && r != 22)
+		return 0;
+
+	if (is_tou_world_boss)
+		return 0;
+
+	// return 0;
+
+
+
+    ob1 = new("/adm/special_ob/fuben/world_boss/tian");
+    ob2 = new("/adm/special_ob/fuben/world_boss/di");
+
+    ob1->move("/d/taishan/taixuan_shan");
+    ob2->move("/d/taishan/taixuan_shan");
+
+    ob1->kill_ob(ob2);
+
+	dugu = new("/adm/special_ob/fuben/world_boss/dugu");
+	dugu->move("/d/taishan/lianhua");
+
+	dugu->force_me("chat 万剑归宗化虚无，孤峰独立问苍穹。一生求道心不改，剑随我意破长空。");
+
+	// 创建600级BOSS张三丰
+	zhang_sanfeng = new("/adm/special_ob/fuben/world_boss/zhang_sanfeng");
+	zhang_sanfeng->move("/d/wudang/taijitai");
+
+	zhang_sanfeng->force_me("chat 太极生两仪，两仪生四象，四象生八卦，八卦定乾坤。");
+
+	foreach (object player in users())
+	{
+		int player_level;
+
+		player_level = player->query("level");
+
+		// 300级以下：只播报太玄论武阵营战
+		if (player_level < 300 && player_level > 200)
+		{
+			tell_object(player, HIR "【太玄论武阵营战】" NOR + "太玄论武阵营战已经在泰山的太玄山开始，攻击天和地任意一方进行默认加入另一方的阵营。\n");
+			tell_object(player, HIY "【等级要求】" NOR + "此战凶险异常，建议300级以上玩家参与，低等级玩家将承受巨大风险！\n");
+		}
+		// 300-600级：只播报剑圣求道
+		else if (player_level < 600)
+		{
+			tell_object(player, HIR "【剑圣求道】" NOR + "剑圣-独孤求败在泰山的莲花峰出现，问剑天下。\n");
+			tell_object(player, HIY "【等级要求】" NOR + "剑圣求道专为300-600级武林高手而设，需达到相应等级方可挑战！\n");
+		}
+		// 600级以上：只播报武圣降临
+		else if (player_level >= 600)
+		{
+			tell_object(player, HIR "【武圣降临】" NOR + "武当祖师张三丰在武当山太极台现身，专为600级以上的武林高手而来！\n");
+			tell_object(player, HIY "【等级要求】" NOR + "此战凶险异常，仅限600级以上的顶尖高手挑战！\n");
+		}
+	}
+
+	is_tou_world_boss = 1;
+
+	// next_time = 3600 - (now_time - 3600 * r) % 3600;
+	next_time = 3600 - (now_time - 3600 * r) % 3600;
+
+	// 60分钟以后删除
+	call_out("delete_tou_world_boss", next_time);
+
+	return 1;
+}
+
+
+
+void heart_beat()
+{
+	mixed* r;
+	object dao,jian,jing,road3;
+	int time = time();
+	r = localtime(time);
+
+	tou_world_boss();
+
+	if(r[1]==0&&r[2]>9&&r[2]<24)
+	{
+		if(!objectp(running_story)&&!flag)
+		{
+			flag = 1;
+			remove_call_out("start_story");
+			remove_call_out("process_story");
+			call_out("start_story", 0);
+		}
+	}
+	else flag = 0;
+
+	if(r[1]==30&&r[2]==21)
+	{
+		jian = find_object("/d/tulong/obj/yitianjian");
+		jing = find_object("/d/tulong/obj/zhenjing");
+		if ( !yitian_flag && (!jian||!environment(jian)) && (!jing||!environment(jing)) ) 
+		{
+			road3 = find_object("/d/heimuya/road3");
+			if(!road3) road3 = load_object("/d/heimuya/road3");
+			road3->start_yitian();
+			yitian_flag = 1;
+		}
+	}
+	else yitian_flag = 0;
+
+	if(r[1]==30&&r[2]==20)
+	{
+		dao = find_object("/d/tulong/obj/tulongdao");
+		jing = find_object("/d/tulong/obj/zhenjing");
+		if ( !tulong_flag && (!dao||!environment(dao)) && (!jing||!environment(jing)) ) 
+		{
+			road3 = find_object("/d/beijing/haigang");
+			if(!road3) road3 = load_object("/d/beijing/haigang");
+			road3->start_tulong();
+			tulong_flag = 1;
+		}
+	}
+	else tulong_flag = 0;
+
+}
+
+void go_on_process(object ob)
+{
+	remove_call_out("start_story");
+	remove_call_out("process_story");
+	call_out("process_story", 1, ob);
+}
+
+int clean_up()
+{
+	return 1;
+}
+
+object query_running_story()
+{
+	return running_story;
+}
+
+varargs void start_story(string sname)
+{
+	string *all_story;
+	string name;
+	object ob;
+
+	CHANNEL_D->do_channel(this_object(), "sys", "BOSS系统开始选择BOSS。");
+
+	if (sname)
+		all_story = explode(sname, ",");
+	else
+		all_story = story_name;
+
+	while (sizeof(all_story))
+	{
+		name = all_story[random(sizeof(all_story))];
+		if (undefinedp(history[name]))
+			history += ([ name : 0 ]);
+		else
+			history[name] = (int)time();
+
+		CHANNEL_D->do_channel(this_object(), "sys","BOSS系统选择了BOSS(" + name + ")。");
+ 
+		if (ob = find_object("/adm/daemons/boss/" + name))
+			destruct(ob);
+	
+		catch(ob = load_object("/adm/daemons/boss/" + name));
+		running_story = ob;
+	
+		if (objectp(ob))
+		{
+			step = 0;
+			go_on_process(ob);
+			break;
+		}
+	}
+}
+
+string *query_all_story()
+{
+	return story_name;
+}
+
+void process_story(object ob)
+{
+	mixed line;
+	object *listeners;
+	string prompt;
+
+	go_on_process(ob);
+
+	if (! objectp(ob))
+	{
+		return;
+	}
+
+	line = ob->query_story_message(step);
+	step++;
+
+	prompt = ob->prompt();
+	if (! prompt) prompt = HIG "【异域挑战】" NOR;
+	if (functionp(line)) catch(line = evaluate(line));
+	if (stringp(line))
+	{
+		listeners = filter_array(users(), (: filter_listener :));
+		message("story",  prompt + WHT + line + ""NOR"\n", listeners);
+	}
+
+	if (intp(line) && ! line)
+	{
+		destruct(ob);
+	}
+}
+
+int filter_listener(object ob)
+{
+	if (ob->query("env/no_story")) return 0;
+	return 1;
+}

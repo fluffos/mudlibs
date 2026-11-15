@@ -1,0 +1,100 @@
+// yi.c 玄命剑意
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+string query_name() { return "玄命剑意"; }
+
+/**
+ * @brief 玄命剑意绝技
+ * @param object me 施展者
+ * @param object target 目标
+ * @return int 1表示成功，0表示失败
+ * @details 融合独孤九剑的灵动剑意与玄铁剑法的刚猛内劲，形成刚柔并济的强力攻击
+ */
+int perform(object me, object target)
+{
+    string msg;
+    int ap, dp, damage;
+    object weapon;
+
+    if (! target) target = offensive_target(me);
+
+    if (! target || ! me->is_fighting(target))
+        return notify_fail("「玄命剑意」只能对战斗中的对手使用。\n");
+
+    if (me->query_skill("xuanming-sword", 1) < 100)
+        return notify_fail("你的玄命剑典不够娴熟，无法施展「玄命剑意」。\n");
+
+    if (me->query_skill("force", 1) < 120)
+        return notify_fail("你的内功火候不够，无法施展「玄命剑意」。\n");
+
+    if (!objectp(weapon = me->query_temp("weapon")) || weapon->query("skill_type") != "sword")
+        return notify_fail("你必须持剑才能使用「玄命剑意」！\n");
+
+    if (me->query("neili") < 400)
+        return notify_fail("你现在真气不足，无法使用「玄命剑意」。\n");
+
+    if (me->query_skill_mapped("sword") != "xuanming-sword")
+        return notify_fail("你没有激发玄命剑典，无法施展「玄命剑意」。\n");
+
+    msg = HIY "$N" HIY "深吸一口气，剑意如虹，手中" + weapon->name() + HIY "微微一颤，既有独孤九剑的飘逸灵动，\n"
+          "又蕴含玄铁重剑的刚猛霸道，剑锋直指$n" HIY "，玄命剑意骤然而发！\n" NOR;
+
+    // 计算攻击力：融合剑法和内功
+    ap = attack_power(me, "sword") + attack_power(me, "force");
+    dp = defense_power(target, "parry") + defense_power(target, "force");
+
+    me->start_busy(1);
+    me->add("neili", -250);
+
+    // PVE加成
+    if (!userp(target))
+    {
+        ap += ap / 4; // PVE时攻击力提升25%
+    }
+
+    // 命中判定
+    if (COMBAT_D->hit_determination(me, target, ap, dp))
+    {
+        int anran_level = COMBAT_D->get_skill_aoyi_level(me, "黯然隐雾");
+        int cangsung_level = COMBAT_D->get_skill_aoyi_level(me, "苍松之劲");
+        damage = ap * 2 + random(ap);
+
+        // 双重意境效果
+
+        if (cangsung_level > 0)
+        {
+            int cangsung_damage = cangsung_level * me->query_skill("sword", 1) / 3;
+            damage += cangsung_damage;
+            msg += HIC "刹那间，$N" HIC "的「苍松之劲」与玄命剑意完美融合，剑气中蕴含千松万壑之力！\n" NOR;
+        }
+
+        if (anran_level > 0)
+        {
+            int anran_damage = anran_level * damage / 10;
+            damage += anran_damage;
+            // 致命一击判定
+            if (random(100) < anran_level * 3)
+            {
+                damage += damage / 2;
+                msg += HIR "$N" HIR "触发「黯然隐雾」致命一击，剑意如雾如幻，威力大增！\n" NOR;
+            }
+            else
+            {
+                msg += HIW "$N" HIW "的「黯然隐雾」意境加持，剑意更添几分阴郁杀机！\n" NOR;
+            }
+        }
+
+        msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 380,
+                   HIR "$n" HIR "只觉眼前剑光闪烁，刚柔并济的剑意已穿透周身要穴！\n" NOR);
+    }
+    else
+    {
+        msg += CYN "$n" CYN "凝神应对，看破了$N" CYN "剑意中的虚实变化，险险避过！\n" NOR;
+    }
+
+    message_combatd(msg, me, target);
+    return 1;
+}

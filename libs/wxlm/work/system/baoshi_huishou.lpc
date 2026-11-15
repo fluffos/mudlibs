@@ -1,0 +1,178 @@
+/**
+ * 编写代码用于回收一个玩家身上的所有宝石，转换成绑定元宝
+ * 1级白色宝石的价值为20绑定元宝，回收1级宝石获得30绑定元宝，即额外给予50%。
+ * 1级绿色宝石的价值为30绑定元宝，回收1级宝石获得45绑定元宝，即额外给予50%
+ * 1级蓝色宝石的价值为40绑定元宝，回收1级宝石获得60绑定元宝，即额外给予50%
+ * 1级黄色宝石的价值为50绑定元宝，回收1级宝石获得75绑定元宝，即额外给予50%
+ * 1级红色宝石的价值为60绑定元宝，回收1级宝石获得90绑定元宝，即额外给予50%
+*/
+
+//设定宝石价格表
+mapping baoshi_price = ([
+    "white": 30,
+    "green": 45,
+    "blue": 60,
+    "yellow": 75,
+    "red": 90
+]);
+
+//原价值宝石价格表
+mapping baoshi_original_price = ([
+    "white": 20,
+    "green": 30,
+    "blue": 40,
+    "yellow": 50,
+    "red": 60
+]);
+
+//各等级宝石价值几颗一级宝石
+mapping gem_levels = ([
+    1: 1, 2: 3, 3: 9, 4: 27, 5: 81, 6: 162, 7: 324, 8: 648, 9: 1296, 10: 2592
+]);
+
+//返回所有宝石
+object *get_all_baoshi(object me)
+{
+    //是否继承了"/clone/baoshi/color_baoshi"
+    return filter_array(all_inventory(me), (: inherits("/clone/baoshi/color_baoshi", $1) :));
+}
+
+
+int huishou_baoshi_value(object me)
+{
+    // 先获取玩家身上的所有宝石
+    object *baoshi_list = get_all_baoshi(me);
+
+    int total_value = 0;
+
+    if (!sizeof(baoshi_list))
+    {
+        return 0;
+    }
+
+    //有gem_effects和attr_name属性的才是宝石
+    foreach(object baoshi in baoshi_list)
+    {
+        int gem_level = 0, gem_value = 0;
+        string gem_color;
+
+        //获取宝石等级
+        gem_level = baoshi->query("level");
+
+        //获取宝石颜色
+        gem_color = baoshi->query("color");
+
+        //获取宝石价值
+        gem_value = baoshi_price[gem_color] * gem_levels[gem_level];
+
+        gem_value = gem_value * baoshi->query_amount();
+
+        //计算总价值
+        total_value += gem_value;
+    }
+
+    return total_value;
+}
+
+//显示宝石的回收价格和回收数量
+void show_baoshi_huishou_info(object me)
+{
+
+    object *baoshi_list = get_all_baoshi(me);
+
+    string msg = "";
+
+    int total_value = huishou_baoshi_value(me);
+
+    foreach(object baoshi in baoshi_list)
+    {
+        msg += sprintf("%s：%d颗，原价%d绑元，回收价%d绑元\n",
+         baoshi->query("name"), 
+         baoshi->query_amount(), 
+         baoshi_original_price[baoshi->query("color")] * gem_levels[baoshi->query("level")] * baoshi->query_amount(), 
+         baoshi_price[baoshi->query("color")] * gem_levels[baoshi->query("level")] * baoshi->query_amount());
+    }
+
+
+    msg += "-----------------------------------\n";
+    msg += sprintf("你当前拥有的宝石回收总价格为：%d绑定元宝。\n", total_value);
+    msg += "-----------------------------------\n";
+
+    tell_object(me, popup_comb(msg,"确认回收:huishou_baoshi all"));
+}
+
+
+/**
+ * @brief 回收玩家身上所有宝石并给予绑定元宝
+ * @param me 玩家对象
+ * @return int 1 表示成功，0 表示失败或没有宝石
+ */
+int huishou_all_baoshi(object me)
+{
+    object *baoshi_list;
+    int total_value;
+    int total_count = 0; // 用于记录回收的宝石总数（非堆叠）
+    string log_msg = ""; // 用于构建日志信息
+
+    // 获取玩家身上所有宝石
+    baoshi_list = get_all_baoshi(me);
+
+    // 检查是否有宝石
+    if (!sizeof(baoshi_list))
+    {
+        tell_object(me, "你身上没有任何宝石可以回收。\n");
+        return 0; // 没有宝石可回收
+    }
+
+    // 计算总回收价值
+    total_value = huishou_baoshi_value(me);
+
+    // 再次确认价值大于0
+    if (total_value <= 0)
+    {
+        // 理论上如果 baoshi_list 不为空，且价格配置正确，这里不应该为0或负数
+        // 但作为防御性编程，添加此检查
+        tell_object(me, "计算出的宝石回收价值异常，无法回收。\n");
+        // 考虑记录错误日志
+        log_file("static/log/baoshi_huishou_error.log", sprintf("%s %s(%s) 尝试回收宝石时价值计算异常 (%d)。\n",
+            log_time(), me->query("name"), me->query("id"), total_value));
+        return 0; // 回收价值异常
+    }
+
+    // 准备日志信息并移除所有宝石
+    log_msg = sprintf("%s %s(%s) 回收宝石: ", log_time(), me->query("name"), me->query("id"));
+    foreach(object baoshi in baoshi_list)
+    {
+        // 确保对象仍然存在且是宝石
+        if (objectp(baoshi) && inherits("/clone/baoshi/color_baoshi", baoshi))
+        {
+            int amount = baoshi->query_amount();
+            log_msg += sprintf("%s(%d) ", baoshi->query("name"), amount);
+            total_count += amount;
+            destruct(baoshi);
+        }
+    }
+
+    // 如果因为某种原因没有成功销毁任何宝石（例如中途对象消失），则中止
+    if (total_count == 0) {
+        tell_object(me, "回收过程中出现问题，未能成功回收任何宝石。\n");
+        return 0;
+    }
+
+    // 给予绑定元宝
+    me->add("bind_yuanbao", total_value);
+
+    // 记录详细日志 (使用 log_file，更通用)
+    log_msg += sprintf("共获得 %d 绑定元宝。\n", total_value);
+    log_file("static/log/baoshi_huishou.log", log_msg);
+
+    // 通知玩家
+    tell_object(me, sprintf(HIY "你成功回收了 %d 颗宝石，获得了 %d 绑定元宝。\n" NOR, total_count, total_value));
+
+    return 1; // 回收成功
+}
+
+
+
+
+

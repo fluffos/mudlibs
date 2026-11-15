@@ -1,0 +1,587 @@
+/**
+ * @file pk_master.c
+ * @author Lu dexiang
+ * @brief PK匹配系统管理类
+ * @version 1.0
+ * @date 2024-03-19
+ */
+
+
+
+inherit F_DBASE;
+inherit F_SAVE;
+
+// 系统开启时间
+#define START_HOUR 10
+// 系统结束时间
+#define END_HOUR 23
+// 系统结束分钟
+#define END_MINUTE 30
+
+// 基础积分变化
+#define BASE_SCORE_CHANGE 32
+// 连胜/连败加成系数 (每连胜一次加1分)
+#define STREAK_FACTOR 1
+// 最大连胜加分
+#define MAX_STREAK_BONUS 10
+// 积分差距系数 (改为整数，10表示0.1)
+#define RATING_FACTOR 10
+
+private mapping player_data = ([]);  // 玩家数据
+nosave private mapping waiting_queue = ([]); // 等待队列
+nosave private int *match_times = ({});     // 匹配时间记录
+nosave private mapping queue_join_time = ([]);  // 记录玩家加入队列的时间
+
+// 返回存档文件路径
+public string query_save_file()
+{
+    return DATA_DIR "match_pk";
+}
+
+// MUD关闭时保存数据
+public void mud_shutdown()
+{
+    save();
+}
+
+void create()
+{
+    seteuid(getuid());
+    set("channel_id", "PK系统");
+    
+    // 读取存档数据
+    restore();
+    
+    // 初始化数据
+    if (!mapp(player_data))
+        player_data = ([]);
+    if (!mapp(waiting_queue))
+        waiting_queue = ([]);
+        
+    // 设置心跳
+    set_heart_beat(1);
+}
+
+// 检查系统是否开启
+private int is_system_active()
+{
+    mixed *local = localtime(time());
+    int hour = local[2];
+    int minute = local[1];
+    
+    if (hour < START_HOUR || (hour == END_HOUR && minute >= END_MINUTE) || hour > END_HOUR)
+        return 0;
+        
+    return 1;
+}
+
+// 计算积分变化
+private int calculate_score_change(object winner, object loser)
+{
+    int base_change = BASE_SCORE_CHANGE;
+    int streak_bonus = 0;
+    int rating_diff;
+    int final_score;
+    int winner_score, loser_score;
+    float score_multiplier;
+    string template_id;
+    
+    // 获取胜者积分
+    winner_score = player_data[winner->query("id")]["score"];
+    
+    // 获取败者积分
+    if(loser->query_temp("is_robot")) {
+        // 如果是机器人，获取被复制玩家的ID和积分
+        template_id = loser->query_temp("template_id");
+        
+        // 如果数据表中有这个玩家的数据就用这个积分，否则默认1000分
+        if(mapp(player_data[template_id]))
+            loser_score = player_data[template_id]["score"];
+        else
+            loser_score = 1000;
+    } else {
+        loser_score = player_data[loser->query("id")]["score"];
+    }
+    
+    // 计算连胜加成 (每连胜一次加1分，最高10分)
+    if (player_data[winner->query("id")]["win_streak"] > 0) {
+        streak_bonus = player_data[winner->query("id")]["win_streak"] * STREAK_FACTOR;
+        if(streak_bonus > MAX_STREAK_BONUS)
+            streak_bonus = MAX_STREAK_BONUS;
+    }
+        
+    // 计算积分差距
+    rating_diff = winner_score - loser_score;
+    
+    // 根据积分差距调整系数
+    if (rating_diff > 0) {
+        // 高分打低分，降低获得的积分
+        score_multiplier = 100.0 / (100.0 + rating_diff / 100.0);
+    } else {
+        // 低分打高分，提高获得的积分
+        score_multiplier = 1.0 + abs(rating_diff) / 500.0;
+    }
+    
+    // 计算最终积分变化 (全部使用整数运算)
+    final_score = to_int(base_change * score_multiplier) + streak_bonus;
+    
+    // 确保最小和最大积分变化
+    if (final_score < 1)
+        final_score = 1;
+    if (final_score > base_change * 5)
+        final_score = base_change * 5;
+        
+    return final_score;
+}
+
+// 更新玩家数据
+private void update_player_data(object winner, object loser, int score_change)
+{
+    string winner_id = winner->query("id");
+    string loser_id = loser->query("id");
+    int actual_score_change;
+    
+    // 更新胜者数据
+    player_data[winner_id]["score"] += score_change;
+    player_data[winner_id]["win_streak"]++;
+    player_data[winner_id]["lose_streak"] = 0;
+    player_data[winner_id]["total_wins"]++;
+    //记录时间
+    player_data[winner_id]["last_match_time"] = time();
+    
+    // 更新最大连胜记录
+    if (player_data[winner_id]["win_streak"] > player_data[winner_id]["max_win_streak"]) {
+        player_data[winner_id]["max_win_streak"] = player_data[winner_id]["win_streak"];
+        // 全服通告破纪录
+        if (player_data[winner_id]["win_streak"] >= 5) {
+            message("channel:rumor", HIR "【PK系统】" + winner->query("name") + 
+                "创造了个人新的连胜纪录：" + player_data[winner_id]["max_win_streak"] + 
+                "连胜！" NOR "\n", users());
+        }
+    }
+    
+    // 如果败者是真实玩家才更新数据
+    if(!loser->query_temp("is_robot")) {
+        // 更新败者数据，确保积分不低于100
+        if (player_data[loser_id]["score"] - score_change < 100) {
+            actual_score_change = player_data[loser_id]["score"] - 100;
+            if (actual_score_change < 0) actual_score_change = 0;
+            player_data[loser_id]["score"] = 100;
+        } else {
+            actual_score_change = score_change;
+            player_data[loser_id]["score"] -= score_change;
+        }
+        player_data[loser_id]["win_streak"] = 0;
+        player_data[loser_id]["lose_streak"]++;
+        player_data[loser_id]["total_losses"]++;
+        //记录时间
+        player_data[loser_id]["last_match_time"] = time();
+    } else {
+        actual_score_change = score_change;
+    }
+    
+    // 发送消息时使用实际扣除的积分
+    tell_object(winner, sprintf(HIY "你在PK中获胜，获得%d点积分！当前积分：%d\n" NOR,
+        score_change, player_data[winner_id]["score"]));
+    if(!loser->query_temp("is_robot")) {
+        tell_object(loser, sprintf(HIR "你在PK中失败，失去%d点积分！当前积分：%d\n" NOR,
+            actual_score_change, player_data[loser_id]["score"]));
+    }
+    
+    // 保存数据
+    save();
+}
+
+// 初始化玩家数据
+private void init_player_data(object me)
+{
+    string id = me->query("id");
+    if (!mapp(player_data[id])) {
+        player_data[id] = ([
+            "score": 1000,           // 初始积分
+            "win_streak": 0,         // 连胜次数
+            "lose_streak": 0,        // 连败次数
+            "total_wins": 0,         // 总胜场
+            "total_losses": 0,       // 总负场
+            "max_win_streak": 0,     // 最大连胜记录
+            "last_match_time": 0     // 上次匹配时间
+        ]);
+    }
+}
+
+// 寻找合适的对手
+private object find_opponent(object me)
+{
+    string *candidates = keys(waiting_queue) - ({me->query("id")});
+    string best_match;
+    int min_score_diff = 99999;
+    int my_score = player_data[me->query("id")]["score"];
+    
+    foreach (string id in candidates) {
+        object player = waiting_queue[id];  // 直接使用存储的玩家对象
+        int score_diff;
+        
+        if (!objectp(player) || !living(player)) {  // 检查对象是否有效且活着
+            map_delete(waiting_queue, id);
+            map_delete(queue_join_time, id);
+            continue;
+        }
+        
+        score_diff = abs(my_score - player_data[id]["score"]);
+        
+        // 考虑连胜连败因素
+        if (player_data[me->query("id")]["win_streak"] > 2)
+            score_diff -= 100 * player_data[me->query("id")]["win_streak"];
+        if (player_data[me->query("id")]["lose_streak"] > 2)
+            score_diff += 100 * player_data[me->query("id")]["lose_streak"];
+            
+        if (score_diff < min_score_diff) {
+            min_score_diff = score_diff;
+            best_match = id;
+        }
+    }
+    
+    return waiting_queue[best_match];  // 直接返回存储的玩家对象
+}
+
+// 开始一场比赛
+private void start_match(object p1, object p2)
+{
+    object arena;
+    
+    // 创建竞技场
+    arena = new("/system/match_pk/map");
+    if (!arena) {
+        tell_object(p1, "系统错误：无法创建竞技场。\n");
+        tell_object(p2, "系统错误：无法创建竞技场。\n");
+        return;
+    }
+    
+    // 记录玩家原始环境
+    p1->set_temp("old_env", environment(p1));
+    p2->set_temp("old_env", environment(p2));
+    
+    // 设置竞技场数据
+    arena->set("player1", p1);
+    arena->set("player2", p2);
+    
+    // 传送玩家到竞技场
+    p1->move(arena);
+    p2->move(arena);
+    
+    // 从等待队列中移除
+    map_delete(waiting_queue, p1->query("id"));
+    map_delete(waiting_queue, p2->query("id"));
+    map_delete(queue_join_time, p1->query("id"));
+    map_delete(queue_join_time, p2->query("id"));
+    
+    // 开始战斗
+    arena->start_fight();
+}
+
+// 处理比赛结果
+void handle_match_result(object winner, object loser)
+{
+    int score_change;
+    object old_env;
+    
+    if (!winner || !loser) return;
+    
+    score_change = calculate_score_change(winner, loser);
+    update_player_data(winner, loser, score_change);
+    
+    // 发送消息
+    tell_object(winner, sprintf(HIY "你在PK中获胜，获得%d点积分！当前积分：%d\n" NOR,
+        score_change, player_data[winner->query("id")]["score"]));
+    tell_object(loser, sprintf(HIR "你在PK中失败，失去%d点积分！当前积分：%d\n" NOR,
+        score_change, player_data[loser->query("id")]["score"]));
+        
+    // 恢复状态并传送回原地图
+    winner->remove_all_killer();
+    loser->remove_all_killer();
+    
+    if (objectp(old_env = winner->query_temp("old_env")))
+        winner->move(old_env);
+    if (objectp(old_env = loser->query_temp("old_env")))
+        loser->move(old_env);
+        
+    winner->delete_temp("old_env");
+    loser->delete_temp("old_env");
+}
+
+// 加入匹配队列
+int join_queue(object me)
+{
+    if (!is_system_active()) {
+        tell_object(me, "PK系统当前未开放，开放时间为每天" + START_HOUR + "点至" + 
+                       END_HOUR + "点" + END_MINUTE + "分。\n");
+        return 1;
+    }
+    
+    if (waiting_queue[me->query("id")]) {
+        tell_object(me, "你已经在匹配队列中了。\n");
+        return 1;
+    }
+    
+    init_player_data(me);
+    waiting_queue[me->query("id")] = me;  // 存储玩家对象而不是1
+    queue_join_time[me->query("id")] = time();
+    tell_object(me, "你已加入PK匹配队列，请等待匹配。\n");
+    
+    // 保存数据
+    save();
+    return 1;
+}
+
+// 离开匹配队列
+int leave_queue(object me)
+{
+    if (!waiting_queue[me->query("id")]) {
+        tell_object(me, "你并未在匹配队列中。\n");
+        return 1;
+    }
+    
+    map_delete(waiting_queue, me->query("id"));
+    map_delete(queue_join_time, me->query("id"));
+    tell_object(me, "你已离开PK匹配队列。\n");
+    
+    // 保存数据
+    save();
+    return 1;
+}
+
+// 显示积分
+int show_score(object me)
+{
+    string id = me->query("id");
+    
+    if (!mapp(player_data[id])) {
+        tell_object(me, "你还未参加过PK。\n");
+        return 1;
+    }
+    
+    tell_object(me, popup_comb(sprintf(
+        "你的PK记录：\n"
+        "当前积分：%d\n"
+        "连胜次数：%d\n"
+        "连败次数：%d\n"
+        "最大连胜：%d\n"
+        "总胜场数：%d\n"
+        "总负场数：%d\n",
+        player_data[id]["score"],
+        player_data[id]["win_streak"],
+        player_data[id]["lose_streak"],
+        player_data[id]["max_win_streak"],
+        player_data[id]["total_wins"],
+        player_data[id]["total_losses"]
+    ),"返回:match_pk"));
+    
+
+    return 1;
+}
+
+// 显示排行榜
+int show_rank(object me)
+{
+    string *ids = sort_array(keys(player_data), 
+        (: player_data[$1]["score"] < player_data[$2]["score"] ? 1 : -1 :));
+    string msg = "PK系统积分排行榜：\n";
+    int i;
+    
+    for (i = 0; i < sizeof(ids) && i < 10; i++) {
+        object player = find_player(ids[i]);
+        if (!player) continue;
+        
+        msg += sprintf("%2d. %-20s %d分 (胜:%d 负:%d 最大连胜:%d)\n", 
+            i + 1,
+            player->query("name") + "(" + ids[i] + ")",
+            player_data[ids[i]]["score"],
+            player_data[ids[i]]["total_wins"],
+            player_data[ids[i]]["total_losses"],
+            player_data[ids[i]]["max_win_streak"]
+        );
+    }
+    
+    tell_object(me, popup_comb(msg,"返回:match_pk"));
+    return 1;
+}
+
+// 创建NPC机器人
+private object create_robot(object source_player)
+{
+    object *players = users();
+    object template_player;
+    object robot;
+    int idx;
+    
+    // 随机选择一个在线玩家作为模板
+    players = filter_array(players, (: living($1) && !wizardp($1) :));
+    if(sizeof(players) < 1)
+        return 0;
+        
+    idx = random(sizeof(players));
+    template_player = players[idx];
+    
+    // 创建机器人NPC
+    robot = NPC_COPY_MASTER->create_npc(template_player, NPC_COPY);
+    if(!robot)
+        return 0;
+        
+    // 设置机器人标记和原玩家ID
+    robot->set_temp("is_robot", 1);
+    robot->set_temp("template_id", template_player->query("id"));
+    // robot->set("long", "这是一个PK系统的机器人。\n");
+    
+    return robot;
+}
+
+// 每小时清理一次数据
+void heart_beat()
+{
+    string *waiting_players;
+    int t = time();
+    
+    if (!is_system_active()) {
+        // 系统未开放时清空等待队列
+        if (sizeof(waiting_queue) > 0) {
+            waiting_queue = ([]);
+            queue_join_time = ([]);
+            save();
+        }
+        return;
+    }
+    
+    // 每小时检查一次离线玩家数据
+    if (t % 3600 == 0 || t % 3600 == 1) {
+        string *ids = keys(player_data);
+        foreach (string id in ids) {
+            // 如果玩家超过30天未参与PK，清除其数据
+            if (t - player_data[id]["last_match_time"] > 86400 * 30) {
+                map_delete(player_data, id);
+            }
+        }
+        save();
+    }
+    
+    waiting_players = keys(waiting_queue);
+    
+    // 检查等待时间超过20秒的玩家
+    foreach(string id in waiting_players) {
+        object player = waiting_queue[id];
+        int wait_time = t - queue_join_time[id];
+        
+        if(wait_time >= 20 && objectp(player) && living(player)) {
+            object robot = create_robot(player);
+            if(objectp(robot)) {
+                // 初始化机器人数据
+                init_player_data(robot);
+                
+                // 从等待队列中移除玩家
+                map_delete(waiting_queue, id);
+                map_delete(queue_join_time, id);
+                
+                // tell_object(player, HIY "系统为你匹配了一个机器人对手，即将开始战斗！\n" NOR);
+                
+                // 创建竞技场并开始战斗
+                start_match(player, robot);
+            }
+        }
+    }
+    
+    if (sizeof(waiting_players) < 4) {
+        // 如果等待队列人数少于4人，只发送等待提示
+        if (t % 5 == 0 || t % 5 == 1) {
+            foreach (string id in waiting_players) {
+                int wait_time;
+                string time_str;
+                object player = waiting_queue[id];
+                
+                if (!objectp(player) || !living(player)) {
+                    map_delete(waiting_queue, id);
+                    map_delete(queue_join_time, id);
+                    continue;
+                }
+                
+                wait_time = t - queue_join_time[id];
+                if (wait_time < 60) {
+                    time_str = wait_time + "秒";
+                } else if (wait_time < 3600) {
+                    time_str = (wait_time / 60) + "分" + (wait_time % 60) + "秒";
+                } else {
+                    time_str = (wait_time / 3600) + "小时" + 
+                              ((wait_time % 3600) / 60) + "分" +
+                              (wait_time % 60) + "秒";
+                }
+                
+                tell_object(player, HIY "正在等待更多玩家加入...当前队列人数：" + 
+                    sizeof(waiting_players) + "。你已等待" + time_str + "。"
+                    ZJURL("cmds:match_pk leave")"[离开匹配]"NOR"\n" NOR);
+            }
+        }
+        return;
+    }
+    
+    // 当队列中有4人或以上时，开始匹配
+    if (sizeof(waiting_players) >= 4) {
+        int i;
+        // 按照积分排序玩家
+        waiting_players = sort_array(waiting_players, 
+            (: player_data[waiting_queue[$1]->query("id")]["score"] - 
+               player_data[waiting_queue[$2]->query("id")]["score"] :));
+        
+        // 每次处理4个玩家，分成两场比赛
+        for (i = 0; i + 3 < sizeof(waiting_players); i += 4) {
+            object p1, p2, p3, p4;
+            
+            // 获取4个玩家
+            p1 = waiting_queue[waiting_players[i]];
+            p2 = waiting_queue[waiting_players[i + 1]];
+            p3 = waiting_queue[waiting_players[i + 2]];
+            p4 = waiting_queue[waiting_players[i + 3]];
+            
+            // 检查玩家是否有效
+            if (!objectp(p1) || !living(p1) || !objectp(p2) || !living(p2) ||
+                !objectp(p3) || !living(p3) || !objectp(p4) || !living(p4)) {
+                continue;
+            }
+            
+            // 开始两场比赛
+            // 积分相近的两两配对：1vs4, 2vs3
+            start_match(p1, p4);
+            start_match(p2, p3);
+        }
+    }
+}
+
+// 检查玩家是否在匹配队列中
+int is_in_queue(object me)
+{
+    return objectp(waiting_queue[me->query("id")]) ? 1 : 0;
+}
+
+// 获取玩家数据
+mapping get_player_data(object me)
+{
+    string id = me->query("id");
+    if (!mapp(player_data[id])) {
+        return 0;
+    }
+    return player_data[id];
+}
+
+// 获取排行榜数据
+public mapping get_rank_data()
+{
+    return player_data;
+}
+
+// 重置所有数据（仅限巫师使用）
+public void reset_all_data()
+{
+    if (!wizardp(this_player()))
+        return;
+        
+    player_data = ([]);
+    waiting_queue = ([]);
+    save();
+}

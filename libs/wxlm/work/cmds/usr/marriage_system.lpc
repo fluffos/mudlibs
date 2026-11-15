@@ -1,0 +1,438 @@
+// marriage_system.c - 婚姻系统查看页面
+// 提供完整的婚姻状态查看和功能导航
+// 函数原型声明
+int main(object me, string arg);
+int show_main_interface(object me);
+string get_marriage_status(object me);
+string get_marriage_info(object me);
+string get_system_introduction();
+int show_spouse_info(object me);
+int show_marriage_history(object me);
+int show_witness_locations(object me);
+int show_detailed_help(object me);
+string format_time_duration(int seconds);
+int help(object me);
+
+/**
+ * @brief 主函数入口
+ * @param object me 玩家对象
+ * @param string arg 命令参数
+ * @return int 返回1表示成功
+ * @details 处理婚姻系统命令的主入口函数
+ */
+int main(object me, string arg)
+{
+    if (!me) return 0;
+    
+    if (!arg) {
+        return show_main_interface(me);
+    }
+    
+    switch(arg) {
+        case "spouse":
+            return show_spouse_info(me);
+        case "history":
+            return show_marriage_history(me);
+        case "find_witness":
+            return show_witness_locations(me);
+        case "help":
+            return show_detailed_help(me);
+        default:
+            return show_main_interface(me);
+    }
+}
+
+/**
+ * @brief 显示主界面
+ * @param object me 玩家对象
+ * @return int 返回1表示成功
+ * @details 显示婚姻系统的主界面，包含状态、信息和功能按钮
+ */
+int show_main_interface(object me)
+{
+    string msg;
+    string *button_list;
+    mapping couple;
+    int divorce_time, remaining_days;
+    
+    seteuid(getuid());
+    
+    msg = sprintf("%s═══ 婚姻系统 ═══%s\n", HIW, NOR);
+    msg += get_system_introduction();
+    msg += "\n" + get_marriage_status(me);
+    msg += "\n" + get_marriage_info(me);
+    
+    // 生成按钮列表
+    button_list = ({});
+    
+    couple = me->query("couple");
+    if (mapp(couple)) {
+        // 已婚状态的按钮
+        button_list += ({"查看配偶:marriage_system spouse"});
+        button_list += ({"婚姻历史:marriage_system history"});
+        button_list += ({"申请离婚:divorce " + couple["id"]});
+    } else {
+        // 单身状态
+        divorce_time = me->query("divorce_time");
+        if (divorce_time && (time() - divorce_time) < 86400 * 7) {
+            remaining_days = 7 - (time() - divorce_time) / 86400;
+            msg += sprintf("\n%s注意：您刚离婚不久，还需等待 %d 天才能再次结婚。%s\n", 
+                          HIR, remaining_days, NOR);
+        }
+        button_list += ({"寻找红娘:marriage_system find_witness"});
+        button_list += ({"婚姻历史:marriage_system history"});
+    }
+    
+    button_list += ({"详细帮助:marriage_system help"});
+    
+    tell_object(me, popup_comb(msg, button_list));
+    return 1;
+}
+
+/**
+ * @brief 获取婚姻状态信息
+ * @param object me 玩家对象
+ * @return string 格式化的状态信息
+ * @details 返回玩家当前的婚姻状态描述
+ */
+string get_marriage_status(object me)
+{
+    mapping couple;
+    string status_msg;
+    object spouse;
+    string online_status;
+    int marry_count, divorce_time, days_passed, remaining_days;
+    
+    couple = me->query("couple");
+    
+    if (mapp(couple)) {
+        spouse = find_player(couple["id"]);
+        online_status = spouse ? HIY"在线"NOR : HIC"离线"NOR;
+        
+        status_msg = sprintf("%s当前状态：%s已婚%s\n", HIW, HIG, NOR);
+        status_msg += sprintf("配偶：%s%s%s (%s)\n", HIY, couple["name"], NOR, online_status);
+        
+        if (couple["witness"]) {
+            status_msg += sprintf("证婚人：%s%s%s\n", HIY, couple["witness"], NOR);
+        } else {
+            status_msg += sprintf("结婚方式：%s私定终身%s\n", HIB, NOR);
+        }
+        
+        // 显示结婚次数
+        marry_count = me->query("nosave/marry");
+        if (marry_count > 1) {
+            status_msg += sprintf("结婚次数：%s第%d次%s\n", HIY, marry_count, NOR);
+        }
+    } else {
+        status_msg = sprintf("%s当前状态：%s单身%s\n", HIW, HIB, NOR);
+        
+        // 显示离婚冷却时间
+        divorce_time = me->query("divorce_time");
+        if (divorce_time) {
+            days_passed = (time() - divorce_time) / 86400;
+            if (days_passed < 7) {
+                remaining_days = 7 - days_passed;
+                status_msg += sprintf("再婚限制：%s还需等待%d天%s\n", HIR, remaining_days, NOR);
+            }
+        }
+        
+        // 显示历史结婚次数
+        marry_count = me->query("nosave/marry");
+        if (marry_count > 0) {
+            status_msg += sprintf("历史结婚：%s%d次%s\n", HIY, marry_count, NOR);
+        }
+    }
+    
+    return status_msg;
+}
+
+/**
+ * @brief 获取个人信息
+ * @param object me 玩家对象
+ * @return string 格式化的个人信息
+ * @details 返回与婚姻相关的个人信息
+ */
+string get_marriage_info(object me)
+{
+    string info_msg;
+    string gender_str, family_str;
+    int age;
+    
+    info_msg = sprintf("%s个人信息：%s\n", HIW, NOR);
+    
+    age = me->query("age");
+    info_msg += sprintf("年龄：%s%d岁%s", HIY, age, NOR);
+    if (age < 16) {
+        info_msg += sprintf(" %s(未满16岁，不能结婚)%s", HIR, NOR);
+    }
+    info_msg += "\n";
+    
+    gender_str = me->query("gender");
+    if (gender_str) {
+        info_msg += sprintf("性别：%s%s%s\n", HIY, gender_str, NOR);
+    }
+    
+    family_str = me->query("family/family_name");
+    if (family_str) {
+        info_msg += sprintf("门派：%s%s%s", HIY, family_str, NOR);
+        
+        // 检查是否为出家门派
+        if (family_str == "少林派" || family_str == "峨嵋派" || family_str == "天龙寺") {
+            if (me->query("class") == "bonze") {
+                info_msg += sprintf(" %s(出家人不能结婚)%s", HIR, NOR);
+            }
+        }
+        info_msg += "\n";
+    }
+    
+    return info_msg;
+}
+
+/**
+ * @brief 获取系统介绍
+ * @return string 系统介绍文本
+ * @details 返回婚姻系统的基本介绍信息
+ */
+string get_system_introduction()
+{
+    string intro;
+    
+    intro = sprintf("%s欢迎使用婚姻系统！%s\n", HIY, NOR);
+    intro += sprintf("这里可以查看您的婚姻状态、配偶信息等。\n");
+    intro += sprintf("您可以通过红娘证婚或私定终身的方式结婚。\n");
+    
+    return intro;
+}
+
+/**
+ * @brief 显示配偶详细信息
+ * @param object me 玩家对象
+ * @return int 返回1表示成功
+ * @details 显示配偶的详细信息和相关操作按钮
+ */
+int show_spouse_info(object me)
+{
+    mapping couple;
+    string msg, gender_str;
+    string *button_list;
+    object spouse;
+    
+    couple = me->query("couple");
+    
+    if (!mapp(couple)) {
+        msg = sprintf("%s您目前还没有配偶。%s\n", HIC, NOR);
+        msg += sprintf("快去寻找您的真命天子/天女吧！\n");
+        button_list = ({"返回主页:marriage_system"});
+        tell_object(me, popup_comb(msg, button_list));
+        return 1;
+    }
+    
+    msg = sprintf("%s═══ 配偶信息 ═══%s\n", HIW, NOR);
+    msg += sprintf("配偶姓名：%s%s%s\n", HIY, couple["name"], NOR);
+    msg += sprintf("配偶ID：%s%s%s\n", HIY, couple["id"], NOR);
+    
+    spouse = find_player(couple["id"]);
+    
+    if (spouse) {
+        msg += sprintf("状态：%s在线%s\n", HIG, NOR);
+        msg += sprintf("等级：%s%d级%s\n", HIY, spouse->query("level"), NOR);
+        
+        if (spouse->query("gender")) {
+            gender_str = (spouse->query("gender") == "男性") ? "男" : "女";
+            msg += sprintf("性别：%s%s%s\n", HIY, gender_str, NOR);
+        }
+        
+        if (spouse->query("family/family_name")) {
+            msg += sprintf("门派：%s%s%s\n", HIY, spouse->query("family/family_name"), NOR);
+        }
+        
+        msg += sprintf("等级：%s%d级%s\n", HIY, spouse->query("level"), NOR);
+    } else {
+        msg += sprintf("状态：%s离线%s\n", HIC, NOR);
+    }
+    
+    if (couple["witness"]) {
+        msg += sprintf("证婚人：%s%s%s\n", HIY, couple["witness"], NOR);
+    }
+    
+    button_list = ({});
+    if (spouse) {
+        button_list += ({"发送消息:tell " + couple["id"] + " "});
+        if (environment(spouse) == environment(me)) {
+            button_list += ({"查看配偶:look " + couple["id"]});
+        }
+    }
+    button_list += ({"返回主页:marriage_system"});
+    
+    tell_object(me, popup_comb(msg, button_list));
+    return 1;
+}
+
+/**
+ * @brief 显示婚姻历史记录
+ * @param object me 玩家对象
+ * @return int 返回1表示成功
+ * @details 显示玩家的婚姻历史，包括结婚次数、离婚时间等
+ */
+int show_marriage_history(object me)
+{
+    string msg, time_str;
+    string *button_list;
+    int marry_count, divorce_time;
+    
+    msg = sprintf("%s═══ 婚姻历史 ═══%s\n", HIW, NOR);
+    
+    marry_count = me->query("nosave/marry");
+    divorce_time = me->query("divorce_time");
+    
+    msg += sprintf("私定终身次数：%s%d次%s\n", HIY, marry_count, NOR);
+        
+    if (divorce_time) {
+        time_str = format_time_duration(time() - divorce_time);
+        msg += sprintf("最后离婚：%s%s前%s\n", HIB, time_str, NOR);
+    }
+    
+    // 显示结婚条件提醒
+    msg += sprintf("\n%s结婚条件提醒：%s\n", HIW, NOR);
+    msg += sprintf("• 年满16岁\n");
+    msg += sprintf("• 异性之间\n");
+    msg += sprintf("• 非出家人（少林、峨嵋、天龙寺僧尼除外）\n");
+    msg += sprintf("• 离婚后需等待7天\n");
+    
+    button_list = ({"返回主页:marriage_system"});
+    
+    tell_object(me, popup_comb(msg, button_list));
+    return 1;
+}
+
+/**
+ * @brief 显示红娘位置信息
+ * @param object me 玩家对象
+ * @return int 返回1表示成功
+ * @details 显示游戏中红娘NPC的位置信息
+ */
+int show_witness_locations(object me)
+{
+    string msg;
+    string *button_list;
+    
+    msg = sprintf("%s═══ 红娘位置 ═══%s\n", HIW, NOR);
+    msg += sprintf("红娘是专门为有情人证婚的NPC，\n");
+    msg += sprintf("有了红娘证婚，你们就能获得结婚戒指！\n\n");
+    
+    msg += sprintf("%s常见红娘位置：%s\n", HIY, NOR);
+    msg += sprintf("• 苏州城 - 沧浪亭\n");
+    
+    msg += sprintf("%s温馨提示：%s\n", HIW, NOR);
+    msg += sprintf("• 没有红娘也可以私定终身\n");
+    msg += sprintf("• 有红娘证婚可获得结婚戒指\n");
+    msg += sprintf("• 结婚戒指是珍贵的纪念品\n");
+    
+    button_list = ({});
+    button_list += ({"前往沧浪亭:fly sz"});
+    button_list += ({"返回主页:marriage_system"});
+    
+    tell_object(me, popup_comb(msg, button_list));
+    return 1;
+}
+
+/**
+ * @brief 显示详细帮助信息
+ * @param object me 玩家对象
+ * @return int 返回1表示成功
+ * @details 显示婚姻系统的详细使用说明
+ */
+int show_detailed_help(object me)
+{
+    string msg;
+    string *button_list;
+    
+    msg = sprintf("%s═══ 婚姻系统帮助 ═══%s\n", HIW, NOR);
+    msg += sprintf("\n%s结婚流程：%s\n", HIY, NOR);
+    msg += sprintf("1. 找到心仪的对象\n");
+    msg += sprintf("2. 然后点击求婚\n");
+    msg += sprintf("3. 对方同意\n");
+    msg += sprintf("4. 成为夫妻！\n");
+    
+    msg += sprintf("\n%s特殊规则：%s\n", HIY, NOR);
+    msg += sprintf("• 出家人不能结婚\n");
+    msg += sprintf("• 同性不能结婚\n");
+    msg += sprintf("• 未满16岁不能结婚\n");
+    msg += sprintf("• 离婚后7天内不能再婚\n");
+    msg += sprintf("• 重婚是违法的\n");
+    
+    msg += sprintf("\n%s红娘证婚：%s\n", HIY, NOR);
+    msg += sprintf("• 在红娘面前求婚可获得戒指\n");
+    msg += sprintf("• 红娘也可以帮助办理离婚\n");
+    msg += sprintf("• 私定终身同样有效\n");
+    
+    button_list = ({"返回主页:marriage_system"});
+    
+    tell_object(me, popup_comb(msg, button_list));
+    return 1;
+}
+
+/**
+ * @brief 格式化时间间隔
+ * @param int seconds 秒数
+ * @return string 格式化的时间字符串
+ * @details 将秒数转换为易读的时间格式
+ */
+string format_time_duration(int seconds)
+{
+    int days, hours, minutes;
+    string result;
+    
+    days = seconds / 86400;
+    seconds %= 86400;
+    hours = seconds / 3600;
+    seconds %= 3600;
+    minutes = seconds / 60;
+    
+    result = "";
+    if (days > 0) {
+        result += sprintf("%d天", days);
+    }
+    if (hours > 0) {
+        result += sprintf("%d小时", hours);
+    }
+    if (minutes > 0) {
+        result += sprintf("%d分钟", minutes);
+    }
+    
+    if (result == "") {
+        result = "刚刚";
+    }
+    
+    return result;
+}
+
+/**
+ * @brief 显示命令帮助信息
+ * @param object me 玩家对象
+ * @return int 返回1表示成功
+ * @details 显示简要的命令使用说明
+ */
+int help(object me)
+{
+    write(@HELP
+指令格式: marriage_system [参数]
+
+婚姻系统查看页面，提供完整的婚姻状态查看和功能导航。
+
+参数说明:
+  无参数    - 显示主界面
+  spouse    - 查看配偶信息
+  history   - 查看婚姻历史
+  find_witness - 查看红娘位置
+  help      - 显示详细帮助
+
+相关命令:
+  engage <玩家ID> - 求婚
+  divorce <配偶ID> - 离婚
+  right - 同意求婚
+  refuse - 拒绝求婚
+
+HELP );
+    return 1;
+}

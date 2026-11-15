@@ -1,0 +1,244 @@
+/**
+ * @file player_hongbao.c
+ * @author Lu dexiang
+ * @brief 玩家红包指令
+ * @version 1.0
+ * @date 2024-01-20
+ */
+inherit F_CLEAN_UP;
+
+#define PLAYER_HONGBAO_D "/adm/daemons/player_hongbao_master"
+
+int help(object me);
+int do_send_hongbao(object me, string type, int amount, int num, string password);
+
+int main(object me, string arg)
+{
+    string msg;
+    object pop;
+    mapping records;
+    
+    if (arg == "record") {
+        records = PLAYER_HONGBAO_D->query_player_records(me->query("id"));
+        pop = new(POP1);
+        
+        msg = HIY "红包记录(近7天)\n" NOR;
+        msg += sprintf("总发送：%d元宝  总接收：%d元宝\n\n",
+            records["total_sent"], records["total_received"]);
+        
+        msg += HIR "发出的红包：\n" NOR;
+        if (sizeof(records["sent"])) {
+            foreach (string id, mapping info in records["sent"]) {
+                msg += sprintf("%s：%s - %d元宝(%d个) %s\n",
+                    info["type"],
+                    ctime(info["time"])[4..15],
+                    info["amount"],
+                    info["num"],
+                    id);
+            }
+        } else {
+            msg += "暂无记录\n";
+        }
+        
+        msg += "\n" HIY "收到的红包：\n" NOR;
+        if (sizeof(records["received"])) {
+            foreach (string id, mapping info in records["received"]) {
+                msg += sprintf("从%s处收到%s - %d元宝 %s\n",
+                    info["sender"],
+                    info["type"],
+                    info["amount"],
+                    ctime(info["time"])[4..15]);
+            }
+        } else {
+            msg += "暂无记录\n";
+        }
+        
+        pop->basic(msg, 2);
+        pop->add_button("返回", "player_hongbao");
+        
+        write(pop->result() + "\n");
+        return 1;
+    }
+    
+    // 处理查看可抢红包列表
+    if (arg == "list") {
+        mapping hongbaos = PLAYER_HONGBAO_D->query_active_hongbaos();
+        
+        msg = HIY "可抢红包列表\n" NOR;
+        
+        if (sizeof(hongbaos)) {
+            foreach (string id, mapping info in hongbaos) {
+                int time_left = 3600 - (time() - info["create_time"]); // 剩余时间(秒)
+                msg += sprintf("%s发放的%s"ZJBR
+                    "总额：%d元宝  剩余：%d/%d个"ZJBR
+                    "剩余时间：%d分%d秒"ZJBR
+                    "%s"ZJBR
+                    ZJURL("cmds:player_hongbao qiang %s")"点击抢红包"NOR"\n",
+                    info["sender_name"],
+                    info["type"],
+                    info["total_amount"],
+                    info["remaining_packets"],
+                    info["total_packets"],
+                    time_left / 60,
+                    time_left % 60,
+                    info["password"] ? "（需要口令）:" + info["password"] : "",
+                    info["id"]);
+
+                msg += "----------------------------------------\n"; 
+            }
+        } else {
+            msg += "当前没有可抢的红包\n";
+        }
+        
+        // pop->basic(msg, 2);
+        // pop->add_button("返回", "player_hongbao");
+        // pop->add_button("刷新", "player_hongbao list");
+        
+        write(popup_comb(msg,"返回:player_hongbao"));
+        return 1;
+    }
+    
+    // 如果有参数，处理发红包和抢红包的具体操作
+    if (arg) {
+        string type;
+        int amount, num;
+        string password;
+        mixed result;
+        
+        // 处理自定义红包数量输入
+        if (sscanf(arg, "custom_num %s %d", type, amount) == 2) {
+            write(popup_input("请输入红包个数：", 
+                sprintf("player_hongbao send %s %d ", type, amount)));
+            return 1;
+        }
+        
+        // 处理自定义红包金额输入
+        if (sscanf(arg, "custom_amount %s", type) == 1) {
+            write(popup_input("请输入红包总金额：", 
+                sprintf("player_hongbao custom_num %s ", type)));
+            return 1;
+        }
+        
+        // 处理口令输入
+        if (sscanf(arg, "input_password %s %d %d %s", type, amount, num, password) == 4) {
+            return do_send_hongbao(me, type, amount, num, password);
+        }
+        
+        // 处理是否需要口令选择
+        if (sscanf(arg, "send %s %d %d", type, amount, num) == 3) {
+            pop = new(POP1);
+            msg = "请选择是否设置口令：\n";
+            pop->basic(msg, 2);
+            pop->add_button("不需要口令", 
+                sprintf("player_hongbao input_password %s %d %d none", type, amount, num));
+            pop->add_button("设置口令", 
+                sprintf("player_hongbao custom_password %s %d %d", type, amount, num));
+            write(pop->result() + "\n");
+            return 1;
+        }
+        
+        // 处理自定义口令输入
+        if (sscanf(arg, "custom_password %s %d %d", type, amount, num) == 3) {
+            write(popup_input("请输入红包口令：", 
+                sprintf("player_hongbao input_password %s %d %d ", type, amount, num)));
+            return 1;
+        }
+        
+        // 处理抢红包
+        if (sscanf(arg, "qiang %s", type) == 1) {
+            mapping hongbao = PLAYER_HONGBAO_D->query_hongbao(type);
+            if (!hongbao) {
+                return notify_fail("红包已过期或抢完！\n");
+            }
+            
+            // 如果是口令红包，弹出输入框让玩家输入口令
+            if (hongbao["password"]) {
+                write(popup_input("这是一个口令红包，请输入口令：", 
+                    sprintf("player_hongbao qiang_with_password %s ", type)));
+                return 1;
+            }
+            
+            {
+                // 非口令红包直接抢
+                result = PLAYER_HONGBAO_D->get_hongbao(me, type);
+                if (stringp(result)) {
+                    return notify_fail(result + "\n");
+                }
+            }
+
+            return 1;
+        }
+        
+        // 处理带口令的抢红包
+        if (sscanf(arg, "qiang_with_password %s %s", type, password) == 2) {
+            result = PLAYER_HONGBAO_D->get_hongbao(me, type, password);
+            // me->force_me("chat " + password);
+            if (stringp(result)) {
+                return notify_fail(result + "\n");
+            }
+            return 1;
+        }
+    }
+    
+    // 显示主界面
+    pop = new(POP1);
+    msg = HIY "玩家红包系统\n" NOR
+          "可发放的红包类型：\n"
+          "喜气红包：封装费10元宝，可容纳100-1000元宝，最多10人\n"
+          "福禄红包：封装费30元宝，可容纳1000-3000元宝，最多20人\n"
+          "财神红包：封装费50元宝，可容纳3000-10000元宝，最多50人\n"
+          "至尊红包：封装费100元宝，可容纳10000元宝以上，最多100人\n";
+    
+    pop->basic(msg, 2);
+    
+    // 添加发红包按钮
+    pop->add_button("发喜气红包", "player_hongbao custom_amount 喜气红包");
+    pop->add_button("发福禄红包", "player_hongbao custom_amount 福禄红包");
+    pop->add_button("发财神红包", "player_hongbao custom_amount 财神红包");
+    pop->add_button("发至尊红包", "player_hongbao custom_amount 至尊红包");
+    
+    // 在主界面添加查看可抢红包按钮
+    pop->add_button("查看可抢红包", "player_hongbao list");
+    pop->add_button("查看记录", "player_hongbao record");
+    
+    msg = pop->result();
+    write(msg + "\n");
+    return 1;
+}
+
+int do_send_hongbao(object me, string type, int amount, int num, string password)
+{
+    mixed result;
+    
+    if (password == "none") password = 0;
+    
+    result = PLAYER_HONGBAO_D->create_hongbao(me, type, amount, num, password);
+    if (stringp(result)) {
+        return notify_fail(result + "\n");
+    }
+    return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+玩家红包指令使用说明：
+
+player_hongbao fa <红包类型> <总金额> <红包数量>  - 发放红包
+player_hongbao qiang <红包ID>                    - 抢红包
+
+红包类型：
+喜气红包 - 10元宝，100-1000元宝，最多10人
+福禄红包 - 30元宝，1000-3000元宝，最多20人
+财神红包 - 50元宝，3000-10000元宝，最多50人
+至尊红包 - 100元宝，10000元宝以上，最多100人
+
+特殊功能：
+- 发红包时可以选择是否设置口令
+- 带口令的红包需要输入正确口令才能领取
+
+注意：发红包需要支付红包类型对应的费用 + 红包总额
+HELP
+    );
+    return 1;
+}

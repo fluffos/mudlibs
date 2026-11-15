@@ -1,0 +1,169 @@
+// walk.c
+
+inherit F_CLEAN_UP;
+
+#include "/d/rw.h"
+
+#define PATH_D "/adm/daemons/pathd.lpc"
+int check_man_location(object me,string arg);
+mixed fuzzy_matching(string arg);
+int main(object me, string arg)
+{
+        mixed a;
+        mixed br;
+        string str = "", *walks;
+
+        if (!CAN_MOVE->is_can_move(me))
+        {
+                return 1;
+        }
+
+        if (!arg)
+                return notify_fail(INPUTTXT("少侠想去何处?只需说出地名便可。若要寻访江湖人物,直接说出其名号即可。", "walk $txt#") + "\n");
+
+        if (check_man_location(me,arg))
+        {
+                return 1;
+        }
+
+        // if (!is_chinese(arg))
+        //         return notify_fail("指令格式：walk <中文地址>\n");
+
+        me->set_temp("last_walk", time());
+        a = PATH_D->search_for_path(me, arg);
+        if (!a || a == 1)
+        {
+                me->set_temp("last_walk", time() + 10);
+                write("没有这个地方，或者这个地方离这里超过规定的距离限制。\n");
+                return 1;
+        }
+        write(HIC + arg + "路径已寻得,需行" + sizeof(a[1]) + "步,路线如下：\n" + NOR);
+        for (int i = 0; i < sizeof(a[1]); i++)
+        {
+                str += a[1][i] + ";";
+        }
+        str = str[0.. < 2];
+        write(str + "\n"); // 输出路线
+        br = me->query("env/brief");
+        me->set("env/brief", 1);
+        walks = explode(str, ";");
+        for (int i = 0; i < sizeof(walks); i++)
+        {
+                me->force_me(walks[i]); // 利用客户端来处理指令，可以达到防止玩家进行机器人或脚本操作等行为。
+        }
+        me->set("env/brief", br);
+        write(HIG"你已到达" + arg + "。\n"NOR);
+        return 1;
+}
+
+//检查位置库的接口
+int check_man_location(object me,string arg)
+{
+        string path,tagerName;
+
+        if (sscanf(arg, "%s %s", tagerName, path) == 2)
+        {
+                arg = tagerName;
+        }
+
+        if (where[arg] && !me->is_busy() || arg == "师傅")
+        {
+                mixed name;
+   
+
+                if (undefinedp(path))
+                {
+
+                        if (arg == "师傅" && me->query("family/master_name"))
+                        {
+                                name = where[me->query("family/master_name")];
+                        }
+                        else if (arg == "师傅" && !me->query("family/master_name"))
+                        {
+                                tell_object(me, "你还是先找个师傅再说吧。\n");
+                                return 1;
+                        }
+                        else
+                        {
+                                name = where[arg];
+                        }
+
+
+                        if (name[0] == base_name(environment(me)))
+                        {
+                                tell_object(me, HIY"你已在" + arg + "跟前。\n"NOR);
+                                return 1;
+                        }
+
+                        if (sizeof(name) > 1)
+                        {
+                                string msg,*pathData = ({});
+                                msg = "江湖中有多处地点都能寻到" + arg + ",少侠想去哪里?";
+                
+                                foreach (path in where[arg])
+                                {
+                                        tagerName = path->query("short");
+                                        
+                                        pathData += ({ sprintf("%s:walk %s %s",tagerName,arg,path) });
+                                }
+                
+                                write(popup_comb(msg,pathData));
+                                return 1;
+                        }
+                        else
+                        {
+                                path = name[0];
+                        }
+                }
+
+
+                me->move(path);
+
+                //只有玩家才会忙乱
+                if (userp(me))
+                {
+                        me->start_busy(1);
+                }
+                
+                tell_object(me, HIR"你疾行多时,不觉气喘吁吁,需歇息片刻。\n"NOR);
+                return 1;
+                
+        }
+        else if (!where[arg])
+        {
+               
+                {
+                        string popup_msg;
+
+                        //如果没有找到实际人物，调用模糊匹配
+                        if (popup_msg = fuzzy_matching(arg))
+                        {
+                                tell_object(me, popup_msg);
+                                return 1;
+                        }
+
+                        return notify_fail("没有找到你的师傅。\n");
+                }
+        }
+
+        return 0;
+}
+
+//模糊匹配位置库的接口
+mixed fuzzy_matching(string arg)
+{
+        string autual_name,msg;
+        string *popup_button_list = ({}); //弹出按钮列表
+
+        // 在include的文件中包含了fuzzy_name_as这个变量，它是一个mapping类型，其中key是别名，value是对应的地点名
+        if (fuzzy_name_as[arg])
+        {
+                autual_name = fuzzy_name_as[arg];
+                //没有找到arg,但有可能是autual_name,
+                msg = "未寻到" + arg + "，但江湖中倒是有个" + autual_name + "，可要前去?";
+                popup_button_list += ({   sprintf("%s:walk %s",autual_name,autual_name)  });
+                return popup_comb(msg, popup_button_list);
+        }
+
+        return 0;
+}

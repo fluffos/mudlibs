@@ -1,0 +1,143 @@
+/**
+ * @brief 每日礼包包月服务管理命令
+ * @author 系统管理员
+ * @date 2024-12-19
+ */
+inherit F_CLEAN_UP;
+
+/**
+ * @brief 主命令处理函数
+ * @param object me 执行命令的玩家对象
+ * @param string arg 命令参数，格式为：玩家id 金额
+ * @return int 命令执行结果
+ * @details 该命令用于管理员为指定玩家增加每日礼包包月服务时间
+ *          金额对应不同的服务时长：
+ *          - 180元：30天包月服务
+ *          - 360元：60天包月服务
+ *          - 540元：90天包月服务
+ *          如果玩家已有包月服务且未过期，则续费延长服务时间
+ */
+int main(object me, string arg)
+{
+    string user_id;
+    int amount, days, current_expire, new_expire;
+    object player;
+    string username;
+    
+    // 权限检查
+    if (!wizardp(me))
+        return notify_fail("你没有权限使用此命令。\n");
+    
+    // 参数检查
+    if (!arg || sscanf(arg, "%s %d", user_id, amount) != 2)
+        return notify_fail("格式：daily_yue <玩家id> <金额>\n");
+    
+    // 金额验证
+    if (amount <= 0)
+        return notify_fail("金额必须大于0。\n");
+    
+    // 计算服务天数
+    if (amount >= 180)
+    {
+        days = to_int(amount / 180) * 30; // 每180元对应30天
+    }
+    else
+    {
+        return notify_fail("金额不足，至少需要180元才能开通包月服务。\n");
+    }
+    
+    // 查找玩家（支持在线和离线玩家）
+    user_id = lower_case(user_id);
+    player = UPDATE_D->global_find_player(user_id);
+    if (!player)
+    {
+        return notify_fail("未找到玩家 " + user_id + "。\n");
+    }
+    
+    username = player->query("name");
+    if (!username)
+    {
+        return notify_fail("玩家数据异常，无法获取玩家姓名。\n");
+    }
+    
+    // 获取当前包月服务到期时间
+    current_expire = player->query("gift_pass/daily_expire_time");
+    
+    // 计算新的到期时间
+    if (current_expire > time())
+    {
+        // 续费：在现有到期时间基础上延长
+        new_expire = current_expire + days * 86400;
+        tell_object(me, sprintf("玩家 %s(%s) 的每日礼包包月服务已续费 %d 天，新的到期时间：%s\n", 
+                               username, user_id, days, ctime(new_expire)));
+    }
+    else
+    {
+        // 新购：从当前时间开始计算
+        new_expire = time() + days * 86400;
+        tell_object(me, sprintf("玩家 %s(%s) 已开通每日礼包包月服务 %d 天，到期时间：%s\n", 
+                               username, user_id, days, ctime(new_expire)));
+    }
+    
+    // 设置新的到期时间
+    player->set("gift_pass/daily_expire_time", new_expire);
+    
+    // 通知玩家（如果在线）
+    if (interactive(player))
+    {
+        tell_object(player, HIY + sprintf("恭喜！你的每日礼包包月服务已%s %d 天，有效期至 %s\n", 
+                                         current_expire > time() ? "续费" : "开通", days, ctime(new_expire)) + NOR);
+    }
+    
+    // 记录日志
+    log_file("pay/daily_yue", sprintf("%s: %s(%s) 为玩家 %s(%s) %s每日礼包包月服务 %d 天，到期时间 %s\n", 
+                                     ctime(time()), me->query("name"), me->query("id"), 
+                                     username, user_id, 
+                                     current_expire > time() ? "续费" : "开通", 
+                                     days, ctime(new_expire)));
+    
+    // 保存玩家数据
+    player->save();
+    
+    // 系统通知
+    CHANNEL_D->do_channel(this_object(), "sys", sprintf("%s(%s) 为玩家 %s(%s) %s每日礼包包月服务 %d 天。", 
+                                                        me->query("name"), me->query("id"), 
+                                                        username, user_id, 
+                                                        current_expire > time() ? "续费" : "开通", days));
+    
+    return 1;
+}
+
+/**
+ * @brief 命令帮助信息
+ * @param object me 执行命令的玩家对象
+ * @return string 帮助信息
+ */
+string help(object me)
+{
+    return @HELP
+每日礼包包月服务管理命令
+
+用法：daily_yue <玩家id> <金额>
+
+功能：为指定玩家增加每日礼包包月服务时间
+
+参数说明：
+  玩家id：要操作的玩家账号
+  金额：充值金额，用于计算服务时长
+        - 180元：30天包月服务
+        - 360元：60天包月服务
+        - 540元：90天包月服务
+        - 以此类推...
+
+注意事项：
+  1. 只有管理员可以使用此命令
+  2. 如果玩家已有包月服务且未过期，则续费延长服务时间
+  3. 如果玩家没有包月服务或已过期，则开通新的包月服务
+  4. 操作会记录日志并通知在线玩家
+
+示例：
+  daily_yue zhangsan 180    # 为张三开通30天包月服务
+  daily_yue lisi 360        # 为李四开通60天包月服务
+HELP;
+}

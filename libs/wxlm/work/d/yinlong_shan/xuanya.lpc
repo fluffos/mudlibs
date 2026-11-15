@@ -1,0 +1,164 @@
+#include <room.h>
+inherit ROOM;
+
+int check_wuqi_chaoyuan_condition(object me);
+void spawn_sanmo(object me, object room);
+
+void create()
+{
+    set("short", "悬崖");
+    set("long", @LONG
+这里是一处险峻的悬崖，脚下是万丈深渊(深渊)，云雾缭绕。远处群山连绵，景色
+壮丽。悬崖边上有一条窄窄的山路，通向瀑布方向。一阵山风吹来，带着淡淡的
+水汽，令人精神为之一振。
+LONG );
+
+    set("exits", ([
+        "westdown" : __DIR__"dongwai",
+        "eastup"   : __DIR__"pubu",
+    ]));
+    
+    set("item_desc", ([
+        "深渊" : popup_comb("脚下是云雾缭绕的万丈深渊，往下望去令人头晕目眩。\n",
+            "跳下深渊:jump down"),
+    ]));
+    
+    set("outdoors", "yinlong");
+    setup();
+}
+
+void init()
+{
+    add_action("do_jump", "jump");
+}
+
+int do_jump(string arg)
+{
+    object me = this_player();
+    object shenyuan_room;
+
+    if (! arg || arg != "down")
+        return notify_fail("你要往哪里跳？\n");
+
+    // 检查是否满足五气朝元条件
+    if (check_wuqi_chaoyuan_condition(me))
+    {
+        message_vision("$N深吸一口气，毅然纵身跃入深渊！\n", me);
+        tell_object(me, "\n" + HIY +
+            "你纵身跃入深渊，四周的景象逐渐消失...\n" +
+            "你感受到内心深处的波动，仿佛有什么东西正在觉醒...\n" NOR);
+
+        // 为玩家创建独立的深渊房间
+        shenyuan_room = new("/d/shenyuan/zhongsheng");
+        if (objectp(shenyuan_room))
+        {
+            shenyuan_room->set("owner_id", me->query("id"));
+            shenyuan_room->set("owner_name", me->query("name"));
+            me->move(shenyuan_room);
+            spawn_sanmo(me, shenyuan_room);
+        }
+        else
+        {
+            tell_object(me, "深渊入口似乎出了问题...\n");
+            return 1;
+        }
+
+        return 1;
+    }
+
+    // 原有逻辑：普通跳崖
+    message_vision("$N一个失足，从悬崖上掉了下去！\n", me);
+    me->move(__DIR__"shanjiao");
+    message_vision("$N从天而降，重重地摔在地上！\n", me);
+    me->receive_damage("qi", 200);
+    me->unconcious();
+    return 1;
+}
+
+/**
+ * @brief 检查玩家是否满足五气朝元条件
+ * @param object me 玩家对象
+ * @return int 1表示满足条件，0表示不满足
+ */
+int check_wuqi_chaoyuan_condition(object me)
+{
+    int heart_level, liver_level, spleen_level, lung_level, kidney_level;
+
+    if (!objectp(me) || !userp(me))
+        return 0;
+
+    if (me->query("id") == "demo222")
+        return 1;
+
+    // 已经达成五气朝元，不能再进入
+    if (me->query("wuqi_done"))
+        return 0;
+
+    // 检查等级是否达到900
+    if (me->query("level") < 900)
+        return 0;
+
+    // 检查五脏是否全部圆满（100级）
+    heart_level = me->query("wusheng/wuzang/heart") || 0;
+    liver_level = me->query("wusheng/wuzang/liver") || 0;
+    spleen_level = me->query("wusheng/wuzang/spleen") || 0;
+    lung_level = me->query("wusheng/wuzang/lung") || 0;
+    kidney_level = me->query("wusheng/wuzang/kidney") || 0;
+
+    if (heart_level < 100 || liver_level < 100 || spleen_level < 100 ||
+        lung_level < 100 || kidney_level < 100)
+        return 0;
+
+    return 1;
+}
+
+/**
+ * @brief 生成三魔NPC
+ * @param object me 玩家对象
+ * @param object room 深渊房间对象
+ */
+void spawn_sanmo(object me, object room)
+{
+    object tan_mo, chen_mo, chi_mo;
+    string player_name;
+
+    if (!objectp(me) || !objectp(room))
+        return;
+
+    player_name = me->query("name") || me->query("id");
+
+    // 创建贪魔
+    tan_mo = new("/d/shenyuan/npc/tan_mo");
+    if (objectp(tan_mo))
+    {
+        tan_mo->set("owner_id", me->query("id"));
+        tan_mo->set_name(player_name + "的贪", ({"tan_mo", "tan"}));
+        tan_mo->move(room);
+    }
+
+    // 创建嗔魔
+    chen_mo = new("/d/shenyuan/npc/chen_mo");
+    if (objectp(chen_mo))
+    {
+        chen_mo->set("owner_id", me->query("id"));
+        chen_mo->set_name(player_name + "的嗔", ({"chen_mo", "chen"}));
+        chen_mo->move(room);
+    }
+
+    // 创建痴魔
+    chi_mo = new("/d/shenyuan/npc/chi_mo");
+    if (objectp(chi_mo))
+    {
+        chi_mo->set("owner_id", me->query("id"));
+        chi_mo->set_name(player_name + "的痴", ({"chi_mo", "chi"}));
+        chi_mo->move(room);
+    }
+
+    tell_object(me, "\n" + HIR +
+        "黑暗中，三道身影逐渐凝聚成形...\n" +
+        "它们有着与你相似的面容，却散发着令人不安的气息。\n\n" +
+        HIY "「" + player_name + "的贪」" NOR "：\"无尽的欲望，永不满足的渴求...\"\n" +
+        HIR "「" + player_name + "的嗔」" NOR "：\"压抑的愤怒，灼烧灵魂的怒火...\"\n" +
+        HIC "「" + player_name + "的痴」" NOR "：\"执迷不悟的执念，迷失自我的愚昧...\"\n\n" +
+        HIW "唯有战胜心魔，方能达成五气朝元！\n" NOR);
+}

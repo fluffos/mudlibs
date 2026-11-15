@@ -1,0 +1,360 @@
+// history_updated.c
+// 更新公告守护进程
+
+#pragma optimize
+
+#ifndef DATA_DIR
+#define DATA_DIR "/data/"
+#endif
+
+#define UPDATES_DIR DATA_DIR + "updates/"
+#define UPDATES_INDEX_FILE DATA_DIR + "updates_index.json"
+
+// 函数声明
+void save_index();
+void save_update(string id, mapping data);
+void restore();
+string query_latest_update();
+mapping query_update(string id);
+mapping query_all_updates();
+int is_read(object me, string id);
+void mark_read(object me, string id);
+int query_unread_count(object me);
+string *query_update_list();
+int add_update(string id, mapping data);
+int remove_update(string id);
+
+// 存储所有公告索引
+nosave mapping updates_index = ([]);
+// 缓存频繁访问的更新
+nosave mapping updates_cache = ([]);
+
+/**
+ * @brief 将公告索引保存到JSON文件
+ * @details 使用json_format使输出可读
+ */
+void save_index()
+{
+    assure_file(UPDATES_INDEX_FILE);
+    write_file(UPDATES_INDEX_FILE, json_format(json_encode(updates_index)), 1);
+}
+
+/**
+ * @brief 将单个公告保存到自己的文件
+ * @param id 公告ID
+ * @param data 公告数据
+ */
+void save_update(string id, mapping data)
+{
+    string file_path;
+    
+    if (!id || !mapp(data))
+        return;
+        
+    file_path = UPDATES_DIR + id + ".json";
+    assure_file(file_path);
+    write_file(file_path, json_format(json_encode(data)), 1);
+}
+
+/**
+ * @brief 从JSON文件恢复公告索引
+ * @details 读取并解析JSON文件到内存
+ */
+void restore()
+{
+    string content;
+    string *update_files;
+    string file_path;
+    string file_content;
+    mapping update_data;
+
+    // 恢复索引文件
+    if (file_size(UPDATES_INDEX_FILE) > 0)
+    {
+        content = read_file(UPDATES_INDEX_FILE);
+        if (content && content != "")
+        {
+            updates_index = json_decode(content);
+            if (!mapp(updates_index))
+                updates_index = ([]);
+        }
+    }
+    
+    // 如果索引不存在，尝试从现有文件构建
+    if (!sizeof(updates_index))
+    {
+        update_files = get_dir(UPDATES_DIR + "*.json");
+        if (arrayp(update_files))
+        {
+            foreach(string file in update_files)
+            {
+                // 从文件名提取ID（移除.json扩展名）
+                string id = file[0..<6];
+                file_path = UPDATES_DIR + file;
+                
+                if (file_size(file_path) > 0)
+                {
+                    file_content = read_file(file_path);
+                    if (file_content && file_content != "")
+                    {
+                        update_data = json_decode(file_content);
+                        if (mapp(update_data) && update_data["time"])
+                        {
+                            updates_index[id] = update_data["time"];
+                        }
+                    }
+                }
+            }
+            save_index();
+        }
+    }
+}
+
+/**
+ * @brief 初始化守护进程
+ */
+void create()
+{
+    seteuid(getuid());
+    restore();
+}
+
+/**
+ * @brief 获取最新的公告ID
+ * @return string 最新公告ID，如果没有则返回0
+ * @details 通过比较时间戳找到最新的公告
+ */
+string query_latest_update()
+{
+    string *ids;
+    int max_time, latest_time;
+    string latest_id;
+
+    if (!mapp(updates_index) || !sizeof(updates_index))
+        return 0;
+
+    ids = keys(updates_index);
+    if (!sizeof(ids))
+        return 0;
+
+    latest_id = ids[0];
+    max_time = updates_index[ids[0]];
+
+    foreach(string id in ids)
+    {
+        latest_time = updates_index[id];
+        if (latest_time > max_time)
+        {
+            max_time = latest_time;
+            latest_id = id;
+        }
+    }
+
+    return latest_id;
+}
+
+/**
+ * @brief 获取特定公告详情
+ * @param string id 公告ID
+ * @return mapping 包含标题、内容、时间、版本的公告信息
+ */
+mapping query_update(string id)
+{
+    string file_path;
+    string content;
+    mapping update_data;
+    
+    if (!id)
+        return 0;
+        
+    // 首先检查缓存
+    if (mapp(updates_cache[id]))
+        return updates_cache[id];
+        
+    // 从文件加载
+    file_path = UPDATES_DIR + id + ".json";
+    if (file_size(file_path) <= 0)
+        return 0;
+        
+    content = read_file(file_path);
+    if (!content || content == "")
+        return 0;
+        
+    update_data = json_decode(content);
+    if (!mapp(update_data))
+        return 0;
+        
+    // 缓存结果（限制缓存大小）
+    if (sizeof(updates_cache) > 20)
+        updates_cache = ([]);
+    updates_cache[id] = update_data;
+    
+    return update_data;
+}
+
+/**
+ * @brief 获取所有公告
+ * @return mapping 所有公告的映射
+ */
+mapping query_all_updates()
+{
+    string *ids;
+    mapping all_updates = ([]);
+    mapping update_data;
+    
+    if (!mapp(updates_index) || !sizeof(updates_index))
+        return ([]);
+        
+    ids = keys(updates_index);
+    foreach(string id in ids)
+    {
+        update_data = query_update(id);
+        if (mapp(update_data))
+            all_updates[id] = update_data;
+    }
+    
+    return all_updates;
+}
+
+/**
+ * @brief 检查玩家是否已阅读公告
+ * @param object me 玩家对象
+ * @param string id 公告ID
+ * @return int 已读返回1，未读返回0
+ */
+int is_read(object me, string id)
+{
+    string *read_list;
+
+    if (!objectp(me) || !id)
+        return 0;
+
+    read_list = me->query("read_updates");
+    if (!arrayp(read_list))
+        return 0;
+
+    return member_array(id, read_list) != -1;
+}
+
+/**
+ * @brief 为玩家标记公告为已读
+ * @param object me 玩家对象
+ * @param string id 公告ID
+ */
+void mark_read(object me, string id)
+{
+    string *read_list;
+
+    if (!objectp(me) || !id)
+        return;
+
+    read_list = me->query("read_updates");
+    if (!arrayp(read_list))
+        read_list = ({});
+
+    // 如果尚未阅读，添加到已读列表
+    if (member_array(id, read_list) == -1)
+    {
+        read_list += ({ id });
+        me->set("read_updates", read_list);
+    }
+}
+
+/**
+ * @brief 获取玩家的未读公告数量
+ * @param object me 玩家对象
+ * @return int 未读数量
+ */
+int query_unread_count(object me)
+{
+    string *read_list, *all_ids;
+    int unread_count;
+
+    if (!objectp(me) || !mapp(updates_index))
+        return 0;
+
+    read_list = me->query("read_updates");
+    if (!arrayp(read_list))
+        read_list = ({});
+
+    all_ids = keys(updates_index);
+    unread_count = 0;
+
+    foreach(string id in all_ids)
+    {
+        if (member_array(id, read_list) == -1)
+            unread_count++;
+    }
+
+    return unread_count;
+}
+
+/**
+ * @brief 获取按时间降序排列的公告列表
+ * @return string* 公告ID数组
+ */
+string *query_update_list()
+{
+    string *ids;
+
+    if (!mapp(updates_index) || !sizeof(updates_index))
+        return ({});
+
+    ids = keys(updates_index);
+
+    // 按时间降序排序
+    ids = sort_array(ids, (: $(updates_index)[$2] - $(updates_index)[$1] :));
+
+    return ids;
+}
+
+/**
+ * @brief 添加新公告
+ * @param string id 公告ID
+ * @param mapping data 公告数据
+ * @return int 成功返回1，失败返回0
+ */
+int add_update(string id, mapping data)
+{
+    if (!id || !mapp(data) || !data["time"])
+        return 0;
+        
+    // 保存到单独文件
+    save_update(id, data);
+    
+    // 更新索引
+    updates_index[id] = data["time"];
+    save_index();
+    
+    // 清除缓存
+    map_delete(updates_cache, id);
+    
+    return 1;
+}
+
+/**
+ * @brief 移除公告
+ * @param string id 公告ID
+ * @return int 成功返回1，失败返回0
+ */
+int remove_update(string id)
+{
+    string file_path;
+    
+    if (!id)
+        return 0;
+        
+    // 删除文件
+    file_path = UPDATES_DIR + id + ".json";
+    if (file_size(file_path) > 0)
+        rm(file_path);
+    
+    // Update index
+    map_delete(updates_index, id);
+    save_index();
+    
+    // Clear cache
+    map_delete(updates_cache, id);
+    
+    return 1;
+}

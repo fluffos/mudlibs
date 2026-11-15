@@ -1,0 +1,379 @@
+inherit ROOM;
+
+int start_fuben_caoren(object who);
+int get_max_level(string *skills, mapping map_skills);
+void check_caoren_count(object room);
+void random_event(object room, object who);
+void start_murenzheng(object room, object who);
+void end_murenzheng(object room, object who);
+
+// 随机事件相关变量
+int event_triggered = 0;     // 是否已触发随机事件
+int murenzheng_active = 0;   // 木人阵是否激活
+int remaining_caoren = 10;   // 剩余木人数量
+
+void create()
+{
+	set("short", "试炼竹林");
+	set("long", @LONG
+这片试炼竹林隐匿于幽静的山谷之中，四周被险峻的山峰环绕，人迹罕至。踏入竹林，
+首先映入眼帘的是一片翠绿的竹海，修长的竹子直插云霄，竹叶在微风中轻轻摇曳，发出
+沙沙的声响，仿佛在诉说着古老的武学秘密。阳光透过茂密的竹叶，在地上洒下斑驳的光
+影，给竹林增添了几分神秘和肃穆。
+
+竹林中央是一片平整的空地，地面铺着细密的青石，上面刻有各种武学阵法图案。四
+周摆放着各式各样的木人，它们神态各异，手持不同兵器，静静等待着挑战者的到来。空
+气中弥漫着淡淡的木香和竹香，偶尔还能听到远处传来的鸟鸣声，为这片试炼场增添了一
+丝生机。
+
+这里是武者磨砺自身武艺的绝佳场所，据说能在此地无伤通关的武者，将获得前辈高
+人的赏识与厚赐。
+LONG);
+
+	set("action_list", ([
+		"离开副本" : "likai",
+		]));
+	
+	set("no_magic", 1);
+	set("no_clean_up_fb", 1);
+	setup();
+}
+
+void init()
+{
+	add_action("do_likai", "likai");
+}
+
+int do_likai(string arg)
+{
+	if(!arg)
+		return notify_fail(ZJOBLONG + "你确定要离开试炼竹林？离开后本次挑战将结束。\n" ZJOBACTS2 + "确定离开:likai y"ZJSEP"取消:cancel\n");
+	
+	if(arg == "y")
+	{
+		tell_object(this_player(), HIY "你深吸一口气，收起内力，缓步离开了试炼竹林。\n" NOR);
+		this_player()->move("d/city/kedian");
+		tell_object(this_player(), "你回到了扬州客店。\n");
+	}
+	remove_call_out("end_fuben_caoren");
+	destruct(this_object());
+	
+	return 1;
+}
+
+int start_fuben_caoren(object who)
+{
+	int last_time, i, level;
+	object caoren;
+	mapping caoren_hp;
+	
+	//上次进入时间
+	last_time = who->query("fuben_caoren/last_time");
+
+	if((last_time/86400 == time()/86400) && (who->query("fuben_caoren/count") > 1))
+	{
+		tell_object(who, HIR "【试炼提示】木剑砺锋试炼一天只能进入两次，你今日的机会已经用完。\n" NOR);
+		return 0;
+	}
+	else if(last_time/86400 != time()/86400)
+	{
+		//重置进入次数
+		who->delete("fuben_caoren/count");
+	}
+
+	// 如果玩家没有武功不能进入
+	if (!sizeof(who->query_skills()))
+	{
+		tell_object(who, HIR "【试炼提示】你尚未习得任何武功，无法参与木剑砺锋试炼。\n" NOR);
+		return 0;
+	}
+	
+	// 重置随机事件和木人阵状态
+	event_triggered = 0;
+	murenzheng_active = 0;
+	remaining_caoren = 10;
+	
+	tell_object(who, HIC "【试炼开始】你踏入了神秘的试炼竹林，十具木人已经准备就绪，等待你的挑战！\n" NOR);
+	tell_object(who, HIC "【试炼规则】击败所有木人即可通关，挑战时间为15分钟。\n" NOR);
+	tell_object(who, HIC "【特殊奖励】无伤通关或在3分钟内通关可获得额外奖励！\n" NOR);
+	tell_object(who, HIC "【特殊机制】试炼过程中可能会触发随机事件和木人阵，请做好准备！\n" NOR);
+	
+	for(i = 0; i < 10; i++)
+	{
+		caoren = new(__DIR__"caoren");
+		level = get_max_level(keys(who->query_skills()), who->query_skills()) / 100;
+		caoren_hp = caoren->query_entire_dbase();
+		caoren_hp["max_qi"] = caoren_hp["eff_qi"] = caoren_hp["qi"] = caoren_hp["max_qi"] + 1000 * level;
+		caoren_hp["max_neili"] = caoren_hp["neili"] = caoren_hp["max_neili"] + 500 * level;
+		caoren_hp["max_jing"] = caoren_hp["jing"] = caoren_hp["eff_jing"] =caoren_hp["max_jing"] + 500 * level;
+		
+		caoren->move(this_object());
+	}
+	who->set("fuben_caoren/last_time", time());
+	who->add("fuben_caoren/count", 1);
+	set("fuben_caoren", who->query("fuben_caoren/count"));
+	who->move(this_object());
+	call_out("end_fuben_caoren", 900, who, this_object());
+
+	// 从这里开始，开启受伤记录,先关闭再记录
+	who->set_on_damage(0);//先关闭是为了清空之前的记录
+	who->set_on_damage(1);//再开启是为了记录新的受伤记录
+	
+	return 1;
+}
+
+void end_fuben_caoren(object me, object room)
+{
+	if (sscanf(base_name(environment(me)), __DIR__"%*s") && (room->query("fuben_caoren") == me->query("fuben_caoren/count")))
+	{
+		tell_object(me, HBRED+HIY"【试炼结束】挑战时间已到，你未能在规定时间内完成试炼！\n"NOR);
+		tell_object(me, HIY"一阵天旋地转，你被传送回了扬州客店。\n"NOR);
+		me->move("d/city/kedian");
+	}
+	
+	// 重置木人阵状态
+	murenzheng_active = 0;
+	event_triggered = 0;
+	
+	if(objectp(room))
+		destruct(room);
+}
+
+int get_max_level(string *skills, mapping map_skills)	//获取武功数组中最高等级武功
+{
+	string temp;
+	int max_level = 0;
+	
+	foreach(temp in skills)
+	{
+		if (max_level < map_skills[temp])
+		{
+			max_level = map_skills[temp];
+		}
+	}
+	
+	return max_level;
+}
+
+void check_caoren_count(object room)
+{
+	object *inv;
+	object who;
+	int count = 0;
+	
+	// 获取当前房间内的所有对象
+	inv = all_inventory(room);
+	
+	// 计算剩余木人数量
+	foreach(object ob in inv)
+	{
+		if (ob->is_cao())
+			count++;
+		else if (userp(ob))
+			who = ob;
+	}
+	
+	// 更新剩余木人数量
+	remaining_caoren = count;
+	
+	// 当剩余木人数量为5个时，触发木人阵
+	if (count == 5 && !murenzheng_active && objectp(who))
+	{
+		start_murenzheng(room, who);
+	}
+	
+	// 当剩余木人数量为7个时，触发随机事件
+	if (count == 7 && !event_triggered && objectp(who))
+	{
+		random_event(room, who);
+	}
+	
+	// 当木人阵激活，但剩余木人数量小于3时，结束木人阵
+	if (count < 3 && murenzheng_active && objectp(who))
+	{
+		end_murenzheng(room, who);
+	}
+}
+
+void random_event(object room, object who)
+{
+	int event_type;
+	object *inv;
+	object caoren;
+	
+	// 标记事件已触发
+	event_triggered = 1;
+	
+	// 随机选择一个事件类型
+	event_type = random(3);
+	
+	// 获取房间内所有木人
+	inv = filter_array(all_inventory(room), (: $1->is_cao() :));
+	
+	switch(event_type)
+	{
+		case 0: // 竹林风暴
+			tell_object(who, HIC "\n【随机事件】竹林风暴！\n" NOR);
+			tell_object(who, HIW "突然间，竹林中刮起一阵强烈的旋风，竹叶纷飞，木人的动作变得迟缓起来！\n" NOR);
+			
+			// 对所有木人造成影响
+			foreach(object ob in inv)
+			{
+				// 降低木人的攻击速度和命中率
+				ob->add_temp("apply/attack", -50);
+				ob->add_temp("apply/dodge", -30);
+			}
+			
+			// 设置事件持续时间
+			call_out("end_event", 60, room, who, 0);
+			break;
+			
+		case 1: // 木人觉醒
+			if (sizeof(inv) > 0)
+			{
+				// 随机选择一个木人觉醒
+				caoren = inv[random(sizeof(inv))];
+				
+				tell_object(who, HIC "\n【随机事件】木人觉醒！\n" NOR);
+				tell_object(who, HIR + caoren->query("name") + "突然眼中闪过一道红光，仿佛被注入了灵魂，动作变得更加灵活迅捷！\n" NOR);
+				
+				// 提升该木人的能力
+				caoren->add_temp("apply/attack", 100);
+				caoren->add_temp("apply/damage", 50);
+				caoren->add_temp("apply/dodge", 80);
+				
+				// 增加木人的气血
+				caoren->add("max_qi", 2000);
+				caoren->add("eff_qi", 2000);
+				caoren->add("qi", 2000);
+				
+				// 设置特殊标记
+				caoren->set("awakened", 1);
+				
+				// 修改木人名称
+				caoren->set_name("觉醒" + caoren->query("name"), ({caoren->query("id")}));
+			}
+			break;
+			
+		case 2: // 武学感悟
+			tell_object(who, HIC "\n【随机事件】武学感悟！\n" NOR);
+			tell_object(who, HIG "在与木人的交手中，你突然对武学有了新的领悟，获得了宝贵的修炼经验！\n" NOR);
+			
+			// 直接给予潜能奖励，而不是临时提升能力
+			{
+				int pot_reward = 1000 + random(500);
+				who->add("potential", pot_reward);
+				tell_object(who, HIY "你获得了" + HIW + pot_reward + HIY + "点潜能！\n" NOR);
+			}
+			break;
+	}
+}
+
+void end_event(object room, object who, int event_type)
+{
+	object *inv;
+	
+	if (!objectp(room) || !objectp(who))
+		return;
+		
+	// 获取房间内所有木人
+	inv = filter_array(all_inventory(room), (: $1->is_cao() :));
+	
+	switch(event_type)
+	{
+		case 0: // 竹林风暴结束
+			tell_object(who, HIC "【事件结束】竹林风暴逐渐平息，木人恢复了正常状态。\n" NOR);
+			
+			// 恢复木人状态
+			foreach(object ob in inv)
+			{
+				ob->add_temp("apply/attack", 50);
+				ob->add_temp("apply/dodge", 30);
+			}
+			break;
+			
+		// 武学感悟不需要结束事件，因为是直接给予潜能奖励
+	}
+}
+
+void start_murenzheng(object room, object who)
+{
+	object *inv;
+	string *msgs = ({
+		"木人们突然排列成一个奇特的阵型，彼此之间似乎产生了某种神秘的联系！",
+		"地面上的阵法图案开始发出微弱的光芒，木人的动作变得更加协调！",
+		"你感到一股无形的压力扑面而来，这就是传说中的木人阵！"
+	});
+	
+	// 标记木人阵已激活
+	murenzheng_active = 1;
+	
+	// 获取房间内所有木人
+	inv = filter_array(all_inventory(room), (: $1->is_cao() :));
+	
+	// 发送木人阵激活的提示
+	tell_object(who, HIC "\n【特殊事件】木人阵启动！\n" NOR);
+	
+	// 随机选择一条描述信息
+	tell_object(who, HIY + msgs[random(sizeof(msgs))] + "\n" NOR);
+	
+	// 提升所有木人的能力
+	foreach(object ob in inv)
+	{
+		// 提升木人的攻击和防御能力
+		ob->add_temp("apply/attack", 70);
+		ob->add_temp("apply/parry", 50);
+		ob->add_temp("apply/dodge", 40);
+		ob->add_temp("apply/damage", 30);
+		
+		// 设置木人阵标记
+		ob->set("in_murenzheng", 1);
+		
+		// 修改木人名称
+		ob->set_name("阵中" + ob->query("name"), ({ob->query("id")}));
+	}
+	
+	// 修改房间描述，添加木人阵的描述
+	set("long", query("long") + "\n" + HIY "此刻，木人们排列成一个奇特的阵型，地面上的阵法图案闪烁着微光，形成了一个玄妙的木人阵！" NOR);
+}
+
+// 添加一个函数用于恢复房间的原始描述
+void reset_room_desc()
+{
+	string original_desc = @LONG
+这片试炼竹林隐匿于幽静的山谷之中，四周被险峻的山峰环绕，人迹罕至。踏入竹林，
+首先映入眼帘的是一片翠绿的竹海，修长的竹子直插云霄，竹叶在微风中轻轻摇曳，发出
+沙沙的声响，仿佛在诉说着古老的武学秘密。阳光透过茂密的竹叶，在地上洒下斑驳的光
+影，给竹林增添了几分神秘和肃穆。
+
+竹林中央是一片平整的空地，地面铺着细密的青石，上面刻有各种武学阵法图案。四
+周摆放着各式各样的木人，它们神态各异，手持不同兵器，静静等待着挑战者的到来。空
+气中弥漫着淡淡的木香和竹香，偶尔还能听到远处传来的鸟鸣声，为这片试炼场增添了一
+丝生机。
+
+这里是武者磨砺自身武艺的绝佳场所，据说能在此地无伤通关的武者，将获得前辈高
+人的赏识与厚赐。
+LONG;
+
+	set("long", original_desc);
+}
+
+// 添加木人阵结束函数
+void end_murenzheng(object room, object who)
+{
+	// 标记木人阵已结束
+	murenzheng_active = 0;
+	
+	// 发送木人阵结束的提示
+	tell_object(who, HIC "\n【特殊事件】木人阵瓦解！\n" NOR);
+	tell_object(who, HIY "随着大部分木人被击败，木人阵的力量逐渐消散，地面上的阵法图案也恢复了平静。\n" NOR);
+	
+	// 恢复房间描述
+	reset_room_desc();
+	
+	// 给予玩家额外奖励
+	tell_object(who, HIC "【特殊奖励】你成功击破了木人阵，获得额外的2000点经验和1000点潜能！\n" NOR);
+	// who->add("combat_exp", 2000);
+	FUBEN_D->add_exp(who, 2000);
+	who->add("potential", 1000);
+}

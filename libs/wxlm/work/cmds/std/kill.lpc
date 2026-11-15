@@ -1,0 +1,221 @@
+/**
+ * @file kill.c
+ * @brief 生死决斗命令实现
+ * @details 实现玩家间的生死搏杀，支持根据境界差异显示不同的杀意宣言
+ */
+
+// kill.c
+
+inherit F_CLEAN_UP;
+
+// 函数原型声明
+string get_kill_message(object me, object obj, string callname);
+
+/**
+ * @brief 获取根据境界差异的杀意宣言
+ * @param object me 挑战者
+ * @param object obj 被挑战者
+ * @param string callname 对目标的蔑称
+ * @return string 杀意宣言文本
+ * @details 根据挑战者与被挑战者的境界差异，返回不同的杀意宣言
+ */
+string get_kill_message(object me, object obj, string callname)
+{
+	int me_is_wuzun, me_is_zongshi, obj_is_wuzun, obj_is_zongshi;
+	string *messages;
+	
+	// 判定境界
+	me_is_wuzun = me->query("sanhua_done");
+	me_is_zongshi = me->query("opinion/ultra");
+	obj_is_wuzun = obj->query("sanhua_done");
+	obj_is_zongshi = obj->query("opinion/ultra");
+	
+	// 武尊挑战武尊
+	if (me_is_wuzun && obj_is_wuzun) {
+		messages = ({
+			"\n$N眸光深如古井，淡然开口：「" + callname + "，此战过后，世间再无你我。」\n\n",
+			"\n$N神色漠然，声音如寒冰：「" + callname + "，今日便做个了断。」\n\n",
+			"\n$N缓缓抬眸，平静如死水：「" + callname + "，该送你上路了。」\n\n"
+		});
+	}
+	// 武尊杀宗师/普通
+	else if (me_is_wuzun) {
+		messages = ({
+			"\n$N神色淡漠，轻声道：「" + callname + "，记住杀你的人。」\n\n",
+			"\n$N眼神无波无澜：「" + callname + "，你的死期到了。」\n\n",
+			"\n$N平静如古井：「" + callname + "，蝼蚁终归是蝼蚁。」\n\n"
+		});
+	}
+	// 宗师/普通挑战武尊（以下克上）
+	else if (obj_is_wuzun) {
+		messages = ({
+			"\n$N双目血红，嘶吼道：「" + callname + "！传说又如何？今天我就要杀神证道！」\n\n",
+			"\n$N面露死志，癫狂大笑：「" + callname + "！就算是死，我也要在你身上咬下一块肉！」\n\n",
+			"\n$N眼中闪过绝望的疯狂：「" + callname + "！武尊之名，今日我来终结！」\n\n"
+		});
+	}
+	// 宗师挑战宗师
+	else if (me_is_zongshi && obj_is_zongshi) {
+		messages = ({
+			"\n$N杀机毕露，厉声道：「" + callname + "！你我之间，不死不休！」\n\n",
+			"\n$N眸光如刀，冷冷地说：「" + callname + "！今日这里只能活一个！」\n\n",
+			"\n$N眼中战意如火：「" + callname + "！同为宗师，生死见分晓！」\n\n"
+		});
+	}
+	// 宗师杀普通
+	else if (me_is_zongshi) {
+		messages = ({
+			"\n$N眼神冰冷，杀意凛然：「" + callname + "，蝼蚁也敢冒犯宗师？」\n\n",
+			"\n$N冷漠地扫了一眼：「" + callname + "，是你自己找死，怨不得我。」\n\n",
+			"\n$N杀机暴起：「" + callname + "！不知天高地厚的东西！」\n\n"
+		});
+	}
+	// 普通挑战宗师（以下克上）
+	else if (obj_is_zongshi) {
+		messages = ({
+			"\n$N咬紧牙关，声音带着颤抖：「" + callname + "！今日就算拼死，我也要试试你的高招！」\n\n",
+			"\n$N眼中闪过绝望的疯狂：「" + callname + "！既然活不下去，那就拉你垫背！」\n\n",
+			"\n$N癫狂大笑：「" + callname + "！老子今天就要捅死你这个高高在上的家伙！」\n\n"
+		});
+	}
+	// 普通vs普通
+	else {
+		messages = ({
+			"\n$N握紧双拳，怒目而视：「" + callname + "！今日不是你死就是我亡！」\n\n",
+			"\n$N拔出兵器，大声喝道：「" + callname + "！纳命来！」\n\n",
+			"\n$N怒火中烧，指着$n：「" + callname + "！你欺人太甚，我与你拼了！」\n\n",
+			"\n$N眼中战意熊熊：「" + callname + "！血债血偿的时候到了！」\n\n"
+		});
+	}
+	
+	return messages[random(sizeof(messages))];
+}
+
+/**
+ * @brief 生死决斗命令主函数
+ * @param object me 发起挑战的玩家
+ * @param string arg 目标对象的标识
+ * @return int 返回1表示成功执行，0表示失败
+ * @details 实现生死决斗逻辑，包含安全检查、境界判定和杀意宣言
+ */
+int main(object me, string arg)
+{
+	object obj;
+	string callname;
+
+	if (me->is_chatter())
+		return 0;
+
+	if (! arg)
+		return notify_fail("杀意已起，但你要杀的是谁？\n");
+
+	if (! objectp(obj = present(arg, environment(me))))
+		return notify_fail("四下寻觅，却不见此人踪影。\n");
+
+	if (! obj->is_character() || obj->is_corpse())
+		return notify_fail("死物如何能杀？你的杀意找错了目标。\n");
+	if (obj->query("owner") == me->query("id")) 
+		return notify_fail("弑杀自己的追随者？你已经疯狂到这种地步了吗？\n");
+	if (obj == me)
+		return notify_fail("自戕而亡？用 suicide 命令吧，那样死得更快。\n");
+
+	if (arrayp(me->query_team()) &&
+	    member_array(obj, me->query_team()) != -1)
+		return notify_fail("同伴相残？这种背叛比死更令人不齿！\n");
+
+	if (me->is_fighting(obj) && me->is_killing(obj->query("id")))
+		return notify_fail("生死决斗已经开始，何必再添杀意？\n");
+
+	if ((me->query("age")<18 || me->query("combat_exp",1)<200000) && userp(obj) && !me->query_temp("in_pkd"))
+		return notify_fail("乳臭未干就想杀人？回去再练几年吧！\n");
+
+	if ((obj->query("age")<18 || obj->query("combat_exp",1)<200000) && userp(obj) && !obj->query_temp("in_pkd"))
+		return notify_fail("对孩童下杀手？你的心已经这般狠毒了吗？\n");
+	
+	if (environment(me)->query("no_fight")&&!obj->query_condition("killer"))
+		return notify_fail("此地禁止厮杀，收起你的杀念。\n");
+	
+	if (! wizardp(me) && wizardp(obj))
+		return notify_fail("凡人岂敢弑神？你的杀意还不够资格。\n");
+
+	if (! me->is_fighting(obj) &&
+	    me->query("qi") < me->query("max_qi") * 3 / 10)
+		return notify_fail("气血衰竭，连举刀的力气都没有，还想杀人？\n");
+
+	// 如果obj是主线任务战斗npc，则移动到战斗房间
+	// if (obj->query("is_main_task_combat_npc"))
+	// {
+	// 	obj = MAIN_TASK_MASTER->move_to_combat_room(environment(me),me,obj);
+	// }
+
+	callname = RANK_D->query_rude(obj);
+
+	if (obj->query("can_speak"))
+	{
+		string kill_msg;
+		kill_msg = get_kill_message(me, obj, callname);
+		message_vision(kill_msg, me, obj);
+	}
+
+	switch(obj->accept_kill(me))
+	{
+	case 0:
+		return (! objectp(obj));
+	case -1:
+		return 1;
+	default:
+	}
+
+	if (userp(me) && userp(obj) && ! obj->is_want_kill(me->query("id")) )
+		// Recoder the player want to kill another player
+		me->want_kill(obj);
+
+	me->kill_ob(obj);
+	if (living(obj) && ! userp(obj))
+		obj->kill_ob(me);
+	else
+		obj->fight_ob(me);
+
+	return 1;
+}
+
+/**
+ * @brief 显示kill命令的帮助信息
+ * @param object me 查看帮助的玩家
+ * @return int 始终返回1
+ * @details 提供kill命令的使用说明和注意事项
+ */
+int help(object me)
+{
+	write(@HELP
+【生死决斗】kill <目标>
+
+█ 命令说明 █
+kill命令将发起真正的生死搏杀，与切磋不同，这是不死不休的血腥厮杀！
+系统会根据你与对手的境界差异，显示不同的杀意宣言。
+
+█ 境界体系 █
+• 武尊境界：sanhua_done（散花成就）
+• 宗师境界：opinion/ultra  
+• 普通江湖：其他情况
+
+█ 战斗特色 █
+• 以下克上：境界低者挑战高者，显示拼死一搏的疯狂
+• 以上制下：境界高者对低者，展现冷酷无情的杀意
+• 同境对决：势均力敌的生死较量
+
+█ 重要警告 █
+⚠️ 这是真正的杀戮，会造成真实伤害和死亡！
+⚠️ 被kill时会显示红色警告，请谨慎应对！  
+⚠️ 对年幼角色(18岁以下)有特殊限制！
+⚠️ 某些神圣区域禁止杀戮！
+
+█ 相关命令 █
+• hit   - 普通攻击
+• fight - 切磋比试
+• help combat - 查看战斗系统详解
+
+记住：江湖险恶，一旦拔刀，必见生死！
+HELP );
+	return 1;
+}

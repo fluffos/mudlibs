@@ -1,0 +1,225 @@
+// This program is a part of NITAN MudLIB
+
+
+#include <combat.h>
+
+#include "/kungfu/skill/eff_msg.h";
+
+inherit F_SSERVER;
+
+#define RI "「" HIW "魔光日无极" NOR "」"
+string query_name() { return "魔光"ZJBR"日无极"; }
+int perform(object me)
+{
+        object *obs;
+        string msg;
+        int damage;
+        int ap, dp;
+        int flag;
+        int i;
+        int p;
+
+        if (userp(me) && ! me->query("can_perform/jiuyang-shengong/ri"))
+                return notify_fail("你还没有解开紫阳神功的诀窍，无法施展" RI "。\n");
+
+        me->clean_up_enemy();
+        if (! me->is_fighting())
+                return notify_fail(RI "只能对战斗中的对手使用。\n");
+
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail(RI "只能空手施展。\n");
+                
+        if (me->query("max_neili") < 8000)
+                return notify_fail("你的内力的修为不够，现在无法使用" RI "。\n");
+
+        if (me->query_skill("jiuyang-shengong", 1) < 250)
+                return notify_fail("你的紫阳神功还不够娴熟，难以施展" RI "。\n");
+
+        if (me->query_skill_mapped("unarmed") != "jiuyang-shengong")
+                return notify_fail("你现在没有激发紫阳神功为拳脚，难以施展" RI "。\n");
+
+        if (me->query_skill_mapped("force") != "jiuyang-shengong")
+                return notify_fail("你现在没有激发紫阳神功为内功，难以施展" RI "。\n");
+
+        if (me->query_skill_prepared("unarmed") != "jiuyang-shengong")
+                return notify_fail("你现在没有准备使用紫阳神功，难以施展" RI "。\n");
+
+        if ((int)me->query("neili") < 2000)
+                return notify_fail("你的真气不够，无法运用" RI "。\n");
+
+        msg = HIY "只见$N" HIY "双目微闭，单手托天。掌心顿时腾起一个无比刺眼的"
+              "气团，正是奥\n义「" NOR + HIW "魔光日无极" NOR + HIY "」。霎时"
+              "金光万道，尘沙四起，空气炽热，几欲沸腾。$N" HIY "\n随即收拢掌心"
+              "，气团爆裂开来，向四周电射而出，光芒足以和日月争辉。\n\n" NOR;
+
+        message_combatd(msg, me);
+
+        me->add("neili", -1000);
+        me->start_busy(3);
+
+        ap = me->query_skill("unarmed") + me->query_con();
+
+        obs = me->query_enemy();
+        for (flag = 0, i = 0; i < sizeof(obs); i++)
+        {
+                dp = obs[i]->query_skill("parry") + obs[i]->query_con();
+
+                if (!playerp(obs[i]))
+                {
+                        ap = ap * 3 / 2;
+                }
+
+                if (COMBAT_D->hit_determination(me,obs[i],ap,dp))
+                {
+                        int damage_per = 0;
+
+                        switch (random(2))
+                        {
+                        case 0:
+                                tell_object(obs[i], HIR "你只觉眼前金光万道，周围空气几欲沸"
+                                                    "腾，光芒便如利箭一般透体而入。\n" NOR);
+                                break;
+
+                        default:
+                                tell_object(obs[i], HIR "你只觉眼前金光万道，周围空气几欲沸"
+                                                    "腾，光芒便如千万细针一齐扎入身体般。\n"
+                                                    NOR);
+                                break;
+                        }
+
+                        //内功修为加上拳脚修为
+                        damage = me->query_skill("force") + me->query_skill("unarmed");
+                        damage += me->query("max_neili") / 20;
+
+                        damage *= 2;
+
+                        //大成九阳神功(300级以上)额外增伤50%。
+                        if (me->query_skill("jiuyang-shengong", 1) >= 300 && me->query("opinion/ultra"))
+                        {
+                                damage_per += 50;
+                        }
+
+                        //如果敌人只有一个集中功力。伤害+50%
+                        if (sizeof(obs) == 1)
+                        {
+                                damage_per += 50;
+                                msg = HIY "$N" HIY "见只有一个对手，立刻集中全部功力，掌心气团光芒暴涨，威力大增！\n" NOR;
+                                message_combatd(msg, me);
+                        }
+
+
+                        damage_per += COMBAT_D->get_skill_aoyi_level(me, "光明圣火") * 10;//每层意境增伤10%
+
+                        damage += damage * damage_per / 100;
+
+                        if (!playerp(obs[i]))
+                        {
+                                damage = damage * 3 / 2;
+                        }
+
+                        // obs[i]->receive_damage("qi", damage, me);
+                        // obs[i]->receive_wound("qi", damage, me);
+			COMBAT_D->real_damage(me, obs[i], damage);
+                        // msg = HIR + obs[i]->name() + "受到" + me->name() + "的魔光日无极影响，气血减少" + damage + "点！"NOR"\n";
+                        // message_vision(msg, me, obs[i]);
+
+                        obs[i]->receive_damage("jing", damage / 6, me);
+                        obs[i]->receive_wound("jing", damage / 10, me);
+
+                        p = (int)obs[i]->query("qi") * 100 / (int)obs[i]->query("max_qi");
+
+                        switch (random(5))
+                        {
+                        case 0:
+                                msg = HIR "只听" + obs[i]->name() +
+                                      HIR "一声惨嚎，接连退了数步，“"
+                                      "哇”的呕出一大口鲜血。\n" NOR;
+                                msg += "( " + obs[i]->name() + eff_status_msg(p) + " )\n\n";
+                                break;
+
+                        case 1:
+                                msg = HIR "只见" + obs[i]->name() +
+                                      HIR "向后飞出丈远，重重的跌落在"
+                                      "地上，衣衫烧焦，再也没力气站起"
+                                      "。\n" NOR;
+                                msg += "( " + obs[i]->name() + eff_status_msg(p) + " )\n\n";
+                                break;
+
+                        case 2:
+                                msg = HIR "只见" + obs[i]->name() +
+                                      HIR "跌跌撞撞向后连退数步，伏倒"
+                                      "在地。须眉、衣衫都发出一股焦臭"
+                                      "。\n" NOR;
+                                msg += "( " + obs[i]->name() + eff_status_msg(p) + " )\n\n";
+                                break;
+
+                        case 3:
+                                msg = HIR "光芒闪过，" + obs[i]->name() +
+                                      HIR "却是呆立当场，动也不动，七"
+                                      "窍流血，神情扭曲，煞是恐怖。\n" NOR;
+                                msg += "( " + obs[i]->name() + eff_status_msg(p) + " )\n\n";
+                                break;
+
+                        default:
+                                msg = HIR + obs[i]->name() +
+                                      HIR "急忙抽身后退，可只见眼前光"
+                                      "芒暴涨，一闪而过。全身已多了数"
+                                      "个伤口，鲜血飞溅。\n" NOR;
+                                msg += "( " + obs[i]->name() + eff_status_msg(p) + " )\n\n";
+                                break;
+                        }
+
+                        message("vision", msg, environment(me), ({ obs[i] }));
+                        msg = HIR + obs[i]->name() + "受到" + me->name() + "的魔光日无极影响，精元减少"HIY + damage / 6 + HIR"点！"NOR"\n";
+                        message_vision(msg, me, obs[i]);
+                        obs[i]->add("neili", -500);
+                        flag = 1;
+                } else
+                {
+                        tell_object(obs[i], HIY "你只觉眼前金光万道，周围空气几"
+                                            "欲沸腾，大惊之下连忙急运内功，抵御"
+                                            "开来。\n" NOR);
+                }
+                if (obs[i]->query("neili") < 0)
+                        obs[i]->set("neili", 0);
+        }
+
+        if (! flag) 
+                message_vision(HIY "只见光芒顿敛，却没有任何人被$N"
+                               HIY "这招击中。\n\n" NOR, me, 0, obs);
+
+        return 1;
+}
+
+string query_txt()
+{
+        return @DESC
+招式简介：
+「魔光日无极」是紫阳神功中的一种绝技，通过凝聚强大的内力形成刺眼的气团，随后释放，对周围的所有敌人造成巨大伤害。此招要求施术者具有深厚的内功修为与拳脚功夫，以及足够的根骨支撑。
+
+施展条件：
+施术者紫阳神功的基本技能等级至少为250级。
+施术者内力修为至少为8000点。
+施术者当前真气（内力）值需达到2000点以上。
+施术者当前激活的拳脚技能必须是紫阳神功。
+施术者当前激活的内功技能必须是紫阳神功。
+施术者必须空手，不得携带任何武器。
+施术者必须正在与敌人战斗。
+施展流程：
+施术者双眼微闭，单手托天，掌心腾起一个刺眼的气团，随后收拢掌心，气团爆裂并向四周电射而出，光芒足以和日月争辉。
+施术者消耗1000点内力，并进入5回合的忙乱状态。
+施术者对所有敌人进行攻击，攻击力（AP）计算为施术者拳脚技能等级加上根骨属性。
+对于每一个敌人，计算其防御力（DP）为其格挡技能等级加上根骨属性。
+若AP除以2加上随机AP值大于DP，则招式命中，造成伤害。
+伤害计算基于施术者内功修为加上拳脚修为，若施术者紫阳神功达到大成（500级以上），额外增伤50%，并且每层「光明圣火」意境增加伤害10%。
+伤害分为气血伤害、精元伤害，气血伤害为计算出的伤害值，精元伤害为伤害值的六分之一。
+被命中的敌人可能因内力耗尽而陷入更严重的状态。
+效果：
+范围内的所有敌人都会受到不同程度的伤害，具体表现为气血、精元的损失。
+被命中的敌人可能会被击飞、跌倒、呆立不动等，具体表现取决于其剩余气血比例。
+被命中的敌人会损失500点内力。
+特殊效果：
+「光明圣火」意境层数越高，伤害加成越大。
+大成九阳神功可以提供额外的伤害加成。
+DESC;
+}

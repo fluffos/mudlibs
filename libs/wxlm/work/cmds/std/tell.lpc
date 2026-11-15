@@ -1,0 +1,242 @@
+// 千里传音指令
+// Created by Snowsot
+// Last Modified by Claude
+
+#include <net/dns.h>
+inherit F_CLEAN_UP;
+
+// 函数声明
+int help(object me);
+private void create();
+// private object find_player(string target);
+private int check_tell_flood(object me);
+private void record_tell_message(object me, object target, string msg);
+string remote_tell(string cname, string from, string mud, string to, string msg);
+
+// Debug相关
+#define DEBUG "snowsot"
+#ifdef DEBUG
+private void debug(string x) {
+    object monitor;
+    
+    if (!stringp(x) || !stringp(DEBUG)) return;
+    monitor = find_player(DEBUG);
+    if (monitor && monitor->query("env/debug")) {
+        tell_object(monitor, x + "\n");
+    }
+}
+#else
+#define debug(x)
+#endif
+
+// 查找玩家
+// private object find_player(string target) {
+//     int i;
+//     object *str;
+    
+//     str = users();
+//     for (i = 0; i < sizeof(str); i++) {
+//         if (str[i]->query("id") == target) {
+//             if (!environment(str[i])) return 0;
+//             return str[i];
+//         }
+//     }
+//     return 0;
+// }
+
+// 检查tell信息发送频率
+private int check_tell_flood(object me) {
+    if (me->query("chblk_tell") + 300 > time()) {
+        return notify_fail("你现在喉咙嘶哑,半句话也说不出了。\n");
+    }
+    
+    me->add_temp("tell_msg_cnt", 1);
+    if (me->query_temp("tell_msg_cnt") > 5) {
+        if (time() - me->query_temp("tell_time") < 2) {
+            me->set("chblk_tell", time());
+        } else {
+            me->delete_temp("tell_msg_cnt");
+        }
+    }
+    return 1;
+}
+
+// 记录tell信息
+private void record_tell_message(object me, object target, string msg) {
+    debug(sprintf(YEL "%s(%s)告诉%s(%s)：%s" NOR,
+        me->name(1), me->query("id"),
+        target->name(1), target->query("id"),
+        msg));
+        
+    if (member_array("tell", me->query("channels")) == -1) {
+        me->set("channels", me->query("channels") + ({"tell"}));
+    }
+
+    // 使用临时变量记录消息
+    target->set_temp("tell_message/" + me->query("id") + "/" + time(), msg);
+}
+
+void create() {
+    seteuid(getuid());
+}
+
+int main(object me, string arg) {
+    string target, msg, mud;
+    object obj;
+    
+    // 参数检查
+    if (!arg) {
+        return help(me);
+    }
+
+    //如果arg没有空格，则认为是玩家id，则需要检查是否存在
+    if (arg && sscanf(arg, "%s %s", target, msg) != 2) {
+        object target_ob;
+        target = arg;
+
+        target_ob = find_player(target);
+        if (target_ob) {
+            // 检查是否为结义兄弟
+            if (me->is_brother(target_ob)) {
+                // 定义变量并放在函数顶部
+                string history = "";
+                mapping my_history, their_history;
+                mixed *messages = ({});
+
+                // 获取历史聊天记录
+                my_history = target_ob->query_temp("tell_message/" + me->query("id"));
+                their_history = me->query_temp("tell_message/" + target_ob->query("id"));
+
+                // 添加我发送的消息
+                if (mapp(my_history)) {
+                    foreach (string t, string message in my_history) {
+                        messages += ({ ({ to_int(t), 1, message }) }); // 1表示我发送的消息
+                    }
+                }
+
+                // 添加对方发送的消息
+                if (mapp(their_history)) {
+                    foreach (string t, string message in their_history) {
+                        messages += ({ ({ to_int(t), 0, message }) }); // 0表示对方发送的消息
+                    }
+                }
+
+                // 按时间戳排序
+                messages = sort_array(messages, (: $1[0] - $2[0] :));
+
+                // 生成排序后的历史记录
+                foreach (mixed *message_data in messages) {
+                    if (message_data[1]) // 我发送的消息
+                        history += sprintf("你对%s说：%s\n", target_ob->name(), message_data[2]);
+                    else // 对方发送的消息
+                        history += sprintf("%s对你说：%s\n", target_ob->name(), message_data[2]);
+                }
+
+                // 换行符替换为zjbr
+                history = replace_string(history, "\n", ZJBR);
+
+                tell_object(me, INPUTTXT(history + "请输入要告诉" + target_ob->name() + "的话：", 
+                    "tell " + target + " $txt#") + "\n");
+                return 1;
+            } else {
+                return notify_fail("你和" + target_ob->name() + "不是结义兄弟，无法千里传音。\n");
+            }
+        }
+
+        return notify_fail("没有这个人" + target + "....。\n");
+    }
+    
+    // 玩家发送消息频率检查
+    if (userp(me) && !wizardp(me)) {
+        if (!check_tell_flood(me)) return 0;
+    }
+    
+    // 跨MUD消息处理
+    if (sscanf(target, "%s@%s", target, mud) == 2) {
+        GTELL->send_gtell(mud, target, me, msg);
+        write(BOLD "网路讯息已送出，可能要稍候才能得到回应。"NOR"\n");
+        return 1;
+    }
+    
+    // 查找目标玩家
+    obj = find_player(target);
+    
+    // NPC发送消息处理
+    if (obj && !userp(me)) {
+        tell_object(obj, sprintf(BOLD "%s千里传音你：%s"NOR"\n",
+            me->name(1) + "(" + me->query("id") + ")",
+            msg));
+        return 1;
+    }
+    
+    // 错误检查
+    if (!obj) return notify_fail("没有这个人....。\n");
+    if (!me->visible(obj)) return notify_fail("没有这个人....。\n");
+    if (!interactive(obj)) return notify_fail("没有这个人....。\n");
+    if (obj == me) return notify_fail(PTEXT("你在自言自语的不知道在说什么...\n"));
+    
+    // 记录消息
+    record_tell_message(me, obj, msg);
+    
+    // 发送消息
+    write(popup_comb(BOLD + HIG "你千里传音" + obj->name(1) + "：" + msg + ""NOR"\n", ({ "继续输入:tell " + target })));
+    
+    // 检查接收者状态
+    if ((pointerp(obj->query("channels")) && 
+        member_array("tell", obj->query("channels")) == -1) && 
+        !wizardp(me)) {
+        return notify_fail("但" + obj->name(1) + "已经把tell频道关掉了....。\n");
+    }
+    
+    if (me->id(obj->query("env/no_tell"))) {
+        return notify_fail("很显然，" + obj->name(1) + "在生你的闷气，不想和你说话....。\n");
+    }
+    
+    // 发送消息给接收者
+    tell_object(obj, popup_comb(BOLD + HIG + me->name(1) + "(" + me->query("id") + ")千里传音你：" + msg + ""NOR"\n", ({ "回复:tell " + me->query("id") })));
+    
+    // 检查接收者状态并提示
+    if (query_idle(obj) > 120) {
+        write(YEL + "但是" + obj->name(1) + "已经发呆" + 
+            query_idle(obj)/60 + "分钟，看来不会马上回答你哟！\n" + NOR);
+    }
+    
+    if (in_edit(obj)) {
+        return notify_fail("但是，对方好像正在编辑档案！\n");
+    }
+    
+    // 设置回复对象
+    obj->set_temp("reply", me->query("id"));
+    return 1;
+}
+
+// 远程tell处理
+string remote_tell(string cname, string from, string mud, string to, string msg) {
+    object ob;
+    
+    if (ob = find_player(to)) {
+        if (cname) {
+            tell_object(ob, sprintf(PTEXT(BOLD "%s(%s@%s)千里传音你：%s"NOR"\n"),
+                cname, capitalize(from), mud, msg));
+        } else {
+            tell_object(ob, sprintf(PTEXT(BOLD "%s@%s 千里传音你：%s"NOR"\n"),
+                capitalize(from), mud, msg));
+        }
+        ob->set_temp("reply", from + "@" + mud);
+        return ob->name(1);
+    }
+    return 0;
+}
+
+int help(object me) {
+    write(@HELP
+指令格式：tell <某人> <讯息>
+你可以用这个指令和其他地方的使用者说话。
+其他相关指令：reply
+HELP
+    );
+    return 1;
+}
+
+
+

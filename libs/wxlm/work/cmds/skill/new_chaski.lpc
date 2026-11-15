@@ -1,0 +1,298 @@
+// 文件名: new_chaski.c
+// 描述: 查看技能详细信息的命令
+// 作者: Lu dexiang
+// 创建时间: Unknown
+// 修改时间: Unknown
+
+#define SKILL_TOP "/adm/special_ob/skill_top"
+#define SKILL_MASTER "/adm/special_ob/create_skill/self_skill_master"
+inherit F_CLEAN_UP;
+public string generate_skill_title(string skill_name);
+// 有效的技能类型列表
+string *valid_types = ({
+    "xinfa", "force", "dodge", "unarmed", "cuff", "strike", "finger", "hand", "claw",
+    "sword", "blade", "staff", "hammer", "club", "whip", "dagger", "throwing", "parry",
+    "magic", "medical", "poison", "chuixiao-jifa", "tanqin-jifa", "guzheng-jifa", "cooking",
+    "qin",
+});
+
+// 函数声明
+public string generate_element_info(object me, string sname,string basic);
+public mapping *generate_button_list(object me, object ob, string sname, string basic);
+varargs string generate_popmenu_buttons(object me, object ob, string sname, string desc, string basic);
+
+// 生成技能标题信息
+public string generate_skill_title(string skill_name)
+{
+    string title = "";
+    
+    // 生成基础标题
+    title = sprintf("技能名字：%s[%s]%s[%s武学]%s",
+        to_chinese(skill_name),
+        skill_name,
+        HIR,
+        SKILL_TOP->get_skill_level(skill_name),
+        NOR);
+
+    // 添加技能说明文本
+    if (SKILL_D(skill_name)->query_txt())
+        title += ZJBR + SKILL_D(skill_name)->query_txt();
+    
+    return title;
+}
+
+int main(object me, string arg)
+{
+    string str, ob_id;
+    object ob;
+    string basic;
+
+    if (!arg)
+        return notify_fail("你想查看什么资料的详细资料？\n");
+
+    // 解析参数并获取目标对象
+    if (sscanf(arg, "%s %s of %s", ob_id, arg, basic) == 3)
+    {
+        if (!(ob = find_player(ob_id)) && 
+            !(ob = find_living(ob_id)) && 
+            !(ob = present(ob_id, environment(me))))
+            return notify_fail("没有这个玩家。\n");
+    }
+    else if (sscanf(arg, "%s of %s", arg, basic) == 2)
+    {
+        ob = me;
+    }
+    else if (sscanf(arg, "%s %s", ob_id, arg) == 2)
+    {
+        if (!(ob = find_player(ob_id)) && 
+            !(ob = find_living(ob_id)) && 
+            !(ob = present(ob_id, environment(me))))
+            return notify_fail("没有这个玩家。\n");
+    }
+    else
+    {
+        ob = me;
+    }
+
+    // 检查技能是否存在
+    if (file_size(SKILL_D(arg) + ".lpc") <= 0)
+        return notify_fail("系统中没有你要查的这种技能。\n");
+
+    // 生成技能信息
+    str = generate_skill_title(arg);
+
+    write(generate_popmenu_buttons(me, ob, arg, str, basic) + "\n");
+    return 1;
+}
+
+// 生成元素信息的辅助函数
+public string generate_element_info(object me, string sname,string basic)
+{
+    mapping elements = COMBAT_D->single_elements_count(me, sname);
+    string element_str, *element_sor;
+
+    if (!elements) return "";
+
+    if (basic != "force" && basic != "dodge" && basic != "parry")
+        return "";
+    
+    element_str = HIR "元素情况：\n";
+    element_sor = ({"金", "木", "水", "火", "土"});
+    
+    foreach (string element in element_sor)
+        element_str += element + "[" + elements[element] + "] ";
+    
+    return element_str;
+}
+
+// 生成弹出菜单按钮
+varargs string generate_popmenu_buttons(object me, object ob, string sname, string desc, string basic)
+{
+    // 变量声明
+    string  type, *pfms;
+    object pop;
+    int i;
+    mapping pfm;
+
+    // 创建弹出菜单对象
+    pop = new(POP1);
+
+    // 添加元素信息（如果适用）
+    desc += generate_element_info(me, sname,basic);
+
+    pop->basic(desc, 2);
+
+    // 处理技能特殊功能
+    if (mapp(pfm = SKILL_D(sname)->query_pfm()))
+    {
+        string name;
+        pfms = keys(pfm);
+        for (i = 0; i < sizeof(pfms); i++)
+        {
+            sscanf(pfm[pfms[i]], "%s:%s", name, type);
+            
+            // 检查并添加perform功能按钮
+            if (file_size(SKILL_D(sname+"/perform/"+pfms[i])+".lpc") > 0 && 
+                SKILL_D(sname+"/perform/"+pfms[i])->query_txt())
+            {
+                pop->add_button(name, "chaski " + sname + " perform " + pfms[i]);
+            }
+            // 检查并添加exert功能按钮
+            else if (file_size(SKILL_D(sname+"/exert/"+pfms[i])+".lpc") > 0 && 
+                     SKILL_D(sname+"/exert/"+pfms[i])->query_txt())
+            {
+                pop->add_button(name, "chaski " + sname + " exert " + pfms[i]);
+            }
+            // 检查并添加其他功能按钮
+            else if (file_size(SKILL_D(sname+"/"+pfms[i])+".lpc") > 0 && 
+                     SKILL_D(sname+"/"+pfms[i])->query_txt())
+            {
+                pop->add_button(name, "chaski " + sname + " " + pfms[i]);
+            }
+        }
+    }
+
+    // 处理自身技能操作按钮
+    if (ob == me)
+    {
+        // 非基础技能的按钮
+        if (member_array(sname, valid_types) == -1)
+        {
+            if (!basic)
+                pop->add_button("激发", "skills " + sname);
+            else
+                pop->add_button("激发", "jifa " + basic + " " + sname);
+
+            pop->add_button("准备", "prepare " + sname);
+            pop->add_button("研究", "yanjiu " + sname);
+        }
+        // 基础技能的按钮
+        else
+        {
+            pop->add_button("练习", "lian " + sname);
+            pop->add_button("研究", "yanjiu " + sname);
+            if (me->query_skill_mapped(sname))
+                pop->add_button("取消激发", "jifa " + sname + " none");
+        }
+
+        // 元素相关技能的按钮
+        if (basic == "force" || basic == "dodge" || basic == "parry")
+        {
+            pop->add_button("解锁元素", "unlock_elements " + sname);
+        }
+
+        // 主技能演练按钮
+        if (SKILL_D(sname)->main_skill())
+        {
+            pop->add_button("演练", "yanlian " + SKILL_D(sname)->main_skill());
+        }
+
+        // 通用操作按钮
+        pop->add_button("查看", "chaski " + sname);
+        pop->add_button("放弃", "abandon " + sname);
+    }
+    // 处理其他玩家技能操作按钮
+    else
+    {
+        pop->add_button("请教", "learn " + ob->query("id") + " " + sname);
+        pop->add_button("查看", "chaski " + sname);
+    }
+
+    // 巫师特权按钮
+    if (wizardp(me))
+    {
+        pop->add_button("掌握500级", "call me->set_skill(" + sname + ",500)");
+    }
+
+    return pop->result();
+}
+
+// 生成按钮数组
+public mapping *generate_button_list(object me, object ob, string sname, string basic)
+{
+    // 变量声明
+    mapping *buttons = ({});
+
+    // 处理自身技能操作按钮
+    if (ob == me)
+    {
+        // 非基础技能的按钮
+        if (member_array(sname, valid_types) == -1)
+        {
+            if (!basic)
+                buttons += ({ ([ "name": "激发武学", "cmd": "skills " + sname ]) });
+            else
+                buttons += ({ ([ "name": "激发武学", "cmd": "jifa " + basic + " " + sname ]) });
+
+            if ("/cmds/skill/prepare"->find_basic_skill_type(me, sname, me->query_skill_map()))
+            {
+                buttons += ({ ([ "name": "准备武学", "cmd": "prepare " + sname ]) });
+            }
+
+            buttons += ({ 
+                ([ "name": "研究一级", "cmd": "yanjiu " + sname + " 1" ]),
+                ([ "name": "研究十级", "cmd": "yanjiu " + sname + " 10" ]),
+            });
+
+            //如果是一个可以自创招式的武学
+            if (SKILL_MASTER->check_skill_in_pool(sname) && wizardp(me))
+            {
+                buttons += ({ ([ "name": "自创招式", "cmd": "create_pfm new " + sname ]) });
+            }
+        }
+        // 基础技能的按钮
+        else
+        {
+            buttons += ({ 
+                ([ "name": "练习武学", "cmd": "lian " + sname ]),
+                ([ "name": "研究一级", "cmd": "yanjiu " + sname + " 1" ]),
+                ([ "name": "研究十级", "cmd": "yanjiu " + sname + " 10" ])
+            });
+            
+            if (me->query_skill_mapped(sname))
+                buttons += ({ ([ "name": HIR"取消激发"NOR, "cmd": "jifa " + sname + " none" ]) });
+        }
+
+        // 元素相关技能的按钮
+        if (basic == "force" || basic == "dodge" || basic == "parry")
+        {
+            buttons += ({ ([ "name": "解锁元素", "cmd": "unlock_elements " + sname ]) });
+        }
+
+        // 主技能演练按钮
+        if (SKILL_D(sname)->main_skill())
+        {
+            buttons += ({ ([ 
+                "name": "演练武学", 
+                "cmd": "yanlian " + SKILL_D(sname)->main_skill() 
+            ]) });
+        }
+
+        // 通用操作按钮
+        buttons += ({ 
+            ([ "name": "查看武学", "cmd": "chaski " + sname ]),
+            ([ "name": "废除武功", "cmd": "abandon " + sname ])
+        });
+    }
+    // 处理其他玩家技能操作按钮
+    else
+    {
+        buttons += ({ 
+            // ([ "name": "请教", "cmd": "learn " + ob->query("id") + " " + sname ]),
+            ([ "name": "学习一级", "cmd": "learn " + ob->query("id") + " " + sname + " 1" ]),
+            ([ "name": "学习十级", "cmd": "learn " + ob->query("id") + " " + sname + " 10" ]),
+            ([ "name": "查看技能", "cmd": "chaski " + sname ])
+        });
+    }
+
+    // 巫师特权按钮
+    if (wizardp(me))
+    {
+        buttons += ({ ([ 
+            "name": "直达一千", 
+            "cmd": "call me->set_skill(" + sname + ",1000)" 
+        ]) });
+    }
+
+    return buttons;
+}

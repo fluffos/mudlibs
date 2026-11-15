@@ -1,0 +1,80 @@
+// /cmds/std/combine_gem.c
+
+
+
+mapping gem_levels = ([
+    1: 1, 2: 3, 3: 9, 4: 27, 5: 81, 6: 162, 7: 324, 8: 648, 9: 1296, 10: 2592
+]);
+
+int calculate_total_value(object *gems) {
+    int total = 0;
+    for (int i = 0; i < sizeof(gems); i++) {
+        total += gems[i]->query_amount() * gem_levels[gems[i]->query("level")];
+    }
+    return total;
+}
+
+void remove_gems(object *gems, int amount) {
+    int removed = 0;
+    for (int i = 0; i < sizeof(gems) && removed < amount; i++) {
+        int gem_value = gem_levels[gems[i]->query("level")];
+        int gem_amount = gems[i]->query_amount();
+        int to_remove = (gem_amount * gem_value <= (amount - removed)) ? gem_amount : (amount - removed) / gem_value;
+        
+        if (to_remove > 0) {
+            gems[i]->add_amount(-to_remove);
+            removed += to_remove * gem_value;
+        }
+    }
+}
+
+int main(object me, string arg)
+{
+    object *gems, new_gem;
+    string gem_type, gem_name;
+    int current_level, target_level;
+    int gems_required, total_value;
+
+    if (!arg)
+        return notify_fail("格式：combine_gem <gem_id>\n");
+
+    gems = filter_array(all_inventory(me), (: $1->query("id") == $(arg) :));
+    
+    if (sizeof(gems) == 0)
+        return notify_fail("你没有这样的宝石。\n");
+
+    gem_type = gems[0]->query("gem_type");
+    gem_name = gems[0]->query("attr_name");
+    current_level = gems[0]->query("level");
+
+    if (current_level >= 10)
+        return notify_fail("这颗" + gem_name + "已经达到最高等级了。\n");
+
+    target_level = current_level + 1;
+    gems_required = gem_levels[target_level];
+
+    gems = filter_array(all_inventory(me), (: $1->query("gem_type") == $(gem_type) && $1->query("level") <= $(current_level) :));
+    total_value = calculate_total_value(gems);
+
+    if (total_value < gems_required)
+        return notify_fail("你没有足够的" + gem_name + "来合成" + target_level + "级宝石。需要相当于 " + gems_required + " 颗1级宝石的价值。\n");
+
+    // 创建新的高级宝石
+    new_gem = new("/clone/baoshi/" + gem_type + "_baoshi_" + target_level);
+    if (!new_gem)
+        return notify_fail("合成失败，无法创建新的宝石。\n");
+
+    new_gem->set_amount(1);
+    new_gem->move(me);
+
+    // 删除用于合成的宝石
+    remove_gems(gems, gems_required);
+
+    // 清理数量为0的宝石
+    me->clean_up_inventory();
+
+    message_vision("$N将价值相当于 " + gems_required + " 颗1级的" + gem_name + 
+                   "合成为一颗 " + target_level + " 级的" + new_gem->query("name") + "。\n", me);
+
+    return 1;
+}

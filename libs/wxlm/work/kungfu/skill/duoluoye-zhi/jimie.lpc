@@ -1,0 +1,97 @@
+// jumie.c  少林多罗叶指－菩提寂灭
+#include <combat.h>
+
+inherit F_SSERVER;
+
+#define JIMIE "「" HIB "菩提寂灭" NOR "」"
+string query_name() { return "菩提"ZJBR"寂灭"; }
+string *pfm_type() { return ({ "finger", }); }
+
+int perform(object me, object target)
+{
+    string msg;
+    int ap, dp;
+    int damage;
+    int cooldown;
+
+    if (! target) target = offensive_target(me);
+
+    if (! target || ! me->is_fighting(target))
+        return notify_fail(JIMIE "只能在战斗中对对手使用。\n");
+
+    if (me->query_temp("weapon") ||
+        me->query_temp("secondary_weapon"))
+        return notify_fail("你必须空手才能使用" JIMIE "！\n");
+
+    if (me->query_skill("force") < 200)
+        return notify_fail("你的内功的修为不够，不能使用这一绝技！\n");
+
+    if (me->query_skill("duoluoye-zhi", 1) < 100)
+        return notify_fail("你的多罗叶指修为不够，目前不能使用" JIMIE "！\n");
+
+    if (me->query("neili") < 800 || me->query("max_neili") < 1000)
+        return notify_fail("你的真气不够，无法使用" JIMIE "！\n");
+
+    if (me->query_skill_mapped("finger") != "duoluoye-zhi")
+        return notify_fail("你没有激发多罗叶指，不能使用" JIMIE "！\n");
+
+    // 检查冷却时间
+    if (cooldown = me->query_cooldown("jimie"))
+        return notify_fail("你刚刚使用过" JIMIE "，还需等待" + cooldown + "秒。\n");
+
+    if (! living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    msg = HIB "$N" HIB "运起全身功力，直扑向$n" HIB "，双手一圈，用一股内劲" +
+          "拖住$n，\n" HIB "随即全力一指戳出，不惜耗费大量真元，力求一击毙敌！"NOR"\n";
+
+    ap = me->query_skill("finger", 1) + me->query_skill("duoluoye-zhi", 1);
+    dp = target->query_skill("dodge", 1) + target->query_skill("force", 1);
+    damage = ap + random(ap / 4);
+
+    // 如果目标不是玩家，命中率翻倍，伤害 * 2
+    if (!userp(target))
+    {
+        ap *= 2;
+        damage *= 2;
+    }
+
+    if (COMBAT_D->hit_determination(me,target,ap,dp))
+    {
+        me->add("neili", -500);
+
+        msg += COMBAT_D->do_damage(me, target, UNARMED_ATTACK, damage, 66,
+                       HIR "只见$p" HIR "一声惨号，已被$P" +
+                       HIR "一指击中，一股霸道的内力由$P" +
+                       HIR "的指尖传来，伤及经脉！"NOR"\n");
+    }
+    else
+    {
+        me->add("neili", -200);
+        msg += CYN "可是$p" CYN "内力深厚，及时摆脱了"
+               CYN "$P" CYN "内力的牵扯，躲开了这一击！"NOR"\n";
+
+        // 设置新的冷却时间，保留原有逻辑
+        if (me->query("family/family_name") == "少林派" && me->query_skill("yipai-liangsan") >= me->query_skill("duoluoye-zhi"))
+        {
+            cooldown = me->set_cooldown("jimie", 3);  // 设置3秒冷却时间
+            tell_object(me, HIC "你的" JIMIE "进入了3秒冷却时间。\n" NOR);
+        }
+        else
+        {
+            cooldown = me->set_cooldown("jimie", 1);  // 设置1秒冷却时间
+            tell_object(me, HIC "你的" JIMIE "进入了1秒冷却时间。\n" NOR);
+        }
+    }
+
+    msg += HIR "而$P" HIR "由于内力提升过度，经脉负荷不" +
+           "了，受了不轻的内伤！"NOR"\n";
+
+    me->receive_damage("qi", damage / 4);
+
+    message_combatd(msg, me, target);
+
+
+
+    return 1;
+}

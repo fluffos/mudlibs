@@ -1,0 +1,306 @@
+// chinesed.c
+
+#pragma optimize
+
+#include <localtime.h>
+
+#ifndef DATA_DIR
+#define DATA_DIR 	"/data/"
+#endif
+#define E2C_DICTIONARY	DATA_DIR + "e2c_dict.json"
+
+// inherit F_SAVE;
+string query_save_file();
+
+// Constants
+nosave string *c_digit = ({ "零","一","二","三","四","五","六","七","八","九" });
+nosave string *units = ({ "","十","百","千","万","亿","兆" });
+nosave string *sym_tian = ({ "甲","乙","丙","丁","戊","己","庚","辛","壬","癸" });
+nosave string *sym_di = ({ "子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥" });
+
+mapping dict = ([]);
+
+void save()
+{
+    assure_file(E2C_DICTIONARY);
+	write_file(E2C_DICTIONARY, json_format(json_encode(dict)),1);
+}
+
+
+/**
+ * 从文件中恢复字典数据
+ * 如果文件存在则读取JSON数据并解析到dict中
+ */
+void restore()
+{
+    string content;
+    
+    if (file_size(E2C_DICTIONARY) <= 0)
+        return;
+        
+    content = read_file(E2C_DICTIONARY);
+    if (!content || content == "")
+        return;
+        
+    dict = json_decode(content);
+
+    if (!dict)
+        dict = ([]);
+}
+
+void create()
+{
+	seteuid(getuid());
+	restore();
+}
+
+string query_save_file()
+{
+	return E2C_DICTIONARY;
+}
+// ... existing code ...
+
+/**
+    * @brief 将四位数段转换为中文数字
+    * @param int group 段值，范围为 0-9999
+    * @param int at_start 是否位于整体数字开头（用于“十”的省略规则）
+    * @return string 返回该段的中文数字，不含“万/亿”等大单位
+    * @details 处理段内的零抑制与“十”的省略，仅生成当前四位段的中文字符串
+    */
+string convert_group(int group, int at_start, string *c_digit, string *small_units)
+{
+    string res;
+    int thousands;
+    int hundreds;
+    int tens;
+    int ones;
+    int *digits;
+    int i;
+    int digit;
+    int zero_pending;
+
+    res = "";
+    thousands = group / 1000;
+    hundreds = (group / 100) % 10;
+    tens = (group / 10) % 10;
+    ones = group % 10;
+    digits = ({ thousands, hundreds, tens, ones });
+    zero_pending = 0;
+
+    for (i = 3; i >= 0; i--)
+    {
+        digit = digits[3 - i];
+        if (digit == 0)
+        {
+            if (res != "")
+            {
+                zero_pending = 1;
+            }
+        }
+        else
+        {
+            if (zero_pending)
+            {
+                res += "零";
+                zero_pending = 0;
+            }
+            if (i == 1 && digit == 1 && res == "" && at_start)
+            {
+                res += "十";
+            }
+            else
+            {
+                res += c_digit[digit] + small_units[i];
+            }
+        }
+    }
+
+    return res;
+}
+
+/**
+    * @brief 将整数转换为中文数字
+    * @param mixed n 输入的数字或可转换为整数的值
+    * @return string 返回对应的中文数字字符串
+    * @details 采用四位分段法（个/十/百/千；万/亿/兆），正确处理跨段零与 10-19 的“十X”省略规则，并支持负数
+    */
+string chinese_number(mixed n)
+{
+    string *c_digit;
+    string *small_units;
+    string *big_units;
+    string result;
+    int negative;
+    int i;
+    int group_value;
+    int pending_zero;
+    int *groups;
+    int at_start;
+
+    c_digit = ({ "零", "一", "二", "三", "四", "五", "六", "七", "八", "九" });
+    small_units = ({ "", "十", "百", "千" });
+    big_units = ({ "", "万", "亿", "兆" });
+    result = "";
+    negative = 0;
+    pending_zero = 0;
+    groups = ({ });
+
+    n = to_int(n);
+
+    if (n == 0) return "零";
+    if (n < 0)
+    {
+        negative = 1;
+        n = -n;
+    }
+
+    while (n > 0)
+    {
+        groups += ({ n % 10000 });
+        n /= 10000;
+    }
+
+    for (i = sizeof(groups) - 1; i >= 0; i--)
+    {
+        group_value = groups[i];
+
+        if (group_value == 0)
+        {
+            if (result != "")
+            {
+                pending_zero = 1;
+            }
+            continue;
+        }
+
+        if (result != "" && pending_zero)
+        {
+            result += "零";
+            pending_zero = 0;
+        }
+        else if (result != "" && group_value < 1000)
+        {
+            result += "零";
+        }
+
+        at_start = (result == "");
+        result += convert_group(group_value, at_start, c_digit, small_units) + big_units[i];
+    }
+
+    if (negative) result = "负" + result;
+
+    return result;
+}
+
+
+string chinese(string str)
+{
+	return undefinedp(dict[str]) ? str : dict[str];
+}
+
+void add_translate(string key, string chn)
+{
+	dict[key] = chn;
+	save();
+}
+
+void remove_translate(string key)
+{
+	map_delete(dict, key);
+	save();
+}
+
+string chinese_date(int date, int format)
+{
+	mixed *local = localtime(date);
+	int year = local[LT_YEAR];
+	int month = local[LT_MON] + 1;
+	int day = local[LT_MDAY];
+	int hour = local[LT_HOUR];
+	int min = local[LT_MIN];
+	int sec = local[LT_SEC];
+	string time;
+
+	switch (format)
+	{
+		case 1:
+			time = chinese_number(year) + "年" + chinese_number(month) + "月" + chinese_number(day) + "日";
+			time += chinese_number(hour) + "时" + chinese_number(min) + "分" + chinese_number(sec) + "秒";
+			break;
+		case 2:
+			time = sprintf("%d年%d月%d日%d时%d分%d秒", year, month, day, hour, min, sec);
+			break;
+		case 3:
+			time = sprintf("%d年%d月%d日", year, month, day);
+			break;
+		case 4:
+			time = sprintf("%d:%d", hour, min);
+			break;
+		case 5:
+			time = sprintf("%d-%d-%d", year, month, day);
+			break;
+		case 6:
+			time = sprintf("%d:%d:%d", hour, min, sec);
+			break;
+		default:
+			time = sprintf("%d年%d月%d日%d点%d分", year, month, day, hour, min);
+			break;
+	}
+	return time;
+}
+
+string chinese_time(int total)
+{
+    int days, hours, mins, secs;
+    string result;
+
+    if (total == 0)
+        return "零秒";
+
+    days = total / 86400;
+    hours = (total % 86400) / 3600;
+    mins = (total % 3600) / 60;
+    secs = total % 60;
+
+    result = "";
+
+    if (days) result += chinese_number(days) + "天";
+    if (hours) result += chinese_number(hours) + "小时";
+    if (mins) result += chinese_number(mins) + "分";
+    if (secs) result += chinese_number(secs) + "秒";
+    return result;
+}
+
+string short_time(int total)
+{
+    int hours, mins, secs;
+    string result;
+
+    if (total == 0)
+        return "0秒";
+
+    hours = total / 3600;
+    mins = (total % 3600) / 60;
+    secs = total % 60;
+
+    result = "";
+
+    if (hours) result += chinese_number(hours) + "时";
+    if (mins) result += chinese_number(mins) + "分";
+    if (secs) result += chinese_number(secs) + "秒";
+    return result;
+}
+
+string chinese_month(int date)
+{
+	return chinese_number(NATURE_D->query_month());
+}
+
+string chinese_monthday(int date)
+{
+	mixed *local;
+	local = NATURE_D->query_localtime(date);
+	return sprintf("%s月%s日",
+		       chinese_number(local[LT_MON] + 1),
+		       chinese_number(local[LT_MDAY]));
+}

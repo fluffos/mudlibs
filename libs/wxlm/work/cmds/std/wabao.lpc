@@ -1,0 +1,252 @@
+// search.c
+
+inherit F_CLEAN_UP;
+#include <localtime.h>
+
+// 在文件顶部添加函数声明
+int main(object me, string arg);
+int searching(object me);
+int halt_searching(object me);
+int auto_wabao(object me);
+int help(object me);
+
+// 定义自动挖宝标志位
+#define AUTO_WABAO_FLAG "auto_wabao_running"
+
+// 每天下午12点到1点开启挖宝，不在这个时间不能挖宝
+int main(object me, string arg)
+{
+	object env;
+
+	seteuid(getuid());
+
+	env = environment(me);
+
+	if (arg != "wabao")
+	{
+		return notify_fail("你要找什么？\n");
+	}
+
+	// 每天下午12点到1点开启挖宝，不在这个时间不能挖宝
+	if (!is_current_hour(12))
+	{
+		return notify_fail("现在不是挖宝时间，请稍后再试。\n");
+	}
+
+	if (!is_same_day(me->query("wabao_time"), time()))
+	{
+		//我上一次挖宝的时间是？调用ctime
+		tell_object(me, "你上一次挖宝的时间是" + ctime(me->query("wabao_time")) + "。\n");
+		me->delete("wabao_count");
+		tell_object(me, "新的一天到来，你可以开始挖宝了。\n");
+	}
+
+	//冷却时间
+	if (me->query("wabao_time") && time() < me->query("wabao_time"))
+	{
+		return notify_fail("你刚刚挖宝过，现在还不能再次挖宝，还是先休息会吧。距离下次挖宝还有" + (me->query("wabao_time") - time()) + "秒。\n");
+	}
+
+	//一天最多挖20次
+	if (me->query("wabao_count") >= 60)
+	{
+		return notify_fail("你今天已经挖宝60次了，明天再来吧。\n");
+	}
+
+	if (me->is_busy())
+		return notify_fail("等你忙玩了手头的事情再找吧！\n");
+
+	if (me->is_fighting())
+		return notify_fail("一边打架一边找东西？只有你才想得出来！\n");
+
+	// 设置自动挖宝标志位
+	if (!me->query_temp(AUTO_WABAO_FLAG))
+	{
+		me->set_temp(AUTO_WABAO_FLAG, 1);
+	}
+
+	me->set_temp("pending/wabao", 1);
+	me->set_short_desc("正在东张西望。");
+	message("vision", me->name() + "东瞅瞅、西望望，干什么呢？\n",environment(me), ({ me }));
+	tell_object(me, "你开始在这里摸索，看有没有什么值钱的东西。\n");
+	me->start_busy(bind((:call_other, __FILE__, "searching" :), me),bind((:call_other, __FILE__, "halt_searching" :), me));
+	
+	
+	return 1;
+}
+
+
+int searching(object me)
+{
+	object env;
+	object ob;
+	string *obj_list;
+
+	obj_list = ({
+		"/clone/vip/putao",
+		"/clone/vip/dan_chongmai1",
+		"/clone/vip/dan_chongmai2",
+		"/clone/vip/dan_chongmai3",
+		"/clone/aoyi_book/aoyi_book_canye",
+		"/clone/shizhe/new_qiandai",
+		"/clone/shizhe/jinsha",
+		"/clone/vip/dijibao_hufu",
+		"/clone/vip/zhongjibao_hufu"
+	});
+
+	env = environment(me);
+
+	if (env->query("outdoors") != "gumu")
+	{
+		tell_object(me, "这里看起来并不是什么宝藏所在地。\n");
+		return 0;
+	}
+
+	switch (me->query_temp("pending/wabao"))
+	{
+		case 1:
+			tell_object(me, HIG"你站在广阔的" + env->query("short") + "前，手中紧握着铁锹和其他挖掘工具。阳光照耀在这片可能藏有珍宝的土地上，你的眼中闪烁着期待的光芒。深吸一口气，你开始了挖掘行动，将铁锹插入松软的土壤中，眼中充满了对宝物的渴望"NOR"。\n");
+			break;
+		case 2:
+			tell_object(me, "随着挖掘的深入，你的动作变得有节奏起来。一锹又一锹的土壤被翻起，汗水从你的额头滴落，混合进泥土中。周围的其他玩家也在进行着同样的动作，整个区域充满了挖掘的声音。你时不时地停下来，仔细倾听是否有宝物的响动，但除了铁锹与石块碰撞的声音外，什么也没有发现。\n");
+			break;
+		case 3:
+			tell_object(me, HIR"坚持不懈的同时，你体力也在逐渐消耗。但你的决心并未减弱，你知道，宝藏可能就在下一个锹下"NOR"。\n");
+			break;
+	}
+
+	if (me->query_temp("pending/wabao") >= 4)
+	{
+		if (random(3) == 2)
+		{
+			ob = new_bind(obj_list[random(sizeof(obj_list))]);
+
+			//是否可叠加，有多少个物品
+			if (ob->query_amount())
+			{
+				int number;
+				number = 1 + random(3);
+
+				if (time() > 1720833309 && time() < 1720919709)
+				{
+					number *= 5;
+					tell_object(me,"限时模式，奖励5倍！\n");
+				}
+
+				ob->set_amount(number);//随机1到3个
+				//挖到了多少个什么物品，query_amount()
+				tell_object(me, "你挖到了" + ob->query_amount() + "个" + ob->name() + "。\n");
+			}
+			else
+			{
+				tell_object(me, "你挖到了一" + ob->query("unit") + ob->name() + "。\n");
+			}
+			ob->move(me);
+		}
+		else //什么都没挖到
+		{
+			tell_object(me, "你什么都没挖到。\n");
+		}
+
+		me->add("wabao_count", 1);
+		me->set("wabao_time",time() + 20);
+		me->delete_temp("pending/wabao");
+
+		// 仅在自动挖宝标志位存在时调用 auto_wabao
+		if (me->query_temp(AUTO_WABAO_FLAG))
+		{
+			call_out("auto_wabao", 21, me);
+		}
+
+		return 0;
+	}
+
+	me->add_temp("pending/wabao", 1);
+
+	return 1;
+}
+
+int halt_searching(object me)
+{
+	object env;
+
+	env = environment(me);
+	me->delete_temp("pending/wabao");
+	tell_object(me, "你放弃了寻找。\n");
+	message("vision", me->name() + "舒展了一下腰，叹了口气。\n", env, ({ me }));
+
+	// 移除自动挖宝标志位，停止自动挖宝
+	me->delete_temp(AUTO_WABAO_FLAG);
+	remove_call_out("auto_wabao");
+
+	return 1;
+}
+
+int help (object me)
+{
+	write(@HELP
+指令格式: search
+
+在地上寻找东西。能找到什么呢？只有天才知道，某些地方能够找到
+好东西。不过大部分地方只能找到一些普通的东西。如果你找到了东
+西，你的江湖阅历将会因此而增长一点。
+ 
+HELP );
+	return 1;
+}
+
+// 新增自动挖宝函数
+int auto_wabao(object me)
+{
+	object env;
+
+	if (!objectp(me))
+	{
+		return 0;
+	}
+
+	// 检查自动挖宝标志位，防止重复调用
+	if (!me->query_temp(AUTO_WABAO_FLAG))
+	{
+		return 0;
+	}
+
+	env = environment(me);
+
+	// 判断对象和环境
+	if (!objectp(me) || env->query("outdoors") != "gumu")
+	{
+		tell_object(me, "这里看起来并不是什么宝藏所在地，自动挖宝结束。\n");
+		me->delete_temp(AUTO_WABAO_FLAG);
+		return 0;
+	}
+
+	// 判断时间
+	if (!is_current_hour(12))
+	{
+		tell_object(me, "现在不是挖宝时间，自动挖宝结束。\n");
+		me->delete_temp(AUTO_WABAO_FLAG);
+		return 0;
+	}
+
+	// 判断挖宝次数
+	if (me->query("wabao_count") >= 60)
+	{
+		tell_object(me, "你今天已经挖宝60次了，自动挖宝结束。\n");
+		me->delete_temp(AUTO_WABAO_FLAG);
+		return 0;
+	}
+
+	// 判断玩家状态
+	if (me->is_busy() || me->is_fighting())
+	{
+		tell_object(me, "你现在正忙，无法继续挖宝，自动挖宝结束。\n");
+		me->delete_temp(AUTO_WABAO_FLAG);
+		return 0;
+	}
+
+	// 执行挖宝命令
+	me->force_me("wabao wabao");
+
+	return 1;
+}

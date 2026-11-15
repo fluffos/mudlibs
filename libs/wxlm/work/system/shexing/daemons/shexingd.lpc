@@ -1,0 +1,390 @@
+/**
+ * @file shexingd.c
+ * @author Lu dexiang
+ * @brief 蛇形狸翻活动管理守护进程
+ * @version 1.0
+ * @date 2023-12-20
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
+inherit F_DBASE;
+
+// 活动状态
+nosave int activity_status = 0;  // 0:未开启 1:开启
+
+// 活动房间列表
+nosave object *rooms = ({});
+
+// 迷宫大小
+nosave int MAZE_SIZE = 10;  // 10x10的迷宫
+
+// 迷宫终点坐标
+nosave int end_x, end_y;
+
+// 活动时间表 - 使用mapping存储时间点
+nosave mapping activity_times = ([
+    8 : ({ 0, 30 }),  // 18:00, 18:30
+    9 : ({ 0, 30 }),  // 19:00, 19:30
+    10 : ({ 0, 30 }),  // 20:00, 20:30
+    11 : ({ 0, 30 }),  // 21:00, 21:30
+    12 : ({ 0, 30 }),  // 22:00, 22:30
+    13 : ({ 0, 30 }),  // 23:00, 23:30
+    14 : ({ 0, 30 }),  // 14:00, 00:30
+    15 : ({ 0, 30 }),  // 15:00, 15:30
+    16 : ({ 0, 30 }),  // 16:00, 16:30
+    17 : ({ 0, 30 }),  // 17:00, 17:30
+    18 : ({ 0, 30 }),  // 18:00, 18:30
+    19 : ({ 0, 30 }),  // 19:00, 19:30
+    20 : ({ 0, 30 }),  // 20:00, 20:30
+    21 : ({ 0, 30 }),  // 21:00, 21:30
+    22 : ({ 0, 30 }),  // 22:00, 22:30
+    23 : ({ 0 })       // 23:00
+]);
+
+// 活动持续时间(分钟)
+nosave int ACTIVITY_DURATION = 25;
+
+// 心跳计数器
+nosave int heart_beat_count = 0;
+
+// 当前活动开始时间
+nosave int activity_start_time = 0;
+
+// 方向数组
+nosave string *dirs = ({"east", "west", "south", "north"});
+nosave string *opposite_dirs = ({"west", "east", "north", "south"});
+
+void start_activity();
+void stop_activity();
+
+// 获取房间在迷宫中的坐标
+int *get_room_pos(int index)
+{
+    return ({index / MAZE_SIZE, index % MAZE_SIZE});
+}
+
+// 获取房间索引
+int get_room_index(int x, int y)
+{
+    if(x < 0 || x >= MAZE_SIZE || y < 0 || y >= MAZE_SIZE)
+        return -1;
+    return x * MAZE_SIZE + y;
+}
+
+// 检查位置是否有效
+int is_valid_pos(int x, int y)
+{
+    return x >= 0 && x < MAZE_SIZE && y >= 0 && y < MAZE_SIZE;
+}
+
+// 计算到终点的距离
+int distance_to_end(int x, int y)
+{
+    return abs(x - end_x) + abs(y - end_y);
+}
+
+// 深度优先搜索生成迷宫
+void generate_maze(int current_x, int current_y, int *visited)
+{
+    int i, nx, ny, next_index, current_index;
+    int *dirs_order = allocate(4);
+    mapping exits;
+    
+    // 标记当前位置已访问
+    current_index = get_room_index(current_x, current_y);
+    visited[current_index] = 1;
+    
+    // 随机打乱方向顺序
+    for(i = 0; i < 4; i++)
+        dirs_order[i] = i;
+    for(i = 3; i > 0; i--) {
+        int j = random(i + 1);
+        int temp = dirs_order[i];
+        dirs_order[i] = dirs_order[j];
+        dirs_order[j] = temp;
+    }
+    
+    // 遍历四个方向
+    for(i = 0; i < 4; i++) {
+        // 根据方向计算下一个位置
+        switch(dirs_order[i]) {
+            case 0: nx = current_x; ny = current_y + 1; break;
+            case 1: nx = current_x; ny = current_y - 1; break;
+            case 2: nx = current_x + 1; ny = current_y; break;
+            case 3: nx = current_x - 1; ny = current_y; break;
+        }
+        
+        // 检查新位置是否有效且未访问
+        if(is_valid_pos(nx, ny)) {
+            next_index = get_room_index(nx, ny);
+            if(!visited[next_index]) {
+                // 移除随机判断，确保一定连接
+                // 连接两个房间
+                exits = rooms[current_index]->query("exits");
+                if(!exits) exits = ([]);
+                exits[dirs[dirs_order[i]]] = file_name(rooms[next_index]);
+                rooms[current_index]->set("exits", exits);
+                
+                exits = rooms[next_index]->query("exits");
+                if(!exits) exits = ([]);
+                exits[opposite_dirs[dirs_order[i]]] = file_name(rooms[current_index]);
+                rooms[next_index]->set("exits", exits);
+                
+                // 继续生成迷宫
+                generate_maze(nx, ny, visited);
+            }
+        }
+    }
+}
+
+// 初始化
+void create() 
+{
+    seteuid(getuid());
+    set("channel_id", "蛇形狸翻");
+
+    //广播守护进程启动
+    CHANNEL_D->do_channel(this_object(), "sys",
+        HIY"【蛇形狸翻】活动守护进程启动!\n"NOR);
+    
+    //1737302400后再启动心跳
+    if (time() < 1737302400) {
+        return;
+    }
+
+
+    // 启动心跳
+    set_heart_beat(1);
+}
+
+// 检查是否是活动时间
+int is_activity_time()
+{
+    mixed *local = localtime(time());
+    int hour = local[2];
+    int minute = local[1];
+    int current_time = time();
+    
+    // 如果活动已经开启,检查是否超过持续时间
+    if(activity_status) {
+        if(current_time - activity_start_time >= ACTIVITY_DURATION * 60) {
+            return 0;  // 超过持续时间
+        }
+        return 1;  // 在持续时间内
+    }
+    
+    // 检查小时是否在活动时间内
+    if(!mapp(activity_times) || undefinedp(activity_times[hour])) {
+        return 0;
+    }
+    
+    // 检查是否在活动开始时间点
+    if(member_array(minute, activity_times[hour]) != -1) {
+        activity_start_time = current_time;  // 记录活动开始时间
+        return 1;
+    }
+
+    return 0;
+}
+
+// 心跳函数
+void heart_beat()
+{
+    // 每10次心跳(约20秒)检查一次活动时间
+    heart_beat_count++;
+    if(heart_beat_count < 1) {
+        return;
+    }
+    heart_beat_count = 0;
+    
+    // 检查是否在活动时间内
+    if(is_activity_time()) {
+        if(!activity_status) {
+            start_activity();
+        }
+    } else if(activity_status) {
+        stop_activity();
+    }
+}
+
+// 开启活动
+void start_activity()
+{
+    int i;
+    object room;
+    int *visited;
+    int end_index;
+    
+    // 设置活动状态
+    activity_status = 1;
+    
+    // 创建100个房间
+    for(i = 0; i < MAZE_SIZE * MAZE_SIZE; i++) {
+        room = new("/system/shexing/map/room_shexing");
+        room->set_room_index(i);
+        rooms += ({ room });
+    }
+    
+    // 设置终点位置(在迷宫边缘)
+    switch(random(4)) {
+        case 0: // 北边
+            end_x = 0;
+            end_y = random(MAZE_SIZE);
+            break;
+        case 1: // 南边
+            end_x = MAZE_SIZE - 1;
+            end_y = random(MAZE_SIZE);
+            break;
+        case 2: // 西边
+            end_x = random(MAZE_SIZE);
+            end_y = 0;
+            break;
+        case 3: // 东边
+            end_x = random(MAZE_SIZE);
+            end_y = MAZE_SIZE - 1;
+            break;
+    }
+    
+    // 标记终点房间
+    end_index = get_room_index(end_x, end_y);
+    rooms[end_index]->set("is_end", 1);
+    rooms[end_index]->set("long", rooms[end_index]->query("long") + 
+        HIY"\n这里似乎是迷宫的终点,一个金光闪闪的传送阵出现在地面上。\n"NOR);
+    
+    // 初始化访问数组
+    visited = allocate(MAZE_SIZE * MAZE_SIZE);
+    
+    // 从(0,0)开始生成迷宫
+    generate_maze(0, 0, visited);
+    
+    // 随机添加一些额外的连接,但避免终点有太多出口
+    for(i = 0; i < MAZE_SIZE * MAZE_SIZE / 6; i++) {
+        int x1 = random(MAZE_SIZE);
+        int y1 = random(MAZE_SIZE);
+        int dir, x2, y2;
+        // 跳过终点附近的房间
+        if(abs(x1 - end_x) <= 1 && abs(y1 - end_y) <= 1)
+            continue;
+            
+        dir = random(4);
+        
+        // 计算相邻位置
+        switch(dir) {
+            case 0: // east
+                x2 = x1;
+                y2 = y1 + 1;
+                break;
+            case 1: // west
+                x2 = x1;
+                y2 = y1 - 1;
+                break;
+            case 2: // south
+                x2 = x1 + 1;
+                y2 = y1;
+                break;
+            case 3: // north
+                x2 = x1 - 1;
+                y2 = y1;
+                break;
+        }
+        
+        // 如果相邻位置有效且不是终点,添加连接
+        if(is_valid_pos(x2, y2) && (x2 != end_x || y2 != end_y)) {
+            int index1 = get_room_index(x1, y1);
+            int index2 = get_room_index(x2, y2);
+            mapping exits;
+            
+            // 限制出口数量
+            if(sizeof(rooms[index1]->query("exits")) < 3 && 
+               sizeof(rooms[index2]->query("exits")) < 3) {
+                exits = rooms[index1]->query("exits");
+                if(!exits) exits = ([]);
+                exits[dirs[dir]] = file_name(rooms[index2]);
+                rooms[index1]->set("exits", exits);
+                
+                exits = rooms[index2]->query("exits");
+                if(!exits) exits = ([]);
+                exits[opposite_dirs[dir]] = file_name(rooms[index1]);
+                rooms[index2]->set("exits", exits);
+            }
+        }
+    }
+    
+    // 随机设置60个房间放置NPC,但不在终点放置
+    for(i = 0; i < 60; i++) {
+        int room_index;
+        do {
+            room_index = random(sizeof(rooms));
+        } while(room_index == end_index);
+        rooms[room_index]->place_npc();
+    }
+    
+    // 随机设置20个房间的特殊效果,但不在终点设置
+    for(i = 0; i < 20; i++) {
+        int room_index;
+
+        do {
+            room_index = random(sizeof(rooms));
+        } while(room_index == end_index);
+
+        {
+            int effect = 1 + random(2);  // 1:忙乱 2:中毒
+            rooms[room_index]->set_room_status(effect);
+        }
+    }
+    
+    // 在所有房间随机放置特殊物品,但不在终点放置
+    foreach(object r in rooms) {
+        if(!r->query("is_end")) {
+            r->place_special_items();
+        }
+    }
+    
+    // 广播活动开启信息
+    CHANNEL_D->do_channel(this_object(), "sys", 
+        HIY"【蛇形狸翻】活动开启了,将持续" + ACTIVITY_DURATION + "分钟,请各位玩家前来参与!\n"NOR);
+}
+
+// 关闭活动
+void stop_activity()
+{
+    // 设置活动状态
+    activity_status = 0;
+    activity_start_time = 0;
+    
+    // 销毁所有房间
+    foreach(object room in rooms) {
+        if(objectp(room)) {
+            destruct(room);
+        }
+    }
+    rooms = ({});
+    
+    // 广播活动结束信息
+    CHANNEL_D->do_channel(this_object(), "sys",
+        HIY"【蛇形狸翻】活动结束了,感谢各位玩家的参与!\n"NOR);
+}
+
+// 获取活动状态
+int query_activity_status()
+{
+    return activity_status;
+}
+
+// 获取随机房间
+object get_random_room()
+{
+    if(!sizeof(rooms)) {
+        return 0;
+    }
+    return rooms[random(sizeof(rooms))];
+}
+
+// 清理
+void remove()
+{
+    if(activity_status) {
+        stop_activity();
+    }
+} 

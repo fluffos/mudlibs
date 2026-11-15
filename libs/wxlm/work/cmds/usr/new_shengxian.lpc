@@ -1,0 +1,499 @@
+inherit F_CLEAN_UP;
+
+
+// 修改导师等级描述,与传艺堂保持一致
+string *dszg = ({
+    HIW"江湖前辈"NOR, 
+    HIG"武学宗师"NOR, 
+    HIB"桃李满门"NOR, 
+    HIM"名满江湖"NOR, 
+    HIY"德高望重"NOR, 
+    HIR"武林泰斗"NOR
+});
+
+int do_daoshizg(object me)
+{
+    string *dizi;
+    int exp = me->query("combat_exp");
+    int zg_level = me->query("zjvip/daoshizg");
+    int ds_exp = me->query("zjvip/daoshi_exp");
+    int max_level = sizeof(dszg);
+
+    if (exp < 1000000)
+    {
+        tell_object(me, msg299("传艺堂", "你尚需历练，暂不足以收徒授艺。\n需有"HIB"百万经验"NOR"方可收徒。\n"));
+        return 1;
+    }
+
+    if (!zg_level)
+    {
+        me->set("zjvip/daoshizg", 1);
+        tell_object(me, msg299("传艺堂", "恭喜，你已获得收徒资格。\n你现为"HIW"【江湖前辈】"NOR"！\n"));
+        return 1;
+    }
+
+    for (int i = max_level - 1; i > 0; i--)
+    {
+        if (ds_exp > (i * 10 - 1) && zg_level < i + 1 && !me->query("p_master"))
+        {
+            me->set("zjvip/daoshizg", i + 1);
+            tell_object(me, msg299("传艺堂", "恭喜，你的导师资格晋升为" + dszg[i] + "！\n"));
+            return 1;
+        }
+    }
+
+    if (!me->query("p_dizi"))
+    {
+        tell_object(me, msg299("传艺堂", "你现为"+dszg[zg_level - 1]+"，尚未收徒。\n"));
+        return 1;
+    }
+
+    dizi = keys(me->query("p_dizi"));
+    tell_object(me, msg299("传艺堂", "你现为"+dszg[zg_level - 1]+"，座下有"+sizeof(dizi)+"位弟子。\n"));
+    return 1;
+}
+//可变参数
+varargs mixed do_quzhu(object me, mapping resultJson,string arg)
+{
+    int i, last_on;
+    string *dizi;
+    object ob, obj;
+    mapping user;
+
+    if (!arg)
+    {
+        if (!mapp(user = me->query("p_dizi")))
+        {
+            resultJson["data"]["title"] += "你还没有弟子呢！" ;
+            return resultJson;
+        }
+        dizi = sort_array(keys(user), 1);
+        if (!sizeof(dizi))
+        {
+            resultJson["data"]["title"] +=  "你还没有弟子呢！";
+            return resultJson;
+        }
+        for (i = 0; i < sizeof(dizi); i++)
+        {
+            last_on = FINGER_D->get_last_on(dizi[i]);
+            resultJson["data"]["context"] += ({ ([
+                "cmd": "new_shengxian quzhu " + dizi[i],
+                "text": FINGER_D->get_name(dizi[i]) + "（" HIG + dizi[i] + NOR "）" ZJBR "上次登录：" ZJBR + CHINESE_D->chinese_date(last_on, 2)
+            ]) });
+        }
+        return resultJson;
+    }
+    if (sscanf(arg, "%s yes", arg) != 1)
+    {
+        if (!FINGER_D->get_name(arg))
+        {
+            resultJson["data"]["title"] += "你要驱逐谁？";
+            return resultJson;
+        }
+        tell_object(me,popup_comb("你确定要驱逐" + FINGER_D->get_name(arg) + "这个弟子么？\n","确定:new_shengxian quzhu " + arg + " yes"));
+        return resultJson;
+    }
+    if (!objectp(obj = find_player(arg)))
+    {
+        ob = new(LOGIN_OB);
+        ob->set("id", arg);
+        ob->set("body", USER_OB);
+        obj = LOGIN_D->make_body(ob);
+        destruct(ob);
+        if (obj->restore())
+        {
+            obj->setup();
+            if (!me->query("p_dizi/" + obj->query("id")))
+            {
+                resultJson["data"]["context"] += ({ "你没有这个徒弟！" });
+            }
+            else
+            {
+                obj->delete("p_master");
+                obj->delete("zjvip/master");
+                obj->save();
+                me->delete("p_dizi/" + obj->query("id"));
+                me->save();
+                tell_object(me,msg299("圣贤堂",HIR "逐出弟子" + obj->query("name") + "(" + obj->query("id") + ")" + "成功！" NOR));
+            }
+        }
+        else
+        {
+            resultJson["data"]["context"] += ({ "玩家数据错误！" });
+        }
+        destruct(obj);
+        return 1;
+    }
+    else
+    {
+        if (!me->query("p_dizi/" + obj->query("id")))
+        {
+            tell_object(me,msg299("圣贤堂",HIR "你没有这个徒弟！" NOR));
+        }
+        else
+        {
+            obj->delete("p_master");
+            obj->delete("zjvip/master");
+            obj->save();
+            me->delete("p_dizi/" + obj->query("id"));
+            me->save();
+            tell_object(me,msg299("圣贤堂",HIR "逐出弟子" + obj->query("name") + "(" + obj->query("id") + ")" + "成功！" NOR));
+            tell_object(obj,msg299("圣贤堂",HIR + me->query("name") + "(" + me->query("id") + ")" + "将你驱逐出师门了！" NOR));
+            resultJson["data"]["title"] += "驱逐弟子" + obj->query("name") + "(" + obj->query("id") + ")成功！";
+
+        }
+        return 1;
+    }
+    return resultJson;
+}
+
+mapping do_xunshi(int ye,mapping resultJson)
+{
+	string zige;
+	int i,j,yeall;
+	object ob,*ob_list;
+    mapping *result = ({});
+    mapping *close = resultJson["close"];
+	if(ye)
+	{
+		ob_list = users();
+		ob_list = sort_array(users(), "sort_user", this_object());
+		for(i=0; i<sizeof(ob_list); i++)
+		{
+			ob = ob_list[i];
+			if(ob->is_character()&&ob->query("zjvip/daoshizg"))
+			{
+				if(ob->query("zjvip/daoshizg")>5)
+					zige = "一代圣贤";
+				else if(ob->query("zjvip/daoshizg")==5)
+					zige = "桃李天下";
+				else if(ob->query("zjvip/daoshizg")==4)
+					zige = "名满江湖";
+				else if(ob->query("zjvip/daoshizg")==3)
+					zige = "良师益友";
+				else if(ob->query("zjvip/daoshizg")==2)
+					zige = "高级师傅";
+				else if(ob->query("zjvip/daoshizg")==1)
+					zige = "初级师傅";
+                resultJson["data"]["context"] += ({ ([
+                    "cmd": "look " + ob->query("id"),
+                    "text": sprintf("%s(%s)",zige,ob->query("name"))
+                ]) });
+				// str += ({sprintf("%s　%s:baishi %s",zige,ob->query("name"),ob->query("id"))});
+
+			}
+		}
+
+		if(!sizeof(result))
+		{
+
+			yeall = sizeof(result)/10;
+			if(sizeof(result)%10) yeall += 1;
+			if(ye<1) ye = 1;
+			if(ye>yeall) ye = yeall;
+			j = (ye-1)*10;
+			i = ye*10;
+			if (i >= sizeof(result)) i = sizeof(result);
+			i--;
+			if(yeall>1)
+            {
+                
+                if(ye>1)
+                {
+                    close += ({ ([
+                        "cmd": "new_shengxian 寻找师傅 "+(ye-1),
+                        "text": "上一页"
+                    ])
+                    });
+                }
+                if(ye<yeall)
+                {
+                    close +=
+                    ({
+                    ([
+                        "cmd": "new_shengxian 寻找师傅 "+(ye+1),
+                        "text": "下一页"
+                    ])
+                    });
+                }
+
+                resultJson["close"] = close;
+            }
+		}
+	}
+
+    return resultJson;
+}
+
+varargs int do_tuoli(object me, string arg)
+{
+ 
+    string str;
+	object ob,obj;
+ 
+
+	if(!stringp(str=me->query("p_master/id")))
+	{
+		if(!stringp(str=me->query("zjvip/master")))
+		{
+			tell_object(me,"你还没有跟任何玩家保持师徒关系，无需脱离！\n");
+			return 1;
+		}
+	}
+
+	if(arg!="yes")
+	{
+		tell_object(me,ZJOBLONG"你确定要与"+FINGER_D->get_name(str)+"脱离师傅关系么？\n"ZJOBACTS2"确定:new_shengxian tuoli yes\n");
+		return 1;
+	}
+
+	if(!stringp(me->query("p_master/id")))
+	{
+		me->delete("zjvip/master");
+		tell_object(me,"你与"+FINGER_D->get_name(str)+"从此之后再无瓜葛！\n");
+		return 1;
+	}
+
+	if(!objectp(obj=find_player(str)))
+	{
+		ob = new(LOGIN_OB);
+		ob->set("id",str);
+		ob->set("body", USER_OB);
+		obj = LOGIN_D->make_body(ob);
+		destruct(ob);
+		if(obj->restore())
+		{
+			obj->setup();
+			if(me->query("p_master/id")!=obj->query("id"))
+			{
+				tell_object(me,"你没有这个师傅！\n");
+			}
+			else
+			{
+				obj->delete("p_dizi/"+me->query("id"));
+				obj->save();
+				me->delete("p_master");
+				me->delete("zjvip/master");
+				me->save();
+				tell_object(me,HIR"你与"+obj->query("name")+"("+obj->query("id")+")"+"脱离师徒关系了！"NOR"\n");
+			}
+		}else
+			tell_object(me,"玩家数据错误！\n");
+
+		destruct(obj);
+	}
+	else
+	{
+		if(me->query("p_master/id")!=obj->query("id"))
+		{
+			tell_object(me,"你没有这个师傅！\n");
+		}
+		else
+		{
+			me->delete("p_master");
+			me->delete("zjvip/master");
+			me->save();
+			obj->delete("p_dizi/"+me->query("id"));
+			obj->save();
+			tell_object(me,HIR"你与"+obj->query("name")+"("+obj->query("id")+")"+"脱离师徒关系了！"NOR"\n");
+			tell_object(obj,HIR+me->query("name")+"("+obj->query("id")+")"+"与你脱离了师徒关系！"NOR"\n");
+		}
+	}
+
+	return 1;
+}
+
+int do_chushili(object me)
+{
+ 
+ 
+    object ob,ob1;
+
+	if(me->query("combat_exp")<3000000 || me->query("max_neili") < 5000)
+		// return notify_fail("你历练不足还不够资格出师（300万经验，5000内力修为）。\n");
+    {
+        tell_object(me, msg299("圣贤堂", "你历练不足还不够资格出师（300万经验，5000内力修为）。\n"));
+        return 1;
+    }
+	else if(me->query("zjvip/out_master"))
+    {
+		// return notify_fail("你都已经出师了，还来出什么师？\n");
+        tell_object(me, msg299("圣贤堂", "你都已经出师了，还来出什么师？\n"));
+        return 1;
+    }
+	else if(!me->query("p_master"))
+    {
+		// return notify_fail("你都没有导师，出什么师？\n");
+        tell_object(me, msg299("圣贤堂", "你都没有导师，出什么师？\n"));
+        return 1;
+    }
+	else if(!(ob=UPDATE_D->global_find_player(me->query("p_master/id"))))
+	{
+		// return notify_fail("你有导师吗？\n");
+        tell_object(me, msg299("圣贤堂", "你有导师吗？\n"));
+        return 1;
+	}
+	else
+	{
+		me->delete("p_master");
+		ob->delete("p_dizi/"+me->query("id"));
+		ob->add("zjvip/daoshi_exp",1);
+		if(!me->query("zjvip/out_master"))
+		{
+			ob1 = new("/clone/shizhe/masterbox");
+                        ob1->move(me);
+			tell_object(me,"出师仪式完成，你获得了一个"HIM"出师礼包"NOR"！\n");
+			me->add("zjvip/out_master",1);
+		}
+		CHANNEL_D->do_channel(me,"chat","多日以来承蒙导师"+ob->query("name")+"悉心照顾指导，今日在此受徒儿最后一拜！");
+	}
+	return 1;
+}
+
+int main(object me, string arg)
+{
+    mapping result, jsonData;
+
+    result = ([
+        "title": "传艺堂",
+        "w": "630",
+        "h": "100",
+        "close": ({
+            (["cmd": "myscore 随身功能", "text": "关闭"])
+        }),
+        "toggle": ({
+            (["cmd": "new_shengxian", "text": "导师认证"]),
+            (["cmd": "new_shengxian 师徒管理", "text": "师徒管理"])
+        }),
+        "data": ([
+            "title": "",
+            "context": ({})
+        ])
+    ]);
+
+    jsonData = ([
+        "code": "导航弹窗",
+        "data": result
+    ]);
+
+    // 我是否是导师，如果是导师，toggle 添加显示弟子
+    // if (me->query("zjvip/daoshizg"))
+    // {
+    //     result["toggle"] += ({
+    //         //驱逐
+    //         (["cmd": "new_shengxian 驱逐弟子", "text": "驱逐弟子"])
+    //     });
+    // }
+    
+    
+    // {
+    //     //是否有导师
+    //     if (me->query("p_master"))
+    //     {
+    //         result["toggle"] += ({
+    //             (["cmd": "new_shengxian 脱离关系", "text": "脱离关系"]),
+    //             (["cmd": "new_shengxian 出师", "text": "出师"])
+    //         });
+    //     }
+    //     else
+    //     {
+    //         result["toggle"] += ({
+    //             (["cmd": "new_shengxian 寻找师傅", "text": "寻找师傅"])
+    //         });     
+    //     }   
+    // }
+
+    if (!arg)
+    {
+        result["data"]["title"] = "欢迎来到传艺堂！这里是武林中人结缘授徒的胜地。你可以在此寻访名师，或是收徒传艺，将武学薪火相传。无论是作为徒弟还是导师，在师徒关系正式出师时都会获得出师礼包！";
+        result["data"]["context"] += ({ (["cmd": "new_shengxian 导师资格", "text": "开始认证"]) });
+        jsonData["data"] = result;
+        write(json_encode(jsonData) + "\n");
+        return 1;
+    }
+
+    if (arg)
+    {
+        int page = 1;
+
+        if (arg == "导师资格")
+        {
+            do_daoshizg(me);
+            return 1;
+        }
+
+        if (arg == "师徒管理")
+        {
+            result["data"]["title"] = "欢迎来到传艺堂！这里是武林中人结缘授徒的胜地。你可以在此寻访名师，或是收徒传艺，将武学薪火相传。无论是作为徒弟还是导师，在师徒关系正式出师时都会获得出师礼包！";
+
+            // result["data"]["context"] += ({ (["cmd": "new_shengxian 导师资格", "text": "开始认证"]) });
+
+            //如果我是导师，显示驱逐弟子
+            if (me->query("zjvip/daoshizg"))
+            {
+                result["data"]["context"] += ({ (["cmd": "new_shengxian 驱逐弟子", "text": "驱逐弟子"]) });
+            }
+
+            //如果我有导师，显示脱离关系和出师
+            if (me->query("p_master"))
+            {
+                result["data"]["context"] += ({ (["cmd": "new_shengxian 脱离关系", "text": "脱离关系"]) });
+                result["data"]["context"] += ({ (["cmd": "new_shengxian 出师", "text": "出师"]) });
+            }
+
+            //如果我没有导师，显示寻找师傅
+            if (!me->query("p_master"))
+            {
+                result["data"]["context"] += ({ (["cmd": "new_shengxian 寻找师傅", "text": "寻找师傅"]) });
+            }
+
+            jsonData["data"] = result;
+            write(json_encode(jsonData) + "\n");
+            return 1;
+        }
+
+        if (sscanf(arg, "寻找师傅 %d", page) == 1 || (arg == "寻找师傅"))
+        {
+            result = do_xunshi(page, result);
+            jsonData["data"] = result;
+            write(json_encode(jsonData) + "\n");
+            return 1;
+        }
+
+        if (arg == "驱逐弟子")
+        {
+            result = do_quzhu(me,result);
+            jsonData["data"] = result;
+            write(json_encode(jsonData) + "\n");
+            return 1;
+        }
+
+        if (arg == "脱离关系")
+        {
+            do_tuoli(me);
+            return 1;
+        }
+
+        if (arg == "出师")
+        {
+            do_chushili(me);
+            return 1;
+        }
+
+        //脱离师徒关系
+        if (sscanf(arg, "tuoli %s", arg) == 1)
+        {
+            do_tuoli(me, arg);
+            return 1;
+        }
+
+
+        if (sscanf(arg, "quzhu %s", arg) == 1)
+        {
+            result = do_quzhu(me, result, arg);
+            me->force_me("new_shengxian 驱逐弟子");
+            return 1;
+        }
+    }
+    return 1;
+}

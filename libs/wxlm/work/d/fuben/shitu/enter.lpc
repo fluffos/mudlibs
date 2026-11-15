@@ -1,0 +1,178 @@
+// Room: neidian.c
+
+inherit ROOM;
+
+int do_interact(string arg);
+
+void create()
+{
+    set("short", "师徒历练台");
+    set("long", @LONG
+这里是圣贤堂专为师徒设立的历练场所，四周雾气缭绕，一片仙境之感。石台正中刻有
+师徒同心四个大字，每一笔都透着深厚的内力。传闻此处乃是圣贤堂大师考验门下
+弟子的地方，师傅带领徒弟闯过此关，不仅能增进师徒情谊，还可获得丰厚奖励。据说
+曾有无数高手在此领悟出更高深的武学境界。
+LONG
+    );
+    // set("exits", ([
+    //     "south" : __DIR__"qiandian",
+    // ]));
+    set("objects", ([
+        __DIR__"npc/saodi_sengren": 1,
+    ]));
+    set("action_list", ([
+        "历练结束" : "interact map",
+    ]));
+    setup();
+}
+
+int valid_leave(object me, string dir)
+{
+    object *inv;
+    int i;
+
+    if (dir == "south")
+    {
+        inv = all_inventory(environment(me));
+        for (i = 0; i < sizeof(inv); i++)
+        {
+            if (inv[i]->query("id") == "saodi sengren")
+            {
+                return notify_fail("你必须击败圣贤堂大能才能离开。\n");
+            }
+        }
+    }
+
+    if (dir == "out")
+    {
+        if (!query_temp("interact/leave"))
+        {
+            set_temp("interact/leave", 1);
+            return notify_fail("历练尚未结束，贸然离开恐有危险。若确定要放弃，请再次点击出口。\n");
+        }
+    }
+
+    return ::valid_leave(me, dir);
+}
+
+void init()
+{
+    add_action("do_interact", "interact");
+}
+
+// 根据徒弟的人数计算 每个徒弟徒弟 给以师傅1万潜能奖励 1万经验奖励 1点贡献 10绑完成副本 师傅的奖励定元宝
+// 潜能池设定
+// 根据建号日籍 距离开服日期 为几周 得到了基数数据 *42万
+// 徒弟奖励
+// 首先每次给与潜能奖励都会扣除潜能池的潜能存储如果潜能池扣光了 正常的按照每天2万的潜能 20的绑定元宝 2点贡献- 潜能池/7- 得到徒弟潜能奖励得到(建号日期-开服日期)/7 的倍率
+// 奖励
+// 2*倍率的贡献
+// 2*頡地率#a帯造藍家绑定元宝扣除潜能池
+int do_interact(string arg)
+{
+    object me = this_player();
+    int exp = 10000;
+    int potential = 10000;
+    int gx = 1;
+    int bind_yuanbao = 10;
+    object *team;
+    int start_time;
+
+    if (!arg || arg != "map")
+    {
+        return notify_fail("你要和什么交互？\n");
+    }
+
+    if (query_temp("interact/寻宝"))
+    {
+        return notify_fail("历练已经结束。\n");
+    }
+
+    team = me->query_team();
+
+    //只有队长才能交互
+    if (! me->is_team_leader())
+    {
+        tell_object(me,"你不是队长！\n");
+        return 1;
+    }
+
+    if (!present("saodi sengren", environment(me)))
+    {
+        foreach (object member in team)
+        {
+            // 获取开始时间
+            start_time = member->query("fuben_shitu/last_time");
+
+            potential = 20000;
+            gx = 1;
+            bind_yuanbao = 10;
+
+            // 如果是队长
+            if (me == member)
+            {
+                exp = exp * 2;
+                potential = potential * 2;
+            }
+            else
+            {
+                // potential_pool 潜能池的参数,member->query("potential_pool") 潜能池的潜能
+                //如果潜能池的潜能大于等于潜能池的使用潜能
+                if (member->query("potential_pool") && member->query("potential_pool") > member->query("potential_pool_use"))
+                {
+                    if (member->query("potential_pool_time") / 86400 != time() / 86400)
+                    {
+                        int x = 14;
+                        int y = (member->query("birthday") - SHENGXIAN_D->query_start_time()) / 604800;
+                        potential = potential + member->query("potential_pool") / x;
+                        gx = 2 * y;
+                        bind_yuanbao = 20 * y;
+                        member->add("potential_pool_use", member->query("potential_pool") / x);
+
+                        if (member->query("potential_pool_use") >= member->query("potential_pool"))
+                        {
+                            member->set("potential_pool_use", member->query("potential_pool"));
+                        }
+
+                        member->add("potential_pool_time", time());
+                    }
+                    else if (me->query("potential_pool_time") / 86400 != time() / 86400)
+                    {
+                        tell_object(me, "你今天的潜能池已经在师徒副本消耗过了。\n");
+                    }
+                }
+                else
+                {
+                    potential = 20000;
+                    gx = 2;
+                    bind_yuanbao = 20;
+                }
+            }
+
+            // member->add("combat_exp", exp);
+            FUBEN_D->add_exp(member, exp);
+            member->add("potential", potential);
+            member->add("zjvip/all_pay", gx);
+            member->add("bind_yuanbao", bind_yuanbao);
+            tell_object(member, HIY "恭喜你完成了师徒历练！\n" NOR + 
+                "你获得了" + HIR + exp + NOR + "点经验、" + 
+                HIG + potential + NOR + "点潜能、" + 
+                HIC + gx + NOR + "点贡献以及" + 
+                HIY + bind_yuanbao + NOR + "点绑定元宝。\n");
+
+            // 记录副本监控日志
+            MONITOR_MASTER->monitor_fuben_log(member, "师徒副本", start_time, time(), potential, exp);
+
+            member->move("/d/city/kedian");
+            tell_object(member, "一阵天旋地转，你被传送回了扬州客店。\n");
+        }
+
+        set_temp("interact/寻宝", 1);
+    }
+    else
+    {
+        return notify_fail("圣贤堂大师正在场中凝神以待，你必须先击败他才能结束历练！\n");
+    }
+
+    return 1;
+}

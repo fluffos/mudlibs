@@ -1,0 +1,328 @@
+/**
+ * @file condition.c
+ * @author Lu Dexiang
+ * @brief 状态系统核心文件，用于处理角色的各种状态效果
+ * @version 1.0
+ * @date 2024-01-01
+ */
+
+#include <condition.h>
+#include <dbase.h>
+ 
+ // 记录最后施加状态者的信息
+ nosave string last_applyer_name;  // 名称
+ nosave string last_applyer_id;    // ID
+ 
+ // 状态相关映射
+ mapping cond_applyer;   // 状态施加者信息
+ mapping conditions;     // 状态信息
+ 
+ /**
+  * @brief 查询最后施加状态者的名称
+  */
+ string query_last_applyer_name()
+ {
+	 return last_applyer_name;
+ }
+ 
+ /**
+  * @brief 查询最后施加状态者的ID
+  */
+ string query_last_applyer_id()
+ {
+	 return last_applyer_id;
+ }
+ 
+ /**
+  * @brief 获取状态守护进程对象
+  * @param cnd 状态ID
+  * @return object 状态守护进程对象
+  */
+ private object get_cnd_object(string cnd)
+ {
+	 mixed err;
+	 object cnd_d;
+ 
+	 if (!stringp(cnd))
+		 return 0;
+ 
+	 cnd_d = find_object(CONDITION_D(cnd));
+	 if (!cnd_d)
+	 {
+		 err = catch(cnd_d = load_object(CONDITION_D(cnd)));
+ 
+		 if (err || !cnd_d)
+		 {
+			 log_file("condition.err",
+				 sprintf("加载状态守护进程失败 %s, 从 %O 中移除\n错误: %s\n当前状态:%O\n",
+					 CONDITION_D(cnd), this_object(), err,
+					 conditions)
+			 );
+			 return 0;
+		 }
+	 }
+	 return cnd_d;
+ }
+ 
+ /**
+  * @brief 清除指定或所有状态
+  * @param cnd 状态ID,为0时清除所有状态
+  */
+ nomask void clear_condition(string cnd)
+ {
+	 if (!cnd)
+	 {
+		 conditions = 0;
+		 cond_applyer = 0;
+		 last_applyer_name = 0;
+		 last_applyer_id = 0;
+		 return;
+	 }
+ 
+	 if (mapp(conditions))
+	 {
+		 map_delete(conditions, cnd);
+		 if (!sizeof(conditions))
+			 conditions = 0;
+ 
+		 if (mapp(cond_applyer))
+		 {
+			 map_delete(cond_applyer, cnd);
+			 if (!sizeof(cond_applyer))
+				 cond_applyer = 0;
+		 }
+	 }
+ }
+ 
+ /**
+  * @brief 更新持续性状态
+  * @return int 更新标志
+  */
+ nomask int update_condition()
+ {
+	 string *cnd;
+	 string *last_applyer;
+	 int i, flag, update_flag;
+	 object cnd_d;
+ 
+	 if (!mapp(conditions)) 
+		 return 0;
+		 
+	 if (!(i = sizeof(conditions)))
+	 {
+		 conditions = 0;
+		 cond_applyer = 0;
+		 return 0;
+	 }
+ 
+	 cnd = keys(conditions);
+	 update_flag = 0;
+ 
+	 while (i--)
+	 {
+		 // 获取状态守护进程对象
+		 cnd_d = get_cnd_object(cnd[i]);
+		 if (!cnd_d)
+		 {
+			 if (cnd[i]) 
+				 clear_condition(cnd[i]);
+			 continue;
+		 }
+ 
+		 // 更新施加者信息
+		 if (mapp(cond_applyer) && (last_applyer = cond_applyer[cnd[i]]))
+		 {
+			 last_applyer_id = last_applyer[0];
+			 last_applyer_name = last_applyer[1];
+		 }
+		 else
+		 {
+			 last_applyer_id = 0;
+			 last_applyer_name = 0;
+		 }
+ 
+		 // 调用状态更新函数
+		 flag = call_other(cnd_d, "update_condition", this_object(), conditions[cnd[i]]);
+		 
+		 if (!conditions)
+		 {
+			 update_flag |= flag;
+			 break;
+		 }
+		 
+		 if (!(flag & CND_CONTINUE))
+			 clear_condition(cnd[i]);
+			 
+		 update_flag |= flag;
+	 }
+ 
+	 return update_flag;
+ }
+ 
+ /**
+  * @brief 施加状态
+  * @param cnd 状态ID
+  * @param info 状态信息
+  */
+ nomask void apply_condition(string cnd, mixed info)
+ {
+	 object applyer;
+ 
+	 if (!stringp(cnd))
+	 {
+		 log_file("condition.err", 
+			 sprintf("施加状态错误(%O) 来自对象(%O) 信息(%O)\n", 
+				 cnd, previous_object(), info));
+		 return;
+	 }
+ 
+	 conditions = mapp(conditions) ? conditions : ([]);
+	 conditions[cnd] = info;
+ 
+	 applyer = this_player();
+	 if (objectp(applyer) && applyer != this_object() && userp(applyer))
+	 {
+		 cond_applyer = mapp(cond_applyer) ? cond_applyer : ([]);
+		 cond_applyer[cnd] = ({ 
+			 applyer->query("id"), 
+			 applyer->name(1) 
+		 });
+	 }
+ 
+	 set_heart_beat(1);
+ }
+ 
+ /**
+  * @brief 查询状态信息
+  * @param cnd 状态ID
+  * @return mixed 状态信息
+  */
+ nomask mixed query_condition(string cnd)
+ {
+	 if (!cnd) 
+		 return conditions;
+ 
+	 if (!mapp(conditions) || undefinedp(conditions[cnd]))
+		 return 0;
+		 
+	 return conditions[cnd];
+ }
+ 
+ /**
+  * @brief 查询状态施加者信息
+  * @param cnd 状态ID
+  * @return mixed 施加者信息
+  */
+ nomask mixed query_last_applyer(string cnd)
+ {
+	 if (!cnd)
+		 return cond_applyer;
+		 
+	 if (!mapp(cond_applyer))
+		 return 0;
+		 
+	 return cond_applyer[cnd];
+ }
+ 
+ /**
+  * @brief 查询状态名称
+  * @param cnd 状态ID
+  * @return string 状态名称
+  */
+ nomask string query_condition_name(string cnd)
+ {
+	 object cnd_d;
+ 
+	 if (!(cnd_d = get_cnd_object(cnd)))
+	 {
+		 log_file("condition.err", 
+			 sprintf("%O 查询状态 %s\n",
+				 this_object(), CONDITION_D(cnd)));
+		 return 0;
+	 }
+ 
+	 return cnd_d->cnd_name();
+ }
+ 
+ /**
+  * @brief 驱散状态
+  * @param ob 驱散者
+  * @param cnd 状态ID
+  * @return int 是否成功
+  */
+ nomask int dispel_condition(object ob, string cnd)
+ {
+	 object cnd_d;
+ 
+	 if (!(cnd_d = get_cnd_object(cnd)))
+	 {
+		 log_file("condition.err", 
+			 sprintf("%O 尝试驱散 %O %s\n",
+				 ob, this_object(), CONDITION_D(cnd)));
+		 return 0;
+	 }
+ 
+	 return cnd_d->dispel(ob, this_object(), conditions[cnd]);
+ }
+ 
+ /**
+  * @brief 触发状态效果
+  * @param cnd 状态ID
+  * @param para 参数
+  * @return int 是否成功
+  */
+ nomask int affect_by(string cnd, mixed para)
+ {
+	 object cnd_d;
+ 
+	 if (!(cnd_d = get_cnd_object(cnd)))
+	 {
+		 log_file("condition.err", 
+			 sprintf("%O 触发状态 %s:%O\n",
+				 this_object(), CONDITION_D(cnd), para));
+		 return 0;
+	 }
+ 
+	 if (!para) 
+		 para = this_object()->query_temp("para");
+ 
+	 return cnd_d->do_effect(this_object(), cnd, para);
+ }
+ 
+ /**
+  * @brief 更新技能CD
+  */
+ void update_cd()
+ {
+	 mapping pfcds;
+	 string *cds, skill_name;
+	 int  m;
+ 
+	 if (pfcds = this_object()->query("skill_cd"))
+	 {
+		 cds = keys(pfcds);
+		 foreach (string cd in cds)
+		 {
+			 int new_cd = pfcds[cd] - 1;
+			 this_object()->set("skill_cd/" + cd, new_cd);
+			 
+			 if (new_cd <= 0)
+			 {
+				 this_object()->delete("skill_cd/" + cd);
+				 skill_name = replace_string(cd, "|", "/");
+				 tell_object(this_object(),
+					 replace_string(skill_name->query_name(), ZJBR, "") +
+					 "冷却完毕！\n");
+			 }
+		 }
+	 }
+ 
+	 if (this_object()->query("skill_pcd"))
+	 {
+		 m = this_object()->query("skill_pcd/num");
+		 if (m > 0)
+			 this_object()->set("skill_pcd/num", m - 1);
+		 else
+			 this_object()->delete("skill_pcd");
+	 }
+ }

@@ -1,0 +1,299 @@
+/**
+ * @file equip.c
+ * @author Lu Dexiang
+ * @brief 装备系统核心功能实现
+ * @version 1.0
+ * @date 2024-11-22
+ * 
+ * 实现了武器、防具的穿戴、卸除以及套装效果处理等核心功能
+ */
+
+#include <dbase.h>
+#include <weapon.h>
+
+// 预定义常量
+#define SUIT_TYPE_EFF "suit_eff"     // 套装基础属性
+#define SUIT_TYPE_SKILL "suit_skill" // 套装技能加成
+
+nosave mapping equip_prop = ([]);
+private void process_suit_effect(object owner, string suit_type, string temp_key);
+private int handle_single_weapon(object owner, int flag);
+
+/**
+* @brief 处理套装临时效果
+* @param owner 装备拥有者对象
+*/
+private void suit_temp(object owner)
+{
+	if (!owner) return;
+	process_suit_effect(owner, SUIT_TYPE_EFF, "suit_eff");
+	process_suit_effect(owner, SUIT_TYPE_SKILL, "suit_skill");
+}
+
+/**
+* @brief 处理具体的套装效果
+*/
+private void process_suit_effect(object owner, string suit_type, string temp_key)
+{
+	mapping suit_eff;
+	mapping sum_eff;
+	mapping applied_prop;
+	string key;
+
+	applied_prop = ([]);
+	
+	if (mapp(suit_eff = owner->suit(owner, suit_type))) 
+	{
+		sum_eff = owner->sum_eff(owner, suit_eff);
+		foreach (key in keys(sum_eff))
+		{
+			if (undefinedp(applied_prop[key]))
+				applied_prop[key] = sum_eff[key];
+			else
+				applied_prop[key] += sum_eff[key];
+		}
+		owner->set_temp(temp_key, applied_prop);
+	}
+}
+
+/**
+* @brief 穿戴防具
+*/
+int wear()
+{
+	object owner;
+	mapping armor_prop;
+	mapping applied_prop;
+	string type;
+	string key;
+
+	owner = environment();
+	if (!owner || !owner->is_character()) 
+		return 0;
+
+	if (query("consistence") < 1)
+		return notify_fail(this_object()->name() + "现在损坏太严重了，不能继续穿戴了。\n");
+
+	if (query("equipped")) 
+		return 1;
+
+	if (owner->query_temp("handing") == this_object())
+		owner->delete_temp("handing");
+
+	armor_prop = query("armor_prop");
+	type = query("armor_type");
+	if (!mapp(armor_prop) || !stringp(type))
+		return notify_fail("你只能穿戴可当作护具的东西。\n");
+
+	if (owner->query_temp("armor/" + type))
+		return notify_fail("你已经穿戴了同类型的护具了。\n");
+
+	owner->set_temp("armor/" + type, this_object());
+	applied_prop = owner->query_temp("apply") || ([]);
+	
+	foreach (key in keys(armor_prop))
+	{
+		if (undefinedp(applied_prop[key]))
+			applied_prop[key] = armor_prop[key];
+		else
+			applied_prop[key] += armor_prop[key];
+	}
+	
+	owner->set_temp("apply", applied_prop);
+	suit_temp(owner);
+	set("equipped", "worn");
+	return 1;
+}
+
+/**
+* @brief 装备武器
+*/
+int wield()
+{
+	object owner;
+	mapping weapon_prop;
+	mixed no_wield;
+	int flag;
+	string key;
+
+	owner = environment();
+	if (!owner || !owner->is_character()) 
+		return 0;
+
+	if (query("consistence") < 1)
+		return notify_fail(this_object()->name() + "现在损坏太严重了，不能继续装备了。\n");
+
+	if (query("equipped")) 
+		return 1;
+
+	no_wield = query("no_wield");
+	if (no_wield)
+		return notify_fail(stringp(no_wield) ? no_wield : "这样东西无法装备。");
+
+	if (owner->query_temp("handing") == this_object())
+		owner->delete_temp("handing");
+
+	weapon_prop = query("weapon_prop");
+	if (!mapp(weapon_prop) || !stringp(query("skill_type")))
+		return notify_fail("你只能装备可当作武器的东西。\n");
+
+	flag = query("flag");
+	if (flag & TWO_HANDED)
+	{
+		if (owner->query_temp("secondary_weapon") || 
+			owner->query_temp("weapon") ||
+			owner->query_temp("handing"))
+			return notify_fail("你必须空出双手才能装备该武器。\n");
+		
+		owner->set_temp("weapon", this_object());
+	}
+	else
+	{
+		if (!handle_single_weapon(owner, flag))
+			return 0;
+	}
+
+	if (owner->query_temp("secondary_weapon") != this_object())
+	{
+		foreach (key in keys(weapon_prop))
+			owner->add_temp("apply/" + key, weapon_prop[key]);
+	}
+
+	owner->reset_action();
+	suit_temp(owner);
+	set("equipped", "wielded");
+	return 1;
+}
+
+/**
+* @brief 处理单手武器装备逻辑
+*/
+private int handle_single_weapon(object owner, int flag)
+{
+	object old_weapon;
+
+	old_weapon = owner->query_temp("weapon");
+	
+	if (!old_weapon)
+	{
+		owner->set_temp("weapon", this_object());
+		return 1;
+	}
+
+	if (!owner->query_temp("secondary_weapon") && !owner->query_temp("handing"))
+	{
+		if (flag & SECONDARY)
+		{
+			owner->set_temp("secondary_weapon", this_object());
+			return 1;
+		}
+		
+		if (old_weapon->query("flag") & SECONDARY)
+		{
+			old_weapon->unequip();
+			owner->set_temp("weapon", this_object());
+			old_weapon->wield();
+			return 1;
+		}
+		
+		return notify_fail("你必须先放下你目前装备的武器。\n");
+	}
+	
+	return notify_fail("你必须空出一只手来使用武器。\n");
+}
+
+/**
+* @brief 卸除装备
+*/
+int unequip()
+{
+	object owner;
+	string equipped;
+	mapping prop;
+	mapping applied_prop;
+	string key;
+
+	owner = environment();
+	if (!owner->is_character())
+		return 0;
+
+	equipped = query("equipped");
+	if (!stringp(equipped))
+		return notify_fail("你目前并没有装备这样东西。\n");
+
+	if (equipped == "wielded")
+	{
+		if (owner->query_temp("weapon") == this_object())
+		{
+			prop = query("weapon_prop");
+			owner->delete_temp("weapon");
+		}
+		else if (owner->query_temp("secondary_weapon") == this_object())
+		{
+			owner->delete_temp("secondary_weapon");
+			prop = 0;
+		}
+		owner->reset_action();
+	}
+	else if (equipped == "worn")
+	{
+		owner->delete_temp("armor/" + query("armor_type"));
+		prop = query("armor_prop");
+	}
+
+	if (mapp(prop))
+	{
+		applied_prop = owner->query_temp("apply");
+		foreach (key in keys(prop))
+			applied_prop[key] -= prop[key];
+	}
+
+	suit_temp(owner);
+	delete("equipped");
+	return 1;
+}
+
+/**
+* @brief 武器击中目标时的处理
+*/
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+	mixed result;
+	
+	result = this_object()->weapon_hit_ob(me, victim, damage_bonus);
+	
+	ITEM_D->reduce_consistence(this_object());
+	
+	if (mapp(query_temp("daub")))
+		COMBAT_D->hit_with_poison(me, victim, this_object());
+		
+	return result;
+}
+
+/**
+* @brief 防具受到攻击时的处理
+*/
+mixed valid_damage(object me, object victim, int damage_bonus)
+{
+	ITEM_D->reduce_consistence(this_object());
+	
+	if (!mapp(query_temp("daub")))
+		return;
+		
+	if (me->query_temp("weapon") || 
+		me->query_temp("remote_attack") ||
+		me->query("not_living"))
+		return;
+		
+	COMBAT_D->hit_poison(me, victim, this_object());
+}
+
+/**
+* @brief 获取装备属性
+*/
+mapping query_equip_prop() { return equip_prop; }
+
+/**
+* @brief 设置装备属性
+*/
+void set_equip_prop(mapping prop) { equip_prop = prop; }

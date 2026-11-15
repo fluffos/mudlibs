@@ -1,0 +1,214 @@
+// zhuan.c - 明玉功星屑旋转技能
+// 星屑旋转：明玉功的高级招式，能够形成真气漩涡影响敌人
+
+// 函数原型声明
+void give_effect(object me, int extra, int level);
+void take_effect(object me, object target, int level);
+
+#include <combat.h>
+inherit F_SSERVER;
+inherit F_CLEAN_UP;
+
+// 常量定义
+#define SKILL_NAME "星屑旋转"              // 技能名称
+#define SKILL_COOLDOWN 8                    // 技能冷却时间（秒）
+#define MIN_SKILL_LEVEL 150                 // 最低技能等级要求（第九重）
+#define MIN_FORCE_LEVEL 1500                // 最低内力要求
+#define MIN_LEVEL_FOR_ADVANCED 10           // 高级效果的最低等级要求
+#define BUSY_TIME 2                         // 施展技能后的忙碌时间（秒）
+#define EFFECT_INTERVAL 2                   // 持续效果的间隔时间（秒）
+#define FORCE_DIFF_DIVISOR 50               // 内力差距计算除数
+#define MIN_CONDITION_COUNT 4               // 最小状态持续次数
+#define FORCE_DAMAGE_DIVISOR 15             // 内力伤害计算除数
+
+/**
+ * @brief 查询技能名称
+ * @return string 返回技能名称"星屑旋转"
+ */
+string query_name() 
+{ 
+    return SKILL_NAME; 
+}
+
+/**
+ * @brief 执行星屑旋转技能
+ * @param object me 施展技能的玩家对象
+ * @param object target 目标对象（未使用）
+ * @param int amount 技能参数（未使用）
+ * @return int 成功返回1，失败返回0
+ * @details 星屑旋转是明玉功的高级招式，需要达到一定等级和内力才能使用
+ */
+int perform(object me, object target, int amount)
+{
+    int skill_level, current_force, extra_force, mingyu_level;
+
+    // 检查是否在战斗中
+    if (!me->is_fighting())
+        return notify_fail(SKILL_NAME + "只能在战斗中使用。\n");
+    
+    // 检查技能冷却时间
+    if (me->query_temp("xingxiexuanzhuan") + SKILL_COOLDOWN > time())
+        return notify_fail("你不能这么快就施展下一次" + SKILL_NAME + "。\n");
+    
+    // 获取技能等级和内力
+    skill_level = me->query_skill("mingyu-gong", 1);
+    extra_force = me->query_skill("force");
+    current_force = (int)me->query("neili");
+    
+    // 检查技能等级要求
+    if (skill_level < MIN_SKILL_LEVEL && userp(me)) 
+        return notify_fail("你的明玉功尚未达到第九重，不能施展" + SKILL_NAME + "。\n");
+    
+    mingyu_level = skill_level / 20;
+    
+    // 检查内力要求
+    if (userp(me) && mingyu_level < MIN_LEVEL_FOR_ADVANCED && current_force < MIN_FORCE_LEVEL)
+        return notify_fail("你的内力不够。\n");
+
+    // 显示技能施展消息
+    message_combatd(HIW"$N深吸一口气，催动第" + chinese_number(mingyu_level) + 
+                   "重的明玉功，脸上突然变得非红非白，整个人竟似透明的！\n", me);
+    message_combatd("$N肌肉里的每一根筋络，每一根骨头都彷佛能看得清清楚楚，说不出的诡秘可怕！"NOR"\n", me);
+
+    // 设置技能冷却
+    me->set_temp("xingxiexuanzhuan", time());
+
+    // 设置忙碌状态
+    if (me->query_busy() < BUSY_TIME) 
+        me->start_busy(BUSY_TIME);
+    
+    // 延迟执行效果
+    me->start_call_out((:call_other, __FILE__, "give_effect", me, extra_force, mingyu_level:), 1);
+
+    return 1;
+}
+
+/**
+ * @brief 对所有敌人施加明玉功效果
+ * @param object me 施展技能的玩家对象
+ * @param int extra 额外内力值
+ * @param int level 明玉功等级
+ * @details 计算与敌人的内力差距，设置明玉功状态持续时间
+ */
+void give_effect(object me, int extra, int level)
+{
+    object* enemies;
+    int i, condition_count, enemy_force;
+    
+    enemies = me->query_enemy();
+    if (!sizeof(enemies)) 
+        return;
+    
+    message_combatd(HIW"$N内力非但不向外挥发，反而向内收缩，以丹田为中心形成真气漩涡！"NOR"\n", me);
+
+    for (i = 0; i < sizeof(enemies); i++)
+    {
+        enemy_force = enemies[i]->query_skill("force");
+        condition_count = (extra - enemy_force) / FORCE_DIFF_DIVISOR;
+        
+        if (condition_count < MIN_CONDITION_COUNT) 
+            condition_count = MIN_CONDITION_COUNT;
+        
+        if (enemies[i]->query_temp("condition/mingyu") < condition_count)
+            enemies[i]->set_temp("condition/mingyu", condition_count);
+        
+        take_effect(me, enemies[i], level);
+    }
+}
+
+/**
+ * @brief 对单个目标施加持续效果
+ * @param object me 施展技能的玩家对象
+ * @param object target 目标对象
+ * @param int level 明玉功等级
+ * @details 根据等级随机产生不同的负面效果，包括定身和吸取内力
+ */
+void take_effect(object me, object target, int level)
+{
+    int effect_type, max_neili;
+    string effect_msg;
+
+    // 检查效果是否应该结束
+    if (!target->query_temp("condition/mingyu") || !objectp(me) || 
+        !objectp(target) || !target->is_fighting(me))
+    {
+        effect_msg = HIW"$n终于摆脱了明玉功的真气漩涡。"NOR"\n";
+        message_combatd(effect_msg, me, target);
+        target->delete_temp("condition/mingyu");
+        return;
+    }
+
+    target->add_temp("condition/mingyu", -1);
+    effect_type = random(2);
+
+    switch (effect_type)
+    {
+        case 0: // 定身效果
+            if (level >= MIN_LEVEL_FOR_ADVANCED)
+            {
+                effect_msg = GRN"$n身处明玉功的真气漩涡中，突觉举步维艰！"NOR"\n";
+                target->start_busy(2 + random(2));
+            }
+            else
+            {
+                effect_msg = YEL"$n身处明玉功的真气漩涡中，突觉举步维艰！"NOR"\n";
+                target->start_busy(2 + random(2));
+            }
+            break;
+            
+        case 1: // 内力吸取效果
+            // 检查目标内力是否耗尽
+            if (!target->query("neili") && level < 11) 
+            {
+                effect_msg = YEL"$n内力耗尽，脚步蹒跚，摇摇欲坠！"NOR"\n";
+                if (target->query_busy() < BUSY_TIME) 
+                    target->start_busy(BUSY_TIME);
+                break;
+            }
+
+            // 根据等级显示不同消息
+            if (level >= 11)
+                effect_msg = RED"$n身处明玉功的真气漩涡中，全身气血如融雪般开始消失！"NOR"\n";
+            else
+                effect_msg = WHT"$n身处明玉功的真气漩涡中，全身功力如融雪般开始消失！"NOR"\n";
+
+            max_neili = target->query("max_neili");
+            
+            // 减少目标内力
+            target->add("neili", -max_neili / FORCE_DAMAGE_DIVISOR);
+            effect_msg += HIR"$n受到$N的星屑化域影响，内力减少" + HIR + 
+                         (max_neili / FORCE_DAMAGE_DIVISOR) + NOR + "点！"NOR"\n";
+
+            // 处理意境效果
+            {
+                int aoyi_level;
+                
+                aoyi_level = COMBAT_D->get_skill_aoyi_level(me, "星屑化域");
+                if (aoyi_level > 0)
+                {
+                    int damage;
+                    
+                    damage = (me->query("max_qi") * aoyi_level) / 100;
+                    COMBAT_D->real_damage(me, target, damage);
+                    effect_msg += HIR"$n受到$N的星屑化域影响！"NOR"\n";
+                }
+            }
+            
+            // 确保内力不为负数
+            if (target->query("neili") < 0) 
+                target->set("neili", 0);
+            
+            // 施展者回复内力
+            if (me->query("neili") < me->query("max_neili"))
+            {
+                me->add("neili", max_neili / FORCE_DAMAGE_DIVISOR);
+            }
+            break;
+
+        default:
+            return;
+    }
+    
+    message_combatd(effect_msg, me, target);
+    target->start_call_out((:call_other, __FILE__, "take_effect", me, target, level:), EFFECT_INTERVAL);
+}

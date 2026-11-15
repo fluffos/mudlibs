@@ -1,0 +1,169 @@
+// taijihualin.c 太极化劲
+// 先天无极决防御控制绝技
+
+inherit F_SSERVER;
+
+/**
+ * @brief 返回绝技名称
+ * @return string 绝技名称
+ */
+string query_name() { return "太极化劲"; }
+
+/**
+ * @brief 技能类型
+ * @return string* 适用武器类型数组
+ */
+string *pfm_type() { return ({ "unarmed", "sword" }); }
+
+/**
+ * @brief 执行太极化劲绝技
+ * @param object me 施法者
+ * @param object target 目标
+ * @return int 1表示成功，0表示失败
+ * @details 以柔克刚的防御控制型绝技，可以反震和化解攻击
+ */
+int perform(object me, object target)
+{
+    object weapon;
+    string msg;
+    int ap, dp, damage, wujidaoxin_lvl, jindanmiyao_lvl;
+    int skill_level, neili_cost;
+
+    if (!target) target = offensive_target(me);
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail("太极化劲只能对战斗中的对手使用。\n");
+
+    if ((int)me->query_skill("taiji-quanzhen", 1) < 100)
+        return notify_fail("你的先天无极决不够娴熟，不能使用太极化劲。\n");
+
+    if ((int)me->query_skill("force", 1) < 120)
+        return notify_fail("你的内功修为不够，无法运用太极化劲的奥妙。\n");
+
+    if ((int)me->query("neili") < 250)
+        return notify_fail("你现在内力不够，无法使用太极化劲。\n");
+
+    if (me->query_skill_mapped("parry") != "taiji-quanzhen")
+        return notify_fail("你没有激发先天无极决为招架，无法使用太极化劲。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    // 获取技能等级和意境等级
+    skill_level = me->query_skill("sword") + me->query_skill("unarmed");
+    wujidaoxin_lvl = COMBAT_D->get_skill_aoyi_level(me, "无极道心");
+    jindanmiyao_lvl = COMBAT_D->get_skill_aoyi_level(me, "金丹秘要");
+
+    neili_cost = 250;
+
+    // 意境影响内力消耗
+    if (wujidaoxin_lvl > 0)
+    {
+        neili_cost = neili_cost * (10 - wujidaoxin_lvl / 3) / 10;
+        if (neili_cost < 150) neili_cost = 150;
+    }
+
+    weapon = me->query_temp("weapon");
+
+    if (weapon && weapon->query("skill_type") == "sword")
+    {
+        msg = HIC "$N" HIC "剑意通神，一式「太极化劲」，手中$w" HIC "画出玄妙太极图，" +
+              "剑法圆转如意，刚柔相济，形成一道无形屏障护住全身！" NOR "\n";
+    }
+    else
+    {
+        msg = HIC "$N" HIC "拳意通明，一式「太极化劲」，双手缓缓划出太极图形，" +
+              "拳法返璞归真，以柔克刚，浑身散发出一股玄妙气息！" NOR "\n";
+    }
+
+    message_combatd(msg, me, target);
+
+    // 计算攻防数值
+    ap = target->query("parry") + target->query("force");
+    dp = skill_level;
+
+    // 意境加成防御力
+    if (wujidaoxin_lvl > 0)
+    {
+        dp += wujidaoxin_lvl * skill_level / 8;
+    }
+    if (jindanmiyao_lvl > 0)
+    {
+        dp += jindanmiyao_lvl * skill_level / 12;
+    }
+
+    me->add("neili", -neili_cost);
+
+    // 判定是否成功
+    if (COMBAT_D->hit_determination(me, target, dp, ap))
+    {
+        // 成功化解攻击并反震
+        damage = skill_level + me->query_skill("force") + (me->query("max_jing") / 2)+ random(skill_level / 2);
+
+        // 意境加成伤害
+        if (wujidaoxin_lvl > 0)
+        {
+            damage += wujidaoxin_lvl * skill_level / 10;
+        }
+        if (jindanmiyao_lvl > 0)
+        {
+            damage += jindanmiyao_lvl * skill_level / 15;
+        }
+
+        if (weapon && weapon->query("skill_type") == "sword")
+        {
+            msg = HIY "$n" HIY "的攻势被$N" HIY "完全化解，剑气反震，$n" HIY "顿时内府受创！" NOR "\n";
+        }
+        else
+        {
+            msg = HIY "$n" HIY "的攻势被$N" HIY "完全化解，拳劲反震，$n" HIY "顿时气血翻涌！" NOR "\n";
+        }
+
+        message_combatd(msg, me, target);
+
+        COMBAT_D->real_damage(me, target, damage);
+
+        // 减少对方内力并造成忙乱
+        target->add("neili", -damage);
+        if (!target->is_busy())
+            target->start_busy(2);
+
+        // 意境特殊效果
+        if (wujidaoxin_lvl > 3)
+        {
+            message_combatd(HIW "$N" HIW "无极道心运转，一股玄妙真气让$n" HIW "心神不宁，造成"+(wujidaoxin_lvl * skill_level / 10)+"点精神伤害！" NOR "\n", me, target);
+            target->receive_damage("jing", wujidaoxin_lvl * skill_level / 10, me);
+            target->add("neili", -wujidaoxin_lvl * 30);
+        }
+
+        if (jindanmiyao_lvl > 3)
+        {
+            message_combatd(HIB "$N" HIB "金丹秘要显威，真气如虹，让$n" HIB "内息紊乱！" NOR "\n", me, target);
+            COMBAT_D->real_damage(me, target, jindanmiyao_lvl * 15);
+            if (jindanmiyao_lvl > 5 && !target->is_busy())
+                target->start_busy(1);
+        }
+
+        me->start_busy(1);
+        tell_object(me, HIG "你成功使用了太极化劲，将对方的攻势完全化解并反震回去！" NOR "\n");
+    }
+    else
+    {
+        // 失败
+        if (weapon && weapon->query("skill_type") == "sword")
+        {
+            msg = CYN "$n" CYN "看破了$N" CYN "的太极化劲，攻势不减，剑法变化莫测，避开了反震之力！" NOR "\n";
+        }
+        else
+        {
+            msg = CYN "$n" CYN "看破了$N" CYN "的太极化劲，身法灵动，避开了反震之力！" NOR "\n";
+        }
+
+        message_combatd(msg, me, target);
+        me->start_busy(2);
+        me->add("neili", -100);
+        tell_object(me, HIR "你的太极化劲被对方看破，反而露出了破绽！" NOR "\n");
+    }
+
+    return 1;
+}

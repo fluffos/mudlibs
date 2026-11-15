@@ -1,0 +1,599 @@
+// 定义存储路径
+#define SELF_SKILL_DIR "/data/self_skill/"
+
+inherit F_DBASE;
+
+// 函数前向声明
+void create();
+int check_player_condition(object me);
+int check_skill_in_pool(string skill);
+mapping get_skill_pool_attributes(string skill);
+string create_self_skill(object me, string skill_name, string pfm_name);
+int add_action_to_skill(object me, string skill_id, mapping action_data);
+mapping create_single_action(string skill_name, mapping ap_settings, mapping damage_settings, string msg, string hit_msg);
+mapping create_combo_action(string skill_name, string msg, string hit_msg);
+mapping create_real_action(string skill_name, mapping ap_settings, mapping damage_settings, string msg, string damage_type, string hit_msg);
+int save_self_skill(string user_id, mapping skill_data);
+mapping load_self_skill(string user_id);
+mapping get_all_self_skills(string user_id);
+mapping get_self_skill_detail(string user_id, string skill_id);
+int upgrade_action_level(object me, string skill_id, int action_index);
+string query_dodge_msg();
+mapping merge_skill_attributes(string main_skill, string sub_skill);
+
+mapping allow_skill = ([
+    "liuyang-zhang":([
+        "name":"六阳掌",//该招式归属的武学的名称
+        "ap":([ //该武学创建招式时，在命中上可以决定的属性
+            "skill":({ "strike","force","dodge" }),//可以决定的技能
+            "attribute":({ "str", "con"}),//可以决定的属性
+            "jiaoli":1,//可以决定是否有内力比拼影响
+        ]),
+        "damage":([//该武学创建招式时，在伤害上可以决定的技能和属性
+            "skill":({ "strike","force","dodge" }),
+            "attribute":({ "str","con" }),
+        ]),
+        "pfm_type":({ "single","combo" }),
+        "ability":12,//武学能力,用于伤害计算时决定的能力
+    ]),
+    "jiuyang-shengong":([
+        "name":"九阳神功",
+        "ap":([
+            "skill":({ "force","dodge","parry" }),//只有三个武学激发可选
+            "attribute":({ }),//属性为空，只能选择武学激发
+            "jiaoli":1,
+        ]),
+        "damage":([
+            "skill":({ "force","spells" }),
+            "attribute":({ }),
+        ]),
+        "pfm_type":({ "single","real" }),
+        "ability":15,
+    ]),
+    "taiji-jian":([
+        "name":"太极剑法",
+        "ap":([
+            "skill":({ "sword","parry","dodge" }),
+            "attribute":({ "dex" }),//只有一个属性可选
+            "jiaoli":1,
+        ]),
+        "damage":([
+            "skill":({ "sword","parry" }),
+            "attribute":({ "dex" }),
+        ]),
+        "pfm_type":({ "single","combo","real" }),
+        "ability":14,
+    ])
+]);
+
+//在计算ap命中时，该武学一个比较的武学,如果一个ap激发没用在如下列表中有对应的值，那么随机从dodge，parry，force中取值
+mapping dp_comparison_skill = ([
+    "dodge":({ "dodge","parry" }),
+    "force":({ "force" }),
+    "parry":({ "parry","dodge" }),
+]);
+
+//在计算dp命中时，该武学一个比较的武学,如果一个ap属性没用在如下列表中有对应的值，那么随机从dex，str，con中取值
+mapping dp_comparison_attribute = ([
+    "str":({ "dex","str" }),
+    "dex":({ "dex","int" }),
+    "con":({ "str","con" }),
+    "int":({ "con","str" }),
+]);
+
+//自创招式时随机从如下列表中选择闪避描述
+string *dodge_msg = ({
+	"可是$n侧身一让，$N这一招扑了个空。\n",
+	"却见$n足不点地，往旁窜开数尺，躲了开去。\n",
+	"$n身形微晃，有惊无险地避开了$N这一招。\n",
+	"$n跨出几步，落点怪异莫测，让$N这一招没有发挥任何作用。\n",
+	"$n自顾自的走出几步，浑然不理$N出招攻向何处。\n",
+	"$N这一招眼看就要击中，可是$n往旁边一让，去点之妙，实在是匪夷所思。\n",
+	"$n往前一迈，忽然后退，恰恰避开$N这一招，有惊无险。\n",
+    "$n身形左闪右晃，姿势潇洒之极，一招[飞升九天]轻巧地躲开$N的进攻。\n",
+    "$n宛如一屡青烟，飘忽不定，令人琢磨不定，一招[魔神无形]闪到了$N的身后。\n",
+    "$n姿态幽雅之极，躲闪之中丝毫不显狼狈之态，一招[上天入地]避开了$N的攻击。\n",
+    "$n身形突然连晃数下，宛如云雾中的幻灵，一招[洞彻九幽]躲开了$N的攻击。\n",
+    "$n微微一动，已然远去，使$N的进攻全然无用。\n",
+	"$n霎时间平移了数步，如鬼如魅，使$N全然无法掌握。\n",
+	"$n忽的一退，闪去天下任何追击。\n",
+	"$n足不离地，腰肢猛摆，居然将$N的进攻全部躲过。\n",
+    "只见$n脚步左移右移，于须毫之间避开了$N这一招。\n",
+    "$n身子慕然向后一仰，避开了$N的凌厉攻势。\n",
+    "$n身子微微一侧，跨前两步，让$N这一招扑了个空。\n",
+    "但是$n身形飘忽，轻轻一纵，早已避开$N。\n",
+    "$n忽前忽后，身随意转，将$N所有的后招全难落空。\n",
+    "$n身形急转，避过了$N的攻势。\n",
+	"可是$n拔地而起，躲过了$N这一招。\n",
+	"$n作闪右避，总算躲过了$N这一招。\n",
+});
+
+// 创建存储目录
+void create()
+{
+    seteuid(getuid());
+    
+    if (!sizeof(get_dir(SELF_SKILL_DIR)))
+        mkdir(SELF_SKILL_DIR);
+}
+
+// 检查玩家是否满足创建自创招式的条件
+int check_player_condition(object me)
+{
+
+    return 1;
+
+    // 检查三花聚顶境界
+    if (me->query("breakup") < 1)
+        return notify_fail("你尚未达到三花聚顶的境界，无法创建自创招式。\n");
+    
+    // 检查武圣真意积累
+    if (me->query("wusheng/zhenyilun") < 1)
+        return notify_fail("你尚未积累足够的武圣真意，无法创建自创招式。\n");
+    
+    return 1;
+}
+
+// 检查武学是否在武学池中
+int check_skill_in_pool(string skill)
+{
+    if (!allow_skill[skill])
+        return 0;
+    
+    return 1;
+}
+
+// 获取武学池中的武学属性
+mapping get_skill_pool_attributes(string skill)
+{
+    if (!check_skill_in_pool(skill))
+        return 0;
+    
+    return allow_skill[skill];
+}
+
+// 创建新的自创招式
+string create_self_skill(object me, string skill_name, string pfm_name)
+{
+    string skill_id;
+    mapping skill_data, save_data;
+    
+    // 检查玩家条件
+    if (!check_player_condition(me))
+        return 0;
+    
+    // 检查技能是否在武学池中
+    if (!check_skill_in_pool(skill_name))
+        return "该武学不在可自创招式的范围内。";
+    
+    // 生成唯一ID
+    skill_id = sprintf("%s_%s_%d", me->query("id"), skill_name, time());
+    
+    // 创建初始招式数据结构
+    skill_data = ([
+        "name": pfm_name,
+        "creator": me->query("id"),
+        "skill": skill_name,
+        "create_time": time(),
+        "action": ({})
+    ]);
+    
+    // 保存招式数据
+    save_data = ([skill_id: skill_data]);
+    if (!save_self_skill(me->query("id"), save_data))
+        return "保存自创招式数据失败。";
+    
+    return skill_id;
+}
+
+// 添加动作到自创招式
+int add_action_to_skill(object me, string skill_id, mapping action_data)
+{
+    mapping skill_data, save_data;
+    
+    // 读取招式数据
+    save_data = load_self_skill(me->query("id"));
+    if (!save_data || !save_data[skill_id])
+        return notify_fail("未找到该自创招式。\n");
+    
+    skill_data = save_data[skill_id];
+    
+    // 检查动作数量是否已达上限
+    if (sizeof(skill_data["action"]) >= 4)
+        return notify_fail("该招式已达到最大动作数量。\n");
+    
+    // 添加动作
+    skill_data["action"] += ({ action_data });
+    
+    // 保存更新后的数据
+    if (!save_self_skill(me->query("id"), save_data))
+        return notify_fail("保存自创招式数据失败。\n");
+    
+    return 1;
+}
+
+// 创建单招动作
+mapping create_single_action(string skill_name, mapping ap_settings, mapping damage_settings, string msg, string hit_msg)
+{
+    mapping action;
+    mapping skill_pool = get_skill_pool_attributes(skill_name);
+    mapping dp_settings;
+    
+    if (!skill_pool || member_array("single", skill_pool["pfm_type"]) == -1)
+        return 0;
+    
+    // 验证AP设置
+    if (ap_settings["skill"])
+    {
+        foreach (string sk in ap_settings["skill"])
+        {
+            if (member_array(sk, skill_pool["ap"]["skill"]) == -1)
+                return 0;
+        }
+    }
+    
+    if (ap_settings["attribute"])
+    {
+        foreach (string attr in ap_settings["attribute"])
+        {
+            if (member_array(attr, skill_pool["ap"]["attribute"]) == -1)
+                return 0;
+        }
+    }
+    
+    // 验证伤害设置
+    if (damage_settings["skill"])
+    {
+        foreach (string sk in damage_settings["skill"])
+        {
+            if (member_array(sk, skill_pool["damage"]["skill"]) == -1)
+                return 0;
+        }
+    }
+    
+    if (damage_settings["attribute"])
+    {
+        foreach (string attr in damage_settings["attribute"])
+        {
+            if (member_array(attr, skill_pool["damage"]["attribute"]) == -1)
+                return 0;
+        }
+    }
+
+    // 生成DP设置
+    dp_settings = ([]);
+    
+    // 处理技能DP
+    if (ap_settings["skill"] && sizeof(ap_settings["skill"]) > 0)
+    {
+        string *dp_skills = ({});
+        foreach (string sk in ap_settings["skill"])
+        {
+            if (dp_comparison_skill[sk])
+            {
+                // 如果在映射表中，从对应值中随机选择
+                string *options = dp_comparison_skill[sk];
+                dp_skills += ({ options[random(sizeof(options))] });
+            }
+            else
+            {
+                // 如果不在映射表中，从dodge、parry、force中随机选择
+                string *default_options = ({ "dodge", "parry", "force" });
+                dp_skills += ({ default_options[random(sizeof(default_options))] });
+            }
+        }
+        dp_settings["skill"] = dp_skills;
+    }
+    
+    // 处理属性DP
+    if (ap_settings["attribute"] && sizeof(ap_settings["attribute"]) > 0)
+    {
+        string *dp_attrs = ({});
+        foreach (string attr in ap_settings["attribute"])
+        {
+            if (dp_comparison_attribute[attr])
+            {
+                // 从对应值中随机选择
+                string *options = dp_comparison_attribute[attr];
+                dp_attrs += ({ options[random(sizeof(options))] });
+            }
+            else
+            {
+                // 如果没有映射，从dex、str、con中随机选择
+                string *default_options = ({ "dex", "str", "con" });
+                dp_attrs += ({ default_options[random(sizeof(default_options))] });
+            }
+        }
+        dp_settings["attribute"] = dp_attrs;
+    }
+    
+    // 设置jiaoli
+    dp_settings["jiaoli"] = ap_settings["jiaoli"];
+    
+    // 对描述进行颜色转换
+    msg = trans_color(msg, 2);
+    hit_msg = trans_color(hit_msg, 2);
+    
+    // 创建动作数据
+    action = ([
+        "pfm_type": "single",
+        "ap": ap_settings,
+        "dp": dp_settings,
+        "damage": damage_settings,
+        "msg": msg,
+        "hit_msg": hit_msg,
+        "level": 1,
+        "ability": skill_pool["ability"] + random(5),//一定范围内给予随机能力值
+    ]);
+    
+    return action;
+}
+
+// 创建连招动作
+mapping create_combo_action(string skill_name, string msg, string hit_msg)
+{
+    mapping action;
+    mapping skill_pool = get_skill_pool_attributes(skill_name);
+    
+    if (!skill_pool || member_array("combo", skill_pool["pfm_type"]) == -1)
+        return 0;
+    
+    // 对描述进行颜色转换
+    msg = trans_color(msg, 2);
+    hit_msg = trans_color(hit_msg, 2);
+    
+    // 创建动作数据
+    action = ([
+        "pfm_type": "combo",
+        "msg": msg,
+        "hit_msg": hit_msg,
+        "level": 1,
+        "ability": skill_pool["ability"] + random(5),//一定范围内给予随机能力值
+    ]);
+    
+    return action;
+}
+
+// 创建真实伤害动作
+mapping create_real_action(string skill_name, mapping ap_settings, mapping damage_settings, string msg, string damage_type, string hit_msg)
+{
+    mapping action;
+    mapping skill_pool = get_skill_pool_attributes(skill_name);
+    mapping dp_settings;
+    
+    if (!skill_pool || member_array("real", skill_pool["pfm_type"]) == -1)
+        return 0;
+    
+    // 验证AP设置 (ap_settings)
+    if (ap_settings["skill"]) // 检查是否存在 "skill" 键
+    {
+        foreach (string sk in ap_settings["skill"])
+        {
+            if (member_array(sk, skill_pool["ap"]["skill"]) == -1)
+                return 0; // AP skill not allowed
+        }
+    }
+    
+    if (ap_settings["attribute"]) // 检查是否存在 "attribute" 键
+    {
+        foreach (string attr in ap_settings["attribute"])
+        {
+            if (member_array(attr, skill_pool["ap"]["attribute"]) == -1)
+                return 0; // AP attribute not allowed
+        }
+    }
+    
+    // 验证伤害设置 (damage_settings) - 现在是独立传入的
+    if (damage_settings["skill"]) // 检查是否存在 "skill" 键
+    {
+        foreach (string sk in damage_settings["skill"])
+        {
+            // 确保 skill_pool["damage"] 和 skill_pool["damage"]["skill"] 都存在
+            if (!skill_pool["damage"] || !skill_pool["damage"]["skill"] || member_array(sk, skill_pool["damage"]["skill"]) == -1)
+                return 0; // Damage skill not allowed or not defined in pool
+        }
+    }
+    
+    if (damage_settings["attribute"]) // 检查是否存在 "attribute" 键
+    {
+        foreach (string attr in damage_settings["attribute"])
+        {
+            // 确保 skill_pool["damage"] 和 skill_pool["damage"]["attribute"] 都存在
+            if (!skill_pool["damage"] || !skill_pool["damage"]["attribute"] || member_array(attr, skill_pool["damage"]["attribute"]) == -1)
+                return 0; // Damage attribute not allowed or not defined in pool
+        }
+    }
+    
+    // 生成DP设置 (based on ap_settings)
+    dp_settings = ([]);
+    
+    // 处理技能DP
+    if (ap_settings["skill"] && sizeof(ap_settings["skill"]) > 0)
+    {
+        string *dp_skills = ({});
+        foreach (string sk in ap_settings["skill"])
+        {
+            if (dp_comparison_skill[sk])
+            {
+                // 如果在映射表中，从对应值中随机选择
+                string *options = dp_comparison_skill[sk];
+                dp_skills += ({ options[random(sizeof(options))] });
+            }
+            else
+            {
+                // 如果不在映射表中，从dodge、parry、force中随机选择
+                string *default_options = ({ "dodge", "parry", "force" });
+                dp_skills += ({ default_options[random(sizeof(default_options))] });
+            }
+        }
+        dp_settings["skill"] = dp_skills;
+    }
+    
+    // 处理属性DP
+    if (ap_settings["attribute"] && sizeof(ap_settings["attribute"]) > 0)
+    {
+        string *dp_attrs = ({});
+        foreach (string attr in ap_settings["attribute"])
+        {
+            if (dp_comparison_attribute[attr])
+            {
+                // 从对应值中随机选择
+                string *options = dp_comparison_attribute[attr];
+                dp_attrs += ({ options[random(sizeof(options))] });
+            }
+            else
+            {
+                // 如果没有映射，从dex、str、con中随机选择
+                string *default_options = ({ "dex", "str", "con" });
+                dp_attrs += ({ default_options[random(sizeof(default_options))] });
+            }
+        }
+        dp_settings["attribute"] = dp_attrs;
+    }
+    
+    // 设置jiaoli
+    dp_settings["jiaoli"] = ap_settings["jiaoli"];
+    
+    // 对描述进行颜色转换
+    msg = trans_color(msg, 2);
+    hit_msg = trans_color(hit_msg, 2);
+    
+    // 创建动作数据
+    action = ([
+        "pfm_type": "real",
+        "ap": ap_settings,
+        "dp": dp_settings,
+        "damage": damage_settings,
+        "msg": msg,
+        "hit_msg": hit_msg,
+        "damage_type": damage_type, // 气血伤害或精神伤害
+        "level": 1,
+        "ability": skill_pool["ability"] + random(5),//一定范围内给予随机能力值
+    ]);
+    
+    return action;
+}
+
+// 保存自创招式数据
+int save_self_skill(string user_id, mapping skill_data)
+{
+    string file = SELF_SKILL_DIR + user_id + ".json";
+    return write_file(file, json_encode(skill_data), 1);
+}
+
+// 读取自创招式数据
+mapping load_self_skill(string user_id)
+{
+    string file = SELF_SKILL_DIR + user_id + ".json";
+    string content;
+    
+    if (file_size(file) <= 0)
+        return ([]);
+    
+    content = read_file(file);
+    if (!content || content == "")
+        return ([]);
+    
+    return json_decode(content);
+}
+
+// 获取玩家的所有自创招式
+mapping get_all_self_skills(string user_id)
+{
+    return load_self_skill(user_id);
+}
+
+// 获取指定自创招式的详细信息
+mapping get_self_skill_detail(string user_id, string skill_id)
+{
+    mapping skills = load_self_skill(user_id);
+    
+    if (!skills || !skills[skill_id])
+        return 0;
+    
+    return skills[skill_id];
+}
+
+// 升级自创招式动作等级
+int upgrade_action_level(object me, string skill_id, int action_index)
+{
+    mapping save_data, skill_data;
+    mapping action;
+    
+    // 读取招式数据
+    save_data = load_self_skill(me->query("id"));
+    if (!save_data || !save_data[skill_id])
+        return notify_fail("未找到该自创招式。\n");
+    
+    skill_data = save_data[skill_id];
+    
+    // 检查动作索引是否有效
+    if (action_index < 0 || action_index >= sizeof(skill_data["action"]))
+        return notify_fail("动作索引无效。\n");
+    
+    action = skill_data["action"][action_index];
+    
+    // 检查动作等级是否已达上限
+    if (action["level"] >= 10)
+        return notify_fail("该动作已达到最高等级。\n");
+    
+    // 增加动作等级
+    action["level"]++;
+    
+    // 保存更新后的数据
+    if (!save_self_skill(me->query("id"), save_data))
+        return notify_fail("保存自创招式数据失败。\n");
+    
+    return 1;
+}
+
+// 获取随机闪避消息
+string query_dodge_msg()
+{
+    return dodge_msg[random(sizeof(dodge_msg))];
+}
+
+// 融合副武学获取额外条件
+mapping merge_skill_attributes(string main_skill, string sub_skill)
+{
+    mapping main_attr, sub_attr, result;
+    
+    main_attr = get_skill_pool_attributes(main_skill);
+    sub_attr = get_skill_pool_attributes(sub_skill);
+    
+    if (!main_attr || !sub_attr)
+        return 0;
+    
+    // 复制主武学属性
+    result = copy(main_attr);
+    
+    // 合并AP技能列表
+    foreach (string sk in sub_attr["ap"]["skill"])
+    {
+        if (member_array(sk, result["ap"]["skill"]) == -1)
+            result["ap"]["skill"] += ({ sk });
+    }
+    
+    // 合并AP属性列表
+    foreach (string attr in sub_attr["ap"]["attribute"])
+    {
+        if (member_array(attr, result["ap"]["attribute"]) == -1)
+            result["ap"]["attribute"] += ({ attr });
+    }
+    
+    // 合并伤害技能列表
+    foreach (string sk in sub_attr["damage"]["skill"])
+    {
+        if (member_array(sk, result["damage"]["skill"]) == -1)
+            result["damage"]["skill"] += ({ sk });
+    }
+    
+    // 合并伤害属性列表
+    foreach (string attr in sub_attr["damage"]["attribute"])
+    {
+        if (member_array(attr, result["damage"]["attribute"]) == -1)
+            result["damage"]["attribute"] += ({ attr });
+    }
+    
+    return result;
+}

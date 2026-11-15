@@ -1,0 +1,243 @@
+/**
+ * @brief 数据库管理精灵，封装增删改查操作，并定期检测数据库连接
+ */
+
+#ifdef __PACKAGE_DB__
+inherit "/inherit/database.lpc";
+#endif
+inherit F_DBASE;
+
+#include <localtime.h>
+
+#ifdef __PACKAGE_DB__
+
+// 变量声明
+nosave int heartbeat_interval = 3600; // 心跳间隔，单位：秒
+nosave int heartbeat_id;              // 心跳的 call_out ID
+
+// 函数声明
+void create();
+void start_heartbeat();
+void check_connection();
+mixed connect();
+varargs mixed select(string table, string *columns, mapping conditions);
+varargs mixed insert(string table, mapping data);
+varargs mixed update(string table, mapping data, mapping conditions);
+varargs mixed delete(string table, mapping conditions);
+// 新增函数声明
+int get_result_count(mixed result);
+int has_result(mixed result);
+mixed get_result_row(mixed result, int index);
+mapping get_result_mapping(mixed result, int index);
+
+void create()
+{
+    seteuid(ROOT_UID);
+    set("channel_id", "数据库精灵");
+
+    setConnection(([
+        "host": "xxxxxxxx密码示例",
+        "database": "xxxxxxxx密码示例",
+        "user": "xxxxxxxx密码示例",
+        "type": __USE_MYSQL__,
+    ]));
+
+    if (db_host == "xxxxxxxx密码示例")
+    {
+        return;
+    }
+
+    // 初始化数据库连接
+    if (stringp(connect()))
+    {
+        // 连接失败，记录错误日志
+        log_file("db_error.log", sprintf("%s 数据库连接失败：%s\n", ctime(time()), db_error));
+        CHANNEL_D->do_channel(this_object(), "sys", "数据库连接失败：" + db_error);
+    }
+    else
+    {
+        // 连接成功，记录日志
+        log_file("db_status.log", sprintf("%s 数据库连接成功。\n", ctime(time())));
+        CHANNEL_D->do_channel(this_object(), "sys", "数据库连接成功。");
+    }
+
+    // 初始化心跳
+    start_heartbeat();
+    CHANNEL_D->do_channel(this_object(), "sys", "数据库精灵已经启动。");
+}
+
+/**
+ * @brief 开始心跳函数，定期检测数据库连接
+ */
+void start_heartbeat()
+{
+    // 清除之前的 call_out
+    remove_call_out("check_connection");
+
+    // 设置新的 call_out，每小时调用一次
+    heartbeat_id = call_out("check_connection", heartbeat_interval);
+}
+
+/**
+ * @brief 检测数据库连接
+ */
+void check_connection()
+{
+    // 调用 connect 函数，检测数据库连接
+    if (stringp(connect()))
+    {
+        // 如果连接出错，尝试重新连接
+        db_handle = 0;
+        if (stringp(connect()))
+        {
+            // 重新连接仍然出错，记录错误日志
+            log_file("db_error.log", sprintf("%s 数据库重新连接失败：%s\n", ctime(time()), db_error));
+            CHANNEL_D->do_channel(this_object(), "sys", "数据库重新连接失败：" + db_error);
+        }
+        else
+        {
+            // 重新连接成功，记录日志
+            log_file("db_status.log", sprintf("%s 数据库重新连接成功。\n", ctime(time())));
+            CHANNEL_D->do_channel(this_object(), "sys", "数据库重新连接成功。");
+        }
+    }
+    else
+    {
+        // 数据库连接正常，可选地记录日志
+        // log_file("db_status.log", sprintf("%s 数据库连接正常。\n", ctime(time())));
+    }
+
+    // 重新设置心跳
+    start_heartbeat();
+}
+
+/**
+ * @brief 查询数据
+ *
+ * @param table 数据表名称
+ * @param columns 查询的列
+ * @param conditions 查询条件
+ * @return mixed 查询结果
+ */
+mixed select(string table, string *columns, mapping conditions)
+{
+    table(table);
+
+    if (columns && sizeof(columns))
+    {
+        db_sql_columns = implode(columns, ", ");
+    }
+
+    if (conditions)
+    {
+        foreach (string key, mixed value in conditions)
+        {
+            where(key, value);
+        }
+    }
+
+    // 执行查询并返回结果
+    return get();
+}
+
+/**
+ * @brief 插入数据
+ *
+ * @param table 数据表名称
+ * @param data 要插入的数据，键为列名，值为数据
+ * @return mixed 插入结果
+ */
+varargs mixed insert(string table, mapping data)
+{
+    table(table);
+    return ::insert(data);
+}
+
+/**
+ * @brief 更新数据
+ *
+ * @param table 数据表名称
+ * @param data 要更新的数据，键为列名，值为数据
+ * @param conditions 更新条件
+ * @return mixed 更新结果
+ */
+varargs mixed update(string table, mapping data, mapping conditions)
+{
+    table(table);
+
+    if (conditions)
+    {
+        foreach (string key, mixed value in conditions)
+        {
+            where(key, value);
+        }
+    }
+
+    return ::update(data);
+}
+
+/**
+ * @brief 删除数据
+ *
+ * @param table 数据表名称
+ * @param conditions 删除条件
+ * @return mixed 删除结果
+ */
+varargs mixed delete(string table, mapping conditions)
+{
+    table(table);
+
+    if (conditions)
+    {
+        foreach (string key, mixed value in conditions)
+        {
+            where(key, value);
+        }
+    }
+
+    return ::delete();
+}
+
+// 新增函数实现
+int get_result_count(mixed result)
+{
+    if (!arrayp(result) || sizeof(result) == 0)
+        return 0;
+    return sizeof(result);
+}
+
+int has_result(mixed result)
+{
+    return get_result_count(result) > 0;
+}
+
+mixed get_result_row(mixed result, int index)
+{
+    if (!has_result(result) || index < 0 || index >= get_result_count(result))
+        return 0;
+    return result[index];
+}
+
+mapping get_result_mapping(mixed result, int index)
+{
+    mixed row = get_result_row(result, index);
+    mapping data = ([]);
+    string *fields = ({ "id", "username" }); // 根据实际情况修改字段名
+
+    if (!row)
+        return data;
+
+    for (int i = 0; i < sizeof(fields) && i < sizeof(row); i++)
+    {
+        data[fields[i]] = row[i];
+    }
+
+    return data;
+}
+#else
+void create()
+{
+    seteuid(ROOT_UID);
+    set("channel_id", "数据库精灵");
+}
+#endif

@@ -1,0 +1,348 @@
+// yinyang_practice.c - 阴阳共修系统
+// 阴阳共修：阳为男性武者，阴为女性武者，通过双修引动天地之力修炼武功
+// 函数原型声明
+void do_yinyang_practice(object me, object target);
+void do_practicing(object me, object target);
+void do_describe(object me, object target, int i);
+void do_over(object me);
+void give_yinyang_rewards(object me, object target);
+int help(object me);
+
+/**
+ * @brief 创建函数
+ * @details 设置文件权限
+ */
+void create() 
+{ 
+    seteuid(getuid()); 
+}
+
+/**
+ * @brief 主函数入口
+ * @param object me 发起修炼的武者
+ * @param string arg 目标武者ID
+ * @return int 返回1表示成功，0表示失败
+ * @details 处理阴阳共修的主要逻辑
+ */
+int main(object me, string arg)
+{
+    string no_tell, can_tell;
+    object target;
+    object where;
+    
+    where = environment(me);
+    
+    seteuid(getuid());
+
+    if (! (where->query("sleep_room")) || (where->query("no_sleep_room")))
+        return notify_fail("此地恐影响共修安危，无法进行阴阳共修，请寻找合适的修炼场所（安全且可以休息的地点）！\n");
+
+    if (! arg || ! objectp(target = present(arg, where)))
+        return notify_fail("你想和谁进行阴阳共修？\n");
+
+    if (! target->is_character() || target->query("not_living"))
+        return notify_fail("看清楚了，那不是活人！\n");
+
+    // if (! target->query("can_speak"))
+        // return notify_fail("你想和" + target->name() + "共修？对方似乎无法交流。\n");
+
+    if (me == target)
+        return notify_fail("阴阳共修需要两人配合，你无法独自修炼此法。\n");
+
+    //对方不是我的江湖伴侣（妻子或丈夫）
+    if (me->query("couple/id") != target->query("id"))
+        return notify_fail("你想和" + target->name() + "共修？对方似乎不是你的江湖伴侣。\n");
+
+    if (me->is_busy())
+        return notify_fail("你现在正忙着呢！\n");
+
+    if (me->is_fighting())
+        return notify_fail("战斗中无法静心修炼！\n");
+
+    if (! userp(target))
+        return notify_fail(target->name() + "一惊，退后几步。(此人不适合共修)\n");
+
+    if (me->query("gender") == "无性")
+        return notify_fail("阴阳共修需要明确的阴阳属性，你无法修炼此法。\n");
+
+    if (me->query("gender") == target->query("gender"))
+        return notify_fail("阴阳共修需要阴阳调和，同性无法引动天地之力。\n");
+
+    if (me->query("age") < 16)
+        return notify_fail("你年纪尚幼，内力不足，无法承受阴阳共修的强大力量。\n");
+
+    if (me->query_temp("pending/yinyang_practice") == target)
+        return notify_fail("你已经向对方提出共修请求，请等待回应。\n");
+
+    if (me->query("jing") * 100 / me->query("max_jing") < 80)
+        return notify_fail("你精神不济，无法集中心神进行阴阳共修。\n");
+
+    if (me->query("qi") * 100 / me->query("max_qi") < 60)
+        return notify_fail("你内力不足，无法支撑阴阳共修的消耗。\n");
+
+    if (me->query("gender") == "男性" &&
+        time() - (int)me->query_temp("last_yinyang_practice") < 2)
+        return notify_fail("阳气消耗过度，需要时间恢复，暂时无法再次修炼。\n");
+
+    no_tell = target->query("env/no_tell");
+    
+    if (no_tell == "all" || no_tell == "ALL" || is_sub(me->query("id"), no_tell))
+    {
+        can_tell = target->query("env/can_tell");
+        if (! is_sub(me->query("id"), can_tell))
+            return notify_fail("这个人不想听你说话。\n");
+    }
+
+    if (target->query_temp("pending/yinyang_practice") == me)
+    {
+        target->delete_temp("pending/yinyang_practice");
+        do_yinyang_practice(me, target);
+        return 1;
+    }
+
+    me->set_temp("pending/yinyang_practice", target);
+    message("vision", me->name() + "向" + target->name() + "提出了阴阳共修的请求。\n",
+        environment(me), ({ me, target }));
+    
+    if (me->query("gender") == "男性")
+    {
+        tell_object(target, popup_comb(me->name() + "对你说：道友，可愿与在下共修阴阳之法，引动天地灵气？","接受邀请:makelove " + me->query("id")));
+    } else
+    {
+        tell_object(target, popup_comb(me->name() + "对你说：我欲邀请你共修阴阳大道，你可愿意？","接受邀请:makelove " + me->query("id")));
+    }
+
+    return 1;
+}
+
+/**
+ * @brief 执行阴阳共修
+ * @param object me 发起者
+ * @param object target 目标武者
+ * @details 开始阴阳共修的具体过程
+ */
+void do_yinyang_practice(object me, object target)
+{
+    mapping armor;
+    string msg, msg1, msg2;
+    object yang_warrior, yin_warrior;
+
+    if (armor = me->query_temp("armor") && sizeof(armor))
+        me->force_me("remove all");
+
+    if (armor = target->query_temp("armor") && sizeof(armor))
+        target->force_me("remove all");
+
+    if (me->query("gender") == "男性")
+    {
+        yang_warrior = me;
+        yin_warrior = target;
+    } else
+    {
+        yang_warrior = target;
+        yin_warrior = me;
+    }
+
+    msg = "$N与$n相对而坐，双掌相抵，开始运转阴阳共修心法。只见$p"
+          "体内阴气流转，与$P的阳气相互呼应，天地灵气被引动，在两人"
+          "周围形成一个巨大的太极图案，阴阳二气不断交融，两人渐渐"
+          "进入了物我两忘的修炼境界。";
+    
+    msg1 = replace_string(msg, "$N", "你");
+    msg1 = replace_string(msg1, "$n", yin_warrior->name());
+    msg1 = replace_string(msg1, "$P", "你");
+    msg1 = replace_string(msg1, "$p", "她");
+
+    msg2 = replace_string(msg, "$N", yang_warrior->name());
+    msg2 = replace_string(msg2, "$n", "你");
+    msg2 = replace_string(msg2, "$P", "他");
+    msg2 = replace_string(msg2, "$p", "你");
+
+    msg = replace_string(msg, "$N", yang_warrior->name());
+    msg = replace_string(msg, "$n", yin_warrior->name());
+    msg = replace_string(msg, "$P", "他");
+    msg = replace_string(msg, "$p", "她");
+
+    msg1 = sort_string(msg1, 64);
+    msg2 = sort_string(msg2, 64);
+    msg  = sort_string(msg, 64);
+
+    message("vision", msg1, yang_warrior);
+    message("vision", msg2, yin_warrior);
+    message("vision", msg, environment(yang_warrior), ({ yang_warrior, yin_warrior }));
+
+    tell_object(yang_warrior, HIY "\n你感受到体内阳气澎湃，与对方阴气交融，功力大增..."NOR"\n");
+    tell_object(yin_warrior, HIB "\n你感受到体内阴气流转，与对方阳气呼应，境界提升..."NOR"\n");
+
+    do_practicing(yang_warrior, yin_warrior);
+    do_practicing(yin_warrior, yang_warrior);
+}
+
+/**
+ * @brief 修炼过程描述
+ * @param object me 修炼者
+ * @param object target 共修伙伴
+ * @param int i 描述阶段
+ * @details 描述阴阳共修的不同阶段
+ */
+void do_describe(object me, object target, int i)
+{
+    i --;
+
+    if (i < 1) {
+        remove_call_out("do_describe");
+        
+        // 在共修描述的最后阶段为双方发放奖励
+        if (me && target) {
+            give_yinyang_rewards(me, target);
+            give_yinyang_rewards(target, me);
+        }
+        
+        if (me)
+            me->start_call_out(bind((: call_other, __FILE__, "do_over", me :), me), 1);
+        if (target)
+            target->start_call_out(bind((: call_other, __FILE__, "do_over", target :), target), 1);
+        return;
+    }
+    else {
+        if (me && target) {
+            switch (i)
+            {
+                case 1:
+                    message_vision(HIW"$N与$n的内力完全融合，天地灵气汇聚......"NOR"\n", me, target);
+                    break; 
+                case 2:
+                    message_vision(HIY"$n配合着$N的内力运转......"NOR"\n", target, me);
+                    break;
+                case 3:
+                    message_vision(HIB"$N和$n的阴阳二气相互交融......"NOR"\n", me, target);
+                    break;
+            }
+            remove_call_out("do_describe");
+            me->start_call_out(bind((: call_other, __FILE__, "do_describe", me, target, i :), me), 2);
+        } else {
+            if (target)
+                target->start_call_out(bind((: call_other, __FILE__, "do_over", target :), target), 1);
+            if (me)
+                me->start_call_out(bind((: call_other, __FILE__, "do_over", me :), me), 1);
+            return;
+        }
+    }
+}
+
+/**
+ * @brief 开始修炼状态
+ * @param object me 修炼者
+ * @param object target 共修伙伴
+ * @details 设置修炼状态和属性变化
+ */
+void do_practicing(object me, object target)
+{
+    me->set_temp("practicing", 1);
+    me->disable_player(" <阴阳共修中>");
+    me->set("no_get", 1);
+    me->set("no_get_from", 1);
+    me->set_temp("last_yinyang_practice", time());
+    me->add("yinyang_practice/" + target->name(1), 1);
+    me->add("yinyang_practice/times", 1);
+        
+    if (me->query("gender") == "男性")
+    {
+        do_describe(me, target, 4);
+    }
+}
+
+/**
+ * @brief 给予阴阳共修奖励
+ * @param object me 修炼者
+ * @param object target 共修伙伴
+ * @details 计算并给予阴阳共修的经验和技能奖励
+ */
+void give_yinyang_rewards(object me, object target)
+{
+    int base_exp, bonus_exp, total_exp;
+    
+    base_exp = 30;
+    bonus_exp = 0;
+    
+    // 检查是否有阴阳大法技能，计算额外经验
+    if (me->query_skill("yinyang-dafa", 1) > 0)
+    {
+        bonus_exp = me->query_skill("yinyang-dafa", 1) / 10;
+    }
+    
+    total_exp = base_exp + bonus_exp;
+    me->add("combat_exp", total_exp);
+    
+    // 增加阴阳大法技能经验
+    me->add_skill("yinyang-dafa", 1);
+    
+    if (bonus_exp > 0)
+    {
+        tell_object(me, HIY "你通过阴阳共修获得了" + total_exp + "点经验！（基础30点 + 阴阳大法加成" + bonus_exp + "点）" NOR);
+        tell_object(me, HIB "你的阴阳大法修为有所精进！" NOR);
+    }
+    else
+    {
+        tell_object(me, HIY "你通过阴阳共修获得了30点经验！" NOR);
+        tell_object(me, HIB "你的阴阳大法修为有所精进！" NOR);
+    }
+
+    me->improve_skill("yinyang-dafa", 100 + random(10 + me->query_skill("yinyang-dafa")));
+        
+    if (me->query("yinyang_practice/times") == 1)
+        me->set("yinyang_practice/first_partner", target->name(1));
+}
+
+/**
+ * @brief 结束修炼状态
+ * @param object me 修炼者
+ * @details 恢复正常状态，显示修炼结果
+ */
+void do_over(object me)
+{
+    if (! me || ! me->query_temp("practicing"))
+        return;
+
+    me->delete_temp("practicing");
+    
+    if (living(me)) return;
+
+    me->enable_player();
+    me->set_temp("block_msg/all", 0);
+    me->delete("no_get");
+    me->delete("no_get_from");
+    
+    message_vision("\n$N长吁一口气，缓缓睁开双眼，阴阳共修圆满结束。\n", me);
+}
+
+/**
+ * @brief 显示帮助信息
+ * @param object me 玩家对象
+ * @return int 返回1表示成功
+ * @details 显示阴阳共修系统的使用说明
+ */
+int help(object me)
+{
+    write(@HELP
+指令格式 : makelove <id>
+ 
+阴阳共修系统：
+
+阴阳共修是一种高深的武学修炼方法，需要阴阳两种属性的武者配合：
+- 阳：指男性武者，体内阳气充沛
+- 阴：指女性武者，体内阴气柔和
+
+通过阴阳二气的交融，可以引动天地灵气，大幅提升修炼效果。
+
+注意事项：
+1. 需要在灵气充足的安全场所进行
+2. 双方必须是异性武者（阴阳调和）
+3. 年满16岁且内力充足
+4. 修炼后阳性武者需要时间恢复
+
+如果对方设置了no_tell选项，你将无法提出共修请求。
+
+HELP );
+    return 1;
+}

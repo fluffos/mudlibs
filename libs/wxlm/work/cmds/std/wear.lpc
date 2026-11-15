@@ -1,0 +1,371 @@
+// wear.c
+
+#include <command.h>
+
+
+inherit F_CLEAN_UP;
+
+int do_wear(object me, object ob);
+// void apply_gem_effects(object me, object ob);
+// string get_attr_name(string gem_type);
+// varargs void apply_single_gem_effect(object me, object ob, string attr, int value);
+string get_default_wear_msg(object ob);
+void record_equipped_item(object me, object ob);
+void apply_citiao_effects(object me, object ob);
+int auto_wear(object me);
+
+int main(object me, string arg)
+{
+    object ob, ob2, *inv;
+    int i, count;
+
+    if (!arg) return notify_fail("你要穿戴什么？\n");
+    if (userp(me) && me->is_busy())
+        return notify_fail("你正忙着呢。\n");
+
+    if (arg == "all")
+    {
+        inv = all_inventory(me);
+        for (count = 0, i = 0; i < sizeof(inv); i++)
+        {
+            if (inv[i]->query("equipped") || (inv[i]->is_item_make() && inv[i]->item_owner() != me->query("id")))
+                continue;
+            if (do_wear(me, inv[i])) count++;
+        }
+        write(count ? "你穿好了。\n" : "你什么都没有穿上。\n");
+        return 1;
+    }
+
+    if (arg == "auto")
+    {
+        return auto_wear(me);
+    }
+
+    if (!(ob = present(arg, me)))
+        return notify_fail("你身上没有这样东西。\n");
+
+    if (ob->query("equipped"))
+    {
+        inv = all_inventory(me) - ({ob});
+        for (count = 0, i = 0; i < sizeof(inv); i++)
+        {
+            if (inv[i]->id(arg) && !inv[i]->query("equipped") && do_wear(me, inv[i]))
+            {
+                count++;
+                break;
+            }
+        }
+        if (!count)
+            return notify_fail("你已经装备着了。\n");
+        return 1;
+    }
+
+    if (ob2 = me->query_temp("armor/" + ob->query("armor_type")))
+        me->force_me("remove " + file_name(ob2));
+
+    return do_wear(me, ob);
+}
+
+int do_wear(object me, object ob)
+{
+    string str, gender;
+    mixed notice;
+
+    if ((notice = ob->query_temp("no_wear")))
+    {
+        if (stringp(notice)) write(notice);
+        return notify_fail("还是试试别的吧！\n");
+    }
+
+    gender = me->query("gender");
+    if (ob->query("female_only") && gender == "男性")
+        return notify_fail("这是女人的衣衫，你一个大男人也想穿，羞也不羞？\n");
+
+    switch (ob->wear())
+    {
+        case 0:  return 0;
+        case -1: return 1;
+        default:
+            str = ob->query("wear_msg") || get_default_wear_msg(ob);
+            // tell_object(me, str);
+            if (str != "")
+                message_vision(str, me, ob);
+
+            if (ob->query_temp("daub") && ob->query("armor_type") != "hands")
+                DAUB_CMD->check_poison(me, ob);
+
+            // apply_gem_effects(me, ob);
+            apply_citiao_effects(me, ob);  // 应用词条效果
+            record_equipped_item(me, ob);  // 记录已装备的物品
+            me->force_me("equip_group save " + me->query("equip_group_name"));
+            me->force_me("equip_ui");
+            return 1;
+    }
+
+
+
+}
+
+string get_default_wear_msg(object ob)
+{
+    string msg;
+    switch (ob->query("armor_type"))
+    {
+        case "cloth":
+        case "armor":
+        case "boots":
+        case "pants":
+            msg = YEL "$N穿上一" + ob->query("unit") + "$n" YEL "。"NOR"\n";
+            break;
+        case "head":
+        case "neck":
+        case "wrists":
+        case "hands":
+            msg = YEL "$N戴上一" + ob->query("unit") + "$n" YEL "。"NOR"\n";
+            break;
+        case "waist":
+            msg = YEL "$N将一" + ob->query("unit") + "$n" YEL "绑在腰间。"NOR"\n";
+            break;
+        default:
+            msg = YEL "$N装备$n" YEL "。"NOR"\n";
+    }
+    return msg;
+}
+
+/*
+string get_attr_name(string gem_type)
+{
+    return BASE_HANDLE->get_attr_name(gem_type);
+}
+
+
+void apply_gem_effects(object me, object ob)
+{
+    mapping hole_info, gem_effects;
+    int i, holes, effect_value, effect_percentage;
+    string baoshi, gem_type, attr_name;
+
+    hole_info = ob->query("hole_info");
+    if (!hole_info) return;
+
+    holes = hole_info["holes"] || 0;
+    gem_effects = ([]);
+    baoshi = "/clone/baoshi/color_baoshi";
+
+    // 计算角色等级和效果百分比
+    effect_percentage = me->query("level") / 10 + 10;
+    if (effect_percentage > 100)
+        effect_percentage = 100;
+    else if (effect_percentage < 1)
+
+        effect_percentage = 1;
+
+    for (i = 1; i <= holes; i++)
+    {
+        gem_type = hole_info["gem_type_" + i];
+        attr_name = get_attr_name(gem_type);
+        
+        if (attr_name != "")
+        {
+            effect_value = baoshi->query("gem_effects")[attr_name][hole_info["gem_level_" + i]];
+            // 应用角色等级影响
+            effect_value = effect_value * effect_percentage / 100;
+            if (!gem_effects[attr_name]) gem_effects[attr_name] = 0;
+            gem_effects[attr_name] += effect_value;
+        }
+    }
+
+    foreach (string attr, int value in gem_effects)
+    {
+        apply_single_gem_effect(me, ob, attr, value, effect_percentage);
+    }
+
+    CHAR_D->setup_char(me);
+    me->set_temp("gem_effects/" + ob->query("id"), gem_effects);
+}
+
+// 修改apply_single_gem_effect函数的参数列表
+varargs void apply_single_gem_effect(object me, object ob, string attr, int value, int effect_percentage)
+{
+    string temp_attr, msg;
+    mapping attr_map = BASE_HANDLE->get_gem_attr_map();
+
+    if (undefinedp(attr_map[attr]))
+        return;
+
+    temp_attr = attr_map[attr];
+
+    if (temp_attr == "force" || temp_attr == "dodge" || temp_attr == "parry" ||
+        temp_attr == "cuff" || temp_attr == "strike" || temp_attr == "finger" ||
+        temp_attr == "claw" || temp_attr == "hand" || temp_attr == "unarmed" ||
+        temp_attr == "sword" || temp_attr == "blade" || temp_attr == "throwing" || temp_attr == "staff" ||
+        temp_attr == "whip" || temp_attr == "club" || temp_attr == "armor")
+    {
+        me->add_temp("apply/" + temp_attr, value);
+        msg = sprintf(HIY "$N戴上%s，增加了%s效果。\n增加了%d级%s（实际生效%d%%）\n" NOR,
+                      ob->query("name"), replace_string(attr,"宝石",""), value, 
+                      replace_string(attr,"宝石",""), effect_percentage);
+    }
+    else if (temp_attr == "damage")
+    {
+        me->add_temp("apply/damage", value);
+        me->add_temp("apply/unarmed_damage", value);
+        msg = sprintf(HIY "$N戴上%s，增加了攻击效果。\n增加了%d点攻击和徒手伤害（实际生效%d%%）\n" NOR,
+                      ob->query("name"), value, effect_percentage);
+    }
+    else
+    {
+        me->add_temp(temp_attr, value);
+        msg = sprintf(HIY "$N戴上%s，增加了%s效果。\n增加了%d点%s（实际生效%d%%）\n" NOR,
+                      ob->query("name"), replace_string(attr,"宝石",""), value, 
+                      replace_string(attr,"宝石",""), effect_percentage);
+    }
+    message_vision(msg, me);
+}
+*/
+
+/**
+ * @brief 应用装备词条效果
+ * @param object me 玩家对象
+ * @param object ob 装备对象
+ */
+void apply_citiao_effects(object me, object ob)
+{
+    mapping *citiao_list;
+    mapping citiao;
+    string attr_key;
+    int i, value;
+    
+    // 检查装备是否支持词条系统
+    if (!ob->is_item_make()) return;
+    
+    citiao_list = ob->query_citiao_data();
+    if (!sizeof(citiao_list)) return;
+    
+    // 遍历所有词条并应用效果
+    for (i = 0; i < sizeof(citiao_list); i++) {
+        citiao = citiao_list[i];
+        attr_key = citiao["key"];
+        value = citiao["value"];
+        
+        switch(attr_key) {
+            // 基础武功类词条
+            case "force":
+            case "dodge":
+            case "parry":
+            // 兵器类技能
+            case "sword":
+            case "blade":
+            case "staff":
+            case "hammer":
+            case "club":
+            case "whip":
+            case "dagger":
+            case "throwing":
+            case "qin":
+            // 空手类技能
+            case "unarmed":
+            case "cuff":
+            case "strike":
+            case "finger":
+            case "claw":
+            case "hand":
+                me->add_temp("apply/" + attr_key, value);
+                break;
+                
+            // 四维属性类词条
+            case "str":
+            case "int":
+            case "con":
+            case "dex":
+                me->add_temp("apply/" + attr_key, value);
+                break;
+                
+            // 状态属性类词条
+            case "max_qi":
+            case "max_jingli":
+            case "max_neili":
+                me->add_temp("apply/" + attr_key, value);
+                break;
+        }
+    }
+    
+    // 重新计算玩家属性
+    if (sizeof(citiao_list) > 0) {
+        CHAR_D->setup_char(me);
+        
+        // 记录已应用的词条效果
+        me->set_temp("citiao_effects/" + ob->query("id"), citiao_list);
+        
+        message_vision(sprintf(HIB "$N装备%s，词条效果生效。" NOR "\n", 
+            ob->name()), me);
+    }
+}
+
+void record_equipped_item(object me, object ob)
+{
+    string armor_type = ob->query("armor_type");
+    string item_id = ob->query("id");
+    
+    if (armor_type && item_id)
+    {
+        me->set("equipped_items/" + armor_type, item_id);
+    }
+}
+
+int auto_wear(object me)
+{
+    mapping equipped_items = me->query("equipped_items");
+    object ob;
+    int count = 0;
+
+    if (!equipped_items || !mapp(equipped_items))
+    {
+        return 0;
+    }
+
+    foreach (string armor_type, string item_id in equipped_items)
+    {
+        ob = present(item_id, me);
+
+        if (!ob)
+        {
+            me->delete("equipped_items/" + armor_type);
+            continue;
+        }
+
+        if (ob && !ob->query("equipped"))
+        {
+            if (do_wear(me, ob))
+            {
+                count++;
+            }
+        }
+    }
+
+    if (count > 0)
+    {
+        tell_object(me, "你自动穿戴了 " + count + " 件装备。\n");
+    }
+    else
+    {
+        tell_object(me, "没有可以自动穿戴的装备。\n");
+    }
+
+    return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式：wear <装备名称>
+          wear all
+          wear auto
+
+这个指令让你装备某件防具。
+wear all    : 穿戴所有可以装备的物品
+wear auto   : 自动穿戴之前记录的装备
+
+HELP );
+    return 1;
+}

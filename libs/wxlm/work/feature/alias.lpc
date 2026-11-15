@@ -1,0 +1,181 @@
+/**
+ * @brief 角色命令别名处理模块
+ * @file alias.c
+ * @author Lu dexiang
+ * @date 未知
+ * @details 该模块负责处理玩家的命令别名和命令历史记录功能
+ */
+
+#include <dbase.h>
+#include <name.h>
+#include <message.h>
+
+/** @brief 最大别名数量限制 */
+#define MAX_ALIASES	     50
+
+/** @brief 别名映射表 */
+mapping alias;
+
+/** @brief 命令历史记录、最后输入的命令和原始输入命令 */
+nosave string *history, last_input, orginal_input;
+
+/** @brief 是否是直接命令（以/或//开头） */
+nosave int direct_command;
+
+/**
+ * @brief 查询最后输入的命令
+ * @return string 最后输入的命令（已经经过ALIAS处理）
+ */
+string query_last_input() { return last_input; }
+
+/**
+ * @brief 查询最后输入的原始命令
+ * @return string 最后输入的原始命令（已经经过命令确认：/或//打头）
+ */
+string query_orginal_input() { return orginal_input; }
+
+/**
+ * @brief 检查是否是直接命令
+ * @return int 是否是直接命令，1为是，0为否
+ */
+int is_direct_command() { return direct_command; }
+
+/**
+ * @brief 处理玩家输入的命令
+ * @param string str 玩家输入的原始命令
+ * @return string 处理后的命令
+ * @details 该函数负责处理玩家输入的命令，包括：
+ *          1. 记录原始输入
+ *          2. 处理直接命令（以/或//开头）
+ *          3. 检查玩家状态（是否晕倒、是否附加系统等）
+ *          4. 处理命令别名替换
+ *          5. 记录命令历史
+ */
+string process_input(string str)
+{
+	string *args, cmd, argstr;
+	object me;
+	int i, j;
+
+	me = this_object();
+	notify_fail("\n");
+	clear_written();
+	if (! living(me)) return "";
+
+	// 记录最原始的输入
+	if (str[0] == '/')
+	{
+		direct_command = 1;
+		if (str[1] == '/') str = str[2..<1]; else
+				   str = str[1..<1];
+	} else
+		direct_command = 0;
+	orginal_input = str;
+	
+	// attach system ?
+	if (me->is_attach_system())
+	{
+		me->detach_system();
+		tell_object(me, HIR "用户终止了当前执行的进程。"NOR"\n");
+	}
+
+	if (str == "") return str;
+
+	if (! wizardp(me))
+	{
+		if (me->reject_command())
+		{
+			int cq, cj;
+
+			// 晕倒以后要保证qi/jing不变
+			cq = query("qi");
+			cj = query("jing");
+
+			// 确保qi/jing不小于零，免得指令过多而冤死
+			if (cq < 1) cq = 0;
+			if (cj < 1) cj = 0;
+
+			// 我要保证清除最后打伤这个角色的人
+
+			//set("jing", 0);
+			//me->receive_damage("jing", 0);
+
+			message_vision(BLU "\n天空忽然传来了几声冷笑，霎时间乌云密布！一道" HIW "闪电" BLU "从天而降！"NOR"\n", me);
+ 
+			//me->unconcious();				
+
+			// 恢复晕倒前的qi/jing
+			//set("qi", cq);
+			//set("jing", cj);
+
+			// 确保有效的qi/jing不小于零，免得因
+			// 为指令过多而冤死。
+			if (query("eff_qi") < 1) set("eff_qi", 0);
+			if (query("eff_jing") < 1) set("eff_jing", 0);
+
+			message_vision(HIY "只见$N身上一道电流冒过，顿时引起一阵麻痹酥软......"NOR"\n", me);
+
+                        tell_object(me,"你输入的指令过多，slow down"NOR"\n"); 
+
+	                if (me->is_busy())
+                             me->add_busy(2);
+                        else me->start_busy(2);
+
+			return "";
+		}
+	}
+
+	if (mapp(alias))
+	{
+		if (! undefinedp(alias[str]))
+		{
+			str = replace_string(alias[str], "$*", "");
+		} else
+		if (sscanf(str, "%s %s", cmd, argstr) == 2 && ! undefinedp(alias[cmd]))
+		{
+			cmd = replace_string(alias[cmd], "$*", argstr);
+			args = explode(argstr, " ");
+			if ((j = sizeof(args)))
+				for (i = 0; i < j; i++)
+					cmd = replace_string(cmd, "$" + (i + 1), args[i]);
+			str = cmd;
+		}
+	}
+
+	last_input = (string)ALIAS_D->process_global_alias(str);
+	log_command(last_input);
+	return last_input;
+}
+
+/**
+ * @brief 设置命令别名
+ * @param string verb 别名
+ * @param string replace 替换的命令
+ * @return int 是否成功设置，1为成功，0为失败
+ * @details 设置或删除命令别名，如果replace为空则删除别名
+ *          如果别名数量超过MAX_ALIASES则设置失败
+ */
+int set_alias(string verb, string replace)
+{
+	if (! replace)
+	{
+		if (mapp(alias)) map_delete(alias, verb);
+		return 1;
+	} else
+	{
+		if (! mapp(alias)) alias = ([ verb : replace ]);
+		else if (sizeof(alias) > MAX_ALIASES)
+			return notify_fail("您设定的 alias 太多了，请先删掉一些不常用的。\n");
+		else alias[verb] = replace;
+		return 1;
+	}
+}
+
+/**
+ * @brief 查询所有命令别名
+ * @return mapping 所有命令别名的映射表
+ */
+mapping query_all_alias()
+{
+	return alias;
+}

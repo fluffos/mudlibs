@@ -1,0 +1,493 @@
+/**
+ * @brief 群雄逐鹿活动入口
+ * @author 陆德翔
+ * @date 2023-08-01
+ * @details 群雄逐鹿活动入口，提供玩家报名、查询、传送等功能
+*/
+
+
+
+inherit ROOM;
+
+// 函数原型声明
+void create();
+void init();
+int do_join(string arg);
+int do_query(string arg);
+int do_quit(string arg);
+int do_status();
+int valid_join(object me);
+void update_status();
+void heart_beat();
+
+// 全局变量声明
+private mapping signed_players = ([]);  // 报名玩家列表
+private int player_count = 0;           // 当前报名人数
+private int min_players = 5;            // 最少开始人数
+private int max_players = 100;           // 最大报名人数
+private int status_broadcast = 0;       // 状态广播计数器
+
+void create()
+{
+    set("short", HIR "群雄逐鹿活动报名处" NOR);
+    set("long", @LONG
+这里是武林中闻名遐迩的群雄逐鹿活动报名处。四周墙壁上挂满了各种令人胆寒的
+武器，有不少上面还沾着已经凝固的血迹。中间摆放着一张乌木桌案，上面放着一本
+厚厚的名册，记录着参与者的名字。
+
+    墙上贴着一张告示，详细说明了活动规则。
+
+LONG);
+    
+    set("item_desc", ([
+        "告示": popup_comb(@TEXT
+【群雄逐鹿活动规则】
+
+1. 参与者将被传送到随机地图的随机位置
+2. 活动持续20分钟，存活到最后的玩家获胜
+3. 每天固定在中午14:40和晚上19:30开始
+※ 报名截止时间为活动开始前5分钟
+※ 活动中死亡将被传送回安全区
+※ 胜利者将获得丰厚奖励
+TEXT
+,
+        ({
+            "报名:join", 
+            "查询状态:status", 
+            "查询报名情况:query", 
+            "退出报名:quit"
+        })
+        )
+    ]));
+    
+    set("exits", ([
+        "south" : "/d/city/jiaowai7",
+    ]));
+    
+    set("no_fight", 1);
+    set("no_steal", 1);
+    set("no_sleep_room", 1);
+    
+    set_heart_beat(5);  // 设置5秒一次的心跳
+    
+    setup();
+}
+
+void init()
+{
+    add_action("do_join", "join");
+    add_action("do_query", "query");
+    add_action("do_quit", "quit");
+    add_action("do_status", "status");
+}
+
+/**
+ * @brief 报名参加群雄逐鹿活动
+ * @param string arg 参数
+ * @return int 成功返回1，失败返回0
+ */
+int do_join(string arg)
+{
+    object me = this_player();
+    object map_manager = find_object("/adm/special_ob/dadaosha/map_manage");
+    mixed active_status;
+    
+    if (!map_manager)
+        map_manager = load_object("/adm/special_ob/dadaosha/map_manage");
+        
+    if (!map_manager)
+    {
+        tell_object(me, "系统错误，无法找到地图管理器。\n");
+        return 1;
+    }
+    
+    // 检查是否已有活动在进行
+    active_status = map_manager->query_active_status();
+    if (sizeof(active_status) > 0)
+    {
+        tell_object(me, "当前有群雄逐鹿活动正在进行中，暂时无法报名下一场活动。\n");
+        return 1;
+    }
+    
+    // 检查玩家是否有资格参加
+    if (!valid_join(me))
+        return 1;
+        
+    // 检查是否已经报名
+    if (member_array(me->query("id"), keys(signed_players)) != -1)
+    {
+        tell_object(me, "你已经报名参加了群雄逐鹿活动，不需要重复报名。\n");
+        return 1;
+    }
+
+    // 检查是否是活动开启前5分钟，前5分钟才允许报名
+    // 检查当前时间是否在活动开始前5分钟内
+    {
+        mapping schedule = map_manager->query_schedule();
+        int current_hour = localtime(time())[2];
+        int current_min = localtime(time())[1];
+        int can_join = 0;
+        
+        foreach (int hour, int minute in schedule) {
+            // 如果当前小时等于活动小时，且当前分钟在活动前5分钟内
+            if (current_hour == hour && current_min >= (minute - 5) && current_min < minute) {
+                can_join = 1;
+                break;
+            }
+        }
+        
+        if (!can_join && !wizardp(me)) {
+                //构建报名时间提示信息
+                string msg = "现在不是报名时间，请在活动开始前5分钟内报名。\n报名时间段：\n";
+                
+                foreach (int hour, int minute in schedule) {
+                    int start_time = minute - 5;
+                    if (start_time < 0) {
+                        start_time += 60;
+                        hour = (hour - 1 + 24) % 24;
+                    }
+                    msg += sprintf("每天 %02d:%02d 到 %02d:%02d\n", hour, start_time, hour, minute);
+                }
+                
+                tell_object(me, msg);
+                return 1;
+        }
+    }
+    
+    // 检查报名人数上限
+    if (player_count >= max_players)
+    {
+        tell_object(me, "本场群雄逐鹿活动报名人数已满，请等待下一场。\n");
+        return 1;
+    }
+    
+    // 添加到报名列表
+    signed_players[me->query("id")] = ([
+        "name": me->query("name"),
+        "time": time(),
+    ]);
+    
+    player_count++;
+    
+    tell_object(me, HIY "你已成功报名参加群雄逐鹿活动，当前共有" + player_count + "人报名。\n" NOR);
+    tell_room(this_object(), HIY + me->query("name") + "报名参加了群雄逐鹿活动。\n" NOR, ({ me }));
+    
+    // 如果是首个报名的玩家，通知全服
+    if (player_count == 1)
+    {
+        CHANNEL_D->do_channel(this_object(), "sys", me->query("name") + "报名参加了群雄逐鹿活动，目前共有1人报名，欢迎大家踊跃参与！");
+    }
+    else if (player_count % 5 == 0)  // 每增加5人通知一次
+    {
+        CHANNEL_D->do_channel(this_object(), "sys", "群雄逐鹿活动已有" + player_count + "人报名，欢迎大家踊跃参与！");
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 查询群雄逐鹿活动报名情况
+ * @param string arg 参数
+ * @return int 成功返回1，失败返回0
+ */
+int do_query(string arg)
+{
+    object me = this_player();
+    string msg = "";
+    int count = 0;
+    if (player_count <= 0)
+    {
+        tell_object(me, "目前没有玩家报名参加群雄逐鹿活动。\n");
+        return 1;
+    }
+    
+    msg = HIY "群雄逐鹿活动报名情况(共" + player_count + "人)：\n" NOR;
+    msg += "─────────────────────────────────\n";
+    
+
+    foreach (string id, mapping info in signed_players)
+    {
+        count++;
+        msg += sprintf("%-4d%-20s%-20s\n", 
+                      count, 
+                      info["name"], 
+                      ctime(info["time"]));
+    }
+    
+    msg += "─────────────────────────────────\n";
+    
+    tell_object(me, msg);
+    return 1;
+}
+
+/**
+ * @brief 退出群雄逐鹿活动报名
+ * @param string arg 参数
+ * @return int 成功返回1，失败返回0
+ */
+int do_quit(string arg)
+{
+    object me = this_player();
+    string id = me->query("id");
+    
+    if (member_array(id, keys(signed_players)) == -1)
+    {
+        tell_object(me, "你尚未报名参加群雄逐鹿活动。\n");
+        return 1;
+    }
+    
+    map_delete(signed_players, id);
+    player_count--;
+    
+    tell_object(me, HIY "你已退出群雄逐鹿活动报名。\n" NOR);
+    tell_room(this_object(), HIY + me->query("name") + "退出了群雄逐鹿活动报名。\n" NOR, ({ me }));
+    
+    return 1;
+}
+
+/**
+ * @brief 查询群雄逐鹿活动状态
+ * @return int 成功返回1，失败返回0
+ */
+int do_status()
+{
+    object me = this_player();
+    object map_manager = find_object("/adm/special_ob/dadaosha/map_manage");
+    mixed active_status;
+    string msg;
+    if (!map_manager)
+        map_manager = load_object("/adm/special_ob/dadaosha/map_manage");
+        
+    if (!map_manager)
+    {
+        tell_object(me, "系统错误，无法找到地图管理器。\n");
+        return 1;
+    }
+    
+    // 检查是否有活动在进行
+    active_status = map_manager->query_active_status();
+    
+    msg = HIW "【群雄逐鹿活动状态】\n" NOR;
+    msg += "────────────────────────────────\n";
+    
+    if (sizeof(active_status) > 0)
+    {
+        // 有活动在进行
+        foreach (string map_name, int start_time in active_status)
+        {
+            mapping map_info = map_manager->query_map_info(map_name);
+            string display_name = map_info && map_info["map_name"] ? map_info["map_name"] : map_name;
+            int remaining = map_manager->query_remaining_time(map_name);
+            
+            msg += "当前活动：" + display_name + "\n";
+            msg += "开始时间：" + ctime(start_time) + "\n";
+            msg += "剩余时间：" + (remaining / 60) + "分" + (remaining % 60) + "秒\n";
+        }
+    }
+    else
+    {
+        // 显示下一场活动时间
+        int current_hour = localtime(time())[2];
+        int current_minute = localtime(time())[1];
+        
+        int next_hour = 0;
+        int next_minute = 0;
+        int found = 0;
+
+        // 没有活动在进行
+        msg += "当前没有群雄逐鹿活动正在进行。\n";
+
+
+        if (!mapp(map_manager->query_schedule()))
+        {
+            tell_object(me, "当前没有群雄逐鹿活动正在进行。\n");
+            return 1;
+        }
+
+        // 查找下一个活动时间
+        foreach (int hour, int minute in map_manager->query_schedule())
+        {
+            if ((hour > current_hour) || 
+                (hour == current_hour && minute > current_minute))
+            {
+                if (!found || hour < next_hour || 
+                    (hour == next_hour && minute < next_minute))
+                {
+                    next_hour = hour;
+                    next_minute = minute;
+                    found = 1;
+                }
+            }
+        }
+        
+        // 如果今天没有更多活动，显示明天第一场
+        if (!found)
+        {
+            mapping schedule = map_manager->query_schedule();
+            if (sizeof(schedule) > 0)
+            {
+                // 获取第一个时间
+                mixed *times = sort_array(keys(schedule), 1);
+                next_hour = times[0];
+                next_minute = schedule[next_hour];
+                
+                msg += "下一场活动：明天" + 
+                       sprintf("%02d:%02d", next_hour, next_minute) + "\n";
+            }
+        }
+        else
+        {
+            msg += "下一场活动：今天" + 
+                   sprintf("%02d:%02d", next_hour, next_minute) + "\n";
+        }
+        
+        msg += "当前报名：" + player_count + "人\n";
+        msg += "最少人数：" + min_players + "人\n";
+    }
+    
+    msg += "────────────────────────────────\n";
+    
+    tell_object(me, popup_comb(msg,"返回:look 告示"));
+    return 1;
+}
+
+/**
+ * @brief 判断玩家是否有资格参加活动
+ * @param object me 玩家对象
+ * @return int 有资格返回1，没有资格返回0
+ */
+int valid_join(object me)
+{
+    // 玩家等级要求
+    if (me->query("combat_exp") < 100000)
+    {
+        tell_object(me, "你的实战经验不足，暂时无法参加群雄逐鹿活动。\n");
+        return 0;
+    }
+    
+    //年龄低于18岁不能参加
+    if (me->query("age") < 18)
+    {
+        tell_object(me, "你的年龄低于18岁，暂时无法参加群雄逐鹿活动。\n");
+        return 0;
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 更新活动状态
+ */
+void update_status()
+{
+    object map_manager = find_object("/adm/special_ob/dadaosha/map_manage");
+    mixed active_status;
+    int is_activity_time = 0;
+    if (!map_manager)
+        map_manager = load_object("/adm/special_ob/dadaosha/map_manage");
+        
+    if (!map_manager)
+        return;
+    
+    // 检查是否有活动在进行
+    active_status = map_manager->query_active_status();
+    
+    if (sizeof(active_status) > 0)
+    {
+        // 有活动在进行，此时应该清空报名列表
+        if (sizeof(signed_players) > 0)
+        {
+            signed_players = ([]);
+            player_count = 0;
+        }
+        return;
+    }
+    
+    // 检查是否到了即将开始活动的时间，传送玩家
+    is_activity_time = map_manager->is_activity_time();
+    if (is_activity_time && player_count >= min_players)
+    {
+        // 准备传送报名玩家到群雄逐鹿地图
+        string selected_map = map_manager->select_random_map();
+        if (selected_map != "")
+        {
+            // 先加载地图
+            map_manager->load_map(selected_map);
+            
+            // 开始活动
+            map_manager->start_dadaosha_activity(selected_map);
+
+ 
+            
+            // 传送所有报名玩家
+            foreach (string id, mapping info in signed_players)
+            {
+                // object player = find_player(id);
+                object player = 0;
+
+                player = present(id,this_object());
+
+                if (!player)
+                {
+                    // 找不到该玩家，可能已经下线或者不在当前房间
+                    player_count--;
+                    continue;
+                }
+
+                if (objectp(player) && living(player))
+                {
+                    // 通知玩家
+                    tell_object(player, HIR "\n群雄逐鹿活动【" + 
+                                      (map_manager->query_map_info(selected_map)["map_name"] || selected_map) + 
+                                      "】即将开始，你被传送到战场...\n\n" NOR);
+                    
+                    // 传送玩家
+                    map_manager->teleport_player_to_random_room(player, selected_map);
+                }
+            }
+
+            //设置初始人数
+            map_manager->set_init_player_count(player_count);
+            
+            // 清空报名列表
+            signed_players = ([]);
+            player_count = 0;
+            
+            return;
+        }
+    }
+}
+
+/**
+ * @brief 心跳函数
+ */
+void heart_beat()
+{
+    // 更新活动状态
+    update_status();
+    
+    // 广播当前状态
+    status_broadcast++;
+    if (status_broadcast >= 60)  // 每5分钟广播一次
+    {
+        status_broadcast = 0;
+        
+        if (player_count > 0)
+        {
+            CHANNEL_D->do_channel(this_object(), "sys", 
+                "群雄逐鹿活动已有" + player_count + "人报名，欢迎大家踊跃参与！");
+        }
+    }
+}
+
+int valid_leave(object me, string dir)
+{
+    if (member_array(me->query("id"), keys(signed_players)) != -1)
+    {
+        // 如果是报名玩家，自动取消报名
+        map_delete(signed_players, me->query("id"));
+        player_count--;
+        tell_object(me, "你离开了战斗场所，报名已取消。\n");
+    }
+    return ::valid_leave(me, dir);
+}

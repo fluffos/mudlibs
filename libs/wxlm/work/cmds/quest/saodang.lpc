@@ -1,0 +1,411 @@
+
+
+// 声明副本特定的扫荡函数
+int saodang_mujian_lifeng(object me);
+int saodang_moku(object me);
+int saodang_damo(object me);
+int saodang_cangjingge(object me);
+int saodang_baoshi(object me);
+int saodang_shimen(object me);
+
+// 在文件开头添加以下函数声明
+int reset_fuben_count(object me, string fuben_name);
+
+int main(object me, string arg)
+{
+    string *fuben_list = ({"木剑砺锋", "魔窟", "大漠", "藏经阁", "宝石矿洞", "师门任务"});
+    string msg = "请选择要扫荡的副本：\n";
+    string *options = ({});
+    
+    if (!wizardp(me))
+    return notify_fail("暂时关闭扫荡功能。\n");
+    
+    if (!arg)
+    {
+        foreach (string fuben in fuben_list)
+        {
+            options += ({ fuben + ":saodang " + fuben });
+        }
+        
+        write(popup_comb(msg, options));
+        return 1;
+    }
+
+    switch (arg) {
+        case "木剑砺锋":
+            return saodang_mujian_lifeng(me);
+        case "魔窟":
+            return saodang_moku(me);
+        case "大漠":
+            return saodang_damo(me);
+        case "藏经阁":
+            return saodang_cangjingge(me);
+        case "宝石矿洞":
+            return saodang_baoshi(me);
+        case "师门任务":
+            return saodang_shimen(me);
+        default:
+            return notify_fail("暂不支持扫荡该副本。\n");
+    }
+}
+
+int saodang_mujian_lifeng(object me)
+{
+    int exp_reward = 0;
+    int pot_reward = 0;
+
+    string str = "你获得了";
+    int rand_num;
+
+    // 检查玩家是否可以进入副本
+    if ((me->query("fuben_caoren/last_time")/86400 == time()/86400) && (me->query("fuben_caoren/count") > 1))
+    {
+        return notify_fail("木剑砺锋试炼一天只能进入两次。\n");
+    }
+
+    // 检查玩家是否有武功
+    if (!sizeof(me->query_skills()))
+    {
+        return notify_fail("你没有任何武功，无法进行扫荡。\n");
+    }
+
+    // 模拟副本奖励（10个木人）
+    for (int i = 0; i < 10; i++)
+    {
+
+        object gift;
+        
+        exp_reward += 250;
+        pot_reward += 250;
+
+        rand_num = random(10);
+        if (rand_num < 3)
+            gift = new_bind("/clone/vip/putao");
+        else if (rand_num == 5)
+            gift = new_bind("/clone/baiyi/onecard");
+        else if (rand_num == 4)
+        {
+            string *dan_list = ({
+                "/clone/vip/dan_dex",
+                "/clone/vip/dan_int",
+                "/clone/vip/dan_con",
+                "/clone/vip/dan_str",
+            });
+            gift = new_bind(dan_list[random(sizeof(dan_list))]);
+        }
+
+        if (objectp(gift))
+        {
+            str += gift->query("name") + "、";
+            gift->move(me);
+        }
+
+        gift = 0;
+
+    }
+
+    // 发放奖励
+    me->add("combat_exp", exp_reward);
+    me->add("potential", pot_reward);
+
+    // 更新副本进入次数和时间
+    me->set("fuben_caoren/last_time", time());
+    me->add("fuben_caoren/count", 1);
+
+    // 输出结果
+    str += sprintf("%d经验和%d潜能。\n", exp_reward, pot_reward);
+    tell_object(me, HIY"扫荡完成！" + str + NOR);
+
+    return 1;
+}
+
+int saodang_moku(object me)
+{
+    int exp_reward = 0;
+    int pot_reward = 0;
+    int yuanbao_reward = 0;
+    int silver_reward = 0;
+    object gift;
+    string str = "你获得了";
+    // int rand_num;
+
+    // 检查玩家是否可以进入副本
+    if (me->query("fuben_moku/last_time")/86400 == time()/86400)
+    {
+        return notify_fail("魔窟副本一天只能进入一次。\n");
+    }
+
+    // 检查玩家是否有武功
+    if (!sizeof(me->query_skills()))
+    {
+        return notify_fail("你没有任何武功，无法进行扫荡。\n");
+    }
+
+    // 模拟副本奖励（100个怪物）
+    for (int i = 0; i < 100; i++)
+    {
+        exp_reward += 100;
+        pot_reward += 200;
+        yuanbao_reward += 1;
+        silver_reward += 50;
+    }
+
+    // 发放奖励
+    me->add("combat_exp", exp_reward);
+    me->add("potential", pot_reward);
+    me->add("bind_yuanbao", yuanbao_reward);
+
+    // 创建并移动银子
+    gift = new("/clone/money/silver");
+    gift->set_amount(silver_reward);
+    gift->move(me);
+
+    // 更新副本进入时间
+    me->set("fuben_moku/last_time", time());
+
+    // 输出结果
+    str += sprintf("%d经验、%d潜能、%d绑定元宝和%d两白银。\n", exp_reward, pot_reward, yuanbao_reward, silver_reward);
+    tell_object(me, HIY"扫荡完成！" + str + NOR);
+
+    return 1;
+}
+
+int saodang_damo(object me)
+{
+    int exp_reward = 0;
+    int pot_reward = 0;
+    int qianghua_shi_reward = 0;
+    int monster_count = 1 + random(40); // 随机1-40个怪物
+    object gift;
+    string str = "你获得了";
+
+    // 检查玩家是否可以进入副本
+    if (reset_fuben_count(me, "damo"))
+    {
+        tell_object(me, "今天是新的一天，大漠副本次数已重置。\n");
+    }
+    
+    if (me->query("new_fuben_api/number/damo") >= 1)
+    {
+        return notify_fail("大漠副本一天只能进入一次。\n");
+    }
+
+    // 检查玩家是否有武功
+    if (!sizeof(me->query_skills()))
+    {
+        return notify_fail("你没有任何武功，无法进行扫荡。\n");
+    }
+
+    // 模拟副本奖励
+    for (int i = 0; i < monster_count; i++)
+    {
+        exp_reward += 500;
+        pot_reward += 250;
+        qianghua_shi_reward += 2;
+    }
+
+    // 发放奖励
+    me->add("combat_exp", exp_reward);
+    me->add("potential", pot_reward);
+
+    // 创建并移动强化石
+    gift = new_bind("/clone/vip/qianghua_shi");
+    gift->set_amount(qianghua_shi_reward);
+    gift->move(me);
+
+    // 更新副本进入次数
+    me->add("new_fuben_api/number/damo", 1);
+    me->set("new_fuben_api/time/damo", time());
+
+    // 输出结果
+    str += sprintf("击败了%d个怪物，获得%d经验、%d潜能和%d颗强化石。\n", 
+                   monster_count, exp_reward, pot_reward, qianghua_shi_reward);
+    tell_object(me, HIY"扫荡完成！" + str + NOR);
+
+    return 1;
+}
+
+int saodang_cangjingge(object me)
+{
+    int exp_reward = 10000;
+    int pot_reward = 30000;
+    object gift;
+    string str = "你获得了";
+
+    // 检查玩家是否可以进入副本
+    if (reset_fuben_count(me, "cangjingge"))
+    {
+        tell_object(me, "今天是新的一天，藏经阁副本次数已重置。\n");
+    }
+    
+    if (me->query("new_fuben_api/number/cangjingge") >= 1)
+    {
+        return notify_fail("藏经阁副本一天只能进入一次。\n");
+    }
+
+    // 检查玩家是否有武功
+    if (!sizeof(me->query_skills()))
+    {
+        return notify_fail("你没有任何武功，无法进行扫荡。\n");
+    }
+
+    // 发放奖励
+    me->add("combat_exp", exp_reward);
+    me->add("potential", pot_reward);
+
+    // 20%概率获得辅助书
+    if (random(100) < 20)
+    {
+        string *book_list = ({ "/clone/fuzhu_book/shaolin-fuzhu-shenfa-book" });
+        gift = new_bind(book_list[random(sizeof(book_list))]);
+
+        if (gift && !me->query("fuzhu_book/" + gift->query("id")))
+        {
+            me->set("fuzhu_book/" + gift->query("id"), 1);
+            gift->move(me);
+            str += gift->name() + "、";
+        }
+        else if (gift)
+        {
+            destruct(gift);
+        }
+    }
+
+    // 更新副本进入次数
+    me->add("new_fuben_api/number/cangjingge", 1);
+    me->set("new_fuben_api/time/cangjingge", time());
+
+    // 输出结果
+    str += sprintf("%d经验和%d潜能。\n", exp_reward, pot_reward);
+    tell_object(me, HIY"扫荡完成！" + str + NOR);
+
+    return 1;
+}
+
+int saodang_baoshi(object me)
+{
+    int exp_reward = 0;
+    int pot_reward = 0;
+    object gift;
+    string str = "你获得了";
+    int total_rooms = 10; // 宝石矿洞共有10个房间
+
+    // 检查玩家是否可以进入副本
+    if (reset_fuben_count(me, "baoshi"))
+    {
+        tell_object(me, "今天是新的一天，宝石矿洞副本次数已重置。\n");
+    }
+    
+    if (me->query("new_fuben_api/number/baoshi") >= 1)
+    {
+        return notify_fail("宝石矿洞副本一天只能进入一次。\n");
+    }
+
+    // 检查玩家是否有武功
+    if (!sizeof(me->query_skills()))
+    {
+        return notify_fail("你没有任何武功，无法进行扫荡。\n");
+    }
+
+    // 模拟副本奖励
+    for (int i = 0; i < total_rooms; i++)
+    {
+        exp_reward += 500 + random(500);
+        pot_reward += 250 + random(250);
+
+        // 模拟每个房间的矿堆
+        for (int j = 0; j < 1 + random(2); j++) // 每个房间1-2个矿堆
+        {
+            int heap_type = (random(100) < 20) ? 2 : 1; // 20%概率是稀有矿堆
+            string drop = new("/d/fuben/baoshi/obj/mine_heap")->get_drop_by_type(heap_type);
+            
+            gift = new_bind(drop);
+            if (objectp(gift))
+            {
+                str += gift->query("name") + "、";
+                gift->move(me);
+            }
+        }
+    }
+
+    // 发放奖励
+    me->add("combat_exp", exp_reward);
+    me->add("potential", pot_reward);
+
+    // 更新副本进入次数
+    me->add("new_fuben_api/number/baoshi", 1);
+    me->set("new_fuben_api/time/baoshi", time());
+
+    // 输出结果
+    str += sprintf("%d经验和%d潜能。\n", exp_reward, pot_reward);
+    tell_object(me, HIY"扫荡完成！" + str + NOR);
+
+    return 1;
+}
+
+int saodang_shimen(object me)
+{
+    int exp_reward = 500;
+    int pot_reward = 500;
+    int shizhan_reward = 200;
+    int shimen_count = me->query("shimen/today");
+    int max_shimen = 3500;
+    string str = "";
+    int remaining;
+    object menke;
+
+    // 检查玩家是否已经召唤门客
+    if (objectp(menke = me->query("menke_system/summon")))
+    {
+        // 如果门客正在执行任务，则不能扫荡
+        if (menke->query("doing_quest"))
+        {
+            return notify_fail("你的门客正在执行任务，无法进行扫荡。请先召回门客。\n");
+        }
+    }
+
+    if (shimen_count >= max_shimen)
+    {
+        return notify_fail("你本周已经完成了所有的师门任务，无法继续扫荡。\n");
+    }
+
+    // 计算剩余可扫荡次数
+    remaining = max_shimen - shimen_count;
+
+    // 一次性扫荡所有剩余次数
+    me->add("combat_exp", exp_reward * remaining);
+    me->add("potential", pot_reward * remaining);
+    me->add("shizhan_experience", shizhan_reward * remaining);
+    me->set("shimen/today", max_shimen);
+    me->set("shimen/last",time());
+
+    // 添加gongxian
+    me->add("gongxian", remaining);
+    // 循环执行TOP_D->add_shimen(who)，扫荡多少次执行多少次
+    for (int i = 0; i < remaining; i++)
+    {
+        TOP_D->add_shimen(me);
+    }
+
+    str = sprintf("扫荡完成！你一共扫荡了%d次师门任务，获得了%d经验、%d潜能和%d实战体会。\n", 
+                  remaining,
+                  exp_reward * remaining, 
+                  pot_reward * remaining, 
+                  shizhan_reward * remaining);
+    
+    tell_object(me, HIY + str + NOR);
+
+    return 1;
+}
+
+// 在文件末尾添加以下函数
+int reset_fuben_count(object me, string fuben_name)
+{
+    if (time() / 86400 != me->query("new_fuben_api/time/" + fuben_name) / 86400)
+    {
+        me->set("new_fuben_api/time/" + fuben_name, time());
+        me->delete("new_fuben_api/number/" + fuben_name);
+        return 1;
+    }
+    return 0;
+}

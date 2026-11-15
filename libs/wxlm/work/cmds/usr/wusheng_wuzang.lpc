@@ -1,0 +1,727 @@
+/**
+ * @file wusheng_wuzang.c
+ * @author AI Assistant
+ * @brief 武圣之躯系统用户指令
+ * @version 1.0
+ * @date 2024
+ */
+
+#define WUSHENG_MASTER "/system/wusheng/wusheng_master"
+
+inherit F_CLEAN_UP;
+int show_wuzang_detail(object me, string organ);
+int handle_upgrade(object me, string organ, int use_dan);
+int confirm_upgrade(object me, string organ, int use_dan);
+int show_help(object me);
+int show_wuzang_overview(object me);
+string get_material_name(string material);
+string get_bonus_name(string bonus);
+int get_player_item_amount(object me, string item_id);
+int calculate_current_bonus(object me, string organ, string bonus_type, int level);
+void create()
+{
+    seteuid(getuid());
+}
+
+void init()
+{
+    add_action("do_lianti", "lianti");
+    add_action("do_lianti", "炼体");
+}
+
+/**
+ * @brief 主命令处理函数
+ * @param object me 玩家对象
+ * @param string arg 命令参数
+ * @return int 1表示成功处理
+ */
+int main(object me, string arg)
+{
+    string cmd, param;
+    
+    if (!me || !objectp(me))
+        return 0;
+
+    // 检查武圣系统开启条件
+    if (!WUSHENG_MASTER->check_wusheng_condition(me))
+    {
+        tell_object(me, popup_title("你的等级不足100级，暂时无法开启武圣之躯系统。"));
+        return 1;
+    }
+
+    if (!arg)
+    {
+        return show_wuzang_overview(me);
+    }
+
+    if (sscanf(arg, "%s %s", cmd, param) != 2)
+    {
+        cmd = arg;
+        param = "";
+    }
+
+    switch (cmd)
+    {
+    case "overview":
+    case "总览":
+        return show_wuzang_overview(me);
+        
+    case "detail":
+    case "详情":
+        return show_wuzang_detail(me, param);
+        
+    case "upgrade":
+    case "炼体":
+        {
+            string organ, use_dan_str;
+            int use_dan;
+            
+            if (sscanf(param, "%s %s", organ, use_dan_str) == 2)
+            {
+                use_dan = atoi(use_dan_str);
+                return handle_upgrade(me, organ, use_dan);
+            }
+            else
+            {
+                return handle_upgrade(me, param, 0); // 默认不使用炼体丹
+            }
+        }
+        
+    case "confirm":
+    case "确认":
+        {
+            string organ, use_dan_str;
+            int use_dan;
+            
+            if (sscanf(param, "%s %s", organ, use_dan_str) == 2)
+            {
+                use_dan = atoi(use_dan_str);
+                return confirm_upgrade(me, organ, use_dan);
+            }
+            else
+            {
+                return confirm_upgrade(me, param, 0); // 默认不使用炼体丹
+            }
+        }
+        
+    case "help":
+    case "帮助":
+        return show_help(me);
+        
+    default:
+        return show_wuzang_overview(me);
+    }
+}
+
+/**
+ * @brief 显示五脏炼体总览
+ * @param object me 玩家对象
+ * @return int 1表示成功
+ */
+int show_wuzang_overview(object me)
+{
+    mapping overview, info;
+    string msg, *buttons = ({}), *organs = ({ "heart", "liver", "spleen", "lung", "kidney" }), color;
+    
+    overview = WUSHENG_MASTER->get_wuzang_overview(me);
+    
+    msg = HIY "≡" HIW " 武圣之躯 · 五脏炼体 " HIY "≡\n" NOR;
+    msg += HIB "人体五脏六腑，乃生命之本，修炼之基。\n" NOR;
+    msg += "通过特殊的炼体法门，可强化五脏机能，突破凡体桎梏。\n\n";
+    
+    // 显示五脏状态
+    foreach (string organ in organs)
+    {
+        info = overview[organ];
+        color = info["color"];
+        
+        msg += sprintf("%s%s%s %d级 (%s)\n",
+                      color, info["name"], NOR,
+                      info["level"], info["stage"]);
+        
+        buttons += ({ sprintf("%s详情:wusheng_wuzang detail %s", info["name"], organ) });
+    }
+    
+    msg += "\n" HIY "说明：" NOR "每个脏器都可以独立炼体提升，不同脏器提供不同的属性加成。\n";
+    
+    buttons += ({ "系统帮助:wusheng_wuzang help" });
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}
+
+/**
+ * @brief 显示指定五脏的详细信息
+ * @param object me 玩家对象
+ * @param string organ 脏器名称
+ * @return int 1表示成功
+ */
+int show_wuzang_detail(object me, string organ)
+{
+    mapping detail;
+    string msg, *buttons = ({}), color, *main_bonus, *sub_bonus;
+    int current_level, player_material_amount;
+    
+    if (!organ)
+    {
+        tell_object(me, popup_title("请指定要查看的脏器。"));
+        return 1;
+    }
+    
+    detail = WUSHENG_MASTER->get_wuzang_detail(me, organ);
+    if (!detail)
+    {
+        tell_object(me, popup_title("未找到指定的脏器信息。"));
+        return 1;
+    }
+    
+    color = detail["color"];
+    msg = sprintf("%s≡ %s%s%s 详情 ≡\n", HIY, color, detail["name"], HIY) + NOR;
+    msg += sprintf("%s\n\n", detail["desc"]);
+    
+    msg += sprintf("当前等级：%s%d级%s (%s)\n", 
+                   HIW, detail["level"], NOR, detail["stage"]);
+    
+    // 显示属性加成
+    msg += "\n" HIY "属性加成：\n" NOR;
+    main_bonus = keys(detail["main_bonus"]);
+    sub_bonus = keys(detail["sub_bonus"]);
+    
+    // 显示主要加成及当前数值
+    msg += HIW "主要加成：" NOR;
+    foreach (string bonus in main_bonus)
+    {
+        int current_bonus = calculate_current_bonus(me, organ, bonus, detail["level"]);
+        if (current_bonus > 0)
+        {
+            msg += sprintf("%s(+%d) ", get_bonus_name(bonus), current_bonus);
+        }
+        else
+        {
+            msg += get_bonus_name(bonus) + " ";
+        }
+    }
+    msg += "\n";
+    
+    // 显示次要加成及当前数值
+    msg += HIB "次要加成：" NOR;
+    foreach (string bonus in sub_bonus)
+    {
+        int current_bonus = calculate_current_bonus(me, organ, bonus, detail["level"]);
+        if (current_bonus > 0)
+        {
+            msg += sprintf("%s(+%d) ", get_bonus_name(bonus), current_bonus);
+        }
+        else
+        {
+            msg += get_bonus_name(bonus) + " ";
+        }
+    }
+    msg += "\n";
+    
+    // 显示升级信息
+    if (detail["can_upgrade"])
+    {
+        mapping dan_info = detail["dan_info"];
+        
+        msg += sprintf("\n" HIY "下级升级需求：\n" NOR);
+        msg += sprintf("需要经验：%s%d%s\n", HIR, detail["need_exp"], NOR);
+        msg += sprintf("需要材料：%s %d个", 
+                       get_material_name(detail["material"]), detail["need_materials"]);
+        
+        // 显示当前拥有的材料数量
+        player_material_amount = get_player_item_amount(me, detail["material"]);
+        if (player_material_amount >= detail["need_materials"])
+        {
+            msg += sprintf(" %s(拥有:%d)%s\n", HIG, player_material_amount, NOR);
+        }
+        else
+        {
+            msg += sprintf(" %s(拥有:%d,不足)%s\n", HIR, player_material_amount, NOR);
+        }
+        
+        msg += sprintf("\n" HIY "炼体成功率：\n" NOR);
+        msg += sprintf("基础成功率：%s10%%%s\n", HIW, NOR);
+        
+        if (dan_info["has_dan"])
+        {
+            msg += sprintf("使用%s：%s%d%%%s", 
+                          dan_info["dan_name"], HIG, 
+                          10 + dan_info["boost"], NOR);
+            msg += sprintf(" %s(拥有:%d)%s\n", HIW, dan_info["total_amount"], NOR);
+        }
+        else
+        {
+            msg += HIB "无可用炼体丹\n" NOR;
+        }
+        
+                 // 检查是否满足升级条件
+         current_level = detail["level"];
+         if (me->query("combat_exp") >= detail["need_exp"] && 
+             WUSHENG_MASTER->check_material_enough(me, organ, current_level))
+        {
+            buttons += ({ sprintf("直接炼体(10%%):wusheng_wuzang upgrade %s 0", organ) });
+            
+            if (dan_info["has_dan"])
+            {
+                buttons += ({ sprintf("使用丹药炼体(%d%%):wusheng_wuzang upgrade %s 1", 
+                                     10 + dan_info["boost"], organ) });
+            }
+        }
+        else
+        {
+            msg += HIR "\n升级条件不足。\n" NOR;
+        }
+    }
+    else
+    {
+        msg += HIR "\n该脏器已炼体至圆满境界。\n" NOR;
+    }
+    
+    buttons += ({ "返回总览:wusheng_wuzang overview" });
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}
+
+/**
+ * @brief 处理炼体升级请求
+ * @param object me 玩家对象
+ * @param string organ 脏器名称
+ * @param int use_dan 是否使用炼体丹
+ * @return int 1表示成功
+ */
+int handle_upgrade(object me, string organ, int use_dan)
+{
+    mapping detail;
+    string msg, *buttons = ({}), next_stage, color;
+    int current_level;
+    
+    if (!organ)
+    {
+        tell_object(me, popup_title("请指定要炼体的脏器。"));
+        return 1;
+    }
+    
+    detail = WUSHENG_MASTER->get_wuzang_detail(me, organ);
+    if (!detail)
+    {
+        tell_object(me, popup_title("未找到指定的脏器信息。"));
+        return 1;
+    }
+    
+    if (!detail["can_upgrade"])
+    {
+        tell_object(me, popup_title(sprintf("%s已经炼体至圆满境界，无法继续提升。", 
+                                           detail["name"])));
+        return 1;
+    }
+    
+    current_level = detail["level"];
+    next_stage = WUSHENG_MASTER->get_level_stage(current_level + 1);
+    
+    // 检查升级条件
+    if (me->query("combat_exp") < detail["need_exp"])
+    {
+        tell_object(me, popup_title(sprintf("经验不足，需要%d点经验。", 
+                                           detail["need_exp"])));
+        return 1;
+    }
+    
+    if (!WUSHENG_MASTER->check_material_enough(me, organ, current_level))
+    {
+        tell_object(me, popup_title(sprintf("材料不足，需要%s %d个。", 
+                                           get_material_name(detail["material"]), 
+                                           detail["need_materials"])));
+        return 1;
+    }
+    
+    // 确认升级
+    color = detail["color"];
+    msg = sprintf("%s≡ 炼体确认 ≡\n", HIY) + NOR;
+    msg += sprintf("准备对%s%s%s进行炼体提升\n\n", color, detail["name"], NOR);
+    
+    msg += sprintf("当前等级：%d级 (%s)\n", current_level, detail["stage"]);
+    msg += sprintf("提升后：%d级 (%s)\n\n", current_level + 1, next_stage);
+    
+    msg += HIR "将消耗：\n" NOR;
+    msg += sprintf("经验：%d点\n", detail["need_exp"]);
+    msg += sprintf("材料：%s %d个\n", 
+                   get_material_name(detail["material"]), detail["need_materials"]);
+    
+    if (use_dan)
+    {
+        mapping dan_info = detail["dan_info"];
+        if (dan_info["has_dan"])
+        {
+            msg += sprintf("炼体丹：%s 1个\n", dan_info["dan_name"]);
+            msg += sprintf("成功率：%s%d%%%s\n", HIG, (10 + dan_info["boost"] + me->query("wusheng/lianti_success_rate")), NOR);
+        }
+        else
+        {
+            tell_object(me, popup_title("没有可用的炼体丹。"));
+            return 1;
+        }
+    }
+    else
+    {
+        msg += sprintf("成功率：%s%d%%%s\n", HIW, (10 + me->query("wusheng/lianti_success_rate")), NOR);
+    }
+    
+    msg += HIY "\n炼体过程不可逆转，失败将损失材料和经验！\n" NOR;
+    
+    buttons += ({ sprintf("确认炼体:wusheng_wuzang confirm %s %d", organ, use_dan) });
+    buttons += ({ sprintf("返回详情:wusheng_wuzang detail %s", organ) });
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}
+
+/**
+ * @brief 确认执行炼体升级
+ * @param object me 玩家对象
+ * @param string organ 脏器名称
+ * @param int use_dan 是否使用炼体丹
+ * @return int 1表示成功
+ */
+int confirm_upgrade(object me, string organ, int use_dan)
+{
+    mapping detail;
+    string msg, *buttons = ({}), color, new_stage;
+    int current_level, result;
+    
+    if (!organ)
+    {
+        tell_object(me, popup_title("参数错误。"));
+        return 1;
+    }
+    
+    detail = WUSHENG_MASTER->get_wuzang_detail(me, organ);
+    if (!detail)
+    {
+        tell_object(me, popup_title("未找到指定的脏器信息。"));
+        return 1;
+    }
+    
+    // 再次检查条件（防止重复点击等情况）
+    current_level = detail["level"];
+    if (!detail["can_upgrade"] || 
+        me->query("combat_exp") < detail["need_exp"] ||
+        !WUSHENG_MASTER->check_material_enough(me, organ, current_level))
+    {
+        tell_object(me, popup_title("升级条件已不满足，炼体失败。"));
+        return 1;
+    }
+    
+    // 执行升级
+    result = WUSHENG_MASTER->upgrade_wuzang(me, organ, use_dan);
+    
+    if (result == 1)
+    {
+        // 成功
+        color = detail["color"];
+        new_stage = WUSHENG_MASTER->get_level_stage(current_level + 1);
+        
+        msg = sprintf("%s≡ 炼体成功 ≡\n", HIY) + NOR;
+        msg += sprintf("%s%s%s炼体成功！\n\n", color, detail["name"], NOR);
+        msg += sprintf("等级提升：%d级 → %s%d级%s\n", 
+                      current_level, HIW, current_level + 1, NOR);
+        msg += sprintf("境界突破：%s → %s%s%s\n\n", 
+                      detail["stage"], HIG, new_stage, NOR);
+        
+        msg += HIG "你感到体内一阵暖流涌动，" + detail["name"] + "机能得到显著增强！\n" NOR;
+        
+        buttons += ({ sprintf("查看详情:wusheng_wuzang detail %s", organ) });
+        buttons += ({ "返回总览:wusheng_wuzang overview" });
+        
+        // 记录日志
+        log_file("wusheng", sprintf("%s (%s) 炼体成功：%s %d级 → %d级 %s\n",
+                                   me->name(), me->query("id"), 
+                                   detail["name"], current_level, current_level + 1,
+                                   use_dan ? "(使用炼体丹)" : "(无炼体丹)"));
+    }
+    else if (result == -1)
+    {
+        // 失败
+        msg = sprintf("%s≡ 炼体失败 ≡\n", HIR) + NOR;
+        msg += sprintf("%s%s%s炼体失败！\n\n", detail["color"], detail["name"], NOR);
+        msg += HIR "虽然失败了，但经验和材料已经消耗。\n" NOR;
+        msg += HIY "不要灰心，继续努力修炼吧！\n" NOR;
+        
+        buttons += ({ sprintf("返回详情:wusheng_wuzang detail %s", organ) });
+        buttons += ({ "返回总览:wusheng_wuzang overview" });
+        
+        // 记录日志
+        log_file("wusheng", sprintf("%s (%s) 炼体失败：%s %d级 %s\n",
+                                   me->name(), me->query("id"), 
+                                   detail["name"], current_level,
+                                   use_dan ? "(使用炼体丹)" : "(无炼体丹)"));
+    }
+    else
+    {
+        // 条件不满足
+        msg = HIR "炼体失败，条件不满足。\n" NOR;
+        buttons += ({ sprintf("返回详情:wusheng_wuzang detail %s", organ) });
+    }
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}
+
+/**
+ * @brief 显示帮助信息
+ * @param object me 玩家对象
+ * @return int 1表示成功
+ */
+int show_help(object me)
+{
+    string msg, *buttons = ({});
+    
+    msg = HIY "≡ 武圣之躯系统帮助 ≡\n" NOR;
+    msg += "\n" HIW "系统概述：\n" NOR;
+    msg += "武圣之躯以人体五脏六腑为核心，通过特殊的炼体之法强化身体机能，\n";
+    msg += "提升各项基础属性。每个脏器最高可修炼至100级。\n\n";
+    
+    msg += HIW "五脏功能及数值加成：\n" NOR;
+    msg += RED "● 心脏（生命之源）\n" NOR;
+    msg += "  主要加成：气血上限、气血恢复速度\n";
+    msg += "  次要加成：内功等级\n";
+    msg += "  数值详情：初炼期每级+100气血/+4恢复/+1内功\n";
+    msg += "            小成期每级+200气血/+6恢复/+2内功\n";
+    msg += "            大成期每级+300气血/+8恢复/+3内功\n";
+    msg += "            圆满期每级+400气血/+10恢复/+4内功\n\n";
+    
+    msg += GRN "● 肝脏（力量之源）\n" NOR;
+    msg += "  主要加成：内力极限、内力恢复速度\n";
+    msg += "  次要加成：招架等级\n";
+    msg += "  数值详情：初炼期每级+50内力/+2恢复/+1招架\n";
+    msg += "            小成期每级+100内力/+4恢复/+2招架\n";
+    msg += "            大成期每级+150内力/+6恢复/+3招架\n";
+    msg += "            圆满期每级+200内力/+8恢复/+4招架\n\n";
+    
+    msg += YEL "● 脾脏（根基之源）\n" NOR;
+    msg += "  主要加成：精力极限、后天悟性\n";
+    msg += "  次要加成：内功等级\n";
+    msg += "  数值详情：初炼期每级+50精力/每10级+2悟性/+1内功\n";
+    msg += "            小成期每级+100精力/每10级+2悟性/+2内功\n";
+    msg += "            大成期每级+150精力/每10级+2悟性/+3内功\n";
+    msg += "            圆满期每级+200精力/每10级+2悟性/+4内功\n\n";
+    
+    msg += WHT "● 肺脏（灵动之源）\n" NOR;
+    msg += "  主要加成：轻功等级\n";
+    msg += "  次要加成：后天身法\n";
+    msg += "  数值详情：初炼期每级+1轻功/每10级+2身法\n";
+    msg += "            小成期每级+2轻功/每10级+2身法\n";
+    msg += "            大成期每级+3轻功/每10级+2身法\n";
+    msg += "            圆满期每级+4轻功/每10级+2身法\n\n";
+    
+    msg += BLU "● 肾脏（潜能之源）\n" NOR;
+    msg += "  主要加成：后天根骨\n";
+    msg += "  次要加成：暴击伤害\n";
+    msg += "  数值详情：初炼期每10级+2根骨/每10级+2%暴击\n";
+    msg += "            小成期每10级+2根骨/每10级+2%暴击\n";
+    msg += "            大成期每10级+2根骨/每10级+2%暴击\n";
+    msg += "            圆满期每10级+2根骨/每10级+2%暴击\n\n";
+    
+    msg += HIY "≡ 炼体消耗计算 ≡\n" NOR;
+    msg += HIW "材料消耗公式：\n" NOR;
+    msg += "初炼期(1-20级)：基础1个 + (当前等级÷10)个\n";
+    msg += "小成期(21-50级)：基础2个 + (当前等级÷10)个\n";
+    msg += "大成期(51-80级)：基础3个 + (当前等级÷10)个\n";
+    msg += "圆满期(81-100级)：基础5个 + (当前等级÷10)个\n\n";
+    
+    msg += HIW "经验消耗公式：\n" NOR;
+    msg += "初炼期：基础10,000 + (当前等级×5,000)\n";
+    msg += "小成期：基础50,000 + (当前等级×5,000)\n";
+    msg += "大成期：基础100,000 + (当前等级×5,000)\n";
+    msg += "圆满期：基础200,000 + (当前等级×5,000)\n\n";
+    
+    msg += HIY "≡ 炼体成功率机制 ≡\n" NOR;
+    msg += HIR "基础成功率：10%\n" NOR;
+    msg += HIW "炼体丹加成：\n" NOR;
+    msg += "基础炼体丹(初炼期)：+10%成功率 = 20%\n";
+    msg += "中级炼体丹(小成期)：+10%成功率 = 20%\n";
+    msg += "高级炼体丹(大成期)：+10%成功率 = 20%\n";
+    msg += "圣级炼体丹(圆满期)：+10%成功率 = 20%\n\n";
+    
+    msg += HIR "失败机制：\n" NOR;
+    msg += "● 炼体失败时消耗经验和材料\n";
+    msg += "● 炼体失败时" HIW "消耗" NOR "炼体丹\n";
+    msg += "● 炼体失败时，叠加上一次炼体成功的概率\n\n";
+    
+    msg += HIY "≡ 使用说明 ≡\n" NOR;
+    msg += "开启条件：需要达到100级\n";
+    msg += "炼体材料：血参果(心)、龙肝草(肝)、地脾黄(脾)、天肺莲(肺)、仙肾石(肾)\n";
+    msg += "获取途径：通过任务、商店或其他活动获得\n\n";
+    
+    msg += HIR "重要提醒：\n" NOR;
+    msg += "1. 炼体有失败风险，请合理使用炼体丹提升成功率\n";
+    msg += "2. 材料和经验珍贵，建议充分准备后再进行炼体\n";
+    msg += "3. 不同阶段的材料需求递增，请提前规划\n";
+    
+    buttons += ({ "返回总览:wusheng_wuzang overview" });
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}
+
+/**
+ * @brief 炼体动作命令处理
+ * @param string arg 命令参数
+ * @return int 1表示成功处理
+ */
+int do_lianti(string arg)
+{
+    object me = this_player();
+    
+    if (!me)
+        return 0;
+        
+    if (!arg)
+    {
+        return main(me, "overview");
+    }
+    
+    return main(me, "upgrade " + arg + " 0"); // 默认不使用炼体丹
+}
+
+/**
+ * @brief 获取属性加成的中文名称
+ * @param string bonus 属性加成标识
+ * @return string 中文名称
+ */
+string get_bonus_name(string bonus)
+{
+    switch (bonus)
+    {
+    case "max_qi": return "气血上限";
+    case "qi_recover": return "气血恢复";
+    case "max_neili": return "内力上限";
+    case "neili_recover": return "内力恢复";
+    case "max_jingli": return "精力上限";
+    case "int_bonus": return "悟性加成";
+    case "dex_bonus": return "身法加成";
+    case "con_bonus": return "根骨加成";
+    case "force_level": return "内功等级";
+    case "parry_level": return "招架等级";
+    case "dodge_level": return "轻功等级";
+    case "crit_damage": return "暴击伤害";
+    default: return bonus;
+    }
+}
+
+/**
+ * @brief 获取材料的中文名称
+ * @param string material 材料标识
+ * @return string 中文名称
+ */
+string get_material_name(string material)
+{
+    switch (material)
+    {
+    case "xuecanguo": return "血参果";
+    case "longgan": return "龙肝草";
+    case "dipi": return "地脾黄";
+    case "tianfei": return "天肺莲";
+    case "xianshen": return "仙肾石";
+    default: return material;
+    }
+}
+
+/**
+ * @brief 获取玩家拥有指定物品的总数量
+ * @param object me 玩家对象
+ * @param string item_id 物品ID
+ * @return int 总数量
+ */
+int get_player_item_amount(object me, string item_id)
+{
+    object *obs;
+    int total_amount;
+    
+    if (!me)
+        return 0;
+        
+    obs = filter(all_inventory(me), (: $1->query("id") == $(item_id) :));
+    
+    total_amount = 0;
+    foreach (object ob in obs)
+    {
+        total_amount += ob->query_amount();
+    }
+    
+    return total_amount;
+}
+
+/**
+ * @brief 计算当前等级提供的属性加成数值
+ * @param object me 玩家对象
+ * @param string organ 脏器名称
+ * @param string bonus_type 加成类型
+ * @param int level 当前等级
+ * @return int 当前提供的加成数值
+ */
+int calculate_current_bonus(object me, string organ, string bonus_type, int level)
+{
+    mapping detail;
+    mapping main_bonus, sub_bonus;
+    int *bonus_array;
+    int stage_index, bonus_value;
+    string stage;
+    
+    if (!me || level <= 0)
+        return 0;
+    
+    detail = WUSHENG_MASTER->get_wuzang_detail(me, organ);
+    if (!detail)
+        return 0;
+    
+    main_bonus = detail["main_bonus"];
+    sub_bonus = detail["sub_bonus"];
+    
+    // 获取当前阶段索引
+    stage = WUSHENG_MASTER->get_level_stage(level);
+    
+    // 根据阶段确定索引
+    switch (stage)
+    {
+    case "初炼期": stage_index = 0; break;
+    case "小成期": stage_index = 1; break;
+    case "大成期": stage_index = 2; break;
+    case "圆满期": stage_index = 3; break;
+    default: return 0;
+    }
+    
+    // 检查主要加成
+    if (main_bonus[bonus_type])
+    {
+        bonus_array = main_bonus[bonus_type];
+        if (sizeof(bonus_array) > stage_index)
+        {
+            // 特殊处理：每10级提升的属性
+            if (bonus_type == "int_bonus" || bonus_type == "dex_bonus" || 
+                bonus_type == "con_bonus" || bonus_type == "crit_damage")
+            {
+                bonus_value = (level / 10) * bonus_array[stage_index];
+            }
+            else
+            {
+                bonus_value = level * bonus_array[stage_index];
+            }
+            return bonus_value;
+        }
+    }
+    
+    // 检查次要加成
+    if (sub_bonus[bonus_type])
+    {
+        bonus_array = sub_bonus[bonus_type];
+        if (sizeof(bonus_array) > stage_index)
+        {
+            bonus_value = level * bonus_array[stage_index];
+            return bonus_value;
+        }
+    }
+    
+    return 0;
+}

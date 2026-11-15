@@ -1,0 +1,245 @@
+// jingang-buhuaiti.c
+
+
+
+inherit SHAOLIN_SKILL;
+
+int valid_enable(string usage) { return usage == "parry"; }
+
+int valid_learn(object me)
+{
+	if ((int)me->query_skill("force") < 300)
+		return notify_fail("你的内功火候不够，难以修习这等神功。\n");
+
+	if ((int)me->query("max_neili") < 3000)
+		return notify_fail("你的内力还不足以修习这等神功。\n");
+
+	if ((int)me->query_skill("force", 1) < (int)me->query_skill("jingang-buhuaiti", 1))
+		return notify_fail("你的基本内功水平有限，无法领会更高深的金刚不坏体神功。\n");
+
+	return 1;
+}
+
+string query_txt()
+{
+	return "要求：内功激发300，内力3000，等级不能高于基本内功"ZJBR
+	"特效：以内力化解攻击者伤害，内力消耗=伤害/4，对比自身(内功激发*12+最大内力)和攻击者(内功激发*12+最大内力)，同数值1/2概率触发"
+	"，内力低于最大内/3不触发，如果敌方使用了葵花神功，并且等级高于我，则触发破体无法格挡，如果我成功防御，有意境等级 * 6 + 10%的几率为下一次一拍两散的特效增伤数值为内功有效等级的金刚破体真气系数（伤害加成），可叠加一次性使用，每次触发仅5秒内有效。";
+}
+
+int remove_yipai_buff(object me, int level)
+{
+	if (!objectp(me))
+		return 0;
+		
+	if (me->query_temp("yipai_buff") < 0)
+	{
+		me->set_temp("yipai_buff", 0);
+		return 0;
+	}
+
+	if (me->query_temp("yipai_buff") < level)
+	{
+		me->set_temp("yipai_buff", 0);
+		return 0;
+	}
+
+	me->add_temp("yipai_buff", -level);
+	return 1;
+}
+
+mixed valid_damage(object ob, object me, int damage, object weapon)
+{
+	mapping result;
+	int ap, dp;
+	int cost;
+	int is_po = 0;
+	cost = damage / 4;
+	cost -= COMBAT_D->get_skill_aoyi_level(me,"明镜止水") * cost / 10;
+	if (! living(me) ||
+	    (int)me->query_skill("jingang-buhuaiti", 1) < 100 ||
+	    (int)me->query("neili") < cost ||
+	    (int)me->query("neili") < me->query("max_neili")/3)
+		return;
+
+	ap = ob->query_skill("force") * 12 + ob->query("max_neili");
+	dp = me->query_skill("force") * 12 + me->query("max_neili");
+
+	//如果敌方使用了葵花神功，并且等级高于我，则触发破体
+	if (ob->query_skill("kuihua-shengong", 1) > me->query_skill("jingang-buhuaiti", 1))
+	{
+		is_po = 1;
+	}
+
+	if (ap / 2 + random(ap) < dp && !is_po)
+	{
+		
+		me->add("neili", -cost);
+        tell_object(me,"你使出金刚不坏体神功，用"+cost+"内力抵消了"+damage+"伤害。"NOR"\n");
+		result = ([ "damage": -(damage * 3 / 4) ]);
+		
+		// 如果敌方是一个npc,触发金钟罩,反弹伤害
+		// if (!userp(ob))
+		{
+			// 反弹的伤害受到1/4的护甲影响
+			int new_damage;
+			if (userp(ob)) // 如果是玩家,伤害根据易筋经的等级 + 加上自身护甲
+			{
+				new_damage = me->query_skill("force") + me->query_temp("apply/armor");
+				new_damage -= ob->query_temp("apply/armor");
+			}
+			else
+			{
+				new_damage = damage / 2;
+				new_damage -= ob->query_temp("apply/armor") / 4;
+			}
+				
+	
+
+			if (new_damage < 1) new_damage = 1;
+
+			ob->receive_damage("qi", new_damage, me);
+			ob->receive_wound("qi", new_damage, me);
+
+			result += (["msg" :"$n运起金钟罩强运$N的一股巨大的吸力顿时另其矛头转向，$N自身受到了金钟罩反伤:" + HIW + (new_damage) + HIR"点。\n"]);
+		}
+
+
+
+		//如果我成功防御有概率为一拍两散提供buff
+		if (random(100) < 10 + (COMBAT_D->get_skill_aoyi_level(me,"明镜止水") * 6))
+			me->add_temp("yipai_buff",me->query_skill("force"));
+
+		//5秒内有效
+		{
+			// remove_call_out("remove_yipai_buff");
+			call_out("remove_yipai_buff", 5, me, me->query_temp("yipai_buff"));
+		}
+
+
+		switch (random(5))
+		{
+		case 0:
+			result += (["msg" : HIY "$n" HIY "身前仿佛有一道无形气墙，让$N"
+					    HIY "再难前进一步。"NOR"\n"]);
+			break;
+		case 1:
+			result += (["msg" : HIY "只见$N" HIY "这一招打了个正中！然而$n"
+					    HIY "毫不在意，并没有放在心上。"NOR"\n"]);
+			break;
+		case 2:
+			result += (["msg" : HIY "$N" HIY "一招正好打在$n" HIY "身上，可"
+					    "力量犹如石沉大海，丝毫不起作用。"NOR"\n"]);
+			break;
+		case 3:
+			result += (["msg" : HIY "$N" HIY "一招击在$n" HIY "身上，可听$n"
+					    HIY "一声大喝，$N" HIY "反被护体罡气震退了"
+					    "数步。"NOR"\n"]);
+			break;
+		default:
+			result += (["msg" : HIY "$n" HIY "浑若无事的接下了$N"
+					    HIY "这一招，却没有受到半点伤害。"NOR"\n"]);
+			break;
+		}
+		return result;
+	}
+}
+
+int query_effect_parry(object attacker, object me)
+{
+	int lvl;
+
+	lvl = me->query_skill("jingang-buhuaiti", 1);
+	if (lvl < 100) return 0;
+	if (lvl < 150) return 50;
+	if (lvl < 200) return 60;
+	if (lvl < 250) return 70;
+	if (lvl < 300) return 80;
+	if (lvl < 350) return 90;
+	if (lvl < 400) return 100;
+	return 120;
+}
+
+int practice_skill(object me)
+{
+	int cost;
+	int lvl;
+
+	if ((lvl = me->query_skill("jingang-buhuaiti", 1)) < 100)
+		return notify_fail("你对这门护体神功的了解甚浅，还不足以自行锻炼。\n");
+
+	cost = 85 + (lvl - 100) / 3;
+	if ((int)me->query("qi") < 70)
+		return notify_fail("你的体力太低了。\n");
+
+	if ((int)me->query("neili") < cost)
+		return notify_fail("你的内力不够练护体神功。\n");
+
+	me->receive_damage("qi", 50);
+	me->add("neili", -cost);
+	return 1;
+}
+
+string perform_action_file(string action)
+{
+	return __DIR__"jingang-buhuaiti/" + action;
+}
+
+string query_description()
+{
+    string msg;
+
+    msg = HIY "【金刚不坏体】" ZJBR NOR;
+    msg += "少林派无上护体神功，练成后刀枪不入，水火不侵。" ZJBR ZJBR; // 基本介绍
+
+    msg += HIY "〖学习要求〗" ZJBR NOR; // valid_learn
+    msg += "  基本内功等级不低于 " HIY "300" NOR " 级。" ZJBR;
+    msg += "  最大内力不低于 " HIB "3000" NOR " 点。" ZJBR;
+    msg += "  基本内功等级需大于等于金刚不坏体等级。" ZJBR ZJBR;
+
+    msg += HIY "〖激发类型〗" ZJBR NOR; // valid_enable
+    msg += "  招架（parry）。" ZJBR ZJBR;
+
+    msg += HIY "〖练习要求〗" ZJBR NOR; // practice_skill
+    msg += "  金刚不坏体等级不低于 " HIY "100" NOR " 级。" ZJBR;
+    msg += "  气血：不低于 " HIR "70" NOR " 点。" ZJBR;
+    msg += "  所需内力：" HIB "85 + (金刚不坏体等级 - 100) / 3" NOR " 点。" ZJBR;
+    msg += "  每次练习消耗气血：" HIR "50" NOR " 点。" ZJBR;
+    msg += "  每次练习消耗内力：" HIB "85 + (金刚不坏体等级 - 100) / 3" NOR " 点。" ZJBR ZJBR;
+
+    msg += HIY "〖攻防特效/被动效果〗" ZJBR NOR; // valid_damage
+    msg += "  金刚护体：" ZJBR;
+    msg += "    触发条件：" ZJBR;
+    msg += "      金刚不坏体等级不低于 " HIY "100" NOR " 级。" ZJBR;
+    msg += "      当前内力不低于（伤害值 / 4，受明镜止水奥义减免）。" ZJBR;
+    msg += "      当前内力不低于最大内力的 " HIM "1/3" NOR "。" ZJBR;
+    msg += "      成功率基于双方（内功激发等级 * 12 + 最大内力）的随机比较。" ZJBR;
+    msg += "      若攻击者葵花神功等级高于自身金刚不坏体等级，则无法触发。" ZJBR;
+    msg += "    成功效果：" ZJBR;
+    msg += "      完全抵消本次伤害。" ZJBR;
+    msg += "      消耗内力：伤害值 / 4（每级明镜止水奥义减免10%）。" ZJBR;
+    msg += "      金钟罩反伤：对攻击者造成反震伤害（伤害受双方内功、护甲影响）。" ZJBR;
+    msg += "      一拍两散增益：有 (10 + 明镜止水奥义等级 * 6)% 几率，为下一次一拍两散增加伤害系数（数值为内功激发等级），持续5秒。" ZJBR ZJBR;
+
+    msg += HIY "〖特殊招式〗" ZJBR NOR; // perform_action_file
+    msg += HIC "  金刚不坏 (jingang)" ZJBR NOR; // 招式名称
+    msg += "    使用要求：" ZJBR; // 招式使用要求
+    msg += "      当前内力不低于 " HIB "100" NOR " 点。" ZJBR;
+    msg += "      金刚不坏体等级不低于 " HIY "100" NOR " 级。" ZJBR;
+    msg += "      未处于金刚不坏状态。" ZJBR;
+    msg += "    效果描述：" ZJBR; // 招式效果描述
+    msg += "      提升防御力：增加 (基本内功等级 + 明镜止水奥义等级 * 100) 点防御力。" ZJBR;
+    msg += "      持续时间：基本内功等级 秒。" ZJBR;
+    msg += "    消耗与代价：" ZJBR; // 消耗与代价
+    msg += "      消耗内力 " HIB "100" NOR " 点。" ZJBR;
+    msg += "      战斗中使用，自身忙乱 " HIR "2" NOR " 秒。" ZJBR ZJBR;
+
+    msg += HIY "〖奥义效果〗" ZJBR NOR;
+    msg += "  明镜止水：" ZJBR;
+    msg += "    每一级奥义：" ZJBR;
+    msg += "      被动效果：金刚护体内力消耗降低 10%。" ZJBR;
+    msg += "      被动效果：触发一拍两散增益的几率增加 6%。" ZJBR;
+    msg += "      主动效果：金刚不坏招式增加 100 点防御力。" ZJBR;
+
+    return msg;
+}

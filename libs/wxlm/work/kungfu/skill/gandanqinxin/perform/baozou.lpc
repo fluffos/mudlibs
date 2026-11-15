@@ -1,0 +1,151 @@
+// /kungfu/skill/gandanqinxin/baozou.c
+
+
+#include <combat.h>
+
+#define BAOZOU "「" HIR "肝胆琴心" NOR "」"
+
+inherit F_SSERVER;
+
+string query_name() { return BAOZOU; }
+
+int perform(object me, object target)
+{
+    object weapon;
+    int skill, ap, dp, damage;
+    string msg;
+    int huoyin_count, bingyin_count;
+    int cooldown;
+    int yijing_level; // 添加变量定义
+    int remain_huoyin, remain_bingyin;
+    if (! target)
+        target = offensive_target(me);
+
+    if (! target || ! me->is_fighting(target))
+        return notify_fail(BAOZOU "只能对战斗中的对手使用。\n");
+
+    if (! objectp(weapon = me->query_temp("weapon")) ||
+        weapon->query("skill_type") != "qin")
+        return notify_fail("你必须手持琴才能施展" BAOZOU "。\n");
+
+    if ((int)me->query_skill("gandanqinxin", 1) < 150)
+        return notify_fail("你的肝胆琴心不够娴熟，还不会使用" BAOZOU "。\n");
+
+    if ((int)me->query_skill("force") < 200)
+        return notify_fail("你的内功修为不够，难以施展" BAOZOU "。\n");
+
+    if ((int)me->query_skill("yinlv", 1) < 150)
+        return notify_fail("你的音律修养不够，无法施展" BAOZOU "。\n");
+
+    if (me->query("neili") < 300)
+        return notify_fail("你现在真气不够，难以施展" BAOZOU "。\n");
+
+    // 检查冷却时间
+    if (cooldown = me->query_cooldown("gandanqinxin_baozou"))
+        return notify_fail("你刚刚使用过" BAOZOU "，还需等待" + chinese_number(cooldown) + "秒。\n");
+
+    // 获取意境等级
+    yijing_level = me->query("skill_aoyi/有我神像");
+
+    huoyin_count = me->query_temp("huoyin_count");
+    bingyin_count = me->query_temp("bingyin_count");
+
+    if (huoyin_count == 0 && bingyin_count == 0)
+        return notify_fail("你没有积累任何音符，无法施展" BAOZOU "。\n");
+
+    skill = me->query_skill("gandanqinxin", 1);
+
+    msg = HIR "$N" HIR "双手猛地在" + weapon->name() + HIR "上一扫，爆发出惊天动地的琴音，\n"
+              "积蓄的音符瞬间引爆，化作无与伦比的力量！\n" NOR;
+
+    ap = me->query_skill("force") +  me->query_skill("qin");
+    dp = target->query_skill("force") + target->query_skill("parry");
+
+    // 根据意境等级增加命中率
+    if (yijing_level) {
+        ap += ap * yijing_level / 100; // 每级意境增加10%命中率
+    }
+
+    if (COMBAT_D->hit_determination(me,target,ap,dp))
+    {
+        if (huoyin_count >= bingyin_count)
+        {
+
+            damage = me->query_skill("yinlv") * 3;
+
+            damage += ap * 3 + huoyin_count * 50;
+            
+            // 根据意境等级增加伤害
+            if (yijing_level) {
+                damage += damage * yijing_level * 10 / 100; // 每级意境增加10%伤害
+            }
+            
+            msg += HIR "$n" HIR "被这炽热的琴音击中，顿时感到全身如被烈火灼烧，痛不欲生！\n" NOR;
+            COMBAT_D->real_damage(me, target, damage);
+            // 告知双方伤害
+            tell_object(me, HIR "你击中了" + target->name() + "，造成了" + damage + "点伤害。\n" NOR);
+            tell_object(target, HIR "你被" + me->name() + "击中了，造成了" + damage + "点伤害。\n" NOR);
+
+            if (target->query("neili") > me->query_skill("yinlv"))
+                target->add("neili",-me->query_skill("yinlv"));
+        }
+        else
+        {
+
+            damage = me->query_skill("yinlv") * 3;
+
+            damage += ap * 3 + bingyin_count * 50;
+            
+            // 根据意境等级增加伤害
+            if (yijing_level) {
+                damage += damage * yijing_level * 10 / 100; // 每级意境增加10%伤害
+            }
+            
+            msg += HIB "$n" HIB "被这极寒的琴音侵袭，登时全身血液几乎凝固，如坠冰窟！\n" NOR;
+            COMBAT_D->real_damage(me, target, damage);
+            // 告知双方伤害
+            tell_object(me, HIB "你击中了" + target->name() + "，造成了" + damage + "点伤害。\n" NOR);
+            tell_object(target, HIB "你被" + me->name() + "击中了，造成了" + damage + "点伤害。\n" NOR);
+
+            target->start_busy(1);
+            
+        }
+    }
+    else
+    {
+        msg += CYN "可是$n" CYN "看破了$N" CYN "的招式，巧妙地躲过了这致命的一击。\n" NOR;
+    }
+
+    message_combatd(msg, me, target);
+
+    me->add("neili", -250);
+
+    // 设置新的冷却时间
+    cooldown = 15 - yijing_level; // 每级意境减少1秒冷却时间
+    if (cooldown < 1)
+        cooldown = 1; // 冷却时间至少为1秒
+
+    cooldown = me->set_cooldown("gandanqinxin_baozou", cooldown);
+    
+    // 提醒用户冷却时间
+    tell_object(me, HIR "你的" BAOZOU "进入了" + chinese_number(cooldown) + "秒冷却时间。\n" NOR);
+
+    // 保留1/3的音符
+    remain_huoyin = huoyin_count / 3;
+    remain_bingyin = bingyin_count / 3;
+    
+    // 设置保留的音符数量
+    me->set_temp("huoyin_count", remain_huoyin);
+    me->set_temp("bingyin_count", remain_bingyin);
+    
+    // 告知玩家保留的音符数量
+    if (remain_huoyin > 0 || remain_bingyin > 0) {
+        tell_object(me, HIC "你的技能余韵尚存，保留了" + 
+            (remain_huoyin ? chinese_number(remain_huoyin) + "个火音符" : "") +
+            (remain_huoyin && remain_bingyin ? "和" : "") +
+            (remain_bingyin ? chinese_number(remain_bingyin) + "个冰音符" : "") +
+            "。\n" NOR);
+    }
+
+    return 1;
+}

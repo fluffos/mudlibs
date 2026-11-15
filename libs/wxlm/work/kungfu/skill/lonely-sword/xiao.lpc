@@ -1,0 +1,197 @@
+// This program is a part of NITAN MudLIB
+
+
+#include <combat.h>
+
+string name() { return HIC "剑破长空" NOR; }
+string query_name() { return "剑破长空"; }
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+        string msg;
+        object weapon, weapon2;
+        int skill, ap, dp, damage, px, md, sx;
+        int hp, hp1;
+        int jy;
+        int delta;
+
+        me->clean_up_enemy();
+        if( !target ) target = me->select_opponent();
+
+        skill = me->query_skill("lonely-sword", 1);
+
+        if( !me->is_fighting(target) )
+                return notify_fail(name() + "只能对战斗中的对手使用。\n");
+
+        if( skill < 200 )
+                return notify_fail("你的独孤九剑等级不够，无法施展" + name() + "。\n");
+
+        if( !objectp(weapon=query_temp("weapon", me) )
+         || query("skill_type", weapon) != "sword" )
+                return notify_fail("你使用的武器不对，无法施展" + name() + "。\n");
+
+        if( me->query_skill_mapped("sword") != "lonely-sword" )
+                return notify_fail("你没有激发独孤九剑，无法施展" + name() + "。\n");
+
+        if( (int)me->query_skill("force") < 200 )
+                return notify_fail("你的内功火候不够，难以施展" + name() + "。\n");
+
+        if( !living(target) )
+                return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+        if( query("neili", me)<1000 ) 
+                return notify_fail("你此时的内力不足，难以施展" + name() + "。\n"); 
+
+        ap = attack_power(me, "sword");
+        dp = defense_power(target, "parry");
+
+        px = target->query_skill("pixie-jian", 1);
+        md = target->query_skill("kuihua-shengong", 1);
+        sx = target->query_skill("six-finger", 1);
+
+        jy = me->query_skill("lonely-sword", 1);
+        ap = ap + me->query_skill("martial-cognize", 1); 
+        dp = dp + target->query_skill("martial-cognize", 1);
+        if( px || md )
+                ap += ap/5;              // 作为万剑之宗，对避邪剑法，葵花神功有加成。
+
+        if( sx )
+                ap -= ap/5;              // 不擅长应付六脉聚气成剑远程攻击，有减成。
+        
+        // pve额外加成50%
+        if (!userp(target))
+        {
+            ap += ap / 2;
+        }
+        
+        if( objectp(weapon2=query_temp("weapon", target)) )
+        {
+                msg = HIC "$N" HIC "神态淡然，双目如电，一股睥睨天下的气势骤然而生。手持" + weapon->name() + 
+                      HIC "轻轻一振，剑尖微颤，无形剑意已遍布四周！\n" NOR
+                      HIW "只见$N" HIW "身形未动，一道凌厉剑气已如惊鸿般划破长空，直袭$n要害！\n"  NOR;
+                
+                addn("neili", -200, me);
+                if(( ap / 2 + random(ap) > dp && random(4) == 1) || ap/2 > dp && playerp(me))
+                {
+                        msg += HIR "$n" HIR "感受到这前所未有的剑道威压，面色剧变，慌忙举" + weapon2->name() +
+                               HIR "格挡，却只觉一股排山倒海之力涌来，虎口剧痛，手中兵器竟脱手飞出！\n" NOR
+                               HIC "$N" HIC "剑势不绝，身形如鹤翔九天，居高临下，淡然道：「剑至此境，万法皆破。」\n" NOR;
+
+                        weapon2->unequip();
+                        weapon2->move(environment(me));
+                } else
+                {
+                        msg += CYN "$n" HIY "面对这惊世骇俗的一剑，全神贯注，将毕生武学精要汇于" + weapon2->name() +  "一点之上。\n" NOR
+                               HIY "「铮」的一声清鸣，剑芒与兵刃相击，火星四溅！$N" HIY "不退反进，剑锋一转：「$n" HIY "武功不凡，\n" NOR
+                               HIY "且看我独孤剑道精髓！」\n"NOR;
+                }
+                message_combatd(msg, me, target);
+        }
+        else
+        {
+                msg = HIC "$N" HIC "面色沉静，眸光如电，一缕缕凌厉剑气自体内透出。只见$N" HIC "手腕轻抖，" + weapon->name() + "\n" NOR
+                      HIW "剑尖在空中划过一道完美弧线，天地间仿佛只余这一道剑光！$n" HIW "只觉一股冷冽剑气迎面扑来！\n"  NOR;
+                message_combatd(msg, me, target);
+
+        }
+
+        msg = HIC "$N" HIC "剑式陡变，身法灵动如风，手中" + weapon->name() +"化作万千剑影，剑招之间浑然天成，无迹可寻！\n" NOR
+              HIC "霎时间" HIW "凌厉剑气"HIC"如银河倒泻，星芒璀璨，剑势纵横交错，已将$n" HIC" 周身要穴尽数笼罩！\n" NOR;
+
+        damage = damage_power(me, "sword");
+
+        //增加2%的最大内力增伤
+        if (me->query("max_neili") > 50)
+        {
+            damage += me->query("max_neili") / 50;
+        }
+
+
+
+        damage += query("jiali", me);
+        damage += damage / 500 * me->query_str();
+
+        // damage += damage / 10 * COMBAT_D->get_skill_aoyi_level(me, "苍松之劲");
+
+        if (COMBAT_D->get_skill_aoyi_level(me, "苍松之劲"))
+        {
+                int damage_add = COMBAT_D->get_skill_aoyi_level(me, "苍松之劲") * me->query_skill("sword") / 3;
+                damage += damage_add;
+                msg += HIC "刹那间，$N的「苍松之劲」与剑破长空剑势完美融合，剑气中蕴含千松万壑之力，似千年古松般挺拔不屈！这股无坚不摧的剑劲贯入$n体内！\n" NOR;
+        }
+
+        damage += me->query_skill("lonely-sword", 1);
+
+        if (!userp(target))
+        {
+            damage += damage / 2;
+        }
+        
+        if( ap / 2 + random(ap) > dp )
+        {
+                msg += COMBAT_D->do_damage(me, target, REMOTE_ATTACK, damage, 200+jy/10,
+                                           HIR "$n" HIR "面对这穷尽天下剑道精髓的一击，只觉目不暇接，心神俱骇！"
+                                           "这一剑已达登峰造极之境，避无可避，挡无可挡！霎时间" HIW "无数剑气" HIR "穿透$n"
+                                           "周身要穴，鲜血如雨飞洒！\n" NOR);
+
+
+                if( delta = 2 ) // 门派ab
+                {
+                        if( random(3) < delta )
+                        {
+                                if (damage < 0) damage = 1;
+                                COMBAT_D->real_damage(me, target, damage / 2);
+                                msg += HIC "$N" HIG "剑势未竭，身形飘逸如仙，剑尖在空中划出一道奇妙轨迹，又是一记精妙绝伦的一剑，令$n遭受灭顶之灾！\n" NOR;
+                        }
+                }
+
+                if (MIZHUAN_MASTER->has_mizhuan(me,"九曜剑枢"))
+                {
+                        msg += HIC "同时，$N的「九曜剑枢」秘传之力被激发，剑光中九点寒星骤现，如九曜当空，剑势更添无尽玄机！\n" NOR;
+                        me->start_busy(1);
+                }
+                else
+                {
+                        me->start_busy(2);
+                }
+
+                if( !target->is_busy() )
+                        target->start_busy(1);
+                addn("neili", -600, me);
+
+        } 
+        else
+        {
+                msg += CYN "$n" CYN "面对这破尽万法的" HIW "剑势" CYN "浑身汗毛倒竖，"
+                       "全神贯注，以毕生所学与之周旋，身形急速旋转腾挪，堪堪避开要害，却也心惊肉跳！\n" NOR;
+                me->start_busy(3);
+                addn("neili", -500, me);
+                target->start_busy(1);
+        }
+        message_combatd(msg, me, target);
+
+        hp=query("qi", target);
+        hp1=query("eff_qi", target);
+        if( hp1 < hp ) hp = hp1;
+
+        if( hp<query("max_qi", target)/10 )
+        {
+                msg  = HIR "$N" HIR "见$n" HIR"已是强弩之末，眼中寒芒一闪，剑尖遥指，一派宗师气度： \n" NOR
+                       HIR "「一生求道心不改，剑随我意破长空。」" + weapon->name() +HIR"剑芒一吐，如天降神剑，穿透$n心口要穴！\n" NOR
+                       HIR "$n" HIR "双目圆睁，不甘与恐惧交织，踉跄后退数步，喉中发出【咯咯】声响，终于缓缓倒下。 \n" NOR;
+                msg += HIC "$N" HIC "潇洒收剑，衣袂飘飘，身形化作一道青影，转瞬消失在天际。 \n" NOR;
+                message_combatd(msg, me, target);
+                if( hp < 1 )
+                        return 1;
+                COMBAT_D->real_damage(me, target, query("qi", target));
+                target->die(me);
+                return 1;
+        }
+
+        msg = HIC"$N" HIC "收剑而立，气势内敛，衣袂轻扬，留下一抹潇洒身影，踏风而去，仿佛从未出现。 \n" NOR;
+
+        message_combatd(msg, me, target);
+        return 1;
+}
+

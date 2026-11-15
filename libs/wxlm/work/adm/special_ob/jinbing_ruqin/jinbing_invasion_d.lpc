@@ -1,0 +1,607 @@
+
+#include <localtime.h>
+
+inherit F_DBASE;
+
+// 函数声明
+void create();
+void check_time();
+void announce_activity_start();
+void start_activity();
+void spawn_jinbing();
+void update_general_formation(string gate);
+void end_activity();
+void calculate_rewards();
+void defeat_jinbing(object player, string type);
+mapping query_player_data(string id);
+void update_gate_defense(string gate, int value);
+void check_early_end();
+void add_player_score(string id, int amount);
+void reset_daily_exchange();
+void save_data();
+void restore_data();
+void check_gate_defense();
+void remove_all_jinbing_and_generals();
+void check_daily_reset();
+void transfer_npcs_from_broken_gate(string broken_gate); // 新增函数声明
+
+// 活动状态
+nosave int is_active = 0;
+// 活动开始时间
+nosave int start_time = 0;
+
+// 活动持续时间(秒)
+#define DURATION 7200
+// 检查城门防御的间隔时间（秒）
+#define DEFENSE_CHECK_INTERVAL 60
+
+// 城门信息
+
+nosave mapping city_gates = ([
+    "青龙门": ([ "defense": 100, "jinbing": 20, "general": 1, "room": "/d/xiangyang/eastgate2" ]),
+    "白虎门": ([ "defense": 100, "jinbing": 20, "general": 1, "room": "/d/xiangyang/westgate2" ]),
+    "朱雀门": ([ "defense": 100, "jinbing": 20, "general": 1, "room": "/d/xiangyang/southgate2" ]),
+    "玄武门": ([ "defense": 100, "jinbing": 20, "general": 1, "room": "/d/xiangyang/northgate2" ])
+]);
+
+nosave mapping city_gates_pth_chinese = ([
+    "/d/xiangyang/eastgate2": "青龙门",
+    "/d/xiangyang/westgate2": "白虎门",
+    "/d/xiangyang/southgate2": "朱雀门",
+    "/d/xiangyang/northgate2": "玄武门"
+]);
+
+
+// 玩家积分和荣誉
+
+mapping player_data = ([]);
+
+// 每日兑换限制
+mapping daily_exchange_limit = ([]);
+
+// 活动开始时间设置
+#define ACTIVITY_START_HOUR 12  // 活动开始的小时（24小时制）
+#define ACTIVITY_START_MINUTE 0 // 活动开始的分钟
+#define ACTIVITY_ANNOUNCE_ADVANCE 15 // 活动开始前多少分钟进行公告
+
+// 在文件顶部添加新的变量
+int last_reset_time = 0;
+
+void create()
+{
+    restore_data();
+    seteuid(getuid());
+    set("channel_id", "金兵入侵系统");
+    CHANNEL_D->do_channel(this_object(), "sys", "金兵入侵系统已经启动。");
+    remove_all_jinbing_and_generals();// 清除所有金兵和将领
+
+    set_heart_beat(10); // 添加心跳
+}
+
+// 添加心跳函数
+void heart_beat()
+{
+    check_time();// 检查是否需要开启活动
+    check_daily_reset();// 检查是否需要重置每日兑换限制
+}
+
+// 新增check_daily_reset函数
+void check_daily_reset()
+{
+    int current_time = time();
+    mixed *local = localtime(current_time);
+    
+    // 如果不是同一天，或者是同一天但还没有重置过（上次重置时间小于当天的8点）
+    if (!is_same_day(last_reset_time, current_time) || 
+        (local[LT_HOUR] >= 8 && last_reset_time < current_time - (local[LT_HOUR] - 8) * 3600 - local[LT_MIN] * 60 - local[LT_SEC]))
+    {
+        // 如果当前时间已经过了8点，执行重置
+        if (local[LT_HOUR] >= 8)
+        {
+            reset_daily_exchange();
+            last_reset_time = current_time;
+            save_data(); // 保存last_reset_time
+        }
+    }
+}
+
+// 重置每日兑换
+void reset_daily_exchange()
+{
+    daily_exchange_limit = ([]);
+    last_reset_time = time();
+    save_data();
+    CHANNEL_D->do_channel(this_object(), "sys", "每日兑换限制已重置。");
+}
+
+// 检查时间，决定是否开启活动
+void check_time()
+{
+    mixed *local;
+    int announce_hour, announce_minute;
+    
+    local = localtime(time());
+
+    // 计算公告时间
+    announce_hour = ACTIVITY_START_HOUR;
+    announce_minute = ACTIVITY_START_MINUTE - ACTIVITY_ANNOUNCE_ADVANCE;
+    
+    // 如果分钟数为负，需要调整小时
+    if (announce_minute < 0)
+    {
+        announce_hour--;
+        announce_minute += 60;
+    }
+    
+    // 如果小时数为负，需要调整到前一天
+    if (announce_hour < 0)
+    {
+        announce_hour += 24;
+    }
+
+    // 检查是否到了活动公告时间
+    if (local[LT_HOUR] == announce_hour && 
+        local[LT_MIN] == announce_minute && 
+        !is_active)
+    {
+        announce_activity_start();
+    }
+    // 检查是否到了活动开始时间
+    else if (local[LT_HOUR] == ACTIVITY_START_HOUR && 
+             local[LT_MIN] == ACTIVITY_START_MINUTE && 
+             !is_active)
+    {
+        start_activity();
+    }
+
+}
+
+// 宣布活动即将开始
+void announce_activity_start()
+{
+    CHANNEL_D->do_channel(this_object(), "chat", HIR "【金兵入侵】活动将在" + 
+                          ACTIVITY_ANNOUNCE_ADVANCE + "分钟后开始，请各位英雄做好准备！" NOR);
+}
+
+// 开始活动
+void start_activity()
+{
+    is_active = 1;
+    start_time = time();
+    CHANNEL_D->do_channel(this_object(), "chat", HIR "【金兵入侵】活动正式开始！请各位英雄前往城门抵御金兵！" NOR);
+    spawn_jinbing();
+    call_out("end_activity", DURATION);
+    call_out("check_gate_defense", DEFENSE_CHECK_INTERVAL);
+}
+
+// 生成金兵和将领
+void spawn_jinbing()
+{
+    string *gates;
+    string gate, room_file;
+    int i;
+    object jinbing, general;
+
+    gates = keys(city_gates);
+
+    foreach (gate in gates)
+    {
+        room_file = city_gates[gate]["room"];
+
+        // 创建金兵
+        for (i = 0; i < city_gates[gate]["jinbing"]; i++)
+        {
+            jinbing = new("/adm/special_ob/day_quest/module/jinbing_npc");
+            jinbing->move(room_file);
+        }
+
+        // 创建将领
+        general = new("/adm/special_ob/day_quest/module/jinbing_general");
+        general->move(room_file);
+        city_gates[gate]["general_ob"] = general;
+    }
+}
+
+// 更新将领的战阵状态
+void update_general_formation(string gate)
+{
+    object general, room;
+    string room_file;
+    int jinbing_count;
+
+    if (!city_gates[gate])
+        return;
+
+    general = city_gates[gate]["general_ob"];
+    room_file = city_gates[gate]["room"];
+    room = find_object(room_file);
+
+    if (!room)
+        room = load_object(room_file);
+
+    jinbing_count = sizeof(filter_array(all_inventory(room), (: $1->query("id") == "jin bing" :)));
+
+    if (general && objectp(general))
+    {
+        general->update_jinbing_count(jinbing_count);
+    }
+}
+
+// 结束活动
+void end_activity()
+{
+    is_active = 0;
+    CHANNEL_D->do_channel(this_object(), "chat", HIR "【金兵入侵】活动结束！感谢各位英雄的参与！" NOR);
+    remove_all_jinbing_and_generals();
+
+    // 恢复城门防御
+    foreach (string gate in keys(city_gates))
+    {
+        city_gates[gate]["defense"] = 100;
+    }
+
+    calculate_rewards();
+
+}
+
+// 回收所有金兵和将领
+void remove_all_jinbing_and_generals()
+{
+    object *jinbing_list, *general_list, ob;
+    
+    // 获取所有金兵对象
+    jinbing_list = children("/adm/special_ob/day_quest/module/jinbing_npc");
+    
+    // 获取所有将领对象
+    general_list = children("/adm/special_ob/day_quest/module/jinbing_general");
+    
+    // 销毁所有金兵
+    foreach (ob in jinbing_list)
+    {
+        if (objectp(ob))
+        {
+            destruct(ob);
+        }
+    }
+    
+    // 销毁所有将领
+    foreach (ob in general_list)
+    {
+        if (objectp(ob))
+        {
+            destruct(ob);
+        }
+    }
+    
+    // 清除城门信息中的将领对象引用
+    foreach (string gate in keys(city_gates))
+    {
+        city_gates[gate]["general_ob"] = 0;
+    }
+    
+    CHANNEL_D->do_channel(this_object(), "sys", "所有金兵和将领已被清除。");
+}
+
+// 计算奖励
+void calculate_rewards()
+{
+    string *players, *top_players;
+    mapping sorted_players;
+    int i, bonus_exp, bonus_pot, base_exp, base_pot;
+    object player;
+
+    // 在函数顶部定义和初始化变量
+    players = keys(player_data);
+    sorted_players = ([]);
+
+    // 按荣誉值排序玩家
+    foreach (string id in players)
+    {
+        sorted_players[id] = player_data[id]["honor"];
+    }
+
+    // 使用$(variable)将局部变量传递到functional中
+    top_players = sort_array(players, (: player_data[$2]["honor"] - player_data[$1]["honor"] :));
+
+    // 发放奖励给前10名玩家
+    for (i = 0; i < sizeof(top_players) && i < 10; i++)
+    {
+        player = find_player(top_players[i]);
+        if (player)
+        {
+            bonus_exp = (10 - i) * 1000; // 第一名获得1万经验，依次递减
+            bonus_pot = (10 - i) * 2000;  // 第一名获得2000潜能，依次递减
+
+            player->add("combat_exp", bonus_exp);
+            player->add("potential", bonus_pot);
+
+            tell_object(player, sprintf(HIY "恭喜你在金兵入侵活动中获得第%d名！\n你获得了额外奖励：\n  经验：%d\n  潜能：%d\n" NOR,
+                                        i + 1, bonus_exp, bonus_pot));
+
+            // 给予特殊称号
+            if (i == 0)
+            {
+                player->set("title", HIR "金兵克星" NOR);
+                tell_object(player, HIR "你获得了「金兵克星」的称号！\n" NOR);
+            }
+        }
+
+        //清空荣誉
+        player_data[top_players[i]]["honor"] = 0;
+    }
+
+
+    // 给所有参与者发放基础奖励
+    foreach (string id in players)
+    {
+        player = find_player(id);
+        if (player)
+        {
+            base_exp = player_data[id]["honor"] * 100; // 每点荣誉奖励100经验
+            base_pot = player_data[id]["honor"] * 50;  // 每点积分奖励50潜能
+
+            player->add("combat_exp", base_exp);
+            player->add("potential", base_pot);
+
+            tell_object(player, sprintf(HIY "感谢你参与金兵入侵活动！\n你获得了基础奖励：\n  经验：%d\n  潜能：%d\n" NOR,
+                                        base_exp, base_pot));
+        }
+    }
+
+    // 清空玩家数据，为下次活动做准备
+    player_data = ([]);
+
+    // 发送全服公告
+    CHANNEL_D->do_channel(this_object(), "chat", HIR "【金兵入侵】活动奖励已经发放完毕，感谢各位英雄的参与！" NOR);
+}
+
+// 玩家击败金兵
+void defeat_jinbing(object player, string type)
+{
+    int score, honor;
+    string gate, player_id;
+
+    player_id = player->query("id");
+
+    if (type == "jinbing")
+    {
+        score = 100;
+        honor = 10;
+    }
+    else if (type == "general")
+    {
+        score = 2000;
+        honor = 200;
+    }
+    else
+    {
+        return;
+    }
+
+    if (!player_data[player_id])
+    {
+        player_data[player_id] = ([ "score": 0, "honor": 0 ]);
+    }
+
+    player_data[player_id]["score"] += score;
+    player_data[player_id]["honor"] += honor;
+
+    tell_object(player, sprintf("你获得了 %d 积分和 %d 荣誉！\n", score, honor));
+    save_data();
+    if (type == "jinbing")
+    {
+        object env;
+        gate = base_name(environment(player));
+        env = environment(player);
+
+        if (strsrch(gate, "/d/xiangyang/") != -1)
+        {
+            // gate = replace_string(gate, "/d/xiangyang/", "");
+            // update_general_formation(gate);
+            gate = city_gates_pth_chinese[gate];
+            update_general_formation(gate);
+        }
+    }
+
+}
+
+// 查询玩家积分和荣誉
+mapping query_player_data(string id)
+{
+    return player_data[id];
+}
+
+// 更新城门防御值
+void update_gate_defense(string gate, int value)
+{
+    if (city_gates[gate])
+    {
+        city_gates[gate]["defense"] += value;
+        if (city_gates[gate]["defense"] < 0)
+            city_gates[gate]["defense"] = 0;
+        if (city_gates[gate]["defense"] > 100)
+            city_gates[gate]["defense"] = 100;
+
+        // 发送消息通知玩家城门防御变化
+        if (value < 0)
+        {
+            CHANNEL_D->do_channel(this_object(), "chat", HIY "【金兵入侵】" + gate + "的防御降低了 " + (-value) + " 点，当前防御：" + city_gates[gate]["defense"] + NOR);
+        }
+        else if (value > 0)
+        {
+            CHANNEL_D->do_channel(this_object(), "chat", HIG "【金兵入侵】" + gate + "的防御提升了 " + value + " 点，当前防御：" + city_gates[gate]["defense"] + NOR);
+        }
+    }
+}
+
+// 检查活动是否应该提前结束
+void check_early_end()
+{
+    string gate;
+
+    foreach (gate in keys(city_gates))
+    {
+        if (city_gates[gate]["defense"] > 0)
+            return;
+    }
+
+    // 所有城门都被攻破，提前结束活动
+    remove_call_out("end_activity");
+    end_activity();
+    CHANNEL_D->do_channel(this_object(), "chat", HIR "【金兵入侵】所有城门都被攻破，活动提前结束！" NOR);
+}
+
+// 更新玩家积分
+void add_player_score(string id, int amount)
+{
+    if (!player_data[id])
+        player_data[id] = ([ "score": 0, "honor": 0 ]);
+
+    player_data[id]["score"] += amount;
+    if (player_data[id]["score"] < 0)
+        player_data[id]["score"] = 0;
+    
+    save_data();
+}
+
+// 保存数据
+void save_data()
+{
+    string file = "/data/jinbing_invasion";
+    assure_file(file);
+    save_object(file);
+}
+
+// 恢复数据
+void restore_data()
+{
+    string file = "/data/jinbing_invasion";
+    if (file_size(file) > 0)
+    {
+        restore_object(file);
+    }
+    if (last_reset_time == 0)
+    {
+        last_reset_time = time();
+    }
+}
+
+// 查询玩家每日兑换限制
+int query_daily_exchange(string id)
+{
+    return daily_exchange_limit[id] || 0;
+}
+
+// 更新玩家每日兑换限制
+void update_daily_exchange(string id, int amount)
+{
+    if (!daily_exchange_limit[id])
+        daily_exchange_limit[id] = 0;
+    
+    daily_exchange_limit[id] += amount;
+    save_data();
+}
+
+// 检查城门防御
+void check_gate_defense()
+{
+    string *gates, gate, room_file;
+    object room;
+    int jinbing_count, defense_loss;
+
+    if (!is_active)
+        return;
+
+    gates = keys(city_gates);
+
+    foreach (gate in gates)
+    {
+        room_file = city_gates[gate]["room"];
+        room = find_object(room_file);
+
+        if (!room)
+            room = load_object(room_file);
+
+        jinbing_count = sizeof(filter_array(all_inventory(room), (: $1->query("id") == "jin bing" :)));
+
+        // 计算防御损失：每个金兵造成1点防御损失
+        defense_loss = jinbing_count;
+
+        // 更新城门防御
+        update_gate_defense(gate, -defense_loss);
+
+        // 如果防御降到0或以下，发送警告并转移NPC
+        if (city_gates[gate]["defense"] <= 0)
+        {
+            CHANNEL_D->do_channel(this_object(), "chat", HIR "【金兵入侵】警告：" + gate + "防御已被攻破！" NOR);
+            transfer_npcs_from_broken_gate(gate);
+        }
+        else if (city_gates[gate]["defense"] <= 30)
+        {
+            CHANNEL_D->do_channel(this_object(), "chat", HIY "【金兵入侵】警告：" + gate + "防御已降至危险水平！" NOR);
+        }
+    }
+
+    // 检查是否应该提前结束活动
+    check_early_end();
+
+    // 如果活动仍在进行，继续定期检查
+    if (is_active)
+    {
+        call_out("check_gate_defense", DEFENSE_CHECK_INTERVAL);
+    }
+}
+
+// 新增函数：转移被攻破城门的NPC
+void transfer_npcs_from_broken_gate(string broken_gate)
+{
+    object room, npc, target_room;
+    string *available_gates, target_gate, room_file;
+    
+    // 获取被攻破城门的房间
+    room_file = city_gates[broken_gate]["room"];
+    room = find_object(room_file);
+    if (!room) room = load_object(room_file);
+    
+    // 获取还未被攻破的城门列表
+    available_gates = filter_array(keys(city_gates), (: city_gates[$1]["defense"] > 0 && $1 != $(broken_gate) :));
+    
+    // 如果没有可用的城门，直接返回
+    if (sizeof(available_gates) == 0) return;
+    
+    // 遍历被攻破城门中的所有NPC
+    foreach (npc in all_inventory(room))
+    {
+        if (npc->query("id") == "jin bing" || npc->query("id") == "jin jiangling")
+        {
+            // 随机选择一个目标城门
+            target_gate = available_gates[random(sizeof(available_gates))];
+            target_room = find_object(city_gates[target_gate]["room"]);
+            if (!target_room) target_room = load_object(city_gates[target_gate]["room"]);
+            
+            // 将NPC转移到目标城门
+            npc->move(target_room);
+            
+            // 更新将领的战阵状态（如果是将领的话）
+            if (npc->query("id") == "jin jiangling")
+            {
+                update_general_formation(target_gate);
+            }
+        }
+    }
+    
+    CHANNEL_D->do_channel(this_object(), "chat", HIY "【金兵入侵】" + broken_gate + "的金兵和将领已继续往其他城门发起进攻！" NOR);
+}
+
+
+
+int query_active()
+{
+    return is_active;
+}
+
+mapping query_city_gates()
+{
+    return city_gates;
+}
+

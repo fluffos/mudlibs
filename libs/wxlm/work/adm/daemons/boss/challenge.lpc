@@ -1,0 +1,311 @@
+// story:challenge 挑战
+
+
+
+// 内部函数
+string show_time();
+mixed  create_challenger();
+mixed  master_opinion(int n);
+mixed  continue_story(int n);
+int    find_respond(object ob);
+
+// 外部可以调用的函数
+void   stop_story();
+string cannot_respond(object ob);
+void   respone_for_challenge(object me);
+
+mixed *story = ({
+	(: show_time :),
+	"一位来自异域的武者踏入中原,扬言要挑战各路高手,一时间江湖风云涌动...",
+	(: create_challenger :),
+	(: master_opinion, 1 :),
+	(: master_opinion, 2 :),
+	(: master_opinion, 3 :),
+	(: master_opinion, 4 :),
+});
+
+string *where_list = ({
+	"/d/quanzhou/lunwulou",
+});
+
+#define NOT_READY		       0
+#define CHALLENGER_IS_WAITING	   1
+#define NO_USER_CAN_RESPOND	     2
+#define CHALLENGER_KILLED_BY_ULTRA      3
+#define CHALLENGER_IS_TOO_CHEAP	 4
+#define CHALLENGER_IS_FIGHTING	  5
+
+int stop;	       // FLAG: 是否需要终止故事
+int too_cheap;	  // FLAG: 敌人的水平是否太差(相比最高水平玩家而言)
+int next;	       // continue_story函数根据改值继续
+string accepted;	// 应战者姓名
+object cob;	     // 挑战者
+object rob;	     // 应战者
+object *ultra ;	 // 大宗师
+
+string *too_cheap_msg = ({
+	"$N冷冷一笑：大言不惭，阁下何人，竟敢如此狂妄？",
+	"只见一道寒光闪过，$N已被一股浑厚内力击飞，重重摔落在地，气息奄奄。",
+	"一位白眉老僧合十道：阿弥陀佛，天下武功，贵在修心。",
+});
+
+string *fenco = ({
+	"汪玉嫣", "黄帮主", "赵闵", "苗幽兰",
+	"原紫衣", "洛笙", "阿轲", "岳苓珊",
+	"霍卿同", "龙姑娘",
+});
+
+string *fenmsg = ({
+	"$C，此战关乎中原武林尊严，还望全力以赴！",
+	"$C，武林同道皆在观战，展现我中原武学之精髓！",
+	"$C，一招一式皆要显中原武林英雄本色，为中原武林拿下这一战！",
+	"$C，你的身后是千百年的武林传承，定要胜之！",
+	"$C，中原武学博大精深，岂容外敌小觑！请全力出手！",
+});
+
+string *menco = ({
+	"胡飞", "苗仁凤", "狄天云", "段羽",
+	"尹至平", "韦天宝", "令狐聪", "陈伽洛",
+	"杨改之", "石迫天", "张无极", "袁承志",
+});
+
+string *menmsg = ({
+	"$N，勇往直前，上乘之势可破其防守！",
+	"$N，此人上身破绽甚多，可攻其要害！",
+	"$N，观其下盘虚浮，可施展擒拿手法制其身形！",
+	"$N，其正手招式生疏，可寻机而入！", 
+	"$N，此人反手招式薄弱，可趁势而上！",
+});
+
+string prompt() { return HIR "【挑战】" NOR; }
+
+void create()
+{
+	seteuid(getuid());
+	stop = 0;
+	too_cheap = 0;
+	accepted = 0;
+	cob = 0;
+	rob = 0;
+	ultra = 0;
+}
+
+mixed query_story_message(int step)
+{
+	if (stop) return 0;
+	return step < sizeof(story) ? story[step] :
+				      continue_story(step - sizeof(story));
+}
+
+string show_time()
+{
+	return "时维" + NATURE_D->game_time() + "，天下英雄逐鹿中原之际。";
+}
+
+mixed create_challenger()
+{
+	object ob;
+	object *u;
+	int i,tmp,lv;
+	string where;
+
+	ob = NPC_D->create_challenger();
+
+	if (! ob)
+	{
+		stop_story();
+		return "此人行踪飘忽,不知所踪,恐已远遁他方...";
+	}
+
+	u = all_interactive();
+	lv = 3;
+	for(i=0;i<sizeof(u);i++)
+	{
+		tmp = to_int(pow(to_float(u[i]->query("combat_exp")*10),0.33333333));
+		if(lv<tmp) lv = tmp;
+	}
+	ob->set_lvl(lv);
+	where = where_list[random(sizeof(where_list))];
+	ob->move(where);
+	message("vision", ob->name() + "大摇大摆的走了过来，当街一立！\n", environment(ob));
+	CHANNEL_D->do_channel(this_object(), "rumor", "江湖传闻，" + ob->query("nation") + "有一位名唤" + ob->name(1) + "的异域武者，不远万里，慕名而来，欲在中原武林一试身手，在泉州" + where->query("short") + "处摆下擂台。");
+	next = NOT_READY;
+	cob = ob;
+	return ob->name() + "：“" + ob->challenge() + "”";
+}
+
+mixed master_opinion(int n)
+{
+	object ob;
+	object *u;
+
+	if (n == 1)
+		ultra = NPC_D->query_ultra_master();
+
+	ultra -= ({ 0 });
+	if (! sizeof(ultra))
+		ultra = NPC_D->query_ultra_master();
+
+	if (! cob)
+	{
+		stop_story();
+		return "此人竟不辞而别，真是有失江湖道义。";
+	}
+
+	ob = ultra[random(sizeof(ultra))];
+	ultra -= ({ ob });
+
+	if (n < 4)
+	{
+		ob->force_me("chat " + cob->query("opinion/msg")[n - 1]);
+		return 1;
+	}
+
+	u = all_interactive();
+	if (! sizeof(u))
+	{
+		if (! too_cheap)
+		{
+			ob->force_me("chat 唉，中原武林竟无一人敢出面应战，实在令人扼腕长叹！");
+			next = NO_USER_CAN_RESPOND;
+			return 1;
+		}
+
+		if (cob->query("nation") == "扶桑")
+		{
+			ob->force_me("chat 哼！倭寇狂徒，胆敢犯我中土！且看" + RANK_D->query_self(ob) + "手中兵刃！");
+			next = CHALLENGER_KILLED_BY_ULTRA;
+			return 1;
+		}
+
+		ob->force_me("chat 阁下修为尚欠火候，恐难与中原武林诸多高手相提并论。不妨归去潜心修炼，待功力大成之日，再来领略我中华武学之博大精深。");
+		next = CHALLENGER_IS_TOO_CHEAP;
+		return 1;
+	}
+
+	if (sizeof(u) < 10)
+	{
+		ob->force_me("chat* sigh");
+		ob->force_me("chat 江湖之中能与此人一较高下者虽众，然能堪当此重任者却是寥寥无几。");
+	} else
+	{
+		ob->force_me("chat* heng");
+		ob->force_me("chat 此人狂妄自大，不知天高地厚！我中原武林高手如云，定有能人出手教训！");
+	}
+	ob->force_me("chat 诸位武林同道，还望出手一展我中原武学渊源，以正我中原武林尊严！");
+	next = CHALLENGER_IS_WAITING;
+	return 1;
+}
+
+mixed continue_story(int n)
+{
+	string msg;
+
+	if (! cob)
+		return 0;
+
+	switch (next)
+	{
+	case CHALLENGER_IS_TOO_CHEAP:
+		if (n >= sizeof(too_cheap_msg))
+		{
+			stop_story();
+			return 0;
+		} else
+			return replace_string(too_cheap_msg[n], "$N", cob->name(1));
+		return;
+
+	case CHALLENGER_KILLED_BY_ULTRA:
+		cob->force_me("chat 羞愧难当！中原武学果然举世无敌，我弹丸小国又如何于千年古国争辉，在下在也不敢在中原高手面前叫嚣了！");
+		CHANNEL_D->do_channel(this_object(), "rumor", "听说扶桑武者" + cob->name(1) + "在中原武林高手面前黯然失色，一阵交锋下狠不得跪地求饶。");
+		destruct(cob);
+		stop_story();
+		return 0;
+
+	case NO_USER_CAN_RESPOND:
+		cob->force_me("chat* haha");
+		stop_story();
+		CHANNEL_D->do_channel( this_object(),
+			"rumor", "听闻来自" + cob->query("nation") +
+			"的" + cob->name(1) + "纵横中原，耀武扬威，竟无人能出面应战，此事传扬开来，令武林同道扼腕叹息，真是奇耻大辱。");
+		return cob->name(1) + "：“中原武林高手，不过如此，竟然无人敢应战！”";
+
+	case CHALLENGER_IS_FIGHTING:
+		if (! rob || environment(rob) != environment(cob))
+		{
+			stop_story();
+			if (rob)
+			{
+				rob->add("weiwang", -rob->query("weiwang") / 10);
+				rob->lost();
+			}
+			CHANNEL_D->do_channel( this_object(),
+			"rumor", "听闻" + accepted + "在和" + cob->query("nation") +
+			"" + cob->name(1) + "交手的时候临阵脱逃，使中原武林蒙羞！");
+			return cob->name(1) + "狂笑不止：“懦夫！中原武林都是一些懦夫！哈哈！”";
+		}
+
+		if (random(3)) return 1;
+		if (rob->query("gender") == "男性")
+			msg = fenco[random(sizeof(fenco))] + "大声喊道：" +
+			      fenmsg[random(sizeof(fenmsg))];
+		else
+			msg = menco[random(sizeof(menco))] + "大声喊道：" +
+			      menmsg[random(sizeof(menmsg))];
+		msg = replace_string(msg, "$N", rob->name(1));
+		msg = replace_string(msg, "$C", RANK_D->query_respect(rob));
+		return msg;
+	}
+
+	switch (n)
+	{
+	case 1:
+		return cob->name(1) +
+		       (random(2) ? "：“诸位豪杰，可有人愿与我一战？在下愿在此稍候。”"
+				  : "：“中原武林，难道无人敢与我一较高下？”");
+
+	case 6:
+		return cob->name(1) +
+		       (random(2) ? "略显焦躁，环顾四周。"
+				  : "时而仰望天际，时而俯瞰大地，神态自若。");
+
+	case 11:
+		return cob->name(1) +
+		       (random(2) ? "：“久闻中原武林藏龙卧虎，今日一见，却略感失望。”"
+				   : "：“莫非中原武学，徒有虚名？”");
+
+	case 16:
+		return cob->name(1) +
+		       (random(2) ? "微微摇头，轻叹一声，似有不屑之意。"
+				   : "冷哼一声，面露轻蔑之色。");
+	case 2700:
+		return cob->name(1) +
+		       (random(2) ? "：“中原武林，竟无一人是男儿？罢了，在下这就告辞！”"
+				   : "：“哈哈，所谓中原武术，不过尔尔！在下这就离去！”");
+
+	case 2705:
+		CHANNEL_D->do_channel(this_object(), "rumor", "传闻" +
+			cob->query("nation") + "武者" + cob->name(1) + "，在中原"
+			"扬威一番后，安然离去，令人扼腕。");
+		return 0;
+	}
+
+	return 1;
+}
+
+void stop_story()
+{
+	stop = 1;
+}
+
+varargs void remove(string euid)
+{
+	if (cob)
+	{
+		if (environment(cob))
+		{
+			message("vision", cob->name() + "面色微变，身形略显不稳，抱拳一礼，旋即转身离去。\n", environment(cob));
+		}
+		destruct(cob);
+	}
+}

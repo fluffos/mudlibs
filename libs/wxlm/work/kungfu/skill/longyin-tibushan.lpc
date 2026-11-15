@@ -1,0 +1,162 @@
+// longyin-tibushan.c 龙吟铁布衫
+
+
+inherit SKILL;
+
+int valid_enable(string usage) { return usage == "parry"; }
+
+int valid_learn(object me)
+{
+    if ((int)me->query_skill("lamaism", 1) < 150)
+        return notify_fail("你的密宗心法火候不够，无法领会龙吟铁布衫。\n");
+
+    if ((int)me->query_skill("parry", 1) < 150)
+        return notify_fail("你的基本招架水平太低，无法领会龙吟铁布衫。\n");
+
+    if ((int)me->query("max_neili") < 2000)
+        return notify_fail("你的内力修为不足，难以修习龙吟铁布衫。\n");
+
+    return 1;
+}
+
+int practice_skill(object me)
+{
+    if ((int)me->query("qi") < 70)
+        return notify_fail("你的体力太低了。\n");
+
+    if ((int)me->query("neili") < 70)
+        return notify_fail("你的内力不够练龙吟铁布衫。\n");
+
+    me->receive_damage("qi", 60);
+    me->add("neili", -60);
+    return 1;
+}
+
+int difficult_level()
+{
+    return 200;
+}
+
+mixed valid_damage(object ob, object me, int damage, object weapon)
+{
+    mixed result;
+    int ap, dp;
+
+    if ((int)me->query_skill("longyin-tibushan", 1) < 100 || 
+        (int)me->query("neili") < 300)
+        return;
+
+    // 修改ap和dp的计算方式，基于后天臂力
+    ap = ob->query_str();
+    dp = me->query_str();
+
+    // 判断对方是否使用太极拳
+    if (ob->query_skill_mapped("parry") == "taiji-quan")
+    {
+        result = ([ "damage": damage ]); // 保持原有伤害
+        result += (["msg" : HIY "$n" HIY "运起龙吟铁布衫，却被$N" HIY "的太极拳以柔克刚，直接破体！\n" NOR]);
+        return result;
+    }
+
+    if (ap / 2 + random(ap) < dp)  // 使用ap和dp对比来决定是否触发防御
+    {
+        int cost = damage / 4;
+        if (cost > 100) cost = 100;
+
+        result = ([ "damage": -(damage * 3 / 4) ]);
+
+        if (weapon)
+            cost /= 2;  // 应对兵器武学时消耗的内力降低50%
+
+        me->add("neili", -cost);
+
+        result += (["msg" : HIY "$n" HIY "运起龙吟铁布衫，全身筋骨顿时坚如钢铁，$N"
+                            HIY "的攻击竟然无法伤及分毫！\n" NOR]);
+
+        if (!weapon && random(100) < 25)
+        {
+            result = ([ "damage": damage ]); // 破体时伤害减免无效
+            result += (["msg" : HIR "$N" HIR "突然感到击中的部位软若棉絮，"
+                                "竟然无法借力，反被震得气血翻涌！同时$n" HIR "的防御也被破体！\n" NOR]);
+            ob->receive_damage("qi", damage / 4, me);
+            ob->receive_wound("qi", damage / 8, me);
+        }
+
+        return result;
+    }
+    else
+    {
+        result = HIY "$n" HIY "运起龙吟铁布衫抵挡，但是$N"
+                            HIY "的力道太强，招式依然奏效。\n" NOR;
+        COMBAT_D->set_bhinfo(result);
+        // return result;
+    }
+}
+
+int query_effect_parry(object attacker, object me)
+{
+    int lvl;
+
+    lvl = me->query_skill("longyin-tibushan", 1);
+    if (lvl < 100) return 0;
+    if (lvl < 150) return 50;
+    if (lvl < 200) return 60;
+    if (lvl < 250) return 70;
+    if (lvl < 300) return 80;
+    if (lvl < 350) return 90;
+    if (lvl < 400) return 100;
+    return 120;
+}
+
+string perform_action_file(string action)
+{
+    return __DIR__"longyin-tibushan/" + action;
+}
+
+string query_description()
+{
+    string msg;
+
+    msg = HIY "【龙吟铁布衫】" ZJBR NOR;
+    msg += WHT "雪山寺独门护体绝技，激发招架时运转此功，可极大增强防御能力，" ZJBR;
+    msg += WHT "全身宛如铜浇铁铸，坚不可摧，并蕴含反震之力。" ZJBR ZJBR;
+
+    msg += HIY "〖学习要求〗" ZJBR NOR; // valid_learn
+    msg += "  密宗心法 (`lamaism`) 等级不低于 " HIY "150" NOR " 级。" ZJBR;
+    msg += "  基本招架 (`parry`) 等级不低于 " HIY "150" NOR " 级。" ZJBR;
+    msg += "  最大内力 (`max_neili`) 不低于 " HIB "2000" NOR " 点。" ZJBR ZJBR;
+
+    msg += HIY "〖激发类型〗" ZJBR NOR; // valid_enable
+    msg += "  招架 (`parry`)。" ZJBR ZJBR;
+
+    msg += HIY "〖练习要求〗" ZJBR NOR; // practice_skill
+    msg += "  气血 (`qi`) 不低于 " HIR "70" NOR " 点。" ZJBR;
+    msg += "  内力 (`neili`) 不低于 " HIB "70" NOR " 点。" ZJBR;
+    msg += "  每次练习消耗气血 " HIR "60" NOR " 点，内力 " HIB "60" NOR " 点。" ZJBR ZJBR;
+
+    msg += HIY "〖学习难度〗" ZJBR NOR; // difficult_level
+    msg += "  难度系数：" HIC "200" NOR "。" ZJBR ZJBR;
+
+    msg += HIY "〖招架效果提升〗" ZJBR NOR; // query_effect_parry
+    msg += "  提升招架成功率，效果随技能等级提升（100级 +50%，最高400级 +120%）。" ZJBR ZJBR;
+
+    msg += HIY "〖攻防特效/被动效果〗" ZJBR NOR; // valid_damage
+    msg += "  铁布衫防御：等级达到 " HIY "100" NOR " 级且当前内力不低于 " HIB "300" NOR " 点时，招架成功时有几率触发。" ZJBR;
+    msg += "    触发判定：若 `自身后天膂力 > 攻击方后天膂力 / 2 + 随机(攻击方后天膂力)` 则触发。" ZJBR;
+    msg += "    完全防御：成功触发时，完全抵消本次伤害。" ZJBR;
+    msg += "    内力消耗：消耗内力 `所受伤害 / 4` 点（最高消耗 " HIB "100" NOR " 点）。若对方使用兵器，则消耗减半。" ZJBR;
+    msg += "    破体反震（对空手）：防御空手攻击时，有 " HIY "25%" NOR " 几率触发破体反震。" ZJBR;
+    msg += "      效果：自身防御失效（受到全额伤害），同时反震部分伤害给攻击方（伤害量为 `所受伤害 / 4` 的气血伤害和 `所受伤害 / 8` 的气血内伤）。" ZJBR;
+    msg += "    太极克制：对武当派太极拳 (`taiji-quan`) 的招架无效，会被直接破防。" ZJBR ZJBR;
+
+    msg += HIY "〖特殊招式 (Perform)〗" ZJBR NOR; // perform_action_file
+    msg += "  无。" ZJBR ZJBR;
+
+    msg += HIR "【注意事项】" ZJBR NOR;
+    msg += "1. 此功法依赖高等级、高内力以及高后天膂力支持。" ZJBR;
+    msg += "2. 防御效果主要依赖于自身与攻击方的后天膂力对比。" ZJBR;
+    msg += "3. 触发完全防御时会消耗内力，内力不足则效果失效。" ZJBR;
+    msg += "4. 对抗太极拳时需要特别注意，防御会被克制。" ZJBR;
+
+    return msg;
+}

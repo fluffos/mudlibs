@@ -1,0 +1,183 @@
+// 仓库命令文件：cangku.c
+// 功能：玩家存取仓库物品的命令
+// 作者：Lu Dexiang
+
+
+
+inherit F_CLEAN_UP;
+
+// 主函数：处理仓库的存取操作
+int main(object me, string arg)
+{
+    object item;
+    mapping items;
+    string cmd, item_id;
+    int amount;
+
+    // 无参数时，显示仓库内容
+    if (!arg)
+    {
+        return me->force_me("new_inventory 仓库");
+    }
+
+    // 解析命令参数
+    if (sscanf(arg, "%s %s %d", cmd, item_id, amount) != 3)
+    {
+        amount = 0;
+        if (sscanf(arg, "%s %s", cmd, item_id) != 2)
+        {
+            write("指令格式：cangku <存|取> <物品ID> [数量]\n");
+            write("说明：对于不可叠加物品，不需要指定数量。\n");
+            return 1;
+        }
+    }
+
+    // 处理存入操作
+    if (cmd == "存")
+    {
+        item = present(item_id, me);
+        if (!item)
+        {
+            write("你身上没有这个物品。\n");
+            return 1;
+        }
+
+        // 检查物品是否可存入
+        if (item->query("unique") || !clonep(item) || item->query("no_cun"))
+        {
+            write(item->name() + "不能储存在仓库里。\n");
+            return 1;
+        }
+
+        // 检查物品是否已装备
+        if (item->query("equipped"))
+        {
+            write(item->name() + "必须先解除装备才能存放。\n");
+            return 1;
+        }
+
+        // 检查容器内是否有物品
+        if (sizeof(all_inventory(item)))
+        {
+            write("请你先把" + item->name() + "里面的东西先拿出来。\n");
+            return 1;
+        }
+
+        if (item->query("money_id"))
+        {
+            write("存钱的话还是到钱庄去吧！\n");
+            return 1;
+        }
+
+        // 检查是否为活物
+        if (item->is_character())
+        {
+            write("活物不能存放在仓库里。\n");
+            return 1;
+        }
+
+        // 检查仓库容量
+        if ("/adm/special_ob/player/cangku/cangku_master"->is_cangku_full(me))
+        {
+            write("你的仓库已经满了。\n");
+            return 1;
+        }
+
+        // 处理存储数量
+        if (amount > 0)
+        {
+            if (!item->query_amount())
+            {
+                write("这个物品不能按数量存储。\n");
+                return 1;
+            }
+            if (amount > item->query_amount())
+            {
+                write("你身上没有那么多" + item->name() + "。\n");
+                return 1;
+            }
+            // 如果指定数量小于总数，拆分物品
+            if (amount < item->query_amount())
+            {
+                object new_item;
+                new_item = new(base_name(item));
+                new_item->set_amount(amount);
+                item->add_amount(-amount);
+                item = new_item;
+            }
+        }
+
+        // 添加物品到仓库
+        if ("/adm/special_ob/player/cangku/cangku_master"->add_item(me, item))
+        {
+            if (item->query_amount() > 0)
+                write("你将" + chinese_number(item->query_amount()) +
+                      item->query("base_unit") + item->name() +
+                      "存入了仓库。\n");
+            else
+                write("你将" + item->name() + "存入了仓库。\n");
+            destruct(item);
+            return 1;
+        }
+
+        write("存入失败。\n");
+        return 1;
+    }
+    // 处理取出操作
+    else if (cmd == "取")
+    {
+        items = "/adm/special_ob/player/cangku/cangku_master"->query_cangku_items(me);
+        if (!mapp(items) || !sizeof(items))
+        {
+            write("你的仓库是空的。\n");
+            return 1;
+        }
+
+        if (!items[item_id])
+        {
+            write("仓库中没有这个物品。\n");
+            return 1;
+        }
+
+        item = "/adm/special_ob/player/cangku/cangku_master"->take_item(me, item_id, amount);
+        if (!item)
+        {
+            write("取出失败。\n");
+            return 1;
+        }
+
+        if (item->move(me))
+        {
+            if (item->query_amount())
+                write("你从仓库取出" + (amount ? chinese_number(amount) : chinese_number(item->query_amount())) +
+                      item->query("base_unit") + item->name() + "。\n");
+            else
+                write("你从仓库取出" + item->name() + "。\n");
+            return 1;
+        }
+
+        write("你拿不下更多的东西了。\n");
+        destruct(item);
+        return 1;
+    }
+
+    write("指令格式：cangku <存|取> <物品ID> [数量]\n");
+    return 1;
+}
+
+// 帮助信息
+int help(object me)
+{
+    write(@HELP
+指令格式：cangku <存|取> <物品ID> [数量]
+
+这个命令可以让你存储和取出物品到你的仓库。
+
+注意：
+- 对于不可叠加物品，不需要指定数量。
+- 仓库容量有限，请合理安排存放物品。
+
+HELP
+    );
+    return 1;
+}

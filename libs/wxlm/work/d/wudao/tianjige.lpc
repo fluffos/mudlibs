@@ -1,0 +1,768 @@
+// 1.100万--200万经验（内功，轻功，招架有效等级不能小于400） 潜龙榜
+// 2.200万-400万经验（内功，轻功，招架有效等级不能小于600） 宗师榜
+// 3.500万级往上（内功，轻功，招架有效等级不能小于800） 尊者榜
+
+// 战胜获得3点评分，2万潜能。
+// 战败获得1点评分，2万潜能。
+
+// 1.比武逻辑，玩家先报名，报名以后自动分配对手。
+// 战胜获得3点评分，2万潜能。
+// 战败获得1点评分，2万潜能。
+// 2.随机匹配，只分配和经验范围内等同的对手。
+
+// 限时2分钟，2分钟后气血或精神百分比低的玩家淘汰。或者两分钟内淘汰对手，如果战斗过程中对手昏迷也淘汰。
+
+
+inherit ROOM;
+//比武轮数
+#define MAX_FIGHT_NUM 5
+//比武开始报名时间
+#define FIGHT_START_TIME 22
+//比武结束时间
+#define FIGHT_END_TIME 23
+//比武开始时间（分钟）
+#define FIGHT_START_MINUTE 10
+
+// check_out(object me): 当玩家战败或被淘汰时，调用该函数。恢复玩家的状态，并给予战败的奖励。
+// fight_application() : 玩家报名参加比武大会的函数。检查报名时间、是否已报名、是否满足武功激发等级要求等条件。如果满足条件，则将玩家加入对应的榜单，并通知玩家报名成功。
+// fight_classify(object me): 根据玩家的经验，将玩家分配到对应的榜单中。返回1表示成功，0表示失败。
+// fight_start(object me1, object me2): 开始比武的函数。将两个玩家传送到比武场，并开始战斗。
+// restore_status(object me): 恢复玩家的状态，移除临时属性。
+// init_player(object me): 初始化玩家的属性，设置比武结束后的处理函数。
+// check_win(object me): 检查玩家是否获胜。恢复玩家的状态，并给予获胜的奖励。
+// heart_beat(): 心跳函数，用于匹配玩家和淘汰玩家。每分钟调用一次。
+// match_players(): 匹配玩家进行比武。从每个榜单中随机选取两个玩家进行比武。
+// eliminate_players(): 淘汰玩家。检查每个比武房间的状态，如果只有一个玩家存活，则该玩家获胜。如果比武时间超过2分钟，则根据玩家的气血或精神百分比决定胜负。
+// valid_leave(object me, string dir): 检查玩家是否已报名参加比武，如果已报名则不允许离开房间。
+// determine_winner_on_timeout(object room): 当比武时间超过2分钟时，根据玩家的气血或精神百分比决定胜负。
+int check_out(object me);
+int fight_application();
+int fight_classify(object me);
+int fight_start(object me1, object me2);
+private void restore_status(object me);
+private void init_player(object me);
+int check_win(object me);
+void heart_beat();
+void match_players();
+void eliminate_players();
+void determine_winner_on_timeout(object room);
+int calculate_survival_rate(object player);
+
+mapping fightPointList = ([]);//比武积分列表
+mapping fight_classify = ([
+	"潜龙":({}),
+	"宗师":({}),
+	"尊者":({}),
+]);
+
+//要求的武功激发等级列表
+string *fight_require_skill = ({
+	"force",
+	"dodge",
+	"parry",
+});
+
+//定义各个榜单的武功要求
+mapping fight_require_level = ([
+	"潜龙":400,
+	"宗师":600,
+	"尊者":700,
+]);
+
+//定义经验范围，如果是数组，表示范围，如果是数字，表示最低要求
+mapping fight_exp_range = ([
+	"潜龙":({1000000,2000000}),
+	"宗师":({2000000,4000000}),
+	"尊者":4000000,
+]);
+
+//已经报名的id
+string *allusers = ({});
+
+object *fightRoom = ({});
+
+//已经比武的轮数
+int fight_round = 0;
+
+int start_time = 0;
+int is_fighting = 0;
+
+void create()
+{
+	set("short", "天机阁");
+	set("long", @LONG
+一座富丽堂皇的楼阁，天下武者向往的圣地。
+LONG );
+	set("exits", ([
+		"south" : "/d/city/ximenroad",
+	]));
+	set("action_list", ([
+		"报名" : "fight_application",
+	]));
+	set("out_room","/d/city/guangchang");
+	setup();
+	// set_heart_beat(1);  // 始终保持心跳
+}
+
+void init()
+{
+	add_action("fight_application","fight_application");
+	add_action("fight_application","wdbaoming");
+}
+
+int valid_leave(object me, string dir)
+{
+	if (member_array(me->query("id"), allusers) != -1)
+	{
+		tell_object(me,"你离开了天机阁的比武场。\n");
+	}
+	return ::valid_leave(me, dir);
+}
+
+/**
+ * @brief 终止比武函数
+ * @details 比武结束后，统计比武结果，并公示积分
+ *          对未结算的房间进行超时判定
+ *          计算排名并发放奖励
+ */
+void stop_fight()
+{
+	object *obs;
+	object ob;
+	string *ids;
+	int i;
+
+	obs = all_inventory(this_object());
+	ids = keys(fightPointList);
+
+	// 遍历所有的房间，并执行判断胜负（只处理未结算的房间）
+	foreach (object room in fightRoom)
+	{
+		// 只对未结算的房间进行判定，避免重复结算
+		if(!room->query("settled"))
+		{
+			room->set("settled", 1);
+			determine_winner_on_timeout(room);
+		}
+	}
+
+	for (i = 0; i < sizeof(ids); i++)
+	{
+		if (objectp(ob = find_player(ids[i])))
+		{
+			tell_object(ob, "比武结束，你的比武积分为" + fightPointList[ids[i]] + "。\n");
+		}
+	}
+
+	// 过滤掉积分为0的玩家
+	fightPointList = filter_mapping(fightPointList, (: $2 > 0 :));
+
+	// 根据积分排序fight_classify，将积分高的排在前面，积分低的排在后面
+	foreach(string classify in keys(fight_classify))
+	{
+		fight_classify[classify] = sort_array(fight_classify[classify], (: $(fightPointList)[$1] > $(fightPointList)[$2] ? -1 : 1 :));
+	}
+
+
+	//精灵记录积分
+	FAMILY_D->set_fight_point(fightPointList);
+	FAMILY_D->set_fight_classify(fight_classify);
+
+	// 遍历fight_classify，显示榜单积分
+	foreach(string classify in keys(fight_classify))
+	{
+		//排名
+		int rank = 1;
+
+		foreach(string id in fight_classify[classify])
+		{
+			object player_ob;
+			// 全局通知那个榜单的那个选手活动了多少分，调用message函数
+			if (!undefinedp(fightPointList[id]))
+			{
+				if (player_ob = find_player(id))
+				{
+
+					//根据积分数奖励绑定元宝,没点积分奖励5绑定元宝
+					player_ob->add("bind_yuanbao", fightPointList[id] * 5);
+					tell_object(player_ob, HIG"你获得了"+fightPointList[id]+"分，获得了"+(fightPointList[id] * 5)+"绑定元宝的奖励！"NOR"\n");
+					message("channel:rumor", HIR"【天下武道大会】"HIY+player_ob->query("name")+"在"+classify+"榜中获得了"+fightPointList[id]+"分。位列：" + chinese_number(rank) +  NOR"\n",users());
+				}
+			}
+			rank++;
+		}
+	}
+
+	for (i = 0; i < sizeof(obs); i++)
+	{
+		if (userp(obs[i]))
+		{
+			ids -= ({obs[i]->query("id")});
+		}
+	}
+
+	fightPointList = ([]);
+	fight_classify = ([
+		"潜龙":({}),
+		"宗师":({}),
+		"尊者":({}),
+	]);
+	allusers = ({});
+	fightRoom = ({});
+	// 重新设置轮
+	fight_round = 0;
+	start_time = time();
+	// 停止心跳
+	set_heart_beat(0);
+	//比武结束
+	is_fighting = 0;
+}
+
+
+// 申请比武,也就是报名，安装经验分配到对应的榜单中
+int fight_application()
+{
+	object me;
+	int time = time();
+	me = this_player();
+
+
+
+	// 不是周一到周五
+	if (localtime(time)[6] > 5 || localtime(time)[6] == 0)
+	{
+		tell_object(me, "比武时间是周一至周五每天晚上"+FIGHT_START_TIME+"点到"+FIGHT_END_TIME+"点。\n");
+		//今天是周几,三目判断，如果是0就是周日否则就是周几，chinese_number是将数字转换成中文数字
+		tell_object(me, "今天是周" + (localtime(time)[6] == 0 ? "日" : chinese_number(localtime(time)[6])) + "。\n");
+		return 1;
+	}
+
+	//可以报名的检查
+	if (!is_current_hour(FIGHT_START_TIME))
+	{
+		tell_object(me, "比武时间是周一至周五每天晚上"+FIGHT_START_TIME+"点到"+FIGHT_END_TIME+"点。\n");
+		//现在是几点
+		tell_object(me, "现在是"+chinese_number(localtime(time)[2])+"点。\n");
+		return 1;
+	}
+
+	// 是否已经报名
+	if (member_array(me->query("id"), allusers) != -1)
+	{
+		tell_object(me, "你已经报名参加比武了。\n");
+		return 1;
+	}
+
+	// 报名截止时间，分钟
+	if (localtime(time)[1] > FIGHT_START_MINUTE)
+	{
+		tell_object(me,"今天的比武报名已经结束\n");
+		return 1;
+	}
+
+	// 检查是否在报名时间内
+	if (localtime(time)[2] != FIGHT_START_TIME || localtime(time)[1] > FIGHT_START_MINUTE)
+	{
+		tell_object(me, "现在不是报名时间。\n");
+		return 1;
+	}
+
+	// 检查比武是否已经开始
+	if (is_fighting)
+	{
+		tell_object(me, "比武已经开始，无法报名。\n");
+		return 1;
+	}
+
+	if (fight_classify(me))
+	{
+		set_heart_beat(1);
+		tell_object(me, "你已经成功报名参加比武。\n");
+		return 1;
+	}
+	else
+	{
+		tell_object(me, "报名失败。\n");
+		return 0;
+	}
+
+}
+
+// //心跳函数,第一步逻辑，检查所有的房间，如果有房间内有一个玩家，那么就开始代表这个玩家获胜
+// //第二步逻辑，每次检查房间的时候，都给房间的存在时间加1，如果存在时间超过2分钟，并且房间内有两个玩家，那么就判断气血或者精神百分比低的玩家淘汰
+void heart_beat()
+{
+	int current_time = time();
+	int current_hour = localtime(current_time)[2];
+	int current_minute = localtime(current_time)[1];
+
+	// 检查是否到了比武开始时间
+	if (current_hour == FIGHT_START_TIME && current_minute == FIGHT_START_MINUTE && !is_fighting)
+	{
+		start_time = current_time;
+		is_fighting = 1;
+		message("channel:rumor", HIR"【天下武道大会】"HIY"比武大会正式开始！"NOR"\n", users());
+	}
+
+	// 检查是否到了比武结束时间
+	if (current_hour == FIGHT_END_TIME && is_fighting)
+	{
+		stop_fight();
+		is_fighting = 0;
+		return;
+	}
+
+	if (is_fighting)
+	{
+		match_players();
+		eliminate_players();
+	}
+}
+
+// 	//开始匹配玩家吗，各个榜单随机匹配
+// 	//如果一个榜单的玩家数量大于等于2，那么就开始匹配，注意匹配逻辑，已经在战斗的玩家不参与匹配，利用一个临时交换数组，每次判断过滤掉已经在战斗的玩家和不在当前地图，也就是this_object()的玩家
+// 	//如果一个玩家正在战斗,is_fighting()返回1，如果一个玩家正在战斗，那么就不参与匹配，直接过滤掉
+// 	//匹配时从临时数组中随机取出一个玩家，然后再从临时数组中随机取出一个玩家，然后开始比武。
+// 	//比武的逻辑在fight_start函数中
+// 	//匹配成功后，将这两个玩家从临时数组中删除，然后开始比武
+void match_players()
+{
+    object *tmp;
+    object me1, me2;
+
+	// 没有正在战斗的房间才开始匹配
+	if(sizeof(fightRoom) > 0)
+	{
+		return;
+	}
+
+	//如果比武轮数大于等于最大比武轮数，那么就停止比武开始结算,放在具体开始匹配之前。
+	if (fight_round >= MAX_FIGHT_NUM)
+	{
+		stop_fight();
+		set_heart_beat(0);
+		return;
+	}
+
+
+	//每轮至少1分钟的准备时间
+	if(time() < query("delay_time"))
+	{
+		// 下一轮比赛还有xx秒
+		// message_vision(HIR"【天下武道大会】"HIY"下一轮比赛还有"+(query("delay_time") - time())+"秒。\n"NOR,users());
+		if (time() % 10 == 0)
+		tell_room(this_object(),HIR"【天下武道大会】"HIY"下一轮比赛还有"+(query("delay_time") - time())+"秒。\n");
+		return;
+	}
+
+	fight_round++;
+
+    foreach(string classify in keys(fight_classify))
+    {
+        if(sizeof(fight_classify[classify]) >= 1)
+        {
+            tmp = ({});
+
+            foreach(string player_id in fight_classify[classify])
+            {
+				object ob;
+
+				ob = find_player(player_id);
+
+                if(!objectp(ob) || ob->is_fighting() || environment(ob) != this_object())
+                {
+                    continue;
+                }
+
+				tmp += ({ob});
+            }
+
+
+
+			// 如果只有一个玩家，直接本轮终止
+			if(sizeof(tmp) < 2)
+			{
+				//天下武道大会通知，由于xx榜人数不足，第x轮xx榜比武终止
+				message("channel:rumor", HIR"【天下武道大会】"HIY"由于"+classify+"榜人数不足，第" + chinese_number(fight_round) + "轮"+classify+"榜比武终止。"NOR"\n",users());
+				continue;
+				// break;
+			}
+
+			// 是否有轮空者
+			if(sizeof(tmp) % 2 != 0)
+			{
+				// 当前玩家数量，全屏公告
+				message("channel:rumor", HIR"【天下武道大会】"HIY"第" + chinese_number(fight_round) + "轮比武中，"+classify+"榜共有" + chinese_number(sizeof(tmp)) + "名玩家参与比武。"NOR"\n",users());
+				// 随机一个玩家轮空
+				me1 = tmp[random(sizeof(tmp))];
+				tmp -= ({me1});
+				check_win(me1);
+				tell_object(me1, "你在本轮比武中轮空晋级！\n");
+			}
+
+			// 使用while
+			while(sizeof(tmp) > 0)
+			{
+				me1 = tmp[random(sizeof(tmp))];
+				tmp -= ({me1});
+				me2 = tmp[random(sizeof(tmp))];
+				tmp -= ({me2});
+
+				fight_start(me1, me2);
+			}
+
+
+        }
+    }
+
+	set("delay_time",time() + 120);
+
+	// 第几轮比武开始了
+	message("channel:rumor", HIR"【天下武道大会】"HIY"第" + chinese_number(fight_round) + "轮比武开始了,下一轮在2分钟后。"NOR"\n",users());
+}
+
+void determine_winner_on_timeout(object room)
+{
+    // 获取房间内的两名玩家
+    object me1 = room->query("player1");
+    object me2 = room->query("player2");
+	int per1, per2;
+
+    // 如果两名玩家都在房间内
+    if(!me1 || !me2) return; // 优化点：提前返回，减少嵌套
+
+
+    // 计算玩家的生存率
+    per1 = calculate_survival_rate(me1);
+    per2 = calculate_survival_rate(me2);
+
+    // 比较生存率决定胜利者
+    if(per1 == per2)
+    {
+        // 经验不相等取经验否则各有50%胜率
+        if (me1->query("combat_exp") != me2->query("combat_exp"))
+        {
+            (me1->query("combat_exp") > me2->query("combat_exp")) ? check_win(me1) : check_win(me2);
+        }
+        else
+        {
+            // 使用明确的if-else结构提高可读性
+            if (random(2) == 0)
+            {
+				check_out(me2); //把淘汰放在前面是为了和心跳函数读取如果房间内只有一位玩家的情况下此玩家胜利的情况下，让逻辑保持一致。在多线程的情况下，可能会存在心跳执行优先度在winner之前。
+                check_win(me1);
+            }
+            else
+            {
+				check_out(me1);
+                check_win(me2);
+            }
+        }
+    }
+    else
+    {
+        // 根据生存率决定胜利者和失败者
+        if (per1 < per2)
+        {
+            check_out(me1);
+            check_win(me2);
+        }
+        else
+        {
+            check_out(me2);
+            check_win(me1);
+        }
+    }
+}
+
+// 计算玩家的生存率
+int calculate_survival_rate(object player)
+{
+    int qixue = player->query("eff_qi") * 100;
+    int max_qi = player->query("max_qi");
+    int jingshen = player->query("eff_jing") * 100 / player->query("max_jing");
+
+    if (max_qi == 0) max_qi = 1; // 优化点：避免除零错误
+
+    qixue /= max_qi;
+    return qixue < jingshen ? qixue : jingshen;
+}
+
+/**
+ * @brief 淘汰玩家函数，检查战斗房间状态并判定胜负
+ * @details 遍历所有战斗房间，处理以下情况：
+ *          1. 房间内只剩一个玩家时，判定该玩家获胜
+ *          2. 房间超时时，根据生存率判定胜负
+ *          3. 清理空房间
+ *          使用settled标记避免重复结算
+ */
+void eliminate_players()
+{
+	object *empty_rooms = ({});
+	object *players;
+
+    foreach(object room in fightRoom)
+    {
+		// 如果房间已经结算过，跳过
+		if(room->query("settled"))
+		{
+			room->add("exist_time", 2);
+			if(sizeof(all_inventory(room)) == 0)
+			{
+				empty_rooms += ({room});
+			}
+			continue;
+		}
+
+        players = filter_array(all_inventory(room), (: playerp :));
+
+        // 筛选出房间内的玩家，并检查是否只有一个玩家
+        if(sizeof(players) == 1)
+        {
+            // 标记房间已结算，避免重复判定
+            room->set("settled", 1);
+            check_win(players[0]);
+        }
+        else if(sizeof(players) == 2 && (room->query("exist_time") > 120 || is_current_hour(FIGHT_END_TIME)))
+        {
+            // 房间存在时间超过120秒或到了结束时间，进行超时判定
+            room->set("settled", 1);
+            determine_winner_on_timeout(room);
+        }
+
+		room->add("exist_time", 2);
+
+		if(sizeof(all_inventory(room)) == 0)
+		{
+			empty_rooms += ({room});
+		}
+    }
+
+	// 如果房间为空，删除房间并删除房间列表中的房间
+	foreach(object room in empty_rooms)
+	{
+		fightRoom -= ({room});
+		destruct(room);
+	}
+}
+
+// 属于那个层次的比武,直接分配到对应的比武层次缓存中。然后等待匹配。返回1表示成功，0表示失败。
+int fight_classify(object me)
+{
+	int exp = me->query("combat_exp");
+	string classify;
+
+
+	if (exp < 1000000)
+	{
+		//资格不够，无法参加比赛返回0
+		tell_object(me, "你的实战经验不足，无法参加比武。\n");
+		return 0;
+	}
+
+	// 开始分配榜单
+	foreach(classify in keys(fight_exp_range))
+	{
+		if (intp(fight_exp_range[classify]))
+		{
+			if (exp >= fight_exp_range[classify])
+			{
+				fight_classify[classify] += ({me->query("id")});
+				allusers += ({me->query("id")});
+				tell_object(me, "你已经成功报名参加" + classify + "榜的比武。\n");
+				return 1;
+			}
+		}
+		else
+		{
+			if (exp >= fight_exp_range[classify][0] && exp <= fight_exp_range[classify][1])
+			{
+				fight_classify[classify] += ({me->query("id")});
+				allusers += ({me->query("id")});
+				tell_object(me, "你已经成功报名参加" + classify + "榜的比武。\n");
+				return 1;
+			}
+		}
+	}
+
+
+
+	return 1;
+
+
+}
+
+//匹配到的两个玩家进入竞技场比武，直接new一个竞技场的对象，然后将这两个玩家传送到竞技场开始比武。
+//竞技场的对象在当前目录下的jingji.c文件中
+int fight_start(object me1, object me2)
+{
+	object jingji;
+	jingji = new(__DIR__"jingji");
+	jingji->set("player1",me1);
+	jingji->set("player2",me2);
+
+	fightRoom += ({jingji});
+
+	me1->move(jingji);
+	me2->move(jingji);
+
+	// 设定比武结束后的处理函数
+	init_player(me1);
+	init_player(me2);
+
+	me1->kill_ob(me2);
+	me2->kill_ob(me1);
+
+	//这里应该是通知xx组的1和2号玩家开始比武了
+	message("channel:rumor", HIR"【天下武道大会】"HIY+me1->name()+"和"+me2->name()+"开始了激烈的比武。"NOR"\n",users());
+	return 1;
+}
+
+private void init_player(object me)
+{
+	tell_object(me, HIY "你来到了天机阁的比武场..."NOR"\n");
+	me->set_override("unconcious", (: call_other, __FILE__, "check_out" :));
+	me->set_override("die", (: call_other, __FILE__, "check_out" :));
+	me->set_override("quit", (: call_other, __FILE__, "check_quit" :));
+	me->set_temp("backup/killer", me->query_killer());
+	me->set_temp("backup/want", me->query_want());
+	me->set_temp("in_pkd", 1);
+
+	me->set("backup/condition", me->query_condition());
+	me->clear_condition();
+}
+
+private void restore_status(object me)
+{
+	mapping my;
+	mapping cnd;
+	string *ks;
+	int i;
+
+	me->delete_temp("in_pkd");
+	me->delete_override("unconcious");
+	me->delete_override("die");
+	me->delete_override("quit");
+	me->remove_all_enemy(1);
+	me->remove_all_killer();
+	me->clear_condition();
+	me->receive_damage("qi", 0);
+
+
+	cnd = me->query("backup/condition");
+	me->delete("backup/condition");
+	me->delete_temp("block_msg/all");
+	if (! mapp(cnd)) return;
+	ks = keys(cnd);
+	for (i = 0; i < sizeof(ks); i++)
+		me->apply_condition(ks[i], cnd[ks[i]]);
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+}
+
+
+/**
+ * @brief 玩家战败处理函数
+ * @param object me 战败的玩家对象
+ * @return int 返回1表示处理成功
+ * @details 恢复玩家状态，给予战败奖励（1点评分，5000经验，1万潜能），将玩家传送回天机阁
+ *          使用tianji_settled标记避免重复结算
+ */
+int check_out(object me)
+{
+	mapping my;
+
+	// 防止重复结算
+	if(me->query_temp("tianji_settled"))
+	{
+		return 1;
+	}
+	me->set_temp("tianji_settled", 1);
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+
+	tell_object(me, HIR "\n你觉得眼前一阵模糊...这下完了！"NOR"\n");
+
+	if(me->is_busy())
+	{
+		me->interrupt_me(me,me->query_busy());
+	}
+	//失败的奖励以及提示
+	fightPointList[me->query("id")] += 1;
+
+	//5000经验
+	me->add("combat_exp", 5000);
+	me->add("potential", 10000);
+	// 设定休整时间15秒
+	me->set("tianji_time",time() + 15);
+	tell_object(me, HIG "你获得了1点评分，1万潜能的奖励！"NOR"\n");
+	tell_object(me, HIR "\n你在本轮比武中战败了！"NOR"\n");
+
+
+	restore_status(me);
+	me->move(this_object());
+	message("vision", "一个黑影倏的窜了出来，随即就是啪的一声，就见" + me->name() +"摔倒了地上，一副半死不活的样子。\n", environment(me), ({ me }));
+	tell_object(me, "半昏半迷中，你觉得被人拎了起来，又重重的摔倒了地上。\n");
+	if (! living(me))
+		me->revive();
+
+	// 移除结算标记
+	me->delete_temp("tianji_settled");
+	return 1;
+}
+
+
+/**
+ * @brief 玩家获胜处理函数
+ * @param object me 获胜的玩家对象
+ * @return int 返回1表示处理成功
+ * @details 恢复玩家状态，给予获胜奖励（3点评分，8000经验，1.5万潜能），将玩家传送回天机阁
+ *          使用tianji_settled标记避免重复结算
+ */
+int check_win(object me)
+{
+	mapping my;
+
+	// 防止重复结算
+	if(me->query_temp("tianji_settled"))
+	{
+		return 1;
+	}
+	me->set_temp("tianji_settled", 1);
+
+	my = me->query_entire_dbase();
+	my["jing"]   = my["eff_jing"]   = my["max_jing"];
+	my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+	my["qi"]     = my["eff_qi"]     = my["max_qi"];
+	my["neili"]  = my["max_neili"];
+
+	fightPointList[me->query("id")] += 3;
+	//8000经验
+	me->add("combat_exp", 8000);
+	me->add("potential", 15000);
+	// 设定休整时间15秒
+	me->set("tianji_time",time() + 15);
+
+	//获得的奖励
+	tell_object(me, HIG "你获得了3点评分，1.5万潜能的奖励！"NOR"\n");
+	tell_object(me, HIR "\n你在本轮比武中获胜晋级！"NOR"\n");
+
+	if(me->is_busy())
+		me->interrupt_me(me,me->query_busy());
+
+	restore_status(me);
+	me->move(this_object());
+
+	// 移除结算标记
+	me->delete_temp("tianji_settled");
+	return 1;
+}
+

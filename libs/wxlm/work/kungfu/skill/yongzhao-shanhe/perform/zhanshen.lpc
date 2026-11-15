@@ -1,0 +1,192 @@
+// zhanshen.c 战神附体
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+#define ZHANSHEN "「" HIR "战神附体" NOR "」"
+
+/**
+ * @brief 获取绝技名称
+ * @return string 绝技显示名称
+ */
+string query_name() { return "战神"ZJBR"附体"; }
+
+/**
+ * @brief 战神附体外功绝技
+ * @param object me 使用者
+ * @param object target 目标对象
+ * @return int 1表示成功，0表示失败
+ * @details 蚩尤战神降临，不死不休，自损换取更强战力
+ */
+int perform(object me, object target)
+{
+    string msg;
+    int ap, dp;
+    int damage;
+    int mo_level;
+    int self_damage;
+
+    object weapon;
+    string skill_type, skill_name;
+    if (!target)
+    {
+        me->clean_up_enemy();
+        target = me->select_opponent();
+    }
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail(ZHANSHEN "只能对战斗中的对手使用。\n");
+
+
+    weapon = me->query_temp("weapon");
+
+    // 判断武器类型和对应的技能
+    if (!weapon)
+    {
+        // 空手：拳脚
+        skill_type = "unarmed";
+        skill_name = "拳脚";
+        if (me->query_skill_mapped("unarmed") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为拳脚，难以施展" ZHANSHEN "。\n");
+        if (me->query_skill_prepared("unarmed") != "yongzhao-shanhe")
+            return notify_fail("你现在没有准备使用永照山河经，难以施展" ZHANSHEN "。\n");
+    }
+    else if (weapon->query("skill_type") == "sword")
+    {
+        // 持剑：剑法
+        skill_type = "sword";
+        skill_name = "剑法";
+        if (me->query_skill_mapped("sword") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为剑法，难以施展" ZHANSHEN "。\n");
+    }
+    else if (weapon->query("skill_type") == "blade")
+    {
+        // 持刀：刀法
+        skill_type = "blade";
+        skill_name = "刀法";
+        if (me->query_skill_mapped("blade") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为刀法，难以施展" ZHANSHEN "。\n");
+    }
+    else
+    {
+        return notify_fail(ZHANSHEN "只能空手、持剑或持刀施展。\n");
+    }
+
+    if (me->query_skill("yongzhao-shanhe", 1) < 240)
+        return notify_fail("你的永照山河经还不够娴熟，难以施展" ZHANSHEN "。\n");
+
+    if (me->query_skill_mapped("force") != "yongzhao-shanhe")
+        return notify_fail("你现在没有激发永照山河经为内功，难以施展" ZHANSHEN "。\n");
+
+    if (me->query("neili") < 400)
+        return notify_fail("你的内力不够，难以施展" ZHANSHEN "。\n");
+
+    if (me->query("qi") < me->query("max_qi") / 3)
+        return notify_fail("你的气血不足，无法承受战神附体的反噬。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    // 获取魔血染刀意境等级
+    mo_level = COMBAT_D->get_skill_aoyi_level(me, "魔血染刀");
+
+    if (!weapon)
+        msg = HIR "$N" HIR "仰天长啸，双目血红，蚩尤战神之意涌现，"
+              "不惜自损也要与$n" HIR "血战到底！\n" NOR;
+    else
+        msg = HIR "$N" HIR "仰天长啸，双目血红，手举" + weapon->name() + HIR "，蚩尤战神之意涌现，"
+              "不惜自损也要与$n" HIR "血战到底！\n" NOR;
+
+    message_combatd(msg, me, target);
+
+    // 根据武器类型计算AP/DP，确保公平对应
+    ap = me->query_skill("force") + me->query_skill(skill_type) + me->query_con();
+
+    // DP也相应调整，保持公平性
+    if (skill_type == "unarmed")
+        dp = target->query_skill("force") + target->query_skill("dodge") + target->query_con();
+    else
+        dp = target->query_skill("force") + target->query_skill("parry") + target->query_con();
+
+    // 计算自损伤害（参考蚩尤狂战决huaxue.c）
+    self_damage = me->query("max_qi") / 6; // 自损1/6气血
+
+    // 魔血染刀意境减少自损，增加威力
+    if (mo_level > 0)
+    {
+        self_damage = self_damage * (10 - mo_level / 2) / 10; // 减少自损
+        ap += mo_level * 25; // 增强魔血染刀对AP的加成
+        message_combatd(HIR "$N" HIR "体内魔血染刀奥义运转，战神之力更加恐怖！\n" NOR, me, target);
+    }
+
+    // 执行自损
+    me->receive_damage("qi", self_damage);
+    me->add("neili", -400);
+
+    if (!userp(target))
+    {
+        ap = ap * 3 / 2;
+    }
+
+    if (!COMBAT_D->hit_determination(me, target, ap, dp))
+    {
+        msg = HIY "然而$n" HIY "毫不示弱，硬生生抵挡住了$N" HIY "的狂暴攻击！\n" NOR;
+        me->start_busy(4); // 失败惩罚更重
+    }
+    else
+    {
+        int qi_percent = me->query("qi") * 100 / me->query("max_qi");
+        me->start_busy(2);
+
+        // 强化伤害计算：内功+拳脚+最大气血+加力（以伤换伤，威力最强）
+        damage = me->query_skill("force") + me->query_skill("unarmed");
+        damage += me->query("max_qi") / 20; // 提升气血转换效率
+        damage += me->query("jiali"); // 加力全额计入
+        damage *= 3; // 高倍数伤害
+
+        // 战神附体特殊效果：当前气血越低，伤害越高
+        if (qi_percent < 50)
+        {
+            damage += damage * (50 - qi_percent) / 100; // 气血越低伤害越高
+            msg = HIR "$N" HIR "气血不足反而激发了更强的战意！\n" NOR;
+            message_combatd(msg, me, target);
+        }
+
+        // 魔血染刀意境伤害加成
+        if (mo_level > 0)
+        {
+            damage += damage * mo_level * 10 / 100; // 每层+10%伤害
+        }
+
+        if (!userp(target))
+        {
+            damage = damage * 3 / 2;
+        }
+
+        msg = HIR "$n" HIR "被战神之力击中，如遭雷击！\n" NOR;
+
+        // 使用真实伤害
+        COMBAT_D->real_damage(me, target, damage);
+
+        // 额外效果：战神附体有几率造成震慑
+        if (random(3) == 0)
+        {
+            target->start_busy(2 + mo_level / 4);
+            msg += HIR "$n" HIR "被蚩尤战神的威势震慑，动作迟缓！\n" NOR;
+        }
+
+        // 特殊效果：如果目标气血很低，有几率即死
+        if (target->query("qi") < target->query("max_qi") / 5 && mo_level >= 3)
+        {
+            COMBAT_D->real_damage(me, target, target->query("qi"));
+            msg += HIR "$n" HIR "在战神威压下，彻底失去战斗能力！\n" NOR;
+        }
+    }
+
+    // 显示自损信息
+    msg += HIY "(" + me->name() + "受到反噬，损失" + self_damage + "点气血)\n" NOR;
+
+    message_combatd(msg, me, target);
+    return 1;
+}

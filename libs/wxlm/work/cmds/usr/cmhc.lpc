@@ -1,0 +1,148 @@
+
+
+inherit F_CLEAN_UP;
+
+void display_synthesis_info(object me, string dan_id, string arg, mapping name_list);
+void handle_synthesis(object me, string dan_id, int could_dan, mapping path);
+void handle_submission(object me, string arg, string dan_id);
+
+int main(object me, string arg)
+{
+    mapping path = ([
+        "中品冲脉丹": "/clone/vip/dan_chongmai2",
+        "上品冲脉丹": "/clone/vip/dan_chongmai3",
+    ]);
+
+    mapping name_list = ([
+        "chongmai dan": "下品冲脉丹",
+        "chongmai dan2": "中品冲脉丹",
+        "chongmai dan3": "上品冲脉丹",
+    ]);
+
+    if (arg)
+    {
+        string dan_id;
+        int number;
+
+        if (sscanf(arg, "%s confirm", dan_id) == 1)
+        {
+            int my_dan = me->query("cmhc_dan/" + dan_id);
+            int could_dan = (int)(my_dan / 3);
+
+            if (my_dan < 3)
+            {
+                return notify_fail("你没有足够的材料合成。\n");
+            }
+
+            if (my_dan < 3 * could_dan)
+            {
+                return notify_fail("你的材料不足以合成。\n");
+            }
+
+            handle_synthesis(me, dan_id, could_dan, path);
+            return 1;
+        }
+
+        if (sscanf(arg, "%s submit %s", arg, dan_id) == 2)
+        {
+            handle_submission(me, arg, dan_id);
+            return 1;
+        }
+
+        if (sscanf(arg, "%s %d", arg, number) == 2)
+        {
+            write(INPUTTXT("你想合成个" + arg + "？" ZJBR "请确认你的背包空间足够。", "cmhc " + arg + " $txt#") + "\n");
+            return 1;
+        }
+
+        if (arg == "中品冲脉丹")
+        {
+            dan_id = "chongmai dan";
+        }
+        else if (arg == "上品冲脉丹")
+        {
+            dan_id = "chongmai dan2";
+        }
+        else
+        {
+            return notify_fail("暂时没有这种丹药合成。\n");
+        }
+
+        display_synthesis_info(me, dan_id, arg, name_list);
+    }
+    else
+    {
+        string msg = ZJOBLONG "你要执行什么操作？\n" ZJOBACTS2;
+        msg += "合成中品冲脉丹:cmhc 中品冲脉丹" ZJSEP;
+        msg += "合成上品冲脉丹:cmhc 上品冲脉丹\n";
+        write(msg);
+    }
+
+    return 1;
+}
+
+void display_synthesis_info(object me, string dan_id, string arg, mapping name_list)
+{
+    string msg;
+    string *button = ({});
+    int my_dan = me->query("cmhc_dan/" + dan_id);
+    int could_dan = (int)(my_dan / 3);
+    object *inv = filter_array(all_inventory(me), (: $1->query("id") == $(dan_id) :));
+
+    msg = sprintf("你当前的合成信息：\n共提交%s:%d颗\n可合成%s:%d颗\n请选择需要提交的材料，注意一经提交化为丹液，无法退回。", name_list[dan_id], my_dan, arg, could_dan);
+
+    if (!sizeof(inv))
+    {
+        msg += "\n" HIR "你没有对应的材料。" NOR;
+    }
+    else
+    {
+        foreach (object ob in inv)
+        {
+            button += ({ sprintf("%s(%d颗):cmhc %s submit %s", ob->query("name"), ob->query_amount(), file_name(ob), arg) });
+        }
+    }
+
+     button += ({ sprintf("确认合成:cmhc %s confirm", dan_id) });
+     button += ({ "返回:cmhc" });
+
+     tell_object(me, popup_comb(msg, button));
+}
+
+void handle_synthesis(object me, string dan_id, int could_dan, mapping path)
+{
+    string result_id;
+    object dan2;
+
+    if (dan_id == "chongmai dan")
+    {
+        result_id = "中品冲脉丹";
+    }
+    else if (dan_id == "chongmai dan2")
+    {
+        result_id = "上品冲脉丹";
+    }
+
+    me->add("cmhc_dan/" + dan_id, -3 * could_dan);
+    dan2 = new_bind(path[result_id]);
+    dan2->set_amount(could_dan);
+    dan2->move(me);
+
+     tell_object(me, pop_final("合成成功，获得" + could_dan + "枚" + dan2->query("name") + "。"));
+}
+
+void handle_submission(object me, string arg, string dan_id)
+{
+    object ob = present(arg, me);
+
+    if (!objectp(ob) || !ob->query("needle/level") || ob->query_amount() < 1)
+    {
+          tell_object(me, "你没有对应的材料。\n");
+          return;
+    }
+
+    me->add("cmhc_dan/" + ob->query("id"), ob->query_amount());
+    destruct(ob);
+    me->force_me("cmhc " + dan_id);
+    tell_object(me, pop_final("提交成功，你的合成信息已更新。"));
+}

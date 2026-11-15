@@ -1,0 +1,345 @@
+/**
+ * @brief 望月台 - 中秋节活动地图
+ * @details 中秋节当天晚上8点-9点开启赏月活动，定时发放月饼和红包奖励
+ * @author LPC开发者
+ * @date 2025
+ */
+
+inherit ROOM;
+
+// 函数原型声明
+void create();
+void init();
+void heart_beat();
+void give_yuebing();
+void give_hongbao();
+int is_activity_time();
+int do_qiang_hongbao(string arg);
+void select_lucky_king(int hongbao_round);
+
+/**
+ * @brief 创建望月台房间
+ */
+void create()
+{
+    set("short", HIY"望月台"NOR);
+    set("long", @LONG
+这里是望月台，位于小秦淮东方的一处高台。台上视野开阔，可尽览秦淮河的月色美景。
+中秋之夜，明月当空，银辉洒满台面，美不胜收。台上摆放着精致的桌椅，还有各式糕点果品。
+许多游人聚集于此，共赏明月，品茗谈笑，好不热闹。
+在中秋节当天晚上8点至9点，这里将举行盛大的赏月活动。
+LONG );
+
+    set("exits", ([
+        "west" : __DIR__"xiaoqinhuai",
+    ]));
+
+    set("outdoors", "nanyang");
+
+    // 活动相关设置
+    // set("activity_start", 1759668535);  // 测试开始时间
+    // set("activity_end", 1759669860);    // 测试结束
+    set("activity_start", 1759752000);  // 中秋节晚上8点时间戳
+    set("activity_end", 1759755600);    // 中秋节晚上9点时间戳
+    set("yuebing_timer", 0);            // 月饼发放计时器
+    set("hongbao_timer", 0);            // 红包发放计时器
+    set("hongbao_round", 0);            // 红包轮次计数器
+
+    set_heart_beat(1);
+
+    setup();
+}
+
+/**
+ * @brief 初始化函数
+ */
+void init()
+{
+    add_action("do_qiang_hongbao", "qiang_hongbao");
+}
+
+/**
+ * @brief 判断是否在活动时间内
+ * @return int 1表示在活动时间内，0表示不在
+ */
+int is_activity_time()
+{
+    int current_time, start_time, end_time;
+
+    current_time = time();
+    start_time = query("activity_start");
+    end_time = query("activity_end");
+
+    if (current_time >= start_time && current_time < end_time)
+        return 1;
+
+    return 0;
+}
+
+/**
+ * @brief 发放月饼给随机玩家
+ */
+void give_yuebing()
+{
+    object *players, target, yuebing;
+    int player_count;
+
+    players = all_inventory(this_object());
+    players = filter_array(players, (: userp($1) :));
+
+    player_count = sizeof(players);
+
+    if (player_count == 0)
+        return;
+
+    // 随机选择一名玩家
+    target = players[random(player_count)];
+
+    if (!target || !objectp(target))
+        return;
+
+    // 创建月饼并发放
+    yuebing = new_bind("/clone/misc/zhongqiu_yuebing");
+
+    if (yuebing) {
+        yuebing->set_amount(1);
+        yuebing->move(target);
+
+        tell_object(target, HIY"【望月台】"NOR HIW"一阵月光洒落，你获得了一块"HIY"中秋月饼"HIW"！"NOR"\n");
+        message("vision", HIY"只见月光闪烁，一块中秋月饼飘然落入" + target->query("name") + "的手中。"NOR"\n",
+            this_object(), ({target}));
+    }
+}
+
+/**
+ * @brief 发放红包（抢红包模式，每轮5个红包）
+ */
+void give_hongbao()
+{
+    object *players;
+    int i, player_count, hongbao_round;
+    string msg;
+
+    players = all_inventory(this_object());
+    players = filter_array(players, (: userp($1) :));
+
+    player_count = sizeof(players);
+
+    if (player_count == 0)
+        return;
+
+    // 生成新的红包轮次ID
+    hongbao_round = query("hongbao_round") + 1;
+    set("hongbao_round", hongbao_round);
+
+    // 初始化本轮红包数据
+    set("hongbao_" + hongbao_round + "_winners", ({}));
+    set("hongbao_" + hongbao_round + "_count", 0);
+    set("hongbao_" + hongbao_round + "_max", 5);
+
+    // 广播红包雨开始
+    message("vision", HIR"【望月台】"NOR HIM"月光洒落，五个中秋红包从天而降！快点击弹窗抢红包！"NOR"\n",
+        this_object());
+
+    // 给所有在场玩家发送抢红包弹窗
+    msg = HIR"【中秋红包雨】"NOR"\n";
+    msg += HIY"月光洒落，五个中秋红包从天而降！\n";
+    msg += "每个红包价值"HIG"绑定元宝+2000"HIY"！\n";
+    msg += "从抢到红包的玩家中将随机选出一名运气王，\n";
+    msg += "运气王可额外获得"HIM"绑定元宝+6000"HIY"或"HIM"黄色真意自选宝箱"HIY"！\n";
+    msg += "手快有，手慢无，快抢！"NOR"\n";
+
+    for (i = 0; i < player_count; i++) {
+        if (!players[i] || !objectp(players[i]))
+            continue;
+
+        tell_object(players[i], popup_comb(msg, ({
+            HIR"立即抢红包:qiang_hongbao " + hongbao_round
+        })));
+    }
+
+    // 10秒后自动结算红包
+    call_out("select_lucky_king", 10, hongbao_round);
+}
+
+/**
+ * @brief 玩家抢红包动作
+ * @param string arg 红包轮次ID
+ * @return int 1表示成功，0表示失败
+ */
+int do_qiang_hongbao(string arg)
+{
+    object me;
+    int hongbao_round, current_count, max_count;
+    object *winners;
+
+    me = this_player();
+
+    if (!arg) {
+        tell_object(me, "请通过弹窗点击抢红包！\n");
+        return 1;
+    }
+
+    hongbao_round = to_int(arg);
+
+    if (hongbao_round != query("hongbao_round")) {
+        tell_object(me, HIY"这一轮红包已经结束了，请等待下一轮！"NOR"\n");
+        return 1;
+    }
+
+    // 检查是否已经抢过
+    winners = query("hongbao_" + hongbao_round + "_winners");
+    if (!arrayp(winners))
+        winners = ({});
+
+    if (member_array(me, winners) != -1) {
+        tell_object(me, HIY"你已经抢过这一轮的红包了！"NOR"\n");
+        return 1;
+    }
+
+    // 检查红包是否已经抢完
+    current_count = query("hongbao_" + hongbao_round + "_count");
+    max_count = query("hongbao_" + hongbao_round + "_max");
+
+    if (current_count >= max_count) {
+        tell_object(me, HIY"红包已经被抢光了，下次要快一点哦！"NOR"\n");
+        return 1;
+    }
+
+    // 抢到红包
+    winners += ({ me });
+
+    set("hongbao_" + hongbao_round + "_winners", winners);
+    set("hongbao_" + hongbao_round + "_count", current_count + 1);
+
+    // 发放红包
+    me->add("bind_yuanbao", 2000);
+
+    tell_object(me, HIR"【抢红包成功】"NOR HIY"恭喜你抢到了中秋红包，获得绑定元宝+2000！"NOR"\n");
+    message("vision", HIY + me->query("name") + "抢到了一个中秋红包！（" + (current_count + 1) + "/5）"NOR"\n",
+        this_object(), ({me}));
+
+    return 1;
+}
+
+/**
+ * @brief 选择运气王并发放奖励
+ * @param int hongbao_round 红包轮次ID
+ */
+void select_lucky_king(int hongbao_round)
+{
+    object *winners, lucky_king;
+    object box;
+    string lucky_king_name, *winner_names;
+
+    // 检查是否是当前轮次
+    if (hongbao_round != query("hongbao_round"))
+        return;
+
+    winners = query("hongbao_" + hongbao_round + "_winners");
+
+    if (!arrayp(winners) || sizeof(winners) == 0) {
+        message("vision", HIY"本轮红包雨无人抢到红包，真是可惜！"NOR"\n", this_object());
+        return;
+    }
+
+    winner_names = map(winners, (: $1->query("name") :));
+
+    // 广播抢到红包的玩家
+    message("vision", HIY"本轮红包雨结束！共有" + chinese_number(sizeof(winners)) + "位玩家抢到红包：\n"
+        + implode(winner_names, "、") + NOR"\n", this_object());
+
+    // 从抢到红包的玩家中随机选出运气王
+    lucky_king = winners[random(sizeof(winners))];
+
+    // 运气王奖励
+    if (lucky_king && objectp(lucky_king)) {
+        lucky_king_name = lucky_king->query("name");
+
+        // 50%概率获得6000绑定元宝或黄色真意自选宝箱
+        if (random(2) == 0) {
+            // 获得6000绑定元宝
+            lucky_king->add("bind_yuanbao", 6000);
+            tell_object(lucky_king, HIM"【运气王】"NOR HIR"恭喜你成为本轮运气王！额外获得绑定元宝+6000！"NOR"\n");
+            message("vision", HIM"【望月台】"NOR HIR"恭喜" + lucky_king_name + "成为本轮运气王，获得额外奖励（绑定元宝+6000）！"NOR"\n",
+                this_object());
+        } else {
+            // 获得黄色真意自选宝箱
+            box = new_bind("/clone/box/zhenyi/yellow_zixuan_box");
+            if (box) {
+                box->set_amount(1);
+                box->move(lucky_king);
+                tell_object(lucky_king, HIM"【运气王】"NOR HIR"恭喜你成为本轮运气王！获得"HIY"黄色真意自选宝箱"HIR"一个！"NOR"\n");
+                message("vision", HIM"【望月台】"NOR HIR"恭喜" + lucky_king_name + "成为本轮运气王，获得黄色真意自选宝箱！"NOR"\n",
+                    this_object());
+            }
+        }
+    }
+
+    // 清理本轮红包数据
+    delete("hongbao_" + hongbao_round + "_winners");
+    delete("hongbao_" + hongbao_round + "_count");
+    delete("hongbao_" + hongbao_round + "_max");
+}
+
+/**
+ * @brief 心跳函数，控制活动奖励发放
+ */
+void heart_beat()
+{
+    int yuebing_timer, hongbao_timer;
+
+    // 检查是否在活动时间内
+    if (!is_activity_time())
+    {
+        // 如果活动刚结束，发送公屏提示
+        if (query("activity_started") && !query("activity_ended"))
+        {
+            set("activity_ended", 1);
+            set_heart_beat(0);
+            CHANNEL_D->do_channel(load_object("/clone/misc/msgd"), "chat",
+                HIY"中秋赏月活动圆满结束！感谢各位的参与，期待明年再会！"NOR);
+        }
+
+        // 如果不在活动时间内，重置活动标志
+        if (query("activity_started"))
+            delete("activity_started");
+        return;
+    }
+
+    // 如果活动刚开始，发送公屏提示
+    if (!query("activity_started"))
+    {
+        set("activity_started", 1);
+        // 重置活动结束标志
+        if (query("activity_ended"))
+            delete("activity_ended");
+        CHANNEL_D->do_channel(load_object("/clone/misc/msgd"), "chat",
+            HIY"中秋佳节，赏月活动正式开始！望月台上红包雨不断，快来参加吧！"NOR);
+    }
+
+    // 获取计时器
+    yuebing_timer = query("yuebing_timer");
+    hongbao_timer = query("hongbao_timer");
+
+    // 增加计时器（心跳间隔为2秒）
+    yuebing_timer += 2;
+    hongbao_timer += 2;
+
+    // 每10秒发放一次月饼
+    if (yuebing_timer >= 10) {
+        give_yuebing();
+        yuebing_timer = 0;
+    }
+
+    // 每5分钟（300秒）发放一次红包
+    if (hongbao_timer >= 300) {
+        give_hongbao();
+        hongbao_timer = 0;
+    }
+
+    // 更新计时器
+    set("yuebing_timer", yuebing_timer);
+    set("hongbao_timer", hongbao_timer);
+}
+

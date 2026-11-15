@@ -1,0 +1,340 @@
+/**
+    * @brief 挥剑求道副本Boss房间
+    * @details 巅峰杨改之所在的决战之地
+    */
+
+#include <room.h>
+
+inherit ROOM;
+
+void create()
+{
+    set("short", HIR "剑道巅峰" NOR);
+    set("long", @LONG
+这里是山谷的最高处，一个巨大的圆形练武台。四周悬崖峭壁，
+只有一条窄路可以上来。练武台中央立着一块巨石，上面刻着
+"剑道巅峰"四个大字。整个台面光滑如镜，显然经过了无数次
+剑招的洗礼。一个身影静静地站在台上，背对着来路，似乎在
+等待着什么。
+LONG);
+
+    // 通常Boss房间不设置出口，依靠副本系统处理
+    set("exits", ([
+        // 可以添加返回路径，但通常由副本系统处理
+    ]));
+
+    // 加载Boss
+    set("objects", ([
+        __DIR__"npc/peak_yang" : 1,
+    ]));
+
+    set("no_clean_up", 1); // 副本房间通常不清理
+    set("is_fuben_room", 1); // 副本房间标记
+
+    // 环境物品描述和交互
+    set("item_desc", ([
+        "【练武台】" : "这个练武台历经千年风雨，见证了无数剑客的较量。",
+        "【巨石】" : popup_comb("剑道巅峰", ({
+            "膜拜:kneel",
+            "参悟剑意:meditate stone"
+        })),
+        "【悬崖】" : "四周的悬崖峭壁，显示着这里的险要和神圣。深不见底，令人胆寒。",
+        "【台面】" : popup_comb("光滑台面", ({
+            "整理衣装:tidy",
+            "检查装备:check equipment"
+        })),
+    ]));
+
+    // 动作列表
+    set("action_list", ([
+        "凝神静气" : "concentrate"
+    ]));
+
+    // 特殊的环境效果
+    set("light", 3);
+    set("listen", "default", "你听到阵阵剑鸣之声在空中回荡。");
+    set("smell", "default", "空气中弥漫着一股凌厉的剑气。");
+
+    setup();
+}
+
+/**
+    * @brief 初始化函数
+    * @details 添加特殊动作和环境效果
+    */
+void init()
+{
+    add_action("do_kneel", "kneel");
+    add_action("do_bow", "bow");
+    add_action("do_meditate", "meditate");
+    add_action("do_tidy", "tidy");
+    add_action("do_check", "check");
+    add_action("do_concentrate", "concentrate");
+}
+
+/**
+    * @brief 下跪动作
+    * @param string arg 参数
+    * @return int 执行结果
+    * @details 在剑道巅峰下跪表示对剑道的敬意
+    */
+int do_kneel(string arg)
+{
+    object me = this_player();
+    object boss;
+
+    if (!me) return 0;
+
+    boss = present("dianfeng yang guo", this_object());
+
+    if (me->is_fighting()) {
+        notify_fail("战斗中无法下跪。\n");
+        return 0;
+    }
+
+    message_vision("$N对着剑道巅峰恭敬地跪下。\n", me);
+
+    if (boss && !boss->is_fighting()) {
+        call_out("boss_reaction", 1, boss, me);
+    }
+
+    return 1;
+}
+
+/**
+    * @brief Boss反应
+    * @param object boss Boss对象
+    * @param object me 玩家对象
+    * @details Boss对玩家敬意的反应
+    */
+void boss_reaction(object boss, object me)
+{
+    if (!boss || !me || environment(boss) != this_object() || environment(me) != this_object())
+        return;
+
+    if (boss->is_fighting()) return;
+
+    boss->command("nod " + me->query("id"));
+    boss->command("say 能以如此敬意对待剑道，你已经具备了挑战的资格。");
+}
+
+/**
+    * @brief 鞠躬动作
+    * @param string arg 参数
+    * @return int 执行结果
+    * @details 向剑道巅峰鞠躬
+    */
+int do_bow(string arg)
+{
+    object me = this_player();
+
+    if (!me) return 0;
+
+    if (me->is_fighting()) {
+        notify_fail("战斗中无法鞠躬。\n");
+        return 0;
+    }
+
+    message_vision("$N对着剑道巅峰深深鞠躬。\n", me);
+
+    return 1;
+}
+
+/**
+    * @brief 冥想动作
+    * @param string arg 参数
+    * @return int 执行结果
+    * @details 参悟剑意或普通冥想
+    */
+int do_meditate(string arg)
+{
+    object me = this_player();
+
+    if (!me) return 0;
+
+    if (me->is_busy()) {
+        notify_fail("你现在正忙着其他事情。\n");
+        return 0;
+    }
+
+    if (me->is_fighting()) {
+        notify_fail("战斗中无法冥想。\n");
+        return 0;
+    }
+
+    if (arg == "stone") {
+        if (me->query_temp("meditated_stone")) {
+            notify_fail("你已经参悟过剑道巅峰石碑了。\n");
+            return 0;
+        }
+
+        message_vision("$N对着剑道巅峰的石碑参悟剑意。\n", me);
+        me->set_busy(5);
+        call_out("finish_stone_meditation", 5, me);
+    } else {
+        message_vision("$N盘腿而坐，开始冥想。\n", me);
+        me->set_busy(3);
+        call_out("finish_normal_meditation", 3, me);
+    }
+
+    return 1;
+}
+
+/**
+    * @brief 整理衣装动作
+    * @param string arg 参数
+    * @return int 执行结果
+    */
+int do_tidy(string arg)
+{
+    object me = this_player();
+
+    if (!me) return 0;
+
+    if (me->is_fighting()) {
+        notify_fail("战斗中无法整理衣装。\n");
+        return 0;
+    }
+
+    message_vision("$N在光滑的台面前整理衣装，神情肃穆。\n", me);
+
+    // 小幅恢复精神
+    me->add("jing", 100);
+    if (me->query("jing") > me->query("max_jing"))
+        me->set("jing", me->query("max_jing"));
+
+    return 1;
+}
+
+/**
+    * @brief 检查装备动作
+    * @param string arg 参数
+    * @return int 执行结果
+    */
+int do_check(string arg)
+{
+    object me = this_player();
+
+    if (!me) return 0;
+
+    if (arg == "equipment") {
+        message_vision("$N仔细检查自己的装备。\n", me);
+        me->command("eq");
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+    * @brief 凝神静气动作
+    * @param string arg 参数
+    * @return int 执行结果
+    */
+int do_concentrate(string arg)
+{
+    object me = this_player();
+
+    if (!me) return 0;
+
+    if (me->is_busy()) {
+        notify_fail("你现在正忙着其他事情。\n");
+        return 0;
+    }
+
+    if (me->is_fighting()) {
+        notify_fail("战斗中无法凝神静气。\n");
+        return 0;
+    }
+
+    message_vision("$N凝神静气，准备迎接挑战。\n", me);
+
+    // 恢复部分内力
+    me->add("neili", me->query("max_neili") / 20);
+    if (me->query("neili") > me->query("max_neili"))
+        me->set("neili", me->query("max_neili"));
+
+    me->set_busy(2);
+    return 1;
+}
+
+/**
+    * @brief 完成石碑参悟
+    * @param object me 玩家对象
+    */
+void finish_stone_meditation(object me)
+{
+    if (!me || environment(me) != this_object()) return;
+
+
+    if (me->query_temp("meditated_stone")) {
+        notify_fail("你已经参悟过剑道巅峰石碑了。\n");
+        return;
+    }
+
+    me->set_temp("meditated_stone", 1);
+
+    message_vision(HIY "$N从石碑的剑意中有所领悟！\n" NOR, me);
+    tell_object(me, HIG "你从剑道巅峰石碑中领悟到了一些剑理，战斗力得到了临时提升！\n" NOR);
+
+    // 临时提升战斗属性
+    me->add_temp("apply/attack", 50);
+    me->add_temp("apply/damage", 30);
+    call_out("remove_stone_bonus", 300, me); // 5分钟后消失
+}
+
+/**
+    * @brief 完成普通冥想
+    * @param object me 玩家对象
+    */
+void finish_normal_meditation(object me)
+{
+    if (!me || environment(me) != this_object()) return;
+
+    message_vision(HIY "$N缓缓睁开双眼，精神焕发。\n" NOR, me);
+
+    // 恢复精神和内力
+    me->add("jing", me->query("max_jing") / 10);
+    me->add("neili", me->query("max_neili") / 15);
+
+    if (me->query("jing") > me->query("max_jing"))
+        me->set("jing", me->query("max_jing"));
+    if (me->query("neili") > me->query("max_neili"))
+        me->set("neili", me->query("max_neili"));
+}
+
+/**
+    * @brief 移除石碑加成
+    * @param object me 玩家对象
+    */
+void remove_stone_bonus(object me)
+{
+    if (!me) return;
+
+    me->delete_temp("meditated_stone");
+    me->add_temp("apply/attack", -50);
+    me->add_temp("apply/damage", -30);
+    tell_object(me, HIB "石碑剑意的加成效果消失了。\n" NOR);
+}
+
+/**
+    * @brief 房间心跳函数
+    * @details 添加一些氛围效果
+    */
+void heart_beat()
+{
+    // 随机的环境效果
+    if (random(10) == 0) {
+        switch(random(3)) {
+            case 0:
+                tell_room(this_object(), HIW "一阵清风吹过，带起台上的落叶飞舞。\n" NOR);
+                break;
+            case 1:
+                tell_room(this_object(), HIY "剑鸣之声在山谷中回响，久久不散。\n" NOR);
+                break;
+            case 2:
+                tell_room(this_object(), HIC "夕阳西下，为整个练武台镀上了一层金辉。\n" NOR);
+                break;
+        }
+    }
+}

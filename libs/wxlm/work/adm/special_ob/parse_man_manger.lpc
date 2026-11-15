@@ -1,0 +1,97 @@
+
+// 格式是房间地址，对应的任务发布者id列表
+//place_man_list中的元素是一个mapping，格式示例 ([ "id":"任务发布者id","path":"任务发布者的生成路径" ])
+mapping place_man_list = ([]);
+
+// 用于管理当师门任务发布者消失以后的处理
+void create()
+{
+	seteuid(ROOT_UID);
+	set_heart_beat(10);
+}
+
+// 不会被销毁
+int clean_up() { return 1; }
+
+//添加函数
+void add_place(string place, mapping man_msg)
+{
+    if( !stringp(place) || !mapp(man_msg) ) return;
+
+    if (undefinedp(place_man_list[place]))
+	{
+		place_man_list[place] = ([]);
+	}
+
+	place_man_list[place] = man_msg;
+}
+
+//删除函数
+void remove_place(string place)
+{
+	if( !stringp(place) ) return;
+	
+	// 先检测place中的元素在man_path_list中是否存在，如果存在则删除
+	if (undefinedp(place_man_list[place]))
+	{
+		return;
+	}
+
+	map_delete(place_man_list, place);
+}
+
+// 心跳检测
+//检测一个房间内是否有任务发布者，如果没有则添加一个
+void heart_beat()
+{
+	object ob,place;//复制出来的任务发布者 任务发布者所在的房间
+	string *wait_delete_place_list = ({});
+
+	if (!sizeof(place_man_list))
+	{
+		return;
+	}
+
+	foreach (string place_name in keys(place_man_list))
+	{
+		// mapping man_path_list;
+
+		// man_path_list = place_man_list[place];
+
+		// place = load_object(place);
+		// 如果一个地点已经被系统回收，通常一个room如果长时间没有被player响应，系统就会从内存中回收它，
+		// 那么这个时候就不必去检测这个房间了，同时将这个房间从place_man_lis中清除以节约效能
+		if (!objectp(place = find_object(place_name))) 
+		{
+			wait_delete_place_list += ({ place_name });
+			continue;
+		}
+
+		// 检查这个房间是否有任务发布者
+		if (!sizeof(all_inventory(place)) || !present(place_man_list[place_name]["id"], place))
+		{
+			string path;
+			object *obs;
+
+			path = place_man_list[place_name]["path"];
+
+			// 任务发布者可能已经复制，但是由于某种原因出门了，这个时候判定一下所有复制出来的对象
+			if (sizeof(obs = children(path)) > 1)
+			{
+				continue;
+			}
+
+			// 如果没有任务发布者，则添加
+			ob = new(path);
+			ob->move(place);
+		}
+	}
+
+	// 清除已经被系统回收的房间
+	foreach (string place_name in wait_delete_place_list)
+	{
+		map_delete(place_man_list, place_name);
+	}
+	
+}
+

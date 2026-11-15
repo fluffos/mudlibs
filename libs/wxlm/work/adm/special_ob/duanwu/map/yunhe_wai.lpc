@@ -1,0 +1,315 @@
+
+#include <room.h>
+
+#define LONGZHOU_D "/adm/special_ob/duanwu/longzhou_master"
+
+inherit ROOM;
+void finish_race(object me);
+
+void create()
+{
+    set("short", HIG "扬州城外运河" NOR);
+    set("long", @LONG
+这里是扬州城外的一条宽阔运河，水面平静，微风吹拂。正值端午佳节，
+这里热闹非凡，挂满了彩旗和灯笼。岸边聚集了许多市民，欢声笑语不断。
+河边停靠着几艘装饰精美的龙舟，船头雕刻着栩栩如生的龙头，船身描绘着
+华丽的图案。龙舟队员们正在做着出发前的准备。
+
+龙舟赛组织者正站在岸边，负责活动的报名和安排。
+LONG);
+
+    set("outdoors", "city");
+    set("no_fight", 1);
+    
+    set("exits", ([
+        "south" : "/d/shaolin/xiaoqinhuai",
+        "north" : "/adm/special_ob/duanwu/map/yunhe_hedao",
+    ]));
+    
+    set("objects", ([
+        "/adm/special_ob/duanwu/npc/longzhou_zhangguan" : 1,
+    ]));
+    
+    setup();
+}
+
+// 检查是否允许玩家离开
+int valid_leave(object me, string dir)
+{
+    // 如果玩家正在参与龙舟比赛，不允许通过普通出口离开
+    if (dir != "south")
+    {
+        return notify_fail("不能进入赛场！\n");
+    }
+    
+    return ::valid_leave(me, dir);
+}
+
+// 开始龙舟比赛
+void start_longzhou_race(object me)
+{
+    object race_room;
+    
+    if (!me || !objectp(me))
+        return;
+    
+    // 设置玩家为比赛状态
+    me->set_temp("longzhou_racing", 1);
+    me->set_temp("longzhou_distance", 0);
+    me->set_temp("longzhou_start_time", time());
+    me->set_temp("longzhou_correct_streak", 0); // 初始化连续正确次数
+    
+    // 创建比赛开始时间
+    me->set_temp("longzhou_current_room", 1);
+    
+    // 移动到第一个赛道
+    race_room = load_object("/adm/special_ob/duanwu/map/yunhe_hedao");
+    if (race_room)
+    {
+        tell_object(me, HIY "\n【龙舟竞渡】比赛即将开始！准备出发！\n" NOR);
+        tell_object(me, HIY "每隔几秒钟会弹出操作提示，请根据提示选择正确的动作！\n" NOR);
+        tell_object(me, HIY "全程共600米，分为三个赛段，每个赛段200米。\n" NOR);
+        tell_object(me, HIY "连续5次选择正确动作，龙舟将加速前进20米！\n\n" NOR);
+        
+        // 迁移到第一赛段
+        me->move(race_room);
+        
+        // 开始第一次弹窗提示
+        call_out("show_action_prompt", 3, me);
+    }
+}
+
+// 显示动作提示
+void show_action_prompt(object me)
+{
+    string correct_option;
+    string *options;
+    string prompt;
+    object pop;
+    
+    if (!me || !objectp(me) || !me->query_temp("longzhou_racing"))
+        return;
+    
+    // 获取正确选项和选项列表
+    correct_option = LONGZHOU_D->get_correct_option();
+    options = LONGZHOU_D->get_challenge_options();
+    
+    // 存储正确选项，用于后续验证
+    me->set_temp("longzhou_correct_option", correct_option);
+    
+    // 构建提示信息
+    prompt =  "【龙舟竞渡】教练喊道：" + correct_option + "！\n";
+    prompt += "目前距离：" + me->query_temp("longzhou_distance") + "米，请选择正确的动作：";
+    
+    // 创建POP1对象
+    pop = new(POP1);
+    
+    // 设置基本信息 (提示信息，目标玩家，弹窗类型)
+    pop->basic(prompt, me, 2);
+    
+    // 添加动作按钮
+    pop->add_button(options[0], "longzhou " + options[0]);
+    pop->add_button(options[1], "longzhou " + options[1]);
+    pop->add_button(options[2], "longzhou " + options[2]);
+    
+    // 显示弹窗
+    tell_object(me, pop->result() + "\n");
+
+    // 设置4秒超时
+    // 首先清除可能存在的旧超时，以防万一（例如，如果由于某种原因，之前的超时没有被正确处理）
+    if (me->query_temp("longzhou_action_timeout_id")) 
+    {
+        remove_call_out(me->query_temp("longzhou_action_timeout_id"));
+        me->delete_temp("longzhou_action_timeout_id");
+    }
+    me->set_temp("longzhou_action_timeout_id", call_out("handle_action_timeout", 4, me));
+}
+
+// 处理选择结果
+int handle_option_selection(object me, string option)
+{
+    string actual_correct_option_for_this_attempt;
+    object next_room;
+    int distance, current_room, correct_streak;
+    int timeout_id; // 用于存储超时 call_out 的 ID
+    
+    if (!me || !objectp(me) || !me->query_temp("longzhou_racing"))
+        return 0;
+    
+    // 原子性地获取并清除本次尝试的正确选项。
+    // 这可以防止由于快速点击而多次处理同一个提示。
+    actual_correct_option_for_this_attempt = me->query_temp("longzhou_correct_option");
+    if (!stringp(actual_correct_option_for_this_attempt) || actual_correct_option_for_this_attempt == "")
+    {
+        // 已经被处理过，或者没有设置有效的选项。
+        // 如果玩家点击速度极快，并且针对同一提示的前一个函数调用已将其清除，则可能发生这种情况。
+        // 或者如果 show_action_prompt 未能设置它。
+        // tell_object(me, HIR "【龙舟竞渡】当前没有有效的操作指令，或操作过快，请等待下一次提示。\n" NOR); // 可选：通知用户
+        return 0; // 本次调用不再继续处理。
+    }
+    me->delete_temp("longzhou_correct_option"); // 消耗掉它
+
+    // 清除动作超时 call_out
+    timeout_id = me->query_temp("longzhou_action_timeout_id");
+    if (timeout_id)
+    {
+        remove_call_out(timeout_id);
+        me->delete_temp("longzhou_action_timeout_id");
+    }
+    
+    distance = me->query_temp("longzhou_distance");
+    current_room = me->query_temp("longzhou_current_room");
+    correct_streak = me->query_temp("longzhou_correct_streak");
+    
+    // 验证选择
+    if (option == actual_correct_option_for_this_attempt)
+    {
+        // 正确选择，龙舟前进5米
+        me->add_temp("longzhou_distance", 5);
+        distance += 5;
+        
+        // 增加连续正确次数
+        correct_streak++;
+        me->set_temp("longzhou_correct_streak", correct_streak);
+        
+        // 检查是否达到5次连续正确
+        if (correct_streak >= 5)
+        {
+            // 龙舟加速前进20米
+            me->add_temp("longzhou_distance", 20);
+
+            if (wizardp(me))
+            {
+                me->add_temp("longzhou_distance", 250);
+                distance += 250;
+            }
+
+            distance += 20;
+            
+            // 重置连续正确计数
+            me->set_temp("longzhou_correct_streak", 0);
+            
+            tell_object(me, HIY "【龙舟竞渡】太棒了！连续5次选择正确，龙舟加速前进了20米！当前距离：" + distance + "米\n" NOR);
+        }
+        else
+        {
+            tell_object(me, HIY "【龙舟竞渡】选择正确！龙舟前进了5米，当前距离：" + distance + "米\n" NOR);
+        }
+        
+        // 增加经验奖励
+        // me->add("combat_exp", 300);
+        // tell_object(me, HIC "你获得了300点经验奖励！\n" NOR);
+    }
+    else
+    {
+        // 错误选择，龙舟不前进，重置连续正确计数
+        me->set_temp("longzhou_correct_streak", 0);
+        tell_object(me, HIR "【龙舟竞渡】选择错误！龙舟停滞不前，当前距离：" + distance + "米\n" NOR);
+    }
+    
+    // 检查是否需要进入下一个地图
+    if (distance >= current_room * 200)
+    {
+        // 进入下一赛段
+        current_room++;
+        me->set_temp("longzhou_current_room", current_room);
+        
+        if (current_room == 2)
+        {
+            next_room = load_object("/adm/special_ob/duanwu/map/yunhe_daqiao_hedao");
+            if (next_room)
+            {
+                tell_object(me, HIY "\n【龙舟竞渡】你的龙舟已进入第二赛段：运河大桥河道！\n" NOR);
+                me->move(next_room);
+            }
+        }
+        else if (current_room == 3)
+        {
+            next_room = load_object("/adm/special_ob/duanwu/map/yunhe_hean");
+            if (next_room)
+            {
+                tell_object(me, HIY "\n【龙舟竞渡】你的龙舟已进入最后赛段：运河河岸！\n" NOR);
+                me->move(next_room);
+            }
+        }
+        else if (current_room > 3)
+        {
+            // 完成比赛
+            finish_race(me);
+            return 1;
+        }
+    }
+    
+    // 如果还在比赛中，继续弹窗
+    if (me->query_temp("longzhou_racing"))
+    {
+        call_out("show_action_prompt", 3, me);
+    }
+    
+    return 1;
+}
+
+// 完成比赛
+void finish_race(object me)
+{
+    int end_time, start_time, time_used;
+    
+    if (!me || !objectp(me))
+        return;
+    
+    // 计算用时
+    end_time = time();
+    start_time = me->query_temp("longzhou_start_time");
+    time_used = end_time - start_time;
+    
+    tell_object(me, HIG "\n【龙舟竞渡】恭喜你完成了龙舟竞渡比赛！\n" NOR);
+    tell_object(me, HIG "你的完成时间为：" + time_used + "秒！\n" NOR);
+    
+    // 记录结果
+    LONGZHOU_D->record_challenge_result(me, time_used);
+    
+    // 清除临时状态
+    me->delete_temp("longzhou_racing");
+    me->delete_temp("longzhou_distance");
+    me->delete_temp("longzhou_start_time");
+    me->delete_temp("longzhou_current_room");
+    me->delete_temp("longzhou_correct_option");
+    me->delete_temp("longzhou_correct_streak");
+    
+    // 返回报名点
+    me->move(__FILE__);
+}
+
+// 处理选择超时
+void handle_action_timeout(object me)
+{
+    if (!me || !objectp(me) || !me->query_temp("longzhou_racing"))
+        return;
+
+    // 清除已触发的超时记录，防止重复执行或与玩家的正常选择冲突
+    me->delete_temp("longzhou_action_timeout_id");
+
+    if (objectp(environment(me)) && !environment(me)->query("longzhou"))
+    return;
+
+    tell_object(me, HIR "【龙舟竞渡】选择超时！请重新选择！\n" NOR);
+    
+    // 重新显示操作提示（会生成新的选项和超时）
+    show_action_prompt(me);
+}
+
+// 新增：重置玩家比赛状态函数
+void reset_player_race_status(object me)
+{
+    if (!me || !objectp(me))
+        return;
+
+    // 清除临时状态
+    me->delete_temp("longzhou_racing");
+    me->delete_temp("longzhou_distance");
+    me->delete_temp("longzhou_start_time");
+    me->delete_temp("longzhou_current_room");
+    me->delete_temp("longzhou_correct_option");
+    me->delete_temp("longzhou_correct_streak");
+    
+}

@@ -1,0 +1,613 @@
+// char.c
+#pragma optimize
+#include <action.h>
+#include <command.h>
+#include <condition.h>
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <team.h>
+#include <user.h>
+
+inherit F_ACTION;
+
+inherit F_ALIAS;
+
+inherit F_APPRENTICE;
+
+inherit F_ATTACK;
+
+inherit F_ATTRIBUTE;
+
+inherit F_COMMAND;
+
+inherit F_CONDITION;
+
+inherit F_DAMAGE;
+
+inherit F_DBASE;
+
+inherit F_EDIT;
+
+inherit F_FINANCE;
+
+inherit F_MESSAGE;
+
+inherit F_MORE;
+
+inherit F_MOVE;
+
+inherit F_NAME;
+
+inherit F_SKILL;
+
+inherit F_TEAM;
+
+inherit F_SUIT;
+
+// Use a tick with longer period than heart beat to save cpu's work
+nosave int next_beat;
+
+nosave int keep_beat_flag = 0;
+
+nosave string short_desc = 0;
+
+nosave mapping cooldowns = ([]);
+
+/**
+ * @brief 创建角色对象
+ * @details 设置euid为0，以便LOGIN_D可以导出uid给我们
+ */
+void create()
+{
+    seteuid(0);
+    // so LOGIN_D can export uid to us
+}
+
+/**
+ * @brief 判断对象是否为角色
+ * @return int 返回1表示是角色
+ * @details 用于识别一个对象是否为角色类型
+ */
+int is_character()
+{
+    return 1;
+}
+
+/**
+ * @brief 判断角色是否不是好人
+ * @return int 如果神值小于500返回1，否则返回0
+ * @details 根据角色的神值(shen)判断其是否不是好人
+ */
+int is_not_good()
+{
+    return query("shen") < 500;
+}
+
+/**
+ * @brief 判断角色是否不是坏人
+ * @return int 如果神值大于-500返回1，否则返回0
+ * @details 根据角色的神值(shen)判断其是否不是坏人
+ */
+int is_not_bad()
+{
+    return query("shen") > -500;
+}
+
+/**
+ * @brief 判断角色是否是好人
+ * @return int 如果神值大于500返回1，否则返回0
+ * @details 根据角色的神值(shen)判断其是否是好人
+ */
+int is_good()
+{
+    return query("shen") > 500;
+}
+
+/**
+ * @brief 判断角色是否是坏人
+ * @return int 如果神值小于-500返回1，否则返回0
+ * @details 根据角色的神值(shen)判断其是否是坏人
+ */
+int is_bad()
+{
+    return query("shen") < -500;
+}
+
+/**
+ * @brief 设置角色的基本属性和状态
+ * @details 初始化角色，设置心跳，启用玩家功能，并通过CHAR_D设置角色属性
+ */
+void setup()
+{
+    seteuid(getuid(this_object()));
+    set_heart_beat(1);
+    next_beat = time() + 9 + random(3);
+    enable_player();
+    CHAR_D->setup_char(this_object());
+}
+
+/**
+ * @brief 保持心跳状态
+ * @details 设置心跳为开启状态，并标记保持心跳标志
+ */
+void keep_heart_beat()
+{
+    set_heart_beat(1);
+    keep_beat_flag = 1;
+}
+
+/**
+ * @brief 取消保持心跳状态
+ * @details 关闭保持心跳标志，允许心跳在适当条件下自动关闭
+ */
+void not_keep_heat_beat()
+{
+    keep_beat_flag = 0;
+}
+
+/**
+ * @brief 设置技能冷却时间
+ * @param string skill 技能名称
+ * @param int duration 冷却持续时间（秒）
+ * @details 为指定技能设置冷却时间，记录冷却结束的时间点
+ */
+void set_cooldown(string skill, int duration)
+{
+    cooldowns[skill] = time() + duration;
+}
+
+/**
+ * @brief 查询技能冷却剩余时间
+ * @param string skill 技能名称
+ * @return int 返回剩余冷却时间（秒），如果没有冷却或冷却已结束则返回0
+ * @details 检查指定技能的冷却状态，如果冷却已结束则清除该技能的冷却记录
+ */
+int query_cooldown(string skill)
+{
+    int remaining;
+
+    if (!cooldowns[skill])
+        return 0;
+
+    remaining = cooldowns[skill] - time();
+
+    if (remaining <= 0)
+    {
+        map_delete(cooldowns, skill);
+        return 0;
+    }
+
+    return remaining;
+}
+
+/**
+ * @brief 角色心跳函数
+ * @details 处理角色的周期性行为，包括战斗、恢复、状态更新等
+ *          这是游戏中最重要的周期性函数之一，负责角色的各种自动行为
+ */
+void heart_beat()
+{
+    int t;
+    int period;
+    int wimpy_ratio, cnd_flag;
+    mapping my;
+    object ob;
+    object me;
+    int is_player;
+
+    me = this_object();
+
+    if (!me)
+        return;
+
+    my = query_entire_dbase();
+
+    if (my["qi"] < 0 || my["jing"] < 0)
+    {
+        //新增的is_killing()判断，如果正在进行死斗，则一旦气血过低导致的昏迷，则直接死亡
+        if (!living(me))
+        {
+            this_object()->die();
+        }
+        else
+        {
+            if (this_object()->is_killing())
+            {
+                message_vision("$N已然昏迷不醒，敌人见此良机，一声冷笑，手起刀落，取了$N性命！\n", me);
+                this_object()->die(query_last_damage_from());
+            }
+            else
+            {
+                me->unconcious();
+            }
+        }
+
+        if (!me || !living(me))
+            return;
+    }
+
+    if (userp(me))
+    {
+        "/cmds/usr/hp1"->main(me);
+    }
+
+    me->auto_cmd();
+    me->update_cd();
+
+    if (playerp(me))
+    {
+        if (userp(me))
+        {
+            me->add("online_time", 2);
+        }
+
+        AFK_D->check_user(me);
+    }
+
+    // 第二次修正，更改效果为：每次有心跳，每点先天根骨有2%几率恢复(后天根骨 / 20) + 1点经脉负荷
+    if (me->query("jingmai_fuhe") < me->query("max_jingmai_fuhe"))
+    {
+        int con = me->query("con");
+        int htg = me->query_con() - con;
+        int recovery_chance = con * 2;         // 每点先天根骨有2%几率
+
+        // 每点先天根骨有2%几率
+        if (random(100) < recovery_chance)
+        {
+            int temp_fuhe = htg / 20 + 1;
+
+            me->add("jingmai_fuhe", temp_fuhe);
+
+            if (me->query("jingmai_fuhe") > me->query("max_jingmai_fuhe"))
+            {
+                me->set("jingmai_fuhe", me->query("max_jingmai_fuhe"));
+            }
+        }
+    }
+
+    if (is_busy())
+    {
+        continue_action();
+    }
+    else if (living(me))
+    {
+        string apply;
+        object apply_ob;
+
+        // 检查是否需要逃跑
+        if (is_fighting())
+        {
+            wimpy_ratio = (int)query("env/wimpy");
+
+            if (intp(wimpy_ratio) && wimpy_ratio > 0)
+            {
+                // 当气血或精神低于设定的百分比时触发逃跑
+                if (my["qi"] * 100 / my["max_qi"] <= wimpy_ratio || my["jing"] * 100 / my["max_jing"] <= wimpy_ratio)
+                {
+                    apply = query("env/wimpy_apply");
+
+                    if (stringp(apply) && objectp(apply_ob = present(apply, me)) && apply_ob->query("can_apply_for_wimpy"))
+                    {
+                        // 使用特定物品进行逃跑
+                        apply_ob->apply_for_wimpy(this_object());
+                    }
+                    else
+                    {
+                        // 直接逃跑
+                        GO_CMD->do_flee(this_object());
+                    }
+                }
+            }
+
+            //战斗时执行的普通攻击
+            attack();
+        }
+    }
+
+    if (!(is_player = playerp(me)))
+    {
+        if (!me)
+            return;
+
+        me->scan();
+    }
+
+    if (!me)
+        return;
+
+    // 检查气血值是否发生变化并更新显示
+    if (query_temp("last_qi") != query("qi") || query_temp("last_eff_qi") != query("eff_qi") || query_temp("last_max_qi") != query("max_qi"))
+    {
+        object env;
+
+        if (env = environment(me))
+        {
+            string msg = sprintf("%slook %s%s%d:%d:%d\n", ZJCHARHP, file_name(me), ZJSEP, my["qi"], my["eff_qi"], my["max_qi"]);
+
+            message("vision", msg, filter_array(all_inventory(env), (: interactive($1) :)), ({
+                me
+            }));
+        }
+    }
+
+    set_temp("last_qi", query("qi"));
+    set_temp("last_eff_qi", query("eff_qi"));
+    set_temp("last_max_qi", query("max_qi"));
+
+    if ((t = time()) < next_beat)
+        return;
+    else
+        next_beat = t + 9 + random(3);
+
+    if (is_player && environment(me) && environment(me)->query("close_room"))
+    {
+        int tpot, texp;
+
+        tpot = random(11);
+        texp = random(11);
+
+        if (me->query_condition("db_exp"))
+        {
+            tpot *= 2;
+            texp *= 2;
+        }
+
+        me->add("combat_exp", texp);
+        tpot = me->improve_potential(tpot);
+
+        if (interactive(me))
+        {
+            if (texp < 4)
+            {
+                tell_object(me, "你深入回忆，努力从过去的战斗经历中汲取智慧。"NOR"\n但似乎还有许多不解之处：你获得了 " + texp + " 点经验和 " + tpot + " 点潜能。\n");
+            }
+            else if (texp >= 4 && texp < 8)
+            {
+                tell_object(me, "你沉思熟虑，细致地分析每一次战斗的技巧。"NOR"\n你的技艺有所提升：你获得了 " + texp + " 点经验和 " + tpot + " 点潜能。\n");
+            }
+            else if (texp >= 8)
+            {
+                tell_object(me, "你模拟战斗场景，专注地研究每一个动作。"NOR"\n你的领悟让你有了新的突破：你获得了 " + texp + " 点经验和 " + tpot + " 点潜能。\n");
+            }
+        }
+    }
+
+    if (is_player)
+        "/adm/daemons/race/human"->setup_human(me);
+
+    if (!my["not_living"])
+        cnd_flag = update_condition();
+
+    if (!me)
+        return;
+
+    if (!(cnd_flag & CND_NO_HEAL_UP))
+        cnd_flag = heal_up();
+
+    if (!cnd_flag && !is_player && !keep_beat_flag && !is_fighting() && !is_busy() && !interactive(this_object()))
+    {
+        if (environment() && query("chat_msg"))
+        {
+            ob = first_inventory(environment());
+
+            while (ob && !interactive(ob))
+                ob = next_inventory(ob);
+        }
+        else
+            ob = 0;
+
+        if (!ob)
+            set_heart_beat(0);
+    }
+
+    if (!me || !is_player)
+        return;
+
+    me->update_age();
+
+    if (living(me))
+    {
+        period = t - ((int)my["last_save"]);
+
+        if (period < 0 || period > 5 * 60)
+        {
+            if (!me->save())
+            {
+                tell_object(me, HIR"【数据保护】由于数据异常，您的档案本次存盘失败。"NOR"\n");
+            }
+
+            set("last_save", t);
+            TOP_D->map_user(me);
+        }
+    }
+
+    if (!interactive(me))
+        return;
+
+    if (my["food"] <= 0 || my["water"] <= 0)
+    {
+        if (environment() && !environment()->is_chat_room() && !query_condition("hunger"))
+        {
+            apply_condition("hunger", 1);
+        }
+    }
+}
+
+/**
+ * @brief 处理角色的毒素攻击
+ * @param object me 攻击者
+ * @param object victim 受害者
+ * @param int damage_bonus 伤害加成
+ * @return mixed 返回毒素攻击的结果
+ * @details 检查角色是否使用了带毒的武器或涂毒，并应用毒素效果
+ */
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+    object unarmed_weapon;
+
+    if (unarmed_weapon = query_temp("armor/hands"))
+        return unarmed_weapon->hit_ob(me, victim, damage_bonus);
+
+    if (!mapp(query_temp("daub")))
+        return;
+
+    return COMBAT_D->hit_with_poison(me, victim, this_object());
+}
+
+/**
+ * @brief 判断对象对当前角色是否可见
+ * @param object ob 要判断的对象
+ * @return int 如果可见返回1，否则返回0
+ * @details 根据对象的类型、巫师等级、隐身状态等判断是否可见
+ */
+int visible(object ob)
+{
+    int lvl;
+
+    if (!ob->is_character())
+        return 1;
+
+    if (!wizardp(ob))
+    {
+        if (!ob->is_ghost() || is_ghost())
+            return 1;
+    }
+
+    lvl = wiz_level(this_object());
+
+    if (lvl && lvl >= wiz_level(ob))
+        return 1;
+
+    if (wizardp(ob) && ob->query("env/invisible"))
+        return 0;
+
+    return 1;
+}
+
+/**
+ * @brief 设置角色的短描述
+ * @param string desc 短描述文本
+ * @return string 返回设置的短描述
+ * @details 设置角色的短描述，用于在look命令中显示
+ */
+string set_short_desc(string desc)
+{
+    short_desc = desc;
+}
+
+/**
+ * @brief 获取角色的短描述
+ * @param int raw 是否获取原始描述（不含状态标记）
+ * @return string 返回角色的短描述
+ * @details 生成角色的短描述，包括名称、称号、昵称等，并根据状态添加相应标记
+ */
+varargs string short(int raw)
+{
+    string title, nick, str, *mask;
+    object me;
+
+    me = this_object();
+
+    if (!raw && sizeof(mask = query_temp("apply/short")))
+        str = (string)mask[sizeof(mask) - 1];
+    else
+    {
+        str = query("name") + "(" + this_object()->real_id() + ")";
+
+        if (!stringp(title = query_temp("title")))
+            title = query("title");
+
+        if (nick = query("nickname"))
+        {
+            str = "「" + nick + "」" + str;
+
+            if (title)
+                str = title + str;
+        }
+        else if (title)
+            str = title + " " + str;
+    }
+
+    if (!raw)
+    {
+        if (short_desc)
+            str = name() + short_desc;
+    }
+    else
+        return str;
+
+    if (me->is_ghost())
+        str = HIB"(鬼气) "NOR + str;
+
+    if (me->is_net_dead())
+    {
+        switch (me->query("doing"))
+        {
+            case "breakup":
+                str += HIY" <闭关中>"NOR;
+                break;
+            case "closed":
+                str += HIY" <修炼中>"NOR;
+                break;
+            default:
+                if (environment(me) && environment(me)->query("close_room"))
+                    str += HIG" <闭关中>"NOR;
+                else
+                    str += HIG" <断线中>"NOR;
+        }
+    }
+
+    if (in_input())
+        str += HIC" <输入文字中>"NOR;
+
+    if (!living(me) && query("disable_type"))
+        str += HIR + query("disable_type") + NOR;
+
+    if (in_edit())
+        str += HIY" <编辑档案中>"NOR;
+
+    if (interactive(this_object()) && query_idle(this_object()) > 120)
+        str += HIM" <发呆中>"NOR;
+
+    return str;
+}
+
+/**
+ * @brief 重置鸣大道计数
+ * @details 根据当前周数重置角色的鸣大道使用次数
+ *          如果当前周与上次记录的周不同，则重置计数
+ */
+void reset_chiming_dadao_count()
+{
+    int current_week = time() / (7 * 24 * 3600);
+
+    if (query("last_chiming_week") != current_week)
+    {
+        set("chiming_dadao_count", 0);
+        set("last_chiming_week", current_week);
+    }
+}
+
+/**
+ * @brief 增加鸣大道使用次数
+ * @return int 如果增加成功返回1，如果已达到本周上限返回0
+ * @details 增加角色的鸣大道使用次数，每周最多使用6次
+ *          在增加前会先检查是否需要重置计数
+ */
+int inc_chiming_dadao_count()
+{
+    int count;
+
+    reset_chiming_dadao_count();
+    count = query("chiming_dadao_count") + 1;
+
+    if (count > 6)
+    {
+        return 0;
+    }
+
+    set("chiming_dadao_count", count);
+    return 1;
+}

@@ -1,0 +1,158 @@
+inherit ROOM;
+
+// 自动研究队列，记录正在自动研究的玩家object
+nosave object *auto_study_players = ({});
+void do_study_page(object me);
+void manage_auto_study_players(string op, object me);
+int hb_count = 0;
+
+void create()
+{
+    set("short", "废弃道观");
+    set("long", @LONG
+这是一座年久失修的道观，屋顶上长满了青苔，墙壁上爬满了藤蔓。道观的
+大门已经倒塌，只剩下一些残垣断壁。正殿中还能看到一尊残破的神像，以及一
+些破旧的道家法器。地上散落着一些古旧的书籍残页(page)。
+LONG );
+
+    set("exits", ([
+        "west"  : __DIR__"liangting",
+        "north" : __DIR__"cangjing",
+        "east"  : __DIR__"liangong",
+    ]));
+    
+    set("item_desc", ([
+        "残页" : popup_comb("几页残破的书页，上面依稀可以辨认出一些修炼心法。\n",
+            ({"研究残页:autostudy page", "停止研究:stopstudy page"})),
+    ]));
+    
+    setup();
+}
+
+void init()
+{
+    add_action("do_autostudy", "autostudy");
+    add_action("do_stopstudy", "stopstudy");
+}
+
+int do_study(string arg)
+{
+    return notify_fail("请使用 autostudy page 指令进行自动研究。\n");
+}
+
+// 自动研究队列管理函数
+void manage_auto_study_players(string op, object me)
+{
+    if (op == "add")
+    {
+        if (member_array(me, auto_study_players) == -1)
+            auto_study_players += ({me});
+    }
+    else if (op == "remove")
+    {
+        if (member_array(me, auto_study_players) != -1)
+            auto_study_players -= ({me});
+    }
+    // 自动控制心跳
+    if (sizeof(auto_study_players) > 0)
+        set_heart_beat(1);
+    else
+        set_heart_beat(0);
+}
+
+int do_autostudy(string arg)
+{
+    object me = this_player();
+    if (!arg || arg != "page")
+        return notify_fail("你要自动研究什么？\n");
+    if (member_array(me, auto_study_players) != -1)
+        return notify_fail("你已经在自动研究残页了。\n");
+    if (me->query("combat_exp") >= 3_0000_0000)
+        return notify_fail("你的实战经验已经无法通过研究残页获得提升了。\n");
+    manage_auto_study_players("add", me);
+    tell_object(me, "你开始自动研究地上的残页……\n");
+    return 1;
+}
+
+int do_stopstudy(string arg)
+{
+    object me = this_player();
+    if (!arg || arg != "page")
+        return notify_fail("你要停止研究什么？\n");
+    if (member_array(me, auto_study_players) == -1)
+        return notify_fail("你并没有在自动研究残页。\n");
+    manage_auto_study_players("remove", me);
+    tell_object(me, "你停止了对残页的研究。\n");
+    return 1;
+}
+
+void heart_beat()
+{
+    object *players;
+    object ob;
+    hb_count++;
+    if (hb_count % 4 != 0) return;
+    
+    if (!arrayp(auto_study_players) || sizeof(auto_study_players) == 0)
+        return;
+    
+    // 复制一份，防止遍历时被修改
+    players = copy(auto_study_players);
+    foreach (ob in players)
+    {
+        if (!objectp(ob) || environment(ob) != this_object())
+        {
+            manage_auto_study_players("remove", ob);
+            continue;
+        }
+        // 触发研究逻辑
+        do_study_page(ob);
+    }
+}
+
+// 自动研究残页的核心逻辑
+void do_study_page(object me)
+{
+    if (!objectp(me)) return;
+    if (me->query("combat_exp") >= 3_0000_0000)
+    {
+        tell_object(me, "你的实战经验已经无法通过研究残页获得提升了。\n");
+        manage_auto_study_players("remove", me);
+        return;
+    }
+    if (me->query("jing") < 30)
+    {
+        tell_object(me, "你太疲倦了，无法专心研究。\n");
+        manage_auto_study_players("remove", me);
+        return;
+    }
+    if (me->is_busy())
+    {
+        tell_object(me, "你现在正忙着呢，没空研究。\n");
+        return;
+    }
+    me->receive_damage("jing", 20);
+    message_vision("$N仔细研究着地上的残页。\n", me);
+    if (random(20) >= 16)
+    {
+        tell_object(me, HIY "你仔细研读残页上的道家心法，豁然领悟到一些玄妙的修炼要诀。\n" NOR +
+                       HIC "你的实战经验增加了五十点。\n" NOR);
+        me->add("combat_exp", 50);
+    }
+    else
+    {
+        tell_object(me, HIC "你从残页中领悟到一些基础的修炼心得。\n" NOR +
+                       "你的实战经验增加了十点。\n");
+        me->add("combat_exp", 10);
+    }
+}
+
+int valid_leave(object me, string dir)
+{
+    if (member_array(me, auto_study_players) != -1)
+    {
+        manage_auto_study_players("remove", me);
+        tell_object(me, "你离开了道观，停止了对残页的研究。\n");
+    }
+    return ::valid_leave(me, dir);
+}

@@ -1,0 +1,274 @@
+inherit ROOM;
+#define WUJUE_UI "/d/lunjian/wujue_iml/wujue_iml_ui"
+#define GUOQING_D "/adm/daemons/guoqingd"
+private string generate_wuzun_text_display(string *leader_ids);
+void create()
+{
+	set("short", "扬城广场");
+	set("long", @LONG
+这里是扬州城的中心广场，宽阔平坦的青石板铺就的地面上人来人往。广场中央耸立着一棵参天巨榕，枝繁叶茂遮天蔽日，
+传说已有千年树龄，见证了扬州城的兴衰荣辱。古树底部赫然有一个幽深的大树洞，不知通向何方。
+四周店铺林立，茶肆酒楼，各色行人络绎不绝，一派繁华景象。
+LONG );
+	set("no_sleep_room",1);
+	set("outdoors", "city");
+	set("item_desc", ([
+		"【参天巨榕】" : "这是一棵参天巨榕，枝繁叶茂遮天蔽日，传说已有千年树龄，见证了扬州城的兴衰荣辱。\n"
+		ZJOBACTS2"密道:enter dong\n",
+		"【五绝雕塑】" : popup_comb("华山论剑，天下英雄汇聚，争夺武林至尊的荣耀。三个组别分别决出各自的五绝。", ({
+			"宗师组五绝:wujue_diao ultra",
+			"新秀组五绝:wujue_diao non_ultra", 
+			"武尊组五绝:wujue_diao wuzun"
+		})),
+		"【红包树】" : popup_comb("玩家红包系统，发红包，抢红包，记录查询。","查看:player_hongbao"),
+		// "【8月特别返场活动】" : popup_comb("查看你在8月特别返场活动中的返场积分进度。","查看:august_comeback_reward"),
+		// "【返场积分兑换商店】" : popup_comb("使用返场积分兑换各种珍贵物品和称号。","查看:exchange_shop"),
+		// "【九月秋季贡献活动】" : popup_comb("查看你在九月秋季贡献活动中的奖励进度。","查看:jiuyue_autumn_reward"),
+		// "【国庆贡献活动】" : popup_comb("查看你在国庆贡献活动中的奖励进度。","查看:guoqing_donate_reward"),
+		"【国庆经验累计活动】" : popup_comb("查看全服经验累计活动进度和你的奖励领取情况。","查看:guoqing_exp_reward"),
+	]));
+
+	set("exits", ([
+		"northeast" : __DIR__"shuyuan",
+		"southeast" : __DIR__"heishi",
+		"east" : __DIR__"dongdajie1",
+		"south" : __DIR__"nandajie1",
+		"west" : __DIR__"xidajie1",
+		"north" : __DIR__"beidajie1",
+	]));
+
+	set("objects", ([
+		__DIR__"npc/liapo" : 1,
+		// "/adm/special_ob/duanwu/npc/quyuan":1,
+		// "/adm/special_ob/duanwu/npc/xianzi":1,
+	     
+	]));
+
+	setup();
+}
+
+void init()
+{
+	add_action("do_enter", "enter");
+	add_action("do_wujue_diao", "wujue_diao");
+	add_action("do_guoqing_exp_reward", "guoqing_exp_reward");
+	add_action("do_guoqing_exp_claim", "guoqing_exp_claim");
+}
+
+int do_enter(string arg)
+{
+	object me;
+	me = this_player();
+
+	if (! arg || arg == "")
+		return 0;
+
+	if (arg == "dong")
+	{
+		if (me->is_busy())
+			return notify_fail("你的动作还没有完成，不能移动。\n");
+
+		message("vision",
+			me->name() + "一弯腰往洞里走了进去。\n",
+			environment(me), ({me}) );
+		me->move("/d/gaibang/inhole");
+		message("vision",
+			me->name() + "从洞里走了进来。\n",
+			environment(me), ({me}) );
+		return 1;
+	}
+}       
+
+
+
+/**
+ * @brief 显示不同组别的五绝动画
+ * @param arg string 组别参数：ultra(宗师组)、non_ultra(新秀组)、wuzun(武尊组)
+ * @return int 1-成功
+ * @details 根据参数显示对应组别的五绝动画，如果没有参数则显示选择菜单
+ */
+int do_wujue_diao(string arg)
+{
+	object me = this_player();
+	string *leader_ids;
+	string group_name;
+	// 显示对应组别的五绝动画
+	string animation_data;
+	// 如果没有参数，显示组别选择菜单
+	if (!arg || arg == "")
+	{
+		string msg;
+		string *buttons;
+		
+		msg = HIY "【五绝雕塑】" NOR "\n\n";
+		msg += "华山论剑分为三个组别，各自决出五绝：\n\n";
+		msg += HIC "宗师组：" NOR "武道宗师级别的最高竞技\n";
+		msg += HIC "新秀组：" NOR "非宗师玩家的论剑比赛\n";
+		msg += HIC "武尊组：" NOR "散花境界武尊的武魁之战\n\n";
+		msg += "请选择要查看的五绝信息：";
+		
+		buttons = ({
+			"宗师组五绝:wujue_diao ultra",
+			"新秀组五绝:wujue_diao non_ultra",
+			"武尊组五绝:wujue_diao wuzun"
+		});
+		
+		tell_object(me, popup_comb(msg, buttons) + "\n");
+		return 1;
+	}
+
+	// 根据参数确定要查询的组别
+	switch(arg)
+	{
+		case "ultra":
+			leader_ids = FAMILY_D->query_lunjian_leader_ids();
+			group_name = "宗师组";
+			break;
+		case "non_ultra":
+			leader_ids = FAMILY_D->query_non_ultra_lunjian_leader_ids();
+			group_name = "新秀组";
+			break;
+		case "wuzun":
+			leader_ids = FAMILY_D->query_wuzun_lunjian_leader_ids();
+			group_name = "武尊组";
+			break;
+		default:
+			tell_object(me, "未知的组别参数。\n");
+			return 1;
+	}
+
+	// 检查是否有五绝信息
+	if (!arrayp(leader_ids) || sizeof(leader_ids) == 0)
+	{
+		tell_object(me, sprintf("目前没有%s五绝的信息。\n", group_name));
+		return 1;
+	}
+	
+	if (arg == "ultra")
+	{
+		// 宗师组使用原有的动画生成函数
+		animation_data = WUJUE_UI->generate_wujue_animation_data(leader_ids);
+	}
+	else if (arg == "non_ultra")
+	{
+		// 新秀组使用专门的动画生成函数
+		animation_data = WUJUE_UI->generate_non_ultra_wujue_animation_data(leader_ids);
+	}
+	else if (arg == "wuzun")
+	{
+		animation_data = WUJUE_UI->generate_wuzun_wujue_animation_data(leader_ids);
+	}
+
+	tell_object(me, animation_data + "\n");
+	return 1;
+}
+
+/**
+ * @brief 生成武尊组五绝的文本显示
+ * @param leader_ids string* 五绝持有者ID数组
+ * @return string 格式化的文本显示
+ * @details 当没有专门的UI动画时，生成简单的文本格式显示
+ */
+private string generate_wuzun_text_display(string *leader_ids)
+{
+	string result;
+	string *titles = ({ "中神通", "东邪", "西毒", "南帝", "北丐" });
+	int i;
+	object player;
+	string name;
+
+	result = HIR "【武魁五绝】" NOR "\n\n";
+	result += HIC "武尊级别的最高荣誉，散花境界的巅峰对决！" NOR "\n\n";
+
+	for (i = 0; i < sizeof(leader_ids) && i < sizeof(titles); i++)
+	{
+		if (leader_ids[i] && leader_ids[i] != "")
+		{
+			player = find_player(leader_ids[i]);
+			if (player)
+				name = player->query("name");
+			else
+				name = TOP_D->get_name(leader_ids[i]);
+			
+			if (name)
+				result += sprintf(HIY "武魁%s：" NOR "%s (%s)\n", titles[i], name, leader_ids[i]);
+		}
+	}
+
+	if (sizeof(leader_ids) == 0)
+	{
+		result += HIW "暂无武魁五绝产生..." NOR "\n";
+	}
+
+	result += "\n" HIB "武魁之战每周日22:00开启，只有武尊才能参与！" NOR;
+	
+	return result;
+}
+
+/**
+ * @brief 显示国庆经验累计活动进度
+ * @return int 1-成功
+ */
+int do_guoqing_exp_reward()
+{
+    object me = this_player();
+    string msg, *buttons, server_msg, player_msg;
+    int *milestones, i;
+
+    // 获取全服进度
+    server_msg = GUOQING_D->get_server_exp_progress();
+
+    // 获取玩家进度
+    player_msg = GUOQING_D->get_player_reward_progress(me);
+
+    msg = server_msg + "\n\n" + player_msg;
+
+    // 获取可领取的奖励档位
+    milestones = ({ 5000000, 15000000, 30000000, 50000000, 100000000 });
+    buttons = ({});
+
+    for (i = 0; i < sizeof(milestones); i++)
+    {
+        if (GUOQING_D->query("milestone_" + milestones[i]) &&
+            !GUOQING_D->has_claimed_reward(me, milestones[i]))
+        {
+            buttons += ({ sprintf("领取%d经验档位:guoqing_exp_claim %d", milestones[i], milestones[i]) });
+        }
+    }
+
+    if (sizeof(buttons) == 0)
+        tell_object(me, popup_title(msg) + "\n");
+    else
+        tell_object(me, popup_comb(msg, buttons) + "\n");
+
+    return 1;
+}
+
+/**
+ * @brief 领取国庆经验累计奖励
+ * @param string arg 里程碑值
+ * @return int 1-成功
+ */
+int do_guoqing_exp_claim(string arg)
+{
+    object me = this_player();
+    int milestone;
+
+    if (!arg || arg == "")
+    {
+        tell_object(me, "请指定要领取的奖励档位。\n");
+        return 1;
+    }
+
+    milestone = to_int(arg);
+    if (milestone <= 0)
+    {
+        tell_object(me, "档位参数错误。\n");
+        return 1;
+    }
+
+    GUOQING_D->claim_reward(me, milestone);
+
+    return 1;
+}
+

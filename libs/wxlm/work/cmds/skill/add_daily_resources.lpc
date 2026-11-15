@@ -1,0 +1,91 @@
+// add_daily_resources.c
+
+
+
+inherit F_CLEAN_UP;
+
+//返回可以领取每日资源的数值
+mapping query_daily_resources(object me)
+{
+    int level;
+    mapping resources;
+    mapping ret;
+
+    level = FAMILY_D->query_family_player_level(me);
+    resources = FAMILY_D->get_daily_resources(level);
+
+    ret["potential"] = resources["potential"];
+    ret["points"] = resources["points"];
+    return ret;
+}
+
+int main(object me, string arg)
+{
+    object ob;
+    int level, last_time, now;
+    mapping resources;
+    int is_family_leader;
+    int multiplier;
+
+    if (arg)
+    {   
+        ob = present(arg, environment(me));
+        
+        if (!ob || !ob->is_quester())
+        {
+            return notify_fail("这里没有这个人。\n");
+        }
+    } 
+    else if (!me->query("family/family_name") || arg != me->query("family/family_name"))
+    {
+        return notify_fail("你还没有加入门派，无法领取每日资源。\n");
+    }
+
+    level = FAMILY_D->query_family_player_level(me);
+    resources = FAMILY_D->get_daily_resources(level);
+
+    if (resources["potential"] == 0 && resources["points"] == 0)
+        return notify_fail("你的门派地位不够，无法领取每日资源。\n");
+
+    last_time = me->query("last_daily_resources_time");
+    now = time();
+
+    if (is_same_day(last_time, now))
+        return notify_fail("你今天已经领取过每日资源了，请明天再来。\n");
+
+    // 检查是否是门派首席弟子
+    is_family_leader = FAMILY_D->is_family_leader(me);
+
+    // 设置新的每日资源
+    multiplier = is_family_leader ? 2 : 1;
+    me->add("potential", resources["potential"] * multiplier);
+    me->add("family_points", resources["points"] * multiplier);
+
+    me->set("last_daily_resources_time", now);
+
+
+    if (ob && objectp(ob))
+    {
+        tell_object(me, HIY "你从" + ob->name() + "处领取了每日资源：潜能 " + 
+                    (resources["potential"] * multiplier) + " 点，门派点数 " + 
+                (resources["points"] * multiplier) + " 点。\n" NOR);
+    }
+    else
+    {
+        tell_object(me, HIY "你恭恭敬敬的跪在祖师爷雕像前，宗门的事务长老给你发放了每日资源：潜能 " + 
+                    (resources["potential"] * multiplier) + " 点，门派点数 " + 
+                (resources["points"] * multiplier) + " 点。\n" NOR);
+    }
+
+    return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式: add_daily_resources <NPC ID>
+
+这个指令让你从掌门处请安以领取每日资源。
+HELP );
+    return 1;
+}

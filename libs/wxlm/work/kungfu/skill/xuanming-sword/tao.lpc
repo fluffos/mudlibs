@@ -1,0 +1,189 @@
+// tao.c 乱海狂涛
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+string name() { return "乱海狂涛"; }
+string query_name() { return "乱海狂涛"; }
+string *pfm_type() { return ({ "sword", }); }
+
+/**
+ * @brief 乱海狂涛绝技
+ * @param object me 施展者
+ * @param object target 目标
+ * @return int 1表示成功，0表示失败
+ * @details 融合乱字诀与狂海之势的终极奥义，多段攻击配合复杂判定
+ */
+int perform(object me, object target)
+{
+    object weapon;
+    string msg;
+    int i, count;
+    int ap, dp, pp;
+    int damage;
+    int anran_level = COMBAT_D->get_skill_aoyi_level(me, "黯然隐雾");
+    int cangsung_level = COMBAT_D->get_skill_aoyi_level(me, "苍松之劲");
+    int attack_times = 4 + me->query_skill("xuanming-sword", 1) / 70;
+    int status_flag = 0;
+
+    if (!target)
+    {
+        me->clean_up_enemy();
+        target = me->select_opponent();
+    }
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail("乱海狂涛只能对战斗中的对手使用。\n");
+
+    if (!objectp(weapon = me->query_temp("weapon")) ||
+        weapon->query("skill_type") != "sword")
+        return notify_fail("施展乱海狂涛必须拿着一把剑！\n");
+
+    if (me->query_skill("xuanming-sword", 1) < 280)
+        return notify_fail("你的玄命剑典还不到家，无法使用乱海狂涛！\n");
+
+    if (me->query_skill("force", 1) < 280)
+        return notify_fail("你的内功火候不够，难以施展如此凶猛的武功！\n");
+
+    if (me->query_skill("martial-cognize", 1) < 150)
+        return notify_fail("你的武学修养有限，难以施展出乱海狂涛中的精微奥妙之处！\n");
+
+    if (me->query("neili") < 800)
+        return notify_fail("你的真气不够，无法施展乱海狂涛！\n");
+
+    if (me->query("max_neili") <= 4000)
+        return notify_fail("你的内力不够施展乱海狂涛！\n");
+
+    if (me->query_skill_mapped("sword") != "xuanming-sword")
+        return notify_fail("你没有激发玄命剑典，无法使用乱海狂涛。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    msg = HIY "$N" HIY "仰天长啸，玄命剑典至高奥义「乱海狂涛」威震四方！手中" + weapon->name() +
+          HIY "剑光暴涨，既有乱字诀的变化莫测，又蕴狂海之势的磅礴威力！\n"
+          "霎时间剑气如海浪涛涛叠叠，将$n" HIY "团团卷入其中！" NOR "\n";
+
+    me->add("neili", -200);
+
+    // 第一阶段：武学修养判定（融合乱字诀）
+    count = (me->query_skill("martial-cognize", 1) -
+             target->query_skill("martial-cognize", 1)) / 3;
+    if (count < -10)
+        msg += HIG "然而$n" HIG "乃武学大家，面对这乱海狂涛丝毫不惧，从容应对。" NOR "\n";
+    else if (count < 30)
+        msg += HIC "然而$n" HIC "见识非凡，在这狂涛巨浪般的攻击下镇定自如。" NOR "\n";
+    else
+    {
+        msg += HIR "$n" HIR "大吃一惊，只觉得$N" HIR "剑意如海潮般汹涌而至，眼前剑网密布！" NOR "\n";
+        if (count > 50) count = 50;
+    }
+
+    message_combatd(msg, me, target);
+    me->add_temp("apply/attack", count);
+
+    // 使用标准连击数函数重新计算
+    attack_times = COMBAT_D->query_base_attack_number(me, query_name());
+
+    for (i = 0; i < attack_times; i++)
+    {
+        if (!me->is_fighting(target))
+            break;
+        COMBAT_D->do_attack(me, target, weapon, 0);
+    }
+
+    me->add_temp("apply/attack", -count);
+
+    // 第三阶段：狂海之势的复杂判定
+    ap = attack_power(me, "sword") / 2 + attack_power(me, "force") / 2;
+    dp = defense_power(target, "dodge");
+    pp = defense_power(target, "parry");
+
+    damage = damage_power(me, "sword") + damage_power(me, "force");
+    damage += me->query("jiali");
+    damage += damage / 500 * me->query_str();
+    damage += me->query("max_neili") / 20;
+    // 双重意境的强化效果
+
+    if (cangsung_level > 0)
+    {
+        damage += cangsung_level * damage / 8; // 苍松之劲增加稳定伤害
+        ap += cangsung_level * 3; // 增加命中
+        msg = HIC "\n$N" HIC "体内「苍松之劲」运转，剑势更添万古不倒之威！\n" NOR;
+        message_combatd(msg, me, target);
+    }
+
+    if (anran_level > 0)
+    {
+        damage += anran_level * damage / 10; // 黯然隐雾增加伤害
+        msg = HIW "\n$N" HIW "体内「黯然隐雾」运转，剑意如雾如幻，更添杀机！\n" NOR;
+        message_combatd(msg, me, target);
+    }
+
+    damage += damage / 2; // 终极奥义基础伤害提升
+
+    // 多种判定路径（融合狂海之势）
+    if (COMBAT_D->hit_determination(me, target, ap, dp))
+    {
+        msg = HIC "\n$N" HIC "剑势排山倒海，$n" HIC "在这乱海狂涛面前如叶扁舟，难以抵挡！\n" NOR;
+
+        // 致命一击判定（融合黯然隐雾特性）
+        if (anran_level > 0 && random(100) < anran_level * 3)
+        {
+            damage += damage * 8 / 10;
+            msg += HIY "$N" HIY "触发「黯然隐雾」致命一击，对$n" HIY "造成「80%」的额外伤害！\n" NOR;
+            target->start_busy(2);
+        }
+
+        damage = damage * 3 / 4;
+        if (damage < 0) damage = 1;
+
+        // 使用真实伤害（融合狂海之势特点）
+        COMBAT_D->real_damage(me, target, damage);
+        msg += HIR "$n" HIR "被乱海狂涛的恐怖威力直接撕裂，无视一切防御，鲜血狂涌！\n" NOR;
+
+        me->add("neili", -me->query("max_neili") / 15);
+        me->start_busy(2 + random(2));
+        status_flag = 1;
+    }
+    else if (me->query("int") > random(target->query("int") * 2))
+    {
+        msg = HIC "\n$N" HIC "剑意变化莫测，如海市蜃楼般虚实难辨，$n" HIC "一时心神大乱！\n" NOR;
+
+        if (!target->is_busy())
+            target->start_busy(3);
+        me->start_busy(2);
+        status_flag = 1;
+    }
+    else if (me->query_str() > random(target->query_str() * 2))
+    {
+        msg = HIC "\n$N" HIC "剑力如海潮般连绵不绝，$n" HIC "内力被这狂涛巨浪冲击得七零八落！\n" NOR;
+
+        me->add("neili", -me->query("max_neili") / 30);
+        target->add("neili", -target->query("max_neili") / 15);
+
+        tell_object(me, HIR "你对" + target->name() + "造成了" + target->query("max_neili") / 15 + "点内力削减。\n" NOR);
+        me->start_busy(1 + random(2));
+        status_flag = 1;
+    }
+    else
+    {
+        msg = HIG "\n$n" HIG "面对这乱海狂涛，竟能从容应对，身如游龙，避开了大部分攻击。\n" NOR;
+        me->start_busy(2 + random(3));
+    }
+
+    me->add("neili", -400);
+
+    // 确保内力不为负
+    if (me->query("neili") < 0) me->set("neili", 0);
+    if (target->query("neili") < 0) target->set("neili", 0);
+
+    message_combatd(msg, me, target);
+    if (status_flag == 1)
+    {
+        tell_object(target, target->name() + "的状态发生了变化。\n");
+    }
+
+    return 1;
+}

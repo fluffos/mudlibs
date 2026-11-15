@@ -1,0 +1,333 @@
+// fanliangyi-dao.c 反两仪刀法
+
+
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit SKILL;
+
+mapping *action = ({
+([      "action" : "$N手中$w斜指，一招「混沌一破」，反身一顿，一刀向$n的$l撩去",
+	"force" : 120,
+	"dodge" : -10,
+	"lvl" : 0,
+	"skill_name" : "混沌一破",
+	"damage_type" : "割伤"
+]),
+([      "action" : "$N一招「太乙生萌」，左右腿虚点，$w一提一收，平刃挥向$n的颈部",
+	"force" : 140,
+	"dodge" : -10,
+	"damage" : 5,
+	"lvl" : 20,
+	"skill_name" : "太乙生萌",
+	"damage_type" : "割伤"
+]),
+([      "action" : "$N展身虚步，提腰跃落，一招「两仪合德」，刀锋化作两股斩向$n",
+	"force" : 160,
+	"dodge" : -5,
+	"damage" : 15,
+	"lvl" : 40,
+	"skill_name" : "两仪合德",
+	"damage_type" : "割伤"
+]),
+([      "action" : "$N一招「日月晦明」，$w大开大阖，自上而下划出一个大弧，笔直劈向$n",
+	"force" : 180,
+	"dodge" : 5,
+	"damage" : 25,
+	"lvl" : 60,
+	"skill_name" : "日月晦明",
+	"damage_type" : "割伤"
+]),
+([      "action" : "$N手中$w一沉，一招「无色无相」，双手持刃拦腰反切，砍向$n的胸口",
+	"force" : 200,
+	"dodge" : 10,
+	"damage" : 28,
+	"lvl" : 80,
+	"skill_name" : "无色无相",
+	"damage_type" : "割伤"
+]),
+([      "action" : "$N挥舞$w，使出一招「万劫不复」，上劈下撩，左挡右开，齐齐罩向$n",
+	"force" : 250,
+	"dodge" : 15,
+	"damage" : 30,
+	"lvl" : 100,
+	"skill_name" : "万劫不复",
+	"damage_type" : "割伤"
+])
+});
+
+
+int valid_enable(string usage)
+{
+	return usage == "blade" ||
+	       usage == "parry" ||
+	       usage == "array";
+}
+
+int form_array(object leader)
+{
+	object *member,ob, weapon;
+	int i,j,n;
+	int max,min,skill;
+
+	member = leader->query_team();
+	if( sizeof(member) != 2 )
+		return notify_fail("反两仪刀共需两人，少一个多一个都不行。\n");
+
+	j=sizeof (member);
+	for (i=0;i<j;i++)
+	{
+		ob=member[i];
+		if (!ob||!living(ob)||!ob->is_character())
+		{
+			return notify_fail("你想和谁同使反两仪刀？\n");
+		}
+		if (ob->query_temp("array/name"))
+		{
+			return notify_fail("已经组成刀阵了。\n");
+		}
+		if (environment(leader)!=environment(ob))
+		{
+			return notify_fail("人数不够两人。\n");
+		}
+		if (!ob->query_skill("fanliangyi-dao",1))
+		{
+			return notify_fail(ob->name()+"还不会反两仪刀法。\n");
+		}
+		if (ob->is_ghost())
+		{
+			return notify_fail("只有阳间的人才能组刀阵。\n");
+		}
+
+		if( (int)ob->query("max_neili") < 50 )
+			return notify_fail(ob->query("name")+"的内力不够。\n");
+
+		if( (string)ob->query_skill_mapped("force")!= "zixia-shengong")
+			return notify_fail(ob->query("name")+"没有使用华山派内功。\n");
+
+		if( !(weapon = ob->query_temp("weapon"))
+		||      (string)weapon->query("skill_type") != "blade" )
+			return notify_fail(ob->query("name")+"必须拿把刀做武器。\n");
+
+		if( (int)ob->query_skill("fanliangyi-dao",1)<180)
+			return notify_fail(ob->query("name")+"的反两仪刀法还不够熟练。\n");
+
+		if( (string)ob->query_skill_mapped("blade")!="fanliangyi-dao")
+			return notify_fail(ob->query("name")+"必须使用反两仪刀法。\n");
+
+	}
+
+//get the average array skill of the team
+	n=0;
+	for (i=0;i<j;i++)
+	{
+		ob=member[i];
+		n+=(int)ob->query_skill("fanliangyi-dao",1);
+	}
+	n/=2;
+
+//get the difference of the array skill,
+//first get the max and mix skill level of the array
+	max=member[0]->query_skill("fanliangyi-dao",1);
+	min=max;
+	for (i=0;i<j;i++)
+	{
+		skill=member[i]->query_skill("fanliangyi-dao",1);
+		if(skill>max)
+			max=skill;
+		else if(skill<min)
+			min=skill;
+	}
+
+//and the leader is important
+	//n += leader->query_skill("fanliangyi-dao", 1) * 5;
+	//n /= max - min + 1;
+      if (n>100) n=100;
+	for (i=0;i<j;i++)
+	{
+		ob=member[i];
+		ob->set_temp("no_quit",1);
+
+		ob->set_temp("array/name","fanliangyi-dao");
+		ob->set_temp("array/level",n);
+
+		ob->add_temp("apply/attack",n);
+		ob->add_temp("apply/defense", n);
+		ob->add_temp("apply/blade",n*4);
+		ob->add_temp("apply/armor", n);
+	}
+	message_vision( HIG "$N率领$N站定两仪方位，顿时两人之间显得浑然天成、毫无破绽。"NOR"\n", leader);
+	return 1;
+}
+
+int dismiss_array(object person)
+{
+	int i,j,n;
+	object *member,ob;
+
+	member = person->query_team();
+	j=sizeof(member);
+	n=person->query_temp("array/level");
+	
+	if (!j || j < 1)
+	{
+		ob = person;
+		ob->delete_temp("array");
+		ob->add_temp("apply/attack",-n);
+		ob->add_temp("apply/blade",-n*4);
+		ob->add_temp("apply/defense",-n);
+		ob->add_temp("apply/armor", -n);
+		tell_object(ob,"刀阵解散了\n");
+	} else {
+		for (i=0;i<j;i++)
+		{
+			ob=member[i];
+			ob->delete_temp("array");
+			ob->add_temp("apply/attack",-n);
+			ob->add_temp("apply/blade",-n*4);
+			ob->add_temp("apply/defense",-n);
+			ob->add_temp("apply/armor", -n);
+			tell_object(ob,"刀阵解散了\n");
+		}
+	}
+}
+
+//if the leader kills enemy, then all members in the array kill enemy
+int array_kill(object leader, object enemy)
+{
+	object *member, ob;
+	int i,j;
+	member=leader->query_team();
+	j=sizeof(member);
+
+	for(i=0;i<j;i++) {
+		ob=member[i];
+		ob->kill_ob(enemy);
+	}
+
+	return 1;
+}
+
+int effective_level() { return 10;}
+
+int valid_learn(object me)
+{
+	if ((int)me->query("max_neili") < 150)
+		return notify_fail("你的内力不够，无法锻炼反两仪刀法。\n");
+
+	if ((int)me->query_skill("force") < 40)
+		return notify_fail("你的内功火候太浅，难以锻炼反两仪刀法。\n");
+
+	if (me->query_skill("fanliangyi-dao", 1) > me->query_skill("blade", 1))
+		return notify_fail("你的基本刀法水平有限，无法领会更高深的反两仪刀法。\n");
+
+	return 1;
+}
+
+string query_skill_name(int level)
+{
+	int i;
+
+	for(i = sizeof(action) - 1; i >= 0; i--)
+		if (level >= action[i]["lvl"])
+			return action[i]["skill_name"];
+}
+
+mapping query_action(object me, object weapon)
+{
+	int i, level;
+	level = (int) me->query_skill("fanliangyi-dao", 1);
+	for (i = sizeof(action); i > 0; i--)
+		if (level > action[i - 1]["lvl"])
+			return action[NewRandom(i, 20, level / 5)];
+}
+
+int practice_skill(object me)
+{
+	object weapon;
+
+	if (! objectp(weapon = me->query_temp("weapon")) ||
+	    (string)weapon->query("skill_type") != "blade")
+		return notify_fail("你使用的武器不对。\n");
+
+	if ((int)me->query("qi") < 50)
+		return notify_fail("你的体力不够练反两仪刀法。\n");
+
+	if ((int)me->query("neili") < 50)
+		return notify_fail("你的内力不足，无法练习反两仪刀法，\n");
+
+	me->receive_damage("qi", 40);
+	me->add("neili", -41);
+	return 1;
+}
+
+string perform_action_file(string action)
+{
+	return __DIR__"fanliangyi-dao/" + action;
+}
+
+string query_description()
+{
+    string msg;
+
+    msg = HIY "【反两仪刀法】" ZJBR NOR;
+    msg += WHT "华山派高级刀法，暗合两仪八卦，阴阳相生，变化无穷。" ZJBR;
+    msg += "两人配合可结成刀阵，威力倍增。" ZJBR ZJBR;
+
+    msg += HIY "〖学习要求〗" ZJBR NOR;
+    msg += "  最大内力不低于 " HIB "150" NOR " 点。" ZJBR;
+    msg += "  基本内功等级不低于 " HIY "40" NOR " 级。" ZJBR;
+    msg += "  基本刀法等级需大于等于反两仪刀法等级。" ZJBR ZJBR;
+
+    msg += HIY "〖激发类型〗" ZJBR NOR;
+    msg += "  刀法（blade）。" ZJBR;
+    msg += "  招架（parry）。" ZJBR;
+    msg += "  阵法（array）。" ZJBR ZJBR;
+
+    msg += HIY "〖练习要求〗" ZJBR NOR;
+    msg += "  气血：不低于 " HIR "50" NOR " 点。" ZJBR;
+    msg += "  内力：不低于 " HIB "50" NOR " 点。" ZJBR;
+    msg += "  每次练习消耗气血： " HIR "40" NOR " 点。" ZJBR;
+    msg += "  每次练习消耗内力： " HIB "41" NOR " 点。" ZJBR;
+    msg += "  必须装备刀类武器。" ZJBR ZJBR;
+
+    msg += HIY "〖攻防特效/被动效果〗" ZJBR NOR;
+    msg += "  无。" ZJBR ZJBR;
+
+    msg += HIY "〖特殊招式〗" ZJBR NOR;
+    msg += HIC "  华岳三神峰 (sanshen)" ZJBR NOR;
+    msg += "    使用要求：" ZJBR;
+    msg += "      反两仪刀法等级 " HIY "50" NOR " 级。" ZJBR; // Note: sanshen.c checks blade skill > 50, not fanliangyi-dao explicitly, but mapped blade must be fanliangyi-dao
+    msg += "      基本内功等级 " HIY "120" NOR " 级。" ZJBR;
+    msg += "      当前内力 " HIB "100" NOR " 点。" ZJBR;
+    msg += "      激发刀法为反两仪刀法，并装备刀类武器。" ZJBR;
+    msg += "    效果描述：" ZJBR;
+    msg += "      对目标发动相当于自身攻击次数 (`COMBAT_D->query_base_attack_number`) 的连续普通攻击。" ZJBR;
+    msg += "      攻击时身法变得异常灵动飘忽。" ZJBR;
+    msg += "    消耗与代价：" ZJBR;
+    msg += "      内力 " HIB "100" NOR " 点，忙乱 " HIR "1~3" NOR " 秒。" ZJBR ZJBR;
+
+    msg += HIC "  反两仪刀阵" ZJBR NOR;
+    msg += "    结阵要求（两人）：" ZJBR;
+    msg += "      队员均需装备刀类武器，且激发反两仪刀法。" ZJBR;
+    msg += "      队员反两仪刀法等级均不低于 " HIY "180" NOR " 级。" ZJBR;
+    msg += "      队员均需激发华山派紫霞神功。" ZJBR;
+    msg += "      队员最大内力均不低于 " HIB "50" NOR " 点。" ZJBR;
+    msg += "      队员必须在同一房间且存活。" ZJBR;
+    msg += "    阵法效果（持续）：" ZJBR;
+    msg += "      提升阵中所有成员的攻击力、防御力、刀法伤害和护甲。" ZJBR;
+    msg += "      提升效果数值等于（两人刀法等级之和 / 2），最高为 " HIY "100" NOR "。" ZJBR;
+    msg += "      具体提升：攻击力+" HIC "n" NOR ", 防御力+" HIC "n" NOR ", 刀法伤害+" HIC "n*4" NOR ", 护甲+" HIC "n" NOR "（n为效果数值）。" ZJBR;
+    msg += "    注意事项：" ZJBR;
+    msg += "      结阵后无法主动退出游戏（quit）。" ZJBR;
+    msg += "      队伍领袖攻击敌人时，所有队员会自动攻击该敌人。" ZJBR;
+    msg += "      可通过解散队伍或由领袖使用解除阵法。" ZJBR ZJBR; // Clarified dismissal
+
+    msg += HIR "【注意事项】" ZJBR NOR;
+    msg += "1. 反两仪刀法与紫霞神功配合能发挥更大威力，尤其是在结阵时。" ZJBR;
+    msg += "2. 华岳三神峰是主要的连击手段，注意内力消耗。" ZJBR; // Corrected description
+    msg += "3. 反两仪刀阵需要两人配合，对技能和内功有较高要求，但增益效果显著。" ZJBR;
+
+    return msg;
+}

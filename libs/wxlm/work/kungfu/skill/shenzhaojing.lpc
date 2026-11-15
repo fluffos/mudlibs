@@ -1,0 +1,286 @@
+// 玄照经神功 shenzhaojing.c
+// Editd By Vin On 26/4/2001
+
+
+inherit FORCE;
+
+int query_neili_improve(object me)
+{
+	int lvl;
+
+	lvl = (int)me->query_skill("shenzhaojing", 1);
+	return lvl * lvl * 15 * 16 / 100 / 200;
+}
+
+mapping *action = ({
+([      "action" : "$N倏然跃近，击出一拳，这一拳无声无影，去势快极，向$n的胸口打去",
+	"dodge"  : 81,
+	"force"  : 323,
+	"attack" : 119,
+	"parry"  : 94,
+	"damage" : 68,
+	"lvl"    : 0,
+	"damage_type": "内伤" 
+]), 
+([      "action" : "$N丝毫不动声色，右掌平伸，左掌运起玄照经神功的劲力，呼的一声拍向$n",
+	"dodge"  : 73,
+	"force"  : 362,
+	"attack" : 138,
+	"parry"  : 51,
+	"damage" : 73,
+	"lvl"    : 200,
+	"damage_type": "内伤"
+]), 
+([      "action" : "$N身形微微一展，已然游走至$n跟前，陡然间双掌齐施，向$n猛拍而去",
+	"dodge"  : 78,
+	"force"  : 389,
+	"attack" : 152,
+	"parry"  : 53,
+	"damage" : 87,
+	"lvl"    : 220,
+	"damage_type": "内伤"
+]),
+([      "action" : "$N退后一步，双掌回收，凌空划出一个圆圈，顿时一股澎湃的气劲直涌$n而出",
+	"dodge"  : 75,
+	"force"  : 410,
+	"attack" : 163,
+	"parry"  : 67,
+	"damage" : 93,
+	"lvl"    : 250,
+	"damage_type": "内伤"
+]), 
+});
+
+int valid_force(string force)
+{
+	return 1;
+}
+
+int valid_enable(string usage)
+{ 
+	return usage == "force" || usage=="unarmed" || usage =="parry";
+}
+
+int valid_learn(object me)
+{
+	if (me->query("gender") == "无性" && me->query("shenzhaojing", 1) > 49)
+		return notify_fail("你无根无性，阴阳不调，难以领会高深的玄照经神功。\n");
+
+	if ((int)me->query_skill("force", 1) < 100)
+		return notify_fail("你的基本内功火候不足100级，不能学玄照经神功。\n");
+
+	if ((int)me->query_skill("unarmed", 1) < 100)
+		return notify_fail("你的基本拳脚火候不足100级，不能学玄照经神功。\n");
+
+	if ((int)me->query("max_neili", 1) < 1000)
+		return notify_fail("你的内力修为不足1000点，不能学玄照经神功。\n");
+
+	if (me->query_skill("force", 1) < me->query_skill("shenzhaojing", 1))
+		return notify_fail("你的基本内功水平不够，难以锻炼更深厚的玄照经神功。\n");
+
+	if (me->query_skill("unarmed", 1) < me->query_skill("shenzhaojing", 1))
+		return notify_fail("你的基本拳脚水平不够，难以锻炼更深厚的玄照经神功。\n");
+
+	return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+	int i, level;
+	level = (int) me->query_skill("shenzhaojing", 1);
+	for (i = sizeof(action); i > 0; i--)
+		if (level > action[i-1]["lvl"])
+			return action[NewRandom(i, 50, level)];
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+	int lvl;
+
+	lvl = me->query_skill("shenzhaojing", 1);
+
+	if (damage_bonus < 160 || lvl < 180) return 0;
+
+	// 玄照经神功所具有的既添设额外伤害又使对手中
+	// 毒的max_hit 在所有武功中是绝无仅有的，但是
+	// 它出现的几率以及伤害值又及毒性伤害相对于其
+	// 他武功大大减弱。
+	if (damage_bonus / 6 > victim->query_con() && random(3) == 0)
+	{
+		victim->receive_wound("qi", (damage_bonus - 100) / 3, me);
+		victim->affect_by("shenzhao",
+			       ([ "level" : me->query("jiali") + random(me->query("jiali")),
+				  "id"    : me->query("id"),
+				  "duration" : lvl / 150 + random(lvl / 10) ]));
+		return HIR "$n" HIR "一声惨嚎，全身骨骼格格格格爆声不绝，肋骨、臂骨、腿骨同时断折。"NOR"\n";
+	}
+}
+
+int practice_skill(object me)
+{
+	int lvl;
+	lvl = me->query_skill("shenzhaojing", 1);
+	
+	if (me->query_temp("shenzhaojing/parctice"))
+		return notify_fail("你正想练习玄照经神功却发现内力提不起来，看来还是得等一会再练习。\n");
+		
+	if (lvl < 40)
+		return notify_fail("你对玄照经神功认识太浅，只能用学(learn)的来增加熟练度。\n");
+	
+	if (lvl > 180)
+		return notify_fail("你觉得玄照经神功高深无比，不有通过简单的练习来增加熟练度。\n");
+	
+	if ((int)me->query("neili") < 200 + (20 * lvl) / 6)
+		return notify_fail("你现在的内力太低了，无法练习玄照经神功。\n");
+		
+	if (me->query("potential") - me->query("learned_points") >= 10)
+	{
+		me->improve_skill("shenzhaojing", me->query("con") * 4 + 20);
+		me->set_temp("shenzhaojing/parctice",1);
+		me->start_call_out( (: call_other, __FILE__, "remove_effect", me :), 2);
+		me->add("neili", - (20 * lvl) / 6); 
+		me->add("potential", -10);
+		return 1;
+	}
+	else 
+		return notify_fail("你现在没有潜能来提高玄照经神功了。\n");
+	
+	return notify_fail("玄照经神功只能用学(learn)的来增加熟练度。\n");
+}
+
+int difficult_level()
+{
+	return 500;
+}
+
+string main_skill() { return "yongzhao-shanhe"; }
+
+string perform_action_file(string action)
+{
+	return __DIR__"shenzhaojing/perform/" + action;
+}
+
+string exert_function_file(string action)
+{
+	return __DIR__"shenzhaojing/exert/" + action;
+}
+
+void remove_effect(object me)
+{
+	if (me->query_temp("shenzhaojing/parctice"))
+	{
+		me->delete_temp("shenzhaojing/parctice");
+	}
+}
+
+
+string query_description()
+{
+    string msg;
+
+    msg = HIY "【玄照经神功】" ZJBR NOR; // 基本介绍
+    msg += WHT "玄照经神功是一门高深的内功心法，以其独特的修炼方式和强大的威力而闻名。此功法融合了内外兼修的精髓，能大幅提升修炼者的整体实力。" ZJBR ZJBR;
+
+    msg += HIY "〖学习要求〗" ZJBR NOR; // valid_learn
+    msg += "  基本内功等级不低于 " HIY "100" NOR " 级。" ZJBR;
+    msg += "  基本拳脚等级不低于 " HIY "100" NOR " 级。" ZJBR;
+    msg += "  最大内力不低于 " HIB "1000" NOR " 点。" ZJBR;
+    msg += "  基本内功等级不低于玄照经神功等级。" ZJBR;
+    msg += "  基本拳脚等级不低于玄照经神功等级。" ZJBR ZJBR;
+
+    msg += HIY "〖特殊限制〗" ZJBR NOR; // valid_learn
+    msg += "  无性角色玄照经神功等级不能超过 " HIR "49" NOR " 级。" ZJBR ZJBR;
+
+    msg += HIY "〖激发类型〗" ZJBR NOR; // valid_enable
+    msg += "  内功 (force)。" ZJBR;
+    msg += "  拳脚 (unarmed)。" ZJBR;
+    msg += "  招架 (parry)。" ZJBR ZJBR;
+
+    msg += HIY "〖练习要求〗" ZJBR NOR; // practice_skill
+    msg += "  仅可在玄照经神功等级 " HIY "40" NOR " 至 " HIY "180" NOR " 级之间通过练习提升。" ZJBR;
+    msg += "  潜能：至少需要 " HIG "10" NOR " 点潜能。" ZJBR;
+    msg += "  内力：需要 (200 + (20 * 玄照经等级) / 6) 点。" ZJBR;
+    msg += "  每次练习消耗内力：(20 * 玄照经等级) / 6 点。" ZJBR;
+    msg += "  每次练习消耗潜能：" HIG "10" NOR " 点。" ZJBR;
+    msg += "  练习后有 " HIR "2" NOR " 秒冷却时间，期间无法再次练习。" ZJBR ZJBR;
+
+    msg += HIY "〖攻防特效/被动效果〗" ZJBR NOR; // hit_ob, query_neili_improve etc.
+    msg += HIC "  断骨伤敌 (被动)" ZJBR NOR;
+    msg += "    触发条件：" ZJBR;
+    msg += "      造成的气血伤害 (`damage_bonus`) 不低于 " HIR "160" NOR " 点。" ZJBR;
+    msg += "      自身玄照经神功等级不低于 " HIY "180" NOR " 级。" ZJBR;
+    msg += "    效果判定：" ZJBR;
+    msg += "      有 " HIR "1/3" NOR " 的几率触发，且需要满足 (造成的气血伤害 / 6) > 目标先天根骨。" ZJBR;
+    msg += "    触发效果：" ZJBR;
+    msg += "      对目标造成气血上限伤害，伤害值为 ((造成的气血伤害 - 100) / 3) 点。" ZJBR;
+    msg += "      使目标中 " HIR "神照内劲 (shenzhao)" NOR " 状态。" ZJBR;
+    msg += "        状态等级 = 自身加力值 + 随机(自身加力值)。" ZJBR;
+    msg += "        状态持续时间 = (玄照经神功等级 / 150 + 随机(玄照经神功等级 / 10)) 秒。" ZJBR ZJBR;
+    msg += "  内力上限提升：" ZJBR;
+    msg += "    提升值约为 (玄照经神功等级 * 玄照经神功等级 * 15 * 16 / 100 / 200)。" ZJBR ZJBR;
+
+    msg += HIY "〖特殊招式 (内功运用 exert)〗" ZJBR NOR;
+    msg += HIC "  神照护体 (shield)" ZJBR NOR;
+    msg += "    使用要求：" ZJBR;
+    msg += "      基本玄照经神功 " HIY "50" NOR " 级。" ZJBR;
+    msg += "      当前内力 " HIB "100" NOR " 点。" ZJBR;
+    msg += "      未处于护体状态 (`shield`)。" ZJBR;
+    msg += "    效果描述：" ZJBR;
+    msg += "      提升自身 防御力 (`apply/armor`)，提升数值为 (激发内功等级 / 2)。" ZJBR;
+    msg += "      效果持续时间为 激发内功等级 秒。" ZJBR;
+    msg += "    消耗与代价：" ZJBR;
+    msg += "      内力 " HIB "100" NOR " 点。" ZJBR;
+    msg += "      若在战斗中，自身忙乱 " HIR "2" NOR " 秒。" ZJBR ZJBR;
+
+    msg += HIC "  神照加力 (powerup)" ZJBR NOR;
+    msg += "    使用要求：" ZJBR;
+    msg += "      当前内力 " HIB "100" NOR " 点。" ZJBR;
+    msg += "      未处于运功状态 (`powerup`)。" ZJBR;
+    msg += "    效果描述：" ZJBR;
+    msg += "      提升自身 攻击有效等级 (`apply/attack`) 和 防御有效等级 (`apply/defense`)。" ZJBR;
+    msg += "      提升数值均为 (激发内功等级 / 3)。" ZJBR;
+    msg += "      效果持续时间为 激发内功等级 秒。" ZJBR;
+    msg += "    消耗与代价：" ZJBR;
+    msg += "      内力 " HIB "100" NOR " 点。" ZJBR;
+    msg += "      若在战斗中，自身忙乱 " HIR "3" NOR " 秒。" ZJBR ZJBR;
+
+    msg += HIY "〖特殊招式 (拳脚施展 perform)〗" ZJBR NOR;
+    msg += HIC "  无影拳舞 (wu)" ZJBR NOR;
+    msg += "    使用要求：" ZJBR;
+    msg += "      基本玄照经神功 " HIY "200" NOR " 级。" ZJBR;
+    msg += "      基本拳脚等级 " HIY "200" NOR " 级。" ZJBR;
+    msg += "      最大内力 " HIB "5000" NOR " 点。" ZJBR;
+    msg += "      当前内力 " HIB "500" NOR " 点。" ZJBR;
+    msg += "      必须空手。" ZJBR;
+    msg += "      必须激发玄照经神功为拳脚并备玄照经神功。" ZJBR;
+    msg += "    效果描述：" ZJBR;
+    msg += "      先进行一次命中判定：比较 (自身激发内功等级 + 先天根骨*10) 与 (目标激发轻功等级 + 先天身法*10)。" ZJBR;
+    msg += "      若判定成功，临时增加攻击有效等级，数值为 ((自身激发内功等级 + 先天根骨*10) / 10)。" ZJBR;
+    msg += "      发动数次攻击 (次数由 `COMBAT_D->query_base_attack_number` 决定)。" ZJBR;
+    msg += "      每次攻击独立计算命中伤害，并有 " HIR "1/3" NOR " 的几率使目标忙乱 " HIR "1" NOR " 秒 (若目标未忙乱)。" ZJBR;
+    msg += "    消耗与代价：" ZJBR;
+    msg += "      内力 " HIB "200" NOR " 点。" ZJBR;
+    msg += "      自身忙乱 " HIR "1" NOR " 至 " HIR "5" NOR " 秒 (随机)。" ZJBR ZJBR;
+
+    msg += HIC "  无影神拳 (ying)" ZJBR NOR;
+    msg += "    使用要求：" ZJBR;
+    msg += "      基本玄照经神功 " HIY "200" NOR " 级。" ZJBR;
+    msg += "      基本拳脚等级 " HIY "200" NOR " 级。" ZJBR;
+    msg += "      最大内力 " HIB "5000" NOR " 点。" ZJBR;
+    msg += "      当前内力 " HIB "500" NOR " 点。" ZJBR;
+    msg += "      必须空手。" ZJBR;
+    msg += "      必须激发玄照经神功为拳脚并备玄照经神功。" ZJBR;
+    msg += "    效果描述：" ZJBR;
+    msg += "      命中判定：比较 (自身激发内功等级 + 先天根骨*10) 与 (目标激发内功等级 + 先天根骨*10)。" ZJBR;
+    msg += "      命中效果：" ZJBR;
+    msg += "        对目标造成大量气血伤害，伤害值约为 ((自身激发内功等级 + 先天根骨*10) + 随机((自身激发内功等级 + 先天根骨*10) / 2))，伤害加成90。" ZJBR;
+    msg += "        使目标中 " HIR "神照内劲 (shenzhao)" NOR " 状态。" ZJBR;
+    msg += "          状态等级 = 自身加力值 + 随机(自身加力值)。" ZJBR;
+    msg += "          状态持续时间 = (玄照经神功等级 / 50 + 随机(玄照经神功等级 / 20)) 秒。" ZJBR;
+    msg += "      未命中效果：无特殊效果。" ZJBR;
+    msg += "    消耗与代价：" ZJBR;
+    msg += "      内力 " HIB "400" NOR " 点 (仅命中时消耗)。" ZJBR;
+    msg += "      自身忙乱 " HIR "4" NOR " 秒。" ZJBR;
+
+    return msg;
+}

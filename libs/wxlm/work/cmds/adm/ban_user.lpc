@@ -1,0 +1,143 @@
+// ban_user.c - 封禁用户账号命令
+
+inherit F_CLEAN_UP;
+
+/**
+ * @brief 创建命令对象
+ * @details 设置命令的权限
+ */
+void create() 
+{ 
+    seteuid(getuid()); 
+}
+
+/**
+ * @brief 主命令函数
+ * @param object me 执行命令的玩家
+ * @param string arg 命令参数
+ * @return int 执行成功返回1，失败返回0
+ * @details 封禁用户账号，格式：ban_user 账号 封禁时间(天为单位) [封禁原因]
+ */
+int main(object me, string arg)
+{
+    string user, reason, *parts;
+    int days;
+    object target;
+    
+    // 检查权限
+    if (!SECURITY_D->valid_grant(me, "(admin)"))
+    {
+        notify_fail("你没有权限使用这个命令。\n");
+        return 0;
+    }
+    
+    // 检查参数
+    if (!arg)
+    {
+        // 显示被封禁用户列表
+        BAN_D->print_banned_users();
+        return 1;
+    }
+    
+    // 解析参数
+    parts = explode(arg, " ");
+    if (sizeof(parts) < 2)
+    {
+        notify_fail("指令格式：ban_user <账号> <封禁天数> [封禁原因]\n");
+        return 0;
+    }
+    
+    user = lower_case(parts[0]);
+    days = to_int(parts[1]);
+    
+    // 检查封禁天数
+    if (days <= 0)
+    {
+        notify_fail("封禁天数必须大于0。\n");
+        return 0;
+    }
+    
+    if (days > 365)
+    {
+        notify_fail("封禁天数不能超过365天。\n");
+        return 0;
+    }
+    
+    // 获取封禁原因
+    if (sizeof(parts) >= 3)
+    {
+        reason = implode(parts[2..], " ");
+    }
+    else
+    {
+        reason = "违反游戏规则";
+    }
+    
+    // 检查是否试图封禁管理员
+    if (wiz_level(user) >= wiz_level(me->query("id")))
+    {
+        notify_fail("你不能封禁权限等于或高于你的用户。\n");
+        return 0;
+    }
+    
+    // 执行封禁
+    BAN_D->ban_user(user, days, reason);
+    
+    // 如果用户在线，强制下线
+    target = find_player(user);
+    if (target)
+    {
+        tell_object(target, sprintf("你的账号已被管理员封禁 %d 天，封禁原因：%s\n", days, reason));
+        if (target->query_temp("link_ob"))
+        {
+            destruct(target->query_temp("link_ob"));
+        }
+        destruct(target);
+    }
+    
+    // 记录日志
+    log_file("ban_user", sprintf("%s：%s 封禁了用户 %s %d 天，原因：%s\n", 
+        ctime(time()), me->query("id"), user, days, reason));
+    
+    write(sprintf("成功封禁用户 %s %d 天，封禁原因：%s\n", user, days, reason));
+    
+    // 通知其他管理员
+    CHANNEL_D->do_channel(load_object("/clone/misc/msgd"), "chat", 
+        sprintf("用户%s被封禁了 %d 天，原因：%s", user, days, reason));
+    
+    return 1;
+}
+
+/**
+ * @brief 帮助信息
+ * @param object me 查看帮助的玩家
+ * @return int 总是返回1
+ * @details 显示命令的使用帮助
+ */
+int help(object me)
+{
+    write(@HELP
+指令格式：ban_user <账号> <封禁天数> [封禁原因]
+          ban_user                    - 显示被封禁用户列表
+
+这个命令用于封禁用户账号，被封禁的用户将无法登录游戏。
+
+参数说明：
+  账号       - 要封禁的用户账号（不区分大小写）
+  封禁天数   - 封禁的天数（1-365天）
+  封禁原因   - 封禁的原因（可选，默认为"违反游戏规则"）
+
+示例：
+  ban_user testuser 7                    - 封禁testuser 7天
+  ban_user baduser 30 恶意刷屏           - 封禁baduser 30天，原因是恶意刷屏
+
+注意：
+1. 只有管理员才能使用此命令
+2. 不能封禁权限等于或高于自己的用户
+3. 被封禁的用户如果在线会被强制下线
+4. 封禁操作会被记录到日志文件中
+
+相关命令：unban_user（解封用户）
+HELP );
+    return 1;
+}

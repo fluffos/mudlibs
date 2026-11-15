@@ -1,0 +1,600 @@
+// multi_family.c
+inherit F_CLEAN_UP;
+
+private object multi_family_mgr;
+private mapping family_man_cache;
+private int cache_time;
+
+private string *all_families = ({
+    "少林派", "武当派", "峨嵋派", "华山派", "华山剑宗", "丐帮",
+    "桃花岛", "星宿派", "逍遥派", "古墓派", "全真教", "神龙教",
+    "雪山寺", "血刀门", "灵鹫宫", "欧阳世家", "关外胡家",
+    "慕容世家", "段氏皇族", "白帝城", "四象门", "移花宫", "明教", "魔教"
+});
+
+private string *family_builds = ({ 
+    "宗门大殿","藏经阁","竞技场","事务大厅","师门排行","绝义堂","意境观","修心阵","门派留学" 
+});
+
+int main(object me, string arg);
+int show_family_menu(object me);
+int join_family(object me, string family_name);
+int show_family_detail(object me, string family_name);
+int show_clear_family_menu(object me);
+int clear_family(object me, string family_name, string pay_type);
+mapping get_family_man_list();
+object get_multi_family_manager();
+
+object get_multi_family_manager()
+{
+    if (!objectp(multi_family_mgr))
+        multi_family_mgr = load_object("/adm/special_ob/multi_family/multi_family_master");
+    return multi_family_mgr;
+}
+
+int main(object me, string arg)
+{
+    string family_name, pay_type;
+    
+    if (!arg || arg == "")
+        return show_family_menu(me);
+    
+    if (arg == "clear")
+        return show_clear_family_menu(me);
+    
+    if (sscanf(arg, "join %s", family_name) == 1)
+        return join_family(me, family_name);
+    
+    if (sscanf(arg, "detail %s", family_name) == 1)
+        return show_family_detail(me, family_name);
+        
+    if (sscanf(arg, "clear %s %s", family_name, pay_type) == 2)
+        return clear_family(me, family_name, pay_type);
+    
+    return show_family_menu(me);
+}
+
+int show_family_menu(object me)
+{
+    object pop, mgr;
+    mapping info, fam_info;
+    string msg, *available_families, current_family, family_name;
+    int i, max_show, has_study_families;
+    string *occupied_slots;
+
+    pop = new(POP1);
+    mgr = get_multi_family_manager();
+
+    if (!objectp(mgr))
+    {
+        pop->basic("系统错误：无法加载多门派管理器。", 2);
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+
+    info = mgr->can_join_family(me);
+    fam_info = mgr->get_family_info(me);
+
+    msg = "【门派留学系统】\n";
+    msg += "功能说明：300级后可拜第二门派，每提升200级开放新槽位\n\n";
+
+    if (info["can_join"])
+    {
+        msg += sprintf("✓ 当前状态：可以留学 (等级:%d)\n", info["current_level"]);
+        msg += sprintf("✓ 可用槽位：%s\n\n", info["family_key"]);
+    }
+    else
+    {
+        msg += sprintf("✗ 当前状态：%s\n", info["reason"]);
+        msg += sprintf("✗ 当前等级：%d", info["current_level"]);
+        if (info["required_level"]) 
+            msg += sprintf("，需求等级：%d", info["required_level"]);
+        msg += "\n\n";
+    }
+    
+    // 显示已加入的门派列表（包括主门派和留学门派）
+    msg += "【已加入门派列表】(点击查看详情)\n";
+
+    pop->basic(msg, 2);
+    
+    has_study_families = 0;
+    if (mapp(fam_info["family_info"]))
+    {
+        // 首先显示主门派
+        if (mapp(fam_info["family_info"]["family_1"]))
+        {
+            family_name = fam_info["family_info"]["family_1"]["family_name"];
+            if (family_name && family_name != "")
+            {
+                pop->add_button(sprintf("%s (主门派)", family_name), 
+                    sprintf("multi_family detail %s", family_name));
+            }
+        }
+        
+        // 然后显示留学门派
+        occupied_slots = mgr->get_occupied_family_slots(me);
+        if (sizeof(occupied_slots) > 0)
+        {
+            foreach (string key in occupied_slots)
+            {
+                mixed val = fam_info["family_info"][key];
+                if (!val || val == "") continue;
+                
+                family_name = "";
+                if (mapp(val) && val["family_name"])
+                    family_name = val["family_name"];
+                else if (stringp(val))
+                    family_name = val;
+                    
+                if (family_name != "")
+                {
+                    pop->add_button(sprintf("%s (已留学)", family_name), 
+                        sprintf("multi_family detail %s", family_name));
+                    has_study_families = 1;
+                }
+            }
+        }
+    }
+    
+    if (!has_study_families)
+    {
+        pop->add_button("暂无留学门派", "multi_family");
+    }
+    
+    // 显示可加入的门派列表
+    if (info["can_join"])
+    {
+        // pop->add_button("━━━━━━━━━━━━━━━━", "multi_family");
+        // pop->add_button("【可加入留学门派】", "multi_family");
+        
+        // current_family = me->query("family/family_name");
+        available_families = all_families - ({ current_family });
+        
+        if (mapp(fam_info["family_info"]))
+        {
+            foreach (string key, mixed val in fam_info["family_info"])
+            {
+                if (mapp(val) && val["family_name"])
+                    available_families -= ({ val["family_name"] });
+                else if (stringp(val) && val != "")
+                    available_families -= ({ val });
+            }
+        }
+        
+        if (sizeof(available_families) > 0)
+        {
+            max_show = sizeof(available_families) > 100 ? 100 : sizeof(available_families);
+            for (i = 0; i < max_show; i++)
+            {
+                pop->add_button(sprintf("➕ %s", available_families[i]), 
+                    sprintf("multi_family join %s", available_families[i]));
+            }
+        }
+        else
+        {
+            pop->add_button("已加入所有可用门派", "multi_family");
+        }
+    }
+    
+    // 添加清除留学的按钮
+    if (has_study_families)
+    {
+        pop->add_button("清除门派留学", "multi_family clear");
+    }
+    
+    pop->add_button("返回", "look");
+    tell_object(me, pop->result() + "\n");
+    return 1;
+}
+
+int show_family_detail(object me, string family_name)
+{
+    mapping jsonData, data, *buildingsData, *peoplesData, family_man_list;
+    mixed *family_members, manName;
+    string name, command, main_family;
+    int i;
+    
+    family_man_list = get_family_man_list();
+    main_family = me->query("family/family_name");
+    
+    jsonData = ([]);
+    data = ([]);
+    peoplesData = ({});
+    jsonData["code"] = "family_layout";
+
+    // 判断是否是主门派
+    if (family_name == main_family)
+    {
+        // 主门派显示完整建筑
+        buildingsData = allocate(sizeof(family_builds));
+        for (i = 0; i < sizeof(family_builds); i++)
+        {
+            buildingsData[i] = ([
+                "name": family_builds[i],
+                "type": "门派建筑",
+                "command": "new_family look_family_build " + family_builds[i],
+            ]);
+        }
+        data["name"] = family_name;
+    }
+    else
+    {
+        // 留学门派只显示门派留学
+        buildingsData = ({ ([
+            "name": "门派留学",
+            "type": "门派建筑", 
+            "command": "multi_family"
+        ]) });
+        data["name"] = family_name + " (留学)";
+    }
+
+    if (mapp(family_man_list) && !undefinedp(family_man_list[family_name]))
+    {
+        family_members = family_man_list[family_name];
+        peoplesData = allocate(sizeof(family_members));
+        
+        for (i = 0; i < sizeof(family_members); i++)
+        {
+            manName = family_members[i];
+            
+            if (mapp(manName))
+            {
+                name = manName["name"];
+                if (undefinedp(manName["no_revive"]))
+                    name = HIR + name + "[收徒]" NOR;
+                if (manName["level"])
+                    name += "[" + manName["level"] + "]";
+                command = "go_family_npc " + manName["name"];
+            }
+            else
+            {
+                name = manName;
+                command = "go_family_npc " + manName;
+            }
+            
+            peoplesData[i] = ([ 
+                "name": name,
+                "type": "门派人物",
+                "command": command
+            ]);
+        }
+    }
+
+    data["buildings"] = buildingsData;
+    data["people"] = peoplesData;
+    jsonData["data"] = data;
+    
+    jsonData["extra_buttons"] = ({ ([
+        "name": "返回留学管理",
+        "command": "multi_family"
+    ]) });
+
+    tell_object(me, json_encode(jsonData) + "\n");
+    return 1;
+}
+
+int join_family(object me, string family_name)
+{
+    object pop, mgr;
+    mapping result;
+    string msg;
+
+    pop = new(POP1);
+    mgr = get_multi_family_manager();
+
+    if (!objectp(mgr))
+    {
+        pop->basic("系统错误：无法加载多门派管理器。", 2);
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+
+    result = mgr->can_join_family(me);
+    if (!result["can_join"])
+    {
+        msg = sprintf("【留学申请失败】\n失败原因：%s\n", result["reason"]);
+        pop->basic(msg, 2);
+        pop->add_button("返回", "multi_family");
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+
+    result = mgr->create_multi_family_info(me, family_name, "留学导师", 50);
+    
+    if (result["success"])
+    {
+        msg = sprintf("【留学申请成功】\n恭喜！你成功申请在【%s】留学！\n\n门派槽位：%s\n提示：找到合适的师傅后可以拜师学艺\n留学时间：%s\n", 
+            family_name, result["family_key"], ctime(time())[4..15]);
+        
+        me->add("family_study_history/" + family_name, time());
+        
+        CHANNEL_D->do_channel(this_object(), "rumor", 
+            sprintf("恭喜 %s 开始在 %s 留学！", me->query("name"), family_name));
+    }
+    else
+    {
+        msg = sprintf("【留学申请失败】\n失败原因：%s\n", result["error"] || "系统异常");
+    }
+
+    pop->basic(msg, 2);
+    if (result["success"])
+    {
+        pop->add_button(sprintf("查看 %s", family_name), sprintf("multi_family detail %s", family_name));
+    }
+    pop->add_button("继续留学", "multi_family");
+    pop->add_button("返回游戏", "look");
+    tell_object(me, pop->result() + "\n");
+    return 1;
+}
+
+mapping get_family_man_list()
+{
+    object family_obj;
+    mapping family_list;
+    
+    if (mapp(family_man_cache) && cache_time > time() - 300)
+        return family_man_cache;
+    
+    family_obj = load_object("/cmds/usr/new_family");
+    if (objectp(family_obj))
+    {
+        family_list = family_obj->query_familyManList();
+        if (mapp(family_list))
+        {
+            family_man_cache = family_list;
+            cache_time = time();
+            return family_list;
+        }
+    }
+    
+    return ([]);
+}
+
+// 显示清除门派留学的菜单
+int show_clear_family_menu(object me)
+{
+    object pop, mgr;
+    mapping fam_info;
+    string family_name;
+    string *occupied_slots;
+    
+    pop = new(POP1);
+    mgr = get_multi_family_manager();
+    
+    if (!objectp(mgr))
+    {
+        pop->basic("系统错误：无法加载多门派管理器。", 2);
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+    
+    fam_info = mgr->get_family_info(me);
+    
+    pop->basic("【清除门派留学】\n清除留学门派需消耗100元宝或200绑定元宝\n请选择要清除的门派：\n", 2);
+    
+    // 显示可清除的留学门派
+    occupied_slots = mgr->get_occupied_family_slots(me);
+    if (sizeof(occupied_slots) > 0)
+    {
+        foreach (string key in occupied_slots)
+        {
+            mixed val = fam_info["family_info"][key];
+            if (!val || val == "") continue;
+            
+            family_name = "";
+            if (mapp(val) && val["family_name"])
+                family_name = val["family_name"];
+            else if (stringp(val))
+                family_name = val;
+                
+            if (family_name != "")
+            {
+                pop->add_button(sprintf("%s (使用元宝)", family_name), 
+                    sprintf("multi_family clear %s yuanbao", family_name));
+                pop->add_button(sprintf("%s (使用绑定元宝)", family_name), 
+                    sprintf("multi_family clear %s bind_yuanbao", family_name));
+            }
+        }
+    }
+    else
+    {
+        pop->add_button("暂无可清除的留学门派", "multi_family");
+    }
+    
+    pop->add_button("返回", "multi_family");
+    tell_object(me, pop->result() + "\n");
+    return 1;
+}
+
+// 清除指定门派的留学记录
+int clear_family(object me, string family_name, string pay_type)
+{
+    object pop, mgr;
+    mapping fam_info, learned_skills_info, all_data;
+    string msg, family_key;
+    int yuanbao_cost, bind_yuanbao_cost, current_yuanbao, current_bind_yuanbao;
+    int found_family = 0;
+    string *occupied_slots, *skill_keys = ({}), *skills_to_delete = ({});
+    mapping result;
+    string skill;
+    int slot_number, cleared_count = 0;
+
+    // 设置消耗的元宝和绑定元宝数量
+    yuanbao_cost = 100;
+    bind_yuanbao_cost = 200;
+    
+    pop = new(POP1);
+    mgr = get_multi_family_manager();
+    
+    if (!objectp(mgr))
+    {
+        pop->basic("系统错误：无法加载多门派管理器。", 2);
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+    
+    if (pay_type != "yuanbao" && pay_type != "bind_yuanbao")
+    {
+        pop->basic("支付类型错误，请重新选择。", 2);
+        pop->add_button("返回", "multi_family clear");
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+    
+    // 获取玩家当前元宝和绑定元宝数量
+    current_yuanbao = me->query("yuanbao");
+    current_bind_yuanbao = me->query("bind_yuanbao");
+    
+    // 检查元宝是否足够
+    if (pay_type == "yuanbao" && current_yuanbao < yuanbao_cost)
+    {
+        pop->basic(sprintf("你的元宝不足，需要%d元宝。", yuanbao_cost), 2);
+        pop->add_button("返回", "multi_family clear");
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+    
+    if (pay_type == "bind_yuanbao" && current_bind_yuanbao < bind_yuanbao_cost)
+    {
+        pop->basic(sprintf("你的绑定元宝不足，需要%d绑定元宝。", bind_yuanbao_cost), 2);
+        pop->add_button("返回", "multi_family clear");
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+    
+    // 查找指定的门派
+    fam_info = mgr->get_family_info(me);
+    occupied_slots = mgr->get_occupied_family_slots(me);
+    
+    foreach (string key in occupied_slots)
+    {
+        mixed val = fam_info["family_info"][key];
+        if (!val || val == "") continue;
+        
+        if (mapp(val) && val["family_name"] == family_name)
+        {
+            family_key = key;
+            found_family = 1;
+            break;
+        }
+        else if (stringp(val) && val == family_name)
+        {
+            family_key = key;
+            found_family = 1;
+            break;
+        }
+    }
+    
+    if (!found_family)
+    {
+        pop->basic(sprintf("你并未在【%s】留学，无法清除。", family_name), 2);
+        pop->add_button("返回", "multi_family clear");
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+    
+    // 获取门派槽位号码
+    if (sscanf(family_key, "family_%d", slot_number) != 1)
+    {
+        pop->basic("系统错误：无法解析门派槽位。", 2);
+        pop->add_button("返回", "multi_family clear");
+        tell_object(me, pop->result() + "\n");
+        return 1;
+    }
+    
+    // 扣除元宝
+    if (pay_type == "yuanbao")
+    {
+        me->add("yuanbao", -yuanbao_cost);
+        log_file("multi_family", sprintf("%s(%s) 使用%d元宝清除了%s的留学记录。\n", 
+            me->query("name"), me->query("id"), yuanbao_cost, family_name));
+    }
+    else // bind_yuanbao
+    {
+        me->add("bind_yuanbao", -bind_yuanbao_cost);
+        log_file("multi_family", sprintf("%s(%s) 使用%d绑定元宝清除了%s的留学记录。\n", 
+            me->query("name"), me->query("id"), bind_yuanbao_cost, family_name));
+    }
+    
+    // 查找该门派学习的所有技能
+    learned_skills_info = mgr->get_family_learned_skills(me, family_name);
+    
+    if (learned_skills_info["success"] && mapp(learned_skills_info["learned_skills"]))
+    {
+        // 收集需要删除的技能名称
+        foreach (string skill_name, mapping skill_data in learned_skills_info["learned_skills"])
+        {
+            skills_to_delete += ({ skill_name });
+        }
+    }
+    
+    // 删除技能
+    if (sizeof(skills_to_delete) > 0)
+    {
+        foreach (string skill_name in skills_to_delete)
+        {
+            me->delete_skill(skill_name);
+            log_file("multi_family", sprintf("%s(%s) 清除了留学技能 %s。\n", 
+                me->query("name"), me->query("id"), skill_name));
+        }
+    }
+    
+    // 查找并删除所有技能学习记录
+    all_data = me->query_entire_dbase();
+    if (mapp(all_data))
+    {
+        foreach (string key in keys(all_data))
+        {
+            if (sscanf(key, "family_%d/learned_skills", slot_number) == 1 && slot_number == to_int(family_key[sizeof(family_key)-1..sizeof(family_key)-1]))
+            {
+                skill_keys += ({ key });
+            }
+            else if (sscanf(key, "family_%d/learned_skills/%s", slot_number, skill) == 2 && slot_number == to_int(family_key[sizeof(family_key)-1..sizeof(family_key)-1]))
+            {
+                skill_keys += ({ key });
+            }
+        }
+        
+        // 删除所有找到的技能学习记录
+        foreach (string key in skill_keys)
+        {
+            me->delete(key);
+            cleared_count++;
+        }
+    }
+    
+    // 删除门派记录
+    result = mgr->remove_family_info(me, to_int(family_key[sizeof(family_key)-1..sizeof(family_key)-1]));
+    
+    if (result["success"])
+    {
+        msg = sprintf("【清除留学成功】\n你成功清除了在【%s】的留学记录！\n\n", family_name);
+        if (sizeof(skills_to_delete) > 0)
+            msg += sprintf("清除技能：%d个\n", sizeof(skills_to_delete));
+        if (cleared_count > 0)
+            msg += sprintf("清除学习记录：%d条\n", cleared_count);
+        if (pay_type == "yuanbao")
+            msg += sprintf("消耗：%d元宝\n", yuanbao_cost);
+        else
+            msg += sprintf("消耗：%d绑定元宝\n", bind_yuanbao_cost);
+        
+        CHANNEL_D->do_channel(this_object(), "rumor", 
+            sprintf("%s 结束了在 %s 的留学之旅！", me->query("name"), family_name));
+    }
+    else
+    {
+        msg = sprintf("【清除留学失败】\n失败原因：%s\n", result["error"] || "系统异常");
+        
+        // 退还元宝
+        if (pay_type == "yuanbao")
+            me->add("yuanbao", yuanbao_cost);
+        else
+            me->add("bind_yuanbao", bind_yuanbao_cost);
+    }
+    
+    pop->basic(msg, 2);
+    pop->add_button("返回留学管理", "multi_family");
+    pop->add_button("返回游戏", "look");
+    tell_object(me, pop->result() + "\n");
+    return 1;
+}

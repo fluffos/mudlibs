@@ -1,0 +1,214 @@
+inherit ITEM;
+void start_move();
+int is_biaoche() { return 1; } // 标记此对象为镖车
+
+varargs void create(object me)
+{
+    string player_name,player_id;
+
+    if (me)
+    {
+        player_name = me->query("name");
+        player_id = me->query("id");
+    }
+    else
+    {
+        player_name = "未知";
+        player_id = "未知";
+    }
+
+    // 初始化镖车属性
+    set_name(sprintf(HIR "%s的镖车" NOR, player_name), ({ "biao che", "che", "cart" }));
+    set_weight(100000);
+    set("unit", "辆");
+    set("long", "这是一辆正在运送货物的镖车。\n");
+    set("value", 0);
+    set("no_get", 1);
+    set("no_drop", 1);
+    set("no_sell", 1);
+
+    // 变量声明
+    set("durability", 1000); // 初始耐久度
+    set("owner", player_id);
+    set("moving", 0);
+    set("current_step", 0);
+
+    setup();
+}
+
+void init()
+{
+    object me = this_player();
+
+    // 禁止玩家攻击镖车
+    add_action("do_attack", "hit");
+    add_action("do_attack", "kill");
+    add_action("do_attack", "fight");
+    add_action("do_attack", "steal");
+
+    // 如果是镖车主人，启动镖车移动
+    if (me->query("id") == query("owner") && !query("moving"))
+    {
+        set("moving", 1);
+        call_out("start_move", 2);
+    }
+}
+
+int do_attack(string arg)
+{
+    object me = this_player();
+
+    if (!arg || present(arg, environment(me)) != this_object())
+        return 0;
+
+    tell_object(me, "你不能攻击镖车！\n");
+    return 1;
+}
+
+// 减少耐久度函数
+void reduce_durability()
+{
+    int dur;
+    object owner;
+
+    dur = query("durability");
+    dur -= 200; // 每次减少200耐久度，可根据需要调整
+    set("durability", dur);
+
+    owner = find_player(query("owner"));
+    if (dur > 0)
+    {
+        if (objectp(owner))
+        {
+            tell_object(owner, HIR "镖车受到了损害，当前耐久度为：" + dur + "。\n" NOR);
+        }
+    }
+    else
+    {
+        // 耐久度为0，镖车被毁
+        if (objectp(owner))
+        {
+            tell_object(owner, HIR "镖车被彻底摧毁，押镖任务失败！\n" NOR);
+            owner->delete("escort_info");
+            owner->delete("escort_today");
+            owner->set_leader(0); // 停止跟随
+        }
+        // 销毁镖车
+        destruct(this_object());
+    }
+}
+
+void start_move()
+{
+    object me, env, *followers;
+    string *route;
+    int current_step, max_step, i;
+
+    me = find_player(query("owner"));
+
+    if (!me)
+    {
+        destruct(this_object());
+        return;
+    }
+
+    // 检查玩家是否在战斗
+    if (me->is_fighting())
+    {
+        // 玩家在战斗，延迟一段时间后再检查
+        call_out("start_move", 5);
+        return;
+    }
+
+    route = query("route");
+    current_step = query("current_step");
+    max_step = sizeof(route);
+
+    // 判断是否到达终点
+    if (current_step >= max_step)
+    {
+        tell_object(me, HIC "镖车顺利到达目的地，你可以前往交付任务了。\n" NOR);
+        me->set_temp("escort/finished", 1);
+        destruct(this_object());
+        return;
+    }
+
+    // 移动到下一地点
+    env = load_object(route[current_step]);
+    if (!env)
+    {
+        tell_object(me, "镖车无法继续前进，任务失败。\n");
+        me->delete("escort_info");
+        me->delete("escort_today");
+        me->set_leader(0); // 停止跟随
+        destruct(this_object());
+        return;
+    }
+
+    this_object()->move(env);
+    current_step += 1;
+    set("current_step", current_step);
+
+    // 镖车移动提示
+    message("vision", "一辆镖车缓缓地驶了过来。\n", env, ({ this_object() }));
+
+    // 将玩家移动到镖车所在地点
+    if (environment(me) != env)
+    {
+        me->move(env);
+        tell_object(me, HIC "你随着镖车前进。\n" NOR);
+        message("vision", me->name() + "跟随着镖车来到这里。\n", env, ({ me }));
+    }
+
+    // 处理跟随者（队伍成员）
+    followers = me->query_team();
+    if (arrayp(followers) && sizeof(followers) > 1)
+    {
+        for (i = 0; i < sizeof(followers); i++)
+        {
+            // 检查跟随者对象是否有效
+            if (!objectp(followers[i]))
+                continue;
+
+            if (followers[i] != me && environment(followers[i]) != env)
+            {
+                // 检查移动操作是否成功
+                if (followers[i]->move(env))
+                {
+                    tell_object(followers[i], HIC "你跟随着队伍前进，来到了" + env->query("short") + "。\n" NOR);
+                    message("vision", followers[i]->name() + "跟随着镖车来到这里。\n", env, ({ followers[i] }));
+                }
+            }
+        }
+    }
+
+    // 敌人攻击判定
+    if (random(100) < 30) // 30%几率遭遇敌人
+    {
+        call_out("enemy_appear", 1, me);
+    }
+
+    // 继续移动
+    call_out("start_move", 5 + random(5)); // 每隔5-10秒移动一次
+}
+
+void enemy_appear(object me)
+{
+    object robber, env;
+
+    env = environment(this_object());
+
+    if (!objectp(me) || environment(me) != env)
+        return;
+
+    // 创建劫匪对象
+    robber = new("/clone/npc/robber");
+    robber->set("target", me->query("id"));
+    robber->move(env);
+
+    message("vision", "突然，一伙劫匪从路边跳了出来，想要抢劫镖车！\n", env, ({ me }));
+    tell_object(me, "你发现一伙劫匪向你冲来，保护你的镖车！\n");
+
+    // 劫匪开始攻击玩家
+    robber->kill_ob(me);
+}

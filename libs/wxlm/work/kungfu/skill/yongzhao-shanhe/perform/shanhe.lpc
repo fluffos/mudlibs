@@ -1,0 +1,264 @@
+// shanhe.c 山河永照
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+#define SHANHE "「" HIM "山河永照" NOR "」"
+
+/**
+ * @brief 获取绝技名称
+ * @return string 绝技显示名称
+ */
+string query_name() { return "山河"ZJBR"永照"; }
+
+/**
+ * @brief 山河永照外功绝技
+ * @param object me 使用者
+ * @return int 1表示成功，0表示失败
+ * @details 四门神功完全融合的终极奥义，山河为证，永照万古
+ */
+int perform(object me)
+{
+    object *obs;
+    string msg;
+    int damage;
+    int ap, dp;
+    int flag;
+    int i;
+    int p;
+    int guang_level, mo_level;
+    int damage_per = 0;
+    object weapon;
+    string skill_type, skill_name;
+    
+    me->clean_up_enemy();
+    if (!me->is_fighting())
+        return notify_fail(SHANHE "只能对战斗中的对手使用。\n");
+
+    weapon = me->query_temp("weapon");
+
+    // 判断武器类型和对应的技能
+    if (!weapon)
+    {
+        // 空手：拳脚
+        skill_type = "unarmed";
+        skill_name = "拳脚";
+        if (me->query_skill_mapped("unarmed") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为拳脚，难以施展" SHANHE "。\n");
+        if (me->query_skill_prepared("unarmed") != "yongzhao-shanhe")
+            return notify_fail("你现在没有准备使用永照山河经，难以施展" SHANHE "。\n");
+    }
+    else if (weapon->query("skill_type") == "sword")
+    {
+        // 持剑：剑法
+        skill_type = "sword";
+        skill_name = "剑法";
+        if (me->query_skill_mapped("sword") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为剑法，难以施展" SHANHE "。\n");
+    }
+    else if (weapon->query("skill_type") == "blade")
+    {
+        // 持刀：刀法
+        skill_type = "blade";
+        skill_name = "刀法";
+        if (me->query_skill_mapped("blade") != "yongzhao-shanhe")
+            return notify_fail("你现在没有激发永照山河经为刀法，难以施展" SHANHE "。\n");
+    }
+    else
+    {
+        return notify_fail(SHANHE "只能空手、持剑或持刀施展。\n");
+    }
+
+    if (me->query("max_neili") < 10000)
+        return notify_fail("你的内力修为不够，现在无法使用" SHANHE "。\n");
+
+    if (me->query_skill("yongzhao-shanhe", 1) < 260)
+        return notify_fail("你的永照山河经还不够娴熟，难以施展" SHANHE "。\n");
+
+    if (me->query_skill_mapped("force") != "yongzhao-shanhe")
+        return notify_fail("你现在没有激发永照山河经为内功，难以施展" SHANHE "。\n");
+
+    if ((int)me->query("neili") < 1500)
+        return notify_fail("你的真气不够，无法运用" SHANHE "。\n");
+
+    // 获取意境等级
+    guang_level = COMBAT_D->get_skill_aoyi_level(me, "光明圣火");
+    mo_level = COMBAT_D->get_skill_aoyi_level(me, "魔血染刀");
+
+    if (!weapon)
+        msg = HIM "只见$N" HIM "双目微闭，双拳缓缓握紧。霎时间天地变色，"
+              "四门神功的精华在$N" HIM "体内\n完美融合，九阴九阳调和，神照金光万道，"
+              "蚩尤战意冲天！\n正是永照山河经至高奥义「" NOR + HIM "山河永照" NOR + HIM "」！\n"
+              "山河为证，日月同辉，$N" HIM "宛如神明降临！\n\n" NOR;
+    else
+        msg = HIM "只见$N" HIM "双目微闭，手举" + weapon->name() + HIM "，霎时间天地变色，"
+              "四门神功的精华在$N" HIM "体内\n完美融合，九阴九阳调和，神照金光万道，"
+              "蚩尤战意冲天！\n" + weapon->name() + HIM "在山河永照的\n至高奥义下" NOR + HIM "金辉万丈" HIM "！\n"
+              "山河为证，日月同辉，$N" HIM "宛如神明降临！\n\n" NOR;
+
+    message_combatd(msg, me);
+
+    me->add("neili", -1000);
+    me->start_busy(3);
+
+    // 强化AP计算：根据武器类型计算AP/DP，确保公平对应
+    ap = me->query_skill("force") + me->query_skill(skill_type) + me->query_con();
+
+    obs = me->query_enemy();
+    for (flag = 0, i = 0; i < sizeof(obs); i++)
+    {
+        // DP也相应调整，保持公平性
+        if (skill_type == "unarmed")
+            dp = obs[i]->query_skill("force") + obs[i]->query_skill("dodge") + obs[i]->query_con();
+        else
+            dp = obs[i]->query_skill("force") + obs[i]->query_skill("parry") + obs[i]->query_con();
+
+        if (!userp(obs[i]))
+        {
+            ap = ap * 3 / 2;
+        }
+
+        if (COMBAT_D->hit_determination(me, obs[i], ap, dp))
+        {
+            switch (random(4))
+            {
+            case 0:
+                tell_object(obs[i], HIR "你只觉四面八方都是攻击，九阴九阳之力"
+                                    "同时袭来，无处可躲。\n" NOR);
+                break;
+            case 1:
+                tell_object(obs[i], HIY "你只觉眼前金光万道，神照之力透体而入，"
+                                    "如万剑穿心。\n" NOR);
+                break;
+            case 2:
+                tell_object(obs[i], HIR "你只觉战意如山压顶，蚩尤之力让你无法抵抗。\n" NOR);
+                break;
+            default:
+                tell_object(obs[i], HIM "你只觉山河倾覆，日月无光，天地间只剩下"
+                                    "毁灭性的力量。\n" NOR);
+                break;
+            }
+
+            // 强化基础伤害计算（终极奥义，威力最强）
+            damage = me->query_skill("force") + me->query_skill(skill_type);
+
+            if (skill_type == "unarmed")
+            {
+                // 空手：威力最强
+                damage += me->query("max_neili") / 10; // 大幅提升内力转换效率
+                damage += me->query("jiali"); // 加力全额计入
+            }
+            else
+            {
+                // 持械：威力稍弱
+                damage += me->query("max_neili") / 12; // 稍低的内力转换效率
+                damage += me->query("jiali") * 4 / 5; // 加力80%
+            }
+
+            damage *= 2; // 基础倍数
+
+            // 大成永照山河经(350级以上)额外增伤
+            if (me->query_skill("yongzhao-shanhe", 1) >= 350)
+            {
+                damage_per += 70; // 比九阳神功ri.c高
+            }
+
+            // 如果敌人只有一个集中功力
+            if (sizeof(obs) == 1)
+            {
+                damage_per += 60; // 比原版略高
+                msg = HIM "$N" HIM "见只有一个对手，四门神功完全融合，"
+                      "山河永照的威力登峰造极！\n" NOR;
+                message_combatd(msg, me);
+            }
+
+            // 双重意境加成
+            if (guang_level > 0)
+            {
+                damage_per += guang_level * 12; // 每层光明圣火+12%伤害
+                msg = HIY "$N" HIY "体内光明圣火奥义彻底爆发，金光照耀山河！\n" NOR;
+                message_combatd(msg, me, obs[i]);
+            }
+
+            if (mo_level > 0)
+            {
+                damage_per += mo_level * 10; // 每层魔血染刀+10%伤害
+                msg = HIR "$N" HIR "体内魔血染刀奥义完全激发，杀意震慑九霄！\n" NOR;
+                message_combatd(msg, me, obs[i]);
+            }
+
+            damage += damage * damage_per / 100;
+
+            if (!userp(obs[i]))
+            {
+                damage = damage * 3 / 2;
+            }
+
+            // 使用真实伤害
+            COMBAT_D->real_damage(me, obs[i], damage);
+
+            // 精神攻击
+            obs[i]->receive_damage("jing", damage / 4, me);
+            obs[i]->receive_wound("jing", damage / 8, me);
+
+            p = (int)obs[i]->query("qi") * 100 / (int)obs[i]->query("max_qi");
+
+            switch (random(6))
+            {
+            case 0:
+                msg = HIR "只听" + obs[i]->name() +
+                      HIR "一声惨嚎，在山河永照的恐怖威力下"
+                      "连连后退，口吐鲜血。\n" NOR;
+                break;
+            case 1:
+                msg = HIY "只见" + obs[i]->name() +
+                      HIY "被神照金光击中，身体焦黑，"
+                      "重重摔倒在地。\n" NOR;
+                break;
+            case 2:
+                msg = HIR "只见" + obs[i]->name() +
+                      HIR "在蚩尤战意的冲击下，"
+                      "如断线风筝般飞出数丈。\n" NOR;
+                break;
+            case 3:
+                msg = HIC "只见" + obs[i]->name() +
+                      HIC "被九阴九阳之力同时击中，"
+                      "冰火两重天，痛苦不堪。\n" NOR;
+                break;
+            case 4:
+                msg = HIM "山河永照，" + obs[i]->name() +
+                      HIM "在这绝世神功面前"
+                      "显得如此渺小。\n" NOR;
+                break;
+            default:
+                msg = HIW + obs[i]->name() +
+                      HIW "被永照之力彻底碾压，"
+                      "身心俱创，不成人形。\n" NOR;
+                break;
+            }
+
+            msg += "( " + obs[i]->name() + "气血状况：" +
+                   sprintf("%.1f", (float)obs[i]->query("qi") * 100 / obs[i]->query("max_qi")) + "% )\n\n";
+
+            message("vision", msg, environment(me), ({ obs[i] }));
+
+            obs[i]->add("neili", -800); // 比ri.c消耗更多内力
+            flag = 1;
+        }
+        else
+        {
+            tell_object(obs[i], HIY "你拼尽全力抵御，总算在山河永照的"
+                                "恐怖威力下保住了性命。\n" NOR);
+        }
+
+        if (obs[i]->query("neili") < 0)
+            obs[i]->set("neili", 0);
+    }
+
+    if (!flag)
+        message_vision(HIM "只见山河之力顿敛，却没有任何人被$N"
+                       HIM "这招击中。\n\n" NOR, me, 0, obs);
+
+    return 1;
+}

@@ -1,0 +1,170 @@
+// /cmds/std/embed_gem.c
+
+
+
+inherit F_CLEAN_UP;
+
+int do_embed(object me, object gem, object equip);
+
+int main(object me, string arg)
+{
+    object gem, *inv;
+    string msg;
+    int i;
+    string gem_id, equip_id;
+    object equip;
+
+    return notify_fail("效果已取消。\n");
+
+    if (!arg)
+        return notify_fail("指令格式：embed_gem <宝石ID>\n");
+    if (sscanf(arg, "%s to %s", gem_id, equip_id) != 2){
+        gem = present(arg, me);
+        if (!gem)
+            return notify_fail("你身上没有这颗宝石。\n");
+    
+        if (!gem->query("gem_type"))
+            return notify_fail("这不是一颗可以镶嵌的宝石。\n");
+    
+        inv = filter(all_inventory(me), (: $1->is_item_make() && !$1->is_weapon() && !$1->is_unarmed_weapon() :));
+        
+        if (!sizeof(inv))
+            return notify_fail("你身上没有可以镶嵌宝石的自制防具。\n");
+    
+        msg = ZJOBLONG"请选择要镶嵌宝石的防具：\n"ZJOBACTS2+ZJMENUF(3,3,10,30);
+        for (i = 0; i < sizeof(inv); i++)
+        {
+            msg += sprintf("%s:embed_gem %s to %s", inv[i]->name(), arg, inv[i]->query("id"));
+            if (i < sizeof(inv) - 1) msg += ZJSEP;
+        }
+    
+        tell_object(me, msg + "\n");
+        return 1;
+    }else if (sscanf(arg, "%s to %s", gem_id, equip_id) == 2){
+        gem = present(gem_id, me);
+        equip = present(equip_id, me);
+        return do_embed(me, gem, equip);
+    }
+
+    return 1;
+}
+
+int do_embed(object me, object gem, object equip)
+{
+    mapping player_gem_count;
+    int max_count;
+    string color_name;
+    mapping hole_info;
+    int holes, gem_level, quality, enhance;
+    string gem_color, gem_type;
+    mapping effects;
+    int effect_value;
+
+    hole_info = equip->query("hole_info") || ([]);
+    holes = hole_info["holes"] || 0;
+    gem_level = gem->query("level");
+    gem_color = gem->query("color");
+    gem_type = gem->query("gem_type");
+    quality = equip->query("quality") || 0;
+    enhance = equip->new_armor_level() || 0;
+
+    if (holes == 0)
+        return notify_fail("这件防具还没有开孔，无法镶嵌宝石。\n");
+
+    
+	 if(equip->item_owner() != me->query("id"))
+     return notify_fail(equip->name() + "不需要你来操心吧！\n");
+
+    // 获取玩家的宝石镶嵌计数
+    player_gem_count = me->query("gem_embed_count") || ([]);
+    if (!player_gem_count[gem_color])
+        player_gem_count[gem_color] = ([]);
+
+    // 设置不同颜色宝石的最大镶嵌数量
+    if (gem_color == "white")
+        max_count = 3;
+    else if (gem_color == "green")
+        max_count = 2;
+    else
+        max_count = 1;
+
+    // 检查当前要镶嵌的宝石是否超过限制
+    if (player_gem_count[gem_color][gem_type] && 
+        player_gem_count[gem_color][gem_type] >= max_count)
+    {
+        switch(gem_color) {
+            case "white": color_name = "白色"; break;
+            case "green": color_name = "绿色"; break;
+            case "blue": color_name = "蓝色"; break;
+            case "yellow": color_name = "黄色"; break;
+            case "red": color_name = "红色"; break;
+            default: color_name = gem_color; break;
+        }
+        return notify_fail("你已经达到该类型" + color_name + "宝石的镶嵌上限（最多" + max_count + "个）。\n");
+    }
+
+    // 检查宝石颜色和等级限制
+    for (int i = 1; i <= holes; i++)
+    {
+        int max_level = 1;
+        int *max_level_list = ({0,1,3,5,7,10});
+
+        max_level = max_level_list[holes];
+
+        if (!hole_info["gem" + i])
+        {
+            if (i == 1 && gem_color != "white")
+                return notify_fail("第一个孔只能镶嵌白色宝石。\n");
+            if (i == 2 && gem_color != "white" && gem_color != "blue")
+                return notify_fail("第二个孔只能镶嵌蓝色或白色宝石。\n");
+            if (i == 3 && gem_color != "white" && gem_color != "green")
+                return notify_fail("第三个孔只能镶嵌绿色或白色宝石。\n");
+            if (i == 4 && gem_color != "white" && gem_color != "yellow")
+                return notify_fail("第四个孔只能镶嵌黄色或白色宝石。\n");
+            if (i == 5 && gem_color != "white" && gem_color != "red")
+                return notify_fail("第五个孔只能镶嵌红色或白色宝石。\n");
+                    
+            //加入一条新的逻辑，根据已经开孔的数值决定我可以镶嵌的宝石最大等级
+            //1孔为1级，2孔为3级，3孔为5级,4孔为7级,5孔为10级
+            if (gem_level > max_level)
+            {
+                return notify_fail("你当前可以镶嵌的宝石的最高等级为" + max_level + "。\n");
+            }
+
+
+
+            // 执行镶嵌
+            hole_info["gem" + i] = gem_color;
+            hole_info["gem_level_" + i] = gem_level;
+            hole_info["gem_type_" + i] = gem_type;
+            hole_info["gem_name_" + i] = gem->name();
+            equip->set("hole_info", hole_info);
+            
+            // 更新玩家的宝石镶嵌计数
+            if (!player_gem_count[gem_color][gem_type])
+                player_gem_count[gem_color][gem_type] = 1;
+            else
+                player_gem_count[gem_color][gem_type]++;
+            me->set("gem_embed_count", player_gem_count);
+            
+            // 应用宝石效果
+            effects = gem->query("gem_effects")[gem->query("attr_name")];
+            effect_value = effects[gem_level];
+            equip->add("magic_baoshi/" + gem->query("attr_name"), effect_value);
+            
+            // 保存装备数据
+            equip->save();
+            message_vision("$N将一颗" + gem->name() + "镶嵌在了" + equip->name() + "上。\n", me);
+            
+            // 消耗宝石
+            if (gem->query_amount() > 1)
+                gem->add_amount(-1);
+            else
+                destruct(gem);
+
+            return 1;
+        }
+    }
+
+    return notify_fail("这件防具的所有孔都已经镶嵌了宝石。\n");
+}

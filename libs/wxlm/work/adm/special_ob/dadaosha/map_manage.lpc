@@ -1,0 +1,1211 @@
+/**
+ * @brief 群雄逐鹿地图管理器
+ * @author 陆德翔
+ * @date 2023-08-01
+ * @details 负责管理群雄逐鹿活动的地图，包括地图加载、房间连接等功能
+*/
+
+
+#define EQUIP_MASTER "/adm/special_ob/equip_master"
+
+inherit F_DBASE;
+
+
+// 函数原型声明
+void create();
+int load_map(string map_file);
+object create_room(mapping room_data, string map_name);
+object find_room(string map_name, mixed coordinates);
+string *list_loaded_maps();
+mapping query_map_info(string map_name);
+int unload_map(string map_name);
+int setup_room_exits(object room, mapping exits_data, string map_name);
+mapping query_all_rooms();
+mapping query_map_rooms(string map_name);
+void start_dadaosha_activity(string map_name);
+void end_dadaosha_activity(string map_name);
+int teleport_player_to_random_room(object player, string map_name);
+void setup_activity_timer(string map_name);
+string *list_available_maps();
+string select_random_map();
+void start_random_activity();
+void check_schedule();
+void setup_daily_schedule();
+int is_activity_time();
+void heart_beat();
+void process_rank_reward(object player,int rank);
+void spawn_wulin_token();
+void recycle_wulin_token();
+void broadcast_token_location();
+void on_token_picked(object player);
+void on_token_dropped(object room);
+void on_token_holder_changed(object holder);
+void record_token_holding_time(object player);
+void on_token_destroyed(object holder);
+void process_token_final_reward();
+
+// 全局变量声明
+private mapping loaded_maps = ([]);     // 已加载的地图信息
+private mapping map_rooms = ([]);       // 地图内的所有房间对象
+private mapping active_maps = ([]);     // 活动中的地图
+private mapping activity_timers = ([]);  // 活动计时器
+
+// 武林盟主令相关变量
+private object wulin_token = 0;          // 武林盟主令对象
+private object token_holder = 0;         // 当前持有者
+private object token_location = 0;       // 当前位置
+private mapping token_holding_time = ([]);// 玩家持有时间统计
+private int broadcast_count = 0;         // 播报计数器
+
+//活动击败数和排名
+private mapping activity_kill_count = ([]);
+private mapping activity_kill_rank = ([]);
+
+//当前活动实际参加的对象列表
+private object *activity_player_list = ({});
+
+private int heart_count = 0;            // 心跳计数器
+
+// 常量定义
+private string MAP_DIR = "/adm/special_ob/dadaosha/map/";         // 地图文件目录
+private string ROOM_FILE = "/adm/special_ob/dadaosha/taosha_room_base";  // 房间基础文件
+private int ACTIVITY_DURATION = 1200;   // 活动持续时间，单位秒（20分钟）
+private int HEART_BEAT_FREQUENCY = 1;   // 心跳频率，单位秒
+private int CHECK_INTERVAL = 60;        // 检查间隔，单位秒
+
+//玩家仇恨备份
+private mapping player_enemy_backup = ([]);
+
+//初始人数
+private int INIT_PLAYER_COUNT = 0;
+// 活动时间表（24小时制）
+private mapping SCHEDULE = ([
+    14 : 30,  // 中午14:30
+    // 19 : 38,  // 晚上19:30
+    19 : 30,  // 晚上19:30
+]);
+
+//地图中文名称
+private string map_name_cn = "群雄逐鹿";
+
+public mapping query_schedule()
+{
+    return SCHEDULE;
+}
+
+//回收所有地图
+void recycle_all_map()
+{
+    object *rooms = ({});
+
+    rooms += children(ROOM_FILE);
+
+    CHANNEL_D->do_channel(this_object(), "sys", 
+    HIW"【群雄逐鹿】开始回收所有地图,共计" + sizeof(rooms) + "个。"NOR);
+
+    foreach(object room in rooms) {
+        destruct(room);
+    }
+}
+
+/**
+ * @brief 对象创建时的初始化
+ */
+void create()
+{
+    seteuid(getuid());
+    set("channel_id", "群雄逐鹿系统");
+    
+    
+    //回收所有地图
+    recycle_all_map();
+
+    // 设置活动日程检查
+    setup_daily_schedule();
+}
+
+
+/**
+ * @brief 加载指定地图文件并创建相应的房间和出口连接
+ * @param string map_file 地图文件名，不包含扩展名
+ * @return int 加载成功返回1，失败返回0
+ * @details 该函数用于从JSON格式的地图文件中加载地图数据，创建所有房间并设置它们之间的出口连接。
+ *          如果地图已经加载过，则直接返回成功。函数会处理文件读取、JSON解析、房间创建和出口设置等步骤。
+ *          加载成功后会通过系统频道通知，并记录地图的中文名称。
+ */
+int load_map(string map_file)
+{
+    string file_content, err;
+    mixed json_data;
+    
+    // 检查地图是否已加载
+    if (member_array(map_file, keys(loaded_maps)) != -1)
+    {
+        return 1;  // 地图已加载，视为成功
+    }
+    
+    // 读取地图文件
+    file_content = read_file(MAP_DIR + map_file + ".json");
+    if (!file_content)
+    {
+        log_file("dadaosha", "无法读取地图文件：" + map_file + "\n");
+        return 0;
+    }
+    
+    // 解析JSON数据
+    err = catch(json_data = json_decode(file_content));
+    if (err)
+    {
+        log_file("dadaosha", "解析地图文件失败：" + err + "\n");
+        return 0;
+    }
+    
+    if (!mapp(json_data))
+    {
+        log_file("dadaosha", "地图数据格式错误：" + map_file + "\n");
+        return 0;
+    }
+    
+    // 保存地图信息
+    loaded_maps[map_file] = json_data;
+    map_rooms[map_file] = ([]);
+    
+    // 创建房间
+    if (arrayp(json_data["rooms"]))
+    {
+        foreach (mapping room_data in json_data["rooms"])
+        {
+            object room_ob = create_room(room_data, map_file);
+            if (room_ob && arrayp(room_data["coordinates"]) && sizeof(room_data["coordinates"]) == 2)
+            {
+                // 使用坐标作为索引
+                int x = room_data["coordinates"][0];
+                int y = room_data["coordinates"][1];
+                map_rooms[map_file][x + "," + y] = room_ob;
+            }
+        }
+    }
+    
+    // 设置房间出口
+    foreach (string coord, object room_ob in map_rooms[map_file])
+    {
+        mapping room_data;
+        if (!room_ob || !objectp(room_ob))
+            continue;
+            
+        room_data = room_ob->query_room_data();
+        if (!room_data || !mapp(room_data["exits"]))
+            continue;
+            
+        setup_room_exits(room_ob, room_data["exits"], map_file);
+    }
+    
+    CHANNEL_D->do_channel(this_object(), "sys", "成功加载地图：" + (stringp(json_data["map_name"]) ? json_data["map_name"] : map_file));
+    map_name_cn = (stringp(json_data["map_name"]) ? json_data["map_name"] : map_file);
+    return 1;
+}
+
+
+/**
+ * @brief 创建并初始化一个新的游戏房间
+ * @param mapping room_data 包含房间配置数据的映射，用于设置房间的基本属性
+ * @param string map_name 地图名称，用于标识房间所属的地图区域
+ * @return object 成功创建的房间对象，若创建失败则返回0
+ * @details 该函数用于在游戏世界中动态生成房间，包括设置房间属性、关联地图名称以及自动投放基础装备。
+ *          房间创建失败可能是因为参数无效或无法实例化房间对象。创建成功后，房间将自动配备
+ *          所有类型的基础武器，以确保玩家在房间中有基本的游戏体验。
+ */
+object create_room(mapping room_data, string map_name)
+{
+    object room_ob;
+    
+    if (!room_data || !mapp(room_data) || !stringp(map_name))
+        return 0;
+        
+    // 创建房间对象
+    room_ob = new(ROOM_FILE);
+    if (!room_ob)
+        return 0;
+        
+    // 设置房间属性
+    room_ob->setup_room(room_data);
+    if (loaded_maps[map_name]["map_name"])
+        room_ob->set_map_name(loaded_maps[map_name]["map_name"]);
+    else
+        room_ob->set_map_name(map_name);
+
+    //投放基础装备
+    {
+        string *weapon_type_list = EQUIP_MASTER->get_weapon_type_list();
+        foreach (string weapon_type in weapon_type_list)
+        {
+            object weapon_obj = EQUIP_MASTER->get_weapon(weapon_type);
+            if (objectp(weapon_obj))
+                weapon_obj->move(room_ob);
+        }
+    }
+        
+    return room_ob;
+}
+
+/**
+ * @brief 根据坐标查找房间
+ * @param string map_name 地图名称
+ * @param mixed coordinates 坐标，可以是数组[x,y]或字符串"x,y"
+ * @return object 找到的房间对象，未找到返回0
+ */
+object find_room(string map_name, mixed coordinates)
+{
+    string coord_key;
+    
+    if (!stringp(map_name) || !map_rooms[map_name])
+        return 0;
+        
+    if (arrayp(coordinates) && sizeof(coordinates) == 2)
+        coord_key = coordinates[0] + "," + coordinates[1];
+    else if (stringp(coordinates))
+        coord_key = coordinates;
+    else
+        return 0;
+        
+    return map_rooms[map_name][coord_key];
+}
+
+/**
+ * @brief 列出所有已加载的地图
+ * @return string* 地图名称数组
+ */
+string *list_loaded_maps()
+{
+    return keys(loaded_maps);
+}
+
+/**
+ * @brief 查询地图信息
+ * @param string map_name 地图名称
+ * @return mapping 地图信息
+ */
+mapping query_map_info(string map_name)
+{
+    if (!stringp(map_name) || !loaded_maps[map_name])
+        return 0;
+        
+    return loaded_maps[map_name];
+}
+
+/**
+ * @brief 卸载地图
+ * @param string map_name 地图名称
+ * @return int 成功返回1，失败返回0
+ */
+int unload_map(string map_name)
+{
+    if (!stringp(map_name) || !loaded_maps[map_name])
+        return 0;
+        
+    // 销毁所有房间
+    if (map_rooms[map_name])
+    {
+        foreach (string coord, object room_ob in map_rooms[map_name])
+        {
+            if (objectp(room_ob))
+                destruct(room_ob);
+        }
+    }
+    
+    // 移除地图数据
+    map_delete(loaded_maps, map_name);
+    map_delete(map_rooms, map_name);
+    map_delete(active_maps, map_name);
+    
+    CHANNEL_D->do_channel(this_object(), "sys", "已卸载地图：" + map_name_cn);
+    return 1;
+}
+
+/**
+ * @brief 设置房间出口
+ * @param object room 房间对象
+ * @param mapping exits_data 出口数据
+ * @param string map_name 地图名称
+ * @return int 成功返回1，失败返回0
+ */
+int setup_room_exits(object room, mapping exits_data, string map_name)
+{
+    if (!objectp(room) || !mapp(exits_data) || !stringp(map_name))
+        return 0;
+        
+    foreach (string dir, mixed dest in exits_data)
+    {
+        if (arrayp(dest) && sizeof(dest) == 2)
+        {
+            // 目标是坐标，查找对应的房间
+            object target_room = find_room(map_name, dest);
+            if (objectp(target_room))
+            {
+                // 设置到目标房间的出口
+                room->set("exits/" + dir, file_name(target_room));
+            }
+        }
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 查询所有房间
+ * @return mapping 所有房间对象
+ */
+mapping query_all_rooms()
+{
+    return map_rooms;
+}
+
+/**
+ * @brief 查询指定地图的所有房间
+ * @param string map_name 地图名称
+ * @return mapping 地图内的所有房间对象
+ */
+mapping query_map_rooms(string map_name)
+{
+    if (!stringp(map_name) || !map_rooms[map_name])
+        return ([]);
+        
+    return map_rooms[map_name];
+}
+
+/**
+ * @brief 启动群雄逐鹿活动
+ * @param string map_name 地图名称
+ */
+void start_dadaosha_activity(string map_name)
+{
+    if (!stringp(map_name) || !loaded_maps[map_name])
+    {
+        // 尝试加载地图
+        if (!load_map(map_name))
+        {
+            CHANNEL_D->do_channel(this_object(), "sys", "无法启动群雄逐鹿活动：地图" + map_name + "不存在！");
+            return;
+        }
+    }
+    
+    // 如果已经有活动在进行，先结束
+    foreach (string active_map in keys(active_maps)) {
+        if (active_maps[active_map])
+            end_dadaosha_activity(active_map);
+    }
+    
+    // 标记地图为活动状态
+    active_maps[map_name] = time();
+    
+    // 设置活动计时器
+    setup_activity_timer(map_name);
+    
+    // 投放武林盟主令
+    spawn_wulin_token();
+    
+    CHANNEL_D->do_channel(this_object(), "sys", "群雄逐鹿活动【" + (loaded_maps[map_name]["map_name"] || map_name) + "】已经开始！将在" + (ACTIVITY_DURATION / 60) + "分钟后结束。");
+    
+}
+
+/**
+ * @brief 结束群雄逐鹿活动
+ * @param string map_name 地图名称
+ */
+void end_dadaosha_activity(string map_name)
+{
+    if (!stringp(map_name) || !active_maps[map_name])
+        return;
+            
+    CHANNEL_D->do_channel(this_object(), "sys", "群雄逐鹿活动【" + (loaded_maps[map_name]["map_name"] || map_name) + "】已经结束！");
+    
+    // 处理武林盟主令最终奖励
+    process_token_final_reward();
+    
+    // 回收武林盟主令
+    recycle_wulin_token();
+    
+    // 结算排名奖励
+    // 处理剩余玩家的排名奖励
+    if (sizeof(activity_player_list) > 0) {
+        // 从第一名开始结算
+        int current_rank = 1;
+        foreach (object player in activity_player_list) {
+            if (!objectp(player)) continue;
+            // 调用奖励函数，传入玩家对象和当前排名
+            process_rank_reward(player, current_rank);
+            current_rank++;
+        }
+        // 清空活动玩家列表
+        activity_player_list = ({});
+    }
+
+    // 移除计时器
+    if (activity_timers[map_name])
+    {
+        remove_call_out(activity_timers[map_name]);
+        map_delete(activity_timers, map_name);
+    }
+    
+    // 清空击杀计数
+    activity_kill_count = ([]);
+    
+    // 清空武林盟主令持有时间统计
+    token_holding_time = ([]);
+    broadcast_count = 0;
+
+    //卸载地图
+    unload_map(map_name);
+    
+}
+
+/**
+ * @brief 查询活动状态
+ * @param string map_name 可选，指定地图名称
+ * @return mixed 如果指定地图名，返回该地图是否活动中；否则返回所有活动中的地图
+ */
+mixed query_active_status(string map_name)
+{
+    if (stringp(map_name))
+        return active_maps[map_name];
+    else
+        return active_maps;
+}
+
+/**
+ * @brief 将玩家传送到随机房间
+ * @param object player 玩家对象
+ * @param string map_name 地图名称
+ * @return int 成功返回1，失败返回0
+ */
+int teleport_player_to_random_room(object player, string map_name)
+{
+    string *room_coords;
+    string random_coord;
+    object target_room;
+    
+    if (!objectp(player) || !stringp(map_name) || !map_rooms[map_name])
+        return 0;
+    
+    // 获取所有房间坐标
+    room_coords = keys(map_rooms[map_name]);
+    if (sizeof(room_coords) < 1)
+        return 0;
+    
+    // 随机选择一个房间
+    random_coord = room_coords[random(sizeof(room_coords))];
+    target_room = map_rooms[map_name][random_coord];
+    
+    if (!objectp(target_room))
+        return 0;
+    
+    // 传送玩家到目标房间
+    tell_object(player, HIC "你被传送到了群雄逐鹿地图【" + (loaded_maps[map_name]["map_name"] || map_name) + "】中的随机位置！\n" NOR);
+    player->move(target_room);
+
+    //添加到当前活动实际参加的对象列表
+    activity_player_list += ({ player });
+    
+    // 通知房间内其他玩家
+    tell_room(target_room, HIC + player->query("name") + "突然出现在这里！\n" NOR, ({ player }));
+    
+    return 1;
+}
+
+/**
+ * @brief 设置活动计时器
+ * @param string map_name 地图名称
+ */
+void setup_activity_timer(string map_name)
+{
+    // 移除旧的计时器（如果存在）
+    if (activity_timers[map_name])
+    {
+        remove_call_out(activity_timers[map_name]);
+    }
+    
+    // 创建新的计时器
+    activity_timers[map_name] = call_out("end_dadaosha_activity", ACTIVITY_DURATION, map_name);
+
+}
+
+/**
+ * @brief 查询活动剩余时间
+ * @param string map_name 地图名称
+ * @return int 剩余时间（秒）
+ */
+int query_remaining_time(string map_name)
+{
+    int start_time, elapsed, remaining;
+    
+    if (!stringp(map_name) || !intp(active_maps[map_name]))
+        return 0;
+    
+    start_time = active_maps[map_name];
+    elapsed = time() - start_time;
+    remaining = ACTIVITY_DURATION - elapsed;
+    
+    return (remaining > 0) ? remaining : 0;
+}
+
+/**
+ * @brief 列出可用的地图文件
+ * @return string* 地图文件名数组（不包含路径和后缀）
+ */
+string *list_available_maps()
+{
+    string *files, *maps = ({});
+    
+    // 获取目录下所有文件
+    files = get_dir(MAP_DIR + "*.json");
+    
+    if (!arrayp(files) || sizeof(files) < 1)
+        return ({});
+    
+    // 提取地图名称（去掉.json后缀）
+    foreach (string file in files)
+    {
+        if (strsrch(file, ".json") != -1)
+        {
+            maps += ({ replace_string(file, ".json", "") });
+        }
+    }
+    
+    return maps;
+}
+
+/**
+ * @brief 随机选择一个地图
+ * @return string 随机选择的地图名称，如果没有可用地图则返回空字符串
+ */
+string select_random_map()
+{
+    string *available_maps;
+    
+    available_maps = list_available_maps();
+    
+    if (sizeof(available_maps) < 1)
+        return "";
+    
+    return available_maps[random(sizeof(available_maps))];
+}
+
+/**
+ * @brief 启动随机地图的群雄逐鹿活动
+ */
+void start_random_activity()
+{
+    string selected_map;
+    
+    selected_map = select_random_map();
+    
+    if (selected_map == "")
+    {
+        CHANNEL_D->do_channel(this_object(), "sys", "无法启动群雄逐鹿活动：没有可用的地图！");
+        return;
+    }
+    
+    CHANNEL_D->do_channel(this_object(), "sys", "系统随机选择了地图：" + selected_map);
+    start_dadaosha_activity(selected_map);
+}
+
+/**
+ * @brief 设置每日活动定时器
+ */
+void setup_daily_schedule()
+{
+    // 启动心跳
+    set_heart_beat(HEART_BEAT_FREQUENCY);
+    heart_count = 0;
+    
+    log_file("dadaosha", "设置了群雄逐鹿活动日程检查，每天中午12:00和晚上19:00自动开始活动\n");
+}
+
+/**
+ * @brief 检查是否到了活动时间
+ */
+void check_schedule()
+{
+    // 如果已经有活动在进行中，则跳过
+    if (sizeof(active_maps) > 0)
+        return;
+        
+    // 检查是否到了活动时间
+    if (is_activity_time())
+    {
+        CHANNEL_D->do_channel(this_object(), "sys", "定时活动时间到，开始群雄逐鹿活动！");
+        start_random_activity();
+    }
+}
+
+/**
+ * @brief 判断当前是否是活动时间
+ * @return int 1:是活动时间 0:不是活动时间
+ */
+int is_activity_time()
+{
+    int hour, minute;
+    
+    hour = localtime(time())[2];    // 小时
+    minute = localtime(time())[1];  // 分钟
+    
+    // 检查是否符合时间表中的任一时间点
+    foreach (int schedule_hour, int schedule_minute in SCHEDULE)
+    {
+        // 如果当前小时匹配，并且分钟在指定分钟之后的5分钟内（允许5分钟误差）
+        if (hour == schedule_hour && 
+            minute >= schedule_minute && 
+            minute < schedule_minute + 5)
+        {
+            return 1;
+        }
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief 心跳函数
+ */
+void heart_beat()
+{
+
+    object *taotai_list = ({});
+    // 增加心跳计数
+    heart_count++;
+    broadcast_count++;
+    
+    // 每CHECK_INTERVAL秒检查一次活动时间
+    if (heart_count >= CHECK_INTERVAL / HEART_BEAT_FREQUENCY)
+    {
+        heart_count = 0;
+        check_schedule();
+    }
+
+    // 检查所有活动玩家
+    foreach (object player in activity_player_list)
+    {
+
+        if (!objectp(player))
+        {
+            activity_player_list -= ({ player });
+            continue;
+        }
+
+        // 检查玩家是否还在活动地图中
+        if (!environment(player) || !environment(player)->query("dadaosha_room"))
+        {
+            // 玩家不在活动地图中，加入淘汰列表
+            taotai_list += ({ player });
+            
+            //通知玩家已被淘汰
+            tell_object(player, HIR "你被淘汰了！\n" NOR);
+            
+            //根据排名结算奖励
+            process_rank_reward(player,sizeof(activity_player_list));
+        }
+    }
+    
+    // 检查武林盟主令持有者是否被淘汰，如果是则回收令牌重新投放
+    if (objectp(token_holder) && member_array(token_holder, taotai_list) != -1)
+    {
+        on_token_destroyed(token_holder);
+        recycle_wulin_token();
+        // 重新投放武林盟主令
+        call_out("spawn_wulin_token", 1);
+    }
+    
+    //淘汰列表中的玩家从活动玩家列表中移除
+    foreach (object player in taotai_list)
+    {
+        activity_player_list -= ({ player });
+    }
+
+    // 检查活动是否已经结束
+    foreach (string map_name, int start_time in active_maps)
+    {
+        if (!start_time)
+            continue;
+            
+        // 检查是否已经超过活动时间
+        if (time() - start_time >= ACTIVITY_DURATION)
+        {
+            // 活动已结束，调用结束函数
+            end_dadaosha_activity(map_name);
+            return;
+        }
+
+        //是否只剩余一名或零名玩家
+        if (sizeof(activity_player_list) <= 1)
+        {
+            // 活动已结束，调用结束函数
+            end_dadaosha_activity(map_name);
+            return;
+        }
+    }
+    
+    // 每5秒播报武林盟主令位置
+    if (broadcast_count >= 5)
+    {
+        broadcast_count = 0;
+        broadcast_token_location();
+    }
+
+
+}
+
+
+/**
+ * @brief 设置游戏世界的初始玩家数量上限
+ * @param int count 要设置的初始玩家数量，必须为正整数
+ * @details 该函数用于在游戏启动时配置服务器能够容纳的初始玩家数量。
+ *          这个值会影响游戏世界的初始资源分配和区域加载策略。
+ */
+void set_init_player_count(int count)
+{
+    INIT_PLAYER_COUNT = count;
+}
+
+
+
+/**
+ * @brief 根据玩家在群雄逐鹿活动中的排名结算奖励
+ * @param object player 参与活动的玩家对象
+ * @param int rank 玩家在活动中的排名
+ * @details 该函数根据玩家在群雄逐鹿活动中的排名、击杀数和生存时间计算并发放奖励。
+ *          前三名玩家将获得特殊物品奖励，所有玩家根据排名获得不同倍数的基础奖励。
+ *          奖励包括实战经验和潜能，同时会考虑玩家的击杀数和生存时间给予额外加成。
+ *          奖励发放完成后，会清除玩家的敌对关系、杀手标记和状态条件。
+ */
+void process_rank_reward(object player,int rank)
+{
+    //根据排名结算奖励
+    int reward = 0;
+
+    //根据初始人数，以及当前排名，结算奖励
+    int init_player_count = INIT_PLAYER_COUNT;
+    int current_rank = rank;
+    // 基础奖励
+    int base_reward = 3500;
+    // 根据排名计算奖励倍数
+    int rank_multiplier = 0;
+    object item;
+
+    // 如果初始人数太少，降低奖励
+
+    if (!objectp(player))
+    {
+        return;
+    }
+    
+    // 根据初始人数调整基础奖励
+    if (init_player_count >= 10) {
+        base_reward += (init_player_count - 10) * 10;
+    }
+    
+
+    
+    // 前三名有特殊奖励
+    if (current_rank == 1) {
+        // 冠军
+        rank_multiplier = 10;
+        CHANNEL_D->do_channel(this_object(), "sys", 
+            HIY + player->query("name") + "在群雄逐鹿活动中获得了冠军，获得榜首奖励九转金丹！" + NOR);
+        item = new_bind("/clone/vip/dan_jiuzhuan");
+        if (objectp(item))
+            item->move(player);
+    } else if (current_rank == 2) {
+        // 亚军
+        rank_multiplier = 9;
+        CHANNEL_D->do_channel(this_object(), "sys", 
+            HIC + player->query("name") + "在群雄逐鹿活动中获得了亚军，获得榜眼奖励单抽卡！" + NOR);
+        item = new_bind("/clone/baiyi/onecard");
+        if (objectp(item))
+            item->move(player);
+    } else if (current_rank == 3) {
+        // 季军
+        rank_multiplier = 8;
+        CHANNEL_D->do_channel(this_object(), "sys", 
+            HIB + player->query("name") + "在群雄逐鹿活动中获得了季军，获得探花奖励替身傀儡！" + NOR);
+        item = new_bind("/clone/vip/kuilei");
+        if (objectp(item))
+            item->move(player);
+    } else {
+        // 其他名次，根据排名和总人数计算
+        // 排名越高，奖励越多
+        int percentile = (init_player_count - current_rank + 1) * 100 / init_player_count;
+        
+        if (percentile > 80) {
+            rank_multiplier = 4;
+        } else if (percentile > 50) {
+            rank_multiplier = 5;
+        } else if (percentile > 20) {
+            rank_multiplier = 6;
+        } else {
+            rank_multiplier = 7;
+        }
+    }
+    
+    // 计算最终奖励
+    reward = base_reward * rank_multiplier;
+    
+    // 击杀数加成
+    if (player && !nullp(activity_kill_count[player->query("id")]) && activity_kill_count[player->query("id")]) {
+        int kills = activity_kill_count[player->query("id")];
+        reward += kills * 2000;  // 每击杀一名玩家增加2000点奖励
+        tell_object(player, HIY "你在群雄逐鹿活动中击败了 " + kills + " 名玩家，获得了 " + kills * 2000 + " 点额外奖励！\n" NOR);
+    }
+
+    //计算生存时间，每生存1分钟，给予2000点奖励
+    {
+        int survival_time = 0;
+        int survival_minutes = 0;
+        int survival_reward = 0;
+        foreach (string map_name, int start_time in active_maps) {
+            if (start_time) {
+                survival_time += time() - start_time;
+            }
+        }
+        survival_minutes = survival_time / 60;  // 转换为分钟
+        survival_reward = survival_minutes * 2000;  // 每分钟2000点奖励
+
+        //最多2w
+        if (survival_reward > 20000) {
+            survival_reward = 20000;
+        }
+
+        reward += survival_reward;
+        tell_object(player, HIY "你在群雄逐鹿活动中生存了 " + survival_minutes + " 分钟，获得了 " + survival_reward + " 点额外奖励！\n" NOR);
+    }
+    
+    // 发放奖励
+    if (reward > 0) {
+        int potential_reward;
+        player->add("combat_exp", reward);
+        tell_object(player, HIY "你在群雄逐鹿活动中获得了 " + reward + " 点实战经验奖励！\n" NOR);
+        
+        // 额外奖励潜能
+        potential_reward = reward / 2;
+        player->add("potential", potential_reward);
+        tell_object(player, HIY "你在群雄逐鹿活动中获得了 " + potential_reward + " 点潜能奖励！\n" NOR);
+    }
+
+    player->remove_all_enemy(1);
+	player->remove_all_killer();
+    player->clear_condition();
+}
+
+
+/**
+ * @brief 增加指定玩家的击杀计数
+ * @param object player 需要增加击杀计数的玩家对象
+ * @return void 无返回值
+ * @details 该函数用于在活动期间追踪玩家的击杀数量，通过玩家ID作为键值来更新全局计数器。设计此函数是为了支持基于击杀数量的活动奖励系统，确保每个玩家的击杀行为能够被准确记录。
+ */
+void add_kill_count(object player)
+{
+    if (!player)
+        return;
+
+    activity_kill_count[player->query("id")]++;
+}
+
+/**
+ * @brief 投放武林盟主令到随机地图位置
+ * @details 在群雄逐鹿活动开始时随机选择一个房间投放武林盟主令
+ */
+void spawn_wulin_token()
+{
+    string *room_coords;
+    string random_coord;
+    object target_room;
+    string map_name;
+    
+    // 检查是否有活动地图
+    if (sizeof(active_maps) == 0)
+        return;
+        
+    // 如果已经有武林盟主令，先回收
+    if (objectp(wulin_token))
+        recycle_wulin_token();
+        
+    // 获取第一个活动地图的所有房间
+    map_name = keys(active_maps)[0];
+    if (!map_rooms[map_name] || sizeof(map_rooms[map_name]) == 0)
+        return;
+        
+    // 随机选择一个房间
+    room_coords = keys(map_rooms[map_name]);
+    random_coord = room_coords[random(sizeof(room_coords))];
+    target_room = map_rooms[map_name][random_coord];
+    
+    if (!objectp(target_room))
+        return;
+        
+    // 创建武林盟主令
+    wulin_token = new("/adm/special_ob/dadaosha/wulin_mengzhu_token");
+    if (objectp(wulin_token))
+    {
+        wulin_token->move(target_room);
+        token_location = target_room;
+        token_holder = 0;
+        
+        CHANNEL_D->do_channel(this_object(), "sys", 
+            HIR"【群雄逐鹿】武林盟主令已投放到地图中，持有者将获得丰厚奖励！"NOR);
+    }
+}
+
+/**
+ * @brief 回收武林盟主令
+ * @details 在活动结束或需要重新投放时回收武林盟主令
+ */
+void recycle_wulin_token()
+{
+    if (objectp(wulin_token))
+    {
+        destruct(wulin_token);
+    }
+    
+    wulin_token = 0;
+    token_holder = 0;
+    token_location = 0;
+}
+
+/**
+ * @brief 广播武林盟主令位置
+ * @details 每5秒向所有活动参与者播报武林盟主令的位置或持有者信息
+ */
+void broadcast_token_location()
+{
+    string msg;
+    
+    // 检查是否有活动在进行
+    if (sizeof(active_maps) == 0)
+        return;
+        
+    if (!objectp(wulin_token))
+        return;
+        
+    // 构建播报消息
+    if (objectp(token_holder) && living(token_holder))
+    {
+        // 被玩家持有
+        object holder_room = environment(token_holder);
+        string room_name = "未知区域";
+        
+        if (objectp(holder_room))
+            room_name = holder_room->query("short") || "未知区域";
+            
+        msg = HIY"【武林盟主令】当前被" + token_holder->query("name") + 
+              "持有，位于" + room_name + "！"NOR;
+    }
+    else if (objectp(token_location))
+    {
+        // 在地面上
+        string room_name = token_location->query("short") || "未知区域";
+        msg = HIR"【武林盟主令】当前位于" + room_name + "，快去争夺吧！"NOR;
+    }
+    else
+    {
+        return;
+    }
+    
+    // 向所有活动参与者播报
+    foreach (object player in activity_player_list)
+    {
+        if (objectp(player) && living(player))
+        {
+            tell_object(player, msg + "\n");
+        }
+    }
+}
+
+/**
+ * @brief 武林盟主令被拾取时的回调
+ * @param object player 拾取的玩家
+ */
+void on_token_picked(object player)
+{
+    if (!objectp(player))
+        return;
+        
+    token_holder = player;
+    token_location = 0;
+    
+    // 初始化持有时间记录
+    if (!token_holding_time[player->query("id")])
+        token_holding_time[player->query("id")] = 0;
+    
+    // 记录开始持有时间
+    token_holding_time[player->query("id") + "_start"] = time();
+    
+    CHANNEL_D->do_channel(this_object(), "sys", 
+        HIY + player->query("name") + "拾取了武林盟主令！\n");
+}
+
+/**
+ * @brief 武林盟主令被丢弃时的回调
+ * @param object room 丢弃的房间
+ */
+void on_token_dropped(object room)
+{
+    if (objectp(token_holder))
+    {
+        // 记录持有时间
+        string player_id = token_holder->query("id");
+        int start_time = token_holding_time[player_id + "_start"];
+        if (start_time > 0)
+        {
+            int holding_duration = time() - start_time;
+            token_holding_time[player_id] += holding_duration;
+        }
+        
+        token_holding_time[player_id + "_start"] = 0;
+    }
+    
+    token_holder = 0;
+    token_location = room;
+}
+
+/**
+ * @brief 武林盟主令持有者变更时的回调
+ * @param object holder 新的持有者
+ */
+void on_token_holder_changed(object holder)
+{
+    // 记录前一个持有者的时间
+    if (objectp(token_holder) && token_holder != holder)
+    {
+        string old_player_id = token_holder->query("id");
+        int start_time = token_holding_time[old_player_id + "_start"];
+        if (start_time > 0)
+        {
+            int holding_duration = time() - start_time;
+            token_holding_time[old_player_id] += holding_duration;
+        }
+        token_holding_time[old_player_id + "_start"] = 0;
+    }
+    
+    // 设置新持有者
+    token_holder = holder;
+    token_location = 0;
+    
+    if (objectp(holder))
+    {
+        // 初始化新持有者记录
+        if (!token_holding_time[holder->query("id")])
+            token_holding_time[holder->query("id")] = 0;
+            
+        token_holding_time[holder->query("id") + "_start"] = time();
+    }
+}
+
+/**
+ * @brief 记录武林盟主令持有时间
+ * @param object player 持有者
+ * @details 此函数由武林盟主令对象在心跳中调用，用于记录持有时间
+ */
+void record_token_holding_time(object player)
+{
+    // 该函数在武林盟主令对象的心跳中被调用
+    // 实际的时间记录在on_token_picked等回调函数中处理
+    return;
+}
+
+/**
+ * @brief 武林盟主令被销毁时的回调
+ * @param object holder 最后的持有者
+ */
+void on_token_destroyed(object holder)
+{
+    if (objectp(holder))
+    {
+        string player_id = holder->query("id");
+        int start_time = token_holding_time[player_id + "_start"];
+        if (start_time > 0)
+        {
+            int holding_duration = time() - start_time;
+            token_holding_time[player_id] += holding_duration;
+        }
+        token_holding_time[player_id + "_start"] = 0;
+    }
+    
+}
+
+/**
+ * @brief 处理武林盟主令最终奖励
+ * @details 在活动结束时，给持有武林盟主令时间最长的玩家发放200元宝奖励
+ */
+void process_token_final_reward()
+{
+    string longest_holder_id;
+    int longest_time;
+    object winner;
+    int minutes;
+    int seconds;
+    
+    longest_holder_id = "";
+    longest_time = 0;
+    
+    // 记录当前持有者的最终时间
+    if (objectp(token_holder))
+    {
+        string player_id = token_holder->query("id");
+        int start_time = token_holding_time[player_id + "_start"];
+        if (start_time > 0)
+        {
+            int holding_duration = time() - start_time;
+            token_holding_time[player_id] += holding_duration;
+        }
+    }
+    
+    // 找出持有时间最长的玩家
+    foreach (string key, int duration in token_holding_time)
+    {
+        // 跳过_start后缀的键
+        if (strsrch(key, "_start") != -1)
+            continue;
+            
+        if (duration > longest_time)
+        {
+            longest_time = duration;
+            longest_holder_id = key;
+        }
+    }
+    
+    // 发放奖励
+    if (longest_holder_id != "" && longest_time > 0)
+    {
+        // 查找获奖玩家对象
+        foreach (object player in activity_player_list)
+        {
+            if (objectp(player) && player->query("id") == longest_holder_id)
+            {
+                winner = player;
+                break;
+            }
+        }
+        
+        // 如果找不到在活动列表中的玩家，尝试在线查找
+        if (!objectp(winner))
+        {
+            winner = find_player(longest_holder_id);
+        }
+        
+        if (objectp(winner))
+        {
+            winner->add("yuanbao", 300);
+            
+            minutes = longest_time / 60;
+            seconds = longest_time % 60;
+            
+            tell_object(winner, HIY"恭喜你！你是持有武林盟主令时间最长的玩家（" + 
+                       minutes + "分" + seconds + "秒），获得300元宝奖励！\n"NOR);
+                       
+            CHANNEL_D->do_channel(this_object(), "sys", 
+                HIY + winner->query("name") + "持有武林盟主令时间最长（" + 
+                minutes + "分" + seconds + "秒），获得300元宝特殊奖励！"NOR);
+        }
+    }
+}
+

@@ -1,0 +1,518 @@
+// File   : cmds/skill/new_skills.c
+// Create : ludexiang 2023/12/01
+// Purpose: 技能查看系统
+// Update : ludexiang 2024/03/21 - 重构代码结构,优化显示逻辑
+#define AOYI_D "/adm/daemons/aoyid"
+#define MIZHUAN_MASTER "/adm/special_ob/mizhuan/mizhuan_master"
+inherit F_CLEAN_UP;
+
+// 技能等级描述
+string *skill_level_desc = ({
+    BLU "初学乍练" NOR, HIB "粗通皮毛" NOR, YEL "初窥门径" NOR, HIY "略知一二" NOR,
+    HIB "渐有所悟" NOR, YEL "半生不熟" NOR, YEL "马马虎虎" NOR, HIY "平淡无奇" NOR,
+    HIY "触类旁通" NOR, HIM "已有小成" NOR, HIG "心领神会" NOR, HIC "驾轻就熟" NOR,
+    RED "了然於胸" NOR, HIG "挥洒自如" NOR, HIC "出类拔萃" NOR, CYN "初入佳境" NOR,
+    MAG "威不可当" NOR, MAG "出神入化" NOR, RED "登峰造极" NOR, HIM "一代宗师" NOR,
+    HIM "独步天下" NOR, HIR "旷古绝伦" NOR, HIW "震古铄今" NOR, WHT "超凡入圣" NOR,
+    HIW "深不可测" NOR, HIW "返璞归真" NOR,
+});
+
+string *knowledge_level_desc = ({
+    BLU "新学乍用" NOR, BLU "不甚了了" NOR, HIB "不知端倪" NOR, HIB "平淡无奇" NOR,
+    YEL "司空鉴惯" NOR, YEL "初窥门径" NOR, HIY "略知一二" NOR, HIY "茅塞顿开" NOR,
+    CYN "略识之无" NOR, CYN "滚瓜烂熟" NOR, MAG "马马虎虎" NOR, MAG "轻车熟路" NOR,
+    HIW "运用自如" NOR, HIW "触类旁通" NOR, HIM "深入浅出" NOR, HIM "已有小成" NOR,
+    HIM "心领神会" NOR, RED "了然於胸" NOR, RED "见多识广" NOR, HIR "无所不通" NOR,
+    HIR "卓尔不群" NOR, HIR "满腹经纶" NOR, WHT "豁然贯通" NOR, WHT "博古通今" NOR,
+    WHT "博大精深" NOR, WHT "超群绝伦" NOR, WHT "举世无双" NOR, WHT "独步天下" NOR,
+    HIW "震古铄今" NOR, HIW "超凡入圣" NOR, HIW "深不可测" NOR
+});
+
+// 有效的技能类型
+string *valid_types = ({
+    "xinfa", "force", "dodge", "unarmed", "cuff", "strike", "finger", "hand", "claw",
+    "sword", "blade", "staff", "hammer", "club", "whip", "dagger", "throwing", "parry",
+    "magic", "medical", "poison", "chuixiao-jifa", "tanqin-jifa", "guzheng-jifa", "cooking",
+    "qin",
+});
+string skill_level(string type, int level);
+// 创建基础结果结构
+private mapping create_base_result()
+{
+    return ([
+        "title": "技能系统",
+        "w": "360",
+        "h": "150",
+        "close": "",
+        "toggle": ({
+            (["cmd": "new_skills", "text": "全部"]),
+            (["cmd": "new_skills tianfu", "text": "天赋"]),
+            (["cmd": "new_skills mizhuan", "text": "秘传"]),
+            // (["cmd": "yj_skill", "text": "意境"]),
+        }),
+        "data": ([
+            "title": "",
+            "context": ({})
+        ]),
+        "is_cmd": "new_skills",
+    ]);
+}
+
+// 获取目标对象
+private object get_target_object(object me, string arg)
+{
+    object ob;
+    
+    if (!arg || arg == "me")
+        return me;
+
+    me->force_me("look");
+        
+    // 依次尝试在当前环境或门派列表中查找、玩家列表和living对象中查找
+    ob = present_in_famliy_ob(arg, environment(me));
+    if (!ob || !ob->is_character())
+        ob = find_player(arg);
+    if (!ob || !ob->is_character())
+        ob = find_living(arg);
+        
+    return ob;
+}
+
+// 检查查看权限
+private int check_view_permission(object me, object target)
+{
+    string league_name;
+    string *pet_list;
+    
+    if (target == me || wizardp(me))
+        return 1;
+
+    if (!playerp(target))
+        return 1;
+        
+    if (target->is_apprentice_of(me) || me->is_apprentice_of(target))
+        return 1;
+        
+    if (me->query("couple/id") == target->query("id"))
+        return 1;
+        
+    if (me->is_brother(target))
+        return 1;
+        
+    // 检查帮派
+    league_name = me->query("league/league_name");
+    if (stringp(league_name) && league_name == target->query("league/league_name"))
+        return 1;
+        
+    // 检查宠物关系
+    if (me->query("can_whistle")) {
+        pet_list = keys(me->query("can_whistle"));
+        if (target->query("owner") == me->query("id"))
+            return 1;
+    }
+    
+    return 0;
+}
+
+// 过滤技能列表
+private string *filter_skills_by_type(string *skill_names, string skill_type)
+{
+    if (!skill_type)
+        return skill_names;
+        
+    // 处理天赋技能
+    if (skill_type == "tianfu")
+        return ({});  // 天赋技能返回空数组,因为它有特殊处理
+        
+    if (member_array(skill_type, valid_types) != -1)
+    {
+        //是否相等或者是否可以激发
+        return filter_array(skill_names, (: SKILL_D($1)->valid_enable($(skill_type)) || $1 == $(skill_type) :));
+    }
+        
+    if (SKILL_D(skill_type)->main_skill())
+        return filter_array(skill_names, (: SKILL_D($1)->main_skill() == $(skill_type) :));
+        
+    return filter_array(skill_names, (: SKILL_D($1)->valid_combine($(skill_type)) :));
+}
+
+// 生成技能信息显示
+private mapping generate_skill_info(string skill_name, mapping skills, mapping learned, string *mapped, string skill_type, object me)
+{
+    // 变量声明
+    int level, percent;
+    string status, skill_color, skill_chinese, skill_type_level;
+    mapping result = ([]);
+
+    // 生成状态标记
+    status = "";
+
+    level = skills[skill_name];
+
+    // 计算技能熟练度百分比
+    if (learned)
+    {
+        // percent = learned[skill_name] * 100 / ((level + 1) * (level + 1) + 1);
+        percent = learned[skill_name] * 100 / me->need_total_exp(level);
+            
+        if (learned[skill_name] >= (level + 1) * (level + 1))
+        {
+            status = HIM;
+        }
+    }
+    else
+        percent = 0;
+
+    if (percent > 100)
+        percent = 100;
+        
+
+    // status += (member_array(skill_name, mapped) != -1) ? RED"●"NOR : "○";
+
+    //不处于激发状态的直接过滤
+    if (member_array(skill_name, mapped) != -1)
+    {
+        //如果有技能类型，判断skill_name是否激发为该类型
+        if (skill_type && me->query_skill_mapped(skill_type) == skill_name)
+        {
+            status += HIM"●"NOR;
+        }
+        else if (!skill_type) // 没有技能类型,但是激发了
+        {
+            status += RED"●"NOR;
+        } 
+        else //有技能类型,但是没有激发
+        {
+            status += HIM"○"NOR;
+        }
+    }
+    else // 没有激发
+    {
+        status += "○";
+    }
+
+    // 获取技能相关信息
+    skill_color = (member_array(skill_name, valid_types) != -1) ? CYN : WHT;
+    skill_chinese = to_chinese(skill_name);
+    skill_type_level = skill_level(SKILL_D(skill_name)->type(), level);
+
+    // 组装返回mapping
+    result["name"] = sprintf("%s%s%s"NOR, skill_color, status, skill_chinese);
+    result["level_point"] = skill_type_level;
+    result["progress"] = sprintf("[%d/%d%s]", level, percent, "%");
+
+    return result;
+}
+
+// 添加技能分类按钮
+private void add_skill_buttons(mapping result, object me, object target, string skill_type)
+{
+    string *skill_names = keys(target->query_skills());
+    string base_cmd = "new_skills";
+    string target_id = target->query("id");
+
+    // 如果查看的是他人, toggle 按钮命令需要带上 target id
+    if (target != me)
+    {
+        result["toggle"] = ({
+            (["cmd": "new_skills " + target_id, "text": "全部"]),
+            // 查看他人时不显示天赋和秘传按钮
+            // (["cmd": "new_skills " + target_id + " tianfu", "text": "天赋"]),
+            // (["cmd": "new_skills " + target_id + " mizhuan", "text": "秘传"]),
+        });
+        base_cmd += " " + target_id;
+    }
+    else // 查看自己
+    {
+        result["toggle"] = ({
+            (["cmd": "new_skills", "text": "全部"]),
+            (["cmd": "new_skills tianfu", "text": "天赋"]),
+            (["cmd": "new_skills mizhuan", "text": "秘传"]),
+        });
+    }
+
+    foreach (string type in valid_types) {
+        if (sizeof(filter_array(skill_names, (: SKILL_D($1)->valid_enable($(type)) :)))) {
+            result["toggle"] += ({ ([ // 使用 += 添加到已有的 toggle 列表
+                "cmd": base_cmd + " " + type,
+                "text": replace_string(to_chinese(type), "基本", ""),
+            ]) });
+        }
+    }
+}
+
+// 技能等级描述
+string skill_level(string type, int level)
+{
+    int grade;
+    
+    if (level >= 100)
+        if (level < 300)
+            grade = (level-100)/20 + 10;
+        else
+            return NOR "返璞归真" NOR;
+    else
+        grade = level / 10;
+        
+    switch(type) {
+        case "knowledge":
+            if (grade >= sizeof(knowledge_level_desc))
+                grade = sizeof(knowledge_level_desc)-1;
+            return knowledge_level_desc[grade];
+        default:
+            if (grade >= sizeof(skill_level_desc))
+                grade = sizeof(skill_level_desc)-1;
+            return skill_level_desc[grade];
+    }
+}
+
+// 主函数入口
+int main(object me, string arg)
+{
+    object target;
+    mapping skills, learned, mapped_skills, prepared_skills;
+    string *skill_names, *mapped, *prepared;
+    string skill_type, title;
+    mapping result = create_base_result();
+
+    seteuid(getuid());
+
+    // 修改参数解析逻辑
+    if (arg) {
+        // 直接处理特殊分类参数
+        if (arg == "tianfu" || arg == "mizhuan") {
+            skill_type = arg;
+            target = me;  // 特殊分类默认查看自己
+        } else {
+            string *args = explode(arg, " ");
+            // 检查最后一个参数是否是已知的特殊分类或技能类型
+            if (sizeof(args) > 0 && (args[<1] == "tianfu" || args[<1] == "mizhuan" || file_size(SKILL_D(args[<1]) + ".lpc") > 0))
+            {
+                skill_type = args[<1];
+                if (sizeof(args) > 1)
+                    arg = implode(args[0..<2], " ");
+                else
+                    arg = "me"; // 如果只有一个参数且是分类/技能，则目标是自己
+            }
+            else // 最后一个参数不是分类/技能，则整个arg是目标名，无分类
+            {
+                skill_type = 0;
+                // arg = arg; // arg保持不变
+            }
+
+            // 获取目标对象
+            target = get_target_object(me, arg);
+        }
+    } else {
+        skill_type = 0;
+        target = me;
+    }
+
+    // 验证目标对象
+    if (!target)
+        return notify_fail("你要察看谁的技能？\n");
+
+    // 检查查看权限
+    if (!check_view_permission(me, target))
+        return notify_fail("你没有权限查看对方的技能。\n");
+        
+    // 获取技能数据
+    skills = target->query_skills();
+    if (!sizeof(skills))
+    {
+        object pop = new(POP1);
+
+        if (target == me)
+        {
+            me->force_me("look");
+        }
+
+        pop->basic((target == me ? "你" : target->name()) + "目前并没有学会任何技能，请关闭当前弹窗，点击右下角的门派按钮先选择一个门派加入后，再学习技能。", me, 1);
+        write(pop->result() + "\n");
+        return 1;
+    }
+    
+    skill_names = keys(skills);
+    
+
+    // target 不是 me，重置 toggle (移除天赋/秘传)，设置 close
+    if (target != me)
+    {
+        // add_skill_buttons 函数内部已处理
+        result["close"] = "look " + target->query("id");
+    }
+    else if (skill_type != "tianfu" && skill_type != "mizhuan")
+    {
+        // 查看自己且不是天赋/秘传页时，确保 toggle 包含特殊分类按钮
+        // add_skill_buttons 函数内部已处理
+    }
+
+    // 添加技能分类按钮 (需要在判断 target!=me 之后，因为会修改 toggle)
+    add_skill_buttons(result, me, target, skill_type);
+
+    // 根据技能类型过滤技能列表
+    if (skill_type && skill_type != "tianfu" && skill_type != "mizhuan") { // 排除特殊分类
+        skill_names = filter_skills_by_type(skill_names, skill_type);
+        if (!sizeof(skill_names))
+            return notify_fail((target == me ? "你" : target->name()) + "目前还没有掌握该技能。\n");
+    }
+
+    // 获取已映射和准备的技能 (仅在显示技能时需要)
+    if (skill_type != "tianfu" && skill_type != "mizhuan")
+    {
+        mapped_skills = target->query_skill_map();
+        mapped = mapp(mapped_skills) ? values(mapped_skills) : ({});
+        prepared_skills = target->query_skill_prepare();
+        prepared = mapp(prepared_skills) ? values(prepared_skills) : ({});
+        learned = target->query_learned();
+    }
+
+    // 生成技能信息显示
+    if (skill_type == "tianfu")
+    {
+        title = "天赋技能";
+    }
+    else if (skill_type == "mizhuan")
+    {
+        title = "已领悟的秘传";
+    }
+    else
+    {
+        title = sprintf("%s目前所学到的%s\n当前武学境界支持的技能等级上限:%d",
+            (target == me ? "你" : target->name()),
+            skill_type ? to_chinese(skill_type) + "及相关技能" : "所有技能",
+            target->query("level"));
+
+        //显示激发等级 (仅对普通技能类型有效)
+        if (skill_type && member_array(skill_type, valid_types) != -1)
+        {
+            //意境加成列表
+            mapping up_skill_type_list = AOYI_D->get_up_skill_type_list();
+            title += sprintf("\n当前激发等级:%d",target->query_skill(skill_type));
+
+            if (up_skill_type_list[skill_type])
+            {
+                int aoyi_bonus;
+                
+                // 根据身份确定意境加成倍数
+                if (target->query("sanhua_done")) // 武尊
+                {
+                    aoyi_bonus = 75;
+                }
+                else if (target->query("opinion/ultra")) // 宗师
+                {
+                    aoyi_bonus = 60;
+                }
+                else // 普通玩家
+                {
+                    aoyi_bonus = 45;
+                }
+                
+                title += "(" +  HIC"含招式使用时"NOR;
+                title += sprintf("遗训加成"NOR":%d)",COMBAT_D->get_skill_aoyi_level(target,up_skill_type_list[skill_type]) * aoyi_bonus);
+            }
+        }
+    }
+
+    result["data"]["title"] = title;
+
+    // 更新 is_cmd
+    {
+        string cmd;
+        string target_id = target->query("id");
+
+        if (target == me)
+        {
+            cmd = "new_skills" + (skill_type ? " " + skill_type : "");
+        }
+        else
+        {
+            cmd = "new_skills " + target_id + (skill_type ? " " + skill_type : "");
+            // 如果是查看他人，不允许切换到天赋和秘传，所以不需要单独处理它们的 is_cmd
+        }
+
+        result["is_cmd"] = cmd;
+    }
+
+
+    // 添加技能/天赋/秘传列表
+    if (skill_type == "tianfu")
+    {
+        // 处理天赋技能 (代码移到下方单独处理)
+    }
+    else if (skill_type == "mizhuan")
+    {
+        mixed mizhuan_data = MIZHUAN_MASTER->query_mizhuan_list(target);
+        if (!arrayp(mizhuan_data) || !sizeof(mizhuan_data))
+        {
+             result["data"]["context"] += ({ ([ "text": (target == me ? "你" : target->name()) + "尚未领悟任何秘传。" ]) });
+        }
+        else
+        {
+             result["data"]["context"] = mizhuan_data; // 直接使用返回的格式
+        }
+    }
+    else // 处理普通技能
+    {
+        foreach (string skill in skill_names) {
+            mapping skill_info = generate_skill_info(skill, skills, learned, mapped, skill_type, target);
+            mapping single_skill_data = ([
+                "text": skill_info["name"],
+                "level_point": skill_info["level_point"],
+                "progress": skill_info["progress"]
+            ]);
+
+            // 添加单个技能的附带desc和button
+            single_skill_data["desc"] = "/cmds/skill/new_chaski"->generate_skill_title(skill) + ZJBR + "/cmds/skill/new_chaski"->generate_element_info(target, skill, skill_type);
+            single_skill_data["button"] = "/cmds/skill/new_chaski"->generate_button_list(me, target, skill, skill_type);
+
+            result["data"]["context"] += ({ single_skill_data });
+        }
+    }
+
+    // 处理天赋技能 (移到这里，确保 context 不会被覆盖)
+    if (skill_type == "tianfu") {
+        mapping tianfu_map = target->query("special_skill");
+        if (!mapp(tianfu_map) || !sizeof(tianfu_map)) {
+            // 清空可能存在的旧 context
+            result["data"]["context"] = ({ ([ "text": (target == me ? "你" : target->name()) + "现在好像什么特技都不会哦。" ]) });
+        } else {
+            // 清空可能存在的旧 context
+            result["data"]["context"] = ({});
+            // 添加每个天赋技能
+            foreach (string single_tianfu in keys(tianfu_map)) {
+                string *tianfu_level_point = ({
+                    "资微命弱",
+                    "稍值一提",
+                    HIG"略显不凡"NOR,
+                    HIG"鹰视十载"NOR,
+                    HIC"千里挑一"NOR,
+                    HIY"登颠之命"NOR,
+                    HIY"冠绝当代"NOR,
+                    HIR"千年不遇"NOR,
+                    HIR"潜龙卧渊"NOR,
+                    HIM"亘古未有"NOR,
+                });
+
+                result["data"]["context"] += ({ 
+                    ([
+                        "button": ({
+                            (["cmd": "special " + single_tianfu + " use", "name": HIR"使用"NOR]),
+                            (["cmd": "choose_tianfu", "name": HIR"自选"NOR]),
+                        }),
+                        "level_point": tianfu_level_point[TALNET_MASTER->query_talnet_level(target, single_tianfu)-1],
+                        "progress": TALNET_MASTER->query_talnet_level(target, single_tianfu),
+                        "desc": TALNET_MASTER->level_desc(target, single_tianfu),
+                        "text": TALNET_MASTER->level_name(target, single_tianfu)
+                    ]) 
+                });
+            }
+        }
+        // is_cmd 已在前面设置
+        // tell_object(me, json_encode((["code": "skills_popup", "data": result])) + "\n");
+        // return 1; // 返回逻辑统一到最后
+    }
+
+    tell_object(me, json_encode((["code": "skills_popup", "data": result])) + "\n");
+    return 1;
+}

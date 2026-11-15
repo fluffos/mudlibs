@@ -1,0 +1,129 @@
+// zhangshouzhenbi.c 掌手合璧
+// 我自逍遥决第一绝技
+
+#include <combat.h>
+
+/**
+ * @brief 绝技名称显示
+ * @return string 带颜色的绝技名称
+ */
+string name() { return HIY "掌手合璧" NOR; }
+
+/**
+ * @brief 绝技名称查询
+ * @return string 绝技名称
+ */
+string query_name() { return "掌手合璧"; }
+
+/**
+ * @brief 绝技激发类型
+ * @return string* 激发类型数组
+ */
+string *pfm_type() { return ({ "strike", "hand" }); }
+
+inherit F_SSERVER;
+
+/**
+ * @brief 绝技执行函数
+ * @param object me 施招者
+ * @param object target 目标
+ * @return int 1成功，0失败
+ */
+int perform(object me, object target)
+{
+	int damage, ap, dp;
+	int aoyi_lingjiu, aoyi_ziyou;
+	string msg;
+
+	// 选择目标
+	if (! target)
+	{
+		me->clean_up_enemy();
+		target = me->select_opponent();
+	}
+	if (! target || ! me->is_fighting(target))
+		return notify_fail(name() + "只能对战斗中的对手使用。\n");
+
+	// 检查武器状态
+	if( query_temp("weapon", me) || query_temp("secondary_weapon", me) )
+		return notify_fail(name() + "只能空手施展。\n");
+
+	// 检查技能等级
+	if ((int)me->query_skill("tianshan-yinyang", 1) < 100)
+		return notify_fail("你的我自逍遥决不够娴熟，难以施展" + name() + "。\n");
+
+	// 检查基本内功等级
+	if ((int)me->query_skill("force", 1) < 120)
+		return notify_fail("你的内功修为不足，难以施展" + name() + "。\n");
+
+	// 检查内力
+	if( query("neili", me) < 250 )
+		return notify_fail("你现在真气不足，难以施展" + name() + "。\n");
+
+	// 检查目标状态
+	if (! living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+	// 获取意境等级
+	aoyi_lingjiu = COMBAT_D->get_skill_aoyi_level(me, "灵鹫飞羽");
+	aoyi_ziyou = COMBAT_D->get_skill_aoyi_level(me, "自由自在");
+
+	// 施招消息
+	msg = HIY "$N" HIY "深吸一口气，左掌运六阳之劲，右手施折梅之巧，掌法刚猛，手法阴柔，\n"
+	      HIY "「掌手合璧」掌主手辅，阴阳调和，一招融汇两家武学精华！" NOR "\n";
+
+	// 消耗内力
+	addn("neili", -250, me);
+
+	// 计算攻击力 - 掌法为主，手法为辅
+	ap = me->query_skill("strike") * 3 / 2 + me->query_skill("hand") + me->query_skill("force");
+	dp = target->query_skill("parry") + target->query_skill("force") + target->query_skill("dodge");
+
+	// 意境加成攻击力
+	if (aoyi_lingjiu > 0)
+		ap += aoyi_lingjiu * 3;
+
+	// PVE加成
+	if (!playerp(target))
+		ap = ap * 5 / 4;
+
+	// 命中判定
+	if (COMBAT_D->hit_determination(me, target, ap, dp))
+	{
+		// 基础伤害计算 - 大幅提升基础威力
+		damage = me->query_skill("tianshan-yinyang", 1) * 5; 
+		damage += me->query_skill("strike") * 4;  
+		damage += me->query_skill("hand") * 3;  
+		damage += me->query("jiali") * 3; 
+
+		// 意境伤害加成
+		if (aoyi_lingjiu > 0)
+		{
+			damage += damage / 20 * aoyi_lingjiu; 
+			msg += HIW "$N" HIW "身形如灵鹫展翅，掌势迅猛如飞羽，意境加持下威力更增！" NOR "\n";
+		}
+
+		if (aoyi_ziyou > 0)
+		{
+			damage += damage / 30 * aoyi_ziyou; 
+			msg += HIB "$N" HIB "心境自由自在，掌手配合天衣无缝，如行云流水般自然！" NOR "\n";
+		}
+
+		// 应用伤害
+		msg += COMBAT_D->do_damage(me, target, UNARMED_ATTACK, damage, 190,
+		                          HIR "$n" HIR "只觉一股刚柔并济的劲力袭来，掌劲如烈日当空，"
+		                          HIR "手法似梅花纷飞，根本无法抵挡！\n" NOR ":内伤@?");
+
+		// 成功施招忙乱
+		me->start_busy(1);
+	}
+	else
+	{
+		// 未命中
+		msg += CYN "$n" CYN "身形一闪，避开了$N" CYN "这招掌手合璧。" NOR "\n";
+		me->start_busy(2);
+	}
+
+	message_vision(msg, me, target);
+	return 1;
+}

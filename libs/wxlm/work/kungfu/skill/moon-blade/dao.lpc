@@ -1,0 +1,211 @@
+// 万劫一瞬斩   By Gold
+ 
+#include <combat.h> 
+        
+inherit F_SSERVER; 
+      
+#define DAO "「" HIW "万劫一瞬斩" NOR "」" 
+  string query_name() { return "万劫一瞬斩"; }
+int can_not_hubo() { return 1;} 
+
+
+//恢复所有气血
+int recover_all_hp(object me,object target)
+{
+
+        if (!me->is_fighting(target) || random(100) < COMBAT_D->get_skill_aoyi_level(me, "魔血染刀"))
+        {
+            me->set("eff_qi", me->query("max_qi"));
+            me->set("qi", me->query("max_qi"));
+            tell_object(me,HIR"你的战意沸腾，恢复了所有气血！"NOR"\n");
+            return 1;
+        }
+        else
+        {
+            return 0;
+        }
+
+}
+
+
+int perform(object me) 
+{ 
+        string msg; 
+        object weapon, target; 
+        int ap, dp, count; 
+        int i, damage,hua; 
+        
+        if( me->query("family/family_name") != "魔教" ) 
+                return notify_fail("你不是魔教弟子，无法使用" DAO "。\n"); 
+                        
+        if (! target) target = offensive_target(me); 
+        
+        if (! target || ! me->is_fighting(target)) 
+                return notify_fail(DAO "只能对战斗中的对手使用。\n"); 
+
+        if (! objectp(weapon = me->query_temp("weapon")) || 
+        (string)weapon->query("skill_type") != "blade") 
+                return notify_fail("你使用的武器不对，难以施展" DAO "。\n"); 
+        
+        if ((int)me->query_skill("moon-blade", 1) < 150) 
+                return notify_fail("你圆月弯刀火候不够，难以施展" DAO "。\n"); 
+        
+        if (me->query_skill_mapped("blade") != "moon-blade") 
+                return notify_fail("你没有激发圆月弯刀，难以施展" DAO "。\n"); 
+        
+        if ((int)me->query_skill("force") < 150) 
+                return notify_fail("你的内功修为不够，难以施展" DAO "。\n"); 
+        
+        if ((int)me->query("max_neili") < 4000) 
+                return notify_fail("你的内力修为不够，难以施展" DAO "。\n"); 
+        
+        if ((int)me->query("neili") < 1000) 
+                return notify_fail("你现在的真气不足，难以施展" DAO "。\n"); 
+        
+        if (! living(target)) 
+                return notify_fail("对方都已经这样了，用不着这么费力吧？\n"); 
+
+        // 没有触发神刀化血不能使用
+        if (!me->query_temp("huaxue_pfm"))
+                return notify_fail("你还没有触发神刀化血的魔意效果，无法使用" DAO "。\n");
+     
+        if (objectp(weapon = target->query_temp("weapon"))) 
+        {         
+            msg = HBYEL "$N" HBYEL "双手持刀，一瞬之间爆发出惊天刀气，刀锋所向，仿佛万劫" 
+                  HBYEL "齐至，一道凌厉刀芒直取$n。\n" NOR; 
+       
+            ap = me->query_skill("blade");
+                        
+            if (COMBAT_D->hit_determination(me,target,ap,dp))
+            { 
+               me->add("neili", -500); 
+               msg += HIR "$n" HIR "暗叫不好，连忙举起手中兵器抵挡，却不想虎口剧痛，手中" + weapon->name() + 
+                               HIR "捏不住，脱手而出。\n" NOR; 
+                               
+               weapon->move(environment(me)); 
+             } else 
+               { 
+                     me->add("neili", -500); 
+                     msg += CYN "$n" CYN "提升十成功力，头上青筋暴出，紧握手中" + weapon->name() +  
+                                     CYN "硬是将$N" CYN "的劲气抵挡化解了。\n" NOR;                         
+                } 
+                message_combatd(msg, me, target); 
+        }  
+               
+             msg = HBBLU "霎那间$N" HBBLU "身形化作残影，瞬息万变，一式" HIY "「万劫临世」" NOR +
+                   HBBLU "刀光暴涨，无数刀影交织成网，笼罩$n全身要害" HBBLU "。\n"NOR;   
+       
+             ap = me->query_skill("blade");
+             dp = target->query_skill("dodge");
+             damage = damage_power(me, "blade") + damage_power(me, "force") + me->query("max_neili") / 10;
+             damage += query("jiali", me);
+             damage *= 2;
+
+             // 如果对手是npc 命中x1.5
+             if (!playerp(target)){
+             	ap = ap * 3 / 2;
+             }
+              
+             // 如果对手是npc 伤害增加50%
+
+             if (!playerp(target)){
+             	damage = damage * 3 /2;
+
+             }
+
+             if (COMBAT_D->hit_determination(me,target,ap,dp)) 
+            {       
+
+                int add_percent = 0;
+                
+                damage = damage;
+
+                //如果魔血染刀大于0，则增加伤害
+                if (COMBAT_D->get_skill_aoyi_level(me, "魔血染刀") > 0)
+                {
+                    add_percent = COMBAT_D->get_skill_aoyi_level(me, "魔血染刀") * 10;
+                }
+
+                //神刀化血期间，根据我的伤势增加伤害 (最大气血-当前气血)/最大气血的百分比
+                if (hua = me->query_temp("huaxue_pfm"))
+                {
+                    add_percent += 100 * (me->query("max_qi") - me->query("eff_qi")) / me->query("max_qi");
+                    me->delete_temp("huaxue_pfm");
+
+                    //增加额外描述
+                    msg += HIR "$N血液沸腾，刀刃上泛起一层血光。\n" NOR;
+                }
+
+
+                //伤害的
+                damage += damage * add_percent / 100;
+
+                msg += COMBAT_D->do_damage(me, target, REMOTE_ATTACK, damage, 100, 
+                                        HIR "$n" HIR "只觉呼吸紧迫，一股劲风扑面" 
+                                        "而来，根本避无所避，被$N" HIR "的劲气袭中"
+                                        "全身，各大穴道血气翻腾，血入箭般喷出。\n" NOR); 
+                target->set_status_xuruo(5); 
+                me->add("neili", -400);                 
+             }
+              else 
+              { 
+                   msg += CYN "$n" CYN "眼见$N" CYN "来势汹涌，丝毫不" 
+                              "敢小觑，急忙闪在了一旁。\n" NOR; 
+                   me->add("neili", -200); 
+              } 
+               
+             message_combatd(msg, me, target);     
+              
+             msg = HBMAG "$N" HBMAG "身形拔地而起，施展出杀招" HIB "「一瞬无间」" NOR +
+                   HBMAG "手中刀芒暴涨，刹那间万千刀影合一，化作灭世一击斩向$n" HBMAG "。\n" NOR;                       
+      
+             ap = me->query_skill("blade");
+             dp = target->query_skill("parry");
+              
+             if (COMBAT_D->hit_determination(me,target,ap,dp)) 
+             { 
+                     msg += HIR "$n" HIR "面对$N" HIR "这排山倒海般的攻" 
+                            "势，完全无法抵挡，招架散乱，连连退后。\n" NOR; 
+                     count = ap / 5; 
+             } else 
+             { 
+                     msg += HIC "$n" HIC "心底微微一惊，心知不妙，急忙" 
+                            "凝聚心神，竭尽所能化解$N" HIC "数道刀劲。\n" NOR; 
+                     count = 0; 
+             } 
+              
+             message_combatd(msg, me, target); 
+      
+             me->add_temp("apply/attack", count); 
+             me->add_temp("apply/damage", count / 2); 
+      
+             for (i = 0; i < COMBAT_D->query_base_attack_number(me,query_name()); i++) 
+             { 
+                     if (! me->is_fighting(target)) 
+                             break; 
+      
+                     if (! target->is_busy()) 
+                             target->start_busy(3); 
+      
+                     if (! objectp(weapon = me->query_temp("weapon")) )
+                     COMBAT_D->do_attack(me, target, 0, 120);
+                     else
+                     COMBAT_D->do_attack(me, target, weapon, 120); 
+             } 
+
+             //战斗已经结束（对手被击毙），恢复所有气血
+             {
+
+                // recover_all_hp(me,target);
+                call_out("recover_all_hp", 1, me, target);
+             }
+             
+             me->add("neili", -2000); 
+             me->add_temp("apply/attack", -count); 
+             me->add_temp("apply/damage", -count / 2); 
+      
+             me->start_busy(3 + random(2)); 
+             me->add("neili", -400 - random(600)); 
+             return 1;         
+     } 
+

@@ -1,0 +1,371 @@
+//	skill.c
+//
+// 	This is the standard skill daemon object. All objects defining a skill
+//	should inherit this as its skeleton.
+
+inherit F_CLEAN_UP;
+
+void create()
+{
+	seteuid(getuid());
+}
+
+// Check if the user(me) has been ready for combininh some sub
+// skills to this skill
+int get_ready(object me)
+{
+	return 1;
+}
+
+// Check if the user(me) has finished to combine some sub skills
+// to this skill
+int get_finish(object me)
+{
+	return 1;
+}
+
+// All the sub skills for combine. Default is null indicating
+// that the skill needn't combine from other skills.
+mapping query_sub_skills()
+{
+	return 0;
+}
+
+//
+// valid_learn()
+//
+// This function is to check if a character should be able to 
+// learn/study/practice the skill. The default function just
+// returns 1 to allow any characters improve the skill. However,
+// a good skill should has its own feature and restriction. Redefine
+// this function in your skill object and make it reasonable 
+// according to the power of the skill.
+
+int valid_learn(object me) { return 1; }
+
+//
+// valid_research()
+//
+// This function is to check if a character should be able to 
+// research the skill. 
+int valid_research(object me) { return 1; }
+
+// do effect when parry
+int valid_effect(object me, object weapon, string action_name, int skill) 
+{ 
+	return 1;
+}
+
+/**
+ * @brief 返回对象的类型标识符
+ * @return string 返回类型字符串"martial"，表示这是一个武术相关对象
+ * @details 此函数用于标识对象的类型为"martial"（武术），系统可通过此类型判断对象属于武术类别，便于进行分类处理或特定逻辑判断。
+ */
+string type() { return "martial"; }
+
+/**
+ * @brief 获取技能的有效学习等级上限
+ * @param object me 要检查的学习者对象
+ * @return int 返回技能的有效学习等级上限，武术类返回200，其他类型返回999
+ * @details 该函数根据技能类型设置不同的学习等级上限，以平衡游戏体验。武术类技能由于威力较大，设置了较低的学习上限(200)，而其他类型技能则允许更高的学习等级(999)。
+ */
+int valid_learn_level(object me)
+{
+	return (type() == "martial") ? 200 : 999;
+}
+
+void skill_improved(object me) {}
+
+/**
+ * @brief 执行角色的技能或特殊功能
+ * @param object me 执行技能的角色对象
+ * @param string arg 技能参数，可能包含技能名称和目标
+ * @return int 技能执行成功返回1，失败返回0
+ * @details 该函数用于处理角色施展技能或特殊功能的逻辑。它会解析参数以确定技能名称和目标对象，
+ * 检查目标是否存在，然后查找对应的技能文件。在执行前会检查技能是否处于冷却状态(CD)，
+ * 如果技能执行成功，会根据技能文件中的设置更新技能的冷却时间，以防止技能被频繁使用。
+ * 这种设计确保了技能系统的平衡性和游戏体验的流畅性。
+ */
+int exert_function(object me, string arg)
+{
+	string func, target, file,pfm;
+	object target_ob;
+
+	if (sscanf(arg, "%s %s", func, target) == 2)
+	{
+		target_ob = present(target, environment(me));
+		if (! target_ob) return notify_fail("这里没有 " + target + "。\n");
+	} else
+	{
+		func = arg;
+		target_ob = me;
+	}
+
+	if (! stringp(file = (string)this_object()->exert_function_file(func)) ||
+	    file_size(file + ".lpc") <= 0)
+		return 0;
+
+	pfm = replace_string(file,"/","|");
+
+	if(file->query_cd())
+	{
+		if(me->query("skill_cd/"+pfm))
+			return notify_fail("技能CD中，"+me->query("skill_cd/"+pfm)*2+"秒后冷却。。。\n");
+	}
+	if((int)call_other(file, "exert", me, target_ob))
+	{
+		if(file->query_cd())
+		{
+			me->set("skill_cd/"+pfm,file->query_cd());
+		}
+		return 1;
+	}
+	else
+		return 0;
+}
+
+/**
+ * @brief 执行角色的技能动作
+ * @param object me 执行技能动作的角色对象
+ * @param string arg 技能动作参数，格式为"动作名称 目标"或仅"动作名称"
+ * @return int 返回1表示技能执行成功，0表示失败
+ * @details 该函数是角色执行技能动作的核心处理函数，负责解析技能参数、检查目标对象、
+ * 验证技能文件存在性、处理技能冷却逻辑，并最终调用相应的技能执行函数。
+ * 设计上采用统一的技能执行入口，便于管理所有技能的冷却时间和执行条件。
+ */
+int perform_action(object me, string arg)
+{
+	string action, target, file,pfm;
+	object target_ob;
+
+	if (sscanf(arg, "%s %s", action, target) == 2)
+	{
+		target_ob = present(target, environment(me));
+		if (! target_ob) return notify_fail("这里没有" + target + "。\n");
+	} else
+	{
+		action = arg;
+	}
+
+	if (! stringp(file = (string)this_object()->perform_action_file(action)) ||  file_size(file + ".lpc") <= 0)
+		return 0;
+
+	if(me->query("skill_pcd"))
+		return notify_fail(me->query("skill_pcd/name")+"的作用时间还没过，"+me->query("skill_pcd/num")*2+"秒之后才能使用外功绝技。\n");
+
+	pfm = replace_string(file,"/","|");
+	if(file->query_cd())
+	{
+		if(me->query("skill_cd/"+pfm))
+			return notify_fail("技能CD中，"+me->query("skill_cd/"+pfm)*2+"秒后冷却。。。\n");
+	}
+
+	if((int)call_other(file, "perform", me, target_ob))
+	{
+		if(file->query_pcd())
+		{
+			me->set("skill_pcd/name",replace_string(file->query_name(),"$br#",""));
+			me->set("skill_pcd/num",file->query_pcd());
+		}
+		if(file->query_cd())
+		{
+			me->set("skill_cd/"+pfm,file->query_cd());
+		}
+		return 1;
+	}
+	else
+		return 0;
+}
+
+/**
+ * @brief 清除指定技能的冷却时间
+ * @param object me 需要清除冷却时间的玩家对象
+ * @param string arg 技能动作参数，可以只包含动作名称，也可以是"动作名称 目标"的格式
+ * @return int 成功清除冷却时间返回1，否则返回0
+ * @details 该函数首先解析参数获取技能动作，然后检查对应的技能文件是否存在。
+ * 如果技能文件存在且设置了冷却时间，则从玩家对象中删除该技能的冷却记录。
+ * 这允许玩家立即重新使用该技能，而不必等待自然冷却时间结束。
+ */
+int clear_pfm_cd(object me, string arg)
+{
+	string action, target, file,pfm;
+	object target_ob;
+
+	if (sscanf(arg, "%s %s", action, target) == 2)
+	{
+		target_ob = present(target, environment(me));
+	} else
+	{
+		action = arg;
+	}
+
+	if (! stringp(file = (string)this_object()->perform_action_file(action)) || file_size(file + ".lpc") <= 0)
+		return 0;
+
+	pfm = replace_string(file,"/","|");
+	if(file->query_cd())
+	{
+		me->delete("skill_cd/"+pfm);
+	}
+
+	return 1;
+}
+
+/**
+ * @brief 查询技能的招式(pfm)情况
+ * @param string type 可选参数，用于筛选特定类型的招式
+ * @return mapping 返回一个映射，键为文件名，值为"招式名称:perform"格式的字符串
+ * @details 该函数扫描当前对象目录下的所有.c文件，收集技能招式信息。如果指定了type参数，
+ *          只会返回pfm_type()包含该type的招式。这个函数主要用于技能系统中获取可用的招式列表，
+ *          便于玩家选择或系统调用。
+ */
+varargs mapping query_pfm(string type)
+{
+	// 查询技能的 pfm 情况
+	string dir,filename;
+ string *all_file;
+	int i,l;
+	mapping pfms;
+
+	dir = file_name(this_object())+"/";
+	pfms = ([]);
+
+	if (file_size(dir) == -2)
+	{
+		all_file = list_dirs(dir);
+		if (sizeof(all_file))
+		{
+			for (i = 0; i < sizeof(all_file); i++)
+			{
+				filename = all_file[i];
+				l = strlen(filename);
+				if (filename[l - 1] == 'c' && filename[l - 2] == '.')
+					filename = filename[0..l - 3];
+
+				if(type&&(dir + filename)->pfm_type()
+					&&member_array(type,(dir + filename)->pfm_type())==-1)
+					continue;
+
+				if((dir+filename)->query_name())
+					pfms[filename] = (dir+filename)->query_name()+":perform";
+				else
+					pfms[filename] = filename+":perform";
+			}
+		}
+	}
+	return pfms;
+}
+
+
+/**
+ * @brief 查询并收集当前技能目录下的所有技能信息
+ * @param string type 可选参数，指定要筛选的技能类型。如果提供此参数，则只返回匹配该类型的技能。
+ * @return mapping * 返回包含技能信息的映射数组，每个映射包含技能的名称、冷却时间、命令路径等信息。
+ * @details 该函数设计用于动态获取技能目录下的所有可用技能，以便在游戏界面展示或供其他系统调用。通过遍历技能目录并调用各技能文件的标准接口方法，实现了技能信息的统一收集和格式化。当指定类型参数时，可以过滤出特定类型的技能，这在需要分类展示技能的场景中非常有用。
+ */
+varargs mapping *skill_pfms(string type)
+{
+	// 查询技能的 pfm 情况
+	string dir,filename;
+	string *all_file;
+	int i,l;
+	mapping *pfms;
+
+	dir = file_name(this_object())+"/";
+	pfms = ({});
+
+	if (file_size(dir) == -2)
+	{
+		all_file = list_dirs(dir);
+		
+		if (sizeof(all_file))
+		{
+			for (i = 0; i < sizeof(all_file); i++)
+			{
+				mapping pfm = ([]);
+				filename = all_file[i];
+
+				l = strlen(filename);
+				if (filename[l - 1] == 'c' && filename[l - 2] == '.')
+					filename = filename[0..l - 3];
+
+				// tell_object(find_player("demodemo"),(dir +filename) + "\n");
+				if(type&&(dir + filename)->pfm_type() && member_array(type,(dir + filename)->pfm_type())==-1)
+					continue;
+
+				if((dir+filename)->query_name())
+				{
+					pfm["name"] = (dir+filename)->query_name();
+					pfm["name"] = replace_string(pfm["name"],ZJBR,"");
+
+					if((dir+filename)->query_cd())
+					{
+						pfm["cd"] = (dir+filename)->query_cd();
+					}
+
+					if (type)
+					{
+						pfm["command"] = sprintf("perform %s.%s",type,filename);
+					}
+					pfm["path"] = dir+filename;
+					pfms += ({ pfm });
+				}
+				else
+				{
+					pfm["name"] = filename;
+					pfm["name"] = replace_string(pfm["name"],ZJBR,"");
+
+					if((dir+filename)->query_cd())
+					{
+						pfm["cd"] = (dir+filename)->query_cd();
+					}
+
+					if (type)
+					{
+						pfm["command"] = sprintf("perform %s.%s",type,filename);
+					}
+
+					pfm["path"] = dir+filename;
+
+					pfms += ({ pfm });
+				}
+
+			}
+		}
+	}
+	return pfms;
+}
+
+/**
+ * @brief 生成一个偏向较小值的随机数
+ * @param int n 输入值，作为随机数生成的基础范围
+ * @param int base 保留参数，当前函数中未使用
+ * @param int d 保留参数，当前函数中未使用
+ * @return int 返回一个偏向较小值的随机数，范围在0到n之间
+ * @details 该函数实现了一种特殊的随机数生成算法，它不是均匀分布而是偏向于生成较小的值。函数通过计算0到k-1的和，然后在这个范围内生成随机数，再通过递减的方式确定最终结果，使得较小值被选中的概率更高。这种设计适用于需要偏向性随机分布的游戏机制，如伤害计算、掉落率等场景。
+ */
+int NewRandom(int n, int base, int d)
+{
+	int sum;
+	int i;
+	int k;
+
+	k = 6;
+	if (k > n) k = n;
+	if (! k) return n;
+
+	sum = 0;
+	for (i = 0; i < k; i++) sum += i;
+	sum = random(sum);
+	for (i = 0; i < k; i++)
+	{
+		sum -= i;
+		if (sum <= 0)
+		{
+			n = n - k + i;
+			if (n <= 0) n = 0;
+			break;
+		}
+	}
+	return n;
+}

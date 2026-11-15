@@ -1,0 +1,109 @@
+// lian.c 破势连环
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+string query_name() { return "破势"ZJBR"连环"; }
+
+/**
+ * @brief 破势连环绝技
+ * @param object me 施展者
+ * @param object target 目标
+ * @return int 1表示成功，0表示失败
+ * @details 融合破气式的多段连击与风卷残云的控制能力，形成连环攻击并控制敌人
+ */
+int perform(object me, object target)
+{
+    string msg;
+    int i, attack_time;
+    int ap, dp;
+    object weapon;
+
+    if (! target) target = offensive_target(me);
+    if (! target || ! me->is_fighting(target))
+        return notify_fail("「破势连环」只能对战斗中的对手使用。\n");
+
+    if (me->query_skill("xuanming-sword", 1) < 120)
+        return notify_fail("你的玄命剑典修为不足，无法施展「破势连环」。\n");
+
+    if (me->query_skill("force", 1) < 150)
+        return notify_fail("你的内功火候不够，无法施展「破势连环」。\n");
+
+    if (me->query("neili") < 500)
+        return notify_fail("你的内力不足以施展「破势连环」。\n");
+
+    if (!objectp(weapon = me->query_temp("weapon")) || weapon->query("skill_type") != "sword")
+        return notify_fail("你必须持剑才能使用「破势连环」！\n");
+
+    if (me->query_skill_mapped("sword") != "xuanming-sword")
+        return notify_fail("你没有激发玄命剑典，无法施展「破势连环」。\n");
+
+    msg = HIW "$N" HIW "施展玄命剑典绝技「破势连环」，手中" + weapon->name() + HIW "连连出击，\n"
+          "既有破气式的凌厉连击，又蕴含卷字诀的变化莫测，剑势如连环锁链，环环相扣！\n" NOR;
+
+    message_combatd(msg, me, target);
+
+    me->add("neili", -350);
+
+    // 计算连击次数：使用标准连击数函数
+    attack_time = COMBAT_D->query_base_attack_number(me, query_name());
+
+    // PVE额外加成
+    if (!userp(target))
+    {
+        attack_time += 2;
+    }
+
+    // 先判定控制效果（融合风卷残云的特点）
+    ap = attack_power(me, "sword");
+    dp = defense_power(target, "dodge");
+
+    if (COMBAT_D->hit_determination(me, target, ap, dp))
+    {
+        int busy_time = ap / 40 + 2; // 基础忙乱时间
+        int max_busy = 15;
+
+        // 双重意境对控制的影响
+        int cangsung_level = COMBAT_D->get_skill_aoyi_level(me, "苍松之劲");
+        int anran_level = COMBAT_D->get_skill_aoyi_level(me, "黯然隐雾");
+
+        if (cangsung_level > 0)
+        {
+            busy_time += cangsung_level / 5; // 苍松之劲增加控制时间
+            max_busy += 5;
+        }
+
+        if (anran_level > 0)
+        {
+            busy_time += anran_level / 8; // 黯然隐雾增加控制时间
+            max_busy += 3;
+        }
+
+        if (me->query("max_neili") > target->query("max_neili"))
+        {
+            max_busy += 5;
+        }
+
+        if (busy_time > max_busy)
+        {
+            busy_time = max_busy;
+        }
+
+        target->start_busy(busy_time);
+        msg = YEL "$n" YEL "被$N" YEL "的连环剑势困住，一时无法脱身！\n" NOR;
+        message_combatd(msg, me, target);
+    }
+
+    me->start_busy(2);
+
+    // 执行连击
+    for (i = 0; i < attack_time; i++)
+    {
+        if (! me->is_fighting(target))
+            break;
+        COMBAT_D->do_attack(me, target, weapon, TYPE_QUICK);
+    }
+
+    return 1;
+}

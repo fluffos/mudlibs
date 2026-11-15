@@ -1,0 +1,204 @@
+// family_shop.c
+
+
+
+inherit F_CLEAN_UP;
+
+//存储可购买物品的列表
+mapping *obj_list = ({
+    ([
+        "path":"/clone/vip/putao",
+        "price":10,
+        "level":1,
+    ]),
+    ([
+        "path":"/clone/vip/book_tianfu",
+        "price":10,
+        "level":1,
+    ]),
+    ([
+        "path":"/clone/vip/book_wuliang",
+        "price":10,
+        "level":1,
+    ]),
+    ([
+        "path":"/clone/vip/jinsha",
+        "price":10,
+        "level":1,
+    ]),
+    ([
+        "path":"/clone/vip/dan_chongmai1",
+        "price":10,
+        "level":3,
+    ]),
+    ([
+        "path":"/clone/vip/dijibao_hufu",
+        "price":10,
+        "level":3,
+    ]),
+    ([
+        "path":"/clone/vip/dan_chongmai2",
+        "price":20,
+        "level":4,
+    ]),
+    ([
+        "path":"/clone/vip/zhongjibao_hufu",
+        "price":30,
+        "level":4,
+    ]),
+    ([
+        "path":"/clone/vip/dan_chongmai3",
+        "price":30,
+        "level":5,
+    ]),
+    ([
+        "path":"/clone/vip/jinpiao",
+        "price":200,
+        "level":6,
+    ]),
+    ([
+        "path":"/clone/vip/putao1",
+        "price":200,
+        "level":6,
+    ]),
+    ([
+        "path":"/clone/vip/dan_chongmai4",
+        "price":50,
+        "level":7,
+    ]),
+    ([
+        "path":"/clone/vip/gaojibao_hufu",
+        "price":50,
+        "level":7,
+    ]),
+    ([
+        "path":"/clone/vip/dan_jiuzhuan",
+        "price":500,
+        "level":9,
+    ]),
+});
+
+mapping *query_obj_list()
+{
+    return obj_list;
+}
+
+int main(object me, string arg)
+{
+    int i, player_level;
+    object item;
+    string output = "", title;
+
+    if (!me->query("family/family_name"))
+        return notify_fail("你还没有加入门派，无法使用门派商店。\n");
+
+    player_level = FAMILY_D->query_family_player_level(me);
+
+    title = me->query("family/family_name") + "门派商店 - " + 
+            FAMILY_D->query_family_player_title(me) + ZJBR;
+    title += "你当前有" + me->query("family_points") + "点门派点数\n";
+
+    if (!arg) {
+        output = ZJOBLONG + title + ZJOBACTS2+ZJMENUF(3,3,8,30);
+        for (i = 0; i < sizeof(obj_list); i++) {
+            if (player_level >= obj_list[i]["level"]) {
+                item = new(obj_list[i]["path"]);
+                if (item) {
+                    output += sprintf("%s"ZJBR"%d门派点数:family_shop look %s"ZJSEP, 
+                                      item->name(), 
+                                      obj_list[i]["price"],
+                                      obj_list[i]["path"]);
+                    destruct(item);
+                }
+            }
+        }
+        write(output + "\n");
+        return 1;
+    }
+
+    if (sscanf(arg, "look %s", arg) == 1) {
+        for (i = 0; i < sizeof(obj_list); i++) {
+            if (obj_list[i]["path"] == arg) {
+                item = load_object(arg);
+                if (item) {
+                    output = ZJOBLONG + "【" + item->name() + "】　　价格：" + 
+                             obj_list[i]["price"] + "门派点数"ZJBR +
+                             "一一一一一一一一一一一一一一一一一一一一一一一"ZJBR +
+                             item->long() + "\n" +
+                             ZJOBACTS2+ZJMENUF(4,4,10,28) +
+                             "购买1个:family_shop buy 1 " + arg + ZJSEP +
+                             "批量购买:family_shop buy " + arg + "\n";
+                    write(output);
+                    return 1;
+                }
+            }
+        }
+        return notify_fail("没有这个商品。\n");
+    }
+
+    if (sscanf(arg, "buy %s", arg) == 1) {
+        int amount;
+        if (sscanf(arg, "%d %s", amount, arg) != 2) {
+            write(INPUTTXT("你想买多少个" + arg->query("name") + "？"ZJBR"请确认你的背包空间足够。",
+                           "family_shop buy $txt# " + arg) + "\n");
+            return 1;
+        }
+
+        for (i = 0; i < sizeof(obj_list); i++) {
+            if (obj_list[i]["path"] == arg) {
+                if (player_level < obj_list[i]["level"]) {
+                    return notify_fail("你的门派等级不足以购买这件商品。\n");
+                }
+                if (me->query("family_points") < obj_list[i]["price"] * amount) {
+                    return notify_fail("你的门派点数不足以购买这件商品。\n");
+                }
+                item = new_bind(arg);
+                if (!item) {
+                    return notify_fail("创建物品失败，请联系管理员。\n");
+                }
+                if (amount > 1 && !item->query_amount()) {
+                    destruct(item);
+                    return notify_fail("这种物品一次只能购买一个。\n");
+                }
+                
+                write("你成功购买了" + amount + (item->query("base_unit")?item->query("base_unit"):item->query("unit")) + item->name() + "。\n");
+
+                if (item->query_amount()) {
+                    item->set_amount(amount);
+                    item->move(me); 
+                } else {
+                    for (int j = 1; j < amount; j++) {
+                        object new_item = new_bind(arg);
+                        if (new_item) {
+                            new_item->move(me);
+                        }
+                    }
+                }
+
+
+                me->add("family_points", -obj_list[i]["price"] * amount);
+
+
+                return 1;
+            }
+        }
+        return notify_fail("门派商店没有这件商品。\n");
+    }
+
+    return notify_fail("格式：family_shop [look <物品路径>] [buy <数量> <物品路径>]\n");
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式：family_shop [look <物品路径>] [buy <数量> <物品路径>]
+
+这个指令让你查看和使用门派商店。
+不带参数时显示可购买的商品列表。
+使用 look 参数查看具体商品信息。
+使用 buy 参数购买指定商品。
+
+商品的可见性和价格会根据你的门派等级而变化。
+HELP );
+    return 1;
+}

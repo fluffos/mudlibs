@@ -1,0 +1,319 @@
+// invasiond.c
+// 门派入侵守护进程
+
+inherit F_DBASE;
+
+
+#include <localtime.h>
+
+// 全局变量声明
+mapping ongoing_invasions = ([]);
+mapping invasion_history = ([]);
+nosave int invasion_started_today = 0;
+nosave int last_invasion_day = -1; // 记录上次入侵发生的日期
+
+// 函数声明
+void create();
+void schedule_invasion();
+void start_invasion();
+void initiate_invasion(string invader_faction, string target_faction);
+int get_faction_player_count(string faction);
+int get_invader_strength(string faction);
+void generate_invaders(string invader_faction, string target_faction, int num, int strength);
+object get_faction_main_room(string faction_id);
+void end_invasion(string invader_faction, string target_faction);
+void heart_beat();
+
+void create()
+{
+    seteuid(getuid());
+    
+    CHANNEL_D->do_channel(this_object(), "sys", "门派入侵系统已经启动。");
+    
+    schedule_invasion();
+    
+    set_heart_beat(60);
+}
+
+void schedule_invasion()
+{
+    mixed *lt;
+    int hour, delay;
+
+    lt = localtime(time());
+    hour = lt[LT_HOUR];
+
+    if (hour >= 23)
+        delay = (24 - hour + 19) * 3600 - lt[LT_MIN] * 60 - lt[LT_SEC];
+    else if (hour < 19)
+        delay = (19 - hour) * 3600 - lt[LT_MIN] * 60 - lt[LT_SEC];
+    else
+        delay = 0;
+
+    if (hour >= 19 && hour < 23)
+        delay = random((23 - hour) * 3600 - lt[LT_MIN] * 60 - lt[LT_SEC]);
+
+    call_out("start_invasion", delay);
+}
+
+void start_invasion()
+{
+    mixed *lt;
+    int hour;
+    object factiond;
+    string *evil_factions, *neutral_factions, *good_factions;
+    string *invaders, *targets;
+    // int i;
+    int current_day;
+    lt = localtime(time());
+    hour = lt[LT_HOUR];
+
+    // 获取当前日期
+    current_day = lt[LT_YDAY];
+
+    // 检查今日是否已经发生过入侵
+    if (last_invasion_day == current_day)
+    {
+        // 如果已经入侵过，安排下次入侵
+        call_out("schedule_invasion", (24 - hour + 19) * 3600 - lt[LT_MIN] * 60 - lt[LT_SEC]);
+        return;
+    }
+
+    // 更新入侵日期
+    last_invasion_day = current_day;
+    invasion_started_today = 1;
+
+    factiond = load_object("/adm/special_ob/faction/factions.lpc");
+    if (!factiond) {
+        log_file("invasion_error", sprintf("无法加载 factions.c 文件\n"));
+        return;
+    }
+
+    evil_factions = factiond->get_evil_factions();
+    neutral_factions = factiond->get_neutral_factions();
+    good_factions = factiond->get_good_factions();
+
+    if (!arrayp(evil_factions) || !arrayp(neutral_factions) || !arrayp(good_factions)) {
+        log_file("invasion_error", sprintf("门派列表不是数组: evil=%O, neutral=%O, good=%O\n",
+            evil_factions, neutral_factions, good_factions));
+        return;
+    }
+
+    invaders = evil_factions;
+
+    foreach (string faction in neutral_factions)
+    {
+        if (random(2) == 0)
+        {
+            invaders += ({ faction });
+        }
+    }
+
+    targets = good_factions + neutral_factions + evil_factions;
+
+    foreach (string target in targets)
+    {
+        string invader = invaders[random(sizeof(invaders))];
+        if (invader != target)
+        {
+            initiate_invasion(invader, target);
+        }
+    }
+
+    // 安排下次入侵（次日）
+    schedule_invasion();
+}
+
+void initiate_invasion(string invader_faction, string target_faction)
+{
+    int player_count, num_invaders, invader_strength;
+    object target_room, factiond;
+    string invader_name, target_name;
+
+    factiond = load_object("/adm/special_ob/faction/factions.lpc");
+    if (!factiond) {
+        log_file("invasion_error", "无法加载 factions.c 文件\n");
+        return;
+    }
+
+    // 获取门派的中文名称
+    invader_name = factiond->get_faction_name(invader_faction);
+    target_name = factiond->get_faction_name(target_faction);
+
+    player_count = get_faction_player_count(target_name);
+    num_invaders = player_count > 0 ? player_count * 3 : 30;
+    invader_strength = get_invader_strength(target_name);
+    target_room = get_faction_main_room(target_faction);
+
+    generate_invaders(invader_name, target_name, num_invaders, invader_strength);
+
+    // 使用中文名称发送消息
+    CHANNEL_D->do_channel(this_object(), "rumor",
+        sprintf("%s正在入侵%s！各位弟子快去支援！", invader_name, target_name));
+
+    // 记录入侵历史时使用中文名称
+    ongoing_invasions[target_name] = ([
+        "invader": invader_name,
+        "start_time": time(),
+    ]);
+
+    if (!invasion_history[ctime(time())])
+    {
+        invasion_history[ctime(time())] = ({});
+    }
+    invasion_history[ctime(time())] += ({ sprintf("%s入侵了%s", invader_name, target_name) });
+
+    FACTION_D->add_invasion_count(invader_faction);
+
+    call_out("end_invasion", 600, invader_name, target_name);
+}
+
+int get_faction_player_count(string faction)
+{
+    object *players;
+    int count, i;
+
+    players = users();
+    count = 0;
+
+    for (i = 0; i < sizeof(players); i++)
+    {
+        if (players[i]->query("family/family_name") == faction)
+            count++;
+    }
+
+    return count;
+}
+
+int get_invader_strength(string faction)
+{
+    int avg_skill;
+
+    avg_skill = NPC_UTILS->get_avg_skill_level_in_clan(faction, 5);
+
+    if (avg_skill == 0)
+        avg_skill = NPC_UTILS->get_avg_skill_level(10);
+
+    return avg_skill;
+}
+
+void generate_invaders(string invader_faction, string target_faction, int num, int strength)
+{
+    object invader;
+    object target_room;
+    int i;
+
+    target_room = get_faction_main_room(target_faction);
+
+    for (i = 0; i < num; i++)
+    {
+        invader = new("/kungfu/class/invader");
+        invader->set_factions(invader_faction, target_faction);
+        invader->set_strength(strength);
+        invader->move(target_room);
+    }
+}
+
+object get_faction_main_room(string faction_id)
+{
+    mapping faction_rooms;
+
+    faction_rooms = ([
+        "少林派"  : "/d/shaolin/guangchang1",       // 少林派
+        "武当派"   : "/d/wudang/sanqingdian",        // 武当派
+        "华山派"  : "/d/huashan/square",          // 华山派
+        "全真教" : "/d/quanzhen/damen",          // 全真教
+        "丐帮"  : "/d/gaibang/xcandao2",         // 丐帮
+        "桃花岛"   : "/d/taohua/dating",             // 桃花岛
+        "逍遥派"  : "/d/xiaoyao/qingcaop",              // 逍遥派
+        "星宿派"  : "/d/xingxiu/tianroad1",         // 星宿派
+        "血刀门"   : "/d/xuedao/sroad4",          // 血刀门
+        "古墓派"     : "/d/gumu/mumen",
+        "灵鹫宫"     : "/d/lingjiu/damen",
+        "神龙教"     : "/d/shenlong/damen",
+        "欧阳世家"     : "/d/baituo/dating",
+        "日月神教"     : "/d/heimuya/baihutang",
+        "明教"     : "/d/mingjiao/dadian",
+        "雪山寺"     : "/d/xueshan/dadian",
+        // 添加更多门派和对应的主要场景路径
+    ]);
+
+    if (undefinedp(faction_rooms[faction_id]))
+        return load_object("/d/city/guangchang"); // 默认场景
+
+    return load_object(faction_rooms[faction_id]);
+}
+
+void end_invasion(string invader_faction, string target_faction)
+{
+    object *invaders;
+    object factiond;
+    string invader_name, target_name;
+    int i;
+
+    invaders = children("/kungfu/class/invader.lpc");
+
+    invaders = filter_array(invaders, (: $1->query("target_faction") == $(target_faction) :));
+
+    if (sizeof(invaders) > 0)
+    {
+        for (i = 0; i < sizeof(invaders); i++)
+        {
+            if (objectp(invaders[i]))
+                destruct(invaders[i]);
+        }
+
+        FACTION_D->add_prestige(target_faction, -10);
+        FACTION_D->add_prestige(invader_faction, 10);
+
+        factiond = load_object("/adm/special_ob/faction/factions.lpc");
+        invader_name = factiond->get_faction_name(invader_faction);
+        target_name = factiond->get_faction_name(target_faction);
+
+        CHANNEL_D->do_channel(this_object(), "rumor",
+            sprintf("%s未能抵御%s的入侵，威望下降了！", target_name, invader_name));
+    }
+    else
+    {
+        FACTION_D->add_prestige(target_faction, 10);
+        FACTION_D->add_prestige(invader_faction, -5);
+
+        FACTION_D->add_defense_count(target_faction);
+
+        factiond = load_object("/adm/special_ob/faction/factions.lpc");
+        invader_name = factiond->get_faction_name(invader_faction);
+        target_name = factiond->get_faction_name(target_faction);
+
+        CHANNEL_D->do_channel(this_object(), "rumor",
+            sprintf("%s成功抵御了%s的入侵，维护了门派的威望！", target_name, invader_name));
+    }
+
+    map_delete(ongoing_invasions, target_faction);
+
+    // 不再在此处重置 invasion_started_today，改为在次日重置
+    // invasion_started_today = 0;
+}
+
+void heart_beat()
+{
+    mixed *lt;
+    int hour;
+    int current_day;
+
+    lt = localtime(time());
+    hour = lt[LT_HOUR];
+    current_day = lt[LT_YDAY];
+
+    // 如果不是同一天，重置 invasion_started_today
+    if (last_invasion_day != current_day)
+    {
+        invasion_started_today = 0;
+        last_invasion_day = current_day;
+    }
+
+    // 如果尚未发生入侵，且当前时间在 19 点到 23 点之间，安排入侵
+    if (!invasion_started_today && hour >= 19 && hour < 23)
+    {
+        start_invasion();
+    }
+}

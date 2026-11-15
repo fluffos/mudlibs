@@ -1,0 +1,526 @@
+// move.c
+#include <tomud.h>
+#pragma optimize
+
+
+
+#include <dbase.h>
+#include <command.h>
+
+// 对象的重量
+nosave int weight = 0;
+
+// encumb: 当前负重值
+// max_encumb: 最大负重值
+nosave int encumb = 0, max_encumb = 0;
+
+// 是否为魔法移动,用于特殊移动效果判断
+nosave int magic_move = 0;
+
+// 临时状态标记,用于对象临时存储
+nosave int in_temp = 0;
+
+/**
+ * @brief 查询当前负重值
+ * @return int 返回当前的负重值
+ * @details 用于获取对象当前的负重状态，供负重计算和判断使用
+ */
+nomask int query_encumbrance() { return encumb; }
+
+/**
+ * @brief 检查是否超重
+ * @return int 如果当前负重超过最大负重则返回非0值，否则返回0
+ * @details 通过比较当前负重与最大负重来判断对象是否处于超重状态
+ */
+nomask int over_encumbranced() { return encumb > max_encumb; }
+
+/**
+ * @brief 查询最大负重值
+ * @return int 返回最大负重限制值
+ * @details 获取对象可承受的最大负重，用于负重限制检查
+ */
+nomask int query_max_encumbrance() { return max_encumb; }
+
+/**
+ * @brief 设置最大负重值
+ * @param int e 要设置的最大负重值
+ * @details 用于设定对象的负重上限，影响超重判断
+ */
+nomask void set_max_encumbrance(int e) { max_encumb = e; }
+
+/**
+ * @brief 增加负重值
+ * @param int w 要增加的重量值，可以为负数表示减少负重
+ * @details 递归更新当前对象及其环境对象的负重状态。
+ *          当负重值变为负数时会记录错误日志并重置为0。
+ *          当超过最大负重时会触发超重处理函数。
+ *          会向上递归更新所有上级环境对象的负重。
+ */
+nomask void add_encumbrance(int w)
+{
+	object env;
+	
+	// 增加负重值
+	encumb += w;
+	
+	// 负重值不能为负数,记录错误日志
+	if (encumb < 0) {
+		log_file("move.bug", sprintf("%O encumbrance underflow.\n", this_object()));
+		encumb = 0;
+	}
+	
+	// 超过最大负重时调用超重处理
+	if (encumb > max_encumb)
+	{
+		this_object()->over_encumbrance();
+	}
+		
+	// 递归更新环境对象的负重
+	if (objectp(env = environment()))
+		env->add_encumbrance(w);
+}
+
+/**
+ * @brief 获取环境出口信息并以TMI格式输出
+ * @param object env 要查询的环境对象
+ * @return int 成功获取并输出出口信息返回1，失败返回0
+ * @details 检查环境对象的exits映射，提取出口方向并格式化输出。
+ *          单个出口时输出格式: TMI("bnway 出口方向;")
+ *          多个出口时输出格式: TMI("bnway 出口1;出口2;...;")
+ *          主要用于客户端界面显示可用的移动方向。
+ */
+int info(object env)
+{
+	string *dirs;
+	mapping exits;
+
+	if (!env) return 0;
+
+	if (mapp(exits = env->query("exits")))
+	{
+		dirs = keys(exits);
+		if (sizeof(dirs))
+		{
+			if (sizeof(dirs) == 1)
+				write(TMI("bnway " + dirs[0] + ";"));
+			else
+				write(TMI("bnway " + implode(dirs, ";") + ";"));
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/**
+ * @brief 处理负重超重的情况
+ * @details 当对象负重超过最大限制时触发此函数。
+ *          只对交互式玩家对象发送超重警告消息，
+ *          非玩家对象不进行任何处理以避免不必要的消息输出。
+ */
+void over_encumbrance()
+{
+	object me = this_object();
+
+	// 非玩家对象不处理超重
+	if (! interactive(me))
+		return;
+
+	// 发送超重提示
+	tell_object(me, HIR "你的负荷过重了，行动将受到影响！" NOR "\n");
+}
+
+/**
+ * @brief 查询对象重量
+ * @return int 返回对象自身的重量值
+ * @details 获取对象的基础重量，不包括其所承载的其他对象重量
+ */
+nomask int query_weight() { return weight; }
+
+/**
+ * @brief 设置对象重量
+ * @param int w 要设置的重量值
+ * @details 设置对象的基础重量，如果对象在某个环境中，
+ *          会自动更新环境对象的负重值以保持负重计算的正确性。
+ *          重量变化时会通知环境对象调整其负重状态。
+ */
+nomask void set_weight(int w)
+{
+        // 如果对象没有环境,直接设置重量
+        if (! environment())
+        {
+                weight = w;
+                return;
+        }
+
+        // 如果新重量与原重量不同,更新环境的负重
+        if (w != weight)
+        {
+                environment()->add_encumbrance(w - weight);
+        }
+
+        // 设置新的重量
+        weight = w;
+}
+
+/**
+ * @brief 获取对象总重量
+ * @return int 返回对象自身重量加上其承载的所有物品重量的总和
+ * @details 计算对象的完整重量，包括自身重量和当前负重，
+ *          用于准确计算对象在移动时对环境造成的重量影响。
+ */
+nomask int weight() { return weight + encumb; }
+
+/**
+ * @brief 检查是否为魔法移动状态
+ * @return int 如果是魔法移动返回非0值，否则返回0
+ * @details 用于判断当前移动是否为特殊的魔法移动，
+ *          魔法移动会触发特殊的视觉效果和状态更新。
+ */
+nomask int is_magic_move() { return magic_move; }
+
+/**
+ * @brief 设置为魔法移动状态
+ * @return int 返回1表示设置成功
+ * @details 将当前移动标记为魔法移动，
+ *          魔法移动在执行时会产生特殊的提示信息和效果。
+ */
+nomask int set_magic_move() { magic_move = 1; }
+
+/**
+ * @brief 移动对象到指定位置
+ * @param mixed dest 目标位置，可以是对象或路径字符串
+ * @param int raw 可选参数，为1时不显示房间描述
+ * @return int 移动成功返回1，失败返回0
+ * @details 这是核心的对象移动函数，处理复杂的移动逻辑：
+ *          1. 检查装备状态，装备的物品需要先卸除
+ *          2. 验证目标位置的有效性和负重限制
+ *          3. 处理魔法移动的特殊效果和提示
+ *          4. 更新守卫状态和临时状态
+ *          5. 为角色对象显示新环境的房间描述
+ *          6. 递归更新所有相关环境的负重状态
+ *          7. 通知客户端更新物品和角色显示
+ *          8. 处理房间物品的自动清理机制
+ */
+varargs int move(mixed dest, int raw)
+{
+	object target_env, *inv, curr_env;
+	object me;
+	int  is_char;
+	mixed guard_target;
+	mixed *guard_list;
+	mapping room_objects;
+
+	me = this_object();
+
+	// 检查装备状态
+	is_char = me->is_character();
+	if (!is_char && query("equipped") && !me->unequip())
+		return notify_fail("你没有办法取下这样东西。\n");
+
+	// 获取目标环境对象
+	if (objectp(dest))
+	{
+		target_env = dest;
+	}
+	else if (stringp(dest))
+	{
+		call_other(dest, "???");
+		target_env = find_object(dest);
+		if (!target_env) 
+			return notify_fail("move: 目标位置不可用。\n");
+	} else
+		return notify_fail(sprintf("move: 无效的目标位置 %O。\n", dest));
+
+	// 检查目标环境负重
+	curr_env = me;
+	while (curr_env = environment(curr_env))
+		if (curr_env == target_env) break;
+	if (!curr_env && 
+		(int)(target_env->query_encumbrance() + weight()) > 
+		(int)target_env->query_max_encumbrance())
+	{
+		if (environment(target_env))
+		{
+			message_vision("由于$n对于$N而言实在太重了，$N看起来移动都困难了。\n",
+				target_env, this_object());
+		}
+		else if (!playerp(target_env))
+		{
+			return notify_fail(this_object()->name() + "对" + 
+				target_env->name() + "而言太重了。\n");
+		}
+	}
+
+	// 处理当前环境
+	curr_env = environment();
+	if (curr_env)
+	{
+		// 处理魔法移动效果
+		if (curr_env != target_env && magic_move && userp(curr_env))
+		{
+			if (curr_env->visible(me))
+				tell_object(curr_env, HIM "你忽然觉得身上好像轻了一些。"NOR"\n");
+
+			if (userp(me))
+			{
+				curr_env->add_temp("person_in_you", -1);
+				if (curr_env->query_temp("person_in_you") <= 0)
+					curr_env->delete_temp("person_in_you");
+			}
+		}
+
+		// 清除手持状态
+		if (!is_char && curr_env->query_temp("handing") == me)
+			curr_env->delete_temp("handing");
+	}
+
+	// 处理守卫状态
+	guard_target = query_temp("guardfor");
+	if (objectp(guard_target) && !guard_target->is_character())
+	{
+		if (arrayp(guard_list = guard_target->query_temp("guarded")))
+		{
+			guard_list -= ({ me });
+			if (!sizeof(guard_list))
+			{
+				guard_target->delete_temp("guarded");
+			} else
+				guard_target->set_temp("guarded", guard_list);
+		}
+		me->delete_temp("guardfor");
+	} else
+	if (stringp(guard_target))
+	{
+		guard_list = curr_env->query_temp("guarded/" + guard_target);
+		if (arrayp(guard_list))
+		{
+			guard_list -= ({ me });
+			if (!sizeof(guard_list))
+			{
+				curr_env->delete_temp("guarded/" + guard_target);
+			} else
+				curr_env->set_temp("guarded/" + guard_target, guard_list);
+		}
+		me->delete_temp("guardfor");
+	}
+
+	// 显示房间描述
+	if (is_char && interactive(me) && living(me) && !raw)
+	{
+		LOOK_CMD->look_room(me, target_env, query("env/brief"));
+	}
+
+	// 处理魔法移动效果
+	if (magic_move && userp(target_env))
+	{
+		if (target_env->visible(this_object()))
+			tell_object(target_env, HIM "你忽然觉得身上好像重了一些。"NOR"\n");
+
+		if (userp(this_object()))
+			target_env->add_temp("person_in_you", 1);
+	}
+	magic_move = 0;
+
+	// 更新负重
+	if (!wizardp(this_object()) || !query("env/invisible"))
+	{
+		if (curr_env)
+			curr_env->add_encumbrance(-weight());
+		if (target_env)
+			target_env->add_encumbrance(weight());
+	}
+
+
+
+	//通知环境双方更新物品信息
+	{
+    
+		mapping update_obj_data;
+		if (curr_env && userp(curr_env))
+		{
+			update_obj_data = "/cmds/usr/new_inventory_beibao"->format_item_data("beibao", this_object(),0,1);
+			
+			tell_object(curr_env, json_encode((["code": "update_obj_data", "data": update_obj_data])) + "\n");
+		}
+
+		if (userp(target_env))
+		{
+			update_obj_data = "/cmds/usr/new_inventory_beibao"->format_item_data("beibao", this_object());
+			
+			tell_object(target_env, json_encode((["code": "update_obj_data", "data": update_obj_data])) + "\n");
+		}
+	}
+
+	move_object(target_env);
+
+	// 处理房间物品清理
+	if (target_env->is_room() && !this_object()->is_character())
+	{
+		room_objects = target_env->query("objects");
+		if (!mapp(room_objects) || !room_objects[base_name(this_object())])
+		{
+			remove_call_out("clean_me");
+			call_out("clean_me", 120);
+		}
+	}
+
+	// 通知房间内玩家更新
+	if (curr_env)
+	{
+		inv = all_inventory(curr_env);
+		foreach(object user in inv) {
+			if (userp(user))
+			{
+				tell_object(user, remove_world_object_button("look "+file_name(this_object())));
+			}
+		}
+	}
+	inv = all_inventory(target_env);
+	
+	foreach(object user in inv) {
+		if (userp(user) && (user != me)) {
+			if (playerp(me))
+			{
+				tell_object(user, add_world_object_button(me->name(), "look "+file_name(this_object()), "player", this_object()->query("gender")));
+			}
+			else if (inherits(NPC, this_object()))
+			{
+				tell_object(user, add_world_object_button(me->name(), "look "+file_name(this_object()), "npc", this_object()->query("gender")));
+			}
+			else 
+			{
+				tell_object(user, add_world_object_button(me->name(), "look "+file_name(this_object()), "object"));
+			}
+		}
+	}
+	return 1;
+}
+
+/**
+ * @brief 处理对象销毁前的清理工作
+ * @param string euid 调用者的有效用户ID
+ * @details 在对象被销毁前进行必要的清理工作：
+ *          1. 验证调用者权限，只允许simul efun调用
+ *          2. 对玩家对象进行特殊的权限检查和日志记录
+ *          3. 卸除所有装备状态
+ *          4. 保存需要持久化的对象数据
+ *          5. 更新环境对象的负重状态
+ *          6. 清理手持物品状态和魔法移动效果
+ *          7. 处理默认对象的清理计数
+ *          8. 结束对象的日志记录
+ */
+varargs mixed remove(string euid)
+{
+	object me = this_object();
+	object env = environment();
+	object default_ob;
+
+	// 检查调用者权限
+	if (! previous_object() || base_name(previous_object()) != SIMUL_EFUN_OB)
+		error("move: remove() can only be called by destruct() simul efun.\n");
+
+	// 处理玩家对象的销毁
+	if (userp(me) && euid != ROOT_UID)
+	{
+		if (euid != getuid(me))
+		{
+			log_file("destruct", sprintf("%s attempt to destruct user object %s (%s)\n",
+				euid, me->query("id"), ctime(time())));
+			error("你(" + euid + ")不能摧毁其他的使用者。\n");
+		}
+		log_file("destruct", sprintf("%s in %O destruct on %s.\n",
+			me->query("id"), env, ctime(time())));
+		error("只有ROOT才能摧毁玩家。\n");
+	}
+
+	// 处理装备的卸除
+	if (me->query("equipped") && !me->unequip())
+	{
+		log_file("destruct", sprintf("Failed to unequip %s when destructed.\n",
+			file_name(me)));
+	}
+
+	// 保存对象数据
+	if (me->is_ob_saved())
+		me->save();
+
+	// 处理环境相关
+	if (objectp(env))
+	{
+		// 更新环境负重
+		env->add_encumbrance(-weight());
+
+		// 清理手持物品
+		if (env->is_character() && env->query_temp("handing") == me)
+			env->delete_temp("handing");
+
+		// 处理特殊移动效果
+		if (is_magic_move() && userp(env))
+		{
+			if (env->visible(me))
+				tell_object(env, HIM "你忽然觉得身上好像轻了一些。"NOR"\n");
+
+			// 更新玩家状态
+			if (userp(me))
+			{
+				env->add_temp("person_in_you", -1);
+				if (env->query_temp("person_in_you") <= 0)
+					env->delete_temp("person_in_you");
+			}
+		}
+	}
+
+	// 处理默认对象
+	if (default_ob = me->query_default_object())
+	{
+		object *clones;
+		
+		// 检查default_ob是否还有其他复制对象存在
+		if (clonep(default_ob))
+		{
+			// 获取所有基于同一蓝图的克隆对象
+			clones = filter_array(children(base_name(default_ob)), (: clonep :));
+			
+			// 如果只有一个克隆对象(即当前的default_ob)，则设置为可清除
+			if (sizeof(clones) <= 1)
+			{
+				default_ob->add("no_clean_up", -1);
+			}
+		}
+		else
+		{
+			// 如果不是克隆对象(蓝图对象)，直接设置为可清除
+			default_ob->add("no_clean_up", -1);
+		}
+	}
+
+	// 结束日志记录
+	me->end_log();
+}
+
+/**
+ * @brief 处理对象的移动或销毁
+ * @param object dest 目标位置对象
+ * @details 根据对象类型采取不同的处理策略：
+ *          对于玩家对象，将其移动到VOID_OB虚空区域并显示传送提示；
+ *          对于非玩家对象，如果支持数据保存则先保存数据再处理。
+ *          主要用于异常情况下的对象处理和清理。
+ */
+void move_or_destruct(object dest)
+{
+        object me = this_object();
+
+        // 玩家对象移动到VOID_OB
+        if (userp(me))
+        {
+                tell_object(me, HIM "一阵时空的扭曲将你传送到另一个地方...." NOR "\n");
+                move(VOID_OB);
+                return;
+        }
+
+        // 非玩家对象且可保存则保存
+        if (me->is_ob_saved())
+        {
+                me->save();
+        }
+}

@@ -1,0 +1,249 @@
+// special
+
+// 
+#define TITLE_D "/adm/daemons/titled.lpc"
+inherit F_CLEAN_UP;
+int reach_player(object me, string title);
+void show_sub_title_management(object me);
+void show_display_title_management(object me);
+int main(object me, string arg)
+{
+	string msg, fmsg;
+	mapping ss;
+	string title;
+	object ob;
+	string pro;
+
+	if (wizardp(me) && stringp(arg) &&
+		objectp(ob = find_player(arg)))
+		// 查看其他玩家的特殊技能
+		arg = 0;
+	else
+		ob = me;
+
+	pro = (ob == me) ? "你" : ob->name(1);
+
+	if (!ob->query("born"))
+		return notify_fail(pro + "还没有出生呐，哪里有什么成就呢？\n");
+
+	if (arg && sscanf(arg, "%s==%s", msg, title) >= 2 && msg == "buy")
+	{
+		TITLE_D->buy_title(me, title);
+		return 1;
+	}
+
+	if (arg && sscanf(arg, "%s==%s", msg, title) >= 2 && msg == "reach")
+	{
+		object player, *players;
+		string *buttons = ({});
+		players = filter_array(users(), (: reach_player:), title);
+
+		if (!sizeof(players))
+			return notify_fail(title + "成就还没有任何玩家达成\n");
+
+		msg = HIR "◎" HIY "江湖成就系统" HIR "◎" NOR + ZJBR;
+		msg += "目前在线玩家中:" + title + "成就已有" + sizeof(players) + "人达成\n";
+
+
+		foreach (player in players)
+		{
+			buttons += ({sprintf("名称：%s%s(%s):look %s", HIC + player->query("name") + NOR, ZJBR, HIG + player->query("id") + NOR, player->query("id"))});
+		}
+
+		// msg += HIY "返回界面" NOR ":querytitles " + title;
+		buttons += ({ HIY "返回界面" NOR ":querytitles " + title });
+		// msg += "\n";
+		write(popup_comb(msg,buttons));
+		return 1;
+	}
+
+	if (!mapp(ss = TITLE_D->alltitles()) ||
+		!sizeof(ss))
+		return notify_fail(pro + "现在好像什么成就都没有哦，等待研发吧。\n");
+
+	if (!arg)
+	{
+		string *buttons = ({});
+		string display_title;
+		
+		msg = HIR "◎" HIY "江湖成就系统" HIR "◎" NOR;
+		msg += "目前已收录:" + sizeof(keys(ss)) + "个称号\n";
+		
+		// 显示展示称号信息
+		display_title = TITLE_D->query_display_title(me);
+		if (display_title) {
+			msg += HIY "当前展示称号：" HIC + display_title + NOR + "\n";
+		} else {
+			msg += HIY "当前展示称号：" HIR "未设置" NOR + "\n";
+		}
+		
+		msg += TITLE_D->query_current_title_effects(me);
+		
+		// 添加展示称号管理按钮
+		buttons += ({HIB "展示称号管理" NOR ":querytitles display_manage"});
+		// 添加副称号管理按钮
+		buttons += ({HIB "副称号管理" NOR ":querytitles sub_manage"});
+		
+		foreach (title in keys(ss))
+		{
+			fmsg = HIC "【" + title + "】" NOR;
+			fmsg += me->query("titles/" + title) ? HIM "(已拥有)" : HIR "(未拥有)";
+			buttons += ({fmsg + ":querytitles " + title});
+		}
+		write(popup_comb(msg,buttons));
+		return 1;
+	}
+	else if (arg && (ob == me))
+	{
+		if (me->is_busy())
+			return notify_fail("你现在忙着呢，不能改变称号。\n");
+		
+		// 处理展示称号管理
+		if (arg == "display_manage")
+		{
+			show_display_title_management(me);
+			return 1;
+		}
+		
+		// 处理副称号管理
+		if (arg == "sub_manage")
+		{
+			show_sub_title_management(me);
+			return 1;
+		}
+		
+		title = arg;
+		if (!ss[title])
+			return notify_fail("你好像没有这个称号...\n");
+		msg = ZJOBLONG + TITLE_D->query_title(me, title);
+		msg = replace_string(msg, "\n", ZJBR) + "\n";
+		msg += ZJOBACTS2 + ZJMENUF(2, 2, 9, 30);
+		msg += "佩戴主称号:usetitles " + title + ZJSEP;
+		msg += "佩戴副称号:usetitles " + title + " sub" + ZJSEP;
+		msg += "兑换称号:querytitles buy==" + title + ZJSEP;
+		msg += "达成人物:querytitles reach==" + title + ZJSEP;
+		msg += HIY "返回界面" NOR ":querytitles";
+	}
+	msg += "\n";
+	write(msg);
+	return 1;
+}
+
+int reach_player(object me, string title)
+{
+
+	if (me->query("titles/" + title))
+		return 1;
+
+	return 0;
+}
+
+/**
+ * @brief 显示展示称号管理界面
+ * @param object me 玩家对象
+ */
+void show_display_title_management(object me)
+{
+	string msg, *buttons, current_display_title;
+	mapping ss, titles_mapping;
+	string *owned_titles, title;
+
+	buttons = ({});
+	ss = TITLE_D->alltitles();
+	current_display_title = TITLE_D->query_display_title(me);
+	titles_mapping = me->query("titles");
+	if (mapp(titles_mapping))
+		owned_titles = keys(titles_mapping);
+	else
+		owned_titles = ({});
+	
+	msg = HIR "◎" HIY "展示称号管理" HIR "◎" NOR;
+	if (current_display_title) {
+		msg += sprintf("当前展示称号：%s\n", HIC + current_display_title + NOR);
+		buttons += ({HIR "清除展示称号" NOR ":usetitles set(chenghao,0)"});
+	} else {
+		msg += HIY "当前没有设置展示称号" NOR + "\n";
+	}
+	
+	msg += HIB "可设置的展示称号：" NOR + "\n";
+	
+	if (sizeof(owned_titles)) {
+		foreach (title in owned_titles) {
+			if (ss[title]) {
+				if (title == current_display_title) {
+					msg += sprintf("%s %s\n", HIG + "[当前]" + NOR, HIC + title + NOR);
+				} else {
+					buttons += ({sprintf("设置[%s]:usetitles set(chenghao,%s)", title, title)});
+				}
+			}
+		}
+	} else {
+		msg += HIR "你还没有获得任何称号" NOR + "\n";
+	}
+	
+	buttons += ({HIY "返回主界面" NOR ":querytitles"});
+	
+	write(popup_comb(msg, buttons));
+}
+
+/**
+ * @brief 显示副称号管理界面
+ * @param object me 玩家对象
+ */
+void show_sub_title_management(object me)
+{
+	string msg, *buttons, title_info, *att, at;
+	string *sub_titles;
+	int slots, i;
+	mapping title_data, chinesename;
+	
+	buttons = ({});
+	slots = TITLE_D->query_sub_title_slots(me);
+	sub_titles = TITLE_D->query_sub_titles(me);
+	chinesename = TITLE_D->query_chinese_attr_names();
+	
+	msg = HIR "◎" HIY "副称号管理" HIR "◎" NOR;
+	msg += sprintf("副称号槽位：%d个\n", slots);
+	msg += sprintf("已佩戴副称号：%d个\n", sizeof(sub_titles));
+	
+	if (sizeof(sub_titles))
+	{
+		msg += HIB "当前副称号：" NOR;
+		for (i = 0; i < sizeof(sub_titles); i++)
+		{
+			msg += sprintf("\n%d. %s", i + 1, HIC + sub_titles[i] + NOR);
+			
+			// 获取副称号属性信息
+			title_data = TITLE_D->alltitles()[sub_titles[i]];
+			if (title_data)
+			{
+				title_info = "";
+				att = keys(title_data);
+				foreach (at in att)
+				{
+					if (intp(title_data[at]) && title_data[at] > 0)
+					{
+						if (title_info != "") title_info += "，";
+						title_info += sprintf("%s+%d", 
+							chinesename[at] ? chinesename[at] : at, 
+							title_data[at] * 30 / 100);
+					}
+				}
+				if (title_info != "")
+				{
+					msg += sprintf(" (%s)", HIW + title_info + NOR);
+				}
+			}
+			
+			buttons += ({sprintf("卸下[%s]:usetitles %s remove_sub", sub_titles[i], sub_titles[i])});
+		}
+	}
+	else
+	{
+		msg += HIY "当前没有佩戴任何副称号" NOR;
+	}
+	
+	buttons += ({HIY "返回主界面" NOR ":querytitles"});
+	
+	write(popup_comb(msg, buttons));
+}

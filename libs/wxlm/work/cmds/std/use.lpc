@@ -1,0 +1,226 @@
+// use.c
+
+inherit F_CLEAN_UP;
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+    int count;
+    string from;
+    object from_ob;
+    object ob;
+    object *guard;
+    int search_flag;
+    string prefix;
+    int k, need_busy;
+    int batch_use = 0;
+    int batch_count = 1;
+
+    if (! arg)
+        return notify_fail("你要使用什么东西？\n");
+
+    // 检查是否为批量使用
+    if (sscanf(arg, "%d %s", batch_count, arg) == 2)
+    {
+        if (batch_count > 1)
+            batch_use = 1;
+    }
+    else if (sscanf(arg, "amount %s", arg) == 1)
+    {
+		object file_my_use;
+
+		file_my_use = present(arg, me);
+		if(!objectp(file_my_use))
+			return notify_fail("你身上没有这个东西。\n");
+		if(!file_my_use->query("only_do_effect"))
+			return notify_fail("这个东西不能批量使用。\n");
+
+        // 处理 "use amount 物品" 的情况
+        write(INPUTTXT("你想使用多少个" + file_my_use->query("name") + "？", "use $txt# " + arg) + "\n");
+        return 1;
+    }
+
+    prefix = "";
+    need_busy = 0;
+    if (sscanf(arg, "%s in %s", arg, from) == 2)
+    {
+        // 检查容器
+        if (sscanf(from, "all %s", from))
+        {
+            if (me->is_busy())
+                return notify_fail("你忙着呢，没有功夫找东西。\n");
+
+            search_flag = 0;
+            foreach (from_ob in all_inventory(me))
+            {
+                if (! from_ob->id(from))
+                    continue;
+
+                if (from_ob->is_character())
+                    continue;
+
+                if (! present(arg, from_ob))
+                    continue;
+
+                search_flag = 1;
+                break;
+            }
+
+            if (! search_flag)
+            {
+                me->start_busy(2);
+                return notify_fail("你翻遍了身上带的东西，也没找到想要的。\n");
+            } else
+                need_busy = 3;
+        } else
+        if (! objectp(from_ob = present(from, me)))
+        {
+            from_ob = present(from, environment(me));
+            if (me->query("env/careful"))
+            {
+                if (! objectp(from_ob))
+                    return notify_fail("你身上没有这个容器。\n");
+                else
+                    return notify_fail("你身上没有这样容器，附近的" +
+                               from_ob->name() + "你又不敢动。\n");
+            }
+    
+            if (! objectp(from_ob))
+                return notify_fail("你身上没有这样容器，附近也没有。\n");
+        }
+
+        if (from_ob->is_character() && from_ob != me)
+            return notify_fail("你要抢劫啊？\n");
+        else
+        if (sizeof(all_inventory(from_ob)) < 1)
+            return notify_fail(from_ob->name() + "里面什么都没有啊。\n");
+
+        prefix = "从" + from_ob->name() + "中";
+    } else
+        from_ob = me;
+
+    if (! objectp(ob = present(arg, from_ob)))
+    {
+        ob = present(arg, environment(me));
+        if (me->query("env/careful"))
+        {
+            if (! objectp(ob))
+                return notify_fail("你身上没有这样东西。\n");
+            else
+                return notify_fail("你身上没有这样东西，附近的" +
+                           ob->name() + "你又不敢动。\n");
+        }
+
+        if (! objectp(ob))
+            return notify_fail("你身上没有这样东西，附近也没有。\n");
+    }
+
+    if (! undefinedp(count = ob->query_amount()) && count < 1)
+        return notify_fail(ob->name() + "已经用完了。\n");
+
+    if (me->is_busy())
+    {
+        write("你上一个动作还没有完成。\n");
+        return 1;
+    }
+
+    if (guard = ob->query_temp("guarded"))
+    {
+        guard = filter_array(guard, (:
+            objectp($1) && present($1, environment($(me))) &&
+            living($1) && ($1 != $(me)) :));
+        if (sizeof(guard))
+            return notify_fail(guard[0]->name()
+                + "正守在" + ob->name() + "一旁，防止任何人拿走。\n");
+    }
+
+    if (ob->query("only_do_effect"))
+    {
+        if (batch_use)
+        {
+            int available_count = ob->query_amount() ? ob->query_amount() : 1;
+            string item_name = ob->name();
+            int i;
+            if (batch_count > available_count)
+            {
+                write("你只有 " + available_count + " 个 " + item_name + "，无法使用 " + batch_count + " 个。\n");
+                batch_count = available_count;
+            }
+
+
+            if (function_exists("do_effect_more",ob))
+            {
+                k = ob->do_effect_more(me,batch_count);
+                i = batch_count;
+
+            }
+            else
+            {
+                for (i = 0; i < batch_count; i++)
+                {
+                    k = ob->do_effect(me);
+                    if (!ob || !objectp(ob))
+                        break;
+                }
+            }
+            
+            if (i > 0)
+            {
+                write("你连续使用了 " + i + " 次 " + item_name + "。\n");
+            }
+            
+            if (ob && objectp(ob))
+            {
+                write("你可以继续使用" + ZJURL("cmds:use " + ob->query("id")) + ob->name() + NOR + "。"NOR"\n");
+            }
+            else
+            {
+                write("你已经用完了所有的 " + item_name + "。\n");
+            }
+        }
+        else
+        {
+            k = ob->do_effect(me);
+            if (ob && objectp(ob))
+            {
+                write("你可以继续使用" + ZJURL("cmds:use " + ob->query("id")) + ob->name() + NOR + "。"NOR"\n");
+            }
+        }
+        return k;
+    } else
+    {
+        return notify_fail(ob->name() + "不能这样使用。\n");
+    }
+
+    if (! me->is_busy() && need_busy)
+        me->start_busy(need_busy);
+    return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式 : 
+  use <道具> | <道具> [in [all] <包裹>]
+  use <数量> <道具>
+  use amount <道具>  (用于输入使用数量)
+
+这个指令可以让你使用道具。如果你没有设置环境变量 careful，并且
+你身上没有带这种道具就会自动在周围的环境寻找你指定的道具。
+
+如果你指明了 in， 那么你将从包裹取出道具使用。倘若你身上没有
+指明的包裹并且没有设置环境变量 careful 的话， 就会自动在附近
+的环境寻找。
+
+如果你指明了 all，那么你将在身上所有指定的包裹中寻找想要的道具，这需要花费你一些时间。
+
+你可以在道具前面指定数量，例如 "use 5 healing_potion" 将连续使用 5 次治疗药水。
+
+你也可以使用 "use amount 道具名" 的格式来输入想要使用的数量。
+
+see also : eat, drink
+ 
+HELP );
+    return 1;
+}

@@ -1,0 +1,374 @@
+/**
+ * @file enter.c
+ * @author Lu dexiang
+ * @brief 白马关副本入口
+ * @version 1.0
+ * @date 2024-07-01
+ */
+
+inherit ROOM;
+int do_interact(string arg);
+int is_init = 0;
+void set_mohist_attributes(object mohist, int current, int max);
+
+// 对玩家施加随机机关术效果
+void apply_random_trap_effect(object me, int level)
+{
+    int effect_type = random(6); // 随机选择一种效果
+    int effect_power = 50 + random(50) + level * 5; // 效果强度随层数增加
+    string effect_msg = "";
+    
+    switch (effect_type)
+    {
+        case 0: // 忙乱效果
+            me->start_busy(2 + random(3));
+            effect_msg = "突然，地面上弹出一个机关，喷出一股烟雾，你感到一阵眩晕，行动变得迟缓！\n";
+            break;
+            
+        case 1: // 减少气血
+            me->receive_damage("qi", me->query("max_qi") * effect_power / 1000);
+            effect_msg = "墙壁上突然射出几支暗箭，你虽然躲闪及时，但仍被划伤，气血受损！\n";
+            break;
+            
+        case 2: // 减少精神
+            me->receive_damage("jing", me->query("max_jing") * effect_power / 1000);
+            effect_msg = "一阵刺耳的金属摩擦声从四面八方传来，你精神受到了干扰！\n";
+            break;
+            
+        case 3: // 减少内力
+            me->add("neili", -effect_power);
+            if (me->query("neili") < 0) me->set("neili", 0);
+            effect_msg = "地板突然震动，一股奇特的力场扰乱了你的内息，内力有所损失！\n";
+            break;
+            
+        case 4: // 临时降低攻击力
+            me->add_temp("apply/attack", -effect_power);
+            if (me->query_temp("apply/attack") < 0) me->set_temp("apply/attack", 0);
+            me->start_call_out((:call_other, __FILE__, "restore_attack", me, effect_power:), 60);
+            effect_msg = "一股寒气从地下冒出，你的手脚变得僵硬，攻击力暂时下降！\n";
+            break;
+            
+        case 5: // 临时降低防御力
+            me->add_temp("apply/defense", -effect_power);
+            if (me->query_temp("apply/defense") < 0) me->set_temp("apply/defense", 0);
+            me->start_call_out((:call_other, __FILE__, "restore_defense", me, effect_power:), 60);
+            effect_msg = "一阵烟雾笼罩了你，你感到身体变得脆弱，防御力暂时下降！\n";
+            break;
+    }
+    
+    tell_object(me, HIR + effect_msg + NOR);
+    tell_object(me, HIY "这是墨家的机关术，你需要更加小心谨慎！\n" NOR);
+}
+
+// 恢复攻击力
+void restore_attack(object me, int value)
+{
+    if (!me || !objectp(me)) return;
+    me->add_temp("apply/attack", value);
+    tell_object(me, HIG "你感觉手脚恢复了灵活，攻击力恢复正常。\n" NOR);
+}
+
+// 恢复防御力
+void restore_defense(object me, int value)
+{
+    if (!me || !objectp(me)) return;
+    me->add_temp("apply/defense", value);
+    tell_object(me, HIG "你感觉身体恢复了强韧，防御力恢复正常。\n" NOR);
+}
+
+// 根据层数获取对应的地点名称
+string get_location_name(int current, int max)
+{
+    int percentage = current * 100 / max;
+    
+    if (percentage <= 25)
+        return "白马关城下";
+    else if (percentage <= 50)
+        return "白马关城楼";
+    else if (percentage <= 75)
+        return "白马关外城";
+    else if (percentage < 100)
+        return "白马关内城";
+    else
+        return "白马关主府";
+}
+
+// 根据层数获取对应的详细描述
+string get_location_desc(int current, int max)
+{
+    int percentage = current * 100 / max;
+    string desc;
+    
+    if (percentage <= 25)
+    {
+        desc = @LONG
+这里是白马关城下，高大的城墙在你面前巍然耸立。
+城墙上墨家弟子来回巡逻，各种机关暗器随时准备应对外敌入侵。
+远处黄沙漫天，不时有墨家弟子骑马疾驰而过，巡视边关。
+据说这座雄关内部设有层层关卡，每一层都有墨家精锐把守。
+LONG;
+    }
+    else if (percentage <= 50)
+    {
+        desc = @LONG
+这里是白马关城楼，站在这里可以俯瞰整个关隘。
+城楼上布满了各种墨家机关，远处可见黄沙漫天。
+一队队墨家弟子正在操练墨家奇技，准备随时应对外敌。
+墨家守卫们神情严肃，目光如炬，警惕地盯着每一个经过的人。
+LONG;
+    }
+    else if (percentage <= 75)
+    {
+        desc = @LONG
+这里是白马关外城，城内建筑错落有致，处处可见墨家的独特风格。
+街道两旁是各种工坊，墨家弟子们正在研究改进各种机关器械。
+空气中弥漫着金属和木材的气息，偶尔传来机关运转的声音。
+这一区域的守卫明显比城下更为精锐，个个身怀绝技。
+LONG;
+    }
+    else if (percentage < 100)
+    {
+        desc = @LONG
+这里是白马关内城，墨家核心区域的入口。
+内城的建筑更加精致，墙壁上刻有墨家经典著作的摘录。
+四周静谧而庄严，守卫们个个气息内敛，但一举一动都透露出强大的实力。
+据说只有击败内城的所有守卫，才能见到墨家的最高统领。
+LONG;
+    }
+    else
+    {
+        desc = @LONG
+这里是白马关主府，墨家在此地的最高统治中心。
+主府装饰简朴却不失威严，墙上挂着历代墨家领袖的画像。
+中央摆放着一张古朴的木桌，上面铺着详细的地形图和各种机关设计图。
+你已经到达了白马关的最深处，这里的守卫是墨家最精锐的力量。
+LONG;
+    }
+    
+    return desc + "\n只有击败所有守卫，才能继续前进深入白马关。\n";
+}
+
+void create()
+{
+    set("short", "白马关城外");
+    set("long", @LONG
+这里是墨家建立的白马关城楼，高耸的城墙上布满了各种墨家机关。
+远处可见黄沙漫天，一队队墨家弟子正在操练墨家奇技。据说这座雄关
+是墨家为抵御外敌而建，内部设有层层关卡，每一层都有墨家精锐把守。
+只有击败所有守卫，才能通过此关。
+LONG
+    );
+    set("exits", ([
+        "north" : file_name(this_object()),
+    ]));
+    set("number", 50 + random(11)); // 地图数量 随机50-60层
+
+    setup();
+}
+
+void init()
+{
+    //如果没有初始化,则初始化并放置一个墨家守卫
+    if (!is_init)
+    {
+        object mohist;
+        is_init = 1;
+        mohist = NPC_COMBAT_TPS->create_family_npc(0, 3000, "/d/fuben/bamaguan/npc/mohist");
+        
+        // 设置墨家守卫的名称和描述
+        set_mohist_attributes(mohist, 1, query("number"));
+        
+        mohist->move(this_object());
+    }
+
+    // 记录进入副本的玩家
+    if (playerp(this_player()))
+    {
+        set("player", this_player());
+    }
+}
+
+// 清除所有非活物
+int clear_all_non_living()
+{
+    object *inv;
+    int i, count = 0;
+    
+    inv = all_inventory(this_object());
+    
+    for (i = 0; i < sizeof(inv); i++)
+    {
+        if (!living(inv[i]))
+        {
+            destruct(inv[i]);
+            count++;
+        }
+    }
+    
+    if (count > 0)
+    {
+        tell_room(this_object(), "一阵风吹过，地上的杂物都被吹走了。\n");
+    }
+    
+    return count;
+}
+
+int valid_leave(object me, string dir)
+{
+    object *inv;
+    int i;
+    object other_ob;
+    int current_level;
+    object mohist;
+    
+    if (dir == "north")
+    {
+        inv = all_inventory(environment(me));
+        for (i = 0; i < sizeof(inv); i++)
+        {
+            if (inv[i]->query("id") == "mohist")
+            {
+                return notify_fail("你必须击败墨家守卫才能继续前进。\n");
+            }
+        }
+
+        // 检查是否达到最大层数
+        if (query("number_use") >= query("number"))
+        {
+            return notify_fail("你已经到达白马关的最深处，无法继续前进。\n");
+        }
+
+        add("number_use", 1);
+        current_level = query("number_use");
+        
+        // 对玩家施加随机机关术效果
+        apply_random_trap_effect(me, current_level);
+        
+        // 生成新的墨家守卫
+        mohist = NPC_COMBAT_TPS->create_family_npc(0, 3000 + current_level * 100, "/d/fuben/bamaguan/npc/mohist");
+        
+        // 设置墨家守卫的名称和描述
+        set_mohist_attributes(mohist, current_level, query("number"));
+        
+        mohist->move(this_object());
+        tell_room(this_object(), "一名" + mohist->query("name") + "出现在了你的面前。\n");
+        
+        // 更新房间描述，根据层数动态设置
+        set("short", get_location_name(current_level, query("number")));
+        set("long", get_location_desc(current_level, query("number")));
+
+        if (other_ob = AUTO_QUEST->is_not_player(me))
+        {
+            AUTO_QUEST->auto_cmd(me, "kill " + other_ob->query("id"));
+        }
+
+        clear_all_non_living();
+    }
+
+    return ::valid_leave(me, dir);
+}
+
+// 根据层数设置墨家守卫的名称和描述
+void set_mohist_attributes(object mohist, int current, int max)
+{
+    int percentage = current * 100 / max;
+    string name, title, long_desc;
+    
+    if (percentage <= 25)
+    {
+        // 城下守卫 - 巡逻兵
+        if (random(2) == 0)
+        {
+            name = "墨家巡逻兵";
+            title = "城下守卫";
+            long_desc = "这是一位墨家城下巡逻兵，身着轻便黑色劲装，腰间挂着墨家特制的短兵器。\n"
+                       "他神情警惕，目光不断扫视四周，是白马关外围的第一道防线。\n";
+        }
+        else
+        {
+            name = "墨家哨兵";
+            title = "城下守卫";
+            long_desc = "这是一位墨家哨兵，手持长矛，身着轻甲，站姿笔直。\n"
+                       "他负责监视来往行人，是白马关外围的基础防御力量。\n";
+        }
+    }
+    else if (percentage <= 50)
+    {
+        // 城楼守卫 - 弩手或机关师
+        if (random(2) == 0)
+        {
+            name = "墨家弩手";
+            title = "城楼守卫";
+            long_desc = "这是一位墨家精锐弩手，手持墨家特制连弩，腰间挂满了弩箭。\n"
+                       "他目光如鹰隼般锐利，据说能在百步之外射中敌人的咽喉。\n";
+        }
+        else
+        {
+            name = "墨家机关师";
+            title = "城楼守卫";
+            long_desc = "这是一位墨家机关师，腰间挂着各种精巧工具，手中握着一个小型机关装置。\n"
+                       "他负责操控城楼上的各种防御机关，一旦触发可以瞬间释放无数暗器。\n";
+        }
+    }
+    else if (percentage <= 75)
+    {
+        // 外城守卫 - 武士或教头
+        if (random(2) == 0)
+        {
+            name = "墨家武士";
+            title = "外城守卫";
+            long_desc = "这是一位墨家精锐武士，身着黑色重甲，手持墨家特制长刀。\n"
+                       "他身形魁梧，气息沉稳，是经过严格训练的墨家中坚力量。\n";
+        }
+        else
+        {
+            name = "墨家教头";
+            title = "外城守卫";
+            long_desc = "这是一位墨家教头，身着教习服，手持训练用的木质兵器。\n"
+                       "他身手矫健，眼神中透露着丰富的实战经验，负责训练墨家弟子。\n";
+        }
+    }
+    else if (percentage < 100)
+    {
+        // 内城守卫 - 统领或护法
+        if (random(2) == 0)
+        {
+            name = "墨家统领";
+            title = "内城守卫";
+            long_desc = "这是一位墨家统领，身着墨家特制黑色战袍，腰间佩戴着精美的配剑。\n"
+                       "他气度不凡，举手投足间透露出强大的实力，是墨家的高级将领。\n";
+        }
+        else
+        {
+            name = "墨家护法";
+            title = "内城守卫";
+            long_desc = "这是一位墨家护法，身着华丽的黑色长袍，手持墨家秘传兵器。\n"
+                       "他面容肃穆，双目如电，是墨家内城的核心防卫力量。\n";
+        }
+    }
+    else
+    {
+        // 主府守卫 - 大统领或墨家传人
+        if (random(2) == 0)
+        {
+            name = "墨家大统领";
+            title = "主府守卫";
+            long_desc = "这是墨家的大统领，身着墨家最高等级的黑色战袍，腰间佩戴着传世宝剑。\n"
+                       "他气息内敛却透露出无与伦比的强大气场，是墨家最高级别的武将。\n";
+        }
+        else
+        {
+            name = "墨家传人";
+            title = "主府守卫";
+            long_desc = "这是墨家的嫡系传人，身着古朴的黑色长衫，手持墨家祖传兵器。\n"
+                       "他面容沉静，眼神中透露出深不可测的智慧和力量，是墨家最核心的人物之一。\n";
+        }
+    }
+    
+    // 只修改名称、称号和描述，保留原有ID
+    mohist->set_name(name, ({"mohist", "shouwei"}));
+    mohist->set("title", title);
+    mohist->set("long", long_desc);
+}
+
+

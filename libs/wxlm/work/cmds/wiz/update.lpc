@@ -1,0 +1,267 @@
+// update.c
+// 用于重新编译文件或更新对象的巫师命令
+
+#include <runtime_config.h>
+#include <getconfig.h>
+
+inherit F_CLEAN_UP;
+
+// 函数声明
+private string compile_file(string file);
+private object *backup_room_users(object room);
+private void restore_room_users(object room, object *users);
+private void cleanup_old_object(string file);
+private int check_compile_permission(string file);
+private int update_player(object target);
+
+int main(object me, string file)
+{
+	string result;
+	object obj;
+	
+	// 权限检查
+	if (!SECURITY_D->valid_grant(me, "(wizard)"))
+		return 0;
+
+	seteuid(geteuid(me));
+
+	// 参数检查
+	if (!file) file = me->query("cwf");
+	if (!file)
+		return notify_fail("你要重新编译什麽档案？\n");
+
+	// 检查是否为玩家对象
+	obj = present(file, environment(me));
+	if (obj && playerp(obj))
+		return update_player(obj);
+		
+	obj = find_player(file);
+	if (obj && playerp(obj))
+		return update_player(obj);
+
+	if (file == "me")
+		return update_player(me);
+
+	// 文件路径处理
+	file = resolve_path(me->query("cwd"), file);
+	if (!sscanf(file, "%*s.lpc")) file += ".lpc";
+
+	if (file_size(file) == -1)
+		return notify_fail("没有这个档案。\n");
+
+	me->set("cwf", file);
+	
+	// 编译并记录日志
+	result = compile_file(file);
+	write(result);
+	log_file("update", sprintf("%s："+me->query("id")+" "+result, ctime(time())));
+	return 1;
+}
+
+// 编译文件的核心函数
+public string compile_file(string file)
+{
+	object obj;
+	object *saved_users;
+	string err,msg;
+
+	// 权限检查
+	if (!check_compile_permission(file))
+		return "没有权限编译该文件。\n";
+
+	obj = find_object(file);
+
+	// 处理已存在的对象
+	if (obj)
+	{
+		// 如果是房间对象，需要特殊处理
+		if (inherits(ROOM, obj))
+			saved_users = backup_room_users(obj);
+			
+		cleanup_old_object(file);
+	}
+
+	// 执行编译
+	err = catch(call_other(file, "???"));
+	if (err)
+		return sprintf("重新编译 %s：发生错误：\n%s\n", file, call_other(LINT_D, "query_err", file));
+
+	// 恢复房间用户
+	obj = load_object(file);
+	if (saved_users && obj)
+		restore_room_users(obj, saved_users);
+
+	msg = sprintf("重新编译 %s：成功！\n", file);
+
+	LINT_D->clear_file_error(file);
+
+	//如果file是clone文件夹的文件，尝试编译绑定物件
+	if (strsrch(file, "/clone/") != -1)
+	{
+		// 通过file—_size判断（/common/bind_obj/目录下是否有同名文件
+		if (file_size("/common/bind_obj" + file) != -1)
+		{
+			// 编译/common/bind_obj/目录下的同名文件
+			if (strsrch(err = compile_file("/common/bind_obj/" + file), "成功") == -1)
+			{
+				return "绑定文件" + err;
+			}
+		}
+		
+	}
+
+
+	return msg;
+}
+
+// 检查编译权限
+private int check_compile_permission(string file)
+{
+	if (file == VOID_OB)
+		return 0;
+	return 1;
+}
+
+// 清理旧对象
+private void cleanup_old_object(string file)
+{
+	object obj = find_object(file);
+	string bin_file;
+	if (!obj) return;
+
+	bin_file = "/binaries" + base_name(obj) + ".b";
+	rm(bin_file);
+	
+	seteuid(getuid());
+	destruct(obj);
+}
+
+// 备份房间用户
+private object *backup_room_users(object room)
+{
+	object *inv = all_inventory(room);
+	object *saved = ({});
+	
+	foreach (object user in inv)
+	{
+		if (playerp(user) || user->is_chatter() || user->query_temp("owner"))
+		{
+			// string dest = (base_name(environment(user)) == "/d/city/kedian") ? 
+			// 			 "/d/city/wumiao" : "/d/city/kedian";
+			
+			// user->move(dest);
+			// tell_object(user, sprintf("由于系统编译你被转移到了%s。\n", 
+			// 		 dest == "/d/city/wumiao" ? "武庙" : "客店"));
+			saved += ({user});
+		}
+	}
+	return saved;
+}
+
+// 恢复房间用户
+private void restore_room_users(object room, object *users)
+{
+	if (!room || !arrayp(users)) return;
+	
+	foreach (object user in users)
+	{
+		if (user) {
+			user->move(room);
+			user->force_me("look");
+
+		}
+	}
+}
+
+// 更新玩家对象
+private int update_player(object me)
+{
+	object env, link_ob, obj;
+	object *ob, *dob;
+	mapping equip;
+	int i;
+
+	if (me->is_chatter())
+		return notify_fail("你不能更新聊天ID。\n");
+
+	if (wiz_level(me) > wiz_level(this_player()))
+		return notify_fail("你没有权限更新这个人物。\n");
+
+	seteuid(getuid());
+	env = environment(me);
+
+	// First, create the new body.
+	link_ob = me->query_temp("link_ob");
+	if (!link_ob)
+	{
+		link_ob = new(LOGIN_OB);
+		link_ob->set("id", me->query("id"));
+		if (!link_ob->restore())
+		{
+			write("找不到该玩家的存盘数据。\n");
+			return 1;
+		}
+		if (interactive(me))
+			link_ob->set_temp("ip_number", query_ip_number(me));
+	}
+
+	if (link_ob->query("id") != getuid(me))
+	{
+		write(sprintf("连接对象的ID(%s)和用户的ID(%s)不相同，不能更新该玩家。\n", 
+			  link_ob->query("id"), getuid(me)));
+		return 1;
+	}
+
+	obj = LOGIN_D->make_body(link_ob);
+	if (!obj) return 0;
+
+	// Save the data and exec the player to his/her link object.
+	ob = all_inventory(me);
+	equip = ([]);
+	for (i = 0; i < sizeof(ob); i++)
+		equip += ([ob[i] : ob[i]->query("equipped")]);
+	ob->move(VOID_OB);
+	me->save();
+	if (interactive(me))
+		exec(link_ob, me);
+	destruct(me);
+
+	// Restore new body and exec to it via enter_world in LOGIN_D
+	obj->restore();
+	LOGIN_D->enter_world(link_ob, obj, 1);
+	dob = all_inventory(obj);
+	for (i = 0; i < sizeof(dob); i++)
+		destruct(dob[i]);
+
+	write("身体更新完毕。\n\n");
+	obj->move(env);
+	ob->move(obj);
+
+	if (!interactive(obj))
+		destruct(link_ob);
+
+	for (i = 0; i < sizeof(ob); i++)
+	{
+		if (equip[ob[i]] == "worn")
+			ob[i]->wear();
+		if (equip[ob[i]] == "wielded")
+			ob[i]->wield();
+	}
+	obj->write_prompt();
+
+	return 1;
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式：update <档名|here|me|玩家名>
+ 
+这个指令可以更新档案，并将新档的内容载入记忆体内。若目标为
+'here' 则更新所在环境。若目标为 'me' 则更新自己的人物。若目
+标为玩家则可更新玩家物件。
+ 
+HELP
+	);
+	return 1;
+}

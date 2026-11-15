@@ -1,0 +1,92 @@
+/**
+ * @file main_task_reward.c
+ * @brief 主线任务奖励模块实现
+ * @author Lu dexiang
+ * @date 2024-06-01
+ */
+
+
+#include "h/main_task_config.h"
+#include "h/main_task_reward.h"
+
+// 主模块对象
+mixed main_task_master = MAIN_TASK_MASTER;
+
+// 初始化函数
+void create()
+{
+    seteuid(getuid());
+}
+
+/**
+ * @brief 发放任务奖励
+ * @param object me 玩家对象
+ * @return int 0:发放失败 1:发放成功
+ * @details 根据任务配置发放奖励：
+ *          - 属性奖励：如经验、潜能等基础属性
+ *          - 物品奖励：创建物品并移动到玩家背包
+ */
+int give_quest_reward(object me)
+{
+    int quest_id;
+    mapping reward;
+    
+    quest_id = main_task_master->get_player_finished_quest(me);
+    
+    // 检查是否有已完成的任务
+    if (!quest_id)
+        return 0;
+        
+    // 检查是否已经发放过奖励
+    if (me->query("new_main_task/rewarded_quest_id") == quest_id)
+        return 1;
+        
+    // 获取任务奖励配置
+    reward = main_task_config[quest_id]["reward"];
+
+    // 如果没有奖励，则直接返回
+    if (nullp(reward))
+    {
+        me->set("new_main_task/rewarded_quest_id", quest_id);
+        return 1;
+    }
+    
+    // 处理属性奖励
+    if (mapp(reward["attribute"]))
+    {
+        foreach (string attr, int value in reward["attribute"])
+        {
+            me->add(attr, value);
+            // 如果是likability/xx属性，提示玩家获得xx的好感度
+            if (strsrch(attr, "likability/") != -1)
+            {
+                string npc_name = replace_string(attr, "likability/", "");
+                tell_object(me, sprintf(HIG"你获得了%d点%s的好感度\n", value, npc_name));
+            }
+            else
+            {
+                tell_object(me, sprintf(HIG"你获得了%d点%s\n", value, to_chinese(attr)));
+            }
+        }
+    }
+    
+    // 处理物品奖励 (如果配置中添加了物品奖励)
+    if (mapp(reward["item"]))
+    {
+        foreach (string item, int amount in reward["item"])
+        {
+            object ob = new_bind(item);
+            if (objectp(ob))
+            {
+                ob->set_amount(amount);
+                tell_object(me, sprintf(HIG"你获得了%d个%s\n", amount, ob->query("name")));
+                ob->move(me);
+            }
+        }
+    }
+    
+    // 标记已发放奖励
+    me->set("new_main_task/rewarded_quest_id", quest_id);
+    
+    return 1;
+} 

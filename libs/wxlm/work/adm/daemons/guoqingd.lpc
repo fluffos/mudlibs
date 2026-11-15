@@ -1,0 +1,395 @@
+/**
+ * @file guoqingd.c
+ * @author 系统
+ * @brief 国庆活动守护进程 - 全服经验累计活动
+ * @version 1.0
+ * @date 2025-10-01
+ */
+
+inherit F_SAVE;
+inherit F_DBASE;
+
+// 函数原型声明
+public int is_in_activity_period();
+public void add_server_exp(int exp);
+public int get_total_exp();
+public string get_server_exp_progress();
+public void try_grant_reward(int milestone);
+public int has_claimed_reward(object player, int milestone);
+public void claim_reward(object player, int milestone);
+public string get_player_reward_progress(object player);
+
+// 活动时间定义
+#define ACTIVITY_START 1759248000  // 2025-10-01 00:00:00
+#define ACTIVITY_END   1759852800  // 2025-10-07 24:00:00
+
+// 全服经验累计档位配置
+mapping exp_milestones = ([
+    5000000    : "500万经验达成",
+    15000000   : "1500万经验达成",
+    30000000   : "3000万经验达成",
+    50000000   : "5000万经验达成",
+    100000000  : "1亿经验达成"
+]);
+
+// 奖励配置
+mapping milestone_rewards = ([
+    5000000    : ([ "yuanbao" : 288 ]),
+    15000000   : ([ "yuanbao" : 388, "putao" : 200 ]),
+    30000000   : ([ "yuanbao" : 588, "yijing" : 1 ]),
+    50000000   : ([ "yuanbao" : 888, "zhenyi_yellow" : 1, "chongmai" : 5 ]),
+    100000000  : ([ "yuanbao" : 1888, "zhenyi_purple" : 1, "tencard" : 3, "yijing" : 1 ])
+]);
+
+/**
+ * @brief 返回保存数据文件路径
+ * @return string 数据文件路径
+ */
+public string query_save_file()
+{
+    return DATA_DIR "guoqingd";
+}
+
+/**
+ * @brief 守护进程创建函数
+ */
+void create()
+{
+    seteuid(getuid());
+    restore();
+    set("channel_id", "国庆活动");
+    CHANNEL_D->do_channel(this_object(), "sys", "国庆活动系统已启动。");
+}
+
+/**
+ * @brief 保存数据
+ */
+varargs void remove(string euid)
+{
+    save();
+}
+
+/**
+ * @brief 服务器关闭时保存数据
+ */
+public void mud_shutdown()
+{
+    save();
+}
+
+/**
+ * @brief 检查是否在活动期间
+ * @return int 1-在活动期间，0-不在活动期间
+ */
+public int is_in_activity_period()
+{
+    return (time() >= ACTIVITY_START && time() <= ACTIVITY_END);
+    // return 1; // 测试期间可以打开此行
+}
+
+/**
+ * @brief 增加全服累计经验
+ * @param int exp 增加的经验值
+ * @details 由副本系统调用，统计全服玩家通过副本获得的经验
+ */
+public void add_server_exp(int exp)
+{
+    int total_exp, new_total, *milestones, i;
+
+    if (!is_in_activity_period() || exp <= 0)
+        return;
+
+    // 获取当前累计经验
+    total_exp = get_total_exp();
+    new_total = total_exp + exp;
+
+    // 更新累计经验
+    set("total_exp", new_total);
+    save();
+
+    // 获取所有里程碑并排序
+    milestones = keys(exp_milestones);
+    milestones = sort_array(milestones, (: $1 - $2 :));
+
+    // 检查是否达成新的里程碑
+    for (i = 0; i < sizeof(milestones); i++)
+    {
+        if (new_total >= milestones[i] && total_exp < milestones[i])
+        {
+            try_grant_reward(milestones[i]);
+        }
+    }
+}
+
+/**
+ * @brief 获取当前全服累计经验
+ * @return int 累计经验值
+ */
+public int get_total_exp()
+{
+    return query("total_exp");
+}
+
+/**
+ * @brief 获取全服经验累计进度文本
+ * @return string 进度文本
+ */
+public string get_server_exp_progress()
+{
+    int total_exp, *milestones, i;
+    string *lines = ({}), status, color;
+    mapping reward;
+
+    // if (!is_in_activity_period())
+    //     return "活动尚未开始或已结束。";
+
+    total_exp = get_total_exp();
+    milestones = keys(exp_milestones);
+    milestones = sort_array(milestones, (: $1 - $2 :));
+
+    lines += ({ sprintf("%s【国庆全服经验累计活动】%s", HIY, NOR) });
+    lines += ({ sprintf("%s全服累计经验：%s%d%s", HIW, HIG, total_exp, NOR) });
+    lines += ({ "" });
+    lines += ({ "奖励档位：" });
+
+    for (i = 0; i < sizeof(milestones); i++)
+    {
+        if (total_exp >= milestones[i])
+        {
+            color = HIG;
+            status = "已达成";
+        }
+        else
+        {
+            color = WHT;
+            status = "未达成";
+        }
+
+        lines += ({ sprintf("%s%d经验 [%s%s%s]%s", HIW, milestones[i], color, status, NOR, NOR) });
+
+        // 显示奖励内容
+        reward = milestone_rewards[milestones[i]];
+        if (reward["yuanbao"])
+            lines += ({ sprintf("  • 绑定元宝 x%d", reward["yuanbao"]) });
+        if (reward["putao"])
+            lines += ({ sprintf("  • 神奇葡萄 x%d", reward["putao"]) });
+        if (reward["yijing"])
+            lines += ({ sprintf("  • 意境卷轴 x%d", reward["yijing"]) });
+        if (reward["zhenyi_yellow"])
+            lines += ({ "  • 黄色真意自选宝箱 x1" });
+        if (reward["zhenyi_purple"])
+            lines += ({ "  • 紫色真意自选宝箱 x1" });
+        if (reward["chongmai"])
+            lines += ({ sprintf("  • 冲脉丹自选宝箱 x%d", reward["chongmai"]) });
+        if (reward["tencard"])
+            lines += ({ sprintf("  • 十连抽卡片 x%d", reward["tencard"]) });
+        lines += ({ "" });
+    }
+
+    lines += ({ sprintf("%s活动时间：2025年10月1日-10月7日%s", HIR, NOR) });
+
+    return implode(lines, "\n");
+}
+
+/**
+ * @brief 尝试广播里程碑达成消息
+ * @param int milestone 达成的里程碑
+ */
+public void try_grant_reward(int milestone)
+{
+    string msg;
+
+    if (!exp_milestones[milestone])
+        return;
+
+    // 标记该里程碑已达成
+    set("milestone_" + milestone, 1);
+    save();
+
+    // 全服广播
+    msg = HIR "【国庆活动】" HIG "全服玩家累计获得" + milestone + "经验！所有玩家可前往各大主城广场领取奖励！" NOR "\n";
+
+    message("channel:rumor", msg, users());
+}
+
+/**
+ * @brief 检查玩家是否已领取某个档位的奖励
+ * @param object player 玩家对象
+ * @param int milestone 里程碑值
+ * @return int 1-已领取，0-未领取
+ */
+public int has_claimed_reward(object player, int milestone)
+{
+    if (!player) return 0;
+    return player->query("guoqing_2025/reward_" + milestone);
+}
+
+/**
+ * @brief 玩家领取里程碑奖励
+ * @param object player 玩家对象
+ * @param int milestone 里程碑值
+ */
+public void claim_reward(object player, int milestone)
+{
+    mapping reward;
+    object item;
+    int i;
+
+    if (!player) return;
+
+    // 检查活动期间
+    if (!is_in_activity_period())
+    {
+        tell_object(player, HIR "活动尚未开始或已结束。\n" NOR);
+        return;
+    }
+
+    // 检查是否已领取
+    if (has_claimed_reward(player, milestone))
+    {
+        tell_object(player, HIR "您已经领取过该档位的奖励了。\n" NOR);
+        return;
+    }
+
+    // 检查全服是否达成
+    if (!query("milestone_" + milestone))
+    {
+        tell_object(player, HIR "全服尚未达成该档位。\n" NOR);
+        return;
+    }
+
+    // 检查奖励配置
+    reward = milestone_rewards[milestone];
+    if (!reward)
+    {
+        tell_object(player, HIR "奖励配置错误，请联系管理员。\n" NOR);
+        return;
+    }
+
+    // 检查背包空间
+    if (sizeof(all_inventory(player)) >= 380)
+    {
+        tell_object(player, HIR "您的背包空间不足，请整理后再来领取。\n" NOR);
+        return;
+    }
+
+    // 发放奖励
+
+    // 绑定元宝
+    if (reward["yuanbao"])
+    {
+        player->add("bind_yuanbao", reward["yuanbao"]);
+        tell_object(player, sprintf(HIG "获得绑定元宝 x%d\n" NOR, reward["yuanbao"]));
+    }
+
+    // 神奇葡萄
+    if (reward["putao"])
+    {
+        item = new_bind("/clone/vip/putao1");
+        if (item)
+        {
+            item->set_amount(reward["putao"]);
+            item->move(player);
+            tell_object(player, sprintf(HIG "获得神奇葡萄 x%d\n" NOR, reward["putao"]));
+        }
+    }
+
+    // 意境卷轴
+    if (reward["yijing"])
+    {
+        for (i = 0; i < reward["yijing"]; i++)
+        {
+            item = new_bind("/clone/aoyi_book/aoyi_book");
+            if (item) item->move(player);
+        }
+        tell_object(player, sprintf(HIG "获得意境卷轴 x%d\n" NOR, reward["yijing"]));
+    }
+
+    // 黄色真意自选宝箱
+    if (reward["zhenyi_yellow"])
+    {
+        item = new_bind("/clone/box/zhenyi/yellow_zixuan_box");
+        if (item) item->move(player);
+        tell_object(player, HIG "获得黄色真意自选宝箱 x1\n" NOR);
+    }
+
+    // 紫色真意自选宝箱
+    if (reward["zhenyi_purple"])
+    {
+        item = new_bind("/clone/box/zhenyi/purple_zixuan_box");
+        if (item) item->move(player);
+        tell_object(player, HIG "获得紫色真意自选宝箱 x1\n" NOR);
+    }
+
+    // 冲脉丹自选宝箱
+    if (reward["chongmai"])
+    {
+        for (i = 0; i < reward["chongmai"]; i++)
+        {
+            item = new_bind("/clone/box/chongmai/chongmai_zixuan_box");
+            if (item) item->move(player);
+        }
+        tell_object(player, sprintf(HIG "获得冲脉丹自选宝箱 x%d\n" NOR, reward["chongmai"]));
+    }
+
+    // 十连抽卡片
+    if (reward["tencard"])
+    {
+        for (i = 0; i < reward["tencard"]; i++)
+        {
+            item = new_bind("/clone/baiyi/tencard");
+            if (item) item->move(player);
+        }
+        tell_object(player, sprintf(HIG "获得十连抽卡片 x%d\n" NOR, reward["tencard"]));
+    }
+
+    // 标记已领取
+    player->set("guoqing_2025/reward_" + milestone, 1);
+
+    tell_object(player, sprintf(HIY "\n恭喜您成功领取了%d经验档位的奖励！\n" NOR, milestone));
+}
+
+/**
+ * @brief 获取玩家的奖励领取进度
+ * @param object player 玩家对象
+ * @return string 进度文本
+ */
+public string get_player_reward_progress(object player)
+{
+    int *milestones, i;
+    string *lines = ({}), status, color;
+
+    if (!player) return "参数错误。";
+
+    if (!is_in_activity_period())
+        return "活动尚未开始或已结束。";
+
+    milestones = keys(exp_milestones);
+    milestones = sort_array(milestones, (: $1 - $2 :));
+
+    lines += ({ sprintf("%s【我的国庆活动奖励】%s", HIY, NOR) });
+    lines += ({ "" });
+
+    for (i = 0; i < sizeof(milestones); i++)
+    {
+        if (has_claimed_reward(player, milestones[i]))
+        {
+            color = HIG;
+            status = "已领取";
+        }
+        else if (query("milestone_" + milestones[i]))
+        {
+            color = HIY;
+            status = "可领取";
+        }
+        else
+        {
+            color = WHT;
+            status = "未达成";
+        }
+
+        lines += ({ sprintf("%s%d经验 [%s%s%s]%s", HIW, milestones[i], color, status, NOR, NOR) });
+    }
+
+    return implode(lines, "\n");
+}

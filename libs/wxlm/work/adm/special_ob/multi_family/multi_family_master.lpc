@@ -1,0 +1,519 @@
+// multi_family_master.c
+// 多门派系统管理器
+// 用于管理玩家的多门派拜师功能
+
+inherit F_CLEAN_UP;
+
+// 函数声明
+mapping can_join_family(object player);
+mapping get_family_info(object player);
+mapping set_family_mark(object player, int family_slot, string family_name);
+mapping create_multi_family_info(object player, string family_name, string master_name, int generation);
+mapping remove_family_info(object player, int family_slot);
+string *get_available_family_slots(object player);
+string *get_occupied_family_slots(object player);
+int get_max_family_count(object player);
+mapping record_skill_learning(object player, string family_name, string skill, string teacher, int learned_level);
+mapping get_family_learned_skills(object player, string family_name);
+mapping get_all_learned_skills(object player);
+int get_family_priority(object player, string family_name);
+mapping clear_all_learning_records(object player);
+
+// 检查玩家是否可以拜师
+// 返回值：mapping 包含检查结果
+mapping can_join_family(object player)
+{
+    int level, max_family_slot, i;
+    string family_key;
+    mixed family_value;
+    
+    if (!player)
+        return ([ "error": "玩家对象无效" ]);
+    
+    // 获取玩家等级
+    level = player->query("level");
+    
+    // 如果等级小于300，不能拜第二门派
+    if (level < 300)
+    {
+        return ([
+            "can_join": 0,
+            "reason": "等级未达到300级，无法拜第二门派",
+            "current_level": level,
+            "required_level": 300
+        ]);
+    }
+    
+    // 计算可以拥有的最大门派槽位数量
+    max_family_slot = 2 + (level - 300) / 200;
+    
+    // 检查所有可用槽位
+    for (i = 2; i <= max_family_slot; i++)
+    {
+        family_key = "family_" + i;
+        family_value = player->query(family_key);
+        
+        // 如果找到空槽位，则可以拜师
+        if (!family_value || family_value == "")
+        {
+            return ([
+                "can_join": 1,
+                "family_slot": i,
+                "family_key": family_key,
+                "current_level": level,
+                "message": sprintf("可以拜第%d门派，槽位：%s", i, family_key)
+            ]);
+        }
+    }
+    
+    // 所有可用槽位都被占用
+    return ([
+        "can_join": 0,
+        "reason": "所有门派槽位都已被占用",
+        "current_level": level,
+        "max_family_slot": max_family_slot
+    ]);
+}
+
+// 获取玩家门派信息
+mapping get_family_info(object player)
+{
+    int level, max_slots, i;
+    mapping family_info;
+    string family_key;
+    mixed family_value, main_family;
+    
+    if (!player)
+        return ([ "error": "玩家对象无效" ]);
+    
+    // 获取玩家等级
+    level = player->query("level");
+    
+    // 计算最大门派槽位数量
+    if (level < 300)
+        max_slots = 1; // 只有主门派
+    else
+        max_slots = 2 + (level - 300) / 200;
+    
+    family_info = ([]);
+    
+    // 获取主门派信息
+    main_family = player->query("family");
+    family_info["family_1"] = main_family;
+    
+    // 获取附属门派信息
+    for (i = 2; i <= max_slots; i++)
+    {
+        family_key = "family_" + i;
+        family_value = player->query(family_key);
+        family_info[family_key] = family_value;
+    }
+    
+    return ([
+        "player_id": player->query("id"),
+        "player_name": player->query("name"),
+        "level": level,
+        "max_family_slots": max_slots,
+        "family_info": family_info
+    ]);
+}
+
+// 设置门派标记
+mapping set_family_mark(object player, int family_slot, string family_name)
+{
+    string family_key;
+    
+    if (!player)
+        return ([ "error": "玩家对象无效" ]);
+    
+    // 验证门派槽位
+    if (family_slot < 2)
+        return ([ "error": "门派槽位必须大于等于2" ]);
+    
+    family_key = "family_" + family_slot;
+    
+    // 设置门派标记
+    player->set(family_key, family_name);
+    
+    return ([
+        "success": 1,
+        "player_id": player->query("id"),
+        "player_name": player->query("name"),
+        "family_key": family_key,
+        "family_name": family_name,
+        "message": sprintf("成功设置%s为%s", family_key, family_name)
+    ]);
+}
+
+// 创建多门派信息
+mapping create_multi_family_info(object player, string family_name, string master_name, int generation)
+{
+    mapping result, family_info;
+    string family_key;
+    int family_slot;
+    
+    if (!player)
+        return ([ "error": "玩家对象无效" ]);
+    
+    // 检查是否可以拜师
+    result = can_join_family(player);
+    if (!result["can_join"])
+        return result;
+    
+    family_slot = result["family_slot"];
+    family_key = result["family_key"];
+    
+    // 创建门派信息mapping
+    family_info = ([
+        "family_name": family_name,
+        "master_name": master_name,
+        "generation": generation,
+        "title": family_name + "-弟子",
+        "join_time": time(),
+        "gongxian": 0
+    ]);
+    
+    // 设置到玩家身上
+    player->set(family_key, family_info);
+    
+    return ([
+        "success": 1,
+        "player_id": player->query("id"),
+        "player_name": player->query("name"),
+        "family_key": family_key,
+        "family_info": family_info,
+        "message": sprintf("成功创建%s门派信息", family_name)
+    ]);
+}
+
+// 删除门派信息
+mapping remove_family_info(object player, int family_slot)
+{
+    string family_key;
+    
+    if (!player)
+        return ([ "error": "玩家对象无效" ]);
+    
+    if (family_slot < 2)
+        return ([ "error": "不能删除主门派信息" ]);
+    
+    family_key = "family_" + family_slot;
+    
+    // 删除门派信息
+    player->delete(family_key);
+    
+    return ([
+        "success": 1,
+        "player_id": player->query("id"),
+        "player_name": player->query("name"),
+        "family_key": family_key,
+        "message": sprintf("成功删除%s门派信息", family_key)
+    ]);
+}
+
+// 获取玩家可用的门派槽位列表
+string *get_available_family_slots(object player)
+{
+    int level, max_slots, i;
+    string *available_slots;
+    string family_key;
+    mixed family_value;
+    
+    if (!player)
+        return ({});
+    
+    level = player->query("level");
+    
+    if (level < 300)
+        return ({}); // 等级不足，没有可用槽位
+    
+    max_slots = 2 + (level - 300) / 200;
+    available_slots = ({});
+    
+    // 检查每个槽位是否可用
+    for (i = 2; i <= max_slots; i++)
+    {
+        family_key = "family_" + i;
+        family_value = player->query(family_key);
+        
+        if (!family_value || family_value == "")
+            available_slots += ({ family_key });
+    }
+    
+    return available_slots;
+}
+
+// 获取玩家已占用的门派槽位列表
+string *get_occupied_family_slots(object player)
+{
+    int level, max_slots, i;
+    string *occupied_slots;
+    string family_key;
+    mixed family_value;
+    
+    if (!player)
+        return ({});
+    
+    level = player->query("level");
+    
+    if (level < 300)
+        return ({}); // 等级不足，没有附属门派
+    
+    max_slots = 2 + (level - 300) / 200;
+    occupied_slots = ({});
+    
+    // 检查每个槽位是否被占用
+    for (i = 2; i <= max_slots; i++)
+    {
+        family_key = "family_" + i;
+        family_value = player->query(family_key);
+        
+        if (family_value && family_value != "")
+            occupied_slots += ({ family_key });
+    }
+    
+    return occupied_slots;
+}
+
+// 计算玩家当前等级可以拥有的最大门派数量
+int get_max_family_count(object player)
+{
+    int level;
+    
+    if (!player)
+        return 0;
+    
+    level = player->query("level");
+    
+    if (level < 300)
+        return 1; // 只有主门派
+    else
+        return 2 + (level - 300) / 200; // 主门派 + 附属门派
+}
+
+// 记录技能学习来源
+mapping record_skill_learning(object player, string family_name, string skill, string teacher, int learned_level)
+{
+    string skill_key, family_key;
+    mapping skill_record, family_info;
+    
+    if (!player || !family_name || !skill || !teacher)
+        return ([ "error": "参数无效" ]);
+    
+    // 获取玩家门派信息，找到对应的留学门派槽位
+    family_info = get_family_info(player);
+    if (!mapp(family_info) || !mapp(family_info["family_info"]))
+        return ([ "error": "无法获取门派信息" ]);
+    
+    family_key = "";
+    foreach (string key, mixed val in family_info["family_info"])
+    {
+        if (mapp(val) && val["family_name"] == family_name)
+        {
+            family_key = key;
+            break;
+        }
+    }
+    
+    if (!family_key)
+        return ([ "error": "未找到对应的留学门派槽位" ]);
+    
+    // 创建技能学习记录的key
+    skill_key = family_key + "/learned_skills/" + skill;
+    
+    // 创建技能记录
+    skill_record = ([
+        "skill_name": skill,
+        "skill_chinese": to_chinese(skill),
+        "family_name": family_name,
+        "teacher_name": teacher,
+        "learned_level": learned_level,
+        "learned_time": time(),
+        "learn_count": 1
+    ]);
+    
+    // 如果已有记录，更新学习次数和等级
+    if (player->query(skill_key))
+    {
+        mapping old_record = player->query(skill_key);
+        if (mapp(old_record))
+        {
+            skill_record["learn_count"] = old_record["learn_count"] + 1;
+            skill_record["first_learned"] = old_record["learned_time"];
+        }
+    }
+    
+    // 保存记录
+    player->set(skill_key, skill_record);
+    
+    return ([
+        "success": 1,
+        "player_id": player->query("id"),
+        "skill_key": skill_key,
+        "record": skill_record,
+        "message": sprintf("成功记录 %s 从 %s 学习 %s 的信息", 
+            player->query("name"), family_name, to_chinese(skill))
+    ]);
+}
+
+// 获取玩家从某个门派学习的技能列表
+mapping get_family_learned_skills(object player, string family_name)
+{
+    mapping family_info, learned_skills;
+    string family_key, skill_key;
+    
+    if (!player || !family_name)
+        return ([ "error": "参数无效" ]);
+    
+    // 获取门派槽位
+    family_info = get_family_info(player);
+    if (!mapp(family_info) || !mapp(family_info["family_info"]))
+        return ([ "error": "无法获取门派信息" ]);
+    
+    family_key = "";
+    foreach (string key, mixed val in family_info["family_info"])
+    {
+        if (mapp(val) && val["family_name"] == family_name)
+        {
+            family_key = key;
+            break;
+        }
+    }
+    
+    if (!family_key)
+        return ([ "error": "未找到对应的门派" ]);
+    
+    // 获取学习技能记录
+    skill_key = family_key + "/learned_skills";
+    learned_skills = player->query(skill_key);
+    
+    if (!mapp(learned_skills))
+        learned_skills = ([]);
+    
+    return ([
+        "success": 1,
+        "family_name": family_name,
+        "family_key": family_key,
+        "learned_skills": learned_skills,
+        "skill_count": sizeof(learned_skills)
+    ]);
+}
+
+// 获取玩家所有留学门派的技能学习记录
+mapping get_all_learned_skills(object player)
+{
+    mapping family_info, all_skills, result;
+    string family_name;
+    
+    if (!player)
+        return ([ "error": "玩家对象无效" ]);
+    
+    family_info = get_family_info(player);
+    if (!mapp(family_info) || !mapp(family_info["family_info"]))
+        return ([ "error": "无法获取门派信息" ]);
+    
+    all_skills = ([]);
+    
+    foreach (string key, mixed val in family_info["family_info"])
+    {
+        if (!mapp(val) || key == "family_1") continue; // 跳过主门派
+        
+        family_name = val["family_name"];
+        if (!family_name) continue;
+        
+        result = get_family_learned_skills(player, family_name);
+        if (result["success"])
+        {
+            all_skills[family_name] = result["learned_skills"];
+        }
+    }
+    
+    return ([
+        "success": 1,
+        "player_id": player->query("id"),
+        "all_learned_skills": all_skills
+    ]);
+}
+
+// 获取某个门派在玩家门派列表中的优先级序号
+int get_family_priority(object player, string family_name)
+{
+    int level, max_slots, i;
+    string family_key;
+    mapping family_info;
+    
+    if (!player || !family_name)
+        return 0;
+    
+    // 检查是否是主门派
+    if (player->query("family/family_name") == family_name)
+        return 1; // 主门派优先级为 1（消耗倍数 1x）
+    
+    level = player->query("level");
+    
+    if (level < 300)
+        return 0; // 等级不足，没有留学门派
+    
+    max_slots = 2 + (level - 300) / 200;
+    
+    // 检查留学门派槽位
+    for (i = 2; i <= max_slots; i++)
+    {
+        family_key = "family_" + i;
+        family_info = player->query(family_key);
+        
+        if (mapp(family_info) && family_info["family_name"] == family_name)
+        {
+            return i; // 返回门派槽位序号，作为优先级（消耗倍数）
+        }
+    }
+    
+    return 0; // 没有找到该门派
+}
+
+// 清除玩家所有技能学习记录（用于脱离门派时）
+mapping clear_all_learning_records(object player)
+{
+    int cleared_count = 0;
+    string *skill_keys = ({});
+    mapping all_data;
+    int num;
+    string skill;
+    
+    if (!player)
+        return ([ "error": "玩家对象无效" ]);
+    
+    // 获取玩家的全部数据
+    all_data = player->query_entire_dbase();
+    if (!mapp(all_data))
+        return ([ "error": "无法获取玩家数据" ]);
+    
+    // 查找所有 family_N/learned_skills 形式的键
+    foreach (string key in keys(all_data))
+    {
+        if (sscanf(key, "family_%d/learned_skills", num) == 1 && num >= 2)
+        {
+            skill_keys += ({ key });
+        }
+        else if (sscanf(key, "family_%d/learned_skills/%s", num, skill) == 2 && num >= 2)
+        {
+            skill_keys += ({ key });
+        }
+    }
+    
+    // 删除所有找到的技能学习记录
+    foreach (string key in skill_keys)
+    {
+        player->delete(key);
+        cleared_count++;
+    }
+    
+    return ([
+        "success": 1,
+        "player_id": player->query("id"),
+        "player_name": player->query("name"),
+        "cleared_count": cleared_count,
+        "cleared_keys": skill_keys,
+        "message": sprintf("成功清除 %d 条技能学习记录", cleared_count)
+    ]);
+} 

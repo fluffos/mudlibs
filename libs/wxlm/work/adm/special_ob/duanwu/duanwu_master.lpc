@@ -1,0 +1,559 @@
+
+
+inherit F_SAVE;
+inherit F_DBASE;
+
+//派系列表
+//甜粽派id列表
+string *tian_pai_id_list = ({});
+//咸粽派id列表
+string *xian_pai_id_list = ({});
+
+//个人积分排行榜
+//key:玩家id，value积分值
+mapping jifen_top = ([]);
+
+// 材料列表
+nosave string *material_list = ({"nuomi", "hongzao", "xianrou", "danhuang"});
+nosave string *material_name = ({"糯米", "红枣", "鲜肉", "蛋黄"});
+
+// 记录玩家收集的材料数量
+mapping player_materials = ([]);
+
+// 文件存档名称
+string query_save_file() { return "/data/npc/duanwu_d"; }
+
+// 初始化函数
+void create()
+{
+    seteuid(getuid());
+    restore();
+    set_heart_beat(300); // 5分钟保存一次
+}
+
+// 关服时保存数据
+public void mud_shutdown()
+{
+    save();
+}
+
+// 卸载时保存数据
+varargs void remove(string euid)
+{
+    save();
+}
+
+// 心跳：定期保存数据
+private void heart_beat()
+{
+    save();
+}
+
+//派系分配函数,具有随机性，但是两个派系人数应该尽可能平均
+int faction_distribution(object me)
+{
+    string id;
+    
+    if (!me || !objectp(me))
+        return 0;
+        
+    id = me->query("id");
+    
+    // 检查玩家是否已经加入派系
+    if (member_array(id, tian_pai_id_list) != -1 || 
+        member_array(id, xian_pai_id_list) != -1)
+    {
+        return 0; // 已经加入过派系
+    }
+    
+    // 根据两个派系的人数分配，保持相对平衡
+    if (sizeof(tian_pai_id_list) < sizeof(xian_pai_id_list))
+    {
+        tian_pai_id_list += ({ id });
+        save(); // 保存更改
+        return 1; // 分配到甜粽派
+    }
+    else if (sizeof(tian_pai_id_list) > sizeof(xian_pai_id_list))
+    {
+        xian_pai_id_list += ({ id });
+        save(); // 保存更改
+        return 2; // 分配到咸粽派
+    }
+    else
+    {
+        // 两派人数相等，随机分配
+        if (random(2) == 0)
+        {
+            tian_pai_id_list += ({ id });
+            save(); // 保存更改
+            return 1; // 分配到甜粽派
+        }
+        else
+        {
+            xian_pai_id_list += ({ id });
+            save(); // 保存更改
+            return 2; // 分配到咸粽派
+        }
+    }
+}
+
+//查看一个玩家是那个派系的:
+string query_faction(object me)
+{
+    string id;
+    
+    if (!me || !objectp(me))
+        return "无";
+        
+    id = me->query("id");
+    
+    if (member_array(id, tian_pai_id_list) != -1)
+        return "甜粽派";
+    else if (member_array(id, xian_pai_id_list) != -1)
+        return "咸粽派";
+    else
+        return "无";
+}
+
+//增加一个玩家的个人积分
+int add_jifen(object me, int number)
+{
+    string id;
+    
+    if (!me || !objectp(me) || number <= 0)
+        return 0;
+        
+    id = me->query("id");
+    
+    if (!jifen_top[id])
+        jifen_top[id] = 0;
+        
+    jifen_top[id] += number;
+    save(); // 保存更改
+    
+    return jifen_top[id];
+}
+
+// 查询玩家的积分
+int query_jifen(object me)
+{
+    string id;
+    
+    if (!me || !objectp(me))
+        return 0;
+        
+    id = me->query("id");
+    
+    if (!jifen_top[id])
+        return 0;
+        
+    return jifen_top[id];
+}
+
+// 添加玩家材料
+int add_material(object me, string mat_type, int amount)
+{
+    string id;
+    
+    if (!me || !objectp(me) || member_array(mat_type, material_list) == -1 || amount <= 0)
+        return 0;
+        
+    id = me->query("id");
+    
+    if (!player_materials[id])
+        player_materials[id] = ([]);
+        
+    if (!player_materials[id][mat_type])
+        player_materials[id][mat_type] = 0;
+        
+    player_materials[id][mat_type] += amount;
+    save(); // 保存更改
+    
+    return player_materials[id][mat_type];
+}
+
+// 查询玩家材料数量
+int query_material(object me, string mat_type)
+{
+    string id;
+    
+    if (!me || !objectp(me) || member_array(mat_type, material_list) == -1)
+        return 0;
+        
+    id = me->query("id");
+    
+    if (!player_materials[id] || !player_materials[id][mat_type])
+        return 0;
+        
+    return player_materials[id][mat_type];
+}
+
+// 消耗玩家材料
+int cost_material(object me, string mat_type, int amount)
+{
+    string id;
+    
+    if (!me || !objectp(me) || member_array(mat_type, material_list) == -1 || amount <= 0)
+        return 0;
+        
+    id = me->query("id");
+    
+    if (!player_materials[id] || !player_materials[id][mat_type] || 
+        player_materials[id][mat_type] < amount)
+        return 0;
+        
+    player_materials[id][mat_type] -= amount;
+    save(); // 保存更改
+    
+    return 1;
+}
+
+// 获取材料名称
+string get_material_name(string mat_type)
+{
+    int idx = member_array(mat_type, material_list);
+    
+    if (idx == -1)
+        return "未知材料";
+        
+    return material_name[idx];
+}
+
+// 制作粽子，需要消耗所需材料各1个
+int make_zongzi(object me)
+{
+    string id, faction;
+    string *needed_materials;
+    int i;
+    
+    if (!me || !objectp(me))
+        return 0;
+        
+    id = me->query("id");
+    faction = query_faction(me);
+    
+    if (faction == "无")
+        return -1; // 未加入派系
+    
+    // 根据派系确定所需材料
+    if (faction == "甜粽派")
+    {
+        // 甜粽需要：糯米、红枣、鲜肉
+        needed_materials = ({"nuomi", "hongzao", "xianrou"});
+    }
+    else // 咸粽派
+    {
+        // 咸粽需要：糯米、鲜肉、蛋黄
+        needed_materials = ({"nuomi", "xianrou", "danhuang"});
+    }
+    
+    // 检查是否有足够的材料
+    for (i = 0; i < sizeof(needed_materials); i++)
+    {
+        if (query_material(me, needed_materials[i]) < 1)
+        {
+            tell_object(me, HIG "【端午活动】"HIY"你缺少" + get_material_name(needed_materials[i]) + "！\n" NOR);
+            return -2; // 材料不足
+        }
+    }
+    
+    // 消耗材料
+    for (i = 0; i < sizeof(needed_materials); i++)
+    {
+        cost_material(me, needed_materials[i], 1);
+    }
+    
+    // 增加积分
+    add_jifen(me, 1);
+    
+    // 增加艾草
+    me->add("duanwu_huodong/obj/ai_cao", 1);
+    
+    // 给予奖励
+    me->add("combat_exp", 2000);
+    me->add("potential", 2000);
+    me->add("bind_yuanbao", 1);
+    
+    return 1; // 成功制作
+}
+
+// 获取所有积分排名
+string *query_jifen_top(int limit)
+{
+    string *ids = keys(jifen_top);
+    mapping scores = ([]);
+    
+    if (!limit || limit < 1)
+        limit = 10;
+        
+    foreach (string id in ids)
+    {
+        scores[id] = jifen_top[id];
+    }
+    
+    // 按积分排序
+    ids = sort_array(ids, (: $(scores)[$2] - $(scores)[$1] :));
+    
+    // 限制数量
+    if (sizeof(ids) > limit)
+        ids = ids[0..limit-1];
+        
+    return ids;
+}
+
+// 重置活动数据
+void reset_duanwu_data()
+{
+    tian_pai_id_list = ({});
+    xian_pai_id_list = ({});
+    jifen_top = ([]);
+    player_materials = ([]);
+    save();
+}
+
+// 根据派系随机给予一个材料
+int give_random_material(object me)
+{
+    string faction, material_id, material_name;
+    string *possible_materials;
+    int index, i;
+    int min_count;
+    string *min_materials = ({});
+    int random_choice;
+    
+    if (!me || !objectp(me))
+        return 0;
+        
+    faction = query_faction(me);
+    
+    if (faction == "无")
+        return 0;
+    
+    // 根据不同派系设定可能获得的材料
+    if (faction == "甜粽派")
+    {
+        // 甜粽需要：糯米、红枣、鲜肉
+        possible_materials = ({"nuomi", "hongzao", "xianrou"});
+    }
+    else // 咸粽派
+    {
+        // 咸粽需要：糯米、鲜肉、蛋黄
+        possible_materials = ({"nuomi", "xianrou", "danhuang"});
+    }
+    
+    // 随机决定是否给予数量最少的材料（70%概率）
+    random_choice = random(10);
+    
+    if (random_choice < 7) // 70%概率获得数量最少的材料
+    {
+        // 查找玩家拥有数量最少的材料
+        // 先获取第一种材料的数量作为初始最小值
+        min_count = query_material(me, possible_materials[0]);
+        min_materials = ({ possible_materials[0] });
+        
+        // 从第二种材料开始比较
+        for (i = 1; i < sizeof(possible_materials); i++)
+        {
+            int count = query_material(me, possible_materials[i]);
+            
+            if (count < min_count)
+            {
+                // 找到更少的材料，重置最小列表
+                min_count = count;
+                min_materials = ({ possible_materials[i] });
+            }
+            else if (count == min_count)
+            {
+                // 和当前最少的一样少，添加到列表
+                min_materials += ({ possible_materials[i] });
+            }
+        }
+        
+        // 在最少的材料中随机选择一种
+        index = random(sizeof(min_materials));
+        material_id = min_materials[index];
+    }
+    else // 30%概率完全随机获得一种材料
+    {
+        // 随机选择一种材料
+        index = random(sizeof(possible_materials));
+        material_id = possible_materials[index];
+    }
+    
+    // 给予材料
+    add_material(me, material_id, 1);
+    
+    // 材料名称
+    material_name = get_material_name(material_id);
+    
+    tell_object(me, HIG "【端午活动】"HIY"你获得了" + material_name + "！\n" NOR);
+    return 1;
+}
+
+// 根据积分排行榜发放奖励
+public void distribute_rank_rewards()
+{
+    string *top_players_id;
+    object player_ob;
+    string title_to_give;
+    string mount_to_give_path;
+    string mount_name;
+    int i, rank, score;
+
+    // 获取前30名玩家的ID列表 (按积分高到低排序)
+    top_players_id = query_jifen_top(300);
+
+    if (!sizeof(top_players_id))
+    {
+        CHANNEL_D->do_channel(this_object(), "sys", "端午活动：积分排行榜为空，本次无人获得排名奖励。");
+        return;
+    }
+
+    CHANNEL_D->do_channel(this_object(), "sys", "端午活动：开始发放个人积分排名奖励。");
+
+    for (i = 0; i < sizeof(top_players_id); i++)
+    {
+        player_ob = UPDATE_D->global_find_player(top_players_id[i]);
+        score = jifen_top[top_players_id[i]];
+
+        rank = i + 1;
+        title_to_give = "";
+        mount_to_give_path = "";
+        mount_name = "";
+
+        // 先按排名判断，再按积分判断
+        // if (rank == 1 || score > 6000)
+        // {
+        //     title_to_give = "龙吟破浪";
+        //     mount_to_give_path = "/adm/special_ob/duanwu/obj/quanxi_longzhou";
+        //     mount_name = HIW "全息龙舟" NOR;
+        // }
+        // else if (rank == 2 || score > 4500)
+        // {
+        //     title_to_give = "粽横四海";
+        //     mount_to_give_path = "/adm/special_ob/duanwu/obj/chitu_ma";
+        //     mount_name = HIR "赤兔马" NOR;
+        // }
+        // else if (rank == 3 || score > 3000)
+        // {
+        //     title_to_give = "粽师百战";
+        //     mount_to_give_path = "/adm/special_ob/duanwu/obj/dilu_ma";
+        //     mount_name = HIW "的卢马" NOR;
+        // }
+        // else if ((rank >= 4 && rank <= 10) || score > 1500)
+        // {
+        //     title_to_give = "屈子遗章";
+        // }
+        // else 
+        
+        if ((rank > 30) || score > 500)
+        {
+            title_to_give = "艾草精灵";
+        }
+
+        // 发放称号
+        if (stringp(title_to_give) && title_to_give != "")
+        {
+            player_ob->set("titles/" + title_to_give, 1);
+            tell_object(player_ob, HIG "【端午活动】恭喜您在本次活动中表现优异，荣获永久称号「" HIY + title_to_give + HIG "」！\n" NOR);
+            // 可选：全服公告获得高级称号的玩家
+            if (rank <= 3 || score > 3000) 
+            {
+                CHANNEL_D->do_channel(this_object(), "chat", 
+                    sprintf("恭喜%s(%s)在端午节活动中%s，获得永久称号「%s」%s！", 
+                        player_ob->name(1), player_ob->query("id"), 
+                        (rank <= 3 ? "荣获第" + chinese_number(rank) + "名" : "积分高达" + chinese_number(score) + "分"),
+                        title_to_give, 
+                        (mount_name != "" ? "和限定坐骑「" + mount_name + "」" : "")));
+            }
+
+            log_file("duanwu_master.log", sprintf("%s：%s 获得称号「%s」 %s排名第%d位，积分%d\n", 
+                      ctime(time()), player_ob->query("name") + "(" + player_ob->query("id") + ")",
+                      title_to_give, mount_to_give_path != "" ? "获得坐骑「"+mount_name+"」 " : "",
+                      rank, score));
+        }
+
+        // 发放坐骑
+        if (stringp(mount_to_give_path) && mount_to_give_path != "")
+        {
+            object mount_ob = new_bind(mount_to_give_path);
+            if (mount_ob)
+            {
+                if (!mount_ob->move(player_ob))
+                {
+                    mount_ob->move(environment(player_ob)); // 如果背包满了，尝试放到环境
+                    tell_object(player_ob, HIR "你的背包满了，奖励坐骑「" + mount_name + HIR "」掉在了地上！\n" NOR);
+                }
+                else
+                {
+                    tell_object(player_ob, HIG "【端午活动】同时，您获得了限定坐骑「" + mount_name + HIG "」一匹！\n" NOR);
+                }
+            }
+            else
+            {
+                CHANNEL_D->do_channel(this_object(), "sys", "端午活动：为玩家 " + player_ob->query("id") + " 创建坐骑 " + mount_to_give_path + " 失败！");
+            }
+        }
+        
+    }
+    CHANNEL_D->do_channel(this_object(), "sys", "端午活动：个人积分排名奖励发放完毕。");
+
+    // 在此决定是否重置活动数据，通常在活动完全结束后由另一个机制调用，或者在这里调用
+    // reset_duanwu_data(); 
+    // CHANNEL_D->do_channel(this_object(), "sys", "端午活动：活动数据已重置。");
+    save(); // 保存 duanwu_master.c 的状态 (如果发放奖励时修改了自身数据)
+}
+
+// 给所有有积分的玩家发放奖励
+public void distribute_common_rewards()
+{
+    string *player_ids;
+    object player_ob;
+    object zongzi_ob;
+    int i, count = 0;
+
+    // 获取所有有积分的玩家ID
+    player_ids = keys(jifen_top);
+
+    if (!sizeof(player_ids))
+    {
+        CHANNEL_D->do_channel(this_object(), "sys", "端午活动：没有玩家获得积分，不发放普通奖励。");
+        return;
+    }
+
+    CHANNEL_D->do_channel(this_object(), "sys", "端午活动：开始给所有参与者发放普通奖励。");
+
+    foreach (string id in player_ids)
+    {
+        // 跳过积分为0的玩家
+        if (jifen_top[id] <= 0)
+            continue;
+            
+        player_ob = UPDATE_D->global_find_player(id);
+        if (!objectp(player_ob))
+            continue;
+            
+        // 发放1000绑定元宝
+        player_ob->add("bind_yuanbao", 1000);
+        
+        // 发放5个秘宝粽子
+        for (i = 0; i < 5; i++)
+        {
+            zongzi_ob = new_bind("/adm/special_ob/duanwu/obj/mibao_zongzi");
+            if (zongzi_ob)
+            {
+                if (!zongzi_ob->move(player_ob))
+                {
+                    zongzi_ob->move(environment(player_ob));
+                    tell_object(player_ob, HIR "你的背包满了，秘宝粽子掉在了地上！\n" NOR);
+                }
+            }
+        }
+        
+        tell_object(player_ob, HIG "【端午活动】感谢您参与端午活动，获得1000绑定元宝和5个秘宝粽子作为奖励！\n" NOR);
+        count++;
+    }
+    
+    CHANNEL_D->do_channel(this_object(), "sys", sprintf("端午活动：普通奖励发放完毕，共有%d位玩家获得奖励。", count));
+    save();
+}

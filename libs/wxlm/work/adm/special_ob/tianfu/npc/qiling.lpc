@@ -1,0 +1,832 @@
+/***************************************************************************
+ * 文件: adm/special_ob/tianfu/npc/qiling.c
+ * 作者: Lu dexiang
+ * 描述: 启灵大师NPC，用于处理天赋相关的交互，包括天赋升级、开悟、补发感悟图、以及第一天赋重朔功能。
+ ***************************************************************************/
+
+inherit NPC;
+
+string ask_ganwu_quest();
+string ask_ganwu_finish();
+string ask_ganwu_reissue();
+string ask_qiling();
+string ask_talnet_up();
+string ask_kaiwu();
+int update_special_place(object me);
+string ask_talent_reset(); // 新增：天赋重塑选择界面
+int talent_reset_execute(string arg); // 新增：天赋重塑执行函数
+int talent_reset_confirm(string arg); // 新增：天赋重塑确认函数
+
+
+void create()
+{
+	// 基本属性设置
+	set_name("启灵大师", ({ "qi lingdashi", "da shi" }));
+	set("age", 22);
+	set("gender", "男性");
+	set("long", "感悟图任务的发布者，也可以为侠客们启灵。还可以进行'天赋重塑'，重置第一或第五天赋的等级。\n");
+	set("attitude", "peaceful");
+
+	set("str", 24);
+	set("dex", 16);
+	set("combat_exp", 10000);
+	set("shen_type", 1);
+
+	set_skill("unarmed", 40);
+	set_skill("dodge", 40);
+	set_skill("parry", 40);
+	set_skill("blade", 40);
+	set_skill("force", 40);
+	set_temp("apply/attack", 40);
+	set_temp("apply/defense", 40);
+	set_temp("apply/damage", 20);
+	set_temp("apply/armor", 40);
+
+	// NPC交互：天赋相关询问映射
+	set("inquiry", ([
+		"启灵"         : (: ask_qiling :),      // 获得新的天赋格子
+		"开悟"         : (: ask_kaiwu :),
+		"天赋升级"     : (: ask_talnet_up :),
+		"感悟图任务"   : (: ask_ganwu_quest :),
+		"提交任务"     : (: ask_ganwu_finish :),
+		"补发感悟图"   : (: ask_ganwu_reissue :),
+		"天赋重塑"     : (: ask_talent_reset :),  // 新增：天赋重塑功能
+	]));
+
+	setup();
+}
+
+void init()
+{
+	// 注册天赋升级和刷新命令
+	add_action("talnet_up", "talnet_up");
+	add_action("talnet_update", "talnet_update");
+
+	// 注册天赋重塑命令
+	add_action("talent_reset_execute", "talent_reset");
+	add_action("talent_reset_confirm", "talent_reset_confirm");
+}
+
+// 天赋升级：绿色天赋升级需要的碎片为100，蓝色200，金色400，红色600
+int talnet_up(string arg)
+{
+	object me, obj;
+	int number, need_number;
+	mapping talnet_quality_need = ([
+		"绿色" : 100,
+		"蓝色" : 200,
+		"金色" : 400,
+		"红色" : 600,
+	]);
+
+	me = this_player();
+	// 使用 COMB_ENV_OBJ 获取天赋碎片对象
+	obj = new(COMB_ENV_OBJ,"tianfuganwu suipian",me);
+
+	// 检查玩家是否拥有天赋碎片
+	if (obj->query_amount() <= 0)
+	{
+		return notify_fail("你没有天赋碎片。\n");
+	}
+
+	number = obj->query_amount();
+	need_number = talnet_quality_need[ TALNET_MASTER->query_talnet_quality(arg) ];
+
+	if (number < need_number)
+	{
+		return notify_fail("你的碎片不足,你只有" + number + "个。\n");
+	}
+
+	// 最高十级
+	if (TALNET_MASTER->query_talnet_level_sure(me, arg) >= 10)
+	{
+		return notify_fail("你的" + TALNET_MASTER->level_name(me, arg) + "已经升级到最高级。\n");
+	}
+
+	// 扣除碎片，并增加天赋等级
+	// 使用 deduct_amount 扣除碎片
+	obj->deduct_amount(need_number);
+	me->add("myspecial/" + arg + "/level", 1);
+
+	tell_object(me, "你的" + TALNET_MASTER->level_name(me, arg) +
+					  "升级成功，当前等级为:" +
+					  TALNET_MASTER->query_talnet_level_sure(me, arg) + "级。\n");
+
+	return 1;
+}
+
+/**
+ * @brief 天赋重塑确认函数
+ * @param string arg 天赋格子编号（"1"或"5"）
+ * @return int 执行结果
+ * @details 执行实际的天赋重塑操作，包括资源检查、扣除和返还
+ */
+int talent_reset_confirm(string arg)
+{
+	object me, obj_frag, obj_book;
+	string talent_id, talent_name, quality;
+	int current_level, cost_per_level, refund_fragments, yuanbao_cost, book_reward;
+	mapping talnet_quality_need = ([
+		"绿色" : 100,
+		"蓝色" : 200,
+		"金色" : 400,
+		"红色" : 600,
+	]);
+
+	me = this_player();
+
+	if (!arg || (arg != "1" && arg != "5"))
+	{
+		return notify_fail("只能重塑第一天赋或第五天赋。\n");
+	}
+
+	// 检查天赋格子是否存在
+	if (!me->query("special_skill_place/" + arg))
+	{
+		return notify_fail("你没有第" + (arg == "1" ? "一" : "五") + "个天赋格子。\n");
+	}
+
+	talent_id = me->query("special_skill_place/" + arg);
+	talent_name = TALNET_MASTER->level_name(me, talent_id);
+	quality = TALNET_MASTER->query_talnet_quality(talent_id);
+	current_level = TALNET_MASTER->query_talnet_level_sure(me, talent_id);
+
+	if (current_level <= 1)
+	{
+		return notify_fail("你的第" + (arg == "1" ? "一" : "五") + "天赋已经是1级，无需重塑。\n");
+	}
+
+	// 设置重塑消耗和奖励
+	if (arg == "1")
+	{
+		yuanbao_cost = 2000;
+		book_reward = 1;
+	}
+	else // arg == "5"
+	{
+		yuanbao_cost = 2500;
+		book_reward = 2;
+	}
+
+	// 检查元宝
+	if (me->query("yuanbao") < yuanbao_cost)
+	{
+		return notify_fail("你没有足够的" + yuanbao_cost + "元宝进行天赋重塑。\n");
+	}
+
+	// 计算返还的天赋感悟碎片数量
+	cost_per_level = talnet_quality_need[quality];
+	refund_fragments = (current_level - 1) * cost_per_level;
+
+	// 扣除元宝
+	me->add("yuanbao", -yuanbao_cost);
+
+	// 重置天赋等级为1级
+	me->delete("myspecial/" + talent_id + "/level");
+
+	// 返还天赋感悟碎片
+	obj_frag = new_bind("/clone/vip/tianfu_ganwu_suipian");
+	obj_frag->set_amount(refund_fragments);
+	obj_frag->move(me);
+
+	// 赠送天赋技能书
+	obj_book = present("tianfu jineng shu", me);
+	if (!obj_book)
+	{
+		obj_book = new_bind("/clone/vip/book_tianfu.lpc");
+		obj_book->set_amount(book_reward);
+		obj_book->move(me);
+	}
+	else
+	{
+		obj_book->add_amount(book_reward);
+	}
+
+	tell_object(me, sprintf(HIG "重塑成功！" NOR "\n\n" +
+							"你的第%s天赋 %s 等级已重置为1级\n" +
+							"返还了 %d 个天赋感悟碎片\n" +
+							"赠送了 %d 本天赋技能书\n" +
+							"消耗了 %d 元宝\n",
+							(arg == "1" ? "一" : "五"), talent_name,
+							refund_fragments, book_reward, yuanbao_cost));
+
+	return 1;
+}
+
+
+
+// 为玩家分配天赋格子，如果没有则给予一个默认的天赋格子
+int update_special_place(object me)
+{
+	// 变量声明
+	string special_skill_name;
+
+	// 如果玩家尚未拥有天赋格子，则初始分配1个
+	if (!me->query("special_skill_place"))
+	{
+		if (!me->query("special_skill"))
+			me->set("special_skill", ([ "tblade" : 1 ]));
+
+		special_skill_name = keys(me->query("special_skill"))[0];
+
+		// 确保玩家只有1个天赋技能
+		me->set("special_skill_place/1", special_skill_name);
+		me->set("special_skill_number", 1);
+	}
+	return 1;
+}
+
+/**
+ * @brief 启灵功能：获得新的天赋格子
+ * @return string 启灵结果或功能介绍
+ * @details 为玩家开启新的天赋格子，每个格子有不同的品质和消耗要求
+ */
+string ask_qiling()
+{
+	object me, obj;
+	string *talnet_list, talnet_id, quality_type, intro_msg;
+	int required_fragments, current_slots;
+	
+	me = this_player();
+
+	// 如果没有天赋格子，则初始化分配
+	if (!me->query("special_skill_place"))
+	{
+		update_special_place(me);
+	}
+
+	talnet_list = keys(me->query("special_skill_place"));
+	current_slots = sizeof(talnet_list);
+
+	// 首先显示启灵功能介绍
+	intro_msg = sprintf(HIY "【启灵功能介绍】" NOR "\n\n" +
+						"启灵可以为你开启新的天赋格子，每个格子都有特定的品质和消耗：\n\n" +
+						HIW "第二格子：" NOR "绿色品质天赋，消耗500天赋感悟碎片\n" +
+						HIB "第三格子：" NOR "蓝色品质天赋，消耗1000天赋感悟碎片\n" +
+						HIY "第四格子：" NOR "金色品质天赋，消耗2000天赋感悟碎片\n" +
+						HIR "第五格子：" NOR "任意品质天赋，消耗5000天赋感悟碎片（需600级解锁）\n\n" +
+						HIG "解锁条件：" NOR "前一个天赋格子的天赋需达到10级\n" +
+						HIG "特殊说明：" NOR "第五格子刷新后不保留等级，始终重置为1级\n\n" +
+						"你当前拥有 " + HIW + current_slots + NOR + " 个天赋格子。\n\n");
+
+	tell_object(me, intro_msg);
+
+	if (current_slots >= 5)
+	{
+		return "你已经拥有了5个天赋格子。\n";
+	}
+
+	// 检查第五个天赋格的特殊条件
+	if (current_slots == 4)
+	{
+		if (me->query("level") < 600)
+		{
+			return "你需要达到600级才能解锁第五个天赋格子。\n";
+		}
+	}
+	else
+	{
+		// 检查最新一个天赋格子是否达到10级
+		talnet_id = me->query("special_skill_place/" + current_slots);
+
+		if (TALNET_MASTER->query_talnet_level_sure(me, talnet_id) < 10)
+		{
+			return "你的" + TALNET_MASTER->level_name(me, talnet_id) +
+				   "等级还没有达到10级。\n";
+		}
+	}
+
+	// 增加天赋格子数量，并设置为新的格子
+	me->set("special_skill_number", current_slots + 1);
+
+	switch (me->query("special_skill_number"))
+	{
+		case 2:
+			quality_type = "绿色";
+			required_fragments = 500;
+			break;
+		case 3:
+			quality_type = "蓝色";
+			required_fragments = 1000;
+			break;
+		case 4:
+			quality_type = "金色";
+			required_fragments = 2000;
+			break;
+		case 5:
+			// 第五个天赋格特殊处理：可以容纳任何天赋，需要5000碎片
+			required_fragments = 5000;
+			break;
+		default:
+			return "未知的天赋格子编号。\n";
+	}
+
+	// 使用 COMB_ENV_OBJ 获取天赋碎片对象
+	obj = new(COMB_ENV_OBJ,"tianfuganwu suipian",me);
+	if (obj->query_amount() < required_fragments)
+	{
+		return "你的天赋感悟碎片不足 (" + obj->query_amount() + "/" + required_fragments + ")，无法开启新的天赋格子。\n";
+	}
+
+	// 扣除相应数量的碎片
+	obj->deduct_amount(required_fragments);
+
+	if (me->query("special_skill_number") == 5)
+	{
+		// 第五个天赋格：随机获得任意品质的天赋
+		talnet_id = UPDATE_D->born_player(me, 1);
+	}
+	else
+	{
+		talnet_id = UPDATE_D->born_player(me, 1, quality_type);
+	}
+	
+	me->set("special_skill_place/" + (me->query("special_skill_number")), talnet_id);
+
+	return "启灵成功，你获得了第" +
+		   chinese_number(me->query("special_skill_number")) + "个天赋格子。\n";
+}
+
+/**
+ * @brief 天赋升级选择交互界面
+ * @return string 天赋升级结果或功能介绍
+ * @details 允许玩家升级已有天赋的等级，提升天赋效果
+ */
+string ask_talnet_up()
+{
+	object me;
+	string *talnet_list, title, intro_msg;
+	string *buttons = ({});
+	
+	me = this_player();
+
+	if (!me->query("special_skill_place"))
+	{
+		update_special_place(me);
+	}
+
+	talnet_list = keys(me->query("special_skill_place"));
+
+	// 显示天赋升级功能介绍
+	intro_msg = sprintf(HIY "【天赋升级功能介绍】" NOR "\n\n" +
+						"天赋升级可以提升你已有天赋的等级，增强天赋效果：\n\n" +
+						HIG "升级消耗：" NOR "\n" +
+						HIW "绿色天赋：" NOR "每级消耗100个天赋感悟碎片\n" +
+						HIB "蓝色天赋：" NOR "每级消耗200个天赋感悟碎片\n" +
+						HIY "金色天赋：" NOR "每级消耗400个天赋感悟碎片\n" +
+						HIR "红色天赋：" NOR "每级消耗600个天赋感悟碎片\n\n" +
+						HIG "等级上限：" NOR "所有天赋最高可升级到10级\n" +
+						HIG "升级效果：" NOR "等级越高，天赋效果越强\n\n");
+
+	tell_object(me, intro_msg);
+
+	foreach (string talnet_number in talnet_list)
+	{
+		string talnet_id;
+		int current_level;
+		talnet_id = me->query("special_skill_place/" + talnet_number);
+		current_level = TALNET_MASTER->query_talnet_level_sure(me, talnet_id);
+		
+		buttons += ({ sprintf("%s.%s(Lv.%d):talnet_up %s", talnet_number,
+							   TALNET_MASTER->level_name(me, talnet_id), current_level, talnet_id) });
+	}
+
+	title = "请选择你要升级的天赋";
+	tell_object(me, popup_comb(title, buttons));
+
+	return "你先考虑考虑吧";
+}
+
+/**
+ * @brief 开悟功能：刷新指定格子的天赋
+ * @return string 开悟结果或功能介绍
+ * @details 允许玩家重新刷新已有天赋格子中的天赋，有不同的等级保留规则
+ */
+string ask_kaiwu()
+{
+	object me;
+	string *talnet_list, title, intro_msg;
+	string *buttons = ({});
+	
+	me = this_player();
+
+	if (!me->query("special_skill_place"))
+	{
+		update_special_place(me);
+	}
+
+	talnet_list = keys(me->query("special_skill_place"));
+
+	// 显示开悟功能介绍
+	intro_msg = sprintf(HIY "【开悟功能介绍】" NOR "\n\n" +
+						"开悟可以重新刷新已有天赋格子中的天赋，消耗规则如下：\n\n" +
+						HIG "消耗物品：" NOR "\n" +
+						"• 天赋技能书：格子编号数量（如第3格需要3本）\n" +
+						"• 天赋感悟碎片：格子编号×10（仅升级过的天赋需要）\n\n" +
+						HIG "等级保留规则：" NOR "\n" +
+						HIW "第1格：" NOR "刷新后重置为1级\n" +
+						HIB "第2-4格：" NOR "刷新后保留原有等级\n" +
+						HIR "第5格：" NOR "刷新后重置为1级（可获得任意品质天赋）\n\n" +
+						HIG "品质限制：" NOR "\n" +
+						"第2格：绿色 | 第3格：蓝色 | 第4格：金色 | 第5格：任意品质\n\n");
+
+	foreach (string talnet_number in talnet_list)
+	{
+		string talnet_id;
+		talnet_id = me->query("special_skill_place/" + talnet_number);
+		buttons += ({ sprintf("%s.%s:talnet_update %s", talnet_number,
+							   TALNET_MASTER->level_name(me, talnet_id), talnet_number) });
+	}
+
+	title = intro_msg;
+	title += "请选择你要开悟的天赋";
+	tell_object(me, popup_comb(title, buttons));
+	return "那么就选择吧。";
+}
+
+// 刷新指定格子的天赋：刷新后第一天赋重置为1级，其他格子保留原等级
+int talnet_update(string arg)
+{
+	object me;
+	string *talnet_list;
+	string talnet_id, quality_type;
+	object obj_book, obj_suipian; // 修改：使用 COMB_ENV_OBJ 对象
+	int number, level = 0;
+	int is_need_up = 0;
+
+	me = this_player();
+
+	if (!me->query("special_skill_place"))
+	{
+		update_special_place(me);
+	}
+
+	talnet_list = keys(me->query("special_skill_place"));
+
+	if (member_array(arg, talnet_list) == -1)
+	{
+		return notify_fail("你没有这个天赋格子。\n");
+	}
+
+	// 如果该天赋已升级，则需要消耗物品
+	if (TALNET_MASTER->query_talnet_level_sure(me, me->query("special_skill_place/" + arg)) > 1)
+	{
+		is_need_up = 1;
+	}
+
+	// 使用 COMB_ENV_OBJ 获取天赋技能书和天赋感悟碎片对象
+	obj_book = new(COMB_ENV_OBJ,"tianfu jineng shu", me);
+	obj_suipian = new(COMB_ENV_OBJ,"tianfuganwu suipian", me);
+
+	if (obj_book->query_amount() <= 0 || (is_need_up && obj_suipian->query_amount() <= 0))
+	{
+		string msg = "你没有";
+		if (obj_book->query_amount() <= 0) msg += "天赋技能书";
+		if (is_need_up && obj_suipian->query_amount() <= 0)
+		{
+			if (obj_book->query_amount() <= 0) msg += "和"; else msg += "";
+			msg += "天赋感悟碎片";
+		}
+		msg += "。\n";
+		return notify_fail(msg);
+	}
+
+	sscanf(arg, "%d", number);
+
+	if (obj_book->query_amount() < number)
+	{
+		return notify_fail("你的天赋技能书数量不足,你需要" + number + "本 (现有:" + obj_book->query_amount() + ")。\n");
+	}
+
+	if (is_need_up)
+	{
+		if (obj_suipian->query_amount() < number * 10)
+		{
+			return notify_fail("你的天赋感悟碎片数量不足,你需要" + number * 10 + "个 (现有:" + obj_suipian->query_amount() + ")。\n");
+		}
+	}
+
+	// 使用 deduct_amount 扣除物品
+	obj_book->deduct_amount(number);
+	if (is_need_up)
+	{
+		obj_suipian->deduct_amount(number * 10);
+	}
+
+	talnet_id = me->query("special_skill_place/" + arg);
+	me->delete("special_skill/" + talnet_id);
+
+	if (number != 1)
+		level = me->query("myspecial/" + talnet_id + "/level");
+
+	me->delete("myspecial/" + talnet_id + "/level"); // 清除旧等级记录
+
+	if (arg == "1")
+	{
+		talnet_id = UPDATE_D->born_player(me, 1);
+	}
+	else if (arg == "5")
+	{
+		// 第五个天赋格：可以容纳任何天赋
+		talnet_id = UPDATE_D->born_player(me, 1);
+	}
+	else
+	{
+		switch (arg)
+		{
+			case "2":
+				quality_type = "绿色";
+				break;
+			case "3":
+				quality_type = "蓝色";
+				break;
+			case "4":
+				quality_type = "金色";
+				break;
+		}
+
+		talnet_id = UPDATE_D->born_player(me, 1, quality_type);
+	}
+
+	me->set("special_skill_place/" + arg, talnet_id);
+
+	tell_object(me, "你获得的天赋技能是" +
+						TALNET_MASTER->level_name(me, talnet_id) + "。\n");
+
+	// 第五个天赋格刷新后不保留等级
+	if (arg == "5")
+	{
+		tell_object(me, "你的" + TALNET_MASTER->level_name(me, talnet_id) +
+							"是第五天赋，重置等级为1级。\n");
+	}
+	else if (level || number != 1)
+	{
+		me->set("myspecial/" + talnet_id + "/level", level);
+		tell_object(me, "开始保留等级并检测原有天赋——更正成功。你的" +
+							TALNET_MASTER->level_name(me, talnet_id) + "等级保持在" +
+							TALNET_MASTER->query_talnet_level_sure(me, talnet_id) + "级。\n");
+	}
+	else
+	{
+		if (number == 1)
+			tell_object(me, "你的" + TALNET_MASTER->level_name(me, talnet_id) +
+								"是第一天赋，重置等级为1级。\n");
+	}
+
+	return 1;
+}
+
+// 感悟图任务：领取任务
+string ask_ganwu_quest()
+{
+	object me, obj;
+	int coin_need;
+
+	me = this_player();
+
+	refresh_time(me, "ganwu_quest");
+
+	// 每天最多领取10次，前5次免费，后续每次需20黄金
+	if (me->query("ganwu_quest/number") >= 10)
+	{
+		return "你今天已经领取的感悟任务太多次了，明天再来吧。\n";
+	}
+
+	if (me->query("ganwu_quest/start"))
+	{
+		return "你已经领取了任务，请尽快完成。\n";
+	}
+
+	if (me->query("ganwu_quest/number") >= 5)
+	{
+		coin_need = 20;
+	}
+	else
+	{
+		coin_need = 0;
+	}
+
+	coin_need = coin_need * 10000;
+
+	if (coin_need)
+	{
+		if (me->query("balance") < coin_need)
+		{
+			return "你的存款不足" + MONEY_D->money_str(coin_need) +
+				   "，我不能给你发布这个任务。\n";
+		}
+		me->add("balance", -coin_need);
+	}
+
+	me->set("ganwu_quest/start", 1);
+	me->set("ganwu_quest/last_time", time());
+	me->add("ganwu_quest/number", 1);
+
+	obj = new("/adm/special_ob/tianfu/obj/ganwu_tu");
+	obj->move(me);
+
+	// 弹窗询问是否自动寻路
+	tell_object(me, popup_comb("你领取了感悟图，是否自动寻路？", "自动寻路:xunlu"));
+
+	return "好吧，这张感悟图你拿去吧，记得在尽快完成任务。\n";
+}
+
+// 感悟图任务：提交任务
+string ask_ganwu_finish()
+{
+	object me, obj;
+	me = this_player();
+
+	if (!me->query("ganwu_quest/start"))
+	{
+		return "你并没有领取任务。\n";
+	}
+
+	obj = present("ganwu tu", me);
+
+	if (!obj)
+	{
+		return "你并没有感悟图。\n";
+	}
+
+	if (!me->query("ganwu_quest/already"))
+	{
+		return "你的任务还没有完成。\n";
+	}
+
+	destruct(obj);
+	me->delete("ganwu_quest/start");
+	me->delete("ganwu_quest/already");
+
+	return "任务完成，你可以再次领取任务。\n";
+}
+
+// 感悟图任务：补发感悟图
+string ask_ganwu_reissue()
+{
+	object me, obj;
+	me = this_player();
+
+	if (!me->query("ganwu_quest/start"))
+	{
+		return "你并没有领取任务。\n";
+	}
+
+	obj = present("ganwu tu", me);
+
+	if (obj)
+	{
+		return "你已经有感悟图了。\n";
+	}
+
+	obj = new("/adm/special_ob/tianfu/obj/ganwu_tu");
+	obj->move(me);
+
+	return "好吧，这张感悟图你拿去吧，记得在尽快完成任务。\n";
+}
+
+/**
+ * @brief 天赋重塑选择界面
+ * @return string 天赋重塑功能介绍和选择界面
+ * @details 显示可重塑的天赋格子，让玩家选择重塑第一天赋或第五天赋
+ */
+string ask_talent_reset()
+{
+	object me;
+	string *talnet_list, popup_content;
+	string *buttons = ({});
+	string talent_id;
+	int current_level;
+	
+	me = this_player();
+
+	// 如果没有天赋格子，则初始化分配
+	if (!me->query("special_skill_place"))
+	{
+		update_special_place(me);
+	}
+
+	talnet_list = keys(me->query("special_skill_place"));
+
+	// 检查第一天赋
+	if (me->query("special_skill_place/1"))
+	{
+		talent_id = me->query("special_skill_place/1");
+		current_level = TALNET_MASTER->query_talnet_level_sure(me, talent_id);
+		
+		if (current_level > 1)
+		{
+			buttons += ({ sprintf("第一天赋.%s(Lv.%d) - 消耗2000元宝:talent_reset 1", 
+								   TALNET_MASTER->level_name(me, talent_id), current_level) });
+		}
+	}
+
+	// 检查第五天赋
+	if (me->query("special_skill_place/5"))
+	{
+		talent_id = me->query("special_skill_place/5");
+		current_level = TALNET_MASTER->query_talnet_level_sure(me, talent_id);
+		
+		if (current_level > 1)
+		{
+			buttons += ({ sprintf("第五天赋.%s(Lv.%d) - 消耗2500元宝:talent_reset 5", 
+								   TALNET_MASTER->level_name(me, talent_id), current_level) });
+		}
+	}
+
+	if (!sizeof(buttons))
+	{
+		return "你目前没有可以重塑的天赋（只有第一天赋和第五天赋可以重塑，且等级需要大于1级）。\n";
+	}
+
+	// 构建弹窗内容，包含介绍文本
+	popup_content = sprintf(HIY "【天赋重塑功能介绍】" NOR "\n\n" +
+							"天赋重塑可以将指定天赋格子的等级重置为1级，并返还升级消耗：\n\n" +
+							HIG "重塑规则：" NOR "\n" +
+							HIW "第一天赋：" NOR "消耗2000元宝，返还升级碎片，赠送1本天赋技能书\n" +
+							HIR "第五天赋：" NOR "消耗2500元宝，返还升级碎片，赠送2本天赋技能书\n\n" +
+							HIG "返还规则：" NOR "\n" +
+							"• 绿色天赋：每级返还100个天赋感悟碎片\n" +
+							"• 蓝色天赋：每级返还200个天赋感悟碎片\n" +
+							"• 金色天赋：每级返还400个天赋感悟碎片\n" +
+							"• 红色天赋：每级返还600个天赋感悟碎片\n\n" +
+							HIR "注意：" NOR "重塑后天赋等级将重置为1级，请谨慎选择！\n\n" +
+							HIG "请选择你要重塑的天赋格子：" NOR);
+
+	tell_object(me, popup_comb(popup_content, buttons));
+
+	return "请在弹窗中选择你要重塑的天赋格子。\n";
+}
+
+/**
+ * @brief 天赋重塑执行函数
+ * @param string arg 天赋格子编号（"1"或"5"）
+ * @return int 执行结果
+ * @details 显示天赋重塑确认信息，不直接执行重塑操作
+ */
+int talent_reset_execute(string arg)
+{
+	object me;
+	string talent_id, talent_name, quality;
+	int current_level, cost_per_level, refund_fragments, yuanbao_cost, book_reward;
+	mapping talnet_quality_need = ([
+		"绿色" : 100,
+		"蓝色" : 200,
+		"金色" : 400,
+		"红色" : 600,
+	]);
+
+	me = this_player();
+
+	if (!arg || (arg != "1" && arg != "5"))
+	{
+		return notify_fail("只能重塑第一天赋或第五天赋。\n");
+	}
+
+	// 检查天赋格子是否存在
+	if (!me->query("special_skill_place/" + arg))
+	{
+		return notify_fail("你没有第" + (arg == "1" ? "一" : "五") + "个天赋格子。\n");
+	}
+
+	talent_id = me->query("special_skill_place/" + arg);
+	talent_name = TALNET_MASTER->level_name(me, talent_id);
+	quality = TALNET_MASTER->query_talnet_quality(talent_id);
+	current_level = TALNET_MASTER->query_talnet_level_sure(me, talent_id);
+
+	if (current_level <= 1)
+	{
+		return notify_fail("你的第" + (arg == "1" ? "一" : "五") + "天赋已经是1级，无需重塑。\n");
+	}
+
+	// 设置重塑消耗和奖励
+	if (arg == "1")
+	{
+		yuanbao_cost = 2000;
+		book_reward = 1;
+	}
+	else // arg == "5"
+	{
+		yuanbao_cost = 2500;
+		book_reward = 2;
+	}
+
+	// 计算返还的天赋感悟碎片数量
+	cost_per_level = talnet_quality_need[quality];
+	refund_fragments = (current_level - 1) * cost_per_level;
+
+	// 显示确认信息
+	tell_object(me, popup_comb(sprintf(HIY "【重塑确认】" NOR "\n\n" +
+							"你确定要重塑第%s天赋吗？\n\n" +
+							HIG "当前天赋：" NOR "%s (Lv.%d)\n" +
+							HIG "重塑消耗：" NOR "%d元宝\n" +
+							HIG "返还碎片：" NOR "%d个天赋感悟碎片\n" +
+							HIG "赠送奖励：" NOR "%d本天赋技能书\n\n" +
+							HIR "警告：重塑后天赋等级将重置为1级！\n\n" NOR +
+							"如果确定，请点击确认按钮。\n",
+							(arg == "1" ? "一" : "五"), talent_name, current_level,
+							yuanbao_cost, refund_fragments, book_reward),
+							"确认重塑:talent_reset_confirm " + arg));
+
+	return 1;
+}

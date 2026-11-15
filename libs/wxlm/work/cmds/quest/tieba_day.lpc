@@ -1,0 +1,157 @@
+/**
+ * @file tieba_day.c
+ * @author Lu dexiang
+ * @brief 百度贴吧昵称签到奖励功能
+ * @version 1.0
+ * @date 2023-12-20
+ */
+
+
+
+// 函数声明
+private mapping load_tieba_data();
+private int check_yesterday_post(mapping data, string tieba_id);
+private int give_reward(object me);
+
+int main(object me, string arg)
+{
+    // 变量声明
+    string tieba_id;
+    mapping tieba_data;
+    int last_reward_time;
+    
+    // 参数检查
+    if (!me || !objectp(me))
+        return 0;
+    
+    // 获取玩家贴吧昵称
+    tieba_id = me->query("tieba_id");
+    if (!tieba_id)
+    {
+        write("你还没有绑定贴吧昵称，请先绑定。\n");
+        return 1;
+    }
+    
+    // 检查是否已经领取过今日奖励
+    last_reward_time = me->query("tieba_reward_time");
+    if (last_reward_time && is_same_day(time(), last_reward_time))
+    {
+        write("你今天已经领取过贴吧奖励了，请明天再来。\n");
+        return 1;
+    }
+    
+    // 加载贴吧数据
+    tieba_data = load_tieba_data();
+    if (!mapp(tieba_data))
+    {
+        write("数据加载失败，请稍后再试。\n");
+        return 1;
+    }
+    
+    // 检查昨日是否发帖
+    if (!check_yesterday_post(tieba_data, tieba_id))
+    {
+        write("你昨天没有在贴吧发帖，无法领取奖励。\n");
+        return 1;
+    }
+    
+    // 发放奖励
+    if (give_reward(me))
+    {
+        write(HIY "恭喜你获得奖励：50绑定元宝和2点游戏贡献！\n" NOR);
+        return 1;
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 加载贴吧数据，只返回昨日的数据
+ * @return mapping 返回处理后的贴吧数据
+ */
+private mapping load_tieba_data()
+{
+    // 变量声明
+    string content;
+    mixed data;
+    mapping result = ([]);
+    int yesterday, post_time;
+    
+    // 计算昨天的时间戳
+    yesterday = time() - 86400;
+    
+    // 读取JSON文件
+    content = read_file("/data/tieba/tieba.json");
+    if (!content)
+        return 0;
+    
+    // 解析JSON数据
+    data = json_decode(content);
+    if (!arrayp(data))
+        return 0;
+    
+    // 只保存昨天的数据
+    foreach (mapping post in data)
+    {
+        if (nullp(post["昵称"]) || nullp(post["时间"]))
+            continue;
+            
+        post_time = convert_to_timestamp(post["时间"]);
+        if (post_time == -1)
+            continue;
+            
+        // 只记录昨天的数据
+        if (is_same_day(post_time, yesterday))
+            result[post["昵称"]] = post_time;
+    }
+    
+    return result;
+}
+
+/**
+ * @brief 检查是否有昨日发帖记录
+ * @param mapping data 贴吧数据
+ * @param string tieba_id 贴吧昵称
+ * @return int 有昨日记录返回1，否则返回0
+ */
+private int check_yesterday_post(mapping data, string tieba_id)
+{
+    // 变量声明
+    int post_time, yesterday;
+    
+    // 参数检查
+    if (!mapp(data) || !stringp(tieba_id))
+        return 0;
+    
+    // 获取发帖时间
+    post_time = data[tieba_id];
+    if (!post_time)
+        return 0;
+    
+    // 计算昨天的时间戳
+    yesterday = time() - 86400;
+    
+    // 判断是否是昨天的帖子
+    return is_same_day(post_time, yesterday);
+}
+
+/**
+ * @brief 发放奖励
+ * @param object me 玩家对象
+ * @return int 成功返回1，失败返回0
+ */
+private int give_reward(object me)
+{
+    // 参数检查
+    if (!me || !objectp(me))
+        return 0;
+    
+    // 添加奖励
+    me->add("bind_yuanbao", 50);
+    me->add("zjvip/all_pay",2);
+    
+    // 记录领取时间
+    me->set("tieba_reward_time", time());
+    
+    return 1;
+}

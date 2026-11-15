@@ -1,0 +1,576 @@
+/**
+ * @file citiao_master.c
+ * @author Lu dexiang
+ * @brief 词条系统管理类
+ */
+
+
+inherit F_CLEAN_UP;
+
+// 词条数据
+private mapping yuansu_data = ([
+    // 基础属性
+    "气血" : ([ "min" : 100, "max" : 1000, "en_id" : "qi" ]),
+    "内力" : ([ "min" : 100, "max" : 1000, "en_id" : "neili" ]),
+    "精神" : ([ "min" : 100, "max" : 1000, "en_id" : "jing" ]),
+    
+    // 技能激发
+    "内功" : ([ "min" : 1, "max" : 20, "en_id" : "force" ]),
+    "轻功" : ([ "min" : 1, "max" : 20, "en_id" : "dodge" ]),
+    "招架" : ([ "min" : 1, "max" : 20, "en_id" : "parry" ]),
+    "剑法" : ([ "min" : 1, "max" : 20, "en_id" : "sword" ]),
+    "掌法" : ([ "min" : 1, "max" : 20, "en_id" : "strike" ]),
+    "手法" : ([ "min" : 1, "max" : 20, "en_id" : "hand" ]),
+    "刀法" : ([ "min" : 1, "max" : 20, "en_id" : "blade" ]),
+    "拳脚" : ([ "min" : 1, "max" : 20, "en_id" : "unarmed" ]),
+    "拳法" : ([ "min" : 1, "max" : 20, "en_id" : "cuff" ]),
+    "锤法" : ([ "min" : 1, "max" : 20, "en_id" : "hammer" ]),
+    "琴法" : ([ "min" : 1, "max" : 20, "en_id" : "qin" ]),
+    "指法" : ([ "min" : 1, "max" : 20, "en_id" : "finger" ]),
+    "长兵" : ([ "min" : 1, "max" : 20, "en_id" : "staff" ]),
+
+
+
+    // 先天属性
+    "臂力" : ([ "min" : 1, "max" : 4, "en_id" : "str" ]),
+    "根骨" : ([ "min" : 1, "max" : 4, "en_id" : "con" ]),
+    "身法" : ([ "min" : 1, "max" : 4, "en_id" : "dex" ]),
+    "悟性" : ([ "min" : 1, "max" : 4, "en_id" : "int" ]),
+
+    //恢复
+    "气血恢复" : ([ "min" : 1, "max" : 20, "en_id" : "recover_qi" ]),
+    "精神恢复" : ([ "min" : 1, "max" : 20, "en_id" : "recover_jing" ]),
+]);
+
+// 天干名称数组，与citiao_rf.c中的保持一致
+string *citiao_name = ({
+    "天蓬", "天芮", "天冲", "天辅", "天禽", "天心", "天柱", "天任", "天英", "天衡", "天后", "天皇",
+    "天虚", "天危", "天室", "天玑", "天璇", "天权", "天枢", "天机", "天梁", "天同", "天相", "天魁",
+    "天钺", "天府", "天破", "天巨", "天哭", "天暗", "天贵", "天马", "天空", "天罗", "天狱", "天姚"
+});
+
+// 私有函数声明
+private void init_citiao_data(object me);
+private int check_player(object me);
+private int apply_citiao_effects(object me);
+private void auto_refresh_heartbeat(object me, string slot_id);
+private string get_citiao_display_name(string slot_id);
+
+/**
+ * @brief 随机返回一个词条及其随机数值
+ * @return mapping 包含词条名称和随机数值的映射
+ */
+mapping random_entry()
+{
+    string *keys_data = keys(yuansu_data);
+    string key = keys_data[random(sizeof(keys_data))];
+    mapping entry = yuansu_data[key];
+    int value = entry["min"] + random(entry["max"] - entry["min"] + 1);
+    
+    return ([
+        "name" : key,
+        "en_id" : entry["en_id"],
+        "value" : value
+    ]);
+}
+
+/**
+ * @brief 初始化玩家的词条数据
+ * @private
+ * @param object me 玩家对象
+ */
+private void init_citiao_data(object me)
+{
+    if (!me->query("citiao_slots"))
+    {
+        me->set("citiao_slots", ([]));
+    }
+}
+
+/**
+ * @brief 检查玩家对象是否有效
+ * @private
+ * @param object me 玩家对象
+ * @return int 1为有效，0为无效
+ */
+private int check_player(object me)
+{
+    if (!objectp(me))
+        return 0;
+    if (!userp(me))
+        return 0;
+    return 1;
+}
+
+/**
+ * @brief 获取玩家的词条数据
+ * @param object me 玩家对象
+ * @return mapping 词条数据，无效则返回0
+ */
+mapping query_citiao_data(object me)
+{
+    if (!check_player(me))
+        return 0;
+        
+    init_citiao_data(me);
+    return me->query("citiao_slots");
+}
+
+/**
+ * @brief 为玩家添加新的词条格子
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return int 是否成功
+ */
+int add_citiao_slot(object me, string slot_id)
+{
+    mapping citiao_slots;
+    
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+    
+    init_citiao_data(me);
+    citiao_slots = me->query("citiao_slots");
+    citiao_slots[slot_id] = random_entry();
+    me->set("citiao_slots", citiao_slots);
+    
+    return 1;
+}
+
+/**
+ * @brief 刷新指定词条格子的词条
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return int 是否成功
+ */
+int refresh_citiao(object me, string slot_id)
+{
+    mapping citiao_slots;
+    
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+    
+    init_citiao_data(me);
+    citiao_slots = me->query("citiao_slots");
+    citiao_slots[slot_id] = random_entry();
+    me->set("citiao_slots", citiao_slots);
+
+    // 显示刷新结果消息
+    if (me->query_temp("auto_refresh_active/" + slot_id))
+        tell_object(me, HIB"[自动刷新]" + get_citiao_display_name(slot_id) + "词条：" + citiao_slots[slot_id]["name"] + " + " + citiao_slots[slot_id]["value"] + "\n"NOR);
+    else
+        tell_object(me, HIG"你刷新了" + get_citiao_display_name(slot_id) + "词条，获得了新的词条：" + citiao_slots[slot_id]["name"] + " + " + citiao_slots[slot_id]["value"] + "。\n"NOR);
+    apply_citiao_effects(me);
+    return 1;
+}
+
+/**
+ * @brief 获取词条格子的词条信息
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return mapping 词条信息，无效则返回0
+ */
+mapping query_citiao(object me, string slot_id)
+{
+    mapping citiao_slots;
+    
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+    
+    init_citiao_data(me);
+    citiao_slots = me->query("citiao_slots");
+    
+    return citiao_slots[slot_id];
+}
+
+/**
+ * @brief 应用词条效果
+ * @param object me 玩家对象
+ * @return int 是否成功
+ */
+int apply_citiao_effects(object me)
+{
+    mapping citiao_slots;
+    string slot_id;
+    mapping entry;
+    
+    if (!check_player(me))
+        return 0;
+    
+    init_citiao_data(me);
+    citiao_slots = me->query("citiao_slots");
+    
+    // 清除之前的词条效果
+    me->delete("citiao_effects");
+    
+    // 应用所有词条效果
+    foreach (slot_id in keys(citiao_slots))
+    {
+        entry = citiao_slots[slot_id];
+        if (mapp(entry))
+        {
+            me->add("citiao_effects/" + entry["en_id"], entry["value"]);
+        }
+    }
+    
+    return 1;
+}
+
+/**
+ * @brief 获取玩家的词条格子数量
+ * @param object me 玩家对象
+ * @return int 词条格子数量，无效则返回0
+ */
+int query_citiao_slots_count(object me)
+{
+    mapping elements;
+    int total = 0;
+    
+    if (!check_player(me))
+        return 0;
+        
+    elements = COMBAT_D->count_unlocked_elements(me);
+    if (!sizeof(elements))
+        return 0;
+        
+    foreach (string element in keys(elements))
+    {
+        total += elements[element];
+    }
+    
+    return total;
+}
+
+/**
+ * @brief 设定目标词条类型和数值
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @param string target_type 目标词条类型
+ * @param int target_value 目标数值
+ * @return int 是否成功
+ */
+int set_target_with_value(object me, string slot_id, string target_type, int target_value)
+{
+    mapping target_data;
+    
+    if (!check_player(me) || !stringp(slot_id) || !stringp(target_type) || !intp(target_value))
+        return 0;
+        
+    if (!yuansu_data[target_type])
+        return 0;
+        
+    if (target_value < yuansu_data[target_type]["min"] || target_value > yuansu_data[target_type]["max"])
+        return 0;
+        
+    target_data = ([
+        "type" : target_type,
+        "value" : target_value
+    ]);
+    
+    me->set("citiao_targets/" + slot_id, target_data);
+    return 1;
+}
+
+/**
+ * @brief 设定目标词条类型（兼容性函数，已弃用）
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @param string target_type 目标词条类型
+ * @return int 是否成功
+ */
+int set_target_citiao(object me, string slot_id, string target_type)
+{
+    mapping entry;
+    int default_value;
+    
+    if (!check_player(me) || !stringp(slot_id) || !stringp(target_type))
+        return 0;
+        
+    if (!yuansu_data[target_type])
+        return 0;
+    
+    // 使用该类型的最大值作为默认目标
+    entry = yuansu_data[target_type];
+    default_value = entry["max"];
+    
+    return set_target_with_value(me, slot_id, target_type, default_value);
+}
+
+/**
+ * @brief 查询目标词条类型
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return string 目标词条类型，无效则返回0
+ */
+string query_target_citiao(object me, string slot_id)
+{
+    mapping target_data;
+    
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+        
+    target_data = me->query("citiao_targets/" + slot_id);
+    if (!mapp(target_data))
+        return 0;
+        
+    return target_data["type"];
+}
+
+/**
+ * @brief 查询目标词条数值
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return int 目标词条数值，无效则返回0
+ */
+int query_target_value(object me, string slot_id)
+{
+    mapping target_data;
+    
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+        
+    target_data = me->query("citiao_targets/" + slot_id);
+    if (!mapp(target_data))
+        return 0;
+        
+    return target_data["value"];
+}
+
+/**
+ * @brief 查询完整的目标数据
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return mapping 包含类型和数值的目标数据，无效则返回0
+ */
+mapping query_target_data(object me, string slot_id)
+{
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+        
+    return me->query("citiao_targets/" + slot_id);
+}
+
+/**
+ * @brief 检查词条是否达到目标数值要求
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return int 是否达到目标
+ */
+int check_target_value_match(object me, string slot_id)
+{
+    mapping target_data;
+    mapping citiao;
+    
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+        
+    target_data = me->query("citiao_targets/" + slot_id);
+    if (!mapp(target_data))
+        return 0;
+        
+    citiao = query_citiao(me, slot_id);
+    if (!mapp(citiao))
+        return 0;
+        
+    // 检查类型和数值是否都达标
+    return (citiao["name"] == target_data["type"] && citiao["value"] >= target_data["value"]);
+}
+
+/**
+ * @brief 检查词条是否匹配目标（兼容性函数，已弃用）
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return int 是否匹配目标
+ */
+int check_target_match(object me, string slot_id)
+{
+    return check_target_value_match(me, slot_id);
+}
+
+/**
+ * @brief 获取所有可用的词条类型
+ * @return string* 词条类型数组
+ */
+string *query_all_citiao_types()
+{
+    return keys(yuansu_data);
+}
+
+/**
+ * @brief 开始自动刷新词条
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return int 是否成功启动
+ */
+int start_auto_refresh(object me, string slot_id)
+{
+    int handle;
+    object cifu;
+    mapping target_data;
+    
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+        
+    // 检查是否已在自动刷新
+    handle = me->query_temp("auto_refresh_handle/" + slot_id);
+    if (handle)
+    {
+        tell_object(me, "该词条格子已在自动刷新中。\n");
+        return 0;
+    }
+    
+    // 检查是否设定了目标
+    target_data = me->query("citiao_targets/" + slot_id);
+    if (!mapp(target_data))
+    {
+        tell_object(me, "请先设定目标词条类型和数值。\n");
+        return 0;
+    }
+    
+    // 检查词符
+    cifu = present("chifu", me);
+    if (!cifu)
+    {
+        tell_object(me, "你需要词符才能自动刷新词条。\n");
+        return 0;
+    }
+    
+    // 启动自动刷新
+    handle = call_out("auto_refresh_heartbeat", 1, me, slot_id);
+    me->set_temp("auto_refresh_handle/" + slot_id, handle);
+    me->set_temp("auto_refresh_active/" + slot_id, 1);
+    
+    tell_object(me, sprintf("开始自动刷新%s格子，目标：%s +%d。\n", 
+        get_citiao_display_name(slot_id), target_data["type"], target_data["value"]));
+    return 1;
+}
+
+/**
+ * @brief 停止自动刷新词条
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return int 是否成功停止
+ */
+int stop_auto_refresh(object me, string slot_id)
+{
+    int handle;
+    
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+        
+    handle = me->query_temp("auto_refresh_handle/" + slot_id);
+    if (!handle)
+    {
+        tell_object(me, "该词条格子未在自动刷新中。\n");
+        return 0;
+    }
+    
+    remove_call_out(handle);
+    me->delete_temp("auto_refresh_handle/" + slot_id);
+    me->delete_temp("auto_refresh_active/" + slot_id);
+    
+    tell_object(me, sprintf("已停止%s格子的自动刷新。\n", get_citiao_display_name(slot_id)));
+    return 1;
+}
+
+/**
+ * @brief 查询自动刷新状态
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ * @return int 是否正在自动刷新
+ */
+int query_auto_refresh_status(object me, string slot_id)
+{
+    if (!check_player(me) || !stringp(slot_id))
+        return 0;
+        
+    return me->query_temp("auto_refresh_active/" + slot_id);
+}
+
+/**
+ * @brief 自动刷新心跳函数
+ * @private
+ * @param object me 玩家对象
+ * @param string slot_id 格子ID
+ */
+private void auto_refresh_heartbeat(object me, string slot_id)
+{
+    object cifu;
+    mapping target_data;
+    mapping current_citiao;
+    
+    if (!objectp(me))
+        return;
+        
+    // 检查是否还需要继续刷新
+    if (!me->query_temp("auto_refresh_active/" + slot_id))
+        return;
+        
+    target_data = me->query("citiao_targets/" + slot_id);
+    if (!mapp(target_data))
+    {
+        stop_auto_refresh(me, slot_id);
+        tell_object(me, "目标词条数据丢失，停止自动刷新。\n");
+        return;
+    }
+    
+    // 检查是否已达到目标
+    if (check_target_value_match(me, slot_id))
+    {
+        current_citiao = query_citiao(me, slot_id);
+        stop_auto_refresh(me, slot_id);
+        tell_object(me, sprintf(HIR"恭喜！%s格子已达到目标：%s +%d（当前：%s +%d）！"NOR"\n", 
+            get_citiao_display_name(slot_id), target_data["type"], target_data["value"],
+            current_citiao["name"], current_citiao["value"]));
+        return;
+    }
+    
+    // 检查词符
+    cifu = present("chifu", me);
+    if (!cifu)
+    {
+        stop_auto_refresh(me, slot_id);
+        tell_object(me, "词符不足，停止自动刷新。\n");
+        return;
+    }
+    
+    // 执行刷新
+    if (refresh_citiao(me, slot_id))
+    {
+        // 消耗词符
+        if (cifu->query_amount() > 1)
+            cifu->add_amount(-1);
+        else
+            destruct(cifu);
+            
+        // 刷新后重新显示词条界面，让用户看到实时结果
+        me->force_me("citiao_rf");
+    }
+    
+    // 设置下一次心跳
+    if (me->query_temp("auto_refresh_active/" + slot_id))
+    {
+        int handle = call_out("auto_refresh_heartbeat", 1, me, slot_id);
+        me->set_temp("auto_refresh_handle/" + slot_id, handle);
+    }
+}
+
+/**
+ * @brief 根据slot_id获取显示用的天干名称
+ * @private
+ * @param string slot_id 格子ID (如"slot1", "slot2"等)
+ * @return string 对应的天干名称
+ */
+private string get_citiao_display_name(string slot_id)
+{
+    int slot_num;
+    
+    if (sscanf(slot_id, "slot%d", slot_num) != 1)
+        return slot_id;
+        
+    if (slot_num < 1 || slot_num > sizeof(citiao_name))
+        return slot_id;
+        
+    return citiao_name[slot_num - 1];
+}
+

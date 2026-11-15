@@ -1,0 +1,153 @@
+// challenge_npc.c - 挑战 NPC 模板
+
+inherit NPC;
+string get_dirname(string path);
+string *shuffle_array(string *arr);
+// 函数声明
+void auto_perform();
+
+void create()
+{
+    set_name("挑战者", ({ "challenger" }));
+    set("gender", "男性");
+    set("age", 20);
+    set("long", "这是一个来自玩家存档的挑战者。\n");
+    set("attitude", "aggressive");
+
+    setup();
+}
+
+void init()
+{
+    object ob;
+
+    if (interactive(ob = this_player()))
+    {
+        kill_ob(ob);
+    }
+}
+
+void heart_beat()
+{
+    if (query("auto_perform") && !is_busy())
+    {
+        auto_perform();
+    }
+
+    // 保持心跳的正常运行
+    ::heart_beat();
+}
+
+// 自动施展特殊招式
+void auto_perform()
+{
+    object target;
+    string skill_type, skill, skill_path, action_path;
+    string *pfm_files;
+    string perform_action, perform_cmd;
+    int i;
+
+    // 变量定义在函数顶部
+
+    target = select_opponent();
+    if (!objectp(target)) return;
+
+    if (is_busy()) return;
+
+    // 获取主要的攻击技能类型
+    skill_type = query("default_skill");
+    if (!stringp(skill_type))
+    {
+        mapping prepare;
+
+        prepare = query_skill_prepare();
+        if (mapp(prepare) && sizeof(prepare))
+            skill_type = keys(prepare)[0];
+        else
+            skill_type = "unarmed";
+    }
+
+    // 获取对应的技能
+    skill = query_skill_mapped(skill_type);
+    if (!stringp(skill))
+        return;
+
+    // 获取技能文件的路径
+    skill_path = SKILL_D(skill);
+    if (!stringp(skill_path))
+        return;
+
+    // 获取技能的特殊招式目录
+    action_path = skill_path->perform_action_file("");
+    if (!stringp(action_path))
+        return;
+
+    // 处理路径，确保指向目录
+    if (file_size(action_path + ".lpc") > 0)
+    {
+        // 如果 action_path 是一个文件，则获取其所在目录
+        action_path = get_dirname(action_path) + "/";
+    }
+    else
+    {
+        // 确保 action_path 以 '/' 结尾
+        if (action_path[<1] != '/')
+            action_path += "/";
+    }
+
+    // 获取特殊招式文件列表
+    pfm_files = get_dir(action_path + "*.lpc");
+
+    if (arrayp(pfm_files) && sizeof(pfm_files) > 0)
+    {
+        // 打乱文件列表顺序，以增加随机性
+        pfm_files = shuffle_array(pfm_files);
+
+        for (i = 0; i < sizeof(pfm_files); i++)
+        {
+            if (sscanf(pfm_files[i], "%s.lpc", perform_action) == 1)
+            {
+                // 构造完整的 perform 命令，格式为 "技能类型.招式名称"
+                perform_cmd = skill_type + "." + perform_action;
+
+                // 尝试执行特殊招式
+                if (command("perform " + perform_cmd))
+                    return;
+            }
+        }
+    }
+
+    // 如果没有特殊招式或无法执行，进行普通攻击
+    command("hit " + target->query("id"));
+}
+
+// 实现 dirname 功能的函数
+string get_dirname(string path)
+{
+    int i;
+
+    i = strsrch(path, '/', -1); // 从末尾查找最后一个 '/'
+    if (i == -1)
+        return path; // 如果没有找到 '/', 返回原路径
+    return path[0..i-1]; // 返回从开头到最后一个 '/' 之前的部分
+}
+
+// 实现数组乱序的函数
+string *shuffle_array(string *arr)
+{
+    int i, j, size;
+    string temp;
+
+    size = sizeof(arr);
+    for (i = size - 1; i > 0; i--)
+    {
+        j = random(i + 1);
+
+        // 交换 arr[i] 和 arr[j]
+        temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
+
+    return arr;
+}

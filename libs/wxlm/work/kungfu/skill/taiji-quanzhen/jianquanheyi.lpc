@@ -1,0 +1,226 @@
+// jianquanheyi.c 剑拳合一
+// 先天无极决武器适应性攻击绝技
+
+inherit F_SSERVER;
+
+/**
+ * @brief 返回绝技名称
+ * @return string 绝技名称
+ */
+string query_name() { return "剑拳合一"; }
+
+/**
+ * @brief 技能类型
+ * @return string* 适用武器类型数组
+ */
+string *pfm_type() { return ({ "unarmed", "sword" }); }
+
+/**
+ * @brief 执行剑拳合一绝技
+ * @param object me 施法者
+ * @param object target 目标
+ * @return int 1表示成功，0表示失败
+ * @details 武器适应性攻击绝技，空手和持剑表现不同威力
+ */
+int perform(object me, object target)
+{
+    object weapon;
+    string msg;
+    int ap, dp, damage, wujidaoxin_lvl, jindanmiyao_lvl;
+    int skill_level, neili_cost, is_sword;
+
+    if (!target) target = offensive_target(me);
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail("剑拳合一只能对战斗中的对手使用。\n");
+
+    if ((int)me->query_skill("taiji-quanzhen", 1) < 150)
+        return notify_fail("你的先天无极决不够娴熟，不能使用剑拳合一。\n");
+
+    if ((int)me->query_skill("force", 1) < 150)
+        return notify_fail("你的内功修为不够，无法运用剑拳合一的奥妙。\n");
+
+    if ((int)me->query("neili") < 300)
+        return notify_fail("你现在内力不够，无法使用剑拳合一。\n");
+
+    if (!living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    // 获取技能等级和意境等级
+    skill_level = me->query_skill("taiji-quanzhen", 1);
+    wujidaoxin_lvl = COMBAT_D->get_skill_aoyi_level(me, "无极道心");
+    jindanmiyao_lvl = COMBAT_D->get_skill_aoyi_level(me, "金丹秘要");
+
+    weapon = me->query_temp("weapon");
+    is_sword = (weapon && weapon->query("skill_type") == "sword");
+
+    neili_cost = 300;
+
+    // 意境影响内力消耗
+    if (wujidaoxin_lvl > 0)
+    {
+        neili_cost = neili_cost * (10 - wujidaoxin_lvl / 4) / 10;
+        if (neili_cost < 200) neili_cost = 200;
+    }
+
+    // 武器适应性表现
+    if (is_sword)
+    {
+        // 持剑状态：剑法为主
+        if (me->query_skill_mapped("sword") != "taiji-quanzhen")
+            return notify_fail("你没有激发先天无极决为剑法，无法使用剑拳合一。\n");
+
+        msg = HIM "$N" HIM "剑拳合一，手中$w" HIM "剑光大盛，同时拳意纵横，剑法与拳法完美融合，" +
+              "一招「剑拳合一」威力倍增，剑气拳劲同时向$n" HIM "袭去！" NOR "\n";
+    }
+    else
+    {
+        // 空手状态：拳脚为主
+        if (me->query_skill_mapped("unarmed") != "taiji-quanzhen")
+            return notify_fail("你没有激发先天无极决为拳脚，无法使用剑拳合一。\n");
+
+        msg = HIM "$N" HIM "剑拳合一，虽然空手，但拳中含剑意，剑意中蕴拳劲，" +
+              "一招「剑拳合一」拳法如剑，无形剑气与有形拳劲齐出，攻向$n！" NOR "\n";
+    }
+
+    message_combatd(msg, me, target);
+
+    // 计算攻防数值
+    if (is_sword)
+    {
+        ap = me->query_skill("sword") + me->query_skill("taiji-quanzhen", 1);
+        ap += me->query_skill("unarmed") / 2; // 空手加成剑法
+    }
+    else
+    {
+        ap = me->query_skill("unarmed") + me->query_skill("taiji-quanzhen", 1);
+        ap += me->query_skill("sword") / 3; // 剑法加成拳脚
+    }
+
+    ap += me->query_skill("force");
+
+    dp = target->query_skill("parry") + target->query_skill("force");
+
+    // 意境加成攻击力
+    if (wujidaoxin_lvl > 0)
+    {
+        ap += wujidaoxin_lvl * skill_level / 12;
+    }
+    if (jindanmiyao_lvl > 0)
+    {
+        ap += jindanmiyao_lvl * skill_level / 15;
+    }
+
+    me->add("neili", -neili_cost);
+
+    // 命中判定
+    if (COMBAT_D->hit_determination(me, target, ap, dp))
+    {
+        // 命中成功
+        if (is_sword)
+        {
+            // 持剑威力更强
+            damage = ap * 2 + random(ap) + skill_level;
+            msg = HIR "$n" HIR "被$N" HIR "剑拳合一的攻势命中，剑气拳劲交错，威力惊人！" NOR "\n";
+        }
+        else
+        {
+            // 空手威力稍弱但更灵活
+            damage = ap * 3 / 2 + random(ap * 2 / 3) + skill_level;
+            msg = HIY "$n" HIY "被$N" HIY "剑拳合一的攻势命中，拳劲如剑，变化莫测！" NOR "\n";
+        }
+
+        message_combatd(msg, me, target);
+
+        // 意境加成伤害
+        if (wujidaoxin_lvl > 0)
+        {
+            damage += wujidaoxin_lvl * skill_level / 8;
+        }
+        if (jindanmiyao_lvl > 0)
+        {
+            damage += jindanmiyao_lvl * skill_level / 10;
+        }
+
+        // 造成伤害
+        COMBAT_D->real_damage(me, target, damage);
+
+        // 内力伤害
+        target->add("neili", -damage / 2);
+
+        // 忙乱效果
+        if (!target->is_busy())
+        {
+            if (is_sword)
+                target->start_busy(2); // 持剑忙乱更久
+            else
+                target->start_busy(1); // 空手忙乱较短
+        }
+
+        // 意境特殊效果
+        if (wujidaoxin_lvl > 3)
+        {
+            message_combatd(HIW "$N" HIW "无极道心运转，一股玄妙真意让$n" HIW "心神恍惚！" NOR "\n", me, target);
+            target->receive_damage("jing", wujidaoxin_lvl * 25, me);
+            if (wujidaoxin_lvl > 5)
+            {
+                target->add("neili", -wujidaoxin_lvl * 40);
+            }
+        }
+
+        if (jindanmiyao_lvl > 3)
+        {
+            message_combatd(HIB "$N" HIB "金丹秘要显威，真气如洪流，让$n" HIB "内府震荡！" NOR "\n", me, target);
+            COMBAT_D->real_damage(me, target, jindanmiyao_lvl * 20);
+            if (jindanmiyao_lvl > 5 && !target->is_busy())
+            {
+                target->start_busy(1);
+            }
+        }
+
+        me->start_busy(1);
+
+        if (is_sword)
+        {
+            tell_object(me, HIG "你成功使用了剑拳合一，剑法与拳法的融合威力惊人！" NOR "\n");
+        }
+        else
+        {
+            tell_object(me, HIG "你成功使用了剑拳合一，以拳代剑，无形剑气纵横！" NOR "\n");
+        }
+
+        // 武器适应性的额外攻击机会
+        if (random(3) == 0)
+        {
+            if (is_sword)
+            {
+                message_combatd(HIC "$N" HIC "剑势未尽，拳意再起，连绵不绝！" NOR "\n", me, target);
+                COMBAT_D->do_attack(me, target, weapon, 0);
+            }
+            else
+            {
+                message_combatd(HIC "$N" HIC "拳势如剑，变化无穷，攻势不断！" NOR "\n", me, target);
+                COMBAT_D->do_attack(me, target, 0, 0);
+            }
+        }
+    }
+    else
+    {
+        // 攻击失败
+        if (is_sword)
+        {
+            msg = CYN "$n" CYN "看破了$N" CYN "剑拳合一的攻势，身法灵动，避开了剑气拳劲！" NOR "\n";
+        }
+        else
+        {
+            msg = CYN "$n" CYN "看破了$N" CYN "剑拳合一的攻势，巧妙闪避，让拳劲落空！" NOR "\n";
+        }
+
+        message_combatd(msg, me, target);
+        me->start_busy(2);
+        me->add("neili", -100);
+        tell_object(me, HIR "你的剑拳合一被对方看破，攻势落空！" NOR "\n");
+    }
+
+    return 1;
+}

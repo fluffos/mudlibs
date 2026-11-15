@@ -1,0 +1,162 @@
+// xiaoao-jianghu.c 笑傲江湖曲
+
+
+
+inherit SKILL;
+
+string type() { return "knowledge"; }
+
+int valid_enable(string usage) { return usage == "chuixiao-jifa" ||
+					usage == "tanqin-jifa"; }
+
+int valid_learn(object me)
+{
+	if (me->query_skill("tanqin-jifa", 1) < 50 &&
+	    me->query_skill("chuixiao-jifa", 1) < 50)
+		return notify_fail("你的吹萧和弹琴的技法水平都太差，还是先练好再说吧！\n");
+
+	if (me->query_skill("tanqin-jifa", 1) < me->query_skill("qingxin-pushan", 1) &&
+	    me->query_skill("cuhixiao-jifa", 1) < me->query_skill("qingxin-pushan", 1))
+		return notify_fail("在掌握更娴熟的吹萧技法或弹琴技法之前，你无法领会更精妙的笑傲江湖曲。\n");
+
+	return 1;
+}
+
+int practice_skill(object me)
+{
+	object ob;
+
+	if (! objectp(ob = me->query_temp("handing")) ||
+	    ! ob->valid_as_qin() &&
+	    ! ob->valid_as_xiao())
+		return notify_fail("你手上即没有箫，也没有琴，怎么练习？\n");
+
+	if ((int)me->query("jing") < 100)
+		return notify_fail("你的精神不够好，没法练习了。\n");
+
+	if ((int)me->query("qi") < 50)
+		return notify_fail("你现在实在是太累了，练不动了。\n");
+
+	me->receive_damage("jing", 60);
+	me->receive_damage("qi", 40);
+
+	return 1;
+}
+
+void do_effect(object me)
+{
+	object *obs;
+	object ob;
+	string type;
+	string other;
+	int amount;
+	int lvl;
+	int i;
+
+	lvl = me->query_skill("xiaoao-jianghu", 1);
+
+	if (lvl < 100)
+		return;
+
+	if (previous_object() == find_object(SKILL_D("chuixiao-jifa")))
+	{
+		type = "xajh/xiao";
+		other = "xajh/qin";
+	} else
+	if (previous_object() == find_object(SKILL_D("tanqin-jifa")))
+	{
+		type = "xajh/qin";
+		other = "xajh/qin";
+	} else
+		return;
+
+	// special effort
+	obs = all_inventory(environment(me));
+	for (i = 0; i < sizeof(obs); i++)
+	{
+		ob = obs[i];
+		if (ob == me || ! ob->is_character() || ! living(ob))
+			continue;
+
+		if (ob->query_temp("xajh/powerup") ||
+		    time() - ob->query_temp(other) > 30 ||
+		    ! stringp(ob->query_temp("xajh/player")) ||
+		    ob->query_temp("xajh/player") == me->query("id"))
+		{
+			ob->set_temp(type, time());
+			ob->set_temp("xajh/player", me->query("id"));
+			ob->set_temp("xajh/player_name", me->name());
+			message("visoin", HIG "你听了" + me->name() +
+				HIG "的曲子，觉得非常的慷慨豪迈。"NOR"\n", ob);
+		} else
+		{
+			// 双人合奏
+			amount = lvl;
+			if (amount > ob->query_skill("force"))
+				amount = ob->query_skill("force");
+			amount /= 6;
+			ob->delete_temp(other);
+			ob->delete_temp(type);
+			ob->add_temp("apply/attack", amount);
+			ob->add_temp("apply/dodge", amount);
+			ob->set_temp("xajh/powerup", 1);
+		
+			call_out("remove_effect", lvl / 2, ob, amount);
+			message("vision", HIG "你听了" + me->name() +
+				HIG "和" + ob->query_temp("xajh/player_name") +
+				"合奏的笑傲江湖，只觉得心潮澎湃，充满了力量。"NOR"\n", ob);
+			ob->delete_temp("xajh/player");
+			ob->delete_temp("xajh/player_name");
+		}
+	}
+}
+
+void remove_effect(object me, int amount)
+{
+	if (! objectp(me))
+		return;
+	if ((int)me->query_temp("xajh/powerup"))
+	{
+		me->add_temp("apply/attack", -amount);
+		me->add_temp("apply/dodge", -amount);
+		me->delete_temp("xajh/powerup");
+		tell_object(me, "你的心情渐渐的平息下来。\n");
+	}
+}
+
+string query_description()
+{
+	string msg;
+
+	msg = HIY "【笑傲江湖曲】" ZJBR NOR;
+	msg += "一门结合乐理与内功的特殊技艺，可通过弹琴或吹箫施展，曲调激昂，可影响听者心境。" ZJBR ZJBR; // 基本介绍
+
+	msg += HIY "〖学习要求〗" ZJBR NOR; // valid_learn
+	msg += "  " HIC "基本弹琴技法" NOR " 或 " HIC "基本吹箫技法" NOR " 等级不低于 " HIY "50" NOR " 级。" ZJBR;
+	msg += "  " HIC "基本弹琴技法" NOR " 或 " HIC "基本吹箫技法" NOR " 中较高者等级，不得低于当前 " HIC "笑傲江湖曲" NOR " 等级。" ZJBR ZJBR;
+
+	msg += HIY "〖激发类型〗" ZJBR NOR; // valid_enable
+	msg += "  可激发为 " HIC "基本弹琴技法 (tanqin-jifa)" NOR "。" ZJBR;
+	msg += "  可激发为 " HIC "基本吹箫技法 (chuixiao-jifa)" NOR "。" ZJBR ZJBR;
+
+	msg += HIY "〖练习要求〗" ZJBR NOR; // practice_skill
+	msg += "  需手持琴或箫类物品。" ZJBR;
+	msg += "  " HIC "精力 (jing)" NOR " 不低于 " HIY "100" NOR " 点。" ZJBR;
+	msg += "  " HIC "气血 (qi)" NOR " 不低于 " HIY "50" NOR " 点。" ZJBR;
+	msg += "  每次练习消耗 " HIC "精力 (jing)" HIR " 60" NOR " 点，" HIC "气血 (qi)" HIR " 40" NOR " 点。" ZJBR ZJBR;
+
+	msg += HIY "〖攻防特效/被动效果〗" ZJBR NOR; // do_effect
+	msg += "  演奏效果（需 " HIC "笑傲江湖曲" NOR " 等级达到 " HIY "100" NOR " 级）：" ZJBR;
+	msg += "    对周围环境内的其他角色施加影响：" ZJBR;
+	msg += "      1. " HIC "单人演奏" NOR "：为听者添加一个短暂的标记（箫或琴），使其感到慷慨豪迈。" ZJBR;
+	msg += "      2. " HIC "双人合奏" NOR "：若一名角色在 " HIY "30" NOR " 秒内，先后接收到由 " HIR "不同玩家" NOR " 演奏的箫和琴标记，则触发合奏效果：" ZJBR;
+	msg += "         - 移除箫、琴标记，并获得增益状态 " HIC "(powerup)" NOR "。" ZJBR;
+	msg += "         - 提升 " HIC "后天攻击加成 (apply/attack)" NOR " 和 " HIC "后天闪避加成 (apply/dodge)" NOR "。" ZJBR;
+	msg += "         - 提升幅度：`min(演奏者笑傲江湖曲等级, 听者内功有效激发等级) / 6` 点。" ZJBR;
+	msg += "         - 效果持续时间：`演奏者笑傲江湖曲等级 / 2` 秒。" ZJBR ZJBR;
+
+	msg += HIY "〖特殊招式〗" ZJBR NOR; // perform/exert
+	msg += "  无。" ZJBR;
+
+	return msg;
+}

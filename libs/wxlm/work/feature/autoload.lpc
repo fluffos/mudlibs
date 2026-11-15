@@ -1,0 +1,167 @@
+/**
+ * @file autoload.c
+ * @author Lu dexiang
+ * @brief 物品自动加载功能模块
+ * @details 该模块负责处理玩家物品的自动保存和加载功能，确保玩家下线后再上线时物品状态得以保持
+ * @date 2023-01-01
+ */
+
+/** 存储需要自动加载的物品信息的数组 */
+string *autoload;
+
+/**
+ * @brief 清理自动加载数据
+ * @details 将autoload变量设置为0，释放内存
+ */
+void clean_up_autoload() { autoload = 0; }
+
+/**
+ * @brief 保存当前对象所有物品的自动加载信息
+ * @details 遍历当前对象的所有物品，收集支持自动加载的物品信息，
+ *          并将这些信息存储在autoload数组中，以便在下次登录时恢复
+ */
+void save_autoload()
+{
+	object *inv;
+	object *obs;
+	int i, j;
+	mixed param;
+
+	inv = all_inventory();
+	if (arrayp(obs = this_object()->query_temp("hire")))
+		inv += obs - ({ 0 });
+	autoload = allocate(sizeof(inv));
+	for (i = 0, j = 0; i < sizeof(inv); i++)
+	{
+		if( !(param = inv[i]->query_autoload()) ) continue; 
+		autoload[j] = base_name(inv[i]);
+		if (stringp(param)) autoload[j] += ":" + param;
+		j++;
+	}
+	autoload = autoload[0..j - 1];
+
+	//保存背包数据
+	// BEIBAO_MASTER->save_beibao_data(this_object()->query("id"));
+
+}
+
+/**
+ * @brief 恢复自动加载的物品
+ * @details 根据autoload数组中存储的信息，重新加载玩家的物品。
+ *          处理过程包括：加载物品文件、创建物品实例、移动物品到玩家身上、
+ *          调用物品的autoload方法恢复物品状态，并处理可能出现的各种错误情况
+ */
+void restore_autoload()
+{
+ int i;
+	object ob;
+	string file, param, err;
+	int has_dropped;
+
+	if (! pointerp(autoload)) return;
+
+	has_dropped = 0;
+	for (i = 0; i < sizeof(autoload); i++)
+	{
+		if (! autoload[i] || autoload[i] == "")
+			continue;
+
+		if (sscanf(autoload[i], "%s:%s", file, param) != 2)
+		{
+			file = autoload[i];
+			param = 0;
+		}
+		if (file_size(file + ".lpc") > 0)
+		{
+			//特殊类型不强制调用错误
+			if (!call_other("/clone/baoshi/base_handle", "is_gem_obj", file))
+				err = catch(call_other(file, "???"));
+
+			ob = load_object(file);
+		} else
+		{
+			err = 0;
+			ob = 0;
+		}
+		if (ob && ! ob->is_no_clone()) ob = new(file);
+		if (err || ! ob || ob->is_no_clone() && environment(ob))
+		{
+			string temp;
+			if (file && sscanf(file, "/data/%*s/%s", temp))
+			{
+				if (has_dropped) continue;
+				has_dropped++;
+				write("你发现有些东西已经没有用了，随手就扔掉了。\n");
+			} else
+			{
+				write("你觉得似乎失落了什么重要的东西，最好通知一下巫师。\n");
+				// write(sprintf("错误信息：%O, %O, %O\n", err, ob, file));
+				write(sprintf("错误信息：%O\n", err));
+				write(sprintf("ob: %O\n", ob));
+				write(sprintf("file: %O\n", file));
+			}
+			log_file("autoload", sprintf("Fail to autoload %s of %s, error %s(%s)\n",
+				 file, this_object()->query("name"),
+				 this_object()->query("id"),
+				 ob ? "The no clone object has existed" : err));
+			continue;
+		}
+		if (ob->is_no_clone() && ob->is_not_belong_me(this_object()))
+		{
+			if (! environment(ob)) destruct(ob);
+			continue;
+		}
+
+		export_uid(ob);
+		if (! ob->is_character())
+		{
+			mixed result;
+				//获取错误信息，并且不暂停线程，避免虚空情况
+			result =  catch {
+				ob->move(this_object(), 1);
+			};
+
+			if (result)
+			{
+				log_file("autoload", sprintf("Fail to autoload-move %s of %s, error %s(%s)\n",
+					 file, this_object()->query("name"),
+					 this_object()->query("id"),
+					 result));
+				continue;
+			}
+		}
+
+		// err = ob->autoload(param, this_object())
+		// 
+		err = catch(ob->autoload(param, this_object()));
+		
+		if (err)
+		{
+			log_file("autoload", sprintf("Fail to autoload-autoload function %s of %s, error %s(%s)\n",
+				 file, this_object()->query("name"),
+				 this_object()->query("id"),
+				 err));
+		}
+	}
+	clean_up_autoload();		// To save memory.
+}
+
+/**
+ * @brief 获取自动加载信息
+ * @return string* 返回存储自动加载信息的数组
+ * @details 该函数用于外部访问当前对象的自动加载信息
+ */
+string *query_autoload_info()
+{
+	return autoload;
+}
+
+/**
+ * @brief 设置自动加载信息
+ * @param string* data 包含自动加载信息的字符串数组
+ * @details 该函数允许外部代码设置当前对象的自动加载信息
+ */
+void set_autoload_info(string *data)
+{
+	autoload = data;
+}

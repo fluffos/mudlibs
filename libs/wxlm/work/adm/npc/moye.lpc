@@ -1,0 +1,369 @@
+inherit NPC;
+inherit F_NOCLONE;
+
+#define ITEM_TYPE       0
+#define ITEM_STYPE      1
+#define ITEM_UNIT       2
+#define ITEM_WEIGHT     3
+#define ITEM_POINT      4
+#define ITEM_PROP       5
+
+#include "/adm/npc/item_template/item_type.h"
+
+int ask_me();
+int no_money();
+
+void create()
+{
+    set_name("莫邪", ({ "mo ye", "moye", "mo" }));
+    set("long", "她身姿婀娜，容貌清丽绝伦，一双妙目顾盼生辉，举手投足间自有一番仙气飘逸。她便是那铸剑大师干将之妻，与夫君一同铸就了无数名震江湖的神兵利器。\n");
+    set("nickname", HIY "铸剑仙子" NOR);
+    set("gender", "女性");
+    set("attitude", "friendly");
+    set("age", 1525);
+    set("shen_type", 0);
+    set("str", 1000);
+    set("icon", "05005");
+    set("inquiry", ([
+        "打造" : (: ask_me :),
+        "钱不够" : (: no_money :),
+        "退货" : "此事还需与内子商议，你且将物件交予干将，由他定夺。",
+        "原料" : "铸造神兵利器，原料乃是关键。欲铸神兵，需有玄铁寒冰之类的奇珍异宝。若要打造护具，则需天蚕丝、龙筋等稀世珍材。这些原料皆为天地灵物，可遇而不可求也！\n",
+        "价格" : "阁下且将原料呈上(show)，待我细细查看，自有定论。",
+    ]));
+    setup();
+    set("startroom", "/d/item/xiaowu");
+    check_clone();
+    if (!this_object()) return;
+    carry_object("/clone/misc/cloth")->wear();
+}
+
+void init()
+{
+    object me = this_player();
+    if (!objectp(me) || !interactive(me)) return;
+    add_action("do_show", "show");
+    add_action("do_answer", "answer");
+    if (me->query_temp("item/status") == "item_gived")
+    {
+        remove_call_out("greeting2");
+        call_out("greeting2", 1, me);
+    }
+    else
+    {
+        remove_call_out("greeting");
+        call_out("greeting", 1, me);
+    }
+}
+
+void greeting(object me)
+{
+    if (objectp(me) && environment(me) == environment())
+    {
+        message_vision("$N莲步轻移，对$n盈盈一笑道：这位" + RANK_D->query_respect(me) + "，可是要打造神兵利器？\n", this_object(), me);
+    }
+}
+
+void greeting2(object me)
+{
+    if (objectp(me) && environment(me) == environment())
+    {
+        message_vision("$N对$n轻声说道：只需付清银两，便可着手铸造了。\n", this_object(), me);
+    }
+}
+
+int do_show(string arg)
+{
+    object me = this_player();
+    object ob;
+    string msg;
+    int power_point, value;
+
+    if (!arg) return notify_fail("你欲行何事？\n");
+
+    if (!objectp(ob = present(arg, me)))
+        return notify_fail("你身上并无此物。\n");
+
+    if (!ob->query("material_attrib"))
+    {
+        message_vision("$N轻摇螓首，对$n说道：此物恐怕难以铸造成兵器。\n", this_object(), me);
+        return 1;
+    }
+
+    power_point = ob->query("power_point");
+    if (!power_point)
+    {
+        message_vision("$N仔细端详了一番$n呈上的原料，叹息道：这原料已失灵性，难成神兵。\n", this_object(), me);
+        return 1;
+    }
+
+    value = power_point * 2 + 10;
+    msg = sprintf("$N凝神观察$n手中的原料，微微颔首道：以此物铸造，需用%s两黄金。我夫妇二人向来童叟无欺，此价已是极为公道。\n若是无异议，便请将原料与银两一并交予我。\n对了，还需提醒阁下一句：若要助我夫妇提升兵器品质，需得有二百以上的内力修为。\n", chinese_number(value));
+    message_vision(msg, this_object(), me);
+
+    return 1;
+}
+
+int ask_me()
+{
+    message_vision("$N对$n说道：阁下是要打造兵器么？\n我夫妇二人精通铸造之术，无论刀、剑、锤、鞭、杖，抑或护甲，皆可为阁下量身打造。\n还请先将原料呈上，待我估算价值。一手交钱，一手交货，童叟无欺！\n", this_object(), this_player());
+    return 1;
+}
+
+int no_money()
+{
+    object me = this_player();
+    object ob;
+
+    if (me->query_temp("item/status") == "item_gived")
+    {
+        message_vision("$N轻叹一声，对$n道：既是囊中羞涩，改日再来不迟。\n", this_object(), me);
+        if (objectp(ob = query_temp("item/accept")))
+        {
+            message_vision("$N将" + ob->name() + "轻轻交还给$n。\n", this_object(), me);
+            if (!ob->move(me)) ob->move(environment());
+        }
+        delete_temp("item");
+        me->delete_temp("item");
+        return 1;
+    }
+
+    message_vision("$N柳眉微蹙，对$n说道：这位" + RANK_D->query_respect(me) + "，银钱乃俗物，但铸剑却需耗费不少珍材，还望见谅。\n", this_object(), me);
+    return 1;
+}
+
+int accept_object(object me, object ob)
+{
+    string status = query_temp("item/status");
+    int val;
+
+    if (status == "look_working")
+    {
+        message_vision("$N轻声对$n道：莫要打扰，干将正在专心铸造。\n", this_object(), me);
+        return 0;
+    }
+
+    // 内力不够200
+    if (me->query("max_neili") < 200)
+    {
+        message_vision("$N对$n婉言道：阁下内力修为尚浅，恐难助我夫妇提升兵器品质。需得二百以上内力方可。\n", this_object(), me);
+        return 0;
+    }
+
+    if (status == "waiting")
+    {
+        if (query_temp("item/player_id") == me->query("id"))
+        {
+            command("say 还请与干将详谈，莫要分心。");
+            return 0;
+        }
+        message_vision("$N对$n轻声道：干将正在与客人商议要事，还请稍候。\n", this_object(), me);
+        return 0;
+    }
+
+    if (status == "accept")
+    {
+        if (query_temp("item/player_id") != me->query("id"))
+        {
+            command("say 我正在与这位客人商议，还请稍候。");
+            return 0;
+        }
+        if (!ob->query("money_id"))
+        {
+            command("say 还请先付银两，若是囊中羞涩，但说无妨。");
+            return 0;
+        }
+    }
+
+    if (ob->query("material_attrib") && ob->query("power_point"))
+    {
+        val = ob->query("power_point") * 2 + 10;
+        message_vision("$N对$n说道：好，以此原料铸造需用" + chinese_number(val) + "两黄金，还请付银。\n", this_object(), me);
+        val *= 10000;
+        if (wizardp(me))
+        {
+            message_vision("$N见是巫师驾到，含笑道：原来是仙长亲临，区区银两，不足挂齿。\n", this_object(), me);
+            val = 1;
+        }
+        ob->set("item/value", val);
+        me->set_temp("item/status", "item_gived");
+        me->set_temp("item/value", val);
+        set_temp("item/status", "accept");
+        set_temp("item/player_id", me->query("id"));
+        set_temp("item/accept", ob);
+        remove_call_out("time_out");
+        call_out("time_out", 30, me, ob);
+        return 1;
+    }
+
+    if (ob->query("money_id"))
+    {
+        object origin;
+        mixed p;
+        string *types;
+        string str;
+        if (me->query_temp("item/status") == "answer_type")
+        {
+            message_vision("$N摇头道：还请先告知要打造何种兵器。\n", this_object(), me);
+            return 0;
+        }
+
+        if (me->query_temp("item/status") != "item_gived")
+        {
+            message_vision("$N婉拒了$n递来的" + ob->name() + "，道：无功不受禄。\n", this_object(), me);
+            return 0;
+        }
+
+        if (ob->value() < me->query_temp("item/value"))
+        {
+            message_vision("$N对$n歉然道：铸剑千年，从未短过分毫银两，还望见谅。\n", this_object(), me);
+            return 0;
+        }
+
+        origin = query_temp("item/accept");
+        if ((p = origin->query("can_make")) == "all")
+        {
+            types = keys(item_type);
+        }
+        else if (arrayp(p))
+        {
+            types = p;
+        }
+        else if (stringp(p))
+        {
+            types = ({ p });
+        }
+
+        p = origin->query("not_make");
+        if (arrayp(p))
+        {
+            types -= p;
+        }
+        else if (stringp(p))
+        {
+            types -= ({ p });
+        }
+
+        set_temp("item/types", types);
+        set_temp("item/money", ob);
+        ob->move(this_object());
+        str = ZJOBLONG"莫邪轻声问道：阁下想打造何种兵器？\n"ZJOBACTS2+ZJMENUF(4,4,9,30);
+
+        for (int i = 0; i < sizeof(types); i++)
+        {
+            str += types[i] + ":answer " + types[i] + ZJSEP;
+        }
+        write(str + "\n");
+        me->set_temp("item/status", "answer_type");
+        return -1;
+    }
+
+    message_vision("莫邪柳眉微蹙，对$N说道：这些物件于铸剑无用，还请收回。\n", me);
+    return 0;
+}
+
+int do_answer(string arg)
+{
+    object me = this_player();
+    object ganjiang, money, ob;
+
+    if (me->query_temp("item/status") != "answer_type")
+        return 0;
+
+    if (!arg)
+        return notify_fail("你要回答什么？\n");
+
+    message_vision("$n对$N道：便请为我打造" + arg + "吧！\n", this_object(), me);
+
+    if (member_array(arg, query_temp("item/types")) == -1 || undefinedp(item_type[arg]))
+    {
+        message_vision("$N轻掩朱唇，打了个小小的喷嚏，略显尴尬地看着$n。\n", this_object(), me);
+        return 1;
+    }
+
+    if (!objectp(ganjiang = present("gan jiang", environment(this_object()))))
+    {
+        message_vision("$N四下张望，不禁轻叹道：内子不在，这便难以动手了...还请改日再来。\n", this_object());
+        if (ob = query_temp("item/accept"))
+        {
+            message_vision("$N将" + ob->name() + "轻轻交还给$n。\n", this_object(), me);
+            if (!ob->move(me)) ob->move(environment());
+        }
+        delete_temp("item");
+        me->delete_temp("item");
+        return 0;
+    }
+
+    if (objectp(money = query_temp("item/money")))
+        destruct(money);
+
+    delete_temp("item/money");
+    set_temp("item/status", "look_working");
+    me->set_temp("item/status", "waiting");
+    ob = query_temp("item/accept");
+    ob->set("item/ctype", arg);
+    ob->set("item/type", item_type[arg][ITEM_TYPE]);
+    ob->set("item/stype", item_type[arg][ITEM_STYPE]);
+    ob->set("item/unit", item_type[arg][ITEM_UNIT]);
+    ob->set("item/point", ob->query("power_point") * item_type[arg][ITEM_POINT] / 100);
+    ob->set("item/owner", me);
+    ob->set("item/owner_id", me->query("id"));
+    ob->set("item/owner_name", me->name(1));
+    ob->set("item/wscale", item_type[arg][ITEM_WEIGHT]);
+    ob->set("item/prop", item_type[arg][ITEM_PROP]);
+    message_vision("$N将" + ob->name() + "轻轻交给了$n。\n", this_object(), ganjiang);
+    if (!ob->move(ganjiang))
+        error("Can move the object to ganjiang.");
+    remove_call_out("time_out");
+
+    ganjiang->accept_object(this_object(), ob);
+    return 1;
+}
+
+void handle_return(object me, object item, string msg)
+{
+    if (objectp(me))
+    {
+        tell_object(me, msg);
+        item->move(me);
+    }
+    else if (environment(item) == this_object())
+    {
+        command("drop " + item->query("id"));
+    }
+}
+
+void time_out(object me, object ob)
+{
+    object money = query_temp("item/money");
+
+    if (!objectp(me))
+    {
+        me = find_player(query_temp("item/player_id"));
+    }
+
+    if (!objectp(me) || environment(me) != environment())
+    {
+        command("say 咦？方才那位客人何故匆匆离去？\n");
+    }
+    else
+    {
+        command("say 铸剑乃是大事，还请阁下细细思量，想好再来。");
+    }
+
+    delete_temp("item");
+    if (objectp(me))
+    {
+        me->delete_temp("item");
+    }
+
+    if (money)
+    {
+        handle_return(me, money, "莫邪将你的银两轻轻退还。\n");
+    }
+
+    if (ob)
+    {
+        handle_return(me, ob, "莫邪将你的" + ob->query("name") + "轻轻交还。\n");
+    }
+}

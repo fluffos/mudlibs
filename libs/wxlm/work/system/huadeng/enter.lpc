@@ -1,0 +1,112 @@
+/**
+ * @file enter.c
+ * @author Lu dexiang
+ * @brief 花灯寻梦活动入口
+ * @version 1.0
+ * @date 2024-02-11
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
+#include <room.h>
+
+inherit ROOM;
+
+void create()
+{
+    set("short", HIW"【花灯寻梦】"NOR"入口");
+    set("long", @LONG
+这里是花灯寻梦活动的入口。每天晚上七点到十点，每整点开启一次活动，每次持续45分钟。
+活动中将会随机传送到花灯迷境中的某个房间，你可能会遇到花灯傀儡、灯谜童子等NPC。
+记得多留意周围的环境，说不定会有意想不到的收获。
+
+    活动时间：19:00-22:00
+    活动规则：
+    1. 每天免费进入3次
+    2. 可使用200元宝购买额外次数
+    3. 击杀花灯傀儡、解答灯谜都有丰厚奖励
+    
+LONG);
+    
+    set("no_fight", 1);
+    set("no_magic", 1);
+    set("item_desc", ([
+        "法阵" : popup_comb("这是一个法阵,可以传送到花灯迷境中。","进入:enter"),
+        "购买次数" : popup_comb("购买额外次数,每次消耗200元宝。","购买:buy"),
+    ]));
+    set("exits", ([
+        "south" : "/d/city/jiaowai8",
+    ]));
+    setup();
+}
+
+void init()
+{
+    add_action("do_enter", "enter");
+    add_action("do_enter", "进入");
+    add_action("buy_enter_number", "buy");
+}
+
+int do_enter(string arg)
+{
+    object me = this_player();
+    object room;
+    int free_times;
+    
+    if(!"/system/huadeng/daemons/huadengd"->query_activity_status()) {
+        return notify_fail("活动还未开启，开放时间为每天19:00-22:00。\n");
+    }
+    
+    //检查是否是第二天
+    if(!is_same_day(time(), me->query("huadeng/last_enter_time"))) {
+        me->set("huadeng/free_times", 3);
+        me->set("huadeng/extra_times", 0);
+        me->set("huadeng/last_enter_time", time());
+        me->delete("huadeng/riddle");
+    }
+
+    free_times = me->query("huadeng/free_times");
+    if(free_times <= 0 && me->query("huadeng/extra_times") <= 0) {
+        return notify_fail("你今天的进入次数已用完，可以购买额外次数。\n");
+    }
+    
+    // 获取随机房间
+    room = "/system/huadeng/daemons/huadengd"->get_random_room();
+    if(!room) {
+        return notify_fail("无法找到可用的房间。\n");
+    }
+    
+    // 扣除次数
+    if(free_times > 0) {
+        me->add("huadeng/free_times", -1);
+    } else {
+        me->add("huadeng/extra_times", -1);
+    }
+    
+    message_vision("$N深吸一口气，踏入了花灯迷境之中。\n", me);
+    me->move(room);
+    me->start_busy(1); // 进入房间后忙乱1秒
+    message("vision", me->name() + "突然出现在房间中。\n",
+            environment(me), ({ me }));
+
+    // 更新最后进入时间
+    me->set("huadeng/last_enter_time", time());
+    
+    return 1;
+} 
+
+// 购买额外次数
+int buy_enter_number(string arg)
+{
+    object me = this_player();
+
+    if (me->query("yuanbao") < 200) {
+        return notify_fail("你的元宝不足200，无法购买额外次数。\n");
+    }
+
+    me->add("huadeng/extra_times", 1);
+    me->add("yuanbao", -200);
+    tell_object(me, "你花费200元宝购买了1次额外进入次数。\n");
+    return 1;
+} 

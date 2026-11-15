@@ -1,0 +1,344 @@
+/**
+ * @brief 执行类函数接口控制器
+ * @details 提供HTTP接口用于执行指定.c文件（类）中的函数，仅供测试使用
+ *          安全限制：仅允许127.0.0.1访问
+ */
+
+#define RequestType(f_name,http_type) string f_name = http_type;
+
+inherit "/external_system_package/http/base.lpc";
+
+// 函数原型声明
+string *get_limit_ip_list();
+mapping execute(string json_data);
+int is_simple_type(mixed value);
+string get_type_info(mixed value);
+mixed process_argument(mixed arg);
+mixed process_arguments(mixed *args);
+
+/**
+ * @brief 返回IP白名单列表
+ * @return string* 允许访问的IP地址数组
+ * @details 限制仅本地访问，提高安全性
+ */
+string *get_limit_ip_list()
+{
+    return ({"127.0.0.1"});
+}
+
+/**
+ * @brief 执行指定类文件中的函数
+ * @param string json_data JSON格式的参数数据
+ * @return mapping 执行结果，包含状态和数据
+ * @details POST方法，接收JSON参数：
+ *          {
+ *            "file_path": "/adm/daemons/updated",
+ *            "function_name": "check_user",
+ *            "args": ["arg1", 123, "arg3"]
+ *          }
+ */
+RequestType(execute, "POST")
+mapping execute(string json_data)
+{
+    mixed data;
+    string file_path, function_name;
+    mixed *args;
+    object target_obj;
+    mixed result;
+
+    // 解析JSON数据
+    data = json_decode(json_data);
+
+    if (!mapp(data))
+    {
+        return ([
+            "success": 0,
+            "error": "JSON格式错误，无法解析参数"
+        ]);
+    }
+
+    // 获取参数
+    file_path = data["file_path"];
+    function_name = data["function_name"];
+    args = data["args"];
+
+    // 参数验证
+    if (!stringp(file_path) || file_path == "")
+    {
+        return ([
+            "success": 0,
+            "error": "file_path参数缺失或格式错误"
+        ]);
+    }
+
+    if (!stringp(function_name) || function_name == "")
+    {
+        return ([
+            "success": 0,
+            "error": "function_name参数缺失或格式错误"
+        ]);
+    }
+
+    // args可选，默认为空数组
+    if (!arrayp(args))
+    {
+        args = ({});
+    }
+
+    // 处理参数，将对象描述转换为实际对象
+    result = process_arguments(args);
+    if (!arrayp(result))
+    {
+        // 参数处理失败，process_arguments返回了错误mapping
+        return result;
+    }
+    args = result;
+
+    // 检查文件是否存在
+    if (file_size(file_path + ".lpc") <= 0)
+    {
+        return ([
+            "success": 0,
+            "error": "文件不存在: " + file_path + ".lpc"
+        ]);
+    }
+
+    // 加载对象
+    target_obj = load_object(file_path);
+    if (!objectp(target_obj))
+    {
+        return ([
+            "success": 0,
+            "error": "无法加载对象: " + file_path
+        ]);
+    }
+
+    // 检查函数是否存在
+    if (!function_exists(function_name, target_obj))
+    {
+        return ([
+            "success": 0,
+            "error": "函数不存在: " + function_name + " in " + file_path
+        ]);
+    }
+
+    // 执行函数，使用数组延展符传参
+    result = call_other(target_obj, function_name, args...);
+
+    // 检查返回值类型
+    if (!is_simple_type(result))
+    {
+        return ([
+            "success": 1,
+            "result_type": get_type_info(result),
+            "message": "函数执行成功，但返回值类型不支持JSON序列化"
+        ]);
+    }
+
+    // 返回执行结果
+    return ([
+        "success": 1,
+        "result": result,
+        "result_type": get_type_info(result)
+    ]);
+}
+
+/**
+ * @brief 检查值是否为简单类型（可JSON序列化）
+ * @param mixed value 待检查的值
+ * @return int 1表示简单类型，0表示复杂类型
+ * @details 简单类型包括：string, int, float, array, mapping
+ */
+int is_simple_type(mixed value)
+{
+    // 检查是否为基本类型
+    if (stringp(value) || intp(value) || floatp(value))
+    {
+        return 1;
+    }
+
+    // 检查是否为数组或映射
+    if (arrayp(value) || mapp(value))
+    {
+        return 1;
+    }
+
+    // 其他类型（如object）不支持
+    return 0;
+}
+
+/**
+ * @brief 获取值的类型信息
+ * @param mixed value 待获取类型的值
+ * @return string 类型名称
+ * @details 返回值的LPC类型名称
+ */
+string get_type_info(mixed value)
+{
+    if (stringp(value))
+        return "string";
+    if (intp(value))
+        return "int";
+    if (floatp(value))
+        return "float";
+    if (arrayp(value))
+        return "array";
+    if (mapp(value))
+        return "mapping";
+    if (objectp(value))
+        return "object";
+    if (functionp(value))
+        return "function";
+
+    return "unknown";
+}
+
+/**
+ * @brief 处理单个参数，将对象描述转换为实际对象
+ * @param mixed arg 参数，可以是普通值或对象描述
+ * @return mixed 处理后的参数值或对象
+ * @details 支持的对象描述格式：
+ *          - {"type": "player", "value": "player_id"} - 通过find_player获取玩家
+ *          - {"type": "object", "method": "load", "value": "/path/to/file"} - 通过load_object加载
+ *          - {"type": "object", "method": "new", "value": "/path/to/file"} - 通过new创建
+ *          - {"type": "environment", "of": {...}} - 获取对象的环境
+ */
+mixed process_argument(mixed arg)
+{
+    string type, method, value;
+    mixed of_arg;
+    object target_obj;
+
+    // 如果不是mapping，直接返回原值
+    if (!mapp(arg))
+    {
+        return arg;
+    }
+
+    // 获取type字段
+    type = arg["type"];
+    if (!stringp(type))
+    {
+        // 不是对象描述，可能是普通mapping参数
+        return arg;
+    }
+
+    // 处理玩家对象
+    if (type == "player")
+    {
+        value = arg["value"];
+        if (!stringp(value))
+        {
+            return 0;
+        }
+
+        target_obj = find_player(value);
+        if (!objectp(target_obj))
+        {
+            return 0;
+        }
+
+        return target_obj;
+    }
+
+    // 处理普通对象（文件路径）
+    if (type == "object")
+    {
+        method = arg["method"];
+        value = arg["value"];
+
+        if (!stringp(value))
+        {
+            return 0;
+        }
+
+        // 根据method选择加载方式
+        if (method == "load")
+        {
+            // 使用load_object
+            target_obj = load_object(value);
+        }
+        else if (method == "new")
+        {
+            // 使用new创建新对象
+            target_obj = new(value);
+        }
+        else
+        {
+            // 默认使用load_object
+            target_obj = load_object(value);
+        }
+
+        if (!objectp(target_obj))
+        {
+            return 0;
+        }
+
+        return target_obj;
+    }
+
+    // 处理environment对象
+    if (type == "environment")
+    {
+        of_arg = arg["of"];
+        if (!of_arg)
+        {
+            return 0;
+        }
+
+        // 递归处理of参数，获取源对象
+        target_obj = process_argument(of_arg);
+        if (!objectp(target_obj))
+        {
+            return 0;
+        }
+
+        // 获取环境对象
+        target_obj = environment(target_obj);
+        if (!objectp(target_obj))
+        {
+            return 0;
+        }
+
+        return target_obj;
+    }
+
+    // 未知类型，返回原值
+    return arg;
+}
+
+/**
+ * @brief 处理参数数组，将所有对象描述转换为实际对象
+ * @param mixed *args 参数数组
+ * @return mixed 处理后的参数数组（mixed *），或错误mapping
+ * @details 遍历参数数组，对每个参数调用process_argument进行处理
+ *          如果某个对象转换失败，返回错误mapping
+ */
+mixed process_arguments(mixed *args)
+{
+    mixed *processed_args;
+    mixed processed_arg;
+    int i;
+
+    processed_args = ({});
+
+    for (i = 0; i < sizeof(args); i++)
+    {
+        processed_arg = process_argument(args[i]);
+
+        // 检查是否转换失败（返回0表示对象获取失败）
+        // 注意：需要区分真正的0值和对象获取失败
+        if (mapp(args[i]) && args[i]["type"] && !objectp(processed_arg) && processed_arg == 0)
+        {
+            // 对象转换失败
+            return ([
+                "success": 0,
+                "error": "参数 " + (i + 1) + " 对象获取失败: " + sprintf("%O", args[i])
+            ]);
+        }
+
+        processed_args += ({ processed_arg });
+    }
+
+    return processed_args;
+}

@@ -1,0 +1,550 @@
+/**
+ * @file wusheng_master.c
+ * @author AI Assistant  
+ * @brief 武圣系统主控文件 - 武圣之躯模块
+ * @version 1.0
+ * @date 2024
+ */
+
+void apply_wuzang_bonus(object me, string organ, int level);
+
+// 五脏对应的属性加成配置
+mapping wuzang_config = ([
+    "heart": ([
+        "name": "心脏",
+        "desc": "生命之源，强心固本，提升生命力",
+        "main_bonus": ([
+            "max_qi": ({ 100, 200, 300, 400 }),        // 初炼期每级100，小成期每级200...
+            "qi_recover": ({ 4, 6, 8, 10 })           // 气血恢复速度
+        ]),
+        "sub_bonus": ([
+            "force_level": ({ 1, 2, 3, 4 })           // 内功等级
+        ]),
+        "material": "xuecanguo", // 血参果
+        "color": RED
+    ]),
+    "liver": ([
+        "name": "肝脏", 
+        "desc": "力量之源，调肝理气，增强内力储备",
+        "main_bonus": ([
+            "max_neili": ({ 50, 100, 150, 200 }),     // 内力极限
+            "neili_recover": ({ 2, 4, 6, 8 })         // 内力恢复速度
+        ]),
+        "sub_bonus": ([
+            "parry_level": ({ 1, 2, 3, 4 })           // 招架等级
+        ]),
+        "material": "longgan", // 龙肝草
+        "color": GRN
+    ]),
+    "spleen": ([
+        "name": "脾脏",
+        "desc": "根基之源，健脾益胃，夯实根基", 
+        "main_bonus": ([
+            "max_jingli": ({ 50, 100, 150, 200 }),    // 精力极限
+            "int_bonus": ({ 2, 2, 2, 2 })             // 每10级提升2点悟性
+        ]),
+        "sub_bonus": ([
+            "force_level": ({ 1, 2, 3, 4 })           // 内功等级
+        ]),
+        "material": "dipi", // 地脾黄
+        "color": YEL
+    ]),
+    "lung": ([
+        "name": "肺脏",
+        "desc": "灵动之源，养肺纳气，提升身法",
+        "main_bonus": ([
+            "dodge_level": ({ 1, 2, 3, 4 })           // 轻功等级
+        ]),
+        "sub_bonus": ([
+            "dex_bonus": ({ 2, 2, 2, 2 })             // 每10级提升2点身法
+        ]),
+        "material": "tianfei", // 天肺莲
+        "color": WHT
+    ]),
+    "kidney": ([
+        "name": "肾脏",
+        "desc": "潜能之源，补肾固元，激发潜能",
+        "main_bonus": ([
+            "con_bonus": ({ 2, 2, 2, 2 })             // 每10级提升2点根骨
+        ]),
+        "sub_bonus": ([
+            "crit_damage": ({ 2, 2, 2, 2 })           // 每10级提升2%暴击伤害
+        ]),
+        "material": "xianshen", // 仙肾石
+        "color": BLU
+    ])
+]);
+
+// 炼体等级配置
+mapping level_config = ([
+    "初炼期": ([
+        "min_level": 1,
+        "max_level": 20,
+        "desc": "初步强化五脏",
+        "material_base": 1,
+        "exp_base": 10000,
+        "dan_type": "chuji",
+        "stage_index": 0
+    ]),
+    "小成期": ([
+        "min_level": 21,
+        "max_level": 50,
+        "desc": "五脏协调运转",
+        "material_base": 2,
+        "exp_base": 50000,
+        "dan_type": "zhongji",
+        "stage_index": 1
+    ]),
+    "大成期": ([
+        "min_level": 51,
+        "max_level": 80,
+        "desc": "五脏合一，相互促进",
+        "material_base": 3,
+        "exp_base": 100000,
+        "dan_type": "gaoji",
+        "stage_index": 2
+    ]),
+    "圆满期": ([
+        "min_level": 81,
+        "max_level": 100,
+        "desc": "达到人体极限",
+        "material_base": 5,
+        "exp_base": 200000,
+        "dan_type": "shengji",
+        "stage_index": 3
+    ])
+]);
+
+void create()
+{
+    seteuid(getuid());
+}
+
+/**
+ * @brief 检查玩家是否满足武圣系统开启条件
+ * @param object me 玩家对象
+ * @return int 1表示满足条件，0表示不满足
+ */
+int check_wusheng_condition(object me)
+{
+    if (!me || !objectp(me))
+        return 0;
+        
+    if (me->query("level") < 100)
+        return 0;
+        
+    return 1;
+}
+
+/**
+ * @brief 获取五脏当前等级
+ * @param object me 玩家对象
+ * @param string organ 脏器名称
+ * @return int 当前等级
+ */
+int query_wuzang_level(object me, string organ)
+{
+    if (!me || !wuzang_config[organ])
+        return 0;
+        
+    return me->query("wusheng/wuzang/" + organ) || 0;
+}
+
+/**
+ * @brief 获取五脏等级阶段名称
+ * @param int level 等级
+ * @return string 阶段名称
+ */
+string get_level_stage(int level)
+{
+    if (level <= 0) return "未炼体";
+    if (level <= 20) return "初炼期";
+    if (level <= 50) return "小成期";
+    if (level <= 80) return "大成期";
+    return "圆满期";
+}
+
+/**
+ * @brief 计算升级所需材料数量
+ * @param string organ 脏器名称
+ * @param int current_level 当前等级
+ * @return int 所需材料数量
+ */
+int calc_material_need(string organ, int current_level)
+{
+    string stage;
+    mapping stage_cfg;
+    int base_need;
+    
+    stage = get_level_stage(current_level + 1);
+    if (!level_config[stage])
+        return 0;
+        
+    stage_cfg = level_config[stage];
+    base_need = stage_cfg["material_base"];
+    
+    // 根据当前等级计算额外需求
+    return base_need + (current_level / 10);
+}
+
+/**
+ * @brief 计算升级所需经验
+ * @param string organ 脏器名称  
+ * @param int current_level 当前等级
+ * @return int 所需经验
+ */
+int calc_exp_need(string organ, int current_level)
+{
+    string stage;
+    mapping stage_cfg;
+    int base_exp;
+    
+    stage = get_level_stage(current_level + 1);
+    if (!level_config[stage])
+        return 0;
+        
+    stage_cfg = level_config[stage];
+    base_exp = stage_cfg["exp_base"];
+    
+    // 每级递增
+    return base_exp + (current_level * 5000);
+}
+
+/**
+ * @brief 检查炼体材料是否充足
+ * @param object me 玩家对象
+ * @param string organ 脏器名称
+ * @param int current_level 当前等级
+ * @return int 1表示充足，0表示不足
+ */
+int check_material_enough(object me, string organ, int current_level)
+{
+    string material;
+    int need_amount, total_amount;
+    object *obs;
+    
+    if (!wuzang_config[organ])
+        return 0;
+        
+    material = wuzang_config[organ]["material"];
+    need_amount = calc_material_need(organ, current_level);
+    
+    obs = filter(all_inventory(me), (: $1->query("id") == $(material) :));
+    
+    // 计算总数量
+    total_amount = 0;
+    foreach (object ob in obs)
+    {
+        total_amount += ob->query_amount();
+    }
+    
+    return total_amount >= need_amount;
+}
+
+/**
+ * @brief 获取可用的炼体丹及其成功率加成
+ * @param object me 玩家对象
+ * @param int current_level 当前等级
+ * @return mapping 包含炼体丹信息和成功率加成
+ */
+mapping get_available_dan(object me, int current_level)
+{
+    string stage, dan_type;
+    object *dans;
+    mapping result = ([]);
+    int total_amount;
+    
+    stage = get_level_stage(current_level + 1);
+    if (!level_config[stage])
+        return result;
+    
+    dan_type = level_config[stage]["dan_type"];
+    
+    // 查找对应类型的炼体丹
+    dans = filter(all_inventory(me), 
+                  (: $1->query("wusheng_dan_type") == $(dan_type) :));
+    
+    // 计算炼体丹总数量
+    total_amount = 0;
+    foreach (object ob in dans)
+    {
+        total_amount += ob->query_amount();
+    }
+    
+    if (total_amount > 0 && sizeof(dans) > 0)
+    {
+        result["has_dan"] = 1;
+        result["dan_object"] = dans[0];
+        result["boost"] = dans[0]->query("wusheng_dan_boost");
+        result["dan_name"] = dans[0]->name();
+        result["total_amount"] = total_amount;
+    }
+    else
+    {
+        result["has_dan"] = 0;
+        result["boost"] = 0;
+        result["total_amount"] = 0;
+    }
+    
+    return result;
+}
+
+/**
+ * @brief 扣除物品数量
+ * @param object me 玩家对象
+ * @param string item_id 物品ID
+ * @param int need_amount 需要扣除的数量
+ * @return int 1表示成功，0表示失败
+ */
+int consume_items(object me, string item_id, int need_amount)
+{
+    object *obs;
+    int remaining, consume_amount;
+    
+    obs = filter(all_inventory(me), (: $1->query("id") == $(item_id) :));
+    if (!sizeof(obs))
+        return 0;
+    
+    remaining = need_amount;
+    
+    foreach (object ob in obs)
+    {
+        if (remaining <= 0)
+            break;
+            
+        consume_amount = (remaining < ob->query_amount()) ? remaining : ob->query_amount();
+        ob->add_amount(-consume_amount);
+        remaining -= consume_amount;
+    }
+    
+    return (remaining <= 0);
+}
+
+/**
+ * @brief 执行炼体升级
+ * @param object me 玩家对象
+ * @param string organ 脏器名称
+ * @param int use_dan 是否使用炼体丹，1表示使用，0表示不使用
+ * @return int 1表示成功，0表示失败，-1表示升级失败但消耗了材料
+ */
+int upgrade_wuzang(object me, string organ, int use_dan)
+{
+    int current_level, need_exp, need_materials, success_rate, random_num;
+    string material;
+    mapping dan_info;
+    
+    if (!me || !wuzang_config[organ])
+        return 0;
+        
+    current_level = query_wuzang_level(me, organ);
+    
+    if (current_level >= 100)
+        return 0; // 已达最高等级
+        
+    need_exp = calc_exp_need(organ, current_level);
+    need_materials = calc_material_need(organ, current_level);
+    material = wuzang_config[organ]["material"];
+    
+    // 检查经验
+    if (me->query("combat_exp") < need_exp)
+        return 0;
+        
+    // 检查材料是否充足
+    if (!check_material_enough(me, organ, current_level))
+        return 0;
+    
+    // 获取炼体丹信息
+    dan_info = get_available_dan(me, current_level);
+    
+    // 如果指定使用炼体丹但没有炼体丹，返回失败
+    if (use_dan && !dan_info["has_dan"])
+        return 0;
+    
+    // 计算成功率
+    success_rate = 10; // 基础成功率10%
+    if (use_dan && dan_info["has_dan"])
+    {
+        success_rate += dan_info["boost"];
+    }
+    
+    // 消耗经验（无论成功失败都消耗经验）
+    me->add("combat_exp", -need_exp);
+    
+    // 消耗材料（无论成功失败都消耗材料）
+    if (!consume_items(me, material, need_materials))
+    {
+        // 材料扣除失败，退还经验
+        me->add("combat_exp", need_exp);
+        return 0;
+    }
+    
+    // 判断成功率
+    random_num = random(100) + 1;
+
+    //记录当前炼体成功的概率
+    me->add("wusheng/lianti_success_rate", success_rate);
+
+    success_rate += (me->query("wusheng/lianti_success_rate") - success_rate);
+    
+    if (random_num <= success_rate)
+    {
+        // 消耗炼体丹（如果使用了的话）
+        if (use_dan && dan_info["has_dan"])
+        {
+            object dan_obj = dan_info["dan_object"];
+            dan_obj->add_amount(-1);
+        }
+
+        //清除叠加的炼体成功的概率
+        me->delete("wusheng/lianti_success_rate");
+        
+        // 升级
+        me->set("wusheng/wuzang/" + organ, current_level + 1);
+        
+        // 应用属性加成
+        apply_wuzang_bonus(me, organ, current_level + 1);
+        
+        return 1; // 成功
+    }
+    else
+    {
+        // 消耗炼体丹（如果使用了的话）
+        if (use_dan && dan_info["has_dan"])
+        {
+            object dan_obj = dan_info["dan_object"];
+            dan_obj->add_amount(-1);
+        }
+
+        // 失败，不消耗炼体丹，但已经消耗了材料和经验
+        return -1; // 失败
+    }
+}
+
+/**
+ * @brief 应用五脏属性加成
+ * @param object me 玩家对象
+ * @param string organ 脏器名称
+ * @param int level 等级
+ */
+void apply_wuzang_bonus(object me, string organ, int level)
+{
+    mapping cfg, main_bonus, sub_bonus;
+    string *bonus_keys;
+    int bonus_value, stage_index;
+    string stage;
+    
+    if (!me || !wuzang_config[organ])
+        return;
+    
+    cfg = wuzang_config[organ];
+    main_bonus = cfg["main_bonus"];
+    sub_bonus = cfg["sub_bonus"];
+    
+    // 获取当前阶段索引
+    stage = get_level_stage(level);
+    if (!level_config[stage])
+        return;
+        
+    stage_index = level_config[stage]["stage_index"];
+    
+    // 应用主要加成
+    bonus_keys = keys(main_bonus);
+    foreach (string bonus in bonus_keys)
+    {
+        int *bonus_array = main_bonus[bonus];
+        if (sizeof(bonus_array) > stage_index)
+        {
+            // 特殊处理：每10级提升的属性
+            if (bonus == "int_bonus" || bonus == "dex_bonus" || 
+                bonus == "con_bonus" || bonus == "crit_damage")
+            {
+                bonus_value = (level / 10) * bonus_array[stage_index];
+            }
+            else
+            {
+                bonus_value = level * bonus_array[stage_index];
+            }
+            me->set("wusheng_bonus/" + bonus, bonus_value);
+        }
+    }
+    
+    // 应用次要加成
+    bonus_keys = keys(sub_bonus);
+    foreach (string bonus in bonus_keys)
+    {
+        int *bonus_array = sub_bonus[bonus];
+        if (sizeof(bonus_array) > stage_index)
+        {
+            bonus_value = level * bonus_array[stage_index];
+            me->set("wusheng_bonus/" + bonus, bonus_value);
+        }
+    }
+}
+
+/**
+ * @brief 获取五脏总览信息
+ * @param object me 玩家对象
+ * @return mapping 包含所有五脏信息的映射
+ */
+mapping get_wuzang_overview(object me)
+{
+    mapping result = ([]);
+    string *organs = keys(wuzang_config);
+    
+    foreach (string organ in organs)
+    {
+        int level = query_wuzang_level(me, organ);
+        string stage = get_level_stage(level);
+        
+        result[organ] = ([
+            "level": level,
+            "stage": stage,
+            "name": wuzang_config[organ]["name"],
+            "desc": wuzang_config[organ]["desc"],
+            "color": wuzang_config[organ]["color"]
+        ]);
+    }
+    
+    return result;
+}
+
+/**
+ * @brief 获取指定五脏详细信息
+ * @param object me 玩家对象
+ * @param string organ 脏器名称
+ * @return mapping 详细信息
+ */
+mapping get_wuzang_detail(object me, string organ)
+{
+    mapping cfg, result, dan_info;
+    int current_level, need_exp, need_materials;
+    string stage, material;
+    
+    if (!wuzang_config[organ])
+        return 0;
+        
+    cfg = wuzang_config[organ];
+    current_level = query_wuzang_level(me, organ);
+    stage = get_level_stage(current_level);
+    material = cfg["material"];
+    need_exp = calc_exp_need(organ, current_level);
+    need_materials = calc_material_need(organ, current_level);
+    dan_info = get_available_dan(me, current_level);
+    
+    result = ([
+        "name": cfg["name"],
+        "desc": cfg["desc"],
+        "level": current_level,
+        "stage": stage,
+        "material": material,
+        "need_exp": need_exp,
+        "need_materials": need_materials,
+        "can_upgrade": (current_level < 100),
+        "main_bonus": cfg["main_bonus"],
+        "sub_bonus": cfg["sub_bonus"],
+        "color": cfg["color"],
+        "dan_info": dan_info
+    ]);
+    
+    return result;
+}

@@ -1,0 +1,178 @@
+// vip_gift.c
+// 氪金礼包系统
+
+
+inherit ITEM;
+
+// 礼包配置
+nosave mapping gift_configs = ([
+    "30" : ([
+        "name" : "经脉入门礼包",
+        "items" : ([
+            "/clone/vip/dan_chongmai1" : 100,  // 下品冲脉丹(约可开2个穴位)
+            "/clone/vip/book_wuliang" : 5,     // 无量经书(提升内力)
+            "/clone/vip/avipcard" : 1,         // VIP月卡
+        ]),
+        "bind" : 1,
+        "yuanbao" : 30,
+        "desc" : "约可开启2个经脉穴位",
+    ]),
+    
+    "98" : ([
+        "name" : "经脉进阶礼包", 
+        "items" : ([
+            "/clone/vip/dan_chongmai2" : 200,  // 中品冲脉丹(约可开4-5个穴位)
+            "/clone/vip/dan_chongmai1" : 100,  // 下品冲脉丹(约可开2个穴位)
+            "/clone/vip/book_wuliang" : 10,    // 无量经书
+            "/clone/vip/avipcard" : 2,         // VIP月卡
+            "/clone/vip/dan_con" : 1,          // 洗髓丹(增加体质)
+        ]),
+        "bind" : 1,
+        "yuanbao" : 98,
+        "desc" : "约可开启6-7个经脉穴位",
+    ]),
+    
+    "198" : ([
+        "name" : "经脉精进礼包",
+        "items" : ([
+            "/clone/vip/dan_chongmai3" : 300,  // 上品冲脉丹(约可开6-7个穴位)
+            "/clone/vip/dan_chongmai2" : 200,  // 中品冲脉丹(约可开4-5个穴位)
+            "/clone/vip/book_wuliang" : 20,    // 无量经书
+            "/clone/vip/avipcard" : 3,         // VIP月卡
+            "/clone/vip/dan_con" : 1,          // 洗髓丹
+            "/clone/vip/dan_dex" : 1,          // 火红仙丹
+        ]),
+        "bind" : 1,
+        "yuanbao" : 198,
+        "desc" : "约可开启10-12个经脉穴位",
+    ]),
+    
+    "328" : ([
+        "name" : "经脉大成礼包",
+        "items" : ([
+            "/clone/vip/dan_chongmai4" : 500,  // 极品冲脉丹(约可开10-12个穴位)
+            "/clone/vip/dan_chongmai3" : 300,  // 上品冲脉丹(约可开6-7个穴位)
+            "/clone/vip/dan_chongsu" : 1,      // 经脉重塑丹
+            "/clone/vip/book_wuliang" : 30,    // 无量经书
+            "/clone/vip/avipcard" : 5,         // VIP月卡
+            "/clone/vip/dan_jiuzhuan" : 1,     // 九转金丹
+        ]),
+        "bind" : 1,
+        "yuanbao" : 328,
+        "desc" : "约可开启16-19个经脉穴位",
+    ]),
+    
+    "648" : ([
+        "name" : "经脉圆满礼包",
+        "items" : ([
+            "/clone/vip/dan_chongmai4" : 1000, // 极品冲脉丹(约可开20-25个穴位)
+            "/clone/vip/dan_chongmai3" : 500,  // 上品冲脉丹(约可开10-12个穴位)
+            "/clone/vip/dan_chongsu" : 2,      // 经脉重塑丹
+            "/clone/vip/book_wuliang" : 50,    // 无量经书
+            "/clone/vip/avipcard" : 10,        // VIP月卡
+            "/clone/vip/dan_jiuzhuan" : 2,     // 九转金丹
+            "/clone/vip/butian" : 1,           // 补天石
+        ]),
+        "bind" : 1,
+        "yuanbao" : 648,
+        "desc" : "约可开启30-37个经脉穴位",
+    ]),
+]);
+
+void create()
+{
+    set_name(HIY "VIP礼包" NOR, ({"vip gift", "gift"}));
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", "这是一个VIP礼包,可以选择购买不同价位的礼包。\n使用指令: gift list 查看礼包\n         gift buy <价格> 购买礼包\n");
+        set("unit", "个");
+        set("no_drop", 1);
+        set("no_give", 1);
+        set("no_sell", 1);
+        set("value", 1);
+    }
+    setup();
+}
+
+void init()
+{
+    add_action("do_list", "gift list");
+    add_action("do_buy", "gift buy");
+}
+
+// 检查玩家是否已购买过该礼包
+int check_bought(object me, string price)
+{
+    return me->query("gift/vip_gift/" + price);
+}
+
+// 显示礼包列表
+int do_list(string arg)
+{
+    string msg = ZJOBLONG + "VIP礼包列表：\n" + ZJOBACTS2+ZJMENUF(3,3,10,30);
+    string *prices = keys(gift_configs);
+    
+    foreach(string price in prices) {
+        mapping config = gift_configs[price];
+        string status = check_bought(this_player(), price) ? HIR"[已购]"NOR : HIY"[可购]"NOR;
+        msg += sprintf("%s%s(%s元宝)\n%s:gift buy %s",
+            config["name"], status, price, 
+            config["desc"],
+            price);
+        if(member_array(price, prices) != sizeof(prices)-1)
+            msg += ZJSEP;
+    }
+    
+    tell_object(this_player(), msg + "\n");
+    return 1;
+}
+
+// 购买礼包
+int do_buy(string arg)
+{
+    object me = this_player();
+    mapping config;
+    object item;
+    
+    if (!arg || arg == "")
+        return notify_fail("格式：gift buy <价格>\n");
+        
+    if (!gift_configs[arg])
+        return notify_fail("没有这个价位的礼包。\n");
+        
+    config = gift_configs[arg];
+    
+    if (check_bought(me, arg))
+        return notify_fail("你已经购买过这个礼包了。\n");
+        
+    if (me->query("yuanbao") < config["yuanbao"])
+        return notify_fail("你的元宝不足以购买这个礼包。\n");
+        
+    // 扣除元宝
+    me->add("yuanbao", -config["yuanbao"]);
+    
+    // 发放物品
+    foreach(string file, int amount in config["items"]) {
+        item = new_bind(file);
+        if (!item) continue;
+        
+        if (config["bind"]) {
+            item->set("bind_owner", me->query("id"));
+            item->set("auto_load", 1);
+        }
+        
+        if (item->query_amount())
+            item->set_amount(amount);
+            
+        if (!item->move(me))
+            item->move(environment(me));
+    }
+    
+    // 记录购买
+    me->set("gift/vip_gift/" + arg, 1);
+    
+    tell_object(me, sprintf(HIY "恭喜你购买了%s！\n" NOR, config["name"]));
+    
+    return 1;
+}

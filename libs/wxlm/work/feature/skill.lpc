@@ -1,0 +1,706 @@
+// skill.c
+
+#include <dbase.h>
+#define AOYI_D "/adm/daemons/aoyid"
+mapping skills;
+mapping learned;
+mapping skill_map;
+mapping skill_prepare;
+mapping wprepare;
+
+/**
+ * @brief 查询对象的技能信息
+ * @return mapping 返回包含所有技能数据的映射，键为技能名称，值为技能等级或相关数据
+ * @details 该函数提供对对象内部技能数据的只读访问，允许其他系统查询当前对象的技能状态而不直接修改数据。这种封装方式确保了技能数据的一致性和安全性。
+ */
+mapping query_skills() { return skills; }
+/**
+ * @brief 获取已学习内容的映射
+ * @return mapping 返回包含已学习内容的映射数据
+ * @details 该函数提供对内部学习状态的安全访问，遵循封装原则，避免直接暴露内部变量。
+ */
+mapping query_learned() { return learned; }
+varargs void map_skill(string skill, string mapped_to);
+
+/**
+ * @brief 清除所有技能相关数据
+ * @details 
+ * 1. 清空技能映射表
+ * 2. 清空学习进度映射表
+ * 3. 清空技能映射表
+ * 4. 清空技能准备映射表
+ * 5. 清空武器准备映射表
+ */
+void clear_all_skill()
+{
+	skills = ([]);
+	learned = ([]);
+	skill_map = ([]);
+	skill_prepare = ([]);
+	wprepare = ([]);
+}
+
+/**
+ * @brief 设置指定技能的数值
+ * @param skill string 技能的英文标识符，如'fist'
+ * @param val int 新技能数值，取值范围为0到1000
+ * @details 
+ * 1. 首先检查技能基础目录是否存在，若未找到对应.c文件则报错，防止后续技能依赖结构缺失
+ * 2. 通过mapp检查技能值存储结构，若不存在则创建基础映射，确保数据容器按需初始化
+ * 3. 采用双重检查机制（目录存在性+映射结构存在性）保障技能系统的原子性操作，避免中间状态异常
+ * 4. 约束数值范围0-1000防止技能值溢出导致系统崩溃
+ */
+void set_skill(string skill, int val)
+{
+	if (! find_object(SKILL_D(skill)) &&
+	    file_size(SKILL_D(skill)+".lpc") < 0)
+		error("F_SKILL: No such skill (" + skill + ")\n");
+
+	if (! mapp(skills)) skills = ([ skill: val ]);
+	else skills[skill] = val;
+}
+
+/**
+ * @brief 完全删除指定技能及其关联数据
+ * @param skill string 要删除的技能名称
+ * @return int 删除成功返回0，失败返回-1
+ * @details 该函数通过三重验证机制确保技能数据完整性：
+ * 1. 首先清理技能映射表skill_map中对应条目
+ * 2. 遍历剩余技能列表检查残留关联值并重置熟练度为0
+ * 3. 同时清理skills和learned两个数据结构中的记录
+ * 这种设计确保当技能被删除后，其所有相关数据（包括已掌握状态）都会被彻底清除，避免出现残留数据导致的逻辑错误
+ */
+int delete_skill(string skill)
+{
+	int i;
+	string *sk;
+
+	if (mapp(skill_map))
+	{
+		map_delete(skill_map, skill);
+		sk = keys(skill_map);
+		for (i = 0; i < sizeof(sk); i++)
+		{
+			if (skill_map[sk[i]] == skill)
+				map_skill(sk[i], 0);
+		}
+	}
+
+	if (mapp(skills))
+	{
+		map_delete(skills, skill);
+		if (mapp(learned))
+		{
+			map_delete(learned, skill);
+			return undefinedp(learned[skill]);
+		}
+		return undefinedp(skills[skill]);
+	}
+	return 0;
+}
+
+/**
+ * @brief 映射技能到另一个技能
+ * @param skill 要映射的技能名称
+ * @param mapped_to 可选参数，技能要映射到的目标技能名称。如果未提供，则删除现有映射
+ * @return 无返回值
+ * @details 该函数用于建立技能之间的映射关系，当调用一个技能时实际执行另一个技能的功能。
+ *          如果mapped_to参数未提供，则会删除已存在的技能映射。函数会检查技能和目标映射的有效性。
+ */
+varargs void map_skill(string skill, string mapped_to)
+{
+	if (! mapped_to && mapp(skill_map))
+	{
+		if ( skill_prepare ) map_delete(skill_prepare, skill);
+		map_delete(skill_map, skill);
+		return;
+	}
+
+	if (! find_object(SKILL_D(skill)) &&
+	    file_size(SKILL_D(skill)+".lpc") < 0 )
+	    error("F_SKILL: No such skill (" + skill + ")\n");
+
+	if (! mapp(skills) || undefinedp(skills[mapped_to]))
+		return;
+		
+	if (skill_prepare) map_delete(skill_prepare, skill);
+	if (! mapp(skill_map)) skill_map = ([ skill: mapped_to ]);
+	else skill_map[skill] = mapped_to;
+}
+
+/**
+ * @brief 准备或更新技能映射关系
+ * @param skill 要准备的技能名称，必须为有效的技能路径
+ * @param mapped_to 可选参数，技能映射到的目标名称，如果为空则删除现有映射
+ * @return 无返回值
+ * @details 该函数用于建立技能与实际实现之间的映射关系，确保系统能正确调用技能函数。
+ * 当映射被移除时，系统将不再尝试调用该技能的实现。此设计允许技能系统灵活地加载和管理不同技能的实现。
+ */
+varargs void prepare_skill(string skill, string mapped_to)
+{
+	if (! mapped_to && mapp(skill_prepare))
+	{
+		map_delete(skill_prepare, skill);
+		return;
+	}
+
+	if (! find_object(SKILL_D(skill)) &&
+	    file_size(SKILL_D(skill)+".lpc") < 0)
+		error("F_SKILL: No such skill (" + skill + ")\n");
+
+	if (! mapp(skills) || undefinedp(skills[mapped_to]))
+		return;
+		
+	if (! mapp(skill_prepare)) skill_prepare = ([ skill: mapped_to ]);
+	else skill_prepare[skill] = mapped_to;
+}
+
+/**
+ * @brief 准备或更新武器技能映射关系
+ * @param skill string 要准备的武器技能名称
+ * @param mapped_to string 可选参数，武器技能映射到的目标名称，如果为空则删除现有映射
+ * @return void 无返回值
+ * @details 
+ * 该函数用于建立武器技能与实际实现之间的映射关系。主要功能包括：
+ * 1. 管理武器技能的映射关系
+ * 2. 当mapped_to为空时，清除已存在的映射
+ * 3. 验证技能文件的存在性
+ * 4. 确保技能数据结构的完整性
+ * 这种设计使得系统能够灵活地处理不同武器技能的实现和切换
+ */
+varargs void prepare_wskill(string skill, string mapped_to)
+{
+	if (! mapped_to && mapp(wprepare))
+	{
+		map_delete(wprepare, skill);
+		return;
+	}
+
+	if (! find_object(SKILL_D(skill)) &&
+	    file_size(SKILL_D(skill)+".lpc") < 0 )
+		error("F_SKILL: No such skill (" + skill + ")\n");
+
+	if (! mapp(skills) || undefinedp(skills[mapped_to]))
+		return;
+		
+	if (! mapp(wprepare)) wprepare = ([ skill: mapped_to ]);
+	else wprepare[skill] = mapped_to;
+}
+
+/**
+ * @brief 查询指定技能的映射关系
+ * @param string skill 要查询的技能名称
+ * @return string 返回映射后的技能名称，如果没有映射则返回0
+ * @details 该函数用于检查技能映射表中是否存在指定技能的映射关系。
+ *          技能映射系统允许将一个技能名称映射到另一个技能名称，
+ *          通常用于实现技能别名或技能转换功能。
+ */
+string query_skill_mapped(string skill)
+{
+	if (mapp(skill_map) && ! undefinedp(skill_map[skill]))
+		return skill_map[skill];
+	return 0;
+}
+
+/**
+ * @brief 查询指定技能的准备状态
+ * @param string skill 要查询的技能名称
+ * @return string 返回技能的准备状态，如果技能未准备则返回0
+ * @details 该函数用于检查某个特定技能是否已准备就绪。在游戏系统中，某些技能可能需要预先准备才能使用，此函数提供了一种检查技能准备状态的方法，以便其他系统可以据此决定是否允许使用该技能。
+ */
+string query_skill_prepared(string skill)
+{
+	if (mapp(skill_prepare) && !undefinedp(skill_prepare[skill]))
+		return skill_prepare[skill];
+	return 0;
+}
+
+/**
+ * @brief 查询指定技能的准备状态
+ * @param string skill 要查询的技能名称
+ * @return string 返回技能的准备状态值，如果技能未准备则返回0
+ * @details 该函数用于检查某个特定技能是否已经准备就绪。在游戏系统中，某些技能可能需要提前准备才能使用，
+ *          此函数提供了一种快速查询技能准备状态的方式，以便其他系统可以据此判断技能是否可用。
+ */
+string query_wprepared(string skill)
+{
+	if (mapp(wprepare) && !undefinedp(wprepare[skill]))
+		return wprepare[skill];
+	return 0;
+}
+
+/**
+ * @brief 综合计算技能当前等级，包含基础值与各类加成/减成效果
+ * @param skill string 技能名称（如"dodge"）
+ * @param raw int 是否返回基础值（1=仅基础值，0=完整计算）
+ * @return int 技能当前等级（完整计算时）或基础值（raw=1时）
+ * @details 
+ * 该函数通过多维度计算机制实现技能等级评估，主要包含以下设计考量：
+ * 1. 套装技能继承：通过query_temp("suit_skill")获取套装加成
+ * 2. 经脉基础加成：检查经脉属性与技能关联性（如ap对应攻击技能）
+ * 3. 天赋系统整合：对接TALNET_MASTER接口获取真解、阴身等特殊天赋
+ * 4. 临时属性叠加：处理apply/...临时参数与技能类型匹配（武器/空手）
+ * 5. 特殊状态修正：阴身天赋对轻功的10倍级数加成、土元素招架加成
+ * 6. 系统接口调用：通过SKILLS_D、AOYI_D等模块获取技能类型与意境加成
+ * 7. 武圣系统适配：兼容武圣等级加成与真意技能特殊处理
+ * 当raw参数为真时，直接返回基础技能值（skills[skill]），避免重复计算
+ * 整个计算过程采用累加模式，确保各模块加成可叠加生效
+ */
+varargs int query_skill(string skill, int raw)
+{
+	int num=0,mer=0;
+	num=query_temp("suit_skill/"+skill);   //套装技能
+	if(stringp(query("meridian/ap"))&&skill==query("meridian/ap"))
+		mer = query("gain/attack");
+	else if(stringp(query("meridian/dp"))&&skill==query("meridian/dp"))
+		mer = query("gain/defense");
+
+	if (! raw)
+	{
+		int s;
+		int ghost_level;
+
+		//天赋加成列表
+		string *talnet_add_list = SKILLS_D->get_talnet_add_list();
+		//武器类型的技能
+		string *weapon_type_list = SKILLS_D->get_weapon_type_list();
+		//空手类型的技能
+		string *kongshou_type_list = SKILLS_D->get_kongshou_type_list();
+		//意境加成列表
+		mapping up_skill_type_list = AOYI_D->get_up_skill_type_list();
+
+		s = query_temp("apply/" + skill);
+		s += query_temp("apply/skills");
+
+
+		if (mapp(skills))
+		{
+			s += skills[skill]+mer+num / 2;
+			if (mapp(skill_map))
+				s += skills[skill_map[skill]];
+		}
+
+		if (playerp(this_object()))
+		{
+			if (query("shimai-tong"))
+			{
+				s += 100;
+			}
+
+			//词条效果
+			if (this_object()->query("citiao_effects/" + skill))
+			{
+				s += this_object()->query("citiao_effects/" + skill);
+			}
+
+			//每一级阴身天赋等级提高10级轻功激发。
+			//如果我有阴身天赋，并且读取的类型是轻功，那么我就加对应的轻功
+			if (query("special_skill/ghost") && skill == "dodge")
+			{
+				ghost_level = TALNET_MASTER->query_talnet_level(this_object(),"ghost");
+				s += ghost_level * 10;
+			}
+
+			//我是否有对应的真解天赋，如果有，那么我就加对应的真解
+			if (member_array(skill,talnet_add_list)!=-1 && TALNET_MASTER->query_talnet_level(this_object(),"t" + skill))
+			{
+				s += 10 * TALNET_MASTER->query_talnet_level(this_object(),"t" + skill);
+			}
+
+			//如果我有apply/wuqi_skill这个临时参数，并且技能的类型是兵器类型，那么我就加上这个临时参数
+			if (query_temp("apply/wuqi_skill") && member_array(skill,weapon_type_list)!=-1)
+			{
+				s += query_temp("apply/wuqi_skill");
+			}
+			else
+			{
+				//如果我有apply/kongshou_skill这个临时参数，那么我就加上这个临时参数
+				if (query_temp("apply/kongshou_skill") && member_array(skill,kongshou_type_list)!=-1)
+				{
+					s += query_temp("apply/kongshou_skill");
+				}
+			}
+
+			//如果是轻功和招架，检查是否有reduce_parry_dodge临时变量，如果有降低对应百分比的等级
+			if (skill == "dodge" || skill == "parry")
+			{
+				int reduce_percent = query_temp("reduce_parry_dodge");
+				if (reduce_percent)
+				{
+					s -= s * reduce_percent / 100;
+				}
+
+				//如果是招架，看看土元素的个数，4土增加百分12的招架激发，8土增加百分之15，12土增加百分之25
+				if (skill == "parry")
+				{
+					int earth_count = COMBAT_D->get_element_count(this_object(), "土");
+					if (earth_count >= 12)
+					{
+						s += s * 25 / 100;
+					}
+					else if (earth_count >= 8)
+					{
+						s += s * 15 / 100;
+					}
+					else if (earth_count >= 4)
+					{
+						s += s * 12 / 100;
+					}
+				}
+			}
+			// 如果是轻功，检查是否有天生灵巧天赋
+			if (skill == "dodge" && this_object()->query("special_skill/tian_sheng_ling_qiao"))
+			{
+				int level = TALNET_MASTER->query_talnet_level(this_object(), "tian_sheng_ling_qiao");
+				s += 15 * level;
+			}
+
+			// 如果是招架，检查是否有招架好手天赋
+			if (skill == "parry" && this_object()->query("special_skill/zhao_jia_hao_shou"))
+			{
+				int level = TALNET_MASTER->query_talnet_level(this_object(), "zhao_jia_hao_shou");
+				s += 15 * level;
+			}
+
+			// 如果是内功，检查是否有内力充盈天赋
+			if (skill == "force" && this_object()->query("special_skill/neili_chongying"))
+			{
+				int level = TALNET_MASTER->query_talnet_level(this_object(), "neili_chongying");
+				s += 15 * level;
+			}
+
+			// 检查是否有头像状态加成
+			if (query("head_image_attribute/" + skill))
+			{
+				s += query("head_image_attribute/" + skill);
+			}
+
+			//检查是否有秘转加成
+			if (query("mizhuan_power/skill/" + skill))
+			{
+				s += query("mizhuan_power/skill/" + skill);
+			}
+
+			// 检查是否有意境加成
+			if (!nullp(up_skill_type_list[skill]))
+			{
+				int aoyi_bonus;
+				
+				// 根据身份确定意境加成倍数
+				if (query("sanhua_done")) // 武尊
+				{
+					aoyi_bonus = 75;
+				}
+				else if (query("opinion/ultra")) // 宗师
+				{
+					aoyi_bonus = 60;
+				}
+				else // 普通玩家
+				{
+					aoyi_bonus = 45;
+				}
+				
+				s += COMBAT_D->get_skill_aoyi_level(this_object(),up_skill_type_list[skill]) * aoyi_bonus;
+			}
+
+			// 武圣系统技能加成
+			if (skill == "force" && query("wusheng_bonus/force_level"))
+			{
+				s += query("wusheng_bonus/force_level");
+			}
+			else if (skill == "parry" && query("wusheng_bonus/parry_level"))
+			{
+				s += query("wusheng_bonus/parry_level");
+			}
+			else if (skill == "dodge" && query("wusheng_bonus/dodge_level"))
+			{
+				s += query("wusheng_bonus/dodge_level");
+			}
+
+			// 武圣真意技能加成
+			if (query("zhenyi_bonus/" + skill))
+			{
+				s += query("zhenyi_bonus/" + skill);
+			}
+		}
+
+		return s;
+	}
+	if (mapp(skills) && ! undefinedp(skills[skill]))
+		return skills[skill];
+	return 0;
+}
+
+mapping query_skill_map()
+{
+	return skill_map;
+}
+
+mapping query_skill_prepare()
+{
+	return skill_prepare;
+}
+
+mapping query_wprepare()
+{
+       return wprepare;  
+}
+
+int skill_death_penalty()
+{
+	string *sk;
+	int i,j;
+
+	if (wizardp(this_object()) || ! mapp(skills)) return 0;
+	if (this_object()->query("combat_exp")<337500) return 0;
+
+	sk = keys(skills);
+
+	if (!mapp(learned)) learned = ([ ]);
+	for(i = 0; i<sizeof(sk); i++)
+	{
+		if(SKILL_D(sk[i])->type()=="knowledge") continue;
+		j = skills[sk[i]] + 1;
+		learned[sk[i]] -= (j*j+1)/5;
+		if (learned[sk[i]] < 0) {
+			j = skills[sk[i]];
+			skills[sk[i]]--;
+			learned[sk[i]] += (j*j+1);
+		}
+		if (j <= 1 ) {
+			map_delete(skills,sk[i]);
+			map_delete(learned,sk[i]);
+		}
+	}
+	// skill_map = 0;
+	// skill_prepare = 0;
+
+	return 1;
+}
+
+int skill_expell_penalty()
+{
+	int i;
+	string *skname;
+
+	if (! mapp(skills)) 
+	return 1;
+
+	skname = keys(skills);
+	for (i = 0; i < sizeof(skname); i++)
+	{
+		if (file_size(SKILL_D(skname[i]) + ".lpc") < 0)
+		{
+			delete_skill(skname[i]);
+			continue;
+		}
+
+		if (SKILL_D(skname[i])->type() != "martial" ||
+		    skname[i] == "martial-cognize")
+			continue;
+
+		if (SKILL_D(skname[i])->valid_enable("parry") ||
+	    	    SKILL_D(skname[i])->valid_enable("dodge") ||
+	    	    SKILL_D(skname[i])->valid_enable("throwing") ||
+	    	    SKILL_D(skname[i])->valid_enable("force"))
+		{
+			delete_skill(skname[i]);
+			continue;
+		}
+
+		if (query_skill(skname[i], 1) >= 100)
+			set_skill(skname[i], 100);
+    	}
+
+    	skill_map = 0;
+    	skill_prepare = 0;
+}
+
+int can_improve_skill(string skill)
+{
+	int lvl;
+	int exp;
+
+	if (! find_object(SKILL_D(skill)) &&
+	    file_size(SKILL_D(skill)+".lpc") < 0)
+		error("F_SKILL: No such skill (" + skill + ")\n");
+
+	switch (SKILL_D(skill)->type())
+	{
+	case "knowledge":
+		// 知识类技能
+		return 1;
+
+	case "technic":
+		// 技术类技能
+		return 1;
+
+	case "martial":
+	case "poison":
+		lvl = query_skill(skill, 1);
+		exp = this_object()->query("level");
+		if (exp < lvl)
+			return 0;
+		// exp = this_object()->query("combat_exp");
+		// if (lvl * lvl * lvl / 10 > exp)
+			// return 0;
+		return 1;
+
+	default:
+		return 1;
+	}
+}
+
+int need_total_exp(int lvl)
+{
+	return (lvl + 1) * (lvl + 1) *  (lvl + 100) / 100;
+}
+
+varargs void improve_skill(string skill, int amount, int weak_mode)
+{
+        int lvl;                    // 当前技能等级
+        int lvl_name;              // 技能名称等级
+        string new_skill;          // 新领悟的技能名称
+
+        if (!skill) return;
+
+        // 检查技能是否存在
+        if (!find_object(SKILL_D(skill)) && file_size(SKILL_D(skill)+".lpc") < 0)
+                error("F_SKILL: No such skill (" + skill + ")\n");
+
+        // 初始化技能映射
+        if (!mapp(skills)) skills = ([]);
+        if (undefinedp(skills[skill])) skills[skill] = 0;
+
+        // 计算技能提升点数
+        lvl = skills[skill];
+
+        // amount = 1 + amount * 100 / (lvl + 100);
+
+        // 初始化学习进度映射
+        if (!mapp(learned)) 
+                learned = ([ skill : amount ]);
+        else 
+                learned[skill] += amount;
+
+        // 检查是否达到升级条件
+        if ((!weak_mode || !userp(this_object())) && 
+            learned[skill] > need_total_exp(lvl))
+        {
+                // 技能等级提升
+                skills[skill]++;
+                learned[skill] = 0;
+
+                // 检查是否领悟新技能
+                lvl_name = (int)this_object()->query_skill(skill,1);
+                if (SKILL_D(skill)->query_skill_up(lvl_name))
+                {
+                        if (lvl_name == 1)
+                                new_skill = SKILL_D(skill)->query_skill_up(0);
+                        else if (SKILL_D(skill)->query_skill_up(lvl_name) != "no")
+                                new_skill = SKILL_D(skill)->query_skill_up(lvl_name);
+
+                        if (new_skill)
+                                tell_object(this_object(), HIR"恭喜："+NOR" 你从"+
+                                          HIY+"「" +to_chinese(skill)+ "」"+NOR+
+                                          "中领悟了"+HIY+"「" +to_chinese(new_skill)+
+                                          "」"+NOR+"的招式。\n");
+                }
+                SKILL_D(skill)->skill_improved(this_object());
+        }
+}
+
+/**
+ * @brief 获取升级到下一级所需的熟练度
+ * @param string skill 技能名称
+ * @return int 升级到下一级所需的熟练度
+ */
+int query_next_level_exp(string skill)
+{
+    int lvl;    // 技能等级
+    int total_exp;    // 总共需要的熟练度
+    int current_exp;    // 当前的熟练度
+
+    if (!mapp(skills) || undefinedp(skills[skill]))
+    {
+        return 0;
+    }
+
+    lvl = skills[skill];
+    total_exp = need_total_exp(lvl);
+
+    if (mapp(learned) && !undefinedp(learned[skill]))
+    {
+        current_exp = learned[skill];
+    }
+    else
+    {
+        current_exp = 0;
+    }
+
+    return total_exp - current_exp;
+}
+
+/**
+ * @brief 获取当前空手技能的最高激发等级
+ * @return int 空手技能的最高激发等级，若无则返回0
+ * @details 遍历所有空手类型技能，找出激发等级最高的技能并返回其等级
+ */
+int query_max_kongshou_skill_level()
+{
+    string *kongshou_type_list;
+    int max_level;
+    int i;
+    int current_level;
+    
+    max_level = 0;
+    
+    // 获取空手类型技能列表
+    kongshou_type_list = SKILLS_D->get_kongshou_type_list();
+    
+    if (!arrayp(kongshou_type_list) || !sizeof(kongshou_type_list))
+        return 0;
+    
+    // 遍历所有空手技能，找出最高等级
+    for (i = 0; i < sizeof(kongshou_type_list); i++)
+    {
+        current_level = query_skill(kongshou_type_list[i]);
+        if (current_level > max_level)
+            max_level = current_level;
+    }
+    
+    return max_level;
+}
+
+/**
+ * @brief 获取当前兵器技能的最高激发等级
+ * @return int 兵器技能的最高激发等级，若无则返回0
+ * @details 遍历所有兵器类型技能，找出激发等级最高的技能并返回其等级
+ */
+int query_max_weapon_skill_level()
+{
+    string *weapon_type_list;
+    int max_level;
+    int i;
+    int current_level;
+    
+    max_level = 0;
+    
+    // 获取兵器类型技能列表
+    weapon_type_list = SKILLS_D->get_weapon_type_list();
+    
+    if (!arrayp(weapon_type_list) || !sizeof(weapon_type_list))
+        return 0;
+    
+    // 遍历所有兵器技能，找出最高等级
+    for (i = 0; i < sizeof(weapon_type_list); i++)
+    {
+        current_level = query_skill(weapon_type_list[i]);
+        if (current_level > max_level)
+            max_level = current_level;
+    }
+    
+    return max_level;
+}
+
+

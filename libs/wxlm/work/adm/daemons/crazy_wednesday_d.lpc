@@ -1,0 +1,157 @@
+inherit F_DBASE;
+inherit F_SAVE;
+
+// 函数声明
+void create();
+void setup();
+void check_thursday();
+private void update_discount_items();
+private int is_same_day(int date);
+private int filter_file(string file);
+public int get_discount_price(string file);
+public int is_thursday();
+public mapping get_discount_items();
+
+// 全局变量声明
+private mapping discount_items = ([]);  // 存储打折商品信息
+private int last_update = 0;        // 上次更新时间
+
+string query_save_file() { return DATA_DIR "crazy_wednesday"; }
+
+void create() 
+{
+
+    return;
+    seteuid(getuid());
+    restore();
+    set("channel_id", "商城精灵");
+    CHANNEL_D->do_channel(this_object(), "sys", "疯狂星期三系统已经启动。");
+    setup();
+}
+
+void setup()
+{
+    // 设置心跳,每分钟检查一次
+    set_heart_beat(60);
+    check_thursday();
+}
+
+void mud_shutdown()
+{
+	save();
+}
+
+// 心跳函数
+void heart_beat()
+{
+    check_thursday();
+}
+
+// 检查是否需要更新打折商品
+void check_thursday()
+{
+    mixed *local;
+    
+    local = localtime(time());
+    
+    // 如果是周三且未更新过
+    if (local[6] == 3 && !is_same_day(last_update))
+    {
+        update_discount_items();
+        last_update = time();
+        save(); // 保存数据
+    }
+}
+
+// 判断是否同一天
+private int is_same_day(int date)
+{
+    mixed *t1, *t2;
+    
+    if (!date) return 0;
+    
+    t1 = localtime(date);
+    t2 = localtime(time());
+    
+    return (t1[5] == t2[5] && t1[4] == t2[4] && t1[3] == t2[3]);
+}
+
+// 更新打折商品列表
+private void update_discount_items()
+{
+    string *files, file;
+    object ob;
+    mapping item_info;
+    int i, idx;
+    
+    discount_items = ([]);
+    files = get_dir("/clone/vip/*");
+    files = filter_array(files, (: filter_file :));
+    
+    // 随机选择10个物品
+    for (i = 0; i < 10; i++) 
+    {
+        if (!sizeof(files)) break;
+        
+        idx = random(sizeof(files));
+        file = files[idx];
+        files -= ({ file });
+        
+        ob = new("/clone/vip/" + file);
+        if (!ob) continue;
+        
+        // 记录物品信息
+        item_info = ([
+            "name": ob->query("name"),
+            "file": "/clone/vip/" + file,
+            "original_price": ob->query("yuanbao"),
+            "discount_price": ob->query("yuanbao") * 8 / 10
+        ]);
+        
+        discount_items["/clone/vip/" + file] = item_info;
+        destruct(ob);
+    }
+    
+    // 发送系统公告
+    CHANNEL_D->do_channel(this_object(), "sys", 
+        sprintf("疯狂星期三活动开启!今日%d件商品享受八折优惠!", sizeof(discount_items)));
+}
+
+// 文件过滤器
+private int filter_file(string file)
+{
+    object ob;
+    int valid;
+    
+    if (file_size("/clone/vip/" + file) < 0) return 0;
+    if (file == "." || file == "..") return 0;
+    
+    ob = new("/clone/vip/" + file);
+    if (!ob) return 0;
+    
+    valid = (int)ob->query("yuanbao") > 0;
+    destruct(ob);
+    
+    return valid;
+}
+
+// 获取物品折扣价格
+public int get_discount_price(string file)
+{
+    if (!is_thursday()) return 0;
+    if (!discount_items[file]) return 0;
+    return discount_items[file]["discount_price"];
+}
+
+// 判断当前是否周三
+public int is_thursday()
+{
+    return localtime(time())[6] == 3;  // 改为周三
+}
+
+// 获取所有打折商品信息
+public mapping get_discount_items()
+{
+    if (!is_thursday()) return ([]);
+    return discount_items;
+}

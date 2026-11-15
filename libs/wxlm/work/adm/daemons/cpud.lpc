@@ -1,0 +1,108 @@
+// cpud.c
+
+#pragma optimize
+
+
+inherit F_DBASE;
+
+
+
+int clean_up() { return 1; }
+
+#define CHECK_PERIOD    100     // 100s检查一次
+#define EXPECTATION     50      // 希望心跳50次
+
+#define check_period    my["check_period"]
+#define expectation     my["expectation"]
+#define counter	 my["counter"]
+#define last_check      my["last_check"]
+#define last_rusage     my["last_rusage"]
+#define last_0	  my["last_0"]
+#define last_1	  my["last_1"]
+#define last_2	  my["last_2"]
+#define last_3	  my["last_3"]
+#define last_4	  my["last_4"]
+
+void create()
+{
+	mapping my;
+
+	seteuid(getuid());
+	set("channel_id", "系统精灵");
+	CHANNEL_D->do_channel(this_object(), "sys", "系统精灵已经启动。");
+	set_heart_beat(1);
+
+	// 初始化扫描时间
+	my = query_entire_dbase();
+	if (CONFIG_D->query_int("cpu_check_period") < 2)
+	{
+		check_period = CHECK_PERIOD;
+		expectation = EXPECTATION;
+	} else
+	{
+		check_period = CONFIG_D->query_int("cpu_check_period");
+		if (CONFIG_D->query_int("cpu_expectation") < 1)
+			expectation = check_period / 2;
+		else
+			expectation = CONFIG_D->query_int("cpu_expectation");
+	}
+
+	last_4 = ([ "supplied" : 100, "cost" : 0 ]);
+	last_3 = ([ "supplied" : 100, "cost" : 0 ]);
+	last_2 = ([ "supplied" : 100, "cost" : 0 ]);
+	last_1 = ([ "supplied" : 100, "cost" : 0 ]);
+	last_0 = ([ "supplied" : 100, "cost" : 0 ]);
+
+	last_check = time();
+	last_rusage = rusage();
+	counter = 0;
+}
+
+/**
+ * @brief 周期性统计系统资源使用情况
+ * @details 该函数每 check_period 秒执行一次资源消耗分析，通过维护四个时间窗口的统计值来平滑数据波动
+ *          每次循环完成以下操作：
+ *          1. 移动时间窗口数据（last_0~last_4），保留最近四期统计信息
+ *          2. 计算当前资源供给率（supp）：基于期望值和实际计数器计算，限制在0-100%区间
+ *          3. 计算时间成本（cost）：通过当前与上次rusage的时间片差值推算CPU消耗
+ *          4. 更新全局资源统计缓存（last_rusage, last_check）
+ *          5. 保存当前统计周期结果到 last_0 作为基准值
+ * @note 该设计通过滑动窗口机制消除瞬时波动影响，成本计算采用时间片差值而非直接消耗值，确保在资源不可观测时仍能估算
+ */
+void heart_beat()
+{
+	mapping my;
+	mapping info;
+	int tlen;
+	int supp, cost;
+
+	my = query_entire_dbase();
+
+	counter++;
+	if ((tlen = (time() - last_check)) < check_period)
+		return;
+
+	// rotate the stat.
+	last_4["supplied"] = last_3["supplied"];
+	last_4["cost"]     = last_3["cost"];
+	last_3["supplied"] = last_2["supplied"];
+	last_3["cost"]     = last_2["cost"];
+	last_2["supplied"] = last_1["supplied"];
+	last_2["cost"]     = last_1["cost"];
+	last_1["supplied"] = last_0["supplied"];
+	last_1["cost"]     = last_0["cost"];
+
+	supp = counter * 100 / expectation;
+	if (supp > 100) supp = 100;
+	info = rusage();
+	cost = info["stime"] + info["utime"] -
+	       last_rusage["stime"] - last_rusage["utime"];
+	cost = cost / tlen / 10;
+
+	last_rusage = info;
+	last_check  = time();
+	counter = 0;
+
+	last_0 = ([ "supplied" : supp,
+		    "cost"     : cost ]);
+}

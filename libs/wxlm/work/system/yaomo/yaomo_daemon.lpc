@@ -1,0 +1,495 @@
+// yaomo_daemon.c
+// 妖魔系统守护进程
+inherit F_DBASE;
+
+#define YAOMO_CONFIG_DIR "/system/yaomo/config/"
+#define YAOMO_NPC "/system/yaomo/yaomo_npc"
+
+// 定时生成配置
+#define SPAWN_COUNT 100                    // 每次生成妖魔数量
+#define SPAWN_AREA "/d/foshan/"            // 生成区域
+#define RECYCLE_DELAY 1800                 // 回收延迟时间（秒），1800秒=30分钟
+#define SPAWN_HOURS ({ 12,19 })           // 生成时间点（小时）
+
+// 配置缓存映射
+private mapping config_cache = ([]);
+
+// 定时生成相关变量
+private object* active_yaomo_list = ({});  // 当前活动的妖魔对象列表
+private int last_spawn_day = -1;           // 上次生成的日期
+private int last_spawn_hour = -1;          // 上次生成的小时
+
+// 函数原型声明
+string* get_foshan_rooms();
+void spawn_yaomo();
+void recycle_yaomo();
+void heart_beat();
+
+/**
+ * @brief 守护进程创建函数
+ */
+void create()
+{
+    seteuid(ROOT_UID);  // 设置为ROOT权限以便读取配置文件
+    set("channel_id", "妖魔精灵");
+
+    // 初始化配置缓存
+    config_cache = ([]);
+
+    // 启用心跳，每60秒检查一次
+    set_heart_beat(2);
+}
+
+/**
+ * @brief 加载妖魔配置文件
+ * @param string config_id 妖魔配置ID
+ * @return mapping 配置数据，失败返回0
+ * @details 从JSON文件读取妖魔配置，并缓存结果
+ */
+mapping load_yaomo_config(string config_id)
+{
+    string file_path;
+    string json_content;
+    mixed config_data;
+
+    // 检查参数
+    if (!stringp(config_id) || config_id == "")
+    {
+        error("YAOMO_DAEMON: 配置ID为空或无效。\n");
+        return 0;
+    }
+
+    // 检查缓存
+    if (!undefinedp(config_cache[config_id]))
+    {
+        return config_cache[config_id];
+    }
+
+    // 构建文件路径
+    file_path = YAOMO_CONFIG_DIR + config_id + ".json";
+
+    // 读取文件
+    json_content = read_file(file_path);
+    if (!stringp(json_content))
+    {
+        error("YAOMO_DAEMON: 无法读取配置文件 " + file_path + "\n");
+        return 0;
+    }
+
+    // 解析JSON
+    config_data = json_decode(json_content);
+    if (!mapp(config_data))
+    {
+        error("YAOMO_DAEMON: 配置文件格式错误 " + file_path + "\n");
+        return 0;
+    }
+
+    // 验证必填字段
+    if (!config_data["id"] || !config_data["name"] || !config_data["level"])
+    {
+        error("YAOMO_DAEMON: 配置文件缺少必填字段 " + file_path + "\n");
+        return 0;
+    }
+
+    // 缓存配置
+    config_cache[config_id] = config_data;
+
+    return config_data;
+}
+
+/**
+ * @brief 创建妖魔NPC对象
+ * @param string config_id 妖魔配置ID
+ * @return object 妖魔NPC对象，失败返回0
+ * @details 根据配置ID加载配置并创建妖魔NPC实例
+ */
+object create_yaomo(string config_id)
+{
+    object yaomo_ob;
+    mapping config;
+
+    // 加载配置
+    config = load_yaomo_config(config_id);
+    if (!mapp(config))
+    {
+        return 0;
+    }
+
+    // 创建妖魔对象
+    yaomo_ob = new(YAOMO_NPC);
+    if (!objectp(yaomo_ob))
+    {
+        error("YAOMO_DAEMON: 无法创建妖魔NPC对象。\n");
+        return 0;
+    }
+
+    // 初始化妖魔
+    yaomo_ob->setup_yaomo(config);
+
+    return yaomo_ob;
+}
+
+/**
+ * @brief 获取所有妖魔配置列表
+ * @return string* 配置ID列表
+ * @details 扫描配置目录，返回所有可用的妖魔配置ID
+ */
+string* query_all_yaomo()
+{
+    string* files;
+    string* config_ids;
+    int i;
+    int len;
+
+    config_ids = ({});
+
+    // 获取配置目录下的所有文件
+    files = get_dir(YAOMO_CONFIG_DIR + "*.json");
+
+    if (!arrayp(files) || sizeof(files) == 0)
+    {
+        return config_ids;
+    }
+
+    len = sizeof(files);
+    for (i = 0; i < len; i++)
+    {
+        string config_id;
+
+        // 去掉.json后缀
+        if (sscanf(files[i], "%s.json", config_id) == 1)
+        {
+            config_ids += ({ config_id });
+        }
+    }
+
+    return config_ids;
+}
+
+/**
+ * @brief 重新加载指定配置
+ * @param string config_id 妖魔配置ID
+ * @return int 1表示成功，0表示失败
+ * @details 清除缓存并重新加载配置
+ */
+int reload_config(string config_id)
+{
+    mapping config;
+
+    // 清除缓存
+    if (!undefinedp(config_cache[config_id]))
+    {
+        map_delete(config_cache, config_id);
+    }
+
+    // 重新加载
+    config = load_yaomo_config(config_id);
+
+    return mapp(config) ? 1 : 0;
+}
+
+/**
+ * @brief 重新加载所有配置
+ * @return int 重新加载的配置数量
+ * @details 清除所有缓存并重新加载所有配置
+ */
+int reload_all_configs()
+{
+    string* config_ids;
+    int count;
+    int i;
+    int len;
+
+    // 清除所有缓存
+    config_cache = ([]);
+
+    // 获取所有配置ID
+    config_ids = query_all_yaomo();
+
+    if (!arrayp(config_ids))
+    {
+        return 0;
+    }
+
+    count = 0;
+    len = sizeof(config_ids);
+
+    for (i = 0; i < len; i++)
+    {
+        if (load_yaomo_config(config_ids[i]))
+        {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+/**
+ * @brief 获取配置缓存信息
+ * @return mapping 缓存的配置映射
+ * @details 返回当前缓存的所有配置数据
+ */
+mapping query_cache()
+{
+    return config_cache;
+}
+
+/**
+ * @brief 清除指定配置缓存
+ * @param string config_id 妖魔配置ID
+ * @return int 1表示成功，0表示失败
+ */
+int clear_cache(string config_id)
+{
+    if (undefinedp(config_cache[config_id]))
+    {
+        return 0;
+    }
+
+    map_delete(config_cache, config_id);
+    return 1;
+}
+
+/**
+ * @brief 清除所有配置缓存
+ */
+void clear_all_cache()
+{
+    config_cache = ([]);
+}
+
+/**
+ * @brief 获取佛山区域可战斗房间列表
+ * @return string* 可战斗房间路径数组
+ * @details 扫描配置的生成区域下所有房间，过滤出未设置no_fight标志的房间
+ */
+string* get_foshan_rooms()
+{
+    string* files;
+    string* valid_rooms;
+    int i;
+    int len;
+    string search_pattern;
+
+    valid_rooms = ({});
+
+    // 构建搜索模式
+    search_pattern = SPAWN_AREA + "*.lpc";
+
+    // 获取目录下所有.c文件
+    files = get_dir(search_pattern);
+
+    if (!arrayp(files) || sizeof(files) == 0)
+    {
+        return valid_rooms;
+    }
+
+    len = sizeof(files);
+    for (i = 0; i < len; i++)
+    {
+        string room_path;
+        object room_ob;
+
+        // 构建完整路径（去掉.c后缀）
+        if (sscanf(files[i], "%s.lpc", room_path) == 1)
+        {
+            room_path = SPAWN_AREA + room_path;
+        }
+        else
+        {
+            continue;
+        }
+
+        // 加载房间对象
+        catch(room_ob = load_object(room_path));
+
+        if (!objectp(room_ob))
+        {
+            continue;
+        }
+
+        // 检查是否为no_fight房间
+        if (!room_ob->query("no_fight"))
+        {
+            valid_rooms += ({ room_path });
+        }
+    }
+
+    return valid_rooms;
+}
+
+/**
+ * @brief 生成妖魔并投放到配置区域
+ * @details 根据SPAWN_COUNT配置生成妖魔，每只妖魔随机选择一个可战斗房间投放
+ */
+void spawn_yaomo()
+{
+    string* config_ids;
+    string* rooms;
+    int i;
+    int config_count;
+    int room_count;
+
+    // 获取所有妖魔配置
+    config_ids = query_all_yaomo();
+    if (!arrayp(config_ids) || sizeof(config_ids) == 0)
+    {
+        CHANNEL_D->do_channel(this_object(), "sys",
+            HIR"【妖魔系统】错误：未找到任何妖魔配置。\n"NOR);
+        return;
+    }
+
+    // 获取所有可战斗房间
+    rooms = get_foshan_rooms();
+    if (!arrayp(rooms) || sizeof(rooms) == 0)
+    {
+        CHANNEL_D->do_channel(this_object(), "sys",
+            HIR"【妖魔系统】错误：" + SPAWN_AREA + "区域没有可用的战斗房间。\n"NOR);
+        return;
+    }
+
+    config_count = sizeof(config_ids);
+    room_count = sizeof(rooms);
+
+    // 清空之前的妖魔列表
+    active_yaomo_list = ({});
+
+    // 根据配置生成妖魔
+    for (i = 0; i < SPAWN_COUNT; i++)
+    {
+        string random_config;
+        string random_room;
+        object yaomo_ob;
+
+        // 随机选择妖魔配置
+        random_config = config_ids[random(config_count)];
+
+        // 随机选择房间
+        random_room = rooms[random(room_count)];
+
+        // 创建妖魔
+        yaomo_ob = create_yaomo(random_config);
+
+        if (!objectp(yaomo_ob))
+        {
+            continue;
+        }
+
+        // 移动到房间
+        if (yaomo_ob->move(random_room) == -1)
+        {
+            // 移动失败，销毁对象
+            destruct(yaomo_ob);
+            continue;
+        }
+
+        // 加入活动列表
+        active_yaomo_list += ({ yaomo_ob });
+    }
+
+    // 广播生成消息
+    CHANNEL_D->do_channel(this_object(), "chat",
+        HIY"【妖魔系统】大量妖魔突然出现在佛山一带，各位侠士请小心应对！\n"NOR);
+
+    // 设置延迟回收
+    call_out("recycle_yaomo", RECYCLE_DELAY);
+}
+
+/**
+ * @brief 回收所有生成的妖魔
+ * @details 销毁所有活动妖魔对象，使用objectp检查避免运行时错误
+ */
+void recycle_yaomo()
+{
+    int i;
+    int len;
+    int recycled_count;
+
+    recycled_count = 0;
+
+    if (!arrayp(active_yaomo_list))
+    {
+        return;
+    }
+
+    len = sizeof(active_yaomo_list);
+
+    for (i = 0; i < len; i++)
+    {
+        object yaomo_ob;
+
+        yaomo_ob = active_yaomo_list[i];
+
+        // 检查对象是否仍然有效
+        if (objectp(yaomo_ob))
+        {
+            destruct(yaomo_ob);
+            recycled_count++;
+        }
+    }
+
+    // 清空列表
+    active_yaomo_list = ({});
+
+    // 广播回收消息
+    CHANNEL_D->do_channel(this_object(), "chat",
+        HIC"【妖魔系统】妖魔已经散去，佛山暂时恢复了平静。\n"NOR);
+}
+
+/**
+ * @brief 心跳函数
+ * @details 每60秒检查一次，在SPAWN_HOURS配置的时间点生成妖魔
+ */
+void heart_beat()
+{
+    mixed* local_time;
+    int* spawn_hours;
+    int year;
+    int month;
+    int day;
+    int hour;
+    int minute;
+    int i;
+    int len;
+
+    // 获取当前时间
+    local_time = localtime(time());
+    year = local_time[5] + 1900;  // 年份
+    month = local_time[4];         // 月份
+    day = local_time[3];           // 日期
+    hour = local_time[2];          // 小时
+    minute = local_time[1];        // 分钟
+
+    // 获取配置的生成时间点
+    spawn_hours = SPAWN_HOURS;
+
+    // 检查是否在分钟为0的时刻
+    if (minute != 0)
+    {
+        return;
+    }
+
+    // 检查当前小时是否在配置的生成时间点中
+    len = sizeof(spawn_hours);
+    for (i = 0; i < len; i++)
+    {
+        if (hour == spawn_hours[i])
+        {
+            // 检查是否已经在这个时间点生成过
+            if (last_spawn_day == day && last_spawn_hour == hour)
+            {
+                return;
+            }
+
+            // 记录生成时间
+            last_spawn_day = day;
+            last_spawn_hour = hour;
+
+            // 执行生成
+            spawn_yaomo();
+            return;
+        }
+    }
+}
+

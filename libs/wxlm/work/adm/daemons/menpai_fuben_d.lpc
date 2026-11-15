@@ -1,0 +1,298 @@
+
+
+inherit F_DBASE;
+varargs int des_menpai_fuben(string fuben_sn, int indx);
+string check_existing_fuben(object me, string name);
+
+mapping menpai_fuben_list = ([
+    "shaolin": ([
+        "name": "少林派",
+        "time": 1800,
+        "team": 1,
+    ]),
+    "wudang": ([
+        "name": "武当派",
+        "time": 1800,
+        "team": 1,
+    ]),
+    "emei": ([
+        "name": "峨眉派",
+        "time": 1800,
+        "team": 1,
+    ]),
+    // 添加其他门派
+    "huashan": ([
+        "name": "华山派",
+        "time": 1800,
+        "team": 1,
+    ]),
+    "gaibang": ([
+        "name": "丐帮",
+        "time": 1800,
+        "team": 1,
+    ]),
+    // 全真派
+    "quanzhen": ([
+        "name": "全真教",
+        "time": 1800,
+        "team": 1,
+    ]),
+    // 古墓派
+    "gumu": ([
+        "name": "古墓派",
+        "time": 1800,
+        "team": 1,
+    ]),
+    // 星宿派
+    "xingxiu": ([
+        "name": "星宿派",
+        "time": 1800,
+        "team": 1,
+    ]),
+        // 逍遥派
+    "xiaoyao": ([
+        "name": "逍遥派",
+        "time": 1800,
+        "team": 1,
+    ]),
+    // 灵鹫宫
+    "lingjiu": ([
+        "name": "灵鹫宫",
+        "time": 1800,
+        "team": 1,
+    ]),
+    // 雪山派
+    "xueshan": ([
+        "name": "雪山派",
+        "time": 1800,
+        "team": 1,
+    ]),
+    // 血刀门
+    "xuedao": ([
+        "name": "血刀门",
+        "time": 1800,
+        "team": 1,
+    ]),
+        // 明教
+    "mingjiao": ([
+        "name": "明教",
+        "time": 1800,
+        "team": 1,
+    ]),
+    // 神龙教
+    "shenlong": ([
+        "name": "神龙教",
+        "time": 1800,
+        "team": 1,
+    ]),
+]);
+
+mapping menpai_fuben_open;
+mapping menpai_fuben_where;
+
+void create()
+{
+    seteuid(ROOT_UID);
+    set("channel_id", "门派副本精灵");
+    CHANNEL_D->do_channel(this_object(), "sys", "门派副本系统已经启动。");
+    menpai_fuben_open = ([]);
+    menpai_fuben_where = ([]);
+    set_heart_beat(30);
+}
+
+void heart_beat()
+{
+    string *fuben, name;
+    int i, time;
+
+    fuben = keys(menpai_fuben_open);
+    for (i = 0; i < sizeof(fuben); i++)
+    {
+        name = menpai_fuben_open[fuben[i]]["name"];
+        time = menpai_fuben_open[fuben[i]]["time"];
+        if ((time() - time) >= menpai_fuben_list[name]["time"])
+            des_menpai_fuben(fuben[i]);
+    }
+}
+
+mixed create_menpai_fuben(object me, string name)
+{
+    string *files, *dirs, fuben_sn, *list;
+    object room;
+    mapping fb;
+    int i, j, k;
+    string existing_fuben;
+
+    if (!mapp(menpai_fuben_list[name]))
+    {
+        tell_object(me, "创建失败，无此门派副本！\n");
+        return 0;
+    }
+
+    existing_fuben = check_existing_fuben(me, name);
+    if (existing_fuben)
+    {
+        log_file("menpai_fuben_d/debug", sprintf("Existing fuben found: %s for player: %s\n", existing_fuben, me->query("id")));
+        return menpai_fuben_open[existing_fuben];
+    }
+
+    files = get_dir("/d/new_fuben/menpai/" + name + "/");
+    list = ({});
+    fb = ([]);
+    fuben_sn = sprintf("%s_%s_%d", name, me->query("id"), time());
+
+    for (i = 0; i < sizeof(files); i++)
+    {
+        if (file_size("/d/new_fuben/menpai/" + name + "/" + files[i]) > 0)
+        {
+            room = new("/d/new_fuben/menpai/" + name + "/" + files[i]);
+            room->set("fuben_sn", fuben_sn);
+            list += ({ file_name(room) });
+            if (files[i] == "enter.lpc")
+            {
+                room->set("exits/out", base_name(environment(me)));
+                fb["enter"] = file_name(room);
+            }
+        }
+    }
+
+    // 设置房间之间的连接
+    for (i = 0; i < sizeof(list); i++)
+    {
+        if (room = find_object(list[i]))
+        {
+            dirs = keys(room->query("exits"));
+            for (j = 0; j < sizeof(dirs); j++)
+            {
+                for (k = 0; k < sizeof(list); k++)
+                {
+                    if (strsrch(list[k], room->query("exits/" + dirs[j]) + "#") == 0)
+                    {
+                        room->set("exits/" + dirs[j], list[k]);
+                    }
+                }
+            }
+        }
+    }
+
+    if (menpai_fuben_where[base_name(environment(me))])
+        menpai_fuben_where[base_name(environment(me))] += ({ fuben_sn });
+    else
+        menpai_fuben_where[base_name(environment(me))] = ({ fuben_sn });
+
+    fb["files"] = list;
+    fb["owner"] = me->query("id");
+    fb["time"] = time();
+    fb["name"] = name;
+    fb["where"] = base_name(environment(me));
+    fb["id"] = fuben_sn;
+    menpai_fuben_open[fuben_sn] = fb;
+
+    log_file("menpai_fuben_d/fuben", sprintf("%s %s %s\n", me->query("name") + "(" + me->query("id") + ")", 
+        "创建了" + name,
+        "位置" + fb["where"]));
+    log_file("menpai_fuben_d/debug", sprintf("Created fuben with ID: %s for player: %s\n", fuben_sn, me->query("id")));
+    return fb;
+}
+
+int enter_menpai_fuben(object me, string fuben_id)
+{
+    mapping info;
+    object room;
+    string entry_room;
+
+    log_file("menpai_fuben_d/debug", sprintf("Attempting to enter fuben: %s for player: %s\n", fuben_id, me->query("id")));
+
+    if (!fuben_id || fuben_id == "")
+    {
+        log_file("menpai_fuben_d/error", sprintf("Invalid fuben_id: %O for player: %s\n", fuben_id, me->query("id")));
+        return 0;
+    }
+
+    if (!mapp(info = menpai_fuben_open[fuben_id]))
+    {
+        log_file("menpai_fuben_d/error", sprintf("Fuben not found: %s for player: %s\n", fuben_id, me->query("id")));
+        return 0;
+    }
+
+    entry_room = info["enter"];
+    if (!entry_room)
+    {
+        log_file("menpai_fuben_d/error", sprintf("Entry room not set for fuben: %s\n", fuben_id));
+        return 0;
+    }
+
+    room = find_object(entry_room);
+    if (!room)
+        room = load_object(entry_room);
+
+    if (!room)
+    {
+        log_file("menpai_fuben_d/error", sprintf("Failed to load entry room: %s for fuben: %s\n", entry_room, fuben_id));
+        return 0;
+    }
+
+    log_file("menpai_fuben_d/debug", sprintf("Successfully entered fuben: %s for player: %s\n", fuben_id, me->query("id")));
+    return me->move(room);
+}
+
+varargs int des_menpai_fuben(string fuben_sn, int indx)
+{
+    mapping info;
+    string *list;
+    object room, *inv;
+    int i, j;
+
+    info = menpai_fuben_open[fuben_sn];
+    if (!info) return 0;
+
+    list = info["files"];
+    for (i = 0; i < sizeof(list); i++)
+    {
+        if (!objectp(room = find_object(list[i]))) continue;
+        inv = all_inventory(room);
+        for (j = 0; j < sizeof(inv); j++)
+        {
+            if (userp(inv[j]))
+            { 
+                if (!indx)
+                    tell_object(inv[j], HIG "你在" + menpai_fuben_list[info["name"]]["name"] + "内呆得太久了，不得不退了出来。" NOR "\n");
+                else
+                    tell_object(inv[j], HIG "你感觉" + menpai_fuben_list[info["name"]]["name"] + "内太恐怖了，还是先撤离吧。" NOR "\n");
+                
+                inv[j]->move(info["where"]);
+            }
+        }
+    }
+
+    // 检查是否还有玩家在副本中
+    if (sizeof(filter_array(users(), (: member_array($1->query("env/fuben_id"), $(list)) != -1 :))) == 0)
+    {
+        // 如果没有玩家在副本中，则销毁副本
+        for (i = 0; i < sizeof(list); i++)
+        {
+            if (objectp(room = find_object(list[i])))
+                destruct(room);
+        }
+        menpai_fuben_where[info["where"]] -= ({ fuben_sn });
+        map_delete(menpai_fuben_open, fuben_sn);
+        if (sizeof(menpai_fuben_where[info["where"]]) < 1)
+            map_delete(menpai_fuben_where, info["where"]);
+    }
+    
+    return 1;
+}
+
+string check_existing_fuben(object me, string name)
+{
+    string *fuben_ids = keys(menpai_fuben_open);
+    foreach (string id in fuben_ids)
+    {
+        if (menpai_fuben_open[id]["owner"] == me->query("id") &&
+            menpai_fuben_open[id]["name"] == name)
+        {
+            return id;
+        }
+    }
+    return 0;
+}

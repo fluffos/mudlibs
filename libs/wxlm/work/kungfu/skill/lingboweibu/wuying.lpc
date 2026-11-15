@@ -1,0 +1,82 @@
+// /kungfu/skill/lingboweibu/wuying.c
+
+
+#include <room.h>
+
+inherit F_SSERVER;
+
+string query_name() { return HIW "无影遁" NOR; }
+
+int perform(object me, object target)
+{
+    object room;
+    mapping exits;
+    string *directions;
+    int i, skill, dodge_skill;
+    int success_rate;
+
+    if ((int)me->query_skill("lingboweibu", 1) < 100)
+        return notify_fail("你的凌波微步还不够熟练，需要100级才能施展" + query_name() + "。\n");
+
+    if ((int)me->query("neili") < 200)
+        return notify_fail("你的内力不足200点，无法施展" + query_name() + "。\n");
+
+    if (me->query_temp("lingboweibu_wuying_cd"))
+        return notify_fail("你刚刚使用过" + query_name() + "，还需要等待" + 
+                           (string)(10 - time() + me->query_temp("lingboweibu_wuying_cd")) + "秒才能再次施展。\n");
+
+    if (!environment(me)->query("exits"))
+        return notify_fail("这里没有任何出口，无法施展" + query_name() + "。\n");
+
+    if (me->is_busy())
+        return notify_fail("你现在正忙着，无法施展" + query_name() + "。请等待当前动作完成。\n");
+
+    if (!target)
+        target = offensive_target(me);
+
+    if (!target || !me->is_fighting(target))
+        return notify_fail("你必须在战斗中才能使用" + query_name() + "。\n");
+
+    skill = me->query_skill("lingboweibu", 1);
+    dodge_skill = target->query_skill("dodge", 1);
+
+    // 计算成功率，基础50%，每高出对手10级增加5%，最高95%
+    success_rate = 50 + (skill - dodge_skill) / 10 * 5;
+    success_rate = (success_rate < 5) ? 5 : ((success_rate > 95) ? 95 : success_rate);
+
+    if (random(100) >= success_rate)
+    {
+        message_vision(HIW "$N" HIW "身形一转，企图施展" + query_name() + HIW "，但被$n" HIW "看破，无法逃脱。\n" NOR, me, target);
+        me->start_busy(2);
+        return 1;
+    }
+
+    me->add("neili", -150);
+
+    message_vision(HIW "$N" HIW "身形一转，施展出" + query_name() + HIW "，瞬间化作一道白光消失不见。\n" NOR, me);
+
+    room = environment(me);
+    exits = room->query("exits");
+    directions = keys(exits);
+    i = random(sizeof(directions));
+
+    me->move(exits[directions[i]]);
+
+    tell_room(room, HIW + me->name() + "施展凌波微步，身形一闪，踪迹难寻。\n" NOR, me);
+    tell_room(environment(me), HIW + me->name() + "如一道白光闪现，转瞬间出现在这里。\n" NOR, me);
+
+    me->start_busy(1);
+    me->set_temp("lingboweibu_wuying_cd", time());
+    call_out("remove_effect", 10, me);
+
+    return 1;
+}
+
+void remove_effect(object me)
+{
+    if (me && me->query_temp("lingboweibu_wuying_cd"))
+    {
+        me->delete_temp("lingboweibu_wuying_cd");
+        tell_object(me, HIG "你感觉内力已经恢复，可以再次施展" + query_name() + "了。\n" NOR);
+    }
+}

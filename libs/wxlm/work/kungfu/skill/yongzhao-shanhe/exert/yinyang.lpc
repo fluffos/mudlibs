@@ -1,0 +1,105 @@
+// yinyang.c 阴阳调和
+
+inherit F_CLEAN_UP;
+
+/**
+ * @brief 获取绝技名称
+ * @return string 绝技显示名称
+ */
+string query_name() { return "阴阳"ZJBR"调和"; }
+
+/**
+ * @brief 移除效果的函数
+ * @param object me 使用者
+ * @param int amount 移除的数值
+ * @details 当绝技效果结束时调用
+ */
+void remove_effect(object me, int amount);
+
+/**
+ * @brief 阴阳调和内功绝技
+ * @param object me 使用者
+ * @param object target 目标对象
+ * @return int 1表示成功，0表示失败
+ * @details 融合九阳神功和蚩尤狂战决的增益效果，阴阳二气调和，全面提升战力
+ */
+int exert(object me, object target)
+{
+    int skill;
+    int guang_level, mo_level;
+
+    if (target != me)
+        return notify_fail("你只能用阴阳调和来提升自己的战斗力。\n");
+
+    if ((int)me->query("neili") < 200)
+        return notify_fail("你的内力不够。\n");
+
+    if ((int)me->query_temp("yinyang"))
+        return notify_fail("你已经在运功中了。\n");
+
+    if (me->query_skill("yongzhao-shanhe", 1) < 200)
+        return notify_fail("你的永照山河经修为不够，无法施展「阴阳调和」。\n");
+
+    if (me->query_skill_mapped("force") != "yongzhao-shanhe")
+        return notify_fail("你现在没有激发永照山河经为内功，难以施展「阴阳调和」。\n");
+
+    skill = me->query_skill("force");
+    me->add("neili", -200);
+    me->receive_damage("qi", 0);
+
+    // 获取意境等级
+    guang_level = COMBAT_D->get_skill_aoyi_level(me, "光明圣火");
+    mo_level = COMBAT_D->get_skill_aoyi_level(me, "魔血染刀");
+
+    message_combatd(HIW "$N" HIW "双手一合，九阴九阳二气在体内缓缓流转，"
+                    "阴阳调和，刚柔并济，浑身散发出" HIM "紫金光华" HIW "！\n" NOR, me);
+
+    // 基础提升（比九阳神功powerup略高）
+    me->add_temp("apply/attack", skill * 2 / 5);
+    me->add_temp("apply/damage", skill * 2 / 5);
+
+    // 意境加成
+    if (guang_level > 0)
+    {
+        me->add_temp("apply/attack", guang_level * 5);
+        message_combatd(HIY "$N" HIY "体内光明圣火奥义运转，攻击力大增！\n" NOR, me);
+    }
+
+    if (mo_level > 0)
+    {
+        me->add_temp("apply/damage", mo_level * 8);
+        message_combatd(HIR "$N" HIR "体内魔血染刀奥义激发，伤害力暴涨！\n" NOR, me);
+    }
+
+    me->set_temp("yinyang", 1);
+
+    // 持续时间：基础时间 + 意境加成
+    me->start_call_out((: call_other, __FILE__, "remove_effect", me, skill :),
+                       skill + guang_level * 2 + mo_level * 3);
+
+    if (me->is_fighting()) me->start_busy(3);
+
+    return 1;
+}
+
+/**
+ * @brief 移除阴阳调和效果
+ * @param object me 使用者
+ * @param int amount 技能等级数值
+ * @details 移除所有临时属性加成
+ */
+void remove_effect(object me, int amount)
+{
+    int guang_level, mo_level;
+
+    if ((int)me->query_temp("yinyang"))
+    {
+        guang_level = COMBAT_D->get_skill_aoyi_level(me, "光明圣火");
+        mo_level = COMBAT_D->get_skill_aoyi_level(me, "魔血染刀");
+
+        me->add_temp("apply/attack", -(amount * 2 / 5 + guang_level * 5));
+        me->add_temp("apply/damage", -(amount * 2 / 5 + mo_level * 8));
+        me->delete_temp("yinyang");
+        tell_object(me, "你的阴阳调和运行完毕，九阴九阳二气重归丹田。\n");
+    }
+}

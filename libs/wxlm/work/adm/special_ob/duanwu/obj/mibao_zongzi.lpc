@@ -1,0 +1,143 @@
+
+#include <command.h>
+
+inherit COMBINED_ITEM;
+
+#define DUANWU_D "/adm/special_ob/duanwu/duanwu_master"
+
+void setup()
+{
+        set_amount(1);
+        ::setup();
+}
+
+void create()
+{
+        set_name(HIR "秘宝粽子" NOR, ({"mibao zongzi", "mibao", "zongzi"}));
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", HIR "这是一个包装精美的粽子，据说是由神秘的粽子仙子特制而成，里面蕴含着珍贵的宝物。\n" +
+                             "一阵阵香气从中散发出来，让人垂涎欲滴。使用后可以获得3点端午活动积分。\n" NOR);
+                set("base_unit", "个");
+                set("base_weight", 1);
+                set("base_value", 5000);
+                set("yuanbao", 50);
+                set("no_sell", 1);
+                set("no_drop", 1);
+                set("no_give", 1);
+                set("no_steal", 1);
+                set("only_do_effect", 1);
+        }
+        setup();
+}
+
+int do_effect(object me)
+{
+        object ob;
+        string msg;
+        int r, point;
+        
+        // 物品奖励池，按照概率分组
+        mapping items = ([
+                // 极品道具(0.01%)
+                "ji" : ([
+                        "/clone/aoyi_book/aoyi_book" : HIR "【意境卷轴】" NOR,
+                        "/clone/vip/dan_jiuzhuan" : HIR "【九转金丹】x3" NOR,
+                ]),
+                // 高级道具(0.99%)
+                "gao" : ([
+                        "/clone/vip/wusheng_book" : HIG "【武圣经义】" NOR,
+                        "/clone/vip/kuilei" : HIG "【替身傀儡】" NOR,
+                        "/clone/vip/cangku_add_book" : HIG "【仓库扩容书】" NOR,
+                ]),
+                // 中级道具(10%)
+                "zhong" : ([
+                        "/clone/vip/zhongjibao_hufu" : HIC "【中级强化保护符】" NOR,
+                        "/clone/vip/dan_chongmai2" : HIC "【冲脉丹中品】" NOR,
+                        "/clone/vip/renshen_seed" : HIC "【人参果种子】" NOR,
+                        "/clone/vip/baijia_baoxia" : HIC "【百家宝匣】" NOR,
+                        "/clone/vip/fushougao" : HIC "【福寿膏】" NOR,
+                ]),
+                // 低级道具(89%)
+                "di" : ([
+                        "/clone/vip/jinsha" : HIC "【金砂】" NOR,
+                        "/clone/vip/dijibao_hufu" : HIC "【低级强化保护符】" NOR,
+                        "/clone/vip/dan_chongmai1" : HIC "【冲脉丹下品】" NOR,
+                        "/clone/vip/lingzhi" : HIC "【千年灵芝】" NOR,
+                        "/clone/vip/fertilizer" : HIC "【肥料】" NOR,
+                        "/clone/vip/putao_seed" : HIC "【葡萄树种子】" NOR,
+                        "/clone/vip/putao" : HIC "【葡萄】" NOR,
+                        "/clone/vip/tianfu_ganwu_suipian" : HIC "【天赋感悟碎片】" NOR,
+                ]),
+        ]);
+        
+        string *paths, level, item_path;
+        int idx;
+        string item_name;
+        // 增加个人积分
+        point = 3;
+        DUANWU_D->add_jifen(me, point);
+        
+        // 随机获取道具
+        r = random(10000);
+        
+        // 根据概率选择物品等级
+        if (r < 1) // 极品道具(0.01%)
+                level = "ji";
+        else if (r < 100) // 高级道具(0.99%)
+                level = "gao";
+        else if (r < 1100) // 中级道具(10%)
+                level = "zhong";
+        else // 低级道具(89%)
+                level = "di";
+        
+        // 从选定等级的物品中随机选择一个
+        paths = keys(items[level]);
+        idx = random(sizeof(paths));
+        item_path = paths[idx];
+        
+        // 创建物品
+        ob = new_bind(item_path);
+        
+        // 如果是九转金丹，设置数量为3
+        if (item_path == "/clone/vip/dan_jiuzhuan")
+                ob->set_amount(3);
+        
+        // 获取物品名称用于消息提示
+        item_name = items[level][item_path];
+        
+        // 根据等级定制消息
+        if (level == "ji")
+                msg = HIY "恭喜！你从秘宝粽子中获得了" + item_name + HIY "！\n" NOR;
+        else if (level == "gao")
+                msg = HIY "恭喜！你从秘宝粽子中获得了" + item_name + HIY "！\n" NOR;
+        else if (level == "zhong")
+                msg = HIY "不错！你从秘宝粽子中获得了" + item_name + HIY "！\n" NOR;
+        else
+                msg = HIY "你从秘宝粽子中获得了" + item_name + HIY "！\n" NOR;
+
+        // 将获得的物品移动到玩家背包
+        if (!ob->move(me))
+        {
+                // 如果无法放入背包，尝试放入环境
+                ob->move(environment(me));
+                msg += "你的背包已满，" + ob->query("name") + "掉在了地上。\n";
+        }
+        
+        // 在频道公布获得高级道具的信息
+        if (level == "ji" || level == "gao")
+        {
+                CHANNEL_D->do_channel(this_object(), "rumor",
+                        sprintf("听说%s在打开秘宝粽子时获得了%s！",
+                                me->name(1), ob->name()));
+        }
+        
+        // 显示消息并消耗物品
+        tell_object(me, msg + "\n");
+        tell_object(me, HIG "【系统提示】：你获得了3点端午活动积分！\n" NOR);
+        
+        // 减少物品数量
+        add_amount(-1);
+        return 1;
+}

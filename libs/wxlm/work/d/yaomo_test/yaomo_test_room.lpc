@@ -1,0 +1,120 @@
+// yaomo_test_room.c
+// 妖魔测试房间
+
+inherit ROOM;
+
+void create()
+{
+    set("short", "妖魔试炼场");
+    set("long", @LONG
+这里是一个专门用于测试妖魔系统的试炼场。四周被强大的结界笼罩，
+可以安全地进行战斗测试。地面上刻画着复杂的法阵，散发着神秘的光芒。
+
+    指令：
+        summon <妖魔ID>  - 召唤指定的妖魔进行测试
+        list             - 查看可召唤的妖魔列表
+LONG);
+
+    set("exits", ([
+        // 可以根据需要添加出口
+    ]));
+
+    setup();
+}
+
+void init()
+{
+    add_action("do_summon", "summon");
+    add_action("do_list", "list");
+}
+
+/**
+ * @brief 召唤妖魔
+ * @param string arg 妖魔配置ID
+ * @return int 1表示成功，0表示失败
+ */
+int do_summon(string arg)
+{
+    object yaomo;
+    object me;
+
+    me = this_player();
+
+    if (!arg || arg == "")
+    {
+        tell_object(me, "用法: summon <妖魔ID>\n");
+        tell_object(me, "例如: summon yaomo_001\n");
+        return 1;
+    }
+
+    // 检查房间内是否已有妖魔
+    if (present("mo", environment(me)))
+    {
+        tell_object(me, "这里已经有妖魔了，请先清理掉再召唤新的妖魔。\n");
+        return 1;
+    }
+
+    // 创建妖魔
+    yaomo = load_object("/system/yaomo/yaomo_daemon")->create_yaomo(arg);
+
+    if (!objectp(yaomo))
+    {
+        tell_object(me, "召唤失败！找不到配置ID为 " + arg + " 的妖魔。\n");
+        tell_object(me, "请使用 list 命令查看可用的妖魔列表。\n");
+        return 1;
+    }
+
+    // 将妖魔移动到房间
+    yaomo->move(environment(me));
+
+    message_vision("$N施展法术，一团黑雾涌现，" + yaomo->name() + "出现在试炼场中！\n", me);
+
+    return 1;
+}
+
+/**
+ * @brief 列出所有可用的妖魔
+ * @return int 1表示成功
+ */
+int do_list()
+{
+    object me;
+    string* yaomo_list;
+    int i;
+    int len;
+    string msg;
+
+    me = this_player();
+
+    yaomo_list = load_object("/system/yaomo/yaomo_daemon")->query_all_yaomo();
+
+    if (!arrayp(yaomo_list) || sizeof(yaomo_list) == 0)
+    {
+        tell_object(me, "当前没有可用的妖魔配置。\n");
+        return 1;
+    }
+
+    msg = "\n==== 可召唤的妖魔列表 ====\n\n";
+
+    len = sizeof(yaomo_list);
+    for (i = 0; i < len; i++)
+    {
+        mapping config;
+
+        config = load_object("/system/yaomo/yaomo_daemon")->load_yaomo_config(yaomo_list[i]);
+
+        if (mapp(config))
+        {
+            msg += sprintf("  %-15s Lv.%-3d %s\n",
+                yaomo_list[i],
+                config["level"],
+                config["name"]);
+        }
+    }
+
+    msg += "\n使用 summon <妖魔ID> 来召唤妖魔\n";
+
+    tell_object(me, msg);
+
+    return 1;
+}

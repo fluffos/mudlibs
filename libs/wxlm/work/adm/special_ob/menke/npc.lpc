@@ -1,0 +1,347 @@
+inherit NPC;
+#include "pfms.h"
+
+// 函数声明
+void retreat();
+void init_attr(int level);
+void upgrade(int level);
+int doing_quest();
+
+// 创建门客
+void create()
+{
+    set_name("门客", ({ "menke" }));
+    set("age", 22);
+    set("gender", "男性");
+    set("long", "。\n");
+    set("attitude", "peaceful");
+
+    set("str", 30);
+    set("dex", 30);
+    set("con", 30);
+    set("int", 30);
+    set("is_menke", 1);
+    set("combat_exp", 1000000);
+    set("shen_type", 1);
+
+    set_temp("apply/attack", 30);
+    set_temp("apply/defense", 30);
+    set_temp("apply/damage", 30);
+    set_temp("apply/armor", 30);
+
+    keep_heart_beat();
+    setup();
+    carry_object("/clone/cloth/cloth")->wear();
+}
+
+// 门客撤退函数
+void retreat()
+{
+    object me = this_object();
+    object ob = find_player(me->query("master_id"));
+
+    if (objectp(ob))
+    {
+        tell_object(ob, "你的门客返回了。\n");
+    }
+
+    if (objectp(environment(me)))
+    {
+        message_vision("$N匆匆离开了。\n", me);
+    }
+    destruct(me);
+}
+
+// 初始化属性
+void init_attr(int level)
+{
+    object me = this_object();
+    mixed *fight_pfms = ({});
+
+    me->set("level", level);
+    me->set("str", 30 + level / 50);
+    me->set("int", 30 + level / 50);
+    me->set("con", 30 + level / 50);
+    me->set("dex", 30 + level / 50);
+
+    me->set_skill("force", level);
+    me->set("max_qi", level * 100);
+    me->set("eff_qi", level * 100);
+    me->set("qi", level * 100);
+    me->set("max_jing", level * 100);
+    me->set("eff_jing", level * 100);
+    me->set("jing", level * 100);
+    me->set("max_neili", level * 100);
+    me->set("neili", level * 100);
+    me->set("jiali", level);
+    me->set("combat_exp", (level * level * level) / 10);
+
+    foreach (string skill in keys(me->query_skills()))
+    {
+        me->set_skill(skill, level);
+    }
+
+    foreach (string exert_name in pfms[me->query("paixi")]["exert_function"])
+    {
+        fight_pfms += ({(: exert_function, exert_name :)});
+    }
+
+    foreach (string perform_name in pfms[me->query("paixi")]["perform_action"])
+    {
+        fight_pfms += ({(: perform_action, perform_name :)});
+    }
+
+    set("chat_chance_combat", 80);
+    set("chat_msg_combat", fight_pfms);
+
+    me->set_temp("apply/attack", 300 + level);
+    me->set_temp("apply/defense", 30 + level);
+    me->set_temp("apply/damage", 300 + level);
+    me->set_temp("apply/armor", 30 + level);
+}
+
+// 门客升级函数
+void upgrade(int level)
+{
+    object me = this_object();
+    init_attr(level);
+
+    message_vision("$N感到一股热流在体内涌动，这是武艺即将突破的前兆。\n", me);
+    message_vision("$N紧闭双眼，全神贯注地引导着这股热流。\n", me);
+    message_vision("碧云的身体周围渐渐泛起淡淡的光晕，这是武艺提升的明显迹象。\n", me);
+    message_vision("经过一番努力，$N成功地突破了瓶颈，武艺更上一层楼。\n", me);
+    command("say 谢主公提携，在下终于突破了瓶颈，武艺更上一层楼。");
+}
+
+// 心跳函数
+void heart_beat()
+{
+    object me = this_object();
+    object where = environment(me);
+    mixed ob = find_player(me->query("master_id"));
+    mixed weapon;
+    if (query("doing_quest"))
+    {
+        doing_quest();
+    }
+
+    if (objectp(weapon = me->query_temp("weapon")) && weapon->query("consistence") < 100)
+    {
+        weapon->set("consistence", 100);
+    }
+
+    if (!me->query_temp("weapon") && me->query("weapon_path"))
+    {
+        if (present((me->query("weapon_path"))->query("id"), me))
+        {
+            // 如果是被击落的武器，捡起来
+            //检查当前环境下是否有武器
+            if (objectp(present((me->query("weapon_path"))->query("id"), environment(me))))
+            {
+                me->force_me("get " + (me->query("weapon_path"))->query("id"));
+            }
+
+            me->force_me("wield " + (me->query("weapon_path"))->query("id"));
+        }
+        else
+        {
+            carry_object(me->query("weapon_path"))->wield();
+        }
+    }
+
+    if (where && stringp(me->query("master_id")) && !query("doing_quest"))
+    {
+        if (objectp(ob) && me->query("level") != ob->query("menke_system/menke_msg/level"))
+        {
+            upgrade(ob->query("menke_system/menke_msg/level"));
+        }
+
+        if (!objectp(ob) || environment(ob) != where)
+        {
+            message_vision("$N匆匆离开了。\n", me);
+            retreat();
+            destruct(me);
+            return;
+        }
+        else if (!me->is_fighting() && ob->is_fighting())
+        {
+            object target = ob->select_opponent();
+            if (objectp(target))
+            {
+                me->kill_ob(target);
+                command("say 大胆狂徒，竟敢在我主公面前撒野！");
+            }
+        }
+    }
+    else if (!query("doing_quest"))
+    {
+        retreat();
+        return;
+    }
+
+    ::heart_beat();
+}
+
+// 开始执行任务
+int start_shimen_quest(object player)
+{
+    object me = this_object();
+    mapping mlist = QUEST_D->query_mlist();
+    string family_name = player->query("family/family_name");
+    string family_man_path = mlist[family_name];
+
+    command("follow none");
+
+    me->set("family", player->query("family"));
+    me->set("shimen_accept_name", family_man_path->query("name"));
+    me->set("shimen_accept_id", family_man_path->query("id"));
+    me->set("doing_quest", 1);
+    player->set("menke_system/doing_quest", 1);
+
+    tell_object(player, me->name() + "即将寻找" + me->query("shimen_accept_name") + "，执行师门任务。\n");
+    return 1;
+}
+
+// 任务结束，接受返回任务
+int end_quest()
+{
+    object me = this_object();
+    object master = find_player(me->query("master_id"));
+
+    me->delete("doing_quest");
+    me->delete("end_quest");
+    me->move(environment(master));
+
+    command("say 属下不负主公重托，已完成任务。请主公清点任务收益");
+    MENKE_M->give_reward_master(me, master);
+
+    return 1;
+}
+
+// 接受远程任务
+int accept_distance_quest()
+{
+    object me = this_object();
+    object master = find_player(me->query("master_id"));
+    object letter = present("letter", me);
+
+    if (me->query("end_quest"))
+    {
+        end_quest();
+        return 1;
+    }
+
+    if (objectp(letter))
+    {
+        if (query("doing_quest"))
+        {
+            command("accept quest");
+        }
+        else
+        {
+            command("refuse quest");
+        }
+
+        if (objectp(master))
+        {
+            tell_object(master, me->name() + "完成了师门任务，准备进行下一个任务。\n");
+        }
+
+        return 1;
+    }
+}
+
+// 处理师门任务
+int doing_quest()
+{
+    object me = this_object();
+    object master = find_player(me->query("master_id"));
+    mapping quest = me->query("quest");
+
+    if (me->is_fighting())
+    {
+        return 1;
+    }
+
+    if (quest)
+    {
+        object env = environment(me);
+        object target;
+
+        if (quest["finished"])
+        {
+            return 1;
+        }
+
+        if (objectp(env) && objectp(present(quest["id"], env)))
+        {
+            target = present(quest["id"], env);
+            command("kill " + quest["id"]);
+        }
+        else
+        {
+            target = query("quest/object");
+            if (!objectp(target))
+            {
+                me->delete("quest");
+                return 1;
+            }
+            me->move(environment(target));
+        }
+        return 1;
+    }
+    else
+    {
+        if (me->query("end_quest"))
+        {
+            end_quest();
+            return 1;
+        }
+
+        if (objectp(present(me->query("shimen_accept_id"), environment(me))))
+        {
+            command("quest " + me->query("shimen_accept_id"));
+            if (objectp(master))
+            {
+                tell_object(master, me->name() + "已经到达目的地领取任务完成。\n");
+            }
+        }
+        else
+        {
+            command("walk " + me->query("shimen_accept_name"));
+        }
+    }
+    return 1;
+}
+
+// 门客死亡清除所有quest
+varargs void die(object target)
+{
+    object me = this_object();
+
+    if (objectp(target))
+    {
+        me->set("killed_by", target->query("id"));
+    }
+
+    me->delete("quest");
+    me->set("eff_qi", me->get("max_qi"));
+    me->set("qi", me->get("max_qi"));
+    me->set("eff_jing", me->get("max_jing"));
+    me->set("jing", me->get("max_jing"));
+    me->set("neili", me->get("max_neili"));
+
+    if (!living(me))
+    {
+        me->revive();
+    }
+
+    me->clear_condition();
+    me->move("/d/city/guangchang");
+}
+
+// 昏迷直接die走复活流程
+void unconcious()
+{
+    die();
+}

@@ -1,0 +1,337 @@
+/**
+ * @file main_task_master.c
+ * @brief 主线任务管理器
+ * @author Lu dexiang
+ * @date 2024-06-01
+ * @details 主线任务系统的主入口，负责协调各个子模块
+ */
+
+
+#include "main_task_doc/h/main_task_config.h"
+#include "main_task_doc/h/main_task_core.h"
+#include "main_task_doc/h/main_task_ui.h"
+#include "main_task_doc/h/main_task_combat.h"
+#include "main_task_doc/h/main_task_reward.h"
+
+// 加载各个模块
+void create()
+{
+    seteuid(getuid());
+    
+    // 加载核心模块
+    load_object("/adm/special_ob/main_task_doc/main_task_core");
+    
+    // 加载UI模块
+    load_object("/adm/special_ob/main_task_doc/main_task_ui");
+    
+    // 加载战斗模块
+    load_object("/adm/special_ob/main_task_doc/main_task_combat");
+    
+    // 加载奖励模块
+    load_object("/adm/special_ob/main_task_doc/main_task_reward");
+}
+
+// 以下是对外接口，调用各个模块的功能
+
+// 获取玩家当前的任务编号
+int get_player_current_quest(object me)
+{
+    return "/adm/special_ob/main_task_doc/main_task_core"->get_player_current_quest(me);
+}
+
+// 获取玩家已完成的最新任务编号
+int get_player_finished_quest(object me)
+{
+    return "/adm/special_ob/main_task_doc/main_task_core"->get_player_finished_quest(me);
+}
+
+
+// 发布任务
+int issue_quest(object me, int quest_id)
+{
+    return "/adm/special_ob/main_task_doc/main_task_core"->issue_quest(me, quest_id);
+}
+
+// 清除任务标记
+int clear_quest_mark(object me)
+{
+    return "/adm/special_ob/main_task_doc/main_task_core"->clear_quest_mark(me);
+}
+
+// 检查玩家是否满足任务的开始条件
+int check_quest_requirements(object me, int quest_id)
+{
+    return "/adm/special_ob/main_task_doc/main_task_core"->check_quest_requirements(me, quest_id);
+}
+
+// 任务字符串信息转译
+string translate_quest_string(string msg, object me)
+{
+    return "/adm/special_ob/main_task_doc/main_task_ui"->translate_quest_string(msg, me);
+}
+
+// 显示任务进度
+public void show_quest_progress(object me, int quest_id)
+{
+    return "/adm/special_ob/main_task_doc/main_task_ui"->show_quest_progress(me, quest_id);
+}
+
+// 显示当前任务信息页面
+public void show_next_quest(object me)
+{
+    return "/adm/special_ob/main_task_doc/main_task_ui"->show_next_quest(me);
+}
+
+// 将玩家传送到战斗房间
+object move_to_combat_room(object room, object me, object npc)
+{
+    return "/adm/special_ob/main_task_doc/main_task_combat"->move_to_combat_room(room, me, npc);
+}
+
+// 将玩家移动到切磋房间
+object move_to_spar_room(object room, object me, string family, int power, string template_path)
+{
+    return "/adm/special_ob/main_task_doc/main_task_combat"->move_to_spar_room(room, me, family, power, template_path);
+}
+
+// 开始切磋任务
+public int start_spar_quest(object me, int quest_id)
+{
+    return "/adm/special_ob/main_task_doc/main_task_combat"->start_spar_quest(me, quest_id);
+}
+
+// 发放任务奖励
+int give_quest_reward(object me)
+{
+    return "/adm/special_ob/main_task_doc/main_task_reward"->give_quest_reward(me);
+}
+
+// 提交任务
+public int submit_quest(object me)
+{
+    return "/adm/special_ob/main_task_doc/main_task_core"->submit_quest(me);
+}
+
+// 判断任务是否为切磋任务
+public int is_spar_quest(int quest_id)
+{
+    return "/adm/special_ob/main_task_doc/main_task_core"->is_spar_quest(quest_id);
+}
+
+// 判断任务是否为击杀任务
+public int is_kill_quest(int quest_id)
+{
+    return "/adm/special_ob/main_task_doc/main_task_core"->is_kill_quest(quest_id);
+}
+
+// 开始击杀任务
+public int start_kill_quest(object me, int quest_id)
+{
+    return "/adm/special_ob/main_task_doc/main_task_combat"->start_kill_quest(me, quest_id);
+}
+
+/**
+ * @brief 开始新任务
+ * @param object me 玩家对象
+ * @param int quest_id 任务ID
+ * @return int 1表示成功，0表示失败
+ */
+public int start_quest(object me, int quest_id)
+{
+    // 检查任务ID是否有效
+    if (!mapp(main_task_config[quest_id]))
+    {
+        tell_object(me, "无效的任务ID。\n");
+        return 0;
+    }
+    
+    // 检查玩家是否满足任务的开始条件
+    if (!check_quest_requirements(me, quest_id))
+    {
+        string msg = HIR"你不满足任务「" + main_task_config[quest_id]["name"] + "」的开始条件。\n"NOR;
+        
+        // 显示任务要求
+        if (mapp(main_task_config[quest_id]["quest_start_need"]) && 
+            mapp(main_task_config[quest_id]["quest_start_need"]["attribute"]))
+        {
+            foreach (string attr, int value in main_task_config[quest_id]["quest_start_need"]["attribute"])
+            {
+                msg += sprintf(HIR"%s需求：%d，当前：%d\n"NOR, 
+                    to_chinese(attr), value, me->query(attr));
+            }
+        }
+        
+        // 显示任务地点要求
+        if (main_task_config[quest_id]["quest_place"])
+        {
+            msg += sprintf(HIR"任务地点：%s，当前地点：%s\n"NOR, 
+                main_task_config[quest_id]["quest_place"]["chinese_name"], 
+                environment(me)->query("short"));
+        }
+        
+        tell_object(me, popup_title(msg));
+        return 0;
+    }
+    
+    // 检查是否是切磋任务或击杀任务（使用NPC_COMBAT_TPS）
+    if (is_spar_quest(quest_id))
+    {
+        // 如果是切磋任务，先发布任务，然后提示玩家使用start_spar命令开始切磋
+        if (issue_quest(me, quest_id))
+        {
+            tell_object(me, HIG"你接受了切磋任务「" + main_task_config[quest_id]["name"] + "」。\n"NOR);
+            
+            // 显示任务信息
+            show_quest_progress(me, quest_id);
+            
+            return 1;
+        }
+    }
+    else if (is_kill_quest(quest_id) && 
+             main_task_config[quest_id]["quest_target"]["family"] && 
+             main_task_config[quest_id]["quest_target"]["power"])
+    {
+        // 如果是使用NPC_COMBAT_TPS的击杀任务，先发布任务，然后提示玩家使用start_kill命令开始战斗
+        if (issue_quest(me, quest_id))
+        {
+            tell_object(me, HIG"你接受了击杀任务「" + main_task_config[quest_id]["name"] + "」。\n"NOR);
+            
+            // 显示任务信息
+            show_quest_progress(me, quest_id);
+            
+            return 1;
+        }
+    }
+    else
+    {
+        // 其他类型任务，直接发布
+        if (issue_quest(me, quest_id))
+        {
+            tell_object(me, HIG"你接受了任务「" + main_task_config[quest_id]["name"] + "」。\n"NOR);
+            
+            // 显示任务信息
+            show_quest_progress(me, quest_id);
+            
+            return 1;
+        }
+    }
+    
+    tell_object(me, "任务发布失败，请联系管理员。\n");
+    return 0;
+}
+
+/**
+ * @brief 获取任务列表的JSON数据
+ * @param object me 玩家对象
+ * @param int page 页码，从1开始
+ * @return string JSON格式的任务列表数据
+ */
+public string get_task_list_json(object me, int page)
+{
+    mapping task_list = ([
+        "code": "new_main_task_list",
+        "data": ({}),
+        "total_pages": 0,
+        "current_page": page,
+        "page_size": 10
+    ]);
+    
+    mixed all_data = ({});
+    mixed page_data = ({});
+    int finished_quest = get_player_finished_quest(me);
+    string quest_type, quest_cmd, quest_place;
+    int quest_finish, quest_is_accept;
+    int total_items, total_pages;
+    
+    // 获取所有任务ID并排序
+    int *quest_ids = keys(main_task_config);
+    quest_ids = sort_array(quest_ids, 1);
+    
+    // 遍历排序后的任务ID
+    foreach (int quest_id in quest_ids)
+    {
+        mapping quest_config = main_task_config[quest_id];
+        
+        // 跳过无效任务
+        if (!mapp(quest_config) || !stringp(quest_config["name"]))
+            continue;
+            
+        // 确定任务类型
+        quest_type = "普通任务";
+
+        if (is_spar_quest(quest_id))
+            quest_type = "切磋任务";
+        else if (is_kill_quest(quest_id))
+            quest_type = "击杀任务";
+        
+        //当前任务如果已经领取，命令为main_task submit
+        if(quest_id == get_player_current_quest(me))
+            quest_cmd = "main_task";
+        else
+            quest_cmd = "main_task start " + quest_id;
+            
+        // 确定任务地点
+        quest_place = "无要求";
+        if (mapp(quest_config["quest_place"]) && stringp(quest_config["quest_place"]["chinese_name"]))
+            quest_place = quest_config["quest_place"]["chinese_name"];
+            
+        // 确定任务是否已完成
+        quest_finish = (quest_id <= finished_quest) ? 1 : 0;
+        
+        // 确定任务是否可接取
+        quest_is_accept = 0;
+
+        if (quest_id <= finished_quest + 1 && quest_id > finished_quest)
+            quest_is_accept = check_quest_requirements(me, quest_id) ? 1 : 0;
+
+        // get_player_finished_quest 只有下一个任务才可以领取
+        if(quest_id > get_player_finished_quest(me) + 1)
+            quest_is_accept = 0;
+        
+        // 添加到任务列表
+        all_data += ({
+            ([
+                "quest_id": quest_id,
+                "quest_name": HIG + quest_config["name"] + NOR,
+                "quest_type":  HIR"任务类型:"NOR + quest_type,
+                "quest_cmd": quest_cmd,
+                "quest_place": HIY"任务地点:"NOR + quest_place,
+                "quest_finish": quest_finish,
+                "quest_is_accept": quest_is_accept,
+            ])
+        });
+    }
+    
+    // 计算总页数
+    total_items = sizeof(all_data);
+    total_pages = (total_items + 9) / 10; // 向上取整
+    
+    // 如果页码无效，默认为第一页
+    if (page < 1 || page > total_pages)
+        page = 1;
+    
+    {
+        // 计算当前页的数据范围
+        int start_index = (page - 1) * 10;
+        int end_index = start_index + 9;
+        
+        if (end_index >= total_items)
+            end_index = total_items - 1;
+        
+        // 提取当前页的数据
+        if (start_index <= end_index)
+        {
+            for (int i = start_index; i <= end_index; i++)
+            {
+                page_data += ({ all_data[i] });
+            }
+        }
+    }
+    
+    task_list["data"] = page_data;
+    task_list["total_pages"] = total_pages;
+    task_list["current_page"] = page;
+    
+    return json_encode(task_list);
+}
+

@@ -1,0 +1,1149 @@
+/**
+ * @file securityd.c
+ * @author Lu Dexiang
+ * @brief MUD安全守护进程
+ * @version 1.0
+ * @date 2024-01-01
+ * 
+ * @details
+ * 本模块是MUD系统的核心安全模块，负责：
+ * 1. 用户权限管理
+ * 2. 文件读写权限控制 
+ * 3. 命令授权管理
+ * 4. 站点特权管理
+ * 5. 对象绑定验证
+ */
+
+#pragma optimize
+
+#include <login.h>
+#include <mudlib.h>
+#include <localtime.h>
+inherit F_SAVE;
+
+//=============================================================================
+// 常量定义
+//=============================================================================
+
+#define MAX_SITE_PRIVILEGE_SIZE 1024    // 站点特权映射最大条目数
+#define CHECKSUM_LENGTH         32      // 校验和字符串长度
+#define BACKUP_SEQ_MAX          10000   // 备份文件序号最大值
+#define SEC_SEED                "12345678901234567890123456789012"  // 加密种子
+
+//=============================================================================
+// 第一部分：数据结构定义
+//=============================================================================
+
+/**
+ * @brief 获取守护进程数据存储文件路径
+ * @return string 数据文件路径
+ */
+string query_save_file()
+{
+	return DATA_DIR "securityd";
+}
+
+
+/**
+ * @brief 巫师等级状态映射
+ * @details 
+ * 这是一个"有效"的访问状态映射，用于直接决定巫师的访问权限。
+ * 它与登录对象中的"status"属性相对应，对于高于普通巫师的用户
+ * （如贤者、大巫师和管理员）来说，确保status属性与此映射匹配非常重要。
+ * 对于未在此映射中出现的用户名，系统会使用wizardp()和interactive()
+ * 将其分为三组：(wizard)、(player)和(object)。
+ * 注：使用括号是为了防止玩家通过将自己命名为"admin"来破解安全系统。
+ */
+private nosave mapping wiz_status = ([ ]);
+
+/**
+ * @brief 巫师等级列表
+ * @details 定义了系统中所有可能的权限等级，从低到高排列
+ */
+private nosave string *wiz_levels = ({
+	"(player)",
+	"(immortal)",
+	"(apprentice)",
+	"(wizard)",
+	"(arch)",
+	"(admin)"
+});
+
+private nosave int seq = 0;
+
+/**
+ * @brief 文件访问权限规则
+ * @details 
+ * 文件写入权限验证需要通过两个检查：
+ * 1. 用户的uid或status不在"exclude"（排除）列表中
+ * 2. 用户的uid或status在目录的"trusted"（信任）列表中
+ * 系统会从当前目录向上递归检查到根目录，且排除检查优先于信任检查
+ */
+
+// ultra rules
+private nosave mapping trusted_read;
+private nosave mapping exclude_read;
+private nosave mapping trusted_write;
+private nosave mapping exclude_write;
+
+// extend rules save in diskette
+private mapping extend_trusted_read;
+private mapping extend_exclude_read;
+private mapping extend_trusted_write;
+private mapping extend_exclude_write;
+
+// grant information for command
+private mapping grant;
+
+// grant information for sites
+private mapping site_privilege;
+
+// 函数声明
+mapping query_security(string para);
+int     set_security(string para, mapping ruler);
+mapping combine_rules(mapping def, mapping extend);
+void    reset_security();
+int     restore();
+int     save();
+
+//=============================================================================
+// 第二部分：初始化与数据持久化
+//=============================================================================
+
+/**
+ * @brief 计算站点特权校验和（私有辅助函数）
+ * @param mapping privilege 站点特权映射
+ * @return string 计算的校验和
+ */
+private string calculate_privilege_checksum(mapping privilege)
+{
+	string item, val, sum;
+	int i;
+
+	sum = SEC_SEED;
+	foreach (item in keys(privilege))
+	{
+		if (! stringp(item) || ! stringp(val = privilege[item]))
+		{
+			map_delete(privilege, item);
+			continue;
+		}
+
+		for (i = 0; i < strlen(item) && i < CHECKSUM_LENGTH; i++)
+			sum[i] = ((sum[i] - 48 + item[i]) & 0x7F) + 48;
+
+		for (i = 0; i < strlen(val) && i < CHECKSUM_LENGTH; i++)
+			sum[i] = ((sum[i] - 48 + val[i]) & 0x7F) + 48;
+	}
+
+	return sum;
+}
+
+/**
+ * @brief 创建安全守护进程
+ * @details 初始化进程并加载保存的数据
+ */
+void create()
+{
+	seteuid(getuid());
+	restore();
+}
+
+/**
+ * @brief 恢复安全守护进程数据
+ * @return int 恢复是否成功
+ * @details 
+ * 1. 验证站点特权信息的合法性
+ * 2. 重置安全信息
+ * 3. 恢复巫师列表
+ * 4. 确保授权信息存在
+ */
+int restore()
+{
+	string item, val;
+	string sum, sec;
+	string *wizlist, wiz_name, wiz_level;
+	int res;
+	int i;
+
+	res = ::restore();
+
+	// check valid of site privilege
+	while (1)
+	{
+		if (! res)
+			break;
+
+		if (! mapp(site_privilege) || sizeof(site_privilege) > MAX_SITE_PRIVILEGE_SIZE ||
+		    ! stringp(sec = site_privilege[INTERMUD_MUD_NAME]))
+		{
+			// illegal data, empty privilege information
+			site_privilege = 0;
+			break;
+		}
+
+		map_delete(site_privilege, INTERMUD_MUD_NAME);
+
+		sum = SEC_SEED;
+		foreach (item in keys(site_privilege))
+		{
+			if (! stringp(item) ||
+			    ! stringp(val = site_privilege[item]))
+			{
+				map_delete(site_privilege, item);
+				continue;
+			}
+
+			for (i = 0; i < strlen(item) && i < CHECKSUM_LENGTH; i++)
+				sum[i] = ((sum[i] - 48 + item[i]) & 0x7F) + 48;
+
+			for (i = 0; i < strlen(val) && i < CHECKSUM_LENGTH; i++)
+				sum[i] = ((sum[i] - 48 + val[i]) & 0x7F) + 48;
+		}
+
+		if (crypt(sum, sec) != sec)
+		{
+			log_file("nosave/security", "site_privilege information encrypted.\n");
+			site_privilege = 0;
+			break;
+		}
+
+		break;
+	}
+
+	// assure site_privilege
+	if (! mapp(site_privilege))
+		site_privilege = ([ ]);
+
+	// reset the security information
+	reset_security();
+
+	// restore wizlist
+	wizlist = explode(read_file(WIZLIST), "\n");
+	wiz_status = allocate_mapping(sizeof(wizlist));
+	for (i = 0; i < sizeof(wizlist); i++)
+	{
+		if (wizlist[i][0]=='#' ||
+		    sscanf(wizlist[i], "%s %s", wiz_name, wiz_level) != 2 ) continue;
+		wiz_status[wiz_name] = wiz_level;
+	}
+
+	// assure grant information
+	if (! mapp(grant)) grant = ([ ]);
+
+	return res;
+}
+
+/**
+ * @brief 保存安全守护进程数据
+ * @return int 保存是否成功
+ * @details 
+ * 1. 验证并清理站点特权信息
+ * 2. 重新计算安全校验和
+ * 3. 加密并保存数据
+ */
+int save()
+{
+	string item;
+	string val;
+	string sum;
+	int i;
+
+	if (! mapp(site_privilege))
+		site_privilege = ([ ]);
+
+	map_delete(site_privilege, INTERMUD_MUD_NAME);
+
+	sum = SEC_SEED;
+	foreach (item in keys(site_privilege))
+	{
+		if (! stringp(item) ||
+		    ! stringp(val = site_privilege[item]))
+		{
+			map_delete(site_privilege, item);
+			continue;
+		}
+
+		for (i = 0; i < strlen(item) && i < CHECKSUM_LENGTH; i++)
+			sum[i] = ((sum[i] - 48 + item[i]) & 0x7F) + 48;
+
+		for (i = 0; i < strlen(val) && i < CHECKSUM_LENGTH; i++)
+			sum[i] = ((sum[i] - 48 + val[i]) & 0x7F) + 48;
+	}
+
+	site_privilege[INTERMUD_MUD_NAME] = crypt(sum, 0);
+
+	return ::save();
+}
+
+//=============================================================================
+// 第三部分：安全规则管理
+//=============================================================================
+
+/**
+ * @brief 查询安全配置信息
+ * @param para 查询参数，可选值包括：
+ *             trusted_read: 信任读取规则
+ *             exclude_read: 排除读取规则
+ *             trusted_write: 信任写入规则
+ *             exclude_write: 排除写入规则
+ *             extend_trusted_read: 扩展信任读取规则
+ *             extend_exclude_read: 扩展排除读取规则
+ *             extend_trusted_write: 扩展信任写入规则
+ *             extend_exclude_write: 扩展排除写入规则
+ *             default_trusted_write: 默认信任写入规则
+ *             default_exclude_write: 默认排除写入规则
+ *             default_trusted_read: 默认信任读取规则
+ * @return mapping 对应的安全规则映射，如果没有权限则返回0
+ * @details 只有root权限的对象才能查询安全配置信息
+ */
+mapping query_security(string para)
+{
+	if (! is_root(previous_object()))
+		return 0;
+
+	switch(para)
+	{
+	case "trusted_read":
+		return trusted_read;
+
+	case "exclude_read":
+		return exclude_read;
+
+	case "trusted_write":
+		return trusted_write;
+
+	case "exclude_write":
+		return exclude_write;
+
+	case "extend_trusted_read":
+		return extend_trusted_read;
+
+	case "extend_exclude_read":
+		return extend_exclude_read;
+
+	case "extend_trusted_write":
+		return extend_trusted_write;
+
+	case "extend_exclude_write":
+		return extend_exclude_write;
+
+	case "default_trusted_write":
+		return ([
+			"/": 		({ "(admin)" }),
+			"/d":		({ "(arch)" }),
+			"/clone":       ({ "(arch)" }),
+			"/kungfu":      ({ "(arch)", "(player)" }),
+			]);
+
+	case "default_exclude_write":
+		return ([
+			"/adm":		({ "(arch)" }),
+			"/feature":     ({ "(arch)" }),
+			"/clone/user":  ({ "(arch)", "(wizard)" }),
+			"/shadow":      ({ "(arch)" }),
+			"/binaries":    ({ "(arch)" }),
+			"/temp":	({ "(arch)" }),
+			"/data":	({ "(arch)" }),
+			"/version":     ({ "(arch)" }),
+			]);
+
+	case "default_trusted_read":
+		return ([
+			"/": 		({ "(admin)", "(arch)", "(wizard)" }),
+			"/system":	({ "(arch)", "(wizard)" }),
+			]);
+
+	case "default_exclude_read":
+		return ([
+			"/adm":		({ "(player)" }),
+			"/feature":     ({ "(player)" }),
+			"/shadow":      ({ "(player)" }),
+			"/binaries":    ({ "(player)" }),
+			"/temp":	({ "(player)" }),
+			"/data":	({ "(player)" }),
+			"/version":     ({ "(player)" }),
+			]);
+	}
+	return 0;
+}
+
+/**
+ * @brief 设置安全规则
+ * @param para 规则类型，可选值包括：
+ *             extend_trusted_read: 扩展信任读取规则
+ *             extend_exclude_read: 扩展排除读取规则
+ *             extend_trusted_write: 扩展信任写入规则
+ *             extend_exclude_write: 扩展排除写入规则
+ * @param ruler 新的规则映射
+ * @return int 设置是否成功，1成功，0失败
+ * @details 只有root权限的对象才能设置安全规则
+ */
+int set_security(string para, mapping ruler)
+{
+	if (! is_root(previous_object()))
+		return 0;
+
+	switch(para)
+	{
+	case "extend_trusted_read":
+		extend_trusted_read = ruler;
+		break;
+
+	case "extend_exclude_read":
+		extend_exclude_read = ruler;
+		break;
+
+	case "extend_trusted_write":
+		extend_trusted_write = ruler;
+		break;
+
+	case "extend_exclude_write":
+		extend_exclude_write = ruler;
+		break;
+
+	default:
+		return 0;
+	}
+
+	return 1;
+}
+
+/**
+ * @brief 合并安全规则
+ * @param def 默认规则映射
+ * @param extend 扩展规则映射
+ * @return mapping 合并后的规则映射
+ * @details 
+ * 将扩展规则合并到默认规则中，如果某个路径在两个规则中都存在，
+ * 则合并其权限列表
+ */
+mapping combine_rules(mapping def, mapping extend)
+{
+	string *ks;
+	int i;
+
+	if (! extend) return def;
+	ks = keys(extend);
+	for (i = 0; i < sizeof(ks); i++)
+	{
+		if (! arrayp(def[ks[i]]))
+			def[ks[i]] = extend[ks[i]];
+		else
+			def[ks[i]] += extend[ks[i]];
+	}
+	return def;
+}
+
+/**
+ * @brief 重置安全规则
+ * @details 
+ * 1. 合并默认读取规则和扩展读取规则
+ * 2. 合并默认写入规则和扩展写入规则
+ * 3. 合并默认排除规则和扩展排除规则
+ * 注：只有root权限的对象才能重置安全规则
+ */
+void reset_security()
+{
+	if (! is_root(previous_object()))
+		return 0;
+
+	trusted_read  = combine_rules(query_security("default_trusted_read"),  extend_trusted_read);
+	exclude_read  = combine_rules(query_security("default_exclude_read"),  extend_exclude_read);
+	trusted_write = combine_rules(query_security("default_trusted_write"), extend_trusted_write);
+	exclude_write = combine_rules(query_security("default_exclude_write"), extend_exclude_write);
+}
+
+//=============================================================================
+// 第四部分：权限等级管理
+//=============================================================================
+
+/**
+ * @brief 获取巫师等级列表
+ * @return string* 巫师等级列表数组
+ */
+string *query_wiz_levels() { return wiz_levels; }
+
+/**
+ * @brief 获取巫师列表
+ * @return string* 所有巫师的名字数组
+ * @details 与 get_wizlist() 功能相同，为兼容性保留
+ */
+string *query_wizlist() { return keys(wiz_status); }
+
+/**
+ * @brief 获取对象的状态
+ * @param ob 要查询的对象或用户ID
+ * @return string 对象的状态字符串
+ * @details 
+ * 如果参数是对象，则获取其euid或uid
+ * 如果参数是字符串，则直接作为用户ID使用
+ * 返回该ID在系统中的状态等级
+ */
+string get_status(mixed ob)
+{
+	string euid;
+	
+	if (objectp(ob))
+	{
+		euid = geteuid(ob);
+		if (! euid) euid = getuid(ob);
+	}
+	else if (stringp(ob)) euid = ob;
+
+	if (! undefinedp(wiz_status[euid]))
+		return wiz_status[euid];
+	else if (member_array(euid, wiz_levels) != -1) 
+		return euid;
+	else 
+		return "(player)";
+}
+
+/**
+ * @brief 获取巫师等级数值
+ * @param ob 要查询的对象或用户ID
+ * @return int 巫师等级的数值索引
+ * @details 返回对象在巫师等级列表中的位置索引，数值越大权限越高
+ */
+int get_wiz_level(mixed ob)
+{
+	return member_array(get_status(ob), wiz_levels);
+}
+
+/**
+ * @brief 设置用户状态
+ * @param ob 要设置的对象或用户ID
+ * @param status 要设置的状态
+ * @return int 设置是否成功，1成功，0失败
+ * @details 
+ * 1. 只有ROOT权限才能调用此函数
+ * 2. 如果设置为(player)则删除其巫师状态
+ * 3. 更新WIZLIST文件
+ * 4. 记录升级日志
+ */
+int set_status(mixed ob, string status)
+{
+	string uid, *wiz, wizlist;
+	int i;
+
+	if (geteuid(previous_object()) != ROOT_UID) return 0;
+
+	if (objectp(ob))	uid = getuid(ob);
+	else if (stringp(ob))   uid = ob;
+	else return 0;
+	
+	if (wizhood(ob) == status)
+		return 1;
+	if (status == "(player)")
+		map_delete(wiz_status, uid);
+	else
+		wiz_status[uid] = status;
+	wiz = keys(wiz_status);
+	for (wizlist = "", i = 0; i < sizeof(wiz); i++)
+		wizlist += wiz[i] + " " + wiz_status[wiz[i]] + "\n";
+	rm(WIZLIST);
+	write_file(WIZLIST, wizlist);
+	log_file("nosave/promotion", log_time() + " " + capitalize(uid) +
+		 " become a " + status + " by " +
+		 (this_player() ? geteuid(this_player()) : "SYSTEM") + "\n");
+	return 1;
+}
+
+/**
+ * @brief 获取巫师列表
+ * @return string* 所有巫师的名字数组
+ * @details 推荐使用此函数，query_wizlist() 为兼容性保留
+ */
+string *get_wizlist() { return keys(wiz_status); }
+
+//=============================================================================
+// 第五部分：文件权限验证（核心功能）
+//=============================================================================
+
+/**
+ * @brief 递归检查目录权限（私有辅助函数）
+ * @param string file 文件路径
+ * @param string euid 用户有效ID
+ * @param string status 用户权限状态
+ * @param mapping trusted 信任规则映射
+ * @param mapping excluded 排除规则映射
+ * @return int 是否允许访问，1允许，0禁止
+ * @details 从文件所在目录向上递归检查到根目录，排除检查优先于信任检查
+ */
+private int check_directory_permission(string file, string euid, string status,
+                                       mapping trusted, mapping excluded)
+{
+	string *path, dir;
+	string *arre, *arrt;
+	int i, valid;
+
+	path = explode(file, "/");
+	valid = 0;
+	i = sizeof(path);
+
+	while ((i--) >= 0)
+	{
+		dir = "/";
+		if (i >= 0) dir += implode(path[0..i], "/");
+
+		arre = excluded[dir];
+		arrt = trusted[dir];
+
+		// 排除检查优先
+		if (arre && member_array(euid, arre) != -1)
+		{
+			valid = 0;
+			break;
+		}
+
+		if (arrt && member_array(euid, arrt) != -1)
+		{
+			valid = 1;
+			break;
+		}
+
+		if (arre && member_array(status, arre) != -1)
+		{
+			valid = 0;
+			break;
+		}
+
+		if (arrt && member_array(status, arrt) != -1)
+		{
+			valid = 1;
+			break;
+		}
+	}
+
+	return valid;
+}
+
+/**
+ * @brief 获取用户有效ID（私有辅助函数）
+ * @param mixed user 用户对象或字符串
+ * @return string 用户有效ID，如果无法获取则返回0
+ */
+private string get_user_euid(mixed user)
+{
+	string euid;
+
+	if (! objectp(user))
+	{
+		if (stringp(user))
+			euid = user;
+		else
+			error("SECURITY_D: Invalid argument type of user.\n");
+	} else
+		euid = geteuid(user);
+
+	return euid;
+}
+
+// valid_write - 由主对象调用，用于判断用户是否有权限写入特定文件
+// 注意：
+//     根据驱动程序源代码，user参数应该是一个对象类型。
+// 但在发布的文档中它被定义为mixed类型。这里我们假定在正常情况下它是一个对象，
+// 如果不是对象类型则抛出错误。                                    - Annihilator
+
+/**
+ * @brief 验证文件写入权限
+ * @param file 要写入的文件路径
+ * @param user 尝试写入的用户对象或ID
+ * @param func 写入操作的函数名
+ * @return int 是否允许写入，1允许，0禁止
+ * @details 
+ * 1. 验证用户身份和权限
+ * 2. 检查特殊情况（如日志写入、存档等）
+ * 3. 递归检查目录权限
+ * 4. 记录非法写入尝试
+ */
+int valid_write(string file, mixed user, string func)
+{
+	string euid, status;
+
+	// 获取用户有效ID
+	euid = get_user_euid(user);
+
+	// 允许写入日志文件
+	if (sscanf(file, LOG_DIR + "%*s") && func=="write_file") return 1;
+
+	// 允许用户保存自己的存档
+	if (func == "save_object")
+	{
+		if ((stringp(user) ? sscanf(user, "/clone/%*s")
+				   : sscanf(file_name(user), "/clone/%*s"))
+		&&	sscanf(file, "/data/%*s")
+		&&	(file == (string)user->query_save_file() +  __SAVE_EXTENSION__ ||
+			 file == (string)user->query_save_file()) )
+		{
+			// 检查对象的文件与id在数据库中是否匹配
+			if (euid && euid != getuid(user))
+			{
+				write(sprintf(HIR "【保护】你的用户标识(%s)和有效用"
+					      "户标识(%s)不同，档案不正常，不能保存。"NOR"\n",
+					      getuid(user), geteuid(user)));
+				return 0;
+			}
+
+			if ((base_name(user) == USER_OB) &&
+			    getuid(user) != user->query("id"))
+			{
+				write(sprintf(HIR "【保护】你的用户标识(%s)和数据中"
+					      "的标识(%s)不同，档案不正常，不能保存。"NOR"\n",
+					      getuid(user), user->query("id")));
+				return 0;
+			}
+			return 1;
+		}
+
+		// 系统对象和管理对象可以保存
+		if (sscanf(base_name(user), "/system/%*s"))
+			return 1;
+
+		if (sscanf(base_name(user), "/adm/%*s"))
+			return 1;
+	}
+
+	// 获取用户的euid和状态
+	if (! euid) return 0;
+	status = get_status(user);
+
+	// ROOT和admin拥有所有写权限
+	if (euid == ROOT_UID || status == "(admin)") return 1;
+
+	// 临时巫师权限
+	if (stringp(user)) user = find_player(user);
+	if (objectp(user) && user->query_temp("wizhood"))
+		return 1;
+
+	// 允许用户写入自己的目录
+	if (sscanf(file, "/u/" + euid + "/%*s"))
+		return 1;
+
+	// 递归检查目录权限
+	if (check_directory_permission(file, euid, status, trusted_write, exclude_write))
+		return 1;
+
+	// 记录非法写入尝试
+	if (! func) func = "null";
+	if (member_array(func, ({ "ls", "dest" })) != -1)
+		return 0;
+
+	log_file("files", sprintf("%s  %s%s write attempt(%s) on %s failed.\n",
+		 log_time(), euid, wizhood(user), func, file));
+	return 0;
+}
+
+/**
+ * @brief 验证文件读取权限
+ * @param file 要读取的文件路径
+ * @param user 尝试读取的用户对象或ID
+ * @param func 读取操作的函数名
+ * @return int 是否允许读取，1允许，0禁止
+ * @details 
+ * 1. ROOT用户拥有所有读取权限
+ * 2. 允许用户读取自己的存档
+ * 3. 允许用户读取自己的目录
+ * 4. 递归检查目录权限
+ * 5. 记录非法读取尝试
+ */
+int valid_read(string file, mixed user, string func)
+{
+	string euid, status, *path;
+	string *arrt;
+	string dir;
+
+	// 获取用户有效ID
+	euid = get_user_euid(user);
+
+	// ROOT拥有所有读权限
+	if (euid == ROOT_UID) return 1;
+
+	// 允许用户读取自己的存档
+	if (func == "restore_object")
+	{
+		if (sscanf(base_name(user), "/clone/%*s") &&
+		    sscanf(file, "/data/%*s") &&
+		    (file == (string)user->query_save_file() +  __SAVE_EXTENSION__ ||
+		     file == (string)user->query_save_file()))
+			return 1;
+
+		// 系统对象和管理对象可以读取
+		if (sscanf(base_name(user), "/system/%*s"))
+			return 1;
+
+		if (sscanf(base_name(user), "/adm/%*s"))
+			return 1;
+	}
+
+	// 允许查询文件大小
+	if (func == "file_size") return 1;
+
+	// 获取用户的euid和状态
+	if (! euid) return 0;
+	status = get_status(user);
+
+	// admin拥有所有读权限
+	if (status == "(admin)") return 1;
+
+	// 临时巫师权限
+	if (objectp(user) && user->query_temp("wizhood"))
+		return 1;
+
+	// 允许用户读取自己的目录
+	if (sscanf(file, "/u/" + euid + "/%*s") ||
+	    file == "/u/" + euid)
+		return 1;
+
+	// 禁止读取其他用户的日志
+	if (sscanf(file, "/log/user/%*s/" + euid))
+		return 0;
+
+	// 递归检查目录权限
+	if (sscanf(file, "%*s/"))
+		path = explode(file, "/");
+
+	if (check_directory_permission(file, euid, status, trusted_read, exclude_read))
+		return 1;
+
+	// 检查是否可以访问更深层目录（用于ls和cd命令）
+	if ((func == "ls" || func == "cd") &&
+	    file_size(file) == -2)
+	{
+		file = "/" + implode(path, "/") + "/";
+		if (file == "/u") return 1;
+		foreach (dir in keys(trusted_read))
+		{
+			if (! sscanf(dir, file + "%*s"))
+				continue;
+
+			if (! arrayp(arrt = trusted_read[dir]))
+				continue;
+
+			if (member_array(euid, arrt) != -1 ||
+			    member_array(status, arrt) != -1)
+				return 1;
+		}
+	}
+
+	// 记录非法读取尝试
+	if (! func) func = "null";
+	if (member_array(func, ({ "ls", "clone" })) != -1)
+		return 0;
+
+	log_file("files", sprintf("%s  %s%s read attempt(%s) on %s failed.\n",
+		 log_time(), euid, wizhood(user), func, file));
+	return 0;
+}
+
+//=============================================================================
+// 第六部分：对象安全验证
+//=============================================================================
+
+/**
+ * @brief 验证设置euid的权限
+ * @param ob 要设置euid的对象
+ * @param uid 要设置的euid值
+ * @return int 是否允许设置，1允许，0禁止
+ * @details 
+ * 1. 允许设置为0（清除euid）
+ * 2. 允许设置为自己的uid
+ * 3. ROOT用户可以设置任意euid
+ * 4. 系统对象(/adm/和/system/下的对象)可以设置任意euid
+ * 5. admin用户可以设置非admin的euid
+ */
+int valid_seteuid(object ob, string uid)
+{
+	if (uid == 0) return 1;
+	if (uid == getuid(ob)) return 1;
+	if (getuid(ob) == ROOT_UID) return 1;
+	if (sscanf(file_name(ob), "/adm/%*s")) return 1;
+	if (sscanf(file_name(ob), "/system/%*s")) return 1;
+	if (wiz_status[uid] != "(admin)" &&
+	    wiz_status[getuid(ob)] == "(admin)")
+		return 1;
+	return 0;
+}
+
+/**
+ * @brief 验证函数绑定权限
+ * @param binder 执行绑定的对象
+ * @param old_owner 原函数所有者
+ * @param new_owner 新函数所有者
+ * @return int 是否允许绑定，1允许，0禁止
+ * @details 
+ * 1. ROOT用户可以绑定任何函数
+ * 2. 如果绑定者没有发生变化则允许
+ * 3. 允许绑定到玩家对象
+ */
+int valid_bind(object binder, object old_owner, object new_owner)
+{
+	// ROOT可以绑定任何函数
+	if (geteuid(binder) == ROOT_UID) return 1;
+
+	// 如果绑定者没有发生变化
+	if (binder == new_owner) return 1;
+
+	// 允许绑定到玩家对象
+	if (playerp(new_owner))
+		return 1;
+
+	// 不同意绑定
+	return 0;
+}
+
+//=============================================================================
+// 第七部分：命令授权管理
+//=============================================================================
+
+/**
+ * @brief 验证命令授权
+ * @param ob 要执行命令的对象
+ * @param min_level 命令要求的最低权限等级
+ * @return int 是否允许执行，1允许，0禁止
+ * @details 
+ * 1. 验证调用对象的合法性
+ * 2. 检查是否为ROOT对象调用
+ * 3. 检查权限等级是否满足要求
+ * 4. 检查是否有显式授权
+ */
+int valid_grant(object ob, string min_level)
+{
+	object cmd_ob;
+	string cmd;
+	string *gr;
+	object call_ob;
+
+	if (! objectp(ob))
+		return notify_fail("没有对象呼叫这个命令。\n");
+
+	if (! objectp(cmd_ob = previous_object()))
+		return notify_fail("必须是命令调用授权函数。\n");
+
+	cmd = base_name(cmd_ob);
+	if (sscanf(cmd, "/cmds/%*s/%s", cmd) != 2)
+		return notify_fail("必须是命令调用授权函数。\n");
+
+	// 检查调用对象的合法性
+	call_ob = previous_object(1);
+	if ((! call_ob || call_ob != this_player(1) && geteuid(call_ob) != ROOT_UID) && base_name(call_ob) != "/external_system_package/http/controller/player_command")
+	{
+		log_file("nosave/security",
+			 sprintf("%s want to call cmd:%s with %s\n",
+				 (call_ob ? geteuid(call_ob) : "null"),
+				 cmd,
+				 (this_player(1) ? geteuid(this_player(1)) : "null")));
+		return 0;
+	}
+
+	// ROOT对象调用命令
+	if (geteuid(ob) == ROOT_UID && call_ob == ob)
+		return 1;
+
+	if (ob != this_player(1))
+		return notify_fail("不是本人呼叫这个命令。\n");
+
+	// 管理员可以执行任何命令
+	if (is_root(ob))
+		return 1;
+
+	// 权限等级满足要求
+	if (wiz_level(ob) >= wiz_level(min_level))
+		return 1;
+
+	// 检查是否有显式授权
+	if (arrayp(gr = grant[geteuid(ob)]) && member_array(cmd, gr) != -1)
+		return 1;
+
+	return 0;
+}
+
+/**
+ * @brief 授权命令
+ * @param user 被授权的用户ID
+ * @param cmd 被授权的命令
+ * @return int 是否授权成功，1成功，0失败
+ * @details 只有ROOT权限才能进行授权操作
+ */
+int grant(string user, string cmd)
+{
+	string *gr;
+
+	if (! previous_object() || ! is_root(previous_object()))
+		return 0;
+
+	if (! arrayp(gr = grant[user]))
+		gr = ({ cmd });
+	else
+	if (member_array(cmd, gr) == -1)
+		gr += ({ cmd });
+	else
+		return 0;
+
+	grant[user] = gr;
+	return 1;
+}
+
+/**
+ * @brief 收回命令授权
+ * @param user 用户ID
+ * @param cmd 要收回的命令，如果为"*"则收回所有授权
+ * @return int 是否成功收回，1成功，0失败
+ * @details 只有ROOT权限才能收回授权
+ */
+int remove_grant(string user, string cmd)
+{
+	string *gr;
+
+	if (! previous_object() || ! is_root(previous_object()))
+		return 0;
+
+	if (cmd == "*")
+	{
+		if (undefinedp(grant[user]))
+			return 0;
+
+		map_delete(grant, user);
+		return 1;
+	}
+
+	if (! arrayp(gr = grant[user]) ||
+	    member_array(cmd, gr) == -1)
+		return 1;
+
+	gr -= ({ cmd });
+	if (sizeof(gr) < 1)
+		map_delete(grant, user);
+	else
+		grant[user] = gr;
+
+	return 1;
+}
+
+/**
+ * @brief 查询用户的授权命令
+ * @param user 用户ID
+ * @return string* 授权命令列表
+ * @details 只有ROOT权限才能查询授权信息
+ */
+string *query_grant(string user)
+{
+	if (! previous_object() || ! is_root(previous_object()))
+		return 0;
+
+	return grant[user];
+}
+
+/**
+ * @brief 查询所有被授权的用户
+ * @return string* 被授权用户列表
+ * @details 只有ROOT权限才能查询授权用户
+ */
+string *query_grant_users()
+{
+	if (! previous_object() || ! is_root(previous_object()))
+		return 0;
+
+	return keys(grant);
+}
+
+//=============================================================================
+// 第八部分：站点特权管理
+//=============================================================================
+
+/**
+ * @brief 设置站点特权信息
+ * @param item 站点名称
+ * @param desc 特权描述
+ * @return int 是否设置成功，1成功，0失败
+ * @details 只有ROOT权限才能设置站点特权
+ */
+varargs int set_site_privilege(string item, string desc)
+{
+	if (! previous_object() || ! is_root(previous_object()))
+		return 0;
+
+	if (! stringp(item))
+		return 0;
+
+	if (! stringp(desc))
+		map_delete(site_privilege, item);
+	else
+		site_privilege[item] = desc;
+
+	return 1;
+}
+
+/**
+ * @brief 查询站点特权信息
+ * @param item 站点名称，如果为空则返回所有特权信息
+ * @return mixed 特权信息或特权映射
+ * @details 只有ROOT权限才能查询所有特权信息
+ */
+varargs mixed query_site_privilege(string item)
+{
+	if (! stringp(item))
+	{
+		if (! previous_object() || ! is_root(previous_object()))
+			return 0;
+
+		return site_privilege;
+	}
+
+	return site_privilege[item];
+}
+
+//=============================================================================
+// 第九部分：文件备份功能
+//=============================================================================
+
+/**
+ * @brief 备份文件
+ * @param file 要备份的文件路径
+ * @details 
+ * 1. 只有非ROOT和非admin用户修改的文件才需要备份
+ * 2. 备份文件按年月日和序号命名
+ * 3. 备份目录结构为/log/file/用户ID/年-月-日/序号-文件名
+ */
+void backup_file(string file)
+{
+	string euid;
+	mixed lt;
+	string* str;
+	string bname;
+
+	euid = geteuid(previous_object());
+	if (euid == ROOT_UID || get_status(euid) == "(admin)")
+		return;
+
+	if (file_size(file) <= 0)
+		return;
+
+	lt = localtime(time());
+	str = explode(file, "/");
+	seq++;
+	seq %= BACKUP_SEQ_MAX;
+	bname = sprintf("/log/file/%s/%d-%d-%d/%d-%s",
+			euid,
+			lt[LT_YEAR], lt[LT_MON] + 1, lt[LT_MDAY],
+			seq, str[sizeof(str) - 1]);
+	assure_file(bname);
+	cp(file, bname);
+}
+
+//=============================================================================
+// 第十部分：守护进程销毁控制
+//=============================================================================
+
+/**
+ * @brief 销毁安全守护进程
+ * @param euid 尝试销毁的用户ID
+ * @details 只有ROOT用户或admin权限才能销毁安全守护进程
+ */
+varargs void remove(string euid)
+{
+	if (euid != ROOT_UID && get_status(euid) != "(admin)")
+		error("Only root can destruct SECURITY daemon.\n");
+
+	return;
+}

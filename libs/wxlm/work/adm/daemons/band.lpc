@@ -1,0 +1,268 @@
+// ban.c
+
+#pragma optimize
+
+#include <localtime.h>
+
+#define BANNED_SITES "/adm/etc/banned_sites"
+#define BANNED_USERS "/adm/etc/banned_users.json"
+
+void load_sites();
+void add(string pattern);
+void remove(string pattern);
+int  is_banned(string site);
+void print();
+
+// 用户封禁相关函数
+void load_banned_users();
+void ban_user(string user, int days, string reason);
+void unban_user(string user);
+int is_user_banned(string user);
+void print_banned_users();
+mapping query_banned_user(string user);
+void save_banned_users();
+
+string *Sites;
+mapping banned_users; // 格式: ([ "用户名": ([ "ban_time": 封禁时间戳, "ban_days": 封禁天数, "reason": 封禁原因 ]) ])
+
+void create()
+{
+	seteuid(getuid());
+	load_sites();
+	load_banned_users();
+}
+
+void load_sites()
+{
+	string *tmp, file;
+	int loop;
+
+	Sites = ({ });
+	file = read_file(BANNED_SITES);
+	if (! file) return;
+	
+	tmp = explode(file, "\n");
+   	for (loop = 0; loop < sizeof(tmp); loop++)
+		if (tmp[loop][0] == '#' || tmp[loop][0] == '\n' || tmp[loop] == "")
+	   		continue;
+		else Sites += ({ tmp[loop] });
+}
+
+int is_banned(string site)
+{
+	string line;
+
+	site = replace_string(site, "*", "%*d");
+
+	foreach (line in Sites)
+	{
+		line = replace_string(line, "*", "%*d");
+		if (site == line || sscanf(site, line) == 1)
+			return 1;
+	}
+
+	return 0;
+}
+
+void print()
+{
+	int i;
+	if (! sizeof(Sites))
+	{
+		write("现在没有禁止任何IP上本站点。\n");
+		return;
+	}
+
+	write("以下是禁止上本站点的IP地址列表。\n");
+	for (i = 0; i < sizeof(Sites); i++)
+		write(Sites[i] + "\n");
+}
+
+void add_site(string site)
+{
+ 
+
+	if (member_array(site, Sites) == -1)
+	{
+		Sites += ({ site });
+		write_file(BANNED_SITES, site + "\n", 0);
+	}
+}
+
+void remove_site(string site)
+{
+	if (member_array(site, Sites) != -1)
+	{
+		Sites -= ({ site });
+		write_file(BANNED_SITES, implode(Sites, "\n") + "\n", 1);
+	}
+}
+
+/**
+ * @brief 加载被封禁的用户列表
+ * @details 从JSON文件中读取被封禁的用户数据
+ */
+void load_banned_users()
+{
+	string content;
+	
+	banned_users = ([]);
+	
+	if (file_size(BANNED_USERS) <= 0)
+		return;
+		
+	content = read_file(BANNED_USERS);
+	if (!content || content == "")
+		return;
+		
+	banned_users = json_decode(content);
+	
+	if (!banned_users)
+		banned_users = ([]);
+}
+
+/**
+ * @brief 保存被封禁用户数据到JSON文件
+ * @details 将banned_users映射保存为JSON格式
+ */
+void save_banned_users()
+{
+	assure_file(BANNED_USERS);
+	write_file(BANNED_USERS, json_format(json_encode(banned_users)), 1);
+}
+
+/**
+ * @brief 封禁用户
+ * @param string user 用户名
+ * @param int days 封禁天数
+ * @param string reason 封禁原因
+ * @details 将用户添加到封禁列表并保存到文件
+ */
+void ban_user(string user, int days, string reason)
+{
+	int ban_time;
+	
+	if (!user || !days || !reason)
+		return;
+		
+	ban_time = time();
+	banned_users[user] = ([
+		"ban_time": ban_time,
+		"ban_days": days,
+		"reason": reason
+	]);
+	
+	save_banned_users();
+}
+
+/**
+ * @brief 解封用户
+ * @param string user 用户名
+ * @details 从封禁列表中移除用户并更新文件
+ */
+void unban_user(string user)
+{
+	if (!user || !banned_users[user])
+		return;
+		
+	map_delete(banned_users, user);
+	save_banned_users();
+}
+
+/**
+ * @brief 检查用户是否被封禁
+ * @param string user 用户名
+ * @return int 被封禁返回1，否则返回0
+ * @details 检查用户是否在封禁期内
+ */
+int is_user_banned(string user)
+{
+	mapping user_data;
+	int ban_time, ban_days, current_time;
+	
+	if (!user || !banned_users[user])
+		return 0;
+		
+	user_data = banned_users[user];
+	ban_time = user_data["ban_time"];
+	ban_days = user_data["ban_days"];
+	current_time = time();
+	
+	// 检查是否已过期
+	if (current_time > ban_time + ban_days * 24 * 3600)
+	{
+		// 自动解封过期用户
+		unban_user(user);
+		return 0;
+	}
+	
+	return 1;
+}
+
+/**
+ * @brief 查询被封禁用户的信息
+ * @param string user 用户名
+ * @return mapping 用户封禁信息
+ * @details 返回用户的封禁详细信息
+ */
+mapping query_banned_user(string user)
+{
+	if (!user || !banned_users[user])
+		return 0;
+		
+	return banned_users[user];
+}
+
+/**
+ * @brief 打印被封禁用户列表
+ * @details 显示所有被封禁的用户及其信息
+ */
+void print_banned_users()
+{
+	string *users;
+	mapping user_data;
+	int i, current_time, ban_time, ban_days, remaining_time;
+	string remaining_str;
+	int days, hours, minutes;
+	
+	current_time = time();
+	users = keys(banned_users);
+	
+	if (!sizeof(users))
+	{
+		write("现在没有被封禁的用户。\n");
+		return;
+	}
+	
+	write("以下是被封禁的用户列表：\n");
+	write("用户名\t\t封禁时间\t\t剩余时间\t\t封禁原因\n");
+	write("================================================================\n");
+	
+	for (i = 0; i < sizeof(users); i++)
+	{
+		user_data = banned_users[users[i]];
+		ban_time = user_data["ban_time"];
+		ban_days = user_data["ban_days"];
+		
+		remaining_time = ban_time + ban_days * 24 * 3600 - current_time;
+		
+		if (remaining_time <= 0)
+		{
+			remaining_str = "已过期";
+		}
+		else
+		{
+			days = remaining_time / (24 * 3600);
+			hours = (remaining_time % (24 * 3600)) / 3600;
+			minutes = (remaining_time % 3600) / 60;
+			remaining_str = sprintf("%d天%d小时%d分钟", days, hours, minutes);
+		}
+		
+		write(sprintf("%-15s\t%s\t%s\t%s\n", 
+			users[i], 
+			ctime(ban_time),
+			remaining_str,
+			user_data["reason"]
+		));
+	}
+}

@@ -1,0 +1,168 @@
+/**
+ * @brief 生成门派师傅NPC清单
+ * @details 遍历/kungfu/class目录及其子目录下的npc对象
+ *          检查是否继承了F_MASTER，如果是则保存到json文件
+ * @author Claude 3.7
+ * @date 2023-08-05
+ */
+
+
+
+// 声明函数
+void create();
+int main(object me, string arg);
+int help(object me);
+string *get_all_files(string dir);
+mapping check_master_objects(string *files);
+void save_to_json(mapping masters);
+
+string json_file = "kungfu/class/menpai_renwu.json";
+
+// 入口函数
+void create()
+{
+    seteuid(getuid());
+}
+
+// 主函数
+int main(object me, string arg)
+{
+    string *files;
+    mapping masters;
+    
+    if (! SECURITY_D->valid_grant(me, "(admin)"))
+    {
+        return notify_fail("只有管理员才能执行此命令。\n");
+    }
+    
+    write(HIY "开始遍历 /kungfu/class 目录寻找师傅NPC对象...\n" NOR);
+    
+    // 获取所有文件
+    files = get_all_files("/kungfu/class");
+    if (! sizeof(files))
+    {
+        return notify_fail("没有找到任何文件。\n");
+    }
+    
+    write(sprintf("共发现 %d 个文件，开始检查是否为师傅对象...\n", sizeof(files)));
+    
+    // 检查哪些对象是师傅
+    masters = check_master_objects(files);
+    if (! sizeof(masters))
+    {
+        return notify_fail("未找到任何继承了F_MASTER的对象。\n");
+    }
+    
+    // 保存到JSON文件
+    save_to_json(masters);
+    
+    write(HIG + sprintf("处理完成，共找到 %d 个师傅对象，已保存到 %s。\n", 
+                         sizeof(masters), json_file) + NOR);
+    
+    return 1;
+}
+
+// 递归获取目录下所有.c文件
+string *get_all_files(string dir)
+{
+    string *files, *result = ({});
+    string file;
+    int i;
+    
+    // 确保目录以/结尾
+    if (dir[strlen(dir) - 1] != '/')
+        dir += "/";
+    
+    // 读取目录内容
+    files = get_dir(dir + "*");
+    if (! sizeof(files))
+        return result;
+    
+    // 遍历所有文件和目录
+    for (i = 0; i < sizeof(files); i++)
+    {
+        file = dir + files[i];
+        
+        if (file_size(file) == -2)
+        {
+            // 如果是目录，递归处理
+            result += get_all_files(file);
+        }
+        else if (strsrch(file, ".lpc") != -1)
+        {
+            // 如果是.c文件，添加到结果中
+            result += ({ file });
+        }
+    }
+    
+    return result;
+}
+
+// 检查对象是否为师傅
+mapping check_master_objects(string *files)
+{
+    mapping masters = ([]);
+    object ob;
+    string file, name;
+    int i;
+    
+    for (i = 0; i < sizeof(files); i++)
+    {
+        file = files[i];
+        
+        // 尝试加载对象
+        catch(ob = load_object(file));
+        
+        if (objectp(ob) && ob->query("name") && 
+            inherits(F_MASTER, ob) && 
+            ob->query("family/family_name"))
+        {
+            name = ob->query("id");
+            
+            // 去掉文件前面的/并去掉.c后缀
+            // file = file[1..]; // 去掉开头的/
+            file = file[0..<5]; // 去掉.lpc后缀
+            
+            masters[name] = file;
+            write(sprintf("发现师傅: %s (%s)\n", name, file));
+        }
+    }
+    
+    return masters;
+}
+
+// 保存到JSON文件
+void save_to_json(mapping masters)
+{
+    string json_str;
+    
+    // 将mapping转换为JSON格式
+    json_str = sprintf("{\n");
+    foreach (string name, string file in masters)
+    {
+        json_str += sprintf("    \"%s\": \"%s\",\n", name, file);
+    }
+    
+    // 处理最后一个逗号
+    if (sizeof(masters) > 0)
+        json_str = json_str[0..<3] + "\n";
+        
+    json_str += "}\n";
+    
+    // 写入文件
+    write_file(json_file, json_str, 1);
+}
+
+// 帮助信息
+int help(object me)
+{
+    write(@HELP
+指令格式: to_man_json
+
+该指令用于遍历/kungfu/class目录及其子目录下的所有NPC对象，
+检查它们是否继承了F_MASTER。如果是，则将对象的name作为key，
+对象路径作为value，写入到kungfu/class/menpai_renwu.json文件中。
+
+HELP );
+    return 1;
+}

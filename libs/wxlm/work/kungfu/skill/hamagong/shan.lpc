@@ -1,0 +1,157 @@
+// tui.c 推
+
+
+#include <combat.h>
+
+inherit F_SSERVER;
+
+string query_name() { return "天蟾山海势"; }
+string *pfm_type() { return ({ "force", }); }
+
+int exert(object me, object target)
+{
+	string msg;
+	int skill, ap, dp, damage;
+
+	if (! target || target == me)
+	{
+		me->clean_up_enemy();
+		target = me->select_opponent();
+	}
+
+	if (! target || ! me->is_fighting(target))
+		return notify_fail("蛤蟆功「天蟾山海势」只能对战斗中的对手使用。\n");
+
+	skill = me->query_skill("hamagong", 1);
+
+	if (skill < 150)
+		return notify_fail("你的蛤蟆功修为不够精深，不能使用「天蟾山海势」！\n");
+
+	if (me->query("max_neili") < 4000)
+		return notify_fail("你的内力修为不够深厚，无法施展「天蟾山海势」！\n");
+
+	if (me->query("neili") < 1000)
+		return notify_fail("你的真气不够，无法运用「天蟾山海势」！\n");
+
+	if (! living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+	if (me->query_temp("hamagong-huti"))
+		return notify_fail("你正在蓄力中，无法再次施展「天蟾山海势」！\n");
+
+	msg = HIB "\n$N双腿一弯，蹲下身来，“阁”的一声大叫，运起蛤蟆功劲力，双掌齐发，向前推出。这一推实乃$P毕生功力之所聚，$n猛然感受到山洪海啸般的劲力袭来。\n" NOR;
+
+	ap = me->query_skill("force") * 15 + me->query("max_neili");
+	dp = target->query_skill("force") * 15 + target->query("max_neili");
+	damage = ap / 5;
+	// 蛤蟆功小于500级并且敌方拥有一阳指，命中削减10%。
+	if (me->query_skill("hamagong", 1) < 500 && target->query_skill("sun-finger", 1))
+		ap = ap * 9 / 10;
+
+	if (dp < 1) dp = 1;
+	
+	// 如果对手是npc 命中翻倍
+	if (!playerp(target)){
+		ap = ap * 2;
+	}
+
+	if (COMBAT_D->hit_determination(me,target,ap,dp))
+	{
+		me->add("neili", -400);
+		me->start_busy(2);
+
+		msg += COMBAT_D->do_damage(me, target, REMOTE_ATTACK, damage, 60,
+					   HIR "$n" HIR "奋力低档，但是$P" HIR "的来势何"
+					   "等浩大，$p" HIR "登时觉得气血不畅，“哇”的"
+					   "吐出了一口鲜血。"NOR"\n");
+	} else
+	if (target->query_skill("sun-finger", 1))
+	{
+		me->start_busy(2);
+		me->add("neili", -300);
+		msg += HIG "然而$p" HIG "哈哈一笑，随手一指刺出，正是一"
+		       "阳指的精妙招数，轻易的化解了$P" HIG "的攻势。"NOR"\n";
+	} else
+	{
+		me->add("neili",-200);
+		msg += CYN "可是$n" CYN "将内力运到双臂上，接下了$P"
+		       CYN "这一推之式，只听“蓬”的一声，震得四周"
+		       "尘土飞扬。"NOR"\n";
+		me->start_busy(3);
+		if (! target->is_busy())
+			target->start_busy(1);
+		if (target->query("neili") > 200)
+			target->add("neili", -200);
+		else
+			target->set("neili", 0);
+	}
+
+	//开始蓄力招式，蓄力两秒
+
+	//进入霸体状态的描述
+	msg += HIR"$N蓄力之时，全身真气鼓荡，竟然形成了一层气劲护体。\n";
+	//如果对方没有六脉神剑（six-finger），则蓄力期间有霸体减伤，否则会六脉神剑破体
+	if (target->query_skill("six-finger", 1) < me->query_skill("hamagong", 1))
+	{
+		me->add_temp("apply/armor",damage);
+		//护体添加多少点，你的护体添加了xxx点护体
+		tell_object(me, HIR"你的护体添加了"+damage+"点。\n");
+		call_out("xuli_pfm", 2, me, target, damage);
+		me->set_temp("hamagong-huti", 1);
+	}
+	else
+	{
+		msg += HIR"$n见$N蓄力之时，全身真气鼓荡，竟然形成了一层气劲护体，心知不妙，立刻运起六脉神剑，破体而入。\n";
+		me->start_busy(3);
+		me->add("neili",-200);
+	}
+	message_combatd(msg, me, target);
+
+	return 1;
+}
+
+//蓄力后的招式
+int xuli_pfm(object me,object target,int damage)
+{
+	string msg;
+		//减少防御力
+	me->add_temp("apply/armor",-damage);
+	me->delete_temp("hamagong-huti");
+
+	if (! me || ! target) return 0;
+
+	if (!me->is_fighting() || !target->is_fighting())
+	{
+		return 0;
+	}
+
+	//不在同一地点停止攻击
+	if (environment(me) != environment(target))
+	{
+		return 0;
+	}
+
+	msg = HIM "\n$N第一推刚完不久，第二推已然蓄力完成，前劲未衰，后劲继至，掌风越发猛烈。\n" ;
+
+
+
+	//双方进行角力,如果比拼成功则伤害对方
+	if (COMBAT_D->judge_power(me, target) )
+	{
+		damage *= 2;
+		// 每层意境增加10%伤害。
+		if (COMBAT_D->get_skill_aoyi_level(me, "狂风扫落叶"))
+		{
+			damage += me->query_temp("apply/armor") / 10 * COMBAT_D->get_skill_aoyi_level(me, "狂风扫落叶");
+			msg += HIY"$N触发了「狂风扫落叶」的效果，周边的尘土和落叶互相排斥，在$N周身形成更重的质量撞击向$n！\n"NOR;
+		}
+		msg += COMBAT_D->do_damage(me, target, REMOTE_ATTACK, damage, 60,HIR"只听$n一声惨叫，这一掌正中小腹。但见$n一个身躯突然平平飞出，腾的一响，尘土飞扬，跌在丈许之外\n");
+	}
+	else
+	{
+		msg += HIR"$n猛觉劲风罩来，心知不妙，也是双掌向前平推。这一下是以硬接硬，刹那之间，两下里竟然凝住不动。\n";
+	}
+
+	message_combatd(msg, me, target);
+	return 1;
+}

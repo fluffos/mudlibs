@@ -1,0 +1,629 @@
+/**
+ * @file message.c
+ * @author Lu dexiang
+ * @brief 消息处理和弹窗相关的模拟外部函数
+ */
+
+//封装zj弹窗单独标题
+/**
+ * @brief 创建一个只有标题的弹窗
+ * @param string str 弹窗标题内容
+ * @return string 格式化后的弹窗字符串
+ */
+string popup_title(string str)
+{
+	string msg;
+	msg = ZJOBLONG+str;
+	msg = replace_string(msg,"\n",ZJBR);
+	return msg+"\n";
+}
+
+string text_link(string text,string cmd)
+{
+	return sprintf(ZJURL("cmds:%s"),cmd) + text + NOR;
+}
+
+//带按键的zj弹窗
+/**
+ * @brief 创建一个带按钮的弹窗
+ * @param mixed button_list 按钮列表，可以是数组或字符串
+ * @return string 格式化后的弹窗字符串
+ */
+string popup_buton(mixed button_list)
+{
+	string str;
+	str = ZJOBACTS2+ZJMENUF(2,2,9,30);
+
+	if (arrayp(button_list))
+	{
+		// 只用ZJSEP连接
+		str += implode(button_list,ZJSEP);
+	}
+	else
+	{
+		str += button_list;
+	}
+	return str+"\n";
+}
+
+//可输入字符串的直接弹窗
+/**
+ * @brief 创建一个带输入框的弹窗
+ * @param string str 弹窗提示文本
+ * @param string order 输入完成后执行的命令
+ * @return string 格式化后的弹窗字符串
+ */
+string popup_input(string str,string order)
+{
+
+	str = replace_string(str,"\n",ZJBR);
+
+	if (strsrch(str,"$txt#")!=-1)
+	{
+		return INPUTTXT(str,order) + "\n";
+	}
+
+	return INPUTTXT(str,order+"$txt#")+"\n";
+}
+
+// 组合类型的弹窗
+/**
+ * @brief 创建一个组合型弹窗(标题+按钮)
+ * @param string title 弹窗标题
+ * @param mixed button_list 按钮列表
+ * @return string 格式化后的弹窗字符串
+ */
+string popup_comb(string title,mixed button_list)
+{
+	string msg;
+	msg = popup_title(title);
+	msg += popup_buton(button_list);
+	return msg;
+}
+
+/**
+ * @brief 创建一个299类型的消息(用于特殊提示)
+ * @param string title 消息标题
+ * @param string msg 消息内容
+ * @return string JSON格式的消息字符串
+ */
+string msg299(string title,string msg)
+{
+	mapping jsonData = ([]);
+
+	jsonData["code"] = 299;
+	jsonData["title"] = title;
+	jsonData["msg"] = replace_string(msg, "\n",ZJBR);
+
+	return json_encode(jsonData) + "\n";
+}
+
+/**
+ * @brief 创建一个错误提示弹窗
+ * @param string msg 错误信息
+ * @return string JSON格式的错误消息
+ */
+string pop_final(string msg)
+{
+        mapping error_map = ([
+                "code":405,
+        ]);
+
+        if (msg)
+        {
+                error_map["msg"] = msg;
+        }
+        else
+        {
+                error_map["msg"] = "未知错误";
+        }
+
+        return json_encode(error_map) + "\n";
+}
+
+/**
+ * @brief 发送消息到指定目标
+ * @param mixed arg 消息类型
+ * @param string message 消息内容
+ * @param mixed target 消息目标
+ * @param mixed exclude 需要排除的对象
+ */
+varargs void message(mixed arg, string message, mixed target, mixed exclude)
+{
+	// efun::message(arg, message, target, exclude);
+	// 判断exclude是否为对象或者对象数组
+	// 如果不是则efun::message只传入前三个参数
+
+	//将"\n"NOR替换为"\n"
+    // if (!message)
+    // {
+    //     message = "";
+    // }
+
+	message = replace_string(message,"\n"NOR,NOR"\n");
+
+	//武庙中屏蔽环境信息
+	if (arg == "vision")
+	{
+
+		if (!undefinedp(target) && objectp(target))
+		{
+			if (target->query("short") == "武庙")
+			{
+				return;
+			}
+		}
+	}
+
+	if (!exclude)
+	{
+		efun::message(arg, message, target);
+	}
+	else if (!objectp(exclude) && ! arrayp(exclude))
+	{
+		efun::message(arg, message, target);
+	}
+	else
+	{
+		efun::message(arg, message, target, exclude);
+	}
+
+}
+
+/**
+ * @brief 对消息进行排版处理
+ * @param string input 需要排版的消息
+ * @return string 排版后的消息
+ */
+string sort_msg(string input)
+{
+	int i;
+	int sl;
+	int len;
+	int esc;
+	string result;
+	result = "";
+
+	len = 0;
+	esc = 0;
+	sl = strlen(input);
+	for (i = 0; i < sl; i++)
+	{
+		if (len >= 46 && input[i] != '\n')
+		{
+			switch (input[i..i+1])
+			{
+			case "：":
+			case "”":
+			case "。":
+			case "，":
+			case "、":
+			case "；":
+			case "）":
+			case " )":
+			case "！":
+			case "？":
+				break;
+			default:
+				len = 0;
+				result += "\n";
+				break;
+			}
+		}
+
+		if (input[i] == 27)
+			esc = 1;
+
+		if (! esc)
+		{
+			if (input[i] > 160)
+			{
+				result += input[i..i+1];
+				i ++;
+				len += 2;
+				continue;
+			}
+			if (input[i] == '\n')
+			{
+				result += "\n";
+				len = 0;
+				continue;
+			}
+		}
+
+		result += input[i..i];
+		if (! esc) len++;
+
+		if (esc && input[i] == 'm')
+			esc = 0;
+	}
+
+	if (i < sl)
+		result += input[i..sl-1];
+
+	return result;
+}
+
+/**
+ * @brief 发送动作消息
+ * @param string msg 消息模板
+ * @param object me 动作发起者
+ * @param object you 动作接收者
+ */
+varargs void message_vision(string msg, object me, object you)
+{
+	string my_gender, your_gender, my_name, your_name;
+	string str1, str2, str3;
+
+	my_name = me->name();
+	my_gender = me->query("gender");
+
+	str1 = replace_string(msg,  "$P", gender_self(my_gender));
+	str1 = replace_string(str1, "$N", gender_self(my_gender));
+	str3 = replace_string(msg,  "$P", my_name);
+	str3 = replace_string(str3, "$N", my_name);
+
+	if (you)
+	{
+		your_name = you->name();
+		your_gender = you->query("gender");
+		str1 = replace_string(str1, "$p", gender_pronoun(your_gender));
+		str1 = replace_string(str1, "$n", your_name);
+
+		str3 = replace_string(str3, "$p", your_name);
+		str3 = replace_string(str3, "$n", your_name);
+
+		str2 = replace_string(msg,  "$P", gender_pronoun(my_gender));
+		str2 = replace_string(str2, "$p", gender_self(your_gender));
+		str2 = replace_string(str2, "$N", my_name);
+		str2 = replace_string(str2, "$n", gender_self(your_gender));
+		message("vision", str2, you);
+	}
+
+	message("vision", str1, me);
+
+	//在新驱动中如果获取到一个未定义的对象会报错，所以这里加上判断
+	if (you)
+	message("vision", str3, all_inventory(environment(me)), ({ me, you }));
+	else
+	message("vision", str3, all_inventory(environment(me)), me);
+}
+
+/**
+ * @brief 发送经过排版的动作消息
+ * @param string msg 消息模板
+ * @param object me 动作发起者
+ * @param object you 动作接收者
+ */
+varargs void message_sort(string msg, object me, object you)
+{
+	string my_gender, your_gender, my_name, your_name;
+	string str1, str2, str3;
+
+	my_name= me->name();
+	my_gender = me->query("gender");
+	str1 = replace_string(msg,  "$P", gender_self(my_gender));
+	str1 = replace_string(str1, "$N", gender_self(my_gender));
+	str3 = replace_string(msg,  "$P", my_name);
+	str3 = replace_string(str3, "$N", my_name);
+	if( you ){
+		your_name= you->name();
+		your_gender= you->query("gender");
+		str2 = replace_string(msg,  "$P", gender_pronoun(my_gender));
+		str2 = replace_string(str2, "$p", gender_self(your_gender));
+		str2 = replace_string(str2, "$N", my_name);
+		str2 = replace_string(str2, "$n", gender_self(your_gender));
+		message("vision", sort_msg(str2), you);
+		str1 = replace_string(str1, "$p", gender_pronoun(your_gender));
+		str1 = replace_string(str1, "$n", your_name);
+		str3 = replace_string(str3, "$p", your_name);
+		str3 = replace_string(str3, "$n", your_name);
+	}
+	message("vision", sort_msg(str1), me);
+	message("vision", sort_msg(str3),  environment(me), ({ me, you}) );
+}
+
+/* Definition of the level of showing combat message */
+#define	SHOW_ALL		0
+#define	SHOW_DAMAGE		1
+#define	SHOW_BRIEF_DAMAGE	2
+#define	SHOW_BRIEF_SELF_DAMAGE	3
+#define	SHOW_NONE		4
+
+
+/**
+ * @brief 发送战斗相关的消息
+ * @param string msg 消息内容
+ * @param object me 攻击者
+ * @param object you 被攻击者
+ * @param string damage_info 伤害信息
+ * @param int damage 伤害值
+ * @param string type 伤害类型
+ */
+varargs void message_combatd(string msg, object me, object you, string damage_info,int damage,string type)
+{
+	string my_gender, your_gender, my_name, your_name, skill_name="";
+	string str1="", str2="", str3f="", str3d="",me_att="",you_def="",stat="",damage_msg="",other_msg="";
+	mixed my_flag;
+	mixed your_flag;
+	int damage_flag;
+	int brief;
+	int others;
+    object ob;
+	object *obs;
+	brief = 1;
+
+	if (! type) type="";
+	if (me->query_temp("attack_skill_name"))
+		skill_name = me->query_temp("attack_skill_name");
+
+	if(!damage || damage == 0)
+		damage_msg = HIG"MISS"NOR;
+	else if(damage == -1)
+		damage_msg = HIY"躲闪"NOR;
+	else if(damage == -2)
+		damage_msg = YEL"招架"NOR;
+	else
+		damage_msg = HIR"HP - " + damage + NOR;
+
+	if (! damage_info)
+	{
+		damage_info = "";
+		brief = 0;
+		msg = "\n" + msg; 
+	}
+	if(you)
+	{
+		stat =HIG"   <hp> "+((int)you->query("qi")*100 / (int)you->query("max_qi"))+"%  "+NOR;       
+		me_att=HIG" √ ( 你对" + you->query("name") + "造成 " +damage + " 点 "+RED+type+NOR+HIG+")\n"+NOR;   
+		you_def=HIR" × ( 你受到" +me->query("name") +" "+ damage + " 点 "+RED+type+NOR+stat+HIR+")\n"+NOR; 
+	}
+	if(damage<1)
+	{
+		me_att="";
+		you_def="";   
+	}
+ 
+	damage_flag = (strlen(damage_info) > 0);
+
+	my_name=me->name();
+	my_gender=me->query("gender");
+
+	if (you)
+	{
+		your_name=you->name();
+		your_gender=you->query("gender");
+	}
+     
+	if (userp(me))
+	{
+		if (! brief) my_flag = SHOW_ALL;
+		else
+		{
+			my_flag = me->query("env/combatd");
+			if (stringp(my_flag) && my_flag == "YES") my_flag = SHOW_BRIEF_DAMAGE;
+			if (! intp(my_flag)) my_flag = SHOW_ALL;
+		}
+
+		if (my_flag == 5 && you)
+			str1 = NOR"\n你："+ skill_name + " 一＞ " + your_name + "：" + damage_msg +"\n";
+		else if (my_flag >= SHOW_BRIEF_SELF_DAMAGE || my_flag && ! damage_flag)
+		{
+			if (! stringp(str1 = me->query("env/ignore_combat")))
+				str1 = "";
+			else
+				str1 += "\n\n";
+		} else
+		if (my_flag == SHOW_BRIEF_DAMAGE)
+			str1 = damage_info;
+		else
+			str1 = msg+me_att + damage_info;
+	      
+		str1 = replace_string(str1, "$P",gender_self(my_gender));
+		str1 = replace_string(str1, "$N",gender_self(my_gender));
+		if (you)
+		{	
+			str1 = replace_string(str1, "$p", gender_pronoun(your_gender));
+			str1 = replace_string(str1, "$n", your_name);
+		}
+
+		if (strlen(str1) > 0)
+			message("tell_object",str1, me);
+	}
+
+	if (you && userp(you))
+	{
+		if (! brief) your_flag = SHOW_ALL;
+		else
+		{
+			your_flag = you->query("env/combatd");
+			if (stringp(your_flag) && your_flag == "YES") your_flag = SHOW_BRIEF_DAMAGE;
+			if (! intp(your_flag)) your_flag = SHOW_ALL;
+		}
+	     
+		if (your_flag == 5)
+			str2 = "你：" + damage_msg + " ＜一 " + my_name + "：" + skill_name + "\n";
+		else if (your_flag == SHOW_ALL || damage_flag && your_flag < SHOW_NONE)
+		{
+			if (your_flag <= SHOW_DAMAGE)
+			{
+				str2 = msg+you_def + damage_info;
+			}
+			else
+			{
+				str2 = damage_info;
+			}
+			str2 = replace_string(str2, "$P",gender_pronoun(my_gender));
+			str2 = replace_string(str2, "$p",gender_self(your_gender));
+			str2 = replace_string(str2, "$N", my_name);
+			str2 = replace_string(str2, "$n",gender_self(your_gender));
+		}
+		if (strlen(str2) > 0)
+			message("tell_object",str2, you);
+	}
+
+	obs = filter_array(all_inventory(environment(me)),(: userp($1) || $1->want_receive_msg() :)) - ({ me, you });
+	others = sizeof(obs);
+	if (others)
+	{
+		str3f = msg;
+		str3d = damage_info;
+		str3f = replace_string(str3f, "$P", my_name);
+		str3f = replace_string(str3f, "$N", my_name);
+		str3d = replace_string(str3d, "$P", my_name);
+		str3d = replace_string(str3d, "$N", my_name);
+		if (you)
+		{
+			str3f = replace_string(str3f, "$p", your_name);
+			str3f = replace_string(str3f, "$n", your_name);
+			str3d = replace_string(str3d, "$p", your_name);
+			str3d = replace_string(str3d, "$n", your_name);
+		}
+
+		if (brief)
+		{
+			str3f += str3d;
+			if(you)
+				other_msg = my_name + "："+ skill_name + " >> " + your_name + "：" + damage_msg +"\n"; 
+			else other_msg = str3f;  
+		}
+		else
+			str3d = str3f;
+
+		if (strlen(str3f) < 1)
+			return;
+
+		foreach (ob in obs)
+		{
+			if(ob->query("env/combatd2")) continue;
+			switch (ob->query("env/combatd"))
+			{
+			case SHOW_NONE:
+				break;
+
+			case SHOW_BRIEF_DAMAGE:
+			case SHOW_BRIEF_SELF_DAMAGE:
+				message("tell_object",str3d, ob);
+				break;
+			case 5:
+				message("tell_object",other_msg, ob);
+				break;
+
+			default:
+				message("tell_object",str3f, ob);
+				break;
+			}
+		}
+	}
+}
+
+
+/**
+ * @brief 向指定对象发送消息
+ * @param object ob 目标对象
+ * @param string str 消息内容
+ */
+void tell_object(object ob, string str)
+{
+	if (!objectp(ob))
+		return;
+	message("tell_object",str, ob);
+}
+
+/**
+ * @brief 向房间内发送消息
+ * @param mixed ob 房间对象
+ * @param string str 消息内容
+ * @param object *exclude 需要排除的对象列表
+ */
+varargs void tell_room(mixed ob, string str, object *exclude)
+{
+	if (ob) message("tell_room", str, ob, exclude);
+}
+
+/**
+ * @brief 发送全局喊话消息
+ * @param string str 喊话内容
+ */
+void shout(string str)
+{
+	message("shout", str, users(), this_player());
+}
+
+/**
+ * @brief 向当前玩家或对象写入消息
+ * @param string str 消息内容
+ */
+void write(string str)
+{
+	if (this_player())
+		message("write", str, this_player());
+	else if (previous_object())
+		message("write", str, previous_object());
+	else
+		efun::write(str);
+}
+
+/**
+ * @brief 发送说话消息
+ * @param string str 说话内容
+ * @param mixed exclude 需要排除的对象
+ */
+varargs void say(string str, mixed exclude)
+{
+	if (living(previous_object()))
+		message("say", str, environment(previous_object()), previous_object());
+	else if (this_player())
+		message("say", str, environment(this_player()), this_player());
+}
+
+
+/**
+ * @brief 发送系统消息
+ * @param string message 系统消息内容
+ */
+void message_system(string message)
+{
+	message("system", HIW "\n【系统提示】" + message + ""NOR"\n",
+		all_interactive(), 0);
+}
+
+/**
+ * @brief 设置命令执行失败的提示信息
+ * @param string msg 失败提示信息
+ * @return int 0:失败 1:成功
+ */
+int notify_fail(string msg)
+{
+	if (this_player()) 
+	{
+		this_player()->set_temp("notify_fail", msg);
+		return efun::notify_fail(msg);
+	} else
+		return 0;
+}
+
+/**
+ * @brief 获取最近一次的失败提示信息
+ * @return string 失败提示信息
+ */
+string query_fail_msg()
+{
+	return this_player()->query_temp("notify_fail");
+}
+
+/**
+ * @brief 替换字符串中的指定内容
+ * @param string str 原始字符串
+ * @param string str1 要替换的内容
+ * @param string str2 替换后的内容
+ * @param int first 起始位置
+ * @param int last 结束位置
+ * @return string 替换后的字符串
+ */
+varargs string replace_string(string str,string str1,string str2,int first,int last)
+{
+	if(str1=="\n")
+		str = efun::replace_string(str,"\r\n",str2,first,last);
+	return efun::replace_string(str,str1,str2,first,last);
+}

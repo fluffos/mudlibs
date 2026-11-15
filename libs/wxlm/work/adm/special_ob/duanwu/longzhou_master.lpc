@@ -1,0 +1,433 @@
+
+
+inherit F_SAVE;
+inherit F_DBASE;
+
+//函数预声明
+void reset_race_data();
+private void give_reward(object me, int zongzi, int yuanbao, int exp, int aicao);
+void distribute_rewards();
+private void heart_beat();
+// 队伍信息
+mapping team_members = ([]);  // 记录所有龙舟队伍
+mapping team_results = ([]);  // 记录队伍完成时间
+mapping player_teams = ([]);  // 记录玩家所属队伍
+
+// 文件存档名称
+string query_save_file() { return "/data/npc/longzhou_d"; }
+
+// 初始化函数
+void create()
+{
+    seteuid(getuid());
+    // restore();
+    // 如果加载后没有 last_distribution_day, 初始化为0
+    if (!query("last_distribution_day")) {
+        set("last_distribution_day", 0);
+    }
+    // set_heart_beat(300); // 5分钟保存一次 (或者根据需要调整心跳频率)
+    // heart_beat();
+}
+
+// 关服时保存数据
+public void mud_shutdown()
+{
+    save();
+}
+
+// 卸载时保存数据
+varargs void remove(string euid)
+{
+    save();
+}
+
+// 心跳：定期保存数据和执行每日结算
+private void heart_beat()
+{
+    int current_time = time();
+
+    // 每天晚上10点 (22点) 结算
+    // 需要确保 is_current_hour 和 is_same_day 是 simul_efun
+    if (is_current_hour(22) && !is_same_day(query("last_distribution_day"), current_time))
+    {
+        CHANNEL_D->do_channel(this_object(), "sys", "龙舟竞渡活动每日结算开始。");
+        distribute_rewards(); // 该函数内部会调用 reset_race_data()
+        set("last_distribution_day", current_time);
+        CHANNEL_D->do_channel(this_object(), "sys", "龙舟竞渡活动每日结算完成，数据已重置。");
+    }
+    
+    save(); // 无论是否结算，都按时保存数据
+}
+
+// 注册新队伍
+int register_team(object leader, object *members)
+{
+    string team_id, leader_id;
+    string *member_ids = ({});
+    int i;
+    
+    if (!leader || !objectp(leader) || !arrayp(members) || sizeof(members) != 4)
+        return 0;
+    
+    leader_id = leader->query("id");
+    team_id = leader_id + "_team";
+    
+    // 检查成员是否已经在其他队伍中
+    for (i = 0; i < sizeof(members); i++)
+    {
+        string member_id = members[i]->query("id");
+        
+        if (player_teams[member_id])
+        {
+            return -1; // 成员已经在队伍中
+        }
+        
+        member_ids += ({ member_id });
+    }
+    
+    // 注册队伍
+    team_members[team_id] = member_ids;
+    
+    // 记录每个玩家所属的队伍
+    for (i = 0; i < sizeof(member_ids); i++)
+    {
+        player_teams[member_ids[i]] = team_id;
+    }
+    
+    // 初始化队伍结果
+    team_results[team_id] = ([
+        "player_times": ([]),      // 存储队员的个人成绩 {player_id: time}
+        "all_members_completed": 0, // 标记是否所有队员都已完成
+        "calculated_total_time": 0, // 计算得出的队伍总时间，仅当 all_members_completed 为1时有效
+    ]);
+    
+    save();
+    return 1;
+}
+
+// 查询玩家所属队伍
+string query_player_team(object me)
+{
+    string id;
+    
+    if (!me || !objectp(me))
+        return 0;
+    
+    id = me->query("id");
+    return player_teams[id];
+}
+
+// 查询队伍成员
+string *query_team_members(string team_id)
+{
+    if (!team_id || !team_members[team_id])
+        return ({});
+    
+    return team_members[team_id];
+}
+
+// 记录玩家挑战结果
+int record_challenge_result(object me, int time_used)
+{
+    string id, team_id;
+    string *member_ids;
+    int all_done = 1; // 假设所有人都完成了
+    int current_total_time = 0;
+    
+    if (!me || !objectp(me) || time_used <= 0)
+        return 0;
+    
+    id = me->query("id");
+    team_id = player_teams[id];
+    
+    if (!team_id || !team_members[team_id] || !team_results[team_id])
+        return 0;
+
+    // 检查玩家是否已经提交过成绩 (虽然主要在NPC端控制，但这里也做个保险)
+    if (member_array(id, keys(team_results[team_id]["player_times"])) != -1)
+    {
+        // tell_object(me, "你已经提交过本次比赛的成绩了。");
+        return 0; // 已经记录过成绩
+    }
+    
+    // 记录当前玩家成绩
+    team_results[team_id]["player_times"][id] = time_used;
+    
+    // 检查队伍所有成员是否都已完成
+    member_ids = team_members[team_id];
+    if (!arrayp(member_ids)) return 0; // 安全检查
+
+    foreach (string member_id in member_ids)
+    {
+        if (member_array(member_id, keys(team_results[team_id]["player_times"])) == -1)
+        {
+            all_done = 0; // 只要有一个人没完成，就标记为未全部完成
+            break;
+        }
+        current_total_time += team_results[team_id]["player_times"][member_id];
+    }
+    
+    if (all_done)
+    {
+        team_results[team_id]["all_members_completed"] = 1;
+        team_results[team_id]["calculated_total_time"] = current_total_time;
+    }
+    else
+    {
+        team_results[team_id]["all_members_completed"] = 0;
+        // team_results[team_id]["calculated_total_time"] = 0; // 或者保持旧值/设为极大值，取决于比较逻辑
+    }
+    
+    save();
+    return 1;
+}
+
+// 队伍时间比较函数
+private int compare_team_time(string team_id1, string team_id2)
+{
+    mapping team1_data = team_results[team_id1];
+    mapping team2_data = team_results[team_id2];
+    int team1_all_completed, team2_all_completed;
+    int team1_members_done, team2_members_done;
+
+    if (!mapp(team1_data) || !mapp(team2_data)) return 0; // Should not happen
+
+    team1_all_completed = team1_data["all_members_completed"];
+    team2_all_completed = team2_data["all_members_completed"];
+
+    // 1. 都完成了，比较总时间
+    if (team1_all_completed && team2_all_completed)
+    {
+        return team1_data["calculated_total_time"] < team2_data["calculated_total_time"] ? -1 : 1;
+    }
+    // 2. team1 完成了，team2 没有
+    else if (team1_all_completed)
+    {
+        return -1; // team1 ranks higher
+    }
+    // 3. team2 完成了，team1 没有
+    else if (team2_all_completed)
+    {
+        return 1; // team2 ranks higher
+    }
+    // 4. 都没有完成，比较已完成人数，人多的优先
+    else
+    {
+        team1_members_done = sizeof(keys(team1_data["player_times"]));
+        team2_members_done = sizeof(keys(team2_data["player_times"]));
+        if (team1_members_done != team2_members_done)
+        {
+            return team1_members_done > team2_members_done ? -1 : 1;
+        }
+        // 如果完成人数相同，可以进一步比较他们当前的部分总时间 (可选，或者视为相等)
+        // For now, consider them equal if members_done are same and neither fully completed
+        return 0; 
+    }
+}
+
+// 队伍排名比较函数
+private int compare_team_rank(string team_id1, string team_id2, mapping rank_map)
+{
+    return rank_map[team_id1] < rank_map[team_id2] ? -1 : 1;
+}
+
+// 获取所有队伍排名
+mapping get_team_rankings()
+{
+    string *teams = keys(team_results);
+    mapping rankings = ([]);
+    int i, rank = 1;
+    
+    if (!sizeof(teams)) return ([]); // 如果没有任何队伍数据，直接返回空
+
+    // 按照新的比较逻辑排序
+    teams = sort_array(teams, (: compare_team_time :), this_object());
+    
+    // 生成排名，主要针对已完成所有成员比赛的队伍
+    for (i = 0; i < sizeof(teams); i++)
+    {
+        // 检查 team_results[teams[i]] 是否存在并且是一个映射
+        if (mapp(team_results[teams[i]]) && team_results[teams[i]]["all_members_completed"])
+        {
+            rankings[teams[i]] = rank++;
+        }
+    }
+
+    return rankings;
+
+
+}
+
+// 获取队伍排名
+int get_team_rank(string team_id)
+{
+    mapping rankings = get_team_rankings();
+    
+    if (!team_id || !rankings[team_id])
+        return 0;
+    
+    return rankings[team_id];
+}
+
+// 发放奖励
+void distribute_rewards()
+{
+    mapping rankings = get_team_rankings();
+    string *teams = keys(rankings);
+    int i, j;
+    
+    // 按排名排序
+    teams = sort_array(teams, "compare_team_rank", this_object(), rankings);
+    
+    // 为所有参与的队伍发放奖励
+    for (i = 0; i < sizeof(teams); i++)
+    {
+        string *members = team_members[teams[i]];
+        int rank = rankings[teams[i]];
+        
+        for (j = 0; j < sizeof(members); j++)
+        {
+            object player = UPDATE_D->global_find_player(members[j]);
+            
+            if (!player) continue;
+            
+            // 根据排名发放不同奖励
+            if (rank == 1) // 冠军
+            {
+                give_reward(player, 5, 200, 50000, 5);
+                tell_object(player, HIG"【端午活动】恭喜你的队伍获得龙舟竞渡冠军！获得秘宝粽子×5，绑定元宝×200，经验潜能×50000，艾草×5\n"NOR);
+            }
+            else if (rank == 2) // 亚军
+            {
+                give_reward(player, 4, 150, 50000, 4);
+                tell_object(player, HIG"【端午活动】恭喜你的队伍获得龙舟竞渡亚军！获得秘宝粽子×4，绑定元宝×150，经验潜能×50000，艾草×4\n"NOR);
+            }
+            else if (rank == 3) // 季军
+            {
+                give_reward(player, 3, 100, 40000, 3);
+                tell_object(player, HIG"【端午活动】恭喜你的队伍获得龙舟竞渡季军！获得秘宝粽子×3，绑定元宝×100，经验潜能×40000，艾草×3\n"NOR);
+            }
+            else if (rank <= 5) // 4-5名
+            {
+                give_reward(player, 2, 50, 30000, 2);
+                tell_object(player, HIG"【端午活动】恭喜你的队伍获得龙舟竞渡第"+ chinese_number(rank) +"名！获得秘宝粽子×2，绑定元宝×50，经验潜能×30000，艾草×2\n"NOR);
+            }
+            else // 保底
+            {
+                give_reward(player, 1, 50, 20000, 1);
+                tell_object(player, HIG"【端午活动】感谢你参与龙舟竞渡活动！获得秘宝粽子×1，绑定元宝×50，经验潜能×20000，艾草×1\n"NOR);
+            }
+        }
+    }
+    
+    // 重置比赛数据
+    reset_race_data();
+}
+
+// 发放具体奖励
+private void give_reward(object me, int zongzi, int yuanbao, int exp, int aicao)
+{
+    object ob;
+    int i;
+    
+    if (!me || !objectp(me))
+        return;
+    
+    // 增加经验和潜能
+    me->add("combat_exp", exp);
+    me->add("potential", exp);
+    
+    // 增加绑定元宝
+    me->add("bind_yuanbao", yuanbao);
+    
+    // 增加艾草
+    me->add("duanwu_huodong/obj/ai_cao", aicao);
+    
+    // 增加秘宝粽子
+    for (i = 0; i < zongzi; i++)
+    {
+        ob = new_bind("/adm/special_ob/duanwu/obj/mibao_zongzi");
+        if (ob)
+        {
+            if (!ob->move(me))
+            {
+                ob->move(environment(me));
+                tell_object(me, "由于你的背包已满，秘宝粽子掉在了地上。\n");
+            }
+        }
+    }
+}
+
+// 重置比赛数据
+void reset_race_data()
+{
+    team_members = ([]);
+    team_results = ([]);
+    player_teams = ([]);
+    save();
+}
+
+// 检查玩家的龙舟挑战状态
+int check_player_challenge_status(object me)
+{
+    string id, team_id;
+    
+    if (!me || !objectp(me))
+        return 0;
+    
+    id = me->query("id");
+    team_id = player_teams[id];
+    
+    if (!team_id || !team_results[team_id] || !mapp(team_results[team_id]["player_times"])) 
+        return 0;
+    
+    // 检查玩家ID是否在已完成的 player_times 映射中
+    return member_array(id, keys(team_results[team_id]["player_times"])) != -1;
+}
+
+// 获取弹窗选项
+string *get_challenge_options()
+{
+    string *options = ({
+        "划桨",
+        "鼓劲",
+        "蹬舟"
+    });
+    
+    // 随机打乱选项顺序
+    options = shuffle(options);
+    
+    return options;
+}
+
+// 获取正确选项
+string get_correct_option()
+{
+    string *options = ({
+        "划桨",
+        "鼓劲",
+        "蹬舟"
+    });
+    
+    return options[random(sizeof(options))];
+}
+
+// 辅助函数：随机打乱数组
+string *shuffle(string *arr)
+{
+    int i, j;
+    string temp;
+    
+    for (i = sizeof(arr) - 1; i > 0; i--)
+    {
+        j = random(i + 1);
+        if (i != j)
+        {
+            temp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = temp;
+        }
+    }
+    
+    return arr;
+}

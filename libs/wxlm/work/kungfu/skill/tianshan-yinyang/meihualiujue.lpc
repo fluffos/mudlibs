@@ -1,0 +1,207 @@
+// meihualiujue.c 梅花六绝
+// 我自逍遥决第三绝技 - 六次连击攻击
+
+#include <combat.h>
+
+/**
+ * @brief 绝技名称显示
+ * @return string 带颜色的绝技名称
+ */
+string name() { return HIM "梅花六绝" NOR; }
+
+/**
+ * @brief 绝技名称查询
+ * @return string 绝技名称
+ */
+string query_name() { return "梅花六绝"; }
+
+/**
+ * @brief 绝技激发类型
+ * @return string* 激发类型数组
+ */
+string *pfm_type() { return ({ "strike", "hand" }); }
+
+inherit F_SSERVER;
+
+/**
+ * @brief 绝技执行函数
+ * @param object me 施招者
+ * @param object target 目标
+ * @return int 1成功，0失败
+ * @details 六次连击攻击，前三掌后三手，体现主辅分明
+ */
+int perform(object me, object target)
+{
+	int damage, ap, dp, i, total_damage;
+	int aoyi_lingjiu, aoyi_ziyou;
+	string msg, attack_msg;
+    int hit_count = 0;  // 命中次数统计
+	string *zhang_moves, *shou_moves;
+
+	// 选择目标
+	if (! target)
+	{
+		me->clean_up_enemy();
+		target = me->select_opponent();
+	}
+	if (! target || ! me->is_fighting(target))
+		return notify_fail(name() + "只能对战斗中的对手使用。\n");
+
+	// 检查武器状态
+	if( query_temp("weapon", me) || query_temp("secondary_weapon", me) )
+		return notify_fail(name() + "只能空手施展。\n");
+
+	// 检查技能等级
+	if ((int)me->query_skill("tianshan-yinyang", 1) < 200)
+		return notify_fail("你的我自逍遥决不够娴熟，难以施展" + name() + "。\n");
+
+	// 检查基本内功等级
+	if ((int)me->query_skill("force", 1) < 200)
+		return notify_fail("你的内功修为不足，难以施展" + name() + "。\n");
+
+	// 检查内力
+	if( query("neili", me) < 400 )
+		return notify_fail("你现在真气不足，难以施展" + name() + "。\n");
+
+	// 检查目标状态
+	if (! living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+	// 获取意境等级
+	aoyi_lingjiu = COMBAT_D->get_skill_aoyi_level(me, "灵鹫飞羽");
+	aoyi_ziyou = COMBAT_D->get_skill_aoyi_level(me, "自由自在");
+
+	// 六阳掌招式名称（前三次）
+	zhang_moves = ({
+		HIR "烈阳当空" NOR,
+		HIY "阳春三月" NOR,
+		HIW "六阳归一" NOR
+	});
+
+	// 折梅手招式名称（后三次）
+	shou_moves = ({
+		HIC "梅花初绽" NOR,
+		HIM "落英缤纷" NOR,
+		HIB "梅影纷飞" NOR
+	});
+
+	// 施招消息
+	msg = HIM "$N" HIM "凝神聚气，运转我自逍遥决心法至巅峰状态，\n"
+	      HIM "「梅花六绝」掌法三式，手法三式，六招连环，如梅花绽放般美妙！" NOR "\n";
+
+	// 消耗内力
+	addn("neili", -400, me);
+
+	total_damage = 0;
+
+	// 六次连击
+	for (i = 0; i < 6; i++)
+	{
+		if (!target || !living(target) || !me->is_fighting(target))
+			break;
+
+		// 前三招为六阳掌式（掌法为主）
+		if (i < 3)
+		{
+			ap = me->query_skill("strike") * 5 / 4 + me->query_skill("tianshan-yinyang", 1) / 3;
+			attack_msg = "第" + chinese_number(i+1) + "式：" + zhang_moves[i] + "，";
+			attack_msg += HIR "$N" HIR "掌劲如烈日当空，六阳之力透掌而出！" NOR;
+		}
+		// 后三招为折梅手法（手法为辅）
+		else
+		{
+			ap = me->query_skill("hand") * 5 / 4 + me->query_skill("tianshan-yinyang", 1) / 3;
+			attack_msg = "第" + chinese_number(i+1) + "式：" + shou_moves[i-3] + "，";
+			attack_msg += HIC "$N" HIC "手法如梅枝虬折，阴柔之劲暗渡陈仓！" NOR;
+		}
+
+		dp = target->query_skill("dodge") + target->query_skill("parry") / 2;
+
+		// 意境加成
+		if (aoyi_lingjiu > 0)
+			ap += aoyi_lingjiu * 2;
+
+		// PVE加成
+		if (!playerp(target))
+			ap = ap * 5 / 4;
+
+		// 单次攻击判定
+		if (COMBAT_D->hit_determination(me, target, ap, dp))
+		{
+			hit_count++;  // 命中次数+1
+
+			// 单次伤害计算（大幅提升基础伤害）
+			damage = me->query_skill("tianshan-yinyang", 1) * 2;  // 从/2改为*2（4倍提升）
+			damage += (i < 3) ? me->query_skill("strike") * 2 : me->query_skill("hand") * 2;  // 从/2改为*2
+			damage += me->query("jiali");  // 从/3改为*1
+
+			// 意境伤害加成（降低依赖）
+			if (aoyi_lingjiu > 0)
+				damage += damage / 20 * aoyi_lingjiu;  // 从/10降低到/20
+
+			if (aoyi_ziyou > 0)
+				damage += damage / 25 * aoyi_ziyou;  // 从/15降低到/25
+
+			total_damage += damage;
+
+			msg += attack_msg + "\n";
+			msg += COMBAT_D->do_damage(me, target, UNARMED_ATTACK, damage, 260,
+			                          HIY "$n" HIY "被" + (i < 3 ? "掌劲" : "手法") + "所伤！" NOR ":内伤@?");
+		}
+		else
+		{
+			msg += attack_msg + "\n";
+			msg += CYN "$n" CYN "身形一闪，避开了这一击。" NOR "\n";
+		}
+
+		// 连击间隔，防止过快
+		if (i < 5) msg += "\n";
+	}
+
+	// 保底机制 - 至少命中3次
+	if (hit_count < 3 && target && living(target) && me->is_fighting(target))
+	{
+		int bonus_hits = 3 - hit_count;
+		int bonus_damage;
+
+		msg += HIY "\n$N" HIY "梅花六绝威势不减，残式连环，必有所获！" NOR "\n";
+
+		for (i = 0; i < bonus_hits; i++)
+		{
+			// 保底伤害计算（大幅提升但低于正常伤害）
+			bonus_damage = me->query_skill("tianshan-yinyang", 1);  // 从/3改为*1
+			bonus_damage += me->query_skill("strike") + me->query_skill("hand");  // 从/3改为*1
+			bonus_damage += me->query("jiali") / 2;  // 从/4改为/2
+
+			// 意境加成（进一步降低）
+			if (aoyi_lingjiu > 0)
+				bonus_damage += bonus_damage / 30 * aoyi_lingjiu;  // 从/15降低到/30
+			if (aoyi_ziyou > 0)
+				bonus_damage += bonus_damage / 40 * aoyi_ziyou;  // 从/20降低到/40
+
+			total_damage += bonus_damage;
+			msg += COMBAT_D->do_damage(me, target, UNARMED_ATTACK, bonus_damage, 40,
+			                          HIB "$n" HIB "被余劲所伤！" NOR ":内伤@?");
+		}
+	}
+
+	// 意境特效总结
+	if (aoyi_lingjiu > 0)
+		msg += HIW "$N" HIW "身如灵鹫展翅，六式连环如飞羽穿云，威力无穷！" NOR "\n";
+
+	if (aoyi_ziyou > 0)
+		msg += HIB "$N" HIB "心境自由自在，六式连环天衣无缝，如行云流水！" NOR "\n";
+
+	// 最终总结
+	if (total_damage > 0)
+	{
+		msg += HIM "梅花六绝，六式连环，掌法为主显威风，手法为辅展精妙，\n"
+		       "$n" HIM "在连环攻势下难以招架！" NOR "\n";
+	}
+
+	// 施招者忙乱
+	me->start_busy(3);
+
+	message_vision(msg, me, target);
+	return 1;
+}

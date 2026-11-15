@@ -1,0 +1,231 @@
+/**
+ * @brief 黄色真意自选宝箱
+ * @details 可自选真意等级，玩家可选等级上限为当前等级的整百数，范围100-600级
+ * @author LPC开发者
+ * @date 2024
+ */
+
+inherit COMBINED_ITEM;
+
+// 函数原型声明
+void init();
+int do_select_yellow_level(string arg);
+int do_effect(object me);
+void autoload(string param);
+void setup();
+void create();
+
+/**
+ * @brief 自动加载函数
+ * @param string param 参数字符串
+ */
+void autoload(string param)
+{
+    int amt;
+    
+    if (sscanf(param, "%d", amt) == 1)
+        set_amount(amt);
+}
+
+/**
+ * @brief 设置初始数量
+ */
+void setup()
+{
+    set_amount(1);
+    ::setup();
+}
+
+/**
+ * @brief 创建黄色真意自选宝箱
+ */
+void create()
+{
+    set_name(HIY"黄色真意自选宝箱"NOR, ({"yellow zhenyi box", "zhenyi box", "yellow box", "box"}));
+    
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", "这是一个黄色真意自选宝箱，可以从中选择指定等级的真意：\n"
+            "可选等级范围：100级、200级、300级、400级、500级、600级\n"
+            HIY"注意：你可选的真意等级上限为当前等级的整百数"NOR"\n");
+        set("base_unit", "个");
+        set("base_value", 30000);
+        set("base_weight", 1);
+        set("no_sell", 1);
+        set("no_drop", 1);
+        set("yuanbao", 500);
+        set("only_do_effect", 1);
+    }
+    setup();
+}
+
+/**
+ * @brief 初始化动作
+ */
+void init()
+{
+    add_action("do_select_yellow_level", "select_yellow_level");
+}
+
+/**
+ * @brief 计算玩家可选的最高真意等级
+ * @param object me 玩家对象
+ * @return int 可选的最高等级
+ */
+int calculate_max_zhenyi_level(object me)
+{
+    int player_level, max_level;
+    
+    if (!me || !objectp(me))
+        return 0;
+        
+    player_level = me->query("level");
+    
+    // 向下取整到百位数
+    max_level = (player_level / 100) * 100;
+    
+    // 限制在100-600级范围内
+    if (max_level < 100)
+        max_level = 100;
+        
+    return max_level;
+}
+
+/**
+ * @brief 获取可选等级列表
+ * @param object me 玩家对象
+ * @return int* 可选等级数组
+ */
+int *get_available_levels(object me)
+{
+    int max_level, i;
+    int *levels;
+    
+    max_level = calculate_max_zhenyi_level(me);
+    levels = ({});
+    
+    for (i = 100; i <= max_level; i += 100)
+    {
+        levels += ({ i });
+    }
+    
+    return levels;
+}
+
+/**
+ * @brief 处理等级选择动作
+ * @param string arg 选择的等级
+ * @return int 1表示成功，0表示失败
+ */
+int do_select_yellow_level(string arg)
+{
+    object me;
+    int selected_level, max_level;
+    int *available_levels;
+    mapping zhenyi_data;
+    string quality;
+    
+    me = this_player();
+    
+    if (!arg) {
+        tell_object(me, "请选择要获得的真意等级，使用方法：select_yellow_level <等级>\n");
+        return 1;
+    }
+    
+    if (environment(this_object()) != me) {
+        tell_object(me, "你必须先拿起自选宝箱才能使用。\n");
+        return 1;
+    }
+    
+    if (me->is_busy()) {
+        tell_object(me, "你正忙着呢，稍后再试。\n");
+        return 1;
+    }
+    
+    if (me->is_fighting()) {
+        tell_object(me, "战斗中无法使用自选宝箱。\n");
+        return 1;
+    }
+    
+    selected_level = to_int(arg);
+    max_level = calculate_max_zhenyi_level(me);
+    available_levels = get_available_levels(me);
+    
+    // 检查选择的等级是否有效
+    if (member_array(selected_level, available_levels) == -1) {
+        tell_object(me, sprintf("无效的等级选择。你当前可选的等级范围是：%s\n",
+            implode(map(available_levels, (: $1 + "级" :)), "、")));
+        return 1;
+    }
+    
+    // 黄色宝箱固定掉落灵犀真意品质
+    quality = "无我真意";
+    
+    // 调用真意系统发放真意
+    zhenyi_data = load_object("/system/wusheng/zhenyi_master")->drop_zhenyi_to_player(me, selected_level, quality);
+    
+    if (mapp(zhenyi_data)) {
+        tell_object(me, HIY"*****************************************************\n"
+            "恭喜：你从黄色真意自选宝箱中获得了一道 " + selected_level + "级 " + quality + "！\n"
+            "真意名称：" + zhenyi_data["name"] + "\n"
+            "*****************************************************"NOR"\n");
+    } else {
+        tell_object(me, HIY"宝箱中的真意似乎受到了某种干扰，获取失败！"NOR"\n");
+        return 1;
+    }
+    
+    // 减少宝箱数量
+    add_amount(-1);
+    
+    
+    return 1;
+}
+
+/**
+ * @brief 宝箱开启效果
+ * @param object me 开启宝箱的玩家
+ * @return int 成功返回1，失败返回0
+ */
+int do_effect(object me)
+{
+    int max_level;
+    int *available_levels;
+    string msg, *button_list;
+    int i;
+    
+    if (!me || !objectp(me))
+        return 0;
+    
+    // 检查玩家等级要求
+    if (me->query("level") < 100) {
+        tell_object(me, HIY"你的等级不足100级，无法使用真意自选宝箱！"NOR"\n");
+        return 0;
+    }
+    
+    max_level = calculate_max_zhenyi_level(me);
+    available_levels = get_available_levels(me);
+    
+    msg = HIY"黄色真意自选宝箱"NOR"\n";
+    msg += "你目前拥有" + chinese_number(query_amount()) + "个黄色真意自选宝箱。\n";
+    msg += sprintf("你当前等级：%d级，可选真意等级上限：%d级\n", me->query("level"), max_level);
+    msg += "请选择要获得的真意等级（固定获得灵犀真意品质）：\n";
+    
+    button_list = ({});
+    
+    for (i = 0; i < sizeof(available_levels); i++) {
+        button_list += ({ sprintf("%d级:select_yellow_level %d", available_levels[i], available_levels[i]) });
+    }
+    
+    tell_object(me, popup_comb(msg, button_list));
+    return 1;
+}
+
+/**
+ * @brief 查询自动加载参数
+ * @return string 自动加载参数
+ */
+string query_autoload()
+{
+    return query_amount() + "";
+}

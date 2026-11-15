@@ -1,0 +1,570 @@
+// 刻字指令文件
+// 玩家用于刻字和查看房间刻字记录的指令
+
+inherit F_CLEAN_UP;
+
+#define KEZI_MASTER "/adm/special_ob/qiyu_world/kezi_master"
+int start_write_kezi(object me);
+int show_room_kezi(object me);
+int start_delete_kezi(object me);
+int handle_delete_confirm(object me, string arg);
+string get_kezi_achievement(int count);
+void create() { seteuid(getuid()); }
+string filter_string(string str);
+int check_bad_content(string content);
+int show_player_stats(object me);
+int show_main_menu(object me);
+int handle_kezi_input(object me, string content);
+int start_write_kezi_extra(object me);
+
+void help(object me)
+{
+    write("指令格式：kezi [参数]\n\n"
+          "参数说明：\n"
+          "  无参数   - 显示操作菜单\n"
+          "  look     - 查看当前房间的刻字记录\n"
+          "  write    - 在当前房间刻字留言\n"
+          "  delete   - 删除自己在当前房间的刻字\n"
+          "  stats    - 查看自己的刻字统计\n"
+          "  write2   - 再次刻字\n\n"
+          "刻字规则：\n"
+          "  - 需要宗师以上才能刻字，刻字可以感悟炼神及经验修为于灵慧\n"
+          "  - 每人每天只能刻字一次，花费20元宝可以再刻字一次\n"
+          "  - 刻字成功获得100点灵慧和1万点经验，50点精神\n"
+          "  - 每个房间最多保存50条刻字记录\n"
+          "  - 玩家可以删除自己的刻字\n");
+}
+
+int main(object me, string arg)
+{
+    object master;
+    string cmd, param;
+    
+    if (!me) return 0;
+    
+    master = load_object(KEZI_MASTER);
+    if (!master) {
+        tell_object(me, "刻字系统暂时无法使用。");
+        return 1;
+    }
+    
+    if (!arg) {
+        return show_main_menu(me);
+    }
+    
+    // 处理刻字输入
+    if (sscanf(arg, "input %s", param) == 1) {
+        return handle_kezi_input(me, param);
+    }
+    
+    // 处理删除确认
+    if (sscanf(arg, "delete_confirm %s", param) == 1) {
+        return handle_delete_confirm(me, param);
+    }
+    
+    // 处理其他命令
+    if (sscanf(arg, "%s %s", cmd, param) == 2) {
+        // 目前没有需要处理参数的其他命令
+    } else {
+        cmd = arg;
+    }
+    
+    switch(cmd) {
+        case "look":
+        case "查看":
+            return show_room_kezi(me);
+            
+        case "write":
+        case "刻字":
+            return start_write_kezi(me);
+            
+        case "delete":
+        case "删除":
+            return start_delete_kezi(me);
+            
+        case "stats":
+        case "统计":
+            return show_player_stats(me);
+            
+        case "write2":
+        case "再次":
+            return start_write_kezi_extra(me);
+            
+        default:
+            help(me);
+            return 1;
+    }
+}
+
+// 显示主菜单
+int show_main_menu(object me)
+{
+    object master;
+    string msg;
+    string *buttons;
+    mapping stats;
+    
+    master = load_object(KEZI_MASTER);
+    stats = master->query_player_kezi_stats(me->query("id"));
+    
+    msg = sprintf(
+        "『刻字系统』\n\n"
+        "欢迎使用武学感悟刻字系统！\n\n"
+        "当前状态：\n"
+        "• 你的等级：%d级\n"
+        "• 累计刻字：%d次\n"
+        "• 上次刻字：%s\n\n"
+        "刻字规则：\n"
+        "• 需要宗师级以上才能刻字\n"
+        "• 每人每天只能刻字一次，花费20元宝可以再刻字一次\n"
+        "• 刻字成功获得100点灵慧和1万点经验，50点精神\n",
+        me->query("level"),
+        stats["count"],
+        stats["last_time"] > 0 ? CHINESE_D->chinese_date(stats["last_time"]) : "从未刻字"
+    );
+    
+    buttons = ({
+        "查看本房间刻字:kezi look",
+        "在此刻字留言:kezi write", 
+        "删除我的刻字:kezi delete",
+        "查看我的统计:kezi stats",
+        "再次刻字:kezi write2",
+        "退出:?"
+    });
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}
+
+// 查看房间刻字记录
+int show_room_kezi(object me)
+{
+    object master;
+    string room_file;
+    string *kezi_list;
+    mixed *raw_kezi_list;
+    string msg;
+    string *buttons;
+    int i;
+    
+    master = load_object(KEZI_MASTER);
+    room_file = file_name(environment(me));
+    kezi_list = master->query_room_kezi_list(room_file);
+    raw_kezi_list = master->query_room_raw_kezi_list(room_file);
+    
+    msg = sprintf("『%s - 刻字记录』\n\n", environment(me)->query("short"));
+    
+    if (!sizeof(kezi_list)) {
+        msg += "这里还没有人留下武学感悟。\n\n"
+               "快来成为第一个在此留下感悟的武者吧！";
+    } else {
+        int show_count = sizeof(kezi_list) > 10 ? 10 : sizeof(kezi_list);
+        // 只显示最近10条
+        msg += sprintf("共有%d条武学感悟：\n\n", sizeof(kezi_list));
+        
+        // 只显示最近10条
+        for (i = 0; i < show_count; i++) {
+            msg += sprintf("%d. %s\n", i + 1, kezi_list[i]);
+        }
+        
+        if (sizeof(kezi_list) > 10) {
+            msg += sprintf("\n... 还有%d条记录\n", sizeof(kezi_list) - 10);
+        }
+    }
+    
+    buttons = ({
+        "在此刻字:kezi write",
+        "删除我的刻字:kezi delete",
+        "刷新记录:kezi look",
+        "返回主菜单:kezi",
+        "退出:?"
+    });
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}
+
+// 开始刻字流程
+int start_write_kezi(object me)
+{
+    object master;
+    string check_result;
+    string msg;
+    
+    master = load_object(KEZI_MASTER);
+    check_result = master->check_can_kezi(me);
+    
+    if (check_result) {
+        // 若已达到当日刻字上限，提供花费元宝的提示
+        if (strsrch(check_result, "今日已经刻过字") != -1) {
+            string pay_msg = "『刻字提示』\n\n" + check_result + "\n\n是否花费20元宝再刻字一次？";
+            string *pay_btns = ({
+                "花费20元宝刻字:kezi write2",
+                "返回主菜单:kezi",
+                "取消:?"
+            });
+            tell_object(me, popup_comb(pay_msg, pay_btns));
+            return 1;
+        }
+        tell_object(me, popup_title(check_result));
+        return 1;
+    }
+    
+    // 可以刻字，显示输入框
+    msg = sprintf(
+        "在『%s』留下武学感悟\n\n"
+        "请输入你要刻字的内容（限制100字以内）：\n"
+        "可以分享你的武学心得、人生感悟或江湖见闻。",
+        environment(me)->query("short")
+    );
+    
+    tell_object(me, popup_input(msg, "kezi input "));
+    return 1;
+}
+
+// 开始删除刻字流程
+int start_delete_kezi(object me)
+{
+    object master;
+    string room_file;
+    mixed *my_kezi_list;
+    string msg;
+    string *buttons;
+    int i;
+    
+    master = load_object(KEZI_MASTER);
+    room_file = file_name(environment(me));
+    my_kezi_list = master->query_player_kezi_in_room(me->query("id"), room_file);
+    
+    if (!sizeof(my_kezi_list)) {
+        tell_object(me, popup_title("你在这个房间没有留下过刻字。"));
+        return 1;
+    }
+    
+    msg = sprintf("『删除刻字 - %s』\n\n", environment(me)->query("short"));
+    msg += "你在此房间的刻字记录：\n\n";
+    
+    for (i = 0; i < sizeof(my_kezi_list); i++) {
+        mapping kezi = my_kezi_list[i];
+        msg += sprintf("%d. %s：%s\n", 
+            i + 1, 
+            kezi["date"], 
+            kezi["content"]);
+    }
+    
+    msg += "\n选择要删除的刻字编号：";
+    
+    buttons = ({});
+    for (i = 0; i < sizeof(my_kezi_list); i++) {
+        buttons += ({ sprintf("删除第%d条:kezi delete_confirm %d", i + 1, i) });
+    }
+    
+    buttons += ({
+        "返回主菜单:kezi",
+        "取消:?"
+    });
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}
+
+// 处理删除确认
+int handle_delete_confirm(object me, string arg)
+{
+    object master;
+    string room_file;
+    mixed *my_kezi_list;
+    int index;
+    string msg;
+    string *buttons;
+    
+    if (!arg || sscanf(arg, "%d", index) != 1) {
+        tell_object(me, popup_title("请选择正确的刻字编号。"));
+        return 1;
+    }
+    
+    master = load_object(KEZI_MASTER);
+    room_file = file_name(environment(me));
+    my_kezi_list = master->query_player_kezi_in_room(me->query("id"), room_file);
+    
+    if (index < 0 || index >= sizeof(my_kezi_list)) {
+        tell_object(me, popup_title("选择的刻字编号不存在。"));
+        return 1;
+    }
+    
+    // 执行删除
+    if (master->delete_kezi(me->query("id"), room_file, my_kezi_list[index]["timestamp"])) {
+        msg = "『刻字删除成功』\n\n"
+              "你已成功删除了刻字记录。";
+              
+        buttons = ({
+            "查看刻字记录:kezi look",
+            "返回主菜单:kezi",
+            "退出:?"
+        });
+        
+        tell_object(me, popup_comb(msg, buttons));
+    } else {
+        tell_object(me, popup_title("删除刻字失败，请稍后再试。"));
+    }
+    
+    return 1;
+}
+
+// 查看玩家统计
+int show_player_stats(object me)
+{
+    object master;
+    mapping stats;
+    string msg;
+    string *buttons;
+    string today_status;
+    
+    master = load_object(KEZI_MASTER);
+    stats = master->query_player_kezi_stats(me->query("id"));
+    
+    // 检查今日是否已刻字
+    if (stats["last_time"] > 0 && is_same_day(stats["last_time"], time())) {
+        today_status = "已刻字";
+    } else {
+        today_status = "未刻字";
+    }
+    
+    msg = sprintf(
+        "『%s的刻字统计』\n\n"
+        "玩家信息：\n"
+        "• 姓名：%s\n"
+        "• 等级：%d级\n\n"
+        "刻字记录：\n"
+        "• 累计刻字：%d次\n"
+        "• 上次刻字：%s\n"
+        "• 今日状态：%s\n\n"
+        "成就评价：%s",
+        me->query("name"),
+        me->query("name"), 
+        me->query("level"),
+        stats["count"],
+        stats["last_time"] > 0 ? CHINESE_D->chinese_date(stats["last_time"]) : "从未刻字",
+        today_status,
+        get_kezi_achievement(stats["count"])
+    );
+    
+    buttons = ({
+        "继续刻字:kezi write",
+        "查看记录:kezi look",
+        "返回主菜单:kezi",
+        "退出:?"
+    });
+    
+    tell_object(me, popup_comb(msg, buttons));
+    return 1;
+}
+
+// 获取刻字成就评价
+string get_kezi_achievement(int count)
+{
+    if (count == 0) return "初入江湖，尚未留下足迹";
+    if (count < 10) return "武学新秀，偶有感悟";
+    if (count < 50) return "江湖游侠，常有心得";
+    if (count < 100) return "武学宗师，见解独到";
+    if (count < 365) return "一代大师，功参造化";
+    return "武道圣者，天人合一";
+}
+
+// 处理刻字输入
+int handle_kezi_input(object me, string content)
+{
+    object master;
+    string check_result;
+    string msg;
+    string *buttons;
+    int extra_cost, has_paid;
+    
+    if (!me) return 0;
+    
+    // 记录日志，便于调试
+    log_file("kezi_log", sprintf("%s: 玩家 %s 输入内容: %s\n", 
+        ctime(time()), me->query("id"), content));
+    
+    // 检查输入内容
+    if (!content || content == "") {
+        tell_object(me, popup_title("请输入刻字内容！"));
+        return 1;
+    }
+    
+    // 过滤内容
+    content = filter_string(content);
+    
+    // 再次检查过滤后的内容
+    if (!content || content == "") {
+        tell_object(me, popup_title("请输入有效的刻字内容！"));
+        return 1;
+    }
+    
+    // 检查长度
+    if (strlen(content) > 100) {
+        tell_object(me, popup_title("刻字内容不能超过100个字符！"));
+        return 1;
+    }
+    
+    // 检查内容是否合适（简单过滤）
+    if (check_bad_content(content)) {
+        tell_object(me, popup_title("刻字内容包含不当词汇，请重新输入！"));
+        return 1;
+    }
+    
+    master = load_object(KEZI_MASTER);
+    extra_cost = me->query_temp("kezi_extra_cost");
+    check_result = master->check_can_kezi(me);
+    if (extra_cost && check_result && strsrch(check_result, "今日已经刻过字") != -1) {
+        // 付费刻字，忽略每日限制
+        check_result = 0;
+    }
+    if (check_result) {
+        tell_object(me, popup_title(check_result));
+        return 1;
+    }
+
+    // 如需扣费，先扣费
+    has_paid = 0;
+    if (extra_cost) {
+        if (me->query("yuanbao") < extra_cost) {
+            me->delete_temp("kezi_extra_cost");
+            me->delete_temp("allow_kezi_extra");
+            tell_object(me, popup_title("你的元宝不足，无法完成刻字。"));
+            return 1;
+        }
+        me->add("yuanbao", -extra_cost);
+        me->delete_temp("kezi_extra_cost");
+        me->delete_temp("allow_kezi_extra");
+        has_paid = 1;
+    }
+    
+    // 执行刻字
+    if (master->do_kezi(me, content)) {
+        mapping stats = master->query_player_kezi_stats(me->query("id"));
+        
+        msg = sprintf(
+            "『刻字成功』\n\n"
+            "你在『%s』成功留下了武学感悟：\n\n"
+            "「%s」\n\n"
+            "获得奖励：\n"
+            "• 灵慧 +100\n"
+            "• 经验 +10000\n"
+            "• 精神 +50\n"
+            "这是你第%d次刻字，继续努力修行吧！%s",
+            environment(me)->query("short"),
+            content,
+            stats["count"],
+            has_paid ? "\n\n(已消耗20元宝)" : ""
+        );
+        
+        buttons = ({
+            "查看记录:kezi look",
+            "返回主菜单:kezi",
+            "退出:?"
+        });
+        
+        tell_object(me, popup_comb(msg, buttons));
+        
+        // 通知房间其他人
+        tell_room(environment(me), sprintf(
+            "%s在此留下了一段武学感悟。", me->query("name")
+        ), ({me}));
+        
+        // 记录已使用付费刻字的时间
+        if (has_paid)
+        me->set("kezi_extra_used", time());
+        
+    } else {
+        tell_object(me, popup_title("刻字失败，请稍后再试。"));
+    }
+    
+    return 1;
+}
+
+// 过滤字符串
+string filter_string(string str)
+{
+    if (!str) return "";
+    
+    // 去除首尾空格和换行
+    str = replace_string(str, "\n", " ");
+    str = replace_string(str, "\t", " ");
+    
+    // 压缩多个空格为一个
+    while (strsrch(str, "  ") != -1) {
+        str = replace_string(str, "  ", " ");
+    }
+    
+    // 去除首尾空格
+    if (strlen(str) > 0 && str[0] == ' ')
+        str = str[1..];
+    if (strlen(str) > 0 && str[strlen(str)-1] == ' ')
+        str = str[0..(strlen(str)-2)];
+    
+    return str;
+}
+
+// 简单的内容检查
+int check_bad_content(string content)
+{
+    string *bad_words = ({
+        "操", "妈", "死", "杀", "血", "屎", "尿", "屁", "鸡巴", "阴茎", "阴道"
+    });
+    
+    foreach (string word in bad_words) {
+        if (strsrch(content, word) != -1) {
+            return 1;
+        }
+    }
+    
+    return 0;
+}
+
+// 新增函数：付费再次刻字
+int start_write_kezi_extra(object me)
+{
+    object master;
+    string check_result;
+    string msg;
+
+    master = load_object(KEZI_MASTER);
+    check_result = master->check_can_kezi(me);
+
+    // 允许忽略每日限制，但其他限制仍需检查
+    if (check_result && strsrch(check_result, "今日已经刻过字") != -1) {
+        check_result = 0;
+    }
+
+    if (check_result) {
+        tell_object(me, popup_title(check_result));
+        return 1;
+    }
+
+    // 检查今日是否已使用过付费刻字
+    if (me->query("kezi_extra_used") && is_same_day(me->query("kezi_extra_used"), time())) {
+        tell_object(me, popup_title("你今天已经使用过一次付费刻字机会了，明天再来吧。"));
+        return 1;
+    }
+
+    // 检查元宝
+    if (me->query("yuanbao") < 20) {
+        tell_object(me, popup_title("你的元宝不足20，无法再次刻字。"));
+        return 1;
+    }
+
+    // 记录临时变量，稍后扣费并跳过限制
+    me->set_temp("allow_kezi_extra", 1);
+    me->set_temp("kezi_extra_cost", 20);
+
+    msg = sprintf(
+        "在『%s』再次留下武学感悟（花费20元宝）\n\n"
+        "请输入你要刻字的内容（限制100字以内）：\n"
+        "可以分享你的武学心得、人生感悟或江湖见闻。",
+        environment(me)->query("short")
+    );
+
+    tell_object(me, popup_input(msg, "kezi input "));
+    return 1;
+} 

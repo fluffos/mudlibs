@@ -1,0 +1,199 @@
+// my_master_path.c
+// created by assistant, refined based on user feedback.
+
+inherit F_CLEAN_UP;
+
+// 函数原型
+void generate_apprentice_list_popup(object me, string target_id, int level);
+string get_master_path_string(object player);
+
+/**
+ * @brief 主函数，指令入口
+ */
+int main(object me, string arg)
+{
+    string target_id;
+    int level;
+
+    if (!arg || arg == "")
+    {
+        target_id = me->query("id");
+        level = 1;
+    }
+    else if (sscanf(arg, "%s %d", target_id, level) != 2)
+    {
+        tell_object(me, "参数格式错误。\n");
+        return 1;
+    }
+
+    generate_apprentice_list_popup(me, target_id, level);
+    return 1;
+}
+
+/**
+ * @brief 向上追溯，构建并返回完整的师徒传承路径字符串
+ * @param player 目标玩家对象
+ * @return string 格式化的传承路径
+ */
+string get_master_path_string(object player)
+{
+    string *path_names = ({});
+    object current_p = player;
+
+    // 循环向上查找，构建路径数组
+    while (1)
+    {
+        object master_p;
+        string master_id;
+
+        // 将当前玩家的名字加到路径的最前面
+        path_names = ({ current_p->name(1) }) + path_names;
+
+        // 优先检查 p_master/id，然后检查 zjvip/master
+        master_id = current_p->query("p_master/id");
+        if (!stringp(master_id))
+        {
+            master_id = current_p->query("zjvip/master");
+        }
+
+        if (!stringp(master_id))
+        {
+            break; // 到达顶端
+        }
+
+        master_p = UPDATE_D->global_find_player(master_id);
+        if (!objectp(master_p))
+        {
+            break; // 找不到师傅
+        }
+
+        if (current_p != player && !playerp(current_p))
+        {
+            destruct(current_p);
+        }
+        current_p = master_p;
+    }
+
+    if (current_p != player && !playerp(current_p))
+    {
+        destruct(current_p);
+    }
+
+    // 格式化路径中的名字
+    if (sizeof(path_names) == 1)
+    {
+        path_names[0] = sprintf("%s (鼻祖)", path_names[0]);
+    }
+    else
+    {
+        // 标记鼻祖
+        int gen;
+
+        // 标记鼻祖
+        path_names[0] = sprintf("%s (鼻祖)", path_names[0]);
+
+        // 标记当前玩家的代数
+        gen = sizeof(path_names);
+        path_names[<1] = sprintf("%s (第%s代传人)", path_names[<1], chinese_number(gen));
+    }
+
+    return implode(path_names, " -> ");
+}
+
+
+/**
+ * @brief 生成并显示指定玩家的徒弟列表弹窗
+ * @param me 指令使用者
+ * @param target_id 目标玩家的ID
+ * @param level 当前代数 (相对于指令使用者)
+ */
+void generate_apprentice_list_popup(object me, string target_id, int level)
+{
+    object target_player;
+    mapping apprentices;
+    string *apprentice_ids;
+    string popup_title;
+    string popup_content = "";
+    string *buttons = ({});
+
+    target_player = UPDATE_D->global_find_player(target_id);
+
+    if (!objectp(target_player))
+    {
+        tell_object(me, "错误：找不到玩家 " + target_id + "。\n");
+        return;
+    }
+
+    // 生成弹窗标题
+    popup_title = get_master_path_string(target_player) + " 的徒弟列表：";
+
+    apprentices = target_player->query("p_dizi");
+
+    if (!mapp(apprentices) || sizeof(apprentices) == 0)
+    {
+        popup_content = "此人目前没有任何徒弟。";
+    }
+    else
+    {
+        apprentice_ids = keys(apprentices);
+        foreach (string id in apprentice_ids)
+        {
+            object apprentice_ob;
+            string status;
+            string line;
+
+            apprentice_ob = UPDATE_D->global_find_player(id);
+            if (!objectp(apprentice_ob))
+            {
+                continue;
+            }
+
+            if (playerp(apprentice_ob) && environment(apprentice_ob))
+            {
+                status = HIG " [在线]" NOR;
+            }
+            else
+            {
+                status = HIR " [离线]" NOR;
+            }
+
+            line = sprintf("%s(%s)%s:my_master_path %s %d",
+                apprentice_ob->name(1),
+                apprentice_ob->query("id"),
+                status,
+                apprentice_ob->query("id"),
+                level + 1);
+            buttons += ({ line });
+
+            if (!playerp(apprentice_ob))
+            {
+                destruct(apprentice_ob);
+            }
+        }
+    }
+    
+    if (sizeof(buttons) > 0) {
+        popup_content = "";
+    }
+
+    if (level > 1)
+    {
+        string parent_id = target_player->query("p_master/id");
+        if (!stringp(parent_id))
+        {
+            parent_id = target_player->query("zjvip/master");
+        }
+        if (stringp(parent_id)) {
+             buttons += ({ "返回上一级:my_master_path " + parent_id + " " + (level - 1) });
+        }
+    }
+    
+    buttons += ({"关闭:look"});
+
+    tell_object(me, popup_comb(popup_title + "\n" + popup_content, buttons));
+
+    if (!playerp(target_player))
+    {
+        destruct(target_player);
+    }
+}

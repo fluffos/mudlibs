@@ -1,0 +1,532 @@
+inherit F_CLEAN_UP;
+#include "/adm/npc/item_template/item_type.h"
+
+
+#define ITEM_TYPE       0
+#define ITEM_STYPE      1
+#define ITEM_UNIT       2
+#define ITEM_WEIGHT     3
+#define ITEM_POINT      4
+#define ITEM_PROP       5
+int is_valid_material(object me, object ob);
+int calculate_price(object ob);
+int deduct_gold(object me, int amount);
+
+private string prop_segment(mapping p, string path)
+{
+	string buf;
+	string *ks;
+	int i;
+
+	buf = "";
+	if (! p) return buf;
+
+	ks = keys(p);
+	for (i = 0; i < sizeof(ks); i++)
+	{
+		// check the paramter's type
+		if (mapp(p[ks[i]]))
+		{
+			path += ks[i] + "/";
+			buf += prop_segment(p[ks[i]], path);
+		} else
+			buf += sprintf("\tset(\"%s\", %s);\n",
+				       path + ks[i], (string)p[ks[i]]);
+	}
+
+	return buf;
+}
+
+private int save_item_file(string filename, string content)
+{
+	rm(filename);
+	if (write_file(filename, content))
+	{
+		return 1;
+	} else
+	{
+		write("写入档案(" + filename + ")时出错，请通知巫师处理。\n");
+		return 0;
+	}
+}
+
+private string read_template(string file)
+{
+    string content;
+    if (file_size(file) > 0)
+    {
+        content = read_file(file);
+    }
+    return content;
+}
+
+private string replace_placeholders(string template, mapping info, object item_temp, string ih, int is_weapon)
+{
+    template = replace_string(template, "{inherit}", ih);
+    template = replace_string(template, "{name}", info["name"]);
+    template = replace_string(template, "{id}", info["id"]);
+    template = replace_string(template, "{weight}", sprintf("%d", item_temp->query_weight() * item_temp->query("item/wscale") / 100));
+    template = replace_string(template, "{unit}", info["unit"]);
+    template = replace_string(template, "{long}", info["long"]);
+    template = replace_string(template, "{value}", sprintf("%d", info["value"]));
+    template = replace_string(template, "{point}", sprintf("%d", info["point"]));
+    template = replace_string(template, "{material}", item_temp->query("material_attrib"));
+
+    if (is_weapon)
+    {
+        template = replace_string(template, "{wield_msg}", info["wield_msg"]);
+        template = replace_string(template, "{unwield_msg}", info["unwield_msg"]);
+        template = replace_string(template, "{stype}", info["stype"]);
+        template = replace_string(template, "{prop_segment}", prop_segment(info["prop"], ""));
+    }
+    else
+    {
+        template = replace_string(template, "{wear_msg}", info["wear_msg"]);
+        template = replace_string(template, "{remove_msg}", info["remove_msg"]);
+        template = replace_string(template, "{armor_prop}", info["prop"] ? prop_segment(info["prop"], "") : "set(\"armor_prop/armor\", apply_armor());");
+    }
+
+    return template;
+}
+
+private string generate_weapon_file(object item_temp, mapping info, string ih)
+{
+    string template = read_template("/adm/npc/item_template/weapon_template.txt");
+    return replace_placeholders(template, info, item_temp, ih, 1);
+}
+
+private string generate_armor_file(object item_temp, mapping info, string ih)
+{
+    string template = read_template("/adm/npc/item_template/armor_template.txt");
+    return replace_placeholders(template, info, item_temp, ih, 0);
+}
+
+private string create_file(object item_temp)
+{
+    string buf; // 生成文件的缓冲区
+    string filename;
+    mapping info;
+    string ih;
+    string id;
+
+    // 生成文件名
+    id = item_temp->query("item/owner_id");
+    filename = ITEM_DIR + id[0..0] + "/" + id + 
+               "-" + item_temp->query("item/id") + ".lpc";
+    if (file_size(filename) != -1)
+    {
+        write("无法生成档案，请通知巫师处理。\n");
+        return 0;
+    }
+    assure_file(filename);
+	buf = "";
+    info = item_temp->query("item");
+    ih = up_case(info["stype"]);
+
+    if (info["type"] == "weapon")
+    {
+        buf += generate_weapon_file(item_temp, info, ih);
+    }
+    else
+    {
+        buf += generate_armor_file(item_temp, info, ih);
+    }
+
+    buf += sprintf("string long() { return query(\"long\") + item_long(); }\n");
+    if (save_item_file(filename, buf) == 1)
+        return filename;
+    return 0;
+}
+
+int do_name(object me,string name,object ob)
+{
+    string sname, sid;
+
+	sname = name;
+	sid = me->query("id") + "-" + time();
+
+
+    if (!sname || !sid)
+    {
+        tell_object(me, "命名失败，请检查输入。\n");
+        return 0;
+    }
+
+    if (!is_chinese(filter_color(sname)))
+    {
+        tell_object(me, "名字必须是中文。\n");
+        return 0;
+    }
+
+    if (strlen(filter_color(sname)) < 2)
+    {
+        tell_object(me, "名字必须是两个汉字以上。\n");
+        return 0;
+    }
+
+    // 不能超过8个汉字
+    if (strlen(filter_color(sname)) > 8)
+    {
+        tell_object(me, "名字不能超过8个汉字。\n");
+        return 0;
+    }
+
+
+    ob->set("item/name", sname);
+    ob->set("item/id", sid);
+    return 1;
+}
+
+int do_desc(object me,string arg,object ob)
+{
+	string chk;
+
+	arg = replace_string(arg, "$N", me->name(1));
+
+	chk = filter_color(arg);
+
+
+	chk = replace_string(chk, " ", "");
+	chk = replace_string(chk, "\\n", "");
+	chk = replace_string(chk, "$n", "");
+
+	arg = replace_string(arg, "$n", ob->query("item/name"));
+	arg = replace_string(arg, "\\n", "\n");
+	arg = chinese_desc(arg);
+	ob->set("item/long", arg);
+	write(CYN "当你观察它的时候将会出现下列描述："NOR"\n" + arg + "\n");
+	return 1;
+}
+
+int do_wieldmsg(object me,string arg,object ob)
+{
+	string chk;
+	// if (me->query_temp("item/status") != "inputing")
+		// return notify_fail("你还没武器胚子呢！\n");
+
+	chk = filter_color(arg);
+
+	chk = replace_string(chk, " ", "");
+	chk = replace_string(chk, "\\n", "");
+	chk = replace_string(chk, "$N", "");
+	chk = replace_string(chk, "$n", "");
+	// 这里不区分武器还是装备，在生成文件时自动选择一条信息
+	arg = chinese_desc(arg);
+	arg = replace_string(arg, me->name(1), "$N");
+	ob->set("item/wear_msg", arg);
+	ob->set("item/wield_msg", arg);
+	arg = replace_string(arg, "\\n", "\n");
+	arg = replace_string(arg, "$N", me->name(1));
+	arg = replace_string(arg, "$n", ob->query("item/name"));
+	write(CYN "当你装备它的时候将会出现下列描述："NOR"\n" + arg + "\n");
+	return 1;
+}
+
+int do_unwield(object me,string arg,object ob)
+{
+	string chk;
+
+
+
+	chk = filter_color(arg);
+
+	chk = replace_string(chk, " ", "");
+	chk = replace_string(chk, "\\n", "");
+	chk = replace_string(chk, "$N", "");
+	chk = replace_string(chk, "$n", "");
+
+	// 这里不区分武器还是装备，在生成文件时自动选择一条信息
+	arg = chinese_desc(arg);
+	arg = replace_string(arg, me->name(1), "$N");
+	ob->set("item/unwield_msg", arg);
+	ob->set("item/remove_msg", arg);
+	arg = replace_string(arg, "\\n", "\n");
+	arg = replace_string(arg, "$N", me->query("name"));
+	arg = replace_string(arg, "$n", ob->query("item/name"));
+	write(CYN "当你收回它的时候将会出现下列描述："NOR"\n" + arg + "\n");
+	return 1;
+}
+
+varargs int do_all_steps(object me, object ob, string name_arg, string desc_arg, string wieldmsg_arg, string unwieldmsg_arg)
+{
+    mixed equip;
+
+    // 检查材料是否有效
+    if (!is_valid_material(me, ob))
+    {
+        return 0;
+    }
+
+    // 设置物品的名称
+    if (!do_name(me, name_arg, ob))
+    {
+        return 0;
+    }
+
+    // 设置物品的描述
+    if (!do_desc(me, desc_arg, ob))
+    {
+        return 0;
+    }
+
+    // 设置物品的装备信息
+    if (!do_wieldmsg(me, wieldmsg_arg, ob))
+    {
+        return 0;
+    }
+
+    // 设置物品的卸下信息
+    if (!do_unwield(me, unwieldmsg_arg, ob))
+    {
+        return 0;
+    }
+
+    // 生成物品文件
+    if (!equip = create_file(ob))
+    {
+        return 0;
+    }
+    else
+    {
+
+
+        if (!deduct_gold(me,calculate_price(ob)))
+        {
+            ob->delete_temp("item");
+            rm(equip);
+            return 1;
+        }
+
+        destruct(ob);
+        load_object(equip)->move(me);
+    }
+
+    return 1;
+}
+
+// 检查材料是否有效
+int is_valid_material(object me, object ob)
+{
+    if (!ob->query("material_attrib"))
+    {
+        tell_object(me, "这是什么东西？我可不能用它来打造。\n");
+        return 0;
+    }
+
+    if (!ob->query("power_point"))
+    {
+        tell_object(me, "这块材料没有任何力量，我无法用它来打造。\n");
+        return 0;
+    }
+
+    if (ob->query("power_point") <= 0)
+    {
+        tell_object(me, "这块材料的力量太弱了，无法用来打造。\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+// 计算材料的价格
+int calculate_price(object ob)
+{
+    return ob->query("power_point") * 2 + 10;
+}
+
+// 确定可以打造的类型
+string *get_available_types(object origin)
+{
+    string *types;
+    mixed p;
+
+    if ((p = origin->query("can_make")) == "all")
+    {
+        types = keys(item_type);
+    }
+    else if (arrayp(p))
+    {
+        types = p;
+    }
+    else if (stringp(p))
+    {
+        types = ({ p });
+    }
+
+    p = origin->query("not_make");
+    if (arrayp(p))
+    {
+        types -= p;
+    }
+    else if (stringp(p))
+    {
+        types -= ({ p });
+    }
+
+    return types;
+}
+
+// 处理玩家选择的类型
+void handle_type_selection(object me, object ob, string arg)
+{
+    if (member_array(arg, get_available_types(ob)) == -1 || undefinedp(item_type[arg]))
+    {
+        message_vision("系统“啊秋”一下打了个喷嚏，一脸无辜的看着$n。\n", me);
+        return;
+    }
+
+    ob->set("item/ctype", arg);
+    ob->set("item/type", item_type[arg][ITEM_TYPE]);
+    ob->set("item/stype", item_type[arg][ITEM_STYPE]);
+    ob->set("item/unit", item_type[arg][ITEM_UNIT]);
+    ob->set("item/point", ob->query("power_point") * item_type[arg][ITEM_POINT] / 100);
+    ob->set("item/owner", me);
+    ob->set("item/owner_id", me->query("id"));
+    ob->set("item/owner_name", me->name(1));
+    ob->set("item/wscale", item_type[arg][ITEM_WEIGHT]);
+    ob->set("item/prop", item_type[arg][ITEM_PROP]);
+    ob->set("item/long", "");
+    ob->set("item/wield_msg", "");
+    ob->set("item/wear_msg", "");
+    ob->set("item/unwield_msg", "");
+    ob->set("item/remove_msg", "");
+    ob->set("item/owner_name", me->query("name"));
+    ob->set("item/owner_id", me->query("id"));
+    ob->add("item/point", ob->query("item/point") * 6 / 5);
+}
+
+// 扣除黄金
+int deduct_gold(object me, int amount)
+{
+    int gold_needed = amount * 10000;
+    if (me->can_afford(gold_needed) == 0)
+    {
+        tell_object(me, "你没有足够的黄金来支付这次打造费用。\n");
+        return 0;
+    }
+
+    // 是否有足够最大内力，200
+    if (me->query("max_neili") < 200)
+    {
+        tell_object(me, "你的内力修为不够，无法打造装备。\n");
+        return 0;
+    }
+
+    me->add("max_neili", -200);
+    me->pay_money(gold_needed);
+    return 1;
+}
+
+// 获取可以打造武器的类型的 JSON 格式数据
+string get_weapon_types_json(object origin)
+{
+    string *types;
+    mapping json_data;
+    mapping button;
+    int i;
+
+    // 获取可以打造的类型
+    types = get_available_types(origin);
+
+    // 构建 JSON 数据
+    json_data = ([
+        "code": "打造装备",
+        "data": ([
+            "title": "选择装备类型",
+            "buttons": ({ }),
+            "confirmCmd": "dazao_zb " + file_name(origin),
+        ])
+    ]);
+
+    // 添加按钮数据
+    for (i = 0; i < sizeof(types); i++)
+    {
+        button = ([
+            "name": types[i],
+            "cmd": types[i],
+        ]);
+        json_data["data"]["buttons"] += ({ button });
+    }
+
+    // 返回 JSON 字符串
+    return json_encode(json_data);
+}
+
+int main(object me, string arg)
+{
+    // 材料id @装备类型@穿上描述@脱下描述@装备描述@名字
+    string material_id, type, wear_msg, remove_msg, desc, name;
+
+    if (!arg)
+    {
+        object *obs;
+        string *buttons = ({});
+        obs = filter_array(all_inventory(me), (: $1->query("material_attrib") :));
+
+        if (!sizeof(obs))
+        {
+            return notify_fail("你身上没有任何材料，不能打造装备。\n");
+        }
+
+        foreach (object ob in obs)
+        {
+            buttons += ({ ob->query("name") + ":" + "dazao_zb choose_material " + ob->query("id") });
+        }
+
+        write(popup_comb("请选择你要打造的装备材料：", buttons));
+        return 1;
+    }
+
+    if (sscanf(arg, "choose_material %s", arg) == 1)
+    {
+        object ob;
+        ob = present(arg, me);
+        if (!objectp(ob))
+        {
+            return notify_fail("你身上没有这样东西。\n");
+        }
+
+        if (!is_valid_material(me, ob))
+        {
+            return 1;
+        }
+
+        me->set_temp("item/ob", ob);
+        me->set_temp("item/status", "choose_type");
+
+        write(get_weapon_types_json(me->query_temp("item/ob")) + "\n");
+        return 1;
+    }
+
+    //接收到格式：材料id @装备类型@穿上描述@脱下描述@装备描述@名字
+    if (sscanf(arg, "%s @%s@%s@%s@%s@%s", material_id, type, wear_msg, remove_msg, desc, name) == 6)
+    {
+        object origin;
+
+        origin = present(material_id, me);
+
+        if (!objectp(origin))
+        {
+            return notify_fail(msg299("打造装备", "材料不存在"));
+        }
+
+        handle_type_selection(me, origin, type);
+
+        if (!do_all_steps(me, origin, name, desc, wear_msg, remove_msg))
+        {
+            write(msg299("打造装备", "打造失败"));
+            return 1;
+        }
+        else
+        {
+
+        }
+
+
+    }
+    
+    if (arg)
+    write(arg + "\n");
+
+    return 1;
+}

@@ -1,0 +1,133 @@
+// /kungfu/skill/pingsha-luoyan/pingsha.c
+
+
+#include <combat.h>
+
+#define PINGSHA "「" HIC "平沙落雁" NOR "」"
+string query_name() { return PINGSHA; }
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+    object weapon;
+    int damage, skill, hit_chance;
+    string msg;
+    int cooldown;
+    int yinlv_bonus;  // 音律加成
+    int base_chance;  // 音符获取基础概率
+
+    if (! target) target = offensive_target(me);
+
+    if (! target || ! me->is_fighting(target))
+        return notify_fail(PINGSHA "只能对战斗中的对手使用。\n");
+
+    if (! objectp(weapon = me->query_temp("weapon")) ||
+        weapon->query("skill_type") != "qin")
+        return notify_fail("你必须手持琴才能施展" PINGSHA "。\n");
+
+    if ((int)me->query_skill("pingsha-luoyan", 1) < 100)
+        return notify_fail("你的平沙落雁琴法不够娴熟，还不会使用" PINGSHA "。\n");
+
+    if ((int)me->query_skill("force") < 150)
+        return notify_fail("你的内功修为不够，难以施展" PINGSHA "。\n");
+
+    if ((int)me->query_skill("yinlv", 1) < 100)
+        return notify_fail("你的音律修养不够，无法施展" PINGSHA "。\n");
+
+    if (me->query("neili") < 200)
+        return notify_fail("你现在真气不够，难以施展" PINGSHA "。\n");
+
+    // 检查冷却时间
+    if (cooldown = me->query_cooldown("pingsha_luoyan"))
+        return notify_fail("你刚刚使用过" PINGSHA "，还需等待" + cooldown + "秒。\n");
+
+    if (! living(target))
+        return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+    skill = me->query_skill("pingsha-luoyan", 1) + me->query_skill("qin");
+
+    msg = HIC "$N" HIC "轻抚手中" + weapon->name() + HIC "，指尖跃动，奏响了"
+              "一曲「平沙落雁」。\n" NOR;
+    
+    me->add("neili", -220);
+
+    // 计算音律加成
+    yinlv_bonus = me->query_skill("yinlv", 1);
+    // 音律贡献值，超过300级后效果递减
+    if (yinlv_bonus > 300) {
+        yinlv_bonus = 300 + (yinlv_bonus - 300) / 4;
+    }
+    
+    hit_chance = 50 + (skill - target->query_skill("force") - target->query_skill("parry",1)) / 10;
+    hit_chance += yinlv_bonus / 20; // 每20级音律增加1%命中
+    
+    if (!playerp(target)) {
+        hit_chance += 30;
+    }
+
+    // 确保命中率在10%到90%之间
+    if (hit_chance < 10)
+        hit_chance = 10;
+    else if (hit_chance > 90)
+        hit_chance = 90;
+
+    // 在注释中说明预期命中率
+    /*
+     * 预期命中率：
+     * 1. 技能相当时，基础命中率约为50%
+     * 2. 技能每高出对方10级，命中率增加1%
+     * 3. 音律等级每20级增加1%命中率
+     * 4. 音律超过300级后，每4级只增加1点贡献值
+     * 5. 对NPC额外增加30%命中
+     * 6. 最终命中率限制在10%-90%之间
+     */
+
+    if (random(100) < hit_chance)
+    {
+        damage = skill;
+        damage = damage * 3 / 2;
+        damage += me->query_skill("yinlv", 1) * 3;
+
+        //pve伤害x2
+        if (!playerp(target)) {
+            damage *= 2;
+        }
+        
+        msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 100,
+                                   HIR "$n" HIR "只觉琴音如潮，心神震荡，"
+                                   "难以招架，受到了不小的伤害。\n" NOR);
+
+        // 根据音律等级计算获取音符的基础概率
+        base_chance = 30 + yinlv_bonus / 4; // 基础30%，每4级音律增加1%概率
+        
+        // 限制最高概率为80%
+        if (base_chance > 80) base_chance = 80;
+        
+        if (random(100) < base_chance)
+        {
+            if (random(2) == 0) // 50%概率获得火音符，50%概率获得冰音符
+            {
+                me->add_temp("huoyin_count", 1);
+                tell_object(me, HIR "你在琴音中感受到了火的力量，凝聚出一枚火音符！\n" NOR);
+            }
+            else
+            {
+                me->add_temp("bingyin_count", 1);
+                tell_object(me, HIB "你在琴音中感受到了冰的气息，凝聚出一枚冰音符！\n" NOR);
+            }
+        }
+    } else
+    {
+        msg += CYN "可是$n" CYN "轻巧地避开了$N" CYN "的琴音攻击。\n" NOR;
+    }
+
+    message_combatd(msg, me, target);
+
+    // 设置新的冷却时间
+    cooldown = me->set_cooldown("pingsha_luoyan", 4);
+    
+    // 提醒用户冷却时间
+    tell_object(me, HIC "你的" PINGSHA "进入了" + cooldown + "秒冷却时间。\n" NOR);
+
+    return 1;
+}

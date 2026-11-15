@@ -1,0 +1,578 @@
+// shop.c
+// 统一商城系统
+#pragma optimize
+
+
+
+#define MYSHOP_DIR "/clone/vip/"
+#define CLASSIFY_POP_SHOP "adm/special_ob/classify_pop_shop"
+#define SHOP_CONFIG "/cmds/usr/game_shop/shop_config"
+
+inherit F_CLEAN_UP;
+inherit F_SAVE;
+inherit "/cmds/usr/game_shop/purchase_limit";
+// 商品分类定义
+nosave mapping items_dict;
+
+// 门派商店物品列表
+nosave mapping *family_items;
+
+// 每周礼包轮回的时间戳
+int week_gift_reset_time = 0;
+
+// 每周礼包列表
+nosave mapping week_gift_list;
+
+// 当前轮换周礼包类型
+string week_gift_type = "";
+nosave string *files;
+
+// 函数声明
+private int do_look(object me, string arg);
+private int do_buy(object me, string arg);
+private string get_currency_name(string shop_type);
+private int get_item_price(object item, string shop_type);
+private int get_total_cost(object item, int amount, string shop_type);
+private int check_currency(object me, string shop_type, int cost);
+private int do_purchase(object me, object item, int amount, string shop_type, int total_cost);
+private string create_shop_ui(object me, string shop_type, string classify_name);
+private void add_shop_items(object classify_pop, string shop_type, string classify_name, object me);
+int main(object me, string arg);
+void reset_week_gift();
+public string query_save_file() { return DATA_DIR "game_shop"; }
+
+
+// 加载商城物品缓存函数
+void load_shop_items()
+{
+
+    //加载配置硬编码
+    items_dict = SHOP_CONFIG->query_items_dict();
+    family_items = SHOP_CONFIG->query_family_items();
+    week_gift_list = SHOP_CONFIG->query_week_gift_list();
+
+
+     // 其他商城的处理
+    files = get_dir(MYSHOP_DIR);
+}
+
+void create()
+{
+	seteuid(getuid());
+	restore();
+    
+    // 加载商城物品路径缓存
+    load_shop_items();
+
+    if (!week_gift_reset_time)
+    {
+        reset_week_gift();
+        save();
+    }
+    
+
+
+    set_heart_beat(3600);
+}
+
+void heart_beat()
+{
+    if (!same_week(week_gift_reset_time, time()))
+    {
+        reset_week_gift();
+    }
+
+}
+
+void reset_week_gift()
+{
+    //轮换不能重复
+    string *types = keys(week_gift_list);
+    string new_type;
+    week_gift_reset_time = time();
+    while (1)
+    {
+        new_type = random_element(types);
+        if (new_type != week_gift_type)
+        {
+            week_gift_type = new_type;
+            break;
+        }
+    }
+
+    save();
+}
+
+// 获取元宝价格
+private int get_yuanbao_price(object item)
+{
+    int price = item->query("yuanbao");
+    if(CRAZY_WEDNESDAY_D->is_thursday()) {
+        int discount = CRAZY_WEDNESDAY_D->get_discount_price(item);
+        if(discount > 0) price = discount;
+    }
+    return price;
+}
+
+// 获取绑定元宝价格
+private int get_bind_yuanbao_price(object item)
+{
+    return item->query("yuanbao") * 2;
+}
+
+// 获取门派点数价格
+private int get_family_price(object item)
+{
+    foreach(mapping m in family_items) {
+        if(m["path"] == base_name(item)) {
+            return m["price"];
+        }
+    }
+    return 0;
+}
+
+// 获取金钱价格
+private int get_money_price(object item)
+{
+    return item->query("value");
+}
+
+// 商店类型对应的价格获取逻辑
+nosave mapping shop_price_map = ([
+    "yuanbao": (: get_yuanbao_price :),
+    "bind": (: get_bind_yuanbao_price :),
+    "family": (: get_family_price :),
+    "money": (: get_money_price :),
+]);
+
+// 获取物品价格
+private int get_item_price(object item, string shop_type)
+{
+    function price_func;
+    if (!item || !shop_type)
+        return 0;
+
+    price_func = shop_price_map[shop_type];
+    if (functionp(price_func)) {
+        return evaluate(price_func, item);
+    }
+    return 0;
+}
+
+// 查看物品详情
+private int do_look(object me, string arg)
+{
+    object item;
+    string msg, shop_type;
+    int price;
+    string currency;
+    if(sscanf(arg, "%s %s", shop_type, arg) != 2)
+        return notify_fail("格式错误。\n");
+
+    // 检查物品是否存在
+    item = load_object(arg);
+    if(!item)
+        return notify_fail("物品不存在。\n");
+
+    if (item->query("is_limit"))
+    {
+        if (me->query(item->query("is_limit")))
+        {
+            return notify_fail("该物品限购，请勿重复购买。\n");
+        }
+    }
+
+    msg = "【" + item->name() + "】";
+
+    // 显示价格
+    if (shop_type == "money")
+    {
+        price = MONEY_D->money_str(get_item_price(item, shop_type));
+        currency = "";
+    }
+    else
+    {
+        price = get_item_price(item, shop_type);
+        currency = get_currency_name(shop_type);
+    }
+
+    msg += "　　价格：" + price + currency;
+
+    if(shop_type == "yuanbao" && CRAZY_WEDNESDAY_D->is_thursday())
+        msg += HIG"(八折)"NOR;
+
+    msg += ZJBR"一一一一一一一一一一一一一一一一一一一一一一一"ZJBR;
+    msg += item->long();
+
+    if(item->query("day_limit_number"))
+    {
+        msg += ZJBR"一一一一一一一一一一一一一一一一一一一一一一一"ZJBR;
+        msg += "限购次数：" + me->query("shop_limit/" + item->query("name")) + " / " + (query_purchase_limit(arg, me) + me->query("shop_limit/" + item->query("name"))) + "\n";
+    }
+
+    msg = popup_comb(
+        msg,
+        ({
+            "购买1个:game_shop buy 1 " + shop_type + " " + arg,
+            "批量购买:game_shop buy input " + shop_type + " "+ arg
+        })
+    );
+
+    write(msg);
+
+    return 1;
+}
+
+// 处理购买请求
+private int do_buy(object me, string arg)
+{
+    int amount;
+    string item_path, shop_type;
+    object item;
+    int total_cost;
+
+    if(sscanf(arg, "input %s %s",shop_type, item_path) == 2) {
+
+        write(INPUTTXT("请输入购买数量:",
+              "game_shop buy $txt# " + shop_type + " " + item_path) + "\n");
+              return 1;
+    }
+
+    // 解析购买参数
+    if(sscanf(arg, "%d %s %s", amount, shop_type, item_path) != 3) {
+            return notify_fail("购买指令格式错误。\n");
+    }
+
+    if(amount < 1)
+        return notify_fail("购买数量必须大于0。\n");
+
+    // 检查物品是否存在
+    item = load_object(item_path);
+    if(!item)
+        return notify_fail("物品不存在。\n");
+
+    // 检查物品是否可以批量购买
+    if(amount > 1 && !item->query_amount()) {
+        return notify_fail("这种物品一次只能购买一个。\n");
+    }
+
+    // 检查物品是否有限购,有有检查是否超过购买次数
+    if(item->query("day_limit_number"))
+    {
+        if (query_purchase_limit(item_path, me) - amount < 0)
+        {
+            return notify_fail("该物品限购，你当前购买次数不能购买这么多。\n");
+        }
+    }
+
+    // 计算总价
+    total_cost = get_total_cost(item, amount, shop_type);
+    if(total_cost < 0) {
+        return notify_fail("价格计算错误。\n");
+    }
+
+    // 检查是否有足够的货币
+    if(!check_currency(me, shop_type, total_cost)) {
+        return notify_fail("你没有足够的" + get_currency_name(shop_type) + "。\n");
+    }
+
+    // 执行购买
+    if(!do_purchase(me, item, amount, shop_type, total_cost)) {
+        return notify_fail("购买失败。\n");
+    }
+
+    write(sprintf("你成功购买了%d%s%s。\n",
+          amount,
+          item->query("base_unit") ? item->query("base_unit") : item->query("unit"),
+          item->name()));
+
+    // 记录购买日志
+    MONITOR_MASTER->monitor_shop_log(me, item->name(), amount, base_name(item), total_cost,(total_cost / amount), get_currency_name(shop_type));
+
+    //如果是限购物品，则记录购买次数
+    if(item->query("day_limit_number"))
+    {
+        me->add("shop_limit/" + item->query("name"), amount);
+    }
+
+    return 1;
+}
+
+// 获取货币名称
+private string get_currency_name(string shop_type)
+{
+    switch(shop_type) {
+        case "yuanbao": return "元宝";
+        case "bind": return "绑定元宝";
+        case "family": return "门派点数";
+        case "money": return "金钱";
+        default: return "未知货币";
+    }
+}
+
+// 计算总价
+private int get_total_cost(object item, int amount, string shop_type)
+{
+    return get_item_price(item, shop_type) * amount;
+}
+
+// 检查货币是否足够
+private int check_currency(object me, string shop_type, int cost)
+{
+    switch(shop_type) {
+        case "yuanbao":
+            return me->query("yuanbao") >= cost;
+        case "bind":
+            return me->query("bind_yuanbao") >= cost;
+        case "family":
+            return me->query("family_points") >= cost;
+        case "money":
+            return me->query("balance") >= cost;
+        default:
+            return 0;
+    }
+}
+
+// 执行购买
+private int do_purchase(object me, object item, int amount, string shop_type, int total_cost)
+{
+    // 扣除货币
+    switch(shop_type) {
+        case "yuanbao":
+            me->add("yuanbao", -total_cost);
+            break;
+        case "bind":
+            me->add("bind_yuanbao", -total_cost);
+            break;
+        case "family":
+            me->add("family_points", -total_cost);
+            break;
+        case "money":
+            me->add("balance", -total_cost);
+            break;
+        default:
+            tell_object(me, "货币错误。\n");
+            return 0;
+    }
+
+    // 创建并移动物品
+    if(item->query_amount()) {
+        object new_item;
+
+        if (shop_type == "bind" || shop_type == "family")
+        {
+            new_item = new_bind(base_name(item));
+        }
+        else
+        {
+            new_item = new(base_name(item));
+        }
+
+        new_item->set_amount(amount);
+        if(!new_item->move(me)) {
+            return 0;
+        }
+    } else {
+        // 创建多个物品
+        for(int i = 0; i < amount; i++) {
+
+            object new_item;
+            if (shop_type == "bind" || shop_type == "family")
+            {
+                new_item = new_bind(base_name(item));
+            }
+            else
+            {
+                new_item = new(base_name(item));
+            }
+
+            if(!objectp(new_item)) {
+                tell_object(me, "物品创建失败。\n");
+                return 0;
+            }
+
+            if(!new_item || !new_item->move(me)) {
+                return 0;
+            }
+        }
+    }
+
+    return 1;
+}
+
+// 创建商城界面
+private string create_shop_ui(object me, string shop_type, string classify_name)
+{
+    object classify_pop = new(CLASSIFY_POP_SHOP);
+    string title, cmd;
+
+    switch(shop_type) {
+        case "yuanbao":
+            // title = sprintf("你目前有%s%d%s元宝，请选择您想购买的道具。【国区测试版本不进行任何商业活动,元宝获取可通关参与游戏活动或官方活动获取】"ZJBR,HIY, me->query("yuanbao"), NOR);
+            title = sprintf("你目前有%s%d%s元宝，请选择您想购买的道具",
+            // "(元宝获取可以关注微信公众号奥游软件，加qq群：2164039263福利多多，"
+            // "寻找形象大使可以获得专属礼包哦)",
+            HIY, me->query("yuanbao"), NOR);
+
+            cmd = "game_shop yuanbao";
+            break;
+
+        case "bind":
+            title = sprintf("你目前有%s%d%s绑定元宝，请选择您想购买的道具",
+                          HIY, me->query("bind_yuanbao"), NOR);
+            cmd = "game_shop bind";
+            break;
+
+        case "family":
+            if(!me->query("family/family_name"))
+                return "你还没有加入门派，无法使用门派商店。\n";
+
+            title = sprintf("%s门派商店 - %s\n你当前有%d点门派点数",
+                          me->query("family/family_name"),
+                          FAMILY_D->query_family_player_title(me),
+                          me->query("family_points"));
+            cmd = "game_shop family";
+            break;
+
+        case "money":
+            title = sprintf("你目前有%s%s%s，请选择您想购买的道具",
+                          HIY, MONEY_D->money_str(me->query("balance")), NOR);
+            cmd = "game_shop money";
+            break;
+    }
+
+    classify_pop->set_id(cmd);
+    classify_pop->add_data_title(title);
+
+    // 添加商城切换按钮
+    classify_pop->add_toggle_button("绑定商城", "game_shop bind");
+    classify_pop->add_toggle_button("元宝商城", "game_shop yuanbao");
+    classify_pop->add_toggle_button("门派商城", "game_shop family");
+    classify_pop->add_toggle_button("金钱商店", "game_shop money");  // 新增金钱商店按钮
+
+    // 添加分类按钮
+    foreach(string cate in keys(items_dict)) {
+        classify_pop->add_second_toggle_button(cate, sprintf("game_shop %s %s", shop_type, cate));
+    }
+
+    // 添加商品列表
+    add_shop_items(classify_pop, shop_type, classify_name, me);
+
+    return classify_pop->get_json_result();
+}
+
+// 添加商品列表
+private void add_shop_items(object classify_pop, string shop_type, string classify_name, object me)
+{
+
+    string price;
+    object item;
+
+    // 门派商城特殊处理
+    if(shop_type == "family") {
+        foreach(mapping m in family_items) {
+            string full_path = m["path"];
+            item = load_object(full_path);
+            if(!item) continue;
+
+            // 检查玩家门派等级是否达到要求
+            if(m["level"] > FAMILY_D->query_family_player_level(me)) continue;
+
+            // 分类过滤
+            if(classify_name && member_array(filter_color(item->query("name")),
+               items_dict[classify_name]) == -1)
+                continue;
+
+            price = m["price"] + get_currency_name(shop_type);
+
+            classify_pop->add_data_button(
+                sprintf("%s"ZJBR"%s", item->query("name"), price),
+                sprintf("game_shop look %s %s", shop_type, full_path)
+            );
+        }
+        return;
+    }
+
+
+    foreach(string file in files) {
+        string full_path = MYSHOP_DIR + file;
+        if(file_size(full_path) < 0) continue;
+
+        item = load_object(full_path);
+        if(!item || item->query("no_shop"))
+        {
+            // 是否在每周轮换的列表中
+            // if (member_array(filter_color(item->query("name")), week_gift_list[week_gift_type]) == -1)
+            // {
+            //     continue;
+            // }
+
+            //暂时注释上面的逻辑，取消展示礼包，只展示商城物品
+            continue;
+        }
+
+        if(shop_type == "bind" && item->query("no_bind_shop")) continue;
+
+        // 元宝商店和绑定元宝商店只显示有yuanbao参数的物品
+        if((shop_type == "yuanbao" || shop_type == "bind") && !item->query("yuanbao")) continue;
+
+        // 金钱商店不显示有yuanbao参数的物品
+        if(shop_type == "money" && item->query("yuanbao")) continue;
+
+        // 分类过滤
+        if(classify_name && member_array(filter_color(item->query("name")),
+           items_dict[classify_name]) == -1)
+            continue;
+
+        if (shop_type == "money")
+        {
+            price = MONEY_D->money_str(get_item_price(item, shop_type));
+        }
+        else
+        {
+            price = get_item_price(item, shop_type) + get_currency_name(shop_type);
+        }
+
+        if (!item->query("name"))
+        {
+            continue;
+        }
+
+        classify_pop->add_data_button(
+            sprintf("%s"ZJBR"%s", item->query("name"), price),
+            sprintf("game_shop look %s %s", shop_type, full_path)
+        );
+    }
+}
+
+// 主函数
+int main(object me, string arg)
+{
+    string shop_type, classify_name;
+
+    if(!arg)
+    {
+        if (me->query("yuanbao"))
+            arg = "yuanbao";
+        else 
+            arg = "bind";
+    }
+
+    // 处理购买请求
+    if(sscanf(arg, "buy %s", arg) == 1)
+        return do_buy(me, arg);
+
+    // 处理查看请求
+    if(sscanf(arg, "look %s", arg) == 1)
+        return do_look(me, arg);
+
+    if(sscanf(arg, "%s %s", shop_type, classify_name) != 2)
+        shop_type = arg;
+
+    if(member_array(shop_type, ({"yuanbao", "bind", "family", "money"})) == -1)
+        return notify_fail("无效的商城类型。\n");
+
+    write(create_shop_ui(me, shop_type, classify_name));
+    return 1;
+}
+

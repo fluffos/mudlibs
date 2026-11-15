@@ -1,0 +1,175 @@
+/**
+ * @file main_task_ui.c
+ * @brief 主线任务UI显示模块实现
+ * @author Lu dexiang
+ * @date 2024-06-01
+ */
+
+
+#include "h/main_task_config.h"
+#include "h/main_task_ui.h"
+
+// 主模块对象
+mixed main_task_master = MAIN_TASK_MASTER;
+
+// 初始化函数
+void create()
+{
+    seteuid(getuid());
+}
+
+/**
+ * @brief 任务字符串信息转译
+ * @param string msg 原始消息
+ * @param object me 玩家对象
+ * @return string 转译后的消息
+ */
+string translate_quest_string(string msg, object me)
+{
+    msg = replace_string(msg, "$player_name$", HIB + me->query("name") + NOR);
+    msg = replace_string(msg, "\n", ZJBR);
+    msg = replace_string(msg, "$family_name$", HIG + me->query("family/family_name") + NOR);
+    msg = replace_string(msg, "$teacher_name$", HIG + me->query("family/master_name") + NOR);
+    return msg;
+}
+
+/**
+ * @brief 显示任务进度
+ * @param object me 玩家对象
+ * @param int quest_id 任务ID
+ */
+public void show_quest_progress(object me, int quest_id)
+{
+    mapping data = ([]);
+    
+    if (!objectp(me) || !quest_id)
+        return;
+    
+    if (!main_task_config[quest_id])
+        return;
+    
+    // data["type"] = "popup";
+    // data["title"] = main_task_config[quest_id]["name"];
+    data["code"] = "new_player_quest";
+    data["stage"] = sprintf("通用");
+    data["msg"] = translate_quest_string(main_task_config[quest_id]["plot_copywriting"], me);
+    
+    //描述信息要求，如果是kill任务，则需要显示当前已经杀死了多少目标
+    //如果任务没有完成才提示如下内容
+    if (me->query("new_main_task/finished_quest_id") != quest_id)
+    {
+        if (main_task_config[quest_id]["quest_target"]["type"] == "kill")
+        {
+            data["msg"] += sprintf(ZJBR"击败%s-任务进度：%d/%d",HIR+ main_task_config[quest_id]["quest_target"]["name"]+NOR, me->query("new_main_task/target_num"), main_task_config[quest_id]["quest_target"]["num"]);
+        }
+        else if (main_task_config[quest_id]["quest_target"]["type"] == "spar")
+        {
+            if (me->query("new_main_task/target_num") > 0)
+                data["msg"] += sprintf(ZJBR + HIG"切磋任务已完成"NOR);
+            else
+                data["msg"] += sprintf(ZJBR + HIR"需要完成切磋任务"NOR);
+        }
+        else if (main_task_config[quest_id]["quest_target"]["type"] == "collect")
+        {
+            mapping items = main_task_config[quest_id]["quest_target"]["items"];
+            mapping collect_progress = me->query("new_main_task/collect_items");
+            string progress_msg = ZJBR"收集物品进度：";
+            
+            foreach (string item_name, mapping item_info in items)
+            {
+                string item_id = item_info["id"];
+                int required_num = item_info["num"];
+                int current_num = collect_progress[item_id];
+                
+                progress_msg += sprintf(ZJBR"%s: %d/%d", item_name, current_num, required_num);
+            }
+            
+            data["msg"] += progress_msg;
+        }
+    }
+    else
+    {
+        data["msg"] += sprintf(ZJBR + HIG"任务已完成"NOR);
+    }
+
+    // data["option"] = main_task_config[quest_id]["quest_options"];
+    {
+        data["option"] = translate_quest_string(main_task_config[quest_id]["quest_options"], me);
+
+        //是否是收集任务
+        if (main_task_config[quest_id]["quest_target"]["type"] == "collect")
+        {
+            data["option"] += "[点击重新检查]";
+        }
+
+    }
+
+    data["cmd"] = "main_task submit";
+
+    tell_object(me, json_encode(data) + "\n");
+}
+
+/**
+ * @brief 显示当前任务信息页面
+ * @param object me 玩家对象
+ * @details 显示当前任务的信息，如果玩家没有任务则尝试发布第一个任务
+ */
+public void show_next_quest(object me)
+{
+    int quest_id;
+
+    //获取当前的任务id，通过主模块调用
+    quest_id = main_task_master->get_player_current_quest(me);
+
+    //如果玩家没有任务，尝试发布第一个任务
+    if (!quest_id)
+    {
+        //检查玩家是否满足第一个任务的要求，通过主模块调用
+        if (!main_task_master->check_quest_requirements(me, 1))
+        {
+            //提示领取该任务的要求
+            string msg = "";
+            msg += sprintf(HIR"你无法领取任务-%s，因为你没有满足任务的要求。"NOR"\n", main_task_config[1]["name"]);
+
+            if (main_task_config[1]["name"] == "主线任务1-1-1")
+            {
+                msg += @DESC
+                游戏提示：请先点击主页下方的【门派】页面，找到自己的师傅，点击学习武功尽量在当前等级满足的情况下，把武功学满。
+                确保：内功，轻功，招架，攻击武学四类都在当前可学范围内学满。
+                然后再点击，主页下方的【技能】页面，左侧是技能分类，在分类中找到一门【非基本】武学，然后点击激发武学。这个时候你就有战斗力了。
+                注意，如果你的攻击武学是兵器类武学，你需要准备一把兵器。比如剑法你就需要一把剑。你需要在背包里把剑给装备上。
+                如想获得更多攻略和游戏帮助，可以添加qq群：2164039263。由于游戏复杂度高，推荐加群游玩奥。
+
+DESC;                
+            }
+
+            if (mapp(main_task_config[1]["quest_start_need"]["attribute"]))
+            {
+                foreach (string attr, int value in main_task_config[1]["quest_start_need"]["attribute"])
+                {
+                    msg += sprintf(HIW"%s需求：%d，当前：%d\n", to_chinese(attr), value, me->query(attr));
+                }
+            }
+
+            if (main_task_config[1]["quest_place"])
+                msg += sprintf(HIC"任务地点：%s，当前地点：%s\n", main_task_config[1]["quest_place"]["chinese_name"], environment(me)->query("short"));
+                
+            tell_object(me, popup_title(msg));
+            return;
+        }
+
+        //发布第一个任务，通过主模块调用
+        if (main_task_master->issue_quest(me, 1))
+        {
+            tell_object(me, "你已经获得了第一个主线任务。\n");
+            quest_id = 1;
+        }
+        else
+        {
+            tell_object(me, "任务发布失败，请联系管理员。\n");
+            return;
+        }
+    }
+    //显示当前任务进度
+    show_quest_progress(me, quest_id);
+} 

@@ -1,0 +1,177 @@
+// drop.c
+// 用于处理玩家丢弃物品的命令
+
+#include <config.h>
+
+inherit F_CLEAN_UP;
+
+int do_drop(object me, object obj, int raw);
+string get_item_unit_string(object obj);
+int can_drop_item(object me, object obj, object env);
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+	object obj,obj2;
+	int  amount;
+	string item;
+
+	if (! arg)
+		return notify_fail("你要丢下什么东西？\n");
+
+	if (sscanf(arg, "%d %s", amount, item) == 2)
+	{
+		if (! objectp(obj = present(item, me)))
+			return notify_fail("你身上没有这样东西。\n");
+
+		if (! can_drop_item(me, obj, environment(me)))
+			return 0;
+
+		if (! obj->query_amount())
+			return notify_fail(obj->name() + "不能被分开丢弃。\n");
+
+		if (amount < 1)
+			return notify_fail("东西的数量至少是一个。\n");
+
+		if (amount > obj->query_amount())
+			return notify_fail("你没有那么多的" + obj->name() + "。\n");
+		
+		if (amount == (int)obj->query_amount())
+			return do_drop(me, obj, 0);
+		
+		// 处理部分数量的物品
+		obj->add_amount(-amount);
+		obj2 = new(base_name(obj));
+		obj2->set_amount(amount);
+		if (! do_drop(me, obj2, 0))
+		{
+			obj2->move(me);
+			return 0;
+		}
+		return 1;
+	}
+
+	if (arg == "all")
+	{
+		write("你只能一件一件的丢弃！\n");
+		return 1;
+	}
+
+	if (! objectp(obj = present(arg, me)))
+		return notify_fail("你身上没有这样东西。\n");
+
+	return do_drop(me, obj, 0);
+}
+
+// 检查物品是否可以被丢弃
+int can_drop_item(object me, object obj, object env)
+{
+	mixed no_drop;
+
+	if (wiz_level(me) < 3 && obj->query("no_drop"))
+		return notify_fail(obj->name() + "不能被丢弃。\n");
+
+	if (no_drop = env->query("no_drop"))
+		return notify_fail(stringp(no_drop) ? no_drop : "这里东西丢弃下去也看不见。\n");
+
+	if (! obj->is_character() &&
+	    ! obj->can_combine_to(env) &&
+	    sizeof(filter_array(all_inventory(env),
+				(: ! $1->is_character() :))) > MAX_ITEM_IN_ROOM)
+	{
+		return notify_fail("这里东西太多了，你乱丢恐怕" + obj->name() + "就找不到了。\n");
+	}
+
+	return 1;
+}
+
+// 获取物品的单位字符串
+string get_item_unit_string(object obj)
+{
+	string num, unit;
+
+	num = obj->query_amount() ? 
+		CHINESE_D->chinese_number(obj->query_amount()) : 
+		"一";
+	unit = obj->query_amount() ? 
+		obj->query("base_unit") : 
+		obj->query("unit");
+
+	return num + unit;
+}
+
+int do_drop(object me, object obj, int raw)
+{
+	object riding;
+
+	// 处理骑乘状态
+	if (obj == (riding = me->query_temp("is_riding")))
+	{
+		message_vision("$N从$n背上飞身跳下。\n", me, riding);
+		me->delete_temp("is_riding");
+		obj->delete_temp("is_rided_by");
+		obj->move(environment(me));
+		return 1;
+	}
+
+	// 处理非克隆物品
+	if (!clonep(obj))
+	{
+		write(obj->query("name") + "化作一道流光消失了！！\n");
+		destruct(obj);
+		return 1;
+	}
+
+	// 检查是否可以丢弃
+	if (! can_drop_item(me, obj, environment(me)))
+		return 0;
+
+	// 检查装备状态
+	switch ((string)obj->query("equipped"))
+	{
+	case "worn":
+		return notify_fail(obj->name() + "必须脱下来才能丢掉。\n");
+	case "wielded":
+		return notify_fail(obj->name() + "必须解除装备才能丢掉。\n");
+	}
+
+	if (obj->move(environment(me)))
+	{
+		if (obj->is_character() && obj->query_weight() > 20000)
+		{
+			message_vision("$N将$n从背上放了下来，躺在地上。\n", me, obj);
+		}
+		else
+		{
+			string drop_msg = sprintf("$N丢下%s$n。\n", 
+				get_item_unit_string(obj));
+				
+			if (! raw)
+				message_vision(drop_msg, me, obj);
+			else
+				write("你丢下了" + get_item_unit_string(obj) + obj->name() + "\n");
+
+			// 处理无价值物品
+			if (! obj->is_character() && ! obj->query("value") && ! obj->value())
+			{
+				write(obj->query("name") + "掉地上消失了。\n");
+				destruct(obj);
+			}
+		}
+		return 1;
+	}
+
+	return 0;
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式 : drop <物品名称> | all
+ 
+这个指令可以让你丢下你所携带的物品。
+ 
+HELP );
+	return 1;
+}

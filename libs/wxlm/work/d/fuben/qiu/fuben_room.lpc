@@ -1,0 +1,164 @@
+
+inherit ROOM;
+
+void create();
+void init();
+void transfer_input(string arg, object me, object *balls);
+int do_transfer(string arg);
+void create_boss();
+void time_reminder(int remaining);
+void time_up();
+void kick_all_players();
+int do_quit(string arg);
+int valid_leave(object me, string dir);
+
+void create()
+{
+    set("short", HIR"非不裘的秘密洞穴"NOR);
+    set("long", @LONG
+这是一个阴暗潮湿的洞穴，四周岩壁上闪烁着诡异的光芒。空气中弥漫着一股
+阴冷的气息，让人不寒而栗。洞穴中央有一个石台，上面刻着奇怪的符文。这
+里就是江湖传说中非不裘的秘密修炼之地，如今你已经闯入，恐怕会面临一场
+恶战。击败非不裘后，每个参与者都将获得丰厚的奖励。
+LONG);
+
+    set("no_drop", 1);
+    set("no_sleep", 1);
+    set("no_quit", 1);
+	set("out_room","/d/city/guangchang");
+
+    set("action_list", ([
+        HIC"传功"NOR : "transfer",
+    ]));
+
+    setup();
+
+    set("exits", ([
+        "out" : __DIR__"enter",
+    ]));
+}
+
+void init()
+{
+    object me = this_player();
+    
+    add_action("do_quit", "quit");
+    add_action("do_quit", "exit");
+    add_action("do_quit", "leave");
+    add_action("do_transfer", "transfer");
+    
+    if (userp(me))
+    {
+        tell_object(me, HIY"你进入了非不裘的秘密洞穴，感受到一股强大的压迫感！\n"NOR);
+        if (!query("boss_created"))
+        {
+            set("boss_created", 1);
+            call_out("create_boss", 2);
+            call_out("time_up", 600);
+            call_out("time_reminder", 60, 10);
+        }
+    }
+}
+
+void transfer_input(string arg, object me, object *balls)
+{
+    if (!arg || arg == "")
+    {
+        tell_object(me, "传功取消。\n");
+        return;
+    }
+
+    if (sizeof(balls) == 0)
+    {
+        tell_object(me, "现在没有可以传功的光球。\n");
+        return;
+    }
+
+    if (!objectp(balls[0]))
+    {
+        tell_object(me, "现在没有可以传功的光球。\n");
+        balls = ({ });
+        return;
+    }
+
+
+    return balls[0]->do_transfer(arg, me);
+}
+
+int do_transfer(string arg)
+{
+    object me = this_player();
+    object *balls;
+
+    balls = filter_array(all_inventory(this_object()), (: $1->query("is_light_ball") :));
+    if (sizeof(balls) == 0)
+        return notify_fail("现在没有可以传功的光球。\n");
+
+    tell_object(me, INPUTTXT("请输入要传功的目标（功力/精力）：", "transfer_input $txt#") + "\n");
+    input_to("transfer_input", me, balls);
+    return 1;
+}
+
+void create_boss()
+{
+    object boss = new("/d/fuben/qiu/obj/feibuqiu");
+    boss->move(this_object());
+    tell_room(this_object(), HIR"一阵阴风吹过，非不裘突然出现在你们面前！\n"NOR);
+}
+
+void time_reminder(int remaining)
+{
+    if (remaining > 0)
+    {
+        tell_room(this_object(), "副本内传来声音：你们还有" + chinese_number(remaining) + "分钟的时间！\n");
+        call_out("time_reminder", 60, remaining - 1);
+    }
+}
+
+void time_up()
+{
+    tell_room(this_object(), "时间已到，你们未能击败非不裘，所有人被强制传送出副本！\n");
+    kick_all_players();
+}
+
+void kick_all_players()
+{
+    object *players = filter_array(all_inventory(this_object()), (: userp($1) :));
+    foreach (object player in players)
+    {
+        player->move("/d/city/guangchang");
+        tell_object(player, "你感觉一阵天旋地转，醒来发现已回到扬州广场。\n");
+    }
+    // 通知 FUBEN_D 销毁副本
+    FUBEN_D->des_fuben(query("fuben_sn"));
+}
+
+int do_quit(string arg)
+{
+    tell_object(this_player(), "副本中不能直接退出，请击败boss或等待副本结束。\n");
+    return 1;
+}
+
+int valid_leave(object me, string dir)
+{
+    tell_object(me, "你现在无法离开这里。\n");
+    return 0;
+}
+
+void no_die(object me)
+{
+    // 不死亡，恢复生命和内力
+
+
+    //真血eff
+    me->set("eff_qi", me->query("max_qi"));
+    //真气eff
+    me->set("eff_jing", me->query("max_jing"));
+    //内力eff
+    me->set("eff_neili", me->query("max_neili"));
+
+    // 虚血
+    me->set("qi", me->query("max_qi"));
+    me->set("jing", me->query("max_jing"));
+    me->set("neili", me->query("max_neili"));
+}

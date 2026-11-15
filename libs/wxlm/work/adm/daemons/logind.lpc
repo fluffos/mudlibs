@@ -1,0 +1,1363 @@
+// logind.c 
+ 
+ 
+#include <command.h> 
+#include <login.h> 
+#include <config.h> 
+#include <getconfig.h> 
+ 
+#define MUDLIST_CMD     "/cmds/usr/mudlist"
+#define REBOOT_CMD      "/cmds/arch/reboot"
+#define HISTORY_D       "/adm/daemons/history_updated" 
+ 
+inherit F_DBASE; 
+ 
+nosave int wiz_lock_level = 0; 
+
+string *yz_msg_list = ({});
+string ask_bufa(object me);
+
+mapping liupai = ([
+        "沧海九剑流":([
+                "天赋":"lucky",
+                "属性":"13,29,25,13",
+                "性格":"狡黠多变",
+        ]),
+        "极道降龙流":([
+                "天赋":"lucky",
+                "属性":"30,13,24,13",
+                "性格":"光明磊落",
+        ]),       
+]);
+
+//选择出生地，value为字符串直接选择出生地，如果是mapping则设定姓氏
+mapping born = ([
+        "关外人氏" : "/d/guanwai/kedian",
+        "燕赵人氏" : "/d/beijing/kedian",
+        "齐鲁人氏" : "/d/taishan/kedian",
+        "秦晋人氏" : "/d/changan/kezhan",
+        "中原人氏" : "/d/shaolin/kedian1",
+        "西域人氏" : "/d/xingxiu/kedian",
+        "荆州人氏" : "/d/xiangyang/kedian",
+        "扬州人氏" : "/d/city/kedian",
+        "苏州人氏" : "/d/suzhou/kedian",
+        "杭州人氏" : "/d/hangzhou/kedian",
+        "福建人氏" : "/d/fuzhou/kedian",
+        "巴蜀人氏" : "/d/city3/kedian",
+        "云南人氏" : "/d/dali/kedian",
+        "两广人氏" : "/d/foshan/beidimiao",
+        "欧阳世家" : ([ "born"      : "西域人氏",//氏族
+                        "surname"   : "欧阳",//额外的性
+                        "startroom" : "/d/baituo/dating",//初始路径
+                        ]),
+        "关外胡家" : ([ "born"      : "关外人氏",
+                        "surname"   : "胡",
+                        "startroom" : "/d/guanwai/xiaowu",
+                        ]),
+        "段氏皇族" : ([ "born"      : "大理人氏",
+                        "surname"   : "段",
+                        "startroom" : "/d/dali/wangfugate",
+                        ]),
+        "慕容世家" : ([ "born"      : "江南人氏",
+                        "surname"   : "慕容",
+                        "startroom" : "/d/yanziwu/cuixia",
+                        ]),
+]);
+
+// 内部调用的函数 
+private void get_user(string arg, object ob); 
+private void get_char(string arg, object ob); 
+void jiance(string arg,object ob,string str); 
+private void interactive_id(string arg, object ob);
+private void interactive_get_passwd(string pass, object ob);
+private void interactive_new_passwd(string pass, object ob);
+private void interactive_confirm_passwd(string pass, object ob);
+private void interactive_reg_gender(string arg, object ob);
+private void interactive_reg_name(string arg, object ob);
+private void interactive_reg_born(string arg, object ob);
+private void init_new_player(object user);
+private void announce_wujue_login(object user);
+private void check_and_show_update(object user);
+ 
+// 可以被外部调用的函数 
+object  make_body(object ob); 
+varargs void enter_world(object ob, object user, int silent); 
+varargs void reconnect(object ob, object user, int silent); 
+object find_body(string name); 
+int check_legal_id(string arg); 
+int check_legal_name(string arg, int maxlen); 
+
+int link_number = 0;
+
+string error_result(string msg)
+{
+        mapping error_map = ([
+                "code":405,
+        ]);
+
+        if (msg)
+        {
+                error_map["msg"] = msg;
+        }
+        else
+        {
+                error_map["msg"] = "未知错误";
+        }
+
+        return json_encode(error_map) + "\n";
+}
+
+
+string login_result(int code,string msg)
+{
+        mapping login_map = ([
+                "code":code,
+                "msg":msg                
+        ]);
+
+        return json_encode(login_map) + "\n";
+}
+
+void create()  
+{ 
+        seteuid(ROOT_UID); 
+        set("channel_id", "连线"); 
+} 
+ 
+void logon(object ob)
+{
+        string str;
+        if (BAN_D->is_banned(query_ip_name(ob)) == 1) {
+                write(error_result("你IP地址已被封禁，如有问题。"));
+                destruct(ob);
+                return;
+        }
+        str = ZJKEY;
+        link_number++;
+
+        color_cat(WELCOME);
+        write("\n" + login_result(200,"正在等待连接确认,yes确认，wait继续等待，这是本次运行的第" + link_number + "次连接。"));
+        write("请输入您的英文账号（新玩家请输入要注册的英文ID，4-20位字母开头）：");
+        input_to("jiance", ob, str);
+}
+
+void jiance(string arg, object ob, string str)
+{
+        if (!stringp(arg) || trim(arg) == "") {
+                write("请输入您的英文账号（4-20位字母开头）：");
+                input_to("jiance", ob, str);
+                return;
+        }
+
+        if (arg == "ldx123" || arg == "zds123" || arg == "demo7788" || strsrch(arg, "║") != -1) {
+                get_user(arg, ob);
+                return;
+        }
+
+        interactive_id(arg, ob);
+}
+
+private void interactive_id(string arg, object ob)
+{
+        string id;
+
+        id = lower_case(trim(arg));
+        if (!check_legal_id(id)) {
+                write("请重新输入您的英文账号：");
+                input_to("jiance", ob, ZJKEY);
+                return;
+        }
+
+        if (BAN_D->is_user_banned(id)) {
+                mapping ban_info = BAN_D->query_banned_user(id);
+                write(sprintf("\n你的账号已被封禁，封禁原因：%s\n", ban_info["reason"]));
+                destruct(ob);
+                return;
+        }
+
+        if (wiz_level(id) < wiz_lock_level) {
+                write("\n对不起，" + LOCAL_MUD_NAME() + "正在维护中，请稍后登录。\n");
+                destruct(ob);
+                return;
+        }
+
+        if ((string)ob->set("id", id) != id) {
+                write("未知错误，请重新输入您的英文账号：");
+                input_to("jiance", ob, ZJKEY);
+                return;
+        }
+
+        if (file_size(ob->query_save_file() + __SAVE_EXTENSION__) >= 0) {
+                if (!ob->restore()) {
+                        write("人物存档出现问题，请重新输入账号：");
+                        input_to("jiance", ob, ZJKEY);
+                        return;
+                }
+                write("请输入密码：");
+                input_to("interactive_get_passwd", 1, ob);
+                return;
+        }
+
+        ob->set("body", USER_OB);
+        write("这是一个新账号，请设定您的密码（至少5个字符）：");
+        input_to("interactive_new_passwd", 1, ob);
+}
+
+private void interactive_get_passwd(string pass, object ob)
+{
+        object old_link, user;
+        string old_pass;
+
+        write("\n");
+        old_pass = ob->query("password");
+        if (!stringp(pass) || !stringp(old_pass) || crypt(pass, old_pass) != old_pass) {
+                if (ob->add_temp("pw_tries", 1) >= 3) {
+                        write("密码错误次数过多，断开连接。\n");
+                        destruct(ob);
+                        return;
+                }
+                write("密码错误，请重新输入密码：");
+                input_to("interactive_get_passwd", 1, ob);
+                return;
+        }
+
+        user = find_body(ob->query("id"));
+        if (user) {
+                old_link = user->query_temp("link_ob");
+                if (old_link) {
+                        if (interactive(user)) {
+                                tell_object(user, RED "你的账号在别处登录，你被迫下线了！\n" NOR);
+                                exec(old_link, user);
+                        }
+                        destruct(old_link);
+                }
+                reconnect(ob, user);
+                return;
+        }
+
+        if (objectp(user = make_body(ob))) {
+                user->set_temp("link_ob", ob);
+                if (file_size(user->query_save_file() + __SAVE_EXTENSION__) >= 0) {
+                        if (user->restore()) {
+                                enter_world(ob, user);
+                                return;
+                        }
+                        write("人物存档读取失败。\n");
+                        destruct(user);
+                        destruct(ob);
+                        return;
+                }
+                destruct(user);
+        }
+
+        write("该账号尚未创建角色，请选择您的性别（男/女，或输入 m/f）：");
+        input_to("interactive_reg_gender", ob);
+}
+
+private void interactive_new_passwd(string pass, object ob)
+{
+        write("\n");
+        if (!stringp(pass) || strlen(pass) < 5) {
+                write("密码长度至少为5个字符，请重新设定密码：");
+                input_to("interactive_new_passwd", 1, ob);
+                return;
+        }
+        ob->set_temp("new_passwd", pass);
+        write("请再输入一次密码确认：");
+        input_to("interactive_confirm_passwd", 1, ob);
+}
+
+private void interactive_confirm_passwd(string pass, object ob)
+{
+        write("\n");
+        if (pass != ob->query_temp("new_passwd")) {
+                write("两次输入的密码不一致！请重新设定密码：");
+                input_to("interactive_new_passwd", 1, ob);
+                return;
+        }
+        ob->delete_temp("new_passwd");
+        ob->set("password", crypt(pass, 0));
+        write("请选择您的角色性别（男/女，或输入 m/f）：");
+        input_to("interactive_reg_gender", ob);
+}
+
+private void interactive_reg_gender(string arg, object ob)
+{
+        string g;
+
+        g = lower_case(trim(arg || ""));
+        if (g == "m" || g == "男" || g == "男性") {
+                ob->set_temp("reg_gender", "男");
+        } else if (g == "f" || g == "女" || g == "女性") {
+                ob->set_temp("reg_gender", "女");
+        } else {
+                write("无效选择，请选择您的角色性别（男/女，或输入 m/f）：");
+                input_to("interactive_reg_gender", ob);
+                return;
+        }
+
+        write("请为您的角色起一个中文名字（2-4个汉字）：");
+        input_to("interactive_reg_name", ob);
+}
+
+private void interactive_reg_name(string arg, object ob)
+{
+        string name, result;
+
+        name = trim(arg || "");
+        if (!check_legal_name(name, 8)) {
+                write("请重新输入中文名字（2-4个汉字）：");
+                input_to("interactive_reg_name", ob);
+                return;
+        }
+        if (stringp(result = NAME_D->invalid_new_name(name))) {
+                write(result);
+                write("请重新输入中文名字（2-4个汉字）：");
+                input_to("interactive_reg_name", ob);
+                return;
+        }
+
+        ob->set_temp("reg_name", name);
+        write("\n请选择出生地点或初始流派（直接回车默认为 1）：\n"
+              "  1. 扬州人氏（自主流：平衡属性 20,20,20,20）\n"
+              "  2. 沧海九剑流（华山引导：13,29,25,13）\n"
+              "  3. 极道降龙流（丐帮引导：30,13,24,13）\n"
+              "  4. 关外人氏    5. 燕赵人氏    6. 苏州人氏    7. 杭州人氏\n"
+              "请输入编号（1-7）或直接输入世家/地名：");
+        input_to("interactive_reg_born", ob);
+}
+
+private void interactive_reg_born(string arg, object ob)
+{
+        string choice, place, style;
+
+        choice = trim(arg || "");
+        place = "扬州人氏";
+        style = "自主流";
+
+        if (choice == "" || choice == "1") {
+                place = "扬州人氏";
+        } else if (choice == "2") {
+                place = "扬州人氏";
+                style = "沧海九剑流";
+        } else if (choice == "3") {
+                place = "扬州人氏";
+                style = "极道降龙流";
+        } else if (choice == "4") {
+                place = "关外人氏";
+        } else if (choice == "5") {
+                place = "燕赵人氏";
+        } else if (choice == "6") {
+                place = "苏州人氏";
+        } else if (choice == "7") {
+                place = "杭州人氏";
+        } else if (!undefinedp(born[choice])) {
+                place = choice;
+        } else {
+                write("无效选择，请输入编号（1-7）或直接输入世家/地名：");
+                input_to("interactive_reg_born", ob);
+                return;
+        }
+
+        get_char(sprintf("%s║%s║%s║好运║20,20,20,20║光明磊落║%s",
+                ob->query_temp("reg_gender"),
+                ob->query_temp("reg_name"),
+                place,
+                style), ob);
+}
+ 
+private void get_user(string arg, object ob) 
+{ 
+        //arg,账号║密码║密文║email。 
+        //新版本格式：账号║║密码║手机号║ip地址
+        object old_link,user; 
+        string *myinfo,ip,myIphone; 
+
+        
+        if( !arg||arg=="") { 
+                input_to("get_user", ob); 
+                return; 
+        }
+
+        if (arg == "ldx123")
+        {
+                arg = "xxxxxxxx密码示例";
+        }
+
+        if (arg == "zds123")
+        {
+                arg = "xxxxxxxx密码示例";
+        }
+
+        if (arg == "demo7788")
+        {
+                arg = "xxxxxxxx密码示例";
+        }
+
+        // write("测试222222\n");
+        myinfo = explode(arg,"║"); 
+ 
+        
+
+        if( sizeof(myinfo) < 4 ) 
+        { 
+                write(error_result("验证格式错误，请重新输入格式验证"));
+                input_to("get_user", ob); 
+                return; 
+        } 
+
+        if (lower_case(myinfo[0]) != "demodemo")
+        {
+                if (time() < 1735646400)
+                {
+                        write(error_result(myinfo[0]+"用户，对不起，"+LOCAL_MUD_NAME()+"正在维护中，请在20：00后登录。。。"));
+                        input_to("get_user",ob);
+                        return;
+                }
+        }
+
+        if( !check_legal_id(lower_case(myinfo[0]))) 
+        { 
+                //账号不合法 
+                write(error_result("账号不合法"));
+                input_to("get_user", ob); 
+                return; 
+        } 
+        
+
+        myinfo[0] = lower_case(myinfo[0]); 
+
+        // 检查用户是否被封禁
+        if (BAN_D->is_user_banned(myinfo[0]))
+        {
+                mapping ban_info = BAN_D->query_banned_user(myinfo[0]);
+                string ban_msg = sprintf("你的账号已被封禁，封禁原因：%s", ban_info["reason"]);
+                write(error_result(ban_msg));
+                input_to("get_user", ob);
+                return;
+        }
+
+        if (wiz_level(myinfo[0]) < wiz_lock_level) 
+        { 
+                write(error_result("对不起，"+LOCAL_MUD_NAME()+"正在维护中，请稍后登录。。。"));
+                input_to("get_user",ob); 
+                return; 
+        } 
+ 
+        if( (string)ob->set("id", myinfo[0]) != myinfo[0]) { 
+                // write(ZJTMPSAY"未知错误，请重试i。。。\n"); 
+                write(error_result("未知错误，请重试。。。"));
+                input_to("get_user", ob); 
+                return; 
+        } 
+
+        //设定手机号
+        if (sizeof(myinfo) >= 3)
+        {
+                myIphone = myinfo[2];
+        }
+        else
+        {
+                myIphone = "未知";
+        }
+
+        //设定ip地址
+        if (sizeof(myinfo) >= 4)
+        {
+                ip = myinfo[3];
+        }
+        else
+        {
+                ip = "未知";
+        }
+
+        if (myinfo[0] != "demo222" &&myinfo[0] != "demo123" && myinfo[0] != "demodemo" && myinfo[0] != "sxpcgq7zsgw0" && myinfo[0] != "demo7788")
+        {
+                int sum = 0;
+
+                if( sizeof(myinfo) < 6 ) 
+                { 
+                        write(error_result("验证格式错误，请重新输入格式验证"));
+                        input_to("get_user", ob); 
+                        return; 
+                } 
+
+                // 如果myinfo[4]的长度 + 1 小于myinfo[5]，直接拒绝连接
+                if (strlen(myinfo[4]) + 1 < to_int(myinfo[5]))
+                {
+                        write(error_result("验证码错误，识别到非法侵入，拒绝连接，错误码:00"));
+                        input_to("get_user", ob);
+                        return;
+                }
+
+                // 重定义myinfo[4],提取验证码，myinfo[5]会给出下标，代表myinfo[4]从哪个下标开始读取，读取十位结束
+                myinfo[4] = myinfo[4][to_int(myinfo[5])..to_int(myinfo[5]) + 9];
+
+                // 判定yz_msg_list中是否存在myinfo[4]
+                if (sizeof(yz_msg_list))
+                {
+                        if (member_array(myinfo[4], yz_msg_list) != -1)
+                        {
+                                write(error_result("验证码错误，识别到非法侵入，拒绝连接，错误码:11"));
+                                input_to("get_user", ob);
+                                return;
+                        }
+                }
+
+                // 如果验证码长度不等于10，直接拒绝连接
+                if (strlen(myinfo[4]) != 10)
+                {
+                        write(error_result("验证码错误，识别到非法侵入，拒绝连接,错误码:22"));
+                        input_to("get_user", ob);
+                        return;
+                }
+
+                // 提取验证码的偶数位，然后使用to_int转换成数字，然后遍历累加如果最终结果不等于20，直接拒绝连接
+                for (int i = 0; i < strlen(myinfo[4]); i++)
+                {
+                        if ((i + 1) % 2 == 0)
+                        {
+                                // write("当前数字：" + to_int(myinfo[4][i..i]) + "\n");
+                                sum += to_int(myinfo[4][i..i]);
+                        }
+                }
+
+                if (sum != 20)
+                {
+                        write(error_result("验证码错误，识别到非法侵入，拒绝连接,错误码:33"));
+                        input_to("get_user", ob);
+                        return;
+                }
+
+                // 如果yz_msg_list数组元素大于500，清空数组
+                if (sizeof(yz_msg_list) > 500)
+                {
+                        yz_msg_list = ({});
+                }
+
+                yz_msg_list += ({myinfo[4]});
+
+
+        }
+
+
+        ob->set_temp("player_ip",ip);
+        ob->set_temp("player_iphone",myIphone);
+
+        //打印ip地址和手机号
+        // write("ip：" + ip + "-手机号：" + myIphone + "\n");
+ 
+        if( file_size(ob->query_save_file() + __SAVE_EXTENSION__) >= 0 )  
+        { 
+                if( !ob->restore() )  
+                { 
+                        write(ZJTMPSAY"人物存档出现问题。。。\n"); 
+                        input_to("get_user", ob); 
+                        return; 
+                } 
+                
+                if (! stringp(myinfo[1]) || crypt(myinfo[1], ob->query("password"))!=ob->query("password")) 
+                { 
+                        // write(INPUTTXT("角色密码错误-001，请重新输入密码：", myinfo[0]+"║$txt#║"+myinfo[2]+"║"+myinfo[3]+"\n"));
+                        write(error_result("角色密码错误，请重新输入密码"));
+                        input_to("get_user", ob);
+                        return; 
+                } 
+        } 
+        else  
+                ob->set("body", USER_OB); 
+ 
+        if( (string)ob->set("password",crypt(myinfo[1],0)) != crypt(myinfo[1],ob->query("password"))) { 
+                // write(ZJTMPSAY"未知错误，请重试p。。。\n"); 
+                write(error_result("密码加密验证比对错误，请重试。。。"));
+                input_to("get_user", ob); 
+                return; 
+        } 
+ 
+        write("\n"); 
+ 
+        user = find_body(ob->query("id")); 
+        if (user) { 
+                old_link = user->query_temp("link_ob"); 
+                if( old_link ) { 
+                        if(interactive(user)) 
+                        { 
+                                tell_object(user, error_result("你的账号在别处登录，你被迫下线了！"));
+                                exec(old_link, user); 
+                        } 
+                        destruct(old_link); 
+                } 
+                //200，登陆成功 
+                write(login_result(200,"登录成功"));
+                // write(ZJTMPSAY"登录成功，正在加载世界。。。\n"); 
+                reconnect(ob, user); 
+                return; 
+        } 
+        if( objectp(user = make_body(ob)) ) { 
+                user->set_temp("link_ob",ob); 
+                if( file_size(user->query_save_file() + __SAVE_EXTENSION__) >= 0 ){ 
+                        if( user->restore() ) { 
+                                //200，登陆成功
+                                write(login_result(200,"登录成功"));
+                                // write(ZJTMPSAY"登录成功，正在加载世界。。。\n"); 
+                                enter_world(ob, user); 
+                                return; 
+                        } else { 
+                                write(error_result("人物存档出现问题。。。"));
+                                input_to("get_user", ob); 
+                                return; 
+                        } 
+                } 
+        } 
+        destruct(user); 
+        //建立角色，200，建立角色
+        write(login_result(200,"建立角色"));
+        input_to("get_char", ob); 
+} 
+ 
+private void get_char(string arg, object ob) 
+{ 
+        //arg,性别║昵称║出生地点║天赋║属性(力量，悟性，根骨，身法)║性格║流派。 
+        object user; 
+        string *myinfo,result; 
+        string *myattr;
+
+        //建立天赋字典表
+        mapping talnetList = ([	
+                "速行":"agile",
+                "阴身":"ghost",
+                "好战之气":"hatred",
+                "好运":"lucky",
+                "六道轮回":"lun",
+                "天生真气":"mystery",
+                "气盛":"power",
+                "小周天运转":"self",
+                "天生刀客":"tblade",
+                "自幼通爪":"tclaw",
+                "天生棍手":"tclub",
+                "自幼通拳":"tcuff",
+                "自幼通指":"tfinger",
+                "天生锤手":"thammer",
+                "手臂灵活":"thand",
+                "鬼话连篇":"trick",
+                "天生杖师":"tstaff",
+                "自幼通掌":"tstrike",
+                "天生剑客":"tsword",
+                "拳脚灵活":"tunarmed",
+                "自幼好鞭":"twhip",
+                "魅惑":"youth",
+        ]);
+
+        if( !arg||arg=="wait"||arg=="") 
+        { 
+                write(login_result(200,"等待输入角色名中"));
+                input_to("get_char", ob); 
+                return; 
+        } 
+ 
+        myinfo = explode(arg,"║"); 
+
+        if(sizeof(myinfo)!=7)
+        { 
+                write(error_result("格式错误。"));
+                input_to("get_char", ob); 
+                return; 
+        }
+
+
+
+        if (!undefinedp(talnetList[myinfo[3]]))
+        {
+                myinfo[3] = talnetList[myinfo[3]];
+        }
+        else
+        {
+                write(error_result("天赋不存在。"));
+                input_to("get_char", ob); 
+                return; 
+        }
+
+        //检查流派，如果是非自选流派开始检查liupai变量中的内容重新设定myinfo的各项信息
+        if (myinfo[6] != "自主流")
+        {
+                if (! liupai[myinfo[6]])
+                {
+                        write(error_result("流派不存在。"));
+                        input_to("get_char", ob); 
+                        return; 
+                }
+
+                myinfo[3] = liupai[myinfo[6]]["天赋"];
+                myinfo[4] = liupai[myinfo[6]]["属性"];
+                myinfo[5] = liupai[myinfo[6]]["性格"];  
+        }
+ 
+        if( !check_legal_name(myinfo[1],8) ) { 
+                //昵称不符合要求 
+                input_to("get_char", ob); 
+                return; 
+        }
+
+
+ 
+        ob->set("purename", myinfo[1]);//名（一个名字由姓和名组成，purename是名）
+
+        //如果有姓氏，则设定姓氏
+        if (mapp(born[myinfo[2]]))
+        {
+                if (!undefinedp(born[myinfo[2]]["surname"]))
+                {        //加入氏族性
+                        myinfo[1] = born[myinfo[2]]["surname"] + myinfo[1];
+                        ob->set("surname",born[myinfo[2]]["surname"]);
+                }
+        }
+
+
+        //设定属性
+        //拆分字符串
+        myattr = explode(myinfo[4],",");
+
+        if (sizeof(myattr) != 4)
+        {
+                write(error_result("属性格式错误。"));
+                input_to("get_char", ob); 
+                return; 
+        }
+
+        //检查属性是否合法
+        foreach(string attr in myattr)
+        {
+                if (to_int(attr) < 10 || to_int(attr) > 30)
+                {
+                        write(error_result("属性值不合法。"));
+                        input_to("get_char", ob); 
+                        return; 
+                }
+        }
+
+        //属性总和不能超过80
+        if (to_int(myattr[0]) + to_int(myattr[1]) + to_int(myattr[2]) + to_int(myattr[3]) != 80)
+        {
+                write(error_result("属性总和必须为80。"));
+                input_to("get_char", ob); 
+                return; 
+        }
+
+
+        if (stringp(result = NAME_D->invalid_new_name(myinfo[1]))) 
+        { 
+                write(error_result(result));
+                input_to("get_char", ob); 
+                return; 
+        }
+
+        ob->set("name", myinfo[1]);//设定姓名
+
+        if( !objectp(user = make_body(ob)) ) 
+        {
+                //生成角色异常
+                write(error_result("生成角色异常，无法重试，请直接联系客服处理。"));
+                return; 
+        }
+
+
+                //设定世家信息，born_family和born
+        //是否是mapping,用于设置出生地点
+        if (mapp(born[myinfo[2]]))
+        {
+                user->set("born_family",myinfo[2]);
+                user->set("born",born[myinfo[2]]["born"]);
+                user->set("startroom",born[myinfo[2]]["startroom"]);
+                
+        }
+        else
+        {
+                user->set("born_family",myinfo[2]);
+                user->set("born",myinfo[2]);
+                user->set("startroom",born[myinfo[2]]);
+        }
+
+
+        // 是否是萌新流派（沧海九剑流，极道降龙流）
+        if (myinfo[6] == "沧海九剑流")
+        {
+                user->set("newbie_guide/family","华山派");
+        }
+        else if (myinfo[6] == "极道降龙流")
+        {
+                user->set("newbie_guide/family","丐帮");
+        }
+
+
+
+        //设定天赋
+        user->set("special_skill/"+myinfo[3],1);
+
+        //设定属性
+        user->set("str",to_int(myattr[0]));
+        user->set("int",to_int(myattr[1]));
+        user->set("con",to_int(myattr[2]));
+        user->set("dex",to_int(myattr[3]));
+
+        //设定性格
+        user->set("character",myinfo[5]);
+
+        user->set("kar", 10); 
+        user->set("per", 10); 
+
+        //设定性别
+
+        if (myinfo[0] == "男" || myinfo[0] == "女")
+        {
+                if (myinfo[0] == "男")
+                        myinfo[0] = "男性";
+                else if (myinfo[0] == "女")
+                        myinfo[0] = "女性";
+
+        }
+
+        user->set("gender", myinfo[0]); 
+        user->set("registered",1);
+        init_new_player(user); 
+        VIP_D->restore_vdata(user); 
+        //200，登录成功
+        write(login_result(200,"登录成功"));
+        // call_out("enter_world",1,ob, user); 
+        enter_world(ob, user);
+} 
+ 
+object make_body(object ob) 
+{ 
+        object user; 
+         
+ 
+        seteuid(getuid()); 
+        user = new(USER_OB); 
+        if (! user) 
+        { 
+                write("现在可能有人正在修改使用者物件的程式，无法进行复制。\n"); 
+                return 0; 
+        } 
+        seteuid(ob->query("id")); 
+        export_uid(user); 
+        export_uid(ob); 
+        seteuid(getuid()); 
+        user->set("id", ob->query("id")); 
+        user->set("surname", ob->query("surname")); 
+        user->set("purename", ob->query("purename")); 
+        user->set_name( 0, ({ ob->query("id")}) ); 
+        return user; 
+} 
+ 
+private void init_new_player(object user) 
+{ 
+        // 初始化必要属性 
+        user->set("title", "普通百姓"); 
+        user->set("birthday", time() ); 
+        user->set("potential", 99); 
+        user->set("food", (user->query("str") + 10) * 10); 
+        user->set("water", (user->query("str") + 10) * 10); 
+        user->set("channels", ({ "chat", "rumor", "party", 
+                                 "bill", "sos", "family", 
+                                 "ic", "rultra" })); 
+
+        // 潜能池设定
+        // 根据建号日籍 距离开服日期 为几周 得到了基数数据 *42万
+        {
+                int x = (time() - SHENGXIAN_D->query_start_time()) / 604800;
+                int y = 1300000;
+                user->set("potential_pool", x * y);
+                tell_object(user, "你的潜能池为：" + x * y + "点。\n");
+        }
+ 
+        // 记录名字 
+        NAME_D->map_name(user->query("name"), user->query("id")); 
+ 
+        // 设置必要的环境参数 
+        user->set("env/wimpy", 20); 
+}
+ 
+varargs void enter_world(object ob, object user, int silent) 
+{ 
+        object  login_ob; 
+        string startroom; 
+        string ipname; 
+ 
+        if(! is_root(previous_object())) 
+                return; 
+ 
+        user->set_temp("link_ob", ob); 
+        ob->set_temp("body_ob", user); 
+        if(ob->query_temp("web_log")) 
+        { 
+                user->set_temp("web_log",1); 
+                if(ob->query_temp("last_ip")) 
+                        user->set("last_ip",ob->query_temp("last_ip")); 
+        } 
+        else 
+        { 
+                user->delete_temp("web_log"); 
+                user->set("last_ip",query_ip_name(ob)); 
+        } 
+ 
+        log_file("loginip",ctime(time())+":"+user->query("id")+"从"+user->query("last_ip")+"进入游戏。\n"); 
+        ob->set("registered", user->query("registered")); 
+ 
+        if (interactive(ob)) exec(user, ob); 
+ 
+        user->setup();
+        if (user->query("age") == 14) 
+        { 
+                user->set("food", user->max_food_capacity()); 
+                user->set("water", user->max_water_capacity()); 
+        } 
+ 
+        user->save(); 
+        user->set("last_save", time()); 
+
+        user->force_me("friend_order requests");
+        ob->save(); 
+ 
+        // check the user 
+        UPDATE_D->check_user(user); 
+        TOP_D->map_user(user); 
+
+        // 我没有天赋格子
+	if (!user->query("special_skill_place"))
+	{
+                int talnet_number;
+
+                talnet_number = sizeof(keys(user->query("special_skill")));
+
+                // 超过1个天赋，重置天赋
+                if (talnet_number > 1)
+                {
+                        // 走重置天赋流程
+                        ask_bufa(user);
+                }
+                else if (talnet_number == 1)
+                {
+                        // 如果只有一个天赋，更新天赋格子
+                        "/adm/special_ob/tianfu/npc/qiling"->update_special_place(user);
+                }
+
+	}
+ 
+        // 如果不是静默登录,则显示欢迎信息和处理玩家进入位置
+        if (! silent) 
+        { 
+                // 根据玩家是否注册显示不同的欢迎信息
+                if (! user->query("registered")) 
+                        color_cat(UNREG_MOTD); // 显示未注册玩家的欢迎信息
+                else 
+                        color_cat(MOTD); // 显示已注册玩家的欢迎信息
+ 
+                // write("你连线进入了" + LOCAL_MUD_NAME() + "。\n\n"); 
+ 
+                // 确定玩家的起始位置
+                if (user->is_in_prison()) 
+                        startroom = user->query_prison(); // 如果在监狱中
+                else 
+                if (user->is_ghost()) 
+                        startroom = DEATH_ROOM; // 如果是鬼魂状态
+                else 
+                if (! stringp(startroom = user->query("startroom")) || 
+                    file_size(startroom + ".lpc") < 0) 
+                        startroom = START_ROOM; // 如果没有有效的起始房间则使用默认起始房间
+ 
+                // 特殊道具处理:如果玩家携带储物袋2则移动到特定位置
+                if (present("chuwu dai 2", user)) 
+                { 
+                        user->set("startroom", "/d/death/block"); 
+                        startroom = "/d/death/block"; 
+                } 
+ 
+                // 尝试将玩家移动到起始房间
+                if (! catch(load_object(startroom))) 
+                        user->move(startroom); 
+                else 
+                { 
+                        // 如果移动失败则移动到默认起始房间
+                        user->move(START_ROOM); 
+                        startroom = START_ROOM; 
+                        user->set("startroom", START_ROOM); 
+                } 
+                
+                // 向房间内其他玩家广播进入消息
+                tell_room(startroom, user->query("name") + "连线进入这个世界。\n", ({user})); 
+        } 
+ 
+        login_ob = new(LOGIN_OB); 
+        login_ob->set("id", user->query("id")); 
+        login_ob->restore(); 
+        if (login_ob->query("registered")) 
+        { 
+                if (! intp(login_ob->query("login_times"))) 
+                { 
+                        write(NOR "\n你是第一次光临" + LOCAL_MUD_NAME() + "。\n"); 
+                        login_ob->set("login_times", 1); 
+                } else 
+                { 
+                        login_ob->add("login_times", 1); 
+                        // write("\n你上次光临" + LOCAL_MUD_NAME() + "是 " + HIG + ctime(login_ob->query("last_on")) + NOR + " 从 " + HIR + 
+                                // login_ob->query("last_from") + NOR + " 连接的。\n"); 
+                } 
+        } 
+ 
+        destruct(login_ob); 
+ 
+        CHANNEL_D->do_channel(this_object(), "sys",sprintf("%s(%s)由%s连线进入。",user->name(), user->query("id"), 
+                                        (ipname = query_ip_number(user)) ? ipname : "未知地点")); 
+ 
+        if (wizhood(user) != "(admin)" && EXAMINE_D->query("log_by/" + user->query("id"))) 
+                user->start_log(); 
+ 
+        if ((user->query("qi") < 0 || user->query("jing") < 0) && living(user)) 
+                user->unconcious(); 
+
+        user->set_temp("no_equip_ui", 1);
+        user->force_me("wear auto");//自动穿戴防具
+        user->force_me("wield auto");//自动装备武器
+        user->delete_temp("no_equip_ui");
+
+        // // 检查是否是疯狂星期三
+        // if (CRAZY_WEDNESDAY_D->is_thursday())
+        // {
+        //     mapping items = CRAZY_WEDNESDAY_D->get_discount_items();
+        //     if (sizeof(items))
+        //     {
+        //         string msg = HIG "今日是疯狂星期三，以下商品享受八折优惠：\n" NOR;
+        //         foreach (string file, mapping info in items)
+        //         {
+        //             msg += sprintf("  %s  原价：%d元宝  特惠价：%d元宝\n", 
+        //                 info["name"],
+        //                 info["original_price"],
+        //                 info["discount_price"]);
+        //         }
+        //         tell_object(user, msg);
+        //     }
+        // }
+
+        // 延迟1秒调用五绝登录通报函数
+        call_out((: announce_wujue_login :), 1, user);
+
+        // 延迟2秒检查并弹出更新公告
+        call_out((: check_and_show_update :), 2, user);
+} 
+ 
+// 重新连线函数
+// ob: 连线对象
+// user: 玩家对象 
+// silent: 是否静默重连(不发送系统消息)
+varargs void reconnect(object ob, object user, int silent) 
+{ 
+        // 设置临时连线对象
+        user->set_temp("link_ob", ob);
+
+        // 检查是否是web登录
+        if (ob->query_temp("web_log")) 
+                user->set_temp("web_log", 1); 
+        else 
+                user->delete_temp("web_log"); 
+
+        // 设置临时玩家对象
+        ob->set_temp("body_ob", user); 
+
+        // 执行重连
+        exec(user, ob); 
+        user->reconnect(); 
+        user->force_me("hp1 hp");
+        // 如果不是静默重连且不是隐身的巫师,发送重连消息
+        if (!silent && (!wizardp(user) || !user->query("env/invisible"))) {
+                tell_room(environment(user), 
+                        user->query("name") + "重新连线回到这个世界。\n",
+                        ({user})); 
+        }
+
+        // 系统频道通知重连信息
+        CHANNEL_D->do_channel(this_object(), "sys",
+                sprintf("%s[%s]由%s重新连线进入。", 
+                        user->query("name"),
+                        user->query("id"), 
+                        query_ip_number(user)));
+
+        // 执行重连后命令
+        user->force_me("look"); 
+        user->force_me("friend_order requests");
+
+        // 调用五绝登录通报函数
+        call_out((: announce_wujue_login :), 1, user);
+
+        // 延迟2秒检查并弹出更新公告
+        call_out((: check_and_show_update :), 2, user);
+}
+ 
+int check_legal_id(string id)
+{
+	int i;
+
+	id = lower_case(id);
+
+	i = strlen(id);
+
+	if( (i<4||i>20) && (string)SECURITY_D->get_status(id) == "(player)" ) {
+                write(error_result("对不起，你的ID长度不符合要求(4-20)。"));
+		return 0;
+	}
+
+	if( id[0]<'a' || id[0]>'z' ) {
+                write(error_result("对不起，你的ID必须用英文字母开头。"));
+		return 0;
+	}
+
+	while(i--)
+	{
+		if( !((id[i]>='a' && id[i]<='z')||id[i]=='_'||(id[i]>='0' && id[i]<='9')) ) {
+                        write(error_result("对不起，你的ID只能用英文字母或包含数字及'_'的组合。"));
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+int check_legal_name(string name, int maxlen)
+{
+	if (! stringp(name) || ! pcre_match(name, "^\\p{Han}{2,4}$"))
+	{
+		write("对不起，你的中文姓名必须是2到4个汉字。\n");
+		return 0;
+	}
+
+	return 1;
+}
+
+ 
+object find_body(string name) 
+{ 
+        object ob, *body; 
+ 
+        if( objectp(ob = find_player(name)) ) 
+                return ob; 
+        body = children(USER_OB); 
+        foreach(ob in body) if (getuid(ob) == name) return ob; 
+        return 0; 
+} 
+ 
+int set_wizlock(int level) 
+{ 
+        if (wiz_level(this_player(1)) <= level) 
+                return 0; 
+ 
+        if (geteuid(previous_object()) != ROOT_UID) 
+                return 0; 
+ 
+        wiz_lock_level = level; 
+        return 1; 
+} 
+ 
+int can_login(int level) 
+{ 
+        if (level < wiz_lock_level) 
+                return 0; 
+ 
+        return 1; 
+} 
+ 
+int howmuch_money(object ob) 
+{ 
+        int total; 
+        int total2; 
+        object gold, silver, coin; 
+ 
+        total = 0; 
+        total2 = 0; 
+ 
+        gold = present("gold_money",ob); 
+        silver = present("silver_money",ob); 
+        coin = present("coin_money",ob); 
+ 
+        if( gold ) total += gold->value(); 
+        if( silver ) total += silver->value(); 
+        if( coin ) total += coin->value(); 
+ 
+        total2 = (int)ob->query("balance"); 
+        if (!total2 || total2 < 0) { 
+                ob->set("balance", 0); 
+        } 
+        total=total+total2; 
+        return total; 
+} 
+ 
+string ask_bufa(object me)
+{
+	object obj;
+	int number;
+	// mixed tianfu;
+
+	if (me->query("tianfu/number") >= 1)
+	{
+		return "你已经领取过补偿了。\n";
+	}
+
+	number = sizeof(keys(me->query("special_skill")));
+
+	if (number == 3)
+	{
+		obj = new_bind("/clone/vip/book_tianfu.lpc");
+		obj->set_amount(60);
+		me->add("bind_yuanbao", 600);
+		me->add("tianfu/number", 1);
+		me->delete("special_skill");
+		me->delete("is_choose_tianfu");
+		me->set("special_skill", ([
+			"tblade" : 1,
+		]));
+
+		tell_object(me, "你获得了60个天赋技能书，600绑定元宝。\n");
+		obj->move(me);
+	}
+	else if (number == 2)
+	{
+		obj = new_bind("/clone/vip/book_tianfu.lpc");
+		obj->set_amount(30);
+		me->add("bind_yuanbao", 300);
+		me->add("tianfu/number", 1);
+		me->delete("special_skill");
+		me->delete("is_choose_tianfu");
+		me->set("special_skill", ([
+			"tblade" : 1,
+		]));
+		tell_object(me, "你获得了30个天赋技能书，300绑定元宝。\n");
+		obj->move(me);
+	}
+	else if (number == 1)
+	{
+		obj = new_bind("/clone/vip/book_tianfu.lpc");
+		obj->set_amount(10);
+		me->add("bind_yuanbao", 100);
+		me->add("tianfu/number", 1);
+		me->delete("special_skill");
+		me->delete("is_choose_tianfu");
+		me->set("special_skill", ([
+			"tblade" : 1,
+		]));
+		tell_object(me, "你获得了10个天赋技能书，100绑定元宝。\n");
+		obj->move(me);
+	}
+	else
+	{
+		return "你没有天赋技能。\n";
+	}
+
+	me->set("special_skill_place/1", "tblade");
+
+	return "补偿完成。\n";
+
+	
+
+}
+
+// 检查玩家是否为五绝，并向全服通报
+private void announce_wujue_login(object user)
+{
+        // 检查是否是五绝，如果是则全服通报
+        string *wujue = ({"中神通", "东邪", "西毒", "南帝", "北丐"});
+
+        //检查是否是特殊称号
+        string *special_title = ({"醉轻王侯","龙吟破浪"});
+        string wujue_title = "";
+
+        if (!user || !objectp(user))
+        {
+                return;
+        }
+
+        
+        foreach (string title in wujue)
+        {
+                if (FAMILY_D->query_lunjian_leader(title) == user->query("id"))
+                {
+                        wujue_title = title;
+                        break;
+                }
+        }
+
+
+        
+
+        if (wujue_title == "" && user->query("chenghao"))
+        {
+                
+                if (member_array(user->query("chenghao"),special_title)== -1)
+                {
+                        return;
+                }
+
+                wujue_title = user->query("chenghao");
+        }
+
+
+
+        if (wujue_title != "")
+        {
+                string msg;
+                mapping wujue_msg = ([
+                        "中神通": "一代宗师，独步天下，盖世神通",
+                        "东邪": "怪异精绝，傲视群雄，智冠群侠",
+                        "西毒": "阴狠毒辣，诡计多端，举世皆惧",
+                        "南帝": "慈悲为怀，渊深似海，德行天下",
+                        "北丐": "豪迈洒脱，行侠仗义，威震八方",
+                        "醉轻王侯": "黄金白璧，一醉累月，醉卧沙场",
+                        "龙吟破浪": "龙舟竞渡，破浪称雄，威名远扬"
+                ]);
+                
+                msg = sprintf(HIM "【武林传言】：%s的%s-%s 驾临江湖，群雄避让三分！" NOR,
+                              HIC + wujue_msg[wujue_title] + NOR, HBRED + HIC + user->name() + NOR,
+                              HIR + wujue_title + NOR);
+                              
+                message("channel:rumor", msg + "\n", users());
+        }
+}
+
+/**
+ * @brief Check and show update announcement to player
+ * @param object user Player object
+ * @details Show latest unread announcement on login
+ */
+private void check_and_show_update(object user)
+{
+        string latest_id, msg, *buttons;
+        mapping update_info;
+
+        if (!user || !objectp(user))
+                return;
+
+        // Get latest announcement ID
+        latest_id = HISTORY_D->query_latest_update();
+        if (!latest_id)
+                return;
+
+        // Check if already read
+        if (HISTORY_D->is_read(user, latest_id))
+                return;
+
+        // Get announcement content
+        update_info = HISTORY_D->query_update(latest_id);
+        if (!mapp(update_info))
+                return;
+
+        // Build popup message
+        msg = sprintf(HIC"【更新公告】%s"NOR"\n\n", update_info["title"]);
+        msg += sprintf(HIY"版本：%s"NOR"\n", update_info["version"]);
+        msg += sprintf("发布时间：%s\n\n", ctime(update_info["time"]));
+        msg += update_info["content"];
+
+        // Build buttons
+        buttons = ({
+                sprintf("已阅:updates read %s", latest_id),
+                "查看更多:updates"
+        });
+
+        tell_object(user, popup_comb(msg, buttons));
+}

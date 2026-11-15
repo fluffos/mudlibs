@@ -1,0 +1,253 @@
+/**
+ * @brief 命令处理模块
+ * @file command.c
+ * @author Lu dexiang
+ * @date 未知
+ * @details 该模块负责处理游戏中的命令执行系统，包括命令查找、执行和权限控制
+ */
+#pragma optimize
+
+#include <command.h>
+#include <dbase.h>
+#include <origin.h>
+
+/** @brief 命令搜索路径 */
+nosave string *path;
+
+/**
+ * @brief 查找命令文件
+ * @param string verb 命令动词
+ * @return string 命令文件路径，如果未找到则返回0
+ * @details 通过命令守护进程查找指定命令的文件路径
+ */
+string find_command(string verb)
+{
+	// 后缀名不是.c或者.alias的命令
+    return (string)COMMAND_D->find_command(verb, path);
+}
+
+/**
+ * @brief 移除字符串前导空格
+ * @param string arg 输入字符串
+ * @return string 移除前导空格后的字符串
+ * @details 去除字符串开头的所有空格字符
+ */
+string remove_leading_space(string arg)
+{
+    int i;
+
+    for (i = 0; i < strlen(arg); i++)
+    {
+        if (arg[i..i] != " ")
+            return arg[i..strlen(arg)];
+    }
+    return "";
+}
+
+/**
+ * @brief 命令钩子函数
+ * @param string arg 命令参数
+ * @return int 命令是否成功执行，1为成功，0为失败
+ * @details 处理玩家输入的命令，包括：
+ *          1. 处理自动说话
+ *          2. 处理方向移动
+ *          3. 执行标准命令
+ *          4. 处理表情和频道命令
+ *          5. 处理监狱限制
+ */
+nomask int command_hook(string arg)
+{
+    string verb, file;
+    object me;
+    mapping para;
+
+#ifdef PROFILE_COMMANDS
+    int mem, utime, stime;
+    mapping info;
+
+    mem = memory_info();
+    info = rusage();
+    utime = info["utime"];
+    stime = info["stime"];
+#endif
+
+    me = this_object();
+    verb = query_verb();
+    verb = remove_leading_space(verb);
+    if (verb == "")
+        return 0;
+
+    para = me->query_entire_dbase()["env"];
+    if (mapp(para) && para["pure_say"] && !me->is_direct_command())
+    {
+        // 不是做动作，而是说话
+        if (stringp(file = find_command("say")) &&
+            call_other(file, "main", me, me->query_orginal_input()))
+        {
+            // 执行完毕说话的动作
+            return 1;
+        }
+        return 0; // 无法说话
+    }
+
+    if (!arg && environment() && stringp(environment()->query("exits/" + verb)) &&
+        stringp(file = find_command("go")) &&
+        call_other(file, "main", me, verb))
+    {
+        return 1; // 成功执行"go"命令
+    }
+    
+    if (stringp(file = find_command(verb)) && call_other(file, "main", me, arg))
+    {
+        return 1; // 成功执行其他命令
+    }
+
+    if (me->is_in_prison())
+    {
+        return notify_fail("狱卒喝道：你老老实实的呆着别动！" +
+            appromix_time(me->query_time_to_leave(), 1) +
+            "放你出去！\n");
+    }
+
+    if (EMOTE_D->do_emote(me, verb, arg) ||
+        CHANNEL_D->do_channel(me, verb, arg))
+    {
+        return 1; // 成功执行表情或频道命令
+    }
+
+    if (mapp(para) && para["auto_say"] &&
+        query_fail_msg() == "什么？\n" &&
+        stringp(file = find_command("say")) &&
+        !me->is_direct_command() &&
+        call_other(file, "main", me, me->query_orginal_input()))
+    {
+        return 1; // 自动说话
+    }
+
+    return 0; // 未能执行任何命令
+
+#ifdef PROFILE_COMMANDS
+    info = rusage();
+    PROFILE_D->log_command(verb, memory_info() - mem, info["stime"] - stime,
+        info["utime"] - utime);
+#endif
+
+    return 1;
+}
+
+/**
+ * @brief 设置命令搜索路径
+ * @param string *p 路径数组
+ * @return void
+ * @details 设置对象的命令搜索路径
+ */
+nomask void set_path(string *p)
+{
+    path = p;
+}
+
+/**
+ * @brief 查询命令搜索路径
+ * @return string* 当前的命令搜索路径数组
+ */
+string *query_path() { return path; }
+
+/**
+ * @brief 查询可用命令
+ * @return mixed* 当前对象可用的命令列表
+ */
+mixed *query_commands() { return commands(); }
+
+/**
+ * @brief 强制执行命令
+ * @param string cmd 要执行的命令
+ * @return int 命令是否成功执行
+ * @details 强制对象执行指定的命令，通常用于NPC或系统控制
+ */
+int force_me(string cmd)
+{
+    int ret;
+    ret = command(this_object()->process_input(cmd));
+    if (objectp(this_object()) && !in_input())
+        this_object()->write_prompt();
+    return ret;
+}
+
+/** @brief 命令系统是否已启用 */
+nosave int enabled = 0;
+
+/**
+ * @brief 启用玩家命令系统
+ * @return void
+ * @details 根据玩家的权限级别设置不同的命令路径，并启用命令系统
+ *          不同身份（管理员、巫师、玩家等）有不同的命令路径和权限
+ */
+nomask void enable_player()
+{
+    object me = this_object();
+    string *my_path;
+
+    // 使用映射存储不同身份对应的路径和权限
+    mapping path_table = ([
+        "(admin)"     : ([ "path": ADM_PATH, "wizard": 1 ]),
+        "(arch)"      : ([ "path": ARC_PATH, "wizard": 1 ]),
+        "(wizard)"    : ([ "path": WIZ_PATH, "wizard": 1 ]),
+        "(apprentice)": ([ "path": APR_PATH, "wizard": 1 ]),
+        "(immortal)"  : ([ "path": IMM_PATH, "wizard": 1 ]),
+    ]);
+
+    set_living_name(stringp(query("id")) ? query("id") : query("name"));
+
+    if (!enabled)
+    {
+        enable_commands();
+        enabled = 1;
+        add_action("command_hook", "", 1);
+    }
+
+
+
+    if (!playerp(me) && !interactive(me) && !me->is_chatter())
+    {
+        my_path = NPC_PATH;
+    }
+    else
+    {
+        string wiz_level = wizhood(me);
+        mapping info = path_table[wiz_level];
+        
+        if (info)
+        {
+            my_path = info["path"];
+            if (info["wizard"])
+                enable_wizard();
+        }
+        else
+            my_path = me->is_in_prison() ? PNE_PATH : PLR_PATH;
+    }
+
+    if (me->is_chatter())
+        my_path -= ({ "/cmds/skill/", "/cmds/usr/" });
+
+    set_path(my_path);
+}
+
+/**
+ * @brief 禁用玩家命令系统
+ * @param string type 禁用类型
+ * @return void
+ * @details 禁止玩家执行命令，通常用于特殊状态（如昏迷、死亡等）
+ *          只有根对象或对象自身可以调用此函数
+ */
+nomask void disable_player(string type)
+{
+    if (!is_root(previous_object()) && previous_object() != this_object())
+        return;
+
+    set("disable_type", type);
+    if (enabled)
+    {
+        disable_commands();
+        enabled = 0;
+    }
+}
