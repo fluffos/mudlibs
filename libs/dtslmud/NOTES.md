@@ -739,3 +739,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，port 40015。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。
+
+## 暗器 embed.h 补全（2026-11-16）
+
+- `clone/weapon/*` 的暗器（冰魄银针、丧门钉等）`#include "/inherit/item/embed.h"`，而存档没有这个文件，整族暗器无法载入（`Cannot #include /inherit/item/embed.h`）。从同系列 bxsj 采入 `inherit/item/embed.h`（与 6 个兄弟库字节相同），`bb_zhen` 载入 PASS。

@@ -570,3 +570,7 @@ pristine + build-debug，port 40197（补 `log/mud` 后）。`scripts/play_login
 
 - 修复 `adm/daemons/brd.lpc`（`buildroom()`）：归档缺少 `/obj/{USER_ROOM,RESTROOM,WEAPONROOM,EATROOM,FIGHTROOM,JOBROOM,JOBTWOROOM}.o` 模板，原逻辑先改写当前房间出口后再读模板并直接 `replace_string(my_file, ...)`，导致 `*Bad argument 1 to replace_string()` 并残留死出口；调整为先读模板校验 `stringp(my_file)` 并校验 `stringp(this_file)` 后再写回。
 - 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to replace_string`）→ 修后（`ZZ_BRD_R7=0`、`ZZ_BRD_R1=0` `PASS`），并通过 `play_boot.sh` + `play_stop.sh`（port 45606）实机启动验证。
+
+## 暗器 embed.h 补全（2026-11-16）
+
+- `clone/weapon/*` 的暗器（冰魄银针、丧门钉等）`#include "/inherit/item/embed.h"`，而存档没有这个文件，整族暗器无法载入（`Cannot #include /inherit/item/embed.h`）。从同系列 bxsj 采入 `inherit/item/embed.h`（与 6 个兄弟库字节相同），`bb_zhen` 载入 PASS。

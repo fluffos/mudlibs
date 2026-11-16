@@ -964,3 +964,11 @@ pristine + build-debug，port 40043。`scripts/play_login.py` 注册并执行 `l
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 暗器 embed.h 补全（2026-11-16）
+
+- `clone/weapon/*` 的暗器（冰魄银针、丧门钉等）`#include "/inherit/item/embed.h"`，而存档没有这个文件，整族暗器无法载入（`Cannot #include /inherit/item/embed.h`）。从同系列 bxsj 采入 `inherit/item/embed.h`（与 6 个兄弟库字节相同），`bb_zhen` 载入 PASS。
+
+## 丧门钉重复继承（2026-11-16）
+
+- `clone/weapon/sm_ding.lpc` 在 `inherit THROWING;` 之后又 `inherit COMBINED_ITEM;`，而 `std/weapon/throwing.lpc` 已继承 COMBINED_ITEM，导致 7 个 `Illegal to redefine nomask function` 错误。删去多余一行，`sm_ding` 载入 PASS。

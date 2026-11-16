@@ -1451,3 +1451,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, AFD living shards mortremains):** thin alias `/std/living/{experience,magic,kill_reward}` → `/adm/AFD/living/…`. Proof: 3 aliases HEAD FAIL → PASS.
 
 **Also (2026-11-09, stey/guai xlqyzdb):** adopt `kill1/guai` → `d/wizz/stey/guai` (same-lib `__DIR__`). Proof: HEAD 1/3 → 3 PASS.
+
+### 6.31 A throwing weapon that includes `/inherit/item/embed.h` the lib never shipped, and `inherit THROWING` + `inherit COMBINED_ITEM` (dtsl/dtsl2/dtslmud/fqyy2/xkxc98sj/xkxz2, 2026-11-16)
+Symptom: `Cannot #include /inherit/item/embed.h` for every `clone/weapon` needle/dart; in dtsl2 `sm_ding` also 7× `Illegal to redefine 'nomask' function` (the base `THROWING` already inherits `COMBINED_ITEM`, the second inherit is a diamond). Fix: copy `inherit/item/embed.h` from a sibling (bxsj; 6 byte-identical copies); drop the redundant `inherit COMBINED_ITEM;`. Detect: loop libs where `git grep 'inherit/item/embed.h'` hits and the file is missing; `lpcc_eval.py SLUG --code 'load_object("/clone/weapon/bb_zhen")'`.

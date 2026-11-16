@@ -579,3 +579,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40126。`scripts/play_login.py` 注册进入游戏世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 暗器 embed.h 补全（2026-11-16）
+
+- `clone/weapon/*` 的暗器（冰魄银针、丧门钉等）`#include "/inherit/item/embed.h"`，而存档没有这个文件，整族暗器无法载入（`Cannot #include /inherit/item/embed.h`）。从同系列 bxsj 采入 `inherit/item/embed.h`（与 6 个兄弟库字节相同），`bb_zhen` 载入 PASS。
