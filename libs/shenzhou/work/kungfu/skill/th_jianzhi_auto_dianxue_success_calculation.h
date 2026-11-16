@@ -1,1 +1,1 @@
-void Auto_Dianxue_Success_Or_Not(object me, string s_Attack_Type);
+int Auto_Dianxue_Success_Or_Not(object me, string s_Attack_Type);

@@ -734,3 +734,7 @@ pristine + build-debug，归档端口 40184。`scripts/play_login.py` 注册并�
 
 - `adm/simul_efun/message.lpc` 中的 `read_file()` 仅声明单参数 `string read_file(string file)` 并转调 `efun::read_file(file)`，丢弃 `start_line` 与 `number_of_lines`（`--head` 下 `(file, 2, 1)` 与 `(file, 999999, 1)` 均返回全篇 1155 字节）；已改为 `varargs string read_file(string file, int start_line, int number_of_lines)` 并透传三参至 `efun::read_file(file, start_line, number_of_lines)`。
 - 验证：`lpcc_eval.py` 通过 1/2/3 参测试（`a_len=1155 a2_len=1136 b_len=23 c_is0=1 more=1 lang1=1 lang2=1`），`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 49301）启动验证通过。
+
+## Auto_Dianxue_Success_Or_Not 原型返回类型（2026-11-16）
+
+- `kungfu/skill/th_jianzhi_auto_dianxue_success_calculation.h` 与 `yuxiao-jian/jianzhi.lpc` 的原型写成 `void`，而定义和调用方（`n_Dianxue_Success_Or_Not = Auto_Dianxue_Success_Or_Not(...)`）都是 `int`，编译告警 `Previous function prototype ... does not match current function in return type ( void vs int )`。原型改为 `int`，`lpc_warnings.py` 重扫该告警消失。

@@ -1537,3 +1537,7 @@ pristine + build-debug，归档端口 40066。`scripts/play_login.py` 注册并�
 
 - `adm/simul_efun/message.lpc` 中的 `read_file(string file, int lines, int line)` 虽已透传三参，但缺少 `varargs` 修饰符；已统一补齐 `varargs` 声明，与全语料 `varargs string read_file(string, int, int)` 接口对齐。
 - 验证：`lpcc_eval.py` 通过 1/2/3 参测试（`a_len=1907 a2_len=1888 b_len=25 c_is0=1 more=1 lang1=1 lang2=1`），`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 49307）启动验证通过。
+
+## Auto_Dianxue_Success_Or_Not 原型返回类型（2026-11-16）
+
+- `kungfu/skill/th_jianzhi_auto_dianxue_success_calculation.h` 与 `yuxiao-jian/jianzhi.lpc` 的原型写成 `void`，而定义和调用方（`n_Dianxue_Success_Or_Not = Auto_Dianxue_Success_Or_Not(...)`）都是 `int`，编译告警 `Previous function prototype ... does not match current function in return type ( void vs int )`。原型改为 `int`，`lpc_warnings.py` 重扫该告警消失。
