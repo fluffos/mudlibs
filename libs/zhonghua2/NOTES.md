@@ -1243,3 +1243,8 @@ pristine + build-debug，归档端口 40028。`scripts/play_login.py` 注册进�
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## 整文件重复粘贴修复（2026-11-18，KB 04 §6.32）
+
+- `adm/daemons/gift/baoming.lpc`（144 行→69 行）与 `adm/daemons/gift/cash.lpc`（39 行→19 行）整份源码被首尾重复粘贴了两次，导致 `inherit`（`medicine.h` 中的 `COMBINED_ITEM` 与 `MONEY`）在同文件二次生效，触发 `Redeclaration of global variable` 告警及 `Illegal to redefine 'nomask' function '_query'` 等编译错误而无法载入。
+- 核实前后两半除去空白完全一致后删去重复后半份（保留原 CRLF 行尾）。验证：`lpcc_eval.py` `--head` 两者均 `FAIL` → 修后 `/adm/daemons/gift/baoming`（`天王保命丹`）与 `/adm/daemons/gift/cash`（`一千两银票`）均 `PASS`。

@@ -914,3 +914,7 @@ pristine + build-debug，port 40032。`scripts/play_login.py` 注册并执行 `l
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## 整文件重复粘贴清理（2026-11-18，KB 04 §6.32）
+
+- `include/net/config.h`（280 行→140 行）整份头文件被重复粘贴了两次（原文件虽被 `#ifndef __NET__CONFIG_H` 包裹而未报错，但后 140 行为完全相同的冗余副本）。核实前后两半完全一致后删去后半份（保留原 CRLF 行尾）。验证：`lpcc_eval.py` `load_object("/adm/daemons/network/dns_master")` `PASS`。
