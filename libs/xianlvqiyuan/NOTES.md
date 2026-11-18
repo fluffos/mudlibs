@@ -917,4 +917,4 @@ pristine + build-debug，port 40032。`scripts/play_login.py` 注册并执行 `l
 
 ## 整文件重复粘贴清理（2026-11-18，KB 04 §6.32）
 
-- `include/net/config.h`（280 行→140 行）整份头文件被重复粘贴了两次（原文件虽被 `#ifndef __NET__CONFIG_H` 包裹而未报错，但后 140 行为完全相同的冗余副本）。核实前后两半完全一致后删去后半份（保留原 CRLF 行尾）。验证：`lpcc_eval.py` `load_object("/adm/daemons/network/dns_master")` `PASS`。
+- `include/net/config.h`（280 行→140 行→70 行）整份头文件最初被连续粘贴了四份（第一次截去后 140 行后，第 1–70 行与第 71–140 行仍完全相同）。核实前后两半完全一致后删去第 71–140 行，仅保留唯一一份 70 行（保留原 CRLF 行尾）。验证：`lpcc_eval.py` `load_object("/adm/daemons/network/dns_master")` `PASS`，`scripts/lint.py` `whole-file-duplicate` 零告警。

@@ -151,3 +151,8 @@ pristine + build-debug，归档端口 40393。`scripts/play_login.py` 注册/连
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## `RANK_D` 空对象守卫补齐（2026-11-18，KB 06 §7.273）
+
+- `adm/daemons/rankd.lpc` 的 `query_respect`、`query_rude`、`query_self`、`query_self_rude` 缺少 `!objectp(ob)` 守卫，在无 `this_player()` 上下文（如房间重置期间的 NPC `create()`）传入 `0` 时触发 `*Bad argument 1 to EFUN call_other()`；已通过 `scripts/lpc_fix_rank_null.py --lib yhlib --apply` 在 4 个函数头部补入 `if (!objectp(ob)) ob = this_object();`。
+- 验证：`lpcc_eval.py`（`--head` `query_respect(0)` 报错 FAIL → 工作树 `query_respect(0)`/`query_rude(0)`/`query_self(0)`/`query_self_rude(0)` 均正常返回、`PASS`），`play_boot.sh` + `play_stop.sh`（端口 `40393`）启动与停止正常，`scripts/lint.py` 零告警。

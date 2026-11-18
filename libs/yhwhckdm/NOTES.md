@@ -299,3 +299,7 @@ pristine + build-debug，port 40270。`scripts/play_login.py` 注册并执行 `l
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## 配置文件端口对齐（2026-11-18，AGENTS.md §10.5）
+
+- 将 `config.fluffos` 的 `port number` 从临时测试端口 `40321` 恢复为登记端口 `40270`（与 `meta.json`、`README.md` 及 `scripts/lib_numbering.json` 一致，且经确认全库无端口冲突）。`play_boot.sh` + `play_stop.sh`（端口 `40270`）与 `scripts/lint.py` 零告警。

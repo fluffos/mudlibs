@@ -281,3 +281,7 @@ create 已有；补 mkdir(DATA_DIR + "site")+keep data/site。
 
 pristine + build-debug，port 40269。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`。
 - 驱动 stdout 与 `debug.log` 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 配置文件端口对齐（2026-11-18，AGENTS.md §10.5）
+
+- 将 `config.fluffos` 的 `port number` 从临时测试端口 `40320` 恢复为登记端口 `40269`（与 `meta.json`、`README.md` 及 `scripts/lib_numbering.json` 一致，且经确认全库无端口冲突）。`play_boot.sh` + `play_stop.sh`（端口 `40269`）与 `scripts/lint.py` 零告警。

@@ -41,3 +41,9 @@
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## `enable_player()` 重入守卫与 `RANK_D` 空对象守卫（2026-11-18，KB 05 §7.19 / KB 06 §7.273）
+
+- `feature/command.lpc` 的 `enable_player()` 缺少 `in_enable_player_now` 重入标志，已通过 `scripts/lpc_fix_enable_player_guard.py --lib wxlm --apply` 补入 `nosave private int in_enable_player_now;` 守卫，防止 `init()` → `setup()` → `enable_commands()` 重入递归溢出。
+- `adm/daemons/rankd.lpc` 的 `query_respect`、`query_rude`、`query_self`、`query_self_rude` 缺少 `!objectp(ob)` 守卫，在无 `this_player()` 上下文传入 `0` 时触发 `*Bad argument 1 to EFUN call_other()`；已通过 `scripts/lpc_fix_rank_null.py --lib wxlm --apply` 在 4 个函数头部补入 `if (!objectp(ob)) ob = this_object();`。
+- 验证：`lpcc_eval.py`（`--head` `rankd->query_respect(0)` 报错 FAIL → 工作树 `new("/feature/command")`、`new("/inherit/char/npc")->enable_player()` 与 `rankd->query_{respect,rude,self,self_rude}(0)` 均正常返回、`PASS`），`play_boot.sh` + `play_stop.sh`（端口 `40404`）启动与停止正常，`scripts/lint.py` 零告警。
