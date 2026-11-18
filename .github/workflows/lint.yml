@@ -1,0 +1,62 @@
+# Fast repository hygiene and discovered-issue lint workflow.
+#
+# Uses shallow checkout (the archive history is ~4 GB) and runs:
+#   - scripts/lint.py --changed <base> (every repo/metadata/targeted check plus
+#     all 60 KB/regression rules on modified files) or --fast if no base ref
+#   - python3 -m py_compile scripts/*.py
+
+name: Lint
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check Python scripts syntax
+        run: python3 -m py_compile scripts/*.py
+
+      - name: Determine diff base
+        id: base
+        run: |
+          set -euo pipefail
+          base=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ref="${{ github.event.pull_request.base.ref }}"
+            if git fetch --quiet --depth=1 --filter=blob:none origin "$ref" 2>/dev/null; then
+              base="FETCH_HEAD"
+            fi
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            before="${{ github.event.before }}"
+            if [[ "$before" =~ ^[0-9a-f]{40}$ ]] && [ "$before" != "0000000000000000000000000000000000000000" ]; then
+              if git fetch --quiet --depth=1 --filter=blob:none origin "$before" 2>/dev/null; then
+                base="$before"
+              fi
+            fi
+          fi
+          echo "ref=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Run scripts/lint.py
+        run: |
+          set -euo pipefail
+          if [ -n "${{ steps.base.outputs.ref }}" ]; then
+            python3 scripts/lint.py --changed "${{ steps.base.outputs.ref }}"
+          else
+            python3 scripts/lint.py --fast
+          fi

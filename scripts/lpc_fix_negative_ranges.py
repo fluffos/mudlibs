@@ -26,18 +26,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_src import mask  # noqa: E402
 
-args = sys.argv[1:]
-apply_ = "--apply" in args
-args = [a for a in args if a != "--apply"]
-root = None
-if "--root" in args:
-    i = args.index("--root")
-    root = args[i + 1]
-    del args[i:i + 2]
-    args = [root]
-if not args:
-    sys.exit(__doc__)
-EXTS = (".lpc", ".h", ".c") if root else (".lpc", ".h")
+EXTS = (".lpc", ".h")
 
 
 def hosting(slug):
@@ -47,12 +36,6 @@ def hosting(slug):
     return "submodule" if any(l.startswith("160000") for l in out.split("\n")) else "vendored"
 
 
-if root:
-    slugs = [root]
-elif args == ["--all"]:
-    slugs = sorted(s for s in os.listdir(f"{REPO}/libs") if os.path.isdir(f"{REPO}/libs/{s}/work") and hosting(s) == "vendored")
-else:
-    slugs = args
 NEG = re.compile(r"^-\s*(\d+)$")
 ASSIGN = re.compile(r"\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)")
 
@@ -126,46 +109,70 @@ def process(text):
     return out, edits, skipped
 
 
-total_files = total_edits = total_skipped = 0
-for slug in slugs:
-    if not root and hosting(slug) != "vendored":
-        print(f"{slug}: hosting {hosting(slug)}, not edited in place (patch or PR)")
-        continue
-    work = root if root else f"{REPO}/libs/{slug}/work"
-    lib_edits = lib_skipped = 0
-    shown = 0
-    for dp, dn, fn in os.walk(work):
-        rel = os.path.relpath(dp, work)
-        if rel == "log" or rel.startswith("log" + os.sep) or rel.startswith("raw"):
+def main():
+    args = sys.argv[1:]
+    apply_ = "--apply" in args
+    args = [a for a in args if a != "--apply"]
+    root = None
+    if "--root" in args:
+        i = args.index("--root")
+        root = args[i + 1]
+        del args[i:i + 2]
+        args = [root]
+    if not args:
+        sys.exit(__doc__)
+    exts = (".lpc", ".h", ".c") if root else (".lpc", ".h")
+    if root:
+        slugs = [root]
+    elif args == ["--all"]:
+        slugs = sorted(s for s in os.listdir(f"{REPO}/libs") if os.path.isdir(f"{REPO}/libs/{s}/work") and hosting(s) == "vendored")
+    else:
+        slugs = args
+
+    total_files = total_edits = total_skipped = 0
+    for slug in slugs:
+        if not root and hosting(slug) != "vendored":
+            print(f"{slug}: hosting {hosting(slug)}, not edited in place (patch or PR)")
             continue
-        for f in sorted(fn):
-            if not f.endswith(EXTS):
+        work = root if root else f"{REPO}/libs/{slug}/work"
+        lib_edits = lib_skipped = 0
+        shown = 0
+        for dp, dn, fn in os.walk(work):
+            rel = os.path.relpath(dp, work)
+            if rel == "log" or rel.startswith("log" + os.sep) or rel.startswith("raw"):
                 continue
-            p = os.path.join(dp, f)
-            try:
-                text = open(p, "rb").read().decode("latin-1")
-            except OSError:
-                continue
-            if ".." not in text:
-                continue
-            new, edits, skipped = process(text)
-            for off, why, snip in skipped:
-                ln = text.count("\n", 0, off) + 1
-                print(f"  SKIP {slug}/{os.path.relpath(p, work)}:{ln}: {why}: {snip}")
-                lib_skipped += 1
-            if not edits:
-                continue
-            total_files += 1
-            lib_edits += len(edits)
-            if apply_:
-                open(p, "wb").write(new.encode("latin-1"))
-            elif shown < 2:
-                a, b, repl = edits[0]
-                ln = text.count("\n", 0, a) + 1
-                print(f"  {slug}/{os.path.relpath(p, work)}:{ln}: {text.split(chr(10))[ln - 1].strip()[:90]}")
-                shown += 1
-    total_edits += lib_edits
-    total_skipped += lib_skipped
-    if lib_edits or lib_skipped:
-        print(f"{slug}: {lib_edits} bound(s) {'rewritten' if apply_ else 'to rewrite'}, {lib_skipped} left for a hand edit")
-print(f"{total_edits} bound(s) in {total_files} file(s), {total_skipped} left for a hand edit")
+            for f in sorted(fn):
+                if not f.endswith(exts):
+                    continue
+                p = os.path.join(dp, f)
+                try:
+                    text = open(p, "rb").read().decode("latin-1")
+                except OSError:
+                    continue
+                if ".." not in text:
+                    continue
+                new, edits, skipped = process(text)
+                for off, why, snip in skipped:
+                    ln = text.count("\n", 0, off) + 1
+                    print(f"  SKIP {slug}/{os.path.relpath(p, work)}:{ln}: {why}: {snip}")
+                    lib_skipped += 1
+                if not edits:
+                    continue
+                total_files += 1
+                lib_edits += len(edits)
+                if apply_:
+                    open(p, "wb").write(new.encode("latin-1"))
+                elif shown < 2:
+                    a, b, repl = edits[0]
+                    ln = text.count("\n", 0, a) + 1
+                    print(f"  {slug}/{os.path.relpath(p, work)}:{ln}: {text.split(chr(10))[ln - 1].strip()[:90]}")
+                    shown += 1
+        total_edits += lib_edits
+        total_skipped += lib_skipped
+        if lib_edits or lib_skipped:
+            print(f"{slug}: {lib_edits} bound(s) {'rewritten' if apply_ else 'to rewrite'}, {lib_skipped} left for a hand edit")
+    print(f"{total_edits} bound(s) in {total_files} file(s), {total_skipped} left for a hand edit")
+
+
+if __name__ == "__main__":
+    main()
