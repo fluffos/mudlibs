@@ -267,3 +267,7 @@ pristine + build-debug（归档端口 40196，临时测试端口 49741）。`scr
 
 - 修复 `daemons/help_d.lpc`（`process_dir()`、`rebuild_data()`）与 `daemons/sghelp_d.lpc`（`process_dir()`）：当传入不存在或无权读取的路径时 `get_dir(path + "*")` 返回 `0` 并导致 `map_array()` 抛出 `*Bad argument 1 to EFUN map()`；补充 `|| ({})` 兜底。
 - 已通过 `lpcc_eval.py` 修前 FAIL → 修后 `ZZT PASS|PASS` 及 `play_boot.sh` + `play_stop.sh`（port 47311）验证。
+## `su`、`hintmenu`、`new_user_d` 与 `loadall` `get_dir()` 返回 `0` 兜底修复（2026-11-19，KB 06 §7.391）
+
+- 为 `cmds/wiz/su.lpc`、`obj/hintmenu.lpc`（第 81/136 行）、`secure/daemons/new_user_d.lpc`、`trans/cmds/loadall.lpc`（用户目录参数 `args[0]` 传入 `map_array()`）中的 `get_dir()` 调用补全 `|| ({})` 空数组兜底。
+- 验证：`sgzmudsgz` `lpcc_eval.py` 四对象全部加载 `PASS`（`su=1 hint=1 nud=1 loadall=1`），`play_boot.sh` + `play_stop.sh`（port 47328）零错误，`scripts/lint.py` 零告警。

@@ -1295,3 +1295,7 @@ pristine + build-debug，port 40087。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+## `rmdir1.lpc` 与 `find.lpc` 动态路径 `get_dir()` 崩溃修复（2026-11-19，KB 06 §7.391）
+
+- `cmds/adm/rmdir1.lpc` 第 56 行补全 `|| ({})`（保留第 54 行 `file[sizeof(file)] != /` 防 `rmdir1 /` 保护，KB 06 §7.343）；`cmds/{adm,sage}/find.lpc` 补全 `this_player() &&` 与 `get_dir(path + wild) || ({})` 兜底（保留原 CRLF 换行）。
+- 验证：`tiexuejianghu` `lpcc_eval.py` `rmdir1=0 find=0 sage=1` `PASS`，`scripts/lint.py` 零告警。

@@ -942,3 +942,8 @@ pristine + build-debug，归档端口 40023。`scripts/play_login.py`（port 490
 
 - `do_purge_log()` 直接在 `foreach` 与 `+=` 中消费 `get_dir(DATA_DIR + "log/")` 和 `get_dir(DATA_DIR + "log/" + letter + "/")`，当目录不存在或为空桶未建时触发 `*Bad argument 2 to foreach`；补入 `|| ({})` 兜底。
 - 验证：`xo` `lpcc_eval.py` 调用 `do_purge_log()` 由 `--head` 第 103 行崩溃转为 `e=0 r=1` `PASS`，`scripts/lint.py --changed HEAD` 零告警。
+## `admin/purge`、`arch/npurge` 与 `app/test` 缺目录 `get_dir()` 崩溃修复（2026-11-19，KB 06 §7.391）
+
+- `cmds/admin/purge.lpc` 与 `cmds/arch/npurge.lpc` 的 `do_purge_log()` 在 `foreach` 与 `+=` 中直接消费 `get_dir(DATA_DIR + "log/")` 与 `get_dir(DATA_DIR + "log/" + letter + "/")`，缺失/无权目录时返回 `0` 崩溃；已补全 `|| ({})`。
+- `cmds/app/test.lpc` 第 14 行 `foreach (string f in get_dir(pwd))` 在 `cwd` 未设或指向不存在目录时崩溃；已改为 `stringp(pwd) ? (get_dir(pwd) || ({})) : ({})`（保留原 CRLF 换行）。
+- 验证：`lpcc_eval.py` 三文件均编译加载 `PASS`（`p=1 n=1 t=1`），`play_boot.sh` + `play_stop.sh`（port 47323）零错误，`scripts/lint.py` 零告警。

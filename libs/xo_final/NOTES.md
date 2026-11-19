@@ -675,3 +675,7 @@ pristine + build-debug（归档端口 40024，临时测试端口 49650）。`scr
 
 - 修复 `system/daemon/taskd.lpc` 与 `secure/sefun/filter.lpc` 中未判空直接传入 `foreach` / `+=` 的 `get_dir()` 调用，补充 `|| ({})` 空数组兜底。
 - 已通过 `lpcc_eval.py` 全部探针 `PASS` 验证。
+## `/cmds/admin/npurge.lpc` 与 `verbd.lpc` `get_dir()` 返回 `0` 保护修复（2026-11-19，KB 06 §7.391）
+
+- `cmds/admin/npurge.lpc` 的 `do_purge_log()` 为 `get_dir(DATA_DIR + "log/")` 与 `get_dir(DATA_DIR + "log/" + letter + "/")` 补全 `|| ({})` 兜底；`system/daemon/verbd.lpc` 为 `get_dir(DIR_VERBS + "/")` 与 `get_dir(dir + "/*.lpc")` 补全 `|| ({})`。
+- 验证：`lpcc_eval.py` `load_object("/cmds/admin/npurge")`（`/cmds/admin/npurge`）与 `verbd=1` 均 `PASS`，`scripts/lint.py` 零告警。

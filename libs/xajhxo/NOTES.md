@@ -1051,3 +1051,7 @@ pristine + build-debug（归档端口 `40069`，测试端口 `49069`）。`scrip
 
 - `do_purge_log()` 直接在 `foreach` 与 `+=` 中消费 `get_dir(DATA_DIR + "log/")` 和 `get_dir(DATA_DIR + "log/" + letter + "/")`，当目录不存在或为空桶未建时触发 `*Bad argument 2 to foreach`；补入 `|| ({})` 兜底。
 - 验证：`xo` `lpcc_eval.py` 调用 `do_purge_log()` 由 `--head` 第 103 行崩溃转为 `e=0 r=1` `PASS`，`scripts/lint.py --changed HEAD` 零告警。
+## `/cmds/admin/purge.lpc` `do_purge_log()` 缺 `/data/log/` 目录崩溃修复（2026-11-19，KB 06 §7.391）
+
+- `do_purge_log()` 直接在 `foreach` 与 `+=` 中消费 `get_dir(DATA_DIR + "log/")` 和 `get_dir(DATA_DIR + "log/" + letter + "/")`，缺失或遇到非目录项时返回 `0` 崩溃；已补全 `|| ({})` 兜底。
+- 验证：`lpcc_eval.py` `load_object("/cmds/admin/purge")` `PASS`（`purge=1`），`scripts/lint.py` 零告警。
