@@ -753,3 +753,8 @@ pristine + build-debug，归档端口 40184。`scripts/play_login.py` 注册并�
 
 - 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `13` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`、`/kungfu/class_all/shaolin/cheng.h`、`/kungfu/class_all/shaolin/dao.h`、`/kungfu/class_all/shaolin/hui.h`、`/kungfu/class_all/shaolin/qing.h`、`/kungfu/class_bak/shaolin/cheng.h`、`/kungfu/class_bak/shaolin/dao.h`、`/kungfu/class_bak/shaolin/hui.h`、`/kungfu/class_bak/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
 - 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
+
+## `/cmds/` `call_out` 回调误用 `this_player()` 修复（2026-11-19，KB 06 §7.395）
+
+- `cmds/std/block.lpc` 两次 `call_out("cost", 3)` 未传入玩家且 `cost()` 内调 `this_player()` 致 3 秒后崩溃；传参 `me` 并对 `objectp(me)` 与 `objectp(env)` 判空。
+- 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。

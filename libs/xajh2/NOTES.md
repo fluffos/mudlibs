@@ -1259,3 +1259,8 @@ pristine + build-debug（归档端口 40068，临时测试端口 49520）。`scr
 
 - `assert(x)` 与 `ASSERT(x)` 的 `"x"` 改为 ANSI `#x` 以便调试断言输出真实条件表达式。
 - 验证：`#define DEBUG 1` + `#include <assert.h>` 调用 `ASSERT(1 == 2)` 捕获 `*assertion failed : file ..., 1 == 2.`，`scripts/lint.py` 零告警。
+
+## `/cmds/` `call_out` 回调误用 `this_player()` 修复（2026-11-19，KB 06 §7.395）
+
+- `cmds/imm/jbless.lpc` 在 `call_out("show_bless", ..., num)` 中未传入发送者且回调读取 `this_player()->query("name")`；传入 `me` 并改为 `varargs void show_bless(int holiday_num, object me)`（空对象兜底 `"我"`）。
+- 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。

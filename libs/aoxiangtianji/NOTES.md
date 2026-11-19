@@ -830,3 +830,8 @@ pristine + build-debug，归档端口 40101。`scripts/play_login.py`（port 491
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## `/cmds/` `call_out` 回调误用 `this_player()` 修复（2026-11-19，KB 06 §7.395）
+
+- `cmds/wiz/jbless.lpc` 在 `call_out("show_bless", ..., num)` 中未传入发送者且回调读取 `this_player()->query("name")`（`call_out` 中 `this_player()` 为 `0`）；传入 `me` 并改为 `varargs void show_bless(int holiday_num, object me)`（空对象兜底 `"我"`）。
+- 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。

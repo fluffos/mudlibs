@@ -563,3 +563,8 @@ pristine + build-debug，port 40143。`scripts/play_login.py` 注册并执行 `l
 
 - `call_out("delete_busy", 4)` 未传入玩家对象且 `delete_busy()` 内部直接调用 `this_player()->delete_temp("say_busy")`（`call_out` 上下文中 `this_player()` 恒为 `0`，4 秒后抛出 `*Bad argument 1 to EFUN call_other()` 并使 `say_busy` 残留）；统一改为前向声明与定义 `void delete_busy(object me)`（加 `objectp(me)` 守卫）并将全部 `call_out("delete_busy", 4)` 传入当前玩家对象参数（保留原有行尾）。
 - 验证：全批 `30` 馆 `/cmds/std/say.lpc` 编译全部通过（`30/30`）；`lpcc_eval.py` 五类代表（`bixiecanyang`、`chidi`、`ffxymud`、`longyunmeng`、`longyunmeng_binary`）均由 `--head` 异常或 `busy_after=1` 转为 `err=0, busy_after=0`；`lpc_scan_callout_targets.py` `say.lpc` 剩余 `0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `say-delete-busy`，共 `66` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47401..47410`）均正常且 `ZERO_DRIVERS`。
+
+## `/cmds/` `call_out` 回调误用 `this_player()` 修复（2026-11-19，KB 06 §7.395）
+
+- `cmds/usr/bbg.lpc` 在 `gogogo_start()` 与 `gogogo_running()` 中误读 `this_player()`（`call_out` 上下文恒为 `0`），导致 `bbg go` 每局 1 秒后即误报「失踪了」中止；改为读取已赋值的全局 `now_player`。
+- 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。

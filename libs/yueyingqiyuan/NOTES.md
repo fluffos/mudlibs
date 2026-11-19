@@ -1360,3 +1360,8 @@ pristine + build-debug，归档端口 40048。`scripts/play_login.py` 注册进�
 
 - `d/qujing/wuzhuang/intree.lpc` 载入的 `/d/obj/drug/renshenguohxl.lpc` 第 22 行 `set("no_sell,1);//石头加` 缺失右引号，致使第 23 行中文触发 `Illegal character` 整文件无法编译（`*No program`）且 `do_eat` 失效；修正为 `set("no_sell", 1); //石头加`。
 - 验证：`lpcc_eval.py` 由 `--head` `*No program in object '/d/obj/drug/renshenguohxl'!` 转为工作树 `tree_ok=1 err=0`，`lpc_scan_callout_targets.py --lib yueyingqiyuan --kind add_action` 剩余 `0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 零告警，`play_boot.sh` + `play_stop.sh`（端口 `47399`）启动正常。
+
+## `/cmds/` `call_out` 回调误用 `this_player()` 修复（2026-11-19，KB 06 §7.395）
+
+- `cmds/adm/jbless.lpc` 与 `cmds/wiz/jbless.lpc` 在 `call_out("show_bless", ..., num)` 中未传入发送者且回调读取 `this_player()->query("name")`；传入 `me` 并改为 `varargs void show_bless(int holiday_num, object me)`（空对象兜底 `"我"`）。
+- 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。

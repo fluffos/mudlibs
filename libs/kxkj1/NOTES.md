@@ -993,3 +993,8 @@ pristine + build-debug，port 40063。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## `/cmds/` `call_out` 回调误用 `this_player()` 修复（2026-11-19，KB 06 §7.395）
+
+- `cmds/std/perform.lpc` 两次 `call_out("del_busy", 3)` 未传入 `me` 且 `del_busy()` 内调 `this_player()` 触发 `*Bad argument 1 to EFUN call_other()`，致 `is_busy` 永久残留锁死 `perform`；传参 `me` 并改为 `void del_busy(object me)`（对齐兄弟库 `kxkj`/`kxkjii2`）。
+- 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。

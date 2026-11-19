@@ -689,3 +689,8 @@ pristine + build-debug，port 40097。`scripts/play_login.py` 注册并执行 `l
 
 - `/d/qujing/chechi/wugu.lpc` 末尾残留仅对 `eaccek`/`eacyy` 绑定的巫师后门 `add_action("do_kan", "wokanle")`，而 `do_kan` 从未实现；移除该无效 `init()`（保留原 CRLF 行尾）。
 - 验证：`lpcc` 编译与工作树加载通过，`lpc_scan_callout_targets.py --lib sjcs --kind add_action` 剩余 `0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 零告警，`play_boot.sh` + `play_stop.sh`（端口 `47397`）启动正常。
+
+## `/cmds/` `call_out` 回调误用 `this_player()` 修复（2026-11-19，KB 06 §7.395）
+
+- `cmds/adm/jbless.lpc` 在 `call_out("show_bless", ..., num)` 中未传入发送者且回调读取 `this_player()->query("name")`；传入 `me` 并改为 `varargs void show_bless(int holiday_num, object me)`（空对象兜底 `"我"`）。
+- 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。

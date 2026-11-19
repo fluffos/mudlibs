@@ -1168,3 +1168,8 @@ pristine + build-debug，port 40034。`scripts/play_login.py` 注册。
 
 - 因历史修补脚本跳过含 `/wiz/` 路径而遗漏：修复 `/cmds/wiz/editskill.lpc` `check_legal_name()` 中 `1 到 6 个中文字` 的字节阈值 `< 2 || > 12` 与 `i % 2 == 0` 改为 `< 1 || > 6` 与 `!is_chinese(name[i..i])`。
 - 验证：全 `42` 馆 / `62` 文件 `lpcc` 差分编译全部通过（`ok=62, regressions=0`）；代表 `lpcc_eval.py` 实测 `xyj2000` `sm`（`法宝` `0->1`、`金a棒` `1->0`、`一二三四五` `1->0`）、`mhxy` `comment`（`好` `0->1`、`好a` `1->0`）、`hxxtjqb` `huang`（`天龙` `0->1`、九字 `1->0`）、`hy2000`/`xjcq2000` 自创武功（`剑` `0->1`、`剑a` `1->0`、七字 `1->0`）均与预期一致；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
+
+## `/cmds/` `call_out` 回调误用 `this_player()` 修复（2026-11-19，KB 06 §7.395）
+
+- `cmds/usr/wash.lpc` 的 `call_out("out", 3, target)` 未传入玩家对象，回调内 `me = this_player();` 为 `0` 致 3 秒后 `me->add("times", 1)` 崩溃；传参 `(target, me)` 并改为 `varargs int out(object target, object me)` 加 `objectp` 守卫。
+- 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。

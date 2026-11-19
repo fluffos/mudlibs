@@ -932,3 +932,8 @@ pristine + build-debug，port 40032。`scripts/play_login.py` 注册并执行 `l
 
 - `/cmds/usr/helpnew.lpc` 将 `help_7` 中的缺失回调 `input_to("help_map", ob)` 修正为 `input_to("help_7", ob)`，并修正 `help_1..9` 错误重问 `input_to("help_" + num, ob)` 为各自菜单函数名。
 - 验证：全批 `32` 馆 / `34` 文件 `lpcc` 差分编译全部通过（`ok=34, regressions=0`）；代表 `lpcc_eval.py` 实测 `nitan6` `hai_end`（`no_exert` `30->0`）、`hxxtjqb` `remove_broken_weapon`（`w_after=0`）、`cctx` `neishi`（`*No program -> loaded` + `do_circle`）、`dtxyzjb` `qnbank1`（`*No program -> loaded` + `do_deposit`）；`lpc_format_changed.py`、`scripts/lint.py --files` 与 `10/10` 实库 `play_boot.sh`+`play_stop.sh` 均通过。
+
+## `/cmds/` `call_out` 回调误用 `this_player()` 修复（2026-11-19，KB 06 §7.395）
+
+- `cmds/adm/jbless.lpc` 在 `call_out("show_bless", ..., num)` 中未传入发送者且回调读取 `this_player()->query("name")`；传入 `me` 并改为 `varargs void show_bless(int holiday_num, object me)`（空对象兜底 `"我"`）。
+- 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。

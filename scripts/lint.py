@@ -109,6 +109,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("warcraft-actions-noop", "targeted", "KB 06 §7.392", "error", "warcraft.h discarded ternary actions == \"follow\" ? ... : ... leaving status untranslated"),
     RuleSpec("mr-dizi-duplicate-inherit", "targeted", "KB 04 §6.31", "error", "d/mr/npc/dizi.lpc declaring inherit NPC while #included by job-dizi.lpc"),
     RuleSpec("say-delete-busy", "targeted", "KB 06 §7.394", "error", "cmds/std/say.lpc call_out(\"delete_busy\") missing arg, deleted/commented body, uninit ob, or this_player()"),
+    RuleSpec("cmd-callout-this-player", "targeted", "KB 06 §7.395", "error", "Shared /cmds/ call_out callback invoking this_player() (0 in timer context)"),
     # Per-file corpus checks (all error in --changed/--files/--strict; configurable in --all)
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
     RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
@@ -738,7 +739,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "rtcfg", "ver_cfg", "band", "embed_cand")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "rtcfg", "ver_cfg", "band", "embed_cand")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -782,6 +783,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["mrdizi"].append(item)
         if rel == "/cmds/std/say.lpc":
             targeted_bins["say"].append(item)
+        if rel in ("/cmds/std/block.lpc", "/cmds/skill/defense.lpc", "/cmds/std/perform.lpc", "/cmds/std/exercise.lpc", "/cmds/std/meditate.lpc", "/cmds/usr/wash.lpc", "/cmds/usr/bbg.lpc") or (rel.startswith("/cmds/") and bn == "jbless.lpc"):
+            targeted_bins["cmdco"].append(item)
         if bn == "runtime_config.h":
             targeted_bins["rtcfg"].append(item)
         if any(k in bn for k in ("versiond", "getconfig", "server", "config")):
@@ -910,6 +913,19 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                     or re.search(rb'\bvoid\s+delete_busy\s*\([^{]*\)\s*\{[^}]*\bthis_player\s*\(', cb)
                     or re.search(rb'\bvoid\s+delete_busy\s*\([^{]*\)\s*\{[^}]*\bobject\s+\w+\s*;[^}]*if\s*\(\s*!\s*\w+\s*\)\s*return', cb)):
                 col.add("say-delete-busy", p, "say.lpc delete_busy() missing target/arg, commented out, uninitialized ob, or calling this_player() in call_out")
+
+    if col.wants("cmd-callout-this-player"):
+        cmdco_re = re.compile(
+            rb'\b(?:void|int|varargs\s+void|varargs\s+int)\s+(?:cost|show_bless|del_busy|dazuo|minsi|out|gogogo_start|gogogo_running)\s*\([^)]*\)\s*\{[^}]{0,600}?\bthis_player\s*\('
+        )
+        for _, p, _ in targeted_bins["cmdco"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"this_player" not in b:
+                continue
+            mk = code_mask(b, heredoc=True)
+            cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+            if cmdco_re.search(cb):
+                col.add("cmd-callout-this-player", p, "command call_out callback uses this_player() (0 under call_out)")
 
 
 def _changed_files(base: str | None) -> list[str]:
