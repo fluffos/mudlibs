@@ -337,3 +337,7 @@ operation plus one assignment, so its absolute numbers are a little higher. The 
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40226。`scripts/play_login.py` 连线进入极简 shell（仅支持 `dest/update/ed/eval/efun/rm/say/who/quit/shutdown`），驱动 stdout 与 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+## `/command/tests.lpc` 递归扫描 `get_dir()` 判空兜底（2026-11-19，KB 06 §7.391）
+
+- `recurse()` 第 8/10/15 行对 `get_dir(dir + "*.lpc")`、`get_dir(dir + "*", -1)` 与 `get_dir(dir + "fail/*.lpc")` 直接迭代或传入 `filter()`，若目录不存在或无权读取将抛出类型错误；已全部补全 `|| ({})` 兜底。
+- 验证：`lpcc_eval.py` 调用 `recurse("/nosuch/")` `ZZT lil t=1 err=0` `PASS`，`play_boot.sh` + `play_stop.sh`（port 47346）零错误，`scripts/lint.py` 零告警。

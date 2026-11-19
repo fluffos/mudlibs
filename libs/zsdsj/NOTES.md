@@ -1180,3 +1180,8 @@ pristine + build-debug，port 40081。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `system/daemons/bug_d.lpc`（缺失 `/data/bug/`）、`system/daemons/area_d_main.lpc`（缺失 `/area/` / `AREA_ROOT`）、`system/daemons/city_d_main.lpc`（缺失 `/city/` / `CITY_ROOT` / `CITY_PATH` / `CITY_NUM_ROOM`）、`system/daemons/estate_d.lpc`（`CITY_PATH`）、`system/daemons/mail_d.lpc`（`/data/user/`）及 `system/kernel/simul_efun/path.lpc`（`deep_path_list()`），统一补充 `|| ({})` 兜底。
 - 已通过 `lpcc_eval.py` 修前 FAIL → 修后五项探针 `PASS|PASS|PASS|PASS|PASS` 及 `play_boot.sh` + `play_stop.sh`（port 47308）验证。
+## 技能/区域后缀 `[0..<3]`→`[0..<5]` 与剩余守护 `get_dir()` 兜底修复（2026-11-19，KB 06 §7.296 / §7.391）
+
+- **`SKILL_D`（`system/daemons/skill_d.lpc` 第 140 行）与 `ZONE_D`（`system/daemons/zone_d.lpc` 第 422–453 行）**：`.c`→`.lpc` 改名后仍使用 `[0..<3]` 截取文件名，导致 `SKILL_D` 将 `agility.lpc` 登记为 `"agility.l"`、`SKILL_D->skill_exists("agility")` 恒返回 `0`（牵连大学授课、薪资与技能指令），`ZONE_D` 将 `test.lpc` 登记在 `"test.lp"` 名下而 `is_zone_exist("test", 0, 0, 0, 0)` 返回 `0`；现统一筛选 `.lpc` 后按 `[0..<5]` 剥除扩展名，并补全 `|| ({})`。
+- **剩余守护/内核 `get_dir()` 兜底**：为 `clean_d.lpc`、 `command_d.lpc`、`login_d.lpc`、`kernel/creator.lpc` 中剩余未判空的 `get_dir()` 调用补全 `|| ({})`（全 FluffOS 语料非 `xtool` `unguarded-get-dir` 至此清零）。
+- 验证：`lpcc_eval.py` 前后对比：`skill_exists("agility")` `0 -> 1`、`is_zone_exist("test", 0, 0, 0, 0)` `0 -> 1`，六对象全部 `PASS`；`play_boot.sh` + `play_stop.sh`（port 47345）零错误，`scripts/lint.py` 零告警。
