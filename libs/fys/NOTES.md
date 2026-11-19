@@ -651,3 +651,7 @@ pristine + build-debug，port 40164。`scripts/play_login.py` 注册并执行 `l
 - `cmds/adm/rmdir1.lpc` 第 56 行 `foreach (tmp in get_dir(file))` 补全 `|| ({})` 兜底，同时保留第 54 行 `file[sizeof(file)] != /` 防 `rmdir1 /` 删库保护（KB 06 §7.343），避免遇到不存在/无权路径或 `/` 时报错。
 - `cmds/{adm,sage}/find.lpc` 的 `do_grep()` 补全 `this_player() &&` 调试标记判空及 `get_dir(path + wild) || ({})` 兜底（保留原 CRLF 换行）。
 - 验证：`fys` `lpcc_eval.py` `--head` `rmdir1->rmDir("/")` 第 56 行 `*Bad argument 2 to foreach` -> 修后 `rmdir1=0 find=0 sage=1` `PASS`，`play_boot.sh` + `play_stop.sh`（port 47326）零错误，`scripts/lint.py` 零告警。
+## `daemon/class/` 兵器外功 `perform` 徒手崩溃修复（2026-11-19，KB 06 §7.246）
+
+- 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `1` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
+- 验证：全 `1` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。

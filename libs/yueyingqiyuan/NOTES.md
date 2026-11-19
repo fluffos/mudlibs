@@ -1341,3 +1341,7 @@ pristine + build-debug，归档端口 40048。`scripts/play_login.py` 注册进�
 
 - `gateway()` 直接 `explode(read_file("/adm/etc/wizjob"), "\n")`（归档未附带该文件），`--head` 调用直接报错 `*Bad argument 1 to explode() Expected: string Got: 0.`；改为 `(read_file("/adm/etc/wizjob") || "")`，并为循环第 89 行补上 `(i < sizeof(task) ? task[i] : "")` 防越界，同时移除第 29 行未用局部变量 `j`。
 - 验证：`mhxy` `lpcc_eval.py` `gateway(0, "")` 由 `--head` 崩溃转为返回 4012 字节 HTML 且零编译警告，`scripts/lint.py --changed HEAD` 零告警。
+## `daemon/class/` 兵器外功 `perform` 徒手崩溃修复（2026-11-19，KB 06 §7.246）
+
+- 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `21` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护（`moon/luori-archery/riyue.lpc` 在内联 `me->query_temp("weapon")->query("name")` 前补入 `objectp()` 拦截）。
+- 验证：全 `21` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。

@@ -1560,3 +1560,7 @@ pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scrip
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 中的 `file_size(...) == -1` 改为 `<= 0`，补充 `stringp()`、`explode(..., "\n") - ({ "" })` 与 `!sizeof(astr)` 空表保护，并将 `sscanf(astr, "(%s)%d;%*s", id, data) != 2` 改为 `sscanf(astr[i], "(%s)%d;%*s", id, data) < 2`（实测 FluffOS 下 `"(%s)%d;%*s"` 在并列行返回 `3`、非并列行返回 `2`）。已验证 `lpcc_eval.py` 编译加载通过。
+## `daemon/class/` 兵器外功 `perform` 徒手崩溃修复（2026-11-19，KB 06 §7.246）
+
+- 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `142` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
+- 验证：全 `142` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。

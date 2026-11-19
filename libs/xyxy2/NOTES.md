@@ -861,3 +861,7 @@ pristine + build-debug，归档端口 40003。`scripts/play_login.py`（port 490
 ## `read_file()` 缺文件判空保护（2026-11-19，KB 06 §7.386）
 
 - `/cmds/adm/spite.lpc` `main()` 直接 `explode(read_file("/data/chinese.o"), ",")`（归档缺失时 `--head` 报错 `*Bad argument 1 to explode()`），补全 `|| ""` 保护；`lpcc_eval.py` 已跳过第 14 行崩溃进入权限检查。
+## `daemon/class/` 兵器外功 `perform` 徒手崩溃修复（2026-11-19，KB 06 §7.246）
+
+- 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `11` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
+- 验证：全 `11` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。

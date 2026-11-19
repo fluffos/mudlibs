@@ -337,3 +337,7 @@ pristine + build-debug，归档端口 40391。`scripts/play_login.py` 注册/连
 - 修复 `d/miwudao/secret/npc/room.lpc`（`create()`）：归档未附带 `/task/room_location`，改为 `stringp(file) ? explode(file, "\n") - ({ "" }) : ({});`。
 - 修复 `adm/daemons/brd.lpc`（`buildroom()`）：改为先按 `rec` 读取房间模板并校验 `stringp(my_file)` 及 `stringp(this_file)`，再改写当前房间文件（保留 `.b` 同源源码格式）。
 - 验证：`lpcc_eval.py` 修前 `--head`（`room.lpc` 报 `*Bad argument 1 to explode`）→ 修后（`ZZ_LYMB=0/0` `PASS`）。
+## `daemon/class/` 兵器外功 `perform` 徒手崩溃修复（2026-11-19，KB 06 §7.246）
+
+- 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `1` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
+- 验证：全 `1` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。

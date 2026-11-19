@@ -964,3 +964,7 @@ pristine + build-debug（归档端口 40025，临时测试端口 49651）。`scr
 
 - `is_illegal()` 离线资产统计表原硬编码 `/clone/money/cash`，本馆实际货币路径位于 `/obj/money/{thousand,tenthousand}-cash`；已更正为 `/obj/money/tenthousand-cash`（`({ 100, 1 })`）与 `/obj/money/thousand-cash`（`({ 10, 1 })`），保留 CRLF 换行。
 - 验证：`lpcc_eval.py` 加载 `/cmds/arch/examine`、`/obj/money/thousand-cash`、`/obj/money/tenthousand-cash` 均 `PASS`（`e=1 c1=1 c2=1`），`play_boot.sh` + `play_stop.sh`（port 47332）零错误，`scripts/lint.py --rule money-path-clone --all` 零告警。
+## `daemon/class/` 兵器外功 `perform` 徒手崩溃修复（2026-11-19，KB 06 §7.246）
+
+- 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `37` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
+- 验证：全 `37` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。

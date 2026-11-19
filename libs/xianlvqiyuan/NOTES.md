@@ -918,3 +918,7 @@ pristine + build-debug，port 40032。`scripts/play_login.py` 注册并执行 `l
 ## 整文件重复粘贴清理（2026-11-18，KB 04 §6.32）
 
 - `include/net/config.h`（280 行→140 行→70 行）整份头文件最初被连续粘贴了四份（第一次截去后 140 行后，第 1–70 行与第 71–140 行仍完全相同）。核实前后两半完全一致后删去第 71–140 行，仅保留唯一一份 70 行（保留原 CRLF 行尾）。验证：`lpcc_eval.py` `load_object("/adm/daemons/network/dns_master")` `PASS`，`scripts/lint.py` `whole-file-duplicate` 零告警。
+## `daemon/class/` 兵器外功 `perform` 徒手崩溃修复（2026-11-19，KB 06 §7.246）
+
+- 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `15` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
+- 验证：全 `15` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。

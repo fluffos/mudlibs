@@ -53,7 +53,7 @@ def fix(b):
             re.search(re.escape(v) + rb"\s*(&&|\?|\|\|)", pre):
         return b, 0
     head = body[:a.end() + first.start()]
-    if re.search(rb'(objectp\s*\(\s*(\w+\s*=\s*)?|!\s*)me\s*->\s*query_temp\s*\(\s*"weapon"\s*\)', head):
+    if re.search(rb'(objectp\s*\(\s*(\w+\s*=\s*)?|!\s*\(?\s*(\w+\s*=\s*)?)me\s*->\s*query_temp\s*\(\s*"weapon"\s*\)', head):
         return b, 0
     if re.search(rb"objectp\s*\(\s*\w+\s*=\s*me\s*->\s*query_temp", head):
         return b, 0
@@ -145,33 +145,33 @@ def main():
         work = f"{REPO}/libs/{slug}/work"
         if os.path.exists(f"{work}/.git"):
             continue
-        for d in ("kungfu/skill", "daemon/skill"):
+        for d in ("kungfu/skill", "daemon/skill", "daemon/class"):
             D = f"{work}/{d}"
             if not os.path.isdir(D):
                 continue
-            for sk in sorted(os.listdir(D)):
-                sd = f"{D}/{sk}"
-                if not os.path.isdir(sd):
+            for dp, _, fn in sorted(os.walk(D)):
+                rel_d = dp[len(work):]
+                if any(part in ("old", "bak", "backup", "tmp", "test") for part in rel_d.split("/")):
                     continue
-                for f in sorted(os.listdir(sd)):
-                    p = f"{sd}/{f}"
+                for f in sorted(fn):
+                    p = f"{dp}/{f}"
                     if not f.endswith(".lpc") or not os.path.isfile(p):
                         continue
                     b = open(p, "rb").read()
                     if b"query_temp" not in b:
                         continue
                     out, n = fix(b)
-                    if not n and optional_weapon(sd, b):
-                        print(f"HAND weapon optional (an included type() helper maps no weapon to unarmed): {slug} /{d}/{sk}/{f}")
+                    if not n and optional_weapon(dp, b):
+                        print(f"HAND weapon optional (an included type() helper maps no weapon to unarmed): {slug} {rel_d}/{f}")
                         continue
                     if not n:
                         out, n = fix_inline(b)
                         if isinstance(n, str):
-                            print(f"{n}: {slug} /{d}/{sk}/{f}")
+                            print(f"{n}: {slug} {rel_d}/{f}")
                             continue
                     if n:
                         tot += n
-                        print(f"FIX   {slug} /{d}/{sk}/{f}")
+                        print(f"FIX   {slug} {rel_d}/{f}")
                         if apply:
                             open(p, "wb").write(out)
     print(f"{tot} perform(s)" + ("" if apply else " (plan only; --apply writes)"))
