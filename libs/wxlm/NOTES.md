@@ -47,3 +47,16 @@
 - `feature/command.lpc` 的 `enable_player()` 缺少 `in_enable_player_now` 重入标志，已通过 `scripts/lpc_fix_enable_player_guard.py --lib wxlm --apply` 补入 `nosave private int in_enable_player_now;` 守卫，防止 `init()` → `setup()` → `enable_commands()` 重入递归溢出。
 - `adm/daemons/rankd.lpc` 的 `query_respect`、`query_rude`、`query_self`、`query_self_rude` 缺少 `!objectp(ob)` 守卫，在无 `this_player()` 上下文传入 `0` 时触发 `*Bad argument 1 to EFUN call_other()`；已通过 `scripts/lpc_fix_rank_null.py --lib wxlm --apply` 在 4 个函数头部补入 `if (!objectp(ob)) ob = this_object();`。
 - 验证：`lpcc_eval.py`（`--head` `rankd->query_respect(0)` 报错 FAIL → 工作树 `new("/feature/command")`、`new("/inherit/char/npc")->enable_player()` 与 `rankd->query_{respect,rude,self,self_rude}(0)` 均正常返回、`PASS`），`play_boot.sh` + `play_stop.sh`（端口 `40404`）启动与停止正常，`scripts/lint.py` 零告警。
+
+## `lint.py` 补全历史扫除遗留（2026-11-19，KB 06 §7.209/§7.246/§7.282/§7.283/§7.334/§7.351/§7.373/§7.391）
+
+- 本库收录晚于多轮全语料扫描，`scripts/lint.py --all` 检出并按现有修复脚本统一清理以下 8 处源码缺陷（跳过经核实属有意设计的 `kungfu/skill/lonely-sword/xiao.lpc:139` `if (delta = 2)`）：
+  - `inherit/char/npc.lpc`：`chat()` 空 `chat_msg` 骰子前补 `sizeof(msg) &&`（`--head` `*Array index out of bounds` 崩溃 → `chat_err=0`）。
+  - `d/mingjiao/shanmen.lpc`：`valid_leave()` `family_name != "明教" || family_name != "武当派"` 恒真误拦本派弟子，改为 `&&`（`--head` `leave=0` → `leave=1`）。
+  - `d/wudang/npc/xiaocui.lpc`：`new(__DIR__"../obj/nuerxiang")` 触发驱动拒绝 `..` 路径，改为 `"/d/wudang/obj/nuerxiang"`（`accept_object()` 返回 `1`）。
+  - `cmds/arch/board.lpc`：`get_dir("/clone/board/")` 加 `|| ({})`（本库无 `/clone/board/` 目录）。
+  - `cmds/arch/sameip.lpc`：`member_array('.', arg)` 改为 `strsrch(arg, ".")`。
+  - `kungfu/class/lingjiu/zhuo.lpc`：`recognize_apprentice()` `ob->query("family")["master_name"]` 改为 `ob->query("family/master_name")`。
+  - `include/npc/chinese.lpc`：`get_cn_name()` 删去 `& 0xFFFE` 对齐并改为 `[0..0]` 单汉字切片。
+  - `include/net/ftpdsupp.h`：4 处负号区间结尾 `..-1` 补 `<` 为 `..<1`。
+- 验证：`lpcc_eval.py` 前后对比均 `PASS`，`lpc_format_changed.py` `0` 重排，`play_boot.sh` + `play_stop.sh`（端口 `40404`）正常，`scripts/lint.py --changed HEAD` 零告警。

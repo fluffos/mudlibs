@@ -156,3 +156,14 @@ pristine + build-debug，归档端口 40393。`scripts/play_login.py` 注册/连
 
 - `adm/daemons/rankd.lpc` 的 `query_respect`、`query_rude`、`query_self`、`query_self_rude` 缺少 `!objectp(ob)` 守卫，在无 `this_player()` 上下文（如房间重置期间的 NPC `create()`）传入 `0` 时触发 `*Bad argument 1 to EFUN call_other()`；已通过 `scripts/lpc_fix_rank_null.py --lib yhlib --apply` 在 4 个函数头部补入 `if (!objectp(ob)) ob = this_object();`。
 - 验证：`lpcc_eval.py`（`--head` `query_respect(0)` 报错 FAIL → 工作树 `query_respect(0)`/`query_rude(0)`/`query_self(0)`/`query_self_rude(0)` 均正常返回、`PASS`），`play_boot.sh` + `play_stop.sh`（端口 `40393`）启动与停止正常，`scripts/lint.py` 零告警。
+
+## `lint.py` 补全历史扫除遗留（2026-11-19，KB 06 §7.209/§7.362/§7.363/§7.373/§7.391）
+
+- `scripts/lint.py --all` 复扫补全本库以下 6 处遗留 UTF-8 与类型缺陷：
+  - `adm/npc/luban.lpc`：`check_legal_name()` 房屋名称字节门槛 `< 4 || > 12` 改为与提示「2 到 6 个中文字」一致的 `< 2 || > 6`（含对应门限）。
+  - `adm/daemons/channeld.lpc`：`do_channel()` 门派名 `strlen(family) == 6`（含帮派前缀 `case 4..10`）从 GBK 字节数改为 UTF-8 字数（`3`、`case 2..5`）并按 `[0..0]` 单字分隔。
+  - `adm/daemons/chinesed.lpc`：`check_chinese()` 跳过奇数下标的 `i % 2 == 0 && ! is_chinese(name[i..<0])` 改为逐字检查 `! is_chinese(name[i..i])`。
+  - `include/npc/chinese.lpc`：`generate_cn_name()` 删去 `& 0xFFFE` 并改为 `[0..0]`。
+  - `kungfu/class/lingxiao/shiqing.lpc`：`recognize_apprentice()` `ob->query("family")["master_name"]` 改为 `ob->query("family/master_name")`。
+  - `include/net/ftpdsupp.h`：4 处负号区间结尾 `..-1` 补 `<` 为 `..<1`。
+- 验证：`lpcc_eval.py`（`CHINESE_D->check_chinese`、`generate_cn_name`、`channeld`、`shiqing`、`luban` 编译）与 `play_boot.sh` + `play_stop.sh`（端口 `40393`）均 `PASS`，`lpc_format_changed.py` `0` 重排，`scripts/lint.py --changed HEAD` 零告警。
