@@ -483,3 +483,8 @@ pristine + build-debug，port 40267。`scripts/play_login.py` 注册并执行 `l
 
 - 因历史修补脚本跳过含 `/wiz/` 路径而遗漏：修复 `/cmds/wiz/sm.lpc` `check_legal_name()` 中 `strlen(name) < 3 || strlen(name) > max_len`（拒绝合法 2 字法宝名却放行 5-8 字）与 `i % 2 == 0 && !is_chinese(name[i..<0])`（漏检奇数位 ASCII）改为 `< 2 || > max_len / 2` 与逐字 `!is_chinese(name[i..i])`。
 - 验证：全 `42` 馆 / `62` 文件 `lpcc` 差分编译全部通过（`ok=62, regressions=0`）；代表 `lpcc_eval.py` 实测 `xyj2000` `sm`（`法宝` `0->1`、`金a棒` `1->0`、`一二三四五` `1->0`）、`mhxy` `comment`（`好` `0->1`、`好a` `1->0`）、`hxxtjqb` `huang`（`天龙` `0->1`、九字 `1->0`）、`hy2000`/`xjcq2000` 自创武功（`剑` `0->1`、`剑a` `1->0`、七字 `1->0`）均与预期一致；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
+
+## `call_out` / `input_to` / `add_action` 缺失回调与房间语法修复（2026-11-19，KB 06 §7.349）
+
+- `/d/koker/qnbank1.lpc` 补回 `@TEXT` 结束标记及 `add_action("do_deposit", "qn_cun");` 缺失分号，使潜能银行房间恢复编译载入。
+- 验证：全批 `32` 馆 / `34` 文件 `lpcc` 差分编译全部通过（`ok=34, regressions=0`）；代表 `lpcc_eval.py` 实测 `nitan6` `hai_end`（`no_exert` `30->0`）、`hxxtjqb` `remove_broken_weapon`（`w_after=0`）、`cctx` `neishi`（`*No program -> loaded` + `do_circle`）、`dtxyzjb` `qnbank1`（`*No program -> loaded` + `do_deposit`）；`lpc_format_changed.py`、`scripts/lint.py --files` 与 `10/10` 实库 `play_boot.sh`+`play_stop.sh` 均通过。
