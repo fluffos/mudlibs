@@ -25,3 +25,8 @@
 - 编译与警告：`lpcc --batch` 与 `scripts/lpc_warnings.py` 全量扫描 `472/472` 个文件全部编译并成功执行 `reset(0)`，`0` errors、`0` warnings、`0` `#pragma no_warnings`；`check_ntfs_paths.py` 全部通过；新增文件 `inherit/wand_base.lpc`、`skills/obj/sp_weap_arm.lpc` 已按 formatter 规范化。
 - 原生启动与实机测试：新建角色 `hero`（密码/邮箱/性别 `m`/种族 `human`）登录 Tempus 广场，移动穿过木桥至市政厅前（4 名守卫鞠躬）及南部花园门（石像鬼与守卫），核对 `score`（Level 1，2s 50c）、`save`、`quit` 后重连读档一致；`log/debug.log` 无错误。
 - WASM 验证（`scripts/wasm_client.js`）：`build-wasm` 正常启动，登录界面完整显示 `mudlibs.fluffos.info`，完成新角色注册、移动浏览与保存退出。
+
+## `/inherit/base/living.lpc` 无 `case` 的纯 `default` `switch` 清理（2026-11-19，KB 04 §6.30）
+
+- `#ifdef LOG_WEAPON_HIT` 分支下的 `switch (file) { default: log_file(...); break; }` 没有 `case` 分支，已通过 `scripts/lpc_fix_default_switch.py heaven7 --apply` 简化为直接调用 `log_file(...)`。
+- 验证：`lpcc_eval.py` 加载 `/inherit/base/living` `PASS`，`scripts/lint.py --changed HEAD` 零告警。

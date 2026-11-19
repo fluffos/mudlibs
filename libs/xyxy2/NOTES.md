@@ -857,3 +857,7 @@ pristine + build-debug，归档端口 40003。`scripts/play_login.py`（port 490
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`，补充 `- ({ "" })` 与 `topten_del` 后 `stringp()` / `!sizeof(astr)` 空表保护（空表复用原建榜语句），并将未注释的 `sscanf(astr, "...;%*s", ...) != 3` 改为 `astr[i]` 与 `< 3`（并列行下 FluffOS 将 `%*s` 计入返回值）。已验证 `lpcc_eval.py` `load_object("/adm/daemons/toptend")` 编译加载通过。
+
+## `read_file()` 缺文件判空保护（2026-11-19，KB 06 §7.386）
+
+- `/cmds/adm/spite.lpc` `main()` 直接 `explode(read_file("/data/chinese.o"), ",")`（归档缺失时 `--head` 报错 `*Bad argument 1 to explode()`），补全 `|| ""` 保护；`lpcc_eval.py` 已跳过第 14 行崩溃进入权限检查。

@@ -1245,3 +1245,8 @@ pristine + build-debug，port 40047。`scripts/play_login.py` 注册并执行 `l
   - `adm/daemons/network/userid.lpc`（`query_userid()`）：删去未使用的局部变量 `tmp`；
   - `obj/mm.lpc`：清理 `unwield_msg` 中 `"一\缕\轻\烟"` 的多余反斜杠转义（注：该文件第 79 行另有原始非法字节语法错误未改动）。
 - 验证：`scripts/lpc_audit_removed_locals.py` 检查 0 误删，`lpcc_eval.py` 验证 `pingd`/`pingtcp` 编译加载通过且 `Illegal to declare nosave` 警告清零（`head_warn=True -> tree_warn=False`）；`play_boot.sh` + `play_stop.sh`（端口 `40047`）启动与停止正常。
+
+## 段云 `master_duan.lpc` `add_record()` 缺 `/u/b/bss/record` 保护（2026-11-19，KB 06 §7.386）
+
+- `open/ping/npc/master_duan.lpc` 与 `open/scholar/room/newplan/npc/master_duan.lpc` 的 `add_record()` 在写入前直接 `explode(read_file("/u/b/bss/record"), "\n")`（文件不存在时 `--head` 报错 `*Bad argument 1 to explode()`）；改为 `|| ""` 兜底。
+- 验证：`kxkj` `lpcc_eval.py` `new("/open/ping/npc/master_duan")->add_record("zztest")` 由 `--head` 崩溃转为 `err=0` `PASS`，`scripts/lint.py --changed HEAD` 零告警。

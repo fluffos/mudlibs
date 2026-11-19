@@ -743,3 +743,8 @@ pristine + build-debug，归档端口 40184。`scripts/play_login.py` 注册并�
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`（注：该文件另有前置 `inherit DAEMON;` 编译错误）。
 - 验证：前置错误同 `--head` 未变更；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## `inherit/char/npc.h` 空 `chat_msg` 下标守卫（2026-11-19，KB 06 §7.334）
+
+- 扩展 `scripts/lpc_fix_chat_empty.py` 扫描 `.h` 文件时为 `inherit/char/npc.h` 的 `chat()` 补入 `sizeof(msg) &&` 守卫。
+- 验证：`scripts/lint.py --changed HEAD` 零告警。

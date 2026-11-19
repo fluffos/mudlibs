@@ -1336,3 +1336,8 @@ pristine + build-debug，归档端口 40048。`scripts/play_login.py` 注册进�
 
 - 修复 `d/obj/book/dd.lpc`（`do_grep()` 第 108 行，保留 CRLF）：对缺失或不可读目录 `get_dir(path + wild)` 返回 `0` 导致 `*Bad argument 2 to foreach`；补充 `|| ({})` 兜底。
 - 已通过 `lpcc_eval.py` 修前 FAIL → 修后 `ZZT PASS` 及 `play_boot.sh` + `play_stop.sh`（port 47306）验证。
+
+## `/www/cgi-bin/wizlist.lpc` 缺 `/adm/etc/wizjob` 与越界读取修复（2026-11-19，KB 06 §7.386）
+
+- `gateway()` 直接 `explode(read_file("/adm/etc/wizjob"), "\n")`（归档未附带该文件），`--head` 调用直接报错 `*Bad argument 1 to explode() Expected: string Got: 0.`；改为 `(read_file("/adm/etc/wizjob") || "")`，并为循环第 89 行补上 `(i < sizeof(task) ? task[i] : "")` 防越界，同时移除第 29 行未用局部变量 `j`。
+- 验证：`mhxy` `lpcc_eval.py` `gateway(0, "")` 由 `--head` 崩溃转为返回 4012 字节 HTML 且零编译警告，`scripts/lint.py --changed HEAD` 零告警。

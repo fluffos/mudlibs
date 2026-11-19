@@ -1514,3 +1514,8 @@ pristine + build-debug，port 40019。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `query_save_file()` 将 `base_name(this_object())` 误写成 `base_name("this_object()")` 导致的字面量路径错误；并参照同源 `tianxia/std/banghui/smith.lpc` 为 `make_weapon_ability[cls] * 1.2` 与 `random(n * 0.6) + n * 0.7` 补齐 `to_int()` 显式取整，消除两处 `Float value truncated to int` 编译告警。
 - 验证：`scripts/lint.py --rule quoted-efun-call --all` 与 `--changed HEAD` 零告警；`lpc_format_changed.py` 格式化通过。
+
+## `/quest11/jiuyin/chen.lpc` `..` 路径导致九阴真经下卷掉落报错修复（2026-11-19，KB 06 §7.351）
+
+- 陈玄风 `die()` 调用 `unew(__DIR__ "../obj/jiuyin-book2")` 取九阴真经下卷（人皮），既包含被驱动拒绝的 `..` 路径（`--head` `chen->die()` 直接报错 `*Read access denied.`），且 `jiuyin-book2.lpc` 实际位于同目录下的 `/quest11/jiuyin/jiuyin-book2.lpc`；改为 `unew(__DIR__ "jiuyin-book2")`。
+- 验证：`nitan6` `lpcc_eval.py` `--head` `*Read access denied.` → 工作树 `err=0`；`scripts/lint.py --changed HEAD` 零告警。

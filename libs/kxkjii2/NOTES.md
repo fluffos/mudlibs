@@ -565,3 +565,8 @@ pristine + build-debug，port 40160。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## 段云 `master_duan.lpc` `add_record()` 缺 `/u/b/bss/record` 保护（2026-11-19，KB 06 §7.386）
+
+- `open/ping/npc/master_duan.lpc` 与 `open/scholar/room/newplan/npc/master_duan.lpc` 的 `add_record()` 在写入前直接 `explode(read_file("/u/b/bss/record"), "\n")`（文件不存在时 `--head` 报错 `*Bad argument 1 to explode()`）；改为 `|| ""` 兜底。
+- 验证：`kxkj` `lpcc_eval.py` `new("/open/ping/npc/master_duan")->add_record("zztest")` 由 `--head` 崩溃转为 `err=0` `PASS`，`scripts/lint.py --changed HEAD` 零告警。

@@ -1442,3 +1442,8 @@ pristine + build-debug，port 40103。`scripts/play_login.py` 注册。
 
 - **流程**：GB/Big5 选 `gb` → 字母 id → 中文名 → 强密码（`Test1234`）→ 天赋 → email → 性别 → 古村（世界之树/老村长）；`look`/`score`/`i`；`quit` 存盘退出。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 天宫与十二宫 NPC 头文件空 `chat_msg` 下标守卫（2026-11-19，KB 06 §7.334）
+
+- `d/migong/dntg/sky/npc/action.h` 与 `d/migong/dntg/sky/stars/star.h` 被多批星君、天神与强敌 NPC `#include`，其中 `chat()` 在 `random(100) < chance` 后直接执行 `rnd = random(sizeof(msg));` 并访问 `msg[rnd]`，当列表为空时触发 `*Array index out of bounds.`；扩展 `scripts/lpc_fix_chat_empty.py` 覆盖 `.h` 后补入 `sizeof(msg) &&` 守卫。
+- 验证：`lpcc_eval.py` 加载 `/d/migong/dntg/sky/stars/0` 与 `/d/migong/dntg/sky/npc/tianshen` 通过，`scripts/lint.py --changed HEAD` 零告警。

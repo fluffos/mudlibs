@@ -1173,3 +1173,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，port 40050。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。
+
+## `/www/cgi-bin/wizlist.lpc` 缺 `/adm/etc/wizjob` 与越界读取修复（2026-11-19，KB 06 §7.386）
+
+- `gateway()` 直接 `explode(read_file("/adm/etc/wizjob"), "\n")`（归档未附带该文件），`--head` 调用直接报错 `*Bad argument 1 to explode() Expected: string Got: 0.`；改为 `(read_file("/adm/etc/wizjob") || "")`，并为循环第 89 行补上 `(i < sizeof(task) ? task[i] : "")` 防越界，同时移除第 29 行未用局部变量 `j`。
+- 验证：`mhxy` `lpcc_eval.py` `gateway(0, "")` 由 `--head` 崩溃转为返回 4012 字节 HTML 且零编译警告，`scripts/lint.py --changed HEAD` 零告警。

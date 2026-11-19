@@ -73,7 +73,7 @@ def main():
                 dirs[:] = []
                 continue
             for f in fs:
-                if not f.endswith((".lpc", ".c")):
+                if not f.endswith((".lpc", ".c", ".h")):
                     continue
                 p = os.path.join(root, f)
                 try:
