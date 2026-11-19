@@ -35,3 +35,8 @@
 
 - 修复 `obj/daemon/rlogind.lpc`（`query_rlogin()`）：归档未附带 `/etc/rlogins` 时 `read_file("/etc/rlogins")` 返回 `0` 并在 `explode(rl, "\n")` 抛出 `*Bad argument 1 to explode()`；增加 `if (!stringp(rl)) return 0;`。
 - 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to explode`）→ 修后（`ZZ_NANNY=0 res=0` `PASS`）。
+
+## `obj/simul_efun.lpc` `PROFILE(X)` 宏参数字符串化修复（2026-11-19，KB 06 §7.352）
+
+- 修复 `obj/simul_efun.lpc:9` `#define PROFILE(X) profiled["X"]++` 将参数字面写成字符串 `"X"` 导致 `query_simulefun_profile_info()` 仅统计单个 `"X"` 键名的问题，改为 `#define PROFILE(X) profiled[#X]++`。
+- 验证：`lpcc_eval.py` 实测 `query_simulefun_profile_info()` 键名由 `--head` `({ "X" })` 转为真实 sefun 列表 `({ "extract", "load_object", "log_file", "query_simulefun_profile_info" })`；`play_boot.sh`+`play_stop.sh`（port 47373）与 `scripts/lint.py --files` 通过。

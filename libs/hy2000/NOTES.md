@@ -498,3 +498,8 @@ pristine + build-debug，port 40174。`scripts/play_login.py` 注册。
 
 - 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `6` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/emei/tobebonze.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
 - 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
+
+## `d/wiz`/`cmds/wiz` UTF-8 中文长度阈值与奇偶位字符校验修复（2026-11-19，KB 06 §7.362 / §7.363）
+
+- 因历史修补脚本跳过含 `/wiz/` 路径而遗漏：修复 `/cmds/wiz/creatskill.lpc` `check_legal_name()` 中 `1 到 6 个中文字` 的字节阈值 `< 2 || > 12` 与 `i % 2 == 0` 改为 `< 1 || > 6` 与 `!is_chinese(name[i..i])`。
+- 验证：全 `42` 馆 / `62` 文件 `lpcc` 差分编译全部通过（`ok=62, regressions=0`）；代表 `lpcc_eval.py` 实测 `xyj2000` `sm`（`法宝` `0->1`、`金a棒` `1->0`、`一二三四五` `1->0`）、`mhxy` `comment`（`好` `0->1`、`好a` `1->0`）、`hxxtjqb` `huang`（`天龙` `0->1`、九字 `1->0`）、`hy2000`/`xjcq2000` 自创武功（`剑` `0->1`、`剑a` `1->0`、七字 `1->0`）均与预期一致；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

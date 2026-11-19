@@ -526,3 +526,8 @@ pristine + build-debug，port 40141。`scripts/play_login.py` 注册并执行 `l
 
 - 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `23` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
 - 验证：全 `23` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。
+
+## `d/wiz`/`cmds/wiz` UTF-8 中文长度阈值与奇偶位字符校验修复（2026-11-19，KB 06 §7.362 / §7.363）
+
+- 因历史修补脚本跳过含 `/wiz/` 路径而遗漏：修复 `/cmds/wiz/sm.lpc` `check_legal_name()` 中 `strlen(name) < 3 || strlen(name) > max_len`（拒绝合法 2 字法宝名却放行 5-8 字）与 `i % 2 == 0 && !is_chinese(name[i..<0])`（漏检奇数位 ASCII）改为 `< 2 || > max_len / 2` 与逐字 `!is_chinese(name[i..i])`；`/d/wiz/comment.lpc` `in_chinese()` 中 `len < 2` 与 `i = i + 2` / `str[i..i + 1]` 改为 `len < 1` 与 `i++` / `!is_chinese(str[i..i])`（避免单字拒绝并堵住混合 ASCII 漏检）。
+- 验证：全 `42` 馆 / `62` 文件 `lpcc` 差分编译全部通过（`ok=62, regressions=0`）；代表 `lpcc_eval.py` 实测 `xyj2000` `sm`（`法宝` `0->1`、`金a棒` `1->0`、`一二三四五` `1->0`）、`mhxy` `comment`（`好` `0->1`、`好a` `1->0`）、`hxxtjqb` `huang`（`天龙` `0->1`、九字 `1->0`）、`hy2000`/`xjcq2000` 自创武功（`剑` `0->1`、`剑a` `1->0`、七字 `1->0`）均与预期一致；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
