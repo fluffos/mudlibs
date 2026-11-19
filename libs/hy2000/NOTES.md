@@ -493,3 +493,8 @@ pristine + build-debug，port 40174。`scripts/play_login.py` 注册。
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `6` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/emei/tobebonze.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

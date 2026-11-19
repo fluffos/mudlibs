@@ -529,3 +529,8 @@ pristine + build-debug，port 40116。`scripts/play_login.py` 注册。
 
 - 修复 `adm/daemons/brd.lpc`（`buildroom()`）：归档缺少 `case 7` 模板 `/obj/JOBTWOROOM.o`（`buildjob2` 使用），原逻辑先改写当前房间再读模板并在 `replace_string(my_file, ...)` 抛出 `*Bad argument 1`；调整为先按 `rec` 读取模板并校验 `stringp(my_file)` 及 `stringp(this_file)`，模板缺失时提示并直接返回。
 - 验证：`lpcc_eval.py` 修前 `--head`（`rec=7` 报 `*Bad argument 1 to replace_string`）→ 修后（`ZZ_BRD_R7=0` `PASS`）。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `1` 个 `.lpc`（`/kungfu/skill/kunlun-zhang.lpc`）、`6` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/emei/tobebonze.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

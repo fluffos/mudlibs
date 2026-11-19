@@ -771,3 +771,8 @@ pristine + build-debug，归档端口 40037。`scripts/play_login.py` 注册并�
 
 - `cmds/wiz/sameip.lpc` 与 `cmds/wiz/samecreate.lpc`（位于 `cmds/wiz/`，此前被修复脚本跳过）以 `member_array('.', arg)` 检查 IP 点分字符串，`--head` 传入 `"127.0.0.1"` 时直接报错 `*Bad argument 2 to member_array() Expected: mapping or array`；改为 `strsrch(arg, ".")`。
 - 验证：`lpcc_eval.py` 传入 `"127.0.0.1"` 由 `--head` 崩溃转为 `e1=0 e2=0` `PASS`，`scripts/lint.py --changed HEAD` 零告警。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `7` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/quanzhen/qing.h`、`/kungfu/class/quanzhen/zhi.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

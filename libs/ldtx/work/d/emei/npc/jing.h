@@ -18,7 +18,7 @@ int accept_object(object ob, object obj)
 {
 	object me = this_object();
 	mapping my_fam  = me->query("family");
-	mapping ob_fam  = ob->query("family");
+	mapping ob_fam  = ob->query("family"); if (!mapp(ob_fam)) ob_fam = ([ ]);
 	if ( ob->query_temp("have_letter") && present("jieshao-xin2", ob) ) 
 	{
 		command("say 怎麽样，你拿我的介绍信去拜师了吗 ?");

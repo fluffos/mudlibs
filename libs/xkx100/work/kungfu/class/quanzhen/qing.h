@@ -5,7 +5,7 @@ int accept_object(object ob, object obj)
 	object me = this_object();
 
 	mapping my_fam  = me->query("family");
-	mapping ob_fam  = ob->query("family");
+	mapping ob_fam  = ob->query("family"); if (!mapp(ob_fam)) ob_fam = ([ ]);
 
 	if ( ob->query_temp("have_letter") && present("quanzhen letter1", ob) ) 
 	{
@@ -88,7 +88,7 @@ int checking(object me, object ob)
 string ask_for_join()
 {
 	object me = this_player();
-	mapping my_fam = me->query("family");
+	mapping my_fam = me->query("family"); if (!mapp(my_fam)) my_fam = ([ ]);
 
 	if( (string)me->query("class")=="quanzhen" )
 		return "无量寿佛！你我同属玄门，何故跟小道开这等无聊玩笑？\n";

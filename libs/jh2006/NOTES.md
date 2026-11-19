@@ -652,3 +652,8 @@ pristine + build-debug，port 40128。`scripts/play_login.py` 注册并执行 `l
 
 - `d/mr/npc/job-dizi.lpc` 第 3 行已 `inherit NPC;`，第 11 行再 `#include "dizi.lpc"`（头注释即 `// dizi.h`），而 `dizi.lpc` 第 2 行仍留有 `inherit NPC;`，导致 44 条全局变量重声明警告以及 `Illegal to redefine 'nomask' function 'is_busy'/'is_lost'/'query_busy'` 编译失败。比对同族 7 馆（`bxsj`/`shujian*`/`sje*`）并确认全语料无直接加载 `d/mr/npc/dizi` 的调用方后，删去 `dizi.lpc` 中的重复 `inherit NPC;`。
 - 验证：`lpcc_eval.py` `--head` 编译报 44 条重声明/重复继承错 → 工作树零编译告警与零编译错误通过编译（进入 `create()` 第 17 行），`play_boot.sh` + `play_stop.sh`（端口 `40128`）正常，`scripts/lint.py` 零告警。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `4` 个 `.h`（`/d/tls/npc/kurong.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

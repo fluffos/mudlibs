@@ -1459,3 +1459,8 @@ pristine + build-debug，归档端口 40056。`scripts/play_login.py` 注册进�
 
 - `adm/simul_efun/file.lpc` 中的 `read_file()` 仅声明单参数 `string read_file(string filename)`，两处放行分支均直接 `return efun::read_file(filename);` 并丢弃行号与行数，`feature/banghui.lpc` 的 `get_file_data("/adm/etc/wizlist")` 按行循环在 `--head` 下死循环直至触发 `Eval interrupted`；已改为 `varargs string read_file(string filename, int start_line, int number_of_lines)` 并在两处放行分支均透传三参。
 - 验证：`lpcc_eval.py` 通过 1/2/3 参测试（`a_len=3737 a2_len=3714 b_len=1 c_is0=1`）且 `new("/feature/banghui")->get_file_data("/adm/etc/wizlist")` 正常退出（`wizlist_n=-1`），`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 49306）启动验证通过。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `5` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

@@ -96,7 +96,7 @@ int mark_success(string arg) {
   int now_time;
   mapping fam;
   me = this_player();
-  fam = (mapping)me->query("family");
+  fam = (mapping)me->query("family"); if (!mapp(fam)) fam = ([]);
   if (!arg) return notify_fail("你要干什么？\n");
   target = present(arg, environment(me));
   now_time = me->query_condition("xx_task");

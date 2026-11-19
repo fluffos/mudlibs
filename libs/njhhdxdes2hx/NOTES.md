@@ -501,3 +501,8 @@ pristine + build-debug，归档端口 40194。`scripts/play_login.py` 注册并�
 
 - `/d/npc/oldman.lpc` 原 `kill_ob(object ob)` 漏掉了 `message("vision",` 调用头及 `object *obs;` 声明，并直接把 `all_inventory(environment())` 赋给 `object ob` 后按 `ob[i]` 下标访问，导致对象在 `HEAD` 下无法编译加载；对照同源已修复的 `es2`/`tianlongbabu` 版本补齐 `object *obs;`、`message("vision",` 及 `obs[i]` 循环。
 - 验证：`lpcc_eval.py` 由 `--head` 编译失败转为 `load_object("/d/npc/oldman")` 后调用 `kill_ob()` `PASS`（`revealed=1`）；`lpc_format_changed.py` 格式化通过。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `16` 个 `.h`（`/class/shaolin/cheng.h`、`/class/shaolin/chengb.h`、`/class/shaolin/chengl.h`、`/class/shaolin/dao.h`、`/class/shaolin/du.h`、`/class/shaolin/hui.h`、`/class/shaolin/qing.h`、`/class/shaolin/xuan1.h`、`/daemon/class/shaolin/cheng.h`、`/daemon/class/shaolin/chengb.h`、`/daemon/class/shaolin/chengl.h`、`/daemon/class/shaolin/dao.h`、`/daemon/class/shaolin/du.h`、`/daemon/class/shaolin/hui.h`、`/daemon/class/shaolin/qing.h`、`/daemon/class/shaolin/xuan1.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

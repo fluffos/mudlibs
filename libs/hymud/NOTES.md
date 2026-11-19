@@ -1447,3 +1447,8 @@ pristine + build-debug，port 40103。`scripts/play_login.py` 注册。
 
 - `d/migong/dntg/sky/npc/action.h` 与 `d/migong/dntg/sky/stars/star.h` 被多批星君、天神与强敌 NPC `#include`，其中 `chat()` 在 `random(100) < chance` 后直接执行 `rnd = random(sizeof(msg));` 并访问 `msg[rnd]`，当列表为空时触发 `*Array index out of bounds.`；扩展 `scripts/lpc_fix_chat_empty.py` 覆盖 `.h` 后补入 `sizeof(msg) &&` 守卫。
 - 验证：`lpcc_eval.py` 加载 `/d/migong/dntg/sky/stars/0` 与 `/d/migong/dntg/sky/npc/tianshen` 通过，`scripts/lint.py --changed HEAD` 零告警。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `1` 个 `.lpc`（`/kungfu/skill/kunlun-zhang.lpc`）、`6` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/emei/tobebonze.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

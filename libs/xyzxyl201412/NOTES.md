@@ -545,3 +545,8 @@ pristine + build-debug，归档端口 40175。`scripts/play_login.py` 注册/连
 
 - 原 `scripts/lpc_fix_start_more.py` 取前 5 行时跨越了仅有 4 行的 `start_more(string msg)`，误命中紧随其后的 `start_more_file()` 内的 `if (!stringp(msg)) return;`；已通过修复括号边界后的 `scripts/lpc_fix_start_more.py --apply` 在 `start_more()` 首行插入 `if (!stringp(msg)) return;`（保持原 CRLF）。
 - 验证：`lpcc_eval.py` 修前 `--head` 抛出 `*Bad argument 1 to explode()` (`FAIL`) → 修后 `e0=0 e1=0` `PASS`；`lpc_format_changed.py` 零重排，且 `play_boot.sh` + `play_stop.sh`（port 47203）实机启动通过。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `1` 个 `.lpc`（`/kungfu/skill/kunlun-zhang.lpc`）、`5` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

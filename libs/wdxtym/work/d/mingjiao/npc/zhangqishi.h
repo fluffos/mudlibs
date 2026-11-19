@@ -21,7 +21,7 @@ int accept_object(object ob, object obj)
 	string name;
 	object me = this_object();
 
-	mapping ob_family  = ob->query("family");
+	mapping ob_family  = ob->query("family"); if (!mapp(ob_family)) ob_family = ([ ]);
 	name = obj->query("id");	
 
 	if ( ob->query_temp("have_letter") && present("tuijian xin3", ob) ) 

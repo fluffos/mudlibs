@@ -108,7 +108,7 @@ string ask_liumai2() {
   me = this_object();
 
 
-  myfam = (mapping)ob->query("family");
+  myfam = (mapping)ob->query("family"); if (!mapp(myfam)) myfam = ([]);
 
   if (myfam["family_name"] != "天龙寺" || !ob->query("tls") || ob->query("class") != "bonze") {
     return "对不起，我不知道！\n";

@@ -10,7 +10,7 @@ int accept_object(object ob, object obj)
 	
 	me = this_object();
 	my_fam  = me->query("family");
-	ob_fam  = ob->query("family");
+	ob_fam  = ob->query("family"); if (!mapp(ob_fam)) ob_fam = ([ ]);
 
 	if ( ob->query_temp("have_letter") && present("tuijian xin1", ob) ) 
 	{

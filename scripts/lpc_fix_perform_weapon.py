@@ -145,7 +145,7 @@ def main():
         work = f"{REPO}/libs/{slug}/work"
         if os.path.exists(f"{work}/.git"):
             continue
-        for d in ("kungfu/skill", "daemon/skill", "daemon/class"):
+        for d in ("kungfu/skill", "daemon/skill", "daemon/class", "daemon/perform", "daemon/gongfu"):
             D = f"{work}/{d}"
             if not os.path.isdir(D):
                 continue

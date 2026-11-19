@@ -776,3 +776,8 @@ pristine + build-debug，port 40091。`scripts/play_login.py` 注册。
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## `daemon/perform/` 兵器绝招 `perform` 徒手崩溃修复（2026-11-19，KB 06 §7.246）
+
+- 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/perform/`，为 `10` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招（含手工修补 `assassin/longfenghuan/longfengshuangfei.lpc` 与 `jinqian/longfenghuan/longfengshuangfei.lpc` 补全 `objectp(weapon)` 检查并修正遗留 `me->add("apply/damage", 100)` 泄漏为 `me->add_temp("apply/damage", -100)`）补全徒手防护。
+- 验证：`fy2` 代表实测 `duxin`/`longfengshuangfei` 徒手 `perform(me, tgt)` 从 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`；全 `10` 文件差分 `lpcc` 零回归，`lpc_format_changed.py`、`scripts/lint.py --files` 与 `play_boot.sh`+`play_stop.sh` 均通过。

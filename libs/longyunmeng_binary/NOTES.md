@@ -341,3 +341,8 @@ pristine + build-debug，归档端口 40391。`scripts/play_login.py` 注册/连
 
 - 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `1` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
 - 验证：全 `1` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `1` 个 `.lpc`（`/kungfu/skill/kunlun-zhang.lpc`）、`5` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

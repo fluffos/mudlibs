@@ -4,7 +4,7 @@ string ask_for_join()
     mapping myfam;
     me = this_player();
 
-    myfam = (mapping)me->query("family");
+    myfam = (mapping)me->query("family"); if (!mapp(myfam)) myfam = ([ ]);
 //    if (!myfam || (myfam["family_name"] != "峨嵋派")) 
 //        return ("你和峨嵋没有渊源，贫尼不敢给你剃度。\n");
 //    if ( (int)me->query("combat_exp") > 100000 && 

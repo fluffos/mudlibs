@@ -8,7 +8,7 @@ int accept_object(object ob, object obj)
         
 
         mapping my_fam = me->query("family");
-        mapping ob_fam = ob->query("family");
+        mapping ob_fam = ob->query("family"); if (!mapp(ob_fam)) ob_fam = ([ ]);
 
 
 

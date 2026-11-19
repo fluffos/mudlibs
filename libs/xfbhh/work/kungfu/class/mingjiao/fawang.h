@@ -8,7 +8,7 @@ int accept_object(object ob, object obj)
         int r;
 
         mapping my_fam = query("family", me);
-        mapping ob_fam = query("family", ob);
+        mapping ob_fam = query("family", ob); if (!mapp(ob_fam)) ob_fam = ([ ]);
 
         if (r = ::accept_object(ob, obj))
                 return r;

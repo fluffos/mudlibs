@@ -4,7 +4,7 @@
 int accept_object(object ob, object obj) {
   object me = this_object();
 
-  mapping ob_family = query("family", ob);
+  mapping ob_family = query("family", ob); if (!mapp(ob_family)) ob_family = ([]);
 
   if (query_temp("have_letter", ob) && present("tuijian xin2", ob)) {
     command("say 怎麽样，你拿我的推荐信去见掌旗使了吗 ?");

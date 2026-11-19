@@ -303,3 +303,8 @@ pristine + build-debug，port 40270。`scripts/play_login.py` 注册并执行 `l
 ## 配置文件端口对齐（2026-11-18，AGENTS.md §10.5）
 
 - 将 `config.fluffos` 的 `port number` 从临时测试端口 `40321` 恢复为登记端口 `40270`（与 `meta.json`、`README.md` 及 `scripts/lib_numbering.json` 一致，且经确认全库无端口冲突）。`play_boot.sh` + `play_stop.sh`（端口 `40270`）与 `scripts/lint.py` 零告警。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `4` 个 `.h`（`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

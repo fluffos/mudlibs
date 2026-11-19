@@ -223,7 +223,7 @@ return last_power;
 int busy_if(object me,object target)
 {
 int ap,dp;
-mapping fam=me->query("family");
+mapping fam=me->query("family"); if (!mapp(fam)) fam = ([ ]);
 ap=(int)me->query("combat_exp")/100*((int)me->query_int()+(int)me->query_dex()+me->query("int")+random(me->query("dex")));
 if(fam["family_name"]=="武当派") ap=ap+random(ap/2);
 dp=(int)target->query("combat_exp")/100*((int)target->query_int()+(int)target->query_dex());

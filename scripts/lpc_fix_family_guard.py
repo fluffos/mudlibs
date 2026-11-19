@@ -79,7 +79,7 @@ def main():
             if SKIP.search(dp[len(work):] + "/"):
                 continue
             for f in fn:
-                if not f.endswith(".lpc"):
+                if not f.endswith((".lpc", ".h")):
                     continue
                 p = os.path.join(dp, f)
                 b = open(p, "rb").read()

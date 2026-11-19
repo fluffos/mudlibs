@@ -1548,3 +1548,8 @@ pristine + build-debug，归档端口 40066。`scripts/play_login.py` 注册并�
   - `adm/daemons/network/pingd.lpc`、`adm/daemons/network/pingtcp.lpc` 及 `u/karlopex/backup/adm/daemons/network/{pingd,pingtcp}.lpc`：`strip_callout()` 原 `nosave` 改为 `protected`；
   - `adm/daemons/network/userid.lpc` 与 `u/karlopex/backup/adm/daemons/network/userid.lpc`（`query_userid()`）：删去未使用的局部变量 `tmp`。
 - 验证：`scripts/lpc_audit_removed_locals.py` 检查 0 误删，`lpcc_eval.py` 验证 `pingd`/`pingtcp` 编译加载通过且 `Illegal to declare nosave` 警告清零（`head_warn=True -> tree_warn=False`）；`play_boot.sh` + `play_stop.sh`（端口 `40066`）启动与停止正常。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `4` 个 `.h`（`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

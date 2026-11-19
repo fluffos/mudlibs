@@ -19,7 +19,7 @@ int accept_object(object ob, object obj) {
   string job_flg;
   object me = this_object();
 
-  mapping ob_family = query("family", ob);
+  mapping ob_family = query("family", ob); if (!mapp(ob_family)) ob_family = ([]);
   name = query("id", obj);
 
   if (name == "huo qiang" && query("id", me) == "xin ran") {

@@ -22,7 +22,7 @@ int accept_object(object ob, object obj)
 	string job_flg;
 	object me = this_object();
 
-	mapping ob_family  = ob->query("family");
+	mapping ob_family  = ob->query("family"); if (!mapp(ob_family)) ob_family = ([ ]);
 	name = obj->query("id");	
 
 	if ( name == "huo qiang" && me->query("id") == "xin ran")

@@ -20,7 +20,7 @@ int accept_object(object ob, object obj)
         object me = this_object();
 
         mapping my_fam=query("family", me);
-        mapping ob_fam=query("family", ob);
+        mapping ob_fam=query("family", ob); if (!mapp(ob_fam)) ob_fam = ([ ]);
 
         if( query_temp("have_letter", ob) && present("tuijian xin4",ob) )
         {

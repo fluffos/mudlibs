@@ -585,3 +585,8 @@ pristine + build-debug，port 40161。`scripts/play_login.py` 注册并执行 `l
 - `/d/huashan/npc/referee.lpc` 第 235 行在写入后调用 `explode(read_file("/data/ladder.txt"), "
 ")`，若目录只读或写入失败导致返回 `0` 会崩溃；已与第 211 行一致补入 `|| ""` 兜底（保留 CRLF）。
 - 验证：`lpcc_eval.py` 加载 `/d/huashan/npc/referee` `PASS`（`r=1`），`play_boot.sh` + `play_stop.sh`（port 47333）零错误，`scripts/lint.py` 零告警。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `5` 个 `.h`（`/d/mj/npc/tangzhu.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

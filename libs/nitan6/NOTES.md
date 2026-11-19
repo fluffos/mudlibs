@@ -1524,3 +1524,8 @@ pristine + build-debug，port 40019。`scripts/play_login.py` 注册并执行 `l
 
 - `cmds/wiz/fxiang.lpc` 在未创建 `/data/room/` 时直接对 `get_dir("/data/room/")` 的返回值 `0` 调用 `map_array()`（两处：`file` 与 `xiang`），执行即报 `*Bad argument 1 to EFUN map()`；补入 `(get_dir("/data/room/") || ({}))` 兜底。
 - 验证：`nitan6` `lpcc_eval.py` 加载 `/cmds/wiz/fxiang` `PASS`，`scripts/lint.py --changed HEAD` 零告警。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `10` 个 `.h`（`/d/mingjiao/npc/menzhu.h`、`/d/mingjiao/npc/tangzhu.h`、`/d/mingjiao/npc/zhangqishi.h`、`/kungfu/class/mingjiao/fawang.h`、`/kungfu/class/mingjiao/shizhe.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`、`/quest11/tlbb/kurong.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。

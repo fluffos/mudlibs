@@ -1248,3 +1248,8 @@ pristine + build-debug，归档端口 40028。`scripts/play_login.py` 注册进�
 
 - `adm/daemons/gift/baoming.lpc`（144 行→69 行）与 `adm/daemons/gift/cash.lpc`（39 行→19 行）整份源码被首尾重复粘贴了两次，导致 `inherit`（`medicine.h` 中的 `COMBINED_ITEM` 与 `MONEY`）在同文件二次生效，触发 `Redeclaration of global variable` 告警及 `Illegal to redefine 'nomask' function '_query'` 等编译错误而无法载入。
 - 核实前后两半除去空白完全一致后删去重复后半份（保留原 CRLF 行尾）。验证：`lpcc_eval.py` `--head` 两者均 `FAIL` → 修后 `/adm/daemons/gift/baoming`（`天王保命丹`）与 `/adm/daemons/gift/cash`（`一千两银票`）均 `PASS`。
+
+## `family` 映射未判空索引修复（2026-11-19，KB 05 §7.30）
+
+- 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `9` 个 `.h`（`/d/mingjiao/npc/menzhu.h`、`/d/mingjiao/npc/tangzhu.h`、`/d/mingjiao/npc/zhangqishi.h`、`/kungfu/class/mingjiao/fawang.h`、`/kungfu/class/mingjiao/shizhe.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
+- 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
