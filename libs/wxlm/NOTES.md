@@ -65,3 +65,16 @@
 
 - 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `9` 个 `.h`（`/d/mingjiao/npc/menzhu.h`、`/d/mingjiao/npc/tangzhu.h`、`/d/mingjiao/npc/zhangqishi.h`、`/kungfu/class/mingjiao/fawang.h`、`/kungfu/class/mingjiao/shizhe.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
 - 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
+
+## `add_action` 缺失回调清理（2026-11-19，KB 06 §7.349）
+
+- 清理全库 `8` 个源码文件中指向不存在或被注释函数的 `10` 处无效 `add_action` 绑定（避免触发 `*Function for verb '...' not found.` 运行时报错）：
+  - `adm/npc/referee.lpc`（第 43–44 行 `do_halt` -> `halt`/`h`）；
+  - `clone/baoshi/color_baoshi.lpc`（第 34–38 行空 `init()`，不存在 `do_embed_gem`/`do_embed`，实际通过 `do_effect` 与 `cmds/std/embed_gem` 工作）；
+  - `clone/vip/qiankun_lingbei.lpc`（第 12–15 行空 `init()`，不存在 `do_eat`，实际通过 `do_effect` 使用）；
+  - `d/beijing/hg_w.lpc`（第 25–28 行空 `init()`，不存在 `do_body`）；
+  - `d/fuben/kuihua/npc/kuihua_mozun.lpc`（第 79 行 `do_flatter`）；
+  - `d/tulong/yitian/npc/obj/ling2.lpc`（第 7–10 行空 `init()`，不存在 `do_du` 且误遮蔽全局 `yandu`）；
+  - `d/yihua/lianhuachi.lpc`（第 24 行 `do_CAI`，原函数已在第 33 行起注释）；
+  - `inherit/char/smith.lpc`（第 9–12、20–23 行 `do_gu`/`do_stop`/`do_dapi`/`do_cuihuo` 前向声明与绑定，原 4 个实现已在第 58–229 行注释）。
+- 验证：`8` 个文件全部通过 `lpcc` 编译与 `lpcc_eval.py` 载入检查，`lpc_scan_callout_targets.py --lib wxlm --kind add_action` 剩余 `0`，`lpc_format_changed.py` 零格式告警，`scripts/lint.py --files` 零告警，`play_boot.sh` + `play_stop.sh`（端口 `47393`）启动正常。

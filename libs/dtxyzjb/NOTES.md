@@ -488,3 +488,8 @@ pristine + build-debug，port 40267。`scripts/play_login.py` 注册并执行 `l
 
 - `/d/koker/qnbank1.lpc` 补回 `@TEXT` 结束标记及 `add_action("do_deposit", "qn_cun");` 缺失分号，使潜能银行房间恢复编译载入。
 - 验证：全批 `32` 馆 / `34` 文件 `lpcc` 差分编译全部通过（`ok=34, regressions=0`）；代表 `lpcc_eval.py` 实测 `nitan6` `hai_end`（`no_exert` `30->0`）、`hxxtjqb` `remove_broken_weapon`（`w_after=0`）、`cctx` `neishi`（`*No program -> loaded` + `do_circle`）、`dtxyzjb` `qnbank1`（`*No program -> loaded` + `do_deposit`）；`lpc_format_changed.py`、`scripts/lint.py --files` 与 `10/10` 实库 `play_boot.sh`+`play_stop.sh` 均通过。
+
+## 海皇 NPC `do_shoot8` 缺失 `add_action` 回调清理（2026-11-19，KB 06 §7.349）
+
+- `/d/shengdoushi/7hai/shendian/npc/haihuangnpc.lpc` 声明并绑定了未定义的 `add_action("do_shoot8", "shoot")`（玩家带有 `7hai/shoot` 临时标记触发 `init()` 后输入 `shoot` 会覆盖前文 `do_shoot` 并报 `*Function for verb 'shoot' not found.`）；移除未定义的 `do_shoot8` 前向声明及 `else add_action("do_shoot8", "shoot")` 分支（保留原 CRLF 行尾）。
+- 验证：`lpcc` 编译与 `lpcc_eval.py` 载入及 `command("shoot")` 测试无崩溃，`lpc_scan_callout_targets.py --lib dtxyzjb --kind add_action` 剩余 `0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 零告警，`play_boot.sh` + `play_stop.sh`（端口 `47394`）启动正常。

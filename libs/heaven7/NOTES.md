@@ -30,3 +30,8 @@
 
 - `#ifdef LOG_WEAPON_HIT` 分支下的 `switch (file) { default: log_file(...); break; }` 没有 `case` 分支，已通过 `scripts/lpc_fix_default_switch.py heaven7 --apply` 简化为直接调用 `log_file(...)`。
 - 验证：`lpcc_eval.py` 加载 `/inherit/base/living` `PASS`，`scripts/lint.py --changed HEAD` 零告警。
+
+## `/room/city/obj/phy.lpc` 缺失 `enter`/`leave` 动作绑定清理（2026-11-19，KB 06 §7.349）
+
+- 法师公会三楼（`room/city/mage/bfloor3.lpc`）克隆载入的 `/room/city/obj/phy.lpc` 在 `init()` 中绑定了 `add_action("enter", "enter")` 与 `add_action("leave", "leave")`，但该物件及其继承的 `ROOM` 均未实现 `enter`/`leave`（原作者未完成的传送机制），触发即报 `*Function for verb 'enter'/'leave' not found.`；移除这两行无效 `add_action` 绑定。
+- 验证：`lpcc` 编译与 `lpcc_eval.py` 载入通过，`lpc_scan_callout_targets.py --lib heaven7 --kind add_action` 剩余 `0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 零告警，`play_boot.sh` + `play_stop.sh`（端口 `47398`）启动正常。

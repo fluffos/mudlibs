@@ -1355,3 +1355,8 @@ pristine + build-debug，归档端口 40048。`scripts/play_login.py` 注册进�
 
 - `/cmds/usr/helpnew.lpc` 将 `help_7` 中的缺失回调 `input_to("help_map", ob)` 修正为 `input_to("help_7", ob)`，并修正 `help_1..9` 错误重问 `input_to("help_" + num, ob)` 为各自菜单函数名。
 - 验证：全批 `32` 馆 / `34` 文件 `lpcc` 差分编译全部通过（`ok=34, regressions=0`）；代表 `lpcc_eval.py` 实测 `nitan6` `hai_end`（`no_exert` `30->0`）、`hxxtjqb` `remove_broken_weapon`（`w_after=0`）、`cctx` `neishi`（`*No program -> loaded` + `do_circle`）、`dtxyzjb` `qnbank1`（`*No program -> loaded` + `do_deposit`）；`lpc_format_changed.py`、`scripts/lint.py --files` 与 `10/10` 实库 `play_boot.sh`+`play_stop.sh` 均通过。
+
+## 人参果 `/d/obj/drug/renshenguohxl.lpc` 字符串引号缺失修复（2026-11-19，KB 06 §7.349）
+
+- `d/qujing/wuzhuang/intree.lpc` 载入的 `/d/obj/drug/renshenguohxl.lpc` 第 22 行 `set("no_sell,1);//石头加` 缺失右引号，致使第 23 行中文触发 `Illegal character` 整文件无法编译（`*No program`）且 `do_eat` 失效；修正为 `set("no_sell", 1); //石头加`。
+- 验证：`lpcc_eval.py` 由 `--head` `*No program in object '/d/obj/drug/renshenguohxl'!` 转为工作树 `tree_ok=1 err=0`，`lpc_scan_callout_targets.py --lib yueyingqiyuan --kind add_action` 剩余 `0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 零告警，`play_boot.sh` + `play_stop.sh`（端口 `47399`）启动正常。

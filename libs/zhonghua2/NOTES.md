@@ -1253,3 +1253,8 @@ pristine + build-debug，归档端口 40028。`scripts/play_login.py` 注册进�
 
 - 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `9` 个 `.h`（`/d/mingjiao/npc/menzhu.h`、`/d/mingjiao/npc/tangzhu.h`、`/d/mingjiao/npc/zhangqishi.h`、`/kungfu/class/mingjiao/fawang.h`、`/kungfu/class/mingjiao/shizhe.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
 - 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
+
+## 宠物物件 `/clone/pet/pet.lpc` 缺失属性函数与无效 `add_action` 修复（2026-11-19，KB 06 §7.349）
+
+- `clone/pet/petowner.lpc` 与 `adm/daemons/cron2.lpc` 使用的 `/clone/pet/pet.lpc` 在 `do_shape()` 中调用未定义的 `query_kar()`、`query_obe()`、`query_tol()` 导致整文件无法编译（`*No program`），且 `init()` 中绑定了未定义的 `add_action("do_move", "fastmove")`；结合同文件与 `petowner`/`pettrainer` 实存属性替换为 `(int)query("kar")`、`(int)query("obedience")`、`(int)query("tol")`，并移除无效 `do_move` 绑定。
+- 验证：`lpcc_eval.py` 由 `--head` `*No program in object '/clone/pet/pet'!` 转为工作树 `tree_ok=1 name="宠物" err=0`，`lpc_scan_callout_targets.py --lib zhonghua2 --kind add_action` 剩余 `0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 零告警，`play_boot.sh` + `play_stop.sh`（端口 `47400`）启动正常。
