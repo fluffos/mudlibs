@@ -110,6 +110,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("mr-dizi-duplicate-inherit", "targeted", "KB 04 §6.31", "error", "d/mr/npc/dizi.lpc declaring inherit NPC while #included by job-dizi.lpc"),
     RuleSpec("say-delete-busy", "targeted", "KB 06 §7.394", "error", "cmds/std/say.lpc call_out(\"delete_busy\") missing arg, deleted/commented body, uninit ob, or this_player()"),
     RuleSpec("cmd-callout-this-player", "targeted", "KB 06 §7.395", "error", "Shared /cmds/ call_out callback invoking this_player() (0 in timer context)"),
+    RuleSpec("skill-sanshen-del-perform", "targeted", "KB 06 §7.396", "error", "kungfu/skill/fanliangyi-dao/sanshen.lpc scheduling del_perform without defining void del_perform(object me)"),
     # Per-file corpus checks (all error in --changed/--files/--strict; configurable in --all)
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
     RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
@@ -739,7 +740,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "rtcfg", "ver_cfg", "band", "embed_cand")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "rtcfg", "ver_cfg", "band", "embed_cand")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -785,6 +786,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["say"].append(item)
         if rel in ("/cmds/std/block.lpc", "/cmds/skill/defense.lpc", "/cmds/std/perform.lpc", "/cmds/std/exercise.lpc", "/cmds/std/meditate.lpc", "/cmds/usr/wash.lpc", "/cmds/usr/bbg.lpc") or (rel.startswith("/cmds/") and bn == "jbless.lpc"):
             targeted_bins["cmdco"].append(item)
+        if rel == "/kungfu/skill/fanliangyi-dao/sanshen.lpc":
+            targeted_bins["sanshen"].append(item)
         if bn == "runtime_config.h":
             targeted_bins["rtcfg"].append(item)
         if any(k in bn for k in ("versiond", "getconfig", "server", "config")):
@@ -926,6 +929,17 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
             if cmdco_re.search(cb):
                 col.add("cmd-callout-this-player", p, "command call_out callback uses this_player() (0 under call_out)")
+
+    if col.wants("skill-sanshen-del-perform"):
+        for _, p, _ in targeted_bins["sanshen"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b'"del_perform"' not in b:
+                continue
+            mk = code_mask(b, heredoc=True)
+            cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+            if (re.search(rb'\b(?:call_out|start_call_out)\s*\(', cb)
+                    and not re.search(rb'\bdel_perform\s*\(', cb)):
+                col.add("skill-sanshen-del-perform", p, "sanshen.lpc schedules del_perform without defining void del_perform(object me)")
 
 
 def _changed_files(base: str | None) -> list[str]:

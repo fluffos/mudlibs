@@ -552,3 +552,7 @@ pristine + build-debug，归档端口 40180。`scripts/play_login.py` 注册进�
 
 - `cmds/usr/bbg.lpc` 在 `gogogo_start()` 与 `gogogo_running()` 中误读 `this_player()` 致每局 1 秒后误报「失踪了」中止；改为读取已赋值的全局 `now_player`。
 - 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。
+## `kungfu/skill/fanliangyi-dao/sanshen.lpc` 补全 `del_perform()` 回调（2026-11-19，KB 06 §7.396）
+
+- `perform()` 与 `do_attack()` 均设置了 `perform` 临时标记并调度 `del_perform` 回调，但本馆文件末尾缺失 `void del_perform(object me)` 定义；若 `do_attack` 未执行或提前中止，`query_temp("perform")` 将永久残留导致无法再次施展「华岳三神峰」。比照同类馆（`tybxjh`、`wlhd`、`yxjh`、`zxty`、`zxty08nxgbb`）于文末补全 `void del_perform(object me)`（保留原文件行尾）。
+- 验证：全批 `22` 馆 `/kungfu/skill/fanliangyi-dao/sanshen.lpc` 经 `lpcc` 编译全部通过（`22/22`）；`lpcc_eval.py` 代表（`bixiecanyang`、`hc`、`longyunmeng_binary`）均由 `--head` `fn=0 perform=1` 转为 `fn="/kungfu/skill/fanliangyi-dao/sanshen" perform=0`（含 `del_perform(0)` 空指针守卫测试）；`lpc_format_changed.py --apply`（`80` 份 `0` 重排）；`lpc_scan_callout_targets.py` `sanshen.lpc` 剩余 `0`；`scripts/lint.py`（新增 `skill-sanshen-del-perform`，共 `68` 条规则）`0` 错误零告警；代表实机 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
