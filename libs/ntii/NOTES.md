@@ -660,3 +660,8 @@ pristine + build-debug，port 40151。`scripts/play_login.py` 注册并执行 `l
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## `/cmds/wiz/fxiang.lpc` 缺失 `/data/room/` 时 `map_array(get_dir())` 崩溃修复（2026-11-19，KB 06 §7.391）
+
+- `cmds/wiz/fxiang.lpc` 在未创建 `/data/room/` 时直接对 `get_dir("/data/room/")` 的返回值 `0` 调用 `map_array()`（两处：`file` 与 `xiang`），执行即报 `*Bad argument 1 to EFUN map()`；补入 `(get_dir("/data/room/") || ({}))` 兜底。
+- 验证：`nitan6` `lpcc_eval.py` 加载 `/cmds/wiz/fxiang` `PASS`，`scripts/lint.py --changed HEAD` 零告警。

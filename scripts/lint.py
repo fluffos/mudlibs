@@ -525,7 +525,7 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         if quotefix.fix_text(txt)[1]:
             hits.append(("eaten-quote", path, "unterminated string literal before statement terminator"))
 
-    if want("money-path-clone") and ctx["uses_obj_money"] and b"/clone/money/" in b:
+    if want("money-path-clone") and ctx["uses_obj_money"] and b'"/clone/money/' in b:
         hits.append(("money-path-clone", path, "\"/clone/money/\" literal in /obj/money/ lib"))
 
     if want("default-switch-only") and b"switch" in b and b"default" in b and not swfix.SKIP.search(rel):
@@ -658,7 +658,8 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
                     drel = lm.group(1).decode("utf-8", "replace").lstrip("/").rstrip("/")
                     if os.path.isdir(f"{REPO}/libs/{slug}/work/{drel}"):
                         continue
-                if GD_GUARD_CTX.search(line_s):
+                ctx_next = b"\n".join(lines_cb[ln:min(len(lines_cb), ln + 3)])
+                if GD_GUARD_CTX.search(ctx_next):
                     continue
                 ctx_prev = b"\n".join(lines_cb[max(0, ln - 8):ln + 1])
                 if GD_GUARD_CTX.search(ctx_prev):

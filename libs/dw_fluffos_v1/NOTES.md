@@ -568,3 +568,8 @@ pristine + build-debug，归档端口 40271。`scripts/play_login.py` 注册/连
 
 - 修复 `cmds/report_base.lpc`（`query_patterns()` 对未附带 `/d/special/` 与 `/obj/` 调用 `filter(get_dir(...))` 抛出 `*Bad argument 1 to EFUN filter()`）、`obj/handlers/parcel.lpc`（`player_refreshed()` 对缺失 `/save/parcels/`）、`obj/misc/housing_creator.lpc`（`list_plans()` 对缺失 `/std/houses/*`）、`www/secure/file_browser.lpc`（`get_full_dir(path)`）及 `std/shops/player_shop/office_code/logging.lpc`（`_savedir + "general.log-*"`），全部补充 `|| ({})` 空数组兜底。
 - 已通过 `lpcc_eval.py` 修前 FAIL（`Bad argument 1/2 ... Got: 0`）→ 修后 `PASS|PASS|PASS|PASS` 验证。
+
+## `/obj/misc/housing_creator.lpc` `get_dir()` 返回 0 兜底（2026-11-19，KB 06 §7.391）
+
+- 第 135 行 `foreach(room in get_dir(PATH+type+"/*.lpc"))` 在模板目录不存在时返回 `0` 会导致 `foreach` 报错；补入 `|| ({})` 兜底。
+- 验证：`discworld` `lpcc_eval.py` 加载 `/obj/misc/housing_creator` `PASS`，`scripts/lint.py --changed HEAD` 零告警。

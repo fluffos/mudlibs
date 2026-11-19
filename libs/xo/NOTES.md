@@ -937,3 +937,8 @@ pristine + build-debug，归档端口 40023。`scripts/play_login.py`（port 490
 
 - 修复 `system/daemon/taskd.lpc` 与 `secure/sefun/filter.lpc` 中未判空直接传入 `foreach` / `+=` 的 `get_dir()` 调用，补充 `|| ({})` 空数组兜底（含 `eventRehashTask()` 因缺失 `/system/task/` 崩溃修复及 `play_boot.sh` + `play_stop.sh` port 47309 验证）。
 - 已通过 `lpcc_eval.py` 全部探针 `PASS` 验证。
+
+## `/cmds/arch/purge.lpc` `do_purge_log()` 缺 `/data/log/` 目录崩溃修复（2026-11-19，KB 06 §7.391）
+
+- `do_purge_log()` 直接在 `foreach` 与 `+=` 中消费 `get_dir(DATA_DIR + "log/")` 和 `get_dir(DATA_DIR + "log/" + letter + "/")`，当目录不存在或为空桶未建时触发 `*Bad argument 2 to foreach`；补入 `|| ({})` 兜底。
+- 验证：`xo` `lpcc_eval.py` 调用 `do_purge_log()` 由 `--head` 第 103 行崩溃转为 `e=0 r=1` `PASS`，`scripts/lint.py --changed HEAD` 零告警。

@@ -342,3 +342,8 @@ xinfang：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40195。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## `/cmds/arch/purge.lpc` `do_purge_log()` 缺 `/data/log/` 目录崩溃修复（2026-11-19，KB 06 §7.391）
+
+- `do_purge_log()` 直接在 `foreach` 与 `+=` 中消费 `get_dir(DATA_DIR + "log/")` 和 `get_dir(DATA_DIR + "log/" + letter + "/")`，当目录不存在或为空桶未建时触发 `*Bad argument 2 to foreach`；补入 `|| ({})` 兜底。
+- 验证：`xo` `lpcc_eval.py` 调用 `do_purge_log()` 由 `--head` 第 103 行崩溃转为 `e=0 r=1` `PASS`，`scripts/lint.py --changed HEAD` 零告警。

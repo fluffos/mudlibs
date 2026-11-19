@@ -1067,3 +1067,8 @@ pristine + build-debug（归档端口 `40055`，测试端口 `49055`）。`scrip
 
 - 修复 `adm/simul_efun/ntefun.lpc`（`deep_path_list(root)` 第 12 行）：对不存在目录调用时 `get_dir(root)` 返回 `0` 抛出 `*Bad argument 2 to foreach`；补充 `|| ({})` 兜底。
 - 已通过 `lpcc_eval.py` 修前 FAIL → 修后 `ZZT PASS cnt=86`（`/include/` 正常遍历）及 `play_boot.sh` + `play_stop.sh`（port 47307）验证。
+
+## `/cmds/wiz/fxiang.lpc` 缺失 `/data/room/` 时 `map_array(get_dir())` 崩溃修复（2026-11-19，KB 06 §7.391）
+
+- `cmds/wiz/fxiang.lpc` 在未创建 `/data/room/` 时直接对 `get_dir("/data/room/")` 的返回值 `0` 调用 `map_array()`（两处：`file` 与 `xiang`），执行即报 `*Bad argument 1 to EFUN map()`；补入 `(get_dir("/data/room/") || ({}))` 兜底。
+- 验证：`nitan6` `lpcc_eval.py` 加载 `/cmds/wiz/fxiang` `PASS`，`scripts/lint.py --changed HEAD` 零告警。

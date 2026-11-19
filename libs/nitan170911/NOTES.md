@@ -1372,3 +1372,8 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 
 - 陈玄风 `die()` 调用 `unew(__DIR__ "../obj/jiuyin-book2")` 取九阴真经下卷（人皮），既包含被驱动拒绝的 `..` 路径（`--head` `chen->die()` 直接报错 `*Read access denied.`），且 `jiuyin-book2.lpc` 实际位于同目录下的 `/quest/skybook/jiuyin/jiuyin-book2.lpc`；改为 `unew(__DIR__ "jiuyin-book2")`。
 - 验证：`nitan6` `lpcc_eval.py` `--head` `*Read access denied.` → 工作树 `err=0`；`scripts/lint.py --changed HEAD` 零告警。
+
+## `/cmds/wiz/fxiang.lpc` 缺失 `/data/room/` 时 `map_array(get_dir())` 崩溃修复（2026-11-19，KB 06 §7.391）
+
+- `cmds/wiz/fxiang.lpc` 在未创建 `/data/room/` 时直接对 `get_dir("/data/room/")` 的返回值 `0` 调用 `map_array()`（两处：`file` 与 `xiang`），执行即报 `*Bad argument 1 to EFUN map()`；补入 `(get_dir("/data/room/") || ({}))` 兜底。
+- 验证：`nitan6` `lpcc_eval.py` 加载 `/cmds/wiz/fxiang` `PASS`，`scripts/lint.py --changed HEAD` 零告警。

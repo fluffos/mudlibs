@@ -527,3 +527,8 @@ pristine + build-debug，归档端口 40117。`scripts/play_login.py` 注册进�
 
 - 修复 `clone/misc/queryip.lpc`（`compare()` 与 `report()`）：归档缺少 `/data/ipdata.o`，`compare()` 对 `0` 执行 `line[0..15]` 抛出 `*Cannot index type 'int' using [ .. ] operator.`，且 `report()` 在 `!stringp(line)` 警告后未返回继续执行 `line[32..]`；增加 `if (!stringp(line) || strlen(line) < 32) return "小于";` 与 `report()` 提前 `return`。
 - 验证：`lpcc_eval.py` 修前 `--head`（`*Cannot index type 'int'`）→ 修后（`ZZ_X100=0/0 res="小于"` `PASS`）。
+
+## `/cmds/wiz/sameip.lpc` 与 `samecreate.lpc` `member_array('.', arg)` 修复（2026-11-19，KB 06 §7.283）
+
+- `cmds/wiz/sameip.lpc` 与 `cmds/wiz/samecreate.lpc`（位于 `cmds/wiz/`，此前被修复脚本跳过）以 `member_array('.', arg)` 检查 IP 点分字符串，`--head` 传入 `"127.0.0.1"` 时直接报错 `*Bad argument 2 to member_array() Expected: mapping or array`；改为 `strsrch(arg, ".")`。
+- 验证：`lpcc_eval.py` 传入 `"127.0.0.1"` 由 `--head` 崩溃转为 `e1=0 e2=0` `PASS`，`scripts/lint.py --changed HEAD` 零告警。
