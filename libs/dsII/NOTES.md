@@ -942,3 +942,7 @@ pristine + build-debug，归档端口 40228。`scripts/play_login.py`（port 492
 
 - 修复 `lib/detect.lpc`（两处分支对缺失 `/verbs/spells/` 调用 `map(get_dir(...))` 并索引 `spells[random(0)]`）与 `lib/std/book.lpc`（`eventLoadChapters()` 对动态目录 `Source` 执行 `foreach`），分别补充 `|| ({})` 与 `!sizeof(spells)` 保护。
 - 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to EFUN map()`）→ 修后 `plain`/`magic`/`book` 全部 `PASS` 验证。
+## `daemon/verbs.lpc` 与 `get_cmds`/`get_verbs` `get_dir()` 崩溃修复（2026-11-19，KB 06 §7.391）
+
+- 为 `daemon/verbs.lpc`（含缺失/无权 `DIR_SECURE_VERBS` 及 `*.lpc`）、`secure/sefun/get_cmds.lpc` 与 `secure/sefun/get_verbs.lpc` 补全 `|| ({})` 兜底并初始化空返回数组 `cmds`/`verbs = ({})`。
+- 验证：`lpcc_eval.py --at /open/zzeval.lpc` `v=1 c=1 vb=0` `PASS`，`play_boot.sh` + `play_stop.sh`（port 47340）零错误，`scripts/lint.py` 零告警。

@@ -947,3 +947,7 @@ pristine + build-debug，归档端口 40023。`scripts/play_login.py`（port 490
 - `cmds/admin/purge.lpc` 与 `cmds/arch/npurge.lpc` 的 `do_purge_log()` 在 `foreach` 与 `+=` 中直接消费 `get_dir(DATA_DIR + "log/")` 与 `get_dir(DATA_DIR + "log/" + letter + "/")`，缺失/无权目录时返回 `0` 崩溃；已补全 `|| ({})`。
 - `cmds/app/test.lpc` 第 14 行 `foreach (string f in get_dir(pwd))` 在 `cwd` 未设或指向不存在目录时崩溃；已改为 `stringp(pwd) ? (get_dir(pwd) || ({})) : ({})`（保留原 CRLF 换行）。
 - 验证：`lpcc_eval.py` 三文件均编译加载 `PASS`（`p=1 n=1 t=1`），`play_boot.sh` + `play_stop.sh`（port 47323）零错误，`scripts/lint.py` 零告警。
+## `include/assert.h` ANSI 字符串化 `#x` 修复（2026-11-19，KB 06 §7.352）
+
+- `assert(x)` 与 `ASSERT(x)` 的 `"x"` 改为 ANSI `#x`（保留 CRLF）。
+- 验证：`#define DEBUG 1` + `#include <assert.h>` 调用 `ASSERT(1 == 2)` 捕获 `*assertion failed : file ..., 1 == 2.`，`play_boot.sh` + `play_stop.sh`（port 47344）零错误，`scripts/lint.py` 零告警。

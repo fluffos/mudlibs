@@ -574,3 +574,7 @@ pristine + build-debug，port 40197（补 `log/mud` 后）。`scripts/play_login
 ## 暗器 embed.h 补全（2026-11-16）
 
 - `clone/weapon/*` 的暗器（冰魄银针、丧门钉等）`#include "/inherit/item/embed.h"`，而存档没有这个文件，整族暗器无法载入（`Cannot #include /inherit/item/embed.h`）。从同系列 bxsj 采入 `inherit/item/embed.h`（与 6 个兄弟库字节相同），`bb_zhen` 载入 PASS。
+## `zi.lpc` / `jinyong.lpc` 重读 `/data/ladder.txt` 判空保护（2026-11-19，KB 06 §7.386）
+
+- `/d/npc/zi.lpc` 第 243 行与 `/quest/jinyongjob/jinyong.lpc` 第 406 行重读 `read_file("/data/ladder.txt")` 未判空；已补入 `|| ""` 兜底（保留 CRLF）。
+- 验证：`lpcc_eval.py` 加载两对象 `PASS`（`z=1 j=1`），`play_boot.sh` + `play_stop.sh`（port 47334）零错误，`scripts/lint.py` 零告警。

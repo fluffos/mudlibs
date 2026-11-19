@@ -1117,3 +1117,7 @@ pristine + build-debug 实测发现，`config.h` 启用 `#define LOG_LOCAL_CHANS
 
 - 修复 `lib/detect.lpc`（两处分支对缺失 `/verbs/spells/` 调用 `map(get_dir(...))` 与 `spells[random(0)]`）与 `daemon/books.lpc`（`LoadChapters()` 对缺失或无效 `Source` 目录执行 `foreach`），补充 `|| ({})` 与 `!sizeof(spells)` 保护。
 - 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to EFUN map()`）→ 修后 `plain`/`magic`/`books` 全部 `PASS` 验证。
+## Dead Souls III 缺失/无权目录 `get_dir()` 返回 0 全族清理（2026-11-19，KB 06 §7.391）
+
+- 为 `daemon/verbs.lpc`、`secure/sefun/{get_cmds,get_verbs}.lpc`（含空数组初值）、`secure/cmds/admins/{liveupgrade,mudconfig}.lpc`、`secure/daemon/master.lpc`、`secure/obj/weirder.lpc`（与同文件已保护的 `loadrooms`/`loadweaps` 对齐）及 `www/cgi/chanlogs.lpc` 的 `get_dir()` 调用补全 `|| ({})` 兜底。
+- 验证：`lpcc_eval.py --at /open/zzeval.lpc` `v=1 l=1 m=1 w=1 cg=1` `PASS`，`play_boot.sh` + `play_stop.sh`（port 47341）零错误，`scripts/lint.py` 零告警。

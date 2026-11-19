@@ -988,3 +988,7 @@ pristine + build-debug（归档端口 `40225`，测试端口 `49225`）。`scrip
 
 - 修复 `lib/detect.lpc` `else` 分支第 82 行：此前第 49 行已保护，但第 82 行仍在 `/verbs/spells/` 缺失时将 `get_dir()` 返回的 `0` 传入 `map()` 并触发 `spells[random(0)]` 越界；现补充 `|| ({})` 与 `if (!sizeof(spells))` 优雅回退。
 - 已通过 `lpcc_eval.py` 修前（`*Bad argument 1 to EFUN map()`）→ 修后 `ZZT detect_magic=ok` 及 `play_boot.sh` + `play_stop.sh`（port 47303）验证。
+## `/daemon/verbs.lpc` `get_dir()` 返回 0 崩溃修复（2026-11-19，KB 06 §7.391）
+
+- 为 `daemon/verbs.lpc` 中 `DIR_VERBS` 及子目录 `*.lpc` 的 `get_dir()` 补全 `|| ({})` 空数组兜底。
+- 验证：`lpcc_eval.py --at /open/zzeval.lpc` 加载 `/daemon/verbs` `PASS`（`v=1`），`play_boot.sh` + `play_stop.sh`（port 47339）零错误，`scripts/lint.py` 零告警。

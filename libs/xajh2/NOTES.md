@@ -1255,3 +1255,7 @@ pristine + build-debug（归档端口 40068，临时测试端口 49520）。`scr
 
 - `cmds/admin/npurge.lpc` 的 `do_purge_log()` 为 `get_dir(DATA_DIR + "log/")` 与 `get_dir(DATA_DIR + "log/" + letter + "/")` 补全 `|| ({})` 兜底（保留原 CRLF）；`system/daemon/verbd.lpc` 为 `get_dir(DIR_VERBS + "/")` 与 `get_dir(dir + "/*.lpc")` 补全 `|| ({})`。
 - 验证：`lpcc_eval.py` `load_object("/cmds/admin/npurge")`（`/cmds/admin/npurge`）与 `verbd=1` 均 `PASS`，`play_boot.sh` + `play_stop.sh`（port 47324）零错误，`scripts/lint.py` 零告警。
+## `include/assert.h` ANSI 字符串化 `#x` 修复（2026-11-19，KB 06 §7.352）
+
+- `assert(x)` 与 `ASSERT(x)` 的 `"x"` 改为 ANSI `#x` 以便调试断言输出真实条件表达式。
+- 验证：`#define DEBUG 1` + `#include <assert.h>` 调用 `ASSERT(1 == 2)` 捕获 `*assertion failed : file ..., 1 == 2.`，`scripts/lint.py` 零告警。

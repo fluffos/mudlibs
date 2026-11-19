@@ -1086,3 +1086,7 @@ pristine + build-debug（归档端口 `40206`，测试端口 `49206`）。`scrip
 
 - 第 135 行 `foreach(room in get_dir(PATH+type+"/*.lpc"))` 在模板目录不存在时返回 `0` 会导致 `foreach` 报错；补入 `|| ({})` 兜底。
 - 验证：`discworld` `lpcc_eval.py` 加载 `/obj/misc/housing_creator` `PASS`，`scripts/lint.py --changed HEAD` 零告警。
+## `tmstats`、`who` 与 `player_council` `get_dir()` 返回 0 兜底（2026-11-19，KB 06 §7.391）
+
+- 为 `cmds/lord/tmstats.lpc`、`cmds/player/who.lpc` 与 `obj/handlers/inherit/player_council.lpc` 中可能缺失/无权的 `get_dir()` 调用补入 `|| ({})` 空数组兜底。
+- 验证：`lpcc_eval.py --at /global/zzeval.lpc` 加载三对象均 `PASS`（`u=1 t=1 c=1`），`play_boot.sh` + `play_stop.sh`（port 47337）零错误，`scripts/lint.py` 零告警。

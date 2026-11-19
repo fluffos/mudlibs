@@ -1055,3 +1055,7 @@ pristine + build-debug（归档端口 `40069`，测试端口 `49069`）。`scrip
 
 - `do_purge_log()` 直接在 `foreach` 与 `+=` 中消费 `get_dir(DATA_DIR + "log/")` 和 `get_dir(DATA_DIR + "log/" + letter + "/")`，缺失或遇到非目录项时返回 `0` 崩溃；已补全 `|| ({})` 兜底。
 - 验证：`lpcc_eval.py` `load_object("/cmds/admin/purge")` `PASS`（`purge=1`），`scripts/lint.py` 零告警。
+## `include/assert.h` ANSI 字符串化 `#x` 修复（2026-11-19，KB 06 §7.352）
+
+- `assert(x)` 与 `ASSERT(x)` 的 `"x"` 改为 ANSI `#x`（保留 CRLF）。
+- 验证：`#define DEBUG 1` + `#include <assert.h>` 调用 `ASSERT(1 == 2)` 捕获 `*assertion failed : file ..., 1 == 2.`，`scripts/lint.py` 零告警。

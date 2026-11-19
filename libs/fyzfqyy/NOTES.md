@@ -567,3 +567,7 @@ pristine + build-debug，port 40133。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40133。`scripts/play_login.py` 注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+## `/cmds/arch/examine.lpc` 钱庄银票路径修复（2026-11-19，KB 06 §7.391）
+
+- `is_illegal()` 离线资产统计表原硬编码 `/clone/money/cash`，本馆实际货币路径位于 `/obj/money/{thousand,tenthousand}-cash`（面额分别为 10 两与 100 两黄金）；已更正为 `/obj/money/tenthousand-cash`（`({ 100, 1 })`）与 `/obj/money/thousand-cash`（`({ 10, 1 })`），保留 CRLF 换行。
+- 验证：`lpcc_eval.py` 加载 `/cmds/arch/examine`、`/obj/money/thousand-cash`、`/obj/money/tenthousand-cash` 均 `PASS`（`e=1 c1=1 c2=1`），`play_boot.sh` + `play_stop.sh`（port 47331）零错误，`scripts/lint.py --rule money-path-clone --all` 零告警。

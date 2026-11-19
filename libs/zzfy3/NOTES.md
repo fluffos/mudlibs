@@ -586,3 +586,7 @@ pristine + build-debug（归档端口 40120，临时测试端口 49652）。`scr
 
 - `rmDir()` 第 53 行 `foreach (tmp in get_dir(file))` 补全 `|| ({})` 兜底，同时保留第 51 行 `file[sizeof(file)] != /` 防 `rmhir /` 删库保护（KB 06 §7.343）。
 - 验证：`zzfy3` `lpcc_eval.py` `rmDir("/")` 返回 `rmhir=0` `PASS`，`scripts/lint.py` 零告警。
+## `/cmds/arch/examine.lpc` 钱庄银票路径修复（2026-11-19，KB 06 §7.391）
+
+- `is_illegal()` 离线资产统计表原硬编码 `/clone/money/cash`，本馆实际货币路径位于 `/obj/money/{thousand,tenthousand}-cash`；已更正为 `/obj/money/tenthousand-cash`（`({ 100, 1 })`）与 `/obj/money/thousand-cash`（`({ 10, 1 })`），保留 CRLF 换行。
+- 验证：`lpcc_eval.py` 加载 `/cmds/arch/examine`、`/obj/money/thousand-cash`、`/obj/money/tenthousand-cash` 均 `PASS`（`e=1 c1=1 c2=1`），`scripts/lint.py --rule money-path-clone --all` 零告警。

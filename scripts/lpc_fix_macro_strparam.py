@@ -28,6 +28,10 @@ def fix_body(params, body):
 
     def one(m):
         lit = m.group(1)
+        prev = body[:m.start()].rstrip(b" \t\\\r\n")
+        nxt = body[m.end():].lstrip(b" \t\\\r\n")
+        if nxt.startswith(b":") and not nxt.startswith(b"::") and (prev.endswith(b"([") or prev.endswith(b",")):
+            return m.group(0)
         if lit in params:
             done.append(lit)
             return b"#" + lit

@@ -899,3 +899,7 @@ pristine + build-debug，port 40100。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+## `/adm/zi.lpc` 重读 `/data/ladder.txt` 判空保护（2026-11-19，KB 06 §7.386）
+
+- `/adm/zi.lpc` 第 248 行重读 `read_file("/data/ladder.txt")` 未判空；已与第 211 行一致补入 `|| ""` 兜底（保留 CRLF）。
+- 验证：`lpcc_eval.py` 加载 `/adm/zi` `PASS`（`z=1`），`play_boot.sh` + `play_stop.sh`（port 47335）零错误，`scripts/lint.py` 零告警。
