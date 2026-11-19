@@ -694,3 +694,7 @@ pristine + build-debug，port 40097。`scripts/play_login.py` 注册并执行 `l
 
 - `cmds/adm/jbless.lpc` 在 `call_out("show_bless", ..., num)` 中未传入发送者且回调读取 `this_player()->query("name")`；传入 `me` 并改为 `varargs void show_bless(int holiday_num, object me)`（空对象兜底 `"我"`）。
 - 验证：`29/29` 目标文件 `lpcc` 编译通过；`lpcc_eval.py` 代表实测（`bmxkx2001 block`、`shenzhou defense`、`shenmo jbless`、`kxkj1 perform` `busy_after=1->0`、`xajdxyj exercise/meditate`、`xjcq2000 wash` `times=0->1`）均由 `--head` 运行时崩溃转为 `err=0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `cmd-callout-this-player`，共 `67` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47411..47420`）均正常且 `ZERO_DRIVERS`。
+## `->query*()` 拼写错误修复（2026-11-19，KB 06 §7.397）
+
+- 全语料排查无定义函数调用（`call_other` 静默返回 `0`），修正 `/daemon/class/pansi/yinsuo-jinling/wanling.lpc`、`/daemon/skill/yirubian.lpc`（共 `2` 个文件） 中的 `->qurey`/`->qeury`/`->quert`/`->queyr`/`->quety_temp`/`->querk_skill`/`->quert_respect`/`->query_tmp`/`->quary`/`->queryr`/`->quer` 等拼写错误为标准方法名（并顺手修正 `yirubian.lpc`/`yiruwhip.lpc` 括号错位 `->query("family/master_name") != ...`），消除功能失效或条件误放行问题（保留原文件行尾）。
+- 验证：全批 `698` 文件（`691/698` 编译通过、`7` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`dtxywzxzb` 非蜀山 `valid_learn` 由 `1` 转为 `0`，`fqyy2` `qurey=0 -> query=50`）；`scripts/lint.py`（新增 `query-method-typo`，共 `69` 条规则）全库与 `--fast` 零错误零告警；`10` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

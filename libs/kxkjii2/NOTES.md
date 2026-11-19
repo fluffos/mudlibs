@@ -570,3 +570,7 @@ pristine + build-debug，port 40160。`scripts/play_login.py` 注册并执行 `l
 
 - `open/ping/npc/master_duan.lpc` 与 `open/scholar/room/newplan/npc/master_duan.lpc` 的 `add_record()` 在写入前直接 `explode(read_file("/u/b/bss/record"), "\n")`（文件不存在时 `--head` 报错 `*Bad argument 1 to explode()`）；改为 `|| ""` 兜底。
 - 验证：`kxkj` `lpcc_eval.py` `new("/open/ping/npc/master_duan")->add_record("zztest")` 由 `--head` 崩溃转为 `err=0` `PASS`，`scripts/lint.py --changed HEAD` 零告警。
+## `->query*()` 拼写错误修复（2026-11-19，KB 06 §7.397）
+
+- 全语料排查无定义函数调用（`call_other` 静默返回 `0`），修正 `/open/capital/npcbak/duan2.lpc`、`/open/capital/npc/duan2.lpc`、`/open/death/npc/ghost1.lpc`（共 `3` 个文件） 中的 `->qurey`/`->qeury`/`->quert`/`->queyr`/`->quety_temp`/`->querk_skill`/`->quert_respect`/`->query_tmp`/`->quary`/`->queryr`/`->quer` 等拼写错误为标准方法名，消除功能失效或条件误放行问题（保留原文件行尾）。
+- 验证：全批 `698` 文件（`691/698` 编译通过、`7` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`dtxywzxzb` 非蜀山 `valid_learn` 由 `1` 转为 `0`，`fqyy2` `qurey=0 -> query=50`）；`scripts/lint.py`（新增 `query-method-typo`，共 `69` 条规则）全库与 `--fast` 零错误零告警；`10` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

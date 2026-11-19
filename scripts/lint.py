@@ -115,6 +115,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
     RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
     RuleSpec("quoted-efun-call", "file", "KB 06 §7.393", "error", "Object efun/sefun called with quoted \"this_object()\"/\"this_player()\"/... string instead of object"),
+    RuleSpec("query-method-typo", "file", "KB 06 §7.397", "error", "Misspelled ->query()/->query_temp()/->query_skill()/->query_respect() method call"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -377,6 +378,13 @@ def run_repo_checks(col: LintCollector, metas: dict[str, dict], skip_ntfs: bool,
                     )
 
 
+QUERY_TYPO_PAT = re.compile(
+    rb'->\s*(queyr|queryr|qury|qurey|quey|quer|qeury|qeuery|quert|quary|'
+    rb'qury_temp|queyr_temp|queryr_temp|qurey_temp|qeury_temp|qeuery_temp|quety_temp|'
+    rb'query_tmp|query_tme|query_tepm|query_tmep|querk_skill|quert_respect)\s*\('
+)
+
+
 def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
     """Run all stateless per-file lint rules on a single tracked file.
 
@@ -430,6 +438,14 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
     if want("not-literal-cmp") and b'!"' in b:
         if notlitfix.fix(b)[1]:
             hits.append(("not-literal-cmp", path, "comparison against negated string literal (`== !\"...\"`)"))
+
+    if want("query-method-typo") and b"->" in b and QUERY_TYPO_PAT.search(b):
+        mk = code_mask(b, heredoc=True)
+        for m in QUERY_TYPO_PAT.finditer(b):
+            if mk[m.start(1)]:
+                ln = b.count(b"\n", 0, m.start(1)) + 1
+                hits.append(("query-method-typo", f"{path}:{ln}", f"misspelled query method `->{m.group(1).decode('latin-1')}()`"))
+                break
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

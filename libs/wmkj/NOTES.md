@@ -1309,3 +1309,7 @@ pristine + build-debug，归档端口 40049。`scripts/play_login.py` 注册并�
 
 - `perform()` 与 `do_attack()` 均设置了 `perform` 临时标记并调度 `del_perform` 回调，但本馆文件末尾缺失 `void del_perform(object me)` 定义；若 `do_attack` 未执行或提前中止，`query_temp("perform")` 将永久残留导致无法再次施展「华岳三神峰」。比照同类馆（`tybxjh`、`wlhd`、`yxjh`、`zxty`、`zxty08nxgbb`）于文末补全 `void del_perform(object me)`（保留原文件行尾）。
 - 验证：全批 `22` 馆 `/kungfu/skill/fanliangyi-dao/sanshen.lpc` 经 `lpcc` 编译全部通过（`22/22`）；`lpcc_eval.py` 代表（`bixiecanyang`、`hc`、`longyunmeng_binary`）均由 `--head` `fn=0 perform=1` 转为 `fn="/kungfu/skill/fanliangyi-dao/sanshen" perform=0`（含 `del_perform(0)` 空指针守卫测试）；`lpc_format_changed.py --apply`（`80` 份 `0` 重排）；`lpc_scan_callout_targets.py` `sanshen.lpc` 剩余 `0`；`scripts/lint.py`（新增 `skill-sanshen-del-perform`，共 `68` 条规则）`0` 错误零告警；代表实机 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+## `->query*()` 拼写错误修复（2026-11-19，KB 06 §7.397）
+
+- 全语料排查无定义函数调用（`call_other` 静默返回 `0`），修正 `/d/tangmen/tangmenzhen/npc/tangda.lpc`、`/d/tangmen/tangmenzhen/npc/tangfei.lpc`（共 `2` 个文件） 中的 `->qurey`/`->qeury`/`->quert`/`->queyr`/`->quety_temp`/`->querk_skill`/`->quert_respect`/`->query_tmp`/`->quary`/`->queryr`/`->quer` 等拼写错误为标准方法名，消除功能失效或条件误放行问题（保留原文件行尾）。
+- 验证：全批 `698` 文件（`691/698` 编译通过、`7` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`dtxywzxzb` 非蜀山 `valid_learn` 由 `1` 转为 `0`，`fqyy2` `qurey=0 -> query=50`）；`scripts/lint.py`（新增 `query-method-typo`，共 `69` 条规则）全库与 `--fast` 零错误零告警；`10` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

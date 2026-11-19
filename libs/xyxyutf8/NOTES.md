@@ -503,3 +503,7 @@ pristine + build-debug，归档端口 40168。`scripts/play_login.py` 注册进�
 
 - 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `14` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
 - 验证：全 `14` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。
+## `->query*()` 拼写错误修复（2026-11-19，KB 06 §7.397）
+
+- 全语料排查无定义函数调用（`call_other` 静默返回 `0`），修正 `/d/death/npc/zhangmen.lpc`、`/d/death/npc/guiwang.lpc`、`/daemon/skill/yirubian.lpc`（共 `3` 个文件） 中的 `->qurey`/`->qeury`/`->quert`/`->queyr`/`->quety_temp`/`->querk_skill`/`->quert_respect`/`->query_tmp`/`->quary`/`->queryr`/`->quer` 等拼写错误为标准方法名（并顺手修正 `yirubian.lpc`/`yiruwhip.lpc` 括号错位 `->query("family/master_name") != ...`），消除功能失效或条件误放行问题（保留原文件行尾）。
+- 验证：全批 `698` 文件（`691/698` 编译通过、`7` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`dtxywzxzb` 非蜀山 `valid_learn` 由 `1` 转为 `0`，`fqyy2` `qurey=0 -> query=50`）；`scripts/lint.py`（新增 `query-method-typo`，共 `69` 条规则）全库与 `--fast` 零错误零告警；`10` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

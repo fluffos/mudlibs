@@ -949,3 +949,7 @@ pristine + build-debug，port 40071。`scripts/play_login.py` 注册并执行 `l
 
 - `/d/shengdoushi/7hai/shendian/npc/haihuangnpc.lpc` 声明并绑定了未定义的 `add_action("do_shoot8", "shoot")`（玩家带有 `7hai/shoot` 临时标记触发 `init()` 后输入 `shoot` 会覆盖前文 `do_shoot` 并报 `*Function for verb 'shoot' not found.`）；移除未定义的 `do_shoot8` 前向声明及 `else add_action("do_shoot8", "shoot")` 分支。
 - 验证：`lpcc` 编译与工作树加载通过，`lpc_scan_callout_targets.py --lib zitengzhan --kind add_action` 剩余 `0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 零告警，`play_boot.sh` + `play_stop.sh`（端口 `47395`）启动正常。
+## `->query*()` 拼写错误修复（2026-11-19，KB 06 §7.397）
+
+- 全语料排查无定义函数调用（`call_other` 静默返回 `0`），修正 `/d/death/npc/zhangmen.lpc`、`/d/death/npc/guiwang.lpc`、`/death/npc/zhangmen.lpc`（共 `3` 个文件） 中的 `->qurey`/`->qeury`/`->quert`/`->queyr`/`->quety_temp`/`->querk_skill`/`->quert_respect`/`->query_tmp`/`->quary`/`->queryr`/`->quer` 等拼写错误为标准方法名，消除功能失效或条件误放行问题（保留原文件行尾）。
+- 验证：全批 `698` 文件（`691/698` 编译通过、`7` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`dtxywzxzb` 非蜀山 `valid_learn` 由 `1` 转为 `0`，`fqyy2` `qurey=0 -> query=50`）；`scripts/lint.py`（新增 `query-method-typo`，共 `69` 条规则）全库与 `--fast` 零错误零告警；`10` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
