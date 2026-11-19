@@ -1237,3 +1237,11 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，port 40047。`scripts/play_login.py` 注册并执行 `look`/`score`/`i`/`quit`，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。
+
+## 编译警告清理（2026-11-19，KB 04 §6.10）
+
+- 通过 `scripts/lpc_warnings.py kxkj --fix` 清理可编译文件及转义警告：
+  - `adm/daemons/network/pingd.lpc` 与 `adm/daemons/network/pingtcp.lpc`：`strip_callout()` 原 `nosave` 改为 `protected`；
+  - `adm/daemons/network/userid.lpc`（`query_userid()`）：删去未使用的局部变量 `tmp`；
+  - `obj/mm.lpc`：清理 `unwield_msg` 中 `"一\缕\轻\烟"` 的多余反斜杠转义（注：该文件第 79 行另有原始非法字节语法错误未改动）。
+- 验证：`scripts/lpc_audit_removed_locals.py` 检查 0 误删，`lpcc_eval.py` 验证 `pingd`/`pingtcp` 编译加载通过且 `Illegal to declare nosave` 警告清零（`head_warn=True -> tree_warn=False`）；`play_boot.sh` + `play_stop.sh`（端口 `40047`）启动与停止正常。

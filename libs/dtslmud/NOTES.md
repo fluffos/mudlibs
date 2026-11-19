@@ -743,3 +743,11 @@ pristine + build-debug，port 40015。`scripts/play_login.py` 注册并执行 `l
 ## 暗器 embed.h 补全（2026-11-16）
 
 - `clone/weapon/*` 的暗器（冰魄银针、丧门钉等）`#include "/inherit/item/embed.h"`，而存档没有这个文件，整族暗器无法载入（`Cannot #include /inherit/item/embed.h`）。从同系列 bxsj 采入 `inherit/item/embed.h`（与 6 个兄弟库字节相同），`bb_zhen` 载入 PASS。
+
+## 编译警告清理（2026-11-19，KB 04 §6.10）
+
+- 通过 `scripts/lpc_warnings.py dtslmud --fix` 清理可编译文件中的全部剩余编译警告（`6,381` 个可编译文件清零）：
+  - `adm/daemons/network/pingd.lpc` 与 `adm/daemons/network/pingtcp.lpc`：`strip_callout()` 原 `nosave` 改为 `protected`；
+  - `d/quest/poison/target.lpc`（`die()`）：删去未使用的局部变量 `me`、`str`、`msg`；
+  - `adm/daemons/network/userid.lpc`（`query_userid()`）：删去未使用的局部变量 `tmp`。
+- 验证：`scripts/lpc_audit_removed_locals.py` 检查 0 误删，重扫 `lpc_warnings.py` 零告警；`lpcc_eval.py` 验证 `pingd`/`pingtcp`/`target` 编译加载通过且 `Illegal to declare nosave` 警告清零（`head_warn=True -> tree_warn=False`）；`play_boot.sh` + `play_stop.sh`（端口 `40015`）启动与停止正常。

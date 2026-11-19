@@ -1541,3 +1541,10 @@ pristine + build-debug，归档端口 40066。`scripts/play_login.py` 注册并�
 ## Auto_Dianxue_Success_Or_Not 原型返回类型（2026-11-16）
 
 - `kungfu/skill/th_jianzhi_auto_dianxue_success_calculation.h` 与 `yuxiao-jian/jianzhi.lpc` 的原型写成 `void`，而定义和调用方（`n_Dianxue_Success_Or_Not = Auto_Dianxue_Success_Or_Not(...)`）都是 `int`，编译告警 `Previous function prototype ... does not match current function in return type ( void vs int )`。原型改为 `int`，`lpc_warnings.py` 重扫该告警消失。
+
+## 编译警告清理（2026-11-19，KB 04 §6.10）
+
+- 通过 `scripts/lpc_warnings.py shenzhou --fix` 清理全部剩余 `Illegal to declare nosave function.` 与未使用局部变量警告：
+  - `adm/daemons/network/pingd.lpc`、`adm/daemons/network/pingtcp.lpc` 及 `u/karlopex/backup/adm/daemons/network/{pingd,pingtcp}.lpc`：`strip_callout()` 原 `nosave` 改为 `protected`；
+  - `adm/daemons/network/userid.lpc` 与 `u/karlopex/backup/adm/daemons/network/userid.lpc`（`query_userid()`）：删去未使用的局部变量 `tmp`。
+- 验证：`scripts/lpc_audit_removed_locals.py` 检查 0 误删，`lpcc_eval.py` 验证 `pingd`/`pingtcp` 编译加载通过且 `Illegal to declare nosave` 警告清零（`head_warn=True -> tree_warn=False`）；`play_boot.sh` + `play_stop.sh`（端口 `40066`）启动与停止正常。

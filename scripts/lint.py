@@ -476,8 +476,8 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         if funclocfix.fix(b)[1]:
             hits.append(("functional-locals", path, "local variable used inside (: this_object(), ({ ... }) :) functional"))
 
-    if want("callout-info-index") and b"call_out_info" in b:
-        if calloutfix.fix(b)[1]:
+    if want("callout-info-index") and b"call_out_info" in b and os.path.basename(rel) not in calloutfix.LEFT:
+        if not calloutfix.TOP.search(rel) and not calloutfix.ANY.search(rel) and calloutfix.fix(b)[1]:
             hits.append(("callout-info-index", path, "call_out_info()[i][3] or sizeof==4 assuming MudOS 4-tuple"))
 
     if want("getdir-strip-dotc") and b".lpc" in b and b"..<3" in b:

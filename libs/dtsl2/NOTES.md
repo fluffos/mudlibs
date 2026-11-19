@@ -972,3 +972,11 @@ pristine + build-debug，port 40043。`scripts/play_login.py` 注册并执行 `l
 ## 丧门钉重复继承（2026-11-16）
 
 - `clone/weapon/sm_ding.lpc` 在 `inherit THROWING;` 之后又 `inherit COMBINED_ITEM;`，而 `std/weapon/throwing.lpc` 已继承 COMBINED_ITEM，导致 7 个 `Illegal to redefine nomask function` 错误。删去多余一行，`sm_ding` 载入 PASS。
+
+## 编译警告清理（2026-11-19，KB 04 §6.10）
+
+- 通过 `scripts/lpc_warnings.py dtsl2 --fix` 清理可编译文件中的机械编译警告（`6,706` 个可编译文件仅剩有前置编译错误的文件内的 3 条连带告警）：
+  - `adm/daemons/network/pingd.lpc` 与 `adm/daemons/network/pingtcp.lpc`：`strip_callout()` 原 `nosave` 改为 `protected`；
+  - `d/quest/poison/target.lpc`（`die()`）：删去未使用的局部变量 `me`、`str`、`msg`；
+  - `adm/daemons/network/userid.lpc`（`query_userid()`）：删去未使用的局部变量 `tmp`。
+- 验证：`scripts/lpc_audit_removed_locals.py` 检查 0 误删，`lpcc_eval.py` 验证 `pingd`/`pingtcp`/`target` 编译加载通过且 `Illegal to declare nosave` 警告清零（`head_warn=True -> tree_warn=False`）；`play_boot.sh` + `play_stop.sh`（端口 `40043`）启动与停止正常。
