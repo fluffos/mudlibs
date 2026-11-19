@@ -1030,3 +1030,8 @@ pristine + build-debug（归档端口 40189，临时测试端口 49519）。`scr
 
 - `adm/simul_efun/file.lpc` 中的 `cat()` 未对其 `read_file()` 返回值判空（存在前置 `seteuid()`、`file_size()` 上限、`SECURITY_D->valid_read()` 或局部变量赋值，因而绕过了早期的裸体正则），缺失文件、目录或不可读时返回 `0` 并送入 `write()` / `receive()`；已通过 `scripts/lpc_fix_cat_unchecked.py --apply` 补全 `|| ""` 保护。
 - 验证：`lpcc_eval.py` 缺失文件/目录 `cat()` 探针加载通过（`ZZT e1=0 e2=0`，无非字符串送入 `receive_message()`），`scripts/lpc_fix_cat_unchecked.py` 幂等复扫剩余 0。
+
+## `clone/npc/warcraft.h` `efun::set` 与状态显示修复（2026-11-19，KB 06 §7.392）
+
+- 修复 `clone/npc/warcraft.h` 中 `do_shape()` 的无副作用三元表达式（`actions == "follow" ? "仅跟随" : "保护";` 补全赋值 `actions = (...)`）及 `set()`/`add()` 中不存在的 `efun::set()` 调用（改为 `::set(idx, para, ob)` 与 `::set(prop, old + data)`；注：`warcraft.lpc` 另有前置缺失 `full_self`/`add_skill` 编译错误未在本轮扩展范围）。
+- 验证：`play_boot.sh` + `play_stop.sh`（端口 `40189`）启动与停止正常；`scripts/lint.py` 零告警。

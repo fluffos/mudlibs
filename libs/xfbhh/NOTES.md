@@ -795,3 +795,8 @@ pristine + build-debug，归档端口 40190。`scripts/play_login.py`（port 491
 
 - 修复 `adm/daemons/bugd.lpc`（`reset_buginfo()` / `list_bug()` 对缺失 `/data/bug/`）、`cmds/usr/grep.lpc`（`do_grep()`）与 `quest/skybook/flagwar/flagd.lpc`（`remove_flag_war()` 对缺失 `/d/flagwar/`），补充 `|| ({})` 空数组兜底，消除 `*Bad argument 1 to EFUN sort_array()` 与 `*Bad argument 2 to foreach`。
 - 已通过 `lpcc_eval.py` 全部探针 `PASS` 验证。
+
+## `clone/npc/warcraft.h` 编译与状态显示修复（2026-11-19，KB 06 §7.392）
+
+- `clone/npc/warcraft.h` 两处同源缺陷：其一 `set()`/`add()` 重载末尾调用不存在的 `efun::set()`/`efun::addn()` 导致 `/clone/npc/warcraft.lpc` 编不过，改为 `::set(idx, para, ob)`、`::set(prop, old + data)` 与 `::add(prop, data)`；其二 `do_shape()` 中 `actions == "follow" ? "仅跟随" : "保护";` 未赋值给 `actions`，补齐 `actions = (actions == "follow" ? "仅跟随" : "保护");`。
+- 验证：`lpcc_eval.py` 由 `--head` `Unknown efun: set` `FAIL` 转为 `load_object("/clone/npc/warcraft")`、`set("actions", "follow")`、`add("neili", 10)` 与 `do_shape("")` 全通 `PASS`；`play_boot.sh` + `play_stop.sh`（端口 `40190`）正常；`scripts/lint.py` 零告警。

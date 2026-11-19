@@ -106,8 +106,10 @@ RULES: list[RuleSpec] = [
     RuleSpec("enable-player-guard", "targeted", "KB 05 §7.19", "warn", "feature/command.lpc enable_player() lacking reentrancy guard"),
     RuleSpec("rank-null-guard", "targeted", "KB 06 §7.273", "warn", "adm/daemons/rankd.lpc missing !objectp(ob) fallback"),
     RuleSpec("ping-strip-callout-nosave", "targeted", "KB 04 §6.10", "error", "pingd.lpc/pingtcp.lpc declaring nosave int strip_callout() instead of protected"),
+    RuleSpec("warcraft-actions-noop", "targeted", "KB 06 §7.392", "error", "warcraft.h discarded ternary actions == \"follow\" ? ... : ... leaving status untranslated"),
     # Per-file corpus checks (all error in --changed/--files/--strict; configurable in --all)
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
+    RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -154,6 +156,7 @@ RULE_MAP: dict[str, RuleSpec] = {r.name: r for r in RULES}
 DOUBLE_SLASH_PAT = re.compile(rb'"//([A-Za-z_][A-Za-z0-9_\-]*/[A-Za-z0-9_./\-]*)"')
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
+EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
 PREV_OBJ_CMP_RE = re.compile(rb'previous_object\s*\(\s*\)\s*(?:==|!=)\s*"/|"[^"\n]*"\s*(?:==|!=)\s*previous_object\s*\(\s*\)')
 SHADOW_SEFUN_RE = re.compile(rb"\b(?:string|mixed|object)\s+(home_path)\s*=\s*\1\s*\(")
 UNGUARDED_RF_NEST = re.compile(rb'\b(?:explode|replace_string|sscanf)\s*\(\s*(?:efun::)?read_file\s*\(\s*"(/[^"\n]+)"\s*\)')
@@ -576,10 +579,17 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         or (want("unguarded-get-dir") and b"get_dir" in b)
         or (want("for-scope-leak") and b"for" in b)
         or (want("path-macro-plus-arrow") and b"#define" in b and b"->" in b)
+        or (want("efun-dbase-call") and b"efun::" in b)
     )
     if need_mask:
         mk = code_mask(b, heredoc=True)
         cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+
+        if want("efun-dbase-call") and b"efun::" in cb:
+            em = EFUN_DBASE_RE.search(cb)
+            if em:
+                ln = b.count(b"\n", 0, em.start()) + 1
+                hits.append(("efun-dbase-call", f"{path}:{ln}", f"`{em.group(0).decode('latin-1').rstrip('(').strip()}` is not a FluffOS efun (use `::set` / `::add` or inherited F_DBASE)"))
 
         if want("throwing-combined-diamond") and ctx["throwing_has_combined"]:
             if re.search(rb"(?m)^[ \t]*inherit[ \t]+THROWING\s*;", cb) and re.search(rb"(?m)^[ \t]*inherit[ \t]+COMBINED_ITEM\s*;", cb):
@@ -699,7 +709,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "rtcfg", "ver_cfg", "band", "embed_cand")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "rtcfg", "ver_cfg", "band", "embed_cand")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -737,6 +747,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["rankd"].append(item)
         if bn in ("pingd.lpc", "pingtcp.lpc"):
             targeted_bins["ping"].append(item)
+        if bn == "warcraft.h":
+            targeted_bins["warcraft"].append(item)
         if bn == "runtime_config.h":
             targeted_bins["rtcfg"].append(item)
         if any(k in bn for k in ("versiond", "getconfig", "server", "config")):
@@ -833,6 +845,17 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 for m in re.finditer(rb"\bnosave\s+int\s+strip_callout\s*\(", b):
                     if mk[m.start()]:
                         col.add("ping-strip-callout-nosave", p, "nosave int strip_callout() emits Illegal to declare nosave function (use protected)")
+                        break
+
+    if col.wants("warcraft-actions-noop"):
+        noop_re = re.compile(rb'^[ \t]*actions\s*==\s*"follow"\s*\?\s*[^;]+;', re.M)
+        for _, p, _ in targeted_bins["warcraft"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"actions" in b:
+                mk = code_mask(b)
+                for m in noop_re.finditer(b):
+                    if mk[m.start()]:
+                        col.add("warcraft-actions-noop", p, "discarded `actions == \"follow\" ? ... : ...;` comparison leaves warcraft status untranslated")
                         break
 
 

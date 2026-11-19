@@ -509,7 +509,7 @@ int do_shape(string arg)
 
                 actions = "自由";
         else
-                actions == "follow" ? "仅跟随" : "保护";
+                actions = (actions == "follow" ? "仅跟随" : "保护");
 
 	str = HIY + ob->name() + HIY "状态属性如下(" + HIR + actions + HIY + ")：\n" NOR;
         str += line;
@@ -583,9 +583,9 @@ varargs mixed set(string idx, mixed para, object ob)
                                         message_vision(HIY "突然天空出现一道玄光与$N" HIY "身泛起的红光相接，$N" HIY "全体通红！\n" NOR, ob);
                         }
                 }
-                return efun::set(idx, para);
+                return ::set(idx, para, ob);
         } else
-                return efun::set(idx, para);
+                return ::set(idx, para, ob);
 }
 
 mixed add(string prop, mixed data)
@@ -598,14 +598,14 @@ mixed add(string prop, mixed data)
                         return set(prop, data);
 
                 if( data < 1 )
-                        return efun::set(prop, old + data);
+                        return ::set(prop, old + data);
 
                 level = query("level");
                 if( !level || level < 1 ) level = 1;
 
                 return set(prop, old + data);
         } else
-                return efun::addn(prop, data);
+                return ::add(prop, data);
 }
 
 // 召唤接口
