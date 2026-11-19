@@ -104,7 +104,7 @@ void chousha_close()
     if (ulist[k]->query_temp("chousha"))
     {
     ulist[k]->delete_temp("chousha");
-    ulist[k]->delte_temp("apply/short");
+    ulist[k]->delete_temp("apply/short");
 
     tell_object(ulist[k], BLK"忽然你心中生起一股厌倦的感觉，"
     +"开始疑惑的这样的江湖仇杀有何意义，\n"

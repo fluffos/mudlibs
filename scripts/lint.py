@@ -116,6 +116,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
     RuleSpec("quoted-efun-call", "file", "KB 06 §7.393", "error", "Object efun/sefun called with quoted \"this_object()\"/\"this_player()\"/... string instead of object"),
     RuleSpec("query-method-typo", "file", "KB 06 §7.397", "error", "Misspelled ->query()/->query_temp()/->query_skill()/->query_respect() method call"),
+    RuleSpec("call-method-typo", "file", "KB 06 §7.398", "error", "Misspelled ->receive_damage()/->receive_wound()/->receive_curing()/->set_temp()/->delete_temp()/->start_busy() call"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -381,7 +382,11 @@ def run_repo_checks(col: LintCollector, metas: dict[str, dict], skip_ntfs: bool,
 QUERY_TYPO_PAT = re.compile(
     rb'->\s*(queyr|queryr|qury|qurey|quey|quer|qeury|qeuery|quert|quary|'
     rb'qury_temp|queyr_temp|queryr_temp|qurey_temp|qeury_temp|qeuery_temp|quety_temp|'
-    rb'query_tmp|query_tme|query_tepm|query_tmep|querk_skill|quert_respect)\s*\('
+    rb'query_tmp|query_tme|query_tepm|query_tmep|querk_skill|quert_respect|'
+    rb'query_skil|quert_skill|queyr_skill)\s*\('
+)
+CALL_TYPO_PAT = re.compile(
+    rb'->\s*(recieve_damage|recieve_wound|recieve_curing|delte_temp|delet_temp|settemp|se_temp|stat_busy)\s*\('
 )
 
 
@@ -445,6 +450,14 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             if mk[m.start(1)]:
                 ln = b.count(b"\n", 0, m.start(1)) + 1
                 hits.append(("query-method-typo", f"{path}:{ln}", f"misspelled query method `->{m.group(1).decode('latin-1')}()`"))
+                break
+
+    if want("call-method-typo") and b"->" in b and CALL_TYPO_PAT.search(b):
+        mk = code_mask(b, heredoc=True)
+        for m in CALL_TYPO_PAT.finditer(b):
+            if mk[m.start(1)]:
+                ln = b.count(b"\n", 0, m.start(1)) + 1
+                hits.append(("call-method-typo", f"{path}:{ln}", f"misspelled call_other method `->{m.group(1).decode('latin-1')}()`"))
                 break
 
     if want("literal-or") and (b"||" in b or b"&&" in b):

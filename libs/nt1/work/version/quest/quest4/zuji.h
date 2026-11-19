@@ -122,7 +122,7 @@ void zuji_close()
    {
       if( !environment(ulist[k]) || !ulist[k]->query_temp("zuji")) continue;
       ulist[k]->delete_temp("zuji");
-      ulist[k]->delte_temp("apply/short");
+      ulist[k]->delete_temp("apply/short");
       ulist[k]->add("combat_exp",20000);
       ulist[k]->add("potential",5000);
       ulist[k]->add("weiwang",20);

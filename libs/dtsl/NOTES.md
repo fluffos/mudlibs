@@ -1388,3 +1388,7 @@ pristine + build-debug，port 40008。`scripts/play_login.py` 注册并执行 `l
   - `d/quest/poison/target.lpc`（`die()`）：删去未使用的局部变量 `me`、`str`、`msg`；
   - `adm/daemons/network/userid.lpc`（`query_userid()`）：删去未使用的局部变量 `tmp`。
 - 验证：`scripts/lpc_audit_removed_locals.py` 检查 0 误删，重扫 `lpc_warnings.py` 零告警；`lpcc_eval.py` 验证 `pingd`/`pingtcp`/`target` 编译加载通过且 `Illegal to declare nosave` 警告由有到无（`head_warn=True -> tree_warn=False`）；`play_boot.sh` + `play_stop.sh`（端口 `40008`）启动与停止正常。
+## `->receive_*`/`->set_temp`/`->delete_temp` 等调用拼写错误修复（2026-11-19，KB 06 §7.398）
+
+- 续查全语料无定义 `call_other` 调用（静默返回 `0`），修正 `/clone/weapon/blade/lengyue-dao.lpc`（共 `1` 个文件） 中的 `->recieve_damage`/`->recieve_wound`/`->recieve_curing`/`->delte_temp`/`->delet_temp`/`->settemp`/`->se_temp`/`->stat_busy`/`->query_skil`/`->quert_skill`/`->queyr_skill` 拼写错误为标准方法名（保留原文件行尾）。
+- 验证：全批 `359` 文件中 `321` 个 `.lpc` 差分编译通过 `313/321`（`8` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表实测通过（`bxsj` `recieve_damage=100 -> receive_damage=60`，`tybxjh` `delet_temp=1 -> delete_temp=0`）；`scripts/lint.py`（新增 `call-method-typo`，共 `70` 条规则）全库与 `--fast` 零错误零告警；`8` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

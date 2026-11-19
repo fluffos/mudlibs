@@ -985,3 +985,7 @@ pristine + build-debug，port 40043。`scripts/play_login.py` 注册并执行 `l
 
 - 因历史修补脚本跳过含 `/wiz/` 路径而遗漏：修复 `/cmds/wiz/sm.lpc` `check_legal_name()` 中 `strlen(name) < 3 || strlen(name) > max_len`（拒绝合法 2 字法宝名却放行 5-8 字）与 `i % 2 == 0 && !is_chinese(name[i..<0])`（漏检奇数位 ASCII）改为 `< 2 || > max_len / 2` 与逐字 `!is_chinese(name[i..i])`。
 - 验证：全 `42` 馆 / `62` 文件 `lpcc` 差分编译全部通过（`ok=62, regressions=0`）；代表 `lpcc_eval.py` 实测 `xyj2000` `sm`（`法宝` `0->1`、`金a棒` `1->0`、`一二三四五` `1->0`）、`mhxy` `comment`（`好` `0->1`、`好a` `1->0`）、`hxxtjqb` `huang`（`天龙` `0->1`、九字 `1->0`）、`hy2000`/`xjcq2000` 自创武功（`剑` `0->1`、`剑a` `1->0`、七字 `1->0`）均与预期一致；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
+## `->receive_*`/`->set_temp`/`->delete_temp` 等调用拼写错误修复（2026-11-19，KB 06 §7.398）
+
+- 续查全语料无定义 `call_other` 调用（静默返回 `0`），修正 `/clone/weapon/blade/lengyue-dao.lpc`（共 `1` 个文件） 中的 `->recieve_damage`/`->recieve_wound`/`->recieve_curing`/`->delte_temp`/`->delet_temp`/`->settemp`/`->se_temp`/`->stat_busy`/`->query_skil`/`->quert_skill`/`->queyr_skill` 拼写错误为标准方法名（保留原文件行尾）。
+- 验证：全批 `359` 文件中 `321` 个 `.lpc` 差分编译通过 `313/321`（`8` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表实测通过（`bxsj` `recieve_damage=100 -> receive_damage=60`，`tybxjh` `delet_temp=1 -> delete_temp=0`）；`scripts/lint.py`（新增 `call-method-typo`，共 `70` 条规则）全库与 `--fast` 零错误零告警；`8` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

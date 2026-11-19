@@ -1059,3 +1059,7 @@ pristine + build-debug（归档端口 `40069`，测试端口 `49069`）。`scrip
 
 - `assert(x)` 与 `ASSERT(x)` 的 `"x"` 改为 ANSI `#x`（保留 CRLF）。
 - 验证：`#define DEBUG 1` + `#include <assert.h>` 调用 `ASSERT(1 == 2)` 捕获 `*assertion failed : file ..., 1 == 2.`，`scripts/lint.py` 零告警。
+## `->receive_*`/`->set_temp`/`->delete_temp` 等调用拼写错误修复（2026-11-19，KB 06 §7.398）
+
+- 续查全语料无定义 `call_other` 调用（静默返回 `0`），修正 `/system/feature/gunpowder.lpc`（共 `1` 个文件） 中的 `->recieve_damage`/`->recieve_wound`/`->recieve_curing`/`->delte_temp`/`->delet_temp`/`->settemp`/`->se_temp`/`->stat_busy`/`->query_skil`/`->quert_skill`/`->queyr_skill` 拼写错误为标准方法名（保留原文件行尾）。
+- 验证：全批 `359` 文件中 `321` 个 `.lpc` 差分编译通过 `313/321`（`8` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表实测通过（`bxsj` `recieve_damage=100 -> receive_damage=60`，`tybxjh` `delet_temp=1 -> delete_temp=0`）；`scripts/lint.py`（新增 `call-method-typo`，共 `70` 条规则）全库与 `--fast` 零错误零告警；`8` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

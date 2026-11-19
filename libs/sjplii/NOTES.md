@@ -618,3 +618,7 @@ pristine + build-debug，归档端口 40153。`scripts/play_login.py` 注册并�
 
 - 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `23` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
 - 验证：全 `23` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。
+## `->receive_*`/`->set_temp`/`->delete_temp` 等调用拼写错误修复（2026-11-19，KB 06 §7.398）
+
+- 续查全语料无定义 `call_other` 调用（静默返回 `0`），修正 `/daemon/class/xiaoyao/gaoge_sword/raya.lpc`（共 `1` 个文件） 中的 `->recieve_damage`/`->recieve_wound`/`->recieve_curing`/`->delte_temp`/`->delet_temp`/`->settemp`/`->se_temp`/`->stat_busy`/`->query_skil`/`->quert_skill`/`->queyr_skill` 拼写错误为标准方法名（保留原文件行尾）。
+- 验证：全批 `359` 文件中 `321` 个 `.lpc` 差分编译通过 `313/321`（`8` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表实测通过（`bxsj` `recieve_damage=100 -> receive_damage=60`，`tybxjh` `delet_temp=1 -> delete_temp=0`）；`scripts/lint.py`（新增 `call-method-typo`，共 `70` 条规则）全库与 `--fast` 零错误零告警；`8` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

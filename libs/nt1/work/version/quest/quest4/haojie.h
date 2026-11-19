@@ -101,7 +101,7 @@ void haojie_close()
    {
       if( !environment(ulist[k]) || !ulist[k]->query_temp("haojie")) continue;
       ulist[k]->delete_temp("haojie");
-      ulist[k]->delte_temp("apply/short");
+      ulist[k]->delete_temp("apply/short");
    }
 
    message("channel:rumor", HIR"【江湖浩劫】经过各路武林豪杰的殊死抗争，"
