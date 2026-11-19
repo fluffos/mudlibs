@@ -108,6 +108,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("ping-strip-callout-nosave", "targeted", "KB 04 §6.10", "error", "pingd.lpc/pingtcp.lpc declaring nosave int strip_callout() instead of protected"),
     RuleSpec("warcraft-actions-noop", "targeted", "KB 06 §7.392", "error", "warcraft.h discarded ternary actions == \"follow\" ? ... : ... leaving status untranslated"),
     RuleSpec("mr-dizi-duplicate-inherit", "targeted", "KB 04 §6.31", "error", "d/mr/npc/dizi.lpc declaring inherit NPC while #included by job-dizi.lpc"),
+    RuleSpec("say-delete-busy", "targeted", "KB 06 §7.394", "error", "cmds/std/say.lpc call_out(\"delete_busy\") missing arg, deleted/commented body, uninit ob, or this_player()"),
     # Per-file corpus checks (all error in --changed/--files/--strict; configurable in --all)
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
     RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
@@ -737,7 +738,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "rtcfg", "ver_cfg", "band", "embed_cand")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "rtcfg", "ver_cfg", "band", "embed_cand")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -779,6 +780,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["warcraft"].append(item)
         if rel in ("/d/mr/npc/dizi.lpc", "/d/mr1/npc/dizi.lpc"):
             targeted_bins["mrdizi"].append(item)
+        if rel == "/cmds/std/say.lpc":
+            targeted_bins["say"].append(item)
         if bn == "runtime_config.h":
             targeted_bins["rtcfg"].append(item)
         if any(k in bn for k in ("versiond", "getconfig", "server", "config")):
@@ -894,6 +897,19 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             if os.path.isfile(job_p) and re.search(rb'(?m)^[ \t]*inherit\s+NPC\s*;', open(f"{REPO}/{p}", "rb").read()):
                 if re.search(rb'(?m)^[ \t]*inherit\s+NPC\s*;', open(job_p, "rb").read()):
                     col.add("mr-dizi-duplicate-inherit", p, "inherit NPC; in dizi.lpc duplicates job-dizi.lpc inherit and breaks compilation")
+
+    if col.wants("say-delete-busy"):
+        for _, p, _ in targeted_bins["say"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"delete_busy" not in b:
+                continue
+            mk = code_mask(b, heredoc=True)
+            cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+            if (re.search(rb'\bcall_out\s*\(\s*"delete_busy"\s*,\s*[^,)]+\s*\)', cb)
+                    or not re.search(rb'\bvoid\s+delete_busy\s*\(\s*\w+\s+\w+\s*\)', cb)
+                    or re.search(rb'\bvoid\s+delete_busy\s*\([^{]*\)\s*\{[^}]*\bthis_player\s*\(', cb)
+                    or re.search(rb'\bvoid\s+delete_busy\s*\([^{]*\)\s*\{[^}]*\bobject\s+\w+\s*;[^}]*if\s*\(\s*!\s*\w+\s*\)\s*return', cb)):
+                col.add("say-delete-busy", p, "say.lpc delete_busy() missing target/arg, commented out, uninitialized ob, or calling this_player() in call_out")
 
 
 def _changed_files(base: str | None) -> list[str]:

@@ -572,3 +572,8 @@ pristine + build-debug，归档端口 40154。`scripts/play_login.py` 注册/连
 
 - 通过 `scripts/lpc_fix_family_guard.py --apply` 为 `5` 个 `.h`（`/d/mingjiao/npc/tangzhu.h`、`/kungfu/class/shaolin/cheng.h`、`/kungfu/class/shaolin/dao.h`、`/kungfu/class/shaolin/hui.h`、`/kungfu/class/shaolin/qing.h`） 中未判空直接索引 `["family_name"]`/`["generation"]` 的 `query("family")` 局部变量补充 `if (!mapp(...)) ... = ([ ]);` 防护，避免无门派玩家触发 `*Value being indexed is zero.`。
 - 验证：全语料相关含头文件 `.lpc` 宿主与修改后 `.lpc` 共 `1,247` 目标经 `lpcc` 差分编译全部通过（`regressions=0`）；代表实测 `hy2002` `kunlun-zhang->valid_learn`、`bixiecanyang` `cheng.h`、`bxsj` `pfm_control.h` 均由 `--head` `*Value being indexed is zero.` 转为 `err=0`；`lpc_format_changed.py` 与 `scripts/lint.py --files` 零错误零告警。
+
+## `cmds/std/say.lpc` `delete_busy()` 回调修复（2026-11-19，KB 06 §7.394）
+
+- `call_out("delete_busy", 4)` 未传入玩家对象，且 `delete_busy()` 内部声明未初始化局部对象直接早退，导致 `"say_busy"` 触发后永不清除；统一改为前向声明与定义 `void delete_busy(object me)`（加 `objectp(me)` 守卫）并将全部 `call_out("delete_busy", 4)` 传入当前玩家对象参数（保留原有行尾）。
+- 验证：全批 `30` 馆 `/cmds/std/say.lpc` 编译全部通过（`30/30`）；`lpcc_eval.py` 五类代表（`bixiecanyang`、`chidi`、`ffxymud`、`longyunmeng`、`longyunmeng_binary`）均由 `--head` 异常或 `busy_after=1` 转为 `err=0, busy_after=0`；`lpc_scan_callout_targets.py` `say.lpc` 剩余 `0`；`lpc_format_changed.py` `0` 重排；`scripts/lint.py`（新增 `say-delete-busy`，共 `66` 条规则）`0` 错误零告警；`10` 馆代表实机 `play_boot.sh`+`play_stop.sh`（端口 `47401..47410`）均正常且 `ZERO_DRIVERS`。
