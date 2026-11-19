@@ -647,3 +647,8 @@ pristine + build-debug，port 40128。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## `d/mr/npc/dizi.lpc` 重复 `inherit NPC` 编译失败与 44 条重声明告警修复（2026-11-19，KB 04 §6.31）
+
+- `d/mr/npc/job-dizi.lpc` 第 3 行已 `inherit NPC;`，第 11 行再 `#include "dizi.lpc"`（头注释即 `// dizi.h`），而 `dizi.lpc` 第 2 行仍留有 `inherit NPC;`，导致 44 条全局变量重声明警告以及 `Illegal to redefine 'nomask' function 'is_busy'/'is_lost'/'query_busy'` 编译失败。比对同族 7 馆（`bxsj`/`shujian*`/`sje*`）并确认全语料无直接加载 `d/mr/npc/dizi` 的调用方后，删去 `dizi.lpc` 中的重复 `inherit NPC;`。
+- 验证：`lpcc_eval.py` `--head` 编译报 44 条重声明/重复继承错 → 工作树零编译告警与零编译错误通过编译（进入 `create()` 第 17 行），`play_boot.sh` + `play_stop.sh`（端口 `40128`）正常，`scripts/lint.py` 零告警。
