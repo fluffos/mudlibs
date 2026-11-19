@@ -1181,3 +1181,8 @@ pristine + build-debug，port 40052。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `adm/daemons/qqzqqjob.lpc`：归档缺 `/d/obj/quest/dynamic_location` 与 `/d/obj/quest/dynamic_quest` 导致 `create()` 在 `explode()` 抛出 `*Bad argument 1 to explode()`，此外第 42 行直接调用本库未附带的 `/adm/daemons/cron.lpc`；为 `create()` 增加 `stringp(...)` 与 `- ({ "" })` 保护、在 `spread_quest()` 增加 `if (!sizeof(roomlines)) return 0;`，并为 `cron.lpc` 调用补 `file_size("/adm/daemons/cron.lpc") > 0` 检查。
 - 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to explode`）→ 修后（`ZZ_wuhanzhan=0` `PASS`），并通过 `play_boot.sh` + `play_stop.sh`（port 45603）实机启动验证。
+
+## `pingd`/`pingtcp` `nosave` 函数修饰符修复（2026-11-19，KB 04 §6.10）
+
+- `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc`、`/adm/daemons1/network/pingd.lpc`、`/adm/daemons1/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
+- 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。

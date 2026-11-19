@@ -285,3 +285,8 @@ pristine + build-debug，port 40269。`scripts/play_login.py` 注册并执行 `l
 ## 配置文件端口对齐（2026-11-18，AGENTS.md §10.5）
 
 - 将 `config.fluffos` 的 `port number` 从临时测试端口 `40320` 恢复为登记端口 `40269`（与 `meta.json`、`README.md` 及 `scripts/lib_numbering.json` 一致，且经确认全库无端口冲突）。`play_boot.sh` + `play_stop.sh`（端口 `40269`）与 `scripts/lint.py` 零告警。
+
+## `pingd`/`pingtcp` `nosave` 函数修饰符修复（2026-11-19，KB 04 §6.10）
+
+- `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
+- 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。

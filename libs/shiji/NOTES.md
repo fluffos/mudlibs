@@ -860,3 +860,8 @@ pristine + build-debug，port 40026。`scripts/play_login.py` 注册。
 ## `adm/daemons/toptend.lpc` 空榜单与 `sscanf` 崩溃修复（2026-11-15，KB 06 §7.385）
 
 - 通过 `scripts/lpc_fix_topten_guard.py --apply` 仅将 `topten_query`/`topten_del`/`topten_add` 内的 `file_size(...) == -1` 改为 `<= 0`（保留可合法为空的 `query_ban_file` 等 `== -1` 判断），补充 `write_file(f_name, str, 1)` 覆写标志与 `topten_del` 后重读空表保护，并将 `sscanf(astr, "%s(%s)%d;%*s", ...) != 3` 改为 `sscanf(astr[i], ...) < 3`。已验证 `lpcc_eval.py` 编译加载通过，并验证 `play_boot.sh` + `play_stop.sh` 启动停止通过。
+
+## `pingd`/`pingtcp` `nosave` 函数修饰符修复（2026-11-19，KB 04 §6.10）
+
+- `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
+- 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。

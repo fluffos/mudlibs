@@ -738,3 +738,8 @@ pristine + build-debug，归档端口 40184。`scripts/play_login.py` 注册并�
 ## Auto_Dianxue_Success_Or_Not 原型返回类型（2026-11-16）
 
 - `kungfu/skill/th_jianzhi_auto_dianxue_success_calculation.h` 与 `yuxiao-jian/jianzhi.lpc` 的原型写成 `void`，而定义和调用方（`n_Dianxue_Success_Or_Not = Auto_Dianxue_Success_Or_Not(...)`）都是 `int`，编译告警 `Previous function prototype ... does not match current function in return type ( void vs int )`。原型改为 `int`，`lpc_warnings.py` 重扫该告警消失。
+
+## `pingd`/`pingtcp` `nosave` 函数修饰符修复（2026-11-19，KB 04 §6.10）
+
+- `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`（注：该文件另有前置 `inherit DAEMON;` 编译错误）。
+- 验证：前置错误同 `--head` 未变更；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。

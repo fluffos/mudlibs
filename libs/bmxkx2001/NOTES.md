@@ -731,3 +731,8 @@ pristine + build-debug，归档端口 40039。`scripts/play_login.py` 注册并�
 
 - `adm/simul_efun/message.lpc` 中的 `read_file()` 仅声明单参数 `string read_file(string file)` 并转调 `efun::read_file(file)`，丢弃 `start_line` 与 `number_of_lines`，导致分页/行读取（`(file, 2, 1)` 与 `(file, 999999, 1)`）在 `--head` 下均整篇返回 1078 字节且永不因越界返回 `0`；已改为 `varargs string read_file(string file, int start_line, int number_of_lines)` 并透传三参至 `efun::read_file(file, start_line, number_of_lines)`。
 - 验证：`lpcc_eval.py` 通过 1/2/3 参测试（`a_len=1078 a2_len=1059 b_len=23 c_is0=1 more=1 lang1=1 lang2=1`），`lpc_format_changed.py` 零重排，并经 `play_boot.sh` + `play_stop.sh`（port 49300）启动验证通过。
+
+## `pingd`/`pingtcp` `nosave` 函数修饰符修复（2026-11-19，KB 04 §6.10）
+
+- `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
+- 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。

@@ -1230,3 +1230,8 @@ pristine + build-debug，port 40088。`scripts/play_login.py` 注册。
 
 - 修复 `cmds/usr/hatred.lpc`（`main()`）：归档缺少 `/hate/mp_num` 与门派仇恨文件，直接执行 `sscanf(str, "%d", mp_num)` 抛出 `*Bad argument 1 to sscanf Expected: string Got: 0.`；补 `/hate/mp_num` `!stringp(str)` `notify_fail` 与循环内 `/hate/<pai>` `if (!stringp(str)) continue;`。
 - 验证：`lpcc_eval.py` 修前 `--head`（`*Bad argument 1 to sscanf`）→ 修后（`ZZ_SYXJL_HATRED=0` `PASS`）。
+
+## `pingd`/`pingtcp` `nosave` 函数修饰符修复（2026-11-19，KB 04 §6.10）
+
+- `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`（注：该文件另有第 39 行前置语法错误）。
+- 验证：前置错误同 `--head` 未变更；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。

@@ -105,6 +105,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("missing-embed-h", "targeted", "KB 04 §6.31", "error", "#include /inherit/item/embed.h in playable lib that never shipped it"),
     RuleSpec("enable-player-guard", "targeted", "KB 05 §7.19", "warn", "feature/command.lpc enable_player() lacking reentrancy guard"),
     RuleSpec("rank-null-guard", "targeted", "KB 06 §7.273", "warn", "adm/daemons/rankd.lpc missing !objectp(ob) fallback"),
+    RuleSpec("ping-strip-callout-nosave", "targeted", "KB 04 §6.10", "error", "pingd.lpc/pingtcp.lpc declaring nosave int strip_callout() instead of protected"),
     # Per-file corpus checks (all error in --changed/--files/--strict; configurable in --all)
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
@@ -698,7 +699,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "rtcfg", "ver_cfg", "band", "embed_cand")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "rtcfg", "ver_cfg", "band", "embed_cand")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -734,6 +735,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["command"].append(item)
         if rel == "/adm/daemons/rankd.lpc":
             targeted_bins["rankd"].append(item)
+        if bn in ("pingd.lpc", "pingtcp.lpc"):
+            targeted_bins["ping"].append(item)
         if bn == "runtime_config.h":
             targeted_bins["rtcfg"].append(item)
         if any(k in bn for k in ("versiond", "getconfig", "server", "config")):
@@ -821,6 +824,16 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             _, msgs = rankfix.fix(open(f"{REPO}/{p}", "rb").read(), slug)
             if any(m.startswith("FIX") for m in msgs):
                 col.add("rank-null-guard", p, "adm/daemons/rankd.lpc lacks !objectp(ob) guard")
+
+    if col.wants("ping-strip-callout-nosave"):
+        for _, p, _ in targeted_bins["ping"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"strip_callout" in b:
+                mk = code_mask(b)
+                for m in re.finditer(rb"\bnosave\s+int\s+strip_callout\s*\(", b):
+                    if mk[m.start()]:
+                        col.add("ping-strip-callout-nosave", p, "nosave int strip_callout() emits Illegal to declare nosave function (use protected)")
+                        break
 
 
 def _changed_files(base: str | None) -> list[str]:
