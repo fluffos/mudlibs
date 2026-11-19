@@ -806,3 +806,8 @@ pristine + build-debug，port 40186。`scripts/play_login.py` 注册并执行 `l
 
 - `clone/npc/warcraft.h` 两处同源缺陷：其一 `set()`/`add()` 重载末尾调用不存在的 `efun::set()`/`efun::addn()` 导致 `/clone/npc/warcraft.lpc` 编不过，改为 `::set(idx, para, ob)`、`::set(prop, old + data)` 与 `::add(prop, data)`；其二 `do_shape()` 中 `actions == "follow" ? "仅跟随" : "保护";` 未赋值给 `actions`，补齐 `actions = (actions == "follow" ? "仅跟随" : "保护");`。
 - 验证：`lpcc_eval.py` 由 `--head` `Unknown efun: set` `FAIL` 转为 `load_object("/clone/npc/warcraft")`、`set("actions", "follow")`、`add("neili", 10)` 与 `do_shape("")` 全通 `PASS`；`play_boot.sh` + `play_stop.sh`（端口 `40186`）正常；`scripts/lint.py` 零告警。
+
+## `/inherit/banghui/smith.lpc` 引号误写与浮点截断修复（2026-11-19，KB 06 §7.393）
+
+- 修复 `query_save_file()` 将 `base_name(this_object())` 误写成 `base_name("this_object()")` 导致的字面量路径错误；并参照同源 `tianxia/std/banghui/smith.lpc` 为 `make_weapon_ability[cls] * 1.2` 与 `random(n * 0.6) + n * 0.7` 补齐 `to_int()` 显式取整，消除两处 `Float value truncated to int` 编译告警。
+- 验证：`scripts/lint.py --rule quoted-efun-call --all` 与 `--changed HEAD` 零告警；`lpc_format_changed.py` 格式化通过。

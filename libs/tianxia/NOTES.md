@@ -1172,3 +1172,8 @@ pristine + build-debug，port 40044。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## `/std/banghui/smith.lpc` 引号误写与存档路径修复（2026-11-19，KB 06 §7.393）
+
+- `query_save_file()` 将 `base_name(this_object())` 误写成 `base_name("this_object()")`，传入 `adm/simul_efun/file.lpc` 的 `base_name(object ob)` 后直接触发 `*Bad argument 1 to file_name() Expected: object Got: "this_object()".` 运行时崩溃；改为 `base_name(this_object())`。
+- 验证：`lpcc_eval.py` 探针 `new("/std/banghui/smith")->query_save_file()` 由 `--head` 崩溃转为返回 `"/std/banghui/smith"` `PASS`；`scripts/lint.py --rule quoted-efun-call --all` 全语料零命中。

@@ -111,6 +111,7 @@ RULES: list[RuleSpec] = [
     # Per-file corpus checks (all error in --changed/--files/--strict; configurable in --all)
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
     RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
+    RuleSpec("quoted-efun-call", "file", "KB 06 §7.393", "error", "Object efun/sefun called with quoted \"this_object()\"/\"this_player()\"/... string instead of object"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -158,6 +159,9 @@ DOUBLE_SLASH_PAT = re.compile(rb'"//([A-Za-z_][A-Za-z0-9_\-]*/[A-Za-z0-9_./\-]*)
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
+QUOTED_EFUN_RE = re.compile(
+    rb'\b(?:base_name|file_name|environment|geteuid|getuid|living|userp|wizardp|clonep|destruct|tell_object|present|move|move_object)\s*\(\s*"(?:this_object|this_player|previous_object|environment)\(\)"\s*\)'
+)
 PREV_OBJ_CMP_RE = re.compile(rb'previous_object\s*\(\s*\)\s*(?:==|!=)\s*"/|"[^"\n]*"\s*(?:==|!=)\s*previous_object\s*\(\s*\)')
 SHADOW_SEFUN_RE = re.compile(rb"\b(?:string|mixed|object)\s+(home_path)\s*=\s*\1\s*\(")
 UNGUARDED_RF_NEST = re.compile(rb'\b(?:explode|replace_string|sscanf)\s*\(\s*(?:efun::)?read_file\s*\(\s*"(/[^"\n]+)"\s*\)')
@@ -581,6 +585,7 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         or (want("for-scope-leak") and b"for" in b)
         or (want("path-macro-plus-arrow") and b"#define" in b and b"->" in b)
         or (want("efun-dbase-call") and b"efun::" in b)
+        or (want("quoted-efun-call") and b'()"' in b)
     )
     if need_mask:
         mk = code_mask(b, heredoc=True)
@@ -591,6 +596,12 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             if em:
                 ln = b.count(b"\n", 0, em.start()) + 1
                 hits.append(("efun-dbase-call", f"{path}:{ln}", f"`{em.group(0).decode('latin-1').rstrip('(').strip()}` is not a FluffOS efun (use `::set` / `::add` or inherited F_DBASE)"))
+
+        if want("quoted-efun-call") and b'()"' in cb:
+            qm = QUOTED_EFUN_RE.search(cb)
+            if qm:
+                ln = b.count(b"\n", 0, qm.start()) + 1
+                hits.append(("quoted-efun-call", f"{path}:{ln}", f"quoted zero-arg efun string `{qm.group(0).decode('latin-1')}` passed where an object expression was intended"))
 
         if want("throwing-combined-diamond") and ctx["throwing_has_combined"]:
             if re.search(rb"(?m)^[ \t]*inherit[ \t]+THROWING\s*;", cb) and re.search(rb"(?m)^[ \t]*inherit[ \t]+COMBINED_ITEM\s*;", cb):
@@ -658,6 +669,7 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         if want("for-scope-leak") and b"for" in cb:
             blocks = forscope.top_blocks(cb)
             starts = [x[0] for x in blocks]
+            decl_re = forscope.TYPES + rb"[ \t*]+(?:[^;(){}]*,\s*)?\*?"
             for fm in forscope.FOR.finditer(cb):
                 vname = fm.group(1)
                 fs, fe = forscope.func_bounds(blocks, starts, fm.start())
@@ -667,13 +679,27 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
                 if close_paren < 0:
                     continue
                 after_loop = forscope.stmt_end(cb, close_paren + 1)
-                rest = cb[after_loop:fe]
-                if not re.search(rb"\b" + vname + rb"\b", rest):
+                rest_ba = bytearray(cb[after_loop:fe])
+                for m2 in forscope.FOR.finditer(cb, after_loop, fe):
+                    if m2.group(1) != vname:
+                        continue
+                    hc2 = forscope.match_close(cb, cb.find(b"(", m2.start()), 0x28, 0x29)
+                    if hc2 < 0:
+                        continue
+                    e2 = forscope.stmt_end(cb, hc2 + 1)
+                    for q in range(m2.start() - after_loop, min(e2, fe) - after_loop):
+                        rest_ba[q] = 32
+                rest = bytes(rest_ba)
+                first = re.search(rb"(?<![A-Za-z0-9_'])" + vname + rb"\b", rest)
+                if not first:
                     continue
-                before_loop = cb[fs:fm.start()]
-                if re.search(rb"\b" + forscope.TYPES + rb"\s+[^;{]*\b" + vname + rb"\b", before_loop):
+                if re.search(rb"(?m)^[ \t]*#[ \t]*(else|elif)\b", rest[:first.start()]):
                     continue
-                if re.match(rb"[^;{}]*\b" + vname + rb"\b\s*[,;]", rest):
+                vdecl = decl_re + vname + rb"\b"
+                if re.search(vdecl, cb[fs:fm.start()]):
+                    continue
+                d = re.search(vdecl, rest)
+                if d and d.start() <= first.start():
                     continue
                 ln = b.count(b"\n", 0, fm.start()) + 1
                 hits.append(("for-scope-leak", f"{path}:{ln}", f"`for`-scoped variable `{vname.decode()}` read after loop"))
