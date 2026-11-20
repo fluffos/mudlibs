@@ -2686,3 +2686,12 @@ delete_temp("quest/jinshe2/step2", 1, who);
 3. `d/hellfire/hellfire1/**/*.lpc` (`sanjieshenhua` `69`, `sjshv2578bb` `47`, `xyj20032` `47` = `163` rooms): `reset()` repeats the same non-advancing `for (i = 0; this_object()->query("npc_number"); i++)` loop whenever `"npc_number" > 1`.
 **Fix:** Declare `int i;` and comment out `(: goaway :),` in `fy330` `gangster2.lpc`; declare `int level, i;` + `object guai;`, point `new("/d/quest/mofeng/npc/stey/guai")` + `objectp(guai)` guard in `mofengroom.lpc`; and add `i < ` to all `166` `for (i = 0; i < this_object()->query("npc_number"); i++)` loops across `mofengroom.lpc` and `d/hellfire/hellfire1/**/*.lpc` (`167` files total).
 **Detection:** `scripts/lint.py --rule undeclared-for-i-loop`.
+
+### 7.410 `#include __DIR__` / `#include __DIR_` preprocessor compile blocker (`23` files, 10 libs) {#7410-include-dir-macro}
+
+**Symptom:** FluffOS's C preprocessor does not expand `__DIR__` inside `#include` directives (`Bad #include directive` / `Cannot read #include file`), blocking compilation on two active-lib clusters (alongside unported wizard `/u/wudang/taoyuan/tyroad4..7.lpc` copies in `sjpl2`/`sjplii`):
+1. `d/mingjiao/npc/{baiguishou,fenggongying}.lpc` (`jyqxc`, `jyqxc2`, `ldtx`, `ldtxii`, `syxjl`, `xiakexing3`, `xkxlb`, plus `fenggongying.lpc` in `xbtxiii`; `15` NPCs across `8` libs): `#include __DIR__"tanzhu.h"` when `tanzhu.h` sits in the same directory.
+2. `d/suburb/xkx/wudang/taoyuan/tyroad{4,5,6,7}.lpc` in `xyj451` (`4` rooms): `#include __DIR_"feng.h"` (one underscore), whereas the actual `feng.h` resides in the parent directory (`d/suburb/xkx/wudang/feng.h`).
+3. `d/wudang/taoyuan/tyroad{4,5,6,7}.lpc` in `jinyongwenzi` (`4` rooms): `#include __DIR_"feng.h"` where `jinyongwenzi` never shipped `d/wudang/feng.h`.
+**Fix:** Change `#include __DIR__"tanzhu.h"` -> `#include "tanzhu.h"` in the `15` Mingjiao NPCs (preserving CRLF/LF); change `#include __DIR_"feng.h"` -> `#include "/d/suburb/xkx/wudang/feng.h"` in `xyj451`'s `4` Taoyuan road rooms; and comment out the missing `#include __DIR_"feng.h"` plus its `"feng": (: look_feng :),` and `add_action("look_feng", "look");` hooks in `jinyongwenzi`'s `4` rooms (`23` files total).
+**Detection:** `scripts/lint.py --rule include-dir-macro`.

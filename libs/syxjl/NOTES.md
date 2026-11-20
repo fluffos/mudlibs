@@ -1245,3 +1245,8 @@ pristine + build-debug，port 40088。`scripts/play_login.py` 注册。
 
 - `/cmds/usr/help.lpc` 在 `num == "7"` 地图分支移除缺失目标 `input_to("help_map", ob)` 并保持 `ob->delete_temp("block_msg/all")`；`/cmds/usr/help1.lpc` 在 `num == "7"` 地图分支移除缺失目标 `input_to("help_map", ob)` 并保持 `ob->delete_temp("block_msg/all")`。
 - 验证：全批 `32` 馆 / `34` 文件 `lpcc` 差分编译全部通过（`ok=34, regressions=0`）；代表 `lpcc_eval.py` 实测 `nitan6` `hai_end`（`no_exert` `30->0`）、`hxxtjqb` `remove_broken_weapon`（`w_after=0`）、`cctx` `neishi`（`*No program -> loaded` + `do_circle`）、`dtxyzjb` `qnbank1`（`*No program -> loaded` + `do_deposit`）；`lpc_format_changed.py`、`scripts/lint.py --files` 与 `10/10` 实库 `play_boot.sh`+`play_stop.sh` 均通过。
+
+## `#include __DIR__` 预处理指令编译阻断修复（2026-11-20，KB 06 §7.410）
+
+- 修复 `/d/mingjiao/npc/baiguishou.lpc`、`/d/mingjiao/npc/fenggongying.lpc` 中 FluffOS 预处理器不支持的 `#include __DIR__"tanzhu.h"`（编译报错 `Cannot read #include file`），统一改为同目录相对包含 `#include "tanzhu.h"`（保留原文件行尾）。
+- 验证：`lpcc_eval.py` 实测 `baiguishou` 与 `fenggongying` 均成功编译加载（`ZZT 1 1`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `include-dir-macro` 规则，共 `81` 条规则）全库零错误。

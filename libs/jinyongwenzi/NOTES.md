@@ -1127,3 +1127,8 @@ pristine + build-debug，port 40083。`scripts/play_login.py` 注册并执行 `l
 
 - `/kungfu/skill/songyang-shou/junji.lpc` 移除引用不存在回调 `remove_effect` 的失效 `call_out`（保留原文件行尾）。
 - 验证：全批 `36` 文件 `lpcc` 编译全部通过（`36/36`）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 验证 `nitan6` `beidou-zhenfa`（`--head` `fn=0 after=1` → `after=0`）及 5 组技能加载正常；`lpc_scan_callout_targets.py` 对应 `6` 类路径剩余 `0` 命中；`scripts/lint.py`（新增 `skill-dead-callout`，共 `71` 条规则）零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+
+## `#include __DIR_` 预处理指令编译阻断修复（2026-11-20，KB 06 §7.410）
+
+- `/d/wudang/taoyuan/tyroad{4,5,6,7}.lpc` 第 6 行 `#include __DIR_"feng.h"` 因预处理器写法与原档缺失 `feng.h` 双重原因触发 `Bad #include directive`；比照同族做法注释掉缺失的 `#include __DIR_"feng.h"` 及对应 `look_feng` 引用（`"feng": (: look_feng :),` 与 `init()` 中的 `add_action("look_feng", "look")`），避免伪造缺失文件并恢复房间编译加载。
+- 验证：`lpcc_eval.py` 实测 `tyroad4..7` 全部编译加载通过（`ZZT 1 1 1 1 "山路"`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `include-dir-macro` 规则，共 `81` 条规则）全库零错误。

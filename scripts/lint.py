@@ -127,6 +127,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("basket-missing-check-trigger", "file", "KB 06 §7.407", "error", "Room calling undefined check_trigger() or inheriting ITEM with ::reset() (d/heimuya/basket.lpc)"),
     RuleSpec("unquoted-set-string", "file", "KB 06 §7.408", "error", "Missing opening quote or stray integer trailing quote in set(\"prop\", ...\")"),
     RuleSpec("undeclared-for-i-loop", "file", "KB 06 §7.409", "error", "Non-advancing `for (i = 0; obj->query(...); i++)` loop, undeclared `for (i = sizeof(ob)...)` loop var, or dead `(: goaway :)` pointer"),
+    RuleSpec("include-dir-macro", "file", "KB 06 §7.410", "error", "C preprocessor #include __DIR__ / #include __DIR_ directive fails in FluffOS"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -422,6 +423,7 @@ CALL_TYPO_PAT = re.compile(
     rb'delete_tem|strat_busy|start_bus|receive_damgae|recive_damage|receive_woud|start_perfrom|'
     rb'apply_conditon|clear_conditon|is_figting)\s*\('
 )
+INCLUDE_DIR_PAT = re.compile(rb'(?m)^[ \t]*#[ \t]*include[ \t]+__DIR_+\s*"([^"\n]+)"')
 
 
 def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
@@ -567,6 +569,14 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             hits.append(("undeclared-for-i-loop", path, "undefined `(: goaway :)` lfun pointer"))
         elif re.search(rb'\bfor\s*\(\s*i\s*=\s*sizeof\s*\(\s*ob\s*\)\s*-\s*1\s*;', cb) and not re.search(rb'\bint\b[^;(){}\n]*\bi\b', cb):
             hits.append(("undeclared-for-i-loop", path, "undeclared loop counter `i` in `for (i = sizeof(ob) - 1; ...)`"))
+
+    if want("include-dir-macro") and b"__DIR_" in b and INCLUDE_DIR_PAT.search(b):
+        mk = code_mask(b, heredoc=True)
+        for m in INCLUDE_DIR_PAT.finditer(b):
+            if mk[m.start()]:
+                ln = b.count(b"\n", 0, m.start()) + 1
+                hits.append(("include-dir-macro", f"{path}:{ln}", f"`#include __DIR_` fails FluffOS preprocessor (`Cannot read #include file`) for `{m.group(1).decode('latin-1')}`"))
+                break
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

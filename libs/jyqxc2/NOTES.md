@@ -449,3 +449,8 @@ pristine + build-debug，port 40172。`scripts/play_login.py` 注册并执行 `l
 
 - `/d/heimuya/neishi.lpc` 修复 `item_desc["wan"]` 缺失左引号、跨行未拼接字符串、`roo` 拼写错误及残缺重复块，使黑木崖后厅及 `do_circle` 恢复编译载入。
 - 验证：全批 `32` 馆 / `34` 文件 `lpcc` 差分编译全部通过（`ok=34, regressions=0`）；代表 `lpcc_eval.py` 实测 `nitan6` `hai_end`（`no_exert` `30->0`）、`hxxtjqb` `remove_broken_weapon`（`w_after=0`）、`cctx` `neishi`（`*No program -> loaded` + `do_circle`）、`dtxyzjb` `qnbank1`（`*No program -> loaded` + `do_deposit`）；`lpc_format_changed.py`、`scripts/lint.py --files` 与 `10/10` 实库 `play_boot.sh`+`play_stop.sh` 均通过。
+
+## `#include __DIR__` 预处理指令编译阻断修复（2026-11-20，KB 06 §7.410）
+
+- 修复 `/d/mingjiao/npc/baiguishou.lpc`、`/d/mingjiao/npc/fenggongying.lpc` 中 FluffOS 预处理器不支持的 `#include __DIR__"tanzhu.h"`（编译报错 `Cannot read #include file`），统一改为同目录相对包含 `#include "tanzhu.h"`（保留原文件行尾）。
+- 验证：`lpcc_eval.py` 实测 `baiguishou` 与 `fenggongying` 均成功编译加载（`ZZT 1 1`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `include-dir-macro` 规则，共 `81` 条规则）全库零错误。
