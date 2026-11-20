@@ -1313,3 +1313,8 @@ pristine + build-debug，归档端口 40049。`scripts/play_login.py` 注册并�
 
 - 全语料排查无定义函数调用（`call_other` 静默返回 `0`），修正 `/d/tangmen/tangmenzhen/npc/tangda.lpc`、`/d/tangmen/tangmenzhen/npc/tangfei.lpc`（共 `2` 个文件） 中的 `->qurey`/`->qeury`/`->quert`/`->queyr`/`->quety_temp`/`->querk_skill`/`->quert_respect`/`->query_tmp`/`->quary`/`->queryr`/`->quer` 等拼写错误为标准方法名，消除功能失效或条件误放行问题（保留原文件行尾）。
 - 验证：全批 `698` 文件（`691/698` 编译通过、`7` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`dtxywzxzb` 非蜀山 `valid_learn` 由 `1` 转为 `0`，`fqyy2` `qurey=0 -> query=50`）；`scripts/lint.py`（新增 `query-method-typo`，共 `69` 条规则）全库与 `--fast` 零错误零告警；`10` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+
+## `feature/team.lpc` 缺失 `set_lord()`/`query_lord()` 认主机制修复（2026-11-20，KB 06 §7.412）
+
+- `/feature/team.lpc`（`F_TEAM`，由 `CHAR` 继承）原改写后遗漏 `lord` 变量及 `set_lord(object ob)`、`query_lord()`，导致驯兽/坐骑/白驼蛇类等调用静默失效；现按原修饰符补全 `lord` 声明、`int set_lord(object ob)`（含自设报错与 `return 1;`）与 `object query_lord()`。
+- 验证：`lpcc_eval.py` 实测 `set_lord(this_object())` 后 `query_lord()` 正确返回宿主（`ok=1 same=1`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `missing-team-lord` 规则，共 `83` 条规则）与 `--fast` 零错误。

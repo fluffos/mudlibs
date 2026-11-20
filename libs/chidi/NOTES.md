@@ -1270,3 +1270,8 @@ pristine + build-debug，port 40006。`scripts/play_login.py` 注册并执行 `l
 
 - 扩扫 `->delete_tem`/`->strat_busy`/`->start_bus`/`->receive_damgae`/`->recive_damage`/`->receive_woud`/`->query_conditon`/`->apply_conditon`/`->clear_conditon`/`->query_skill_perpare`/`->start_perfrom`/`->is_figting` 等无定义拼写错误（避开真实方法 `del_temp` 与 `start_exert`），统一修正 `/kungfu/skill/tiangang-zhi/lingkong.lpc`（共 `1` 个文件） 中的错误调用为标准方法名（保留原文件行尾）。
 - 验证：全批 `130` 个 `.lpc` 差分编译通过 `115/130`（`15` 处 `wenfang*` 为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`aoxiangtianji` `clear_conditon` `10 -> 0`、`bxsj` `cond_typo=0 -> cond_fix=5` 且 `del_typo=1 -> del_fix=0`、`chidi` `busy_typo=0 -> busy_fix=1`）；`scripts/lint.py`（共 `70` 条规则）全库与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+
+## `feature/team.lpc` 缺失 `set_lord()`/`query_lord()` 认主机制修复（2026-11-20，KB 06 §7.412）
+
+- `/feature/team.lpc`（`F_TEAM`，由 `CHAR` 继承）原改写后遗漏 `lord` 变量及 `set_lord(object ob)`、`query_lord()`，导致驯兽/坐骑/白驼蛇类等调用静默失效；现按原修饰符补全 `lord` 声明、`int set_lord(object ob)`（含自设报错与 `return 1;`）与 `object query_lord()`。
+- 验证：`lpcc_eval.py` 实测 `set_lord(this_object())` 后 `query_lord()` 正确返回宿主（`ok=1 same=1`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `missing-team-lord` 规则，共 `83` 条规则）与 `--fast` 零错误。

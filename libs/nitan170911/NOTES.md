@@ -1430,3 +1430,8 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 
 - 修复 `/adm/daemons/npcsd.lpc`（`467..493` 行）与 `/clone/npc/qingyun.lpc:166` 共 `2` 个文件：`npcsd.lpc` 的 `random_move()` 把房间路径字符串 `exits[dir]` 赋给 `object dest` 并传给 `find_object(dest)`/`load_object(dest)` 导致编译失败（`Bad argument 1 to efun find_object()`），且后续 `query("no_fight", dest)`/`query("no_quest", dest)` 与 `qingyun.lpc` `rshorts()` 的 `query("short", exits[kexits[i]])` 均把路径字符串误传给 `sefun::query(prop, raw_or_ob)`（返回 `({"0"})`）；改为 `mixed dest` + `object dest_ob` / `dest_room` 先加载房间对象并补充 `!mapp(exits)`、`!objectp(...)`、`!stringp(name)` 防护。
 - 验证：`lpcc_eval.py` 实测 `npcsd` 由 `--head` 编译失败转为成功加载且 `random_move(qy)` 正确移动至 `/d/city/nandajie1`、`shorts=4` 项（北/南/东/西大街）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（新增 `exit-string-as-object` 规则，共 `75` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。
+
+## `feature/team.lpc` 缺失 `set_lord()`/`query_lord()` 认主机制修复（2026-11-20，KB 06 §7.412）
+
+- `/feature/team.lpc`（`F_TEAM`，由 `CHAR` 继承）原改写后遗漏 `lord` 变量及 `set_lord(object ob)`、`query_lord()`，导致驯兽/坐骑/白驼蛇类等调用静默失效；现按原修饰符补全 `lord` 声明、`int set_lord(object ob)`（含自设报错与 `return 1;`）与 `object query_lord()`。
+- 验证：`lpcc_eval.py` 实测 `set_lord(this_object())` 后 `query_lord()` 正确返回宿主（`ok=1 same=1`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `missing-team-lord` 规则，共 `83` 条规则）与 `--fast` 零错误。

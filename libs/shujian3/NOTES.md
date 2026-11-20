@@ -486,3 +486,8 @@ pristine + build-debug，port 40200。`scripts/play_login.py` 走完 8 步注册
 - `d/wanshou/forest8.lpc` 原在 `set("outdoors", 万兽山庄");` 处缺失左引号导致整份房间无法编译（`Illegal character 0xe4` / `syntax error`，打断万兽山庄九宫树林迷宫通行）；其中 `bxsj`/`bxsj1`/`shujian2008`/`sjtx2` 还因引号奇偶反转使旧排版器将下行起全部字符串误改写为带空格字面量（`" cost "`、`" tree8 "`、`" exits / north "`、`__DIR__" shijie "`、`" close_exit_shijie "`、`__DIR__" forest2 "`、`" tree "`），并同时存在第 11 行前向声明 `void check_out(object me);` 与下文 `int check_out(object me)` 返回类型冲突。
 - 统一补全 `set("outdoors", "万兽山庄");`、恢复被引号反转破坏的字符串字面量（保留原 CRLF 行尾）并将前向声明改为 `int check_out(object me);`。
 - 验证：`bxsj` `--head` 基线 `lpcc_eval.py` 编译失败，修复后 `bxsj`/`bxsj1`/`shujian2008`/`shujian3`/`sjecl`/`sjtx2` 全 `6` 馆 `lpcc_eval.py` 均通过（`万兽山庄 short=密林 ok1=0 ok2=1 tree1=0 cost=1`）；`lpc_format_changed.py --apply` 检查 `6` 份文件零重排（`0 to format`）；`scripts/lint.py` 新增 `unquoted-set-string` 规则（共 `79` 条规则）通过 `--rule unquoted-set-string --all --jobs 8`、`--files` 与 `--fast`（`0 error(s), 0 warning(s)`）及 `HEAD` 正向单测；全 `6` 馆 `play_boot.sh`+`play_stop.sh` 启停正常且无残留驱动。
+
+## `feature/team.lpc` 缺失 `set_lord()`/`query_lord()` 认主机制修复（2026-11-20，KB 06 §7.412）
+
+- `/feature/team.lpc`（`F_TEAM`，由 `CHAR` 继承）原改写后遗漏 `lord` 变量及 `set_lord(object ob)`、`query_lord()`，导致驯兽/坐骑/白驼蛇类等调用静默失效；现按原修饰符补全 `lord` 声明、`int set_lord(object ob)`（含自设报错与 `return 1;`）与 `object query_lord()`。同步修复 `/d/wanshou/npc/animal2.lpc`：补充 `to_int(pow(...))` 消除第 300 行浮点截断警告，并在 `animal_combat_check()` 增加 `objectp(query_lord()) &&` 防护后使其恢复编译载入；
+- 验证：`lpcc_eval.py` 实测 `set_lord(this_object())` 后 `query_lord()` 正确返回宿主（`ok=1 same=1`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `missing-team-lord` 规则，共 `83` 条规则）与 `--fast` 零错误。

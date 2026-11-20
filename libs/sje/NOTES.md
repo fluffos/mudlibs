@@ -515,3 +515,8 @@ pristine + build-debug，port 40146。`scripts/play_login.py` 注册并执行 `l
 
 - `/kungfu/class/xiake/master.lpc` 末尾将 `create_family("侠客岛", 3, "弟子");` 误写在 `create()` 闭合大括号 `}` 之外（触发 `syntax error, unexpected L_STRING` 致 NPC 无法编译载入），将其移入 `create()` 内 `setup();` 之前（保留原缩进、繁简体与行尾格式）。
 - 验证：`lpcc_eval.py` 实测该对象成功载入并正确设置门派 `"侠客岛"`/`"俠客島"`，`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `top-level-create-family` 规则，共 `82` 条规则）全库零错误。
+
+## `feature/team.lpc` 缺失 `set_lord()`/`query_lord()` 认主机制修复（2026-11-20，KB 06 §7.412）
+
+- `/feature/team.lpc`（`F_TEAM`，由 `CHAR` 继承）原改写后遗漏 `lord` 变量及 `set_lord(object ob)`、`query_lord()`，导致驯兽/坐骑/白驼蛇类等调用静默失效；现按原修饰符补全 `lord` 声明、`int set_lord(object ob)`（含自设报错与 `return 1;`）与 `object query_lord()`。
+- 验证：`lpcc_eval.py` 实测 `set_lord(this_object())` 后 `query_lord()` 正确返回宿主（`ok=1 same=1`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `missing-team-lord` 规则，共 `83` 条规则）与 `--fast` 零错误。

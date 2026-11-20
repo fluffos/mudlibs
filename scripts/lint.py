@@ -103,6 +103,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("lima-menu-protected-remove", "targeted", "KB 06 §7.383", "error", "Lima std/menu.lpc declaring protected void remove()"),
     RuleSpec("dead-souls-stat-3tuple", "targeted", "KB 06 §7.382", "error", "Dead Souls books.lpc checking sizeof(statinfo) != 3 on FluffOS 4-tuple stat()"),
     RuleSpec("missing-embed-h", "targeted", "KB 04 §6.31", "error", "#include /inherit/item/embed.h in playable lib that never shipped it"),
+    RuleSpec("missing-team-lord", "targeted", "KB 06 §7.412", "error", "feature/team.lpc omits set_lord()/query_lord() used by trainee/animal NPCs, or animal2.lpc pow() truncation"),
     RuleSpec("enable-player-guard", "targeted", "KB 05 §7.19", "warn", "feature/command.lpc enable_player() lacking reentrancy guard"),
     RuleSpec("rank-null-guard", "targeted", "KB 06 §7.273", "warn", "adm/daemons/rankd.lpc missing !objectp(ob) fallback"),
     RuleSpec("ping-strip-callout-nosave", "targeted", "KB 04 §6.10", "error", "pingd.lpc/pingtcp.lpc declaring nosave int strip_callout() instead of protected"),
@@ -900,7 +901,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -965,6 +966,12 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["band"].append(item)
         if not has_embed[slug] and "/weapon/" in rel:
             targeted_bins["embed_cand"].append(item)
+        if rel == "/feature/team.lpc":
+            targeted_bins["team"].append(item)
+        if rel == "/d/wanshou/npc/animal2.lpc":
+            targeted_bins["animal2"].append(item)
+        if rel == "/d/baituo/npc/bt_snake.lpc":
+            targeted_bins["btsnake"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -1032,6 +1039,44 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if b"embed.h" in b and re.search(rb'#include\s+"/?inherit/item/embed\.h"', b):
                 col.add("missing-embed-h", p, "includes /inherit/item/embed.h which is missing from lib")
+
+    if col.wants("missing-team-lord"):
+        lord_callers = (
+            "inherit/char/trainee.lpc",
+            "d/wanshou/npc/animal2.lpc",
+            "d/wanshou/shulin.lpc",
+            "clone/animal/lion.lpc",
+            "clone/animal/laohu.lpc",
+            "clone/animal/tuying.lpc",
+            "d/baituo/npc/tuying.lpc",
+            "d/baituo/npc/bt_snake.lpc",
+            "d/baituo/obj/zhulou.lpc",
+            "d/xueshan/npc/tuying.lpc",
+            "cmds/std/train.lpc",
+            "adm/daemons/fairyland_quest/temp/get.lpc",
+            "adm/daemons/huanjing2003/temp/get.lpc",
+        )
+        for slug, p, _ in targeted_bins["team"]:
+            if slug == "wllz3":
+                continue
+            b = open(f"{REPO}/{p}", "rb").read()
+            has_set = bool(re.search(rb'\b(?:void|int|object|mixed)\s+set_lord\s*\(', b))
+            has_qry = bool(re.search(rb'\b(?:void|int|object|mixed)\s+query_lord\s*\(', b))
+            if not (has_set and has_qry):
+                w = f"{REPO}/libs/{slug}/work"
+                if any(
+                    os.path.isfile(f"{w}/{c}") and (b"query_lord" in open(f"{w}/{c}", "rb").read() or b"set_lord" in open(f"{w}/{c}", "rb").read())
+                    for c in lord_callers
+                ):
+                    col.add("missing-team-lord", p, "feature/team.lpc omits set_lord()/query_lord() while trainee/animal callers use it")
+        for _, p, _ in targeted_bins["animal2"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"pow(" in b and re.search(rb'\bmax\s*=\s*pow\s*\(', b):
+                col.add("missing-team-lord", p, "animal2.lpc assigns float pow() result to int `max` without to_int()")
+        for _, p, _ in targeted_bins["btsnake"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if re.search(rb'(?m)^void query_lord\s*\(\s*\)\s*;', b):
+                col.add("missing-team-lord", p, "bt_snake.lpc has bogus void query_lord() forward declaration shadowing F_TEAM")
 
     if col.wants("enable-player-guard"):
         for _, p, _ in targeted_bins["command"]:
