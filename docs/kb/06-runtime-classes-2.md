@@ -2644,3 +2644,11 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Cause:** Nitan7's simul_efun declares `varargs int delete_temp(string prop, object ob)` with two arguments (`include/dbase.h`). When porting `ob->delete_temp("...")` calls alongside `set_temp("...", 1, ob)`, five call sites per lib were emitted with a stray `, 1` second argument from `set_temp`.
 **Fix:** Remove the stray `, 1` middle argument (`delete_temp("...", ob);`) across all `18` vendored files (`30` call sites).
 **Detection:** `scripts/lint.py --rule delete-temp-three-args`.
+
+### 7.404 Exit room path strings passed as `object` to `find_object()`/`sefun::query()` in Nitan7 (`12` vendored files, 6 libs) {#7404-exit-string-as-object}
+
+**Symptom:** Two shared Nitan7 files across all `6` active vendored libs (`hhsj`, `nitan170911`, `nitan6`, `nt6`, `nt6nitan6win`, `xfbhh`; also present in `fluffos-upstream` `nt7` submodule) break when walking room exits:
+1. `/adm/daemons/npcsd.lpc` fails compilation (`Bad argument 1 to efun find_object()`, `Bad argument 1 to efun load_object()`) because `random_move()` declares `object dest;`, assigns `dest = exits[dir];` (a room path string), and passes `dest` to `find_object(dest)` / `load_object(dest)` — while `if (query("no_fight", dest))` / `query("no_quest", dest)` also passes that string path into `sefun::query(prop, raw_or_ob)`.
+2. `/clone/npc/qingyun.lpc:166` compiles cleanly but `rshorts()` calls `name = query("short", exits[kexits[i]]);` with a string path; `wizard.lpc`'s `sefun::query()` only treats `objectp(raw_or_ob)` as the target object (`0` otherwise -> reads `this_object()` or returns `"0"`), collapsing every exit name to `({ "0" })`.
+**Fix:** Keep `mixed dest;` + resolved `object dest_ob;` (`if (objectp(dest)) dest_ob = dest; else if (stringp(dest)) dest_ob = find_object(dest) || load_object(dest);`) with `!mapp(exits)` / `!objectp(dest_ob)` guards in `npcsd.lpc`, and resolve `object dest_room = find_object(exits[kexits[i]]) || load_object(...)` before `query("short", dest_room)` in `qingyun.lpc`.
+**Detection:** `scripts/lint.py --rule exit-string-as-object`.

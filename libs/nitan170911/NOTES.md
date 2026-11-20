@@ -1425,3 +1425,8 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 
 - 修复 `/inherit/room/pawn_d.lpc:331`、`/quest/skybook/jinshe/wenyi.lpc`（`143`、`212`）与 `/quest/skybook/jinshe/wenyi (2).lpc`（`143`、`213`）共 `3` 个文件 / `5` 处调用：去除从 `set_temp` 误带入的多余第二参数 `, 1`，匹配 `varargs int delete_temp(string prop, object ob)` 签名（消除 `Bad type for argument 2 of delete_temp ( object vs int )`）。
 - 验证：`lpcc_eval.py` 实测 `wenyi` 与 `wenyi (2)` 均由 `--head` 编译失败转为成功加载（`a=温仪 b=温仪`，`nitan170911` 全零报错；`nitan6` 实测 `delete_temp("quest/jinshe2/step1", p)` 将标记清零 `step1_after_del=0`；`pawn_d.lpc` 消除第 `331` 行报错，仅余既有未定义 `pay_from_bank`）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（新增 `delete-temp-three-args` 规则，共 `74` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。
+
+## `npcsd.lpc` 与 `qingyun.lpc` 出口路径字符串误作 `object` 缺陷修复（2026-11-20，KB 06 §7.404）
+
+- 修复 `/adm/daemons/npcsd.lpc`（`467..493` 行）与 `/clone/npc/qingyun.lpc:166` 共 `2` 个文件：`npcsd.lpc` 的 `random_move()` 把房间路径字符串 `exits[dir]` 赋给 `object dest` 并传给 `find_object(dest)`/`load_object(dest)` 导致编译失败（`Bad argument 1 to efun find_object()`），且后续 `query("no_fight", dest)`/`query("no_quest", dest)` 与 `qingyun.lpc` `rshorts()` 的 `query("short", exits[kexits[i]])` 均把路径字符串误传给 `sefun::query(prop, raw_or_ob)`（返回 `({"0"})`）；改为 `mixed dest` + `object dest_ob` / `dest_room` 先加载房间对象并补充 `!mapp(exits)`、`!objectp(...)`、`!stringp(name)` 防护。
+- 验证：`lpcc_eval.py` 实测 `npcsd` 由 `--head` 编译失败转为成功加载且 `random_move(qy)` 正确移动至 `/d/city/nandajie1`、`shorts=4` 项（北/南/东/西大街）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（新增 `exit-string-as-object` 规则，共 `75` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。
