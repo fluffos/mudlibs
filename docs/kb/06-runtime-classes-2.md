@@ -2616,3 +2616,19 @@ Also (2026-11-11): hy3 `logind` 在选码后立刻 `write_file("/topten/login/us
 2. Wrapper-swallowed function/boolean calls (`Bad type` / runtime crash): `clone/game/seaf.lpc:848,849,866` (`hhsj`, `nitan170911`, `xfbhh`: `query("id", get_ship/get_table/player_id(this_player()))`), `adm/daemons/versiond.lpc:1026/1028` (`!query("manual_synchronize", stringp(op) && CONFIG_D)`), `d/baituo/npc/guaishe.lpc:233` (`query("owner", random(6) != 0 && (owner = present(me), here))`), `d/mingjiao/npc/attacker.h:6/7` (`query("outer_times", random(this_object())) == 1`, passing `this_object()` to `random()`), and `d/xingxiu/xx_job.h:106/110` (`query("combat_exp", random(50) <= 3 && count_ge(me), 150000)`). Note also two dormant copies inside `/* ... */` block comments (`kungfu/skill/tanzhi-shentong.lpc:243`, `d/yuanyue/shibanlu2.lpc:33`) left untouched outside active code. Note for `versiond.lpc`: `sefun::query(prop, raw_or_ob)` treats a non-object second arg as `int raw` rather than resolving a path string, so `CONFIG_D->query("manual_synchronize")` matches `nitan_ceshi`/`nitan_san` safely.
 **Fix:** Restored the uncrossed subscript/call form across all `39` live `.lpc`/`.h` files (`6` libs, preserving LF) and added rule `crossed-bracket-query` (`72` rules total) in `scripts/lint.py`. Verified `lpc_format_changed.py --apply` (`39` checked, `0` reformatted), `lpcc_eval.py` (`hhsj` `dhs`/`pai`/`pai21`/`seaf`/`versiond`/`guaishe` & `nitan6` `ouyezi`/`versiond`/`guaishe` all `--head` FAIL/broken → `PASS`), `scripts/lint.py --rule crossed-bracket-query --all --jobs 8` & `--files` & `--fast` (`0 error(s), 0 warning(s) across 72 rules`), `6/6` `play_boot.sh` + `play_stop.sh` (`47351..47356` -> `ZERO_DRIVERS`), and `check_ntfs_paths.py` clean (`0` issues).
 **Detection:** `scripts/lint.py --rule crossed-bracket-query`.
+
+### 7.402 `load_object(__DIR__ "tomb2")\n)\n{` / `load_object("d/emei/tomb2";` + companion `tomb2.lpc` `* /` syntax breakage (`21 + 21` `d/em*/**/obj/tomb*.lpc`, 7 libs) {#7402-malformed-load-object}
+
+**Symptom:** All `21` `d/em*/**/obj/tomb.lpc` (`bmxkx2001`, `jym`, `shenzhou`, `xkm`, `xkx2000zxb`, `xkx2001`, `xuanjianlu`) failed to compile at two adjacent lines in `do_dig()` / `close_tomb()` (`syntax error, unexpected ')'` + cascade `Unused local variable 'weapon', 'room'`), leaving `No program in object '/d/emei/.../tomb'`:
+```c
+object room = load_object(__DIR__ "tomb2")
+)
+{
+...
+void close_tomb() {
+  object room = load_object("d/emei/tomb2";
+```
+Once `tomb.lpc` compiled and `close_tomb()` executed, all `21` companion `tomb2.lpc` rooms in the same directories immediately failed compilation on a stray unclosed comment closer `* /` at line 76 (`syntax error, unexpected '/', expecting L_DEFINED_NAME or L_IDENTIFIER`).
+**Cause:** Corrupted manual edit in the upstream ESII/XKX shared Emei tomb pair (`tomb.lpc` / `tomb2.lpc`): the `)` of `load_object(__DIR__ "tomb2")` was followed by a duplicate `)` and stray `{`, `close_tomb()` dropped the `)` before `;` while hard-coding `"d/emei/tomb2"` (missing sibling `d/em/` and `npc/obj/` paths where `do_dig()` uses `__DIR__ "tomb2"`), and `tomb2.lpc` left an unmatched `* /` token below `shoot_arrow()`.
+**Fix:** Restore `object room = load_object(__DIR__ "tomb2");` at both `tomb.lpc` call sites and remove the stray `* /` line from all `21` companion `tomb2.lpc` files (`42` files total across the `7` vendored libs).
+**Detection:** `scripts/lint.py --rule malformed-load-object`.
