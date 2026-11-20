@@ -1472,3 +1472,13 @@ Symptom: A single-line `#define` macro ends with an odd/unclosed `"` (and no `\`
 6. **`nanny/std/rfc/monster_setup.h:13`:** `ADD_LOCAL_CALL(fun,arg)` left `file_name(this_object()+"\b"+fun",arg)` malformed without closing `)` or quotes around `fun` (K&R stringizing, also in `_ADD_CALL`/`ADD_MONSTER_CALL`/`_ADD_CALL2` per KB 06 §7.352).
 Fix: Restore the missing closing `"` (and `.lpc` for `F_ITEMMAKE`, `"\x1b"` for `ESC`, `+"fun"`/`#fun` + `()` balance in `monster_setup.h`, quotes around `"yondala/pm_io.log"`/`"\n"` in `pm.h`, and strip the stray trailing `"` on `PANTS`) while preserving each header's CRLF/LF endings (`silberland/sys/terminal.h` `#define CR "\r"` embeds a literal CR inside `"..."`, so scan lines split only on `\n`).
 Detection: `scripts/lint.py --rule unclosed-define-string`.
+
+### 6.34 Fullwidth Chinese punctuation or ideographic space (`\u3000`, `；`, `，`, `）`) in LPC code position (`32` files across `27` libs / `7+` lineages, 2026-11-20)
+Symptom: Compilation aborts immediately with `error: Illegal character 0xe3` or `0xef` because fullwidth punctuation or ideographic spaces sit outside string literals and comments in LPC code positions:
+1. **`/include/common.h` (`hhsj`, `nitan170911`, `nitan6`, `nt6`, `nt6nitan6win`, `wxddym`, `xfbhh` — and `nt7` upstream):** `886` `\u3000` (U+3000 ideographic spaces) inside `mapping common_list = ([ ... ])` prevent `<common.h>` from compiling anywhere.
+2. **`hdnecklace.lpc:16` (`fengyun434`, `fysjmb`, `xsfyssjb`), `duanzc.lpc:4` (`tianxiawuxue`), `yd-shizhe.lpc:65` (`xyzxfk`):** fullwidth `；` used as a statement separator instead of `;`.
+3. **`cdkedian{3,4}.lpc`, `cdyaopu.lpc`, `chengzhong.lpc` (`shzs`), `include/npc/npcd.lpc:38` (`wqfy`, `zzfy`, `zzfy3`), `adm/daemons/newvoted.lpc:56` (`wqfy`), `daemon/lianhua.lpc:8` (`zitengzhan`):** fullwidth `，` used as argument/list/map separator instead of `,`.
+4. **`d/death/npc/mamian.lpc:34-47` (`yhwhpublicfi`):** fullwidth `）` used to close 14 consecutive `set_skill(..., 650 ）;` calls.
+5. **`/story/{shitang,pifeng2}.lpc` (`sjsh`, `xianlvqiyuan`, `xlqy_early`, `xlqy_new2007`, `xlqyzdb`, `yueyingqiyuan`), `open/prayer/npc/new-pope.lpc:127` (`kxkj`, `kxkjii2`), `d/leox/tianpeng/ns1.lpc:19` (`sjshv150`):** `\u3000` indentation inside array/mapping literals or code blocks.
+Fix: Replace `\u3000`→` `, `，`→`,`, `；`→`;`, `（`→`(`, `）`→`)`, `：`→`:` strictly where `code_mask(b, heredoc=True)` marks code (preserving strings, comments, heredocs, and CRLF/LF endings), then run the formatter. Note pre-existing unrelated errors in `newvoted.lpc` (missing closing `}` at EOF) and `new-pope.lpc` (`notify_fail(command(...))`).
+Detection: `scripts/lint.py --rule fullwidth-code-punct`.

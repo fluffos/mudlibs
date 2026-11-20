@@ -133,6 +133,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("top-level-create-family", "file", "KB 06 §7.411", "error", "create_family() statement placed outside function braces after create()"),
     RuleSpec("one-arg-set", "file", "KB 06 §7.414", "error", "1-argument set(\"k\") / set_temp(\"k\") (data=0) or missing-value set(\"k\",) against ES2 F_DBASE"),
     RuleSpec("unclosed-define-string", "file", "KB 04 §6.33", "error", "Single-line #define macro carrying an unclosed string literal"),
+    RuleSpec("fullwidth-code-punct", "file", "KB 04 §6.34", "error", "Fullwidth punctuation or ideographic space used as LPC syntax/whitespace in code position"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -258,6 +259,34 @@ def _find_unclosed_define_string(b: bytes) -> int | None:
                     return lno
         off += line_len + 1
     return None
+
+
+FW_CODE_RE = re.compile(rb'\xe3\x80\x80|\xef\xbc\x8c|\xef\xbc\x9b|\xef\xbc\x88|\xef\xbc\x89|\xef\xbc\x9a')
+FW_CODE_LPC_RE = re.compile(
+    rb'(?m)^[ \t]*(?:#[ \t]*(?:include|define|ifdef|ifndef|pragma)\b|inherit\b|(?:(?:private|public|protected|nosave|static|nomask|varargs)\s+)*(?:void|int|string|object|mapping|mixed|float|buffer)\s+[A-Za-z_*])'
+)
+
+
+def _find_fullwidth_code_punct(b: bytes) -> tuple[int, str] | None:
+    """Return (1-based line, char) for first fullwidth punctuation/space in LPC code, else None."""
+    if not FW_CODE_LPC_RE.search(b):
+        return None
+    mk = code_mask(b, heredoc=True)
+    off = 0
+    for lno, raw in enumerate(b.split(b"\n"), 1):
+        line = raw[:-1] if raw.endswith(b"\r") else raw
+        if FW_CODE_RE.search(line):
+            code_seg = bytes(line[k] if mk[off + k] == 1 else 32 for k in range(len(line)))
+            m = FW_CODE_RE.search(code_seg)
+            if m:
+                rem_code = bytes(line[k] for k in range(len(line)) if mk[off + k] == 1)
+                if not any(ch >= 0x80 for ch in FW_CODE_RE.sub(b"", rem_code)):
+                    if len(re.findall(rb'(?<!\\)"', line[:m.start()])) % 2 == 0:
+                        return (lno, m.group(0).decode("utf-8"))
+        off += len(raw) + 1
+    return None
+
+
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
@@ -671,6 +700,12 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         uln = _find_unclosed_define_string(b)
         if uln is not None:
             hits.append(("unclosed-define-string", f"{path}:{uln}", "#define macro carries an unclosed string literal"))
+
+    if want("fullwidth-code-punct") and FW_CODE_RE.search(b):
+        fw_hit = _find_fullwidth_code_punct(b)
+        if fw_hit is not None:
+            fln, fch = fw_hit
+            hits.append(("fullwidth-code-punct", f"{path}:{fln}", f"fullwidth `{fch}` used in LPC code position"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

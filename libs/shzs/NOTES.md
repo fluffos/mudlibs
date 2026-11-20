@@ -865,3 +865,8 @@ pristine + build-debug，port 40001。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## 代码位置全角标点与全角空格修复（2026-11-20，KB 04 §6.34）
+
+- 修复 `/d/zuichen/{cdkedian3,cdkedian4,cdyaopu,chengzhong}.lpc` 共 `4` 个文件、`56` 处代码位置全角逗号 `，` → `,`（保留注释与原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `32` 文件中 `26` 处重排（`0` 错误、盲区与 CRLF/LF 一致，其余 `6` 份历史未排版 `common.h` 保持原样）；`lpcc_eval.py` 验证 `23/23` 无前置报错文件（含 `hhsj`/`nitan170911`/`nitan6`/`wxddym` `<common.h>` `ZZT common=13 max=0 list=13` 及各剧情/NPC/房间/技能文件）均由 `--head` `Illegal character` 编译失败转为 `PASS`，`nt6`/`nt6nitan6win`/`xfbhh` `<common.h>`、`wqfy`/`zzfy`/`zzfy3` `/include/npc/npcd.lpc`、`wqfy` `newvoted.lpc` 与 `kxkj`/`kxkjii2` `new-pope.lpc` 均已消除全部全角字符语法报错（仅余既有的 `static`/缺失 `NPC_D`/文末缺 `}`/`notify_fail(command(...))` 问题）；`scripts/lint.py`（新增规则 #87 `fullwidth-code-punct`）通过 `32/32` `HEAD` 正例、工作树与 `sjpl2`/`sjplii` `welcome0.lpc` 反例单测，全库 `--all` 与 `--fast` 均 `0` 错误 `0` 告警；`14` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47551..47564`）全部正常且 `ZERO_DRIVERS`。
