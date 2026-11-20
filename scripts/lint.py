@@ -124,6 +124,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("exit-string-as-object", "file", "KB 06 §7.404", "error", "Exit room path string passed as object to find_object(object dest) or sefun query(..., exits[...])"),
     RuleSpec("missing-mapping-comma", "file", "KB 06 §7.405", "error", "Missing comma between consecutive mapping literal entries (`\"dodge\": 15\\n\"parry\": 15`) breaking compilation"),
     RuleSpec("unclosed-mapping-string", "file", "KB 06 §7.406", "error", "Unclosed multiline mapping string value (`\"hua1\": \"\\n...` without closing quote before next key or `]));`)"),
+    RuleSpec("basket-missing-check-trigger", "file", "KB 06 §7.407", "error", "Room calling undefined check_trigger() or inheriting ITEM with ::reset() (d/heimuya/basket.lpc)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -184,6 +185,7 @@ MISSING_MAPPING_COMMA_PAT = re.compile(
 UNCLOSED_MAPPING_STR_PAT = re.compile(
     rb'(?m)^[ \t]*"[^"\n]{1,32}"[ \t]*:[ \t]*"[ \t]*\\?[ \t]*n[ \t]*\r?\n(?:(?!(?<!\\)").){1,1500}?\r?\n[ \t]*\]\s*\)\s*;'
 )
+BASKET_CHECK_TRIGGER_RE = re.compile(rb'\bcheck_trigger\s*\(\s*\)\s*;')
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
@@ -532,6 +534,14 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
                 ln = b.count(b"\n", 0, m.start()) + 1
                 hits.append(("unclosed-mapping-string", f"{path}:{ln}", "unclosed multiline mapping string literal before ]));"))
                 break
+
+    if want("basket-missing-check-trigger") and (b"check_trigger" in b or b"::reset" in b):
+        mk = code_mask(b, heredoc=True)
+        cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+        if (BASKET_CHECK_TRIGGER_RE.search(cb) and not re.search(rb'\b(?:void|int|mixed)\s+check_trigger\s*\(', cb)) or (
+            re.search(rb'(?m)^[ \t]*inherit\s+ITEM\s*;', cb) and re.search(rb'::reset\s*\(', cb)
+        ):
+            hits.append(("basket-missing-check-trigger", path, "undefined check_trigger() or inherit ITEM with ::reset()"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

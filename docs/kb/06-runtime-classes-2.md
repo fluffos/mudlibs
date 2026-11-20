@@ -2664,3 +2664,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** `d/taihu/gumu/houtang.lpc` across all `7` active vendored ESII/XKX libs (`bmxkx2001`, `jym`, `shenzhou`, `xkm`, `xkx2000zxb`, `xkx2001`, `xuanjianlu`) fails compilation (`syntax error, unexpected L_IDENTIFIER`, `Illegal character '\'`, `Illegal character 0xe8`) because both `"hua1"` and `"hua2"` inside `set("item_desc", ([ ... ]));` lack closing double quotes (and in `jym`/`xkm`, the earlier formatter pass had also spaced `"hua2"` into `" hua2 " : " \ n\n    这 道 人 ...`).
 **Fix:** Restore properly quoted and terminated `"hua1"` and `"hua2"` strings with `",` before the next entry and `]));`, cleaning the spaced `jym`/`xkm` entry and running `lpc_format_changed.py --apply` on previously formatted files.
 **Detection:** `scripts/lint.py --rule unclosed-mapping-string`.
+
+### 7.407 `d/heimuya/basket.lpc` `inherit ITEM;` + missing `check_trigger()` + `clifftop` exit typo (`7` files, 7 libs) {#7407-basket-missing-check-trigger}
+
+**Symptom:** `d/heimuya/basket.lpc` (the 黑木崖 cliff-basket room linked by `"enter": __DIR__ "basket"` from both `blifftop.lpc` and `cliff.lpc`) across all `7` active vendored ESII/XKX libs (`bmxkx2001`, `jym`, `shenzhou`, `xkm`, `xkx2000zxb`, `xkx2001`, `xuanjianlu`) fails compilation on `Undefined function check_trigger` (line 73) and `Unable to find the inherited function 'reset'` (line 83) because it declared `inherit ITEM;` instead of `inherit ROOM;` and dropped `check_trigger()`, while `arrive()` pointed `"exits/out"` at nonexistent `__DIR__ "clifftop"` (the room file is `blifftop.lpc`).
+**Fix:** Change `inherit ITEM;` to `inherit ROOM;`, add the missing `void check_trigger()` forward declaration and function matching `on_basket()`/`close_passage()` (`yell_trigger`), and point `arrive()`'s `"exits/out"` at `__DIR__ "blifftop"`.
+**Detection:** `scripts/lint.py --rule basket-missing-check-trigger`.

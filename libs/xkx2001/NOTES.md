@@ -1204,3 +1204,8 @@ pristine + build-debug，归档端口 40021。`scripts/play_login.py` 注册进�
 
 - 修复 `/d/taihu/gumu/houtang.lpc`：`set("item_desc", ([ ... ]));` 中 `"hua1"` 与 `"hua2"` 两处多行字符串缺少闭合双引号及逗号（致 `syntax error, unexpected L_IDENTIFIER` 与 `Illegal character '\'` 无法编译），补全闭合双引号与 `",` 分隔（保留原有 tab 缩进未重排）。
 - 验证：`lpcc_eval.py` 实测由 `--head` 编译失败转为成功加载且 `short=后堂 h1=105 h2=44`，零警告零错误；`lpc_format_changed.py --apply` 通过（`errors: 0`）；`scripts/lint.py`（新增 `unclosed-mapping-string` 规则，共 `77` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。
+
+## 黑木崖 `/d/heimuya/basket.lpc` 继承错误与缺失 `check_trigger()` 修复（2026-11-20，KB 06 §7.407）
+
+- 修复 `/d/heimuya/basket.lpc`（由 `blifftop.lpc` 与 `cliff.lpc` `enter` 出口接入）：原档误声明 `inherit ITEM;` 且缺少 `check_trigger()`（致 `Undefined function check_trigger` 与 `Unable to find the inherited function 'reset'` 无法加载），同时 `arrive()` 出口指向不存在的 `__DIR__ "clifftop"`；改为 `inherit ROOM;`、补全匹配 `on_basket()`/`close_passage()` 的 `void check_trigger()` 声明与实现，并将 `arrive()` 出口修正为 `__DIR__ "blifftop"`。
+- 验证：`lpcc_eval.py` 实测由 `--head` 编译失败转为成功加载且完整跑通 `check_trigger()` -> `on_basket()` -> `arrive()` -> `close_passage()`（`short=大竹篓 yt1=1 out=/d/heimuya/blifftop top=/d/heimuya/blifftop ("崖顶") yt2=0`，零警告零错误）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（新增 `basket-missing-check-trigger` 规则，共 `78` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。
