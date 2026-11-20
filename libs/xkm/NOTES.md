@@ -546,3 +546,8 @@ pristine + build-debug，归档端口 40191。`scripts/play_login.py` 注册进�
 
 - 修复 `/d/minjiao/skill/bagua-dao.lpc` 三处缺陷：补全 `mapping *action` 中 `"dodge": 15`、`"parry": 15`、`"damage": 20` 缺失的逗号（消除 `syntax error, unexpected L_STRING` / `';'`）；删除紧邻重复粘贴的第二个 `query_skill_name(int level)` 定义；将 `query_action()` 中 `level > action[i - 1]["lvl"]` 改为 `>=` 并追加 `if (sizeof(action)) return action[0];` 兜底，避免 0 级调用返回 `0` 导致战斗索引 `*Value being indexed is zero.`。
 - 验证：`lpcc_eval.py` 实测由 `--head` 编译失败/0 级报错转为成功加载并执行 `query_skill_name(0)`、`valid_enable("blade")` 与 `query_action()`（`sname=八卦刀 ve=1 act_name=八卦刀`，零警告零错误）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（新增 `missing-mapping-comma` 规则，共 `76` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。
+
+## 归云庄/古墓后堂 `/d/taihu/gumu/houtang.lpc` 未闭合 `item_desc` 字符串修复（2026-11-20，KB 06 §7.406）
+
+- 修复 `/d/taihu/gumu/houtang.lpc`：`set("item_desc", ([ ... ]));` 中 `"hua1"` 与 `"hua2"` 两处多行字符串缺少闭合双引号及逗号（致 `syntax error, unexpected L_IDENTIFIER` 与 `Illegal character '\'` 无法编译），补全闭合双引号与 `",` 分隔（并清理早期分词器引入的 `" hua2 " : " \ n` 空格后经 `lpc_format_changed.py --apply` 重排）。
+- 验证：`lpcc_eval.py` 实测由 `--head` 编译失败转为成功加载且 `short=后堂 h1=105 h2=44`，零警告零错误；`lpc_format_changed.py --apply` 通过（`errors: 0`）；`scripts/lint.py`（新增 `unclosed-mapping-string` 规则，共 `77` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。

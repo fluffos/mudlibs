@@ -123,6 +123,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("delete-temp-three-args", "file", "KB 06 §7.403", "error", "Three-argument delete_temp(\"k\", 1, ob) stray `1` failing compilation against delete_temp(string, object)"),
     RuleSpec("exit-string-as-object", "file", "KB 06 §7.404", "error", "Exit room path string passed as object to find_object(object dest) or sefun query(..., exits[...])"),
     RuleSpec("missing-mapping-comma", "file", "KB 06 §7.405", "error", "Missing comma between consecutive mapping literal entries (`\"dodge\": 15\\n\"parry\": 15`) breaking compilation"),
+    RuleSpec("unclosed-mapping-string", "file", "KB 06 §7.406", "error", "Unclosed multiline mapping string value (`\"hua1\": \"\\n...` without closing quote before next key or `]));`)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -179,6 +180,9 @@ BAD_EXIT_OBJ_PAT = re.compile(
 )
 MISSING_MAPPING_COMMA_PAT = re.compile(
     rb'"(?:dodge|parry|damage|force|attack|lvl)"\s*:\s*-?\d+[ \t]*\r?\n[ \t]*"(?:dodge|parry|damage|force|attack|lvl|action|skill_name|damage_type)"\s*:'
+)
+UNCLOSED_MAPPING_STR_PAT = re.compile(
+    rb'(?m)^[ \t]*"[^"\n]{1,32}"[ \t]*:[ \t]*"[ \t]*\\?[ \t]*n[ \t]*\r?\n(?:(?!(?<!\\)").){1,1500}?\r?\n[ \t]*\]\s*\)\s*;'
 )
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
@@ -519,6 +523,14 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             if mk[m.start()]:
                 ln = b.count(b"\n", 0, m.start()) + 1
                 hits.append(("missing-mapping-comma", f"{path}:{ln}", "missing comma between mapping entries"))
+                break
+
+    if want("unclosed-mapping-string") and b"]));" in b and UNCLOSED_MAPPING_STR_PAT.search(b):
+        mk = code_mask(b, heredoc=True)
+        for m in UNCLOSED_MAPPING_STR_PAT.finditer(b):
+            if mk[m.start()]:
+                ln = b.count(b"\n", 0, m.start()) + 1
+                hits.append(("unclosed-mapping-string", f"{path}:{ln}", "unclosed multiline mapping string literal before ]));"))
                 break
 
     if want("literal-or") and (b"||" in b or b"&&" in b):

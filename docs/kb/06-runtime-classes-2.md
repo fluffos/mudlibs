@@ -2658,3 +2658,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** `d/kunlun/skill/bagua-dao.lpc` (`bmxkx2001`, `jym`, `xkx2000zxb`, `xkx2001`, `xuanjianlu`), `d/mingjiao/skill/bagua-dao.lpc` (`shenzhou`), and `d/minjiao/skill/bagua-dao.lpc` (`xkm`) fail compilation (`syntax error, unexpected L_STRING` / `';'`) on missing commas after `"dodge": 15`, `"parry": 15`, and `"damage": 20`, also mask a duplicate `string query_skill_name(int level)` definition directly below, and leave `query_action()` returning `0` when `level == 0` (`level > action[i - 1]["lvl"]` vs `lvl: 0`).
 **Fix:** Add the three missing commas in `action`, remove the duplicate `query_skill_name()` definition, change `level > action[i - 1]["lvl"]` to `>=` with an `if (sizeof(action)) return action[0];` fallback in `query_action()`.
 **Detection:** `scripts/lint.py --rule missing-mapping-comma`.
+
+### 7.406 Unclosed multiline `item_desc` strings in `d/taihu/gumu/houtang.lpc` (`7` files, 7 libs) {#7406-unclosed-mapping-string}
+
+**Symptom:** `d/taihu/gumu/houtang.lpc` across all `7` active vendored ESII/XKX libs (`bmxkx2001`, `jym`, `shenzhou`, `xkm`, `xkx2000zxb`, `xkx2001`, `xuanjianlu`) fails compilation (`syntax error, unexpected L_IDENTIFIER`, `Illegal character '\'`, `Illegal character 0xe8`) because both `"hua1"` and `"hua2"` inside `set("item_desc", ([ ... ]));` lack closing double quotes (and in `jym`/`xkm`, the earlier formatter pass had also spaced `"hua2"` into `" hua2 " : " \ n\n    这 道 人 ...`).
+**Fix:** Restore properly quoted and terminated `"hua1"` and `"hua2"` strings with `",` before the next entry and `]));`, cleaning the spaced `jym`/`xkm` entry and running `lpc_format_changed.py --apply` on previously formatted files.
+**Detection:** `scripts/lint.py --rule unclosed-mapping-string`.
