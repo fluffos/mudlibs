@@ -4,7 +4,7 @@ void init()
         if ( interactive(me) 
            && query_temp("mj/xunluo", me )
            && query_temp("mj/attacker", me )
-           && query("outer_times", random(this_object())) == 1
+           && random(query("outer_times", this_object())) == 1
           ) {
                  ob = new("/d/mingjiao/npc/attacker");
                  message_vision("\n一个人影突然从旁跳了出来，拦住$N的去路！\n\n", me); 

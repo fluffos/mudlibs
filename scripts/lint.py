@@ -118,6 +118,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("quoted-efun-call", "file", "KB 06 §7.393", "error", "Object efun/sefun called with quoted \"this_object()\"/\"this_player()\"/... string instead of object"),
     RuleSpec("query-method-typo", "file", "KB 06 §7.397", "error", "Misspelled ->query()/->query_temp()/->query_skill()/->query_respect() method call"),
     RuleSpec("call-method-typo", "file", "KB 06 §7.398", "error", "Misspelled ->receive_damage()/->receive_wound()/->receive_curing()/->set_temp()/->delete_temp()/->start_busy() call"),
+    RuleSpec("crossed-bracket-query", "file", "KB 06 §7.401", "error", "Bracket-crossed query()/query_temp() corruption (`query(\"k\", map[ob) ]`) breaking compilation"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -162,6 +163,10 @@ RULES: list[RuleSpec] = [
 RULE_MAP: dict[str, RuleSpec] = {r.name: r for r in RULES}
 
 DOUBLE_SLASH_PAT = re.compile(rb'"//([A-Za-z_][A-Za-z0-9_\-]*/[A-Za-z0-9_./\-]*)"')
+CROSSED_QUERY_PAT = re.compile(
+    rb'\b(?:query|query_temp|set|set_temp|addn?|delete|delete_temp)\s*\("[^"\n]+",\s*[A-Za-z_]\w*\[[^()\[\]\n;"\']*\)\s*\]'
+    rb'|\b(?:query|query_temp)\s*\("[^"\n]+",\s*(?:get_ship|get_table|player_id|random|mapp|stringp|intp|objectp|arrayp|pointerp|sizeof|strlen|keys|values|to_int|atoi)\s*\('
+)
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
@@ -461,6 +466,14 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             if mk[m.start(1)]:
                 ln = b.count(b"\n", 0, m.start(1)) + 1
                 hits.append(("call-method-typo", f"{path}:{ln}", f"misspelled call_other method `->{m.group(1).decode('latin-1')}()`"))
+                break
+
+    if want("crossed-bracket-query") and (b") ]" in b or b")]" in b or b"query" in b) and CROSSED_QUERY_PAT.search(b):
+        mk = code_mask(b, heredoc=True)
+        for m in CROSSED_QUERY_PAT.finditer(b):
+            if mk[m.start()]:
+                ln = b.count(b"\n", 0, m.start()) + 1
+                hits.append(("crossed-bracket-query", f"{path}:{ln}", "bracket-crossed query/set subscript corruption"))
                 break
 
     if want("literal-or") and (b"||" in b or b"&&" in b):

@@ -107,7 +107,7 @@ int do_search(string arg) {
                         
                  }
                 
-                   if( query("combat_exp", random(50) <= 3 && count_ge(me),150000) && query_temp("xx_job", me)){
+                   if( random(50) <= 3 && count_ge(query("combat_exp", me), 150000) && query_temp("xx_job", me)){
 
                         message_vision(HIR"突然间从树后越出一个人，高喊一声：“星宿奸人，拿命来！”\n"NOR,me);
                      fighter = new(CLASS_D("generate") + "/xxnpc.lpc");

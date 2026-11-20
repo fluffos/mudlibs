@@ -1407,3 +1407,12 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 
 - 排查 `scripts/lpc_warnings.py` 发现同源 `11` 个计谋文件（`fakeorder.lpc`、`huangbao.lpc`、`hunluan.lpc`、`jbhj.lpc`、`jbsj.lpc`、`jiedu.lpc`、`luoshi.lpc`、`neihong.lpc`、`shidu.lpc`、`shoushi.lpc`、`zhanbu.lpc`，共 `34` 处）因含既有报错被 `lpc_fix_float_trunc.py` 跳过，仍存在 `Float value truncated to int` 警告（其中 `hunluan.lpc` 将倍率 `x = 1.8`、`z = 1.5` 声明为 `int` 会悄悄截断为 `1`）；比照 `sgzmudsgz` Round 10 修复，将 `hunluan.lpc` 的 `x`/`z` 改为 `float` 并在全部 `34` 处整型赋值补入 `to_int(...)`（保留 LF 行尾）。
 - 验证：`scripts/lpc_warnings.py`（`nitan6` 复扫剩余 `0` 条浮点截断告警）及各馆 `lpcc` 编译 `11/11` `Float value truncated` 均降至 `0`；`lpc_format_changed.py --apply`（格式化 `hunluan.lpc`，`errors: 0`）；`sgzmudsgz` `lpcc_eval.py` 验证 `hunluan=1 before_trunc=90 after_float=170`；`scripts/lint.py`（`71` 条规则）与 `7/7` `play_boot.sh`+`play_stop.sh` 均通过且 `ZERO_DRIVERS`。
+## Nitan7 语法转换器括号错位与外包错位修复（2026-11-19，KB 06 §7.401）
+
+- 清理 Nitan7 `ob->query(...)` → `query(..., ob)` 批转换器误吞 `[`/`(` 与函数调用产生的 `8` 处文件（`29` 处代码位置）错位（保留 LF 行尾）：
+  * `/clone/game/dhs.lpc`（8 处 `player`/`player_toss`/`visitor`/`player_deal` 错位 `query("id", arr[ob) ]`）、`/clone/game/pai.lpc`（5 处）、`/clone/game/pai21.lpc`（2 处）、`/clone/game/seaf.lpc`（2 处括号错位 + 第 848/849/866 行 `query("id", get_ship/get_table/player_id(this_player()))` 外包错位）：此前上述 4 个游戏对象均因语法/类型错误完全无法编译加载。
+  * `/adm/daemons/versiond.lpc`：`!query("manual_synchronize", stringp(op) && CONFIG_D)` → `!stringp(op) && CONFIG_D->query("manual_synchronize")`。
+  * `/d/baituo/npc/guaishe.lpc`：`query("owner", random(6) != 0 && (owner = present(me), here))` → `random(6) != 0 && (owner = present(query("owner", me), here))`。
+  * `/d/mingjiao/npc/attacker.h`：`query("outer_times", random(this_object()))` → `random(query("outer_times", this_object()))`。
+  * `/d/xingxiu/xx_job.h`：`query("combat_exp", random(50) <= 3 && count_ge(me), ...)` → `random(50) <= 3 && count_ge(query("combat_exp", me), 150000)`。
+- 验证：`lpc_format_changed.py --apply` 零报错；`lpcc_eval.py` 验证 `dhs`/`pai`/`pai21`/`seaf`/`versiond`/`guaishe` 全部加载 `PASS`；`scripts/lint.py`（新增 `crossed-bracket-query`，共 `72` 条规则）全库、`--files` 与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
