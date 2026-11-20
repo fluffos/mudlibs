@@ -126,6 +126,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("unclosed-mapping-string", "file", "KB 06 §7.406", "error", "Unclosed multiline mapping string value (`\"hua1\": \"\\n...` without closing quote before next key or `]));`)"),
     RuleSpec("basket-missing-check-trigger", "file", "KB 06 §7.407", "error", "Room calling undefined check_trigger() or inheriting ITEM with ::reset() (d/heimuya/basket.lpc)"),
     RuleSpec("unquoted-set-string", "file", "KB 06 §7.408", "error", "Missing opening quote or stray integer trailing quote in set(\"prop\", ...\")"),
+    RuleSpec("undeclared-for-i-loop", "file", "KB 06 §7.409", "error", "Non-advancing `for (i = 0; obj->query(...); i++)` loop, undeclared `for (i = sizeof(ob)...)` loop var, or dead `(: goaway :)` pointer"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -190,6 +191,8 @@ BASKET_CHECK_TRIGGER_RE = re.compile(rb'\bcheck_trigger\s*\(\s*\)\s*;')
 UNQUOTED_SET_STR_PAT = re.compile(
     rb'\bset\s*\(\s*"[^"\n]+"\s*,\s*(?:(?![A-Z_][A-Z0-9_]*\b)[^"\s\d({\[/\-+.\n][^";+()\[\]\n]*"|\d+")\s*\)'
 )
+MOFENG_LOOP_PAT = re.compile(rb'\bfor\s*\(\s*[A-Za-z_]\w*\s*=\s*0\s*;\s*this_object\s*\(\s*\)\s*->\s*query\s*\(')
+DEAD_GOAWAY_PAT = re.compile(rb'\(\s*:\s*goaway\s*:\s*\)')
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
@@ -554,6 +557,16 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
                 ln = b.count(b"\n", 0, m.start()) + 1
                 hits.append(("unquoted-set-string", f"{path}:{ln}", "set() value missing opening quote before closing quote"))
                 break
+
+    if want("undeclared-for-i-loop") and (b"goaway" in b or b"npc_number" in b or b"sizeof(ob)" in b):
+        mk = code_mask(b, heredoc=True)
+        cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+        if MOFENG_LOOP_PAT.search(cb):
+            hits.append(("undeclared-for-i-loop", path, "non-advancing `for (i = 0; this_object()->query(...); i++)` infinite loop / undeclared locals"))
+        elif DEAD_GOAWAY_PAT.search(cb) and not re.search(rb'\b(?:void|int|mixed|varargs)\s+goaway\s*\(', cb):
+            hits.append(("undeclared-for-i-loop", path, "undefined `(: goaway :)` lfun pointer"))
+        elif re.search(rb'\bfor\s*\(\s*i\s*=\s*sizeof\s*\(\s*ob\s*\)\s*-\s*1\s*;', cb) and not re.search(rb'\bint\b[^;(){}\n]*\bi\b', cb):
+            hits.append(("undeclared-for-i-loop", path, "undeclared loop counter `i` in `for (i = sizeof(ob) - 1; ...)`"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

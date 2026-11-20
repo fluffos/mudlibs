@@ -556,3 +556,9 @@ pristine + build-debug，归档端口 40125。`scripts/play_login.py` 注册/连
 
 - 扩扫 `->delete_tem`/`->strat_busy`/`->start_bus`/`->receive_damgae`/`->recive_damage`/`->receive_woud`/`->query_conditon`/`->apply_conditon`/`->clear_conditon`/`->query_skill_perpare`/`->start_perfrom`/`->is_figting` 等无定义拼写错误（避开真实方法 `del_temp` 与 `start_exert`），统一修正 `/d/wuguan/lianwuch1.lpc`、`/daemon/hellfire/base/tiequan.lpc`、`/daemon/hellfire/base/dianji.lpc`（共 `3` 个文件） 中的错误调用为标准方法名（保留原文件行尾）。
 - 验证：全批 `130` 个 `.lpc` 差分编译通过 `115/130`（`15` 处 `wenfang*` 为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`aoxiangtianji` `clear_conditon` `10 -> 0`、`bxsj` `cond_typo=0 -> cond_fix=5` 且 `del_typo=1 -> del_fix=0`、`chidi` `busy_typo=0 -> busy_fix=1`）；`scripts/lint.py`（共 `70` 条规则）全库与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+## 修复 `/std/room/mofengroom.lpc` 缺失变量声明、死循环条件与魔风怪路径错误（2026-11-20，KB 06 §7.409）
+
+- `/std/room/mofengroom.lpc` 的 `setup2()` 仅声明 `int level;`，遗漏 `int i;` 与 `object guai;` 导致编译失败（`Undefined variable 'i'` / `'guai'`）；且循环条件误写为 `for (i = 0; this_object()->query("npc_number"); i++)`（缺少 `i < ` 构成死循环），并将魔风怪路径误写为 `/d/mofeng/npc/stey/guai`（实位于 `/d/quest/mofeng/npc/stey/guai`）。
+- 补全 `int level, i;` 与 `object guai;`，改用 `i < this_object()->query("npc_number")` 与 `new("/d/quest/mofeng/npc/stey/guai")` 并增加 `objectp(guai)` 保护（保留原 LF 与 `lpc_format_changed` 排版风格）。
+- 同类死循环扩展清理：`d/hellfire/hellfire1/` 下共 `47` 间地狱房间（三馆合计 `163` 份）的 `reset()` 亦含同一 `for (i = 0; this_object()->query("npc_number"); i++)` 无上界循环，统一改为 `i < this_object()->query("npc_number")`。
+- 验证：`--head` `lpcc_eval.py` 编译失败，修复后三馆 `mofengroom->setup2()`（`npc_number=2`）均精确刷出 `2` 只怪且 `d/hellfire/hellfire1/bing1->reset()` 均正常返回；`lpc_format_changed.py --apply` 检查全批 `167` 文件零错误；`scripts/lint.py`（新增 `undeclared-for-i-loop` 共 `80` 条规则）全库与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 启停正常且无残留驱动。

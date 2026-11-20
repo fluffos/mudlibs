@@ -299,3 +299,8 @@ pristine + build-debug，port 40199。`scripts/play_login.py` 注册。
 
 - 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/class/`（同步修补 `! (ob = me->query_temp("weapon"))` 已检判定以消除误报），为本馆 `17` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招补全 `if (!objectp(...)) return notify_fail(...)` 保护。
 - 验证：全 `17` 文件 `HEAD` 与工作树差分 `lpcc` 载入零回归（全批 52 馆 1,368 文件 `PASS=1367 FAIL=1` 与 `HEAD` 一致，`regressions=0`），代表馆 `dtxywzxzb` `huohun` 与 `xbtxiii` `lastattack` 徒手实测由 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`，`lpc_format_changed.py` 与 `scripts/lint.py --files` 均零错误零告警。
+## 修复 `/d/fy/npc/gangster2.lpc` 缺失局部变量 `int i` 与悬空 `(: goaway :)` 指针（2026-11-20，KB 06 §7.409）
+
+- `/d/fy/npc/gangster2.lpc` 第 48–55 行 `init()` 使用 `for (i = sizeof(ob) - 1; i >= 0; i--)` 却未声明 `int i;`，导致编译失败（`Undefined variable 'i'` / `Illegal lvalue`）；同时第 24 行 `chat_msg` 保留未实现的 `(: goaway :),`（同 §7.355，姊妹馆已注释）。
+- 在 `init()` 补全 `int i;` 并注释掉无效 `(: goaway :),` 指针（保留原 CRLF 行尾）。
+- 验证：`--head` `lpcc_eval.py` 编译失败，修复后载入通过（`name="山西劫匪" eq=3 chat=({ })`）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py` 新增 `undeclared-for-i-loop` 规则（共 `80` 条规则）通过全库与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 启停正常且无残留驱动。
