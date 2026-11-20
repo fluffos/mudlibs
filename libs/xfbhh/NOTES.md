@@ -873,3 +873,8 @@ pristine + build-debug，归档端口 40190。`scripts/play_login.py`（port 491
 
 - `/feature/team.lpc`（`F_TEAM`，由 `CHAR` 继承）原改写后遗漏 `lord` 变量及 `set_lord(object ob)`、`query_lord()`，导致驯兽/坐骑/白驼蛇类等调用静默失效；现按原修饰符补全 `lord` 声明、`int set_lord(object ob)`（含自设报错与 `return 1;`）与 `object query_lord()`。
 - 验证：`lpcc_eval.py` 实测 `set_lord(this_object())` 后 `query_lord()` 正确返回宿主（`ok=1 same=1`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `missing-team-lord` 规则，共 `83` 条规则）与 `--fast` 零错误。
+
+## `paiming_d.lpc` / `fengkou.lpc` 缺失 `MISC_DIR` 宏与 `clr_ansi()` 编译阻断修复（2026-11-20，KB 06 §7.413）
+
+- `/adm/daemons/paiming_d.lpc` 引用了未定义的 `MISC_DIR` 宏导致编译报错 `syntax error, unexpected L_STRING`（见 `nitan6/log/log`）：对照 `wxddym` 及已有的 `data/topten` 目录补充 `#define MISC_DIR "/data/topten/"`，将未定义的 `clr_ansi(out)` 替换为 Nitan7 自带 `remove_ansi(out)`，把 `void add_to_top_rich()` 内 3 处 `return 0;` 改为 `return;`，并在 `init_dirs_and_args()` 为空的 `dirs` 补充 `!sizeof(dirs)` 与 `|| ({})` 防护。
+- 验证：`lpcc_eval.py` 对比 `--head` 编译报错 → `6/6` 馆全部零警告零错误载入通过（`p=1 sort=0 save="/data/paiming_d"`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `undefined-misc-dir` 规则，共 `84` 条规则）与 `--fast` 零错误。

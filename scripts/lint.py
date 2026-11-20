@@ -104,6 +104,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("dead-souls-stat-3tuple", "targeted", "KB 06 §7.382", "error", "Dead Souls books.lpc checking sizeof(statinfo) != 3 on FluffOS 4-tuple stat()"),
     RuleSpec("missing-embed-h", "targeted", "KB 04 §6.31", "error", "#include /inherit/item/embed.h in playable lib that never shipped it"),
     RuleSpec("missing-team-lord", "targeted", "KB 06 §7.412", "error", "feature/team.lpc omits set_lord()/query_lord() used by trainee/animal NPCs, or animal2.lpc pow() truncation"),
+    RuleSpec("undefined-misc-dir", "targeted", "KB 06 §7.413", "error", "paiming_d.lpc/fengkou.lpc using undefined MISC_DIR macro (or void add_to_top_rich return 0;)"),
     RuleSpec("enable-player-guard", "targeted", "KB 05 §7.19", "warn", "feature/command.lpc enable_player() lacking reentrancy guard"),
     RuleSpec("rank-null-guard", "targeted", "KB 06 §7.273", "warn", "adm/daemons/rankd.lpc missing !objectp(ob) fallback"),
     RuleSpec("ping-strip-callout-nosave", "targeted", "KB 04 §6.10", "error", "pingd.lpc/pingtcp.lpc declaring nosave int strip_callout() instead of protected"),
@@ -901,7 +902,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -972,6 +973,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["animal2"].append(item)
         if rel == "/d/baituo/npc/bt_snake.lpc":
             targeted_bins["btsnake"].append(item)
+        if rel in ("/adm/daemons/paiming_d.lpc", "/d/kongdong/fengkou.lpc"):
+            targeted_bins["miscdir_cand"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -1077,6 +1080,28 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if re.search(rb'(?m)^void query_lord\s*\(\s*\)\s*;', b):
                 col.add("missing-team-lord", p, "bt_snake.lpc has bogus void query_lord() forward declaration shadowing F_TEAM")
+
+    if col.wants("undefined-misc-dir"):
+        has_misc = {
+            s: (
+                os.path.isfile(f"{REPO}/libs/{s}/work/include/globals.h")
+                and b"MISC_DIR" in open(f"{REPO}/libs/{s}/work/include/globals.h", "rb").read()
+            )
+            for s in slugs
+        }
+        for slug, p, rel in targeted_bins["miscdir_cand"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"MISC_DIR" in b and not has_misc[slug] and not re.search(rb'(?m)^[ \t]*#[ \t]*define[ \t]+MISC_DIR\b', b):
+                col.add("undefined-misc-dir", p, f"{rel} uses undefined MISC_DIR macro (missing #define MISC_DIR)")
+            elif rel == "/adm/daemons/paiming_d.lpc":
+                sefun_p = f"{REPO}/libs/{slug}/work/adm/kernel/simul_efun.lpc"
+                if b"clr_ansi(" in b and os.path.isfile(sefun_p) and b"clr_ansi" not in open(sefun_p, "rb").read():
+                    col.add("undefined-misc-dir", p, "paiming_d.lpc calls undefined clr_ansi() instead of remove_ansi()")
+                else:
+                    idx = b.find(b"protected void add_to_top_rich(object ply)")
+                    end_idx = b.find(b"protected int sort_top_force(", idx) if idx != -1 else -1
+                    if idx != -1 and end_idx != -1 and b"return 0;" in b[idx:end_idx]:
+                        col.add("undefined-misc-dir", p, "paiming_d.lpc void add_to_top_rich() returns 0")
 
     if col.wants("enable-player-guard"):
         for _, p, _ in targeted_bins["command"]:
