@@ -849,3 +849,7 @@ pristine + build-debug，port 40187。`scripts/play_login.py` 注册并执行 `l
   * `/d/mingjiao/npc/attacker.h:7`：`query("outer_times", random(this_object()))` → `random(query("outer_times", this_object()))`。
   * `/d/xingxiu/xx_job.h:110`：`query("combat_exp", random(50) <= 3 && count_ge(me),150000)` → `random(50) <= 3 && count_ge(query("combat_exp", me), 150000)`。
 - 验证：`lpc_format_changed.py --apply` 零报错；`lpcc_eval.py` 验证 `ouyezi`/`versiond`/`guaishe` 全部 `PASS`；`scripts/lint.py`（新增 `crossed-bracket-query`，共 `72` 条规则）全库、`--files` 与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+## `adm/npc/ouyezi.lpc` 未使用局部变量编译警告清零（2026-11-19，KB 04 §6.10）
+
+- §7.401 解除 `/adm/npc/ouyezi.lpc` 编译阻断后，消除 `do_show()` 第 419 行残留的未使用局部变量声明 `object money;`（源自注释块遗留，保留 LF 行尾）。
+- 验证：`lpcc` 与 `lpcc_eval.py` 加载 `/adm/npc/ouyezi` `PASS`（`0` 告警/`0` 错误）；`lpc_audit_removed_locals.py` 检查通过；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（`72` 条规则）零告警；`play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

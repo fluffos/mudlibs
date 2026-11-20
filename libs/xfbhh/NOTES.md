@@ -854,3 +854,7 @@ pristine + build-debug，归档端口 40190。`scripts/play_login.py`（port 491
   * `/d/mingjiao/npc/attacker.h`：`query("outer_times", random(this_object()))` → `random(query("outer_times", this_object()))`。
   * `/d/xingxiu/xx_job.h`：`query("combat_exp", random(50) <= 3 && count_ge(me), ...)` → `random(50) <= 3 && count_ge(query("combat_exp", me), 150000)`。
 - 验证：`lpc_format_changed.py --apply` 零报错；`lpcc_eval.py` 验证 `dhs`/`pai`/`pai21`/`seaf`/`versiond`/`guaishe` 全部加载 `PASS`；`scripts/lint.py`（新增 `crossed-bracket-query`，共 `72` 条规则）全库、`--files` 与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+## `clone/game/{dhs,pai,pai21,seaf}.lpc` 未使用局部变量编译警告清零（2026-11-19，KB 04 §6.10）
+
+- §7.401 解除 `clone/game/{dhs,pai,pai21,seaf}.lpc` 编译阻断后，通过 `scripts/lpc_warnings.py` 清理上述 4 个文件中新增暴露的全部 `55` 处未使用局部变量声明（`dhs.lpc` 1 处、`pai.lpc` 41 处、`pai21.lpc` 10 处、`seaf.lpc` 3 处，保留 LF 行尾）。
+- 验证：`lpcc --batch` 与 `lpcc_eval.py` 加载全部 4 个游戏对象 `PASS`（`0` 告警/`0` 错误）；`lpc_audit_removed_locals.py` 检查通过；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（`72` 条规则）零告警；`play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
