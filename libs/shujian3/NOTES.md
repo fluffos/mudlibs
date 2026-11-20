@@ -481,3 +481,8 @@ pristine + build-debug，port 40200。`scripts/play_login.py` 走完 8 步注册
 
 - `/kungfu/skill/songyang-shou/junji.lpc` 移除引用不存在回调 `remove_effect` 的失效 `call_out`（保留原文件行尾）。
 - 验证：全批 `36` 文件 `lpcc` 编译全部通过（`36/36`）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 验证 `nitan6` `beidou-zhenfa`（`--head` `fn=0 after=1` → `after=0`）及 5 组技能加载正常；`lpc_scan_callout_targets.py` 对应 `6` 类路径剩余 `0` 命中；`scripts/lint.py`（新增 `skill-dead-callout`，共 `71` 条规则）零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+## 修复 `/d/wanshou/forest8.lpc` 缺失左引号、`void check_out` 返回类型冲突及字串空格损毁（2026-11-20，KB 06 §7.408）
+
+- `d/wanshou/forest8.lpc` 原在 `set("outdoors", 万兽山庄");` 处缺失左引号导致整份房间无法编译（`Illegal character 0xe4` / `syntax error`，打断万兽山庄九宫树林迷宫通行）；其中 `bxsj`/`bxsj1`/`shujian2008`/`sjtx2` 还因引号奇偶反转使旧排版器将下行起全部字符串误改写为带空格字面量（`" cost "`、`" tree8 "`、`" exits / north "`、`__DIR__" shijie "`、`" close_exit_shijie "`、`__DIR__" forest2 "`、`" tree "`），并同时存在第 11 行前向声明 `void check_out(object me);` 与下文 `int check_out(object me)` 返回类型冲突。
+- 统一补全 `set("outdoors", "万兽山庄");`、恢复被引号反转破坏的字符串字面量（保留原 CRLF 行尾）并将前向声明改为 `int check_out(object me);`。
+- 验证：`bxsj` `--head` 基线 `lpcc_eval.py` 编译失败，修复后 `bxsj`/`bxsj1`/`shujian2008`/`shujian3`/`sjecl`/`sjtx2` 全 `6` 馆 `lpcc_eval.py` 均通过（`万兽山庄 short=密林 ok1=0 ok2=1 tree1=0 cost=1`）；`lpc_format_changed.py --apply` 检查 `6` 份文件零重排（`0 to format`）；`scripts/lint.py` 新增 `unquoted-set-string` 规则（共 `79` 条规则）通过 `--rule unquoted-set-string --all --jobs 8`、`--files` 与 `--fast`（`0 error(s), 0 warning(s)`）及 `HEAD` 正向单测；全 `6` 馆 `play_boot.sh`+`play_stop.sh` 启停正常且无残留驱动。
