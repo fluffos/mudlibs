@@ -853,3 +853,8 @@ pristine + build-debug，port 40187。`scripts/play_login.py` 注册并执行 `l
 
 - §7.401 解除 `/adm/npc/ouyezi.lpc` 编译阻断后，消除 `do_show()` 第 419 行残留的未使用局部变量声明 `object money;`（源自注释块遗留，保留 LF 行尾）。
 - 验证：`lpcc` 与 `lpcc_eval.py` 加载 `/adm/npc/ouyezi` `PASS`（`0` 告警/`0` 错误）；`lpc_audit_removed_locals.py` 检查通过；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（`72` 条规则）零告警；`play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+
+## 三参数 `delete_temp(..., 1, ob)` 编译类型错误修复（2026-11-20，KB 06 §7.403）
+
+- 修复 `/inherit/room/pawn_d.lpc:331`、`/quest11/jinshe/wenyi.lpc`（`143`、`212`）与 `/quest11/jinshe/wenyi (2).lpc`（`143`、`213`）共 `3` 个文件 / `5` 处调用：去除从 `set_temp` 误带入的多余第二参数 `, 1`，匹配 `varargs int delete_temp(string prop, object ob)` 签名（消除 `Bad type for argument 2 of delete_temp ( object vs int )`）。
+- 验证：`lpcc_eval.py` 实测 `wenyi` 与 `wenyi (2)` 均由 `--head` 编译失败转为成功加载（`a=温仪 b=温仪`，`nt6nitan6win` 全零报错；`nitan6` 实测 `delete_temp("quest/jinshe2/step1", p)` 将标记清零 `step1_after_del=0`；`pawn_d.lpc` 消除第 `331` 行报错，仅余既有未定义 `pay_from_bank`）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（新增 `delete-temp-three-args` 规则，共 `74` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。

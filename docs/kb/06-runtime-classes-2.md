@@ -2632,3 +2632,15 @@ Once `tomb.lpc` compiled and `close_tomb()` executed, all `21` companion `tomb2.
 **Cause:** Corrupted manual edit in the upstream ESII/XKX shared Emei tomb pair (`tomb.lpc` / `tomb2.lpc`): the `)` of `load_object(__DIR__ "tomb2")` was followed by a duplicate `)` and stray `{`, `close_tomb()` dropped the `)` before `;` while hard-coding `"d/emei/tomb2"` (missing sibling `d/em/` and `npc/obj/` paths where `do_dig()` uses `__DIR__ "tomb2"`), and `tomb2.lpc` left an unmatched `* /` token below `shoot_arrow()`.
 **Fix:** Restore `object room = load_object(__DIR__ "tomb2");` at both `tomb.lpc` call sites and remove the stray `* /` line from all `21` companion `tomb2.lpc` files (`42` files total across the `7` vendored libs).
 **Detection:** `scripts/lint.py --rule malformed-load-object`.
+
+### 7.403 Three-argument `delete_temp("key", 1, ob)` stray `1` in Nitan7 (`18` vendored files / `30` calls, 6 libs) {#7403-delete-temp-three-args}
+
+**Symptom:** `inherit/room/pawn_d.lpc`, `quest*/jinshe/wenyi.lpc`, and `quest*/jinshe/wenyi (2).lpc` across all `6` vendored Nitan7 libs (`hhsj`, `nitan170911`, `nitan6`, `nt6`, `nt6nitan6win`, `xfbhh`; plus `fluffos-upstream` submodule `nt7`) fail to compile with `error: Bad type for argument 2 of delete_temp ( object vs int )`:
+```c
+delete_temp("be_in_sale_meeting_chu", 1, current_user);
+delete_temp("quest/jinshe2/step1", 1, this_player());
+delete_temp("quest/jinshe2/step2", 1, who);
+```
+**Cause:** Nitan7's simul_efun declares `varargs int delete_temp(string prop, object ob)` with two arguments (`include/dbase.h`). When porting `ob->delete_temp("...")` calls alongside `set_temp("...", 1, ob)`, five call sites per lib were emitted with a stray `, 1` second argument from `set_temp`.
+**Fix:** Remove the stray `, 1` middle argument (`delete_temp("...", ob);`) across all `18` vendored files (`30` call sites).
+**Detection:** `scripts/lint.py --rule delete-temp-three-args`.

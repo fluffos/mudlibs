@@ -120,6 +120,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("call-method-typo", "file", "KB 06 §7.398", "error", "Misspelled ->receive_damage()/->receive_wound()/->receive_curing()/->set_temp()/->delete_temp()/->start_busy() call"),
     RuleSpec("crossed-bracket-query", "file", "KB 06 §7.401", "error", "Bracket-crossed query()/query_temp() corruption (`query(\"k\", map[ob) ]`) breaking compilation"),
     RuleSpec("malformed-load-object", "file", "KB 06 §7.402", "error", "Malformed load_object() call missing closing paren or followed by stray `){`"),
+    RuleSpec("delete-temp-three-args", "file", "KB 06 §7.403", "error", "Three-argument delete_temp(\"k\", 1, ob) stray `1` failing compilation against delete_temp(string, object)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -169,6 +170,7 @@ CROSSED_QUERY_PAT = re.compile(
     rb'|\b(?:query|query_temp)\s*\("[^"\n]+",\s*(?:get_ship|get_table|player_id|random|mapp|stringp|intp|objectp|arrayp|pointerp|sizeof|strlen|keys|values|to_int|atoi)\s*\('
 )
 BAD_LOAD_OBJECT_PAT = re.compile(rb"\bload_object\s*\([^()\n;]*;|\bload_object\s*\([^;\n]+\)\r?\n\s*\)\r?\n\s*\{")
+BAD_DELETE_TEMP_PAT = re.compile(rb'\bdelete_temp\s*\(\s*"[^"\n]+"\s*,\s*(?:0|1)\s*,\s*[A-Za-z_]')
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
@@ -484,6 +486,14 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             if mk[m.start()]:
                 ln = b.count(b"\n", 0, m.start()) + 1
                 hits.append(("malformed-load-object", f"{path}:{ln}", "malformed load_object() missing ')' or stray '){'"))
+                break
+
+    if want("delete-temp-three-args") and b"delete_temp" in b and BAD_DELETE_TEMP_PAT.search(b):
+        mk = code_mask(b, heredoc=True)
+        for m in BAD_DELETE_TEMP_PAT.finditer(b):
+            if mk[m.start()]:
+                ln = b.count(b"\n", 0, m.start()) + 1
+                hits.append(("delete-temp-three-args", f"{path}:{ln}", "3-argument delete_temp(\"k\", 1, ob) call failing compilation"))
                 break
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
