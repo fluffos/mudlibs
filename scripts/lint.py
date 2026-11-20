@@ -383,10 +383,12 @@ QUERY_TYPO_PAT = re.compile(
     rb'->\s*(queyr|queryr|qury|qurey|quey|quer|qeury|qeuery|quert|quary|'
     rb'qury_temp|queyr_temp|queryr_temp|qurey_temp|qeury_temp|qeuery_temp|quety_temp|'
     rb'query_tmp|query_tme|query_tepm|query_tmep|querk_skill|quert_respect|'
-    rb'query_skil|quert_skill|queyr_skill)\s*\('
+    rb'query_skil|quert_skill|queyr_skill|query_skill_perpare|query_conditon)\s*\('
 )
 CALL_TYPO_PAT = re.compile(
-    rb'->\s*(recieve_damage|recieve_wound|recieve_curing|delte_temp|delet_temp|settemp|se_temp|stat_busy)\s*\('
+    rb'->\s*(recieve_damage|recieve_wound|recieve_curing|delte_temp|delet_temp|settemp|se_temp|stat_busy|'
+    rb'delete_tem|strat_busy|start_bus|receive_damgae|recive_damage|receive_woud|start_perfrom|'
+    rb'apply_conditon|clear_conditon|is_figting)\s*\('
 )
 
 

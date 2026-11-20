@@ -488,3 +488,7 @@ pristine + build-debug，归档端口 40135。`scripts/play_login.py` 注册进�
 
 - `/cmds/usr/help.lpc` 将 `help_7` 中的缺失回调 `input_to("help_map", ob)` 修正为 `input_to("help_7", ob)`，并修正 `help_1..9` 错误重问 `input_to("help_" + num, ob)` 为各自菜单函数名。
 - 验证：全批 `32` 馆 / `34` 文件 `lpcc` 差分编译全部通过（`ok=34, regressions=0`）；代表 `lpcc_eval.py` 实测 `nitan6` `hai_end`（`no_exert` `30->0`）、`hxxtjqb` `remove_broken_weapon`（`w_after=0`）、`cctx` `neishi`（`*No program -> loaded` + `do_circle`）、`dtxyzjb` `qnbank1`（`*No program -> loaded` + `do_deposit`）；`lpc_format_changed.py`、`scripts/lint.py --files` 与 `10/10` 实库 `play_boot.sh`+`play_stop.sh` 均通过。
+## 扩展 `->delete_temp`/`->start_busy`/`->*_condition` 等拼写错误修复（2026-11-19，KB 06 §7.399）
+
+- 扩扫 `->delete_tem`/`->strat_busy`/`->start_bus`/`->receive_damgae`/`->recive_damage`/`->receive_woud`/`->query_conditon`/`->apply_conditon`/`->clear_conditon`/`->query_skill_perpare`/`->start_perfrom`/`->is_figting` 等无定义拼写错误（避开真实方法 `del_temp` 与 `start_exert`），统一修正 `/clone/npc/muren.lpc`（共 `1` 个文件） 中的错误调用为标准方法名（保留原文件行尾）。
+- 验证：全批 `130` 个 `.lpc` 差分编译通过 `115/130`（`15` 处 `wenfang*` 为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`aoxiangtianji` `clear_conditon` `10 -> 0`、`bxsj` `cond_typo=0 -> cond_fix=5` 且 `del_typo=1 -> del_fix=0`、`chidi` `busy_typo=0 -> busy_fix=1`）；`scripts/lint.py`（共 `70` 条规则）全库与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

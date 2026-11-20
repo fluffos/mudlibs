@@ -839,3 +839,7 @@ pristine + build-debug，归档端口 40101。`scripts/play_login.py`（port 491
 
 - 全语料排查无定义函数调用（`call_other` 静默返回 `0`），修正 `/d/emei/obj/tianxiang-gao.lpc`、`/adm/daemons/combatd.lpc`（共 `2` 个文件） 中的 `->qurey`/`->qeury`/`->quert`/`->queyr`/`->quety_temp`/`->querk_skill`/`->quert_respect`/`->query_tmp`/`->quary`/`->queryr`/`->quer` 等拼写错误为标准方法名，消除功能失效或条件误放行问题（保留原文件行尾）。
 - 验证：全批 `698` 文件（`691/698` 编译通过、`7` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`dtxywzxzb` 非蜀山 `valid_learn` 由 `1` 转为 `0`，`fqyy2` `qurey=0 -> query=50`）；`scripts/lint.py`（新增 `query-method-typo`，共 `69` 条规则）全库与 `--fast` 零错误零告警；`10` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+## 扩展 `->delete_temp`/`->start_busy`/`->*_condition` 等拼写错误修复（2026-11-19，KB 06 §7.399）
+
+- 扩扫 `->delete_tem`/`->strat_busy`/`->start_bus`/`->receive_damgae`/`->recive_damage`/`->receive_woud`/`->query_conditon`/`->apply_conditon`/`->clear_conditon`/`->query_skill_perpare`/`->start_perfrom`/`->is_figting` 等无定义拼写错误（避开真实方法 `del_temp` 与 `start_exert`），统一修正 `/feature/vendor_sale.lpc`（共 `1` 个文件） 中的错误调用为标准方法名（保留原文件行尾）。
+- 验证：全批 `130` 个 `.lpc` 差分编译通过 `115/130`（`15` 处 `wenfang*` 为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`aoxiangtianji` `clear_conditon` `10 -> 0`、`bxsj` `cond_typo=0 -> cond_fix=5` 且 `del_typo=1 -> del_fix=0`、`chidi` `busy_typo=0 -> busy_fix=1`）；`scripts/lint.py`（共 `70` 条规则）全库与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。

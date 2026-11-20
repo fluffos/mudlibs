@@ -626,3 +626,7 @@ pristine + build-debug，port 40127。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+## 扩展 `->delete_temp`/`->start_busy`/`->*_condition` 等拼写错误修复（2026-11-19，KB 06 §7.399）
+
+- 扩扫 `->delete_tem`/`->strat_busy`/`->start_bus`/`->receive_damgae`/`->recive_damage`/`->receive_woud`/`->query_conditon`/`->apply_conditon`/`->clear_conditon`/`->query_skill_perpare`/`->start_perfrom`/`->is_figting` 等无定义拼写错误（避开真实方法 `del_temp` 与 `start_exert`），统一修正 `/clone/npc/muren.lpc`（共 `1` 个文件） 中的错误调用为标准方法名（保留原文件行尾）。
+- 验证：全批 `130` 个 `.lpc` 差分编译通过 `115/130`（`15` 处 `wenfang*` 为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`aoxiangtianji` `clear_conditon` `10 -> 0`、`bxsj` `cond_typo=0 -> cond_fix=5` 且 `del_typo=1 -> del_fix=0`、`chidi` `busy_typo=0 -> busy_fix=1`）；`scripts/lint.py`（共 `70` 条规则）全库与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
