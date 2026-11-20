@@ -122,6 +122,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("malformed-load-object", "file", "KB 06 §7.402", "error", "Malformed load_object() call missing closing paren or followed by stray `){`"),
     RuleSpec("delete-temp-three-args", "file", "KB 06 §7.403", "error", "Three-argument delete_temp(\"k\", 1, ob) stray `1` failing compilation against delete_temp(string, object)"),
     RuleSpec("exit-string-as-object", "file", "KB 06 §7.404", "error", "Exit room path string passed as object to find_object(object dest) or sefun query(..., exits[...])"),
+    RuleSpec("missing-mapping-comma", "file", "KB 06 §7.405", "error", "Missing comma between consecutive mapping literal entries (`\"dodge\": 15\\n\"parry\": 15`) breaking compilation"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -175,6 +176,9 @@ BAD_DELETE_TEMP_PAT = re.compile(rb'\bdelete_temp\s*\(\s*"[^"\n]+"\s*,\s*(?:0|1)
 BAD_EXIT_OBJ_PAT = re.compile(
     rb'\bif\s*\(\s*!\s*find_object\s*\(\s*dest\s*\)\s*\)\s*load_object\s*\(\s*dest\s*\)\s*;\s*\r?\n\s*if\s*\(\s*query\s*\(\s*"no_fight"\s*,\s*dest\s*\)\s*\)'
     rb'|\bquery(?:_temp)?\s*\(\s*"[^"\n]+"\s*,\s*exits\s*\['
+)
+MISSING_MAPPING_COMMA_PAT = re.compile(
+    rb'"(?:dodge|parry|damage|force|attack|lvl)"\s*:\s*-?\d+[ \t]*\r?\n[ \t]*"(?:dodge|parry|damage|force|attack|lvl|action|skill_name|damage_type)"\s*:'
 )
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
@@ -507,6 +511,14 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             if mk[m.start()]:
                 ln = b.count(b"\n", 0, m.start()) + 1
                 hits.append(("exit-string-as-object", f"{path}:{ln}", "exit room path string passed as object to find_object/sefun query"))
+                break
+
+    if want("missing-mapping-comma") and b'"dodge"' in b and MISSING_MAPPING_COMMA_PAT.search(b):
+        mk = code_mask(b, heredoc=True)
+        for m in MISSING_MAPPING_COMMA_PAT.finditer(b):
+            if mk[m.start()]:
+                ln = b.count(b"\n", 0, m.start()) + 1
+                hits.append(("missing-mapping-comma", f"{path}:{ln}", "missing comma between mapping entries"))
                 break
 
     if want("literal-or") and (b"||" in b or b"&&" in b):

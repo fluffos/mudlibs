@@ -1733,3 +1733,8 @@ pristine + build-debug，归档端口 40064。`scripts/play_login.py` 注册进�
 
 - 修复 `d/em/obj/`、`d/em/npc/obj/`、`d/emei/obj/`、`d/emei/npc/obj/` 共 `4` 组 `tomb.lpc` 与 `tomb2.lpc`（合计 `8` 文件）：`tomb.lpc` 中 `load_object(__DIR__ "tomb2")\n)\n{` 与 `close_tomb()` 的 `load_object("d/emei/tomb2";` 导致 `syntax error, unexpected ')'` 无法加载，统一改为 `object room = load_object(__DIR__ "tomb2");`；并移除同目录 `tomb2.lpc` 第 `76` 行导致 `syntax error, unexpected '/'` 的孤立 `* /`。
 - 验证：`lpcc_eval.py` 全量编译加载每处 `tomb`/`tomb2` 并实测 `t->set("tomb_door", 1); t->close_tomb();` 均返回 `door=0 short2=墓室` 且零警告；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（新增 `malformed-load-object` 规则，共 `73` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。
+
+## 八卦刀 `/d/kunlun/skill/bagua-dao.lpc` 映射缺逗号、重复函数及 0 级 `query_action()` 返回空值修复（2026-11-20，KB 06 §7.405）
+
+- 修复 `/d/kunlun/skill/bagua-dao.lpc` 三处缺陷：补全 `mapping *action` 中 `"dodge": 15`、`"parry": 15`、`"damage": 20` 缺失的逗号（消除 `syntax error, unexpected L_STRING` / `';'`）；删除紧邻重复粘贴的第二个 `query_skill_name(int level)` 定义；将 `query_action()` 中 `level > action[i - 1]["lvl"]` 改为 `>=` 并追加 `if (sizeof(action)) return action[0];` 兜底，避免 0 级调用返回 `0` 导致战斗索引 `*Value being indexed is zero.`。
+- 验证：`lpcc_eval.py` 实测由 `--head` 编译失败/0 级报错转为成功加载并执行 `query_skill_name(0)`、`valid_enable("blade")` 与 `query_action()`（`sname=八卦刀 ve=1 act_name=八卦刀`，零警告零错误）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（新增 `missing-mapping-comma` 规则，共 `76` 条）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 实机启动干净且 `ZERO_DRIVERS`。

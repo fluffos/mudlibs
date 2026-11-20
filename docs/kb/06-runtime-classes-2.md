@@ -2652,3 +2652,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 2. `/clone/npc/qingyun.lpc:166` compiles cleanly but `rshorts()` calls `name = query("short", exits[kexits[i]]);` with a string path; `wizard.lpc`'s `sefun::query()` only treats `objectp(raw_or_ob)` as the target object (`0` otherwise -> reads `this_object()` or returns `"0"`), collapsing every exit name to `({ "0" })`.
 **Fix:** Keep `mixed dest;` + resolved `object dest_ob;` (`if (objectp(dest)) dest_ob = dest; else if (stringp(dest)) dest_ob = find_object(dest) || load_object(dest);`) with `!mapp(exits)` / `!objectp(dest_ob)` guards in `npcsd.lpc`, and resolve `object dest_room = find_object(exits[kexits[i]]) || load_object(...)` before `query("short", dest_room)` in `qingyun.lpc`.
 **Detection:** `scripts/lint.py --rule exit-string-as-object`.
+
+### 7.405 Missing commas in `bagua-dao.lpc` `mapping *action` + duplicated `query_skill_name()` + level-0 `query_action()` null return (`7` files, 7 libs) {#7405-missing-mapping-comma}
+
+**Symptom:** `d/kunlun/skill/bagua-dao.lpc` (`bmxkx2001`, `jym`, `xkx2000zxb`, `xkx2001`, `xuanjianlu`), `d/mingjiao/skill/bagua-dao.lpc` (`shenzhou`), and `d/minjiao/skill/bagua-dao.lpc` (`xkm`) fail compilation (`syntax error, unexpected L_STRING` / `';'`) on missing commas after `"dodge": 15`, `"parry": 15`, and `"damage": 20`, also mask a duplicate `string query_skill_name(int level)` definition directly below, and leave `query_action()` returning `0` when `level == 0` (`level > action[i - 1]["lvl"]` vs `lvl: 0`).
+**Fix:** Add the three missing commas in `action`, remove the duplicate `query_skill_name()` definition, change `level > action[i - 1]["lvl"]` to `>=` with an `if (sizeof(action)) return action[0];` fallback in `query_action()`.
+**Detection:** `scripts/lint.py --rule missing-mapping-comma`.
