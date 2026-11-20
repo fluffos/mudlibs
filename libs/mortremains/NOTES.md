@@ -1023,3 +1023,8 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/adm/haras
 ## 深度功能测试（§10.7，2026-11-15，重测）
 
 pristine + build-debug（归档端口 `40231`，测试端口 `49231`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
+## 修复 `/adm/Fooland/cave.lpc` `set ("light", 1") ;` 多余后缀引号导致的整室编译崩溃（2026-11-20，KB 06 §7.408）
+
+- `/adm/Fooland/cave.lpc` 第 11 行 `set ("light", 1") ;` 多出后缀双引号，导致下文 `@BiteMe` 及全部房间字符串奇偶反转并在文件尾触发 `End of file in string`，整室无法加载。
+- 删除 `1` 后的多余双引号改为 `set ("light", 1) ;`（保留原 LF 格式）。
+- 验证：`lpcc_eval.py`（`--at /adm/Fooland/zzeval.lpc`）由 `--head` `End of file in string` 编译失败转为通过（`light=1 short="Bazz's cave" eq=1`）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（`unquoted-set-string` 规则扩展覆盖整型后缀引号，共 `79` 条规则）全库与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 启停正常且无残留驱动。

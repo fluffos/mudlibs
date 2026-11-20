@@ -622,3 +622,8 @@ pristine + build-debug，归档端口 40153。`scripts/play_login.py` 注册并�
 
 - 续查全语料无定义 `call_other` 调用（静默返回 `0`），修正 `/daemon/class/xiaoyao/gaoge_sword/raya.lpc`（共 `1` 个文件） 中的 `->recieve_damage`/`->recieve_wound`/`->recieve_curing`/`->delte_temp`/`->delet_temp`/`->settemp`/`->se_temp`/`->stat_busy`/`->query_skil`/`->quert_skill`/`->queyr_skill` 拼写错误为标准方法名（保留原文件行尾）。
 - 验证：全批 `359` 文件中 `321` 个 `.lpc` 差分编译通过 `313/321`（`8` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表实测通过（`bxsj` `recieve_damage=100 -> receive_damage=60`，`tybxjh` `delet_temp=1 -> delete_temp=0`）；`scripts/lint.py`（新增 `call-method-typo`，共 `70` 条规则）全库与 `--fast` 零错误零告警；`8` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+## 修复 `/d/wuhan/hankou/huanglx.lpc` `set("age", 67");` 多余引号、缺逗号与装备路径错位（2026-11-20，KB 06 §7.408）
+
+- `/d/wuhan/hankou/huanglx.lpc` 原第 14 行 `set("age", 67");` 误带后缀双引号导致后续映射引号全部反转（`Illegal character 0x87`），同时掩盖了第 28–29 行 `"金狂"` 条目末尾缺少逗号，以及因文件位于 `/d/wuhan/hankou/` 而非 `npc/` 导致的 `__DIR__"obj/goldc"`/`"obj/goldh"` 装备不存在运行时崩溃（实位于 `__DIR__"npc/obj/gold{c,h}"`）。
+- 去掉 `67` 后多余 `"`、补全 `"金狂"` 后逗号并修正 `__DIR__"npc/obj/goldc"` / `__DIR__"npc/obj/goldh"`（保留原 LF 与无尾换行格式）。
+- 验证：`lpcc_eval.py` 由 `--head` 编译失败 / 修复引号后缺装备崩溃转为完整载入通过（`name="黄历之" age=67 eq=2`）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（`unquoted-set-string` 规则扩展覆盖整型后缀引号，共 `79` 条规则）全库与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 启停正常且无残留驱动。

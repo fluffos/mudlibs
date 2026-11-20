@@ -125,7 +125,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("missing-mapping-comma", "file", "KB 06 §7.405", "error", "Missing comma between consecutive mapping literal entries (`\"dodge\": 15\\n\"parry\": 15`) breaking compilation"),
     RuleSpec("unclosed-mapping-string", "file", "KB 06 §7.406", "error", "Unclosed multiline mapping string value (`\"hua1\": \"\\n...` without closing quote before next key or `]));`)"),
     RuleSpec("basket-missing-check-trigger", "file", "KB 06 §7.407", "error", "Room calling undefined check_trigger() or inheriting ITEM with ::reset() (d/heimuya/basket.lpc)"),
-    RuleSpec("unquoted-set-string", "file", "KB 06 §7.408", "error", "Missing opening quote in set(\"outdoors\", ...\") inverting downstream string quotes"),
+    RuleSpec("unquoted-set-string", "file", "KB 06 §7.408", "error", "Missing opening quote or stray integer trailing quote in set(\"prop\", ...\")"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -187,7 +187,9 @@ UNCLOSED_MAPPING_STR_PAT = re.compile(
     rb'(?m)^[ \t]*"[^"\n]{1,32}"[ \t]*:[ \t]*"[ \t]*\\?[ \t]*n[ \t]*\r?\n(?:(?!(?<!\\)").){1,1500}?\r?\n[ \t]*\]\s*\)\s*;'
 )
 BASKET_CHECK_TRIGGER_RE = re.compile(rb'\bcheck_trigger\s*\(\s*\)\s*;')
-UNQUOTED_SET_STR_PAT = re.compile(rb'\bset\s*\(\s*"[^"\n]+"\s*,\s*(?![A-Z_][A-Z0-9_]*\b)[^"\s\d({\[/\-+.\n][^";+()\[\]\n]*"\s*\)')
+UNQUOTED_SET_STR_PAT = re.compile(
+    rb'\bset\s*\(\s*"[^"\n]+"\s*,\s*(?:(?![A-Z_][A-Z0-9_]*\b)[^"\s\d({\[/\-+.\n][^";+()\[\]\n]*"|\d+")\s*\)'
+)
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
