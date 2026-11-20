@@ -111,6 +111,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("say-delete-busy", "targeted", "KB 06 §7.394", "error", "cmds/std/say.lpc call_out(\"delete_busy\") missing arg, deleted/commented body, uninit ob, or this_player()"),
     RuleSpec("cmd-callout-this-player", "targeted", "KB 06 §7.395", "error", "Shared /cmds/ call_out callback invoking this_player() (0 in timer context)"),
     RuleSpec("skill-sanshen-del-perform", "targeted", "KB 06 §7.396", "error", "kungfu/skill/fanliangyi-dao/sanshen.lpc scheduling del_perform without defining void del_perform(object me)"),
+    RuleSpec("skill-dead-callout", "targeted", "KB 06 §7.400", "error", "Skill/daemon call_out scheduling undefined destruct_me/remove_effect/perform2/perform_jiaoyang/perform_qiao"),
     # Per-file corpus checks (all error in --changed/--files/--strict; configurable in --all)
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
     RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
@@ -771,7 +772,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "rtcfg", "ver_cfg", "band", "embed_cand")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -819,6 +820,15 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["cmdco"].append(item)
         if rel == "/kungfu/skill/fanliangyi-dao/sanshen.lpc":
             targeted_bins["sanshen"].append(item)
+        if rel in (
+            "/kungfu/skill/beidou-zhenfa.lpc",
+            "/kungfu/skill/shigu-bifa/kuangcao.lpc",
+            "/daemon/class/lingjie/lingfan-san/lieshi.lpc",
+            "/kungfu/skill/songyang-shou/junji.lpc",
+            "/kungfu/skill/banruo-zhang/yipai.lpc",
+            "/kungfu/skill/guang-jian/guangmang.lpc",
+        ):
+            targeted_bins["skill_co"].append(item)
         if bn == "runtime_config.h":
             targeted_bins["rtcfg"].append(item)
         if any(k in bn for k in ("versiond", "getconfig", "server", "config")):
@@ -971,6 +981,26 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             if (re.search(rb'\b(?:call_out|start_call_out)\s*\(', cb)
                     and not re.search(rb'\bdel_perform\s*\(', cb)):
                 col.add("skill-sanshen-del-perform", p, "sanshen.lpc schedules del_perform without defining void del_perform(object me)")
+
+    if col.wants("skill-dead-callout"):
+        sym_map = {
+            "/kungfu/skill/beidou-zhenfa.lpc": b"destruct_me",
+            "/kungfu/skill/shigu-bifa/kuangcao.lpc": b"remove_effect",
+            "/daemon/class/lingjie/lingfan-san/lieshi.lpc": b"perform_jiaoyang",
+            "/kungfu/skill/songyang-shou/junji.lpc": b"remove_effect",
+            "/kungfu/skill/banruo-zhang/yipai.lpc": b"perform2",
+            "/kungfu/skill/guang-jian/guangmang.lpc": b"perform_qiao",
+        }
+        for _, p, rel in targeted_bins["skill_co"]:
+            sym = sym_map[rel]
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b'"' + sym + b'"' not in b:
+                continue
+            mk = code_mask(b, heredoc=True)
+            cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+            if (re.search(rb'\b(?:call_out|start_call_out)\s*\(', cb)
+                    and not re.search(rb'\b' + sym + rb'\s*\(', cb)):
+                col.add("skill-dead-callout", p, f"{rel} calls undefined call_out(\"{sym.decode()}\")")
 
 
 def _changed_files(base: str | None) -> list[str]:

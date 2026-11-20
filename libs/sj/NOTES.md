@@ -630,3 +630,7 @@ pristine + build-debug，port 40127。`scripts/play_login.py` 注册并执行 `l
 
 - 扩扫 `->delete_tem`/`->strat_busy`/`->start_bus`/`->receive_damgae`/`->recive_damage`/`->receive_woud`/`->query_conditon`/`->apply_conditon`/`->clear_conditon`/`->query_skill_perpare`/`->start_perfrom`/`->is_figting` 等无定义拼写错误（避开真实方法 `del_temp` 与 `start_exert`），统一修正 `/clone/npc/muren.lpc`（共 `1` 个文件） 中的错误调用为标准方法名（保留原文件行尾）。
 - 验证：全批 `130` 个 `.lpc` 差分编译通过 `115/130`（`15` 处 `wenfang*` 为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`aoxiangtianji` `clear_conditon` `10 -> 0`、`bxsj` `cond_typo=0 -> cond_fix=5` 且 `del_typo=1 -> del_fix=0`、`chidi` `busy_typo=0 -> busy_fix=1`）；`scripts/lint.py`（共 `70` 条规则）全库与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+## 技能 `call_out` 失效/缺失回调修复（2026-11-19，KB 06 §7.400）
+
+- `/kungfu/skill/guang-jian/guangmang.lpc` 移除引用不存在回调 `perform_qiao` 的失效 `call_out`（保留原文件行尾）。
+- 验证：全批 `36` 文件 `lpcc` 编译全部通过（`36/36`）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 验证 `nitan6` `beidou-zhenfa`（`--head` `fn=0 after=1` → `after=0`）及 5 组技能加载正常；`lpc_scan_callout_targets.py` 对应 `6` 类路径剩余 `0` 命中；`scripts/lint.py`（新增 `skill-dead-callout`，共 `71` 条规则）零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
