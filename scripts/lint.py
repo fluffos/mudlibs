@@ -128,6 +128,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("unquoted-set-string", "file", "KB 06 §7.408", "error", "Missing opening quote or stray integer trailing quote in set(\"prop\", ...\")"),
     RuleSpec("undeclared-for-i-loop", "file", "KB 06 §7.409", "error", "Non-advancing `for (i = 0; obj->query(...); i++)` loop, undeclared `for (i = sizeof(ob)...)` loop var, or dead `(: goaway :)` pointer"),
     RuleSpec("include-dir-macro", "file", "KB 06 §7.410", "error", "C preprocessor #include __DIR__ / #include __DIR_ directive fails in FluffOS"),
+    RuleSpec("top-level-create-family", "file", "KB 06 §7.411", "error", "create_family() statement placed outside function braces after create()"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -576,6 +577,18 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             if mk[m.start()]:
                 ln = b.count(b"\n", 0, m.start()) + 1
                 hits.append(("include-dir-macro", f"{path}:{ln}", f"`#include __DIR_` fails FluffOS preprocessor (`Cannot read #include file`) for `{m.group(1).decode('latin-1')}`"))
+                break
+
+    if want("top-level-create-family") and b"create_family" in b:
+        mk = code_mask(b, heredoc=True)
+        cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+        for m in re.finditer(rb'\bcreate_family\s*\([^;{}]*\)\s*;', cb):
+            ls = cb.rfind(b"\n", 0, m.start()) + 1
+            if re.match(rb'^[ \t]*(?:void|int|mixed|string|varargs|nomask|protected|public|private|nosave)\b', cb[ls:m.start()]):
+                continue
+            if cb[:m.start()].count(b"{") - cb[:m.start()].count(b"}") <= 0:
+                ln = b.count(b"\n", 0, m.start()) + 1
+                hits.append(("top-level-create-family", f"{path}:{ln}", "create_family() statement outside any function body"))
                 break
 
     if want("literal-or") and (b"||" in b or b"&&" in b):

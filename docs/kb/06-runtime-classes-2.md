@@ -2695,3 +2695,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 3. `d/wudang/taoyuan/tyroad{4,5,6,7}.lpc` in `jinyongwenzi` (`4` rooms): `#include __DIR_"feng.h"` where `jinyongwenzi` never shipped `d/wudang/feng.h`.
 **Fix:** Change `#include __DIR__"tanzhu.h"` -> `#include "tanzhu.h"` in the `15` Mingjiao NPCs (preserving CRLF/LF); change `#include __DIR_"feng.h"` -> `#include "/d/suburb/xkx/wudang/feng.h"` in `xyj451`'s `4` Taoyuan road rooms; and comment out the missing `#include __DIR_"feng.h"` plus its `"feng": (: look_feng :),` and `add_action("look_feng", "look");` hooks in `jinyongwenzi`'s `4` rooms (`23` files total).
 **Detection:** `scripts/lint.py --rule include-dir-macro`.
+
+### 7.411 Top-level `create_family(...)` placed outside `create()` closing brace (`11` `xiake/master.lpc` files, 11 libs) {#7411-top-level-create-family}
+
+**Symptom:** `/kungfu/class/xiake/master.lpc` (`cctx`, `jyqxc`, `jyqxc2`, `niaoren`, `sje`, `xiakexing3`, `xjcq2000`, `xkxlb`, `xkxyb`) and `/daemon/class/xiake/master.lpc` (`xajdxyj`, `xyj451`) place `create_family("侠客岛", 3, "弟子");` on the line after `create()`'s closing `}` (top-level statement outside any function body), failing compilation with `syntax error, unexpected L_STRING` and leaving the Xiake Island Master unloadable (`*No program in object`).
+**Fix:** Move `create_family("侠客岛", 3, "弟子");` inside `create()` right before `setup();` (preserving original indentation, encoding, and CRLF/LF line endings).
+**Detection:** `scripts/lint.py --rule top-level-create-family`.

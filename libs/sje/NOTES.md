@@ -510,3 +510,8 @@ pristine + build-debug，port 40146。`scripts/play_login.py` 注册并执行 `l
 
 - 扩扫 `->delete_tem`/`->strat_busy`/`->start_bus`/`->receive_damgae`/`->recive_damage`/`->receive_woud`/`->query_conditon`/`->apply_conditon`/`->clear_conditon`/`->query_skill_perpare`/`->start_perfrom`/`->is_figting` 等无定义拼写错误（避开真实方法 `del_temp` 与 `start_exert`），统一修正 `/kungfu/skill/zhenshan-mianzhang/bingdi.lpc`（共 `1` 个文件） 中的错误调用为标准方法名（保留原文件行尾）。
 - 验证：全批 `130` 个 `.lpc` 差分编译通过 `115/130`（`15` 处 `wenfang*` 为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表对比验证通过（`aoxiangtianji` `clear_conditon` `10 -> 0`、`bxsj` `cond_typo=0 -> cond_fix=5` 且 `del_typo=1 -> del_fix=0`、`chidi` `busy_typo=0 -> busy_fix=1`）；`scripts/lint.py`（共 `70` 条规则）全库与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+
+## 侠客岛掌门 `create_family()` 错置函数体外编译失败修复（2026-11-20，KB 06 §7.411）
+
+- `/kungfu/class/xiake/master.lpc` 末尾将 `create_family("侠客岛", 3, "弟子");` 误写在 `create()` 闭合大括号 `}` 之外（触发 `syntax error, unexpected L_STRING` 致 NPC 无法编译载入），将其移入 `create()` 内 `setup();` 之前（保留原缩进、繁简体与行尾格式）。
+- 验证：`lpcc_eval.py` 实测该对象成功载入并正确设置门派 `"侠客岛"`/`"俠客島"`，`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `top-level-create-family` 规则，共 `82` 条规则）全库零错误。

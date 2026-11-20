@@ -510,3 +510,8 @@ pristine + build-debug，port 40112。`scripts/play_login.py` 注册并执行 `l
 
 - `lpc_warnings.py xyj451` 检出 `/d/suburb/xkx/wudang/taoyuan/tyroad{4,5,6,7}.lpc` 第 6 行 `#include __DIR_"feng.h"` 报 `Bad #include directive` 阻断编译；核实 `feng.h` 位于上级目录 `/d/suburb/xkx/wudang/feng.h`（同区其余 `tyroad4..7.lpc` 已采用该绝对包含），统一改为 `#include "/d/suburb/xkx/wudang/feng.h"`。
 - 验证：`lpcc_eval.py` 对比 `--head` 加载失败 → 工作树 `tyroad4..7` 全部编译加载成功（`ZZT 1 1 1 1 "山路"`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `include-dir-macro` 规则，共 `81` 条规则）全库零错误。
+
+## 侠客岛掌门 `create_family()` 错置函数体外编译失败修复（2026-11-20，KB 06 §7.411）
+
+- `/daemon/class/xiake/master.lpc` 末尾将 `create_family("侠客岛", 3, "弟子");` 误写在 `create()` 闭合大括号 `}` 之外（触发 `syntax error, unexpected L_STRING` 致 NPC 无法编译载入），将其移入 `create()` 内 `setup();` 之前（保留原缩进、繁简体与行尾格式）。
+- 验证：`lpcc_eval.py` 实测该对象成功载入并正确设置门派 `"侠客岛"`/`"俠客島"`，`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `top-level-create-family` 规则，共 `82` 条规则）全库零错误。

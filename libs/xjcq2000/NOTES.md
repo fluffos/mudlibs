@@ -1185,3 +1185,8 @@ pristine + build-debug，port 40034。`scripts/play_login.py` 注册。
 
 - `/kungfu/skill/banruo-zhang/yipai.lpc` 移除引用不存在回调 `perform2` 的失效 `call_out`（保留原文件行尾）。
 - 验证：全批 `36` 文件 `lpcc` 编译全部通过（`36/36`）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 验证 `nitan6` `beidou-zhenfa`（`--head` `fn=0 after=1` → `after=0`）及 5 组技能加载正常；`lpc_scan_callout_targets.py` 对应 `6` 类路径剩余 `0` 命中；`scripts/lint.py`（新增 `skill-dead-callout`，共 `71` 条规则）零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+
+## 侠客岛掌门 `create_family()` 错置函数体外编译失败修复（2026-11-20，KB 06 §7.411）
+
+- `/kungfu/class/xiake/master.lpc` 末尾将 `create_family("侠客岛", 3, "弟子");` 误写在 `create()` 闭合大括号 `}` 之外（触发 `syntax error, unexpected L_STRING` 致 NPC 无法编译载入），将其移入 `create()` 内 `setup();` 之前（保留原缩进、繁简体与行尾格式）。
+- 验证：`lpcc_eval.py` 实测该对象成功载入并正确设置门派 `"侠客岛"`/`"俠客島"`，`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `top-level-create-family` 规则，共 `82` 条规则）全库零错误。
