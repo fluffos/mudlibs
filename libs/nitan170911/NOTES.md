@@ -1403,3 +1403,7 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 
 - `/kungfu/skill/beidou-zhenfa.lpc` 比照 `kungfu/class/quanzhen/beidou.h` 补全 `void destruct_me(object me)`（加 `objectp(me)` 守卫）（保留原文件行尾）。
 - 验证：全批 `36` 文件 `lpcc` 编译全部通过（`36/36`）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 验证 `nitan6` `beidou-zhenfa`（`--head` `fn=0 after=1` → `after=0`）及 5 组技能加载正常；`lpc_scan_callout_targets.py` 对应 `6` 类路径剩余 `0` 命中；`scripts/lint.py`（新增 `skill-dead-callout`，共 `71` 条规则）零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+## `quest/skybook/jimou` 浮点截断编译警告修复（2026-11-19，KB 04 §6.10）
+
+- 排查 `scripts/lpc_warnings.py` 发现同源 `11` 个计谋文件（`fakeorder.lpc`、`huangbao.lpc`、`hunluan.lpc`、`jbhj.lpc`、`jbsj.lpc`、`jiedu.lpc`、`luoshi.lpc`、`neihong.lpc`、`shidu.lpc`、`shoushi.lpc`、`zhanbu.lpc`，共 `34` 处）因含既有报错被 `lpc_fix_float_trunc.py` 跳过，仍存在 `Float value truncated to int` 警告（其中 `hunluan.lpc` 将倍率 `x = 1.8`、`z = 1.5` 声明为 `int` 会悄悄截断为 `1`）；比照 `sgzmudsgz` Round 10 修复，将 `hunluan.lpc` 的 `x`/`z` 改为 `float` 并在全部 `34` 处整型赋值补入 `to_int(...)`（保留 LF 行尾）。
+- 验证：`scripts/lpc_warnings.py`（`nitan6` 复扫剩余 `0` 条浮点截断告警）及各馆 `lpcc` 编译 `11/11` `Float value truncated` 均降至 `0`；`lpc_format_changed.py --apply`（格式化 `hunluan.lpc`，`errors: 0`）；`sgzmudsgz` `lpcc_eval.py` 验证 `hunluan=1 before_trunc=90 after_float=170`；`scripts/lint.py`（`71` 条规则）与 `7/7` `play_boot.sh`+`play_stop.sh` 均通过且 `ZERO_DRIVERS`。

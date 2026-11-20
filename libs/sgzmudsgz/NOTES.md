@@ -271,3 +271,7 @@ pristine + build-debug（归档端口 40196，临时测试端口 49741）。`scr
 
 - 为 `cmds/wiz/su.lpc`、`obj/hintmenu.lpc`（第 81/136 行）、`secure/daemons/new_user_d.lpc`、`trans/cmds/loadall.lpc`（用户目录参数 `args[0]` 传入 `map_array()`）中的 `get_dir()` 调用补全 `|| ({})` 空数组兜底。
 - 验证：`sgzmudsgz` `lpcc_eval.py` 四对象全部加载 `PASS`（`su=1 hint=1 nud=1 loadall=1`），`play_boot.sh` + `play_stop.sh`（port 47328）零错误，`scripts/lint.py` 零告警。
+## `sgdomain/npc/king.lpc` 浮点截断修复（2026-11-19，KB 04 §6.10）
+
+- 修复 `/sgdomain/npc/king.lpc` 第 369 行 `repd = 0.2 * t_money;` 引发的 `Float value truncated to int` 编译警告（该文件因 `NULL` 未定义被 `lpc_fix_float_trunc.py` 跳过），补全显式 `repd = to_int(0.2 * t_money);`（保留 LF 行尾）。
+- 验证：`scripts/lpc_warnings.py sgzmudsgz` 复扫非 `/wiz/` 浮点截断告警降至 `0`；`lpcc_eval.py` 验证 `repd=31`（`0.2 * 155`）及 `hunluan` `PASS`；`lpc_format_changed.py --apply` 与 `scripts/lint.py`（`71` 条规则）零告警；`play_boot.sh`+`play_stop.sh`（port 47336）正常且 `ZERO_DRIVERS`。
