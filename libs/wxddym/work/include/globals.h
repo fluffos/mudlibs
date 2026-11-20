@@ -162,7 +162,7 @@
 #define CLOSE_D         "/adm/daemons/closed"
 #define COMBAT_D        "/adm/daemons/combatd"
 #define COMMAND_D       "/adm/daemons/commandd"
-#define HISTORY_D               "/adm/daemons/historyd
+#define HISTORY_D               "/adm/daemons/historyd"
 #define LANGUAGE_D              "/adm/daemons/languaged"
 #define MEMBER_D                "/adm/daemons/memberd"
 #define CPU_D           "/adm/daemons/cpud"

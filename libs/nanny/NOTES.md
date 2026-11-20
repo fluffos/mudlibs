@@ -40,3 +40,8 @@
 
 - 修复 `obj/simul_efun.lpc:9` `#define PROFILE(X) profiled["X"]++` 将参数字面写成字符串 `"X"` 导致 `query_simulefun_profile_info()` 仅统计单个 `"X"` 键名的问题，改为 `#define PROFILE(X) profiled[#X]++`。
 - 验证：`lpcc_eval.py` 实测 `query_simulefun_profile_info()` 键名由 `--head` `({ "X" })` 转为真实 sefun 列表 `({ "extract", "load_object", "log_file", "query_simulefun_profile_info" })`；`play_boot.sh`+`play_stop.sh`（port 47373）与 `scripts/lint.py --files` 通过。
+
+## 单行 `#define` 字符串未闭合修复（2026-11-20，KB 04 §6.33）
+
+- 修复 `/std/rfc/monster_setup.h:13` 中 `ADD_LOCAL_CALL(fun,arg)` 误写 `file_name(this_object()+"\b"+fun",arg)` 导致缺少 `)` 与引号不闭合的问题，并同步将同文件 `12`/`13`/`14`/`27` 行的 K&R `"fun"` 宏参数字符串化改写为 FluffOS `#fun`（KB 06 §7.352），保留原 LF 行尾。
+- 验证：`lpc_format_changed.py --apply` 13/13 头文件（含再次复验 `monster_setup.h`）零重排；`lpcc_eval.py` 验证通过（`wxddym` `/adm/daemons/skillsd1` 加载正常、`xkxc98sj`/`xkxz2` `F_ITEMMAKE` 由 `--head` 语法错误转为 `"/feature/itemmake.lpc"`、`kxkj`/`kxkj1`/`kxkjii2` `PANTS`、`fengyun434`/`fysjmb`/`xsfyssjb` `ansi4.h`、`wuhanzhan` `ansi1.h`、`silberland` `PMMASTER` 及 `nanny` `monster_setup.h` 宏加载均通过）；`scripts/lint.py`（新增规则 #86 `unclosed-define-string`）`13/13` `HEAD` 正例与工作树/`silberland/work/sys/terminal.h` 反例单测通过，全库 `--all`、`13` 头文件 `--files` 与 `--fast` 均 `0` 错误 `0` 告警；`13/13` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47531..47543`）全部正常且 `ZERO_DRIVERS`。

@@ -5,7 +5,7 @@
 
 // Makros
 
-#define ESC "
+#define ESC "\x1b"
 #define STRICHE     "--------------------------------------------------"\
                     "---------------------------\n"
 #define OTHER_VERBS  ({"showhelp","showroom","createroom"})

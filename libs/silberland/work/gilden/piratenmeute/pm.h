@@ -28,9 +28,9 @@
 */
 
 //LOGS
-#define DO_LOG_EINAUS(x) log_file(yondala/pm_io.log",dtime(time())+" "+capitalize(getuid(TP))+" ist gerade "+x+"!\n")
+#define DO_LOG_EINAUS(x) log_file("yondala/pm_io.log",dtime(time())+" "+capitalize(getuid(TP))+" ist gerade "+x+"!\n")
 #define DO_LOG_ADVANCE(x) log_file("yondala/pm_adv.log", dtime(time())+" "+capitalize(getuid(TP))+" hat gerade Stufe "+x+" erreicht!\n")
-#define DO_LOG_PUB_TRY(x) log_file("yondala/pubtries/pubtries.log", dtime(time())+" "+capitalize(getuid(TP))+" "+x+\n");
+#define DO_LOG_PUB_TRY(x) log_file("yondala/pubtries/pubtries.log", dtime(time())+" "+capitalize(getuid(TP))+" "+x+"\n");
 
 //SYS
 #define UA this_interactive()->_unparsed_args()

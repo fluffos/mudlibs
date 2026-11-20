@@ -156,7 +156,7 @@
 #define F_FINANCE               "/feature/finance.lpc"
 #define F_FOOD                  "/feature/food.lpc"
 #define F_GUARDER               "/feature/guarder.lpc"
-#define F_ITEMMAKE              "/feature/itemmake.c
+#define F_ITEMMAKE              "/feature/itemmake.lpc"
 #define F_LIQUID                "/feature/liquid.lpc"
 #define F_MASTER                "/feature/master.lpc"
 #define F_MESSAGE               "/feature/message.lpc"

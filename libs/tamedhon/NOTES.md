@@ -30,3 +30,8 @@
 - **`lpcc` 编译与 `lpc_warnings.py`**：14 个活跃 FluffOS 文件全部 `PASS`，0 warning / 0 error（其余 `/d/`、`/obj/`、`/p/`、`/secure/`、`/spellbooks/`、`/std/`、`/doc/`、`/room/death/`、`/room/netztot` 及 `*_ldmud.lpc` 为保留的 LDMud 源码）。
 - **原生驱动实测（临时拷贝 `/home/sunyc/.cache/lpc-scratch/tamedhon-live`，端口 `40498`）**：注册 `testera` → 落点 Abenteurergilde → `lies liste` / `rieche` / `unt drachenkopf` → Kreuzung → `lies wegweiser` → Lehrlingsbude → MKZ → `druecke 1` → `gott` workroom → Kittchen → `sag hallo` → Debugraum → `umlegen` → Anderswelt → `welt` 回公会 → `score` / `quit` 持久化 → 冷重连密码验证通过；`log/debug.log`、`catch`、`runtime`、`compile` 均为空。
 - **WASM 实测**：`node scripts/wasm_client.js /home/sunyc/src/fluffos/build-wasm/src libs/tamedhon` 注册 `testerw` → 浏览 `WELCOME.localhost` 横幅与 `mudlibs.fluffos.info` 戳记 → `lies liste` → Kreuzung → Lehrlingsbude → Kreuzung → `score` → `quit` 全流程通过。
+
+## 单行 `#define` 字符串未闭合修复（2026-11-20，KB 04 §6.33）
+
+- 修复 `/obj/tools/astralschwert.h:8` 中 `#define ESC "\x1b` 缺少闭合 `"`，补全闭合引号并保留原 LF 行尾（保留其余 LDMud 归档源码不变）。
+- 验证：`lpc_format_changed.py --apply` 13/13 头文件零重排；`lpcc_eval.py` 验证通过（`wxddym` `/adm/daemons/skillsd1` 加载正常、`xkxc98sj`/`xkxz2` `F_ITEMMAKE` 由 `--head` 语法错误转为 `"/feature/itemmake.lpc"`、`kxkj`/`kxkj1`/`kxkjii2` `PANTS`、`fengyun434`/`fysjmb`/`xsfyssjb` `ansi4.h`、`wuhanzhan` `ansi1.h` 及 `silberland` `PMMASTER` 均通过）；`scripts/lint.py`（新增规则 #86 `unclosed-define-string`）`13/13` `HEAD` 正例与工作树/`silberland/work/sys/terminal.h` 反例单测通过，全库 `--all` 与 `--fast` 均 `0` 错误 `0` 告警；`13/13` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47531..47543`）全部正常且 `ZERO_DRIVERS`。

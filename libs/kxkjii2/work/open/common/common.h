@@ -24,7 +24,7 @@
 #define MBOOTS		COMMON_OBJ"mboots"
 #define SCARF		COMMON_OBJ"scarf"
 #define CLOTH		COMMON_OBJ"cloth"
-#define PANTS		COMMON_OBJ"pants""
+#define PANTS		COMMON_OBJ"pants"
 // 新娘的礼服
 #define GBOOTS		COMMON_OBJ"gboots"
 #define LACE		COMMON_OBJ"lace"

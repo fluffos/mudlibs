@@ -7,7 +7,7 @@
 //
 //   The standard set of ANSI codes for mudlib use.
  
-#define ESC   "
+#define ESC   "\x1b"
 #define CSI   ESC + "["
  
                 /*  Foreground Colors  */

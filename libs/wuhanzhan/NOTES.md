@@ -1208,3 +1208,8 @@ pristine + build-debug，port 40052。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/d/death/npc/yanluowang.lpc`、`/d/obj/fabao/EXAMPLE.lpc`、`/d/obj/fabao/huntian-ling.lpc`、`/d/obj/fabao/kunxian-suo.lpc`、`/d/qujing/firemount/xiaomiao.lpc` 等共 `8` 个文件 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 单行 `#define` 字符串未闭合修复（2026-11-20，KB 04 §6.33）
+
+- 修复 `/include/ansi1.h:10` 中 `#define ESC "\x1b` 缺少闭合 `"`（对照 `include/ansi.h`），补全闭合引号并保留原 LF 行尾。
+- 验证：`lpc_format_changed.py --apply` 13/13 头文件零重排；`lpcc_eval.py` 验证通过（`wxddym` `/adm/daemons/skillsd1` 加载正常、`xkxc98sj`/`xkxz2` `F_ITEMMAKE` 由 `--head` 语法错误转为 `"/feature/itemmake.lpc"`、`kxkj`/`kxkj1`/`kxkjii2` `PANTS`、`fengyun434`/`fysjmb`/`xsfyssjb` `ansi4.h`、`wuhanzhan` `ansi1.h` 及 `silberland` `PMMASTER` 均通过）；`scripts/lint.py`（新增规则 #86 `unclosed-define-string`）`13/13` `HEAD` 正例与工作树/`silberland/work/sys/terminal.h` 反例单测通过，全库 `--all` 与 `--fast` 均 `0` 错误 `0` 告警；`13/13` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47531..47543`）全部正常且 `ZERO_DRIVERS`。

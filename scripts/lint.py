@@ -132,6 +132,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("include-dir-macro", "file", "KB 06 §7.410", "error", "C preprocessor #include __DIR__ / #include __DIR_ directive fails in FluffOS"),
     RuleSpec("top-level-create-family", "file", "KB 06 §7.411", "error", "create_family() statement placed outside function braces after create()"),
     RuleSpec("one-arg-set", "file", "KB 06 §7.414", "error", "1-argument set(\"k\") / set_temp(\"k\") (data=0) or missing-value set(\"k\",) against ES2 F_DBASE"),
+    RuleSpec("unclosed-define-string", "file", "KB 04 §6.33", "error", "Single-line #define macro carrying an unclosed string literal"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -205,6 +206,58 @@ BLANK_SET_TEMPLATES = frozenset({
     "/d/eastland/yogor/weapon/example.lpc",
     "/d/city/capital/npc/stdnpc.lpc",
 })
+DEFINE_LINE_RE = re.compile(rb"^[ \t]*#[ \t]*define[ \t]+")
+
+
+def _find_unclosed_define_string(b: bytes) -> int | None:
+    """Return 1-based line number of first single-line #define with an unclosed string, else None."""
+    mk = code_mask(b, heredoc=True)
+    off = 0
+    for lno, raw_line in enumerate(b.split(b"\n"), 1):
+        line_len = len(raw_line)
+        line = raw_line[:-1] if raw_line.endswith(b"\r") else raw_line
+        if mk[off:off + 1] == b"\x01" and b'"' in line and DEFINE_LINE_RE.match(line):
+            if not line.endswith(b"\\"):
+                i = 0
+                n = len(line)
+                in_str = False
+                in_chr = False
+                while i < n:
+                    ch = line[i]
+                    if not in_str and not in_chr:
+                        if ch == 47 and i + 1 < n and line[i + 1] == 47:  # //
+                            break
+                        if ch == 47 and i + 1 < n and line[i + 1] == 42:  # /*
+                            j = line.find(b"*/", i + 2)
+                            if j < 0:
+                                break
+                            i = j + 2
+                            continue
+                        if ch == 39:  # '
+                            in_chr = True
+                            i += 1
+                            continue
+                        if ch == 34:  # "
+                            in_str = True
+                            i += 1
+                            continue
+                    elif in_chr:
+                        if ch == 92 and i + 1 < n:
+                            i += 2
+                            continue
+                        if ch == 39:
+                            in_chr = False
+                    elif in_str:
+                        if ch == 92 and i + 1 < n:
+                            i += 2
+                            continue
+                        if ch == 34:
+                            in_str = False
+                    i += 1
+                if in_str:
+                    return lno
+        off += line_len + 1
+    return None
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
@@ -613,6 +666,11 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
                 ln = b.count(b"\n", 0, m.start()) + 1
                 hits.append(("one-arg-set", f"{path}:{ln}", f"`{m.group(0).decode('latin-1', 'replace').strip()}` omits value arg (sets 0 / compile error)"))
                 break
+
+    if want("unclosed-define-string") and b"#define" in b and b'"' in b:
+        uln = _find_unclosed_define_string(b)
+        if uln is not None:
+            hits.append(("unclosed-define-string", f"{path}:{uln}", "#define macro carries an unclosed string literal"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

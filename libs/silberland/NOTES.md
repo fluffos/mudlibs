@@ -21,3 +21,8 @@
 - `lpcc libs/silberland/config.fluffos --batch`：全部 23 个活跃对象（5 个 `catalog` 对象 + 18 个房间）零警告一次通过；提交后使用 `scripts/lpc_warnings.py silberland` 限定覆盖该 23 个活跃 `.lpc` 文件校验零诊断。
 - 原生端测试（临时副本端口 `40494`）：`gast` 登录检验 `/etc/WELCOME` 与 `mudlibs.fluffos.info` 标记，`status`/`help` 并走通全部 17 个可通行房间及闭环折返；注册新角色 `testera`（`/data/t/testera.o`）、冷重启驱动后成功复登并 `quit` 存档；`log/{debug.log,catch,runtime,compile}` 均为零错误。
 - WASM 端测试（`scripts/wasm_client.js`）：`testerw` 注册并遍历 Midas 城房间与阅读物品、存档退出全程无异常。已通过 `scripts/gen_keep_dirs.py --merge silberland` 合并运行空目录清单。
+
+## 单行 `#define` 字符串未闭合修复（2026-11-20，KB 04 §6.33）
+
+- 修复 `/gilden/piratenmeute/pm.h:31,33` 中 `DO_LOG_EINAUS(x)` 遗漏 `"yondala/pm_io.log"` 起始引号及 `DO_LOG_PUB_TRY(x)` 末尾 `"\n"` 遗漏起始引号，补全两处引号并保留原 CRLF 行尾（核实 `sys/terminal.h` 含字面 `\r` 的宏实已闭合）。
+- 验证：`lpc_format_changed.py --apply` 13/13 头文件零重排；`lpcc_eval.py` 验证通过（`wxddym` `/adm/daemons/skillsd1` 加载正常、`xkxc98sj`/`xkxz2` `F_ITEMMAKE` 由 `--head` 语法错误转为 `"/feature/itemmake.lpc"`、`kxkj`/`kxkj1`/`kxkjii2` `PANTS`、`fengyun434`/`fysjmb`/`xsfyssjb` `ansi4.h`、`wuhanzhan` `ansi1.h` 及 `silberland` `PMMASTER` 均通过）；`scripts/lint.py`（新增规则 #86 `unclosed-define-string`）`13/13` `HEAD` 正例与工作树/`silberland/work/sys/terminal.h` 反例单测通过，全库 `--all` 与 `--fast` 均 `0` 错误 `0` 告警；`13/13` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47531..47543`）全部正常且 `ZERO_DRIVERS`。
