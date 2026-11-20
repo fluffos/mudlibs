@@ -157,7 +157,7 @@ void playing(object me)
 	{
 		message_vision(CYN"箫声忽停，四下阒无声息，一音袅袅，曲终音歇。\n"NOR, me);
 		me->delete_temp("apply/short");
-		me->set_temp("delete/playing");
+		me->delete_temp("playing");
 		me->delete_temp("played_times");
 		me->delete_temp("playing_bihai");
 		me->delete_temp("exercise/playing");
@@ -171,7 +171,7 @@ void playing(object me)
 	{
 		message_vision(CYN"$N手中无箫，箫声顿停。\n"NOR, me);
 		me->delete_temp("apply/short");
-		me->set_temp("delete/playing");
+		me->delete_temp("playing");
 		me->delete_temp("played_times");
 		me->delete_temp("playing_bihai");
 		me->delete_temp("exercise/playing");
@@ -186,7 +186,7 @@ void playing(object me)
 			tell_object(me,"你的内力不足以继续吹奏碧海潮生曲了。\n");
 		message_vision(CYN"箫声忽停，四下阒无声息，一音袅袅，曲终音歇。\n"NOR, me);
 		me->delete_temp("apply/short");
-		me->set_temp("delete/playing");
+		me->delete_temp("playing");
 		me->delete_temp("played_times");
 		me->delete_temp("playing_bihai");
 		me->delete_temp("exercise/playing");
@@ -203,7 +203,7 @@ void playing(object me)
 	if(k < 1 && !environment(me)->query("no_fight")) {
 		tell_object(me,CYN"四下并无敌人，无需再吹奏碧海潮生曲了。\n"NOR);
 		me->delete_temp("apply/short");
-		me->set_temp("delete/playing");
+		me->delete_temp("playing");
 		me->delete_temp("played_times");
 		me->delete_temp("playing_bihai");
 		me->delete_temp("exercise/playing");
@@ -363,7 +363,7 @@ int halt_play()
 	if(me->query_temp("exercise/playing")) {
 	message_vision(CYN"箫声忽停，四下阒无声息，一音袅袅，曲终音歇。\n"NOR, me);
 	me->delete_temp("apply/short");
-	me->set_temp("delete/playing");
+	me->delete_temp("playing");
 	me->delete_temp("played_times");
 	me->delete_temp("playing_bihai");
 	me->delete_temp("exercise/playing");

@@ -760,3 +760,8 @@ pristine + build-debug，port 40098。`scripts/play_login.py` 注册。
 - 补全 `int level, i;` 与 `object guai;`，改用 `i < this_object()->query("npc_number")` 与 `new("/d/quest/mofeng/npc/stey/guai")` 并增加 `objectp(guai)` 保护（保留原 LF 与 `lpc_format_changed` 排版风格）。
 - 同类死循环扩展清理：`d/hellfire/hellfire1/` 下共 `69` 间地狱房间（三馆合计 `163` 份）的 `reset()` 亦含同一 `for (i = 0; this_object()->query("npc_number"); i++)` 无上界循环，统一改为 `i < this_object()->query("npc_number")`。
 - 验证：`--head` `lpcc_eval.py` 编译失败，修复后三馆 `mofengroom->setup2()`（`npc_number=2`）均精确刷出 `2` 只怪且 `d/hellfire/hellfire1/bing1->reset()` 均正常返回；`lpc_format_changed.py --apply` 检查全批 `167` 文件零错误；`scripts/lint.py`（新增 `undeclared-for-i-loop` 共 `80` 条规则）全库与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 启停正常且无残留驱动。
+
+## ES2 `F_DBASE` 单参 `set("`/`set_temp("` 与悬空逗号修复（2026-11-20，KB 06 §7.414）
+
+- 修复 `/cmds/eld/helpnew.lpc`、`/d/death/npc/yanluowang.lpc`、`/d/jz/obj/yugan.lpc`、`/d/milin/qy/scc.lpc`、`/d/obj/fabao/kunxian-suo.lpc` 等共 `11` 个文件 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
+- 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

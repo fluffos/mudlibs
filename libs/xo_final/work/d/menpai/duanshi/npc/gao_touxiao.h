@@ -59,7 +59,7 @@ int do_accept_me()
                     command("say “我替王爷收下你了！你可凭我的令牌找四大卫护学功夫，担任卫士一职。”");
                     obj = new(__DIR__"obj/lingpai");
                     obj->move(me);
-                    me->set_temp("marks/段/拿到令牌");
+                    me->set_temp("marks/段/拿到令牌", 1);
                     message_vision("$N交给$n一块令牌。\n",this_object(), me);
                 }
                 else

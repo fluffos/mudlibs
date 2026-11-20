@@ -466,7 +466,7 @@ int do_baoming()
 
 		message_vision("主持人说： 好，现在$N是擂主！\n", me);
 		delete_temp("no_challenger");
-		me->set("bwdh/fighting");
+		me->set("bwdh/fighting", 1);
 		let(me->query("id") + " play " + me->query("id"));
 		remove_call_out("auto_check");
 		call_out("auto_check",30);
@@ -486,7 +486,7 @@ int do_baoming()
 	call_out("start",30,host,challenger);
 
 	message_vision("主持人说： 好，$N许参加比赛！\n", me);
-	me->set("bwdh/fighting");
+	me->set("bwdh/fighting", 1);
 	let(me->query("id") + " play " + me->query("id"));
 
 	return 1;

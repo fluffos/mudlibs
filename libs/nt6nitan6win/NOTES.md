@@ -873,3 +873,8 @@ pristine + build-debug，port 40187。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/paiming_d.lpc` 引用了未定义的 `MISC_DIR` 宏导致编译报错 `syntax error, unexpected L_STRING`（见 `nitan6/log/log`）：对照 `wxddym` 及已有的 `data/topten` 目录补充 `#define MISC_DIR "/data/topten/"`，将未定义的 `clr_ansi(out)` 替换为 Nitan7 自带 `remove_ansi(out)`，把 `void add_to_top_rich()` 内 3 处 `return 0;` 改为 `return;`，并在 `init_dirs_and_args()` 为空的 `dirs` 补充 `!sizeof(dirs)` 与 `|| ({})` 防护；同步将 `/d/kongdong/fengkou.lpc:23` 未定义宏 `MISC_DIR "killer"` 修正为 `"/clone/npc/killer"`（实测载入 `"峰口"` 及杀手 NPC 通过）。
 - 验证：`lpcc_eval.py` 对比 `--head` 编译报错 → `6/6` 馆全部零警告零错误载入通过（`p=1 sort=0 save="/data/paiming_d"`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `undefined-misc-dir` 规则，共 `84` 条规则）与 `--fast` 零错误。
+
+## ES2 `F_DBASE` 单参 `set("`/`set_temp("` 与悬空逗号修复（2026-11-20，KB 06 §7.414）
+
+- 修复 `/d/beijing/npc/yucongma.lpc`、`/d/city/npc/qiuhaoshi.lpc`、`/d/gaibang/obj/qingzhu-ling.lpc`、`/d/taohua/obj/flute.h`、`/kungfu/class/gaibang/obj/gb_songxin.lpc` 等共 `10` 个文件 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
+- 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

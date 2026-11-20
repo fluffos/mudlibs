@@ -781,3 +781,8 @@ pristine + build-debug，port 40091。`scripts/play_login.py` 注册。
 
 - 扩展 `scripts/lpc_fix_perform_weapon.py` 扫描 `daemon/perform/`，为 `10` 个未判空直接解引用 `me->query_temp("weapon")` 的绝招（含手工修补 `assassin/longfenghuan/longfengshuangfei.lpc` 与 `jinqian/longfenghuan/longfengshuangfei.lpc` 补全 `objectp(weapon)` 检查并修正遗留 `me->add("apply/damage", 100)` 泄漏为 `me->add_temp("apply/damage", -100)`）补全徒手防护。
 - 验证：`fy2` 代表实测 `duxin`/`longfengshuangfei` 徒手 `perform(me, tgt)` 从 `--head` `*Bad argument 1 to EFUN call_other()` 转为 `err=0`；全 `10` 文件差分 `lpcc` 零回归，`lpc_format_changed.py`、`scripts/lint.py --files` 与 `play_boot.sh`+`play_stop.sh` 均通过。
+
+## ES2 `F_DBASE` 单参 `set("`/`set_temp("` 与悬空逗号修复（2026-11-20，KB 06 §7.414）
+
+- 修复 `/feature/dealer.lpc` 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
+- 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

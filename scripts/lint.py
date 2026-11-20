@@ -131,6 +131,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("undeclared-for-i-loop", "file", "KB 06 §7.409", "error", "Non-advancing `for (i = 0; obj->query(...); i++)` loop, undeclared `for (i = sizeof(ob)...)` loop var, or dead `(: goaway :)` pointer"),
     RuleSpec("include-dir-macro", "file", "KB 06 §7.410", "error", "C preprocessor #include __DIR__ / #include __DIR_ directive fails in FluffOS"),
     RuleSpec("top-level-create-family", "file", "KB 06 §7.411", "error", "create_family() statement placed outside function braces after create()"),
+    RuleSpec("one-arg-set", "file", "KB 06 §7.414", "error", "1-argument set(\"k\") / set_temp(\"k\") (data=0) or missing-value set(\"k\",) against ES2 F_DBASE"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -197,6 +198,13 @@ UNQUOTED_SET_STR_PAT = re.compile(
 )
 MOFENG_LOOP_PAT = re.compile(rb'\bfor\s*\(\s*[A-Za-z_]\w*\s*=\s*0\s*;\s*this_object\s*\(\s*\)\s*->\s*query\s*\(')
 DEAD_GOAWAY_PAT = re.compile(rb'\(\s*:\s*goaway\s*:\s*\)')
+ONE_ARG_SET_PAT = re.compile(rb'\bset(?:_temp)?\s*\(\s*"[^"\n]+"\s*(,?)\s*\)\s*;')
+ES1_SET_CLEAR_SLUGS = frozenset({"es1", "es1_win", "esI", "tmi2"})
+BLANK_SET_TEMPLATES = frozenset({
+    "/d/eastland/yogor/armor/example.lpc",
+    "/d/eastland/yogor/weapon/example.lpc",
+    "/d/city/capital/npc/stdnpc.lpc",
+})
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
@@ -591,6 +599,19 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             if cb[:m.start()].count(b"{") - cb[:m.start()].count(b"}") <= 0:
                 ln = b.count(b"\n", 0, m.start()) + 1
                 hits.append(("top-level-create-family", f"{path}:{ln}", "create_family() statement outside any function body"))
+                break
+
+    if want("one-arg-set") and (b"set(" in b or b"set_temp(" in b) and ONE_ARG_SET_PAT.search(b):
+        if rel not in BLANK_SET_TEMPLATES:
+            mk = code_mask(b, heredoc=True)
+            for m in ONE_ARG_SET_PAT.finditer(b):
+                if not mk[m.start()]:
+                    continue
+                has_comma = bool(m.group(1))
+                if not has_comma and (slug in ES1_SET_CLEAR_SLUGS or not ctx["has_es2_dbase"]):
+                    continue
+                ln = b.count(b"\n", 0, m.start()) + 1
+                hits.append(("one-arg-set", f"{path}:{ln}", f"`{m.group(0).decode('latin-1', 'replace').strip()}` omits value arg (sets 0 / compile error)"))
                 break
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
@@ -1238,6 +1259,11 @@ def _run_file_batch(col: LintCollector, paths: list[str], metas: dict[str, dict]
             slug_ctx[slug] = {
                 "active": _is_active_vendored(slug, metas, gitlinks),
                 "has_embed_h": os.path.isfile(f"{REPO}/libs/{slug}/work/inherit/item/embed.h"),
+                "has_es2_dbase": (
+                    os.path.isfile(f"{REPO}/libs/{slug}/work/feature/dbase.lpc")
+                    or os.path.isfile(f"{REPO}/libs/{slug}/work/inherit/dbase.lpc")
+                    or os.path.isfile(f"{REPO}/libs/{slug}/work/include/dbase.h")
+                ),
                 "sefun_wraps_rf": _sefun_wraps_read_file(slug),
                 "uses_obj_money": moneyfix.taken(slug),
                 "throwing_has_combined": _throwing_inherits_combined(slug),

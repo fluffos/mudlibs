@@ -587,3 +587,8 @@ pristine + build-debug（归档端口 40157，临时测试端口 49660）。`scr
 
 - 续查全语料无定义 `call_other` 调用（静默返回 `0`），修正 `/d/shulin/lin8.lpc`、`/d/shulin/valley.lpc`、`/d/qujing/baigudong/sanchakou.lpc`（共 `3` 个文件） 中的 `->recieve_damage`/`->recieve_wound`/`->recieve_curing`/`->delte_temp`/`->delet_temp`/`->settemp`/`->se_temp`/`->stat_busy`/`->query_skil`/`->quert_skill`/`->queyr_skill` 拼写错误为标准方法名（保留原文件行尾）。
 - 验证：全批 `359` 文件中 `321` 个 `.lpc` 差分编译通过 `313/321`（`8` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表实测通过（`bxsj` `recieve_damage=100 -> receive_damage=60`，`tybxjh` `delet_temp=1 -> delete_temp=0`）；`scripts/lint.py`（新增 `call-method-typo`，共 `70` 条规则）全库与 `--fast` 零错误零告警；`8` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+
+## ES2 `F_DBASE` 单参 `set("`/`set_temp("` 与悬空逗号修复（2026-11-20，KB 06 §7.414）
+
+- 修复 `/d/death/npc/yanluowang.lpc`、`/d/jz/obj/yugan.lpc`、`/d/obj/fabao/huntian-ling.lpc`、`/d/obj/fabao/kunxian-suo.lpc`、`/d/qujing/firemount/xiaomiao.lpc` 等共 `8` 个文件 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
+- 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

@@ -55,7 +55,7 @@ string ask_piao()
 	obj = new("/d/shaolin/obj/piao");
 	obj->move(me);
 	message_vision("$n给$N一个水瓢。\n",me, ob);
-	me->set_temp("piao_asked");
+	me->set_temp("piao_asked", 1);
 	return "记得用完后还回来啊。";
 	
 	

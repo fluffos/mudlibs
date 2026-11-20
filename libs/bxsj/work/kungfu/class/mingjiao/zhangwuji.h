@@ -56,7 +56,7 @@ string ask_qishang()
 		return "咦，义父不是已经把七伤拳的拳理教了你吗？\n";
 	if(me->query_temp("marks/七伤"))
 		return "咦，我不是叫你出海去拜访我义父谢狮王了吗？\n";
-	me->set("luopan/bhd");
+	me->set("luopan/bhd", 1);
 	me->set_temp("marks/七伤",1);
 	command("hmm");
 	command("whisper "+me->query("id")+" 我义父在极北冰火岛上，大概位于黄道带以北九百五十、以东二百个距离的地方。");

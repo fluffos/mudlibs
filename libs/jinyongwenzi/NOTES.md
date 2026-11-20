@@ -1132,3 +1132,8 @@ pristine + build-debug，port 40083。`scripts/play_login.py` 注册并执行 `l
 
 - `/d/wudang/taoyuan/tyroad{4,5,6,7}.lpc` 第 6 行 `#include __DIR_"feng.h"` 因预处理器写法与原档缺失 `feng.h` 双重原因触发 `Bad #include directive`；比照同族做法注释掉缺失的 `#include __DIR_"feng.h"` 及对应 `look_feng` 引用（`"feng": (: look_feng :),` 与 `init()` 中的 `add_action("look_feng", "look")`），避免伪造缺失文件并恢复房间编译加载。
 - 验证：`lpcc_eval.py` 实测 `tyroad4..7` 全部编译加载通过（`ZZT 1 1 1 1 "山路"`），`lpc_format_changed.py --apply` 零重排，`scripts/lint.py`（新增 `include-dir-macro` 规则，共 `81` 条规则）全库零错误。
+
+## ES2 `F_DBASE` 单参 `set("`/`set_temp("` 与悬空逗号修复（2026-11-20，KB 06 §7.414）
+
+- 修复 `/kungfu/class/mingjiao/zhangwuji.h`、`/kungfu/condition/dali_xuncheng.lpc`、`/kungfu/condition/hostage1.lpc`、`/kungfu/condition/hostage2.lpc`、`/kungfu/condition/hostage3.lpc`、`/kungfu/skill/xianglong-zhang/jueji1.lpc` 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
+- 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
