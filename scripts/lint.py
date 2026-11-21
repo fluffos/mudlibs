@@ -114,6 +114,8 @@ RULES: list[RuleSpec] = [
     RuleSpec("cmd-callout-this-player", "targeted", "KB 06 §7.395", "error", "Shared /cmds/ call_out callback invoking this_player() (0 in timer context)"),
     RuleSpec("skill-sanshen-del-perform", "targeted", "KB 06 §7.396", "error", "kungfu/skill/fanliangyi-dao/sanshen.lpc scheduling del_perform without defining void del_perform(object me)"),
     RuleSpec("skill-dead-callout", "targeted", "KB 06 §7.400", "error", "Skill/daemon call_out scheduling undefined destruct_me/remove_effect/perform2/perform_jiaoyang/perform_qiao"),
+    RuleSpec("semote-local-functional", "targeted", "KB 04 §6.45", "error", "cmds/std/semote.lpc functional indexing local mapping `emotion_sort[$1]` without `$(emotion_sort)`"),
+    RuleSpec("rpp-self-corrupted", "targeted", "KB 04 §6.45", "error", "cmds/adm/{rp,rpp}.lpc self-corrupted by running dbase converter over its own source"),
     # Per-file corpus checks (all error in --changed/--files/--strict; configurable in --all)
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
     RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
@@ -1381,7 +1383,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1454,6 +1456,10 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["btsnake"].append(item)
         if rel in ("/adm/daemons/paiming_d.lpc", "/d/kongdong/fengkou.lpc"):
             targeted_bins["miscdir_cand"].append(item)
+        if rel == "/cmds/std/semote.lpc":
+            targeted_bins["semote"].append(item)
+        if rel in ("/cmds/adm/rp.lpc", "/cmds/adm/rpp.lpc"):
+            targeted_bins["rpadm"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -1618,9 +1624,31 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
     if col.wants("mr-dizi-duplicate-inherit"):
         for slug, p, rel in targeted_bins["mrdizi"]:
             job_p = f"{REPO}/libs/{slug}/work{os.path.dirname(rel)}/job-dizi.lpc"
-            if os.path.isfile(job_p) and re.search(rb'(?m)^[ \t]*inherit\s+NPC\s*;', open(f"{REPO}/{p}", "rb").read()):
-                if re.search(rb'(?m)^[ \t]*inherit\s+NPC\s*;', open(job_p, "rb").read()):
-                    col.add("mr-dizi-duplicate-inherit", p, "inherit NPC; in dizi.lpc duplicates job-dizi.lpc inherit and breaks compilation")
+            if os.path.isfile(job_p):
+                dizi_b = open(f"{REPO}/{p}", "rb").read()
+                job_b = open(job_p, "rb").read()
+                if re.search(rb'(?m)^[ \t]*inherit\s+NPC\s*;', job_b):
+                    if re.search(rb'(?m)^[ \t]*inherit\s+NPC\s*;', dizi_b):
+                        col.add("mr-dizi-duplicate-inherit", p, "inherit NPC; in dizi.lpc duplicates job-dizi.lpc inherit and breaks compilation")
+                    elif re.search(rb'(?m)^[ \t]*mapping\s+(?:skills|learned)\s*;', dizi_b):
+                        col.add("mr-dizi-duplicate-inherit", p, "mapping skills/learned in dizi.lpc redeclares globals inherited from F_SKILL via job-dizi.lpc")
+
+    if col.wants("semote-local-functional"):
+        for _, p, _ in targeted_bins["semote"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"emotion_sort[$1]" in b:
+                mk = code_mask(b, heredoc=True)
+                for m in re.finditer(rb'\bemotion_sort\[\$1\]', b):
+                    if mk[m.start()]:
+                        ln = b.count(b"\n", 0, m.start()) + 1
+                        col.add("semote-local-functional", f"{p}:{ln}", "local mapping `emotion_sort` indexed in functional without `$(emotion_sort)`")
+                        break
+
+    if col.wants("rpp-self-corrupted"):
+        for _, p, _ in targeted_bins["rpadm"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b'strsrch(str,query(", ")' in b or b'set(%s, %s, if(' in b:
+                col.add("rpp-self-corrupted", p, "rp/rpp.lpc source self-corrupted by dbase rewrite (`query(\", \"` / `set(%s, %s, if(`)")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

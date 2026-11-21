@@ -1,3 +1,4 @@
+#ifndef __MAN_CUSTOM_HOOKS__
 int do_walk() {
   string name;
   object ob;
@@ -51,7 +52,7 @@ void fighting(object ob) {
   fight_ob(ob);
 }
 
-int kill_ob(object ob) {
+void kill_ob(object ob) {
   //解决halt后不战斗的问题
   ob->set_temp("tasknpc", 1);
   command("fear");
@@ -76,6 +77,7 @@ int kill_ob(object ob) {
   }
 
 }
+#endif
 
 mapping *dizhia = ({
 

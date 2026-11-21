@@ -1265,3 +1265,9 @@ pristine + build-debug（归档端口 `40106`，测试端口 `49106`）。`scrip
 
 - 修复 `/d/dragon/outlet.lpc` `@LONG` 文本块末行 `突然无数棵参天大树中出现了一条小径，似乎是出口！LONG);` 未换行导致 `End of file in text block` 编译失败（对照 `chidi`/`ffxymud`/`jhfy2` 拆出独立行首 `LONG`）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `34` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `34/34` 目标（`es1_win` 3、`esI` 2、`njhhdxdes2hx`、`yhyxcs`、`yxxcii` 及 `23` 馆 `26` 份 `outlet.lpc`）全部由 `--head` `End of file in text block`/`*No program` 转为干净加载 `PASS`（`ok=1`）；`scripts/lint.py`（新增规则 #101 `unclosed-heredoc`，`KB 04 §6.44`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`es1_win`/`esI`/`hhsj`/`nitan6`/`njhhdxdes2hx`/`nt1`/`shenmo`/`wxddym`/`yhyxcs`/`yxxcii`，端口 `47521..47530`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-21 `semote.lpc` 局部映射闭包与 `hsgm-blade.lpc` 错位引号修复（KB 04 §6.45）
+
+- 修复 `/cmds/std/semote.lpc` 第 `56` 行 `#else` 分支 `sort_array(emotions, (: emotion_sort[$1] > emotion_sort[$2] ? -1 : 1 :))` 捕获局部映射未写 `$(emotion_sort)` 导致 `Illegal to use local variable in functional.` 编译失败（与 `nitan6` 对齐补成 `$(emotion_sort)[$1]`/`$(emotion_sort)[$2]`）。
+- 修复 `/kungfu/skill/hsgm-blade.lpc` 第 `118` 行 `悟透"` 误写为 ASCII 双引号而截断字符串（引发 `Illegal character 0xe6`），改为中文前引号 `“` 与第 `119` 行 `”` 配对。
+- 验证：`lpc_format_changed.py --apply` 零重排、`lpcc_eval.py` 实测 `/cmds/std/semote` 与 `/kungfu/skill/hsgm-blade` 均由 `--head` 编译报错转为干净加载 `PASS`、`scripts/lint.py`（新增规则 #102 `semote-local-functional`）与 `--fast` 零错误零告警、`play_boot.sh`+`play_stop.sh`（端口 `47531`）启动正常且 `ZERO_DRIVERS`。

@@ -903,3 +903,9 @@ pristine + build-debug，归档端口 40190。`scripts/play_login.py`（port 491
 
 - 修复 `/d/dragon/outlet.lpc` `@LONG` 文本块末行 `突然无数棵参天大树中出现了一条小径，似乎是出口！LONG);` 未换行导致 `End of file in text block` 编译失败（对照 `chidi`/`ffxymud`/`jhfy2` 拆出独立行首 `LONG`）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `34` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `34/34` 目标（`es1_win` 3、`esI` 2、`njhhdxdes2hx`、`yhyxcs`、`yxxcii` 及 `23` 馆 `26` 份 `outlet.lpc`）全部由 `--head` `End of file in text block`/`*No program` 转为干净加载 `PASS`（`ok=1`）；`scripts/lint.py`（新增规则 #101 `unclosed-heredoc`，`KB 04 §6.44`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`es1_win`/`esI`/`hhsj`/`nitan6`/`njhhdxdes2hx`/`nt1`/`shenmo`/`wxddym`/`yhyxcs`/`yxxcii`，端口 `47521..47530`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-21 `semote.lpc`、`hsgm-blade.lpc` 与 `cmds/adm/{rp,rpp}.lpc` 编译及告警修复（KB 04 §6.45）
+
+- 修复 `/cmds/std/semote.lpc` 第 `56` 行 `#else` 分支局部映射 `emotion_sort` 缺少 `$(emotion_sort)` 捕获导致 `Illegal to use local variable in functional.` 编译失败；修复 `/kungfu/skill/hsgm-blade.lpc` 第 `118` 行 `悟透"` 误用 ASCII 双引号导致的 `Illegal character 0xe6` 编译失败（改为 `“`）。
+- 从同源 `hhsj` 完整还原被 `rpp` 自身脚本二次替换损坏的 `/cmds/adm/rp.lpc` 与 `/cmds/adm/rpp.lpc`（清除 `query(", "`、`set(%s, %s, if(` 与多余 `"addn("` 导致的 `syntax error, unexpected L_CONTINUE` 与未使用局部变量告警，保留 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 实测上述 `4` 文件全部干净加载 `PASS`；`scripts/lpc_warnings.py xfbhh` 全库复扫可编译文件增至 `23,462` 份、上述 `4` 文件零报错零告警（总警告由 `11` 条降至仅 `/clone/d.lpc` 与 `/u/modao2/eval_modao2.lpc` 的 `5` 条）；`scripts/lint.py`（新增规则 #102 `semote-local-functional`、#103 `rpp-self-corrupted`）与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh`（端口 `47532`）启动正常且 `ZERO_DRIVERS`。
