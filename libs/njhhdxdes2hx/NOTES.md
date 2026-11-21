@@ -521,3 +521,8 @@ pristine + build-debug，归档端口 40194。`scripts/play_login.py` 注册并�
 
 - 修复 `/d/suzhou/npc/szroad11.lpc` 第 `11` 行 `@LONG` 文本块缺失行首 `LONG` 结束标记导致的 `End of file in text block` 编译阻断。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `34` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `34/34` 目标（`es1_win` 3、`esI` 2、`njhhdxdes2hx`、`yhyxcs`、`yxxcii` 及 `23` 馆 `26` 份 `outlet.lpc`）全部由 `--head` `End of file in text block`/`*No program` 转为干净加载 `PASS`（`ok=1`）；`scripts/lint.py`（新增规则 #101 `unclosed-heredoc`，`KB 04 §6.44`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`es1_win`/`esI`/`hhsj`/`nitan6`/`njhhdxdes2hx`/`nt1`/`shenmo`/`wxddym`/`yhyxcs`/`yxxcii`，端口 `47521..47530`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-21 同行相邻 LPC 函数调用缺少分号 `;` 与连带缺号截断修复（KB 04 §6.48）
+
+- 修复 `/d/snow/npc/poster.lpc:12` 中 `set("age", 28) set("long", ...` 缺少分号导致的编译阻断（保留 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。

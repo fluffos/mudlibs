@@ -153,6 +153,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("unclosed-heredoc", "file", "KB 04 §6.44", "error", "Unclosed `@MARKER` heredoc lacking a column-0 `MARKER` terminator (`End of file in text block`)"),
     RuleSpec("unbalanced-if-ctrl", "file", "KB 04 §6.46", "error", "Single-line `if (...) return/continue/break;` missing closing `)` before control statement"),
     RuleSpec("malformed-query-args", "file", "KB 06 §7.416", "error", "Nitan7 `ob->query()`-converter malformed `query()`/`query_temp()` call (3+ args, hoisted `2 && obj`, or unquoted DB_STR splice)"),
+    RuleSpec("missing-call-semicolon", "file", "KB 04 §6.48", "error", "Missing `;` between adjacent LPC statement calls (`f(...) g(...)`)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -701,6 +702,85 @@ def _find_malformed_query_args(b: bytes) -> tuple[int, str] | None:
     return None
 
 
+_CALL_SEMI_RHS = (
+    rb"(?:add_money|add_action|apply_condition|carry_object|command|create_family|delete_temp|"
+    rb"destruct|init_(?:axe|blade|dagger|fork|hammer|spear|staff|stick|sword|whip)|"
+    rb"map_skill|message_vision|move|prepare_skill|reset_action|set|set_amount|"
+    rb"set_heart_beat|set_name|set_skill|set_temp|set_weight|seteuid|setup|"
+    rb"start_busy|tell_object|tell_room|unwield|wear|wield|write)"
+)
+MISSING_CALL_SEMI_RE = re.compile(rb"\)[ \t]+" + _CALL_SEMI_RHS + rb"\s*\(")
+_CALL_SEMI_CTL = frozenset({
+    b"if", b"while", b"for", b"switch", b"catch", b"return", b"foreach",
+    b"sizeof", b"typeof", b"defined", b"stringp", b"intp", b"objectp",
+    b"mapp", b"arrayp", b"undefinedp", b"floatp", b"functionp", b"bufferp", b"nullp",
+})
+_CALL_SEMI_IDENT_RE = re.compile(rb"\b([A-Za-z_][A-Za-z0-9_]*)$")
+
+
+def _find_missing_call_semicolon(b: bytes) -> int | None:
+    """Return 1-based line number of adjacent LPC statement calls missing `;`."""
+    mask = code_mask(b, heredoc=True)
+    cb = bytes(b[i] if (mask[i] or b[i] == 10) else 32 for i in range(len(b)))
+    if not MISSING_CALL_SEMI_RE.search(cb):
+        return None
+    lines = cb.split(b"\n")
+    for lno, raw in enumerate(lines, 1):
+        if b")" not in raw:
+            continue
+        st = raw.lstrip()
+        if st.startswith((b"#", b"if", b"else", b"while", b"for", b"switch", b"catch", b"return", b"foreach")):
+            continue
+        for m in MISSING_CALL_SEMI_RE.finditer(raw):
+            seg_start = max(raw.rfind(b";", 0, m.start()) + 1, 0)
+            seg = raw[seg_start:m.start() + 1]
+            depth = 0
+            open_idx = -1
+            for k in range(len(seg) - 1, -1, -1):
+                c = seg[k]
+                if c == 41:  # ')'
+                    depth += 1
+                elif c == 40:  # '('
+                    depth -= 1
+                    if depth == 0:
+                        open_idx = k
+                        break
+            if open_idx <= 0:
+                if depth == 1 and seg.strip() == b")":
+                    # Walk backward over preceding lines to ensure this ')' does not close an `if/while/for (...)`
+                    d = 1
+                    prev_ln = lno - 2
+                    found_ctl = None
+                    steps = 0
+                    while prev_ln >= 0 and steps < 40 and d > 0:
+                        pl = lines[prev_ln]
+                        for k in range(len(pl) - 1, -1, -1):
+                            if pl[k] == 41:
+                                d += 1
+                            elif pl[k] == 40:
+                                d -= 1
+                                if d == 0:
+                                    cm = _CALL_SEMI_IDENT_RE.search(pl[:k].rstrip())
+                                    found_ctl = cm.group(1) if cm else b""
+                                    break
+                        prev_ln -= 1
+                        steps += 1
+                    if found_ctl is not None and found_ctl not in _CALL_SEMI_CTL:
+                        return lno
+                continue
+            prefix = seg[:open_idx].rstrip()
+            cm = _CALL_SEMI_IDENT_RE.search(prefix)
+            if not cm:
+                continue
+            if cm.group(1) in _CALL_SEMI_CTL:
+                continue
+            before = prefix[:cm.start()].rstrip()
+            if before and before[-1] in b"(,=?:&|+*/!~[":
+                continue
+            return lno
+    return None
+
+
 PRAGMA_NOWARN_RE = re.compile(rb"(?m)^[ \t]*#pragma\s+.*\bno_warnings\b")
 READ_FILE_SEFUN_RE = re.compile(rb"(?m)^[ \t]*(?:(varargs)\s+)?string\s+read_file\s*\(([^)]*)\)\s*\{")
 EFUN_DBASE_RE = re.compile(rb"\befun::(?:set|addn|query|delete)[ \t]*\(")
@@ -1193,6 +1273,17 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         qhit = _find_malformed_query_args(b)
         if qhit is not None:
             hits.append(("malformed-query-args", f"{path}:{qhit[0]}", qhit[1]))
+    if (
+        want("missing-call-semicolon")
+        and not rel.startswith("/sjsh/u/")
+        and b")" in b
+        and b"(" in b
+        and not (slug == "mohuanshiji" and rel in ("/d/moon/obj/dan_xueshan.lpc", "/obj/prize/xueshan.lpc"))
+        and MISSING_CALL_SEMI_RE.search(b)
+    ):
+        mcs_ln = _find_missing_call_semicolon(b)
+        if mcs_ln is not None:
+            hits.append(("missing-call-semicolon", f"{path}:{mcs_ln}", "Adjacent LPC statement calls missing `;` between `)` and next call"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

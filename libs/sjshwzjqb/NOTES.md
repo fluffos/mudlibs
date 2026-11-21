@@ -776,3 +776,8 @@ pristine + build-debug，port 40173。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/obj/jineng/obj2/huojin@.lpc` 第 `8` 行 `set_name(MAG "活筋舒血丹 NOR, ...)` 缺失的 `NOR` 前闭合引号（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `20` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `20/20` 目标全数干净加载 `PASS`（`haiyang2`/`hy5`/`sje`/`shenzhou`/`tianxiawuxue`/`shenmo`/`kxkj` 等均由 `--head` 编译报错转为 `ok=1`）；`scripts/lint.py`（新增规则 #100 `unclosed-color-nor-quote`，`KB 04 §6.43`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`9` 馆代表（`haiyang2`/`hy5`/`hhsj`/`kxkj`/`shenmo`/`shenzhou`/`sje`/`tianxiawuxue`/`wxddym`，端口 `47512..47520`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-21 同行相邻 LPC 函数调用缺少分号 `;` 与连带缺号截断修复（KB 04 §6.48）
+
+- 修复 `/d/sanjie/npc/yaoge.lpc:43` 中 `set_skill("medical", 50) map_skill("force", "huntianforce");` 缺少分号导致的加载失败（保留 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。

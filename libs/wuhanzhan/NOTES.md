@@ -1228,3 +1228,8 @@ pristine + build-debug，port 40052。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/d/huanggong/npc/xrg.lpc`（薛仁贵）第 `37` 行 `set("inquiry", (`…`]);` 缺失开方括号 `[` 导致的 `syntax error, unexpected ':'`（`*No program in object`）编译失败，补全为 `set("inquiry", ([ ... ]);`（保留 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零报错格式化；`lpcc_eval.py` 验证由 `--head` 编译报错转为干净加载 `PASS`（`"薛仁贵"`，`err=0`）；`scripts/lint.py`（新增规则 #98 `missing-mapping-bracket` 与 #99 `tilde-dollar-color`）全库 `--all --jobs 8` 与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh`（端口 `47674`）启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-21 同行相邻 LPC 函数调用缺少分号 `;` 与连带缺号截断修复（KB 04 §6.48）
+
+- 参照同目录 `officer.lpc` 修复 `/d/wiz/officer/kenofficer.lpc:4` 中 `set("short", ...) set("long", ...) set("exits", (down)) setup() w s o q e` 缺少分号、错位退出语法与未闭合 `}`（保留 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。

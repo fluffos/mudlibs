@@ -641,3 +641,8 @@ pristine + build-debug，port 40030。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/clone/weapon/user_weapon_sn.lpc` 第 `7` 行 `if (!(owner = environment()) return 0;` 条件缺少闭合右括号导致 `syntax error, unexpected L_RETURN` 编译失败（连带第 `9` 行使用未声明变量 `me` 改为 `owner->query("id")`，并为第 `66` 行 `int weapon_fix()` 补全 `return 1;`，保留 CRLF 行尾并统一排版）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `9` 份文件统一格式化且 `0` 错误；`lpcc_eval.py` 实测 `9/9`（`bxsj`/`bxsj1`/`dtsl`/`dtsl2`/`dtslmud`/`shujian2008`/`shujian3`/`sjecl`/`sjtx2`）`new("/clone/weapon/user_weapon_sn")` + `weapon_setup()` + `weapon_fix()` + `wield()` 全部由 `--head` 编译失败转为干净通过 `PASS`；`scripts/lint.py`（新增规则 #104 `unbalanced-if-ctrl`）通过 `9/9` `HEAD` 正例、`mail_rdr.lpc` 反例、`--all --jobs 8`（193 万文件零误报）与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `9` 馆（端口 `47541..47549`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-21 同行相邻 LPC 函数调用缺少分号 `;` 与连带缺号截断修复（KB 04 §6.48）
+
+- 修复 `/cmds/leitai/dzd/dzd_flag.lpc:6` 中 `set_name("看不到", ({ "dzd's flag", "wakakak" })) set_weight(1);` 缺少分号导致编译失败（保留 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。
