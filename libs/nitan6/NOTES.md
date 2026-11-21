@@ -1597,3 +1597,8 @@ pristine + build-debug，port 40019。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/include/common.h` `mapping common_list` 等代码位置 `886` 处全角空格 `\u3000` → ASCII 空格（保留注释文本与 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` `32` 文件中 `26` 处重排（`0` 错误、盲区与 CRLF/LF 一致，其余 `6` 份历史未排版 `common.h` 保持原样）；`lpcc_eval.py` 验证 `23/23` 无前置报错文件（含 `hhsj`/`nitan170911`/`nitan6`/`wxddym` `<common.h>` `ZZT common=13 max=0 list=13` 及各剧情/NPC/房间/技能文件）均由 `--head` `Illegal character` 编译失败转为 `PASS`，`nt6`/`nt6nitan6win`/`xfbhh` `<common.h>`、`wqfy`/`zzfy`/`zzfy3` `/include/npc/npcd.lpc`、`wqfy` `newvoted.lpc` 与 `kxkj`/`kxkjii2` `new-pope.lpc` 均已消除全部全角字符语法报错（仅余既有的 `static`/缺失 `NPC_D`/文末缺 `}`/`notify_fail(command(...))` 问题）；`scripts/lint.py`（新增规则 #87 `fullwidth-code-punct`）通过 `32/32` `HEAD` 正例、工作树与 `sjpl2`/`sjplii` `welcome0.lpc` 反例单测，全库 `--all` 与 `--fast` 均 `0` 错误 `0` 告警；`14` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47551..47564`）全部正常且 `ZERO_DRIVERS`。
+
+## 2026-11-21 未闭合 @HEREDOC 文本块修复（KB 04 §6.44）
+
+- 修复 `/d/dragon/outlet.lpc` `@LONG` 文本块末行 `突然无数棵参天大树中出现了一条小径，似乎是出口！LONG);` 未换行导致 `End of file in text block` 编译失败（对照 `chidi`/`ffxymud`/`jhfy2` 拆出独立行首 `LONG`）。
+- 验证：`lpc_format_changed.py --apply` 确认全批 `34` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `34/34` 目标（`es1_win` 3、`esI` 2、`njhhdxdes2hx`、`yhyxcs`、`yxxcii` 及 `23` 馆 `26` 份 `outlet.lpc`）全部由 `--head` `End of file in text block`/`*No program` 转为干净加载 `PASS`（`ok=1`）；`scripts/lint.py`（新增规则 #101 `unclosed-heredoc`，`KB 04 §6.44`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`es1_win`/`esI`/`hhsj`/`nitan6`/`njhhdxdes2hx`/`nt1`/`shenmo`/`wxddym`/`yhyxcs`/`yxxcii`，端口 `47521..47530`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

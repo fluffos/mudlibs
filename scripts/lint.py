@@ -147,6 +147,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("missing-mapping-bracket", "file", "KB 04 §6.42", "error", "Mapping literal `(`\"k\" : v, ... ])` missing opening `[` after `(`"),
     RuleSpec("tilde-dollar-color", "file", "KB 04 §6.42", "error", "Unquoted BBSMUD/MUSH `~$HIG`-style color token in LPC code position (outside heredoc/strings)"),
     RuleSpec("unclosed-color-nor-quote", "file", "KB 04 §6.43", "error", "ANSI color macro string missing closing `\"` before `NOR`/`HI*`"),
+    RuleSpec("unclosed-heredoc", "file", "KB 04 §6.44", "error", "Unclosed `@MARKER` heredoc lacking a column-0 `MARKER` terminator (`End of file in text block`)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -564,6 +565,25 @@ def _find_unclosed_color_nor_quote(b: bytes) -> int | None:
             mask = code_mask(b, heredoc=True)
         if m.start() < len(mask) and mask[m.start()]:
             return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+UNCLOSED_HEREDOC_RE = re.compile(rb"@@?([A-Za-z_][A-Za-z0-9_]*)[ \t]*(?://[^\r\n]*)?(?:\r?\n|$)")
+
+
+def _find_unclosed_heredoc(b: bytes) -> tuple[int, str] | None:
+    """Return `(1-based line, tag)` of `@MARKER` lacking a column-0 terminator line."""
+    mask = None
+    for m in UNCLOSED_HEREDOC_RE.finditer(b):
+        if m.start() > 0 and b[m.start() - 1:m.start()] not in b" \t(=+,;:{\n\r":
+            continue
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() >= len(mask) or not mask[m.start()]:
+            continue
+        tag = m.group(1)
+        if not re.compile(rb"(?m)^" + re.escape(tag) + rb"(?![A-Za-z0-9_])").search(b, m.end()):
+            return (b.count(b"\n", 0, m.start()) + 1, tag.decode("ascii", "replace"))
     return None
 
 
@@ -1040,6 +1060,17 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         cnl = _find_unclosed_color_nor_quote(b)
         if cnl is not None:
             hits.append(("unclosed-color-nor-quote", f"{path}:{cnl}", "ANSI color string missing closing `\"` before `NOR`/`HI*`"))
+    if (
+        want("unclosed-heredoc")
+        and not is_wiz
+        and "/doc/" not in f"/{path}/"
+        and not path.endswith("/cmds/usr/whotest.lpc")
+        and b"@" in b
+        and UNCLOSED_HEREDOC_RE.search(b)
+    ):
+        uh = _find_unclosed_heredoc(b)
+        if uh is not None:
+            hits.append(("unclosed-heredoc", f"{path}:{uh[0]}", f"Unclosed heredoc `@{uh[1]}` missing column-0 terminator (`End of file in text block`)"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

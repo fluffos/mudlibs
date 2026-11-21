@@ -946,3 +946,8 @@ pristine + build-debug，归档端口 40009。`scripts/play_login.py`（port 490
 
 - 清理 `/d/eastland/liang_shan/obj/skeleton.lpc:9-10` 中 BIG5 `0x5C` 残留转义闭合引号 `"巨大的髑髅\"`（`2` 处，保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` `17` 文件零重排（保留各文件原 CRLF/LF 行尾）；`lpcc_eval.py` 验证 `17/17` 文件均由 `--head` 编译报错（`Illegal character` / `End of file in string` / `syntax error`，其中 `es1_win` 与 `esI` 经 `--at /d/eastland/zzeval.lpc` 验证）转为 `PASS` 正常加载；`scripts/lint.py`（新增规则 #88 `big5-backslash-quote`）通过 `17/17` `HEAD` 正例、工作树与 `2` 份模板/转义反例单测，全库 `--all`、`--files` 与 `--fast` 均 `0` 错误 `0` 告警；`6/6` 馆实机 `play_boot.sh`+`play_stop.sh`（端口 `47565..47570`）全部正常且 `ZERO_DRIVERS`。
+
+## 2026-11-21 未闭合 @HEREDOC 文本块修复（KB 04 §6.44）
+
+- 修复 `/d/eastland/liang_shan/monster/temp2.lpc`（`@DIET1` 错写闭合 `DIET` 及 `void ask_{skill,diet,trouble}()` 返回 `1` 改为 `int`）、`/d/erosmia/ekravia/object/chain_fw.lpc`（`@CLONG` 错写闭合 `LONG` 及第 `65` 行 `nnotify_fail` -> `notify_fail`）与 `/d/island/samurai/obj/armor.lpc`（`@AAA` 缺失行首 `AAA` 结束标记），保留原 CRLF 行尾。
+- 验证：`lpc_format_changed.py --apply` 确认全批 `34` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `34/34` 目标（`es1_win` 3、`esI` 2、`njhhdxdes2hx`、`yhyxcs`、`yxxcii` 及 `23` 馆 `26` 份 `outlet.lpc`）全部由 `--head` `End of file in text block`/`*No program` 转为干净加载 `PASS`（`ok=1`）；`scripts/lint.py`（新增规则 #101 `unclosed-heredoc`，`KB 04 §6.44`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`es1_win`/`esI`/`hhsj`/`nitan6`/`njhhdxdes2hx`/`nt1`/`shenmo`/`wxddym`/`yhyxcs`/`yxxcii`，端口 `47521..47530`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
