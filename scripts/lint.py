@@ -135,6 +135,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("unclosed-define-string", "file", "KB 04 §6.33", "error", "Single-line #define macro carrying an unclosed string literal"),
     RuleSpec("fullwidth-code-punct", "file", "KB 04 §6.34", "error", "Fullwidth punctuation or ideographic space used as LPC syntax/whitespace in code position"),
     RuleSpec("big5-backslash-quote", "file", "KB 03 §4.4", "error", "BIG5 0x5C leftover backslash escaping a closing string quote (`...\\\"` before `,`/`;`/`:`/`)`)"),
+    RuleSpec("seccrypt-tail-corruption", "file", "KB 04 §6.35", "error", "<SecCrypt>/trailing U+FFFD+PUA binary tail corruption at EOF (truncated call/missing closing brace/trailing garbage)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -315,6 +316,34 @@ def _find_big5_backslash_quote(b: bytes) -> int | None:
                     if re.search(rb'(?<!\\)"\s*(?:\)\s*)?;\s*$', line) and line.count(b'\\"') >= 2:
                         continue
                 return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+SECCRYPT_TAIL_PATTERNS = (
+    # shuijingqiu.lpc truncated mid-call: locate_quest(this_player(), arg <U+FFFD/PUA>...
+    re.compile(rb"locate_quest\s*\(\s*this_player\s*\(\s*\)\s*,\s*arg[^\)\r\n]*[\xef\xee]"),
+    # beast1.lpc trailing U+FFFD/PUA garbage line at EOF after closing function brace
+    re.compile(rb"(?:^|\n)[ \t]*\}\r?\n(?:\r?\n)*(?:[ \t]*(?:\xef\xbf\xbd|\xee[\x80-\xbf]{2}|\xef[\x80-\xa3][\x80-\xbf])[ \t]*)+\r?\n?\Z"),
+    # sunguanshi.lpc <SecCrypt> control byte 0x16 + PUA bytes at EOF replacing closing ); return 1; }
+    re.compile(rb'"[ \t]*\x16[^\r\n]*(?:\xee[\x80-\xbf]{2}|\xef[\x80-\xa3][\x80-\xbf])[^\r\n]*(?:\r?\n)*\Z'),
+)
+LPC_FUNC_SIG_RE = re.compile(rb"\b(?:void|int|mixed|string|object|mapping)\s+[A-Za-z_]\w*\s*\(")
+
+
+def _find_seccrypt_tail(b: bytes) -> int | None:
+    """Return 1-based line number of <SecCrypt> / trailing U+FFFD+PUA tail corruption, if any."""
+    for idx, pat in enumerate(SECCRYPT_TAIL_PATTERNS):
+        m = pat.search(b)
+        if m is not None:
+            if idx == 2 and LPC_FUNC_SIG_RE.search(b[: m.start()]) is None:
+                continue
+            pos = m.start()
+            if idx == 1:
+                # Anchor line number on the trailing U+FFFD/PUA line rather than `}`
+                m_bad = re.search(rb"\xef\xbf\xbd|\xee[\x80-\xbf]{2}|\xef[\x80-\xa3][\x80-\xbf]", b[pos:])
+                if m_bad is not None:
+                    pos += m_bad.start()
+            return b.count(b"\n", 0, pos) + 1
     return None
 
 
@@ -742,6 +771,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         bln = _find_big5_backslash_quote(b)
         if bln is not None:
             hits.append(("big5-backslash-quote", f"{path}:{bln}", "BIG5 0x5C leftover `\\\"` escapes closing string quote"))
+    if want("seccrypt-tail-corruption") and (b"\xef" in b or b"\xee" in b or b"\x16" in b):
+        sln = _find_seccrypt_tail(b)
+        if sln is not None:
+            hits.append(("seccrypt-tail-corruption", f"{path}:{sln}", "<SecCrypt>/trailing U+FFFD+PUA binary tail corruption breaks EOF syntax"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

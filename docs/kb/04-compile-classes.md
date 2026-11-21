@@ -1482,3 +1482,10 @@ Symptom: Compilation aborts immediately with `error: Illegal character 0xe3` or 
 5. **`/story/{shitang,pifeng2}.lpc` (`sjsh`, `xianlvqiyuan`, `xlqy_early`, `xlqy_new2007`, `xlqyzdb`, `yueyingqiyuan`), `open/prayer/npc/new-pope.lpc:127` (`kxkj`, `kxkjii2`), `d/leox/tianpeng/ns1.lpc:19` (`sjshv150`):** `\u3000` indentation inside array/mapping literals or code blocks.
 Fix: Replace `\u3000`→` `, `，`→`,`, `；`→`;`, `（`→`(`, `）`→`)`, `：`→`:` strictly where `code_mask(b, heredoc=True)` marks code (preserving strings, comments, heredocs, and CRLF/LF endings), then run the formatter. Note pre-existing unrelated errors in `newvoted.lpc` (missing closing `}` at EOF) and `new-pope.lpc` (`notify_fail(command(...))`).
 Detection: `scripts/lint.py --rule fullwidth-code-punct`.
+
+
+### 6.35 `<SecCrypt>` / 文件尾二进制与 PUA/U+FFFD 截断乱码（`shuijingqiu.lpc`、`beast1.lpc`、`sunguanshi.lpc`）
+
+Symptom: An LPC source file in the XYJ lineage compiles with `Illegal character 0xef` / `0xee` / `0x16` and `*No program in object` on its final lines because its tail still holds leftover `<SecCrypt CPL V3R05>` binary bytes or their `U+FFFD` (`\xef\xbf\xbd`) / Private Use Area (`U+E000..U+F8FF`) transcoding artifacts. Three distinct shapes recur across 18 XYJ libs: (1) `d/obj/quest/shuijingqiu.lpc` (and `quest/xunbao/obj/shuijingqiu.lpc`) truncated mid-call on the last line after `locate_quest(this_player(), arg `, dropping the closing `);` and `}`; (2) `d/sea/npc/beast1.lpc` (and `d/xiyou/sea/npc/beast1.lpc`) holding a trailing standalone `\xef\xbf\xbd \xef\xbf\xbd` line past the closing `}` of `die()`; (3) `d/wuguan/npc/sunguanshi.lpc` ending with `\x16...` + PUA `\xee\x9d\xab` right after `NOR + "。"` instead of `");\n  return 1;\n}`.
+Fix: Truncate the trailing binary/PUA line or restore the exact closing statement (`locate_quest(this_player(), arg);\n}` or `");\n  return 1;\n}`) matching clean lineage siblings while preserving the file's original LF/CRLF line endings.
+Detection: `scripts/lint.py --rule seccrypt-tail-corruption`.

@@ -1208,3 +1208,8 @@ pristine + build-debug，port 40050。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/cmds/usr/back/bangzhu.lpc`、`/d/changan/npc/wei.lpc`、`/d/death/new-walk2.lpc`、`/d/death/npc/yanluowang.lpc`、`/d/jz/obj/yugan.lpc` 等共 `10` 个文件 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## <SecCrypt>/文件尾乱码截断修复（2026-11-21，KB 04 §6.35）
+
+- 修复 `/d/obj/quest/shuijingqiu.lpc` 第 43 行 `locate_quest(this_player(), arg ...)` 处 `<SecCrypt>`/PUA 截断尾，补全为 `);\n}`。
+- 验证：`lpc_format_changed.py --apply` 对本批 `26` 个文件确认零重排（`sjcs/work/d/wuguan/npc/sunguanshi.lpc` 按历史未格式化状态保持 `KEEP`，`xyj20032/work/d/sea/npc/beast1.lpc` 保留 CRLF，其余 25 份保留 LF）；`lpcc_eval.py` 验证全数 `26/26` 消除 `Illegal character`/`*No program` 编译失败——`13` 份 `shuijingqiu.lpc` 与 `2` 份 `sunguanshi.lpc` 全部干净加载 `PASS`，`11` 份 `beast1.lpc` 全部编译通过并执行 `create()` 至既有的字符串字面量丢字问题 `*Chard: undefined race Ұ.`；`scripts/lint.py`（新增规则 #89 `seccrypt-tail-corruption`）通过 `26/26` `HEAD` 正例、全库 `--all --jobs 8`、`--files` 与 `--fast` 零错误零告警；全批 `18` 馆（端口 `47571..47588`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
