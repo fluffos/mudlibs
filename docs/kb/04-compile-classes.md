@@ -1565,3 +1565,12 @@ Detection: `scripts/lint.py --rule semote-local-functional --rule rpp-self-corru
 Symptom: 书剑系 `6` 馆（`bxsj`、`bxsj1`、`shujian2008`、`shujian3`、`sjecl`、`sjtx2`）与大唐系 `3` 馆（`dtsl`、`dtsl2`、`dtslmud`）共有 `/clone/weapon/user_weapon_sn.lpc` 在第 `7` 行写为 `if (!(owner = environment()) return 0;`，条件部分缺少闭合 `)` 导致 `syntax error, unexpected L_RETURN`（连带后面括号错位与第 `9` 行未声明 `me->query("id")` 报错、第 `66` 行 `int weapon_fix()` 缺少返回值）。
 Fix: 补齐第 `7` 行闭合括号 `if (!(owner = environment())) return 0;`、将第 `9` 行未声明 `me` 改为已校验的 `owner->query("id")`、为第 `66` 行 `int weapon_fix()` 补 `return 1;`，保留 CRLF 并统一按 LPC 格式化；同步将该通用单行缺括号特征固化为 `lint.py` 规则（全库 193 万文件零误报）。
 Detection: `scripts/lint.py --rule unbalanced-if-ctrl`（经 `code_mask(b, heredoc=True)` 屏蔽字符串与注释，逐字符校验 `if (` 到 `return`/`continue`/`break` 之前的括号深度）。
+
+### 6.47 `fingerd.lpc` `#ifdef DB_SAVE` 局部变量插断 `sprintf()` 与作用域/未用告警（`8` 馆 / `8` 文件，2026-11-21）
+
+Symptom: 泥潭 7 系 `8` 馆 `/adm/daemons/fingerd.lpc` 的 `finger_user()` 存在三类 `#ifdef DB_SAVE` 变量声明缺陷：
+1. **`hhsj`、`nitan6`、`nt6`、`nt6nitan6win`、`xfbhh`（`5` 馆）：** 将 `string addr; string sql, ip_number; string where; string *ret;` 直接插入跨行 `sprintf("SELECT place,address ...", ...)` 参数中间，且把 `where` 限死在内层 `if (interactive(body))` 作用域内（外层第二处 `#ifdef DB_SAVE` 的 `where = res[1];` 无法访问），一旦开启 `DB_SAVE` 立即语法报错退出。
+2. **`nitan3`、`nitan_san`（`2` 馆）：** 将 `string where, sql, ip_number; string *ret;` 声明在内层 `if (interactive(body))` 的 `#ifdef DB_SAVE` 中，导致第 `306` 行 `where = res[1];` 在启用 `DB_SAVE` 时报 `Undefined variable 'where'`。
+3. **`nitan170911`（`1` 馆）：** `where`/`ret`/`sql`/`ip_number`/`addr`/`res`/`flag` 全部声明在 `finger_user()` 顶部却未用 `#ifdef DB_SAVE` 包裹，默认构建报 `7` 条 `Unused local variable` 编译告警。
+Fix: 按 `nitan_ceshi` 标准结构在 `finger_user()` 顶部用单一 `#ifdef DB_SAVE ... #endif` 统一声明 `where`/`*ret`/`sql`/`ip_number`/`addr`/`*res`/`flag`（`nitan3`/`nitan_san` 不含 `addr`），移除内层各块重复及插入 `sprintf()` 中间的声明，保留原 LF 行尾（`fluffos-upstream` 库 `nt7` 保持未改）。
+Detection: `scripts/lint.py --rule fingerd-db-save-decls`。

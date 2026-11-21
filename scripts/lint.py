@@ -116,6 +116,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("skill-dead-callout", "targeted", "KB 06 §7.400", "error", "Skill/daemon call_out scheduling undefined destruct_me/remove_effect/perform2/perform_jiaoyang/perform_qiao"),
     RuleSpec("semote-local-functional", "targeted", "KB 04 §6.45", "error", "cmds/std/semote.lpc functional indexing local mapping `emotion_sort[$1]` without `$(emotion_sort)`"),
     RuleSpec("rpp-self-corrupted", "targeted", "KB 04 §6.45", "error", "cmds/adm/{rp,rpp}.lpc self-corrupted by running dbase converter over its own source"),
+    RuleSpec("fingerd-db-save-decls", "targeted", "KB 04 §6.47", "error", "adm/daemons/fingerd.lpc DB_SAVE locals outside #ifdef DB_SAVE, spliced in sprintf(), or out of scope across blocks"),
     # Per-file corpus checks (all error in --changed/--files/--strict; configurable in --all)
     RuleSpec("no-pragma-no-warnings", "file", "AGENTS (2026-10-03)", "error", "Forbids #pragma no_warnings anywhere in libs/*/work/"),
     RuleSpec("efun-dbase-call", "file", "KB 06 §7.392", "error", "Non-existent efun::set/addn/query/delete calls failing compilation"),
@@ -1429,7 +1430,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1506,6 +1507,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["semote"].append(item)
         if rel in ("/cmds/adm/rp.lpc", "/cmds/adm/rpp.lpc"):
             targeted_bins["rpadm"].append(item)
+        if rel == "/adm/daemons/fingerd.lpc":
+            targeted_bins["fingerd"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -1695,6 +1698,26 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if b'strsrch(str,query(", ")' in b or b'set(%s, %s, if(' in b:
                 col.add("rpp-self-corrupted", p, "rp/rpp.lpc source self-corrupted by dbase rewrite (`query(\", \"` / `set(%s, %s, if(`)")
+
+    if col.wants("fingerd-db-save-decls"):
+        fd_splice_re = re.compile(rb'sprintf\([^;)]*\n[ \t]*(?:string|int)\s+[A-Za-z_*]')
+        fd_inner_where_re = re.compile(rb'#ifdef DB_SAVE[^\n]*\n(?:[ \t]*string\s+\*ret;[^\n]*\n)?[ \t]*string\s+where\b[^\n]*\n[ \t]*ip_number\s*=')
+        fd_hdr_re = re.compile(rb'finger_user\s*\([^)]*\)\s*\{(.*?)\bif\s*\(\s*!\s*me\s*\)', re.S)
+        fd_ifdef_re = re.compile(rb'#ifdef\s+DB_SAVE\b.*?#endif\b', re.S)
+        fd_var_re = re.compile(rb'\b(?:ret|sql|ip_number|addr|res|flag)\b')
+        for _, p, _ in targeted_bins["fingerd"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"#ifdef DB_SAVE" not in b or b"DATABASE_D->do_sql" not in b:
+                continue
+            if fd_splice_re.search(b):
+                col.add("fingerd-db-save-decls", p, "DB_SAVE local declarations spliced inside sprintf(...) call")
+                continue
+            if fd_inner_where_re.search(b) and b"where = res[1];" in b:
+                col.add("fingerd-db-save-decls", p, "`where` declared inside inner #ifdef DB_SAVE block is out of scope at `where = res[1]`")
+                continue
+            hm = fd_hdr_re.search(b)
+            if hm and fd_var_re.search(fd_ifdef_re.sub(b"", hm.group(1))):
+                col.add("fingerd-db-save-decls", p, "DB_SAVE locals declared outside #ifdef DB_SAVE emit unused-local warnings")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
