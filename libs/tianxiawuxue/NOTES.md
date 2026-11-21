@@ -1467,3 +1467,8 @@ pristine + build-debug，归档端口 40045。`scripts/play_login.py` 注册并�
 
 - 修复 `/kungfu/skill/{zhuihun-biao,wudu-goufa}.lpc` 共 `2` 个武功文件中由 `order[random(13)]` 着色脚本导致的词中引号破坏：还原 `"「小鬼闹花灯」" NOR ` 与 `刺$n的小腹",`（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `33` 份文件零重排（`hymud` 5 份保持历史未格式化 `KEEP`，`5` 份 CRLF 与 `28` 份 LF 原样保留）；`lpcc_eval.py` 验证代表 `HEAD` 均报编译错且修复后全数 `33/33`（包括 `shenmo` 全部 `9` 份）干净加载 `PASS`；`scripts/lint.py`（新增规则 #92 `broken-order-color-quote`）通过 `33/33` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `8` 馆（端口 `47611..47618`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 2026-11-21 颜色宏字串缺失闭合引号修复（KB 04 §6.43）
+
+- 修复 `/d/japan/npc/xiaoquan.lpc` 第 `7` 行 `set_name(HIW"小犬蠢一狼NOR, ...)` 缺失的 `NOR` 前闭合引号（保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 确认全批 `20` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `20/20` 目标全数干净加载 `PASS`（`haiyang2`/`hy5`/`sje`/`shenzhou`/`tianxiawuxue`/`shenmo`/`kxkj` 等均由 `--head` 编译报错转为 `ok=1`）；`scripts/lint.py`（新增规则 #100 `unclosed-color-nor-quote`，`KB 04 §6.43`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`9` 馆代表（`haiyang2`/`hy5`/`hhsj`/`kxkj`/`shenmo`/`shenzhou`/`sje`/`tianxiawuxue`/`wxddym`，端口 `47512..47520`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

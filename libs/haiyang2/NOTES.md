@@ -1793,3 +1793,8 @@ pristine + build-debug，port 40057。`scripts/play_login.py` 注册。
 
 - 修复 `/kungfu/skill/lingyuan-xinfa/force.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-21 颜色宏字串缺失闭合引号修复（KB 04 §6.43）
+
+- 修复 `/d/migong/lev17/dong70.lpc` 第 `6` 行 `set("short", GRN "海之礁岛NOR);` 缺失闭合引号及后续受引号翻转波及的 `" long "` / `" exits "` / `__DIR__" dong69 "` / `" / clone / box / gboxm "` 等错加空格（对照 `hy5`/`wxddym` `dong70.lpc` 还原，保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 确认全批 `20` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `20/20` 目标全数干净加载 `PASS`（`haiyang2`/`hy5`/`sje`/`shenzhou`/`tianxiawuxue`/`shenmo`/`kxkj` 等均由 `--head` 编译报错转为 `ok=1`）；`scripts/lint.py`（新增规则 #100 `unclosed-color-nor-quote`，`KB 04 §6.43`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`9` 馆代表（`haiyang2`/`hy5`/`hhsj`/`kxkj`/`shenmo`/`shenzhou`/`sje`/`tianxiawuxue`/`wxddym`，端口 `47512..47520`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

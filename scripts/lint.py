@@ -146,6 +146,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("pua-action-unclosed-quote", "file", "KB 04 §6.41", "error", "Active action/mapping string literal truncated with UTF-8 PUA bytes and missing closing `\"` before `,`"),
     RuleSpec("missing-mapping-bracket", "file", "KB 04 §6.42", "error", "Mapping literal `(`\"k\" : v, ... ])` missing opening `[` after `(`"),
     RuleSpec("tilde-dollar-color", "file", "KB 04 §6.42", "error", "Unquoted BBSMUD/MUSH `~$HIG`-style color token in LPC code position (outside heredoc/strings)"),
+    RuleSpec("unclosed-color-nor-quote", "file", "KB 04 §6.43", "error", "ANSI color macro string missing closing `\"` before `NOR`/`HI*`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -543,6 +544,22 @@ def _find_tilde_dollar_color(b: bytes) -> int | None:
     """Return 1-based line number of unquoted `~$COLOR` markup in LPC code position."""
     mask = None
     for m in TILDE_DOLLAR_COLOR_RE.finditer(b):
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() < len(mask) and mask[m.start()]:
+            return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+COLOR_NOR_OPEN_RE = re.compile(
+    rb'\b(?:HI[RGBYMCW]|RED|GRN|YEL|BLU|MAG|CYN|WHT|B(?:LACK|RED|GRN|YEL|BLU|MAG|CYN|WHT|LINK|OLD))\b[ \t]*"[^"\r\n\\]{1,120}(?:NOR|HI[RGBYMCW])\b[ \t]*(?:[;,)+:\]\r\n]|$)'
+)
+
+
+def _find_unclosed_color_nor_quote(b: bytes) -> int | None:
+    """Return 1-based line number of `HI*\"...NOR` missing its closing quote."""
+    mask = None
+    for m in COLOR_NOR_OPEN_RE.finditer(b):
         if mask is None:
             mask = code_mask(b, heredoc=True)
         if m.start() < len(mask) and mask[m.start()]:
@@ -1019,6 +1036,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         tdl = _find_tilde_dollar_color(b)
         if tdl is not None:
             hits.append(("tilde-dollar-color", f"{path}:{tdl}", "Unquoted `~$COLOR` color markup in LPC code position"))
+    if want("unclosed-color-nor-quote") and not is_wiz and (b"NOR" in b or b"HI" in b) and COLOR_NOR_OPEN_RE.search(b):
+        cnl = _find_unclosed_color_nor_quote(b)
+        if cnl is not None:
+            hits.append(("unclosed-color-nor-quote", f"{path}:{cnl}", "ANSI color string missing closing `\"` before `NOR`/`HI*`"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

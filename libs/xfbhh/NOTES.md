@@ -893,3 +893,8 @@ pristine + build-debug，归档端口 40190。`scripts/play_login.py`（port 491
 
 - 修复 `/cmds/usr/hp.lpc` 第 `118–125` 行：`include/globals.h` 将 `unixconf.h` 放在 `#ifdef __PACKAGE_LONELY__` 下（FluffOS 未定义该宏而退回 `winconf.h`，导致 `LONELY_IMPROVED` 未定义），原代码在 `#else` 分支仅注释掉 `//sp += HIW "【死亡保护】  " NOR + sprintf("%-43s",` 而将 `#endif` 后的三元参数与闭合 `);` 留在代码里，造成第 `125` 行 `syntax error, unexpected ')'`（`*No program in object '/cmds/usr/hp'`）。已取消注释并将完整的 `sp += ... sprintf(...);` 语句分别包入 `#ifdef LONELY_IMPROVED` 与 `#else` 分支，使两支括号各自闭合（避免格式化器跨分支缩进漂移），并保留原 LF 行尾。
 - 验证：`lpc_format_changed.py --apply` 确认 `0 to format`（`502` 行维持 LF）；`lpcc_eval.py` 验证由 `--head` 第 `125` 行编译失败转为 `ZZT xfbhh ob=/cmds/usr/hp ... err=0` `PASS`；`scripts/lint.py`（新增规则 #95 `unbalanced-pp-comment`）通过 `2/2` `HEAD` 正例与反例单测、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`play_boot.sh`+`play_stop.sh`（端口 `47642`）启动与停止正常且 `ZERO_DRIVERS`。
+
+## 2026-11-21 颜色宏字串缺失闭合引号修复（KB 04 §6.43）
+
+- 修复 `/kungfu/skill/longfeng-sword/feng.lpc` 第 `53` 行颜色串引号缺失（`...「 NOR + HIW 凤之剑 NOR + HIC 」绝技。e"` 补齐闭合/起始引号并去掉末尾错字 `e`，避免字面输出 `NOR + HIW`）。
+- 验证：`lpc_format_changed.py --apply` 确认全批 `20` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `20/20` 目标全数干净加载 `PASS`（`haiyang2`/`hy5`/`sje`/`shenzhou`/`tianxiawuxue`/`shenmo`/`kxkj` 等均由 `--head` 编译报错转为 `ok=1`）；`scripts/lint.py`（新增规则 #100 `unclosed-color-nor-quote`，`KB 04 §6.43`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`9` 馆代表（`haiyang2`/`hy5`/`hhsj`/`kxkj`/`shenmo`/`shenzhou`/`sje`/`tianxiawuxue`/`wxddym`，端口 `47512..47520`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

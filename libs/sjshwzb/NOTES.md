@@ -778,3 +778,8 @@ pristine + build-debug，port 40113。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/obj/jineng/npc/yang.lpc` 第 `20` 行 `set("inquiry", (`…`]);` 缺失开方括号 `[` 导致的 `syntax error, unexpected ':'`（`*No program in object`）编译失败，补全为 `set("inquiry", ([ ... ]);`（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零报错格式化并维持 CRLF；`lpcc_eval.py` 验证由 `--head` 编译报错转为干净加载 `PASS`（`"杨中顺"`，`err=0`）；`scripts/lint.py`（新增规则 #98 `missing-mapping-bracket` 与 #99 `tilde-dollar-color`）全库 `--all --jobs 8` 与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh`（端口 `47672`）启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-21 颜色宏字串缺失闭合引号修复（KB 04 §6.43）
+
+- 修复 `/obj/jineng/obj2/huojin@.lpc` 第 `8` 行 `set_name(MAG "活筋舒血丹 NOR, ...)` 缺失的 `NOR` 前闭合引号（保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 确认全批 `20` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `20/20` 目标全数干净加载 `PASS`（`haiyang2`/`hy5`/`sje`/`shenzhou`/`tianxiawuxue`/`shenmo`/`kxkj` 等均由 `--head` 编译报错转为 `ok=1`）；`scripts/lint.py`（新增规则 #100 `unclosed-color-nor-quote`，`KB 04 §6.43`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`9` 馆代表（`haiyang2`/`hy5`/`hhsj`/`kxkj`/`shenmo`/`shenzhou`/`sje`/`tianxiawuxue`/`wxddym`，端口 `47512..47520`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
