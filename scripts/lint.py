@@ -144,6 +144,8 @@ RULES: list[RuleSpec] = [
     RuleSpec("unbalanced-pp-comment", "file", "KB 04 §6.40", "error", "Commented `//` line with unbalanced `(`/` )` inside `#ifdef`/`#else`/`#endif` block"),
     RuleSpec("newline-in-key-string", "file", "KB 06 §7.415", "error", "Dbase/skill/condition/property/mapping key string literal split across raw newline (`\\n`)"),
     RuleSpec("pua-action-unclosed-quote", "file", "KB 04 §6.41", "error", "Active action/mapping string literal truncated with UTF-8 PUA bytes and missing closing `\"` before `,`"),
+    RuleSpec("missing-mapping-bracket", "file", "KB 04 §6.42", "error", "Mapping literal `(`\"k\" : v, ... ])` missing opening `[` after `(`"),
+    RuleSpec("tilde-dollar-color", "file", "KB 04 §6.42", "error", "Unquoted BBSMUD/MUSH `~$HIG`-style color token in LPC code position (outside heredoc/strings)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -508,6 +510,42 @@ def _find_pua_action_unclosed_quote(b: bytes) -> int | None:
         if mask is None:
             mask = code_mask(b, heredoc=True)
         if m.start() > 0 and m.start() - 1 < len(mask) and mask[m.start() - 1]:
+            return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+MAP_OPEN_KEY_RE = re.compile(rb'\(\s*(?:"[^"\r\n()]+"|\d+)\s*:')
+MAP_CLOSE_RE = re.compile(rb'\]\s*\)')
+TILDE_DOLLAR_COLOR_RE = re.compile(
+    rb'~\$(?:HI[RGBYMCW]|NOR|BLINK|B[A-Z]{2,3}|RED|GRN|YEL|BLU|MAG|CYN|WHT)'
+)
+
+
+def _find_missing_mapping_bracket(b: bytes) -> int | None:
+    """Return 1-based line number of `( "k" : v, ... ])` missing `[` after `(`."""
+    mask = None
+    for m in MAP_OPEN_KEY_RE.finditer(b):
+        win = b[m.end():m.end() + 2500]
+        jm = MAP_CLOSE_RE.search(win)
+        if not jm:
+            continue
+        seg = win[:jm.start()]
+        if b";" in seg or b"{" in seg or b"}" in seg or b"([" in seg or b"({" in seg or b"[" in seg:
+            continue
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() < len(mask) and mask[m.start()] and (m.end() + jm.end() - 1) < len(mask) and mask[m.end() + jm.end() - 1]:
+            return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+def _find_tilde_dollar_color(b: bytes) -> int | None:
+    """Return 1-based line number of unquoted `~$COLOR` markup in LPC code position."""
+    mask = None
+    for m in TILDE_DOLLAR_COLOR_RE.finditer(b):
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() < len(mask) and mask[m.start()]:
             return b.count(b"\n", 0, m.start()) + 1
     return None
 
@@ -973,6 +1011,14 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         pal = _find_pua_action_unclosed_quote(b)
         if pal is not None:
             hits.append(("pua-action-unclosed-quote", f"{path}:{pal}", "PUA-corrupted action string missing closing `\"` before `,`"))
+    if want("missing-mapping-bracket") and not is_wiz and b"]" in b and MAP_OPEN_KEY_RE.search(b):
+        mbl = _find_missing_mapping_bracket(b)
+        if mbl is not None:
+            hits.append(("missing-mapping-bracket", f"{path}:{mbl}", "Mapping literal `(\"k\": v ... ])` missing opening `[` after `(`"))
+    if want("tilde-dollar-color") and b"~$" in b and TILDE_DOLLAR_COLOR_RE.search(b):
+        tdl = _find_tilde_dollar_color(b)
+        if tdl is not None:
+            hits.append(("tilde-dollar-color", f"{path}:{tdl}", "Unquoted `~$COLOR` color markup in LPC code position"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

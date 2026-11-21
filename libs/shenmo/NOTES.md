@@ -1625,3 +1625,8 @@ pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scrip
 
 - 修复 `/d/jjf/zuixing2.lpc`、`/d/newjob/longzhu/user.lpc`、`/daemon/skill/lingyuan-xinfa/force.lpc`、`/kungfu/skill/lingyuan-xinfa/force.lpc`（共 `4` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 映射字面量缺失开方括号修复（2026-11-21，KB 04 §6.42）
+
+- 修复 `/obj/jineng/npc/yang.lpc` 与 `/sjsh/obj/jineng/npc/yang.lpc` 第 `20` 行 `set("inquiry", (`…`]);` 缺失开方括号 `[` 导致的 `syntax error, unexpected ':'`（`*No program in object`）编译失败，统一补全为 `set("inquiry", ([ ... ]);`（保留 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零报错格式化；`lpcc_eval.py` 验证两文件均由 `--head` 编译报错转为干净加载 `PASS`（`"杨中顺"`，`err=0`）；`scripts/lint.py`（新增规则 #98 `missing-mapping-bracket` 与 #99 `tilde-dollar-color`）通过 `HEAD` 正例、反例单测、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`play_boot.sh`+`play_stop.sh`（端口 `47671`）启动正常且 `ZERO_DRIVERS`。
