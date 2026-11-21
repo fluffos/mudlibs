@@ -1615,3 +1615,8 @@ pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scrip
 
 - 修复 `/sjsh/u/stey/obj/jinpai.lpc` 第 37–43 行 `if (!id(arg)) return 0);`、`me` 未声明及 `me->add("potential, 10000);` 键名漏闭合引号导致的编译失败，整理为 `object me = this_player();`、`return 0;` 与 `me->add("potential", 10000);`。
 - 验证：`lpc_format_changed.py --apply` 全部通过（`13` 份 `rulai1/rulaim.lpc` 保持历史未格式化 `KEEP` 并保留原 `CRLF`/`LF`，`shenmo/work/sjsh/u/stey/obj/jinpai.lpc` 为 `0 to format`）；`lpcc_eval.py` 验证全数 `14/14` 由 `--head` 编译报错（`rulai1/rulaim` `Illegal character 0xe6`/`*No program`，`jinpai` `syntax error`/`End of file in string`）转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #90 `unclosed-set-key`，支持 `code_mask` 过滤注释如 `syxjl/d/city/npc/ping2.lpc:37`）通过 `14/14` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `10` 馆（端口 `47591..47600`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 武功随机着色脚本破坏引号修复（2026-11-21，KB 04 §6.38）
+
+- 修复 `/daemon/skill/{zhuihun-biao,wudu-goufa,qxxy-shou,diwangquan}.lpc` 与 `/kungfu/skill/{zhuihun-biao,wudu-goufa,shedao-qigong,qxxy-shou,diwangquan}.lpc` 共 `9` 个武功文件中由 `order[random(13)]` 着色脚本导致的词中引号破坏：分别还原 `"「小鬼闹花灯」" NOR `、`刺$n的小腹",`、`直击$n小腹",`、`qxxy-shou.lpc` 两处招式（`摇光易位` 与 `摇光指`）及 `右手向$n小腹击去",`。
+- 验证：`lpc_format_changed.py --apply` 确认全批 `33` 份文件零重排（`hymud` 5 份保持历史未格式化 `KEEP`，`5` 份 CRLF 与 `28` 份 LF 原样保留）；`lpcc_eval.py` 验证代表 `HEAD` 均报编译错且修复后全数 `33/33`（包括 `shenmo` 全部 `9` 份）干净加载 `PASS`；`scripts/lint.py`（新增规则 #92 `broken-order-color-quote`）通过 `33/33` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `8` 馆（端口 `47611..47618`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。

@@ -828,3 +828,8 @@ pristine + build-debug，port 40183。`scripts/play_login.py` 注册。
 
 - 清理 `/d/xiyou/sea/npc/beast1.lpc` 第 75 行 `die()` 闭合花括号后多余的 `U+FFFD` 乱码尾行。
 - 验证：`lpc_format_changed.py --apply` 对本批 `26` 个文件确认零重排（`sjcs/work/d/wuguan/npc/sunguanshi.lpc` 按历史未格式化状态保持 `KEEP`，`xyj20032/work/d/sea/npc/beast1.lpc` 保留 CRLF，其余 25 份保留 LF）；`lpcc_eval.py` 验证全数 `26/26` 消除 `Illegal character`/`*No program` 编译失败——`13` 份 `shuijingqiu.lpc` 与 `2` 份 `sunguanshi.lpc` 全部干净加载 `PASS`，`11` 份 `beast1.lpc` 全部编译通过并执行 `create()` 至既有的字符串字面量丢字问题 `*Chard: undefined race Ұ.`；`scripts/lint.py`（新增规则 #89 `seccrypt-tail-corruption`）通过 `26/26` `HEAD` 正例、全库 `--all --jobs 8`、`--files` 与 `--fast` 零错误零告警；全批 `18` 馆（端口 `47571..47588`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 武功随机着色脚本破坏引号修复（2026-11-21，KB 04 §6.38）
+
+- 修复 `/kungfu/skill/{zhuihun-biao,wudu-goufa,shedao-qigong,qxxy-shou,diwangquan}.lpc` 共 `5` 个武功文件中由 `order[random(13)]` 着色脚本导致的词中引号破坏：分别还原 `"「小鬼闹花灯」" NOR `、`刺$n的小腹",`、`直击$n小腹",`、`qxxy-shou.lpc` 两处招式（`摇光易位` 与 `摇光指`）及 `diwangquan.lpc` `右手向$n小腹击去",`（保留 CRLF/LF 原行尾）。
+- 验证：`lpc_format_changed.py --apply` 确认全批 `33` 份文件零重排（`hymud` 5 份保持历史未格式化 `KEEP`，`5` 份 CRLF 与 `28` 份 LF 原样保留）；`lpcc_eval.py` 验证代表 `HEAD` 均报编译错且修复后全数 `33/33`（包括 `shenmo` 全部 `9` 份）干净加载 `PASS`；`scripts/lint.py`（新增规则 #92 `broken-order-color-quote`）通过 `33/33` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `8` 馆（端口 `47611..47618`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。

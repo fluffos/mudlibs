@@ -138,6 +138,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("seccrypt-tail-corruption", "file", "KB 04 §6.35", "error", "<SecCrypt>/trailing U+FFFD+PUA binary tail corruption at EOF (truncated call/missing closing brace/trailing garbage)"),
     RuleSpec("unclosed-set-key", "file", "KB 04 §6.36", "error", "Missing closing quote on dbase key before comma in set/add/query/delete(\"key,expr)"),
     RuleSpec("unclosed-set-alias-quote", "file", "KB 04 §6.37", "error", "Unclosed string argument in set_alias(..., \"...); breaking quote parity"),
+    RuleSpec("broken-order-color-quote", "file", "KB 04 §6.38", "error", "Skill colorizer `+(order[random(...)])+\"` / mid-move `NOR\"` breaking string quotes"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -378,6 +379,27 @@ def _find_unclosed_set_alias_quote(b: bytes) -> int | None:
             mask = code_mask(b, heredoc=True)
         if m.start() < len(mask) and mask[m.start()]:
             return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+BROKEN_ORDER_STR_RE = re.compile(
+    rb'[^\s"]\+\(order\[random\(\d+\)\]\)\+"[^"\r\n]*,(?=[ \t]*\r?$)', re.MULTILINE
+)
+BROKEN_MID_NOR_RE = re.compile(
+    rb'(?:' + "「".encode("utf-8") + rb'|:\s*")[^\x00-\x7f]{1,9}NOR"[ \t]*[^\x00-\x7f]'
+)
+
+
+def _find_broken_order_color_quote(b: bytes) -> int | None:
+    """Return 1-based line number of colorizer-broken +(order[...])+" or mid-move NOR" syntax."""
+    mask = None
+    for pat in (BROKEN_ORDER_STR_RE, BROKEN_MID_NOR_RE):
+        for m in pat.finditer(b):
+            if mask is None:
+                mask = code_mask(b, heredoc=True)
+            pos = m.end() - 1
+            if pos < len(mask) and mask[pos]:
+                return b.count(b"\n", 0, m.start()) + 1
     return None
 
 
@@ -817,6 +839,11 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         aln = _find_unclosed_set_alias_quote(b)
         if aln is not None:
             hits.append(("unclosed-set-alias-quote", f"{path}:{aln}", "set_alias() string argument missing closing quote"))
+    if want("broken-order-color-quote") and (b"+(order[random(" in b or b'NOR"' in b):
+        if BROKEN_ORDER_STR_RE.search(b) or BROKEN_MID_NOR_RE.search(b):
+            oln = _find_broken_order_color_quote(b)
+            if oln is not None:
+                hits.append(("broken-order-color-quote", f"{path}:{oln}", "skill colorizer broke string quotes around `+(order[...])` or `NOR\"`"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:
