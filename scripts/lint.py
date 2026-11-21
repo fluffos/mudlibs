@@ -143,6 +143,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("unclosed-cmp-quote", "file", "KB 04 §6.39", "error", "Comparison `== \"...` or `!= \"...` missing closing `\"` before `)` or `;` on same line"),
     RuleSpec("unbalanced-pp-comment", "file", "KB 04 §6.40", "error", "Commented `//` line with unbalanced `(`/` )` inside `#ifdef`/`#else`/`#endif` block"),
     RuleSpec("newline-in-key-string", "file", "KB 06 §7.415", "error", "Dbase/skill/condition/property/mapping key string literal split across raw newline (`\\n`)"),
+    RuleSpec("pua-action-unclosed-quote", "file", "KB 04 §6.41", "error", "Active action/mapping string literal truncated with UTF-8 PUA bytes and missing closing `\"` before `,`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -491,6 +492,23 @@ def _find_newline_in_key_string(b: bytes) -> tuple[int, str] | None:
                 ln = b.count(b"\n", 0, m.start()) + 1
                 snip = m.group(0).replace(b"\r", b"").replace(b"\n", b"\\n").decode("utf-8", "replace")
                 return ln, snip.strip()
+    return None
+
+
+PUA_ACTION_COMMA_RE = re.compile(
+    rb'^[ \t]*"[^"\r\n]*\xee[\x80-\xbf]{2}[^"\r\n]*,[ \t]*\r?$',
+    re.MULTILINE,
+)
+
+
+def _find_pua_action_unclosed_quote(b: bytes) -> int | None:
+    """Return 1-based line number of an active PUA-truncated `\"...,` string missing closing quote."""
+    mask = None
+    for m in PUA_ACTION_COMMA_RE.finditer(b):
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() > 0 and m.start() - 1 < len(mask) and mask[m.start() - 1]:
+            return b.count(b"\n", 0, m.start()) + 1
     return None
 
 
@@ -951,6 +969,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         nk = _find_newline_in_key_string(b)
         if nk is not None:
             hits.append(("newline-in-key-string", f"{path}:{nk[0]}", f"Key literal split across newline: `{nk[1]}`"))
+    if want("pua-action-unclosed-quote") and b"\xee" in b and PUA_ACTION_COMMA_RE.search(b):
+        pal = _find_pua_action_unclosed_quote(b)
+        if pal is not None:
+            hits.append(("pua-action-unclosed-quote", f"{path}:{pal}", "PUA-corrupted action string missing closing `\"` before `,`"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:
