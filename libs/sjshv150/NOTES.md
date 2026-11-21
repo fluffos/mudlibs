@@ -594,3 +594,8 @@ pristine + build-debug，port 40171。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/d/leox/tianpeng/ns1.lpc:19` `exits` 映射缩进 `3` 处全角空格 `\u3000` → ASCII 空格（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` `32` 文件中 `26` 处重排（`0` 错误、盲区与 CRLF/LF 一致，其余 `6` 份历史未排版 `common.h` 保持原样）；`lpcc_eval.py` 验证 `23/23` 无前置报错文件（含 `hhsj`/`nitan170911`/`nitan6`/`wxddym` `<common.h>` `ZZT common=13 max=0 list=13` 及各剧情/NPC/房间/技能文件）均由 `--head` `Illegal character` 编译失败转为 `PASS`，`nt6`/`nt6nitan6win`/`xfbhh` `<common.h>`、`wqfy`/`zzfy`/`zzfy3` `/include/npc/npcd.lpc`、`wqfy` `newvoted.lpc` 与 `kxkj`/`kxkjii2` `new-pope.lpc` 均已消除全部全角字符语法报错（仅余既有的 `static`/缺失 `NPC_D`/文末缺 `}`/`notify_fail(command(...))` 问题）；`scripts/lint.py`（新增规则 #87 `fullwidth-code-punct`）通过 `32/32` `HEAD` 正例、工作树与 `sjpl2`/`sjplii` `welcome0.lpc` 反例单测，全库 `--all` 与 `--fast` 均 `0` 错误 `0` 告警；`14` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47551..47564`）全部正常且 `ZERO_DRIVERS`。
+
+## dbase 键值缺失闭合引号修复（2026-11-21，KB 04 §6.36）
+
+- 修复 `/d/wizz/stey/npc/rulai1.lpc` 与 `/d/wizz/stey/npc/rulaim.lpc` 第 502 行 `me->set("rulaitask/job_start,time());` 键名缺失闭合引号的编译阻断，补全为 `"rulaitask/job_start",time()`。
+- 验证：`lpc_format_changed.py --apply` 全部通过（`13` 份 `rulai1/rulaim.lpc` 保持历史未格式化 `KEEP` 并保留原 `CRLF`/`LF`，`shenmo/work/sjsh/u/stey/obj/jinpai.lpc` 为 `0 to format`）；`lpcc_eval.py` 验证全数 `14/14` 由 `--head` 编译报错（`rulai1/rulaim` `Illegal character 0xe6`/`*No program`，`jinpai` `syntax error`/`End of file in string`）转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #90 `unclosed-set-key`，支持 `code_mask` 过滤注释如 `syxjl/d/city/npc/ping2.lpc:37`）通过 `14/14` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `10` 馆（端口 `47591..47600`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。

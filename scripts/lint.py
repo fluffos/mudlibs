@@ -136,6 +136,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("fullwidth-code-punct", "file", "KB 04 §6.34", "error", "Fullwidth punctuation or ideographic space used as LPC syntax/whitespace in code position"),
     RuleSpec("big5-backslash-quote", "file", "KB 03 §4.4", "error", "BIG5 0x5C leftover backslash escaping a closing string quote (`...\\\"` before `,`/`;`/`:`/`)`)"),
     RuleSpec("seccrypt-tail-corruption", "file", "KB 04 §6.35", "error", "<SecCrypt>/trailing U+FFFD+PUA binary tail corruption at EOF (truncated call/missing closing brace/trailing garbage)"),
+    RuleSpec("unclosed-set-key", "file", "KB 04 §6.36", "error", "Missing closing quote on dbase key before comma in set/add/query/delete(\"key,expr)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -344,6 +345,22 @@ def _find_seccrypt_tail(b: bytes) -> int | None:
                 if m_bad is not None:
                     pos += m_bad.start()
             return b.count(b"\n", 0, pos) + 1
+    return None
+
+
+UNCLOSED_SET_KEY_RE = re.compile(
+    rb'\b(?:set|set_temp|add|add_temp|query|query_temp|delete|delete_temp)\s*\(\s*"[A-Za-z0-9_/\-]+,[^"\r\n]+\)'
+)
+
+
+def _find_unclosed_set_key(b: bytes) -> int | None:
+    """Return 1-based line number of set/add/query/delete(\"key,expr) missing its closing quote."""
+    mask = None
+    for m in UNCLOSED_SET_KEY_RE.finditer(b):
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() < len(mask) and mask[m.start()]:
+            return b.count(b"\n", 0, m.start()) + 1
     return None
 
 
@@ -775,6 +792,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         sln = _find_seccrypt_tail(b)
         if sln is not None:
             hits.append(("seccrypt-tail-corruption", f"{path}:{sln}", "<SecCrypt>/trailing U+FFFD+PUA binary tail corruption breaks EOF syntax"))
+    if want("unclosed-set-key") and UNCLOSED_SET_KEY_RE.search(b):
+        kln = _find_unclosed_set_key(b)
+        if kln is not None:
+            hits.append(("unclosed-set-key", f"{path}:{kln}", "dbase key missing closing quote before comma"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

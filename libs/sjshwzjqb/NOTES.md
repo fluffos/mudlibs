@@ -756,3 +756,8 @@ pristine + build-debug，port 40173。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/d/obj/quest/shuijingqiu.lpc` 第 43 行 `locate_quest(this_player(), arg ...)` 处 `<SecCrypt>`/PUA 截断尾补全为 `);\n}`，以及 `/d/sea/npc/beast1.lpc` 第 75 行 `die()` 闭合花括号后多余的 `U+FFFD` 乱码尾行清理。
 - 验证：`lpc_format_changed.py --apply` 对本批 `26` 个文件确认零重排（`sjcs/work/d/wuguan/npc/sunguanshi.lpc` 按历史未格式化状态保持 `KEEP`，`xyj20032/work/d/sea/npc/beast1.lpc` 保留 CRLF，其余 25 份保留 LF）；`lpcc_eval.py` 验证全数 `26/26` 消除 `Illegal character`/`*No program` 编译失败——`13` 份 `shuijingqiu.lpc` 与 `2` 份 `sunguanshi.lpc` 全部干净加载 `PASS`，`11` 份 `beast1.lpc` 全部编译通过并执行 `create()` 至既有的字符串字面量丢字问题 `*Chard: undefined race Ұ.`；`scripts/lint.py`（新增规则 #89 `seccrypt-tail-corruption`）通过 `26/26` `HEAD` 正例、全库 `--all --jobs 8`、`--files` 与 `--fast` 零错误零告警；全批 `18` 馆（端口 `47571..47588`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## dbase 键值缺失闭合引号修复（2026-11-21，KB 04 §6.36）
+
+- 修复 `/d/wizz/stey/npc/rulai1.lpc` 第 502 行 `me->set("rulaitask/job_start,time());` 键名缺失闭合引号的编译阻断，补全为 `"rulaitask/job_start",time()`（保留原 CRLF 行尾与未格式化状态）。
+- 验证：`lpc_format_changed.py --apply` 全部通过（`13` 份 `rulai1/rulaim.lpc` 保持历史未格式化 `KEEP` 并保留原 `CRLF`/`LF`，`shenmo/work/sjsh/u/stey/obj/jinpai.lpc` 为 `0 to format`）；`lpcc_eval.py` 验证全数 `14/14` 由 `--head` 编译报错（`rulai1/rulaim` `Illegal character 0xe6`/`*No program`，`jinpai` `syntax error`/`End of file in string`）转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #90 `unclosed-set-key`，支持 `code_mask` 过滤注释如 `syxjl/d/city/npc/ping2.lpc:37`）通过 `14/14` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `10` 馆（端口 `47591..47600`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
