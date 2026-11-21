@@ -141,6 +141,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("broken-order-color-quote", "file", "KB 04 §6.38", "error", "Skill colorizer `+(order[random(...)])+\"` / mid-move `NOR\"` breaking string quotes"),
     RuleSpec("pager-text-in-code", "file", "KB 06 §7.263", "error", "Interactive `more` pager prompt (`继续下一页` / `前一页)` / `未完继续`) pasted into LPC code position"),
     RuleSpec("unclosed-cmp-quote", "file", "KB 04 §6.39", "error", "Comparison `== \"...` or `!= \"...` missing closing `\"` before `)` or `;` on same line"),
+    RuleSpec("unbalanced-pp-comment", "file", "KB 04 §6.40", "error", "Commented `//` line with unbalanced `(`/` )` inside `#ifdef`/`#else`/`#endif` block"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -433,6 +434,25 @@ def _find_unclosed_cmp_quote(b: bytes) -> int | None:
     """Return 1-based line number of `== \"...` / `!= \"...` missing closing quote."""
     mask = None
     for m in UNCLOSED_CMP_QUOTE_RE.finditer(b):
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() < len(mask) and mask[m.start()]:
+            return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+UNBALANCED_PP_CMT_RE = re.compile(
+    rb"#(?:if|ifdef|ifndef|elif|else)[^\r\n]*\r?\n(?:[ \t]*//[^\r\n]*\r?\n)+[ \t]*#(?:else|elif|endif)"
+)
+
+
+def _find_unbalanced_pp_comment(b: bytes) -> int | None:
+    """Return 1-based line number of unbalanced `(`/` )` commented line inside `#ifdef`/`#else`."""
+    mask = None
+    for m in UNBALANCED_PP_CMT_RE.finditer(b):
+        seg = m.group(0)
+        if seg.count(b"(") == seg.count(b")"):
+            continue
         if mask is None:
             mask = code_mask(b, heredoc=True)
         if m.start() < len(mask) and mask[m.start()]:
@@ -889,6 +909,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         cln = _find_unclosed_cmp_quote(b)
         if cln is not None:
             hits.append(("unclosed-cmp-quote", f"{path}:{cln}", "Comparison string literal missing closing `\"` before `)` or `;`"))
+    if want("unbalanced-pp-comment") and b"#endif" in b and UNBALANCED_PP_CMT_RE.search(b):
+        upl = _find_unbalanced_pp_comment(b)
+        if upl is not None:
+            hits.append(("unbalanced-pp-comment", f"{path}:{upl}", "Commented `//` line leaves unbalanced `(`/` )` inside preprocessor branch"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

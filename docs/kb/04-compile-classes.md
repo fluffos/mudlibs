@@ -1516,3 +1516,9 @@ Symptom: A comparison expression `==` or `!=` ends with an unclosed string liter
 3. **`sunshadow` `/d/dagger/nurval/nightwalker/obj/circlet.lpc:76`:** `if(str != "power)` omits `"` before `)`, breaking line 79 and reaching line 86 `End of file in string`.
 Fix: Restore the closing `"` (and `羞"` + `身边为好。\n` in `hy5`/`hymud` `huangpao.lpc`) matching neighboring checks in the same file or clean lineage siblings while preserving exact CRLF/LF line endings.
 Detection: `scripts/lint.py --rule unclosed-cmp-quote`.
+
+### 6.40 预处理分支内注释掉多行调用头（`#else // ... #endif`，`hhsj` / `xfbhh` `/cmds/usr/hp.lpc`，2026-11-21）
+
+Symptom: In `hhsj` and `xfbhh` `/cmds/usr/hp.lpc:118-125`, `include/globals.h` gates `"unixconf.h"` behind `#ifdef __PACKAGE_LONELY__` (falling back to `"winconf.h"`, where `LONELY_IMPROVED` is undefined), so compilation enters the `#else` branch on line 121 where `//sp += HIW "【死亡保护】  " NOR + sprintf("%-43s",` was commented out while leaving the ternary argument and closing `);` outside `#endif`. Compilation fails at line 125 with `syntax error, unexpected ')'` (`*No program in object '/cmds/usr/hp'!`), breaking the core player `hp` command.
+Fix: Uncomment the `#else` call header and keep the complete `sp += HIW ... sprintf(...);` statement inside both `#ifdef LONELY_IMPROVED` and `#else` branches so parentheses stay balanced inside every preprocessor branch (which also avoids the formatter's `#ifdef`+`(` indentation shift across the rest of the file) while preserving exact CRLF (`hhsj`) / LF (`xfbhh`) endings.
+Detection: `scripts/lint.py --rule unbalanced-pp-comment` (checks `#(?:if|ifdef|ifndef|elif|else)...//...#(?:else|elif|endif)` blocks with unbalanced `(` vs `)` outside comments/strings/heredocs).
