@@ -150,6 +150,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("tilde-dollar-color", "file", "KB 04 §6.42", "error", "Unquoted BBSMUD/MUSH `~$HIG`-style color token in LPC code position (outside heredoc/strings)"),
     RuleSpec("unclosed-color-nor-quote", "file", "KB 04 §6.43", "error", "ANSI color macro string missing closing `\"` before `NOR`/`HI*`"),
     RuleSpec("unclosed-heredoc", "file", "KB 04 §6.44", "error", "Unclosed `@MARKER` heredoc lacking a column-0 `MARKER` terminator (`End of file in text block`)"),
+    RuleSpec("unbalanced-if-ctrl", "file", "KB 04 §6.46", "error", "Single-line `if (...) return/continue/break;` missing closing `)` before control statement"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -586,6 +587,47 @@ def _find_unclosed_heredoc(b: bytes) -> tuple[int, str] | None:
         tag = m.group(1)
         if not re.compile(rb"(?m)^" + re.escape(tag) + rb"(?![A-Za-z0-9_])").search(b, m.end()):
             return (b.count(b"\n", 0, m.start()) + 1, tag.decode("ascii", "replace"))
+    return None
+
+
+UNBAL_IF_CTRL_RE = re.compile(rb"^[ \t]*(?:else[ \t]+)?if\s*\([^\n]*?\b(?:return|continue|break)\b", re.M)
+_IF_CTRL_KW_RE = re.compile(rb"\b(?:return|continue|break)\b")
+
+
+def _find_unbalanced_if_ctrl(b: bytes) -> int | None:
+    """Return 1-based line number of single-line `if (...) return/continue/break;` missing `)`."""
+    mask = None
+    for m in UNBAL_IF_CTRL_RE.finditer(b):
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        lstart = m.start()
+        if lstart >= len(mask) or not mask[lstart]:
+            continue
+        lend = b.find(b"\n", lstart)
+        if lend == -1:
+            lend = len(b)
+        line = b[lstart:lend]
+        lp = line.find(b"(")
+        km = _IF_CTRL_KW_RE.search(line[lp:])
+        if not km:
+            continue
+        kpos = lp + km.start()
+        if lstart + kpos >= len(mask) or not mask[lstart + kpos]:
+            continue
+        depth = 0
+        ok = True
+        for i in range(lp, kpos):
+            if not mask[lstart + i]:
+                continue
+            if line[i] == 40:
+                depth += 1
+            elif line[i] == 41:
+                depth -= 1
+                if depth < 0:
+                    ok = False
+                    break
+        if ok and depth > 0 and b"{" not in line[kpos:] and b";" in line[kpos:]:
+            return b.count(b"\n", 0, lstart) + 1
     return None
 
 
@@ -1073,6 +1115,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         uh = _find_unclosed_heredoc(b)
         if uh is not None:
             hits.append(("unclosed-heredoc", f"{path}:{uh[0]}", f"Unclosed heredoc `@{uh[1]}` missing column-0 terminator (`End of file in text block`)"))
+    if want("unbalanced-if-ctrl") and not is_wiz and b"if" in b and UNBAL_IF_CTRL_RE.search(b):
+        ifln = _find_unbalanced_if_ctrl(b)
+        if ifln is not None:
+            hits.append(("unbalanced-if-ctrl", f"{path}:{ifln}", "Single-line `if (...) return/continue/break;` missing closing `)` before statement"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:
