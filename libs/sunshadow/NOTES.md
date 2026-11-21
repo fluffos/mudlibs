@@ -1151,3 +1151,8 @@ pristine + build-debug（归档端口 `40232`，测试端口 `49232`）。
 ## 运行期与背包备份目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/wasm_keep_dirs.txt` 补齐 `adm/etc`、`d/magic/spellbook`、`d/player.village/keys`、`d/save/summons`、`d/sglib/strong/save/{,data,markers}`、`daemon/save/news/rn`、`inv/backup_inv/{,a..z}`、`log/d/...` 及铸造/神殿捐献实写 `realms/...`。`lpcc_eval.py` `/adm/etc/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。
+
+## 条件比较字符串缺失闭合引号修复（2026-11-21，KB 04 §6.39）
+
+- 修复 `/d/dagger/nurval/nightwalker/obj/circlet.lpc` 第 76 行 `check_mana()` 中 `if(str != "power)` 缺失的闭合引号（对齐第 58 行 `draw()` 的 `if(str != "power")`，保留原 LF 与文件尾格式）。
+- 验证：`lpcc --batch` 对照 `--head` 确认第 76 行引发的第 79/86 行语法错与 `End of file in string` 已全部消除（该文件第 51 行尚留存既有的 `::heart_beat()` 无继承实现报错）；`lpc_format_changed.py --apply` 保持 `KEEP` 零重排；`scripts/lint.py`（规则 #94 `unclosed-cmp-quote`）通过 `4/4` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh`（端口 `47634`）启停正常且 `ZERO_DRIVERS`。

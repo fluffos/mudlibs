@@ -833,3 +833,8 @@ pristine + build-debug，port 40183。`scripts/play_login.py` 注册。
 
 - 修复 `/kungfu/skill/{zhuihun-biao,wudu-goufa,shedao-qigong,qxxy-shou,diwangquan}.lpc` 共 `5` 个武功文件中由 `order[random(13)]` 着色脚本导致的词中引号破坏：分别还原 `"「小鬼闹花灯」" NOR `、`刺$n的小腹",`、`直击$n小腹",`、`qxxy-shou.lpc` 两处招式（`摇光易位` 与 `摇光指`）及 `diwangquan.lpc` `右手向$n小腹击去",`（保留 CRLF/LF 原行尾）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `33` 份文件零重排（`hymud` 5 份保持历史未格式化 `KEEP`，`5` 份 CRLF 与 `28` 份 LF 原样保留）；`lpcc_eval.py` 验证代表 `HEAD` 均报编译错且修复后全数 `33/33`（包括 `shenmo` 全部 `9` 份）干净加载 `PASS`；`scripts/lint.py`（新增规则 #92 `broken-order-color-quote`）通过 `33/33` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `8` 馆（端口 `47611..47618`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 条件比较字符串缺失闭合引号修复（2026-11-21，KB 04 §6.39）
+
+- 修复 `/d/qujing/baoxiang/npc/huangpao.lpc` 第 58 行 `names[0]!="百花)` 缺失闭合引号与“羞”字（致第 60 行起 `$var illegal outside of function pointer` / `Illegal character` 编译失败），同时比对干净同系 `mhxy` 修复第 76 行 `身蔽谩n` 乱码为 `"$N说道：浑家，舍利子内丹还是放在我身边为好。\n"`（保留 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对全批 `4` 份文件确认 `0 to format`（维持 `KEEP` 历史格式）；`lpcc_eval.py` 验证 `hy5`/`hymud` `/d/qujing/baoxiang/npc/huangpao` 由 `--head` 编译失败转为干净加载 `PASS`（`"黄袍怪(huangpao guai)"`，`err=0`）；`scripts/lint.py`（新增规则 #94 `unclosed-cmp-quote`）通过 `4/4` `HEAD` 正例与反例单测、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；全批 `4` 馆（端口 `47631..47634`）逐一完成 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。

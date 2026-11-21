@@ -26,3 +26,8 @@
 
 - 修复 `/gilden/piratenmeute/pm.h:31,33` 中 `DO_LOG_EINAUS(x)` 遗漏 `"yondala/pm_io.log"` 起始引号及 `DO_LOG_PUB_TRY(x)` 末尾 `"\n"` 遗漏起始引号，补全两处引号并保留原 CRLF 行尾（核实 `sys/terminal.h` 含字面 `\r` 的宏实已闭合）。
 - 验证：`lpc_format_changed.py --apply` 13/13 头文件零重排；`lpcc_eval.py` 验证通过（`wxddym` `/adm/daemons/skillsd1` 加载正常、`xkxc98sj`/`xkxz2` `F_ITEMMAKE` 由 `--head` 语法错误转为 `"/feature/itemmake.lpc"`、`kxkj`/`kxkj1`/`kxkjii2` `PANTS`、`fengyun434`/`fysjmb`/`xsfyssjb` `ansi4.h`、`wuhanzhan` `ansi1.h` 及 `silberland` `PMMASTER` 均通过）；`scripts/lint.py`（新增规则 #86 `unclosed-define-string`）`13/13` `HEAD` 正例与工作树/`silberland/work/sys/terminal.h` 反例单测通过，全库 `--all` 与 `--fast` 均 `0` 错误 `0` 告警；`13/13` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47531..47543`）全部正常且 `ZERO_DRIVERS`。
+
+## 条件比较字符串缺失闭合引号修复（2026-11-21，KB 04 §6.39）
+
+- 修复 `/d/kristallwald/sargola/seher/rubin.lpc` 第 237 行 `zwerge()` 中 `if(TP->QueryProp(P_NAME) == "Vivienne)` 缺失的闭合引号（对齐第 216 行 `finger()` 中的 `== "Vivienne"`，保留 LF 行尾）。
+- 说明与验证：`silberland` 遗留 LDMud 目录中的 `/std/armour.lpc` -> `/std/thing/properties.lpc` 尚存在既有未移植错误（`query_wiz_level`/`extern_call`），`lpcc --batch` 在父类阶段即中止而未编译至第 237 行；`lpc_format_changed.py --apply` 确认零重排，`scripts/lint.py`（新增规则 #94 `unclosed-cmp-quote`）验证 `HEAD` 命中第 237 行、修复后全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警，以及 `play_boot.sh`+`play_stop.sh`（端口 `47633`）启停正常且 `ZERO_DRIVERS`。

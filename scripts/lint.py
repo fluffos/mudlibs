@@ -140,6 +140,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("unclosed-set-alias-quote", "file", "KB 04 §6.37", "error", "Unclosed string argument in set_alias(..., \"...); breaking quote parity"),
     RuleSpec("broken-order-color-quote", "file", "KB 04 §6.38", "error", "Skill colorizer `+(order[random(...)])+\"` / mid-move `NOR\"` breaking string quotes"),
     RuleSpec("pager-text-in-code", "file", "KB 06 §7.263", "error", "Interactive `more` pager prompt (`继续下一页` / `前一页)` / `未完继续`) pasted into LPC code position"),
+    RuleSpec("unclosed-cmp-quote", "file", "KB 04 §6.39", "error", "Comparison `== \"...` or `!= \"...` missing closing `\"` before `)` or `;` on same line"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -415,6 +416,23 @@ def _find_pager_text_in_code(b: bytes) -> int | None:
     """Return 1-based line number of `more` pager status text pasted into LPC code."""
     mask = None
     for m in PAGER_CODE_RE.finditer(b):
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() < len(mask) and mask[m.start()]:
+            return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+UNCLOSED_CMP_QUOTE_RE = re.compile(
+    rb'(?:==|!=)[ \t]*"[^"\r\n\\;)]+[);][ \t]*\r?$',
+    re.MULTILINE,
+)
+
+
+def _find_unclosed_cmp_quote(b: bytes) -> int | None:
+    """Return 1-based line number of `== \"...` / `!= \"...` missing closing quote."""
+    mask = None
+    for m in UNCLOSED_CMP_QUOTE_RE.finditer(b):
         if mask is None:
             mask = code_mask(b, heredoc=True)
         if m.start() < len(mask) and mask[m.start()]:
@@ -867,6 +885,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         pln = _find_pager_text_in_code(b)
         if pln is not None:
             hits.append(("pager-text-in-code", f"{path}:{pln}", "`more` pager prompt text pasted into LPC code position"))
+    if want("unclosed-cmp-quote") and (b"==" in b or b"!=" in b) and UNCLOSED_CMP_QUOTE_RE.search(b):
+        cln = _find_unclosed_cmp_quote(b)
+        if cln is not None:
+            hits.append(("unclosed-cmp-quote", f"{path}:{cln}", "Comparison string literal missing closing `\"` before `)` or `;`"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

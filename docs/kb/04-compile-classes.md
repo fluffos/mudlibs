@@ -1507,3 +1507,12 @@ Detection: `scripts/lint.py --rule unclosed-set-alias-quote`.
 Symptom: Across `8` `hy`-lineage mudlibs (`haiyang2`, `hy`, `hy2002`, `hy5`, `hymud`, `shenmo`, `tianxiawuxue`, `wxddym`), `33` skill files (`zhuihun-biao.lpc` x9, `wudu-goufa.lpc` x8, `shedao-qigong.lpc` x6, `qxxy-shou.lpc` x5, `diwangquan.lpc` x5) fail compilation because an automated `order[random(13)]` colorizer substituted mid-string move words (`小鬼`, `小腹`, `摇光易位`) with unquoted `+(order[random(13)])+" 「,` (or `" 「 够 魅,`) or inserted `NOR"` inside a quoted move name followed by unquoted mojibake (`"「小NOR" 砟 只 ǖ 啤 NOR `, `"「摇NOR" 庖 孜 弧 NOR `, `"skill_name": "摇NOR" 庖 孜,`).
 Fix: Restore the original clean string literals (`"「小鬼闹花灯」" NOR `, `刺$n的小腹",`, `直击$n小腹",`, `"「摇光易位」" NOR ` + `"skill_name": "摇光易位",`, `右手向$n小腹击去",`) matching clean lineage siblings while preserving file formatting and LF/CRLF endings.
 Detection: `scripts/lint.py --rule broken-order-color-quote`.
+
+### 6.39 条件比较表达式右侧字符串缺失闭合引号：`== "Vivienne)` / `!= "百花)` / `!= "power)`（`4` 个文件 / `4` 个 mudlib，2026-11-21）
+
+Symptom: A comparison expression `==` or `!=` ends with an unclosed string literal before `)` or `;` on the same line, causing cascading syntax errors or `End of file in string`:
+1. **`hy5` & `hymud` `/d/qujing/baoxiang/npc/huangpao.lpc:58`:** `names[0]!="百花)` omits `羞"` before `)`, breaking compilation on line 60 (`error: $var illegal outside of function pointer` / `Illegal character`) alongside line 76 PUA mojibake `身蔽谩n` (`身边为好。\n`, matching sibling `mhxy`).
+2. **`silberland` `/d/kristallwald/sargola/seher/rubin.lpc:237`:** `if(TP->QueryProp(P_NAME) == "Vivienne)` omits `"` before `)`.
+3. **`sunshadow` `/d/dagger/nurval/nightwalker/obj/circlet.lpc:76`:** `if(str != "power)` omits `"` before `)`, breaking line 79 and reaching line 86 `End of file in string`.
+Fix: Restore the closing `"` (and `羞"` + `身边为好。\n` in `hy5`/`hymud` `huangpao.lpc`) matching neighboring checks in the same file or clean lineage siblings while preserving exact CRLF/LF line endings.
+Detection: `scripts/lint.py --rule unclosed-cmp-quote`.
