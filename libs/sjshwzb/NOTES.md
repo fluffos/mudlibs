@@ -763,3 +763,8 @@ pristine + build-debug，port 40113。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/d/wizz/stey/npc/rulai1.lpc` 第 502 行 `me->set("rulaitask/job_start,time());` 键名缺失闭合引号的编译阻断，补全为 `"rulaitask/job_start",time()`（保留原 CRLF 行尾与未格式化状态）。
 - 验证：`lpc_format_changed.py --apply` 全部通过（`13` 份 `rulai1/rulaim.lpc` 保持历史未格式化 `KEEP` 并保留原 `CRLF`/`LF`，`shenmo/work/sjsh/u/stey/obj/jinpai.lpc` 为 `0 to format`）；`lpcc_eval.py` 验证全数 `14/14` 由 `--head` 编译报错（`rulai1/rulaim` `Illegal character 0xe6`/`*No program`，`jinpai` `syntax error`/`End of file in string`）转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #90 `unclosed-set-key`，支持 `code_mask` 过滤注释如 `syxjl/d/city/npc/ping2.lpc:37`）通过 `14/14` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `10` 馆（端口 `47591..47600`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 源代码内嵌分页提示符乱码修复（2026-11-21，KB 06 §7.263）
+
+- 清理 `/adm/combatd.lpc` 第 936 行注释前的 `== 未 完 继 续 55 % == (ENTER 继 续 下 一 页 ， q 离 开 ， b 前 一 页)` 以及第 1009–1010 行 `case "cast_fenshen": ， q 离 开 ， b 前 一 页\n)` 分页符乱码（保留原 CRLF 行尾并确认格式化无误差）。
+- 验证：`lpc_format_changed.py --apply` 对本批 `9` 份文件确认无错（`sjshwzb/adm/combatd.lpc` 重排后保持 CRLF，`wqfy`/`zzfy`/`zzfy3` 6 份保持历史未格式化 `KEEP` 与原 CRLF，`wuhanzhan`/`xjcq2000` 保留原 LF）；`lpcc_eval.py` 验证 `xjcq2000 /kungfu/skill/anyue-bian` 与 `wuhanzhan /wizu/focus/westsword` 均由 `--head` 报错转为干净加载 `PASS`，`sjshwzb /adm/combatd` 与 `wqfy`/`zzfy`/`zzfy3` 6 份 `ultra/{huang,shenni}` 全部消除分页语法/非法字符及缺失函数头报错（仅余既有的 `LEAGUE_D` / `NPC_D` / `ultrap` / `message_combatd` 未定义符号）；`scripts/lint.py`（新增规则 #93 `pager-text-in-code`）通过 `9/9` `HEAD` 正例、`more.lpc`/`backupd.lpc` 反例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `6` 馆（端口 `47621..47626`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。

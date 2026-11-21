@@ -1578,7 +1578,7 @@ More of the same (2026-10-15): a `check_fight()` that declares `object weapon;` 
 **Symptom:** `syntax error, unexpected L_ORDER` at line 1 of `boxing.lpc` (`> more boxing.c  // houquan.c 猴拳`) and `Illegal character 0xe5` in `westsword.lpc` (a line `已 经 显 示 26 % (ENTER 继 续 下 一 页 ， q 离 开 ， b 前 一 页)` between two array elements) in xajdxyj, xianlvqiyuan and xjcq2000.
 **Cause:** the files were copied out of a `more` session; the command line and the pager's status line stayed in the text. The code around them is intact (the token stream equals chidi's and yxjh's copy except for the tuned numbers).
 **Fix:** the line deleted (6 files). Left alone: five shadowgate `d/player_houses/alzar/*` files that end in `--More-- (93%)` (the capture stopped there, the file is cut).
-**Detection:** `git grep -n -E '^\s*(已 ?经 ?显 ?示|>+ ?more |--More--)' -- '*.lpc' '*.h'`.
+**Detection:** `scripts/lint.py --rule pager-text-in-code` (`git grep -n -E '^\s*(已 ?经 ?显 ?示|>+ ?more |--More--)' -- '*.lpc' '*.h'`). Also fixed in 2026-11-21 (`sjshwzb/adm/combatd.lpc`, `wuhanzhan/wizu/focus/westsword.lpc`, `xjcq2000/kungfu/skill/anyue-bian.lpc`, and `wqfy`/`zzfy`/`zzfy3` `include/npc/ultra/{huang,shenni}.lpc` including lost `void do_congration(object me)` and `int accept_fight(object me)` headers).
 sje `cmds/usr/zhaohuan.lpc` starts with the colour codes of a terminal paste, the ESC byte gone (`[0; 1; 34 m[1 m[0 m  // ...`); the prefix is dropped, and the damaged tail (statements run together, `;` and braces lost) rebuilt from the file's own earlier blocks and hymud's copy.
 
 ### 7.264 A function pasted twice, word for word (2026-10-19)

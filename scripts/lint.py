@@ -139,6 +139,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("unclosed-set-key", "file", "KB 04 §6.36", "error", "Missing closing quote on dbase key before comma in set/add/query/delete(\"key,expr)"),
     RuleSpec("unclosed-set-alias-quote", "file", "KB 04 §6.37", "error", "Unclosed string argument in set_alias(..., \"...); breaking quote parity"),
     RuleSpec("broken-order-color-quote", "file", "KB 04 §6.38", "error", "Skill colorizer `+(order[random(...)])+\"` / mid-move `NOR\"` breaking string quotes"),
+    RuleSpec("pager-text-in-code", "file", "KB 06 §7.263", "error", "Interactive `more` pager prompt (`继续下一页` / `前一页)` / `未完继续`) pasted into LPC code position"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -400,6 +401,24 @@ def _find_broken_order_color_quote(b: bytes) -> int | None:
             pos = m.end() - 1
             if pos < len(mask) and mask[pos]:
                 return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+PAGER_CODE_RE = re.compile(
+    rb"\xe7\xbb\xa7\s*\xe7\xbb\xad\s*\xe4\xb8\x8b\s*\xe4\xb8\x80\s*\xe9\xa1\xb5"
+    rb"|\xe5\x89\x8d\s*\xe4\xb8\x80\s*\xe9\xa1\xb5\s*\)"
+    rb"|\xe6\x9c\xaa\s*\xe5\xae\x8c\s*\xe7\xbb\xa7\s*\xe7\xbb\xad"
+)
+
+
+def _find_pager_text_in_code(b: bytes) -> int | None:
+    """Return 1-based line number of `more` pager status text pasted into LPC code."""
+    mask = None
+    for m in PAGER_CODE_RE.finditer(b):
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() < len(mask) and mask[m.start()]:
+            return b.count(b"\n", 0, m.start()) + 1
     return None
 
 
@@ -844,6 +863,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
             oln = _find_broken_order_color_quote(b)
             if oln is not None:
                 hits.append(("broken-order-color-quote", f"{path}:{oln}", "skill colorizer broke string quotes around `+(order[...])` or `NOR\"`"))
+    if want("pager-text-in-code") and (b"\xe9\xa1\xb5" in b or b"\xe7\xbb\xad" in b) and PAGER_CODE_RE.search(b):
+        pln = _find_pager_text_in_code(b)
+        if pln is not None:
+            hits.append(("pager-text-in-code", f"{path}:{pln}", "`more` pager prompt text pasted into LPC code position"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

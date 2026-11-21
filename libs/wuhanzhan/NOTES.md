@@ -1213,3 +1213,8 @@ pristine + build-debug，port 40052。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/include/ansi1.h:10` 中 `#define ESC "\x1b` 缺少闭合 `"`（对照 `include/ansi.h`），补全闭合引号并保留原 LF 行尾。
 - 验证：`lpc_format_changed.py --apply` 13/13 头文件零重排；`lpcc_eval.py` 验证通过（`wxddym` `/adm/daemons/skillsd1` 加载正常、`xkxc98sj`/`xkxz2` `F_ITEMMAKE` 由 `--head` 语法错误转为 `"/feature/itemmake.lpc"`、`kxkj`/`kxkj1`/`kxkjii2` `PANTS`、`fengyun434`/`fysjmb`/`xsfyssjb` `ansi4.h`、`wuhanzhan` `ansi1.h` 及 `silberland` `PMMASTER` 均通过）；`scripts/lint.py`（新增规则 #86 `unclosed-define-string`）`13/13` `HEAD` 正例与工作树/`silberland/work/sys/terminal.h` 反例单测通过，全库 `--all` 与 `--fast` 均 `0` 错误 `0` 告警；`13/13` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47531..47543`）全部正常且 `ZERO_DRIVERS`。
+
+## 源代码内嵌分页提示符乱码修复（2026-11-21，KB 06 §7.263）
+
+- 删除 `/wizu/focus/westsword.lpc` 第 24 行混入技能动作数组中的 `已 经 显 示 26 % (ENTER 继 续 下 一 页 ， q 离 开 ， b 前 一 页)` 分页提示行。
+- 验证：`lpc_format_changed.py --apply` 对本批 `9` 份文件确认无错（`sjshwzb/adm/combatd.lpc` 重排后保持 CRLF，`wqfy`/`zzfy`/`zzfy3` 6 份保持历史未格式化 `KEEP` 与原 CRLF，`wuhanzhan`/`xjcq2000` 保留原 LF）；`lpcc_eval.py` 验证 `xjcq2000 /kungfu/skill/anyue-bian` 与 `wuhanzhan /wizu/focus/westsword` 均由 `--head` 报错转为干净加载 `PASS`，`sjshwzb /adm/combatd` 与 `wqfy`/`zzfy`/`zzfy3` 6 份 `ultra/{huang,shenni}` 全部消除分页语法/非法字符及缺失函数头报错（仅余既有的 `LEAGUE_D` / `NPC_D` / `ultrap` / `message_combatd` 未定义符号）；`scripts/lint.py`（新增规则 #93 `pager-text-in-code`）通过 `9/9` `HEAD` 正例、`more.lpc`/`backupd.lpc` 反例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `6` 馆（端口 `47621..47626`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
