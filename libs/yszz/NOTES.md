@@ -446,3 +446,8 @@ pristine + build-debug，归档端口 40192。`scripts/play_login.py` 注册进�
 
 - 修复 `/d/death/npc/yanluowang.lpc`、`/d/jz/obj/yugan.lpc`、`/d/moon/npc/fakeyulao.lpc`、`/d/obj/fabao/EXAMPLE.lpc`、`/d/obj/fabao/huntian-ling.lpc` 等共 `9` 个文件 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 巫师法宝 `rabbit.lpc` / `ARMOR.lpc` 缺失闭合引号与花括号修复（2026-11-21，KB 04 §6.37）
+
+- 修复 `/clone/misc/rabbit.lpc` 第 589 行 `ob->set_alias(cmd, ");` 缺失闭合引号导致的语法/引号奇偶崩溃，补全为 `ob->set_alias(cmd, "");`（保留原 CRLF 行尾与未格式化状态）。
+- 验证：`lpc_format_changed.py --apply` 对本批 `9` 个文件确认历史未格式化 `KEEP` 且完整保留 `5` 份 CRLF / `4` 份 LF 行尾；`lpcc_eval.py` 验证全数 `9/9` 由 `--head` 编译报错（`rabbit.lpc` `syntax error, unexpected L_IDENTIFIER`/`Illegal character 0xee`，`ARMOR.lpc` `whereis()`/`do_give()`/`do_rm()`/`set_alias()` 语法错）转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #91 `unclosed-set-alias-quote`）通过 `9/9` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `6` 馆（端口 `47601..47606`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。

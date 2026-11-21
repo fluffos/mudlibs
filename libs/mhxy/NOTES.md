@@ -1443,3 +1443,8 @@ pristine + build-debug，port 40016。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/d/obj/quest/shuijingqiu.lpc` 第 43 行 `locate_quest(this_player(), arg ...)` 处 `<SecCrypt>`/PUA 截断尾，补全为 `);\n}`。
 - 验证：`lpc_format_changed.py --apply` 对本批 `26` 个文件确认零重排（`sjcs/work/d/wuguan/npc/sunguanshi.lpc` 按历史未格式化状态保持 `KEEP`，`xyj20032/work/d/sea/npc/beast1.lpc` 保留 CRLF，其余 25 份保留 LF）；`lpcc_eval.py` 验证全数 `26/26` 消除 `Illegal character`/`*No program` 编译失败——`13` 份 `shuijingqiu.lpc` 与 `2` 份 `sunguanshi.lpc` 全部干净加载 `PASS`，`11` 份 `beast1.lpc` 全部编译通过并执行 `create()` 至既有的字符串字面量丢字问题 `*Chard: undefined race Ұ.`；`scripts/lint.py`（新增规则 #89 `seccrypt-tail-corruption`）通过 `26/26` `HEAD` 正例、全库 `--all --jobs 8`、`--files` 与 `--fast` 零错误零告警；全批 `18` 馆（端口 `47571..47588`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 巫师法宝 `rabbit.lpc` / `ARMOR.lpc` 缺失闭合引号与花括号修复（2026-11-21，KB 04 §6.37）
+
+- 修复 `/clone/misc/rabbit.lpc` 第 589 行 `ob->set_alias(cmd, ");` 缺失闭合引号导致的语法/引号奇偶崩溃，补全为 `ob->set_alias(cmd, "");`。
+- 验证：`lpc_format_changed.py --apply` 对本批 `9` 个文件确认历史未格式化 `KEEP` 且完整保留 `5` 份 CRLF / `4` 份 LF 行尾；`lpcc_eval.py` 验证全数 `9/9` 由 `--head` 编译报错（`rabbit.lpc` `syntax error, unexpected L_IDENTIFIER`/`Illegal character 0xee`，`ARMOR.lpc` `whereis()`/`do_give()`/`do_rm()`/`set_alias()` 语法错）转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #91 `unclosed-set-alias-quote`）通过 `9/9` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `6` 馆（端口 `47601..47606`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。

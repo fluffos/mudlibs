@@ -721,3 +721,8 @@ pristine + build-debug，port 40097。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/d/wizz/stey/npc/rulai1.lpc` 第 502 行 `me->set("rulaitask/job_start,time());` 键名缺失闭合引号的编译阻断，补全为 `"rulaitask/job_start",time()`（保留原 CRLF 行尾与未格式化状态）。
 - 验证：`lpc_format_changed.py --apply` 全部通过（`13` 份 `rulai1/rulaim.lpc` 保持历史未格式化 `KEEP` 并保留原 `CRLF`/`LF`，`shenmo/work/sjsh/u/stey/obj/jinpai.lpc` 为 `0 to format`）；`lpcc_eval.py` 验证全数 `14/14` 由 `--head` 编译报错（`rulai1/rulaim` `Illegal character 0xe6`/`*No program`，`jinpai` `syntax error`/`End of file in string`）转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #90 `unclosed-set-key`，支持 `code_mask` 过滤注释如 `syxjl/d/city/npc/ping2.lpc:37`）通过 `14/14` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `10` 馆（端口 `47591..47600`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 巫师法宝 `rabbit.lpc` / `ARMOR.lpc` 缺失闭合引号与花括号修复（2026-11-21，KB 04 §6.37）
+
+- 修复 `/clone/misc/rabbit.lpc` 第 589 行 `ob->set_alias(cmd, ");` 缺失闭合引号；以及 `/adm/CL/ARMOR.lpc` 中 `whereis()` `else` 缺闭合 `}`、`wave()` 缺 `else` 配对花括号、`do_give()` 将 `{` 误写成 `}`、`do_rm()` 缺开头 `{`，以及 `ob->set_alias(cmd, "?);` 漏写闭合引号（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对本批 `9` 个文件确认历史未格式化 `KEEP` 且完整保留 `5` 份 CRLF / `4` 份 LF 行尾；`lpcc_eval.py` 验证全数 `9/9` 由 `--head` 编译报错（`rabbit.lpc` `syntax error, unexpected L_IDENTIFIER`/`Illegal character 0xee`，`ARMOR.lpc` `whereis()`/`do_give()`/`do_rm()`/`set_alias()` 语法错）转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #91 `unclosed-set-alias-quote`）通过 `9/9` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `6` 馆（端口 `47601..47606`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。

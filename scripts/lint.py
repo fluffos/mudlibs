@@ -137,6 +137,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("big5-backslash-quote", "file", "KB 03 §4.4", "error", "BIG5 0x5C leftover backslash escaping a closing string quote (`...\\\"` before `,`/`;`/`:`/`)`)"),
     RuleSpec("seccrypt-tail-corruption", "file", "KB 04 §6.35", "error", "<SecCrypt>/trailing U+FFFD+PUA binary tail corruption at EOF (truncated call/missing closing brace/trailing garbage)"),
     RuleSpec("unclosed-set-key", "file", "KB 04 §6.36", "error", "Missing closing quote on dbase key before comma in set/add/query/delete(\"key,expr)"),
+    RuleSpec("unclosed-set-alias-quote", "file", "KB 04 §6.37", "error", "Unclosed string argument in set_alias(..., \"...); breaking quote parity"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -357,6 +358,22 @@ def _find_unclosed_set_key(b: bytes) -> int | None:
     """Return 1-based line number of set/add/query/delete(\"key,expr) missing its closing quote."""
     mask = None
     for m in UNCLOSED_SET_KEY_RE.finditer(b):
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if m.start() < len(mask) and mask[m.start()]:
+            return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+UNCLOSED_SET_ALIAS_RE = re.compile(
+    rb'\bset_alias\s*\([^,\r\n]+,\s*"(?:[^"\r\n\\]|\\.)*\)\s*;'
+)
+
+
+def _find_unclosed_set_alias_quote(b: bytes) -> int | None:
+    """Return 1-based line number of set_alias(cmd, \"...); missing closing string quote."""
+    mask = None
+    for m in UNCLOSED_SET_ALIAS_RE.finditer(b):
         if mask is None:
             mask = code_mask(b, heredoc=True)
         if m.start() < len(mask) and mask[m.start()]:
@@ -796,6 +813,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         kln = _find_unclosed_set_key(b)
         if kln is not None:
             hits.append(("unclosed-set-key", f"{path}:{kln}", "dbase key missing closing quote before comma"))
+    if want("unclosed-set-alias-quote") and UNCLOSED_SET_ALIAS_RE.search(b):
+        aln = _find_unclosed_set_alias_quote(b)
+        if aln is not None:
+            hits.append(("unclosed-set-alias-quote", f"{path}:{aln}", "set_alias() string argument missing closing quote"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:
