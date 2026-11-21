@@ -1156,3 +1156,8 @@ pristine + build-debug（归档端口 `40232`，测试端口 `49232`）。
 
 - 修复 `/d/dagger/nurval/nightwalker/obj/circlet.lpc` 第 76 行 `check_mana()` 中 `if(str != "power)` 缺失的闭合引号（对齐第 58 行 `draw()` 的 `if(str != "power")`，保留原 LF 与文件尾格式）。
 - 验证：`lpcc --batch` 对照 `--head` 确认第 76 行引发的第 79/86 行语法错与 `End of file in string` 已全部消除（该文件第 51 行尚留存既有的 `::heart_beat()` 无继承实现报错）；`lpc_format_changed.py --apply` 保持 `KEEP` 零重排；`scripts/lint.py`（规则 #94 `unclosed-cmp-quote`）通过 `4/4` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh`（端口 `47634`）启停正常且 `ZERO_DRIVERS`。
+
+## 键值字符串换行断裂修复（2026-11-21，KB 06 §7.415）
+
+- 修复 `/d/archive/undead/mon/xeryl.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

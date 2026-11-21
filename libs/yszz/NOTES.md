@@ -451,3 +451,8 @@ pristine + build-debug，归档端口 40192。`scripts/play_login.py` 注册进�
 
 - 修复 `/clone/misc/rabbit.lpc` 第 589 行 `ob->set_alias(cmd, ");` 缺失闭合引号导致的语法/引号奇偶崩溃，补全为 `ob->set_alias(cmd, "");`（保留原 CRLF 行尾与未格式化状态）。
 - 验证：`lpc_format_changed.py --apply` 对本批 `9` 个文件确认历史未格式化 `KEEP` 且完整保留 `5` 份 CRLF / `4` 份 LF 行尾；`lpcc_eval.py` 验证全数 `9/9` 由 `--head` 编译报错（`rabbit.lpc` `syntax error, unexpected L_IDENTIFIER`/`Illegal character 0xee`，`ARMOR.lpc` `whereis()`/`do_give()`/`do_rm()`/`set_alias()` 语法错）转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #91 `unclosed-set-alias-quote`）通过 `9/9` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `6` 馆（端口 `47601..47606`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 键值字符串换行断裂修复（2026-11-21，KB 06 §7.415）
+
+- 修复 `/d/jjf/zuixing2.lpc`、`/daemon/quest/qlist1536000.lpc`、`/daemon/quest/qlist3456000.lpc`、`/daemon/quest/qlist5184000.lpc`、`/daemon/quest/qlist7776000.lpc`（共 `5` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

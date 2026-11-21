@@ -1028,3 +1028,8 @@ pristine + build-debug（归档端口 `40231`，测试端口 `49231`）。`scrip
 - `/adm/Fooland/cave.lpc` 第 11 行 `set ("light", 1") ;` 多出后缀双引号，导致下文 `@BiteMe` 及全部房间字符串奇偶反转并在文件尾触发 `End of file in string`，整室无法加载。
 - 删除 `1` 后的多余双引号改为 `set ("light", 1) ;`（保留原 LF 格式）。
 - 验证：`lpcc_eval.py`（`--at /adm/Fooland/zzeval.lpc`）由 `--head` `End of file in string` 编译失败转为通过（`light=1 short="Bazz's cave" eq=1`）；`lpc_format_changed.py --apply` 零重排；`scripts/lint.py`（`unquoted-set-string` 规则扩展覆盖整型后缀引号，共 `79` 条规则）全库与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh` 启停正常且无残留驱动。
+
+## 键值字符串换行断裂修复（2026-11-21，KB 06 §7.415）
+
+- 修复 `/d/attic/Prime/Dagaard/dilligaf/monster/lordsoth.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

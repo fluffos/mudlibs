@@ -11,8 +11,7 @@ void init()
 void greeting()
 {      
     object me = this_player();
-    if( me->query_condition("kill_capital") || me->query_condition("
-kill_soldier") || me->query_condition("kill_government") )
+    if( me->query_condition("kill_capital") || me->query_condition("kill_soldier") || me->query_condition("kill_government") )
     {
         message_vision( name()+"对着$N大喝一声：“杀人放火的刁民，快快受死吧！！！” \n", me );
         kill_ob(me);

@@ -142,6 +142,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("pager-text-in-code", "file", "KB 06 §7.263", "error", "Interactive `more` pager prompt (`继续下一页` / `前一页)` / `未完继续`) pasted into LPC code position"),
     RuleSpec("unclosed-cmp-quote", "file", "KB 04 §6.39", "error", "Comparison `== \"...` or `!= \"...` missing closing `\"` before `)` or `;` on same line"),
     RuleSpec("unbalanced-pp-comment", "file", "KB 04 §6.40", "error", "Commented `//` line with unbalanced `(`/` )` inside `#ifdef`/`#else`/`#endif` block"),
+    RuleSpec("newline-in-key-string", "file", "KB 06 §7.415", "error", "Dbase/skill/condition/property/mapping key string literal split across raw newline (`\\n`)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -457,6 +458,39 @@ def _find_unbalanced_pp_comment(b: bytes) -> int | None:
             mask = code_mask(b, heredoc=True)
         if m.start() < len(mask) and mask[m.start()]:
             return b.count(b"\n", 0, m.start()) + 1
+    return None
+
+
+NL_FN_KEY_RE = re.compile(
+    rb"(?:query(?:_skill|_temp|_skill_mapped|_skill_prepared|_entire_dbase|_condition|_property)?|"
+    rb"set(?:_temp|_skill|_property)?|"
+    rb"add(?:n|_temp)?|"
+    rb"delete(?:_temp|_skill)?|"
+    rb"apply_condition|clear_condition|"
+    rb"map_skill|prepare_skill|skill_mapped|exert_function|perform_action|"
+    rb"present|load_object|find_object|new|inherit)"
+    rb"\s*\(\s*\"[A-Za-z0-9_ /-]*\r?\n[A-Za-z0-9_/-]+\""
+)
+NL_MAP_KEY_RE = re.compile(
+    rb"(?:^|[,({\[ \t])(?:\"[a-z_][a-z0-9_ /-]*\r?\n[a-z0-9_/-]+\"|\"\r?\n[a-z_][a-z0-9_/-]*\")\s*:",
+    re.MULTILINE,
+)
+
+
+def _find_newline_in_key_string(b: bytes) -> tuple[int, str] | None:
+    """Return (1-based line, snippet) of a key/mapping-key string split across a raw newline."""
+    mask = None
+    for pat, use_end in ((NL_FN_KEY_RE, False), (NL_MAP_KEY_RE, True)):
+        if not pat.search(b):
+            continue
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        for m in pat.finditer(b):
+            idx = (m.end() - 1) if use_end else m.start()
+            if idx < len(mask) and mask[idx]:
+                ln = b.count(b"\n", 0, m.start()) + 1
+                snip = m.group(0).replace(b"\r", b"").replace(b"\n", b"\\n").decode("utf-8", "replace")
+                return ln, snip.strip()
     return None
 
 
@@ -913,6 +947,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         upl = _find_unbalanced_pp_comment(b)
         if upl is not None:
             hits.append(("unbalanced-pp-comment", f"{path}:{upl}", "Commented `//` line leaves unbalanced `(`/` )` inside preprocessor branch"))
+    if want("newline-in-key-string") and not is_wiz and b"\n" in b and (NL_FN_KEY_RE.search(b) or NL_MAP_KEY_RE.search(b)):
+        nk = _find_newline_in_key_string(b)
+        if nk is not None:
+            hits.append(("newline-in-key-string", f"{path}:{nk[0]}", f"Key literal split across newline: `{nk[1]}`"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

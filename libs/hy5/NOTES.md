@@ -838,3 +838,8 @@ pristine + build-debug，port 40183。`scripts/play_login.py` 注册。
 
 - 修复 `/d/qujing/baoxiang/npc/huangpao.lpc` 第 58 行 `names[0]!="百花)` 缺失闭合引号与“羞”字（致第 60 行起 `$var illegal outside of function pointer` / `Illegal character` 编译失败），同时比对干净同系 `mhxy` 修复第 76 行 `身蔽谩n` 乱码为 `"$N说道：浑家，舍利子内丹还是放在我身边为好。\n"`（保留 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `4` 份文件确认 `0 to format`（维持 `KEEP` 历史格式）；`lpcc_eval.py` 验证 `hy5`/`hymud` `/d/qujing/baoxiang/npc/huangpao` 由 `--head` 编译失败转为干净加载 `PASS`（`"黄袍怪(huangpao guai)"`，`err=0`）；`scripts/lint.py`（新增规则 #94 `unclosed-cmp-quote`）通过 `4/4` `HEAD` 正例与反例单测、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；全批 `4` 馆（端口 `47631..47634`）逐一完成 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 键值字符串换行断裂修复（2026-11-21，KB 06 §7.415）
+
+- 修复 `/kfedit/skill/lingyuan-xinfa/force.lpc`、`/kungfu/skill/lingyuan-xinfa/force.lpc`（共 `2` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

@@ -893,3 +893,8 @@ pristine + build-debug，归档端口 40246。`scripts/play_login.py`（port 492
 ## 运行期与分桶目录补全（2026-11-15，KB 06 §7.384）
 
 对比同宗 `sunshadow` 与 `debug.log` 报错（`backup_inventory` 无法保存 `/inv/backup_inv/...`），在 `scripts/wasm_keep_dirs.txt` 补齐 `adm/etc`、`adm/save/daemons`、`adm/save/letters/{0..9}`、`adm/save/{pacct,postal,users}` 各 `a..z` 分桶（含 `arrest`/`suicide`）、`d/magic/spellbook`、`d/player.village/keys`、`d/save/summons`、`d/sglib/strong/save/{,data,markers}`、`daemon/save/news/rn`、`inv/backup_inv/{,a..z}`、`log/adm`、`log/d/...` 及 4 处游戏指令实写 `realms/*/log`。`lpcc_eval.py` `/inv/backup_inv/z/zztest` 修前 FAIL → 修后 `ZZRES=1` PASS；`play_boot.sh` 重启 clean。
+
+## 键值字符串换行断裂修复（2026-11-21，KB 06 §7.415）
+
+- 修复 `/d/undead/mon/xeryl.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

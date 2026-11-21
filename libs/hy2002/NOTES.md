@@ -558,3 +558,8 @@ pristine + build-debug，port 40116。`scripts/play_login.py` 注册。
 
 - 修复 `/kungfu/skill/{zhuihun-biao,wudu-goufa,shedao-qigong}.lpc` 共 `3` 个武功文件中由 `order[random(13)]` 着色脚本导致的词中引号破坏：分别还原 `"「小鬼闹花灯」" NOR `、`刺$n的小腹",` 与 `直击$n小腹",`。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `33` 份文件零重排（`hymud` 5 份保持历史未格式化 `KEEP`，`5` 份 CRLF 与 `28` 份 LF 原样保留）；`lpcc_eval.py` 验证代表 `HEAD` 均报编译错且修复后全数 `33/33`（包括 `shenmo` 全部 `9` 份）干净加载 `PASS`；`scripts/lint.py`（新增规则 #92 `broken-order-color-quote`）通过 `33/33` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；全批 `8` 馆（端口 `47611..47618`）逐一通过 `play_boot.sh`+`play_stop.sh` 启动验证且 `ZERO_DRIVERS`。
+
+## 键值字符串换行断裂修复（2026-11-21，KB 06 §7.415）
+
+- 修复 `/kungfu/skill/lingyuan-xinfa/force.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

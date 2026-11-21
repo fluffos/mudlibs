@@ -1282,3 +1282,8 @@ pristine + build-debug，port 40047。`scripts/play_login.py` 注册并执行 `l
 
 - 清理 `/open/capital/npcbak/gy.lpc:20`、`open/center/{,npc/}gy.lpc:21`（`"战功\"`）、`/open/poison/obj/jade.lpc:6,8`（`"玉佩\"` 与 `玉佩\。`）、`/open/snow/npc/dguger.lpc:48`（`"玄子神功\"`）与 `/open/start/npc/papa.lpc:26`（`"武功\"`）共 `6` 个文件的 BIG5 `0x5C` 残留反斜杠（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` `17` 文件零重排（保留各文件原 CRLF/LF 行尾）；`lpcc_eval.py` 验证 `17/17` 文件均由 `--head` 编译报错（`Illegal character` / `End of file in string` / `syntax error`，其中 `es1_win` 与 `esI` 经 `--at /d/eastland/zzeval.lpc` 验证）转为 `PASS` 正常加载；`scripts/lint.py`（新增规则 #88 `big5-backslash-quote`）通过 `17/17` `HEAD` 正例、工作树与 `2` 份模板/转义反例单测，全库 `--all`、`--files` 与 `--fast` 均 `0` 错误 `0` 告警；`6/6` 馆实机 `play_boot.sh`+`play_stop.sh`（端口 `47565..47570`）全部正常且 `ZERO_DRIVERS`。
+
+## 键值字符串换行断裂修复（2026-11-21，KB 06 §7.415）
+
+- 修复 `/cmds/apr/clone.lpc`、`/open/death/room/npc/king-1.lpc`、`/open/love/npc/1.lpc`（共 `3` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
