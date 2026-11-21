@@ -537,3 +537,8 @@ pristine + build-debug，port 40122。`scripts/play_login.py` 注册。
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## BIG5 `0x5C` 残留反斜杠转义闭合引号修复（2026-11-21，KB 03 §4.4）
+
+- 清理 `/open/sky/42.lpc:12` 中 BIG5 `0x5C` 残留闭合引号转义 `"马厩\"`，消除第 `13`/`30` 行语法报错与字串未闭合（保留原混合行尾）。
+- 验证：`lpc_format_changed.py --apply` `17` 文件零重排（保留各文件原 CRLF/LF 行尾）；`lpcc_eval.py` 验证 `17/17` 文件均由 `--head` 编译报错（`Illegal character` / `End of file in string` / `syntax error`，其中 `es1_win` 与 `esI` 经 `--at /d/eastland/zzeval.lpc` 验证）转为 `PASS` 正常加载；`scripts/lint.py`（新增规则 #88 `big5-backslash-quote`）通过 `17/17` `HEAD` 正例、工作树与 `2` 份模板/转义反例单测，全库 `--all`、`--files` 与 `--fast` 均 `0` 错误 `0` 告警；`6/6` 馆实机 `play_boot.sh`+`play_stop.sh`（端口 `47565..47570`）全部正常且 `ZERO_DRIVERS`。

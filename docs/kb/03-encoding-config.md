@@ -149,6 +149,7 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
   `scripts/lpc_fix_big5_quote_backslash.py [--apply] SLUG...|--all` deletes the backslash when the character before it
   encodes to cp950 with 0x5C as second byte and the quote ends an expression. Two backslashes (`功\\"`, yxsj
   `bullets.lpc`) are not handled; read those by hand.
+  *(2026-11-21 follow-up: `17` remaining files across `es1_win`, `esI` (`skeleton.lpc`), `gjzddmudda` (`open/sky/42.lpc` `"马厩\"`), and `kxkj`/`kxkj1`/`kxkjii2` (`npcbak/gy.lpc`, `center/{,npc/}gy.lpc`, `jade.lpc`, `dguger.lpc`, `papa.lpc`, `goufu.lpc` including mid-string `玉佩\。`/`髑髅\，`/`惭愧\,`) slipped past `cp950`/EOL-delimiter filters; fixed and encoded in `scripts/lint.py --rule big5-backslash-quote`.)*
 - **The GB18030 mirror image in save files: a stray half character in front of `\"`.** MudOS saves wrote a quote as `\"`; a
   text that held half of a GBK character right before a quote (`“` + `0xBA` + `\"` in the xyj/sjsh family's `nokiss` emote) was
   transcoded with the `0xBA 0x5C` pair as one character (`篭`), the backslash is gone, the bare quote ends the string and

@@ -941,3 +941,8 @@ pristine + build-debug，归档端口 40009。`scripts/play_login.py`（port 490
 
 - 续查全语料无定义 `call_other` 调用（静默返回 `0`），修正 `/cmds/std/_identify.lpc`（共 `1` 个文件） 中的 `->recieve_damage`/`->recieve_wound`/`->recieve_curing`/`->delte_temp`/`->delet_temp`/`->settemp`/`->se_temp`/`->stat_busy`/`->query_skil`/`->quert_skill`/`->queyr_skill` 拼写错误为标准方法名（保留原文件行尾）。
 - 验证：全批 `359` 文件中 `321` 个 `.lpc` 差分编译通过 `313/321`（`8` 处为既有历史问题、零新增退化）；`lpc_format_changed.py --apply` 零重排；`lpcc_eval.py` 代表实测通过（`bxsj` `recieve_damage=100 -> receive_damage=60`，`tybxjh` `delet_temp=1 -> delete_temp=0`）；`scripts/lint.py`（新增 `call-method-typo`，共 `70` 条规则）全库与 `--fast` 零错误零告警；`8` 馆代表 `play_boot.sh`+`play_stop.sh` 正常且 `ZERO_DRIVERS`。
+
+## BIG5 `0x5C` 残留反斜杠转义闭合引号修复（2026-11-21，KB 03 §4.4）
+
+- 清理 `/d/eastland/liang_shan/obj/skeleton.lpc:9-10` 中 BIG5 `0x5C` 残留转义闭合引号 `"巨大的髑髅\"`（`2` 处，保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `17` 文件零重排（保留各文件原 CRLF/LF 行尾）；`lpcc_eval.py` 验证 `17/17` 文件均由 `--head` 编译报错（`Illegal character` / `End of file in string` / `syntax error`，其中 `es1_win` 与 `esI` 经 `--at /d/eastland/zzeval.lpc` 验证）转为 `PASS` 正常加载；`scripts/lint.py`（新增规则 #88 `big5-backslash-quote`）通过 `17/17` `HEAD` 正例、工作树与 `2` 份模板/转义反例单测，全库 `--all`、`--files` 与 `--fast` 均 `0` 错误 `0` 告警；`6/6` 馆实机 `play_boot.sh`+`play_stop.sh`（端口 `47565..47570`）全部正常且 `ZERO_DRIVERS`。

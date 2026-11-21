@@ -963,3 +963,8 @@ pristine + build-debug，归档端口 40010。`scripts/mudplay.py`（port 49010�
 
 - 修复 `/d/noden/farwind/monster/copperman.lpc` 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## BIG5 `0x5C` 残留反斜杠转义闭合引号修复（2026-11-21，KB 03 §4.4）
+
+- 清理 `/d/eastland/liang_shan/obj/skeleton.lpc:9-11,66` 中 BIG5 `0x5C` 残留反斜杠 `"巨大的髑髅\"`、`"\巨大的髑髅\"` 及 `髑髅\，`，修复闭合引号并消除编译与转义告警（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `17` 文件零重排（保留各文件原 CRLF/LF 行尾）；`lpcc_eval.py` 验证 `17/17` 文件均由 `--head` 编译报错（`Illegal character` / `End of file in string` / `syntax error`，其中 `es1_win` 与 `esI` 经 `--at /d/eastland/zzeval.lpc` 验证）转为 `PASS` 正常加载；`scripts/lint.py`（新增规则 #88 `big5-backslash-quote`）通过 `17/17` `HEAD` 正例、工作树与 `2` 份模板/转义反例单测，全库 `--all`、`--files` 与 `--fast` 均 `0` 错误 `0` 告警；`6/6` 馆实机 `play_boot.sh`+`play_stop.sh`（端口 `47565..47570`）全部正常且 `ZERO_DRIVERS`。

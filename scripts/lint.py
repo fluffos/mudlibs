@@ -134,6 +134,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("one-arg-set", "file", "KB 06 §7.414", "error", "1-argument set(\"k\") / set_temp(\"k\") (data=0) or missing-value set(\"k\",) against ES2 F_DBASE"),
     RuleSpec("unclosed-define-string", "file", "KB 04 §6.33", "error", "Single-line #define macro carrying an unclosed string literal"),
     RuleSpec("fullwidth-code-punct", "file", "KB 04 §6.34", "error", "Fullwidth punctuation or ideographic space used as LPC syntax/whitespace in code position"),
+    RuleSpec("big5-backslash-quote", "file", "KB 03 §4.4", "error", "BIG5 0x5C leftover backslash escaping a closing string quote (`...\\\"` before `,`/`;`/`:`/`)`)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -284,6 +285,36 @@ def _find_fullwidth_code_punct(b: bytes) -> tuple[int, str] | None:
                     if len(re.findall(rb'(?<!\\)"', line[:m.start()])) % 2 == 0:
                         return (lno, m.group(0).decode("utf-8"))
         off += len(raw) + 1
+    return None
+
+
+BIG5_BS_QUOTE_RE = re.compile(rb'[\x80-\xff]\\"[ \t]*[,;:\)\]\}]')
+_BIG5_TMPL_LHS_RE = re.compile(rb'^\s*(?:file_global|item_buff|room|roomtext|str|mobu|list|msg|bstr|code|line|txt|arg|out)\s*\+?=')
+
+
+def _find_big5_backslash_quote(b: bytes) -> int | None:
+    """Return 1-based line number of first BIG5 0x5C stray backslash escaping a closing quote, else None."""
+    mk = None
+    for m in BIG5_BS_QUOTE_RE.finditer(b):
+        ls = b.rfind(b"\n", 0, m.start()) + 1
+        le = b.find(b"\n", m.end())
+        if le < 0:
+            le = len(b)
+        line = b[ls:le].rstrip(b"\r")
+        if b[ls:m.start()].lstrip().startswith(b"//"):
+            continue
+        if mk is None:
+            mk = code_mask(b, heredoc=True)
+        line_first_nonws = ls + len(line) - len(line.lstrip())
+        if line_first_nonws < le and mk[m.start()] == 0 and mk[m.start() + 2] == 0:
+            before = b[ls:m.start()]
+            if b'\\"' not in before and len(re.findall(rb'"', before)) % 2 == 1:
+                if _BIG5_TMPL_LHS_RE.search(line):
+                    continue
+                if (b"sprintf" in line or b"fprintf" in line or b"replace_string" in line or b"write_file" in line or b"query(" in line):
+                    if re.search(rb'(?<!\\)"\s*(?:\)\s*)?;\s*$', line) and line.count(b'\\"') >= 2:
+                        continue
+                return b.count(b"\n", 0, m.start()) + 1
     return None
 
 
@@ -706,6 +737,11 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         if fw_hit is not None:
             fln, fch = fw_hit
             hits.append(("fullwidth-code-punct", f"{path}:{fln}", f"fullwidth `{fch}` used in LPC code position"))
+
+    if want("big5-backslash-quote") and b'\\"' in b and BIG5_BS_QUOTE_RE.search(b):
+        bln = _find_big5_backslash_quote(b)
+        if bln is not None:
+            hits.append(("big5-backslash-quote", f"{path}:{bln}", "BIG5 0x5C leftover `\\\"` escapes closing string quote"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

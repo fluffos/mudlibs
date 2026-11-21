@@ -1016,3 +1016,8 @@ pristine + build-debug，port 40063。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/open/common/common.h:27` 中 `#define PANTS\t\tCOMMON_OBJ"pants` 缺少闭合 `"`，补全闭合引号为 `COMMON_OBJ"pants"` 并保留原 LF 行尾。
 - 验证：`lpc_format_changed.py --apply` 13/13 头文件零重排；`lpcc_eval.py` 验证通过（`wxddym` `/adm/daemons/skillsd1` 加载正常、`xkxc98sj`/`xkxz2` `F_ITEMMAKE` 由 `--head` 语法错误转为 `"/feature/itemmake.lpc"`、`kxkj`/`kxkj1`/`kxkjii2` `PANTS`、`fengyun434`/`fysjmb`/`xsfyssjb` `ansi4.h`、`wuhanzhan` `ansi1.h` 及 `silberland` `PMMASTER` 均通过）；`scripts/lint.py`（新增规则 #86 `unclosed-define-string`）`13/13` `HEAD` 正例与工作树/`silberland/work/sys/terminal.h` 反例单测通过，全库 `--all` 与 `--fast` 均 `0` 错误 `0` 告警；`13/13` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47531..47543`）全部正常且 `ZERO_DRIVERS`。
+
+## BIG5 `0x5C` 残留反斜杠转义闭合引号修复（2026-11-21，KB 03 §4.4）
+
+- 清理 `/open/center/npc/goufu.lpc:34,36`（`"么\"` 与 `惭愧\,`）、`/open/poison/obj/jade.lpc:6,8`（`"玉佩\"` 与 `玉佩\。`）与 `/open/snow/npc/dguger.lpc:26`（`"玄子神功\"`）共 `3` 个文件的 BIG5 `0x5C` 残留反斜杠（保留各文件原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `17` 文件零重排（保留各文件原 CRLF/LF 行尾）；`lpcc_eval.py` 验证 `17/17` 文件均由 `--head` 编译报错（`Illegal character` / `End of file in string` / `syntax error`，其中 `es1_win` 与 `esI` 经 `--at /d/eastland/zzeval.lpc` 验证）转为 `PASS` 正常加载；`scripts/lint.py`（新增规则 #88 `big5-backslash-quote`）通过 `17/17` `HEAD` 正例、工作树与 `2` 份模板/转义反例单测，全库 `--all`、`--files` 与 `--fast` 均 `0` 错误 `0` 告警；`6/6` 馆实机 `play_boot.sh`+`play_stop.sh`（端口 `47565..47570`）全部正常且 `ZERO_DRIVERS`。
