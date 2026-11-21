@@ -152,6 +152,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("unclosed-color-nor-quote", "file", "KB 04 §6.43", "error", "ANSI color macro string missing closing `\"` before `NOR`/`HI*`"),
     RuleSpec("unclosed-heredoc", "file", "KB 04 §6.44", "error", "Unclosed `@MARKER` heredoc lacking a column-0 `MARKER` terminator (`End of file in text block`)"),
     RuleSpec("unbalanced-if-ctrl", "file", "KB 04 §6.46", "error", "Single-line `if (...) return/continue/break;` missing closing `)` before control statement"),
+    RuleSpec("malformed-query-args", "file", "KB 06 §7.416", "error", "Nitan7 `ob->query()`-converter malformed `query()`/`query_temp()` call (3+ args, hoisted `2 && obj`, or unquoted DB_STR splice)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -629,6 +630,74 @@ def _find_unbalanced_if_ctrl(b: bytes) -> int | None:
                     break
         if ok and depth > 0 and b"{" not in line[kpos:] and b";" in line[kpos:]:
             return b.count(b"\n", 0, lstart) + 1
+    return None
+
+
+_BARE_QUERY_CALL_RE = re.compile(rb"(?<![A-Za-z0-9_>])(query(?:_temp)?)\s*\(")
+_QUERY_DECL_PREFIX_RE = re.compile(rb"\b(?:mixed|int|string|void|mapping|object|varargs|private|protected|public|nomask)\s+$")
+_QUERY_BOOL_HOIST_RE = re.compile(rb"\b[0-9]+\s*(?:&&|\|\|)\s*[A-Za-z_]")
+
+
+def _split_call_args(b: bytes, start: int) -> list[bytes] | None:
+    depth = 1
+    i = start
+    args: list[bytes] = []
+    cur = start
+    n = min(len(b), start + 1000)
+    in_str = False
+    while i < n and depth > 0:
+        ch = b[i]
+        if in_str:
+            if ch == 92:  # \
+                i += 2
+                continue
+            if ch == 34:  # "
+                in_str = False
+        else:
+            if ch == 34:
+                in_str = True
+            elif ch in (40, 91, 123):  # ([{
+                depth += 1
+            elif ch in (41, 93, 125):  # )]}
+                depth -= 1
+                if depth == 0:
+                    args.append(b[cur:i].strip())
+                    return args
+            elif ch == 59 and depth == 1:  # ;
+                return None
+            elif ch == 44 and depth == 1:  # ,
+                args.append(b[cur:i].strip())
+                cur = i + 1
+        i += 1
+    return None
+
+
+def _find_malformed_query_args(b: bytes) -> tuple[int, str] | None:
+    """Return `(1-based line, reason)` for Nitan7 converter-corrupted `query`/`query_temp` calls."""
+    idx = b.find(b'username=query(" id "')
+    if idx != -1:
+        return (b.count(b"\n", 0, idx) + 1, "unquoted `query(\" id \"` DB_STR splice inside SQL literal")
+    mask = None
+    for m in _BARE_QUERY_CALL_RE.finditer(b):
+        pos = m.start()
+        if pos >= 2 and b[pos - 2:pos] in (b"->", b"::"):
+            continue
+        if _QUERY_DECL_PREFIX_RE.search(b[max(0, pos - 40):pos]):
+            continue
+        args = _split_call_args(b, m.end())
+        if not args:
+            continue
+        reason = None
+        if len(args) >= 3:
+            reason = f"3+-arg `{m.group(1).decode()}()` call drops trailing target object or fails compilation"
+        elif len(args) == 2 and _QUERY_BOOL_HOIST_RE.search(args[1]):
+            reason = f"boolean `&&`/`||` inside `{m.group(1).decode()}()` 2nd arg drops target object"
+        if reason is None:
+            continue
+        if mask is None:
+            mask = code_mask(b, heredoc=True)
+        if pos < len(mask) and mask[pos]:
+            return (b.count(b"\n", 0, pos) + 1, reason)
     return None
 
 
@@ -1120,6 +1189,10 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         ifln = _find_unbalanced_if_ctrl(b)
         if ifln is not None:
             hits.append(("unbalanced-if-ctrl", f"{path}:{ifln}", "Single-line `if (...) return/continue/break;` missing closing `)` before statement"))
+    if want("malformed-query-args") and not is_wiz and slug not in ("unitopia", "silberland", "tamedhon") and (b"query(" in b or b"query (" in b or b"query_temp(" in b or b"query_temp (" in b):
+        qhit = _find_malformed_query_args(b)
+        if qhit is not None:
+            hits.append(("malformed-query-args", f"{path}:{qhit[0]}", qhit[1]))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:
