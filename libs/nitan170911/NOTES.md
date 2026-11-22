@@ -1469,3 +1469,8 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 
 - 清理 `/clone/drug/fengdong.lpc:142`、`kungfu/class/quanzhen/auto_perform.h`、`quest/skybook/jinshe/wenyi{, (2)}.lpc:106` 等处 `query()`/`query_temp()` 误传 3 参数（移除多余 `1` 并修正 `auto_perform.h` 粘连声明 `object weapon`）、`d/hudie/liandan/liandan.lpc:548` 嵌套 `me` 被错提入 `query("id", ob, me)` 导致错查自身、`/adm/daemons/pkd.lpc:352` `2 && total[0]` 被吞入 `query("couple/couple_id", ...)` 使夫妻双胜判定恒假，以及 `/adm/daemons/boardd.lpc:1160` `#ifdef DB_SAVE_A` 块中 `DB_STR(user->query("id"))` 截断 SQL 字串（全批保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 全批 `47` 份文件确认 `0` 错误；`lpcc_eval.py` 实测全部修复文件及 `auto_perform.h` 干净加载 `PASS`；`boardd.lpc` 开启 `#define DB_SAVE_A 1` 探针由 `diags=5` 降至 `3`（0 语法报错）；`scripts/lint.py`（新增规则 #106 `malformed-query-args`）通过 `47/47` `HEAD` 正例、`3/3` `nitan_ceshi` 反例及 `--rule malformed-query-args --all --jobs 8` / `--changed HEAD` / `--fast` 零错误零告警（106 条规则）；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47562`）启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-21 内置 Efun 拼写错误 `arryp` 修复（KB 04 §6.49）
+
+- 修复 `/adm/daemons/pathd.lpc:91` 中误将 `arrayp(exits[key])` 拼写为 `arryp(exits[key])` 引发的 `Undefined function arryp` 编译阻断，恢复寻路守护精灵 `/adm/daemons/pathd` 与玩家 `walk` 指令加载（保留原 LF 行尾与未格式化 `KEEP` 状态）。
+- 验证：`lpcc_eval.py` 实测 `/adm/daemons/pathd` 由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #108 `efun-name-typo`）确认 `HEAD` 正例检出、全库复扫与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh`（端口 `47591`）启停正常且 `ZERO_DRIVERS`。

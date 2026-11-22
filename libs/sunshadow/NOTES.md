@@ -1161,3 +1161,8 @@ pristine + build-debug（归档端口 `40232`，测试端口 `49232`）。
 
 - 修复 `/d/archive/undead/mon/xeryl.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 内置 Efun 拼写错误 `sizof` 编译阻断修复（2026-11-21，KB 04 §6.49）
+
+- 修复 `/d/atoyatl/tecqumin/rooms/mummy.lpc:86,96,106`（`sunder()`、`shatter()`、`rush()` 三处）将 `sizeof(critters)` 误拼为 `sizof(critters)` 导致严格类型模式下加载报错 `Undefined function sizof`（连带 `Bad argument 1 to efun random()` -> `*No program`）的编译阻断（保留原 LF 行尾）。
+- 验证：`lpcc_eval.py --at /d/zzeval.lpc` 实测 `/d/atoyatl/tecqumin/rooms/mummy` 及三项特技函数由 `--head` 6 处编译报错转为干净加载 `PASS`；`lpc_format_changed.py` 保持 `KEEP`；`scripts/lint.py`（规则 #108 `efun-name-typo`）与 `play_boot.sh`+`play_stop.sh`（端口 `47595`）启停正常且 `ZERO_DRIVERS`。

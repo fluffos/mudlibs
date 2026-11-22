@@ -880,3 +880,8 @@ pristine + build-debug，port 40239。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40239。`scripts/mudplay.py`（port 49239）按提示完成注册进入冒险者公会并执行 `look`/`score`/`quit`，驱动 stdout 0 错误/警告。本轮无新编程缺陷。
+
+## `chain_fw.lpc` 未闭合 heredoc 与 `nnotify_fail` 拼写修复（2026-11-21，KB 04 §6.44 / §6.49）
+
+- 修复 `/d/erosmia/ekravia/object/chain_fw.lpc:30,62` 两处缺陷（此前因 `meta.json` 标记 `submodule-patch` 而在 §6.44 漏扫）：第 `30` 行将误用的 `LONG` 闭合为与第 `27` 行 `@CLONG` 匹配的 `CLONG`（消除 `End of file in text block`），并将第 `62` 行 `nnotify_fail(` 修正为 `notify_fail(`（保留原 LF 行尾）。
+- 验证：`lpcc_eval.py --at /d/zzeval.lpc` 实测 `/d/erosmia/ekravia/object/chain_fw` 由 `--head` `End of file in text block` 转为干净加载 `PASS`；`lpc_format_changed.py` 保持 `KEEP`；`scripts/lint.py`（规则 #101 `unclosed-heredoc` 与规则 #108 `efun-name-typo`）与 `play_boot.sh`+`play_stop.sh`（端口 `47596`）均通过且 `ZERO_DRIVERS`。

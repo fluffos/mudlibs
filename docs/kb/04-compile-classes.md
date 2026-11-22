@@ -1582,3 +1582,15 @@ Symptom: 同一行或多行续接的相邻语句调用之间遗漏分号 `;`（�
 2. **大段脱号/错位截断（`7` 馆 / `8` 文件）：** `sanjieshenhua`/`sjshv2578bb`/`xyj20032` `/d/obj/npc/girl.lpc` 自 `case 2` 至 `my_randommove()` 脱失全部 `;`/`{`/`}`/`:`（对照各馆 `/d/obj/npc/bad.lpc` 与 `yao0.lpc` 还原）；`zxty` `/clone/obj/job_server.lpc:254+` 注释错位与下半截截断（对照 `bmxkx2001` 完整还原）；`wmkj` `/quest/wudang/song.lpc:226-355` 片段错贴到 `guaif()` 之后且脱失 `;`/`{`/`}` 与前向声明的 `guaim()`（对照 `chidi` 修复并保留本馆 `accountguaiexp`/`ask_fangqi` 数值）；`xfbhh` `/clone/lkj.lpc:18,48`（连带 `do_effect(object me)` 重声明 `me`、未定义 `arg`/`ob`）及同源 `/clone/poi.lpc:52`（对照 `combatd.lpc`/`questd.lpc` 字串类型 `query("quest/id", me)` 用 `find_living()` 改写）。`mohuanshiji` `/d/moon/obj/dan_xueshan.lpc`、`/obj/prize/xueshan.lpc` 与 `shenmo` 嵌套巫师快照 `/sjsh/u/...` 中的半成品草稿文件在规则中予以豁免。
 Fix: 逐文件按语法结构补齐 `;` 并对脱号/截断文件参照同源干净副本精准还原，统一保留原 CRLF/LF 行尾与 `KEEP` 状态。
 Detection: `scripts/lint.py --rule missing-call-semicolon`（经 `code_mask(b, heredoc=True)` 屏蔽注释、字符串及 heredoc，校验 `)` 后紧接语句级调用且前面非控制结构/运算/参数分隔）。
+
+### 6.49 内置 Efun 名称、类型谓词与全局宏拼写错误（`6` 馆 / `8` 文件，2026-11-21）
+
+Symptom: 活跃可玩库非巫师路径中遗留的多类 FluffOS 内置 efun、类型谓词及全局守护精灵宏拼写错误，在严格类型模式下直接触发 `Undefined function` 编译阻断（或于运行时战斗/过滤/任务路径静默失败并伴随参数截断）：
+1. **`nitan170911` `/adm/daemons/pathd.lpc:91`：** `if (arryp(exits[key]))` 将 `arrayp` 误拼为 `arryp`，导致寻路守护精灵 `/adm/daemons/pathd` 编译失败（`Undefined function arryp`），玩家 `walk` 指令全部失效。
+2. **`xajhxo` `/system/daemon/daemon/filter.lpc:12,15,56-60`：** `if (funtionp(condition))` 将 `functionp` 误拼为 `funtionp`（同文件第 `15` 行未声明局部变量 `comp_cond`、`filter_gift()` 缺少返回值且 `filter_candidate()` 在 `sizeof(candidates) > amount` 时越界写入 `TopTen[i]` 并漏毁 `i == amount` 对象），生产 `log/runtime` 与 `log/log` 持续报错 `*No program in object '/system/daemon/daemon/filter'`。
+3. **`pkuxkx` `/adm/daemons/ftaskd.lpc:77,150-231` 与 `/kungfu/skill/{sword,backup/adv_weapon}/wujian.lpc:31`：** `wujian.lpc` 将 `destruct(ob)` 误拼为 `destrcut(ob)` 导致无形剑气武器模板编译失败；`ftaskd.lpc` 除第 `193` 行 `objecpt(...)`（`objectp`）及第 `206`/`210` 行 `CHANNLE_D->do_channel(...)`（`CHANNEL_D->do_channel(this_object(), ...)`）拼写错外，还连带缺少 `#include <localtime.h>`、第 `150` 行 `if(file_size(roomfile) continue;`、第 `151` 行 `err=catch(roomfile,"???");`、第 `175-186` 行循环错用外层索引 `inv[i]` 替代 `inv[j]`、第 `208-209` 行 `message()` 缺失第 3 参数 `users()` 及第 `231` 行未定义 `last_start_time`。
+4. **`shadowgate` 与 `sunshadow` `/d/atoyatl/tecqumin/rooms/mummy.lpc:86,96,106`：** `sunder()`/`shatter()`/`rush()` 三处全部将 `sizeof(critters)` 误拼为 `sizof(critters)`；`sunshadow` 因默认 `strict_types` 在加载时即报错 `Undefined function sizof` 阻断编译，`shadowgate` 则于木乃伊战斗触发特技时失效。
+5. **`es1` `/d/erosmia/ekravia/object/chain_fw.lpc:30,62`：** 除同 `es1_win`（§6.44）一样的 `@CLONG ... LONG` 未闭合 heredoc 阻断外（因 `hosting: "submodule-patch"` 此前漏扫），第 `62` 行亦存在 `nnotify_fail(`（`notify_fail(`）拼写错误。
+
+Fix: 逐一修正 `arryp`→`arrayp`、`funtionp`→`functionp`（并声明 `comp_cond`、补 `return 0;` 与 `if (i < amount)` 守卫）、`objecpt`→`objectp` / `CHANNLE_D`→`CHANNEL_D` / `ftaskd.lpc` 语法与循环变量、`destrcut`→`destruct`、`sizof`→`sizeof`、`nnotify_fail`→`notify_fail` 与 `es1` `LONG`→`CLONG`（保留各文件原有 CRLF/LF 行尾与 `KEEP` 格式化状态）。
+Detection: `scripts/lint.py --rule efun-name-typo`（经 `code_mask(b, heredoc=True)` 屏蔽注释、字符串及 heredoc，排除巫师与 LDMud 目录）。

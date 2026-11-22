@@ -154,6 +154,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("unbalanced-if-ctrl", "file", "KB 04 §6.46", "error", "Single-line `if (...) return/continue/break;` missing closing `)` before control statement"),
     RuleSpec("malformed-query-args", "file", "KB 06 §7.416", "error", "Nitan7 `ob->query()`-converter malformed `query()`/`query_temp()` call (3+ args, hoisted `2 && obj`, or unquoted DB_STR splice)"),
     RuleSpec("missing-call-semicolon", "file", "KB 04 §6.48", "error", "Missing `;` between adjacent LPC statement calls (`f(...) g(...)`)"),
+    RuleSpec("efun-name-typo", "file", "KB 04 §6.49", "error", "Misspelled FluffOS efun/predicate/daemon call (`arryp`, `objecpt`, `funtionp`, `destrcut`, `sizof`, `nnotify_fail`, `CHANNLE_D->`)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -796,6 +797,23 @@ GD_GUARD_CTX = re.compile(rb"\b(?:file_size|pointerp|arrayp|directory_exists|is_
 DEAD_U_EXITS_RE = re.compile(
     r'"(/u/(?:calvin/兰陵|fly/doublesword/houdian|beyond/|tianlin/阿修罗界|g/gold/dock|xinyue/sunrise_room|mei/(?:workroom|tianying/elou)|b/bigcat/|f/faceoff/|r/rence/|onskyer/niulang/|skinys/yihua/))'
 )
+EFUN_NAME_TYPO_RE = re.compile(
+    rb"\b(?:arryp|objecpt|funtionp|strinp|destrcut|destuct|sizof|sizoef|enviroment|nnotify_fail|prevous_object|this_palyer|this_obect|call_othre|load_obejct|find_obejct|clone_obejct)\s*\("
+    rb"|\bCHANNLE_D\s*->"
+)
+
+
+def _find_efun_name_typo(b: bytes) -> tuple[int, str] | None:
+    mask = code_mask(b, heredoc=True)
+    for m in EFUN_NAME_TYPO_RE.finditer(b):
+        pos = m.start()
+        if not mask[pos]:
+            continue
+        tok = m.group(0)
+        if not tok.startswith(b"CHANNLE_D") and b[:pos].rstrip().endswith(b"->"):
+            continue
+        return b[:pos].count(b"\n") + 1, tok.decode("ascii", "replace").strip()
+    return None
 
 
 def _load_metas() -> dict[str, dict]:
@@ -1284,6 +1302,17 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         mcs_ln = _find_missing_call_semicolon(b)
         if mcs_ln is not None:
             hits.append(("missing-call-semicolon", f"{path}:{mcs_ln}", "Adjacent LPC statement calls missing `;` between `)` and next call"))
+    if (
+        want("efun-name-typo")
+        and not is_wiz
+        and slug not in sc.LDMUD
+        and slug not in ("unitopia", "silberland", "tamedhon")
+        and slug not in sc.GENERATED
+        and EFUN_NAME_TYPO_RE.search(b)
+    ):
+        et = _find_efun_name_typo(b)
+        if et is not None:
+            hits.append(("efun-name-typo", f"{path}:{et[0]}", f"Misspelled FluffOS efun/daemon identifier `{et[1]}`"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:
