@@ -527,3 +527,8 @@ pristine + build-debug，port 40174。`scripts/play_login.py` 注册。
 
 - 将 `/d/yanziwu/obj/dodgebook.lpc:20-27` 被 80 列折断的注释尾词 `uired`/`is`/`ill`/`rn` 接回对应 `//` 注释行（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hy5`/`haiyang2`/`hymud`/`niaoren`/`wdxtym`/`wxddym` 代表）全数由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #120 `dodgebook-party-syntax`，共 120 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47701..47706`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `d/heimuya/mishi.lpc` 截断与重复粘贴编译阻断修复（KB 04 §6.63）
+
+- 修复 `/d/heimuya/mishi.lpc:59,83` 截断的 `this_pl;` -> `this_player());` 并截除末尾重复粘贴的 `oid buqun_rob` 片段（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 全批 `9` 馆 `12` 文件零错零告警 `PASS`；`scripts/lint.py`（新增规则 #124 `heimuya-mishi-cctx-syntax`，共 124 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `9` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47741..47749`）均通过且 `ZERO_DRIVERS`。

@@ -170,6 +170,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("hy-migong-skill-warnings", "targeted", "KB 04 §6.60", "error", "lin06.lpc passing string path to `set_maze_boss(object)`, zhuihun-biao.lpc no-op `weapon; weapon =`, or meskill empty `if (i > j - 2)`"),
     RuleSpec("undefined-set-max-items", "targeted", "KB 04 §6.61", "error", "Uncommented `set_max_items(...)` call in home/bag/shopbox/tai/vase/hualan when the lib's `feature/move.lpc` lacks `set_max_items`"),
     RuleSpec("xkx-include-syntax-blockers", "targeted", "KB 04 §6.62", "error", "XKX `yaolu.lpc` stale `/d/quanzhou/obj/drug_list.h`, `gaolao1.lpc` stale `zhanglao.lpc`, `yuelao2.lpc` stray `]));`, or `pixie_superskill.lpc` unbraced `if`/`else`"),
+    RuleSpec("heimuya-mishi-cctx-syntax", "targeted", "KB 04 §6.63", "error", "`d/heimuya/mishi.lpc` truncated `this_player();`/`this_pl;`/`oid buqun_rob` or `cctx` `shoumu1`/`haibing`/`mjjs` syntax blockers"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1772,7 +1773,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1898,6 +1899,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/d/qilian/npc/pixie_superskill.lpc",
         ):
             targeted_bins["xkx_blockers"].append(item)
+        if rel in (
+            "/d/heimuya/mishi.lpc",
+            "/d/taohua/npc/shoumu1.lpc",
+            "/d/shenlong/npc/haibing.lpc",
+            "/d/mj/obj/mjjs.lpc",
+        ):
+            targeted_bins["mishi_cctx"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2251,6 +2259,26 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             elif rel == "/d/qilian/npc/pixie_superskill.lpc":
                 if re.search(rb'target->unconcious\(\);\r?\n[ \t]*else\s*\{', b):
                     col.add("xkx-include-syntax-blockers", p, "pixie_superskill.lpc two-statement `if` missing `{ ... }` before `else`")
+
+    if col.wants("heimuya-mishi-cctx-syntax"):
+        for _, p, rel in targeted_bins["mishi_cctx"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/heimuya/mishi.lpc":
+                if (
+                    re.search(rb'\\n",\s*this_player\(\);', b)
+                    or b"this_pl;" in b
+                    or re.search(rb'\boid buqun_rob\(', b)
+                ):
+                    col.add("heimuya-mishi-cctx-syntax", p, "mishi.lpc truncated `this_player();`/`this_pl;` or duplicated `oid buqun_rob(`")
+            elif rel == "/d/taohua/npc/shoumu1.lpc":
+                if re.search(rb'\(:\s*exert_function,\s*"recover"\s*:\),\s*\r?\n[ \t]*setup\(\);', b):
+                    col.add("heimuya-mishi-cctx-syntax", p, "shoumu1.lpc unclosed `set(\"chat_msg_combat\", ({ ...` before `setup();`")
+            elif rel == "/d/shenlong/npc/haibing.lpc":
+                if b"inherit " not in b and b"set_name(" in b:
+                    col.add("heimuya-mishi-cctx-syntax", p, "haibing.lpc missing `inherit NPC;`")
+            elif rel == "/d/mj/obj/mjjs.lpc":
+                if re.search(rb'set\("long",\r?\n"', b):
+                    col.add("heimuya-mishi-cctx-syntax", p, "mjjs.lpc unclosed multiline string literal in `set(\"long\", ...)`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

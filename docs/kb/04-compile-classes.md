@@ -1720,3 +1720,14 @@ Symptom: 侠客行系 `7` 馆（`bmxkx2001`、`jym`、`shenzhou`、`xkm`、`xkx2
 
 Fix: 将 `6` 馆 `yaolu.lpc` 改为 `#include "/d/quanzhou/yaopu/obj/drug_list.h"`；将 `7` 馆 `gaolao1.lpc` 删去重复内联 `init()`/`greeting()` 并改为 `#include "/d/xiakedao/npc/zhanglao.h"`（与同目录完好 `gaolao.lpc` 一致）；删去 `yuelao2.lpc` 孤立 `]));` 并为 `pixie_superskill.lpc` 补齐 `if (...) { ... } else {` 花括号（全批纯 LF 保留）。
 Detection: `scripts/lint.py --rule xkx-include-syntax-blockers`（targeted 规则，校验上述四路径特征）。
+
+### 6.63 黑木崖密室 `mishi.lpc` 行尾截断/重复粘贴与 `cctx` 三处编译阻断（`9` 馆 / `12` 文件，2026-11-23）
+
+Symptom: 纵横/海洋同源 `9` 馆（`cctx`、`jyqxc`、`jyqxc2`、`xiakexing3`、`xkxlb`、`hy`、`hy2000`、`hy2002`、`hyiishzdscbb`）的 `/d/heimuya/mishi.lpc` 与 `cctx` 另三份世界物件均存在编译阻断：
+1. **`/d/heimuya/mishi.lpc:48,59,83-84`（全 `9` 馆）：** `cctx`/`jyqxc`/`jyqxc2`/`xiakexing3`/`xkxlb` 第 `48` 行 `message_vision(..., this_player();` 缺闭合 `)`，且全 `9` 馆第 `59` 行 `this_pl;` 被截断、末尾第 `83-99` 行重复粘贴了丢失首字母 `v` 与闭合 `}` 的 `oid buqun_rob(object me, object book) { ...`。
+2. **`cctx` `/d/taohua/npc/shoumu1.lpc:49-50`：** `set("chat_msg_combat", ({ ...` 未闭合 `}));` 即进入 `setup();`。
+3. **`cctx` `/d/shenlong/npc/haibing.lpc`：** 缺失 `inherit NPC;`，导致 `set_name`/`set`/`set_max_encumbrance` 全部未定义。
+4. **`cctx` `/d/mj/obj/mjjs.lpc:10-18`：** `set("long", "...")` 跨多行未闭合引号，触发 `End of file in string`。
+
+Fix: 补齐 `9` 馆 `mishi.lpc` 的 `this_player());` 并截除末尾重复的 `oid buqun_rob` 片段；为 `shoumu1.lpc` 补齐 `}));`、为 `haibing.lpc` 补齐 `inherit NPC;`、将 `mjjs.lpc` 跨行长描述改为 `@LONG ... LONG` heredoc（保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule heimuya-mishi-cctx-syntax`（targeted 规则，校验上述四路径语法特征）。
