@@ -1489,3 +1489,8 @@ pristine + build-debug，port 40103。`scripts/play_login.py` 注册。
 
 - 修复 `/d/migong/lev17/dong70.lpc` 第 `7` 行 `GRN"海之礁岛NOR);` 缺失闭合引号（保留 CRLF）及 `/d/qujing/village/npc/test.lpc` 第 `180` 行 `RED "埔肚碇ゲ NOR,` 乱码并缺失闭合引号（对照 `hxxtjqb` 同源 `test.lpc` 还原为 `RED "七叶琼芝草" NOR,`）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `20` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `20/20` 目标全数干净加载 `PASS`（`haiyang2`/`hy5`/`sje`/`shenzhou`/`tianxiawuxue`/`shenmo`/`kxkj` 等均由 `--head` 编译报错转为 `ok=1`）；`scripts/lint.py`（新增规则 #100 `unclosed-color-nor-quote`，`KB 04 §6.43`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`9` 馆代表（`haiyang2`/`hy5`/`hhsj`/`kxkj`/`shenmo`/`shenzhou`/`sje`/`tianxiawuxue`/`wxddym`，端口 `47512..47520`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `dodgebook.lpc` 注释折行与 `party.lpc` 映射漏逗号编译阻断修复（KB 04 §6.59）
+
+- 将 `/d/yanziwu/obj/dodgebook.lpc:20-27` 被 80 列折断的注释尾词 `uired`/`is`/`ill`/`rn` 接回对应 `//` 注释行；在 `/quest/shenshu/npc/party.lpc:77` `"qingyun-shou": 100` 后补齐缺失逗号 `,`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hy5`/`haiyang2`/`hymud`/`niaoren`/`wdxtym`/`wxddym` 代表）全数由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #120 `dodgebook-party-syntax`，共 120 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47701..47706`）均通过且 `ZERO_DRIVERS`。

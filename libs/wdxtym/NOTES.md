@@ -771,3 +771,8 @@ pristine + build-debug（归档端口 40188，临时测试端口 49513）。`scr
 
 - 修复 `/kungfu/skill/qujing-gunfa.lpc:125,128` `query_action(object me, object weapon)` 中未判空直接内联解引用 `me->query_temp("weapon")->query("name")` 致空手触发 `*Bad argument 1 to EFUN call_other() Got: int(0)` 崩溃的缺陷：优先取形参 `weapon` 并补 `objectp()` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hell` 及 `6` 馆代表）`query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（规则 #117 `qujing-gunfa-weapon-name`，共 117 条）`--changed HEAD` 与 `--fast` 零错误零告警。
+
+## 2026-11-23 `dodgebook.lpc` 注释折行与 `party.lpc` 映射漏逗号编译阻断修复（KB 04 §6.59）
+
+- 在 `/quest/shenshu/npc/party.lpc:77` `"qingyun-shou": 100` 后补齐缺失逗号 `,`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hy5`/`haiyang2`/`hymud`/`niaoren`/`wdxtym`/`wxddym` 代表）全数由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #120 `dodgebook-party-syntax`，共 120 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47701..47706`）均通过且 `ZERO_DRIVERS`。

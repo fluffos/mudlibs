@@ -1803,3 +1803,8 @@ pristine + build-debug，port 40057。`scripts/play_login.py` 注册。
 
 - 修复 `/clone/demogorgon.lpc` 与 `/clone/npc/demogorgon.lpc` `do_go()`/`do_kill()` 中向 `feature/attack.lpc` `is_killing(string id)` 传入对象 `this_player()` 引发的 `Bad type for argument 1 of is_killing ( string vs object )` 编译阻断：改为 `is_killing(this_player()->query("id"))`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py` 全部 `6` 馆 `11` 文件由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #119 `demogorgon-is-killing-object`，共 119 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47691..47696`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `dodgebook.lpc` 注释折行与 `party.lpc` 映射漏逗号编译阻断修复（KB 04 §6.59）
+
+- 将 `/d/yanziwu/obj/dodgebook.lpc:20-27` 被 80 列折断的注释尾词 `uired`/`is`/`ill`/`rn` 接回对应 `//` 注释行；在 `/quest/shenshu/npc/party.lpc:77` `"qingyun-shou": 100` 后补齐缺失逗号 `,`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hy5`/`haiyang2`/`hymud`/`niaoren`/`wdxtym`/`wxddym` 代表）全数由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #120 `dodgebook-party-syntax`，共 120 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47701..47706`）均通过且 `ZERO_DRIVERS`。

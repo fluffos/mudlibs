@@ -166,6 +166,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("qujing-gunfa-weapon-name", "targeted", "KB 04 §6.56", "error", "qujing-gunfa.lpc `int wn` / mangled `query_temp(\"weapon\", wn = me)` or unguarded `query_temp(\"weapon\")->query(\"name\")`"),
     RuleSpec("xyj-eof-tail-corruption", "targeted", "KB 04 §6.57", "error", "XYJ archive-corrupted EOF tails (`d/qujing/start/24/12.lpc`, `cuiping.lpc`, `nowords.lpc` ESC, `yunlougate.lpc`)"),
     RuleSpec("demogorgon-is-killing-object", "targeted", "KB 04 §6.58", "error", "demogorgon.lpc passing `this_player()` object to `is_killing(string id)` (`Bad type for argument 1`)"),
+    RuleSpec("dodgebook-party-syntax", "targeted", "KB 04 §6.59", "error", "dodgebook.lpc wrapped bare comment words (`uired`/`is`/`ill`/`rn`) or party.lpc missing `,` after `\"qingyun-shou\": 100`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1768,7 +1769,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1859,6 +1860,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["xyj_eof"].append(item)
         if rel in ("/clone/demogorgon.lpc", "/clone/npc/demogorgon.lpc"):
             targeted_bins["demogorgon"].append(item)
+        if rel in ("/d/yanziwu/obj/dodgebook.lpc", "/quest/shenshu/npc/party.lpc"):
+            targeted_bins["dodge_party"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2151,6 +2154,20 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 )
             if str_iskill_cache[slug]:
                 col.add("demogorgon-is-killing-object", p, "calls `is_killing(this_player())` against `feature/attack.lpc` `is_killing(string id)`")
+
+    if col.wants("dodgebook-party-syntax"):
+        for _, p, rel in targeted_bins["dodge_party"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/yanziwu/obj/dodgebook.lpc":
+                if re.search(rb"//[^\r\n]*experience req\r?\n[ \t]*uired\b", b):
+                    col.add("dodgebook-party-syntax", p, "wrapped comment continuation words (`uired`/`is`/`ill`/`rn`) in code position")
+            elif rel == "/quest/shenshu/npc/party.lpc":
+                if (
+                    re.search(rb'"qingyun-shou": 100[ \t]*\r?\n', b)
+                    or re.search(rb'"strike"[ \t]*:[ \t]*"chousui-zhang",[ \t]*q\r?\n', b)
+                    or re.search(rb'\]\),\r?\n[ \t]*"party"[ \t]*:[ \t]*"shaolin",', b)
+                ):
+                    col.add("dodgebook-party-syntax", p, "party.lpc missing `,` after `\"qingyun-shou\": 100`, stray `q` after `\"chousui-zhang\",`, or missing `([` before `\"party\": \"shaolin\"`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

@@ -1684,3 +1684,12 @@ Symptom: 海洋/武汉站系 `6` 馆（`fqyy2`、`haiyang2`、`hy2000`、`hy2002
 
 Fix: 将 `11` 份文件中两处 `is_killing(this_player())` 统一改为 `is_killing(this_player()->query("id"))`（保留 `hy2000` CRLF 与其余 `5` 馆 LF）。
 Detection: `scripts/lint.py --rule demogorgon-is-killing-object`（targeted 规则，对照同馆 `feature/attack.lpc` 是否声明 `is_killing(string ...)` 精准校验）。
+
+### 6.59 `dodgebook.lpc` 注释折行裸词与 `party.lpc` 技能映射漏逗号编译阻断（`12` 馆 / `15` 文件，2026-11-23）
+
+Symptom: 海洋/侠客行系 `12` 馆存在两处高发语法阻断（均触发 `syntax error, unexpected L_STRING` 与 `*No program in object`）：
+1. **`/d/yanziwu/obj/dodgebook.lpc:20-27`（`10` 馆：`fqyy2`、`haiyang2`、`hy`、`hy2000`、`hy2002`、`hy5`、`hyiishzdscbb`、`hymud`、`niaoren`、`xkxyb`）：** `// minimum combat experience req\n      uired`、`study th\n      is`、`this sk\n      ill`、`can lea\n      rn` 四条单行注释被 80 列硬折行，折出的裸词 `uired`/`is`/`ill`/`rn` 落入 `set("skill", ([ ... ]))` 映射体内阻断编译。
+2. **`/quest/shenshu/npc/party.lpc:77-78,148,299`（`5` 馆：`haiyang2`、`hy5`、`hymud`、`wdxtym`、`wxddym`）：** `"qingyun-shou": 100` 末尾漏写逗号 `,`、第 `148` 行 `"strike": "chousui-zhang", q` 末尾多出裸字母 `q`，且第 `299` 行 `"party" : "shaolin",` 缺映射起始符 `([`，均导致语法编译阻断。
+
+Fix: 将 `10` 馆 `dodgebook.lpc` 四处折行尾词接回对应 `//` 注释行；在 `5` 馆 `party.lpc` 补齐 `"qingyun-shou": 100,`、删除 `"chousui-zhang",` 后的裸 `q` 并补齐 `([ "party": "shaolin",`（全批保留原 CRLF/LF 行尾与 `KEEP` 状态）。
+Detection: `scripts/lint.py --rule dodgebook-party-syntax`（targeted 规则，校验上述两路径语法特征）。
