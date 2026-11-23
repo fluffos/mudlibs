@@ -1650,3 +1650,8 @@ pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scrip
 
 - 还原 `/d/qujing/start/24/12.lpc:41-43` 被归档截断损坏的 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();` 尾部与闭合 `}`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`xyj2000`/`xyj2000f`/`sjsh`/`sjshv2578bb`/`xyj20032`/`mhxy` 代表）全数由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #118 `xyj-eof-tail-corruption`，共 118 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47681..47686`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `kungfu/skill` 与 `daemon/skill` `9` 份武功告警清零（KB 04 §6.60）
+
+- 移除 `/{kungfu,daemon}/skill/zhuihun-biao.lpc:191` 裸表达式 `weapon;` 并清零 `/{kungfu,daemon}/skill/{diwangquan,qxxy-shou,wudu-goufa,zhuihun-biao}.lpc` 与 `/kungfu/skill/shedao-qigong.lpc`（共 `9` 份）`hit_ob()`/`ob_hit()` 全部未用局部声明告警（保留原 LF）。
+- 验证：`lpc_audit_removed_locals.py HEAD`（`234` 处零误删）；`lpc_format_changed.py` `0` 重排；`lpcc --batch` `9/9` 零错零告警；`scripts/lint.py`（新增规则 #121 `hy-migong-skill-warnings`，共 121 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47714`）通过且 `ZERO_DRIVERS`。

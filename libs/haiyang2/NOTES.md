@@ -1808,3 +1808,8 @@ pristine + build-debug，port 40057。`scripts/play_login.py` 注册。
 
 - 将 `/d/yanziwu/obj/dodgebook.lpc:20-27` 被 80 列折断的注释尾词 `uired`/`is`/`ill`/`rn` 接回对应 `//` 注释行；在 `/quest/shenshu/npc/party.lpc:77` `"qingyun-shou": 100` 后补齐缺失逗号 `,`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hy5`/`haiyang2`/`hymud`/`niaoren`/`wdxtym`/`wxddym` 代表）全数由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #120 `dodgebook-party-syntax`，共 120 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47701..47706`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `diwangquan`/`qxxy-shou`/`shedao-qigong`/`wudu-goufa`/`zhuihun-biao` 告警清零（KB 04 §6.60）
+
+- 移除 `/kungfu/skill/zhuihun-biao.lpc:191` 裸表达式 `weapon;` 并清零 `/kungfu/skill/{diwangquan,qxxy-shou,shedao-qigong,wudu-goufa,zhuihun-biao}.lpc` `hit_ob()`/`ob_hit()` 全部未用局部声明告警（保留 `diwangquan.lpc` CRLF 与其余 `4` 份 LF）。
+- 验证：`lpc_audit_removed_locals.py HEAD`（`234` 处零误删）；`lpc_format_changed.py` `0` 重排；`lpcc --batch` `5/5` 零错零告警；`scripts/lint.py`（新增规则 #121 `hy-migong-skill-warnings`，共 121 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47713`）通过且 `ZERO_DRIVERS`。

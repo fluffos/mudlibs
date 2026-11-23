@@ -1693,3 +1693,13 @@ Symptom: 海洋/侠客行系 `12` 馆存在两处高发语法阻断（均触发 
 
 Fix: 将 `10` 馆 `dodgebook.lpc` 四处折行尾词接回对应 `//` 注释行；在 `5` 馆 `party.lpc` 补齐 `"qingyun-shou": 100,`、删除 `"chousui-zhang",` 后的裸 `q` 并补齐 `([ "party": "shaolin",`（全批保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 Detection: `scripts/lint.py --rule dodgebook-party-syntax`（targeted 规则，校验上述两路径语法特征）。
+
+### 6.60 `p/migong/lin06.lpc` 向 `set_maze_boss(object)` 传入字符串阻断与海洋系武功/自创技能/草药编译告警清零（`4` 馆 / `40` 文件，2026-11-23）
+
+Symptom: 海洋系 `4` 馆（`hy5`、`hymud`、`haiyang2`、`shenmo`）存在一处迷宫编译阻断与多处可编译告警：
+1. **`/p/migong/lin06.lpc:30-31`（`hy5`、`hymud`）：** 继承 `/adm/daemons/vrm_server.lpc`（其声明 `void set_maze_boss(object ob)`），却调用 `set_maze_boss("/d/city/npc/liumangtou");` 传入路径字符串，触发严格类型编译报错 `Bad type for argument 1 of set_maze_boss ( object vs string )` 与 `*No program in object '/p/migong/lin06'`。
+2. **`/{kfedit,kungfu}/skill/meskill/{dan,hun,lian}.lpc`（`hy5`、`hymud` 共 `12` 文件）：** 残留空条件块 `if (i > j - 2) { { //case 0..2 } }` 触发 `warning: Value of conditional expression is unused`。
+3. **`/{kungfu,daemon}/skill/zhuihun-biao.lpc:191`（`hy5`、`hymud`、`haiyang2`、`shenmo` x2 共 `5` 文件）：** 裸表达式 `weapon; weapon = me->query_temp("weapon");` 触发 `warning: Expression has no side effects, and the value is unused`，并伴随 `hit_ob()` 中 `6` 个未用局部变量；同源 `diwangquan.lpc`、`qxxy-shou.lpc`、`shedao-qigong.lpc`、`wudu-goufa.lpc`（`19` 文件）与 `d/qujing/village/npc/test.lpc:177`（`hy5`/`hymud` `2` 文件）亦各有大量未用局部声明告警。
+
+Fix: 移除 `lin06.lpc` 中非法 `set_maze_boss("/d/city/npc/liumangtou");` 并将 `"/d/city/npc/liumangtou": 1,` 并入 `set_exit_npcs(([ ... ]))`（与同馆 `EVRM_0000.lpc` 迷宫 Boss 刷新方式一致）；删去 `meskill/{dan,hun,lian}.lpc` 空 `if (i > j - 2)` 块、修复 `zhuihun-biao.lpc` `weapon = me->query_temp("weapon");` 并精准清理 `hit_ob()`/`ob_hit()`/`grow_g()` 未用局部声明（保留原 CRLF/LF/混合行尾，经 `lpc_audit_removed_locals.py HEAD` 审计 `234` 处零误删）。
+Detection: `scripts/lint.py --rule hy-migong-skill-warnings`（targeted 规则，校验 `lin06.lpc` 字符串 `set_maze_boss`、`zhuihun-biao.lpc` 裸 `weapon;` 及 `meskill` 空 `if (i > j - 2)`）。

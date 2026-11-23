@@ -167,6 +167,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("xyj-eof-tail-corruption", "targeted", "KB 04 §6.57", "error", "XYJ archive-corrupted EOF tails (`d/qujing/start/24/12.lpc`, `cuiping.lpc`, `nowords.lpc` ESC, `yunlougate.lpc`)"),
     RuleSpec("demogorgon-is-killing-object", "targeted", "KB 04 §6.58", "error", "demogorgon.lpc passing `this_player()` object to `is_killing(string id)` (`Bad type for argument 1`)"),
     RuleSpec("dodgebook-party-syntax", "targeted", "KB 04 §6.59", "error", "dodgebook.lpc wrapped bare comment words (`uired`/`is`/`ill`/`rn`) or party.lpc missing `,` after `\"qingyun-shou\": 100`"),
+    RuleSpec("hy-migong-skill-warnings", "targeted", "KB 04 §6.60", "error", "lin06.lpc passing string path to `set_maze_boss(object)`, zhuihun-biao.lpc no-op `weapon; weapon =`, or meskill empty `if (i > j - 2)`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1769,7 +1770,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1862,6 +1863,18 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["demogorgon"].append(item)
         if rel in ("/d/yanziwu/obj/dodgebook.lpc", "/quest/shenshu/npc/party.lpc"):
             targeted_bins["dodge_party"].append(item)
+        if rel in (
+            "/p/migong/lin06.lpc",
+            "/kungfu/skill/zhuihun-biao.lpc",
+            "/daemon/skill/zhuihun-biao.lpc",
+            "/kfedit/skill/meskill/dan.lpc",
+            "/kfedit/skill/meskill/hun.lpc",
+            "/kfedit/skill/meskill/lian.lpc",
+            "/kungfu/skill/meskill/dan.lpc",
+            "/kungfu/skill/meskill/hun.lpc",
+            "/kungfu/skill/meskill/lian.lpc",
+        ):
+            targeted_bins["hy_migong_skill"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2168,6 +2181,19 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                     or re.search(rb'\]\),\r?\n[ \t]*"party"[ \t]*:[ \t]*"shaolin",', b)
                 ):
                     col.add("dodgebook-party-syntax", p, "party.lpc missing `,` after `\"qingyun-shou\": 100`, stray `q` after `\"chousui-zhang\",`, or missing `([` before `\"party\": \"shaolin\"`")
+
+    if col.wants("hy-migong-skill-warnings"):
+        for _, p, rel in targeted_bins["hy_migong_skill"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/p/migong/lin06.lpc":
+                if re.search(rb'\bset_maze_boss\s*\(\s*"', b):
+                    col.add("hy-migong-skill-warnings", p, "lin06.lpc passes string path to `vrm_server::set_maze_boss(object ob)`")
+            elif rel in ("/kungfu/skill/zhuihun-biao.lpc", "/daemon/skill/zhuihun-biao.lpc"):
+                if re.search(rb'(?m)^[ \t]*weapon\s*;\s*weapon\s*=\s*me->query_temp\("weapon"\)\s*;', b):
+                    col.add("hy-migong-skill-warnings", p, "zhuihun-biao.lpc stray no-op `weapon; weapon = me->query_temp(\"weapon\");`")
+            else:
+                if re.search(rb'\bif\s*\(\s*i\s*>\s*j\s*-\s*2\s*\)\s*\{\r?\n[ \t]*\{\r?\n(?:[ \t]*//case [012]:[^\r\n]*\r?\n){3}[ \t]*\}\r?\n[ \t]*\}', b):
+                    col.add("hy-migong-skill-warnings", p, "meskill empty `if (i > j - 2)` block triggers unused conditional warning")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
