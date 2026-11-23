@@ -1710,3 +1710,13 @@ Symptom: 西游记系 `feature/move.lpc` 提供 `nomask void set_max_items(int e
 
 Fix: 参照同源已修复库（`bmxkx2001`/`chidi`/`hymud`/`yxcs`/`zhyx`）做法，将这 `19` 份文件中的 `set_max_items(...);` 注释为 `// set_max_items(...);`（保留 `sjpl2`/`sjplgfjxb`/`sjplii` CRLF 与其余 `8` 馆 LF）。
 Detection: `scripts/lint.py --rule undefined-set-max-items`（targeted 规则，对照同馆 `feature/move.lpc` 是否缺少 `set_max_items` 精准校验）。
+
+### 6.62 侠客行系 `yaolu.lpc`/`gaolao1.lpc` 错路径 `#include` 与 `yuelao2.lpc`/`pixie_superskill.lpc` 语法阻断（`7` 馆 / `15` 文件，2026-11-23）
+
+Symptom: 侠客行系 `7` 馆（`bmxkx2001`、`jym`、`shenzhou`、`xkm`、`xkx2000zxb`、`xkx2001`、`xuanjianlu`）存在四处编译阻断：
+1. **`/d/quanzhou/yaopu/obj/yaolu.lpc:6`（`6` 馆，不含 `shenzhou`）：** `#include "/d/quanzhou/obj/drug_list.h"` 指向不存在路径，而同名 `drug_list.h` 就在同目录 `/d/quanzhou/yaopu/obj/drug_list.h`。
+2. **`/d/xiakedao/npc/gaolao1.lpc:116`（全 `7` 馆）：** `#include "/d/xiakedao/npc/zhanglao.lpc"` 指向已改名为 `zhanglao.h` 的同目录头文件，且文件正文保留了提取前重复的 `init()` 与 `greeting()`（内含错误调用 `fight_obj()`，改指向 `zhanglao.h` 后会触发 `Redeclaration of function 'init'/'greeting'`）。
+3. **`xkx2000zxb` `/d/city/yuelao2.lpc:37-39` 与 `/d/qilian/npc/pixie_superskill.lpc:277-282`：** `yuelao2.lpc` 在 `set("exits", ([ ... ]));` 后多出一组孤立 `]\n)\n);`；`pixie_superskill.lpc` 的双语句 `if` 分支（`set("eff_qi", 0); target->unconcious();`）缺少花括号 `{ ... }` 即接 `else {`，触发 `syntax error, unexpected L_ELSE`。
+
+Fix: 将 `6` 馆 `yaolu.lpc` 改为 `#include "/d/quanzhou/yaopu/obj/drug_list.h"`；将 `7` 馆 `gaolao1.lpc` 删去重复内联 `init()`/`greeting()` 并改为 `#include "/d/xiakedao/npc/zhanglao.h"`（与同目录完好 `gaolao.lpc` 一致）；删去 `yuelao2.lpc` 孤立 `]));` 并为 `pixie_superskill.lpc` 补齐 `if (...) { ... } else {` 花括号（全批纯 LF 保留）。
+Detection: `scripts/lint.py --rule xkx-include-syntax-blockers`（targeted 规则，校验上述四路径特征）。

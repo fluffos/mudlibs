@@ -169,6 +169,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("dodgebook-party-syntax", "targeted", "KB 04 §6.59", "error", "dodgebook.lpc wrapped bare comment words (`uired`/`is`/`ill`/`rn`) or party.lpc missing `,` after `\"qingyun-shou\": 100`"),
     RuleSpec("hy-migong-skill-warnings", "targeted", "KB 04 §6.60", "error", "lin06.lpc passing string path to `set_maze_boss(object)`, zhuihun-biao.lpc no-op `weapon; weapon =`, or meskill empty `if (i > j - 2)`"),
     RuleSpec("undefined-set-max-items", "targeted", "KB 04 §6.61", "error", "Uncommented `set_max_items(...)` call in home/bag/shopbox/tai/vase/hualan when the lib's `feature/move.lpc` lacks `set_max_items`"),
+    RuleSpec("xkx-include-syntax-blockers", "targeted", "KB 04 §6.62", "error", "XKX `yaolu.lpc` stale `/d/quanzhou/obj/drug_list.h`, `gaolao1.lpc` stale `zhanglao.lpc`, `yuelao2.lpc` stray `]));`, or `pixie_superskill.lpc` unbraced `if`/`else`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1771,7 +1772,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1890,6 +1891,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/clone/newitem/dazao/tai.lpc",
         ):
             targeted_bins["set_max_items"].append(item)
+        if rel in (
+            "/d/quanzhou/yaopu/obj/yaolu.lpc",
+            "/d/xiakedao/npc/gaolao1.lpc",
+            "/d/city/yuelao2.lpc",
+            "/d/qilian/npc/pixie_superskill.lpc",
+        ):
+            targeted_bins["xkx_blockers"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2227,6 +2235,22 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
             if re.search(rb'(?<!->)\bset_max_items\s*\(', cb):
                 col.add("undefined-set-max-items", p, "calls `set_max_items(...)` but `feature/move.lpc` does not define it")
+
+    if col.wants("xkx-include-syntax-blockers"):
+        for slug, p, rel in targeted_bins["xkx_blockers"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/quanzhou/yaopu/obj/yaolu.lpc":
+                if b'"/d/quanzhou/obj/drug_list.h"' in b and os.path.isfile(f"{REPO}/libs/{slug}/work/d/quanzhou/yaopu/obj/drug_list.h"):
+                    col.add("xkx-include-syntax-blockers", p, "yaolu.lpc includes missing `/d/quanzhou/obj/drug_list.h` instead of `/d/quanzhou/yaopu/obj/drug_list.h`")
+            elif rel == "/d/xiakedao/npc/gaolao1.lpc":
+                if b'"/d/xiakedao/npc/zhanglao.lpc"' in b:
+                    col.add("xkx-include-syntax-blockers", p, "gaolao1.lpc includes missing `/d/xiakedao/npc/zhanglao.lpc` instead of `zhanglao.h`")
+            elif rel == "/d/city/yuelao2.lpc":
+                if re.search(rb'\r?\n\]\r?\n\)\r?\n\);', b):
+                    col.add("xkx-include-syntax-blockers", p, "yuelao2.lpc stray duplicate `]));` after `set(\"exits\", ...)`")
+            elif rel == "/d/qilian/npc/pixie_superskill.lpc":
+                if re.search(rb'target->unconcious\(\);\r?\n[ \t]*else\s*\{', b):
+                    col.add("xkx-include-syntax-blockers", p, "pixie_superskill.lpc two-statement `if` missing `{ ... }` before `else`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

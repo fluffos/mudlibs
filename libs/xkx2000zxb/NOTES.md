@@ -573,3 +573,8 @@ pristine + build-debug，归档端口 40140。`scripts/play_login.py` 注册进�
 
 - 修复 `/d/xiakedao/npc/daozhu1.lpc`、`/d/xingxiu/riyuedong.lpc`（共 `2` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `yaolu.lpc`/`gaolao1.lpc` 错路径 `#include` 与语法阻断修复（KB 04 §6.62）
+
+- 修正 `/d/quanzhou/yaopu/obj/yaolu.lpc:6` `drug_list.h` 路径、清理 `/d/xiakedao/npc/gaolao1.lpc` 重复 `init()`/`greeting()` 与改指向 `zhanglao.h`，并移除 `/d/city/yuelao2.lpc:37-39` 孤立 `]));` 及补齐 `/d/qilian/npc/pixie_superskill.lpc:277-282` `if`/`else` 花括号（全批保留纯 LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 全批 `7` 馆 `15` 文件零错零告警 `PASS`；`lpcc_eval.py`（`xkx2000zxb` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #123 `xkx-include-syntax-blockers`，共 123 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `7` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47731..47737`）均通过且 `ZERO_DRIVERS`。

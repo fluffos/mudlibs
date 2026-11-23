@@ -1602,3 +1602,8 @@ pristine + build-debug，归档端口 40066。`scripts/play_login.py` 注册并�
 
 - 修复 `/clone/board/shuyuan_b.lpc:7-8` 中 `set_name(...) set("location", ...);`、`set("board_id", "towiz_b") set("long", ...) setup();` 三处缺少分号导致的编译阻断（保留 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `yaolu.lpc`/`gaolao1.lpc` 错路径 `#include` 与语法阻断修复（KB 04 §6.62）
+
+- 清理 `/d/xiakedao/npc/gaolao1.lpc` 重复内联 `init()`/`greeting()`（含错误 `fight_obj()`）并将 `#include "/d/xiakedao/npc/zhanglao.lpc"` 修正为 `zhanglao.h`（全批保留纯 LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 全批 `7` 馆 `15` 文件零错零告警 `PASS`；`lpcc_eval.py`（`xkx2000zxb` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #123 `xkx-include-syntax-blockers`，共 123 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `7` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47731..47737`）均通过且 `ZERO_DRIVERS`。
