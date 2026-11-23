@@ -452,3 +452,10 @@ pristine + build-debug，port 40139。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/cmds/leitai/dzd/dzd_flag.lpc:6` 中 `set_name("看不到", ({ "dzd's flag", "wakakak" })) set_weight(1);` 缺少分号导致编译失败（保留 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。
+
+## 2026-11-22 书剑系 `guo/mai.lpc` 缺括号、`sprint.lpc` 变参与 `logind.lpc` 孤立重复块修复（KB 04 §6.50）
+
+- 修复 `/d/shaolin/npc/guo.lpc:69,71` 与 `/d/shaolin/npc/mai.lpc:72,74` 中 `if (objectp(present(ob, this_object()) {` 及 `if (query_temp("last_damage_from") == me {` 缺失闭合 `)` 引发的编译失败，并补齐 `objectp(ob)`/`objectp(me)` 守卫与 `else { ... }` 花括号（保留原 CRLF 行尾）。
+- 修复 `/adm/simul_efun/sprint.lpc:3` 的 C 风格裸 `...` 变参声明为 `varargs string sprint(string format, mixed *args...)` 并转调 `sprintf(format, args...)`（保留 CRLF 并通过格式化）。
+- 清除 `/logind.lpc:473-482` 位于 `confirm_password()` 闭合 `}` 之外的重复孤立代码块（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 确认全批 `23` 份文件零错误；`lpcc_eval.py` 实测 `guo`/`mai`/`sprint`（`s1=hi s2=x=42`）/`logind` 全部由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #109 `bare-c-varargs` 与 #110 `shujian-unclosed-if-logind`，共 110 条）与 `play_boot.sh`+`play_stop.sh` 均通过且 `ZERO_DRIVERS`。

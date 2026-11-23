@@ -155,6 +155,8 @@ RULES: list[RuleSpec] = [
     RuleSpec("malformed-query-args", "file", "KB 06 §7.416", "error", "Nitan7 `ob->query()`-converter malformed `query()`/`query_temp()` call (3+ args, hoisted `2 && obj`, or unquoted DB_STR splice)"),
     RuleSpec("missing-call-semicolon", "file", "KB 04 §6.48", "error", "Missing `;` between adjacent LPC statement calls (`f(...) g(...)`)"),
     RuleSpec("efun-name-typo", "file", "KB 04 §6.49", "error", "Misspelled FluffOS efun/predicate/daemon call (`arryp`, `objecpt`, `funtionp`, `destrcut`, `sizof`, `nnotify_fail`, `CHANNLE_D->`)"),
+    RuleSpec("bare-c-varargs", "file", "KB 04 §6.50", "error", "C-style bare `...` varargs parameter in LPC function declaration (FluffOS requires `mixed *args...`)"),
+    RuleSpec("shujian-unclosed-if-logind", "targeted", "KB 04 §6.50", "error", "Shujian `d/shaolin/npc/{guo,mai}.lpc` unbalanced `if (... {` or `/logind.lpc` orphan `confirm_password()` tail"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -816,6 +818,20 @@ def _find_efun_name_typo(b: bytes) -> tuple[int, str] | None:
     return None
 
 
+BARE_C_VARARGS_RE = re.compile(
+    rb"(?m)^[ \t]*(?:(?:public|private|protected|nomask|varargs)[ \t]+)*"
+    rb"(?:void|int|string|mixed|object|mapping|float|buffer)[ \t]+\*?[A-Za-z_][A-Za-z0-9_]*[ \t]*\([^;\r\n]*,[ \t]*\.\.\.[ \t]*\)"
+)
+
+
+def _find_bare_c_varargs(b: bytes) -> int | None:
+    mask = code_mask(b, heredoc=True)
+    for m in BARE_C_VARARGS_RE.finditer(b):
+        if mask[m.start()]:
+            return b[:m.start()].count(b"\n") + 1
+    return None
+
+
 def _load_metas() -> dict[str, dict]:
     out = {}
     for mp in sorted(glob.glob(f"{REPO}/libs/*/meta.json")):
@@ -1313,6 +1329,20 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         et = _find_efun_name_typo(b)
         if et is not None:
             hits.append(("efun-name-typo", f"{path}:{et[0]}", f"Misspelled FluffOS efun/daemon identifier `{et[1]}`"))
+    if (
+        want("bare-c-varargs")
+        and not is_wiz
+        and "/bin/" not in rel
+        and "/doc/" not in rel
+        and slug not in sc.LDMUD
+        and slug not in ("unitopia", "silberland", "tamedhon")
+        and slug not in sc.GENERATED
+        and b"..." in b
+        and BARE_C_VARARGS_RE.search(b)
+    ):
+        bcv = _find_bare_c_varargs(b)
+        if bcv is not None:
+            hits.append(("bare-c-varargs", f"{path}:{bcv}", "C-style bare `...` varargs parameter (FluffOS requires `mixed *args...`)"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:
@@ -1623,7 +1653,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1702,6 +1732,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["rpadm"].append(item)
         if rel == "/adm/daemons/fingerd.lpc":
             targeted_bins["fingerd"].append(item)
+        if rel in ("/d/shaolin/npc/guo.lpc", "/d/shaolin/npc/mai.lpc"):
+            targeted_bins["guomai"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -1911,6 +1943,19 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             hm = fd_hdr_re.search(b)
             if hm and fd_var_re.search(fd_ifdef_re.sub(b"", hm.group(1))):
                 col.add("fingerd-db-save-decls", p, "DB_SAVE locals declared outside #ifdef DB_SAVE emit unused-local warnings")
+
+    if col.wants("shujian-unclosed-if-logind"):
+        for _, p, _ in targeted_bins["guomai"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"if (objectp(present(ob, this_object()) {" in b or b'if (query_temp("last_damage_from") == me {' in b:
+                col.add("shujian-unclosed-if-logind", p, "unbalanced `if (... {` missing closing `)` before `{`")
+        lg_orphan_re = re.compile(rb'input_to\("get_name",\s*ob\);\r?\n\}\r?\n"\\n"')
+        for _, p, rel in targeted_bins["logind"]:
+            if rel != "/logind.lpc":
+                continue
+            b = open(f"{REPO}/{p}", "rb").read()
+            if lg_orphan_re.search(b):
+                col.add("shujian-unclosed-if-logind", p, "orphan duplicated `confirm_password()` tail outside closing `}`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

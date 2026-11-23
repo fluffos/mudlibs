@@ -1594,3 +1594,16 @@ Symptom: 活跃可玩库非巫师路径中遗留的多类 FluffOS 内置 efun、
 
 Fix: 逐一修正 `arryp`→`arrayp`、`funtionp`→`functionp`（并声明 `comp_cond`、补 `return 0;` 与 `if (i < amount)` 守卫）、`objecpt`→`objectp` / `CHANNLE_D`→`CHANNEL_D` / `ftaskd.lpc` 语法与循环变量、`destrcut`→`destruct`、`sizof`→`sizeof`、`nnotify_fail`→`notify_fail` 与 `es1` `LONG`→`CLONG`（保留各文件原有 CRLF/LF 行尾与 `KEEP` 格式化状态）。
 Detection: `scripts/lint.py --rule efun-name-typo`（经 `code_mask(b, heredoc=True)` 屏蔽注释、字符串及 heredoc，排除巫师与 LDMud 目录）。
+
+### 6.50 书剑系 `6` 馆 `guo/mai.lpc` 条件缺括号、`sprint.lpc` C 风格裸 `...` 变参与 `logind.lpc` 尾部孤立重复块（`6` 馆 / `23` 文件，2026-11-22）
+
+Symptom: 书剑系 `6` 馆（`bxsj`、`bxsj1`、`shujian2008`、`shujian3`、`sjecl`、`sjtx2`）共有三处编译阻断缺陷：
+1. **`/d/shaolin/npc/guo.lpc`（6 馆）与 `/d/shaolin/npc/mai.lpc`（6 馆）：** `unconcious()` 中 `if (objectp(present(ob, this_object()) {`（`guo:69`/`mai:72`）及 `if (query_temp("last_damage_from") == me {`（`guo:71`/`mai:74`）均缺失闭合右括号 `)`，触发 `syntax error, unexpected '{'` 与 `*No program in object`；同时 `guo.lpc` 注释了 `ob` 赋值导致直接调用 `present(0, ...)` 且 `else` 缺少花括号使 `destruct(ob)` 误删新掉落的 `qzling`。
+2. **`/adm/simul_efun/sprint.lpc:3`（6 馆）：** `string sprint(string format, ...) {` 使用 C 风格裸 `...` 变参声明，FluffOS 报错 `syntax error, unexpected L_DOT_DOT_DOT`。
+3. **`/logind.lpc:473-482`（5 馆：`bxsj`、`bxsj1`、`shujian2008`、`sjecl`、`sjtx2`）：** `confirm_password()` 闭合 `}` 之外残留一段复制粘贴出来的提示字串、`write`/`input_to("get_name", ob);` 与多余 `}`，触发 `syntax error, unexpected L_STRING`。
+
+Fix:
+- `guo.lpc` / `mai.lpc` 补齐两处闭合 `)`，加 `objectp(ob)` / `objectp(me)` 守卫并用 `{ ... }` 包裹 `else` 分支（保留原 CRLF 行尾）。
+- `adm/simul_efun/sprint.lpc` 改为 FluffOS 变参语法 `varargs string sprint(string format, mixed *args...) { return sizeof(args) ? sprintf(format, args...) : format; }` 并按格式规范化（保留 CRLF）。
+- `logind.lpc` 移除第 `473-482` 行重复孤立块（保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule bare-c-varargs`（全库文件级规则，屏蔽注释/字符串/heredoc 并排除 `/bin/` 驱动源码 `.spec`）与 `--rule shujian-unclosed-if-logind`（targeted 规则，覆盖 `guo.lpc`/`mai.lpc` 与 `/logind.lpc`）。
