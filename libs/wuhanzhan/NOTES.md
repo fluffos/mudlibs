@@ -1238,3 +1238,8 @@ pristine + build-debug，port 40052。`scripts/play_login.py` 注册并执行 `l
 
 - 剥离 `/wizu/focus/boxing.lpc:1` 首行误粘贴的 `> more boxing.c  ` 前缀（保留 `// houquan.c 猴拳` 注释与原 LF 行尾），消除 `syntax error, unexpected L_ORDER` 编译阻断。
 - 验证：`lpc_format_changed.py` 保持 `KEEP`；`lpcc_eval.py` 实测 `/wizu/focus/boxing` 由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #112 `pasted-shell-prompt`，共 112 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47622`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `demogorgon.lpc` `is_killing(this_player())` 类型不匹配编译阻断修复（KB 04 §6.58）
+
+- 修复 `/clone/npc/demogorgon.lpc` `do_go()`/`do_kill()` 中向 `feature/attack.lpc` `is_killing(string id)` 传入对象 `this_player()` 引发的 `Bad type for argument 1 of is_killing ( string vs object )` 编译阻断：改为 `is_killing(this_player()->query("id"))`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py` 全部 `6` 馆 `11` 文件由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #119 `demogorgon-is-killing-object`，共 119 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47691..47696`）均通过且 `ZERO_DRIVERS`。

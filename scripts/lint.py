@@ -165,6 +165,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("stray-quote-before-newline", "file", "KB 04 §6.55", "error", "Stray/unescaped `\"` right before `\\n\"` breaking out of string literal (`Illegal character '\\\\' (0x5c)`)"),
     RuleSpec("qujing-gunfa-weapon-name", "targeted", "KB 04 §6.56", "error", "qujing-gunfa.lpc `int wn` / mangled `query_temp(\"weapon\", wn = me)` or unguarded `query_temp(\"weapon\")->query(\"name\")`"),
     RuleSpec("xyj-eof-tail-corruption", "targeted", "KB 04 §6.57", "error", "XYJ archive-corrupted EOF tails (`d/qujing/start/24/12.lpc`, `cuiping.lpc`, `nowords.lpc` ESC, `yunlougate.lpc`)"),
+    RuleSpec("demogorgon-is-killing-object", "targeted", "KB 04 §6.58", "error", "demogorgon.lpc passing `this_player()` object to `is_killing(string id)` (`Bad type for argument 1`)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1767,7 +1768,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1856,6 +1857,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["qujing"].append(item)
         if rel in ("/d/qujing/start/24/12.lpc", "/d/meishan/cuiping.lpc", "/d/ourhome/obj/nowords.lpc", "/d/sky/yunlougate.lpc"):
             targeted_bins["xyj_eof"].append(item)
+        if rel in ("/clone/demogorgon.lpc", "/clone/npc/demogorgon.lpc"):
+            targeted_bins["demogorgon"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2133,6 +2136,21 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 col.add("xyj-eof-tail-corruption", p, "stray trailing ESC (0x1b) byte at EOF")
             elif rel == "/d/sky/yunlougate.lpc" and re.search(rb"(?m)^  a [^\x00-\x7f]", b):
                 col.add("xyj-eof-tail-corruption", p, "corrupted EOF garbage bytes replacing closing `}`")
+
+    if col.wants("demogorgon-is-killing-object"):
+        str_iskill_cache: dict[str, bool] = {}
+        for slug, p, _ in targeted_bins["demogorgon"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"is_killing(this_player())" not in b:
+                continue
+            if slug not in str_iskill_cache:
+                atk = f"{REPO}/libs/{slug}/work/feature/attack.lpc"
+                str_iskill_cache[slug] = (
+                    os.path.isfile(atk)
+                    and bool(re.search(rb"\bis_killing\s*\(\s*string\b", open(atk, "rb").read()))
+                )
+            if str_iskill_cache[slug]:
+                col.add("demogorgon-is-killing-object", p, "calls `is_killing(this_player())` against `feature/attack.lpc` `is_killing(string id)`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

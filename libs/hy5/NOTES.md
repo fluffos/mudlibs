@@ -848,3 +848,8 @@ pristine + build-debug，port 40183。`scripts/play_login.py` 注册。
 
 - 修复 `/d/migong/lev17/dong70.lpc` 第 `7` 行 `GRN"海之礁岛NOR);` 缺失闭合引号（保留 CRLF）及 `/d/qujing/village/npc/test.lpc` 第 `180` 行 `RED "埔肚碇ゲ NOR,` 乱码并缺失闭合引号（对照 `hxxtjqb` 同源 `test.lpc` 还原为 `RED "七叶琼芝草" NOR,`）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `20` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `20/20` 目标全数干净加载 `PASS`（`haiyang2`/`hy5`/`sje`/`shenzhou`/`tianxiawuxue`/`shenmo`/`kxkj` 等均由 `--head` 编译报错转为 `ok=1`）；`scripts/lint.py`（新增规则 #100 `unclosed-color-nor-quote`，`KB 04 §6.43`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`9` 馆代表（`haiyang2`/`hy5`/`hhsj`/`kxkj`/`shenmo`/`shenzhou`/`sje`/`tianxiawuxue`/`wxddym`，端口 `47512..47520`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `demogorgon.lpc` `is_killing(this_player())` 类型不匹配编译阻断修复（KB 04 §6.58）
+
+- 修复 `/clone/demogorgon.lpc` 与 `/clone/npc/demogorgon.lpc` `do_go()`/`do_kill()` 中向 `feature/attack.lpc` `is_killing(string id)` 传入对象 `this_player()` 引发的 `Bad type for argument 1 of is_killing ( string vs object )` 编译阻断：改为 `is_killing(this_player()->query("id"))`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py` 全部 `6` 馆 `11` 文件由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #119 `demogorgon-is-killing-object`，共 119 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47691..47696`）均通过且 `ZERO_DRIVERS`。

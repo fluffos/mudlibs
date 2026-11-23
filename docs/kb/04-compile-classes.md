@@ -1677,3 +1677,10 @@ Symptom: 西游记系 `23` 馆存在归档解包遗留的 EOF 尾部字节损坏
 
 Fix: 将 `23` 馆 `12.lpc` 损坏尾部还原为完整 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();\n}`（与同目录 `11.lpc`/`13.lpc` 及现存 `/d/qujing/tianzhu/obj/piyi.lpc` 一致，保留 `sjshv2578bb`/`xyj20032` CRLF 与其余 `21` 馆 LF）；参照 `sjsh` 完好副本还原 `xyj2000`/`xyj2000f` 三份文件尾部并删除裸 `0x1b` 字节。
 Detection: `scripts/lint.py --rule xyj-eof-tail-corruption`（targeted 规则，校验上述四路径 EOF 损坏特征）。
+
+### 6.58 `demogorgon.lpc` 向 `is_killing(string id)` 传入对象 `this_player()` 编译阻断（`6` 馆 / `11` 文件，2026-11-23）
+
+Symptom: 海洋/武汉站系 `6` 馆（`fqyy2`、`haiyang2`、`hy2000`、`hy2002`、`hy5` 均含 `/clone/demogorgon.lpc` 与 `/clone/npc/demogorgon.lpc`；`wuhanzhan` 含 `/clone/npc/demogorgon.lpc`，共 `11` 份已跟踪文件）的 `feature/attack.lpc` 声明 `is_killing(string id)`，而 `demogorgon.lpc` 的 `do_go()` 与 `do_kill()` 仍沿用 `is_killing(object ob)` 分支的写法 `is_killing(this_player())`，导致严格类型编译报错 `Bad type for argument 1 of is_killing ( string vs object )` 与 `*No program in object '/clone/demogorgon'`。
+
+Fix: 将 `11` 份文件中两处 `is_killing(this_player())` 统一改为 `is_killing(this_player()->query("id"))`（保留 `hy2000` CRLF 与其余 `5` 馆 LF）。
+Detection: `scripts/lint.py --rule demogorgon-is-killing-object`（targeted 规则，对照同馆 `feature/attack.lpc` 是否声明 `is_killing(string ...)` 精准校验）。
