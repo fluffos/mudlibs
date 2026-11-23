@@ -1231,3 +1231,8 @@ pristine + build-debug，port 40092。`scripts/play_login.py` 注册。
 
 - 还原 `/d/qujing/start/24/12.lpc:41-43` 被归档截断损坏的 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();` 尾部与闭合 `}`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`xyj2000`/`xyj2000f`/`sjsh`/`sjshv2578bb`/`xyj20032`/`mhxy` 代表）全数由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #118 `xyj-eof-tail-corruption`，共 118 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47681..47686`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `clone/misc/rabbit.lpc` 未用局部变量清理（KB 04 §6.10）
+
+- 清理 `/clone/misc/rabbit.lpc` 中 `do_closecommand()`/`do_opencommand()` 未使用的局部变量 `verb`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `75` 处 `0 to look at`；`lpc_format_changed.py` `21/21` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`128` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh`（`47791..47797`）通过且 `ZERO_DRIVERS`。

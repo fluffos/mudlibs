@@ -1233,3 +1233,8 @@ pristine + build-debug，port 40050。`scripts/play_login.py` 注册并执行 `l
 
 - 将 `/d/youxia/BAGUA/bagua{0..7}.lpc:6`（`8` 份）的 `#include "/d/bagua/bagua.h"` 修正为同目录 `#include "/d/youxia/BAGUA/BAGUA.H"`，并清理 `BAGUA.H:11` 未用局部 `i`（保留原 LF 与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `2` 馆 `16` 份房间零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 报错转为全 `8` 间 `PASS`；`scripts/lint.py`（新增规则 #128 `mhxy-bagua-include`，共 128 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47781..47782`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `clone/misc/rabbit.lpc` 与 `www/cgi-bin/*` 未用局部变量清理（KB 04 §6.10）
+
+- 清理 `/clone/misc/rabbit.lpc`（`verb`×2）以及 `/www/cgi-bin/{board_h,board_list,mudlist,top,who}.lpc`（`time1`/`time2`/`notes`/`i`/`nummuds`/`j`/`option`/`fname` 共 `8` 处）的未使用局部变量，保留原 CRLF/LF 行尾与格式状态；`mhxy` 全库 `11,981` 份可编译文件现已实现零编译告警。
+- 验证：`lpc_audit_removed_locals.py HEAD` `75` 处 `0 to look at`；`lpc_format_changed.py` `21/21` `0` 重排；`lpcc --batch` 全批 `7` 馆 `21` 份文件零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `mhxy` 由 `10` 条告警降为 `0` 告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`128` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh`（`47791..47797`）通过且 `ZERO_DRIVERS`。

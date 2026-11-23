@@ -461,3 +461,8 @@ pristine + build-debug，归档端口 40192。`scripts/play_login.py` 注册进�
 
 - 修复 `/daemon/skill/jue.lpc`、`/daemon/skill/jueqingbian.lpc` 与 `/u/xlwang/skills/jueqingbian.lpc` 共 `3` 个活跃编译失败文件：补全 `action_male`/`action_sanshou` 中 `君应有语`/`万里层云`/`寂寞箫鼓`/`荒烟平楚`/`千秋万古`/`情是何物`/`无孔不入`/`无所不为` 的 PUA 截断闭合引号及 `莺燕黄土`/`生死相许` 乱码，同时消除缺引号连带引起的 `" action "`/`" dodge "`/`" damage "`/`" force "`/`" lvl "`/`" skill_name "`/`" damage_type "` 及招式名/描述空格填充（保留 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对 `3` 份文件零报错格式化；`lpcc_eval.py` 验证由 `--head` `syntax error`/`Illegal character` 全部转为干净加载 `PASS`（`sn="生死相许"`、`errs=(0,0,0)`）；`scripts/lint.py`（规则 #97 `pua-action-unclosed-quote`）通过 `4/4` `HEAD` 正例与反例、全库 `--all --jobs 8` 与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh`（端口 `47662`）启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `clone/misc/rabbit.lpc` 未用局部变量清理（KB 04 §6.10）
+
+- 清理 `/clone/misc/rabbit.lpc` 中 `do_closecommand()`/`do_opencommand()` 未使用的局部变量 `verb`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `75` 处 `0 to look at`；`lpc_format_changed.py` `21/21` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`128` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh`（`47791..47797`）通过且 `ZERO_DRIVERS`。
