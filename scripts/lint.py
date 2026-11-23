@@ -931,7 +931,7 @@ def _is_active_vendored(slug: str, metas: dict[str, dict], gitlinks: set[str]) -
     m = metas.get(slug, {})
     return (
         m.get("wasm_status") == "playable"
-        and m.get("hosting", "vendored") == "vendored"
+        and m.get("hosting", "vendored") in ("vendored", "submodule-patch")
         and not m.get("duplicate_of")
     )
 
@@ -1768,30 +1768,18 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
         k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot")
     }
     slug_set = set(slugs)
-    ping_slug_set = {
-        s for s in metas
-        if s not in gitlinks
-        and s not in sc.GENERATED
-        and s not in sc.LDMUD
-        and metas[s].get("wasm_status") == "playable"
-        and metas[s].get("hosting", "vendored") in ("vendored", "submodule-patch")
-        and not metas[s].get("duplicate_of")
-        and (only_slugs is None or s in only_slugs)
-    }
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
     for p in files:
         if "/work/" not in p or not p.endswith((".lpc", ".h")):
             continue
         prefix, rel_raw = p.split("/work/", 1)
         slug = prefix.split("/", 1)[1]
-        rel = "/" + rel_raw
-        bn = os.path.basename(rel)
-        if slug in ping_slug_set and bn in ("pingd.lpc", "pingtcp.lpc") and not (sc.TOP.search(rel) or sc.ANY.search(rel)):
-            targeted_bins["ping"].append((slug, p, rel))
         if slug not in slug_set:
             continue
+        rel = "/" + rel_raw
         if sc.TOP.search(rel) or sc.ANY.search(rel) or "海洋2002/hy3/" in rel:
             continue
+        bn = os.path.basename(rel)
         item = (slug, p, rel)
         if "more" in bn:
             targeted_bins["more"].append(item)
@@ -1813,6 +1801,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["command"].append(item)
         if rel == "/adm/daemons/rankd.lpc":
             targeted_bins["rankd"].append(item)
+        if bn in ("pingd.lpc", "pingtcp.lpc"):
+            targeted_bins["ping"].append(item)
         if bn == "warcraft.h":
             targeted_bins["warcraft"].append(item)
         if rel in ("/d/mr/npc/dizi.lpc", "/d/mr1/npc/dizi.lpc"):

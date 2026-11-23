@@ -1158,3 +1158,11 @@ pristine + build-debug，归档端口 40233。`scripts/play_login.py` 注册进�
 
 - 修复 `/kungfu/skill/xuanfeng-leg.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `submodule-patch` 全量 targeted lint 补漏：`toptend`、`team`/`bt_snake` 与 `beidou-zhenfa`（KB 06 §7.385 / §7.400 / §7.412）
+
+- 扩充 `scripts/lint.py` `_is_active_vendored()` 覆盖全部 `31` 馆非 gitlink `submodule-patch` 活跃可玩库，唯一命中的 `4` 处缺陷均位于本馆并已一次性清零：
+  - `/adm/daemons/toptend.lpc`：通过 `lpc_fix_topten_guard.py` 补全 `topten_add`/`topten_del`/`topten_query` 空/0 字节榜文件 `file_size <= 0`、`stringp`+过滤空行及 `sscanf(astr[i], ...)` 守卫（KB 06 §7.385）。
+  - `/feature/team.lpc` 与 `/d/baituo/npc/bt_snake.lpc:9`：在 `F_TEAM` 补回 `lord`/`set_lord()`/`query_lord()` 并移除 `bt_snake.lpc` 遮蔽基类的空原型 `void query_lord();`（KB 06 §7.412）。
+  - `/kungfu/skill/beidou-zhenfa.lpc:139,148,209`：补齐 `call_out("destruct_me", 10, me)` 缺失的 `void destruct_me(object me)` 定义（KB 06 §7.400），并一并修正 `->queyr("dex")` 拼写错误为 `->query("dex")`（KB 06 §7.397）。
+- 验证：`lpc_format_changed.py` 保持 `KEEP`、`file` 确认纯 LF；`lpcc_eval.py` 实测 `toptend`、`bt_snake`（`set_lord`/`query_lord` 往返相等）、`beidou-zhenfa`（`function_exists("destruct_me")` 返回本文件且调用后销毁目标）全数零警告 `PASS`；`scripts/lint.py --changed HEAD` 与 `--fast`（`116` 条规则，含全部 `31` 馆 `submodule-patch`）均 `0` 错误 `0` 告警；`play_boot.sh`+`play_stop.sh`（端口 `47661`）通过且 `ZERO_DRIVERS`。
