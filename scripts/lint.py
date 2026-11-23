@@ -162,6 +162,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("malformed-super-call", "file", "KB 04 §6.53", "error", "Superclass hook call `::init()`/`::die()`/`::create()` missing `;` or single-colon `: init();`"),
     RuleSpec("stray-foreach-semicolon", "file", "KB 04 §6.54", "error", "Stray trailing `;` on `foreach (...)` header terminating loop body and breaking loop variable scope"),
     RuleSpec("xo-special-quest-setreboot", "targeted", "KB 04 §6.54", "error", "XO `special_quest.lpc` `if` swallowed into `//` comment or `setreboot.lpc` calling undefined `adminp()`"),
+    RuleSpec("stray-quote-before-newline", "file", "KB 04 §6.55", "error", "Stray/unescaped `\"` right before `\\n\"` breaking out of string literal (`Illegal character '\\\\' (0x5c)`)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -876,6 +877,20 @@ def _find_stray_foreach_semicolon(b: bytes) -> int | None:
     return None
 
 
+STRAY_QUOTE_NL_RE = re.compile(rb'[^\x00-\x7f]"\\n"')
+
+
+def _find_stray_quote_before_newline(b: bytes) -> int | None:
+    mask = code_mask(b, heredoc=True)
+    for m in STRAY_QUOTE_NL_RE.finditer(b):
+        # Single stray `"` leaves `\` at m.start()+2 outside the string (mask==1);
+        # paired unescaped inner quotes leave the CJK char at m.start() outside the string (mask==1);
+        # comments (e.g. `// 被"\n"取代`) have mask==0 at both positions.
+        if mask[m.start()] or mask[m.start() + 2]:
+            return b[:m.start()].count(b"\n") + 1
+    return None
+
+
 def _load_metas() -> dict[str, dict]:
     out = {}
     for mp in sorted(glob.glob(f"{REPO}/libs/*/meta.json")):
@@ -1427,6 +1442,19 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         sfs = _find_stray_foreach_semicolon(b)
         if sfs is not None:
             hits.append(("stray-foreach-semicolon", f"{path}:{sfs}", "Stray `;` after `foreach (...)` terminates the loop header and breaks loop-variable scope"))
+    if (
+        want("stray-quote-before-newline")
+        and not is_wiz
+        and "/doc/" not in rel
+        and slug not in sc.LDMUD
+        and slug not in ("unitopia", "silberland", "tamedhon")
+        and slug not in sc.GENERATED
+        and b'"\\n"' in b
+        and STRAY_QUOTE_NL_RE.search(b)
+    ):
+        sqn = _find_stray_quote_before_newline(b)
+        if sqn is not None:
+            hits.append(("stray-quote-before-newline", f"{path}:{sqn}", "Stray/unescaped `\"` before `\\n\"` closes string early (`Illegal character '\\\\' (0x5c)`)"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:
@@ -1740,18 +1768,30 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
         k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot")
     }
     slug_set = set(slugs)
+    ping_slug_set = {
+        s for s in metas
+        if s not in gitlinks
+        and s not in sc.GENERATED
+        and s not in sc.LDMUD
+        and metas[s].get("wasm_status") == "playable"
+        and metas[s].get("hosting", "vendored") in ("vendored", "submodule-patch")
+        and not metas[s].get("duplicate_of")
+        and (only_slugs is None or s in only_slugs)
+    }
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
     for p in files:
         if "/work/" not in p or not p.endswith((".lpc", ".h")):
             continue
         prefix, rel_raw = p.split("/work/", 1)
         slug = prefix.split("/", 1)[1]
+        rel = "/" + rel_raw
+        bn = os.path.basename(rel)
+        if slug in ping_slug_set and bn in ("pingd.lpc", "pingtcp.lpc") and not (sc.TOP.search(rel) or sc.ANY.search(rel)):
+            targeted_bins["ping"].append((slug, p, rel))
         if slug not in slug_set:
             continue
-        rel = "/" + rel_raw
         if sc.TOP.search(rel) or sc.ANY.search(rel) or "海洋2002/hy3/" in rel:
             continue
-        bn = os.path.basename(rel)
         item = (slug, p, rel)
         if "more" in bn:
             targeted_bins["more"].append(item)
@@ -1773,8 +1813,6 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["command"].append(item)
         if rel == "/adm/daemons/rankd.lpc":
             targeted_bins["rankd"].append(item)
-        if bn in ("pingd.lpc", "pingtcp.lpc"):
-            targeted_bins["ping"].append(item)
         if bn == "warcraft.h":
             targeted_bins["warcraft"].append(item)
         if rel in ("/d/mr/npc/dizi.lpc", "/d/mr1/npc/dizi.lpc"):

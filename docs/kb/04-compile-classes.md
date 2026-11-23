@@ -1649,3 +1649,12 @@ Symptom: 笑傲江湖 XO 系 `3` 馆（`xajhxo`、`xo`、`xo_final`）存在三�
 
 Fix: 移除 `localcmds.lpc` 第 `10` 行 `foreach (...)` 末尾多余分号；将三馆 `special_quest.lpc` 第 `162` 行拆回 `// 现在先共用一个quest库` 与 `if (random(class_score) < 50)` 两行；将两馆 `setreboot.lpc` 第 `13` 行替换为同系 `wizlock.lpc` 标准的 `if (wiz_level(me) < wiz_level("(admin)"))`（全批保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule stray-foreach-semicolon`（全库文件级规则，屏蔽注释/字符串/heredoc 并排除巫师目录、`/doc/`、`bad_foreach.lpc` 编译器反例及 LDMud）与 `--rule xo-special-quest-setreboot`（targeted 规则，校验 `special_quest.lpc` 与 `setreboot.lpc`）。
+
+### 6.55 字符串 `\n"` 前多余/未转义双引号与 `submodule-patch` 四馆 `pingd`/`pingtcp` `nosave` 补漏（`4` 馆 / `13` 文件，2026-11-23）
+
+Symptom:
+1. **字符串末尾 `\n"` 前误插或未转义 `"`（`pkuxkx` `5` 文件）：** `/d/pker/npc/obj/key.lpc:13`（`"一块用铁片磨成的钥匙，显得极为粗糙"\n"`）、`/obj/taozhuang/zhinv/ring.lpc:19`（`"一个金光闪闪的金指环，透射出无法掩饰的光芒。"\n"`）与 `/data/giftmade/yadianna{1315502571,1315502593,1315502612}.lpc:39`（`"…，"天哪…"\n"`）在 `\n"` 前提前闭合字符串，导致 `Illegal character '\' (0x5c)` / `End of file in string` 编译阻断。
+2. **`submodule-patch` 四馆遗漏的 `pingd.lpc`/`pingtcp.lpc` `nosave int strip_callout(int num)` 告警（`4` 馆 / `7` 文件）：** `demonangel`（`pingd`+`pingtcp`）、`dreamofseven`（`pingd`+`pingtcp`）、`es2`（`pingd`+`pingtcp`）与 `pkuxkx`（`pingtcp`）因 `hosting: "submodule-patch"` 未落入旧版 `_is_active_vendored()` 集合，仍保留 `nosave int strip_callout(int num)` 触发 `Illegal to declare nosave function.`；另 `pkuxkx` `/d/bwdh/sjsz/obj/obj/unique/fan.lpc:72` `mapping query_action(object me, object weapon)` 与 `F_EQUIP::query_action()` 参数个数不匹配（零参调用），清零后 `pkuxkx` 全部 `21,377` 份可编译非 `/u/` 文件零警告。
+
+Fix: 去除 `key.lpc`/`ring.lpc` `\n"` 前多余 `"`、转义 `yadianna*.lpc` 内嵌双引号 `\"...\"`；将四馆 `7` 份 `pingd`/`pingtcp` 的 `nosave int strip_callout(int num)` 改为 `protected int strip_callout(int num)` 并将 `ping-strip-callout-nosave` 规则扩展覆盖非 gitlink `submodule-patch` 馆；将 `fan.lpc` 改为 `mapping query_action()`（全批保留原 LF 行尾与 `KEEP`）。
+Detection: `scripts/lint.py --rule stray-quote-before-newline`（经 `code_mask(b, heredoc=True)` 校验 `\n"` 的 `\` 落在字符串外以区分注释，排除巫师目录、`/doc/` 及 LDMud）与 `--rule ping-strip-callout-nosave`。

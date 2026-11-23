@@ -584,3 +584,9 @@ pristine + build-debug，归档端口 40274。`scripts/play_login.py` 注册并�
 - 修复 `/kungfu/skill/sword/wujian.lpc:31` 及 `/kungfu/skill/backup/adv_weapon/wujian.lpc:31` 中 `destruct(ob)` 误拼为 `destrcut(ob)` 引发的 `Undefined function destrcut` 编译阻断。
 - 修复 `/adm/daemons/ftaskd.lpc:77,150-231` 多处连带缺陷：补齐 `#include <localtime.h>`（修复 `LT_HOUR` 未定义）、补齐第 `150` 行 `if(file_size(roomfile)<=0) continue;` 与第 `151` 行 `err=catch(call_other(roomfile,"???"));`、修正第 `175-186` 行循环错用外层索引 `inv[i]` 为 `inv[j]`、修正第 `193` 行 `objecpt` 为 `objectp`、修正第 `206`/`210` 行 `CHANNLE_D->do_channel("rumor", ...)` 为 `CHANNEL_D->do_channel(this_object(), "rumor", ...)`、为第 `208-209` 行 `message("vision", ...)` 补齐第 3 参数 `users()`，以及将第 `231` 行未定义 `last_start_time` 修正为 `last_start`（均保留原 LF 行尾）。
 - 验证：`lpcc_eval.py` 实测 `/adm/daemons/ftaskd` 与 `/kungfu/skill/{sword,backup/adv_weapon}/wujian` 全数由 `--head` 编译报错转为干净加载 `PASS` 零告警；`lpc_format_changed.py` 保持 `KEEP`；`scripts/lint.py`（规则 #108 `efun-name-typo`）与 `play_boot.sh`+`play_stop.sh`（端口 `47593`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `lpc_warnings.py` 非 `/u/` 告警清零与 `\n"` 前多余/未转义双引号修复（KB 04 §6.55）
+
+- 清理 `scripts/lpc_warnings.py pkuxkx`（`21,377` 份可编译文件）仅余的 3 条非 `/u/` 编译告警：将 `/adm/daemons/network/pingtcp.lpc`（第 `23`/`109` 行）`nosave int strip_callout(int num)` 改为 `protected int strip_callout(int num)`；将 `/d/bwdh/sjsz/obj/obj/unique/fan.lpc:72` `mapping query_action(object me, object weapon)` 对齐 `F_EQUIP` 零参签名 `mapping query_action()`。
+- 修复全库 5 处活跃非 `/u/` 字符串 `\n"` 前多余或未转义 `"` 编译阻断（`Illegal character '\' (0x5c)`）：`/d/pker/npc/obj/key.lpc:13`、`/obj/taozhuang/zhinv/ring.lpc:19` 与 `/data/giftmade/yadianna{1315502571,1315502593,1315502612}.lpc:39`（全批保留原 LF 行尾与 `KEEP`）。
+- 验证：`lpcc_eval.py` 实测 7 份对象全部由 `--head` 告警/报错转为零警告干净加载 `PASS`；`scripts/lint.py`（新增规则 #116 `stray-quote-before-newline` + `ping-strip-callout-nosave` 覆盖 `submodule-patch`，共 116 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47654`）均通过且 `ZERO_DRIVERS`。

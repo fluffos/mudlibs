@@ -686,3 +686,8 @@ pristine + build-debug，port 40214。
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40214。`scripts/play_login.py`（port 49214）注册/连线并验证入世界与 `look`/`score`/`i`/`quit`，驱动 stdout 与 `log/` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 2026-11-23 `pingd`/`pingtcp` `nosave` 函数修饰符补漏（KB 04 §6.55）
+
+- 将 `/adm/daemons/network/pingd.lpc`（第 `22`/`125` 行）与 `/adm/daemons/network/pingtcp.lpc`（第 `23`/`109` 行）中触发 `Illegal to declare nosave function.` 编译告警的 `nosave int strip_callout(int num)` 修正为 `protected int strip_callout(int num)`（保留原 LF 行尾与 `KEEP`）。
+- 验证：`lpcc_eval.py` 实测两份对象均由 `--head` 告警转为零警告干净加载 `PASS`；`scripts/lint.py`（`ping-strip-callout-nosave` 扩展覆盖 `submodule-patch` 馆）与 `play_boot.sh`+`play_stop.sh`（端口 `47653`）均通过且 `ZERO_DRIVERS`。

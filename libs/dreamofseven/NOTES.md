@@ -1138,3 +1138,8 @@ pristine + build-debug，port 40240。注册走到种族选择菜单，驱动 st
 
 - `/open/world1/tmr/area/npc/maa.lpc` 右侧边缘被截断，导致 `::die()`（第 `286`/`293` 行）及函数头/语句普遍缺失分号与括号；用同目录完好同源副本 `/open/world1/tmr/area/npc/master.lpc`（「李書文」）还原（保留原 LF 行尾与 `KEEP` 状态）。
 - 验证：`lpcc_eval.py` 实测 `/open/world1/tmr/area/npc/maa` 由 `--head` 报错转为干净加载 `PASS`（`李書文`）；`scripts/lint.py`（新增规则 #113 `malformed-super-call`，共 113 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47631`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `pingd`/`pingtcp` `nosave` 函数修饰符补漏（KB 04 §6.55）
+
+- 将 `/adm/daemons/network/pingd.lpc`（第 `22`/`125` 行）与 `/adm/daemons/network/pingtcp.lpc`（第 `23`/`109` 行）中触发 `Illegal to declare nosave function.` 编译告警的 `nosave int strip_callout(int num)` 修正为 `protected int strip_callout(int num)`（保留原 LF 行尾与 `KEEP`）。
+- 验证：`lpcc_eval.py` 实测两份对象均由 `--head` 告警转为零警告干净加载 `PASS`；`scripts/lint.py`（`ping-strip-callout-nosave` 扩展覆盖 `submodule-patch` 馆）与 `play_boot.sh`+`play_stop.sh`（端口 `47652`）均通过且 `ZERO_DRIVERS`。
