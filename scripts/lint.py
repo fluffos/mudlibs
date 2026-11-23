@@ -163,6 +163,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("stray-foreach-semicolon", "file", "KB 04 §6.54", "error", "Stray trailing `;` on `foreach (...)` header terminating loop body and breaking loop variable scope"),
     RuleSpec("xo-special-quest-setreboot", "targeted", "KB 04 §6.54", "error", "XO `special_quest.lpc` `if` swallowed into `//` comment or `setreboot.lpc` calling undefined `adminp()`"),
     RuleSpec("stray-quote-before-newline", "file", "KB 04 §6.55", "error", "Stray/unescaped `\"` right before `\\n\"` breaking out of string literal (`Illegal character '\\\\' (0x5c)`)"),
+    RuleSpec("qujing-gunfa-weapon-name", "targeted", "KB 04 §6.56", "error", "qujing-gunfa.lpc `int wn` / mangled `query_temp(\"weapon\", wn = me)` or unguarded `query_temp(\"weapon\")->query(\"name\")`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1765,7 +1766,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1850,6 +1851,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["pharmacy"].append(item)
         if rel in ("/system/std/char/special_quest.lpc", "/cmds/admin/setreboot.lpc"):
             targeted_bins["xo_qboot"].append(item)
+        if rel == "/kungfu/skill/qujing-gunfa.lpc":
+            targeted_bins["qujing"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2105,6 +2108,16 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
                 if re.search(rb"\badminp[ \t]*\(", cb):
                     col.add("xo-special-quest-setreboot", p, "setreboot.lpc calls undefined `adminp()` instead of `wiz_level()` check")
+
+    if col.wants("qujing-gunfa-weapon-name"):
+        for _, p, _ in targeted_bins["qujing"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if (
+                b"int wn, i, level;" in b
+                or b'query_temp("weapon", wn = me)' in b
+                or b'me->query_temp("weapon")->query("name")' in b
+            ):
+                col.add("qujing-gunfa-weapon-name", p, "qujing-gunfa.lpc declares `int wn` or reads weapon name without objectp() guard / mangled `wn = me`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

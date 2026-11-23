@@ -650,3 +650,8 @@ pristine + build-debug / release 驱动（归档端口 `40185`，测试端口 `4
 
 - 修复 `/d/dragon/outlet.lpc` 与 `/d/tulong/outlet.lpc`（共 `2` 文件）第 `8` 行 `突然无数棵参天大树中出现了一条小径，似乎是出口！LONG);` 未换行导致 `End of file in text block` 编译失败（对照 `chidi`/`ffxymud`/`jhfy2` 拆出独立行首 `LONG`）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `34` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `34/34` 目标（`es1_win` 3、`esI` 2、`njhhdxdes2hx`、`yhyxcs`、`yxxcii` 及 `23` 馆 `26` 份 `outlet.lpc`）全部由 `--head` `End of file in text block`/`*No program` 转为干净加载 `PASS`（`ok=1`）；`scripts/lint.py`（新增规则 #101 `unclosed-heredoc`，`KB 04 §6.44`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`es1_win`/`esI`/`hhsj`/`nitan6`/`njhhdxdes2hx`/`nt1`/`shenmo`/`wxddym`/`yhyxcs`/`yxxcii`，端口 `47521..47530`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `qujing-gunfa.lpc` `int wn` 错类型与空手解引用崩溃修复（KB 04 §6.56）
+
+- 修复 `/kungfu/skill/qujing-gunfa.lpc` `query_action(object me, object weapon)` 中将兵器名 `wn` 错声明为 `int wn`、`nitan6`/`nt6`/`nt6nitan6win` 转换脚本倒置 `query_temp("weapon", wn = me)` 致编译失败（`Bad assignment ( int vs object )`），以及未判空直接解引用 `query_temp("weapon")->query("name")` 致空手调用报错（`*Bad argument 1 to EFUN call_other() Got: int(0)`）的缺陷：改为 `string wn;`，优先取形参 `weapon` 并补 `objectp(weapon)` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` 全批 `0` 错误；`lpcc_eval.py` 跨系代表实测（`nitan6`/`nt6`/`nt6nitan6win`/`hhsj`/`nitan_ceshi`/`zhonghua2`）由 `--head` 编译报错/空手崩溃转为 `query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（新增规则 #117 `qujing-gunfa-weapon-name`，共 117 条）全库 `--fast` 与 `--changed HEAD` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47671..47676`）均通过且 `ZERO_DRIVERS`。

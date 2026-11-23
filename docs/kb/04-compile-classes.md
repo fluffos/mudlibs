@@ -1658,3 +1658,13 @@ Symptom:
 
 Fix: 去除 `key.lpc`/`ring.lpc` `\n"` 前多余 `"`、转义 `yadianna*.lpc` 内嵌双引号 `\"...\"`；将四馆 `7` 份 `pingd`/`pingtcp` 的 `nosave int strip_callout(int num)` 改为 `protected int strip_callout(int num)` 并将 `ping-strip-callout-nosave` 规则扩展覆盖非 gitlink `submodule-patch` 馆；将 `fan.lpc` 改为 `mapping query_action()`（全批保留原 LF 行尾与 `KEEP`）。
 Detection: `scripts/lint.py --rule stray-quote-before-newline`（经 `code_mask(b, heredoc=True)` 校验 `\n"` 的 `\` 落在字符串外以区分注释，排除巫师目录、`/doc/` 及 LDMud）与 `--rule ping-strip-callout-nosave`。
+
+### 6.56 `qujing-gunfa.lpc` `int wn` 错类型、转换脚本倒置 `wn = me` 与空手解引用崩溃（`25` 馆 / `25` 文件，2026-11-23）
+
+Symptom: 泥潭/炎黄/地狱/侠客行系 `25` 馆 `/kungfu/skill/qujing-gunfa.lpc` 的 `query_action(object me, object weapon)` 存在三层叠加缺陷：
+1. `17` 馆（`hhsj`、`nitan170911`、`nitan6`、`nitan_ceshi`、`nitan_san`、`nt1`、`nt6`、`nt6nitan6win`、`nte`、`ntii`、`wlqxcmudlib`、`xfbhh`、`yanhuangwuhun`、`yhlib`、`yhwhpublicfi`、`yhyxs`、`zhonghua2`）将兵器名变量 `wn` 错声明为 `int wn, i, level;`（后文用作字串拼接 `HIY "$N" HIY "将" + wn + HIY "一挥"`）。
+2. 其中 `nitan6`/`nt6`/`nt6nitan6win` 经 Nitan7 dbase 转换脚本将 `wn = me->query_temp("weapon")->query("name");` 破坏为 `query("name", query_temp("weapon", wn = me));`，编译直接失败（`Bad assignment ( int vs object ).`）。
+3. 其余 `14` 馆及另外 `8` 馆（`hell`、`wdxtym`、`wxddym`、`wxlm`、`zjdy2008wzb`、`zjdyaryl`、`zjdyzj`、`zjmudhell`，内联两处 `me->query_temp("weapon")->query("name")`）在未持兵器时直接解引用，触发 `*Bad argument 1 to EFUN call_other() Got: int(0)` 运行时崩溃。
+
+Fix: 前 `17` 馆统一改为 `string wn; int i, level;`，优先使用形参 `weapon` 并补 `objectp(weapon)` 判空守卫（无兵器时兜底 `"长棍"`）；后 `8` 馆对内联兵器名表达式补充 `objectp(weapon)` / `objectp(me->query_temp("weapon"))` 判空守卫（全批保留原 LF 行尾与 `KEEP` 状态）。
+Detection: `scripts/lint.py --rule qujing-gunfa-weapon-name`（targeted 规则，覆盖全部活跃库 `/kungfu/skill/qujing-gunfa.lpc`）。

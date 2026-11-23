@@ -1045,3 +1045,8 @@ pristine + build-debug（归档端口 `40073`，测试端口 `49073`）。`scrip
 
 - 修复 `/kungfu/condition/xixing-fanshi.lpc`、`/kungfu/condition/xuanming_poison.lpc` 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `qujing-gunfa.lpc` 空手解引用 `query_temp("weapon")->query("name")` 崩溃修复（KB 04 §6.56）
+
+- 修复 `/kungfu/skill/qujing-gunfa.lpc:125,128` `query_action(object me, object weapon)` 中未判空直接内联解引用 `me->query_temp("weapon")->query("name")` 致空手触发 `*Bad argument 1 to EFUN call_other() Got: int(0)` 崩溃的缺陷：优先取形参 `weapon` 并补 `objectp()` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hell` 及 `6` 馆代表）`query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（规则 #117 `qujing-gunfa-weapon-name`，共 117 条）`--changed HEAD` 与 `--fast` 零错误零告警。

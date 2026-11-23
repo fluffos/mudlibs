@@ -1481,3 +1481,8 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 - 修复 `/clone/pharmacy/herb/herb.lpc` 缺失 `#define PHARMACY_D`、`s_name` 重复声明自 `F_NAME` 继承变量（改名 `herb_name`）及 `set_name(name, ({ eng }))` 嵌套数组错误，并将 `/clone/pharmacy/medicine/10.lpc` 未定义 `inherit MEDICINE;` 修正为 `inherit ITEM;`。
 - 将 `/cmds/arch/restore.lpc:21` 的 `temp_ob` 移入 `#ifdef DB_SAVE` 块内（对齐同源 5 馆），消除默认构建的 `Unused local variable 'temp_ob'` 告警（全批保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` 全批 `15` 文件零错误；`lpcc_eval.py` 实测 `pharmacyd`/`herb`/`10`/`restore` 零告警 `PASS`（`cid=10 miss=-1 hbid=1 hblong=33`）；`scripts/lint.py`（新增规则 #111 `nitan-pharmacy-broken`，共 111 条）与 `play_boot.sh`+`play_stop.sh` 均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `qujing-gunfa.lpc` `int wn` 错类型与空手解引用崩溃修复（KB 04 §6.56）
+
+- 修复 `/kungfu/skill/qujing-gunfa.lpc` `query_action(object me, object weapon)` 中将兵器名 `wn` 错声明为 `int wn`、`nitan6`/`nt6`/`nt6nitan6win` 转换脚本倒置 `query_temp("weapon", wn = me)` 致编译失败（`Bad assignment ( int vs object )`），以及未判空直接解引用 `query_temp("weapon")->query("name")` 致空手调用报错（`*Bad argument 1 to EFUN call_other() Got: int(0)`）的缺陷：改为 `string wn;`，优先取形参 `weapon` 并补 `objectp(weapon)` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` 全批 `0` 错误；`lpcc_eval.py` 跨系代表实测（`nitan6`/`nt6`/`nt6nitan6win`/`hhsj`/`nitan_ceshi`/`zhonghua2`）由 `--head` 编译报错/空手崩溃转为 `query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（新增规则 #117 `qujing-gunfa-weapon-name`，共 117 条）全库 `--fast` 与 `--changed HEAD` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47671..47676`）均通过且 `ZERO_DRIVERS`。

@@ -1101,3 +1101,8 @@ pristine + build-debug（归档端口 40189，临时测试端口 49519）。`scr
 
 - 修复 `/d/maze/khkc/npc/1fuben.lpc:35` 中 `set_skill("finger", 200) set_skill("dodge", 200);` 缺少分号导致的编译阻断（保留 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `qujing-gunfa.lpc` 空手解引用 `query_temp("weapon")->query("name")` 崩溃修复（KB 04 §6.56）
+
+- 修复 `/kungfu/skill/qujing-gunfa.lpc:125,128` `query_action(object me, object weapon)` 中未判空直接内联解引用 `me->query_temp("weapon")->query("name")` 致空手触发 `*Bad argument 1 to EFUN call_other() Got: int(0)` 崩溃的缺陷：优先取形参 `weapon` 并补 `objectp()` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hell` 及 `6` 馆代表）`query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（规则 #117 `qujing-gunfa-weapon-name`，共 117 条）`--changed HEAD` 与 `--fast` 零错误零告警。

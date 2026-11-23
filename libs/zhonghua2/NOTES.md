@@ -1285,3 +1285,8 @@ pristine + build-debug，归档端口 40028。`scripts/play_login.py` 注册进�
 
 - 修复 `/kungfu/skill/xuanfeng-leg.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `qujing-gunfa.lpc` `int wn` 错类型与空手解引用崩溃修复（KB 04 §6.56）
+
+- 修复 `/kungfu/skill/qujing-gunfa.lpc` `query_action(object me, object weapon)` 中将兵器名 `wn` 错声明为 `int wn`、`nitan6`/`nt6`/`nt6nitan6win` 转换脚本倒置 `query_temp("weapon", wn = me)` 致编译失败（`Bad assignment ( int vs object )`），以及未判空直接解引用 `query_temp("weapon")->query("name")` 致空手调用报错（`*Bad argument 1 to EFUN call_other() Got: int(0)`）的缺陷：改为 `string wn;`，优先取形参 `weapon` 并补 `objectp(weapon)` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` 全批 `0` 错误；`lpcc_eval.py` 跨系代表实测（`nitan6`/`nt6`/`nt6nitan6win`/`hhsj`/`nitan_ceshi`/`zhonghua2`）由 `--head` 编译报错/空手崩溃转为 `query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（新增规则 #117 `qujing-gunfa-weapon-name`，共 117 条）全库 `--fast` 与 `--changed HEAD` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47671..47676`）均通过且 `ZERO_DRIVERS`。
