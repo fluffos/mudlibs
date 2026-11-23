@@ -1703,3 +1703,10 @@ Symptom: 海洋系 `4` 馆（`hy5`、`hymud`、`haiyang2`、`shenmo`）存在一
 
 Fix: 移除 `lin06.lpc` 中非法 `set_maze_boss("/d/city/npc/liumangtou");` 并将 `"/d/city/npc/liumangtou": 1,` 并入 `set_exit_npcs(([ ... ]))`（与同馆 `EVRM_0000.lpc` 迷宫 Boss 刷新方式一致）；删去 `meskill/{dan,hun,lian}.lpc` 空 `if (i > j - 2)` 块、修复 `zhuihun-biao.lpc` `weapon = me->query_temp("weapon");` 并精准清理 `hit_ob()`/`ob_hit()`/`grow_g()` 未用局部声明（保留原 CRLF/LF/混合行尾，经 `lpc_audit_removed_locals.py HEAD` 审计 `234` 处零误删）。
 Detection: `scripts/lint.py --rule hy-migong-skill-warnings`（targeted 规则，校验 `lin06.lpc` 字符串 `set_maze_boss`、`zhuihun-biao.lpc` 裸 `weapon;` 及 `meskill` 空 `if (i > j - 2)`）。
+
+### 6.61 跨系移植容器/住宅调用未定义 `set_max_items()` 编译阻断（`11` 馆 / `19` 文件，2026-11-23）
+
+Symptom: 西游记系 `feature/move.lpc` 提供 `nomask void set_max_items(int e)` 限制容器物品件数，而 ES2/风云/侠客行/中华等系 `feature/move.lpc` 仅实现负重 `set_max_encumbrance()`、并不定义 `set_max_items()`。跨系移植而来的玩家住宅与容器对象（`/obj/home.lpc`、`/clone/guan/home.lpc`、`/d/city/obj/{bag,shopbox}.lpc`、`/d/city/obj/misc/{hualan,vase}.lpc`、`/inherit/room/shopbox.lpc`、`/clone/newitem/{baoshi,dazao}/tai.lpc`）仍保留未注释的 `set_max_items(...)` 调用，在 `11` 馆（`ffxymud`、`mnhf`、`sjpl2`、`sjplgfjxb`、`sjplii`、`wqfy`、`xbtxiii`、`xjcq2000`、`zhonghua2`、`zzfy`、`zzfy3`，共 `19` 份活跃文件）全部触发 `error: Undefined function set_max_items` 与 `*No program in object` 编译阻断（`19/19` 均已自带 `set_max_encumbrance(...)`）。
+
+Fix: 参照同源已修复库（`bmxkx2001`/`chidi`/`hymud`/`yxcs`/`zhyx`）做法，将这 `19` 份文件中的 `set_max_items(...);` 注释为 `// set_max_items(...);`（保留 `sjpl2`/`sjplgfjxb`/`sjplii` CRLF 与其余 `8` 馆 LF）。
+Detection: `scripts/lint.py --rule undefined-set-max-items`（targeted 规则，对照同馆 `feature/move.lpc` 是否缺少 `set_max_items` 精准校验）。

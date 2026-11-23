@@ -699,3 +699,8 @@ pristine + build-debug（归档端口 40124，临时测试端口 49518）。`scr
 
 - 修复 `/clone/gift/bingtang.lpc:32,35` 与 `/obj/gift/bingtang.lpc:32,35` 中 `do_eat()` 连续 `add(...)` 与 `message_vision(...)` 缺少分号导致的编译阻断（保留 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。
+
+## 2026-11-23 未定义 `set_max_items()` 容器/住宅编译阻断修复（KB 04 §6.61）
+
+- 注释掉 `/d/city/obj/{bag,shopbox}.lpc` 中调用 `set_max_items(...)` 的语句（本馆 `feature/move.lpc` 仅实现 `set_max_encumbrance()`、未定义 `set_max_items()`，对照 `bmxkx2001`/`chidi`/`hymud`/`yxcs`/`zhyx` 同源做法，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `19/19` `0` 重排；`lpcc --batch` 全批 `11` 馆 `19` 文件均由 `Undefined function set_max_items` 转为零错零告警 `PASS`；`lpcc_eval.py`（`mnhf`/`sjpl2`/`wqfy`/`zhonghua2` 代表）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #122 `undefined-set-max-items`，共 122 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47721..47726`）全通过且 `ZERO_DRIVERS`。

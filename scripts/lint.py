@@ -168,6 +168,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("demogorgon-is-killing-object", "targeted", "KB 04 §6.58", "error", "demogorgon.lpc passing `this_player()` object to `is_killing(string id)` (`Bad type for argument 1`)"),
     RuleSpec("dodgebook-party-syntax", "targeted", "KB 04 §6.59", "error", "dodgebook.lpc wrapped bare comment words (`uired`/`is`/`ill`/`rn`) or party.lpc missing `,` after `\"qingyun-shou\": 100`"),
     RuleSpec("hy-migong-skill-warnings", "targeted", "KB 04 §6.60", "error", "lin06.lpc passing string path to `set_maze_boss(object)`, zhuihun-biao.lpc no-op `weapon; weapon =`, or meskill empty `if (i > j - 2)`"),
+    RuleSpec("undefined-set-max-items", "targeted", "KB 04 §6.61", "error", "Uncommented `set_max_items(...)` call in home/bag/shopbox/tai/vase/hualan when the lib's `feature/move.lpc` lacks `set_max_items`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1770,7 +1771,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1875,6 +1876,20 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/kungfu/skill/meskill/lian.lpc",
         ):
             targeted_bins["hy_migong_skill"].append(item)
+        if rel in (
+            "/obj/home.lpc",
+            "/clone/guan/home.lpc",
+            "/d/taohuacun/obj/home.lpc",
+            "/clone/home/home.lpc",
+            "/d/city/obj/bag.lpc",
+            "/d/city/obj/shopbox.lpc",
+            "/d/city/obj/misc/hualan.lpc",
+            "/d/city/obj/misc/vase.lpc",
+            "/inherit/room/shopbox.lpc",
+            "/clone/newitem/baoshi/tai.lpc",
+            "/clone/newitem/dazao/tai.lpc",
+        ):
+            targeted_bins["set_max_items"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2194,6 +2209,24 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             else:
                 if re.search(rb'\bif\s*\(\s*i\s*>\s*j\s*-\s*2\s*\)\s*\{\r?\n[ \t]*\{\r?\n(?:[ \t]*//case [012]:[^\r\n]*\r?\n){3}[ \t]*\}\r?\n[ \t]*\}', b):
                     col.add("hy-migong-skill-warnings", p, "meskill empty `if (i > j - 2)` block triggers unused conditional warning")
+
+    if col.wants("undefined-set-max-items"):
+        move_lacks_max_items: dict[str, bool] = {}
+        for slug, p, _ in targeted_bins["set_max_items"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"set_max_items" not in b:
+                continue
+            if slug not in move_lacks_max_items:
+                mv = f"{REPO}/libs/{slug}/work/feature/move.lpc"
+                move_lacks_max_items[slug] = (
+                    os.path.isfile(mv) and b"set_max_items" not in open(mv, "rb").read()
+                )
+            if not move_lacks_max_items[slug]:
+                continue
+            mk = code_mask(b, heredoc=True)
+            cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+            if re.search(rb'(?<!->)\bset_max_items\s*\(', cb):
+                col.add("undefined-set-max-items", p, "calls `set_max_items(...)` but `feature/move.lpc` does not define it")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
