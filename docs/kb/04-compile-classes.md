@@ -1749,3 +1749,14 @@ Symptom: 三界神话/西游记系 `8` 馆（`sanjieshenhua`、`shenmo`、`sjsh`
 
 Fix: 分别改写为绝对路径 `#include "/d/huanggong/npc/reporting.h"` 与 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule sjsh-angle-include-headers`（targeted 规则，校验上述两路径在缺少 `/include/` 同名头文件时是否仍使用尖括号包含）。
+
+### 6.66 大唐双龙系 `fingerd2`/`cleard`/`tulong-dao`/`zhuyu-yan` 四处编译阻断（`3` 馆 / `10` 文件，2026-11-23）
+
+Symptom: 大唐双龙系 `3` 馆（`dtsl`、`dtsl2`、`dtslmud`）存在四处编译阻断：
+1. **`/adm/daemons/fingerd2.lpc:222`（全 `3` 馆）：** 向仅接受 `object` 的内置 efun `wizardp()` 传入字符串 `name`（`(wizardp(name) > 0)`），触发 `Bad argument 1 to efun wizardp()`（同函数第 `213` 行已正确使用 `wiz_level(name)`）。
+2. **`/adm/daemons/cleard.lpc:6,14`（全 `3` 馆）：** 函数体内残留两行孤立裸词 `say`，触发 `syntax error, unexpected L_DEFINED_NAME/L_STRING`。
+3. **`/clone/weapon/tulong-dao.lpc:31`（全 `3` 馆）：** 沿用书剑系的 `use_flag = 16;`（大唐武器基类未定义 `use_flag`），触发 `Undefined variable 'use_flag'` 与 `Illegal lvalue`。
+4. **`dtsl` `/d/clone/room/lingwu/yingui/zhuyu-yan.lpc`：** 使用 `HIR`/`NOR` 却缺少 `#include <ansi.h>`，且 `surrender()` 残留未用局部 `object ob;`。
+
+Fix: 将 `fingerd2.lpc:222` 改为 `(wiz_level(name) > 0)`；删去 `cleard.lpc` 两行裸 `say`；注释掉 `tulong-dao.lpc:31` `// use_flag = 16;`；为 `dtsl` `zhuyu-yan.lpc` 补齐 `#include <ansi.h>` 并删去未用 `object ob;`（全批保留 CRLF）。
+Detection: `scripts/lint.py --rule dtsl-daemon-weapon-blockers`（targeted 规则，校验上述四路径特征）。

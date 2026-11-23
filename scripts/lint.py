@@ -173,6 +173,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("heimuya-mishi-cctx-syntax", "targeted", "KB 04 §6.63", "error", "`d/heimuya/mishi.lpc` truncated `this_player();`/`this_pl;`/`oid buqun_rob` or `cctx` `shoumu1`/`haibing`/`mjjs` syntax blockers"),
     RuleSpec("qhlist-cike-chidi-syntax", "targeted", "KB 04 §6.64", "error", "`quest/qhlist600000.lpc` stray `r`, `quest/baobiao/cike.lpc` truncated EOF, `guxing-sword.lpc` missing quote before `+NOR+`, or `yaoguai4.lpc` stray quote/`1*0000`"),
     RuleSpec("sjsh-angle-include-headers", "targeted", "KB 04 §6.65", "error", "`d/huanggong/dachen2.lpc` `#include <reporting.h>` or `d/calvin/tianpeng/npc/hufa.lpc` `#include <soldier_skill.h>` missing from `/include/`"),
+    RuleSpec("dtsl-daemon-weapon-blockers", "targeted", "KB 04 §6.66", "error", "DTSL `fingerd2.lpc` `wizardp(name)`, `cleard.lpc` bare `say`, `tulong-dao.lpc` undefined `use_flag = 16;`, or `zhuyu-yan.lpc` missing `<ansi.h>`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1775,7 +1776,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1917,6 +1918,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["qhlist_chidi"].append(item)
         if rel in ("/d/huanggong/dachen2.lpc", "/d/calvin/tianpeng/npc/hufa.lpc"):
             targeted_bins["sjsh_inc"].append(item)
+        if rel in (
+            "/adm/daemons/fingerd2.lpc",
+            "/adm/daemons/cleard.lpc",
+            "/clone/weapon/tulong-dao.lpc",
+            "/d/clone/room/lingwu/yingui/zhuyu-yan.lpc",
+        ):
+            targeted_bins["dtsl_blk"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2316,6 +2324,22 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             elif rel == "/d/calvin/tianpeng/npc/hufa.lpc":
                 if b"#include <soldier_skill.h>" in b and not os.path.isfile(f"{REPO}/libs/{slug}/work/include/soldier_skill.h") and os.path.isfile(f"{REPO}/libs/{slug}/work/obj/npc/soldier_skill.h"):
                     col.add("sjsh-angle-include-headers", p, "hufa.lpc uses `#include <soldier_skill.h>` instead of `\"/obj/npc/soldier_skill.h\"`")
+
+    if col.wants("dtsl-daemon-weapon-blockers"):
+        for slug, p, rel in targeted_bins["dtsl_blk"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/adm/daemons/fingerd2.lpc":
+                if b"(wizardp(name) > 0)" in b:
+                    col.add("dtsl-daemon-weapon-blockers", p, "fingerd2.lpc passes string `name` to efun `wizardp()` instead of `wiz_level(name)`")
+            elif rel == "/adm/daemons/cleard.lpc":
+                if re.search(rb'(?m)^say\r?$', b):
+                    col.add("dtsl-daemon-weapon-blockers", p, "cleard.lpc stray bare `say` statement")
+            elif rel == "/clone/weapon/tulong-dao.lpc":
+                if slug in ("dtsl", "dtsl2", "dtslmud") and re.search(rb'(?m)^[ \t]*use_flag\s*=\s*16;', b):
+                    col.add("dtsl-daemon-weapon-blockers", p, "tulong-dao.lpc assigns undefined `use_flag = 16;` in DTSL")
+            elif rel == "/d/clone/room/lingwu/yingui/zhuyu-yan.lpc":
+                if slug == "dtsl" and b"ansi.h" not in b and b"HIR" in b:
+                    col.add("dtsl-daemon-weapon-blockers", p, "zhuyu-yan.lpc uses `HIR`/`NOR` without `#include <ansi.h>`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

@@ -998,3 +998,8 @@ pristine + build-debug，port 40043。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/clone/weapon/user_weapon_sn.lpc` 第 `7` 行 `if (!(owner = environment()) return 0;` 条件缺少闭合右括号导致 `syntax error, unexpected L_RETURN` 编译失败（连带第 `9` 行使用未声明变量 `me` 改为 `owner->query("id")`，并为第 `66` 行 `int weapon_fix()` 补全 `return 1;`，保留 CRLF 行尾并统一排版）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `9` 份文件统一格式化且 `0` 错误；`lpcc_eval.py` 实测 `9/9`（`bxsj`/`bxsj1`/`dtsl`/`dtsl2`/`dtslmud`/`shujian2008`/`shujian3`/`sjecl`/`sjtx2`）`new("/clone/weapon/user_weapon_sn")` + `weapon_setup()` + `weapon_fix()` + `wield()` 全部由 `--head` 编译失败转为干净通过 `PASS`；`scripts/lint.py`（新增规则 #104 `unbalanced-if-ctrl`）通过 `9/9` `HEAD` 正例、`mail_rdr.lpc` 反例、`--all --jobs 8`（193 万文件零误报）与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `9` 馆（端口 `47541..47549`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `fingerd2`/`cleard`/`tulong-dao`/`zhuyu-yan` 编译阻断修复（KB 04 §6.66）
+
+- 修复 `/adm/daemons/fingerd2.lpc:222` `wiz_level(name)`、移除 `/adm/daemons/cleard.lpc:6,14` 裸 `say` 并注释 `/clone/weapon/tulong-dao.lpc:31` 未定义 `use_flag = 16;`（全批保留 CRLF）。
+- 验证：`lpc_format_changed.py` `10/10` `0` 重排；`lpcc --batch` 全批 `3` 馆 `10` 文件零错零告警 `PASS`；`lpcc_eval.py`（`dtsl` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #127 `dtsl-daemon-weapon-blockers`，共 127 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `3` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47771..47773`）均通过且 `ZERO_DRIVERS`。
