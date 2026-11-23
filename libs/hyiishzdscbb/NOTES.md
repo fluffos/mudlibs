@@ -461,3 +461,8 @@ pristine + build-debug，port 40147。`scripts/play_login.py` 注册。
 
 - 修复 `/d/heimuya/mishi.lpc:59,83` 截断的 `this_pl;` -> `this_player());` 并截除末尾重复粘贴的 `oid buqun_rob` 片段（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 全批 `9` 馆 `12` 文件零错零告警 `PASS`；`scripts/lint.py`（新增规则 #124 `heimuya-mishi-cctx-syntax`，共 124 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `9` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47741..47749`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `qhlist600000`/`baobiao/cike`/字串引号编译阻断修复（KB 04 §6.64）
+
+- 删除 `/quest/qhlist600000.lpc:2180` `"pot_bonus": 44,` 后的裸字母 `r`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `12/12` `0` 重排；`lpcc --batch` 全批 `9` 馆 `12` 文件零错零告警 `PASS`；`lpcc_eval.py`（`chidi` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #125 `qhlist-cike-chidi-syntax`，共 125 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47751..47756`）均通过且 `ZERO_DRIVERS`。

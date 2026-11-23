@@ -171,6 +171,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("undefined-set-max-items", "targeted", "KB 04 §6.61", "error", "Uncommented `set_max_items(...)` call in home/bag/shopbox/tai/vase/hualan when the lib's `feature/move.lpc` lacks `set_max_items`"),
     RuleSpec("xkx-include-syntax-blockers", "targeted", "KB 04 §6.62", "error", "XKX `yaolu.lpc` stale `/d/quanzhou/obj/drug_list.h`, `gaolao1.lpc` stale `zhanglao.lpc`, `yuelao2.lpc` stray `]));`, or `pixie_superskill.lpc` unbraced `if`/`else`"),
     RuleSpec("heimuya-mishi-cctx-syntax", "targeted", "KB 04 §6.63", "error", "`d/heimuya/mishi.lpc` truncated `this_player();`/`this_pl;`/`oid buqun_rob` or `cctx` `shoumu1`/`haibing`/`mjjs` syntax blockers"),
+    RuleSpec("qhlist-cike-chidi-syntax", "targeted", "KB 04 §6.64", "error", "`quest/qhlist600000.lpc` stray `r`, `quest/baobiao/cike.lpc` truncated EOF, `guxing-sword.lpc` missing quote before `+NOR+`, or `yaoguai4.lpc` stray quote/`1*0000`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1773,7 +1774,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1906,6 +1907,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/d/mj/obj/mjjs.lpc",
         ):
             targeted_bins["mishi_cctx"].append(item)
+        if rel in (
+            "/quest/qhlist600000.lpc",
+            "/quest/baobiao/cike.lpc",
+            "/kungfu/skill/guxing-sword.lpc",
+            "/d/shushan/zhenyaota/npc/yaoguai4.lpc",
+        ):
+            targeted_bins["qhlist_chidi"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2279,6 +2287,22 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             elif rel == "/d/mj/obj/mjjs.lpc":
                 if re.search(rb'set\("long",\r?\n"', b):
                     col.add("heimuya-mishi-cctx-syntax", p, "mjjs.lpc unclosed multiline string literal in `set(\"long\", ...)`")
+
+    if col.wants("qhlist-cike-chidi-syntax"):
+        for _, p, rel in targeted_bins["qhlist_chidi"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/quest/qhlist600000.lpc":
+                if re.search(rb'"pot_bonus"\s*:\s*44,\s*r\r?\n', b):
+                    col.add("qhlist-cike-chidi-syntax", p, "qhlist600000.lpc stray `r` after `\"pot_bonus\": 44,`")
+            elif rel == "/quest/baobiao/cike.lpc":
+                if b.rstrip().endswith(b'set_skill("hunyuan-yiqi", l'):
+                    col.add("qhlist-cike-chidi-syntax", p, "cike.lpc truncated EOF at `set_skill(\"hunyuan-yiqi\", l`")
+            elif rel == "/kungfu/skill/guxing-sword.lpc":
+                if re.search(rb'\+YEL\+"[^"\r\n]+\+NOR\+"', b):
+                    col.add("qhlist-cike-chidi-syntax", p, "guxing-sword.lpc missing closing `\"` before `+NOR+`")
+            elif rel == "/d/shushan/zhenyaota/npc/yaoguai4.lpc":
+                if b'"+chinese_number(1*0000)+"' in b:
+                    col.add("qhlist-cike-chidi-syntax", p, "yaoguai4.lpc stray `\"` and `1*0000` in `tell_object()`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

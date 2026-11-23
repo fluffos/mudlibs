@@ -1731,3 +1731,14 @@ Symptom: 纵横/海洋同源 `9` 馆（`cctx`、`jyqxc`、`jyqxc2`、`xiakexing3
 
 Fix: 补齐 `9` 馆 `mishi.lpc` 的 `this_player());` 并截除末尾重复的 `oid buqun_rob` 片段；为 `shoumu1.lpc` 补齐 `}));`、为 `haibing.lpc` 补齐 `inherit NPC;`、将 `mjjs.lpc` 跨行长描述改为 `@LONG ... LONG` heredoc（保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule heimuya-mishi-cctx-syntax`（targeted 规则，校验上述四路径语法特征）。
+
+### 6.64 `qhlist600000.lpc` 行尾裸 `r`、`baobiao/cike.lpc` EOF 截断与 `chidi` 两处字串引号阻断（`9` 馆 / `12` 文件，2026-11-23）
+
+Symptom: 海洋/赤帝/笑傲等 `9` 馆（`chidi`、`fqyy2`、`hy`、`hy2000`、`hy2002`、`hy3`、`hyiishzdscbb`、`xjcq2000`、`yxcs`）存在四处编译阻断：
+1. **`/quest/qhlist600000.lpc:2180`（`8` 馆，不含 `hy3`）：** `"pot_bonus": 44, r` 行尾多出裸字母 `r`，导致任务表无法编译（`syntax error, unexpected L_STRING`）。
+2. **`/quest/baobiao/cike.lpc:16,24`（`chidi`、`hy3`）：** 末尾被截断在 `set_skill("hunyuan-yiqi", l`（`unexpected end of file`），且第 `16` 行 `level = ceil(pow(...))` 存在浮点截断告警。
+3. **`chidi` `/kungfu/skill/guxing-sword.lpc:8`：** `"+YEL+"星光瞬闪+NOR+"` 缺失 `+NOR+` 前闭合引号 `"`（`Illegal character 0xe3`）。
+4. **`chidi` `/d/shushan/zhenyaota/npc/yaoguai4.lpc:52`：** `"+chinese_number(1*0000)+"点潜能！\n"` 多出前导引号且将 `10000` 误写为 `1*0000`（实为 `0`）。
+
+Fix: 删除 `8` 馆 `qhlist600000.lpc` 行尾裸 `r`；补全 `2` 馆 `cike.lpc` `to_int(ceil(...))` 与 `set_skill("hunyuan-yiqi", level); setup(); }`；补齐 `guxing-sword.lpc` 闭合引号并修复 `yaoguai4.lpc` `chinese_number(10000)`（全批保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule qhlist-cike-chidi-syntax`（targeted 规则，校验上述四路径特征）。
