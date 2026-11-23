@@ -1083,3 +1083,8 @@ pristine + build-debug（归档端口 `40069`，测试端口 `49069`）。`scrip
 
 - 截断 `/clone/eat/liquid/guihua_jiu.lpc:33`（`> c huangjiu.c`）与 `/clone/misc/record.lpc:17`（`> c stone.c inherit ITEM;`）后误粘贴的客户端日志尾部；将 `/clone/misc/bag.lpc:1`（`bag.c inherit ITEM;`）与 `/d/menpai/wuliang/xiangfan.lpc:1`（`xiangfan.c inherit ROOM;`）首行裸文件名改为 `// bag.c` 与 `// xiangfan.c` 注释行（全批保留原 CRLF 行尾），消除 4 处 `unexpected L_ORDER` / `unexpected '.'` 编译阻断。
 - 验证：`lpc_format_changed.py` 全批零错误、`file` 确认纯 CRLF；`lpcc_eval.py` 实测 4 份对象全部由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #112 `pasted-shell-prompt`，共 112 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47623`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-22 父类钩子 `::init()` 缺分号与单冒号 `: init();` 修复（KB 04 §6.53）
+
+- 修复 `/d/city/capital/dxgs_xilang3.lpc:28`（`::init()` 缺 `;`）与 `/d/city/capital/dxgs_dongta.lpc:25`（单冒号 `: init();`），对齐同源 `xajh2`/`xo_final` 完整 `::init();`（保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py` 零错误、`file` 确认纯 CRLF；`lpcc_eval.py` 实测两间大相国寺房间均由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #113 `malformed-super-call`，共 113 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47634`）均通过且 `ZERO_DRIVERS`。

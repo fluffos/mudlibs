@@ -159,6 +159,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("shujian-unclosed-if-logind", "targeted", "KB 04 §6.50", "error", "Shujian `d/shaolin/npc/{guo,mai}.lpc` unbalanced `if (... {` or `/logind.lpc` orphan `confirm_password()` tail"),
     RuleSpec("nitan-pharmacy-broken", "targeted", "KB 04 §6.51", "error", "Nitan7 `pharmacyd.lpc`/`herb.lpc`/`10.lpc` missing `MEDICINE_DIR`/`HERB_OB`/`PHARMACY_D`, swapped `member_array(value, name)`, `s_name` redecl, `({ eng })`, or `inherit MEDICINE`"),
     RuleSpec("pasted-shell-prompt", "file", "KB 04 §6.52", "error", "Pasted MUD wizard `> c/cat/more file.c` prompt or bare `name.c inherit` header in LPC code"),
+    RuleSpec("malformed-super-call", "file", "KB 04 §6.53", "error", "Superclass hook call `::init()`/`::die()`/`::create()` missing `;` or single-colon `: init();`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -847,6 +848,19 @@ def _find_pasted_shell_prompt(b: bytes) -> tuple[int, str] | None:
     return None
 
 
+MALFORMED_SUPER_CALL_RE = re.compile(
+    rb"(?m)^[ \t]*(?:::(?:init|create|setup|reset|die|unconcious|heart_beat|remove|clean_up)[ \t]*\([ \t]*\)[ \t]*\r?$|:[ \t]*(?:init|create|setup|reset|die|unconcious)[ \t]*\([ \t]*\)[ \t]*;)"
+)
+
+
+def _find_malformed_super_call(b: bytes) -> tuple[int, str] | None:
+    mask = code_mask(b, heredoc=True)
+    for m in MALFORMED_SUPER_CALL_RE.finditer(b):
+        if mask[m.start()]:
+            return b[:m.start()].count(b"\n") + 1, m.group(0).decode("ascii", "replace").strip()
+    return None
+
+
 def _load_metas() -> dict[str, dict]:
     out = {}
     for mp in sorted(glob.glob(f"{REPO}/libs/*/meta.json")):
@@ -1371,6 +1385,19 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         psp = _find_pasted_shell_prompt(b)
         if psp is not None:
             hits.append(("pasted-shell-prompt", f"{path}:{psp[0]}", f"Pasted wizard shell prompt or bare filename prefix `{psp[1]}`"))
+    if (
+        want("malformed-super-call")
+        and not is_wiz
+        and "/doc/" not in rel
+        and slug not in sc.LDMUD
+        and slug not in ("unitopia", "silberland", "tamedhon")
+        and slug not in sc.GENERATED
+        and b":" in b
+        and MALFORMED_SUPER_CALL_RE.search(b)
+    ):
+        msc = _find_malformed_super_call(b)
+        if msc is not None:
+            hits.append(("malformed-super-call", f"{path}:{msc[0]}", f"Malformed superclass hook call `{msc[1]}`"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:

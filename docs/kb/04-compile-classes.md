@@ -1629,3 +1629,13 @@ Symptom: 跨 `3` 个独立系别（`syxjl`、`wuhanzhan`、`xajhxo`）的 `6` �
 
 Fix: 截断 `kong.lpc`/`guihua_jiu.lpc`/`record.lpc` 自 `> cat`/`> c` 起的粘贴尾部，剥离 `boxing.lpc` 首行 `> more boxing.c  ` 前缀，并将 `bag.lpc`/`xiangfan.lpc` 首行裸文件名改为 `// bag.c`、`// xiangfan.c` 注释行（全批保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule pasted-shell-prompt`（经 `code_mask(b, heredoc=True)` 屏蔽注释、字符串与 heredoc，排除巫师目录、`/doc/` 及 LDMud）。
+
+### 6.53 父类钩子调用 `::init()`/`::die()` 缺失分号与单冒号 `: init();` 编译阻断（`4` 馆 / `5` 文件，2026-11-22）
+
+Symptom: 跨 `3` 个独立系别（`dreamofseven`、`shadowgate`/`sunshadow`、`xajhxo`）的 `5` 份活跃文件因父类钩子调用缺少终止分号 `;` 或漏写第二个冒号导致编译失败：
+1. **`dreamofseven` `/open/world1/tmr/area/npc/maa.lpc:286,293`：** 整份文件右侧边缘截断导致 `::die()` 等全部语句丢失分号与括号（同目录 `master.lpc` 为完好同源副本「李書文」）。
+2. **`shadowgate` 与 `sunshadow` `/d/mine2/sandy/rooms/sandy18.lpc:39-40`：** `init()` 中 `::init()` 缺 `;` 且紧接 `add_action"south","south";` 缺括号（`syntax error, unexpected L_DEFINED_NAME`）。
+3. **`xajhxo` `/d/city/capital/dxgs_xilang3.lpc:28` 与 `/d/city/capital/dxgs_dongta.lpc:25`：** 分别写为 `::init()`（缺 `;`，`unexpected '}'`）与 `: init();`（单冒号，`unexpected ':'`；同源 `xajh2`/`xo_final` 均为完整 `::init();`）。
+
+Fix: 用同目录完好 `master.lpc` 还原 `dreamofseven` `maa.lpc`；在 `shadowgate`/`sunshadow` `sandy18.lpc` 补齐 `::init();` 与 `add_action("south","south");`；在 `xajhxo` `dxgs_xilang3.lpc`/`dxgs_dongta.lpc` 恢复 `::init();`（全批保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule malformed-super-call`（经 `code_mask(b, heredoc=True)` 屏蔽注释、字符串与 heredoc，排除巫师目录、`/doc/` 及 LDMud）。

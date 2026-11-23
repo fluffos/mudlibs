@@ -1166,3 +1166,8 @@ pristine + build-debug（归档端口 `40232`，测试端口 `49232`）。
 
 - 修复 `/d/atoyatl/tecqumin/rooms/mummy.lpc:86,96,106`（`sunder()`、`shatter()`、`rush()` 三处）将 `sizeof(critters)` 误拼为 `sizof(critters)` 导致严格类型模式下加载报错 `Undefined function sizof`（连带 `Bad argument 1 to efun random()` -> `*No program`）的编译阻断（保留原 LF 行尾）。
 - 验证：`lpcc_eval.py --at /d/zzeval.lpc` 实测 `/d/atoyatl/tecqumin/rooms/mummy` 及三项特技函数由 `--head` 6 处编译报错转为干净加载 `PASS`；`lpc_format_changed.py` 保持 `KEEP`；`scripts/lint.py`（规则 #108 `efun-name-typo`）与 `play_boot.sh`+`play_stop.sh`（端口 `47595`）启停正常且 `ZERO_DRIVERS`。
+
+## 2026-11-22 父类钩子 `::init()` 缺失分号与 `add_action` 缺括号修复（KB 04 §6.53）
+
+- 修复 `/d/mine2/sandy/rooms/sandy18.lpc:39-40` 中 `::init()` 缺失 `;` 及 `add_action"south","south";` 缺失括号引发的 `syntax error, unexpected L_DEFINED_NAME` 编译阻断（保留原 LF 行尾与 `KEEP` 状态）。
+- 验证：`lpcc_eval.py --at /d/zzeval.lpc` 实测 `/d/mine2/sandy/rooms/sandy18` 由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #113 `malformed-super-call`，共 113 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47633`）启停正常且 `ZERO_DRIVERS`。

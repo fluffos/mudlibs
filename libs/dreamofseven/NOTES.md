@@ -1133,3 +1133,8 @@ alone-scan 15 个 `End of file` / `End of file in string`：
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，port 40240。注册走到种族选择菜单，驱动 stdout 与 `debug.log` 无错误/警告。本轮无新编程缺陷。
+
+## 2026-11-22 父类钩子调用缺失分号与截断 NPC `maa.lpc` 修复（KB 04 §6.53）
+
+- `/open/world1/tmr/area/npc/maa.lpc` 右侧边缘被截断，导致 `::die()`（第 `286`/`293` 行）及函数头/语句普遍缺失分号与括号；用同目录完好同源副本 `/open/world1/tmr/area/npc/master.lpc`（「李書文」）还原（保留原 LF 行尾与 `KEEP` 状态）。
+- 验证：`lpcc_eval.py` 实测 `/open/world1/tmr/area/npc/maa` 由 `--head` 报错转为干净加载 `PASS`（`李書文`）；`scripts/lint.py`（新增规则 #113 `malformed-super-call`，共 113 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47631`）均通过且 `ZERO_DRIVERS`。
