@@ -1228,3 +1228,8 @@ pristine + build-debug，port 40050。`scripts/play_login.py` 注册并执行 `l
 
 - 还原 `/d/qujing/start/24/12.lpc:41-43` 被归档截断损坏的 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();` 尾部与闭合 `}`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`xyj2000`/`xyj2000f`/`sjsh`/`sjshv2578bb`/`xyj20032`/`mhxy` 代表）全数由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #118 `xyj-eof-tail-corruption`，共 118 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47681..47686`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 游侠八卦阵 `bagua{0..7}.lpc` 错路径 `#include` 与 `BAGUA.H` 告警修复（KB 04 §6.67）
+
+- 将 `/d/youxia/BAGUA/bagua{0..7}.lpc:6`（`8` 份）的 `#include "/d/bagua/bagua.h"` 修正为同目录 `#include "/d/youxia/BAGUA/BAGUA.H"`，并清理 `BAGUA.H:11` 未用局部 `i`（保留原 LF 与 `KEEP` 状态）。
+- 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `2` 馆 `16` 份房间零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 报错转为全 `8` 间 `PASS`；`scripts/lint.py`（新增规则 #128 `mhxy-bagua-include`，共 128 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47781..47782`）均通过且 `ZERO_DRIVERS`。

@@ -1760,3 +1760,10 @@ Symptom: 大唐双龙系 `3` 馆（`dtsl`、`dtsl2`、`dtslmud`）存在四处�
 
 Fix: 将 `fingerd2.lpc:222` 改为 `(wiz_level(name) > 0)`；删去 `cleard.lpc` 两行裸 `say`；注释掉 `tulong-dao.lpc:31` `// use_flag = 16;`；为 `dtsl` `zhuyu-yan.lpc` 补齐 `#include <ansi.h>` 并删去未用 `object ob;`（全批保留 CRLF）。
 Detection: `scripts/lint.py --rule dtsl-daemon-weapon-blockers`（targeted 规则，校验上述四路径特征）。
+
+### 6.67 `mhxy`/`mhxyqd` 游侠八卦阵 `bagua{0..7}.lpc` 错路径 `#include "/d/bagua/bagua.h"`（`2` 馆 / `18` 文件，2026-11-23）
+
+Symptom: 梦幻西游系 `2` 馆（`mhxy`、`mhxyqd`）的 `/d/youxia/BAGUA/bagua{0..7}.lpc:6`（共 `16` 份房间）均写 `#include "/d/bagua/bagua.h"`，而实际头文件就位于同目录大写的 `/d/youxia/BAGUA/BAGUA.H`（且该头文件 `check_dirs()` 第 `11` 行含未用局部 `int i`），导致整个游侠八卦阵 `8` 间房间全部因 `Cannot #include /d/bagua/bagua.h` 无法编译加载。
+
+Fix: 将 `16` 份 `bagua{0..7}.lpc` 改为 `#include "/d/youxia/BAGUA/BAGUA.H"`，并清理 `2` 份 `BAGUA.H` 第 `11` 行未用局部变量 `i`（保留原 LF 行尾与 `KEEP` 状态）。
+Detection: `scripts/lint.py --rule mhxy-bagua-include`（targeted 规则，校验 `/d/youxia/BAGUA/bagua*.lpc` 在同目录存在 `BAGUA.H` 时是否仍引用 `/d/bagua/bagua.h`）。
