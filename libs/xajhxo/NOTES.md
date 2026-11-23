@@ -1078,3 +1078,8 @@ pristine + build-debug（归档端口 `40069`，测试端口 `49069`）。`scrip
 
 - 修复 `/system/daemon/daemon/filter.lpc:12,15,56-60` 中将 `functionp(condition)` 误拼为 `funtionp(condition)`、未声明局部变量 `comp_cond`、`filter_gift()` 缺失 `return 0;` 返回值，以及 `filter_candidate()` 在 `sizeof(candidates) > amount` 时越界写入 `TopTen[i]` 并漏毁 `candidates[amount]` 的缺陷，消除 `log/runtime` 与 `log/log` 中持续出现的 `*No program in object '/system/daemon/daemon/filter'` 报错（保留原 CRLF 行尾）。
 - 验证：`lpcc_eval.py` 实测 `/system/daemon/daemon/filter` 与 `filter_candidate(({}), 3)` 由 `--head` 编译报错转为干净加载 `PASS`（返回 `0`）；`lpc_format_changed.py` 保持 `KEEP`、`file` 确认纯 CRLF；`scripts/lint.py`（规则 #108 `efun-name-typo`）与 `play_boot.sh`+`play_stop.sh`（端口 `47592`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-22 源码中误粘贴巫师命令提示符与裸文件名前缀修复（KB 04 §6.52）
+
+- 截断 `/clone/eat/liquid/guihua_jiu.lpc:33`（`> c huangjiu.c`）与 `/clone/misc/record.lpc:17`（`> c stone.c inherit ITEM;`）后误粘贴的客户端日志尾部；将 `/clone/misc/bag.lpc:1`（`bag.c inherit ITEM;`）与 `/d/menpai/wuliang/xiangfan.lpc:1`（`xiangfan.c inherit ROOM;`）首行裸文件名改为 `// bag.c` 与 `// xiangfan.c` 注释行（全批保留原 CRLF 行尾），消除 4 处 `unexpected L_ORDER` / `unexpected '.'` 编译阻断。
+- 验证：`lpc_format_changed.py` 全批零错误、`file` 确认纯 CRLF；`lpcc_eval.py` 实测 4 份对象全部由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #112 `pasted-shell-prompt`，共 112 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47623`）均通过且 `ZERO_DRIVERS`。

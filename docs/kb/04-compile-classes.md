@@ -1618,3 +1618,14 @@ Symptom: 泥潭 7 系 `6` 馆（`hhsj`、`nitan170911`、`nitan6`、`nt6`、`nt6
 
 Fix: 在 `pharmacyd.lpc` 补齐 `MEDICINE_DIR(x)`/`HERB_OB` 宏、加固 `register_medicine()`、修正 `member_array(name, value)` 与 `loc == -1 ? -1 : key[loc]` 并清理多余 `;`/补 `return 0;`；在 `herb.lpc` 补 `PHARMACY_D`、重命名 `s_name`→`herb_name`、改 `set_name(name, eng)`；将 `10.lpc` 改为 `inherit ITEM;`；将 `nitan170911` `restore.lpc` 的 `temp_ob` 移入 `#ifdef DB_SAVE`（全批保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule nitan-pharmacy-broken`（targeted 规则，校验三份制药文件）。
+
+### 6.52 源码中误粘贴巫师命令提示符 `> c/cat/more file.c` 与裸文件名 `name.c inherit` 前缀（`3` 馆 / `6` 文件，2026-11-22）
+
+Symptom: 跨 `3` 个独立系别（`syxjl`、`wuhanzhan`、`xajhxo`）的 `6` 份活跃非巫师源码文件在抓包/日志粘贴过程中混入交互式客户端命令提示符或裸文件名，触发 `syntax error, unexpected L_ORDER` / `syntax error, unexpected '.'` 编译阻断：
+1. **`syxjl` `/kungfu/skill/qiantian-yiyang/kong.lpc:42`：** 第 `1–41` 行为完整 `kong.lpc`，第 `42` 行起误粘贴 `> cat kong.c  // jing.c 静` 及整份副本。
+2. **`wuhanzhan` `/wizu/focus/boxing.lpc:1`：** 文件首行带入 `> more boxing.c  // houquan.c 猴拳`。
+3. **`xajhxo` `/clone/eat/liquid/guihua_jiu.lpc:33` 与 `/clone/misc/record.lpc:17`：** 完整文件之后分别误粘贴 `> c huangjiu.c` 与 `> c stone.c inherit ITEM;` 及其后续整份文件。
+4. **`xajhxo` `/clone/misc/bag.lpc:1` 与 `/d/menpai/wuliang/xiangfan.lpc:1`：** 首行无注释直接写为 `bag.c inherit ITEM;` 与 `xiangfan.c inherit ROOM;`。
+
+Fix: 截断 `kong.lpc`/`guihua_jiu.lpc`/`record.lpc` 自 `> cat`/`> c` 起的粘贴尾部，剥离 `boxing.lpc` 首行 `> more boxing.c  ` 前缀，并将 `bag.lpc`/`xiangfan.lpc` 首行裸文件名改为 `// bag.c`、`// xiangfan.c` 注释行（全批保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule pasted-shell-prompt`（经 `code_mask(b, heredoc=True)` 屏蔽注释、字符串与 heredoc，排除巫师目录、`/doc/` 及 LDMud）。
