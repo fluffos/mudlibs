@@ -897,3 +897,8 @@ pristine + build-debug，port 40187。`scripts/play_login.py` 注册并执行 `l
 
 - 清理 `/clone/drug/fengdong.lpc:142`、`/adm/npc/ouyezi.lpc:446`、`kungfu/class/quanzhen/auto_perform.h`、`quest11/jinshe/wenyi{, (2)}.lpc:106` 等处 `query()`/`query_temp()` 误传 3 参数（移除多余 `1` 并修正 `auto_perform.h` 粘连声明 `object weapon`）、`d/hudie/liandan/liandan.lpc:548` 嵌套 `me` 被错提入 `query("id", ob, me)` 导致错查自身、`/adm/daemons/pkd.lpc:352` `2 && total[0]` 被吞入 `query("couple/couple_id", ...)` 使夫妻双胜判定恒假，以及 `/adm/daemons/boardd.lpc:1160` `#ifdef DB_SAVE_A` 块中 `DB_STR(user->query("id"))` 截断 SQL 字串（全批保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 全批 `47` 份文件确认 `0` 错误；`lpcc_eval.py` 实测全部修复文件及 `auto_perform.h` 干净加载 `PASS`；`boardd.lpc` 开启 `#define DB_SAVE_A 1` 探针由 `diags=5` 降至 `3`（0 语法报错）；`scripts/lint.py`（新增规则 #106 `malformed-query-args`）通过 `47/47` `HEAD` 正例、`3/3` `nitan_ceshi` 反例及 `--rule malformed-query-args --all --jobs 8` / `--changed HEAD` / `--fast` 零错误零告警（106 条规则）；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47565`）启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-22 泥潭7系制药系统编译与运行期缺陷修复（KB 04 §6.51）
+
+- 修复 `/adm/daemons/pharmacyd.lpc` 缺失 `#define MEDICINE_DIR(x)`/`#define HERB_OB`、`register_medicine()` 未捕获异常、`check_id()` 参数反写 `member_array(value, name)` 与缺项越界 `key[-1]`，以及 `build_medicine()` 多余分号与缺 `return 0;`；同步修复 `/clone/pharmacy/herb/herb.lpc`（补 `PHARMACY_D`、改名 `herb_name`、`set_name(name, eng)`）与 `/clone/pharmacy/medicine/10.lpc`（`inherit ITEM;`），全批保留原 LF 行尾。
+- 验证：`lpc_format_changed.py` 零错误；`lpcc_eval.py` 实测 `pharmacyd`/`herb`/`10` 零告警 `PASS`（`cid=10 miss=-1 hbid=1`）；`scripts/lint.py`（规则 #111 `nitan-pharmacy-broken`）与 `play_boot.sh`+`play_stop.sh` 均通过且 `ZERO_DRIVERS`。

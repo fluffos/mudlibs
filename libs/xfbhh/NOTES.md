@@ -923,3 +923,8 @@ pristine + build-debug，归档端口 40190。`scripts/play_login.py`（port 491
 
 - 修复 `/clone/lkj.lpc:18,48`（`set("cz", 99999);` 缺分号）与 `/clone/lkj.lpc:28,48`、`/clone/poi.lpc:40,52` 中 `do_effect(object me)` 重声明 `me`、未定义 `arg`/`ob` 与串接语句缺分号问题（按本馆 `questd.lpc` 字串 `query("quest/id", me)` 用 `find_living()` 解析目标并保留 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。
+
+## 2026-11-22 泥潭7系 `pharmacyd.lpc` 缺失宏与参数反写修复（KB 04 §6.51）
+
+- 修复 `/adm/daemons/pharmacyd.lpc` 缺失 `#define MEDICINE_DIR(x)`/`#define HERB_OB`、`register_medicine()` 未捕获异常、`check_id()` 参数反写 `member_array(value, name)` 与缺项越界 `key[-1]`，以及 `build_medicine()` 多余分号 `; ;` 与缺 `return 0;`（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` 零错误；`lpcc_eval.py` 实测 `/adm/daemons/pharmacyd` 零告警 `PASS`（`miss=-1`）；`scripts/lint.py`（规则 #111 `nitan-pharmacy-broken`）与 `play_boot.sh`+`play_stop.sh` 均通过且 `ZERO_DRIVERS`。

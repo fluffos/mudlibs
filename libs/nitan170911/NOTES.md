@@ -1474,3 +1474,10 @@ pristine + build-debug，port 40018。注册 + `reg` + `look`/`score`/`i`/`quit`
 
 - 修复 `/adm/daemons/pathd.lpc:91` 中误将 `arrayp(exits[key])` 拼写为 `arryp(exits[key])` 引发的 `Undefined function arryp` 编译阻断，恢复寻路守护精灵 `/adm/daemons/pathd` 与玩家 `walk` 指令加载（保留原 LF 行尾与未格式化 `KEEP` 状态）。
 - 验证：`lpcc_eval.py` 实测 `/adm/daemons/pathd` 由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #108 `efun-name-typo`）确认 `HEAD` 正例检出、全库复扫与 `--fast` 零错误零告警；`play_boot.sh`+`play_stop.sh`（端口 `47591`）启停正常且 `ZERO_DRIVERS`。
+
+## 2026-11-22 泥潭7系制药系统与 `restore.lpc` 告警修复（KB 04 §6.51）
+
+- 修复 `/adm/daemons/pharmacyd.lpc` 缺失 `#define MEDICINE_DIR(x)`/`#define HERB_OB`、`register_medicine()` 未捕获异常、`check_id()` 参数反写 `member_array(value, name)` 与缺项越界 `key[-1]`，以及 `build_medicine()` 多余分号 `; ;` 与缺 `return 0;`。
+- 修复 `/clone/pharmacy/herb/herb.lpc` 缺失 `#define PHARMACY_D`、`s_name` 重复声明自 `F_NAME` 继承变量（改名 `herb_name`）及 `set_name(name, ({ eng }))` 嵌套数组错误，并将 `/clone/pharmacy/medicine/10.lpc` 未定义 `inherit MEDICINE;` 修正为 `inherit ITEM;`。
+- 将 `/cmds/arch/restore.lpc:21` 的 `temp_ob` 移入 `#ifdef DB_SAVE` 块内（对齐同源 5 馆），消除默认构建的 `Unused local variable 'temp_ob'` 告警（全批保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` 全批 `15` 文件零错误；`lpcc_eval.py` 实测 `pharmacyd`/`herb`/`10`/`restore` 零告警 `PASS`（`cid=10 miss=-1 hbid=1 hblong=33`）；`scripts/lint.py`（新增规则 #111 `nitan-pharmacy-broken`，共 111 条）与 `play_boot.sh`+`play_stop.sh` 均通过且 `ZERO_DRIVERS`。

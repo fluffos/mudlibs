@@ -1607,3 +1607,14 @@ Fix:
 - `adm/simul_efun/sprint.lpc` 改为 FluffOS 变参语法 `varargs string sprint(string format, mixed *args...) { return sizeof(args) ? sprintf(format, args...) : format; }` 并按格式规范化（保留 CRLF）。
 - `logind.lpc` 移除第 `473-482` 行重复孤立块（保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule bare-c-varargs`（全库文件级规则，屏蔽注释/字符串/heredoc 并排除 `/bin/` 驱动源码 `.spec`）与 `--rule shujian-unclosed-if-logind`（targeted 规则，覆盖 `guo.lpc`/`mai.lpc` 与 `/logind.lpc`）。
+
+### 6.51 泥潭7系 `pharmacyd.lpc`/`herb.lpc`/`10.lpc` 缺失宏、参数反写与重声明（`6` 馆 / `15` 文件，2026-11-22）
+
+Symptom: 泥潭 7 系 `6` 馆（`hhsj`、`nitan170911`、`nitan6`、`nt6`、`nt6nitan6win`、`xfbhh`）移植自 Landis@MYTH 的制药系统全部无法编译或加载：
+1. **`/adm/daemons/pharmacyd.lpc`（6 馆）：** 缺少 `#define MEDICINE_DIR(x)` 与 `#define HERB_OB`（`Undefined function MEDICINE_DIR` / `Undefined variable 'HERB_OB'`）；`check_id()` 第 `233` 行将 `member_array(name, value)` 反写为 `member_array(value, name)` 且未判 `loc == -1`（直接越界 `key[-1]`）；`register_medicine()` 未捕获加载异常；`build_medicine()` 第 `450` 行多余分号 `; ;` 且循环外缺少 `return 0;`。
+2. **`/clone/pharmacy/herb/herb.lpc`（4 馆：`nitan170911`、`nitan6`、`nt6`、`nt6nitan6win`）：** 缺少 `#define PHARMACY_D`（`Undefined variable 'PHARMACY_D'`），第 `12` 行 `string s_name` 重复声明自 `F_NAME` 继承的全局变量（`Redeclaration of global variable 's_name'`），第 `43` 行 `set_name(name, ({ eng }))` 把已是 `string *` 的 `eng` 套成嵌套数组导致 `id()` 失效。
+3. **`/clone/pharmacy/medicine/10.lpc`（同上 4 馆）：** 第 `3` 行 `inherit MEDICINE;` 引用全库未定义的宏 `MEDICINE`，致使 `pharmacyd::register_all_medicine()` 首次初始化扫描 `/clone/pharmacy/medicine/` 时失败。
+4. **`nitan170911` `/cmds/arch/restore.lpc:21`：** `temp_ob` 声明在 `#ifdef DB_SAVE` 外部产生 `Unused local variable 'temp_ob'` 告警（其余 5 馆已迁入 `#ifdef DB_SAVE` 内）。
+
+Fix: 在 `pharmacyd.lpc` 补齐 `MEDICINE_DIR(x)`/`HERB_OB` 宏、加固 `register_medicine()`、修正 `member_array(name, value)` 与 `loc == -1 ? -1 : key[loc]` 并清理多余 `;`/补 `return 0;`；在 `herb.lpc` 补 `PHARMACY_D`、重命名 `s_name`→`herb_name`、改 `set_name(name, eng)`；将 `10.lpc` 改为 `inherit ITEM;`；将 `nitan170911` `restore.lpc` 的 `temp_ob` 移入 `#ifdef DB_SAVE`（全批保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule nitan-pharmacy-broken`（targeted 规则，校验三份制药文件）。

@@ -1280,3 +1280,8 @@ pristine + build-debug（归档端口 `40106`，测试端口 `49106`）。`scrip
 
 - 清理 `/clone/drug/fengdong.lpc:142`、`kungfu/class/quanzhen/auto_perform.h`、`quest/skybook/jinshe/wenyi{, (2)}.lpc:106` 等处 `query()`/`query_temp()` 误传 3 参数（移除多余 `1` 并修正 `auto_perform.h` 粘连声明 `object weapon`）、`d/hudie/liandan/liandan.lpc:548` 嵌套 `me` 被错提入 `query("id", ob, me)` 导致错查自身、`/adm/daemons/pkd.lpc:352` `2 && total[0]` 被吞入 `query("couple/couple_id", ...)` 使夫妻双胜判定恒假、`/adm/daemons/boardd.lpc:1160` `#ifdef DB_SAVE_A` 块中 `DB_STR(user->query("id"))` 截断 SQL 字串，以及 `d/city/npc/fuxinglaoren.lpc` 第 `9`/`10`/`65`/`92`/`100` 行 `query("cz", 2, me)` 错参及 `string` 函数 `return 1;` 类型报错（改为 `mixed gift_jingyan{,1}()` 与 `query("cz", me) < 2`）。
 - 验证：`lpc_format_changed.py --apply` 全批 `47` 份文件（6 馆）确认 `0` 错误并保持原 LF 行尾；`lpcc_eval.py` 实测 `fengdong`/`fuxinglaoren`/`auto_perform.h` 均由 `--head` 编译失败转为干净加载 `PASS`（及 `ZZT_PKD_COUPLE=1`）；`boardd.lpc` 开启 `#define DB_SAVE_A 1` 探针由 `diags=5` 降至 `3`（0 语法报错）；`scripts/lint.py`（新增规则 #106 `malformed-query-args`）通过 `47/47` `HEAD` 正例、`3/3` `nitan_ceshi` 反例及 `--rule malformed-query-args --all --jobs 8` / `--changed HEAD` / `--fast` 零错误零告警（106 条规则）；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47561`）启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-22 泥潭7系 `pharmacyd.lpc` 缺失宏与参数反写修复（KB 04 §6.51）
+
+- 修复 `/adm/daemons/pharmacyd.lpc` 缺失 `#define MEDICINE_DIR(x)`/`#define HERB_OB`、`register_medicine()` 未捕获异常、`check_id()` 参数反写 `member_array(value, name)` 与缺项越界 `key[-1]`，以及 `build_medicine()` 多余分号 `; ;` 与缺 `return 0;`（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` 零错误；`lpcc_eval.py` 实测 `/adm/daemons/pharmacyd` 零告警 `PASS`（`miss=-1`）；`scripts/lint.py`（规则 #111 `nitan-pharmacy-broken`）与 `play_boot.sh`+`play_stop.sh` 均通过且 `ZERO_DRIVERS`。
