@@ -164,6 +164,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("xo-special-quest-setreboot", "targeted", "KB 04 §6.54", "error", "XO `special_quest.lpc` `if` swallowed into `//` comment or `setreboot.lpc` calling undefined `adminp()`"),
     RuleSpec("stray-quote-before-newline", "file", "KB 04 §6.55", "error", "Stray/unescaped `\"` right before `\\n\"` breaking out of string literal (`Illegal character '\\\\' (0x5c)`)"),
     RuleSpec("qujing-gunfa-weapon-name", "targeted", "KB 04 §6.56", "error", "qujing-gunfa.lpc `int wn` / mangled `query_temp(\"weapon\", wn = me)` or unguarded `query_temp(\"weapon\")->query(\"name\")`"),
+    RuleSpec("xyj-eof-tail-corruption", "targeted", "KB 04 §6.57", "error", "XYJ archive-corrupted EOF tails (`d/qujing/start/24/12.lpc`, `cuiping.lpc`, `nowords.lpc` ESC, `yunlougate.lpc`)"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1766,7 +1767,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1853,6 +1854,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["xo_qboot"].append(item)
         if rel == "/kungfu/skill/qujing-gunfa.lpc":
             targeted_bins["qujing"].append(item)
+        if rel in ("/d/qujing/start/24/12.lpc", "/d/meishan/cuiping.lpc", "/d/ourhome/obj/nowords.lpc", "/d/sky/yunlougate.lpc"):
+            targeted_bins["xyj_eof"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2118,6 +2121,18 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 or b'me->query_temp("weapon")->query("name")' in b
             ):
                 col.add("qujing-gunfa-weapon-name", p, "qujing-gunfa.lpc declares `int wn` or reads weapon name without objectp() guard / mangled `wn = me`")
+
+    if col.wants("xyj-eof-tail-corruption"):
+        for _, p, rel in targeted_bins["xyj_eof"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/qujing/start/24/12.lpc" and (b"\x06" in b or b"piyi@" in b):
+                col.add("xyj-eof-tail-corruption", p, "corrupted binary EOF tail on carry_object(\".../piyi\")")
+            elif rel == "/d/meishan/cuiping.lpc" and b"return ZN" in b:
+                col.add("xyj-eof-tail-corruption", p, "corrupted EOF `return ZN ...` instead of `return 1; }`")
+            elif rel == "/d/ourhome/obj/nowords.lpc" and b"\x1b" in b:
+                col.add("xyj-eof-tail-corruption", p, "stray trailing ESC (0x1b) byte at EOF")
+            elif rel == "/d/sky/yunlougate.lpc" and re.search(rb"(?m)^  a [^\x00-\x7f]", b):
+                col.add("xyj-eof-tail-corruption", p, "corrupted EOF garbage bytes replacing closing `}`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

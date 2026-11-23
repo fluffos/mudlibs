@@ -1668,3 +1668,12 @@ Symptom: 泥潭/炎黄/地狱/侠客行系 `25` 馆 `/kungfu/skill/qujing-gunfa.
 
 Fix: 前 `17` 馆统一改为 `string wn; int i, level;`，优先使用形参 `weapon` 并补 `objectp(weapon)` 判空守卫（无兵器时兜底 `"长棍"`）；后 `8` 馆对内联兵器名表达式补充 `objectp(weapon)` / `objectp(me->query_temp("weapon"))` 判空守卫（全批保留原 LF 行尾与 `KEEP` 状态）。
 Detection: `scripts/lint.py --rule qujing-gunfa-weapon-name`（targeted 规则，覆盖全部活跃库 `/kungfu/skill/qujing-gunfa.lpc`）。
+
+### 6.57 西游记系归档文件尾部截断/控制字节损坏（`23` 馆 / `29` 文件，2026-11-23）
+
+Symptom: 西游记系 `23` 馆存在归档解包遗留的 EOF 尾部字节损坏，直接触发 `End of file in string` / `Illegal character 0x1b/0xe6/0xe8` 编译阻断：
+1. **`/d/qujing/start/24/12.lpc`（`23` 馆：`dtxywzxzb`、`mhxy`、`mhxyqd`、`mohuanshiji`、`rzrmud`、`sanjieshenhua`、`shenmo`、`sjsh`、`sjshv150`、`sjshv2578bb`、`sjshwzb`、`sjshwzjqb`、`xianlvqiyuan`、`xiyouji2006`、`xlqy_early`、`xlqy_new2007`、`xlqyzdb`、`xyj2000`、`xyj2000f`、`xyj20032`、`xyj2006n`、`xyj2006zzzhx`、`yueyingqiyuan`）：** 末尾被截断为 `carry_object("/d/qujing/tianzhu/obj/piyi@俋t;\n\n>矩\x06t\x0f`，致使坚牢地神 NPC 全部无法编译加载。
+2. **`xyj2000` 与 `xyj2000f` 另三处尾部损坏（`6` 文件）：** `/d/meishan/cuiping.lpc:74`（`return ZN 殼` 替代 `return 1;\n}`）、`/d/ourhome/obj/nowords.lpc:46`（闭合 `}` 后多出裸 `0x1b` ESC 字节）、`/d/sky/yunlougate.lpc:45`（`  a 蝍` 替代闭合 `}`）。
+
+Fix: 将 `23` 馆 `12.lpc` 损坏尾部还原为完整 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();\n}`（与同目录 `11.lpc`/`13.lpc` 及现存 `/d/qujing/tianzhu/obj/piyi.lpc` 一致，保留 `sjshv2578bb`/`xyj20032` CRLF 与其余 `21` 馆 LF）；参照 `sjsh` 完好副本还原 `xyj2000`/`xyj2000f` 三份文件尾部并删除裸 `0x1b` 字节。
+Detection: `scripts/lint.py --rule xyj-eof-tail-corruption`（targeted 规则，校验上述四路径 EOF 损坏特征）。
