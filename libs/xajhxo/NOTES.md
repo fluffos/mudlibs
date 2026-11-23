@@ -1088,3 +1088,8 @@ pristine + build-debug（归档端口 `40069`，测试端口 `49069`）。`scrip
 
 - 修复 `/d/city/capital/dxgs_xilang3.lpc:28`（`::init()` 缺 `;`）与 `/d/city/capital/dxgs_dongta.lpc:25`（单冒号 `: init();`），对齐同源 `xajh2`/`xo_final` 完整 `::init();`（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py` 零错误、`file` 确认纯 CRLF；`lpcc_eval.py` 实测两间大相国寺房间均由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #113 `malformed-super-call`，共 113 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47634`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `localcmds.lpc` `foreach` 多余分号、`special_quest.lpc` 注释吞行与 `setreboot.lpc` 未定义 `adminp()` 修复（KB 04 §6.54）
+
+- 修复 `/cmds/wiz/localcmds.lpc:10` `foreach (class Action action in me->GetActions());` 末尾多余分号（消除第 `11` 行 `Undefined variable 'action'`）；修复 `/system/std/char/special_quest.lpc:162` 注释行误吞 `if (random(class_score) < 50)` 导致的 `unexpected L_ELSE`（×3）；将 `/cmds/admin/setreboot.lpc:13` 未定义的 `!adminp(me)` 替换为标准权限判定 `wiz_level(me) < wiz_level("(admin)")`（全批保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` 零错误、`file` 确认 `special_quest.lpc` 纯 LF / `localcmds.lpc` 与 `setreboot.lpc` 纯 CRLF；`lpcc_eval.py` 实测 3 份对象全部由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #114 `stray-foreach-semicolon` 与 #115 `xo-special-quest-setreboot`，共 115 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47641`）均通过且 `ZERO_DRIVERS`。

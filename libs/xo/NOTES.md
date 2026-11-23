@@ -965,3 +965,8 @@ pristine + build-debug，归档端口 40023。`scripts/play_login.py`（port 490
 
 - 修复 `/d/city/yangzhou/npc/qiu_haoshi.lpc`、`/d/menpai/wuliang/west/caiyuan.lpc`、`/system/daemon/logind.lpc` 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `special_quest.lpc` 注释吞行与 `setreboot.lpc` 未定义 `adminp()` 修复（KB 04 §6.54）
+
+- 修复 `/system/std/char/special_quest.lpc:162` 注释行误吞 `if (random(class_score) < 50)` 导致的 `unexpected L_ELSE`（×3）；将 `/cmds/admin/setreboot.lpc:13` 未定义的 `!adminp(me)` 替换为标准权限判定 `wiz_level(me) < wiz_level("(admin)")`（保留原 LF/CRLF 行尾）。
+- 验证：`lpc_format_changed.py` 零错误、`file` 确认 `special_quest.lpc` 纯 LF / `setreboot.lpc` 纯 CRLF；`lpcc_eval.py` 实测两份对象均由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（规则 #115 `xo-special-quest-setreboot`）与 `play_boot.sh`+`play_stop.sh`（端口 `47642`）均通过且 `ZERO_DRIVERS`。

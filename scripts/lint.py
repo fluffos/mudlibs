@@ -160,6 +160,8 @@ RULES: list[RuleSpec] = [
     RuleSpec("nitan-pharmacy-broken", "targeted", "KB 04 §6.51", "error", "Nitan7 `pharmacyd.lpc`/`herb.lpc`/`10.lpc` missing `MEDICINE_DIR`/`HERB_OB`/`PHARMACY_D`, swapped `member_array(value, name)`, `s_name` redecl, `({ eng })`, or `inherit MEDICINE`"),
     RuleSpec("pasted-shell-prompt", "file", "KB 04 §6.52", "error", "Pasted MUD wizard `> c/cat/more file.c` prompt or bare `name.c inherit` header in LPC code"),
     RuleSpec("malformed-super-call", "file", "KB 04 §6.53", "error", "Superclass hook call `::init()`/`::die()`/`::create()` missing `;` or single-colon `: init();`"),
+    RuleSpec("stray-foreach-semicolon", "file", "KB 04 §6.54", "error", "Stray trailing `;` on `foreach (...)` header terminating loop body and breaking loop variable scope"),
+    RuleSpec("xo-special-quest-setreboot", "targeted", "KB 04 §6.54", "error", "XO `special_quest.lpc` `if` swallowed into `//` comment or `setreboot.lpc` calling undefined `adminp()`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -861,6 +863,19 @@ def _find_malformed_super_call(b: bytes) -> tuple[int, str] | None:
     return None
 
 
+STRAY_FOREACH_SEMI_RE = re.compile(
+    rb"(?m)^[ \t]*foreach[ \t]*\((?:[^()\r\n]|\([^()\r\n]*\))*\)[ \t]*;[ \t]*\r?$"
+)
+
+
+def _find_stray_foreach_semicolon(b: bytes) -> int | None:
+    mask = code_mask(b, heredoc=True)
+    for m in STRAY_FOREACH_SEMI_RE.finditer(b):
+        if mask[m.start()]:
+            return b[:m.start()].count(b"\n") + 1
+    return None
+
+
 def _load_metas() -> dict[str, dict]:
     out = {}
     for mp in sorted(glob.glob(f"{REPO}/libs/*/meta.json")):
@@ -1398,6 +1413,20 @@ def check_file_worker(task: tuple[str, dict]) -> list[tuple[str, str, str]]:
         msc = _find_malformed_super_call(b)
         if msc is not None:
             hits.append(("malformed-super-call", f"{path}:{msc[0]}", f"Malformed superclass hook call `{msc[1]}`"))
+    if (
+        want("stray-foreach-semicolon")
+        and not is_wiz
+        and "/doc/" not in rel
+        and not rel.endswith("/bad_foreach.lpc")
+        and slug not in sc.LDMUD
+        and slug not in ("unitopia", "silberland", "tamedhon")
+        and slug not in sc.GENERATED
+        and b"foreach" in b
+        and STRAY_FOREACH_SEMI_RE.search(b)
+    ):
+        sfs = _find_stray_foreach_semicolon(b)
+        if sfs is not None:
+            hits.append(("stray-foreach-semicolon", f"{path}:{sfs}", "Stray `;` after `foreach (...)` terminates the loop header and breaks loop-variable scope"))
 
     if want("literal-or") and (b"||" in b or b"&&" in b):
         if litorfix.fix(b)[1]:
@@ -1708,7 +1737,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1791,6 +1820,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["guomai"].append(item)
         if rel in ("/adm/daemons/pharmacyd.lpc", "/clone/pharmacy/herb/herb.lpc", "/clone/pharmacy/medicine/10.lpc"):
             targeted_bins["pharmacy"].append(item)
+        if rel in ("/system/std/char/special_quest.lpc", "/cmds/admin/setreboot.lpc"):
+            targeted_bins["xo_qboot"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2034,6 +2065,18 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             elif rel == "/clone/pharmacy/medicine/10.lpc":
                 if b"inherit MEDICINE;" in b:
                     col.add("nitan-pharmacy-broken", p, "10.lpc inherits undefined macro MEDICINE instead of ITEM")
+
+    if col.wants("xo-special-quest-setreboot"):
+        for _, p, rel in targeted_bins["xo_qboot"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/system/std/char/special_quest.lpc":
+                if re.search(rb"//[^\r\n]*\bif[ \t]*\([ \t]*random[ \t]*\([ \t]*class_score", b):
+                    col.add("xo-special-quest-setreboot", p, "special_quest.lpc `if (random(class_score) < 50)` swallowed into `//` comment line")
+            elif rel == "/cmds/admin/setreboot.lpc":
+                mk = code_mask(b, heredoc=True)
+                cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+                if re.search(rb"\badminp[ \t]*\(", cb):
+                    col.add("xo-special-quest-setreboot", p, "setreboot.lpc calls undefined `adminp()` instead of `wiz_level()` check")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

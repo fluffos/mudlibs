@@ -1639,3 +1639,13 @@ Symptom: 跨 `3` 个独立系别（`dreamofseven`、`shadowgate`/`sunshadow`、`
 
 Fix: 用同目录完好 `master.lpc` 还原 `dreamofseven` `maa.lpc`；在 `shadowgate`/`sunshadow` `sandy18.lpc` 补齐 `::init();` 与 `add_action("south","south");`；在 `xajhxo` `dxgs_xilang3.lpc`/`dxgs_dongta.lpc` 恢复 `::init();`（全批保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule malformed-super-call`（经 `code_mask(b, heredoc=True)` 屏蔽注释、字符串与 heredoc，排除巫师目录、`/doc/` 及 LDMud）。
+
+### 6.54 XO 系 `foreach (...);` 多余分号、`special_quest.lpc` 注释吞行与 `setreboot.lpc` 未定义 `adminp()`（`3` 馆 / `6` 文件，2026-11-23）
+
+Symptom: 笑傲江湖 XO 系 `3` 馆（`xajhxo`、`xo`、`xo_final`）存在三处编译阻断缺陷：
+1. **`xajhxo` `/cmds/wiz/localcmds.lpc:10-11`：** `foreach (class Action action in me->GetActions());` 头部末尾多出分号 `;`，提前终止循环体，导致第 `11` 行 `printf("%-15s %-40O\n", action->verb, find_object(action->ob));` 报 `Undefined variable 'action'` 无法编译（全语料唯一活跃 FluffOS 命中）。
+2. **`xajhxo`、`xo`、`xo_final` `/system/std/char/special_quest.lpc:162-169`：** 第 `162` 行 `// 现在先共用一个quest库    if ( random( class_score ) < 50 )` 将 `if (...)` 条件句误拼入 `//` 单行注释内，触发 `syntax error, unexpected L_ELSE`（×3）与 `Illegal LHS`（同源 `xajh2` 为独立两行完好版本）。
+3. **`xajhxo` 与 `xo` `/cmds/admin/setreboot.lpc:13`：** `if (!adminp(me))` 调用全库未定义的 `adminp()` 函数（`Undefined function adminp`），致使管理员重启间隔指令无法编译。
+
+Fix: 移除 `localcmds.lpc` 第 `10` 行 `foreach (...)` 末尾多余分号；将三馆 `special_quest.lpc` 第 `162` 行拆回 `// 现在先共用一个quest库` 与 `if (random(class_score) < 50)` 两行；将两馆 `setreboot.lpc` 第 `13` 行替换为同系 `wizlock.lpc` 标准的 `if (wiz_level(me) < wiz_level("(admin)"))`（全批保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule stray-foreach-semicolon`（全库文件级规则，屏蔽注释/字符串/heredoc 并排除巫师目录、`/doc/`、`bad_foreach.lpc` 编译器反例及 LDMud）与 `--rule xo-special-quest-setreboot`（targeted 规则，校验 `special_quest.lpc` 与 `setreboot.lpc`）。
