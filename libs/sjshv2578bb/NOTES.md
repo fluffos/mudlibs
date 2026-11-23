@@ -592,3 +592,8 @@ pristine + build-debug，归档端口 40125。`scripts/play_login.py` 注册/连
 
 - 还原 `/d/qujing/start/24/12.lpc:41-43` 被归档截断损坏的 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();` 尾部与闭合 `}`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`xyj2000`/`xyj2000f`/`sjsh`/`sjshv2578bb`/`xyj20032`/`mhxy` 代表）全数由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #118 `xyj-eof-tail-corruption`，共 118 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47681..47686`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `dachen2.lpc`/`hufa.lpc` 尖括号包含路径修复（KB 04 §6.65）
+
+- 将 `/d/huanggong/dachen2.lpc:4` `#include <reporting.h>` 改为 `#include "/d/huanggong/npc/reporting.h"`，并将 `/d/calvin/tianpeng/npc/hufa.lpc:7` `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `8` 馆 `16` 文件零错零告警 `PASS`；`lpcc_eval.py`（`sjsh`/`sanjieshenhua` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #126 `sjsh-angle-include-headers`，共 126 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47761..47766`）均通过且 `ZERO_DRIVERS`。

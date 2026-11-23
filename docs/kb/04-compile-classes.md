@@ -1742,3 +1742,10 @@ Symptom: 海洋/赤帝/笑傲等 `9` 馆（`chidi`、`fqyy2`、`hy`、`hy2000`�
 
 Fix: 删除 `8` 馆 `qhlist600000.lpc` 行尾裸 `r`；补全 `2` 馆 `cike.lpc` `to_int(ceil(...))` 与 `set_skill("hunyuan-yiqi", level); setup(); }`；补齐 `guxing-sword.lpc` 闭合引号并修复 `yaoguai4.lpc` `chinese_number(10000)`（全批保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule qhlist-cike-chidi-syntax`（targeted 规则，校验上述四路径特征）。
+
+### 6.65 西游/三界系 `dachen2.lpc`/`hufa.lpc` 尖括号 `#include <reporting.h>`/`<soldier_skill.h>` 路径缺失（`8` 馆 / `16` 文件，2026-11-23）
+
+Symptom: 三界神话/西游记系 `8` 馆（`sanjieshenhua`、`shenmo`、`sjsh`、`sjshv150`、`sjshv2578bb`、`sjshwzb`、`sjshwzjqb`、`xyj20032`）的 `/d/huanggong/dachen2.lpc:4` 写 `#include <reporting.h>`、`/d/calvin/tianpeng/npc/hufa.lpc:7` 写 `#include <soldier_skill.h>`，但两份头文件并不在 `/include/` 下，而是分别位于 `/d/huanggong/npc/reporting.h` 与 `/obj/npc/soldier_skill.h`，导致 `16` 份 NPC 文件全部触发 `Cannot #include` 编译阻断。
+
+Fix: 分别改写为绝对路径 `#include "/d/huanggong/npc/reporting.h"` 与 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule sjsh-angle-include-headers`（targeted 规则，校验上述两路径在缺少 `/include/` 同名头文件时是否仍使用尖括号包含）。

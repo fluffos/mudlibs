@@ -1655,3 +1655,8 @@ pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scrip
 
 - 移除 `/{kungfu,daemon}/skill/zhuihun-biao.lpc:191` 裸表达式 `weapon;` 并清零 `/{kungfu,daemon}/skill/{diwangquan,qxxy-shou,wudu-goufa,zhuihun-biao}.lpc` 与 `/kungfu/skill/shedao-qigong.lpc`（共 `9` 份）`hit_ob()`/`ob_hit()` 全部未用局部声明告警（保留原 LF）。
 - 验证：`lpc_audit_removed_locals.py HEAD`（`234` 处零误删）；`lpc_format_changed.py` `0` 重排；`lpcc --batch` `9/9` 零错零告警；`scripts/lint.py`（新增规则 #121 `hy-migong-skill-warnings`，共 121 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47714`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `dachen2.lpc`/`hufa.lpc` 尖括号包含路径修复（KB 04 §6.65）
+
+- 将 `/d/huanggong/dachen2.lpc:4` `#include <reporting.h>` 改为 `#include "/d/huanggong/npc/reporting.h"`，并将 `/d/calvin/tianpeng/npc/hufa.lpc:7` `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `8` 馆 `16` 文件零错零告警 `PASS`；`lpcc_eval.py`（`sjsh`/`sanjieshenhua` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #126 `sjsh-angle-include-headers`，共 126 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47761..47766`）均通过且 `ZERO_DRIVERS`。
