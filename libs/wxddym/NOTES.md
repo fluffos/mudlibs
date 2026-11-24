@@ -1111,3 +1111,8 @@ pristine + build-debug（归档端口 40189，临时测试端口 49519）。`scr
 
 - 在 `/quest/shenshu/npc/party.lpc:77` `"qingyun-shou": 100` 后补齐缺失逗号 `,`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hy5`/`haiyang2`/`hymud`/`niaoren`/`wdxtym`/`wxddym` 代表）全数由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #120 `dodgebook-party-syntax`，共 120 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47701..47706`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `present(query("baixing", environment(this_object())))` 错位括号修复（KB 04 §6.71）
+
+- 修复 `/kungfu/class/generate/slough_killed.lpc`、`/kungfu/class/generate/slough_killer.lpc`、`/u/lonely/quest3/slough_killed.lpc`、`/u/lonely/quest3/slough_killer.lpc`（共 `4` 份）中 `die()` 错把 `environment(this_object())` 放进 `query()` 括号内的缺陷，更正为 `present(query("baixing"), environment(this_object()))`（保留原 LF 行尾与 `KEEP` 状态）。
+- 验证：`lpc_format_changed.py` `36/36` `0` 重排；`lpcc --batch`（`12/13` 馆 `32/32` 零错零告警 `PASS`，`wxddym` 另缺 `slough.h`）；`lpcc_eval.py` 差分实测 `nitan3` `4/4` 由 `--head` 报错转为 `PASS`、`nitan6` `2/2` `PASS`；`scripts/lint.py`（新增规则 #132 `nitan-present-baixing-paren`，共 132 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`6` 馆代表（`nitan3`/`nt1`/`nte`/`nitan6`/`hhsj`/`xfbhh`，端口 `47831..47836`）均通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

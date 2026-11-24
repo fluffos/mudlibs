@@ -1795,3 +1795,10 @@ Symptom: `bxsj`、`bxsj1`、`shujian2008`、`shujian3`、`sjecl`、`sjtx2` 共 `
 
 Fix: 将 `6` 馆共 `18` 份文件中的 `#include "chan.h"` 改为绝对路径 `#include "/d/shaolin/obj/chan.h"`（保留原 CRLF 行尾）。
 Detection: `scripts/lint.py --rule shujian-shaolin-chan-include`（targeted 规则，校验 `/d/shaolin/npc/{jichan,kongchan,mingchan}.lpc` 在 `/d/shaolin/obj/chan.h` 存在时是否仍用未注释的相对 `#include "chan.h"`）。
+
+### 6.71 泥潭系 `slough_{killed,killer}`/`x{killed,killer}` 错位括号 `present(query("baixing", environment(this_object())))`（13 馆，36 份文件）
+
+Symptom: `nitan3`、`nitan_ceshi`、`nitan_san`、`nt1`、`nte`、`ntii`、`wxddym`（`slough_killed.lpc`/`slough_killer.lpc`）与 `hhsj`、`nitan170911`、`nitan6`、`nt6`、`nt6nitan6win`、`xfbhh`（`xkilled.lpc`/`xkiller.lpc`）共 `13` 馆 `36` 份文件在 `die()` 中将 `present(query("baixing"), environment(this_object()))` 错写成了 `present(query("baixing", environment(this_object())))`。在旧版单参 `query(string, int)` 泥潭馆直接触发编译报错 `Bad type for argument 2 of query ( int vs object )`；在新版双参 `query(string, object)` 泥潭馆虽可编译，但错误地向房间而非 `this_object()` 读取 `"baixing"`，导致被解救的百姓 NPC 永远找不到、无法道谢并残留不销毁。
+
+Fix: 将全部 `13` 馆 `36` 份文件更正为 `present(query("baixing"), environment(this_object()))`（保留原 LF 行尾与 `KEEP` 状态）。
+Detection: `scripts/lint.py --rule nitan-present-baixing-paren`（targeted 规则，校验 `slough_{killed,killer}.lpc` 与 `x{killed,killer}.lpc`）。

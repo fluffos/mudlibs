@@ -178,6 +178,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("xkx-rstbkup-xunbu-xuanci", "targeted", "KB 04 §6.68", "error", "XKX/Shenzhou `rstbkup.lpc` collapsed `#endif #define`, `cmds/std/xunbu.lpc` relative `npc_skills_attrib_setup.h`, or `d/shaolin/npc/xuanci.lpc` missing `/d/shaolin/npc/job.h`"),
     RuleSpec("sanjieshenhua-footprint-hufa-luoyang", "targeted", "KB 04 §6.69", "error", "`d/linghai/footprint.lpc` `set_name(\"short\"/\"long\")`, `d/wizz/calvin/tianpeng/npc/hufa.lpc` `<soldier_skill.h>`, `luoyang/{npc/fushang,zhulin2}.lpc` leading `a`, or `aohan-liujue.lpc` duplicate `query_action()`"),
     RuleSpec("shujian-shaolin-chan-include", "targeted", "KB 04 §6.70", "error", "`d/shaolin/npc/{jichan,kongchan,mingchan}.lpc` relative `#include \"chan.h\"` when `chan.h` lives in `/d/shaolin/obj/chan.h`"),
+    RuleSpec("nitan-present-baixing-paren", "targeted", "KB 04 §6.71", "error", "Nitan `slough_{killed,killer}`/`x{killed,killer}` misplaced paren `present(query(\"baixing\", environment(this_object())))` instead of `present(query(\"baixing\"), environment(this_object()))`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1780,7 +1781,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1952,6 +1953,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/d/shaolin/npc/mingchan.lpc",
         ):
             targeted_bins["sj_chan"].append(item)
+        if rel.endswith(("/slough_killed.lpc", "/slough_killer.lpc", "/xkilled.lpc", "/xkiller.lpc")):
+            targeted_bins["nt_baixing"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2408,6 +2411,12 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if re.search(rb'(?m)^[ \t]*#include[ \t]+"chan\.h"', b) and not os.path.isfile(f"{REPO}/libs/{slug}/work/d/shaolin/npc/chan.h") and os.path.isfile(f"{REPO}/libs/{slug}/work/d/shaolin/obj/chan.h"):
                 col.add("shujian-shaolin-chan-include", p, "relative `#include \"chan.h\"` fails outside `/d/shaolin/obj/`")
+
+    if col.wants("nitan-present-baixing-paren"):
+        for _, p, _ in targeted_bins["nt_baixing"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b'present(query("baixing", environment(this_object())))' in b:
+                col.add("nitan-present-baixing-paren", p, "misplaced paren in `present(query(\"baixing\", environment(this_object())))`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

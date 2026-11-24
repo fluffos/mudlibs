@@ -1621,3 +1621,8 @@ pristine + build-debug，port 40019。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/kungfu/skill/qujing-gunfa.lpc` `query_action(object me, object weapon)` 中将兵器名 `wn` 错声明为 `int wn`、`nitan6`/`nt6`/`nt6nitan6win` 转换脚本倒置 `query_temp("weapon", wn = me)` 致编译失败（`Bad assignment ( int vs object )`），以及未判空直接解引用 `query_temp("weapon")->query("name")` 致空手调用报错（`*Bad argument 1 to EFUN call_other() Got: int(0)`）的缺陷：改为 `string wn;`，优先取形参 `weapon` 并补 `objectp(weapon)` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` 全批 `0` 错误；`lpcc_eval.py` 跨系代表实测（`nitan6`/`nt6`/`nt6nitan6win`/`hhsj`/`nitan_ceshi`/`zhonghua2`）由 `--head` 编译报错/空手崩溃转为 `query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（新增规则 #117 `qujing-gunfa-weapon-name`，共 117 条）全库 `--fast` 与 `--changed HEAD` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47671..47676`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `present(query("baixing", environment(this_object())))` 错位括号修复（KB 04 §6.71）
+
+- 修复 `/kungfu/class/generate/xkilled.lpc`、`/kungfu/class/generate/xkiller.lpc`（共 `2` 份）中 `die()` 错把 `environment(this_object())` 放进 `query()` 括号内的缺陷，更正为 `present(query("baixing"), environment(this_object()))`（保留原 LF 行尾与 `KEEP` 状态）。
+- 验证：`lpc_format_changed.py` `36/36` `0` 重排；`lpcc --batch`（`12/13` 馆 `32/32` 零错零告警 `PASS`，`wxddym` 另缺 `slough.h`）；`lpcc_eval.py` 差分实测 `nitan3` `4/4` 由 `--head` 报错转为 `PASS`、`nitan6` `2/2` `PASS`；`scripts/lint.py`（新增规则 #132 `nitan-present-baixing-paren`，共 132 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`6` 馆代表（`nitan3`/`nt1`/`nte`/`nitan6`/`hhsj`/`xfbhh`，端口 `47831..47836`）均通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
