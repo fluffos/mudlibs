@@ -146,7 +146,7 @@ int begin_paimai(string name, int money, int num, int m) {
   set("on_paimai", 1);
   mon = to_ch(money);
   command("bill " + NOR + name + HIG + "底价" + mon + "第" + chinese_number(m) + "次");
-  command("bill " + name + HIG "是本店第『" + chinese_number(num) + "』号拍卖品，有意者请使用ＢＩＤ命令进行竞买。\n" NOR);
+  command("bill " + name + HIG "是本店第『" + chinese_number(num) + "』号拍卖品，有意者请使用ＢＩＤ命令进行竞买。" NOR);
 
   if (!(m == 3))
     call_out("begin_paimai", 20, name, money, num, m);
@@ -205,31 +205,113 @@ int finish_paimai(int num, int sign) {
 
   if (query("pnum"))
     pay_back(owner_id, query("vpaimai/" + sprintf("%d", num)) * 95);
-  if (!who->restore()) {
-    log_file("paimai_log", "Failed to return " + amount +
-      " coin to " + id + "\n");
-    destruct(who);
-    return 0;
+
+  call_out("delete_ob", 600, num);
+
+  num = num + 1;
+  if (query("lpaimai/" + sprintf("%d", num)) == 1) {
+    set("value", query("vpaimai/" + sprintf("%d", num)));
+    set("number", num);
+    set("pnum", 0);
+    call_out(
+      "begin_paimai",
+      5,
+      query("npaimai/" + sprintf("%d", num)),
+      query("vpaimai/" + sprintf("%d", num)),
+      num,
+      0
+    );
+  }
+  return 1;
+}
+int report_paimai(object buyer, int money, int num) {
+  string mon;
+  remove_call_out("begin_paimai");
+  remove_call_out("finish_paimai");
+  remove_call_out("go_paimai");
+
+  if (query("pnum"))  // pnum是判断是否有人投标的标志　 
+  {
+    pay_back(query("ipaimai/" + sprintf("%d", num)), query("vpaimai/" + sprintf("%d", num)) * 100);  //归还前一个竞买者的钱　
+    add("pnum", 1);
+  }
+  buyer->add("balance", (0 - money * 100));
+  set("vpaimai/" + sprintf("%d", num), money);
+  set("ipaimai/" + sprintf("%d", num), buyer->query("id"));
+  set("value", money);
+  mon = to_ch(money);
+  if (!buyer->query_temp("invisibility_buyer")) {
+    if (!query("pnum"))
+      add("pnum", 1);
+    command("bill  " + buyer->query("id") + " 出价 " + mon + "购入" + NOR + query("npaimai/" + sprintf(
+      "%d",
+      num
+    )) + HIG "的所有权。");
+    call_out(
+      "go_paimai",
+      5,
+      buyer->query("name") + "(" + buyer->query("id") + ")",
+      query("npaimai/" + sprintf("%d", num)),
+      money,
+      num,
+      0
+    );
   } else {
+    if (!query("pnum"))
+      add("pnum", 1);
+    command("sys  " + buyer->query("id") + " 出价 " + mon + "购入" + NOR + query("npaimai/" + sprintf(
+      "%d",
+      num
+    )) + HIG "的所有权。");
+    command("bill  有人出价 " + chinese_number(money) + "两银子 购入" + NOR + query("npaimai/" + sprintf(
+      "%d",
+      num
+    )) + HIG "的所有权。");
+    call_out("go_paimai", 5, "某人", query("npaimai/" + sprintf("%d", num)), money, num, 0);
+  }
+  return 1;
+}
+int pay_back(string id, int amount) {
+  object who;
+
+  who = find_player(id);
+  if (who) {
     who->add("balance", amount);
-    if (!who->save(1)) {  // save(1) will not erase autoload.
+    if (!who->save(1)) {
+      log_file("paimai_log", "Failed to return " + amount +
+        " coin to " + id + "\n");
+      return 0;
+    }
+    log_file("paimai_log", "pay " + amount + " to " + id + "\n");
+    return 1;
+  } else {
+    who = new(USER_OB);
+    who->set("id", id);
+    if (!who->restore()) {
       log_file("paimai_log", "Failed to return " + amount +
         " coin to " + id + "\n");
       destruct(who);
       return 0;
+    } else {
+      who->add("balance", amount);
+      if (!who->save(1)) {  // save(1) will not erase autoload.
+        log_file("paimai_log", "Failed to return " + amount +
+          " coin to " + id + "\n");
+        destruct(who);
+        return 0;
+      }
+      log_file("paimai_log", "pay " + amount + " to " + id + "\n");
+      destruct(who);
+      return 1;
     }
-    log_file("paimai_log", "pay " + amount + " to " + id + "\n");
-    destruct(who);
-    return 1;
   }
-}
 }
 int go_paimai(string id, string name, int money, int num, int m) {
   string mon;
   m += 1;
   mon = to_ch(money);
   command("bill " + id + " 出价 " + mon + "购入 " + NOR + name + HIG + " 的所有权，第" + chinese_number(m) + "次");
-  command("bill " + name + HIG "是本店第『" + chinese_number(num) + "』号拍卖品，有意者请使用ＢＩＤ命令进行竞买。\n" NOR);
+  command("bill " + name + HIG "是本店第『" + chinese_number(num) + "』号拍卖品，有意者请使用ＢＩＤ命令进行竞买。" NOR);
   if (!(m == 3))
     call_out("go_paimai", 20, id, name, money, num, m);
   else
@@ -253,7 +335,6 @@ int do_paimailist() {
 int do_yao() {
   mapping fpaimai, vpaimai, ipaimai, npaimai, lpaimai, spaimai;
   string *terms;
-  string id;
   object ob;
   int i;
 
@@ -312,90 +393,3 @@ string to_ch(int money) {
   set_temp("price", mon);
   return mon;
 }
-
-call_out("delete_ob", 600, num) num = num + 1 if (query("lpaimai/" + sprintf("%d", num)) == 1
-
-  set("value", query("vpaimai/" + sprintf("%d", num)))
-  set("number", num)
-  set("pnum", 0)
-  call_out(
-    "begin_paimai",
-    5,
-    query("npaimai/" + sprintf("%d", num)),
-    query("vpaimai/" + sprintf("%d", num)),
-    num,
-    0
-  )
-
-  return 1
-  int report_paimai(object buyer, int money, int num
-    string mon
-    remove_call_out("begin_paimai")
-    remove_call_out("finish_paimai")
-    remove_call_out("go_paimai")
-
-    if (query("pnum"))  // pnum是判断是否有人投标的标志　
-
-      pay_back(
-        query("ipaimai/" + sprintf("%d", num)),
-        query("vpaimai/" + sprintf("%d", num)) * 100
-      );  //归还前一个竞买者的钱                add("pnum",1)
-
-      buyer->add("balance", (0 - money * 100))
-      set("vpaimai/" + sprintf("%d", num), money)
-      set("ipaimai/" + sprintf("%d", num), buyer->query("id"))
-      set("value", money)
-      mon = to_ch(money)
-      if (!buyer->query_temp("invisibility_buyer")
-
-        if (!query("pnum")
-          add("pnum", 1)
-          command("bill  " + buyer->query("id") + " 出价 " + mon + "购入" + NOR + query("npaimai/" + sprintf(
-            "%d",
-            num
-          )) + HIG "的所有权。")
-          call_out(
-            "go_paimai",
-            5,
-            buyer->query("name") + "(" + buyer->query("id") + ")",
-            query("npaimai/" + sprintf("%d", num)),
-            money,
-            num,
-            0
-          )
-
-          els
-
-          if (!query("pnum")
-            add("pnum", 1)
-            command("sys  " + buyer->query("id") + " 出价 " + mon + "购入" + NOR + query("npaimai/" + sprintf(
-              "%d",
-              num
-            )) + HIG "的所有权。")
-            command("bill  有人出价 " + chinese_number(money) + "两银子 购入" + NOR + query("npaimai/" + sprintf(
-              "%d",
-              num
-            )) + HIG "的所有权。")
-            call_out("go_paimai", 5, "某人", query("npaimai/" + sprintf("%d", num)), money, num, 0)
-
-            return 1
-            int pay_back(string id, int amount
-              object who
-
-              who = find_player(id)
-              if (who
-
-                who->add("balance", amount)
-                if (!who->save(1))
-
-                  log_file("paimai_log", "Failed to return " + amount
-                    " coin to " + id + "\n")
-                  return 0
-
-                  log_file("paimai_log", "pay " + amount + " to " + id + "\n")
-                  return 1
-              }
-                els
-
-                who = new(USER_OB)
-                who->set("id", id)

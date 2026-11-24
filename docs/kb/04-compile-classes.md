@@ -1809,3 +1809,10 @@ Symptom: `nitan3`、`nitan_ceshi`、`nitan_san`（`checkskill.lpc` 与 `chpfm.lp
 
 Fix: 将 `6` 馆共 `9` 份文件第 `97` 行的 `mixed *value;` 改为 `mixed value;`（保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule nitan-checkskill-mixed-array`（targeted 规则，校验 `/cmds/skill/{checkskill,chpfm}.lpc` 是否同时含 `mixed *value;` 与未强转的 `replace_string(temp, "$N", value)`）。
+
+### 6.73 `nitan3`/`nitan_san` `d/city/npc/paimaishi.lpc` 错贴 `pay_back()` 尾部与分号缺失（2 馆，2 份文件）
+
+Symptom: `nitan3` 与 `nitan_san` 的 `/d/city/npc/paimaishi.lpc`（两馆逐字节一致）在第 `208` 行 `finish_paimai()` 中被错贴了一段 `pay_back()` 尾部（引用未定义局部 `who`/`amount`/`id` 且多出一个 `}`），后续 `report_paimai()` 亦丢失大量分号与右括号，导致拍卖师 NPC 无法编译加载；而同源孪生馆 `nitan_ceshi` 保留了完整无损版本。
+
+Fix: 从同源孪生馆 `nitan_ceshi` 还原 `/d/city/npc/paimaishi.lpc` 至 `nitan3` 与 `nitan_san`（均为已格式化 LF 文件）。
+Detection: `scripts/lint.py --rule nitan-paimaishi-corrupt-payback`（targeted 规则，校验 `d/city/npc/paimaishi.lpc` 中 `pay_back(owner_id, ...);` 后紧跟 `if (!who->restore())`）。

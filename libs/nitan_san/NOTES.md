@@ -1128,3 +1128,8 @@ pristine + build-debug（归档端口 `40055`，测试端口 `49055`）。`scrip
 
 - 将 `/cmds/skill/checkskill.lpc`、`/cmds/skill/chpfm.lpc`（共 `2` 份）第 `97` 行误声明为数组的 `mixed *value;` 改为 `mixed value;`，解决第 `134` 行 `replace_string(temp, "$N", value)` 触发的 `Bad argument 3 to efun replace_string()` 编译阻断（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` `9/9` `0` 重排；`lpcc --batch` 全批 `6` 馆 `9/9` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `nitan3` `2/2` 由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #133 `nitan-checkskill-mixed-array`，共 133 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47843`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `d/city/npc/paimaishi.lpc` 错贴 `pay_back()` 尾部修复（KB 04 §6.73）
+
+- 从同源孪生馆 `nitan_ceshi` 还原 `/d/city/npc/paimaishi.lpc`，修复第 `208` 行 `finish_paimai()` 中错贴的 `pay_back()` 尾部（未定义 `who`/`amount`/`id` 与多余 `}`）及后续 `report_paimai()` 缺失的分号与括号（保留 LF 与格式状态）。
+- 验证：`lpc_format_changed.py` `2/2` `0` 重排；`lpcc --batch` 与 `lpcc_eval.py` 差分实测均由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #134 `nitan-paimaishi-corrupt-payback`，共 134 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47852`）通过且 `ZERO_DRIVERS`。

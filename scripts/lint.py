@@ -180,6 +180,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("shujian-shaolin-chan-include", "targeted", "KB 04 §6.70", "error", "`d/shaolin/npc/{jichan,kongchan,mingchan}.lpc` relative `#include \"chan.h\"` when `chan.h` lives in `/d/shaolin/obj/chan.h`"),
     RuleSpec("nitan-present-baixing-paren", "targeted", "KB 04 §6.71", "error", "Nitan `slough_{killed,killer}`/`x{killed,killer}` misplaced paren `present(query(\"baixing\", environment(this_object())))` instead of `present(query(\"baixing\"), environment(this_object()))`"),
     RuleSpec("nitan-checkskill-mixed-array", "targeted", "KB 04 §6.72", "error", "`cmds/skill/{checkskill,chpfm}.lpc` declares `mixed *value;` then passes `value` to `replace_string(temp, \"$N\", value)`"),
+    RuleSpec("nitan-paimaishi-corrupt-payback", "targeted", "KB 04 §6.73", "error", "`d/city/npc/paimaishi.lpc` corrupted `finish_paimai()` with stray `if (!who->restore())` tail from `pay_back()`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1782,7 +1783,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1958,6 +1959,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["nt_baixing"].append(item)
         if rel in ("/cmds/skill/checkskill.lpc", "/cmds/skill/chpfm.lpc"):
             targeted_bins["nt_chkskill"].append(item)
+        if rel == "/d/city/npc/paimaishi.lpc":
+            targeted_bins["nt_paimai"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2426,6 +2429,12 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if b"mixed *value;" in b and b'replace_string(temp, "$N", value)' in b:
                 col.add("nitan-checkskill-mixed-array", p, "declares `mixed *value;` then passes `value` to `replace_string()`")
+
+    if col.wants("nitan-paimaishi-corrupt-payback"):
+        for _, p, _ in targeted_bins["nt_paimai"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if re.search(rb'pay_back\(owner_id,[^\n]+\);\s*\n\s*if \(!who->restore\(\)\)', b):
+                col.add("nitan-paimaishi-corrupt-payback", p, "corrupted `finish_paimai()` with stray `pay_back()` tail")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
