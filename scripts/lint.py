@@ -189,6 +189,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("calvin-rjl-diamond-header", "targeted", "KB 04 §6.79", "error", "`d/calvin/armor/rjl.lpc` diamond `inherit SHIELD; inherit NECK;` or missing `offensive_target()` header"),
     RuleSpec("weapon-feature-include-dotc", "targeted", "KB 04 §6.80", "error", "`std/weapon/_*.lpc` stale `#include \"<name>.c\"` after `.c`->`.lpc` rename when `<name>.lpc` exists"),
     RuleSpec("shenzhou-syntax-include-blockers", "targeted", "KB 04 §6.81", "error", "`shenzhou` `pantao.lpc` missing `;`, `bangjob200000.lpc` stray `]),`, `hetaichong.lpc` unclosed quote, or `haishui3.lpc`/`yaoshui.h` glued `#include`"),
+    RuleSpec("shujian-buliao-change-state", "targeted", "KB 04 §6.82", "error", "`d/zhiye/obj/buliao.h` missing `change_state()` called by `buliao{1..4}-2.lpc` and `zhibuji.lpc`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1791,7 +1792,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1988,6 +1989,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["rjl_blk"].append(item)
         if rel.startswith("/std/weapon/_") and rel.endswith(".lpc"):
             targeted_bins["weapon_feat"].append(item)
+        if rel == "/d/zhiye/obj/buliao.h":
+            targeted_bins["buliao_h"].append(item)
         if rel in (
             "/clone/gift/pantao.lpc",
             "/d/huanghe/bangjob/bangjob200000.lpc",
@@ -2552,6 +2555,12 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 col.add("shenzhou-syntax-include-blockers", p, "relative `#include \"d/shaolin/npc/yaoshui.h\";inherit ROOM;`")
             elif rel == "/d/shaolin/npc/yaoshui.h" and (b"#include <ansi.h>int " in b or b'if (ob->query("full")\n' in b):
                 col.add("shenzhou-syntax-include-blockers", p, "glued `#include <ansi.h>int` or unclosed `if (ob->query(\"full\")`")
+
+    if col.wants("shujian-buliao-change-state"):
+        for _, p, _ in targeted_bins["buliao_h"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"void change_name(" in b and b"void change_state(" not in b:
+                col.add("shujian-buliao-change-state", p, "`buliao.h` defines `change_name()` without `change_state()` needed by `buliao*-2.lpc` and `zhibuji.lpc`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

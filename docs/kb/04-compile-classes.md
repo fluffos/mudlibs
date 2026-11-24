@@ -1879,3 +1879,10 @@ Symptom: `shenzhou` 存在四处活跃编译阻断：
 
 Fix: 分别补全 `pantao.lpc` 分号、删除 `bangjob200000.lpc` 重复 `]),`、闭合 `hetaichong.lpc:99` 引号并从初始提交 `b32bcb881b4` 恢复第 `103..186` 行干净文本、恢复三条 `inquiry` 函数指针与删去 `ask_su()` 未用局部 `ob`，以及拆分修正两份 `haishui3.lpc` 与 `yaoshui.h`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule shenzhou-syntax-include-blockers`（targeted 规则，校验上述六份文件）。
+
+### 6.82 书剑/大唐双龙系 `d/zhiye/obj/buliao.h` 缺少 `change_state()` 阻断 `buliao{1..4}-2.lpc` 与织布机改名（9 馆，9 份头文件 / 解锁 36 份物件）
+
+Symptom: `bxsj`、`bxsj1`、`dtsl`、`dtsl2`、`dtslmud`、`shujian2008`、`shujian3`、`sjecl`、`sjtx2` 共 `9` 馆的 `/d/zhiye/obj/buliao.h` 将成品变名函数命名为 `void change_name()`（未定义 `change_state()`），而同目录 `/d/zhiye/obj/buliao{1..4}-2.lpc:8`（共 `36` 份成品布料物件）均直接调用 `void initlvl() { set_level(N); change_state(); }` 导致 `Undefined function change_state` 编译失败，且织布机 `/d/zhiye/obj/zhibuji.lpc:140,149` 织布完成后调用 `obj->change_state()` 静默失效（织完仍显示原料名“棉花”而非“棉布”）。
+
+Fix: 在 `9` 馆 `/d/zhiye/obj/buliao.h` 末尾补入 `void change_state() { change_name(); }`（保留原 CRLF 行尾与 `caifengzhuo.lpc` 使用的 `change_name()`），同时解锁全部 `36` 份 `buliao{1..4}-2.lpc` 与织布机 `zhibuji.lpc` 变名流程。
+Detection: `scripts/lint.py --rule shujian-buliao-change-state`（targeted 规则，校验 `d/zhiye/obj/buliao.h` 定义 `change_name()` 时是否缺少 `change_state()`）。

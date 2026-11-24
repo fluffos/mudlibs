@@ -769,3 +769,8 @@ pristine + build-debug，port 40015。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/adm/daemons/fingerd2.lpc:222` `wiz_level(name)`、移除 `/adm/daemons/cleard.lpc:6,14` 裸 `say` 并注释 `/clone/weapon/tulong-dao.lpc:31` 未定义 `use_flag = 16;`（全批保留 CRLF）。
 - 验证：`lpc_format_changed.py` `10/10` `0` 重排；`lpcc --batch` 全批 `3` 馆 `10` 文件零错零告警 `PASS`；`lpcc_eval.py`（`dtsl` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #127 `dtsl-daemon-weapon-blockers`，共 127 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `3` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47771..47773`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `d/zhiye/obj/buliao.h` 补齐 `change_state()` 解锁 `buliao{1..4}-2.lpc` 与织布机改名（KB 04 §6.82）
+
+- 在 `/d/zhiye/obj/buliao.h` 末尾补入 `void change_state() { change_name(); }`（保留原 CRLF 行尾与 `caifengzhuo.lpc` 使用的 `change_name()`），消除 `buliao{1..4}-2.lpc` 编译阻断（`Undefined function change_state`）并修复织布机 `/d/zhiye/obj/zhibuji.lpc:140,149` 织布后未变名问题。
+- 验证：`lpc_format_changed.py` `9/9` `0` 重排；`lpcc --batch` 全批 `9` 馆 `36/36` `buliao{1..4}-2.lpc` 零错零告警 `PASS`；`lpcc_eval.py`（`shujian2008`/`dtsl`）由 `--head` `buliao1-2` 编译报错且 `buliao1->change_state()` 静默失效转为 `PASS`；`scripts/lint.py`（新增规则 #143 `shujian-buliao-change-state`，共 143 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47851..47856`）均通过且 `ZERO_DRIVERS`。

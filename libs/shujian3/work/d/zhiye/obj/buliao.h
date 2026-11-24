@@ -212,3 +212,7 @@ void change_name()
                         break;
         }
 }
+
+void change_state() {
+  change_name();
+}
