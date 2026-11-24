@@ -185,6 +185,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("vrm-server-undefined-schedule-d", "targeted", "KB 04 §6.75", "error", "`adm/daemons/vrm_server.lpc` calls `SCHEDULE_D->set_event(...)` in a lib without `scheduled.lpc`"),
     RuleSpec("sje-uid-mafu-shenshu-blockers", "targeted", "KB 04 §6.76", "error", "`include/uid.h` orphan `#endif`, `d/huanghe/npc/mafu.lpc` missing `mafuyz.h`/`mafulz.h`, or `quest/shenshu/npc/name.lpc` missing `<ansi.h>`"),
     RuleSpec("pkuxkx-sjsz-special-weapon", "targeted", "KB 04 §6.77", "error", "`pkuxkx` `d/bwdh/sjsz/obj/obj/{unique,weapon}/*.lpc` stale `#include \"/clone/unique/special_weapon.h\"` instead of `\"/d/bwdh/sjsz/obj/obj/unique/special_weapon.h\"`"),
+    RuleSpec("task1-npc-accept-hit-type", "targeted", "KB 04 §6.78", "error", "`d/city/task1/npc.h` declares `int accept_hit(string arg)` then calls `accept_hit(who)` with `object who`, or `xkx100` `fugu`/`tuwu`/`dami` blockers"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1787,7 +1788,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1973,6 +1974,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["sje_blk"].append(item)
         if rel.startswith(("/d/bwdh/sjsz/obj/obj/unique/", "/d/bwdh/sjsz/obj/obj/weapon/")) and rel.endswith(".lpc") and not rel.endswith("/yuxiao.lpc"):
             targeted_bins["pku_sw"].append(item)
+        if rel in (
+            "/d/city/task1/npc.h",
+            "/kungfu/skill/jinshe-zhang/fugu.lpc",
+            "/kungfu/skill/jinshe-zhui/tuwu.lpc",
+            "/clone/food/dami.lpc",
+        ):
+            targeted_bins["task1_hit"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2483,6 +2491,19 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if b'#include "/clone/unique/special_weapon.h"' in b and not os.path.isfile(f"{REPO}/libs/{slug}/work/clone/unique/special_weapon.h") and os.path.isfile(f"{REPO}/libs/{slug}/work/d/bwdh/sjsz/obj/obj/unique/special_weapon.h"):
                 col.add("pkuxkx-sjsz-special-weapon", p, "uses stale `#include \"/clone/unique/special_weapon.h\"` instead of `\"/d/bwdh/sjsz/obj/obj/unique/special_weapon.h\"`")
+
+    if col.wants("task1-npc-accept-hit-type"):
+        for _, p, rel in targeted_bins["task1_hit"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/city/task1/npc.h":
+                if b"int accept_hit(string " in b and b"accept_hit(who)" in b:
+                    col.add("task1-npc-accept-hit-type", p, "`int accept_hit(string arg)` called with `object who`")
+            elif rel in ("/kungfu/skill/jinshe-zhang/fugu.lpc", "/kungfu/skill/jinshe-zhui/tuwu.lpc"):
+                if b.startswith(b"s  //"):
+                    col.add("task1-npc-accept-hit-type", p, "stray leading `s  //` before comment")
+            elif rel == "/clone/food/dami.lpc":
+                if b"init_unarmed(" in b and b"inherit ITEM;" in b:
+                    col.add("task1-npc-accept-hit-type", p, "food `inherit ITEM` calls nonexistent `init_unarmed()`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

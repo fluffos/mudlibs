@@ -1116,3 +1116,8 @@ pristine + build-debug（归档端口 40189，临时测试端口 49519）。`scr
 
 - 修复 `/kungfu/class/generate/slough_killed.lpc`、`/kungfu/class/generate/slough_killer.lpc`、`/u/lonely/quest3/slough_killed.lpc`、`/u/lonely/quest3/slough_killer.lpc`（共 `4` 份）中 `die()` 错把 `environment(this_object())` 放进 `query()` 括号内的缺陷，更正为 `present(query("baixing"), environment(this_object()))`（保留原 LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `36/36` `0` 重排；`lpcc --batch`（`12/13` 馆 `32/32` 零错零告警 `PASS`，`wxddym` 另缺 `slough.h`）；`lpcc_eval.py` 差分实测 `nitan3` `4/4` 由 `--head` 报错转为 `PASS`、`nitan6` `2/2` `PASS`；`scripts/lint.py`（新增规则 #132 `nitan-present-baixing-paren`，共 132 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`6` 馆代表（`nitan3`/`nt1`/`nte`/`nitan6`/`hhsj`/`xfbhh`，端口 `47831..47836`）均通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `d/city/task1/npc.h` `accept_hit` 类型错配修复（KB 04 §6.78）
+
+- 将 `/d/city/task1/npc.h` 的 `int accept_hit(string arg)` 改为 `int accept_hit(mixed arg)`，解决 `accept_kill(who)`/`accept_ansuan(who)`/`accept_touxi(who)` 传入 `object who` 触发的 `Bad type for argument 1 of accept_hit ( string vs object )` 编译阻断（保留原 LF 行尾）。
+- 验证：`lpcc --batch` 全批 `9` 馆抽检逃犯 NPC 零错零告警 `PASS`；`scripts/lint.py`（规则 #139 `task1-npc-accept-hit-type`，共 139 条）`--changed HEAD` 与 `--fast` 零错零告警；`5` 馆代表（`xkx100`/`xiakexing100`/`nitan6`/`hhsj`/`wxddym`，端口 `47901..47905`）均通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。

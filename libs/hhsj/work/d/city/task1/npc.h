@@ -265,7 +265,7 @@ void init() {
                 else return 0;
         }
 }*/
-int accept_hit(string arg) {
+int accept_hit(mixed arg) {
   object me = this_player();
   object ob = this_object();
   if (!(query_temp("guanfu_target", me) == query("id", ob)))

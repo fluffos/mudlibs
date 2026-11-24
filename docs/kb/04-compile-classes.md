@@ -1847,3 +1847,10 @@ Symptom: `pkuxkx` 试剑山庄 `/d/bwdh/sjsz/obj/obj/unique/`（`11` 份：`cy-j
 
 Fix: 将 `19` 份文件改引 `#include "/d/bwdh/sjsz/obj/obj/unique/special_weapon.h"`，并注释其中 `12` 份不存在的 `// ::create();`（保留各文件原 LF 行尾与 `KEEP` 状态）。
 Detection: `scripts/lint.py --rule pkuxkx-sjsz-special-weapon`（targeted 规则，校验 `d/bwdh/sjsz/obj/obj/{unique,weapon}/*.lpc` 在本地存在 `special_weapon.h` 时是否仍引用 `/clone/unique/special_weapon.h`）。
+
+### 6.78 官府通缉 `d/city/task1/npc.h` `accept_hit(string arg)` 类型错配与 `xkx100` `fugu`/`tuwu`/`dami`（9 馆，12 份文件）
+
+Symptom: `hhsj`、`nitan170911`、`nitan6`、`nt6`、`nt6nitan6win`、`wxddym`、`xfbhh`、`xiakexing100`、`xkx100` 共 `9` 馆的 `/d/city/task1/npc.h` 将 `accept_hit()` 声明为 `int accept_hit(string arg)`，随后 `accept_kill(object who)`/`accept_ansuan(object who)`/`accept_touxi(object who)` 均直接调用 `accept_hit(who)`，触发 `Bad type for argument 1 of accept_hit ( string vs object )`，连带阻断整套官府缉凶逃犯 NPC（每馆数十份）编译加载；此外 `xkx100` 的 `/kungfu/skill/jinshe-zhang/fugu.lpc:1` 与 `/kungfu/skill/jinshe-zhui/tuwu.lpc:1` 首行多出 `s  //` 触发 `unexpected L_INHERIT`（另含 `5` 处未用局部），`/clone/food/dami.lpc:26` 继承 `ITEM` 却调用不存在的 `init_unarmed(5);`。
+
+Fix: 将 `9` 馆 `d/city/task1/npc.h` 的 `int accept_hit(string arg)` 改为 `int accept_hit(mixed arg)`；移除 `xkx100` `fugu.lpc`/`tuwu.lpc` 首行 `s  ` 及 `5` 处未用局部，并移除 `dami.lpc:26` 的 `init_unarmed(5);`（保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule task1-npc-accept-hit-type`（targeted 规则，校验上述三处）。
