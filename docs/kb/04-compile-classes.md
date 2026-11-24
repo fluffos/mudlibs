@@ -1830,3 +1830,13 @@ Symptom: `yanhuangwuhun`、`yhwhckdm`、`yhwhpublicfi` 共 `3` 馆均未附带 `
 
 Fix: 将 `3` 馆 `/adm/daemons/vrm_server.lpc` 的两处 `SCHEDULE_D->set_event(...)` 改为原生 `call_out("refresh_maze", refresh_delay);` 与 `call_out("refresh_maze", 10);`（保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule vrm-server-undefined-schedule-d`（targeted 规则，校验 `/adm/daemons/vrm_server.lpc` 在无 `/adm/daemons/scheduled.lpc` 时是否引用 `SCHEDULE_D->`）。
+
+### 6.76 `sje` `include/uid.h` 孤立 `#endif`、`d/huanghe/npc/mafu.lpc` 缺头文件与 `quest/shenshu/npc/name.lpc` 缺 `<ansi.h>`（1 馆，4 份文件）
+
+Symptom: `sje` 存在三处独立编译阻断：
+1. `/include/uid.h:3` 仅含两行 `#define` 后接孤立 `#endif`（无匹配 `#if`/`#ifndef`），被任意文件 `#include <uid.h>` 时即报 `unexpected #endif`。
+2. `/d/huanghe/npc/mafu.lpc:54,55` 未注释 `#include "mafuyz.h"` 且缺失 `mafulz.h`（其余 `7` 个书剑姊妹馆均已注释 `mafuyz.h` 并附带 `mafulz.h`）。
+3. `/quest/shenshu/npc/name.lpc:7` 使用 `HIY`/`HIG` 等 ANSI 宏却未 `#include <ansi.h>`，触发 `syntax error, unexpected L_IDENTIFIER`。
+
+Fix: 移除 `include/uid.h:3` 孤立 `#endif`；按书剑姊妹馆惯例注释 `mafu.lpc:54` `//#include "mafuyz.h"` 并从 `bxsj` 移植 `/d/huanghe/npc/mafulz.h`；在 `quest/shenshu/npc/name.lpc` 首行补入 `#include <ansi.h>`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule sje-uid-mafu-shenshu-blockers`（targeted 规则，校验上述三处）。
