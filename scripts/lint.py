@@ -187,6 +187,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("pkuxkx-sjsz-special-weapon", "targeted", "KB 04 §6.77", "error", "`pkuxkx` `d/bwdh/sjsz/obj/obj/{unique,weapon}/*.lpc` stale `#include \"/clone/unique/special_weapon.h\"` instead of `\"/d/bwdh/sjsz/obj/obj/unique/special_weapon.h\"`"),
     RuleSpec("task1-npc-accept-hit-type", "targeted", "KB 04 §6.78", "error", "`d/city/task1/npc.h` declares `int accept_hit(string arg)` then calls `accept_hit(who)` with `object who`, or `xkx100` `fugu`/`tuwu`/`dami` blockers"),
     RuleSpec("calvin-rjl-diamond-header", "targeted", "KB 04 §6.79", "error", "`d/calvin/armor/rjl.lpc` diamond `inherit SHIELD; inherit NECK;` or missing `offensive_target()` header"),
+    RuleSpec("weapon-feature-include-dotc", "targeted", "KB 04 §6.80", "error", "`std/weapon/_*.lpc` stale `#include \"<name>.c\"` after `.c`->`.lpc` rename when `<name>.lpc` exists"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1789,7 +1790,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1984,6 +1985,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["task1_hit"].append(item)
         if rel == "/d/calvin/armor/rjl.lpc":
             targeted_bins["rjl_blk"].append(item)
+        if rel.startswith("/std/weapon/_") and rel.endswith(".lpc"):
+            targeted_bins["weapon_feat"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2515,6 +2518,16 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 col.add("calvin-rjl-diamond-header", p, "diamond `inherit SHIELD;` + `inherit NECK;`")
             if b"offensive_target(" in b and b"object offensive_target(" not in b:
                 col.add("calvin-rjl-diamond-header", p, "missing `object offensive_target(object me)` header")
+
+    if col.wants("weapon-feature-include-dotc"):
+        for _, p, _ in targeted_bins["weapon_feat"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            mo = re.search(rb'^\s*#\s*include\s*"([^"]+\.c)"', b, re.M)
+            if mo:
+                inc = mo.group(1).decode("ascii", "replace")
+                parent = os.path.dirname(f"{REPO}/{p}")
+                if not os.path.exists(os.path.join(parent, inc)) and os.path.exists(os.path.join(parent, inc[:-2] + ".lpc")):
+                    col.add("weapon-feature-include-dotc", p, f'stale `#include "{inc}"` when `{inc[:-2]}.lpc` exists')
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

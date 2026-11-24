@@ -798,3 +798,8 @@ pristine + build-debug，port 40113。`scripts/play_login.py` 注册并执行 `l
 
 - 将 `/d/huanggong/dachen2.lpc:4` `#include <reporting.h>` 改为 `#include "/d/huanggong/npc/reporting.h"`，并将 `/d/calvin/tianpeng/npc/hufa.lpc:7` `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `8` 馆 `16` 文件零错零告警 `PASS`；`lpcc_eval.py`（`sjsh`/`sanjieshenhua` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #126 `sjsh-angle-include-headers`，共 126 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47761..47766`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `std/weapon/_qin.lpc` 过期 `#include "qin.c"` 阻断与 `cmds/std/heall.lpc` 未用局部修复（KB 04 §6.80）
+
+- 将 `/std/weapon/_qin.lpc:2`（`F_QIN` 武器特质）遗漏的 `#include "qin.c"` 改为 `#include "qin.lpc"`，并移除 `/cmds/std/heall.lpc:6` 未用局部变量 `obj`（保留原 CRLF 行尾），本馆全库 `11,768` 份可编译文件零告警。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py` `4/4` `0` 重排；`lpcc --batch` `4/4 PASS` 零错零告警；`lpcc_eval.py` 两馆均由 `--head` `Cannot #include qin.c`+`Unused local variable 'obj'` 转为零告警 `PASS`；`scripts/lint.py`（新增规则 #141 `weapon-feature-include-dotc`，共 141 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47831..47832`）均通过且 `ZERO_DRIVERS`。

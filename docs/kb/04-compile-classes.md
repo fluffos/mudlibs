@@ -1861,3 +1861,10 @@ Symptom: `sjshv150`、`sjshv2578bb`、`xyj20032` 共 `3` 馆的 `/d/calvin/armor
 
 Fix: 在 `3` 馆 `rjl.lpc` 中移除冗余 `inherit SHIELD;`（保留 `inherit NECK;`）并补回 `object offensive_target(object me)` 函数头；在 `2` 馆 `hebing.lpc` 中移除 `ob_list`/`lev_ob`/`passport`（保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule calvin-rjl-diamond-header`（targeted 规则，校验 `d/calvin/armor/rjl.lpc` 双继承与缺失 `offensive_target()` 函数头）。
+
+### 6.80 三界神话 `std/weapon/_qin.lpc` 过期 `#include "qin.c"` 阻断 `F_QIN` 与 `cmds/std/heall.lpc` 未用局部（2 馆，4 份文件）
+
+Symptom: `sjshwzb` 与 `sjshwzjqb` 共 `2` 馆的 `/std/weapon/_qin.lpc:2`（由 `/include/weapon.h:48` 定义为 `F_QIN`）在 `.c`→`.lpc` 批量改名时漏改，仍保留 `#include "qin.c"`，而同目录文件已是 `qin.lpc`，导致 `Cannot #include qin.c` 阻断 `F_QIN` 武器特质加载（全库活跃可玩非 gitlink 库普查仅此 `2` 处遗漏）；此外两馆 `/cmds/std/heall.lpc:6` 声明未用局部变量 `obj`（同源 `sjsh` 已清理），清理后 `sjshwzb` 全库 `11,768` 份可编译文件零告警。
+
+Fix: 将两馆 `/std/weapon/_qin.lpc:2` 改为 `#include "qin.lpc"`，并移除 `/cmds/std/heall.lpc:6` 未用局部变量 `obj`（保留原 CRLF 行尾）。
+Detection: `scripts/lint.py --rule weapon-feature-include-dotc`（targeted 规则，校验 `/std/weapon/_*.lpc` 在同目录存在 `.lpc` 时是否仍 `#include "<name>.c"`）。
