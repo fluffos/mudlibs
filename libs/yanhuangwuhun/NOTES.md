@@ -1049,3 +1049,8 @@ pristine + build-debug，port 40060。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/kungfu/skill/qujing-gunfa.lpc` `query_action(object me, object weapon)` 中将兵器名 `wn` 错声明为 `int wn`、`nitan6`/`nt6`/`nt6nitan6win` 转换脚本倒置 `query_temp("weapon", wn = me)` 致编译失败（`Bad assignment ( int vs object )`），以及未判空直接解引用 `query_temp("weapon")->query("name")` 致空手调用报错（`*Bad argument 1 to EFUN call_other() Got: int(0)`）的缺陷：改为 `string wn;`，优先取形参 `weapon` 并补 `objectp(weapon)` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` 全批 `0` 错误；`lpcc_eval.py` 跨系代表实测（`nitan6`/`nt6`/`nt6nitan6win`/`hhsj`/`nitan_ceshi`/`zhonghua2`）由 `--head` 编译报错/空手崩溃转为 `query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（新增规则 #117 `qujing-gunfa-weapon-name`，共 117 条）全库 `--fast` 与 `--changed HEAD` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47671..47676`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `adm/daemons/vrm_server.lpc` 未定义 `SCHEDULE_D` 修复（KB 04 §6.75）
+
+- 本馆无 `/adm/daemons/scheduled.lpc` 与 `SCHEDULE_D` 宏，将 `/adm/daemons/vrm_server.lpc:436,683` 的 `SCHEDULE_D->set_event(...)` 改为原生 `call_out("refresh_maze", refresh_delay);` 与 `call_out("refresh_maze", 10);`，使虚拟随机迷宫基类及继承它的迷宫（如 `/d/death/heisenlin.lpc`）恢复正常编译（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` `3/3` `0` 重排；`lpcc --batch` 全批 `3` 馆 `vrm_server` 与 `heisenlin` `6/6` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `yanhuangwuhun` `2/2` 由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #136 `vrm-server-undefined-schedule-d`，共 136 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47871`）通过且 `ZERO_DRIVERS`。

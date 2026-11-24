@@ -331,3 +331,8 @@ pristine + build-debug，port 40270。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/kungfu/skill/xuanfeng-leg.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `adm/daemons/vrm_server.lpc` 未定义 `SCHEDULE_D` 修复（KB 04 §6.75）
+
+- 本馆无 `/adm/daemons/scheduled.lpc` 与 `SCHEDULE_D` 宏，将 `/adm/daemons/vrm_server.lpc:436,683` 的 `SCHEDULE_D->set_event(...)` 改为原生 `call_out("refresh_maze", refresh_delay);` 与 `call_out("refresh_maze", 10);`，使虚拟随机迷宫基类及继承它的迷宫（如 `/d/death/heisenlin.lpc`）恢复正常编译（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` `3/3` `0` 重排；`lpcc --batch` 全批 `3` 馆 `vrm_server` 与 `heisenlin` `6/6` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `yanhuangwuhun` `2/2` 由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #136 `vrm-server-undefined-schedule-d`，共 136 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47872`）通过且 `ZERO_DRIVERS`。

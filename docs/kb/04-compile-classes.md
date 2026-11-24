@@ -1823,3 +1823,10 @@ Symptom: `dtxywzxzb`、`rzrmud`、`xiyouji2006`、`xyj2006n`、`xyj2006zzzhx` �
 
 Fix: 将 `5` 馆 `yulan.lpc:4,5` 改为 `#include "quest_wr.lpc"` 与 `#include "reporting.lpc"`；移除 `dtxywzxzb` `lj.lpc:1` 首行 `i  ` 并清理 `work_me()` 未用局部 `ghost`（保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule xyj-yulan-lj-blockers`（targeted 规则，校验上述两处）。
+
+### 6.75 炎黄系 `adm/daemons/vrm_server.lpc` 调用未定义 `SCHEDULE_D` 阻断全套迷宫基类（3 馆，3 份文件）
+
+Symptom: `yanhuangwuhun`、`yhwhckdm`、`yhwhpublicfi` 共 `3` 馆均未附带 `/adm/daemons/scheduled.lpc` 且未定义 `SCHEDULE_D` 宏，但 `/adm/daemons/vrm_server.lpc:436,683` 调用 `SCHEDULE_D->set_event(refresh_delay, 1, this_object(), "refresh_maze")` 与 `SCHEDULE_D->set_event(10, 0, this_object(), "refresh_maze")`，触发 `Undefined variable 'SCHEDULE_D'`，连带阻断所有继承 `VRM_SERVER` 的随机迷宫（如 `/d/death/heisenlin.lpc`）编译加载。
+
+Fix: 将 `3` 馆 `/adm/daemons/vrm_server.lpc` 的两处 `SCHEDULE_D->set_event(...)` 改为原生 `call_out("refresh_maze", refresh_delay);` 与 `call_out("refresh_maze", 10);`（保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule vrm-server-undefined-schedule-d`（targeted 规则，校验 `/adm/daemons/vrm_server.lpc` 在无 `/adm/daemons/scheduled.lpc` 时是否引用 `SCHEDULE_D->`）。
