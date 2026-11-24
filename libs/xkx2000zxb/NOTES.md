@@ -578,3 +578,8 @@ pristine + build-debug，归档端口 40140。`scripts/play_login.py` 注册进�
 
 - 修正 `/d/quanzhou/yaopu/obj/yaolu.lpc:6` `drug_list.h` 路径、清理 `/d/xiakedao/npc/gaolao1.lpc` 重复 `init()`/`greeting()` 与改指向 `zhanglao.h`，并移除 `/d/city/yuelao2.lpc:37-39` 孤立 `]));` 及补齐 `/d/qilian/npc/pixie_superskill.lpc:277-282` `if`/`else` 花括号（全批保留纯 LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 全批 `7` 馆 `15` 文件零错零告警 `PASS`；`lpcc_eval.py`（`xkx2000zxb` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #123 `xkx-include-syntax-blockers`，共 123 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `7` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47731..47737`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `xunbu`/`xuanci` 编译阻断修复（KB 04 §6.68）
+
+- 将 `/cmds/std/xunbu.lpc:19` 相对 `#include "npc_skills_attrib_setup.h"` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h"`，并从同源姊妹馆 `jym` 移植缺失的 `/d/shaolin/npc/job.h` 使 `/d/shaolin/npc/xuanci.lpc` 恢复编译（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `2/2` 零错零告警 `PASS`；`scripts/lint.py`（规则 #129 `xkx-rstbkup-xunbu-xuanci`，共 129 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47805`）通过且 `ZERO_DRIVERS`。

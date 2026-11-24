@@ -1607,3 +1607,8 @@ pristine + build-debug，归档端口 40066。`scripts/play_login.py` 注册并�
 
 - 清理 `/d/xiakedao/npc/gaolao1.lpc` 重复内联 `init()`/`greeting()`（含错误 `fight_obj()`）并将 `#include "/d/xiakedao/npc/zhanglao.lpc"` 修正为 `zhanglao.h`（全批保留纯 LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 全批 `7` 馆 `15` 文件零错零告警 `PASS`；`lpcc_eval.py`（`xkx2000zxb` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #123 `xkx-include-syntax-blockers`，共 123 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `7` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47731..47737`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `cmds/adm/rstbkup.lpc` 折行 `#endif` 修复（KB 04 §6.68）
+
+- 拆回 `/cmds/adm/rstbkup.lpc:9` 挤在同一行的 `#define`/`#endif`/`inherit` 换行（保留原 LF 行尾与格式状态）。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（规则 #129 `xkx-rstbkup-xunbu-xuanci`，共 129 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47803`）通过且 `ZERO_DRIVERS`。

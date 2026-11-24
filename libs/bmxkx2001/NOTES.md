@@ -785,3 +785,8 @@ pristine + build-debug，归档端口 40039。`scripts/play_login.py` 注册并�
 
 - 修正 `/d/quanzhou/yaopu/obj/yaolu.lpc:6` `#include "/d/quanzhou/yaopu/obj/drug_list.h"`，并清理 `/d/xiakedao/npc/gaolao1.lpc` 重复内联 `init()`/`greeting()` 与改指向 `zhanglao.h`（全批保留纯 LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 全批 `7` 馆 `15` 文件零错零告警 `PASS`；`lpcc_eval.py`（`xkx2000zxb` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #123 `xkx-include-syntax-blockers`，共 123 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `7` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47731..47737`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `rstbkup`/`xunbu`/`xuanci` 编译阻断修复（KB 04 §6.68）
+
+- 拆回 `/cmds/wiz/rstbkup.lpc:9` 挤在同一行的 `#define`/`#endif`/`inherit` 换行；将 `/cmds/std/xunbu.lpc:19` 相对 `#include "npc_skills_attrib_setup.h"` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h"`；从同源姊妹馆 `jym` 移植缺失的 `/d/shaolin/npc/job.h` 使少林方丈 `/d/shaolin/npc/xuanci.lpc` 恢复编译（保留原 LF 行尾与格式状态）。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `7` 馆 `16/16` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `rstbkup`/`xunbu`/`xuanci` 由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #129 `xkx-rstbkup-xunbu-xuanci`，共 129 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47801`）通过且 `ZERO_DRIVERS`。

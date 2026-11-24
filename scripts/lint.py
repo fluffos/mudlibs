@@ -175,6 +175,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("sjsh-angle-include-headers", "targeted", "KB 04 §6.65", "error", "`d/huanggong/dachen2.lpc` `#include <reporting.h>` or `d/calvin/tianpeng/npc/hufa.lpc` `#include <soldier_skill.h>` missing from `/include/`"),
     RuleSpec("dtsl-daemon-weapon-blockers", "targeted", "KB 04 §6.66", "error", "DTSL `fingerd2.lpc` `wizardp(name)`, `cleard.lpc` bare `say`, `tulong-dao.lpc` undefined `use_flag = 16;`, or `zhuyu-yan.lpc` missing `<ansi.h>`"),
     RuleSpec("mhxy-bagua-include", "targeted", "KB 04 §6.67", "error", "`d/youxia/BAGUA/bagua{0..7}.lpc` stale `#include \"/d/bagua/bagua.h\"` instead of `\"/d/youxia/BAGUA/BAGUA.H\"`"),
+    RuleSpec("xkx-rstbkup-xunbu-xuanci", "targeted", "KB 04 §6.68", "error", "XKX/Shenzhou `rstbkup.lpc` collapsed `#endif #define`, `cmds/std/xunbu.lpc` relative `npc_skills_attrib_setup.h`, or `d/shaolin/npc/xuanci.lpc` missing `/d/shaolin/npc/job.h`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1777,7 +1778,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1928,6 +1929,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["dtsl_blk"].append(item)
         if rel.startswith("/d/youxia/BAGUA/bagua") and rel.endswith(".lpc"):
             targeted_bins["mhxy_bagua"].append(item)
+        if rel in (
+            "/cmds/wiz/rstbkup.lpc",
+            "/cmds/adm/rstbkup.lpc",
+            "/cmds/std/xunbu.lpc",
+            "/d/shaolin/npc/xuanci.lpc",
+        ):
+            targeted_bins["xkx_rx"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2349,6 +2357,19 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if b'#include "/d/bagua/bagua.h"' in b and os.path.isfile(f"{REPO}/libs/{slug}/work/d/youxia/BAGUA/BAGUA.H"):
                 col.add("mhxy-bagua-include", p, "uses stale `#include \"/d/bagua/bagua.h\"` instead of `\"/d/youxia/BAGUA/BAGUA.H\"`")
+
+    if col.wants("xkx-rstbkup-xunbu-xuanci"):
+        for slug, p, rel in targeted_bins["xkx_rx"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel.endswith("/rstbkup.lpc"):
+                if b"#endif #define" in b:
+                    col.add("xkx-rstbkup-xunbu-xuanci", p, "collapsed `#endif #define` on one line causes `Missing #endif`")
+            elif rel == "/cmds/std/xunbu.lpc":
+                if b'#include "npc_skills_attrib_setup.h"' in b and os.path.isfile(f"{REPO}/libs/{slug}/work/d/city/npc/npc_skills_attrib_setup.h"):
+                    col.add("xkx-rstbkup-xunbu-xuanci", p, "relative `#include \"npc_skills_attrib_setup.h\"` fails outside `/d/city/npc/`")
+            elif rel == "/d/shaolin/npc/xuanci.lpc":
+                if b'#include "/d/shaolin/npc/job.h"' in b and not os.path.isfile(f"{REPO}/libs/{slug}/work/d/shaolin/npc/job.h"):
+                    col.add("xkx-rstbkup-xunbu-xuanci", p, "includes missing `/d/shaolin/npc/job.h` (adopt from sibling `jym`)")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

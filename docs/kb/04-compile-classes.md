@@ -1767,3 +1767,13 @@ Symptom: 梦幻西游系 `2` 馆（`mhxy`、`mhxyqd`）的 `/d/youxia/BAGUA/bagu
 
 Fix: 将 `16` 份 `bagua{0..7}.lpc` 改为 `#include "/d/youxia/BAGUA/BAGUA.H"`，并清理 `2` 份 `BAGUA.H` 第 `11` 行未用局部变量 `i`（保留原 LF 行尾与 `KEEP` 状态）。
 Detection: `scripts/lint.py --rule mhxy-bagua-include`（targeted 规则，校验 `/d/youxia/BAGUA/bagua*.lpc` 在同目录存在 `BAGUA.H` 时是否仍引用 `/d/bagua/bagua.h`）。
+
+### 6.68 XKX/神州系 `rstbkup.lpc` 折行 `#endif`、`cmds/std/xunbu.lpc` 相对 `#include` 与 `xuanci.lpc` 缺失 `job.h`（7 馆，15 份文件）
+
+Symptom: `bmxkx2001`、`jym`、`shenzhou`、`xkm`、`xkx2000zxb`、`xkx2001`、`xuanjianlu` 共 `7` 馆存在三类阻断编译的同源缺陷：
+1. `/cmds/wiz/rstbkup.lpc`（`bmxkx2001`、`jym`、`xkx2001`）与 `/cmds/adm/rstbkup.lpc`（`shenzhou`）第 `9` 行把 `#define QUEUEDIR "/queue/" #endif #define RESTOREDATA ... inherit F_DBASE; inherit F_CLEAN_UP;` 全部挤在同一行，触发 `Missing #endif`。
+2. `/cmds/std/xunbu.lpc:19`（`6` 馆：`bmxkx2001`、`jym`、`xkm`、`xkx2000zxb`、`xkx2001`、`xuanjianlu`）写相对 `#include "npc_skills_attrib_setup.h"`，但头文件实际位于 `/d/city/npc/`（其中 `jym` 的 `npc_skills_attrib_setup.h` 为旧版 `skills_setup()`，新接口 `skills_setup_weapon()`/`skills_setup_none()` 位于同目录 `npc_skills_attrib_setup.h.new`）。
+3. `/d/shaolin/npc/xuanci.lpc:152`（`5` 馆：`bmxkx2001`、`xkm`、`xkx2000zxb`、`xkx2001`、`xuanjianlu`）`#include "/d/shaolin/npc/job.h"`（提供 `ask_tiaoshui()` 挑水任务）但归档缺失该头文件，仅同源姊妹馆 `jym` 完整保留了 `/d/shaolin/npc/job.h`。
+
+Fix: 拆回 `4` 份 `rstbkup.lpc` 第 `9` 行的预处理指令与 `inherit` 换行；将 `5` 馆 `xunbu.lpc:19` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h"`、`jym` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h.new"`（保留 `xkm` 原 CRLF 与其余 LF）；从 `jym` 原样移植 `/d/shaolin/npc/job.h` 至其余 `5` 馆。
+Detection: `scripts/lint.py --rule xkx-rstbkup-xunbu-xuanci`（targeted 规则，校验上述三处）。
