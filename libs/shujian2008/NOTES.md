@@ -818,3 +818,8 @@ pristine + build-debug，port 40029。`scripts/play_login.py` 注册并执行 `l
 - 修复 `/adm/simul_efun/sprint.lpc:3` 的 C 风格裸 `...` 变参声明为 `varargs string sprint(string format, mixed *args...)` 并转调 `sprintf(format, args...)`（保留 CRLF 并通过格式化）。
 - 清除 `/logind.lpc:473-482` 位于 `confirm_password()` 闭合 `}` 之外的重复孤立代码块（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `23` 份文件零错误；`lpcc_eval.py` 实测 `guo`/`mai`/`sprint`（`s1=hi s2=x=42`）/`logind` 全部由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #109 `bare-c-varargs` 与 #110 `shujian-unclosed-if-logind`，共 110 条）与 `play_boot.sh`+`play_stop.sh` 均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `d/shaolin/npc/{jichan,kongchan,mingchan}.lpc` 相对 `#include "chan.h"` 修复（KB 04 §6.70）
+
+- 将 `/d/shaolin/npc/{jichan,kongchan,mingchan}.lpc:45`（`3` 份）的相对 `#include "chan.h"` 改为 `#include "/d/shaolin/obj/chan.h"`（保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py` `18/18` `0` 重排；`lpcc --batch` 全批 `6` 馆 `18/18` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `bxsj` `3/3` 由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #131 `shujian-shaolin-chan-include`，共 131 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47823`）通过且 `ZERO_DRIVERS`。

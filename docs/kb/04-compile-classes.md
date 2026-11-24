@@ -1788,3 +1788,10 @@ Symptom: `sanjieshenhua`、`sjshv2578bb`、`xyj20032` 共 `3` 馆存在四类编
 
 Fix: 将 `3` 份 `footprint.lpc` 改为 `set("short"/ "long", ...)`；将 `3` 份 `/d/wizz/calvin/tianpeng/npc/hufa.lpc` 改为 `#include "/obj/npc/soldier_skill.h"`；移除 `fushang.lpc`/`zhulin2.lpc` 首行孤立 `a`；在 `aohan-liujue.lpc` 第一版 `query_action()` 顶部合入 `AOHAN_perform` 分支（供 `aohan-blade/bingyu.lpc` 使用）并移除第二份重复定义（保留各文件原 CRLF/LF 行尾与 `KEEP` 状态）。
 Detection: `scripts/lint.py --rule sanjieshenhua-footprint-hufa-luoyang`（targeted 规则，校验上述四处）。
+
+### 6.70 书剑系 `d/shaolin/npc/{jichan,kongchan,mingchan}.lpc` 相对 `#include "chan.h"`（6 馆，18 份文件）
+
+Symptom: `bxsj`、`bxsj1`、`shujian2008`、`shujian3`、`sjecl`、`sjtx2` 共 `6` 馆的 `/d/shaolin/npc/{jichan,kongchan,mingchan}.lpc:45` 均从 `/d/shaolin/obj/` 复制而来并保留了相对 `#include "chan.h"`，而 `chan.h` 实际仅存在于 `/d/shaolin/obj/chan.h`，导致这三名少林石人 NPC 全部触发 `Cannot #include chan.h` 无法编译。
+
+Fix: 将 `6` 馆共 `18` 份文件中的 `#include "chan.h"` 改为绝对路径 `#include "/d/shaolin/obj/chan.h"`（保留原 CRLF 行尾）。
+Detection: `scripts/lint.py --rule shujian-shaolin-chan-include`（targeted 规则，校验 `/d/shaolin/npc/{jichan,kongchan,mingchan}.lpc` 在 `/d/shaolin/obj/chan.h` 存在时是否仍用未注释的相对 `#include "chan.h"`）。
