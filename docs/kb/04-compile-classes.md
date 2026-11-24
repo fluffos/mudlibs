@@ -1777,3 +1777,14 @@ Symptom: `bmxkx2001`、`jym`、`shenzhou`、`xkm`、`xkx2000zxb`、`xkx2001`、`
 
 Fix: 拆回 `4` 份 `rstbkup.lpc` 第 `9` 行的预处理指令与 `inherit` 换行；将 `5` 馆 `xunbu.lpc:19` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h"`、`jym` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h.new"`（保留 `xkm` 原 CRLF 与其余 LF）；从 `jym` 原样移植 `/d/shaolin/npc/job.h` 至其余 `5` 馆。
 Detection: `scripts/lint.py --rule xkx-rstbkup-xunbu-xuanci`（targeted 规则，校验上述三处）。
+
+### 6.69 三界神话系 `footprint`/`hufa`/`luoyang`/`aohan-liujue` 编译阻断（3 馆，9 份文件）
+
+Symptom: `sanjieshenhua`、`sjshv2578bb`、`xyj20032` 共 `3` 馆存在四类编译阻断缺陷：
+1. `/d/linghai/footprint.lpc:7,8`（`3` 馆）误将 `set("short", ...)` / `set("long", ...)` 写成 `set_name("short", ...)` / `set_name("long", ...)`，触发 `Bad type for argument 2 of set_name ( string * vs string )`。
+2. `/d/wizz/calvin/tianpeng/npc/hufa.lpc:7`（`3` 馆）使用尖括号 `#include <soldier_skill.h>`，而头文件实际位于 `/obj/npc/soldier_skill.h`（同 §6.65 位于 `/d/calvin/` 的姊妹路径）。
+3. `sanjieshenhua` `/d/luoyang/npc/fushang.lpc:1` 与 `/d/luoyang/zhulin2.lpc:1` 文件首行多出孤立字符 `a`（vi 插入键误触），触发 `unexpected L_INHERIT`。
+4. `sanjieshenhua` `/daemon/skill/aohan-liujue.lpc` 在第 `132` 行与第 `177` 行重复定义了两个 `mapping query_action(object me, object weapon)`，触发 `Redeclaration of function 'query_action'`。
+
+Fix: 将 `3` 份 `footprint.lpc` 改为 `set("short"/ "long", ...)`；将 `3` 份 `/d/wizz/calvin/tianpeng/npc/hufa.lpc` 改为 `#include "/obj/npc/soldier_skill.h"`；移除 `fushang.lpc`/`zhulin2.lpc` 首行孤立 `a`；在 `aohan-liujue.lpc` 第一版 `query_action()` 顶部合入 `AOHAN_perform` 分支（供 `aohan-blade/bingyu.lpc` 使用）并移除第二份重复定义（保留各文件原 CRLF/LF 行尾与 `KEEP` 状态）。
+Detection: `scripts/lint.py --rule sanjieshenhua-footprint-hufa-luoyang`（targeted 规则，校验上述四处）。

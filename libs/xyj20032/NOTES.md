@@ -596,3 +596,8 @@ pristine + build-debug，归档端口 40119。`scripts/play_login.py` 注册/连
 
 - 将 `/d/huanggong/dachen2.lpc:4` `#include <reporting.h>` 改为 `#include "/d/huanggong/npc/reporting.h"`，并将 `/d/calvin/tianpeng/npc/hufa.lpc:7` `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `8` 馆 `16` 文件零错零告警 `PASS`；`lpcc_eval.py`（`sjsh`/`sanjieshenhua` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #126 `sjsh-angle-include-headers`，共 126 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47761..47766`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `footprint`/`hufa` 编译阻断修复（KB 04 §6.69）
+
+- 将 `/d/linghai/footprint.lpc:7,8` 误写的 `set_name("short"/"long", ...)` 改为 `set("short"/"long", ...)`，并将 `/d/wizz/calvin/tianpeng/npc/hufa.lpc:7` 的 `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `2/2` 零错零告警 `PASS`；`scripts/lint.py`（规则 #130 `sanjieshenhua-footprint-hufa-luoyang`，共 130 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47813`）通过且 `ZERO_DRIVERS`。

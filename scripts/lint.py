@@ -176,6 +176,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("dtsl-daemon-weapon-blockers", "targeted", "KB 04 §6.66", "error", "DTSL `fingerd2.lpc` `wizardp(name)`, `cleard.lpc` bare `say`, `tulong-dao.lpc` undefined `use_flag = 16;`, or `zhuyu-yan.lpc` missing `<ansi.h>`"),
     RuleSpec("mhxy-bagua-include", "targeted", "KB 04 §6.67", "error", "`d/youxia/BAGUA/bagua{0..7}.lpc` stale `#include \"/d/bagua/bagua.h\"` instead of `\"/d/youxia/BAGUA/BAGUA.H\"`"),
     RuleSpec("xkx-rstbkup-xunbu-xuanci", "targeted", "KB 04 §6.68", "error", "XKX/Shenzhou `rstbkup.lpc` collapsed `#endif #define`, `cmds/std/xunbu.lpc` relative `npc_skills_attrib_setup.h`, or `d/shaolin/npc/xuanci.lpc` missing `/d/shaolin/npc/job.h`"),
+    RuleSpec("sanjieshenhua-footprint-hufa-luoyang", "targeted", "KB 04 §6.69", "error", "`d/linghai/footprint.lpc` `set_name(\"short\"/\"long\")`, `d/wizz/calvin/tianpeng/npc/hufa.lpc` `<soldier_skill.h>`, `luoyang/{npc/fushang,zhulin2}.lpc` leading `a`, or `aohan-liujue.lpc` duplicate `query_action()`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1778,7 +1779,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1936,6 +1937,14 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/d/shaolin/npc/xuanci.lpc",
         ):
             targeted_bins["xkx_rx"].append(item)
+        if rel in (
+            "/d/linghai/footprint.lpc",
+            "/d/wizz/calvin/tianpeng/npc/hufa.lpc",
+            "/d/luoyang/npc/fushang.lpc",
+            "/d/luoyang/zhulin2.lpc",
+            "/daemon/skill/aohan-liujue.lpc",
+        ):
+            targeted_bins["sjsh_fhl"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2370,6 +2379,22 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             elif rel == "/d/shaolin/npc/xuanci.lpc":
                 if b'#include "/d/shaolin/npc/job.h"' in b and not os.path.isfile(f"{REPO}/libs/{slug}/work/d/shaolin/npc/job.h"):
                     col.add("xkx-rstbkup-xunbu-xuanci", p, "includes missing `/d/shaolin/npc/job.h` (adopt from sibling `jym`)")
+
+    if col.wants("sanjieshenhua-footprint-hufa-luoyang"):
+        for slug, p, rel in targeted_bins["sjsh_fhl"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/linghai/footprint.lpc":
+                if b'set_name("short"' in b or b'set_name("long"' in b:
+                    col.add("sanjieshenhua-footprint-hufa-luoyang", p, "`set_name(\"short\"/\"long\", ...)` should be `set(...)`")
+            elif rel == "/d/wizz/calvin/tianpeng/npc/hufa.lpc":
+                if b"#include <soldier_skill.h>" in b and os.path.isfile(f"{REPO}/libs/{slug}/work/obj/npc/soldier_skill.h"):
+                    col.add("sanjieshenhua-footprint-hufa-luoyang", p, "uses `#include <soldier_skill.h>` instead of `\"/obj/npc/soldier_skill.h\"`")
+            elif rel in ("/d/luoyang/npc/fushang.lpc", "/d/luoyang/zhulin2.lpc"):
+                if b.startswith(b"a\n") or b.startswith(b"a\r\n"):
+                    col.add("sanjieshenhua-footprint-hufa-luoyang", p, "stray leading `a` before `inherit`")
+            elif rel == "/daemon/skill/aohan-liujue.lpc":
+                if b.count(b"mapping query_action(") > 1:
+                    col.add("sanjieshenhua-footprint-hufa-luoyang", p, "duplicate `query_action()` definition")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
