@@ -184,6 +184,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("xyj-yulan-lj-blockers", "targeted", "KB 04 §6.74", "error", "`d/kaifeng/npc/yulan.lpc` stale `#include \"quest_wr.h\"`/`<reporting.h>` when `.lpc` siblings exist, or `d/dntg/yunlou/npc/lj.lpc` leading `i  //`"),
     RuleSpec("vrm-server-undefined-schedule-d", "targeted", "KB 04 §6.75", "error", "`adm/daemons/vrm_server.lpc` calls `SCHEDULE_D->set_event(...)` in a lib without `scheduled.lpc`"),
     RuleSpec("sje-uid-mafu-shenshu-blockers", "targeted", "KB 04 §6.76", "error", "`include/uid.h` orphan `#endif`, `d/huanghe/npc/mafu.lpc` missing `mafuyz.h`/`mafulz.h`, or `quest/shenshu/npc/name.lpc` missing `<ansi.h>`"),
+    RuleSpec("pkuxkx-sjsz-special-weapon", "targeted", "KB 04 §6.77", "error", "`pkuxkx` `d/bwdh/sjsz/obj/obj/{unique,weapon}/*.lpc` stale `#include \"/clone/unique/special_weapon.h\"` instead of `\"/d/bwdh/sjsz/obj/obj/unique/special_weapon.h\"`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1786,7 +1787,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1970,6 +1971,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["vrm_sched"].append(item)
         if rel in ("/include/uid.h", "/d/huanghe/npc/mafu.lpc", "/quest/shenshu/npc/name.lpc"):
             targeted_bins["sje_blk"].append(item)
+        if rel.startswith(("/d/bwdh/sjsz/obj/obj/unique/", "/d/bwdh/sjsz/obj/obj/weapon/")) and rel.endswith(".lpc") and not rel.endswith("/yuxiao.lpc"):
+            targeted_bins["pku_sw"].append(item)
 
     if col.wants("start-more-unguarded"):
         for _, p, _ in targeted_bins["more"]:
@@ -2474,6 +2477,12 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             elif rel == "/quest/shenshu/npc/name.lpc":
                 if b"HIY" in b and b"ansi.h" not in b:
                     col.add("sje-uid-mafu-shenshu-blockers", p, "uses ANSI color macros (`HIY`) without `#include <ansi.h>`")
+
+    if col.wants("pkuxkx-sjsz-special-weapon"):
+        for slug, p, _ in targeted_bins["pku_sw"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b'#include "/clone/unique/special_weapon.h"' in b and not os.path.isfile(f"{REPO}/libs/{slug}/work/clone/unique/special_weapon.h") and os.path.isfile(f"{REPO}/libs/{slug}/work/d/bwdh/sjsz/obj/obj/unique/special_weapon.h"):
+                col.add("pkuxkx-sjsz-special-weapon", p, "uses stale `#include \"/clone/unique/special_weapon.h\"` instead of `\"/d/bwdh/sjsz/obj/obj/unique/special_weapon.h\"`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

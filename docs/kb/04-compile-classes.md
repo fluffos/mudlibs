@@ -1840,3 +1840,10 @@ Symptom: `sje` 存在三处独立编译阻断：
 
 Fix: 移除 `include/uid.h:3` 孤立 `#endif`；按书剑姊妹馆惯例注释 `mafu.lpc:54` `//#include "mafuyz.h"` 并从 `bxsj` 移植 `/d/huanghe/npc/mafulz.h`；在 `quest/shenshu/npc/name.lpc` 首行补入 `#include <ansi.h>`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule sje-uid-mafu-shenshu-blockers`（targeted 规则，校验上述三处）。
+
+### 6.77 `pkuxkx` 试剑山庄 `d/bwdh/sjsz/obj/obj/{unique,weapon}/*.lpc` 过期 `special_weapon.h` 引用与多余 `::create()`（1 馆，19 份文件）
+
+Symptom: `pkuxkx` 试剑山庄 `/d/bwdh/sjsz/obj/obj/unique/`（`11` 份：`cy-jian`、`fumo-dao`、`jinfu`、`jinshe-jian`、`tulong-dao`、`xuantie-jian`、`xuedao`、`yitian-jian`、`yuchang-jian`、`yuzhu-zhang`、`zhenwu`）与 `/d/bwdh/sjsz/obj/obj/weapon/`（`8` 份：`fumo-dao`、`xuantie-jian`、`yangdao`、`yitian-jian`、`youlong`、`yuandao`、`zhenwu`、`zijin-dao`）共 `19` 份神兵均沿用 XKX 旧路径 `#include "/clone/unique/special_weapon.h"`，而该头文件在本馆实际位于 `/d/bwdh/sjsz/obj/obj/unique/special_weapon.h`；此外其中 `12` 份在 `create()` 末尾调用本馆武器基类不存在的 `::create();`（KB 06 §7.259），触发 `Unable to find the inherited function 'create'`。
+
+Fix: 将 `19` 份文件改引 `#include "/d/bwdh/sjsz/obj/obj/unique/special_weapon.h"`，并注释其中 `12` 份不存在的 `// ::create();`（保留各文件原 LF 行尾与 `KEEP` 状态）。
+Detection: `scripts/lint.py --rule pkuxkx-sjsz-special-weapon`（targeted 规则，校验 `d/bwdh/sjsz/obj/obj/{unique,weapon}/*.lpc` 在本地存在 `special_weapon.h` 时是否仍引用 `/clone/unique/special_weapon.h`）。
