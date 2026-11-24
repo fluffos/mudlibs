@@ -1854,3 +1854,10 @@ Symptom: `hhsj`、`nitan170911`、`nitan6`、`nt6`、`nt6nitan6win`、`wxddym`�
 
 Fix: 将 `9` 馆 `d/city/task1/npc.h` 的 `int accept_hit(string arg)` 改为 `int accept_hit(mixed arg)`；移除 `xkx100` `fugu.lpc`/`tuwu.lpc` 首行 `s  ` 及 `5` 处未用局部，并移除 `dami.lpc:26` 的 `init_unarmed(5);`（保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule task1-npc-accept-hit-type`（targeted 规则，校验上述三处）。
+
+### 6.79 西游记系 `d/calvin/armor/rjl.lpc` 菱形双继承与丢失函数头及 `hebing.lpc` 未用局部（3 馆，5 份文件）
+
+Symptom: `sjshv150`、`sjshv2578bb`、`xyj20032` 共 `3` 馆的 `/d/calvin/armor/rjl.lpc` 同时 `inherit SHIELD;` 与 `inherit NECK;` 引发 `F_DBASE` 菱形重定义 `nomask` 报错，且第 `80` 行丢失 `object offensive_target(object me)` 函数头触发 `syntax error, unexpected '{'`（同源姊妹馆 `sanjieshenhua` 已修正）；此外 `sjshv2578bb` 与 `xyj20032` 的 `/cmds/usr/hebing.lpc` 含 `3` 处未用局部变量（`ob_list`、`lev_ob`、`passport`），清理后 `xyj20032` 全库 `12,226` 份可编译文件零告警。
+
+Fix: 在 `3` 馆 `rjl.lpc` 中移除冗余 `inherit SHIELD;`（保留 `inherit NECK;`）并补回 `object offensive_target(object me)` 函数头；在 `2` 馆 `hebing.lpc` 中移除 `ob_list`/`lev_ob`/`passport`（保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule calvin-rjl-diamond-header`（targeted 规则，校验 `d/calvin/armor/rjl.lpc` 双继承与缺失 `offensive_target()` 函数头）。

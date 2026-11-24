@@ -614,3 +614,8 @@ pristine + build-debug，port 40171。`scripts/play_login.py` 注册并执行 `l
 
 - 将 `/d/huanggong/dachen2.lpc:4` `#include <reporting.h>` 改为 `#include "/d/huanggong/npc/reporting.h"`，并将 `/d/calvin/tianpeng/npc/hufa.lpc:7` `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `8` 馆 `16` 文件零错零告警 `PASS`；`lpcc_eval.py`（`sjsh`/`sanjieshenhua` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #126 `sjsh-angle-include-headers`，共 126 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47761..47766`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `d/calvin/armor/rjl.lpc` 菱形双继承与丢失函数头修复（KB 04 §6.79）
+
+- 移除 `/d/calvin/armor/rjl.lpc` 冗余 `inherit SHIELD;`（保留 `inherit NECK;`，与姊妹馆 `sanjieshenhua` 一致），并补回第 `80` 行丢失的 `object offensive_target(object me)` 函数头（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（新增规则 #140 `calvin-rjl-diamond-header`，共 140 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47911`）通过且 `ZERO_DRIVERS`。

@@ -602,3 +602,8 @@ pristine + build-debug，归档端口 40125。`scripts/play_login.py` 注册/连
 
 - 将 `/d/linghai/footprint.lpc:7,8` 误写的 `set_name("short"/"long", ...)` 改为 `set("short"/"long", ...)`，并将 `/d/wizz/calvin/tianpeng/npc/hufa.lpc:7` 的 `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `2/2` 零错零告警 `PASS`；`scripts/lint.py`（规则 #130 `sanjieshenhua-footprint-hufa-luoyang`，共 130 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47812`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `d/calvin/armor/rjl.lpc` 与 `cmds/usr/hebing.lpc` 修复（KB 04 §6.79）
+
+- 移除 `/d/calvin/armor/rjl.lpc` 冗余 `inherit SHIELD;`（保留 `inherit NECK;`）并补回第 `80` 行丢失的 `object offensive_target(object me)` 函数头；清理 `/cmds/usr/hebing.lpc` 中未使用的 `ob_list`/`lev_ob`/`passport`（保留原 CRLF/LF 行尾，`xyj20032` 全库 `12,226` 份可编译文件现零告警）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `3` 馆 `5/5` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `xyj20032` `2/2` 由 `--head` 报错/告警转为干净 `PASS`；`scripts/lint.py`（规则 #140 `calvin-rjl-diamond-header`，共 140 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47912`）通过且 `ZERO_DRIVERS`。
