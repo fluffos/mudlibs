@@ -557,3 +557,8 @@ pristine + build-debug，port 40150。`scripts/play_login.py` 注册并执行 `l
 
 - 还原 `/d/qujing/start/24/12.lpc:41-43` 被归档截断损坏的 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();` 尾部与闭合 `}`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`xyj2000`/`xyj2000f`/`sjsh`/`sjshv2578bb`/`xyj20032`/`mhxy` 代表）全数由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #118 `xyj-eof-tail-corruption`，共 118 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47681..47686`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-23 `d/kaifeng/npc/yulan.lpc` 与 `d/dntg/yunlou/npc/lj.lpc` 编译阻断修复（KB 04 §6.74）
+
+- 将 `/d/kaifeng/npc/yulan.lpc:4,5` 的 `#include "quest_wr.h"` / `#include <reporting.h>` 改为同目录 `.lpc` 版本的 `#include "quest_wr.lpc"` 与 `#include "reporting.lpc"`；移除 `/d/dntg/yunlou/npc/lj.lpc:1` 首行误触的 `i  ` 并清理 `work_me()` 未用局部 `ghost`（保留原 LF 行尾）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py` `6/6` `0` 重排；`lpcc --batch` 全批 `5` 馆 `6/6` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `yulan`/`lj` 由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #135 `xyj-yulan-lj-blockers`，共 135 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47861`）通过且 `ZERO_DRIVERS`。

@@ -1816,3 +1816,10 @@ Symptom: `nitan3` 与 `nitan_san` 的 `/d/city/npc/paimaishi.lpc`（两馆逐字
 
 Fix: 从同源孪生馆 `nitan_ceshi` 还原 `/d/city/npc/paimaishi.lpc` 至 `nitan3` 与 `nitan_san`（均为已格式化 LF 文件）。
 Detection: `scripts/lint.py --rule nitan-paimaishi-corrupt-payback`（targeted 规则，校验 `d/city/npc/paimaishi.lpc` 中 `pay_back(owner_id, ...);` 后紧跟 `if (!who->restore())`）。
+
+### 6.74 西游记系 `d/kaifeng/npc/yulan.lpc` 过期 `.h` 引用与 `d/dntg/yunlou/npc/lj.lpc` 首行孤立 `i`（5 馆，6 份文件）
+
+Symptom: `dtxywzxzb`、`rzrmud`、`xiyouji2006`、`xyj2006n`、`xyj2006zzzhx` 共 `5` 馆的 `/d/kaifeng/npc/yulan.lpc:4,5` 仍写 `#include "quest_wr.h"` 与 `#include <reporting.h>`（同目录实际已是 `.lpc` 版本的 `quest_wr.lpc` 与 `reporting.lpc`，而旧 `quest_wr.h` 又 `#include <quest.h>` 导致 `Cannot #include quest.h`/`reporting.h`、`Undefined function sort_quests/quest_accurate_index/informing`）；此外 `dtxywzxzb` 的 `/d/dntg/yunlou/npc/lj.lpc:1` 首行注释前多出 vi 插入误触的 `i  ` 触发 `unexpected L_INHERIT`（`work_me()` 另含未用局部 `ghost`）。
+
+Fix: 将 `5` 馆 `yulan.lpc:4,5` 改为 `#include "quest_wr.lpc"` 与 `#include "reporting.lpc"`；移除 `dtxywzxzb` `lj.lpc:1` 首行 `i  ` 并清理 `work_me()` 未用局部 `ghost`（保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule xyj-yulan-lj-blockers`（targeted 规则，校验上述两处）。
