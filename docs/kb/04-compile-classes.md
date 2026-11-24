@@ -1802,3 +1802,10 @@ Symptom: `nitan3`、`nitan_ceshi`、`nitan_san`、`nt1`、`nte`、`ntii`、`wxdd
 
 Fix: 将全部 `13` 馆 `36` 份文件更正为 `present(query("baixing"), environment(this_object()))`（保留原 LF 行尾与 `KEEP` 状态）。
 Detection: `scripts/lint.py --rule nitan-present-baixing-paren`（targeted 规则，校验 `slough_{killed,killer}.lpc` 与 `x{killed,killer}.lpc`）。
+
+### 6.72 泥潭系 `cmds/skill/{checkskill,chpfm}.lpc` 误声明 `mixed *value;` 阻断 `replace_string()`（6 馆，9 份文件）
+
+Symptom: `nitan3`、`nitan_ceshi`、`nitan_san`（`checkskill.lpc` 与 `chpfm.lpc`）以及 `nt1`、`nte`、`ntii`（`checkskill.lpc`）共 `6` 馆 `9` 份玩家查询指令在第 `97` 行把可返回字符串或数组的局部声明为 `mixed *value;`，第 `134` 行在 `if (stringp(value))` 中直接调用 `replace_string(temp, "$N", value)`，在 FluffOS 静态类型检查下触发 `Bad argument 3 to efun replace_string()` 无法编译（新版泥潭馆均已改为 `mixed value;`）。
+
+Fix: 将 `6` 馆共 `9` 份文件第 `97` 行的 `mixed *value;` 改为 `mixed value;`（保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule nitan-checkskill-mixed-array`（targeted 规则，校验 `/cmds/skill/{checkskill,chpfm}.lpc` 是否同时含 `mixed *value;` 与未强转的 `replace_string(temp, "$N", value)`）。
