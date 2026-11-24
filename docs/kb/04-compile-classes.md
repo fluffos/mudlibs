@@ -1868,3 +1868,14 @@ Symptom: `sjshwzb` 与 `sjshwzjqb` 共 `2` 馆的 `/std/weapon/_qin.lpc:2`（由
 
 Fix: 将两馆 `/std/weapon/_qin.lpc:2` 改为 `#include "qin.lpc"`，并移除 `/cmds/std/heall.lpc:6` 未用局部变量 `obj`（保留原 CRLF 行尾）。
 Detection: `scripts/lint.py --rule weapon-feature-include-dotc`（targeted 规则，校验 `/std/weapon/_*.lpc` 在同目录存在 `.lpc` 时是否仍 `#include "<name>.c"`）。
+
+### 6.81 `shenzhou` `pantao`/`bangjob200000`/`hetaichong`/`haishui3`/`yaoshui.h` 编译阻断（1 馆，6 份文件）
+
+Symptom: `shenzhou` 存在四处活跃编译阻断：
+1. `/clone/gift/pantao.lpc:38` `me->add("story/pantao", 1) remove_action("do_eat", "eat");` 缺少分号触发 `unexpected L_DEFINED_NAME`。
+2. `/d/huanghe/bangjob/bangjob200000.lpc:96` 多出重复行 `]),` 触发 `syntax error, unexpected ']'`。
+3. `/kungfu/class/kunlun/hetaichong.lpc:99` `"老夫可不敢收女弟子，你去找班夫人吧.);` 缺失闭合引号（导致后文 80 余行在历史格式化时被误插空格，且 `ask_me`/`ask_su`/`ask_ding` 被静态扫描误判缺失而注释；`ask_su()` 另含未用局部 `ob`）。
+4. `/d/shaolin/haishui3.lpc:5` 与 `/d/shaolin/shaolin/haishui3.lpc:5` 写为 `#include "d/shaolin/npc/yaoshui.h";inherit ROOM;`（缺前导 `/` 且同行黏连 `inherit ROOM;`），且 `/d/shaolin/npc/yaoshui.h` 同行黏连 `#include <ansi.h>int do_yao();`、第 `16` 行 `if (ob->query("full")` 缺失右括号并含 `3` 处未用局部（`water_filled`/`full`/`aa`）。
+
+Fix: 分别补全 `pantao.lpc` 分号、删除 `bangjob200000.lpc` 重复 `]),`、闭合 `hetaichong.lpc:99` 引号并从初始提交 `b32bcb881b4` 恢复第 `103..186` 行干净文本、恢复三条 `inquiry` 函数指针与删去 `ask_su()` 未用局部 `ob`，以及拆分修正两份 `haishui3.lpc` 与 `yaoshui.h`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule shenzhou-syntax-include-blockers`（targeted 规则，校验上述六份文件）。

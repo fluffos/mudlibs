@@ -1612,3 +1612,8 @@ pristine + build-debug，归档端口 40066。`scripts/play_login.py` 注册并�
 
 - 拆回 `/cmds/adm/rstbkup.lpc:9` 挤在同一行的 `#define`/`#endif`/`inherit` 换行（保留原 LF 行尾与格式状态）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（规则 #129 `xkx-rstbkup-xunbu-xuanci`，共 129 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47803`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `pantao`/`bangjob200000`/`hetaichong`/`haishui3`/`yaoshui.h` 编译阻断修复（KB 04 §6.81）
+
+- 修复 `/clone/gift/pantao.lpc:38` 缺失分号、`d/huanghe/bangjob/bangjob200000.lpc:96` 重复 `]),`、`/kungfu/class/kunlun/hetaichong.lpc:99` 未闭合引号（并从初始提交 `b32bcb881b4` 恢复被误插空格的第 `103..186` 行、还原 `ask_me`/`ask_su`/`ask_ding` 三条 `inquiry` 函数指针并清理 `ask_su()` 未用局部 `ob`），以及 `/d/shaolin/{,shaolin/}haishui3.lpc:5` 缺前导 `/` 与黏连 `inherit ROOM;`、`/d/shaolin/npc/yaoshui.h` 黏连 `#include <ansi.h>int do_yao();`、缺右括号与 `3` 处未用局部（保留各文件原 CRLF/LF 行尾）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py` `0` 错误；`lpcc --batch` `5/5 PASS` 零错零告警；`lpcc_eval.py` `5/5` 由 `--head` 编译报错转为 `PASS`；`scripts/lint.py`（新增规则 #142 `shenzhou-syntax-include-blockers`，共 142 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47841`）通过且 `ZERO_DRIVERS`。
