@@ -1960,3 +1960,10 @@ Symptom: 扫描 `wlqxcmudlib`（`10,262` 份可编译文件零告警，全库仅
 
 Fix: 将 `3` 馆 `spekilled.lpc` 中的 `query("combat_exp", me)` 改为 `me->query("combat_exp")`（保留原 LF 行尾与排版），使 `wlqxcmudlib` 全库 `10,263` 份可编译文件零诊断。
 Detection: `scripts/lint.py --rule spekilled-es2-query-arg`（targeted 规则，校验 ES2 `dbase` 馆的 `spekilled.lpc` 是否仍写 `exp = query("combat_exp", me)`）。
+
+### 6.92 `kungfu/skill/shenghuo-quan.lpc` 乱码吞引号阻断编译（2 馆，2 份文件）
+
+Symptom: 扫描 `nt1`（`24,597` 份可编译文件零告警，全库非 `/u/` 代码仅此 `1` 处编译阻断）并全库扫查活跃 `return notify_fail("...);` 发现 `nt1`、`xkm` 共 `2` 馆的 `/kungfu/skill/shenghuo-quan.lpc:48` 含 GBK 乱码吞掉闭合引号：`return notify_fail("你的内力太弱，无法练仁セ鹑\uE11A);`，触发 `syntax error, unexpected L_IDENTIFIER` + `Illegal character` 阻断编译（同源 `xuanjianlu` 完好为 `"你的内力太弱，无法练圣火拳。\n");`）。
+
+Fix: 将 `nt1`（LF）与 `xkm`（CRLF）第 `48` 行恢复为 `return notify_fail("你的内力太弱，无法练圣火拳。\n");`，保留原行尾与缩进。
+Detection: `scripts/lint.py --rule shenghuo-quan-mojibake-quote`（targeted 规则，校验 `kungfu/skill/shenghuo-quan.lpc` 是否含乱码未闭合引号）。

@@ -576,3 +576,4 @@ pristine + build-debug，归档端口 40191。`scripts/play_login.py` 注册进�
 
 - 将 `/cmds/std/xunbu.lpc:19` 相对 `#include "npc_skills_attrib_setup.h"` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h"`，并从同源姊妹馆 `jym` 移植缺失的 `/d/shaolin/npc/job.h` 使 `/d/shaolin/npc/xuanci.lpc` 恢复编译（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `2/2` 零错零告警 `PASS`；`scripts/lint.py`（规则 #129 `xkx-rstbkup-xunbu-xuanci`，共 129 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47804`）通过且 `ZERO_DRIVERS`。
+- 2026-11-25（KB 04 §6.92）：修复 `/kungfu/skill/shenghuo-quan.lpc:48` GBK 乱码吞掉闭合引号阻断编译（恢复为 `return notify_fail("你的内力太弱，无法练圣火拳。\n");`）；`lpcc --batch` 零告警通过，新增回归规则 `shenghuo-quan-mojibake-quote`。

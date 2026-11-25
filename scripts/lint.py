@@ -199,6 +199,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("hy-danuoyi-quest-unclosed-quote", "targeted", "KB 04 §6.89", "error", "`bingxue-xinfa/qiankun-danuoyi.lpc` `&& random(2) = 0 {`, or `quest/{menpaijob/dali,menpaijob/tiezhang,songhuo}/quest.lpc` / `lagjobold.lpc` unclosed Chinese quote"),
     RuleSpec("jianjun-count-wxddym-blockers", "targeted", "KB 04 §6.90", "error", "`d/city2/npc/jianjun.lpc` undeclared `count` shadowing sefun, or `wxddym` `tianshi`/`tangmen-throwing/san`/`killer`/`feizei14` compile blockers"),
     RuleSpec("spekilled-es2-query-arg", "targeted", "KB 04 §6.91", "error", "`kungfu/class/generate/spekilled.lpc` calls Nitan7 `query(\"combat_exp\", me)` in ES2-dbase lib where `query(string, int)` takes int"),
+    RuleSpec("shenghuo-quan-mojibake-quote", "targeted", "KB 04 §6.92", "error", "`kungfu/skill/shenghuo-quan.lpc` GBK-mojibake unclosed `notify_fail(\"你的内力太弱，无法练仁セ鹑...);`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1801,7 +1802,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2043,6 +2044,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["jj_wx"].append(item)
         if rel == "/kungfu/class/generate/spekilled.lpc":
             targeted_bins["spekilled"].append(item)
+        if rel == "/kungfu/skill/shenghuo-quan.lpc":
+            targeted_bins["shquan"].append(item)
         if rel in (
             "/clone/gift/pantao.lpc",
             "/d/huanghe/bangjob/bangjob200000.lpc",
@@ -2708,6 +2711,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if re.search(rb'(?m)^[ \t]*exp\s*=\s*query\(\s*"combat_exp",\s*me\s*\)', b):
                 col.add("spekilled-es2-query-arg", p, 'calls Nitan7 `query("combat_exp", me)` under ES2 `query(string, int)`')
+
+    if col.wants("shenghuo-quan-mojibake-quote"):
+        bad_q = "仁セ鹑\ue11a);".encode("utf-8")
+        for _, p, _ in targeted_bins["shquan"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if bad_q in b:
+                col.add("shenghuo-quan-mojibake-quote", p, 'GBK-mojibake unclosed `notify_fail("你的内力太弱，无法练仁セ鹑...);`')
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
