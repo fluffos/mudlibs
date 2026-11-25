@@ -1976,3 +1976,13 @@ Symptom: 扫描 `fysjmb`（`7,643` 份可编译文件零告警）发现 `fengyun
 
 Fix: 在 `3` 馆删去 `purplerose.lpc:10` 孤立 `d`，将 `hulu.lpc`/`shoupa.lpc` 的 `setup();` 改为 `::init_item();`，并在已有 `init_hammer(160);` 的 `wavehammer.lpc` 中移除 `setup();`（保留各文件原 CRLF 行尾）。
 Detection: `scripts/lint.py --rule fy-purplerose-newtask-setup`（targeted 规则，校验上述两类阻断）。
+
+### 6.94 侠影/江湖风云系 `chai*.lpc` 重复 `query_autoload`、`box/item/26.lpc` `inherit FINGER` 与 `haodatong.lpc` 尾部重复粘贴（8 馆，25 份文件）
+
+Symptom: 扫描 `jhfy3`（`13,945` 份可编译文件零告警）并全库扫查，发现三类跨馆活跃编译阻断：
+1. `/d/obj/quest/{chai,chai1,chai3}.lpc:15`（`jhfy3`、`xyzx`、`xyzxfk`、`xyzxfy2` 共 `4` 馆 `12` 份）：文件已 `#include "task.h"`（其内定义 `int query_autoload()`），末尾又多出 `int query_autoload() { return 1; }` 触发 `Redeclaration of function 'query_autoload'`。
+2. `/clone/box/item/26.lpc:2`（`bixiecanyang`、`jhfy3`、`xajhzcjh`、`xyzx`、`xyzxfy2` 共 `5` 馆）：包含 `<weapon.h>` 并调用 `init_ring(150);`，却误写 `inherit FINGER;`（未定义宏，应为 `inherit RING;`，同源 `14` 馆及反编译 `.b` 均如此），触发 `syntax error, unexpected L_IDENTIFIER`。
+3. `/d/quanzhen_old/npc/haodatong.lpc:185-202`（`bixiecanyang`、`jhfy`、`jhfy3`、`wmkj`、`xajhzcjh`、`xyzx`、`xyzxfk`、`xyzxfy2` 共 `8` 馆）：文件闭合 `}` 后重复粘贴两段 `me->set("neili", ...)` 孤立代码触发 `syntax error, unexpected L_ARROW`。
+
+Fix: 分别删去 `12` 份 `chai*.lpc` 末尾重复 `query_autoload()`、将 `5` 份 `26.lpc` 改为 `inherit RING;`、并截断 `8` 份 `haodatong.lpc` 末尾重复粘贴段（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule jhfy-chai-ring-haodatong`（targeted 规则，校验上述三类阻断）。

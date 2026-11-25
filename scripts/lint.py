@@ -201,6 +201,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("spekilled-es2-query-arg", "targeted", "KB 04 §6.91", "error", "`kungfu/class/generate/spekilled.lpc` calls Nitan7 `query(\"combat_exp\", me)` in ES2-dbase lib where `query(string, int)` takes int"),
     RuleSpec("shenghuo-quan-mojibake-quote", "targeted", "KB 04 §6.92", "error", "`kungfu/skill/shenghuo-quan.lpc` GBK-mojibake unclosed `notify_fail(\"你的内力太弱，无法练仁セ鹑...);`"),
     RuleSpec("fy-purplerose-newtask-setup", "targeted", "KB 04 §6.93", "error", "Fengyun `d/fy/npc/obj/purplerose.lpc` stray `else {d` or `newtask/{hulu,shoupa,wavehammer}.lpc` nonexistent `setup()`"),
+    RuleSpec("jhfy-chai-ring-haodatong", "targeted", "KB 04 §6.94", "error", "`d/obj/quest/chai*.lpc` duplicate `query_autoload()` with `task.h`, `clone/box/item/26.lpc` `inherit FINGER` under `<weapon.h>`, or `haodatong.lpc` orphan tail"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1803,7 +1804,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2049,6 +2050,14 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["shquan"].append(item)
         if rel in ("/d/fy/npc/obj/purplerose.lpc", "/newtask/hulu.lpc", "/newtask/shoupa.lpc", "/newtask/wavehammer.lpc"):
             targeted_bins["fy_nt"].append(item)
+        if rel in (
+            "/d/obj/quest/chai.lpc",
+            "/d/obj/quest/chai1.lpc",
+            "/d/obj/quest/chai3.lpc",
+            "/clone/box/item/26.lpc",
+            "/d/quanzhen_old/npc/haodatong.lpc",
+        ):
+            targeted_bins["jhfy_crh"].append(item)
         if rel in (
             "/clone/gift/pantao.lpc",
             "/d/huanghe/bangjob/bangjob200000.lpc",
@@ -2731,6 +2740,18 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 fi = f"{REPO}/libs/{slug}/work/std/item.lpc"
                 if os.path.isfile(fi) and b"void setup(" not in open(fi, "rb").read():
                     col.add("fy-purplerose-newtask-setup", p, "calls undefined `setup()` under Fengyun `std/item.lpc` (use `::init_item()`)")
+
+    if col.wants("jhfy-chai-ring-haodatong"):
+        for slug, p, rel in targeted_bins["jhfy_crh"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel.startswith("/d/obj/quest/chai") and b'#include "task.h"' in b and b"int query_autoload()" in b:
+                th = f"{REPO}/libs/{slug}/work/d/obj/quest/task.h"
+                if os.path.isfile(th) and b"query_autoload" in open(th, "rb").read():
+                    col.add("jhfy-chai-ring-haodatong", p, 'redeclares `query_autoload()` already defined in `"task.h"`')
+            elif rel == "/clone/box/item/26.lpc" and b"#include <weapon.h>" in b and b"inherit FINGER;" in b:
+                col.add("jhfy-chai-ring-haodatong", p, "`inherit FINGER;` under `<weapon.h>` instead of `inherit RING;`")
+            elif rel == "/d/quanzhen_old/npc/haodatong.lpc" and re.search(rb'return 1;\r?\n\}\r?\n\r?\nme->set\("neili"', b):
+                col.add("jhfy-chai-ring-haodatong", p, "orphan duplicated `me->set(\"neili\", ...)` tail after closing `}`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
