@@ -194,6 +194,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("huashan-doctor-unclosed-sprintf", "targeted", "KB 04 §6.84", "error", "`d/huashan/npc/doctor.lpc` unclosed `sprintf(\"...想自宫可惜办不到...\",` followed directly by `return 0;`"),
     RuleSpec("m-bian-duplicate-create", "targeted", "KB 04 §6.85", "error", "`d/npc/m_weapon/weapon/m_bian.lpc` duplicate `void create()` or unguarded `me = this_player(); w_name = me->query(\"weapon/name\");`"),
     RuleSpec("lingshe-set-color-wmkj-blockers", "targeted", "KB 04 §6.86", "error", "`d/xingxiu/npc/lingshe.lpc` undefined `set_color(\"$HIW$\")` / dangling `me,);`, or `wmkj` `tianyi.lpc` `unique::init()` / `xixi-unarmed.lpc` leading `c  //`"),
+    RuleSpec("objmaker-for-zhaoshi-dup", "targeted", "KB 04 §6.87", "error", "`clone/misc/objmaker.lpc` truncated `for (i = 0; i if (member_array(...)` or player-skill duplicated `// ZHAOSHI : 0// THIS IS PLAYER'S OWN SKILL` header"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1796,7 +1797,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2003,6 +2004,15 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["m_bian"].append(item)
         if rel in ("/d/xingxiu/npc/lingshe.lpc", "/d/objj/cloth/tianyi.lpc", "/kungfu/skill/xixi-unarmed.lpc"):
             targeted_bins["ls_wmkj"].append(item)
+        if rel in (
+            "/clone/misc/objmaker.lpc",
+            "/kungfu/skill/club-sword.lpc",
+            "/kungfu/skill/dabei-unarmed.lpc",
+            "/kungfu/skill/wulainizou-unarmed.lpc",
+            "/kungfu/skill/wuming-sword.lpc",
+            "/kungfu/skill/wushuang-sword.lpc",
+        ):
+            targeted_bins["objmaker_zh"].append(item)
         if rel in (
             "/clone/gift/pantao.lpc",
             "/d/huanghe/bangjob/bangjob200000.lpc",
@@ -2611,6 +2621,14 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                     col.add("lingshe-set-color-wmkj-blockers", p, "`unique::init()` when `feature/unique.lpc` defines no `init()`")
             elif rel == "/kungfu/skill/xixi-unarmed.lpc" and b.startswith(b"c  //"):
                 col.add("lingshe-set-color-wmkj-blockers", p, "stray leading `c  //` before comment")
+
+    if col.wants("objmaker-for-zhaoshi-dup"):
+        for _, p, rel in targeted_bins["objmaker_zh"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/clone/misc/objmaker.lpc" and b"for (i = 0; i if (member_array(" in b:
+                col.add("objmaker-for-zhaoshi-dup", p, "truncated `for (i = 0; i if (member_array(...)`")
+            elif rel.startswith("/kungfu/skill/") and b"// ZHAOSHI : 0// THIS IS PLAYER'S OWN SKILL" in b:
+                col.add("objmaker-for-zhaoshi-dup", p, "duplicated `// ZHAOSHI : 0// THIS IS PLAYER'S OWN SKILL` header")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

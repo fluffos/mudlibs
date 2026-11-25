@@ -930,3 +930,8 @@ pristine + build-debug，归档端口 40041。`scripts/play_login.py` 注册进�
 
 - 移除 `/kungfu/skill/xixi-unarmed.lpc:1` 注释前的孤立 `c  `（消除 `unexpected L_INHERIT` 编译阻断，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `17/17` `xixi-unarmed.lpc` 零错零告警 `PASS`；`scripts/lint.py`（规则 #147 `lingshe-set-color-wmkj-blockers`，共 147 条）`--changed HEAD` 与 `--fast` 零错零告警。
+
+## 2026-11-24 `clone/misc/objmaker.lpc` 被吞 `for` 头与重复头部修复（KB 04 §6.87）
+
+- 修复 `/clone/misc/objmaker.lpc:141` 被 HTML 标签清洗吞掉的 `for (i = 0; i < sizeof(name1); i++) {`、移除第 `122` 行未用局部 `file`并删除末尾重复的 `int query_autoload()`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `60` 项 `0` 待看；`lpc_format_changed.py` `20/20` 格式化零错；`lpcc --batch` 全批 `15` 馆 `20/20 PASS` 零错零告警；`lpcc_eval.py`（`yxcs`/`jhfy3`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #148 `objmaker-for-zhaoshi-dup`，共 148 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47901..47906`）均通过且 `ZERO_DRIVERS`。

@@ -1343,3 +1343,8 @@ pristine + build-debug，归档端口 40049。`scripts/play_login.py` 注册并�
 
 - 修复 `/d/xingxiu/npc/lingshe.lpc`（将 `set_color("$HIW$");` 改为 `HIW "灵蛇" NOR`、修正 `me,);` 悬空逗号、将未定义种族 `"蛇类"` 改为 `"野兽"`）、`/d/objj/cloth/tianyi.lpc:12`（删去不存在的 `unique::init();`）、`/kungfu/skill/xixi-unarmed.lpc:1`（删去首行孤立 `c  `），并清零 `/cmds/usr/news.lpc` 未用局部 `user`/`i`、`/quest/guojob/zzzjob.lpc:68` `accept_object` 缺 `varargs`、`/d/yandang/npc/sunerniang.lpc:2` 冗余 `inherit F_SAVE;`（本馆全库 `10,593` 份可编译文件零告警，保留各文件原 CRLF/LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `3` 项 `0` 待看；`lpc_format_changed.py` `8/8` `0` 重排；`lpcc --batch` 全批 `3` 馆 `8/8 PASS` 零错零告警；`lpcc_eval.py`（`wmkj`/`chidi`）由 `--head` 报错/告警转为 `PASS`；`scripts/lint.py`（新增规则 #147 `lingshe-set-color-wmkj-blockers`，共 147 条）`--changed HEAD` 与 `--fast` 零错零告警；`3/3` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47891..47893`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `clone/misc/objmaker.lpc` 被吞 `for` 头与重复头部修复（KB 04 §6.87）
+
+- 修复 `/clone/misc/objmaker.lpc:141` 被 HTML 标签清洗吞掉的 `for (i = 0; i < sizeof(name1); i++) {`、移除第 `122` 行未用局部 `file`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `60` 项 `0` 待看；`lpc_format_changed.py` `20/20` 格式化零错；`lpcc --batch` 全批 `15` 馆 `20/20 PASS` 零错零告警；`lpcc_eval.py`（`yxcs`/`jhfy3`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #148 `objmaker-for-zhaoshi-dup`，共 148 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47901..47906`）均通过且 `ZERO_DRIVERS`。

@@ -1914,3 +1914,10 @@ Symptom: `chidi`、`wmkj`、`yxcs` 共 `3` 馆的 `/d/xingxiu/npc/lingshe.lpc` �
 
 Fix: 在 `3` 馆 `lingshe.lpc` 中将 `set_name` 改为 `HIW "灵蛇" NOR` 并移除 `set_color("$HIW$");`、将 `race` 改为 `"野兽"`、删去 `me,);` 悬空逗号；在 `17` 馆 `xixi-unarmed.lpc` 中移除首行 `c  `（`xjcq2000` 补 `#include <ansi.h>`）；在 `wmkj` 中移除 `tianyi.lpc` 的 `unique::init();`、`news.lpc` 未用 `user`/`i`、`sunerniang.lpc` 冗余 `inherit F_SAVE;`，并为 `zzzjob.lpc` `accept_object()` 补 `varargs`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule lingshe-set-color-wmkj-blockers`（targeted 规则，校验上述三类阻断）。
+
+### 6.87 `clone/misc/objmaker.lpc` 被吞掉的 `for` 头与 `yxcs` 玩家自创武功重复头部（15 馆，20 份文件）
+
+Symptom: `chidi`、`hc`、`jhfy`、`jhfy3`、`tybxjh`、`wlhd`、`wmkj`、`xajhzcjh`、`xyzx`、`xyzxfk`、`xyzxfy2`、`yxcs`、`yxjh`、`zxty`、`zxty08nxgbb` 共 `15` 馆的 `/clone/misc/objmaker.lpc:141` 为 `for (i = 0; i if (member_array(name1[i], special_props) != -1) continue;`（原 `< sizeof(name1); i++) {` 被 HTML 标签清洗误删），触发 `syntax error, unexpected L_IF` 阻断编译（同文件第 `122` 行另含未用局部 `file`，其中 `jhfy3`/`xajhzcjh`/`xyzx`/`xyzxfk`/`xyzxfy2` `5` 馆末尾还重复定义 `int query_autoload()`）；此外 `yxcs` 的 `/kungfu/skill/{club-sword,dabei-unarmed,wulainizou-unarmed,wuming-sword,wushuang-sword}.lpc`（`5` 份）头部重复粘贴至 `// ZHAOSHI : 0// THIS IS PLAYER'S OWN SKILL` 触发 `unexpected L_INHERIT`。
+
+Fix: 在 `15` 馆 `objmaker.lpc` 中补全 `for (i = 0; i < sizeof(name1); i++) {`、移除未用局部 `file`、并在 `5` 馆删去末尾重复的 `query_autoload()`；在 `yxcs` `5` 份玩家武功中删除重复的前 20 行头部（保留原 CRLF/LF 行尾并用 `lpc_format_changed.py --apply` 规范排版）。
+Detection: `scripts/lint.py --rule objmaker-for-zhaoshi-dup`（targeted 规则，校验上述两类阻断）。
