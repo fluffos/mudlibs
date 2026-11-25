@@ -1121,3 +1121,4 @@ pristine + build-debug（归档端口 40189，临时测试端口 49519）。`scr
 
 - 将 `/d/city/task1/npc.h` 的 `int accept_hit(string arg)` 改为 `int accept_hit(mixed arg)`，解决 `accept_kill(who)`/`accept_ansuan(who)`/`accept_touxi(who)` 传入 `object who` 触发的 `Bad type for argument 1 of accept_hit ( string vs object )` 编译阻断（保留原 LF 行尾）。
 - 验证：`lpcc --batch` 全批 `9` 馆抽检逃犯 NPC 零错零告警 `PASS`；`scripts/lint.py`（规则 #139 `task1-npc-accept-hit-type`，共 139 条）`--changed HEAD` 与 `--fast` 零错零告警；`5` 馆代表（`xkx100`/`xiakexing100`/`nitan6`/`hhsj`/`wxddym`，端口 `47901..47905`）均通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+- 2026-11-24（KB 04 §6.88）：修复 `/d/npc/robber.lpc:93` 向 `is_killing(string)` 误传 `this_player()` 阻断编译（改为 `this_player()->query("id")`）；`lpcc --batch` 零告警通过，新增回归规则 `fqyy-robber-gaochang-shopman`。

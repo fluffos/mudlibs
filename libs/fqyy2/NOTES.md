@@ -617,3 +617,4 @@ pristine + build-debug，port 40197（补 `log/mud` 后）。`scripts/play_login
 
 - 删除 `/quest/qhlist600000.lpc:2180` `"pot_bonus": 44,` 后的裸字母 `r`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `12/12` `0` 重排；`lpcc --batch` 全批 `9` 馆 `12` 文件零错零告警 `PASS`；`lpcc_eval.py`（`chidi` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #125 `qhlist-cike-chidi-syntax`，共 125 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47751..47756`）均通过且 `ZERO_DRIVERS`。
+- 2026-11-24（KB 04 §6.88）：修复 `/d/npc/robber.lpc:93` 向 `is_killing(string)` 误传 `this_player()`（改为 `this_player()->query("id")`）、`/d/gaochang/zoulang_1.lpc:29` 错写 `) ]);`（改为 `]));`）、`/d/pingan/pingan/npc/shopman2.lpc:25-27` 注释 `vendor_goods` 残留未注释 `});`、以及 `/d/gaochang/npc/3.lpc:68` 缺失分号阻断编译；`lpcc --batch` 4/4 零告警通过，新增回归规则 `fqyy-robber-gaochang-shopman`。

@@ -385,3 +385,4 @@ pristine + build-debug，归档端口 40136。`scripts/play_login.py` 注册进�
 
 - 修复 `/d/city/bite.lpc` 第 `11` 行 `@LONG` 文本块缺失行首 `LONG` 结束标记导致的 `End of file in text block` 编译阻断。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `34` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `34/34` 目标（`es1_win` 3、`esI` 2、`njhhdxdes2hx`、`yhyxcs`、`yxxcii` 及 `23` 馆 `26` 份 `outlet.lpc`）全部由 `--head` `End of file in text block`/`*No program` 转为干净加载 `PASS`（`ok=1`）；`scripts/lint.py`（新增规则 #101 `unclosed-heredoc`，`KB 04 §6.44`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`es1_win`/`esI`/`hhsj`/`nitan6`/`njhhdxdes2hx`/`nt1`/`shenmo`/`wxddym`/`yhyxcs`/`yxxcii`，端口 `47521..47530`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+- 2026-11-24（KB 04 §6.88）：修复 `/d/npc/robber.lpc:116` 向 `is_killing(string)` 误传 `this_player()` 阻断编译（改为 `this_player()->query("id")`）；`lpcc --batch` 零告警通过，新增回归规则 `fqyy-robber-gaochang-shopman`。

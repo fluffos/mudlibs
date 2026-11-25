@@ -1813,3 +1813,4 @@ pristine + build-debug，port 40057。`scripts/play_login.py` 注册。
 
 - 移除 `/kungfu/skill/zhuihun-biao.lpc:191` 裸表达式 `weapon;` 并清零 `/kungfu/skill/{diwangquan,qxxy-shou,shedao-qigong,wudu-goufa,zhuihun-biao}.lpc` `hit_ob()`/`ob_hit()` 全部未用局部声明告警（保留 `diwangquan.lpc` CRLF 与其余 `4` 份 LF）。
 - 验证：`lpc_audit_removed_locals.py HEAD`（`234` 处零误删）；`lpc_format_changed.py` `0` 重排；`lpcc --batch` `5/5` 零错零告警；`scripts/lint.py`（新增规则 #121 `hy-migong-skill-warnings`，共 121 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47713`）通过且 `ZERO_DRIVERS`。
+- 2026-11-24（KB 04 §6.88）：修复 `/d/pingan/pingan/npc/shopman2.lpc:25-27` 注释 `vendor_goods` 残留未注释 `});` 阻断编译；`lpcc --batch` 零告警通过，新增回归规则 `fqyy-robber-gaochang-shopman`。

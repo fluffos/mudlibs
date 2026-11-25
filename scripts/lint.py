@@ -195,6 +195,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("m-bian-duplicate-create", "targeted", "KB 04 §6.85", "error", "`d/npc/m_weapon/weapon/m_bian.lpc` duplicate `void create()` or unguarded `me = this_player(); w_name = me->query(\"weapon/name\");`"),
     RuleSpec("lingshe-set-color-wmkj-blockers", "targeted", "KB 04 §6.86", "error", "`d/xingxiu/npc/lingshe.lpc` undefined `set_color(\"$HIW$\")` / dangling `me,);`, or `wmkj` `tianyi.lpc` `unique::init()` / `xixi-unarmed.lpc` leading `c  //`"),
     RuleSpec("objmaker-for-zhaoshi-dup", "targeted", "KB 04 §6.87", "error", "`clone/misc/objmaker.lpc` truncated `for (i = 0; i if (member_array(...)` or player-skill duplicated `// ZHAOSHI : 0// THIS IS PLAYER'S OWN SKILL` header"),
+    RuleSpec("fqyy-robber-gaochang-shopman", "targeted", "KB 04 §6.88", "error", "`d/npc/robber.lpc` `is_killing(this_player())` vs `is_killing(string)`, `d/gaochang/zoulang_1.lpc` `) ]);`, `d/pingan/pingan/npc/shopman2.lpc` stray `});`, or `d/gaochang/npc/3.lpc` missing `;`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1797,7 +1798,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2013,6 +2014,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/kungfu/skill/wushuang-sword.lpc",
         ):
             targeted_bins["objmaker_zh"].append(item)
+        if rel in (
+            "/d/npc/robber.lpc",
+            "/d/gaochang/zoulang_1.lpc",
+            "/d/pingan/pingan/npc/shopman2.lpc",
+            "/d/gaochang/npc/3.lpc",
+        ):
+            targeted_bins["fqyy_blk"].append(item)
         if rel in (
             "/clone/gift/pantao.lpc",
             "/d/huanghe/bangjob/bangjob200000.lpc",
@@ -2629,6 +2637,20 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 col.add("objmaker-for-zhaoshi-dup", p, "truncated `for (i = 0; i if (member_array(...)`")
             elif rel.startswith("/kungfu/skill/") and b"// ZHAOSHI : 0// THIS IS PLAYER'S OWN SKILL" in b:
                 col.add("objmaker-for-zhaoshi-dup", p, "duplicated `// ZHAOSHI : 0// THIS IS PLAYER'S OWN SKILL` header")
+
+    if col.wants("fqyy-robber-gaochang-shopman"):
+        for slug, p, rel in targeted_bins["fqyy_blk"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/npc/robber.lpc" and b"is_killing(this_player())" in b:
+                fa = f"{REPO}/libs/{slug}/work/feature/attack.lpc"
+                if os.path.isfile(fa) and re.search(rb"\bint\s+is_killing\s*\(\s*string\b", open(fa, "rb").read()):
+                    col.add("fqyy-robber-gaochang-shopman", p, "passes `this_player()` object to `is_killing(string)`")
+            elif rel == "/d/gaochang/zoulang_1.lpc" and b") ]);" in b:
+                col.add("fqyy-robber-gaochang-shopman", p, "malformed mapping closer `) ]);` instead of `]));`")
+            elif rel == "/d/pingan/pingan/npc/shopman2.lpc" and re.search(rb"//[^\r\n]*book4[^\r\n]*\r?\n[ \t]*\}\r?\n[ \t]*\)\r?\n[ \t]*\);", b):
+                col.add("fqyy-robber-gaochang-shopman", p, "uncommented `}\n)\n);` tail left after commented `vendor_goods`")
+            elif rel == "/d/gaochang/npc/3.lpc" and b"this_player() if (" in b:
+                col.add("fqyy-robber-gaochang-shopman", p, "missing `;` between `me = this_player()` and `if (...)`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

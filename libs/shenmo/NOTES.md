@@ -1660,3 +1660,4 @@ pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scrip
 
 - 将 `/d/huanggong/dachen2.lpc:4` `#include <reporting.h>` 改为 `#include "/d/huanggong/npc/reporting.h"`，并将 `/d/calvin/tianpeng/npc/hufa.lpc:7` `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `8` 馆 `16` 文件零错零告警 `PASS`；`lpcc_eval.py`（`sjsh`/`sanjieshenhua` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #126 `sjsh-angle-include-headers`，共 126 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47761..47766`）均通过且 `ZERO_DRIVERS`。
+- 2026-11-24（KB 04 §6.88）：修复 `/d/pingan/pingan/npc/shopman2.lpc:25-27` 注释 `vendor_goods` 残留未注释 `});` 阻断编译；`lpcc --batch` 零告警通过，新增回归规则 `fqyy-robber-gaochang-shopman`。

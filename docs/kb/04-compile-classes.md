@@ -1921,3 +1921,14 @@ Symptom: `chidi`、`hc`、`jhfy`、`jhfy3`、`tybxjh`、`wlhd`、`wmkj`、`xajhz
 
 Fix: 在 `15` 馆 `objmaker.lpc` 中补全 `for (i = 0; i < sizeof(name1); i++) {`、移除未用局部 `file`、并在 `5` 馆删去末尾重复的 `query_autoload()`；在 `yxcs` `5` 份玩家武功中删除重复的前 20 行头部（保留原 CRLF/LF 行尾并用 `lpc_format_changed.py --apply` 规范排版）。
 Detection: `scripts/lint.py --rule objmaker-for-zhaoshi-dup`（targeted 规则，校验上述两类阻断）。
+
+### 6.88 `robber.lpc` 错传 `is_killing(this_player())`、高昌 `zoulang_1`/`npc/3` 与平安 `shopman2` 语法阻断（9 馆，16 份文件）
+
+Symptom: 扫描 `fqyy2`（`11,511` 份可编译文件零告警）发现四类跨馆活跃编译阻断：
+1. `/d/npc/robber.lpc:93`（`fqyy2`、`wxddym`、`yxxcii` 共 `3` 馆）：其 `feature/attack.lpc` 定义 `int is_killing(string id)`（同文件第 `44`/`80` 行已传 `ob->query("id")`），但第 `93` 行写为 `if (is_killing(this_player()))` 触发 `Bad type for argument 1 of is_killing ( string vs object )` 阻断编译。
+2. `/d/gaochang/zoulang_1.lpc:29`（`fqyy2`、`hy`、`hyiishzdscbb` 共 `3` 馆）：`set("objects", ([ ... ) ]);` 中 `)` 与 `]` 被空格拆开触发 `syntax error, unexpected ')'`。
+3. `/d/pingan/pingan/npc/shopman2.lpc:20-27`（`fqyy2`、`haiyang2`、`hy`、`hy2000`、`hy2002`、`hyiishzdscbb`、`shenmo` 共 `7` 馆）：`set("vendor_goods", ({ ...` 已被逐行注释，却留下未注释的 `}\n)\n);` 触发 `syntax error, unexpected ')'`。
+4. `/d/gaochang/npc/3.lpc:68`（`fqyy2`、`hy`、`hyiishzdscbb` 共 `3` 馆）：`me = this_player() if (me->query_temp("marks/李2")) {` 缺失分号触发 `syntax error, unexpected L_IF`。
+
+Fix: 分别将 `3` 馆 `robber.lpc` 改为 `is_killing(this_player()->query("id"))`、`3` 馆 `zoulang_1.lpc` 改为 `]));`、`7` 馆 `shopman2.lpc` 注释掉残留 `// }));`（与 `hy5` 一致）、`3` 馆 `npc/3.lpc` 补齐分号并换行（保留各文件原 CRLF/LF 行尾并用 `lpc_format_changed.py --apply` 规范排版）。
+Detection: `scripts/lint.py --rule fqyy-robber-gaochang-shopman`（targeted 规则，校验上述四类阻断）。
