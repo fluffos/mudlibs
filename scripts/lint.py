@@ -203,6 +203,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("fy-purplerose-newtask-setup", "targeted", "KB 04 §6.93", "error", "Fengyun `d/fy/npc/obj/purplerose.lpc` stray `else {d` or `newtask/{hulu,shoupa,wavehammer}.lpc` nonexistent `setup()`"),
     RuleSpec("jhfy-chai-ring-haodatong", "targeted", "KB 04 §6.94", "error", "`d/obj/quest/chai*.lpc` duplicate `query_autoload()` with `task.h`, `clone/box/item/26.lpc` `inherit FINGER` under `<weapon.h>`, or `haodatong.lpc` orphan tail"),
     RuleSpec("competed-string-type-typo", "targeted", "KB 04 §6.95", "error", "`adm/daemons/competed.lpc` `static`->`string` typo (`string object/int/string/mapping`) instead of `nosave`"),
+    RuleSpec("zhonghua2-questobj-init-item", "targeted", "KB 04 §6.96", "error", "`questobj/*.lpc` calls Fengyun `::init_{item,cloth,head,boots,neck}()` when ES2 `inherit/item/item.lpc` lacks `init_item()`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1805,7 +1806,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1983,6 +1984,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["nt_chkskill"].append(item)
         if rel == "/adm/daemons/competed.lpc":
             targeted_bins["competed"].append(item)
+        if rel.startswith("/questobj/") and rel.endswith(".lpc"):
+            targeted_bins["qobj_ii"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -2761,6 +2764,21 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if re.search(rb"(?m)^string (?:object|int|string|mapping) ", b):
                 col.add("competed-string-type-typo", p, "`static`->`string` typo (`string object/int/string/mapping`) instead of `nosave`")
+
+    if col.wants("zhonghua2-questobj-init-item"):
+        qobj_re = re.compile(rb"(?m)^[ \t]*::init_(?:item|cloth|head|boots|neck)\(\);")
+        has_ii_cache: dict[str, bool] = {}
+        for slug, p, _ in targeted_bins["qobj_ii"]:
+            if slug not in has_ii_cache:
+                has_ii_cache[slug] = any(
+                    os.path.isfile(ip) and b"void init_item" in open(ip, "rb").read()
+                    for ip in (f"{REPO}/libs/{slug}/work/std/item.lpc", f"{REPO}/libs/{slug}/work/inherit/item/item.lpc")
+                )
+            if has_ii_cache[slug]:
+                continue
+            b = open(f"{REPO}/{p}", "rb").read()
+            if qobj_re.search(b):
+                col.add("zhonghua2-questobj-init-item", p, "calls Fengyun `::init_{item,cloth,head,boots,neck}()` under ES2 `ITEM` (use `setup()`)")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

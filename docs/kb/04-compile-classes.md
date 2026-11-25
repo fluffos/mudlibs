@@ -1995,3 +1995,10 @@ Symptom: 扫描 `zhonghua2`（`11,597` 份可编译非 `/u/` 文件零告警）�
 
 Fix: 将 `8` 馆 `checkskill.lpc` 的 `mixed *value;` 改为 `mixed value;` 并扩展规则 `nitan-checkskill-mixed-array` 覆盖全部 `/cmds/*/{checkskill,chpfm}.lpc`；将 `zhonghua2` `competed.lpc:15-27` 的 `9` 处 `string <type>` 修正为 `nosave <type>`（保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule nitan-checkskill-mixed-array` 与 `scripts/lint.py --rule competed-string-type-typo`（targeted 规则）。
+
+### 6.96 `zhonghua2` `questobj/*.lpc` 在 ES2 基类下误调风云 `::init_{item,cloth,head,boots,neck}()`（1 馆，38 份文件）
+
+Symptom: `zhonghua2` 的 `/questobj/*.lpc` 移植自风云系，其中 `38` 份非武器任务物件（`30` 份 `::init_item()`、`4` 份 `::init_cloth()`、`2` 份 `::init_head()`、`1` 份 `::init_boots()`、`1` 份 `::init_neck()`；`jade-ring.lpc` 的 `::init_finger()` 在本馆 `inherit/armor/finger.lpc` 中已定义，未受影响）直接调用风云基类初始化函数，而本馆采用 ES2 `inherit/item/item.lpc` 与 `inherit/armor/*.lpc`（仅定义 `setup()`），触发 `No such function 'init_item' defined.` 阻断全部 `38` 份任务物件编译。
+
+Fix: 将这 `38` 份 `questobj/*.lpc` 的 `::init_{item,cloth,head,boots,neck}();` 替换为 `setup();`（全部保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule zhonghua2-questobj-init-item`（targeted 规则，校验无 `init_item()` 的馆中 `/questobj/*.lpc` 是否调用风云 `::init_*()`）。
