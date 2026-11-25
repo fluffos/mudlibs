@@ -1986,3 +1986,12 @@ Symptom: 扫描 `jhfy3`（`13,945` 份可编译文件零告警）并全库扫查
 
 Fix: 分别删去 `12` 份 `chai*.lpc` 末尾重复 `query_autoload()`、将 `5` 份 `26.lpc` 改为 `inherit RING;`、并截断 `8` 份 `haodatong.lpc` 末尾重复粘贴段（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule jhfy-chai-ring-haodatong`（targeted 规则，校验上述三类阻断）。
+
+### 6.95 `cmds/{usr,std}/checkskill.lpc` `mixed *value;` 补漏（8 馆）与 `zhonghua2` `competed.lpc` `string <type>` 误替换（8 馆，9 份文件）
+
+Symptom: 扫描 `zhonghua2`（`11,597` 份可编译非 `/u/` 文件零告警）并扩扫全部 `/cmds/*/{checkskill,chpfm}.lpc` 发现两类编译阻断：
+1. `/cmds/usr/checkskill.lpc`（`hell`、`wdxtym`、`wxddym`、`zjdy2008wzb`、`zjdyaryl`、`zjdyzj`、`zjmudhell`）与 `/cmds/std/checkskill.lpc`（`zhonghua2`）共 `8` 馆同样存在 KB 04 §6.72 的 `mixed *value;` 声明，在 `replace_string(temp, "$N", value)` 触发 `Bad argument 3 to efun replace_string()` 阻断编译。
+2. `zhonghua2` `/adm/daemons/competed.lpc:15-27` 的 `9` 个全局变量在历史替换 `static` 时误改为 `string`（`string object challenger = 0;`、`string int state = 1;`、`string string top_id = "";`、`string mapping tops = ([]);`），触发 `syntax error, unexpected L_BASIC_TYPE`。
+
+Fix: 将 `8` 馆 `checkskill.lpc` 的 `mixed *value;` 改为 `mixed value;` 并扩展规则 `nitan-checkskill-mixed-array` 覆盖全部 `/cmds/*/{checkskill,chpfm}.lpc`；将 `zhonghua2` `competed.lpc:15-27` 的 `9` 处 `string <type>` 修正为 `nosave <type>`（保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule nitan-checkskill-mixed-array` 与 `scripts/lint.py --rule competed-string-type-typo`（targeted 规则）。

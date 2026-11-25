@@ -553,3 +553,4 @@ pristine + build-debug，port 40204。指间 ZJ 握手（`crypt(ZJKEY,"zj")` 挑
 
 - 修复 `/kungfu/skill/qujing-gunfa.lpc:125,128` `query_action(object me, object weapon)` 中未判空直接内联解引用 `me->query_temp("weapon")->query("name")` 致空手触发 `*Bad argument 1 to EFUN call_other() Got: int(0)` 崩溃的缺陷：优先取形参 `weapon` 并补 `objectp()` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hell` 及 `6` 馆代表）`query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（规则 #117 `qujing-gunfa-weapon-name`，共 117 条）`--changed HEAD` 与 `--fast` 零错误零告警。
+- 2026-11-25（KB 04 §6.95）：修复 `/cmds/usr/checkskill.lpc` `mixed *value;` 声明在 `replace_string()` 触发类型错误阻断编译（改为 `mixed value;`）；`lpcc --batch` 零告警通过，扩展回归规则 `nitan-checkskill-mixed-array`。

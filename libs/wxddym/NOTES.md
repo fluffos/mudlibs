@@ -1125,3 +1125,4 @@ pristine + build-debug（归档端口 40189，临时测试端口 49519）。`scr
 - 2026-11-24（KB 04 §6.90）：修复 `/d/city2/npc/jianjun.lpc` 缺失 `int count;`、`/d/city/npc/tianshi.lpc:49` 重复声明形参 `object ob;`、`/kungfu/skill/tangmen-throwing/san.lpc:46` 误写 `++`、`/clone/npc/killer.lpc:22` 缺失分号及 `/npc/feizei14.lpc:51-53` 残留 `}
 )
 );` 阻断编译；`lpcc --batch` 5/5 零告警通过，新增回归规则 `jianjun-count-wxddym-blockers`。
+- 2026-11-25（KB 04 §6.95）：修复 `/cmds/usr/checkskill.lpc` `mixed *value;` 声明在 `replace_string()` 触发类型错误阻断编译（改为 `mixed value;`）；`lpcc --batch` 零告警通过，扩展回归规则 `nitan-checkskill-mixed-array`。
