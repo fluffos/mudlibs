@@ -1953,3 +1953,10 @@ Symptom: 扫描 `wxddym`（`24,986` 份可编译非 `/u/` 文件零告警）发�
 
 Fix: 在 `4` 馆 `jianjun.lpc` `give_quest()` 补齐 `int count;`，并在 `wxddym` 分别删除 `tianshi.lpc` 重复声明、`san.lpc` 改 `++` 为 `+`、`killer.lpc` 补 `;`、`feizei14.lpc` 删去多余 `}\n)\n);`（保留原 CRLF/LF 行尾并用 `lpc_format_changed.py --apply` 规范排版）。
 Detection: `scripts/lint.py --rule jianjun-count-wxddym-blockers`（targeted 规则，校验上述五类阻断）。
+
+### 6.91 炎黄系 `kungfu/class/generate/spekilled.lpc` 在 ES2 `dbase` 下误调泥潭双参 `query("combat_exp", me)`（3 馆，3 份文件）
+
+Symptom: 扫描 `wlqxcmudlib`（`10,262` 份可编译文件零告警，全库仅此 `1` 条诊断）发现 `wlqxcmudlib`、`yhwhckdm`、`yhwhpublicfi` 共 `3` 馆的 `/kungfu/class/generate/spekilled.lpc`（第 `80`/`84` 行）在 `set_from_me()` 中保留了泥潭7 风格的 `exp = query("combat_exp", me) * 11 / 10;`；而这 `3` 馆使用 ES2 `feature/dbase.lpc`（`mixed query(string prop, int raw)`），触发 `Bad type for argument 2 of query ( int vs object )` 阻断编译（同源 `yanhuangwuhun` 已改为 `me->query("combat_exp")`）。
+
+Fix: 将 `3` 馆 `spekilled.lpc` 中的 `query("combat_exp", me)` 改为 `me->query("combat_exp")`（保留原 LF 行尾与排版），使 `wlqxcmudlib` 全库 `10,263` 份可编译文件零诊断。
+Detection: `scripts/lint.py --rule spekilled-es2-query-arg`（targeted 规则，校验 ES2 `dbase` 馆的 `spekilled.lpc` 是否仍写 `exp = query("combat_exp", me)`）。

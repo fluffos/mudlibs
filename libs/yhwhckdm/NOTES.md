@@ -336,3 +336,4 @@ pristine + build-debug，port 40270。`scripts/play_login.py` 注册并执行 `l
 
 - 本馆无 `/adm/daemons/scheduled.lpc` 与 `SCHEDULE_D` 宏，将 `/adm/daemons/vrm_server.lpc:436,683` 的 `SCHEDULE_D->set_event(...)` 改为原生 `call_out("refresh_maze", refresh_delay);` 与 `call_out("refresh_maze", 10);`，使虚拟随机迷宫基类及继承它的迷宫（如 `/d/death/heisenlin.lpc`）恢复正常编译（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` `3/3` `0` 重排；`lpcc --batch` 全批 `3` 馆 `vrm_server` 与 `heisenlin` `6/6` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `yanhuangwuhun` `2/2` 由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #136 `vrm-server-undefined-schedule-d`，共 136 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47872`）通过且 `ZERO_DRIVERS`。
+- 2026-11-25（KB 04 §6.91）：修复 `/kungfu/class/generate/spekilled.lpc` 在 ES2 `dbase` 下误调泥潭双参 `query("combat_exp", me)` 阻断编译（改为 `me->query("combat_exp")`）；`lpcc --batch` 零告警通过，新增回归规则 `spekilled-es2-query-arg`。
