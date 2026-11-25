@@ -1221,3 +1221,4 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（§10.7，2026-11-15，重测）
 
 pristine + build-debug（归档端口 `40027`，测试端口 `49027`）。`scripts/play_login.py` 完成注册与基础游戏内命令验证（`rc=0`、`out_errs=0`、`log_hits=[]`），无未捕获 runtime error 或新增可修警告。本轮无新编程缺陷。
+- 2026-11-25（KB 04 §6.97）：修复 `/adm/daemons/eventd.lpc:13` 缺失闭合引号（`DATA_DIR + "event;` -> `"event";`）阻断编译；`lpcc --batch` 零告警通过，新增回归规则 `fy2-eventd-bamboo3-cola`。

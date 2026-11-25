@@ -2002,3 +2002,13 @@ Symptom: `zhonghua2` 的 `/questobj/*.lpc` 移植自风云系，其中 `38` 份�
 
 Fix: 将这 `38` 份 `questobj/*.lpc` 的 `::init_{item,cloth,head,boots,neck}();` 替换为 `setup();`（全部保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule zhonghua2-questobj-init-item`（targeted 规则，校验无 `init_item()` 的馆中 `/questobj/*.lpc` 是否调用风云 `::init_*()`）。
+
+### 6.97 风云2/东方故事2 `eventd.lpc` 缺引号、`bamboo3.lpc` 函数嵌套与 `cola.lpc` 缺失 `inherit ITEM`（3 馆，7 份文件）
+
+Symptom: 扫描 `fy2`（`2,819` 份可编译文件零告警）并全库扫查，发现三处活跃编译阻断：
+1. `/adm/daemons/eventd.lpc:13`（`dfgs2`、`fy2`、`fy2qh` 共 `3` 馆）：`return DATA_DIR + "event; }` 缺失闭合引号触发 `End of file in string`。
+2. `/d/canyon/bamboo/bamboo3.lpc:17`（`fy2`、`fy2qh` 共 `2` 馆）：`void init()` 与 `int do_move()` 被误嵌入 `void create()` 的 `setup(); }` 之前，触发 `Illegal to declare local variable of type void`（同源 `es2` 完好）。
+3. `/d/canyon/npc/obj/cola.lpc`（`fy2`、`fy2qh` 共 `2` 馆）：缺失 `inherit ITEM;` 触发 `Undefined function set_name` / `set`（同源 `es2` 完好）。
+
+Fix: 分别补全 `eventd.lpc` 闭合引号、参照 `es2` 将 `bamboo3.lpc` 的 `setup(); }` 移回 `set("exits", ...));` 之后、并为 `cola.lpc` 补回 `inherit ITEM;`（保留各文件原 CRLF/LF 行尾并用 `lpc_format_changed.py --apply` 规范排版）。
+Detection: `scripts/lint.py --rule fy2-eventd-bamboo3-cola`（targeted 规则，校验上述三类阻断）。
