@@ -808,3 +808,8 @@ pristine + build-debug，归档端口 40037。`scripts/play_login.py` 注册并�
 
 - 将 `/d/city/task1/npc.h` 的 `int accept_hit(string arg)` 改为 `int accept_hit(mixed arg)`，解决 `accept_kill(who)`/`accept_ansuan(who)`/`accept_touxi(who)` 传入 `object who` 触发的 `Bad type for argument 1 of accept_hit ( string vs object )` 编译阻断（保留原 LF 行尾）。
 - 验证：`lpcc --batch` 全批 `9` 馆抽检逃犯 NPC 零错零告警 `PASS`；`scripts/lint.py`（规则 #139 `task1-npc-accept-hit-type`，共 139 条）`--changed HEAD` 与 `--fast` 零错零告警；`5` 馆代表（`xkx100`/`xiakexing100`/`nitan6`/`hhsj`/`wxddym`，端口 `47901..47905`）均通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-25 `kungfu/skill/dragonfly-sword.lpc` 提前闭合 `});` 阻断修复（KB 04 §6.100）
+
+- 同步修复 `/kungfu/skill/dragonfly-sword.lpc:16` `mapping *action = ({` 后提前闭合的 `});`（保留原 LF 行尾），消除 `syntax error, unexpected '('` 编译阻断。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 与 `lpcc_eval.py` 由 `--head` `FAIL` 转为干净 `PASS`（`0` 错 `0` 告警）；`scripts/lint.py`（新增规则 #161 `zhaoshi-premature-action-close`，共 `161` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh xiakexing100`（端口 `48022`）通过且 `ZERO_DRIVERS`。

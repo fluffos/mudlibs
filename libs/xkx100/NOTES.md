@@ -569,3 +569,8 @@ pristine + build-debug，归档端口 40117。`scripts/play_login.py` 注册进�
 
 - 将 `/d/city/task1/npc.h` 的 `int accept_hit(string arg)` 改为 `int accept_hit(mixed arg)`，解除整套官府通缉逃犯 NPC 因 `accept_kill(who)`/`accept_ansuan(who)`/`accept_touxi(who)` 传入 `object` 触发的编译阻断；移除 `/kungfu/skill/jinshe-zhang/fugu.lpc:1` 与 `/kungfu/skill/jinshe-zhui/tuwu.lpc:1` 首行误触 `s  ` 及 `5` 处未用局部，并移除 `/clone/food/dami.lpc:26` 不存在的 `init_unarmed(5);`（保留原 LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `9` 馆均零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `dadao`/`fugu`/`tuwu`/`dami` `4/4` 由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #139 `task1-npc-accept-hit-type`，共 139 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`5` 馆代表（`xkx100`/`xiakexing100`/`nitan6`/`hhsj`/`wxddym`，端口 `47901..47905`）均通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-25 `kungfu/skill/dragonfly-sword.lpc` 提前闭合 `});` 阻断修复（KB 04 §6.100）
+
+- 全库扫描 `scripts/lpc_warnings.py`（`14,245` 份可编译文件零告警）发现本馆唯一的活跃业务代码编译阻断 `/kungfu/skill/dragonfly-sword.lpc:16`：`mapping *action = ({` 后提前闭合 `});`，使 `// ZHAOSHI :0` 下的招式映射报 `syntax error, unexpected '('`；删去多余 `});`（保留原 LF 行尾），将全库 `14,246` 份活跃代码清零至零编译错误零告警。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 与 `lpcc_eval.py` 由 `--head` `FAIL` 转为干净 `PASS`（`0` 错 `0` 告警）；`scripts/lint.py`（新增规则 #161 `zhaoshi-premature-action-close`，共 `161` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh xkx100`（端口 `48021`）通过且 `ZERO_DRIVERS`。

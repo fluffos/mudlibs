@@ -2032,3 +2032,10 @@ Symptom: 扫描 `xyj2000f`（`5,611` 份可编译文件零告警）与 `sjcs`（
 
 Fix: 删除 `xyj2000f` `xiwangmu.lpc:95` 重复的 `ask_pantao()`、删除 `sjcs` `vcd3.lpc:265` 孤立 `users());`、并移除 `sjcs` `ARMOR.lpc` `4` 个未用局部变量（保留原 LF/CRLF 行尾），清零 `sjcs` 全部 `10,788` 份可编译文件告警。
 Detection: `scripts/lint.py --rule xyj-xiwangmu-vcd3-blockers`（targeted 规则，校验 `xiwangmu.lpc` 重复 `ask_pantao()` 与 `vcd3.lpc` 重复 `users());`）。
+
+### 6.100 玩家自创武功 `dragonfly-sword.lpc` `mapping *action = ({` 提前闭合 `});`（2 馆，2 份文件）
+
+Symptom: 扫描 `xkx100`（`14,245` 份可编译文件零告警）并全库扫查所有活跃库技能目录，发现 `xkx100` 与 `xiakexing100` 的 `/kungfu/skill/dragonfly-sword.lpc:15-18`（玩家自创武功 `// ZHAOSHI :0`，也是 `xkx100` 全库唯一的活跃业务代码编译错误）在 `mapping *action = ({` 后多出一行提前闭合的 `});`，导致紧跟 `// ZHAOSHI :0` 的招式映射 `([ ... ]),` 落入数组之外，触发 `syntax error, unexpected '('` 阻断编译（同系 `xkx100utf8` 仅含空壳前 17 行，无后续招式映射，不受影响）。
+
+Fix: 删除 `xkx100` 与 `xiakexing100` `dragonfly-sword.lpc` 第 `16` 行多余的 `});`（保留原 LF 行尾），将 `xkx100` 全库 `14,246` 份活跃代码清零至 `0` 编译错误、`0` 编译告警。
+Detection: `scripts/lint.py --rule zhaoshi-premature-action-close`（targeted 规则，校验 `mapping *action = ({` 与 `// ZHAOSHI :0` 招式映射 `([` 之间是否提前插入 `});`）。
