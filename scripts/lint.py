@@ -209,6 +209,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("xyj-xiwangmu-vcd3-blockers", "targeted", "KB 04 §6.99", "error", "`d/moon/npc/xiwangmu.lpc` duplicate `ask_pantao()` or `clone/misc/vcd3.lpc` stray duplicated `users());`"),
     RuleSpec("zhaoshi-premature-action-close", "targeted", "KB 04 §6.100", "error", "Player-created skill `mapping *action = ({ });` prematurely closed before `// ZHAOSHI :0` entries"),
     RuleSpec("tang-raw-telnet-utf8-literal", "targeted", "KB 04 §6.101", "error", "`clone/misc/tang.lpc` raw Telnet IAC octal bytes (`\\377...`) in UTF-8 string literal"),
+    RuleSpec("dtsl-missing-wanted-h", "targeted", "KB 04 §6.102", "error", "`d/zhiye/npc/biaotou{,2}.lpc` `#include <wanted.h>` when `include/wanted.h` is missing"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1811,7 +1812,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2001,6 +2002,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["zhao_cls"].append(item)
         if rel == "/clone/misc/tang.lpc":
             targeted_bins["tang_iac"].append(item)
+        if rel in ("/d/zhiye/npc/biaotou.lpc", "/d/zhiye/npc/biaotou2.lpc"):
+            targeted_bins["biaotou_w"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -2830,6 +2833,12 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if b"\\377" in b:
                 col.add("tang-raw-telnet-utf8-literal", p, "raw Telnet IAC octal bytes (`\\377`) in UTF-8 string literal")
+
+    if col.wants("dtsl-missing-wanted-h"):
+        for slug, p, _ in targeted_bins["biaotou_w"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b"#include <wanted.h>" in b and not os.path.isfile(f"{REPO}/libs/{slug}/work/include/wanted.h"):
+                col.add("dtsl-missing-wanted-h", p, "`#include <wanted.h>` but `include/wanted.h` is missing")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

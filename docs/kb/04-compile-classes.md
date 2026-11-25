@@ -2046,3 +2046,10 @@ Symptom: 扫描 `bxsj`（`9,911` 份可编译文件）并全库扫查所有活�
 
 Fix: 去除 `ff` 前导原始 Telnet 字节，改为合法 UTF-8 字面量 `nosave string ff = "\n[-Yes-] \n";`（保留 `6` 馆 CRLF 与 `jh2006`/`jinyongwenzi` LF 行尾），`8/8` 编译通过且级联报错全部消失。
 Detection: `scripts/lint.py --rule tang-raw-telnet-utf8-literal`（targeted 规则，校验 `clone/misc/tang.lpc` 是否残留 `\377` 原始字节转义）。
+
+### 6.102 大唐双龙系 `d/zhiye/npc/biaotou{,2}.lpc` 缺失 `<wanted.h>` 头文件（3 馆，新增 3 份头文件解锁 6 份 NPC）
+
+Symptom: 扫描 `dtslmud` 并全库扫查所有活跃库，发现大唐双龙系 `3` 馆（`dtsl`、`dtsl2`、`dtslmud`）的 `/d/zhiye/npc/biaotou.lpc`（龙门镖局总镖头）与 `/d/zhiye/npc/biaotou2.lpc`（虎威镖局周虎威）均 `#include <wanted.h>` 并通过 `biaotou.h:42` 调用 `is_wanted(me)`，但三馆归档均漏收了同源书剑系的 `/include/wanted.h`（三馆历史生产 `log/log` 中均反复报错 `Cannot #include wanted.h`），导致全部 `6` 份镖头 NPC 无法编译加载。
+
+Fix: 从同源 `bxsj` 引入完整的 `12` 行 `/include/wanted.h`（定义 `int is_wanted(object me)`，保留 CRLF 行尾）至 `dtsl`、`dtsl2`、`dtslmud` 三馆（KB 04 §6.15 模式），一次性解锁全部 `6` 份 `biaotou{,2}.lpc`。
+Detection: `scripts/lint.py --rule dtsl-missing-wanted-h`（targeted 规则，校验 `d/zhiye/npc/biaotou{,2}.lpc` 包含 `<wanted.h>` 时同馆是否存在 `include/wanted.h`）。
