@@ -1122,3 +1122,6 @@ pristine + build-debug（归档端口 40189，临时测试端口 49519）。`scr
 - 将 `/d/city/task1/npc.h` 的 `int accept_hit(string arg)` 改为 `int accept_hit(mixed arg)`，解决 `accept_kill(who)`/`accept_ansuan(who)`/`accept_touxi(who)` 传入 `object who` 触发的 `Bad type for argument 1 of accept_hit ( string vs object )` 编译阻断（保留原 LF 行尾）。
 - 验证：`lpcc --batch` 全批 `9` 馆抽检逃犯 NPC 零错零告警 `PASS`；`scripts/lint.py`（规则 #139 `task1-npc-accept-hit-type`，共 139 条）`--changed HEAD` 与 `--fast` 零错零告警；`5` 馆代表（`xkx100`/`xiakexing100`/`nitan6`/`hhsj`/`wxddym`，端口 `47901..47905`）均通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
 - 2026-11-24（KB 04 §6.88）：修复 `/d/npc/robber.lpc:93` 向 `is_killing(string)` 误传 `this_player()` 阻断编译（改为 `this_player()->query("id")`）；`lpcc --batch` 零告警通过，新增回归规则 `fqyy-robber-gaochang-shopman`。
+- 2026-11-24（KB 04 §6.90）：修复 `/d/city2/npc/jianjun.lpc` 缺失 `int count;`、`/d/city/npc/tianshi.lpc:49` 重复声明形参 `object ob;`、`/kungfu/skill/tangmen-throwing/san.lpc:46` 误写 `++`、`/clone/npc/killer.lpc:22` 缺失分号及 `/npc/feizei14.lpc:51-53` 残留 `}
+)
+);` 阻断编译；`lpcc --batch` 5/5 零告警通过，新增回归规则 `jianjun-count-wxddym-blockers`。

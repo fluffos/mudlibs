@@ -197,6 +197,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("objmaker-for-zhaoshi-dup", "targeted", "KB 04 §6.87", "error", "`clone/misc/objmaker.lpc` truncated `for (i = 0; i if (member_array(...)` or player-skill duplicated `// ZHAOSHI : 0// THIS IS PLAYER'S OWN SKILL` header"),
     RuleSpec("fqyy-robber-gaochang-shopman", "targeted", "KB 04 §6.88", "error", "`d/npc/robber.lpc` `is_killing(this_player())` vs `is_killing(string)`, `d/gaochang/zoulang_1.lpc` `) ]);`, `d/pingan/pingan/npc/shopman2.lpc` stray `});`, or `d/gaochang/npc/3.lpc` missing `;`"),
     RuleSpec("hy-danuoyi-quest-unclosed-quote", "targeted", "KB 04 §6.89", "error", "`bingxue-xinfa/qiankun-danuoyi.lpc` `&& random(2) = 0 {`, or `quest/{menpaijob/dali,menpaijob/tiezhang,songhuo}/quest.lpc` / `lagjobold.lpc` unclosed Chinese quote"),
+    RuleSpec("jianjun-count-wxddym-blockers", "targeted", "KB 04 §6.90", "error", "`d/city2/npc/jianjun.lpc` undeclared `count` shadowing sefun, or `wxddym` `tianshi`/`tangmen-throwing/san`/`killer`/`feizei14` compile blockers"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1799,7 +1800,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2031,6 +2032,14 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/quest/newbie/qiandao/lagjobold.lpc",
         ):
             targeted_bins["hy_dq"].append(item)
+        if rel in (
+            "/d/city2/npc/jianjun.lpc",
+            "/d/city/npc/tianshi.lpc",
+            "/kungfu/skill/tangmen-throwing/san.lpc",
+            "/clone/npc/killer.lpc",
+            "/npc/feizei14.lpc",
+        ):
+            targeted_bins["jj_wx"].append(item)
         if rel in (
             "/clone/gift/pantao.lpc",
             "/d/huanghe/bangjob/bangjob200000.lpc",
@@ -2673,6 +2682,20 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 col.add("hy-danuoyi-quest-unclosed-quote", p, 'unclosed `"天门道人,` string literal in quest table')
             elif rel == "/quest/newbie/qiandao/lagjobold.lpc" and q_jk in b:
                 col.add("hy-danuoyi-quest-unclosed-quote", p, 'unclosed `"绞髁,` string literal in quest table')
+
+    if col.wants("jianjun-count-wxddym-blockers"):
+        for _, p, rel in targeted_bins["jj_wx"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/city2/npc/jianjun.lpc" and b"count = 600000;" in b and not re.search(rb"\bint\b[^;]*\bcount\b", b):
+                col.add("jianjun-count-wxddym-blockers", p, "assigns `count = 600000;` without declaring `int count;` (collides with `count` sefun)")
+            elif rel == "/d/city/npc/tianshi.lpc" and re.search(rb"int\s+accept_object\s*\(\s*object\s+who\s*,\s*object\s+ob\s*\)\s*\{\r?\n[ \t]*object\s+ob\s*;", b):
+                col.add("jianjun-count-wxddym-blockers", p, "redeclares parameter `object ob;` inside `accept_object()`")
+            elif rel == "/kungfu/skill/tangmen-throwing/san.lpc" and b'query_skill("force")++ me->query_skill' in b:
+                col.add("jianjun-count-wxddym-blockers", p, "stray `++` instead of `+` in `ap` expression")
+            elif rel == "/clone/npc/killer.lpc" and re.search(rb'set\("qi",\s*100\)[ \t]+//', b):
+                col.add("jianjun-count-wxddym-blockers", p, 'missing `;` after `set("qi", 100)`')
+            elif rel == "/npc/feizei14.lpc" and re.search(rb'map_skill\("sword",\s*"huashan-jianfa"\);\r?\n[ \t]*\}\r?\n[ \t]*\)\r?\n[ \t]*\);', b):
+                col.add("jianjun-count-wxddym-blockers", p, "stray `}\n)\n);` closing tokens after `map_skill()`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

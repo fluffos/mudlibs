@@ -654,3 +654,4 @@ pristine + build-debug，port 40217。
 
 - 从同源孪生馆 `nitan_ceshi` 还原 `/d/city/npc/paimaishi.lpc`，修复第 `208` 行 `finish_paimai()` 中错贴的 `pay_back()` 尾部（未定义 `who`/`amount`/`id` 与多余 `}`）及后续 `report_paimai()` 缺失的分号与括号（保留 LF 与格式状态）。
 - 验证：`lpc_format_changed.py` `2/2` `0` 重排；`lpcc --batch` 与 `lpcc_eval.py` 差分实测均由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #134 `nitan-paimaishi-corrupt-payback`，共 134 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47851`）通过且 `ZERO_DRIVERS`。
+- 2026-11-24（KB 04 §6.90）：修复 `/d/city2/npc/jianjun.lpc` `give_quest()` 缺失局部声明 `int count;` 与同名函数冲突阻断编译；`lpcc --batch` 零告警通过，新增回归规则 `jianjun-count-wxddym-blockers`。

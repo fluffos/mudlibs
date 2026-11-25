@@ -1941,3 +1941,15 @@ Symptom: 扫描 `haiyang2`（`25,604` 份可编译文件零告警）发现两类
 
 Fix: 将 `3` 份 `qiankun-danuoyi.lpc` 修正为 `&& me->query_skill_mapped("force") == "jiuyang-shengong"\n    && random(2) == 0) {`；在 `hymud` `4` 份任务表补回闭合 `"`，在 `haiyang2` `4` 份任务表自同源完好 `hy5` 恢复后半段干净文本（全部保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule hy-danuoyi-quest-unclosed-quote`（targeted 规则，校验上述两类阻断）。
+
+### 6.90 泥潭系 `d/city2/npc/jianjun.lpc` 未声明 `int count;` 与 `wxddym` 四份语法/重声明阻断（4 馆，8 份文件）
+
+Symptom: 扫描 `wxddym`（`24,986` 份可编译非 `/u/` 文件零告警）发现五处活跃编译阻断：
+1. `/d/city2/npc/jianjun.lpc:50`（`nitan3`、`nitan_ceshi`、`nitan_san`、`wxddym` 共 `4` 馆）：`give_quest()` 中赋值 `count = 600000;` 却未声明局部变量 `int count;`（而 `hhsj`/`nitan6`/`nitan170911`/`nt6`/`nt6nitan6win`/`xfbhh` 与 `maze/battle3/npc/jianjun.lpc` 均已声明），致 `count` 解析为同名函数触发 `Illegal lvalue` / `Bad assignment ( function vs int )`。
+2. `wxddym` `/d/city/npc/tianshi.lpc:49`：`int accept_object(object who, object ob)` 首行重复声明 `object ob;` 触发 `Illegal to redeclare local name 'ob'`。
+3. `wxddym` `/kungfu/skill/tangmen-throwing/san.lpc:46`：`me->query_skill("force")++ me->query_skill("aqbj")` 误写 `++` 触发 `Illegal lvalue`。
+4. `wxddym` `/clone/npc/killer.lpc:22`：`set("qi", 100)  //...` 缺少分号触发 `unexpected L_DEFINED_NAME`。
+5. `wxddym` `/npc/feizei14.lpc:51-53`：`map_skill("sword", "huashan-jianfa");` 后残留多余 `}\n)\n);` 触发 `syntax error, unexpected ')'`。
+
+Fix: 在 `4` 馆 `jianjun.lpc` `give_quest()` 补齐 `int count;`，并在 `wxddym` 分别删除 `tianshi.lpc` 重复声明、`san.lpc` 改 `++` 为 `+`、`killer.lpc` 补 `;`、`feizei14.lpc` 删去多余 `}\n)\n);`（保留原 CRLF/LF 行尾并用 `lpc_format_changed.py --apply` 规范排版）。
+Detection: `scripts/lint.py --rule jianjun-count-wxddym-blockers`（targeted 规则，校验上述五类阻断）。
