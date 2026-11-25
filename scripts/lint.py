@@ -209,7 +209,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("xyj-xiwangmu-vcd3-blockers", "targeted", "KB 04 §6.99", "error", "`d/moon/npc/xiwangmu.lpc` duplicate `ask_pantao()` or `clone/misc/vcd3.lpc` stray duplicated `users());`"),
     RuleSpec("zhaoshi-premature-action-close", "targeted", "KB 04 §6.100", "error", "Player-created skill `mapping *action = ({ });` prematurely closed before `// ZHAOSHI :0` entries"),
     RuleSpec("tang-raw-telnet-utf8-literal", "targeted", "KB 04 §6.101", "error", "`clone/misc/tang.lpc` raw Telnet IAC octal bytes (`\\377...`) in UTF-8 string literal"),
-    RuleSpec("dtsl-missing-wanted-h", "targeted", "KB 04 §6.102", "error", "`d/zhiye/npc/biaotou{,2}.lpc` `#include <wanted.h>` when `include/wanted.h` is missing"),
+    RuleSpec("dtsl-missing-wanted-h", "targeted", "KB 04 §6.102", "error", "`#include <wanted.h>` in active rooms/NPCs (`biaotou{,2}`, `quest11/{lcj/damen,tlbb/*}`, `hdg/shanbi`) when `include/wanted.h` is missing"),
     RuleSpec("nitan-lcj-stale-lchj-include", "targeted", "KB 04 §6.103", "error", "`quest*/lcj/*.lpc` stale `#include \"/d/suzhou/npc/lchj.h\"` when local `lchj.h` exists"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
@@ -2003,7 +2003,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["zhao_cls"].append(item)
         if rel == "/clone/misc/tang.lpc":
             targeted_bins["tang_iac"].append(item)
-        if rel in ("/d/zhiye/npc/biaotou.lpc", "/d/zhiye/npc/biaotou2.lpc"):
+        if rel in ("/d/zhiye/npc/biaotou.lpc", "/d/zhiye/npc/biaotou2.lpc", "/quest11/lcj/damen.lpc", "/quest11/tlbb/guangchang.lpc", "/quest11/tlbb/silk3.lpc", "/d/mingjiao/hdg/shanbi.lpc"):
             targeted_bins["biaotou_w"].append(item)
         if ("/lcj/" in rel) and rel.endswith(".lpc"):
             targeted_bins["lcj_inc"].append(item)

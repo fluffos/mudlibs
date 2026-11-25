@@ -2060,3 +2060,12 @@ Symptom: 扫描 `nitan6` 并全库扫查所有活跃库，发现泥潭 6/7 系 `
 
 Fix: 将 `24` 份文件的 `#include "/d/suzhou/npc/lchj.h"` 统一改为本地相对路径 `#include "lchj.h"`（二进制替换完整保留 `18` 份 CRLF 与 `6` 份 `wan.lpc` 原有混合行尾），一次性解锁全部 `18` 份 `qi.lpc`/`taohong.lpc`/`wan.lpc` 编译加载（`dizi7.lpc` 另缺 `question.h` 属独立问题）。
 Detection: `scripts/lint.py --rule nitan-lcj-stale-lchj-include`（targeted 规则，校验 `*/lcj/*.lpc` 在无 `/d/suzhou/npc/lchj.h` 且同目录存在 `lchj.h` 时是否仍包含旧绝对路径）。
+
+### 6.104 全库剩余 `include/wanted.h` 缺失补齐（`nitan6`/`nt6`/`nt6nitan6win`/`wxddym`，4 馆新增 4 份头文件 + 3 份 `close_gate` 告警清零）
+
+Symptom: 全语料扫查所有活跃非巫师文件 `#include <wanted.h>`，发现除 §6.102 的大唐双龙系外，尚有 `4` 馆共 `10` 份房间文件缺失 `/include/wanted.h`：
+1. `nitan6`、`nt6`、`nt6nitan6win`（`3` 馆共 `9` 份）：`/quest11/lcj/damen.lpc`、`/quest11/tlbb/guangchang.lpc`、`/quest11/tlbb/silk3.lpc` 均报错 `Cannot #include wanted.h` / `Undefined function is_wanted`；解锁 `guangchang.lpc` 后另暴露第 `62` 行 `int close_gate()` 与基类 `/inherit/room/room.lpc` `void close_gate()` 返回类型冲突告警。
+2. `wxddym`（`1` 份）：`/d/mingjiao/hdg/shanbi.lpc` 报错 `Cannot #include wanted.h`。
+
+Fix: 从同源 `hhsj` 引入 `11` 行 `/include/wanted.h`（`is_wanted(object me)`）至上述 `4` 馆（匹配各馆行尾风格），并将 `3` 馆 `guangchang.lpc:62` 的 `int close_gate()` 改为 `void close_gate()`（保留原 CRLF 行尾）。至此全语料活跃非巫师路径零缺失 `<wanted.h>`。
+Detection: 扩展 `scripts/lint.py --rule dtsl-missing-wanted-h` 同步覆盖上述 `6` 类路径。

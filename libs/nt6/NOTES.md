@@ -933,3 +933,8 @@ pristine + build-debug，port 40186。`scripts/play_login.py` 注册并执行 `l
 
 - 将连城诀任务目录下 `dizi7.lpc`、`qi.lpc`、`taohong.lpc`、`wan.lpc`（`4` 份）中已失效的书剑旧路径 `#include "/d/suzhou/npc/lchj.h"` 改为同目录 `#include "lchj.h"`（保留原 CRLF / `wan.lpc` 混合行尾），立即解锁 `qi.lpc`、`taohong.lpc`、`wan.lpc` 编译加载（`dizi7.lpc` 另缺 `question.h`）。
 - 验证：`lpc_format_changed.py` `24/24` `0` 重排；`lpcc --batch` 全批 `6` 馆 `18/18` `qi`/`taohong`/`wan` 零错零告警 `PASS`；`lpcc_eval.py`（`nitan6`/`hhsj` `3/3`）由 `--head` `FAIL` 转为干净 `PASS`；`scripts/lint.py`（新增规则 #164 `nitan-lcj-stale-lchj-include`，共 `164` 条）`--changed HEAD` 与 `--fast` 零错零告警；`6/6` 馆 `play_boot.sh`+`play_stop.sh`（端口 `48051..48056`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-25 补齐 `include/wanted.h` 解锁 `quest11` 房间并清零 `guangchang.lpc` 告警（KB 04 §6.104）
+
+- 从同源 `hhsj` 引入缺失的 `11` 行 `/include/wanted.h`（定义 `is_wanted(object me)`），消除 `/quest11/lcj/damen.lpc`、`/quest11/tlbb/guangchang.lpc`、`/quest11/tlbb/silk3.lpc` 的 `Cannot #include wanted.h` 编译阻断；同步将解锁后暴露的 `/quest11/tlbb/guangchang.lpc:62` `int close_gate()` 改为 `void close_gate()`（匹配 `/inherit/room/room.lpc`，保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py` `3/3` `0` 重排；`lpcc --batch` `guangchang`/`silk3` 零错零告警 `PASS`；`lpcc_eval.py`（`nitan6` `2/2`）由 `--head` `FAIL` 转为干净 `PASS`；`scripts/lint.py`（扩展规则 #163 `dtsl-missing-wanted-h`，共 `164` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
