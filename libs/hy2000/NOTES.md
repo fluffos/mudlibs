@@ -537,3 +537,8 @@ pristine + build-debug，port 40174。`scripts/play_login.py` 注册。
 
 - 删除 `/quest/qhlist600000.lpc:2180` `"pot_bonus": 44,` 后的裸字母 `r`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `12/12` `0` 重排；`lpcc --batch` 全批 `9` 馆 `12` 文件零错零告警 `PASS`；`lpcc_eval.py`（`chidi` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #125 `qhlist-cike-chidi-syntax`，共 125 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47751..47756`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 华山郎中 `d/huashan/npc/doctor.lpc` 补回 `sprintf()` 参数行（KB 04 §6.84）
+
+- 在 `/d/huashan/npc/doctor.lpc:41-42` `sprintf("%s 想自宫可惜办不到, 哈哈..\n",` 后补回丢失的 `me->query("name")));`（消除 `syntax error, unexpected L_RETURN` 编译阻断，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `15/15` 格式化零错；`lpcc --batch` 全批 `15/15` 由 `HEAD` `FAIL` 转为零错零告警 `PASS`；`lpcc_eval.py`（`wmkj`/`hy2000`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #145 `huashan-doctor-unclosed-sprintf`，共 145 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47871..47876`）均通过且 `ZERO_DRIVERS`。

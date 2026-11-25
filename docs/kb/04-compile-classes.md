@@ -1893,3 +1893,10 @@ Symptom: `jyqxc`、`jyqxc2`、`ldtx`、`ldtxii`、`syxjl`、`xiakexing3`、`xkxl
 
 Fix: 将 `7` 馆 `changjinpeng.lpc:71` 改引 `#include "/d/mingjiao/npc/tanzhu.h"`，并将 `11` 馆 `laozhe.lpc:25` `object ob, me, what;` 改为 `object ob, me;`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule changjinpeng-tanzhu-include`（targeted 规则，校验 `d/mingjiao/npc/changjinpeng.lpc` 在缺失 `/kungfu/class/mingjiao/tanzhu.h` 而存在 `/d/mingjiao/npc/tanzhu.h` 时是否仍引用旧路径）。
+
+### 6.84 华山郎中 `d/huashan/npc/doctor.lpc` 丢失 `sprintf()` 参数行致 `unexpected L_RETURN`（15 馆，15 份文件）
+
+Symptom: `ffxymud`、`hy`、`hy2000`、`hy2002`、`hyiishzdscbb`、`jhfy`、`jhfy2`、`tianxiawuxue`、`wmkj`、`xhcii`、`xkxyb`、`xysylmhb`、`xyzx3`、`xyzxiiylzymh`、`yzxiiizylfy` 共 `15` 馆的 `/d/huashan/npc/doctor.lpc:41-42` 在 `CHANNEL_D->do_channel(this_object(), "chat", sprintf("%s 想自宫可惜办不到, 哈哈..\n",` 后直接丢失 `me->query("name")));` 一行而紧接 `return 0;`，触发 `syntax error, unexpected L_RETURN` 阻断华山郎中 NPC 编译加载。
+
+Fix: 补回缺失的 `me->query("name")));`（与同源完好馆一致）并用 `lpc_format_changed.py --apply` 规范缩进（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule huashan-doctor-unclosed-sprintf`（targeted 规则，校验 `d/huashan/npc/doctor.lpc` 是否在 `sprintf("%s ...",` 后紧接 `return 0;`）。

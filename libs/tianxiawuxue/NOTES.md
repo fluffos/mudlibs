@@ -1472,3 +1472,8 @@ pristine + build-debug，归档端口 40045。`scripts/play_login.py` 注册并�
 
 - 修复 `/d/japan/npc/xiaoquan.lpc` 第 `7` 行 `set_name(HIW"小犬蠢一狼NOR, ...)` 缺失的 `NOR` 前闭合引号（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `20` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `20/20` 目标全数干净加载 `PASS`（`haiyang2`/`hy5`/`sje`/`shenzhou`/`tianxiawuxue`/`shenmo`/`kxkj` 等均由 `--head` 编译报错转为 `ok=1`）；`scripts/lint.py`（新增规则 #100 `unclosed-color-nor-quote`，`KB 04 §6.43`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`9` 馆代表（`haiyang2`/`hy5`/`hhsj`/`kxkj`/`shenmo`/`shenzhou`/`sje`/`tianxiawuxue`/`wxddym`，端口 `47512..47520`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-24 华山郎中 `d/huashan/npc/doctor.lpc` 补回 `sprintf()` 参数行（KB 04 §6.84）
+
+- 在 `/d/huashan/npc/doctor.lpc:41-42` `sprintf("%s 想自宫可惜办不到, 哈哈..\n",` 后补回丢失的 `me->query("name")));`（消除 `syntax error, unexpected L_RETURN` 编译阻断，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `15/15` 格式化零错；`lpcc --batch` 全批 `15/15` 由 `HEAD` `FAIL` 转为零错零告警 `PASS`；`lpcc_eval.py`（`wmkj`/`hy2000`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #145 `huashan-doctor-unclosed-sprintf`，共 145 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47871..47876`）均通过且 `ZERO_DRIVERS`。

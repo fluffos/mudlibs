@@ -520,3 +520,8 @@ pristine + build-debug，port 40142。客户端版本握手（`shikongyouxia3.0`
 
 - 注释掉 `/clone/guan/home.lpc` 中调用 `set_max_items(...)` 的语句（本馆 `feature/move.lpc` 仅实现 `set_max_encumbrance()`、未定义 `set_max_items()`，对照 `bmxkx2001`/`chidi`/`hymud`/`yxcs`/`zhyx` 同源做法，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `19/19` `0` 重排；`lpcc --batch` 全批 `11` 馆 `19` 文件均由 `Undefined function set_max_items` 转为零错零告警 `PASS`；`lpcc_eval.py`（`mnhf`/`sjpl2`/`wqfy`/`zhonghua2` 代表）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #122 `undefined-set-max-items`，共 122 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47721..47726`）全通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 华山郎中 `d/huashan/npc/doctor.lpc` 补回 `sprintf()` 参数行（KB 04 §6.84）
+
+- 在 `/d/huashan/npc/doctor.lpc:41-42` `sprintf("%s 想自宫可惜办不到, 哈哈..\n",` 后补回丢失的 `me->query("name")));`（消除 `syntax error, unexpected L_RETURN` 编译阻断，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `15/15` 格式化零错；`lpcc --batch` 全批 `15/15` 由 `HEAD` `FAIL` 转为零错零告警 `PASS`；`lpcc_eval.py`（`wmkj`/`hy2000`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #145 `huashan-doctor-unclosed-sprintf`，共 145 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47871..47876`）均通过且 `ZERO_DRIVERS`。
