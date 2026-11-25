@@ -1265,3 +1265,8 @@ pristine + build-debug，port 40088。`scripts/play_login.py` 注册。
 
 - 截断 `/kungfu/skill/qiantian-yiyang/kong.lpc` 第 `42` 行起误粘贴的 `> cat kong.c  // jing.c 静` 及其整份重复副本（保留第 `1–41` 行完整源码与原 CRLF 行尾），消除 `syntax error, unexpected L_ORDER` 编译阻断。
 - 验证：`lpc_format_changed.py` 保持 `KEEP`、`file` 确认纯 CRLF；`lpcc_eval.py` 实测 `/kungfu/skill/qiantian-yiyang/kong` 由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #112 `pasted-shell-prompt`，共 112 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47621`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `changjinpeng.lpc` 错路径 `tanzhu.h` 与 `laozhe.lpc` 未用局部修复（KB 04 §6.83）
+
+- 将 `/d/mingjiao/npc/changjinpeng.lpc:71` `#include "/kungfu/class/mingjiao/tanzhu.h"` 改为同目录 `#include "/d/mingjiao/npc/tanzhu.h"`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py` `18/18` `0` 重排；`lpcc --batch` 全批 `14` 馆 `18/18 PASS` 零错零告警；`lpcc_eval.py`（`jyqxc`）由 `--head` `Cannot #include`+`Unused local` 转为零告警 `PASS`；`scripts/lint.py`（新增规则 #144 `changjinpeng-tanzhu-include`，共 144 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47861..47866`）均通过且 `ZERO_DRIVERS`。

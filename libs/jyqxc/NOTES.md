@@ -522,3 +522,8 @@ pristine + build-debug，port 40129。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/d/heimuya/mishi.lpc:48,59,84` 两处 `this_player());` 截断与末尾重复 `oid buqun_rob` 片段（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 全批 `5` 馆 `8` 文件零错零告警 `PASS`；`lpcc_eval.py`（`cctx` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #124 `heimuya-mishi-cctx-syntax`，共 124 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `5` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47741..47745`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `changjinpeng.lpc` 错路径 `tanzhu.h` 与 `laozhe.lpc` 未用局部修复（KB 04 §6.83）
+
+- 将 `/d/mingjiao/npc/changjinpeng.lpc:71` `#include "/kungfu/class/mingjiao/tanzhu.h"` 改为同目录 `#include "/d/mingjiao/npc/tanzhu.h"`，并移除 `/d/heimuya/npc/laozhe.lpc:25` 未用局部变量 `what`（保留原 CRLF/LF 行尾，本馆全库 `2,990` 份可编译文件零告警）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py` `18/18` `0` 重排；`lpcc --batch` 全批 `14` 馆 `18/18 PASS` 零错零告警；`lpcc_eval.py`（`jyqxc`）由 `--head` `Cannot #include`+`Unused local` 转为零告警 `PASS`；`scripts/lint.py`（新增规则 #144 `changjinpeng-tanzhu-include`，共 144 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47861..47866`）均通过且 `ZERO_DRIVERS`。

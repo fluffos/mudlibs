@@ -190,6 +190,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("weapon-feature-include-dotc", "targeted", "KB 04 §6.80", "error", "`std/weapon/_*.lpc` stale `#include \"<name>.c\"` after `.c`->`.lpc` rename when `<name>.lpc` exists"),
     RuleSpec("shenzhou-syntax-include-blockers", "targeted", "KB 04 §6.81", "error", "`shenzhou` `pantao.lpc` missing `;`, `bangjob200000.lpc` stray `]),`, `hetaichong.lpc` unclosed quote, or `haishui3.lpc`/`yaoshui.h` glued `#include`"),
     RuleSpec("shujian-buliao-change-state", "targeted", "KB 04 §6.82", "error", "`d/zhiye/obj/buliao.h` missing `change_state()` called by `buliao{1..4}-2.lpc` and `zhibuji.lpc`"),
+    RuleSpec("changjinpeng-tanzhu-include", "targeted", "KB 04 §6.83", "error", "`d/mingjiao/npc/changjinpeng.lpc` stale `#include \"/kungfu/class/mingjiao/tanzhu.h\"` when `/d/mingjiao/npc/tanzhu.h` exists"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1792,7 +1793,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1991,6 +1992,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["weapon_feat"].append(item)
         if rel == "/d/zhiye/obj/buliao.h":
             targeted_bins["buliao_h"].append(item)
+        if rel == "/d/mingjiao/npc/changjinpeng.lpc":
+            targeted_bins["cjp_tanzhu"].append(item)
         if rel in (
             "/clone/gift/pantao.lpc",
             "/d/huanghe/bangjob/bangjob200000.lpc",
@@ -2561,6 +2564,14 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if b"void change_name(" in b and b"void change_state(" not in b:
                 col.add("shujian-buliao-change-state", p, "`buliao.h` defines `change_name()` without `change_state()` needed by `buliao*-2.lpc` and `zhibuji.lpc`")
+
+    if col.wants("changjinpeng-tanzhu-include"):
+        for slug, p, _ in targeted_bins["cjp_tanzhu"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b'#include "/kungfu/class/mingjiao/tanzhu.h"' in b:
+                if (not os.path.exists(f"{REPO}/libs/{slug}/work/kungfu/class/mingjiao/tanzhu.h")
+                        and os.path.exists(f"{REPO}/libs/{slug}/work/d/mingjiao/npc/tanzhu.h")):
+                    col.add("changjinpeng-tanzhu-include", p, 'stale `#include "/kungfu/class/mingjiao/tanzhu.h"` when `/d/mingjiao/npc/tanzhu.h` exists')
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

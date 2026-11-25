@@ -1886,3 +1886,10 @@ Symptom: `bxsj`、`bxsj1`、`dtsl`、`dtsl2`、`dtslmud`、`shujian2008`、`shuj
 
 Fix: 在 `9` 馆 `/d/zhiye/obj/buliao.h` 末尾补入 `void change_state() { change_name(); }`（保留原 CRLF 行尾与 `caifengzhuo.lpc` 使用的 `change_name()`），同时解锁全部 `36` 份 `buliao{1..4}-2.lpc` 与织布机 `zhibuji.lpc` 变名流程。
 Detection: `scripts/lint.py --rule shujian-buliao-change-state`（targeted 规则，校验 `d/zhiye/obj/buliao.h` 定义 `change_name()` 时是否缺少 `change_state()`）。
+
+### 6.83 明教 `d/mingjiao/npc/changjinpeng.lpc` 过期 `tanzhu.h` 引用与黑木崖 `laozhe.lpc` 未用局部（14 馆，18 份文件）
+
+Symptom: `jyqxc`、`jyqxc2`、`ldtx`、`ldtxii`、`syxjl`、`xiakexing3`、`xkxlb` 共 `7` 馆的 `/d/mingjiao/npc/changjinpeng.lpc:71` 仍写 `#include "/kungfu/class/mingjiao/tanzhu.h"`，而这些馆将明教坛主头文件放在同目录 `/d/mingjiao/npc/tanzhu.h`，触发 `Cannot #include /kungfu/class/mingjiao/tanzhu.h` 阻断常金鹏编译加载；此外 `jqxz2008`、`jqxz2008dlx`、`jqxz2008std`、`jqxz2015`、`jyqxc`、`jyqxc2`、`jyqxc2013fwq`、`xiakexing2017`、`xiakexing3`、`xkx2017`、`xkxlb` 共 `11` 馆的 `/d/heimuya/npc/laozhe.lpc:25` 在注释掉 `what = new(...)`（KB 06 §7.360）后遗留未用局部变量 `what`，清理后 `jyqxc` 全库 `2,990` 份可编译文件零告警。
+
+Fix: 将 `7` 馆 `changjinpeng.lpc:71` 改引 `#include "/d/mingjiao/npc/tanzhu.h"`，并将 `11` 馆 `laozhe.lpc:25` `object ob, me, what;` 改为 `object ob, me;`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule changjinpeng-tanzhu-include`（targeted 规则，校验 `d/mingjiao/npc/changjinpeng.lpc` 在缺失 `/kungfu/class/mingjiao/tanzhu.h` 而存在 `/d/mingjiao/npc/tanzhu.h` 时是否仍引用旧路径）。
