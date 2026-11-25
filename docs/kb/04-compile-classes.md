@@ -2012,3 +2012,13 @@ Symptom: 扫描 `fy2`（`2,819` 份可编译文件零告警）并全库扫查，
 
 Fix: 分别补全 `eventd.lpc` 闭合引号、参照 `es2` 将 `bamboo3.lpc` 的 `setup(); }` 移回 `set("exits", ...));` 之后、并为 `cola.lpc` 补回 `inherit ITEM;`（保留各文件原 CRLF/LF 行尾并用 `lpc_format_changed.py --apply` 规范排版）。
 Detection: `scripts/lint.py --rule fy2-eventd-bamboo3-cola`（targeted 规则，校验上述三类阻断）。
+
+### 6.98 `tianxia` `adm/daemons/banghui_d.lpc` 未定义 `tmp`/`dir_pre` 与 `return notify_fail` 类型冲突（1 馆，1 份核心守护进程）
+
+Symptom: 扫描 `tianxia`（`5,747` 份可编译文件零告警）发现 `feature/banghui.lpc` 所依赖的核心守护进程 `/adm/daemons/banghui_d.lpc` 存在三处编译阻断：
+1. `string buildup_new_guild()` 中 `5` 处 `return notify_fail(...);` 触发 `Type of returned value doesn't match function return type ( void vs string )`。
+2. `register_banghui_name(string str)` 与 `unregister_banghui_name(string str)` 中将形参 `str` 误写为未定义的 `tmp`（第 `81`/`94`/`97` 行）。
+3. 第 `675`/`876` 行仍沿用旧变量 `dir_pre`（`sprintf("%s%s/", dir_pre, id)`），实际已改用全局宏 `BANGHUI_DIR`。
+
+Fix: 将 `buildup_new_guild()` 的 `5` 处 `return notify_fail(...);` 拆为 `notify_fail(...); return 0;`、将 `register_banghui_name()`/`unregister_banghui_name()` 中的 `tmp` 改为 `str`、并将两处 `dir_pre` 替换为 `BANGHUI_DIR`（保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule tianxia-banghui-d-blockers`（targeted 规则，校验 `adm/daemons/banghui_d.lpc` 是否残留 `member_array(tmp, bh_cnames)` 或 `dir_pre`）。

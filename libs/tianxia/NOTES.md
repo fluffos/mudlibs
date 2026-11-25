@@ -1177,3 +1177,4 @@ pristine + build-debug，port 40044。`scripts/play_login.py` 注册并执行 `l
 
 - `query_save_file()` 将 `base_name(this_object())` 误写成 `base_name("this_object()")`，传入 `adm/simul_efun/file.lpc` 的 `base_name(object ob)` 后直接触发 `*Bad argument 1 to file_name() Expected: object Got: "this_object()".` 运行时崩溃；改为 `base_name(this_object())`。
 - 验证：`lpcc_eval.py` 探针 `new("/std/banghui/smith")->query_save_file()` 由 `--head` 崩溃转为返回 `"/std/banghui/smith"` `PASS`；`scripts/lint.py --rule quoted-efun-call --all` 全语料零命中。
+- 2026-11-25（KB 04 §6.98）：修复核心守护进程 `/adm/daemons/banghui_d.lpc` `buildup_new_guild()` `return notify_fail()` 类型冲突、`register_banghui_name()`/`unregister_banghui_name()` 未定义 `tmp`（改为 `str`）及两处未定义 `dir_pre`（改为 `BANGHUI_DIR`）；`lpcc --batch` 零告警通过，新增回归规则 `tianxia-banghui-d-blockers`。
