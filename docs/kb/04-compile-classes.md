@@ -2069,3 +2069,13 @@ Symptom: 全语料扫查所有活跃非巫师文件 `#include <wanted.h>`，发�
 
 Fix: 从同源 `hhsj` 引入 `11` 行 `/include/wanted.h`（`is_wanted(object me)`）至上述 `4` 馆（匹配各馆行尾风格），并将 `3` 馆 `guangchang.lpc:62` 的 `int close_gate()` 改为 `void close_gate()`（保留原 CRLF 行尾）。至此全语料活跃非巫师路径零缺失 `<wanted.h>`。
 Detection: 扩展 `scripts/lint.py --rule dtsl-missing-wanted-h` 同步覆盖上述 `6` 类路径。
+
+### 6.105 清零 `hell` 全库编译诊断：`yangrongwan.lpc` `set_amount()`、`bowl.lpc` 字串 `set_name()` 与 `4` 份重复 `query_autoload()`（2 馆，7 份文件）
+
+Symptom: 扫描 `hell`（`7,456` 份可编译文件零告警）发现全库仅剩 `6` 份编译失败文件（同步扫查全语料另命中 `wllz3` 同源 `bowl.lpc`）：
+1. `hell` `/clone/gift/yangrongwan.lpc:20`：继承 `ITEM`（非 `COMBINED_ITEM`）且 `do_effect()` 直接 `destruct(this_object())`，却调用 `set_amount(1);` 触发 `Undefined function set_amount`。
+2. `hell` 与 `wllz3` `/d/baituo/npc/obj/bowl.lpc:7/8`：`set_name("海口大碗", "bowl");` 误传字符串而非 `string *` 数组，触发 `Bad type for argument 2 of set_name ( string * vs string )`（KB 06 §7.260）。
+3. `hell` `/clone/special/bear.lpc:586`、`/d/city/npc/obj/lbook3.lpc:28`、`/d/xiaoyao/npc/obj/lbook4.lpc:27`、`/d/xiaoyao/obj/lbook4.lpc:26`：文件末尾重复追加 `int query_autoload() { return 1; }` 触发 `Redeclaration of function 'query_autoload'`。
+
+Fix: 删除 `yangrongwan.lpc:20` 无效 `set_amount(1);`、将两馆 `bowl.lpc` 改为 `set_name("海口大碗", ({ "bowl" }));`、并删去 `hell` `4` 份文件末尾重复 `query_autoload()`（保留原 CRLF/LF 行尾），使 `hell` 全库 `7,462` 份文件实现零编译诊断。
+Detection: `scripts/lint.py --rule hell-zero-diag-blockers`（targeted 规则，校验上述三类阻断）。
