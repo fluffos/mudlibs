@@ -2039,3 +2039,10 @@ Symptom: 扫描 `xkx100`（`14,245` 份可编译文件零告警）并全库扫�
 
 Fix: 删除 `xkx100` 与 `xiakexing100` `dragonfly-sword.lpc` 第 `16` 行多余的 `});`（保留原 LF 行尾），将 `xkx100` 全库 `14,246` 份活跃代码清零至 `0` 编译错误、`0` 编译告警。
 Detection: `scripts/lint.py --rule zhaoshi-premature-action-close`（targeted 规则，校验 `mapping *action = ({` 与 `// ZHAOSHI :0` 招式映射 `([` 之间是否提前插入 `});`）。
+
+### 6.101 书剑系 `clone/misc/tang.lpc` 字符串内嵌原始 Telnet IAC 八进制字节（`Invalid UTF8 codepoint in string literal`，8 馆，8 份文件）
+
+Symptom: 扫描 `bxsj`（`9,911` 份可编译文件）并全库扫查所有活跃库字符串中的 `\377` 原始字节，发现书剑系 `8` 馆（`bxsj`、`bxsj1`、`jh2006`、`jinyongwenzi`、`shujian2008`、`shujian3`、`sjecl`、`sjtx2`）的 `/clone/misc/tang.lpc:7` 均写有 `nosave string ff = "\377\371\377\376\042\377\374\005\n[-Yes-] \n";`（历史 MudOS 用于在 `receive_snoop()` 中剔除 Telnet IAC GA/DONT/WONT 字节与提示符）。FluffOS 要求字符串字面量为合法 UTF-8，直接报错 `Invalid UTF8 codepoint in string literal` 并引发第 `46` 行 `Illegal LHS` 级联编译阻断。
+
+Fix: 去除 `ff` 前导原始 Telnet 字节，改为合法 UTF-8 字面量 `nosave string ff = "\n[-Yes-] \n";`（保留 `6` 馆 CRLF 与 `jh2006`/`jinyongwenzi` LF 行尾），`8/8` 编译通过且级联报错全部消失。
+Detection: `scripts/lint.py --rule tang-raw-telnet-utf8-literal`（targeted 规则，校验 `clone/misc/tang.lpc` 是否残留 `\377` 原始字节转义）。

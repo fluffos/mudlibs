@@ -469,3 +469,8 @@ pristine + build-debug，port 40139。`scripts/play_login.py` 注册并执行 `l
 
 - 在 `/d/zhiye/obj/buliao.h` 末尾补入 `void change_state() { change_name(); }`（保留原 CRLF 行尾与 `caifengzhuo.lpc` 使用的 `change_name()`），消除 `buliao{1..4}-2.lpc` 编译阻断（`Undefined function change_state`）并修复织布机 `/d/zhiye/obj/zhibuji.lpc:140,149` 织布后未变名问题。
 - 验证：`lpc_format_changed.py` `9/9` `0` 重排；`lpcc --batch` 全批 `9` 馆 `36/36` `buliao{1..4}-2.lpc` 零错零告警 `PASS`；`lpcc_eval.py`（`shujian2008`/`dtsl`）由 `--head` `buliao1-2` 编译报错且 `buliao1->change_state()` 静默失效转为 `PASS`；`scripts/lint.py`（新增规则 #143 `shujian-buliao-change-state`，共 143 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47851..47856`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-25 `clone/misc/tang.lpc` 原始 Telnet 字节导致 `Invalid UTF8 codepoint` 修复（KB 04 §6.101）
+
+- 将 `/clone/misc/tang.lpc:7` 的 `nosave string ff = "\377\371\377\376\042\377\374\005\n[-Yes-] \n";` 去除非法 UTF-8 的 Telnet IAC 原始字节，改为 `nosave string ff = "\n[-Yes-] \n";`（保留原 CRLF/LF 行尾），消除 `Invalid UTF8 codepoint in string literal` 及第 `46` 行级联 `Illegal LHS` 编译阻断。
+- 验证：`lpc_format_changed.py` `8/8` `0` 重排；`lpcc --batch` 全批 `8` 馆 `8/8` 零错零告警 `PASS`；`lpcc_eval.py`（`bxsj`/`jh2006`）由 `--head` `FAIL` 转为干净 `PASS`；`scripts/lint.py`（新增规则 #162 `tang-raw-telnet-utf8-literal`，共 `162` 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `48031..48036`）均通过且 `ZERO_DRIVERS`。
