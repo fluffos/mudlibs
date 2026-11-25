@@ -2053,3 +2053,10 @@ Symptom: 扫描 `dtslmud` 并全库扫查所有活跃库，发现大唐双龙系
 
 Fix: 从同源 `bxsj` 引入完整的 `12` 行 `/include/wanted.h`（定义 `int is_wanted(object me)`，保留 CRLF 行尾）至 `dtsl`、`dtsl2`、`dtslmud` 三馆（KB 04 §6.15 模式），一次性解锁全部 `6` 份 `biaotou{,2}.lpc`。
 Detection: `scripts/lint.py --rule dtsl-missing-wanted-h`（targeted 规则，校验 `d/zhiye/npc/biaotou{,2}.lpc` 包含 `<wanted.h>` 时同馆是否存在 `include/wanted.h`）。
+
+### 6.103 泥潭6/7系连城诀 NPC 过时 `#include "/d/suzhou/npc/lchj.h"`（6 馆，24 份文件）
+
+Symptom: 扫描 `nitan6` 并全库扫查所有活跃库，发现泥潭 6/7 系 `6` 馆（`hhsj`、`nitan170911`、`xfbhh` 位于 `/quest/skybook/lcj/`；`nitan6`、`nt6`、`nt6nitan6win` 位于 `/quest11/lcj/`）的 `4` 份连城诀任务 NPC（`dizi7.lpc`、`qi.lpc`、`taohong.lpc`、`wan.lpc`，共 `24` 份）仍沿用书剑原路径 `#include "/d/suzhou/npc/lchj.h";`，而各馆已将 `lchj.h` 迁至同目录，导致全部 `24` 份文件报错 `Cannot #include /d/suzhou/npc/lchj.h`。
+
+Fix: 将 `24` 份文件的 `#include "/d/suzhou/npc/lchj.h"` 统一改为本地相对路径 `#include "lchj.h"`（二进制替换完整保留 `18` 份 CRLF 与 `6` 份 `wan.lpc` 原有混合行尾），一次性解锁全部 `18` 份 `qi.lpc`/`taohong.lpc`/`wan.lpc` 编译加载（`dizi7.lpc` 另缺 `question.h` 属独立问题）。
+Detection: `scripts/lint.py --rule nitan-lcj-stale-lchj-include`（targeted 规则，校验 `*/lcj/*.lpc` 在无 `/d/suzhou/npc/lchj.h` 且同目录存在 `lchj.h` 时是否仍包含旧绝对路径）。

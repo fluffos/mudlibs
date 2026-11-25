@@ -1300,3 +1300,8 @@ pristine + build-debug（归档端口 `40106`，测试端口 `49106`）。`scrip
 
 - 将 `/d/city/task1/npc.h` 的 `int accept_hit(string arg)` 改为 `int accept_hit(mixed arg)`，解决 `accept_kill(who)`/`accept_ansuan(who)`/`accept_touxi(who)` 传入 `object who` 触发的 `Bad type for argument 1 of accept_hit ( string vs object )` 编译阻断（保留原 LF 行尾）。
 - 验证：`lpcc --batch` 全批 `9` 馆抽检逃犯 NPC 零错零告警 `PASS`；`scripts/lint.py`（规则 #139 `task1-npc-accept-hit-type`，共 139 条）`--changed HEAD` 与 `--fast` 零错零告警；`5` 馆代表（`xkx100`/`xiakexing100`/`nitan6`/`hhsj`/`wxddym`，端口 `47901..47905`）均通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-25 连城诀 NPC 过时 `#include "/d/suzhou/npc/lchj.h"` 修复（KB 04 §6.103）
+
+- 将连城诀任务目录下 `dizi7.lpc`、`qi.lpc`、`taohong.lpc`、`wan.lpc`（`4` 份）中已失效的书剑旧路径 `#include "/d/suzhou/npc/lchj.h"` 改为同目录 `#include "lchj.h"`（保留原 CRLF / `wan.lpc` 混合行尾），立即解锁 `qi.lpc`、`taohong.lpc`、`wan.lpc` 编译加载（`dizi7.lpc` 另缺 `question.h`）。
+- 验证：`lpc_format_changed.py` `24/24` `0` 重排；`lpcc --batch` 全批 `6` 馆 `18/18` `qi`/`taohong`/`wan` 零错零告警 `PASS`；`lpcc_eval.py`（`nitan6`/`hhsj` `3/3`）由 `--head` `FAIL` 转为干净 `PASS`；`scripts/lint.py`（新增规则 #164 `nitan-lcj-stale-lchj-include`，共 `164` 条）`--changed HEAD` 与 `--fast` 零错零告警；`6/6` 馆 `play_boot.sh`+`play_stop.sh`（端口 `48051..48056`）均通过且 `ZERO_DRIVERS`。
