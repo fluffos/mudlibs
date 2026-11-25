@@ -1496,3 +1496,8 @@ pristine + build-debug，归档端口 40056。`scripts/play_login.py` 注册进�
 
 - 删除 `/quest/qhlist600000.lpc:2180` `"pot_bonus": 44,` 后的裸字母 `r`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `12/12` `0` 重排；`lpcc --batch` 全批 `9` 馆 `12` 文件零错零告警 `PASS`；`lpcc_eval.py`（`chidi` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #125 `qhlist-cike-chidi-syntax`，共 125 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47751..47756`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 西域灵蛇 `lingshe.lpc` 编译与种族阻断修复（KB 04 §6.86）
+
+- 修复 `/d/xingxiu/npc/lingshe.lpc`（将 `set_color("$HIW$");` 改为 `HIW "灵蛇" NOR`、修正第 `79` 行 `me,);` 悬空逗号，并将本馆 `chard.lpc` 未定义的种族 `"蛇类"` 改为 `"野兽"`，保留原 CRLF 行尾）并移除 `/kungfu/skill/xixi-unarmed.lpc:1` 首行孤立 `c  `（保留原 LF 行尾）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `3` 项 `0` 待看；`lpc_format_changed.py` `8/8` `0` 重排；`lpcc --batch` 全批 `3` 馆 `8/8 PASS` 零错零告警；`lpcc_eval.py`（`wmkj`/`chidi`）由 `--head` 报错/告警转为 `PASS`；`scripts/lint.py`（新增规则 #147 `lingshe-set-color-wmkj-blockers`，共 147 条）`--changed HEAD` 与 `--fast` 零错零告警；`3/3` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47891..47893`）均通过且 `ZERO_DRIVERS`。

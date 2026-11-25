@@ -893,3 +893,8 @@ pristine + build-debug，port 40162。
 
 - 补全 `/quest/baobiao/cike.lpc:16,24` `to_int(ceil(...))` 与被截断的 `set_skill("hunyuan-yiqi", level); setup(); }` 结尾（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `12/12` `0` 重排；`lpcc --batch` 全批 `9` 馆 `12` 文件零错零告警 `PASS`；`lpcc_eval.py`（`chidi` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #125 `qhlist-cike-chidi-syntax`，共 125 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47751..47756`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 `kungfu/skill/xixi-unarmed.lpc` 首行孤立 `c  //` 编译阻断修复（KB 04 §6.86）
+
+- 移除 `/kungfu/skill/xixi-unarmed.lpc:1` 注释前的孤立 `c  `（消除 `unexpected L_INHERIT` 编译阻断，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `17/17` `xixi-unarmed.lpc` 零错零告警 `PASS`；`scripts/lint.py`（规则 #147 `lingshe-set-color-wmkj-blockers`，共 147 条）`--changed HEAD` 与 `--fast` 零错零告警。

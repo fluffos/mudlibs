@@ -1907,3 +1907,10 @@ Symptom: `ffxymud`、`jhfy2`、`jhfy3`、`tianxiawuxue`、`wmkj`、`wuhanzhan`�
 
 Fix: 在 `13` 馆删除重复的第二个 `void create()`，并在全部 `15` 馆移除首个 `create()` 中未用且会空指针崩溃的 `me`/`w_name`/`w_id`/`w_or` 及对应赋值，同时将第 `5` 行原型修正为 `int do_hui(string weapon);`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule m-bian-duplicate-create`（targeted 规则，校验 `d/npc/m_weapon/weapon/m_bian.lpc` 是否重复定义 `void create()` 或存在未判空 `w_name = me->query("weapon/name")`）。
+
+### 6.86 西域灵蛇 `d/xingxiu/npc/lingshe.lpc` 未定义 `set_color()`/`蛇类` 种族、`xixi-unarmed.lpc` 首行 `c  //` 与 `wmkj` 告警清零（18 馆，24 份文件）
+
+Symptom: `chidi`、`wmkj`、`yxcs` 共 `3` 馆的 `/d/xingxiu/npc/lingshe.lpc` 移植自神州系，同时存在三处阻断：第 `10` 行调用本馆不存在的 `set_color("$HIW$");`（`Undefined function set_color`）、第 `79` 行 `message_vision(..., me,);` 悬空逗号、以及第 `11` 行 `set("race", "蛇类");` 在本馆 `adm/daemons/chard.lpc` 中未定义（加载时报 `*Chard: undefined race 蛇类.`，本馆蛇类 NPC 均用 `"野兽"`）；`17` 馆（`ffxymud`、`hy3`、`jhfy`、`jhfy2`、`jhfy3`、`tianxiawuxue`、`wmkj`、`xajhzcjh`、`xjcq2000`、`xysylmhb`、`xyzx`、`xyzx3`、`xyzxfk`、`xyzxfy2`、`xyzxiiylzymh`、`yxcs`、`yzxiiizylfy`）的 `/kungfu/skill/xixi-unarmed.lpc:1` 首行多出 `c  //` 触发 `unexpected L_INHERIT`（`xjcq2000` 另缺 `#include <ansi.h>`）；此外 `wmkj` 另有 `/d/objj/cloth/tianyi.lpc:12` 调用 `feature/unique.lpc` 不存在的 `unique::init();` 及 `3` 处活文件编译告警（`/cmds/usr/news.lpc` 未用 `user`/`i`、`/quest/guojob/zzzjob.lpc:68` `accept_object` 缺 `varargs`、`/d/yandang/npc/sunerniang.lpc:2` 冗余 `inherit F_SAVE;`），清零后 `wmkj` 全库 `10,593` 份可编译文件零告警。
+
+Fix: 在 `3` 馆 `lingshe.lpc` 中将 `set_name` 改为 `HIW "灵蛇" NOR` 并移除 `set_color("$HIW$");`、将 `race` 改为 `"野兽"`、删去 `me,);` 悬空逗号；在 `17` 馆 `xixi-unarmed.lpc` 中移除首行 `c  `（`xjcq2000` 补 `#include <ansi.h>`）；在 `wmkj` 中移除 `tianyi.lpc` 的 `unique::init();`、`news.lpc` 未用 `user`/`i`、`sunerniang.lpc` 冗余 `inherit F_SAVE;`，并为 `zzzjob.lpc` `accept_object()` 补 `varargs`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule lingshe-set-color-wmkj-blockers`（targeted 规则，校验上述三类阻断）。
