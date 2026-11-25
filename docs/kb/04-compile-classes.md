@@ -1967,3 +1967,12 @@ Symptom: 扫描 `nt1`（`24,597` 份可编译文件零告警，全库非 `/u/` �
 
 Fix: 将 `nt1`（LF）与 `xkm`（CRLF）第 `48` 行恢复为 `return notify_fail("你的内力太弱，无法练圣火拳。\n");`，保留原行尾与缩进。
 Detection: `scripts/lint.py --rule shenghuo-quan-mojibake-quote`（targeted 规则，校验 `kungfu/skill/shenghuo-quan.lpc` 是否含乱码未闭合引号）。
+
+### 6.93 风云系 `purplerose.lpc` 错字 `else {d` 与 `newtask` 物件未定义 `setup()`（3 馆，12 份文件）
+
+Symptom: 扫描 `fysjmb`（`7,643` 份可编译文件零告警）发现 `fengyun434`、`fysjmb`、`xsfyssjb` 共 `3` 馆存在两类活跃编译阻断：
+1. `/d/fy/npc/obj/purplerose.lpc:10`：`else {d` 多出孤立字符 `d`，触发 `syntax error, unexpected L_DEFINED_NAME`。
+2. `/newtask/{hulu,shoupa,wavehammer}.lpc`：风云 `std/item.lpc` 与 `HAMMER` 使用 `::init_item()` / `init_hammer()` 而无 `setup()`，调用 `setup();` 触发 `Undefined function setup` 阻断编译。
+
+Fix: 在 `3` 馆删去 `purplerose.lpc:10` 孤立 `d`，将 `hulu.lpc`/`shoupa.lpc` 的 `setup();` 改为 `::init_item();`，并在已有 `init_hammer(160);` 的 `wavehammer.lpc` 中移除 `setup();`（保留各文件原 CRLF 行尾）。
+Detection: `scripts/lint.py --rule fy-purplerose-newtask-setup`（targeted 规则，校验上述两类阻断）。
