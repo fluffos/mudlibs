@@ -1900,3 +1900,10 @@ Symptom: `ffxymud`、`hy`、`hy2000`、`hy2002`、`hyiishzdscbb`、`jhfy`、`jhf
 
 Fix: 补回缺失的 `me->query("name")));`（与同源完好馆一致）并用 `lpc_format_changed.py --apply` 规范缩进（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule huashan-doctor-unclosed-sprintf`（targeted 规则，校验 `d/huashan/npc/doctor.lpc` 是否在 `sprintf("%s ...",` 后紧接 `return 0;`）。
+
+### 6.85 自造武器 `d/npc/m_weapon/weapon/m_bian.lpc` 重复 `void create()` 与空 `this_player()` 解引用崩溃（15 馆，15 份文件）
+
+Symptom: `ffxymud`、`jhfy2`、`jhfy3`、`tianxiawuxue`、`wmkj`、`wuhanzhan`、`xysylmhb`、`xyzx`、`xyzx3`、`xyzxfk`、`xyzxfy2`、`xyzxiiylzymh`、`yzxiiizylfy` 共 `13` 馆的 `/d/npc/m_weapon/weapon/m_bian.lpc` 定义了两个 `void create()`，触发 `Redeclaration of function 'create'` 阻断编译（同源反编译自线上 `.b` 二进制的 `longyunmeng_binary` 证实首个火龙鞭 `create()` 为真身，第二个仅是残缺副本）；此外上述 `13` 馆及已注释掉第二个 `create()` 的 `longyunmeng`、`xyzxyl201412` 共 `15` 馆在首个 `create()` 内直接执行无用且未判空的 `me = this_player(); w_name = me->query("weapon/name");`（在 `this_player() == 0` 载入时触发 `Bad argument 1 to call_other()` 崩溃，且第 `5` 行原型 `int do_hui(object weapon);` 与定义 `string weapon` 冲突）。
+
+Fix: 在 `13` 馆删除重复的第二个 `void create()`，并在全部 `15` 馆移除首个 `create()` 中未用且会空指针崩溃的 `me`/`w_name`/`w_id`/`w_or` 及对应赋值，同时将第 `5` 行原型修正为 `int do_hui(string weapon);`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule m-bian-duplicate-create`（targeted 规则，校验 `d/npc/m_weapon/weapon/m_bian.lpc` 是否重复定义 `void create()` 或存在未判空 `w_name = me->query("weapon/name")`）。

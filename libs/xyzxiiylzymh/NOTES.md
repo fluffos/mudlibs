@@ -483,3 +483,8 @@ pristine + build-debug（归档端口 40130，临时测试端口 49664）。`scr
 
 - 在 `/d/huashan/npc/doctor.lpc:41-42` `sprintf("%s 想自宫可惜办不到, 哈哈..\n",` 后补回丢失的 `me->query("name")));`（消除 `syntax error, unexpected L_RETURN` 编译阻断，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `15/15` 格式化零错；`lpcc --batch` 全批 `15/15` 由 `HEAD` `FAIL` 转为零错零告警 `PASS`；`lpcc_eval.py`（`wmkj`/`hy2000`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #145 `huashan-doctor-unclosed-sprintf`，共 145 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47871..47876`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-24 自造武器 `d/npc/m_weapon/weapon/m_bian.lpc` 重复 `create()` 与空指针解引用修复（KB 04 §6.85）
+
+- 在 `/d/npc/m_weapon/weapon/m_bian.lpc` 中删除重复的第二个 `void create()`，移除首个 `create()` 内未用且在 `this_player()==0` 时崩溃的 `me`/`w_name`/`w_id`/`w_or` 及 `me->query("weapon/...")` 赋值，并将第 `5` 行原型 `int do_hui(object weapon);` 修正为 `int do_hui(string weapon);`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `112` 项 `0` 待看；`lpc_format_changed.py` `15/15` `0` 重排；`lpcc --batch` 全批 `15/15 PASS` 零错零告警；`lpcc_eval.py`（`wmkj`/`longyunmeng`）由 `--head` 编译/空指针失败转为 `PASS`；`scripts/lint.py`（新增规则 #146 `m-bian-duplicate-create`，共 146 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47881..47886`）均通过且 `ZERO_DRIVERS`。

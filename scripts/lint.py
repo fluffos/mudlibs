@@ -192,6 +192,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("shujian-buliao-change-state", "targeted", "KB 04 §6.82", "error", "`d/zhiye/obj/buliao.h` missing `change_state()` called by `buliao{1..4}-2.lpc` and `zhibuji.lpc`"),
     RuleSpec("changjinpeng-tanzhu-include", "targeted", "KB 04 §6.83", "error", "`d/mingjiao/npc/changjinpeng.lpc` stale `#include \"/kungfu/class/mingjiao/tanzhu.h\"` when `/d/mingjiao/npc/tanzhu.h` exists"),
     RuleSpec("huashan-doctor-unclosed-sprintf", "targeted", "KB 04 §6.84", "error", "`d/huashan/npc/doctor.lpc` unclosed `sprintf(\"...想自宫可惜办不到...\",` followed directly by `return 0;`"),
+    RuleSpec("m-bian-duplicate-create", "targeted", "KB 04 §6.85", "error", "`d/npc/m_weapon/weapon/m_bian.lpc` duplicate `void create()` or unguarded `me = this_player(); w_name = me->query(\"weapon/name\");`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1794,7 +1795,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1997,6 +1998,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["cjp_tanzhu"].append(item)
         if rel == "/d/huashan/npc/doctor.lpc":
             targeted_bins["hs_doc"].append(item)
+        if rel == "/d/npc/m_weapon/weapon/m_bian.lpc":
+            targeted_bins["m_bian"].append(item)
         if rel in (
             "/clone/gift/pantao.lpc",
             "/d/huanghe/bangjob/bangjob200000.lpc",
@@ -2581,6 +2584,16 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if re.search(rb'sprintf\("%s [^\r\n"]+",\s*\r?\n\s*return 0;', b):
                 col.add("huashan-doctor-unclosed-sprintf", p, "unclosed `sprintf(...,` followed directly by `return 0;`")
+
+    if col.wants("m-bian-duplicate-create"):
+        for _, p, _ in targeted_bins["m_bian"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            mk = code_mask(b)
+            cb = bytes(ch if mk[i] else 32 for i, ch in enumerate(b))
+            if len(re.findall(rb'\bvoid\s+create\s*\(\s*\)\s*\{', cb)) >= 2:
+                col.add("m-bian-duplicate-create", p, "duplicate `void create()` definition")
+            elif b'w_name = me->query("weapon/name");' in cb and b'if (!me' not in cb:
+                col.add("m-bian-duplicate-create", p, "unguarded `me->query(\"weapon/name\")` when `this_player()` may be 0")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
