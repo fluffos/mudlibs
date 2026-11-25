@@ -1932,3 +1932,12 @@ Symptom: 扫描 `fqyy2`（`11,511` 份可编译文件零告警）发现四类跨
 
 Fix: 分别将 `3` 馆 `robber.lpc` 改为 `is_killing(this_player()->query("id"))`、`3` 馆 `zoulang_1.lpc` 改为 `]));`、`7` 馆 `shopman2.lpc` 注释掉残留 `// }));`（与 `hy5` 一致）、`3` 馆 `npc/3.lpc` 补齐分号并换行（保留各文件原 CRLF/LF 行尾并用 `lpc_format_changed.py --apply` 规范排版）。
 Detection: `scripts/lint.py --rule fqyy-robber-gaochang-shopman`（targeted 规则，校验上述四类阻断）。
+
+### 6.89 海洋系 `bingxue-xinfa/qiankun-danuoyi.lpc` 条件括号错位与 `quest.lpc`/`lagjobold.lpc` 缺闭合引号（3 馆，11 份文件）
+
+Symptom: 扫描 `haiyang2`（`25,604` 份可编译文件零告警）发现两类活跃编译阻断：
+1. `/kungfu/skill/bingxue-xinfa/qiankun-danuoyi.lpc:241-242`（`haiyang2`、`shenmo` 及 `shenmo` `/daemon/skill/bingxue-xinfa/qiankun-danuoyi.lpc`，共 `3` 份）：`if (... && me->query_skill_mapped("force") == "jiuyang-shengong")\n    && random(2) = 0 {` 提前闭合 `)` 且将 `==` 错写为 `=`，触发 `syntax error, unexpected L_LAND` / `Illegal LHS` 阻断编译。
+2. `/quest/{menpaijob/dali,menpaijob/tiezhang,songhuo}/quest.lpc:3265`（`"quest": "天门道人,`）及 `/quest/newbie/qiandao/lagjobold.lpc:227`（`"short": "绞髁,`）在 `haiyang2`、`hymud`（共 `8` 份）缺失闭合引号，触发 `syntax error, unexpected L_IDENTIFIER` + `Illegal character`；`haiyang2` 历史格式化更因该处引号未闭合将后半段字串误插空格（同源 `hy5` 完好）。
+
+Fix: 将 `3` 份 `qiankun-danuoyi.lpc` 修正为 `&& me->query_skill_mapped("force") == "jiuyang-shengong"\n    && random(2) == 0) {`；在 `hymud` `4` 份任务表补回闭合 `"`，在 `haiyang2` `4` 份任务表自同源完好 `hy5` 恢复后半段干净文本（全部保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule hy-danuoyi-quest-unclosed-quote`（targeted 规则，校验上述两类阻断）。
