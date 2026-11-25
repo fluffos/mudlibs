@@ -741,3 +741,8 @@ pristine + build-debug，port 40097。`scripts/play_login.py` 注册并执行 `l
 
 - 清理 `/clone/misc/rabbit.lpc` 中 `do_closecommand()`/`do_opencommand()` 未使用的局部变量 `verb`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `75` 处 `0 to look at`；`lpc_format_changed.py` `21/21` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`128` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh`（`47791..47797`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-25 `clone/misc/vcd3.lpc` 重复 `users());` 阻断与 `adm/CL/ARMOR.lpc` 未用局部变量清零（KB 04 §6.99）
+
+- 全库扫描 `scripts/lpc_warnings.py`（`10,787` 份可编译文件）发现并修复：`/clone/misc/vcd3.lpc:265` 删除紧跟 `message("channel:xjmy", ..., users());` 的孤立重复行 `users());`；`/adm/CL/ARMOR.lpc:486,503,610,628` 清理 `4` 个未用局部变量（`me`、`msg`、`verb`、`verb`），清零全库 `10,788` 份可编译文件告警（均保留原 CRLF 行尾）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py` `0` 错误；`lpcc --batch` 与 `lpcc_eval.py` 均为 `0` 错 `0` 告警 `PASS`；`scripts/lint.py`（新增规则 #160 `xyj-xiwangmu-vcd3-blockers`，共 `160` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh sjcs`（端口 `48012`）通过且 `ZERO_DRIVERS`。

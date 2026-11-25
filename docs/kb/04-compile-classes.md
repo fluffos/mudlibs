@@ -2022,3 +2022,13 @@ Symptom: 扫描 `tianxia`（`5,747` 份可编译文件零告警）发现 `featur
 
 Fix: 将 `buildup_new_guild()` 的 `5` 处 `return notify_fail(...);` 拆为 `notify_fail(...); return 0;`、将 `register_banghui_name()`/`unregister_banghui_name()` 中的 `tmp` 改为 `str`、并将两处 `dir_pre` 替换为 `BANGHUI_DIR`（保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule tianxia-banghui-d-blockers`（targeted 规则，校验 `adm/daemons/banghui_d.lpc` 是否残留 `member_array(tmp, bh_cnames)` 或 `dir_pre`）。
+
+### 6.99 `xyj2000f` 西王母重复 `ask_pantao()` 与 `sjcs` `vcd3.lpc` 重复 `users());` / `ARMOR.lpc` 未用局部变量（2 馆，3 份文件）
+
+Symptom: 扫描 `xyj2000f`（`5,611` 份可编译文件零告警）与 `sjcs`（`10,787` 份可编译文件）发现两处活跃编译阻断与一处全库仅余可编译告警：
+1. `xyj2000f` `/d/moon/npc/xiwangmu.lpc:95-98`（月宫主房 `wangmu_room.lpc:18` 直接刷新的旗舰祖师 NPC 西王母）：连续声明了两个 `string ask_pantao()`（第 `95` 行 `string ask_pantao() { return "ok."; }` 与第 `96–98` 行 `string ask_pantao() { return " "; }`），触发 `Redeclaration of function 'ask_pantao'` 阻断加载。
+2. `sjcs` `/clone/misc/vcd3.lpc:264-265`：`message("channel:xjmy", ..., users());` 下一行多出孤立重复的 `users());`，触发 `syntax error, unexpected ')'` 阻断编译。
+3. `sjcs` `/adm/CL/ARMOR.lpc:486,503,610,628`：`do_rm()`/`do_move()`/`do_closecommand()`/`do_opencommand()` 残留 `4` 个未使用局部变量（`me`、`msg`、`verb`、`verb`），是本馆唯一含告警的可编译文件。
+
+Fix: 删除 `xyj2000f` `xiwangmu.lpc:95` 重复的 `ask_pantao()`、删除 `sjcs` `vcd3.lpc:265` 孤立 `users());`、并移除 `sjcs` `ARMOR.lpc` `4` 个未用局部变量（保留原 LF/CRLF 行尾），清零 `sjcs` 全部 `10,788` 份可编译文件告警。
+Detection: `scripts/lint.py --rule xyj-xiwangmu-vcd3-blockers`（targeted 规则，校验 `xiwangmu.lpc` 重复 `ask_pantao()` 与 `vcd3.lpc` 重复 `users());`）。

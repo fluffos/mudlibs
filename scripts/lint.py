@@ -206,6 +206,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("zhonghua2-questobj-init-item", "targeted", "KB 04 §6.96", "error", "`questobj/*.lpc` calls Fengyun `::init_{item,cloth,head,boots,neck}()` when ES2 `inherit/item/item.lpc` lacks `init_item()`"),
     RuleSpec("fy2-eventd-bamboo3-cola", "targeted", "KB 04 §6.97", "error", "`adm/daemons/eventd.lpc` unclosed `\"event;`, `d/canyon/bamboo/bamboo3.lpc` nested `void init()`, or `d/canyon/npc/obj/cola.lpc` missing `inherit ITEM;`"),
     RuleSpec("tianxia-banghui-d-blockers", "targeted", "KB 04 §6.98", "error", "`adm/daemons/banghui_d.lpc` `return notify_fail(...)` in `string` fn, undeclared `tmp` in `register_banghui_name()`, or undeclared `dir_pre`"),
+    RuleSpec("xyj-xiwangmu-vcd3-blockers", "targeted", "KB 04 §6.99", "error", "`d/moon/npc/xiwangmu.lpc` duplicate `ask_pantao()` or `clone/misc/vcd3.lpc` stray duplicated `users());`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1808,7 +1809,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -1992,6 +1993,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["fy2_ebc"].append(item)
         if rel == "/adm/daemons/banghui_d.lpc":
             targeted_bins["tx_bh"].append(item)
+        if rel in ("/d/moon/npc/xiwangmu.lpc", "/clone/misc/vcd3.lpc"):
+            targeted_bins["xyj_xv"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -2801,6 +2804,14 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if b"member_array(tmp, bh_cnames)" in b or b'sprintf("%s%s/", dir_pre, id)' in b:
                 col.add("tianxia-banghui-d-blockers", p, "undeclared `tmp` or `dir_pre` in `banghui_d.lpc`")
+
+    if col.wants("xyj-xiwangmu-vcd3-blockers"):
+        for _, p, rel in targeted_bins["xyj_xv"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/moon/npc/xiwangmu.lpc" and len(re.findall(rb'(?m)^\s*(?:string|int|void|mixed)\s+ask_pantao\s*\(', b)) > 1:
+                col.add("xyj-xiwangmu-vcd3-blockers", p, "duplicate `ask_pantao()` definition")
+            elif rel == "/clone/misc/vcd3.lpc" and re.search(rb'users\(\)\);\r?\nusers\(\)\);', b):
+                col.add("xyj-xiwangmu-vcd3-blockers", p, "stray duplicated `users());` line")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

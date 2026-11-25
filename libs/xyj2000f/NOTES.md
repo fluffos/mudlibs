@@ -612,3 +612,8 @@ pristine + build-debug，port 40012。`scripts/play_login.py` 注册并执行 `l
 
 - 还原 `/d/qujing/start/24/12.lpc:41-43` 被归档截断损坏的 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();` 尾部与闭合 `}`，并同步还原 `/d/meishan/cuiping.lpc:74`（`return 1; }`）、`/d/ourhome/obj/nowords.lpc:46`（移除末尾裸 `0x1b`）与 `/d/sky/yunlougate.lpc:45`（补闭合 `}`）（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`xyj2000`/`xyj2000f`/`sjsh`/`sjshv2578bb`/`xyj20032`/`mhxy` 代表）全数由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #118 `xyj-eof-tail-corruption`，共 118 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47681..47686`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-25 西王母 `d/moon/npc/xiwangmu.lpc` 重复 `ask_pantao()` 编译阻断修复（KB 04 §6.99）
+
+- 全库扫描 `scripts/lpc_warnings.py`（`5,611` 份可编译文件零告警）发现月宫主房 `wangmu_room.lpc` 直接刷新的祖师 NPC `/d/moon/npc/xiwangmu.lpc:95-98` 重复定义 `string ask_pantao()`，触发 `Redeclaration of function 'ask_pantao'` 阻断加载；删除第 `95` 行重复定义（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 与 `lpcc_eval.py` 由 `--head` `FAIL` 转为干净 `PASS`（`0` 错 `0` 告警）；`scripts/lint.py`（新增规则 #160 `xyj-xiwangmu-vcd3-blockers`，共 `160` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh xyj2000f`（端口 `48011`）通过且 `ZERO_DRIVERS`。
