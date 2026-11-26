@@ -2275,3 +2275,15 @@ Symptom: 扫描 `yxjh`（`12,862` 份可编译文件零活跃告警）并全库�
 
 Fix: 从同源 `bmxkx2001` 补齐 122 行 `/kungfu/skill/force_list.h` 到 `chidi`/`yxcs`/`yxjh` 三馆（匹配各馆行尾），并移除 `zxty` `/d/suoha/roome.lpc:28` 未用声明（保留 CRLF 行尾），使 `zxty` 全库可编译文件实现零告警。
 Detection: `scripts/lint.py --rule bitao-xuangong-missing-force-list`（targeted 规则，检测 `bitao-xuangong.lpc` 缺失 `force_list.h`）。
+
+### 6.126 `sanjieshenhua`/`xiyouji2003` 五类活跃编译阻断（2 馆，6 份文件）
+
+Symptom: 扫描 `sanjieshenhua`（`12,529` 份可编译文件零活跃告警）、`sjsh`（`9,214` 份可编译文件零活跃告警）与 `xiyouji2003`（`2,561` 份可编译文件）并全库扫查，发现 `sanjieshenhua` 与 `xiyouji2003` 存在五类活跃编译阻断（共 `6` 份文件）：
+1. `/d/city/npc/fly.lpc`（`sanjieshenhua:37`、`xiyouji2003:36`，被 `menwc.lpc`/`manwc.lpc` 刷新）：`create()` 中调用 `set_leader(1);` 向 `set_leader(object)` 传入整型，触发 `Bad type for argument 1 of set_leader ( object vs int )`（`follow()` 已在玩家进入时正确调用 `me->set_leader(who);`）。
+2. `sanjieshenhua` `/d/city/shangshu/keting.lpc`（由 `d/city/shangshu/yuan.lpc:26` 东向连接）：仅 `#include <allcity.h>` 却未写 `inherit ROOM;`，而 `sanjieshenhua` 的 `include/allcity.h` 已删去 `inherit ROOM;`（与 `xiyouji2003` 不同），触发 `Undefined function set`/`setup`。
+3. `xiyouji2003` `/daemon/skill/houquan.lpc:78`：`return action[random(i, 20, level / 5)];` 误将 `SKILL` 基类提供的 `NewRandom(i, 20, level / 5)` 写成三参 `random()`，触发 `Too many arguments to 'random'`。
+4. `xiyouji2003` `/obj/weapon/blade/doubleblade.lpc:5,27`：紫青双刀误写 `inherit SWORD;` 却在第 `27` 行调用 `init_blade(150);`，触发 `Undefined function init_blade`。
+5. `xiyouji2003` `/adm/npc/fjtx.lpc:43`：第 `43` 行 `//int last_time = 0;` 被误注释，导致后文 `8` 处 `last_time = time();` 及 `(time() - last_time) > 10` 全部触发 `Undefined variable 'last_time'` / `Illegal lvalue`（同源 `nitan3`/`zhonghua2`/`zhyx` 等均未注释）。
+
+Fix: 移除两馆 `fly.lpc` 中的 `set_leader(1);`；在 `sanjieshenhua` `keting.lpc` 补齐 `inherit ROOM;`；将 `xiyouji2003` `houquan.lpc:78` 改为 `NewRandom(i, 20, level / 5)`、`doubleblade.lpc:5` 改为 `inherit BLADE;`、并取消 `fjtx.lpc:43` 的注释（均保留各文件原 LF/CRLF 行尾）。
+Detection: `scripts/lint.py --rule sanjieshenhua-xiyouji2003-blockers`（targeted 规则，校验上述五类编译阻断）。

@@ -800,3 +800,8 @@ pristine + build-debug，port 40098。`scripts/play_login.py` 注册。
 
 - 将 `/d/linghai/footprint.lpc:7,8` 误写的 `set_name("short"/"long", ...)` 改为 `set("short"/"long", ...)`；将 `/d/wizz/calvin/tianpeng/npc/hufa.lpc:7` 的 `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`；移除 `/d/luoyang/npc/fushang.lpc` 与 `/d/luoyang/zhulin2.lpc` 首行孤立字符 `a`；在 `/daemon/skill/aohan-liujue.lpc` 第一版 `query_action()` 顶部合入 `AOHAN_perform` 分支并移除第 `177` 行重复定义（保留原 LF 与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `3` 馆 `9/9` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测全 `5` 份文件由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #130 `sanjieshenhua-footprint-hufa-luoyang`，共 130 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47811`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 复扫零活跃告警并修复 `fly.lpc`/`shangshu/keting.lpc` 编译阻断（KB 04 §6.126）
+
+- 运行 `scripts/lpc_warnings.py sanjieshenhua` 确认全库 `12,529` 份可编译文件零活跃告警；修复两份活跃编译阻断文件（保留原 LF 行尾与 `KEEP` 状态）：移除 `/d/city/npc/fly.lpc:37` 向 `set_leader(object)` 传入整型的 `set_leader(1);`（`follow()` 已调用 `me->set_leader(who);`），并在 `/d/city/shangshu/keting.lpc`（由 `yuan.lpc:26` 东向连接）的 `#include <allcity.h>` 后补齐 `inherit ROOM;`。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `2/2 PASS` 零告警；`lpcc_eval.py` 实测两份文件由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（新增规则 #185 `sanjieshenhua-xiyouji2003-blockers`，共 `185` 条）`--changed HEAD` 与 `--fast` 均零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 启动验证正常且 `ZERO_DRIVERS`。

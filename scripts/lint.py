@@ -231,6 +231,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("xkxc98sj-smding-poison-list", "targeted", "KB 04 §6.123", "error", "`d/job/obj/smding.lpc` calling `offensive_target()` without `inherit F_SSERVER;` or `xiantian-gong/bidu.lpc` missing `kungfu/skill/poison_list.h`"),
     RuleSpec("wlhd-summon-unbalanced-if", "targeted", "KB 04 §6.124", "error", "`cmds/wiz/summon.lpc` unbalanced `if (!ob || (!me->visible(ob))` missing `)`"),
     RuleSpec("bitao-xuangong-missing-force-list", "targeted", "KB 04 §6.125", "error", "`kungfu/skill/bitao-xuangong.lpc` includes `/kungfu/skill/force_list.h` when missing"),
+    RuleSpec("sanjieshenhua-xiyouji2003-blockers", "targeted", "KB 04 §6.126", "error", "`fly.lpc` `set_leader(1)` / `keting.lpc` missing `inherit ROOM` / `houquan.lpc` 3-arg `random()` / `doubleblade.lpc` `inherit SWORD` + `init_blade` / `fjtx.lpc` commented `last_time`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1833,7 +1834,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl", "sjsh_xyj03")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2079,6 +2080,14 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["wlhd_sm"].append(item)
         if rel == "/kungfu/skill/bitao-xuangong.lpc":
             targeted_bins["bitao_fl"].append(item)
+        if rel in (
+            "/d/city/npc/fly.lpc",
+            "/d/city/shangshu/keting.lpc",
+            "/daemon/skill/houquan.lpc",
+            "/obj/weapon/blade/doubleblade.lpc",
+            "/adm/npc/fjtx.lpc",
+        ):
+            targeted_bins["sjsh_xyj03"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -3114,6 +3123,22 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             b = open(f"{REPO}/{p}", "rb").read()
             if b"force_list.h" in b and not os.path.isfile(f"{REPO}/libs/{slug}/work/kungfu/skill/force_list.h"):
                 col.add("bitao-xuangong-missing-force-list", p, "includes `/kungfu/skill/force_list.h` which is missing")
+
+    if col.wants("sanjieshenhua-xiyouji2003-blockers"):
+        for slug, p, rel in targeted_bins["sjsh_xyj03"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/d/city/npc/fly.lpc" and re.search(rb"\bset_leader\s*\(\s*1\s*\)\s*;", b):
+                col.add("sanjieshenhua-xiyouji2003-blockers", p, "calls `set_leader(1)` passing int to `set_leader(object)`")
+            elif rel == "/d/city/shangshu/keting.lpc" and b"#include <allcity.h>" in b and b"inherit ROOM;" not in b:
+                ac = f"{REPO}/libs/{slug}/work/include/allcity.h"
+                if os.path.isfile(ac) and b"inherit ROOM;" not in open(ac, "rb").read():
+                    col.add("sanjieshenhua-xiyouji2003-blockers", p, "includes `<allcity.h>` (which lacks `inherit ROOM;`) without `inherit ROOM;`")
+            elif rel == "/daemon/skill/houquan.lpc" and re.search(rb"\brandom\s*\(\s*i\s*,\s*20\s*,", b):
+                col.add("sanjieshenhua-xiyouji2003-blockers", p, "calls 3-argument `random(i, 20, ...)` instead of `NewRandom(...)`")
+            elif rel == "/obj/weapon/blade/doubleblade.lpc" and b"inherit SWORD;" in b and b"init_blade(" in b:
+                col.add("sanjieshenhua-xiyouji2003-blockers", p, "inherits `SWORD` while calling `init_blade()`")
+            elif rel == "/adm/npc/fjtx.lpc" and re.search(rb"(?m)^[ \t]*//\s*int\s+last_time\s*=", b) and b"last_time = time()" in b:
+                col.add("sanjieshenhua-xiyouji2003-blockers", p, "comments out `int last_time = 0;` while assigning `last_time = time()`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

@@ -1147,3 +1147,8 @@ pristine + build-debug，归档端口 40075。`scripts/play_login.py` 注册并�
 
 - 修复 `/d/city/misc/npc/wei.lpc` 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-26 修复 `fly`/`houquan`/`doubleblade`/`fjtx` 四份活跃编译阻断（KB 04 §6.126）
+
+- 运行 `scripts/lpc_warnings.py xiyouji2003`（`2,561` 份可编译文件）并修复四份活跃编译阻断（均保留原 CRLF 行尾）：移除 `/d/city/npc/fly.lpc:36` 的非法整型调用 `set_leader(1);`（被 `menwc`/`manwc` 刷新）、将 `/daemon/skill/houquan.lpc:78` 三参 `random(i, 20, level / 5)` 改为 `NewRandom(i, 20, level / 5)`、将 `/obj/weapon/blade/doubleblade.lpc:5` 误写的 `inherit SWORD;` 改为 `inherit BLADE;` 以匹配 `init_blade(150);`、并取消 `/adm/npc/fjtx.lpc:43` 被误注释的 `int last_time = 0;`（对照同源 `nitan3`/`zhonghua2`/`zhyx`）。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `4/4 PASS` 零告警；`lpcc_eval.py` 实测四份文件由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（新增规则 #185 `sanjieshenhua-xiyouji2003-blockers`，共 `185` 条）`--changed HEAD` 与 `--fast` 均零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 启动验证正常且 `ZERO_DRIVERS`。
