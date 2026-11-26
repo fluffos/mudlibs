@@ -676,3 +676,8 @@ pristine + build-debug（归档端口 40169，临时测试端口 49662）。`scr
 
 - 修复 `/d/kaifeng/ground0.lpc:16-20` 残留 `} else {`（解锁 `ground0`/`ground1`）及 `/d/mingjiao/banshanyao.lpc:32,41` 字面 `^ M`（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`scripts/lint.py`（新增规则 #175 `jhfy2-ground0-banshanyao`，共 `175` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-26 古墓断肠崖 `duanchang.lpc` 改用 `tiao.lpc`（KB 04 §6.117）
+
+- 将 `/d/gumu/duanchang.lpc` 末尾的 `#include "/d/gumu/tiao.h"`（该头文件实为被 `fang.c` 完整房间覆盖的副本，触发 `Illegal to redefine 'nomask' function` 阻断断肠崖加载）改为 `#include "/d/gumu/tiao.lpc"`（与同目录跳崖动作片段及干净同源一致，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（新增规则 #176 `gumu-duanchang-tiao-h-include`，共 `176` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。

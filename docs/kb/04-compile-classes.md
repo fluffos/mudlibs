@@ -2191,3 +2191,10 @@ Symptom: 扫描 `bxsj1`（`9,914` 份可编译文件零活跃告警）与 `jhfy2
 
 Fix: 参照干净同源 `xyj2000`/`tianxiawuxue` 为 `ground0.lpc` 补回 `#include "ground.h"` 并去掉多余的 `}` 恢复 `if (...) ... else { ... }`、移除 `banshanyao.lpc` 两处字面 `^ M` 并将拼接的 `message_vision(...)` 换行、删除 `ffxymud`/`jhfy2` `d/fyue/questguai.lpc:15` 未用声明（均保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule jhfy2-ground0-banshanyao`（targeted 规则，校验上述两类语法阻断）。
+
+### 6.117 古墓断肠崖 `d/gumu/duanchang.lpc` 误含被 `fang.c` 覆盖的 `tiao.h`（11 馆，11 份文件）
+
+Symptom: 扫描 `jyqxc2`（`2,990` 份可编译文件零活跃告警）与 `ldtxii`（`5,940` 份可编译文件零活跃告警）并全库扫查，发现 `ffxymud`、`fqyy2`、`jhfy`、`jhfy2`、`ldtx`、`ldtxii`、`tianxiawuxue`、`xysylmhb`、`xyzx3`、`xyzxiiylzymh`、`yzxiiizylfy` 共 `11` 馆的古墓断肠崖房间 `/d/gumu/duanchang.lpc:106` 写了 `#include "/d/gumu/tiao.h"`，而同目录 `tiao.h` 实为被完整房间文件 `fang.c`（含 `inherit ROOM;`、`create()`、`init()`）误覆盖的副本，导致编译触发 `Illegal to redefine 'nomask' function '_query'/'_set'/'_delete'` 与 `Redeclaration of function 'create'/'init'` 阻断断肠崖加载；而真正的跳崖动作片段（`do_tiao`/`do_yes`/`do_no`）完整保存在同目录 `/d/gumu/tiao.lpc` 中（干净同源 `bixiecanyang`/`jhfy3`/`xyzx` 均直接 `#include "/d/gumu/tiao.lpc"`）。
+
+Fix: 将上述 `11` 馆 `/d/gumu/duanchang.lpc` 末尾的 `#include "/d/gumu/tiao.h"` 改为 `#include "/d/gumu/tiao.lpc"`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule gumu-duanchang-tiao-h-include`（targeted 规则，检测 `duanchang.lpc` 包含含 `inherit ROOM;` 的 `tiao.h`）。

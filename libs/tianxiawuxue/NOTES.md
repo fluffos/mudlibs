@@ -1487,3 +1487,8 @@ pristine + build-debug，归档端口 40045。`scripts/play_login.py` 注册并�
 
 - 移除 `/kungfu/skill/xixi-unarmed.lpc:1` 注释前的孤立 `c  `（消除 `unexpected L_INHERIT` 编译阻断，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `17/17` `xixi-unarmed.lpc` 零错零告警 `PASS`；`scripts/lint.py`（规则 #147 `lingshe-set-color-wmkj-blockers`，共 147 条）`--changed HEAD` 与 `--fast` 零错零告警。
+
+## 2026-11-26 古墓断肠崖 `duanchang.lpc` 改用 `tiao.lpc`（KB 04 §6.117）
+
+- 将 `/d/gumu/duanchang.lpc` 末尾的 `#include "/d/gumu/tiao.h"`（该头文件实为被 `fang.c` 完整房间覆盖的副本，触发 `Illegal to redefine 'nomask' function` 阻断断肠崖加载）改为 `#include "/d/gumu/tiao.lpc"`（与同目录跳崖动作片段及干净同源一致，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（新增规则 #176 `gumu-duanchang-tiao-h-include`，共 `176` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。

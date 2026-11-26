@@ -596,3 +596,8 @@ pristine + build-debug，port 40176。`scripts/play_login.py` 注册并执行 `l
 
 - 移除 `/d/quanzhen/npc/obj/jia.lpc:53` 末尾孤立 `>` 与 `/d/shenlong/ma.lpc:125` `return 1;` 前多余闭合 `}`（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `2/2` 零错零告警 `PASS`；`scripts/lint.py`（规则 #173 `ldtx-tiao-jia-ma-blockers`，共 `173` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48162`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 古墓断肠崖 `duanchang.lpc` 改用 `tiao.lpc`（KB 04 §6.117）
+
+- 将 `/d/gumu/duanchang.lpc` 末尾的 `#include "/d/gumu/tiao.h"`（该头文件实为被 `fang.c` 完整房间覆盖的副本，触发 `Illegal to redefine 'nomask' function` 阻断断肠崖加载）改为 `#include "/d/gumu/tiao.lpc"`（与同目录跳崖动作片段及干净同源一致，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（新增规则 #176 `gumu-duanchang-tiao-h-include`，共 `176` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。

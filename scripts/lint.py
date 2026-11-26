@@ -222,6 +222,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("ldtx-tiao-jia-ma-blockers", "targeted", "KB 04 §6.114", "error", "`d/quanzhen/npc/obj/jia.lpc` trailing `>`, `d/shenlong/ma.lpc` stray `}` before `return 1;`, or `ldtx` `tiao`/`yabi1` `destruct(\"corpse\")`"),
     RuleSpec("syxjl-duchang5-ll-jia-blockers", "targeted", "KB 04 §6.115", "error", "`d/city/npc/duchang5.lpc` top-level `room_status = 0;` / `bl_gui0`, `cmds/wiz/ll.lpc` duplicated `main()`, or `d/quanzhen/obj/jia.lpc` trailing `>`"),
     RuleSpec("jhfy2-ground0-banshanyao", "targeted", "KB 04 §6.116", "error", "`d/kaifeng/ground0.lpc` stray `}` before `else` without `if (DEBUG)` or `d/mingjiao/banshanyao.lpc` literal `^ M`"),
+    RuleSpec("gumu-duanchang-tiao-h-include", "targeted", "KB 04 §6.117", "error", "`d/gumu/duanchang.lpc` includes `fang.c`-overwritten `tiao.h` (`inherit ROOM;`) instead of `tiao.lpc`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1824,7 +1825,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2040,6 +2041,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["syxjl_dlj"].append(item)
         if rel in ("/d/kaifeng/ground0.lpc", "/d/mingjiao/banshanyao.lpc"):
             targeted_bins["jhfy2_gb"].append(item)
+        if rel == "/d/gumu/duanchang.lpc":
+            targeted_bins["gumu_dc"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -2994,6 +2997,14 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                     col.add("jhfy2-ground0-banshanyao", p, "stray `}` before `else {` in `announcing()` after `if (DEBUG)` was stripped")
             elif rel == "/d/mingjiao/banshanyao.lpc" and (b"^ M" in b or b"^M" in b):
                 col.add("jhfy2-ground0-banshanyao", p, "literal `^ M` (escaped Ctrl-M) in `do_jumpdown`/`do_jumpup`")
+
+    if col.wants("gumu-duanchang-tiao-h-include"):
+        for slug, p, _ in targeted_bins["gumu_dc"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b'#include "/d/gumu/tiao.h"' in b or b'#include "tiao.h"' in b:
+                th = f"{REPO}/libs/{slug}/work/d/gumu/tiao.h"
+                if os.path.isfile(th) and b"inherit ROOM;" in open(th, "rb").read():
+                    col.add("gumu-duanchang-tiao-h-include", p, 'includes `fang.c`-overwritten `tiao.h` (`inherit ROOM;`) instead of `"/d/gumu/tiao.lpc"`')
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

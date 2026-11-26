@@ -603,3 +603,8 @@ pristine + build-debug，port 40137。`scripts/play_login.py` 注册并执行 `l
 
 - 全库 `scripts/lpc_warnings.py` 复扫（`8,256` 份可编译文件）并修复 `/d/kaifeng/ground0.lpc:16-20` 残留 `} else {`（解锁 `ground0`/`ground1`）、`/d/mingjiao/banshanyao.lpc:32,41` 字面 `^ M` 及 `/d/fyue/questguai.lpc:15` 未用局部 `int level, chooseguai;`，全库可编译文件实现零告警（`8,258` 份，保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`scripts/lint.py`（新增规则 #175 `jhfy2-ground0-banshanyao`，共 `175` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-26 古墓断肠崖 `duanchang.lpc` 改用 `tiao.lpc`（KB 04 §6.117）
+
+- 将 `/d/gumu/duanchang.lpc` 末尾的 `#include "/d/gumu/tiao.h"`（该头文件实为被 `fang.c` 完整房间覆盖的副本，触发 `Illegal to redefine 'nomask' function` 阻断断肠崖加载）改为 `#include "/d/gumu/tiao.lpc"`（与同目录跳崖动作片段及干净同源一致，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（新增规则 #176 `gumu-duanchang-tiao-h-include`，共 `176` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
