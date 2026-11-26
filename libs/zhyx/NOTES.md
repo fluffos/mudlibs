@@ -1166,3 +1166,8 @@ pristine + build-debug，归档端口 40233。`scripts/play_login.py` 注册进�
   - `/feature/team.lpc` 与 `/d/baituo/npc/bt_snake.lpc:9`：在 `F_TEAM` 补回 `lord`/`set_lord()`/`query_lord()` 并移除 `bt_snake.lpc` 遮蔽基类的空原型 `void query_lord();`（KB 06 §7.412）。
   - `/kungfu/skill/beidou-zhenfa.lpc:139,148,209`：补齐 `call_out("destruct_me", 10, me)` 缺失的 `void destruct_me(object me)` 定义（KB 06 §7.400），并一并修正 `->queyr("dex")` 拼写错误为 `->query("dex")`（KB 06 §7.397）。
 - 验证：`lpc_format_changed.py` 保持 `KEEP`、`file` 确认纯 LF；`lpcc_eval.py` 实测 `toptend`、`bt_snake`（`set_lord`/`query_lord` 往返相等）、`beidou-zhenfa`（`function_exists("destruct_me")` 返回本文件且调用后销毁目标）全数零警告 `PASS`；`scripts/lint.py --changed HEAD` 与 `--fast`（`116` 条规则，含全部 `31` 馆 `submodule-patch`）均 `0` 错误 `0` 告警；`play_boot.sh`+`play_stop.sh`（端口 `47661`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-25 `cmds/std/checkskill.lpc` 多空格 `mixed   *value;` 编译阻断修复（KB 04 §6.106）
+
+- 将 `/cmds/std/checkskill.lpc:99` 对齐多空格写法 `mixed   *value;` 改为 `mixed   value;`（保留原 LF 行尾），消除 `replace_string(temp, "$N", value)` 处的 `Bad argument 3 to efun replace_string()` 编译阻断，并收紧规则 #133 `nitan-checkskill-mixed-array` 为任意空白正则匹配。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 与 `lpcc_eval.py` 由 `--head` `FAIL` 转为零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`165` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh zhyx`（端口 `48081`）通过且 `ZERO_DRIVERS`。

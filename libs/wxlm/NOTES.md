@@ -96,3 +96,8 @@
 
 - 修复 `/kungfu/skill/qujing-gunfa.lpc:125,128` `query_action(object me, object weapon)` 中未判空直接内联解引用 `me->query_temp("weapon")->query("name")` 致空手触发 `*Bad argument 1 to EFUN call_other() Got: int(0)` 崩溃的缺陷：优先取形参 `weapon` 并补 `objectp()` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hell` 及 `6` 馆代表）`query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（规则 #117 `qujing-gunfa-weapon-name`，共 117 条）`--changed HEAD` 与 `--fast` 零错误零告警。
+
+## 2026-11-25 `cmds/usr/checkskill.lpc` 多空格 `mixed  *value;` 编译阻断修复（KB 04 §6.106）
+
+- 将 `/cmds/usr/checkskill.lpc:76` 的 `mixed  *value;` 改为 `mixed  value;`（保留原 LF 行尾），消除 `replace_string(temp, "$N", value)` 编译阻断。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 与 `lpcc_eval.py` 由 `--head` `FAIL` 转为零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`165` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh wxlm`（端口 `48082`）通过且 `ZERO_DRIVERS`。

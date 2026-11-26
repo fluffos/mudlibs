@@ -2079,3 +2079,12 @@ Symptom: 扫描 `hell`（`7,456` 份可编译文件零告警）发现全库仅�
 
 Fix: 删除 `yangrongwan.lpc:20` 无效 `set_amount(1);`、将两馆 `bowl.lpc` 改为 `set_name("海口大碗", ({ "bowl" }));`、并删去 `hell` `4` 份文件末尾重复 `query_autoload()`（保留原 CRLF/LF 行尾），使 `hell` 全库 `7,462` 份文件实现零编译诊断。
 Detection: `scripts/lint.py --rule hell-zero-diag-blockers`（targeted 规则，校验上述三类阻断）。
+
+### 6.106 补漏多空格 `mixed   *value;` `checkskill.lpc`（`zhyx`/`wxlm`）并清零 `xajhzcjh` 仅余可编译告警（3 馆，3 份文件）
+
+Symptom:
+1. 规则 #133 `nitan-checkskill-mixed-array` 原采用单空格字面匹配 `b"mixed *value;"`，漏掉了对齐多空格写法：`zhyx` `/cmds/std/checkskill.lpc:99`（`mixed   *value;`）与 `wxlm` `/cmds/usr/checkskill.lpc:76`（`mixed  *value;`），两处同样在 `replace_string(temp, "$N", value)` 处触发 `Bad argument 3 to efun replace_string()` 阻断编译。
+2. `xajhzcjh` `/d/fyue/questguai.lpc:16` 残留未用局部变量 `int level,chooseguai;`（其余全部同源侠影馆已移除），为本馆唯一含编译告警的可编译文件。
+
+Fix: 将 `zhyx`/`wxlm` `checkskill.lpc` 的 `mixed *value;` 改为 `mixed value;`（保留 LF）、删去 `xajhzcjh` `questguai.lpc:16` 未用声明（保留 CRLF），并将规则 #133 收紧为正则 `\bmixed\s+\*\s*value\s*;` 以防多空格写法再次漏网。
+Detection: `scripts/lint.py --rule nitan-checkskill-mixed-array`（正则匹配任意空白）。

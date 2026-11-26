@@ -2563,7 +2563,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
     if col.wants("nitan-checkskill-mixed-array"):
         for _, p, _ in targeted_bins["nt_chkskill"]:
             b = open(f"{REPO}/{p}", "rb").read()
-            if b"mixed *value;" in b and b'replace_string(temp, "$N", value)' in b:
+            if re.search(rb'\bmixed\s+\*\s*value\s*;', b) and b'replace_string(temp, "$N", value)' in b:
                 col.add("nitan-checkskill-mixed-array", p, "declares `mixed *value;` then passes `value` to `replace_string()`")
 
     if col.wants("nitan-paimaishi-corrupt-payback"):
