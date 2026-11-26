@@ -550,3 +550,8 @@ pristine + build-debug，port 40142。客户端版本握手（`shikongyouxia3.0`
 
 - 将 `/d/gumu/duanchang.lpc` 末尾的 `#include "/d/gumu/tiao.h"`（该头文件实为被 `fang.c` 完整房间覆盖的副本，触发 `Illegal to redefine 'nomask' function` 阻断断肠崖加载）改为 `#include "/d/gumu/tiao.lpc"`（与同目录跳崖动作片段及干净同源一致，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（新增规则 #176 `gumu-duanchang-tiao-h-include`，共 `176` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-26 `d/kaifeng/ground{1,2,3}.lpc` 未用局部告警清零（KB 04 §6.10）
+
+- 解锁 `ground0.lpc` 后连带暴露了继承链 `ground1.lpc`（5 处）、`ground2.lpc`（16 处）与 `ground3.lpc`（5 处）共 `26` 处未用局部变量告警；参照干净同源 `xyj2000` 清理全部 `26` 处声明并保留 `this_room()->query(...)` 副作用及原 LF/CRLF 行尾。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast` 零错零告警（`181` 条规则）；代表馆 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。

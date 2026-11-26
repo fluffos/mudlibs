@@ -1497,3 +1497,8 @@ pristine + build-debug，归档端口 40045。`scripts/play_login.py` 注册并�
 
 - 全库 `scripts/lpc_warnings.py` 复扫（`12,033` 份可编译文件）并修复 `3` 份活跃编译阻断（保留原 CRLF 行尾）：为 `/d/kaifeng/ground0.lpc` 补回 `#include "ground.h"`（同时解锁 `ground1.lpc`）；删除 `/kungfu/skill/kuaidao-daofa/kan.lpc:36` 中多出的孤立 `8 `；将 `/d/fengxue/xin-xiu.lpc:370` 未定义的 `update(me);` 改为 `destruct(me);`（与 `/d/taishan/npc/xin-xiu.lpc:373` 一致）。
 - 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `4/4`（含 `ground1.lpc`）全部通过；`lpcc_eval.py` 由 `--head` `0/4` 转为 `4/4 PASS`；`scripts/lint.py`（扩展规则 #175 并新增规则 #179 `tianxiawuxue-kan-xinxiu-blockers`，共 `179` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48221`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `d/kaifeng/ground{1,2,3}.lpc` 未用局部告警清零（KB 04 §6.10）
+
+- 解锁 `ground0.lpc` 后连带暴露了继承链 `ground1.lpc`（5 处）、`ground2.lpc`（16 处）与 `ground3.lpc`（5 处）共 `26` 处未用局部变量告警；参照干净同源 `xyj2000` 清理全部 `26` 处声明并保留 `this_room()->query(...)` 副作用及原 LF/CRLF 行尾。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast` 零错零告警（`181` 条规则）；代表馆 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
