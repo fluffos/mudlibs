@@ -526,3 +526,8 @@ pristine + build-debug，port 40200。`scripts/play_login.py` 走完 8 步注册
 
 - 将 `/clone/misc/tang.lpc:7` 的 `nosave string ff = "\377\371\377\376\042\377\374\005\n[-Yes-] \n";` 去除非法 UTF-8 的 Telnet IAC 原始字节，改为 `nosave string ff = "\n[-Yes-] \n";`（保留原 CRLF/LF 行尾），消除 `Invalid UTF8 codepoint in string literal` 及第 `46` 行级联 `Illegal LHS` 编译阻断。
 - 验证：`lpc_format_changed.py` `8/8` `0` 重排；`lpcc --batch` 全批 `8` 馆 `8/8` 零错零告警 `PASS`；`lpcc_eval.py`（`bxsj`/`jh2006`）由 `--head` `FAIL` 转为干净 `PASS`；`scripts/lint.py`（新增规则 #162 `tang-raw-telnet-utf8-literal`，共 `162` 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `48031..48036`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-25 蝶梦楼 `CYNNOR` 与北冥 `liumai.lpc` 缺失 `liumai_msg.h` 修复（KB 04 §6.107）
+
+- 参照同源 `bxsj` 将 `/d/city/diemenglou1.lpc:123` 与 `/d/city/diemenglou2.lpc:135` 的 `NOR + CYNNOR "\n";` 修正为 `NOR + CYN "\n" NOR;`（保留原 CRLF 行尾）；并从 `shujian2008` 引入缺失的 `62` 行 `/kungfu/skill/beiming-shengong/liumai_msg.h`，解锁六脉神剑 `exert liumai`（`/kungfu/skill/beiming-shengong/liumai.lpc`）。
+- 验证：`lpc_format_changed.py` `2/2` `0` 重排；`lpcc --batch` 与 `lpcc_eval.py` `3/3` 均由 `--head` `FAIL` 转为零错零告警 `PASS`；`scripts/lint.py`（新增规则 #166 `shujian3-diemenglou-liumai`，共 `166` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh shujian3`（端口 `48091`）通过且 `ZERO_DRIVERS`。

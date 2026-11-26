@@ -2088,3 +2088,12 @@ Symptom:
 
 Fix: 将 `zhyx`/`wxlm` `checkskill.lpc` 的 `mixed *value;` 改为 `mixed value;`（保留 LF）、删去 `xajhzcjh` `questguai.lpc:16` 未用声明（保留 CRLF），并将规则 #133 收紧为正则 `\bmixed\s+\*\s*value\s*;` 以防多空格写法再次漏网。
 Detection: `scripts/lint.py --rule nitan-checkskill-mixed-array`（正则匹配任意空白）。
+
+### 6.107 `shujian3` 蝶梦楼 `CYNNOR` 宏粘连与北冥神功 `liumai.lpc` 缺失 `liumai_msg.h`（1 馆，3 份文件）
+
+Symptom: 扫描 `shujian3`（`10,000` 份可编译文件零告警）发现两类活跃游戏代码编译阻断：
+1. `/d/city/diemenglou1.lpc:123` 与 `/d/city/diemenglou2.lpc:135`：`NOR + CYNNOR "\n";` 将 `CYN` 与 `NOR` 粘连成未定义标识符 `CYNNOR`，触发 `syntax error, unexpected L_STRING` 及后续级联报错（同源 `bxsj` 为 `NOR + CYN "\n" NOR;`）。
+2. `/kungfu/skill/beiming-shengong/liumai.lpc:5`：`#include "/kungfu/skill/beiming-shengong/liumai_msg.h";` 所引用的 `62` 行头文件仅在本馆归档中遗漏（同系 `bxsj`/`bxsj1`/`shujian2008`/`sjecl`/`sjtx2` 等 `9` 馆均完整存在），导致六脉神剑 `exert liumai` 无法编译。
+
+Fix: 参照 `bxsj` 将 `diemenglou1.lpc:123` 与 `diemenglou2.lpc:135` 改为 `NOR + CYN "\n" NOR;`（保留 CRLF），并从同源 `shujian2008` 引入 `/kungfu/skill/beiming-shengong/liumai_msg.h`。
+Detection: `scripts/lint.py --rule shujian3-diemenglou-liumai`（targeted 规则，校验上述两类阻断）。
