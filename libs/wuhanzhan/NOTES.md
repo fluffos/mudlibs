@@ -1248,3 +1248,8 @@ pristine + build-debug，port 40052。`scripts/play_login.py` 注册并执行 `l
 
 - 在 `/d/npc/m_weapon/weapon/m_bian.lpc` 中删除重复的第二个 `void create()`，移除首个 `create()` 内未用且在 `this_player()==0` 时崩溃的 `me`/`w_name`/`w_id`/`w_or` 及 `me->query("weapon/...")` 赋值，并将第 `5` 行原型 `int do_hui(object weapon);` 修正为 `int do_hui(string weapon);`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `112` 项 `0` 待看；`lpc_format_changed.py` `15/15` `0` 重排；`lpcc --batch` 全批 `15/15 PASS` 零错零告警；`lpcc_eval.py`（`wmkj`/`longyunmeng`）由 `--head` 编译/空指针失败转为 `PASS`；`scripts/lint.py`（新增规则 #146 `m-bian-duplicate-create`，共 146 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47881..47886`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `souhunwhip`/`riyue` 编译阻断修复与 `EXAMPLE.lpc` 告警清零（KB 04 §6.112）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`9,671` 份可编译非 `/u/` 文件）并修复 `3` 份文件（全部保留纯 LF 行尾）：移除 `/d/obj/weapon/whip/souhunwhip.lpc:2` 前导 `: `（`: inherit WHIP;` -> `inherit WHIP;`）；补齐 `/daemon/class/xianren/yiqiforce/riyue.lpc:9` 缺失的右括号；移除 `/d/obj/fabao/EXAMPLE.lpc:91` 未用局部 `damage` 与 `ratio`，使全库 `9,673` 份可编译非 `/u/` 文件实现零编译告警。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`scripts/lint.py`（新增规则 #171 `wuhanzhan-souhunwhip-riyue-blockers`，共 `171` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48141`）通过且 `ZERO_DRIVERS`。

@@ -2140,3 +2140,13 @@ Symptom: 扫描 `xkm`（`10,299` 份可编译非 `/u/` 文件零告警）与 `xu
 
 Fix: 分别在 `bingxue-zhenqi.lpc` 补回 `for (v = 0; v < sizeof(skl); v++) {`、将 `fan_yao.lpc:13` 修正为 `"...\n");`、并移除 `qiankun-danuoyi.lpc:215` 多余的 `, attacker, defender`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule xkm-xuanjianlu-skill-fanyao-blockers`（targeted 规则，校验上述三处阻断）。
+
+### 6.112 `wuhanzhan` `souhunwhip.lpc` 孤立冒号、`yiqiforce/riyue.lpc` 缺右括号与 `EXAMPLE.lpc` 告警清零（1 馆，3 份文件）
+
+Symptom: 扫描 `wuhanzhan`（`9,671` 份可编译非 `/u/` 文件仅余 `1` 份可编译文件含告警）发现两处活跃战斗阻断与两处未用局部告警：
+1. `/d/obj/weapon/whip/souhunwhip.lpc:2`：`: inherit WHIP;` 首行多出孤立冒号，触发 `modifier list may not be empty.` 阻断搜魂鞭加载。
+2. `/daemon/class/xianren/yiqiforce/riyue.lpc:8-10`：`if (!target || !target->is_character()` 缺少闭合 `)` 即接 `return notify_fail(...)`，触发 `syntax error, unexpected L_RETURN` 阻断混元一气功绝招加载。
+3. `/d/obj/fabao/EXAMPLE.lpc:91` 声明未用局部变量 `damage` 与 `ratio`。
+
+Fix: 删除 `souhunwhip.lpc:2` 前导 `: `、在 `riyue.lpc:9` 补齐 `)`、移除 `EXAMPLE.lpc:91` 未用局部 `damage` 与 `ratio`（全部保留纯 LF 行尾），使 `wuhanzhan` 全库 `9,673` 份可编译非 `/u/` 文件实现零编译告警。
+Detection: `scripts/lint.py --rule wuhanzhan-souhunwhip-riyue-blockers`（targeted 规则，校验上述两处阻断）。
