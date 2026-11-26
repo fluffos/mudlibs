@@ -726,3 +726,8 @@ pristine + build-debug，归档端口 40148。`scripts/play_login.py` 注册进�
 
 - 修复 `/d/shop/ansi/nan1.lpc:18-19` 商业街南一街出口吞引号编译阻断（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`scripts/lint.py`（新增规则 #181 `tybxjh-qinyin-nan1-quotes`，共 `181` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-26 `cmds/wiz/summon` 缺括号与 `d/system_2/qinyin` 吞引号修复（KB 04 §6.124）
+
+- 修复 `/cmds/wiz/summon.lpc:19` 未闭合条件 `if (!ob || (!me->visible(ob))` -> `if (!ob || !me->visible(ob))` 并补回 `#include <ansi.h>`；修复 `/d/system_2/qinyin.lpc:9` 缺失闭合引号 `query_skill("yuxiao-jianfa", 1);`（保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `2/2` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（扩展规则 #181 并新增规则 #183 `wlhd-summon-unbalanced-if`，共 `183` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。

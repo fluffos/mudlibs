@@ -229,6 +229,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("xjcq2000-skill-blockers", "targeted", "KB 04 §6.121", "error", "`houquan.lpc` split `stri\\nng`, `taiji-shengong.lpc` pasted `> cat`, `yirubian.lpc` 2-arg `notify_fail`/`write`, or `yinsuo-jinling/shenmen.lpc` `me->query - skill`"),
     RuleSpec("tybxjh-qinyin-nan1-quotes", "targeted", "KB 04 §6.122", "error", "`d/pipip/qinyin.lpc` unclosed `\"yuxiao-jianfa,1)` or `d/shop/ansi/nan1.lpc` eaten `\"west __DIR__\"` exit quotes"),
     RuleSpec("xkxc98sj-smding-poison-list", "targeted", "KB 04 §6.123", "error", "`d/job/obj/smding.lpc` calling `offensive_target()` without `inherit F_SSERVER;` or `xiantian-gong/bidu.lpc` missing `kungfu/skill/poison_list.h`"),
+    RuleSpec("wlhd-summon-unbalanced-if", "targeted", "KB 04 §6.124", "error", "`cmds/wiz/summon.lpc` unbalanced `if (!ob || (!me->visible(ob))` missing `)`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1831,7 +1832,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2069,10 +2070,12 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/kungfu/skill/yinsuo-jinling/shenmen.lpc",
         ):
             targeted_bins["xjcq_sk"].append(item)
-        if rel in ("/d/pipip/qinyin.lpc", "/d/shop/ansi/nan1.lpc"):
+        if rel in ("/d/pipip/qinyin.lpc", "/d/system_2/qinyin.lpc", "/d/shop/ansi/nan1.lpc"):
             targeted_bins["tybx_qn"].append(item)
         if rel in ("/d/job/obj/smding.lpc", "/kungfu/skill/xiantian-gong/bidu.lpc"):
             targeted_bins["xkxc_sp"].append(item)
+        if rel == "/cmds/wiz/summon.lpc":
+            targeted_bins["wlhd_sm"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -3083,7 +3086,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
     if col.wants("tybxjh-qinyin-nan1-quotes"):
         for _, p, rel in targeted_bins["tybx_qn"]:
             b = open(f"{REPO}/{p}", "rb").read()
-            if rel == "/d/pipip/qinyin.lpc" and b'query_skill("yuxiao-jianfa,1);' in b:
+            if rel in ("/d/pipip/qinyin.lpc", "/d/system_2/qinyin.lpc") and b'query_skill("yuxiao-jianfa,1);' in b:
                 col.add("tybxjh-qinyin-nan1-quotes", p, 'unclosed string quote in `query_skill("yuxiao-jianfa,1);`')
             elif rel == "/d/shop/ansi/nan1.lpc" and b'"west __DIR__"' in b:
                 col.add("tybxjh-qinyin-nan1-quotes", p, 'eaten exit quotes `"west __DIR__" hangzhou_shop "`')
@@ -3096,6 +3099,12 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             elif rel == "/kungfu/skill/xiantian-gong/bidu.lpc" and b"poison_list.h" in b:
                 if not os.path.isfile(f"{REPO}/libs/{slug}/work/kungfu/skill/poison_list.h"):
                     col.add("xkxc98sj-smding-poison-list", p, "includes `/kungfu/skill/poison_list.h` which is missing")
+
+    if col.wants("wlhd-summon-unbalanced-if"):
+        for _, p, _ in targeted_bins["wlhd_sm"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if re.search(rb'if\s*\(\s*!ob\s*\|\|\s*\(\s*!me->visible\(ob\)\s*\)\s*\r?\n', b):
+                col.add("wlhd-summon-unbalanced-if", p, "unbalanced `if (!ob || (!me->visible(ob))` missing `)`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

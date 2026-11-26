@@ -2259,3 +2259,12 @@ Symptom: 复核 `xkxz2`（`6,859` 份可编译文件零活跃告警）并全库�
 
 Fix: 将两馆 `d/job/obj/smding.lpc:43` 改为 `F_SSERVER->offensive_target(me)`（避免与 `ITEM` 产生 `F_CLEAN_UP` 菱形继承告警，保留原 LF 行尾），并从同源 `bmxkx2001` 补齐 61 行 `/kungfu/skill/poison_list.h` 解锁 `xiantian-gong/bidu.lpc`。
 Detection: `scripts/lint.py --rule xkxc98sj-smding-poison-list`（targeted 规则，校验上述两类阻断）。
+
+### 6.124 `wlhd`/`yxjh` `cmds/wiz/summon.lpc` 括号未闭合与 `d/system_2/qinyin.lpc` 吞引号（2 馆，4 份文件）
+
+Symptom: 扫描 `wlhd`（`11,014` 份可编译文件零活跃告警）并全库扫查，发现 `wlhd` 与 `yxjh` 共 `2` 馆 `4` 份活跃编译阻断：
+1. `/cmds/wiz/summon.lpc:19`：`if (!ob || (!me->visible(ob))` 缺少闭合 `)`（且第 `41` 行使用 `HIY`/`NOR` 缺少 `#include <ansi.h>`），触发 `syntax error, unexpected L_RETURN` 阻断巫师 `summon` 指令。
+2. `/d/system_2/qinyin.lpc:9`：与 §6.122 同源的 `query_skill("yuxiao-jianfa,1);` 缺失字符串闭合引号（位于 `/d/system_2/` 子目录）。
+
+Fix: 将两馆 `cmds/wiz/summon.lpc` 顶部补回 `#include <ansi.h>` 并修正第 `19` 行为 `if (!ob || !me->visible(ob))`；将两馆 `d/system_2/qinyin.lpc:9` 补全为 `query_skill("yuxiao-jianfa", 1);`（均保留原 CRLF 行尾）。
+Detection: 扩展 `tybxjh-qinyin-nan1-quotes` 覆盖 `/d/system_2/qinyin.lpc`，并新增 `scripts/lint.py --rule wlhd-summon-unbalanced-if`。
