@@ -2250,3 +2250,12 @@ Symptom: 复核 `tybxjh`（`9,295` 份可编译文件零活跃告警）并全库
 
 Fix: 将 `qinyin.lpc:9` 补全为 `skill = me->query_skill("yuxiao-jianfa", 1);`，将 `nan1.lpc:18-19` 补全为 `"west": __DIR__ "hangzhou_shop",` 与 `"east": __DIR__ "foshan_shop",`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule tybxjh-qinyin-nan1-quotes`（targeted 规则，校验上述两处吞引号阻断）。
+
+### 6.123 `xkxc98sj`/`xkxz2` `d/job/obj/smding.lpc` 缺 `inherit F_SSERVER` 与 `xiantian-gong/bidu.lpc` 缺 `poison_list.h`（2 馆，4 份文件）
+
+Symptom: 复核 `xkxz2`（`6,859` 份可编译文件零活跃告警）并全库扫查，发现 `xkxc98sj` 与 `xkxz2` 共 `2` 馆存在两处同源活跃编译阻断：
+1. `/d/job/obj/smding.lpc:43`（神木王鼎）：`do_suck()` 调用了 `offensive_target(me)` 却只 `inherit ITEM;`，缺少 `inherit F_SSERVER;`，触发 `Undefined function offensive_target`。
+2. `/kungfu/skill/xiantian-gong/bidu.lpc:5`（全真先天功逼毒）：`#include "/kungfu/skill/poison_list.h"` 所依赖的毒药表头文件缺失，触发 `Cannot #include` 并连带导致 `NOR` 未定义。
+
+Fix: 将两馆 `d/job/obj/smding.lpc:43` 改为 `F_SSERVER->offensive_target(me)`（避免与 `ITEM` 产生 `F_CLEAN_UP` 菱形继承告警，保留原 LF 行尾），并从同源 `bmxkx2001` 补齐 61 行 `/kungfu/skill/poison_list.h` 解锁 `xiantian-gong/bidu.lpc`。
+Detection: `scripts/lint.py --rule xkxc98sj-smding-poison-list`（targeted 规则，校验上述两类阻断）。

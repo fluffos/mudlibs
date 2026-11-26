@@ -625,3 +625,8 @@ pristine + build-debug，归档端口 40126。`scripts/play_login.py` 注册进�
 
 - 全库 `scripts/lpc_warnings.py` 复扫（`6,855` 份可编译文件零活跃告警）并修复 `6` 份活跃编译阻断：`/d/dali/dalijob/npc1.lpc:49` 路径拼写 `/d/daili/` -> `/d/dali/`、`/d/gumu/jqg/obj/wcloth.lpc:8` `NOR({` -> `NOR, ({`、`/d/tiezhang/npc/bangzhon.lpc:79` 补回 `int hiting_ob(object ob)`、`/kungfu/skill/pixie-jian.lpc:1` 补回 `// ` 注释、`/kungfu/skill/{canhe-zhi,zhusha-zhang}.lpc` 补回 `#include <ansi.h>`（均保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS`；`scripts/lint.py`（新增规则 #177 `xkxc98sj-six-compile-blockers`，共 `177` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-26 `smding` 补 `inherit F_SSERVER` 并补齐 `poison_list.h`（KB 04 §6.123）
+
+- 将 `/d/job/obj/smding.lpc:43` 改为 `F_SSERVER->offensive_target(me)`（避免与 `ITEM` 产生 `F_CLEAN_UP` 菱形继承告警），并从同源 `bmxkx2001` 补齐 61 行 `/kungfu/skill/poison_list.h` 解锁 `/kungfu/skill/xiantian-gong/bidu.lpc`（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `2/2`（`smding`/`bidu`）零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（新增规则 #182 `xkxc98sj-smding-poison-list`，共 `182` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
