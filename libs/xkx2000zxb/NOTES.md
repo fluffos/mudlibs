@@ -583,3 +583,8 @@ pristine + build-debug，归档端口 40140。`scripts/play_login.py` 注册进�
 
 - 将 `/cmds/std/xunbu.lpc:19` 相对 `#include "npc_skills_attrib_setup.h"` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h"`，并从同源姊妹馆 `jym` 移植缺失的 `/d/shaolin/npc/job.h` 使 `/d/shaolin/npc/xuanci.lpc` 恢复编译（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `2/2` 零错零告警 `PASS`；`scripts/lint.py`（规则 #129 `xkx-rstbkup-xunbu-xuanci`，共 129 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47805`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `/d/dali/npc/a.lpc` 缺右括号与缺末行闭合花括号修复（KB 04 §6.108）
+
+- 修复 `/d/dali/npc/a.lpc:221` 缺失右括号（`if (random(a + b + c + d) > 40 && (random(a + b + c + d) < 70)` -> `if (random(a + b + c + d) > 40 && random(a + b + c + d) < 70)`）及第 `242` 行末尾缺失函数闭合 `}`（保留纯 LF 行尾，并用 `lpc_format_changed.py --apply` 规范缩进）。
+- 验证：`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（规则 #167 `jym-pingyuan-copyskills-examine-a`，共 `167` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48102`）通过且 `ZERO_DRIVERS`。

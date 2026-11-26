@@ -2097,3 +2097,14 @@ Symptom: 扫描 `shujian3`（`10,000` 份可编译文件零告警）发现两类
 
 Fix: 参照 `bxsj` 将 `diemenglou1.lpc:123` 与 `diemenglou2.lpc:135` 改为 `NOR + CYN "\n" NOR;`（保留 CRLF），并从同源 `shujian2008` 引入 `/kungfu/skill/beiming-shengong/liumai_msg.h`。
 Detection: `scripts/lint.py --rule shujian3-diemenglou-liumai`（targeted 规则，校验上述两类阻断）。
+
+### 6.108 `jym`/`xkx2000zxb` `pingyuan.lpc` 未闭合映射、`copyskills.lpc` 未定义 `playerp()`、`examine.lpc` 废弃 `efun::count()` 与 `d/dali/npc/a.lpc` 缺括号/花括号（2 馆，5 份文件）
+
+Symptom: 扫描 `jym`（`11,119` 份可编译文件零告警）并全库校验规则 #167，发现 `2` 馆 `5` 份活跃代码编译阻断：
+1. `jym` `/d/final/pingyuan.lpc:17`：空的 `set("item_desc", ([` 未闭合即紧跟 `set("exits", ([`，触发 `syntax error, unexpected ';'`。
+2. `jym` `/cmds/arch/copyskills.lpc:38`：调用本馆未定义的 `playerp(tob)`（应为 FluffOS 标准 `userp(tob)`），触发 `Undefined function playerp`。
+3. `jym` `/cmds/adm/examine.lpc:17`：`count_div(mixed n1, mixed n2)` 调用已被 FluffOS 移除的 `efun::count(n1, "/", n2)`，触发 `Unknown efun: count`。
+4. `jym` 与 `xkx2000zxb` `/d/dali/npc/a.lpc:221,242`：`if (random(a + b + c + d) > 40 && (random(a + b + c + d) < 70)` 缺少闭合 `)` 且文件末尾缺少函数闭合 `}`。
+
+Fix: 分别删去 `pingyuan.lpc:17` 空的未闭合 `set("item_desc", ([`、将 `copyskills.lpc:38` `playerp(tob)` 改为 `userp(tob)`、将 `examine.lpc:16-18` `count_div()` 改为整数除法 `sprintf("%d", to_int(n1) / d)`（含除零保护）、并修复两馆 `a.lpc:221` 括号与补全末行 `}`（全批保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule jym-pingyuan-copyskills-examine-a`（targeted 规则，校验上述阻断）。
