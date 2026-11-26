@@ -1354,3 +1354,8 @@ pristine + build-debug，归档端口 40049。`scripts/play_login.py` 注册并�
 
 - 修复 `/d/mingjiao/banshanyao.lpc:32,41` 字面 `^ M` 导致的语法报错（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`scripts/lint.py`（新增规则 #175 `jhfy2-ground0-banshanyao`，共 `175` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-26 `daboss`/`tangjue` 编译阻断修复与全库告警清零（KB 04 §6.119）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`10,597` 份可编译文件）并修复 `3` 份活跃文件（保留原 CRLF 行尾）：注释掉 `/d/shushan/npc/daboss.lpc:22-24` 残留的 `}\n)\n);`；修正 `/d/tangmen/tangmenzhen/npc/tangjue.lpc:53-60,89` 的 `( : ... : );` 闭包语法与 `swith(0)` -> `switch (0)`；移除 `/d/city/npc/wei.lpc:102` 未用局部 `object *inv;`，全库可编译文件实现零告警（`10,599` 份）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（新增规则 #178 `wmkj-daboss-tangjue-blockers`，共 `178` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48211`）通过且 `ZERO_DRIVERS`。

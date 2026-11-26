@@ -2210,3 +2210,13 @@ Symptom: 扫描 `xkxc98sj`（`6,855` 份可编译文件零活跃告警）并全�
 
 Fix: 将 `npc1.lpc` 路径更正为 `"/d/dali/dalijob/killer1.lpc"`、`wcloth.lpc` 更正为 `set_name(WHT "白纱霓裳" NOR, ({ "white cloth" }));`、`bangzhon.lpc:79` 补回 `int hiting_ob(object ob)`（参照同源 `bixiecanyang`/`hy3`）、`pixie-jian.lpc:1` 补回 `// `、`canhe-zhi.lpc`/`zhusha-zhang.lpc` 顶部补回 `#include <ansi.h>`（均保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule xkxc98sj-six-compile-blockers`（targeted 规则，校验上述六类阻断）。
+
+### 6.119 `wmkj` `daboss.lpc` 残留 `}\n)\n);`、`tangjue.lpc` `( : ... : );`/`swith(0)` 与 `wei.lpc` 告警清零（1 馆，3 份文件）
+
+Symptom: 扫描 `wmkj`（`10,597` 份可编译文件）发现两份活跃 NPC 编译阻断与全库仅余 `1` 份可编译告警：
+1. `/d/shushan/npc/daboss.lpc:22-24`：注释掉 `vendor_goods` 列表后残留未注释的 `}\n)\n);`，触发 `syntax error, unexpected ')'`。
+2. `/d/tangmen/tangmenzhen/npc/tangjue.lpc:53-60,89`：`chat_msg_combat` 数组元素误写为带空格的 `( : ... : )` 且第 `57-58` 行末尾误用 `;` 替代 `,`，同时 `carry_obj()` 中将 `switch (0)` 拼写为 `swith(0)`，触发多处 `syntax error`。
+3. `/d/city/npc/wei.lpc:102`：残留未用局部 `object *inv;`，为 `wmkj` 全库唯一可编译告警。
+
+Fix: 注释掉 `daboss.lpc:22-24` 残留的 `}\n)\n);`、修正 `tangjue.lpc` 中的 `(: ... :)` 闭包语法/逗号与 `switch (0)`、移除 `wei.lpc:102` 未用局部 `object *inv;`（均保留原 CRLF 行尾），使 `wmkj`（`10,599` 份可编译文件）实现零编译告警。
+Detection: `scripts/lint.py --rule wmkj-daboss-tangjue-blockers`（targeted 规则，校验 `daboss.lpc` 与 `tangjue.lpc` 语法阻断）。
