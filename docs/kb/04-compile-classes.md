@@ -2108,3 +2108,14 @@ Symptom: 扫描 `jym`（`11,119` 份可编译文件零告警）并全库校验�
 
 Fix: 分别删去 `pingyuan.lpc:17` 空的未闭合 `set("item_desc", ([`、将 `copyskills.lpc:38` `playerp(tob)` 改为 `userp(tob)`、将 `examine.lpc:16-18` `count_div()` 改为整数除法 `sprintf("%d", to_int(n1) / d)`（含除零保护）、并修复两馆 `a.lpc:221` 括号与补全末行 `}`（全批保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule jym-pingyuan-copyskills-examine-a`（targeted 规则，校验上述阻断）。
+
+### 6.109 梦幻西游/魔幻世纪系 `vcd3.lpc` 跨行重复 `users()`、`yueru.lpc` 缺右括号、`lingfan-san.lpc` 未定义 `umbrella_parry_msg` 与无底洞 `abc.lpc`（3 馆，9 份文件）
+
+Symptom: 扫描 `mhxyqd`（`11,791` 份可编译文件零活跃告警）并全库普查活跃可玩库，发现 `mhxy`、`mhxyqd`、`mohuanshiji` 共 `3` 馆 `9` 份活跃文件存在四类编译阻断：
+1. `/clone/misc/vcd3.lpc:264-265`（`mhxy`、`mhxyqd`、`mohuanshiji` 共 `3` 馆）：与 §6.99 `sjcs` 同源的多余重复 `users()` 被格式化跨行拆成 `users()\r\n);\r\n  users()\r\n);`，触发 `syntax error, unexpected ')'`（原规则 #160 仅匹配单行 `users());\r?\nusers());` 而漏检）。
+2. `/d/shushan/npc/yueru.lpc:44`（`mhxy`、`mhxyqd` 共 `2` 馆）：`command("heng " + me->query("id");` 缺失闭合 `)`（且 `int attempt_apprentice()` 第 `46` 行为裸 `return;`），触发 `syntax error, unexpected ';'`。
+3. `/daemon/skill_wiz/umbrella/lingfan-san.lpc:92`（`mhxy`、`mhxyqd` 共 `2` 馆）：第 `84` 行定义 `string *unarmed_parry_msg`，第 `92` 行却误写为 `return umbrella_parry_msg[random(sizeof(umbrella_parry_msg))];`，触发 `Undefined variable 'umbrella_parry_msg'`。
+4. `/d/qujing/wudidong/npc/obj/abc.lpc:48,53`（`mhxy`、`mhxyqd` 共 `2` 馆）：未声明局部变量 `int qn;`（触发 `Undefined variable 'qn'` / `Illegal lvalue`），且第 `53` 行将字符串 `str` 直接做算术 `str * 3 / 2`（触发 `Invalid types to '*' ( string vs int )`）。
+
+Fix: 删除 `3` 馆 `vcd3.lpc` 多余的 `users()\r\n);`（保留 CRLF）并放宽规则 #160 支持跨行空白匹配；在 `2` 馆 `yueru.lpc` 补回 `)` 并将裸 `return;` 改为 `return 0;`；将 `2` 馆 `lingfan-san.lpc:92` 改为 `unarmed_parry_msg`；在 `2` 馆 `abc.lpc` 补齐 `int qn;` 并将 `str * 3 / 2` 改为 `COMBAT_D->chinese_daoxing((int)query("reward") * 3 / 2)`（保留 LF 行尾）。
+Detection: `scripts/lint.py --rule xyj-xiwangmu-vcd3-blockers` 与 `scripts/lint.py --rule mhxy-yueru-lingfan-abc`（targeted 规则，校验上述四类阻断）。

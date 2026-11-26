@@ -1236,3 +1236,8 @@ pristine + build-debug，port 40092。`scripts/play_login.py` 注册。
 
 - 清理 `/clone/misc/rabbit.lpc` 中 `do_closecommand()`/`do_opencommand()` 未使用的局部变量 `verb`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `75` 处 `0 to look at`；`lpc_format_changed.py` `21/21` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`128` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh`（`47791..47797`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `/clone/misc/vcd3.lpc` 跨行重复 `users()` 编译阻断修复（KB 04 §6.109）
+
+- 删除 `/clone/misc/vcd3.lpc:264-265` 多余重复的 `users()\r\n);`（保留 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（放宽规则 #160 `xyj-xiwangmu-vcd3-blockers`，共 `168` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48113`）通过且 `ZERO_DRIVERS`。
