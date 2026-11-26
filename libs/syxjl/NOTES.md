@@ -1270,3 +1270,8 @@ pristine + build-debug，port 40088。`scripts/play_login.py` 注册。
 
 - 将 `/d/mingjiao/npc/changjinpeng.lpc:71` `#include "/kungfu/class/mingjiao/tanzhu.h"` 改为同目录 `#include "/d/mingjiao/npc/tanzhu.h"`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py` `18/18` `0` 重排；`lpcc --batch` 全批 `14` 馆 `18/18 PASS` 零错零告警；`lpcc_eval.py`（`jyqxc`）由 `--head` `Cannot #include`+`Unused local` 转为零告警 `PASS`；`scripts/lint.py`（新增规则 #144 `changjinpeng-tanzhu-include`，共 144 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47861..47866`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `jia.lpc` 末尾孤立 `>` 与 `ma.lpc` 多余 `}` 修复（KB 04 §6.114）
+
+- 移除 `/d/quanzhen/npc/obj/jia.lpc:53` 末尾孤立 `>` 与 `/d/shenlong/ma.lpc:125` `return 1;` 前多余闭合 `}`（保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `2/2` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（规则 #173 `ldtx-tiao-jia-ma-blockers`，共 `173` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48163`）通过且 `ZERO_DRIVERS`。

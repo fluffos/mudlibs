@@ -2161,3 +2161,13 @@ Symptom: 扫描 `hy3`（`9,865` 份可编译文件）与 `jhfy`（`8,039` 份可
 
 Fix: 为 `7` 馆 `playboy.lpc` 补回 `init()` 闭合 `}` 并删除未用 `int time;`、为 `3` 馆 `qlist3.lpc:35` 补齐 `,`、删除 `hy3` `jinshe-jianfa.lpc:2` 孤立 `jkls  `、并移除 `hy3`/`jhfy` `questguai.lpc` 未用声明（保留各文件原 CRLF/LF 行尾），使 `hy3`（`9,868` 份）与 `jhfy`（`8,039` 份）双双实现零编译告警。
 Detection: `scripts/lint.py --rule hy3-playboy-qlist3-jinshe`（targeted 规则，校验上述三类阻断）。
+
+### 6.114 乱斗天下/书剑系 `jia.lpc` 末尾 `>`、`ma.lpc` 多余 `}` 与 `ldtx` `tiao`/`yabi1` `destruct("corpse")`（3 馆，8 份文件）
+
+Symptom: 扫描 `ldtx`（`5,937` 份可编译文件零活跃告警）与 `shenzhou`（`12,604` 份可编译文件）并全库扫查，发现 `ldtx`、`ldtxii`、`syxjl` 共 `3` 馆 `8` 份活跃编译阻断：
+1. `ldtx` `/d/gumu/tiao.lpc:105` 与 `/d/gumu/yabi1.lpc:47`：在 `destruct(tmp);` 后紧跟无效的 `destruct("corpse");`，因本馆直接使用原生 `efun::destruct(object)` 而触发 `Bad argument 1 to efun destruct()` 阻断古墓跳崖房间加载。
+2. `ldtx`、`ldtxii`、`syxjl` `/d/quanzhen/npc/obj/jia.lpc:53`：文件末尾多出孤立字符 `>`，触发 `syntax error, unexpected L_ORDER` 阻断全真兵器架加载。
+3. `ldtx`、`ldtxii`、`syxjl` `/d/shenlong/ma.lpc:125-127`：`ask_me()` 中 `me->set_temp("send_letter", 1);` 后多出一行闭合 `}`，紧跟 `return 1;\n}` 触发 `syntax error, unexpected L_RETURN`。
+
+Fix: 删除 `ldtx` `tiao.lpc`/`yabi1.lpc` 无效的 `destruct("corpse");`、删除 `3` 馆 `jia.lpc:53` 末尾 `>`、删除 `3` 馆 `ma.lpc:125` 多余闭合 `}`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule ldtx-tiao-jia-ma-blockers`（targeted 规则，校验上述三类阻断）。
