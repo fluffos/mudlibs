@@ -2287,3 +2287,10 @@ Symptom: 扫描 `sanjieshenhua`（`12,529` 份可编译文件零活跃告警）�
 
 Fix: 移除两馆 `fly.lpc` 中的 `set_leader(1);`；在 `sanjieshenhua` `keting.lpc` 补齐 `inherit ROOM;`；将 `xiyouji2003` `houquan.lpc:78` 改为 `NewRandom(i, 20, level / 5)`、`doubleblade.lpc:5` 改为 `inherit BLADE;`、并取消 `fjtx.lpc:43` 的注释（均保留各文件原 LF/CRLF 行尾）。
 Detection: `scripts/lint.py --rule sanjieshenhua-xiyouji2003-blockers`（targeted 规则，校验上述五类编译阻断）。
+
+### 6.127 `ffxymud`/`jhfy2`/`xysylmhb`/`xyzx3`/`xyzxiiylzymh`/`yzxiiizylfy` `quest/mmid/` 缺失 `query.h` 阻断 `54` 份任务表（6 馆，6 份头文件）
+
+Symptom: 扫描 `yzxiiizylfy`（`8,236` 份可编译文件零活跃告警）并全库扫查，发现 `ffxymud`、`jhfy2`、`xysylmhb`、`xyzx3`、`xyzxiiylzymh`、`yzxiiizylfy` 共 `6` 馆的 `/quest/mmid/qlist{0,4000,8000,16000,32000,64000,128000,256000,512000}.lpc`（每馆 `9` 份、共 `54` 份任务表）末尾均写了 `#include "query.h"`，但 `/quest/mmid/` 目录缺失 `query.h`（同馆相邻的 `/quest/upr/query.h` 均完好存在，仅 4 行 `mapping query_quest() { return quest[random(sizeof(quest))]; }`），导致全部 `54` 份任务表触发 `Cannot #include query.h` 无法编译。
+
+Fix: 从各馆自身的 `/quest/upr/query.h` 复制补齐 `/quest/mmid/query.h`（75 字节纯 LF），一次性解锁全部 `6` 馆 `54` 份 `qlist*.lpc` 任务表且零告警。
+Detection: `scripts/lint.py --rule quest-mmid-missing-query-h`（targeted 规则，检测 `quest/mmid/qlist0.lpc` 包含 `"query.h"` 却缺少同目录 `query.h`）。

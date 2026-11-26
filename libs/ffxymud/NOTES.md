@@ -555,3 +555,8 @@ pristine + build-debug，port 40142。客户端版本握手（`shikongyouxia3.0`
 
 - 解锁 `ground0.lpc` 后连带暴露了继承链 `ground1.lpc`（5 处）、`ground2.lpc`（16 处）与 `ground3.lpc`（5 处）共 `26` 处未用局部变量告警；参照干净同源 `xyj2000` 清理全部 `26` 处声明并保留 `this_room()->query(...)` 副作用及原 LF/CRLF 行尾。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast` 零错零告警（`181` 条规则）；代表馆 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-26 补齐 `quest/mmid/query.h` 解锁 `9` 份任务表（KB 04 §6.127）
+
+- 本馆 `/quest/mmid/qlist{0,4000,8000,16000,32000,64000,128000,256000,512000}.lpc`（`9` 份任务表）末尾均 `#include "query.h"` 但缺少同目录 `query.h`；从本馆完好的 `/quest/upr/query.h` 复制补齐 `/quest/mmid/query.h`（75 字节纯 LF）。
+- 验证：`lpcc --batch` `9/9` 全部零错零告警 `PASS`；`lpcc_eval.py` 差分实测由 `--head` `0/9` 转为 `9/9`；`scripts/lint.py`（新增规则 #186 `quest-mmid-missing-query-h`，共 `186` 条）`--changed HEAD` 与 `--fast` 均零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

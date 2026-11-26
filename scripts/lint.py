@@ -232,6 +232,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("wlhd-summon-unbalanced-if", "targeted", "KB 04 §6.124", "error", "`cmds/wiz/summon.lpc` unbalanced `if (!ob || (!me->visible(ob))` missing `)`"),
     RuleSpec("bitao-xuangong-missing-force-list", "targeted", "KB 04 §6.125", "error", "`kungfu/skill/bitao-xuangong.lpc` includes `/kungfu/skill/force_list.h` when missing"),
     RuleSpec("sanjieshenhua-xiyouji2003-blockers", "targeted", "KB 04 §6.126", "error", "`fly.lpc` `set_leader(1)` / `keting.lpc` missing `inherit ROOM` / `houquan.lpc` 3-arg `random()` / `doubleblade.lpc` `inherit SWORD` + `init_blade` / `fjtx.lpc` commented `last_time`"),
+    RuleSpec("quest-mmid-missing-query-h", "targeted", "KB 04 §6.127", "error", "`quest/mmid/qlist0.lpc` includes `\"query.h\"` when `quest/mmid/query.h` is missing"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1834,7 +1835,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl", "sjsh_xyj03")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl", "sjsh_xyj03", "mmid_qh")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2088,6 +2089,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/adm/npc/fjtx.lpc",
         ):
             targeted_bins["sjsh_xyj03"].append(item)
+        if rel == "/quest/mmid/qlist0.lpc":
+            targeted_bins["mmid_qh"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -3139,6 +3142,12 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 col.add("sanjieshenhua-xiyouji2003-blockers", p, "inherits `SWORD` while calling `init_blade()`")
             elif rel == "/adm/npc/fjtx.lpc" and re.search(rb"(?m)^[ \t]*//\s*int\s+last_time\s*=", b) and b"last_time = time()" in b:
                 col.add("sanjieshenhua-xiyouji2003-blockers", p, "comments out `int last_time = 0;` while assigning `last_time = time()`")
+
+    if col.wants("quest-mmid-missing-query-h"):
+        for slug, p, _ in targeted_bins["mmid_qh"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if b'#include "query.h"' in b and not os.path.isfile(f"{REPO}/libs/{slug}/work/quest/mmid/query.h"):
+                col.add("quest-mmid-missing-query-h", p, "includes `\"query.h\"` while `quest/mmid/query.h` is missing")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
