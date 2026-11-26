@@ -226,6 +226,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("xkxc98sj-six-compile-blockers", "targeted", "KB 04 §6.118", "error", "`dalijob/npc1.lpc` `/d/daili/` typo, `wcloth.lpc` `NOR({`, `bangzhon.lpc` missing `hiting_ob` header, `pixie-jian.lpc` uncommented line 1, or `canhe-zhi`/`zhusha-zhang` missing `<ansi.h>`"),
     RuleSpec("wmkj-daboss-tangjue-blockers", "targeted", "KB 04 §6.119", "error", "`d/shushan/npc/daboss.lpc` stray `}\\n)\\n);` or `d/tangmen/tangmenzhen/npc/tangjue.lpc` `( : ... : );` / `swith(` typo"),
     RuleSpec("tianxiawuxue-kan-xinxiu-blockers", "targeted", "KB 04 §6.120", "error", "`kuaidao-daofa/kan.lpc` stray `8 \"kuaidao-daofa\"` or `d/fengxue/xin-xiu.lpc` undefined `update(me);`"),
+    RuleSpec("xjcq2000-skill-blockers", "targeted", "KB 04 §6.121", "error", "`houquan.lpc` split `stri\\nng`, `taiji-shengong.lpc` pasted `> cat`, `yirubian.lpc` 2-arg `notify_fail`/`write`, or `yinsuo-jinling/shenmen.lpc` `me->query - skill`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1828,7 +1829,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2059,6 +2060,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["wmkj_dt"].append(item)
         if rel in ("/kungfu/skill/kuaidao-daofa/kan.lpc", "/d/fengxue/xin-xiu.lpc"):
             targeted_bins["txwx_kx"].append(item)
+        if rel in (
+            "/kungfu/skill/houquan.lpc",
+            "/kungfu/skill/taiji-shengong.lpc",
+            "/kungfu/skill/yirubian.lpc",
+            "/kungfu/skill/yinsuo-jinling/shenmen.lpc",
+        ):
+            targeted_bins["xjcq_sk"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -3053,6 +3061,18 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 col.add("tianxiawuxue-kan-xinxiu-blockers", p, 'stray `8 ` before `"kuaidao-daofa"` in `improve_skill()`')
             elif rel == "/d/fengxue/xin-xiu.lpc" and b"update(me);" in b:
                 col.add("tianxiawuxue-kan-xinxiu-blockers", p, "undefined `update(me);` instead of `destruct(me);`")
+
+    if col.wants("xjcq2000-skill-blockers"):
+        for _, p, rel in targeted_bins["xjcq_sk"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/kungfu/skill/houquan.lpc" and re.search(rb'valid_enable\s*\(\s*stri\r?\n\s*ng\b', b):
+                col.add("xjcq2000-skill-blockers", p, "split `stri\\nng` keyword in `valid_enable()`")
+            elif rel == "/kungfu/skill/taiji-shengong.lpc" and b"> cat /" in b:
+                col.add("xjcq2000-skill-blockers", p, "pasted `> cat / kungfu / skill / taiji - xinfa.c` tail")
+            elif rel == "/kungfu/skill/yirubian.lpc" and re.search(rb'\b(?:notify_fail|write)\s*\([^;\n]+,\s*me\s*\)', b):
+                col.add("xjcq2000-skill-blockers", p, "2-argument `notify_fail(..., me)` or `write(..., me)`")
+            elif rel == "/kungfu/skill/yinsuo-jinling/shenmen.lpc" and b"me->query - skill(" in b:
+                col.add("xjcq2000-skill-blockers", p, "`me->query - skill(` typo for `me->query_skill(`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

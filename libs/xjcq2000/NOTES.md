@@ -1225,3 +1225,8 @@ pristine + build-debug，port 40034。`scripts/play_login.py` 注册。
 
 - 修复 `/d/tiezhang/npc/bangzhon.lpc:79` 缺失的 `int hiting_ob(object ob)` 函数头（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS`；`scripts/lint.py`（新增规则 #177 `xkxc98sj-six-compile-blockers`，共 `177` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-26 `houquan`/`taiji-shengong`/`yirubian`/`shenmen` 武功编译阻断修复（KB 04 §6.121）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`12,168` 份可编译文件）并修复 `4` 份活跃武功编译阻断（保留各文件原 LF/CRLF 行尾）：合并 `/kungfu/skill/houquan.lpc:15-16` 被拆行的 `stri\n  ng usage`；截断 `/kungfu/skill/taiji-shengong.lpc:51-59` 粘贴的 `> cat / kungfu / skill / taiji - xinfa.c` 尾段；移除 `/kungfu/skill/yirubian.lpc:117,139,142` 中 `notify_fail`/`write` 多余的第二参数 `, me`；修正 `/kungfu/skill/yinsuo-jinling/shenmen.lpc:34,49` 的 `me->query - skill(` -> `me->query_skill(` 与引号外中文。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `4/4` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/4` 转为 `4/4 PASS`；`scripts/lint.py`（新增规则 #180 `xjcq2000-skill-blockers`，共 `180` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48231`）通过且 `ZERO_DRIVERS`。

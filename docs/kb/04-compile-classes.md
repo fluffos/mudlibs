@@ -2230,3 +2230,14 @@ Symptom: 复核 `tianxiawuxue`（`12,033` 份可编译文件）发现三处活�
 
 Fix: 为 `ground0.lpc` 补回 `#include "ground.h"`、删除 `kan.lpc:36` 多余的 `8 `、将 `xin-xiu.lpc:370` 改为 `destruct(me);`（均保留原 CRLF 行尾）。
 Detection: 扩展 `jhfy2-ground0-banshanyao` 校验 `STEP_PREPARE` 缺 `ground.h`，并新增 `scripts/lint.py --rule tianxiawuxue-kan-xinxiu-blockers`。
+
+### 6.121 `xjcq2000` 四份武功文件编译阻断（`houquan`/`taiji-shengong`/`yirubian`/`yinsuo-jinling/shenmen`，1 馆，4 份文件）
+
+Symptom: 扫描 `xjcq2000`（`12,168` 份可编译文件）发现四份活跃武功文件因排版损坏或参数错写无法编译：
+1. `/kungfu/skill/houquan.lpc:15-16`：`valid_enable(string usage)` 被硬换行拆成 `valid_enable(stri\n  ng usage)`，触发 `Missing type for argument`。
+2. `/kungfu/skill/taiji-shengong.lpc:51-59`：末尾被粘贴进 `> cat / kungfu / skill / taiji - xinfa.c` 与整份 `taiji-xinfa.c`，触发 `syntax error, unexpected L_ORDER`。
+3. `/kungfu/skill/yirubian.lpc:117,139,142`：两处 `notify_fail(..., me)` 与一处 `write(..., me)` 误传第二个参数 `me`，触发 `Too many arguments`。
+4. `/kungfu/skill/yinsuo-jinling/shenmen.lpc:34,49`：将 `me->query_skill("tiyunzong", 1)` 错写为 `me->query - skill(...)`，且第 `49` 行中文字符串 `， 手 中` 落在引号外触发 `Illegal character 0xef`。
+
+Fix: 合并 `houquan.lpc` 的 `string usage`、截断 `taiji-shengong.lpc` 第 `51` 行起粘贴尾段、去掉 `yirubian.lpc` 三处多余的 `, me` 参数、修正 `shenmen.lpc:34` 为 `me->query_skill("tiyunzong", 1)` 与第 `49` 行引号拼装（保留各文件原 LF/CRLF 行尾）。
+Detection: `scripts/lint.py --rule xjcq2000-skill-blockers`（targeted 规则，校验上述四类武功阻断）。
