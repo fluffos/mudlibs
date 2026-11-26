@@ -1275,3 +1275,8 @@ pristine + build-debug，port 40088。`scripts/play_login.py` 注册。
 
 - 移除 `/d/quanzhen/npc/obj/jia.lpc:53` 末尾孤立 `>` 与 `/d/shenlong/ma.lpc:125` `return 1;` 前多余闭合 `}`（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `2/2` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（规则 #173 `ldtx-tiao-jia-ma-blockers`，共 `173` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48163`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `duchang5`/`cmds/wiz/ll`/`d/quanzhen/obj/jia` 编译阻断修复（KB 04 §6.115）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`7,457` 份可编译文件零活跃告警）并修复 `3` 份活跃编译阻断（保留各文件原 CRLF/LF 行尾）：合并 `/d/city/npc/duchang5.lpc:6-16` 散落在顶层的全局赋值并修正 `object bl_gui0;` -> `object bl_gui = 0;`；截断 `/cmds/wiz/ll.lpc:136-260` 重复粘贴的第二份 `ls` 实现；移除 `/d/quanzhen/obj/jia.lpc:166` 末尾孤立 `>`。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/3` 转为 `3/3 PASS`；`scripts/lint.py`（新增规则 #174 `syxjl-duchang5-ll-jia-blockers`，共 `174` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48171`）通过且 `ZERO_DRIVERS`。

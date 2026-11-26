@@ -2171,3 +2171,13 @@ Symptom: 扫描 `ldtx`（`5,937` 份可编译文件零活跃告警）与 `shenzh
 
 Fix: 删除 `ldtx` `tiao.lpc`/`yabi1.lpc` 无效的 `destruct("corpse");`、删除 `3` 馆 `jia.lpc:53` 末尾 `>`、删除 `3` 馆 `ma.lpc:125` 多余闭合 `}`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule ldtx-tiao-jia-ma-blockers`（targeted 规则，校验上述三类阻断）。
+
+### 6.115 `syxjl` `duchang5.lpc` 顶层裸赋值、`cmds/wiz/ll.lpc` 重复拼接与 `d/quanzhen/obj/jia.lpc` 末尾 `>`（1 馆，3 份文件）
+
+Symptom: 扫描 `syxjl`（`7,457` 份可编译文件零活跃告警）发现三处活跃编译阻断：
+1. `/d/city/npc/duchang5.lpc:6-16`：先声明 `int room_status; object cs_gui; object qn_gui; object bl_gui0;` 后在顶层裸写 `room_status = 0; cs_gui = 0; qn_gui = 0; bl_gui = 0;`，被编译器解析为无类型 `unknown` 全局重声明，触发 `Redeclaration of global variable` 与 `Bad left argument to '>' : "unknown "` 等 9 处报错。
+2. `/cmds/wiz/ll.lpc:136-260`：末尾拼接了整份第二版 `ls` 指令，触发 `Redeclaration of function 'main'` / `'help'`。
+3. `/d/quanzhen/obj/jia.lpc:166`：文件末尾多出孤立 `>`，触发 `syntax error, unexpected L_ORDER`。
+
+Fix: 将 `duchang5.lpc:6-16` 合并为带初值的 `int room_status = 0; object cs_gui = 0; object qn_gui = 0; object bl_gui = 0;`、截断 `ll.lpc` 第 `136` 行起重复段、删除 `jia.lpc:166` 末尾 `>`（均保留原 CRLF 行尾）。
+Detection: `scripts/lint.py --rule syxjl-duchang5-ll-jia-blockers`（targeted 规则，校验上述三处阻断）。
