@@ -2130,3 +2130,13 @@ Symptom: 扫描 `chidi`（`15,815` 份可编译文件仅 `1` 条活告警）与 
 
 Fix: 分别删去 `cheng.lpc:119` 多余 `}`、注释 `qiankundai.lpc` 两处悬空 `} else` 与 `do_get()` `return 1;` 并移除 `do_put()` 未用 `object me = this_player();`、为 `chidi` `huangjobhy.lpc:45` 补齐 `varargs`（使 `chidi` 全库 `15,818` 份可编译文件实现零告警）、并注释 `4` 馆 `dead_leech.lpc:16` 不可用的 `// set("eat_func", (: eat_tonic :));`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule chidi-cheng-qiankundai-dead-leech`（targeted 规则，校验上述阻断）。
+
+### 6.111 `xkm` 冰雪真气丢失 `for` 循环头/范遥缺引号与 `xuanjianlu` 乾坤大挪移 5 参 `replace_string()`（2 馆，3 份文件）
+
+Symptom: 扫描 `xkm`（`10,299` 份可编译非 `/u/` 文件零告警）与 `xuanjianlu`（`10,443` 份可编译非 `/u/` 文件零告警）发现三处活跃技能/NPC 编译阻断：
+1. `xkm` `/kungfu/skill/bingxue-zhenqi.lpc:64-67`：`exert_function_file()` 中 `sname = sort_array(keys(skl), (: strcmp :));` 后丢失 `for (v = 0; v < sizeof(skl); v++) {` 循环头，直接接 `if (SKILL_D(sname[v])->check() == "force") k++; }`，致提前闭合函数触发 `syntax error, unexpected L_IF` 阻断冰雪真气加载。
+2. `xkm` `/d/minjiao/npc/fan_yao.lpc:13`：`set("long", ...)` 末行写为 `"丑陋可怖。他头发作红棕之色，自非中土人氏。);\n"`（闭合引号错放到 `\n` 后），触发 `syntax error, unexpected L_DEFINED_NAME` 阻断范遥 NPC 加载。
+3. `xuanjianlu` `/kungfu/skill/qiankun-danuoyi.lpc:215`：`replace_string(result, "$W", me_weapon->name(), attacker, defender);` 误将对象参数 `attacker, defender` 当作 `replace_string()` 第 4/5 整数参数传入，触发 `Bad argument 4/5 to efun replace_string()` 阻断乾坤大挪移加载。
+
+Fix: 分别在 `bingxue-zhenqi.lpc` 补回 `for (v = 0; v < sizeof(skl); v++) {`、将 `fan_yao.lpc:13` 修正为 `"...\n");`、并移除 `qiankun-danuoyi.lpc:215` 多余的 `, attacker, defender`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule xkm-xuanjianlu-skill-fanyao-blockers`（targeted 规则，校验上述三处阻断）。

@@ -577,3 +577,8 @@ pristine + build-debug，归档端口 40191。`scripts/play_login.py` 注册进�
 - 将 `/cmds/std/xunbu.lpc:19` 相对 `#include "npc_skills_attrib_setup.h"` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h"`，并从同源姊妹馆 `jym` 移植缺失的 `/d/shaolin/npc/job.h` 使 `/d/shaolin/npc/xuanci.lpc` 恢复编译（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `2/2` 零错零告警 `PASS`；`scripts/lint.py`（规则 #129 `xkx-rstbkup-xunbu-xuanci`，共 129 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47804`）通过且 `ZERO_DRIVERS`。
 - 2026-11-25（KB 04 §6.92）：修复 `/kungfu/skill/shenghuo-quan.lpc:48` GBK 乱码吞掉闭合引号阻断编译（恢复为 `return notify_fail("你的内力太弱，无法练圣火拳。\n");`）；`lpcc --batch` 零告警通过，新增回归规则 `shenghuo-quan-mojibake-quote`。
+
+## 2026-11-26 `bingxue-zhenqi.lpc` 缺失 `for` 头与 `fan_yao.lpc` 引号错位修复（KB 04 §6.111）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`10,299` 份可编译非 `/u/` 文件零告警）并修复 `2` 份活跃编译阻断（保留原 CRLF/LF 行尾）：在 `/kungfu/skill/bingxue-zhenqi.lpc:65` 补回缺失的 `for (v = 0; v < sizeof(skl); v++) {` 循环头，并将 `/d/minjiao/npc/fan_yao.lpc:13` 错位引号 `自非中土人氏。);\n"` 修正为 `自非中土人氏。\n");`。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `2/2` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（新增规则 #170 `xkm-xuanjianlu-skill-fanyao-blockers`，共 `170` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48131`）通过且 `ZERO_DRIVERS`。

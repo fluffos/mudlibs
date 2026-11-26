@@ -1768,3 +1768,8 @@ pristine + build-debug，归档端口 40064。`scripts/play_login.py` 注册进�
 
 - 将 `/cmds/std/xunbu.lpc:19` 相对 `#include "npc_skills_attrib_setup.h"` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h"`，并从同源姊妹馆 `jym` 移植缺失的 `/d/shaolin/npc/job.h` 使 `/d/shaolin/npc/xuanci.lpc` 恢复编译（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `2/2` 零错零告警 `PASS`；`scripts/lint.py`（规则 #129 `xkx-rstbkup-xunbu-xuanci`，共 129 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47807`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `/kungfu/skill/qiankun-danuoyi.lpc` 5 参 `replace_string()` 编译阻断修复（KB 04 §6.111）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`10,443` 份可编译非 `/u/` 文件零告警）并修复 `/kungfu/skill/qiankun-danuoyi.lpc:215` 误传对象参数 `replace_string(result, "$W", me_weapon->name(), attacker, defender);` -> `replace_string(result, "$W", me_weapon->name());`（保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（规则 #170 `xkm-xuanjianlu-skill-fanyao-blockers`，共 `170` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48132`）通过且 `ZERO_DRIVERS`。

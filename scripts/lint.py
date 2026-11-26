@@ -216,6 +216,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("jym-pingyuan-copyskills-examine-a", "targeted", "KB 04 §6.108", "error", "`jym` `d/final/pingyuan.lpc` unclosed `item_desc`, `cmds/arch/copyskills.lpc` `playerp()`, `cmds/adm/examine.lpc` `efun::count()`, or `d/dali/npc/a.lpc` unbalanced `if`"),
     RuleSpec("mhxy-yueru-lingfan-abc", "targeted", "KB 04 §6.109", "error", "`mhxy`/`mhxyqd` `yueru.lpc` missing `)`, `lingfan-san.lpc` undefined `umbrella_parry_msg`, or `wudidong/npc/obj/abc.lpc` undeclared `qn` / `str * 3 / 2`"),
     RuleSpec("chidi-cheng-qiankundai-dead-leech", "targeted", "KB 04 §6.110", "error", "`chidi` `cheng.lpc`/`qiankundai.lpc` dangling `else`, or `dead_leech.lpc` undefined `(: eat_tonic :)`"),
+    RuleSpec("xkm-xuanjianlu-skill-fanyao-blockers", "targeted", "KB 04 §6.111", "error", "`bingxue-zhenqi.lpc` missing `for (v = 0; ...)` header, `fan_yao.lpc` unclosed quote, or `qiankun-danuoyi.lpc` 5-arg `replace_string()`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1818,7 +1819,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2022,6 +2023,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["mhxy_yla"].append(item)
         if rel in ("/d/chaoting/npc/cheng.lpc", "/d/city/obj/qiankundai.lpc", "/d/goathill/npc/obj/dead_leech.lpc"):
             targeted_bins["chidi_cqd"].append(item)
+        if rel in ("/kungfu/skill/bingxue-zhenqi.lpc", "/d/minjiao/npc/fan_yao.lpc", "/kungfu/skill/qiankun-danuoyi.lpc"):
+            targeted_bins["xkm_xj"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -2916,6 +2919,16 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             elif rel == "/d/goathill/npc/obj/dead_leech.lpc" and slug not in ("es2", "tianlongbabu"):
                 if re.search(rb'(?m)^[ \t]*set\("eat_func",\s*\(:\s*eat_tonic\s*:\)\);', b):
                     col.add("chidi-cheng-qiankundai-dead-leech", p, "undefined `(: eat_tonic :)` in lib whose `F_FOOD` lacks `eat_tonic()`")
+
+    if col.wants("xkm-xuanjianlu-skill-fanyao-blockers"):
+        for _, p, rel in targeted_bins["xkm_xj"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/kungfu/skill/bingxue-zhenqi.lpc" and re.search(rb'sname = sort_array\(keys\(skl\), \(: strcmp :\)\);\s*\r?\n\s*if \(SKILL_D\(sname\[v\]\)', b):
+                col.add("xkm-xuanjianlu-skill-fanyao-blockers", p, "missing `for (v = 0; v < sizeof(skl); v++) {` loop header")
+            elif rel == "/d/minjiao/npc/fan_yao.lpc" and b'\xe4\xb8\xad\xe5\x9c\x9f\xe4\xba\xba\xe6\xb0\x8f\xe3\x80\x82);' in b:
+                col.add("xkm-xuanjianlu-skill-fanyao-blockers", p, "unclosed quote before `);` in `set(\"long\", ...)`")
+            elif rel == "/kungfu/skill/qiankun-danuoyi.lpc" and b'replace_string(result, "$W", me_weapon->name(), attacker, defender)' in b:
+                col.add("xkm-xuanjianlu-skill-fanyao-blockers", p, "bogus 4th/5th object args `attacker, defender` passed to `replace_string()`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
