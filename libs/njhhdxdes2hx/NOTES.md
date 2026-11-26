@@ -526,3 +526,8 @@ pristine + build-debug，归档端口 40194。`scripts/play_login.py` 注册并�
 
 - 修复 `/d/snow/npc/poster.lpc:12` 中 `set("age", 28) set("long", ...` 缺少分号导致的编译阻断（保留 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对本批格式化目标完成排版（`2` 份 `girl.lpc` 与 `wqfy` `2` 份均 `0` 错误，其余历史未格式化文件保持 `KEEP` 与原 CRLF/LF 行尾）；`lpcc_eval.py` 实测全批 `28` 份文件全部消除原 `syntax error, unexpected L_DEFINED_NAME` 与连带编译报错（`27/28` 成功 `load_object` `PASS`；`shenmo` `/sjsh/u/stey/u/cnd/shushan/npc/linyueru` 编译与 `create()` 通过并推进至既有缺失携带物 `/d/obj/weapon/whip/qingfeng`）；`scripts/lint.py`（新增规则 #107 `missing-call-semicolon`）通过 `16/16` `HEAD` 正例、`osb/obj/lib/qtyper.lpc` 与 `7/7` 反例，`--rule missing-call-semicolon --all --jobs 8`、`--changed HEAD` 与 `--fast`（`107` 条规则）均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；全部 `24` 馆（端口 `47571..47594`）均通过 `play_boot.sh`+`play_stop.sh` 启动测试且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `/d/goathill/npc/obj/dead_leech.lpc` 未定义 `eat_tonic` 编译阻断修复（KB 04 §6.110）
+
+- 注释 `/d/goathill/npc/obj/dead_leech.lpc:16` 本馆 `F_FOOD` 未定义的 `// set("eat_func", (: eat_tonic :));`（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（规则 #169 `chidi-cheng-qiankundai-dead-leech`，共 `169` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48122`）通过且 `ZERO_DRIVERS`。

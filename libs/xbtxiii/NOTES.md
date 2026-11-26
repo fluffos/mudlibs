@@ -601,3 +601,8 @@ pristine + build-debug，port 40201。`scripts/play_login.py` 注册并执行 `l
 
 - 注释掉 `/obj/home.lpc` 中调用 `set_max_items(...)` 的语句（本馆 `feature/move.lpc` 仅实现 `set_max_encumbrance()`、未定义 `set_max_items()`，对照 `bmxkx2001`/`chidi`/`hymud`/`yxcs`/`zhyx` 同源做法，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `19/19` `0` 重排；`lpcc --batch` 全批 `11` 馆 `19` 文件均由 `Undefined function set_max_items` 转为零错零告警 `PASS`；`lpcc_eval.py`（`mnhf`/`sjpl2`/`wqfy`/`zhonghua2` 代表）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #122 `undefined-set-max-items`，共 122 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47721..47726`）全通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `/d/goathill/npc/obj/dead_leech.lpc` 未定义 `eat_tonic` 编译阻断修复（KB 04 §6.110）
+
+- 注释 `/d/goathill/npc/obj/dead_leech.lpc:16` 本馆 `F_FOOD` 未定义的 `// set("eat_func", (: eat_tonic :));`（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（规则 #169 `chidi-cheng-qiankundai-dead-leech`，共 `169` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48123`）通过且 `ZERO_DRIVERS`。

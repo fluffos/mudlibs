@@ -1300,3 +1300,8 @@ pristine + build-debug，port 40006。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/clone/misc/objmaker.lpc:141` 被 HTML 标签清洗吞掉的 `for (i = 0; i < sizeof(name1); i++) {`、移除第 `122` 行未用局部 `file`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `60` 项 `0` 待看；`lpc_format_changed.py` `20/20` 格式化零错；`lpcc --batch` 全批 `15` 馆 `20/20 PASS` 零错零告警；`lpcc_eval.py`（`yxcs`/`jhfy3`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #148 `objmaker-for-zhaoshi-dup`，共 148 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47901..47906`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `cheng`/`qiankundai`/`dead_leech` 编译阻断与 `huangjobhy` 全库告警清零（KB 04 §6.110）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`15,815` 份可编译文件仅余 `1` 条告警）并修复 `4` 份文件（保留原 CRLF/LF 行尾）：移除 `/d/chaoting/npc/cheng.lpc:119` 注释失配残留的 `}`；注释 `/d/city/obj/qiankundai.lpc` 两处悬空 `} else` 与 `do_get()` `return 1;` 并移除 `do_put()` 未用局部 `me`；为 `/quest/huang/huangjobhy.lpc:45` `accept_object()` 补齐 `varargs`（实现全库 `15,818` 份可编译文件零告警）；注释 `/d/goathill/npc/obj/dead_leech.lpc:16` 本馆 `F_FOOD` 未定义的 `// set("eat_func", (: eat_tonic :));`。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `4/4` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/3` 转为 `3/3 PASS`；`scripts/lint.py`（新增规则 #169 `chidi-cheng-qiankundai-dead-leech`，共 `169` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48121`）通过且 `ZERO_DRIVERS`。

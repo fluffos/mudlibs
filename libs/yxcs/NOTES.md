@@ -1506,3 +1506,8 @@ pristine + build-debug，归档端口 40056。`scripts/play_login.py` 注册进�
 
 - 修复 `/clone/misc/objmaker.lpc:141` 被 HTML 标签清洗吞掉的 `for (i = 0; i < sizeof(name1); i++) {`、移除第 `122` 行未用局部 `file`；另移除 `/kungfu/skill/{club-sword,dabei-unarmed,wulainizou-unarmed,wuming-sword,wushuang-sword}.lpc` 重复粘贴的前 20 行头部（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `60` 项 `0` 待看；`lpc_format_changed.py` `20/20` 格式化零错；`lpcc --batch` 全批 `15` 馆 `20/20 PASS` 零错零告警；`lpcc_eval.py`（`yxcs`/`jhfy3`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #148 `objmaker-for-zhaoshi-dup`，共 148 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47901..47906`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `/d/goathill/npc/obj/dead_leech.lpc` 未定义 `eat_tonic` 编译阻断修复（KB 04 §6.110）
+
+- 注释 `/d/goathill/npc/obj/dead_leech.lpc:16` 本馆 `F_FOOD` 未定义的 `// set("eat_func", (: eat_tonic :));`（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（规则 #169 `chidi-cheng-qiankundai-dead-leech`，共 `169` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48124`）通过且 `ZERO_DRIVERS`。

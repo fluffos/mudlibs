@@ -2119,3 +2119,14 @@ Symptom: 扫描 `mhxyqd`（`11,791` 份可编译文件零活跃告警）并全�
 
 Fix: 删除 `3` 馆 `vcd3.lpc` 多余的 `users()\r\n);`（保留 CRLF）并放宽规则 #160 支持跨行空白匹配；在 `2` 馆 `yueru.lpc` 补回 `)` 并将裸 `return;` 改为 `return 0;`；将 `2` 馆 `lingfan-san.lpc:92` 改为 `unarmed_parry_msg`；在 `2` 馆 `abc.lpc` 补齐 `int qn;` 并将 `str * 3 / 2` 改为 `COMBAT_D->chinese_daoxing((int)query("reward") * 3 / 2)`（保留 LF 行尾）。
 Detection: `scripts/lint.py --rule xyj-xiwangmu-vcd3-blockers` 与 `scripts/lint.py --rule mhxy-yueru-lingfan-abc`（targeted 规则，校验上述四类阻断）。
+
+### 6.110 `chidi` `cheng`/`qiankundai` 注释失配 `else`、`huangjobhy` 缺 `varargs` 与 `4` 馆 `dead_leech.lpc` 未定义 `eat_tonic`（4 馆，7 份文件）
+
+Symptom: 扫描 `chidi`（`15,815` 份可编译文件仅 `1` 条活告警）与 `longyunmeng`（`15,906` 份可编译文件零告警）并全库普查活跃可玩库，发现 `4` 馆 `7` 份活跃编译阻断/告警：
+1. `chidi` `/d/chaoting/npc/cheng.lpc:102-121`：注释掉中间 `else { if (combat_exp < 500000) ... }` 时漏掉第 `119` 行配对 `}`，致提前闭合外层函数触发 `syntax error, unexpected L_ELSE` 阻断程药发 NPC 加载。
+2. `chidi` `/d/city/obj/qiankundai.lpc:30-48`：`do_get()` 与 `do_put()` 均注释了 `if ((me->query("id")!="feng")){` 却遗留未注释的 `} else`（以及 `do_put()` 未用局部 `me`），触发 `syntax error, unexpected L_ELSE` 阻断乾坤袋加载。
+3. `chidi` `/quest/huang/huangjobhy.lpc:45`：`int accept_object(object who, object ob, object me)` 缺少 `varargs`，触发全库仅余 `1` 条活编译告警（`Number of arguments to 'accept_object' disagrees with previous definition`）。
+4. `chidi`、`njhhdxdes2hx`、`xbtxiii`、`yxcs` 共 `4` 馆 `/d/goathill/npc/obj/dead_leech.lpc:16`：`set("eat_func", (: eat_tonic :));` 引用 ES2 特有的 `eat_tonic()`，但这 `4` 馆的 `F_FOOD` 并未定义该方法，触发 `Undefined variable 'eat_tonic'` 阻断编译。
+
+Fix: 分别删去 `cheng.lpc:119` 多余 `}`、注释 `qiankundai.lpc` 两处悬空 `} else` 与 `do_get()` `return 1;` 并移除 `do_put()` 未用 `object me = this_player();`、为 `chidi` `huangjobhy.lpc:45` 补齐 `varargs`（使 `chidi` 全库 `15,818` 份可编译文件实现零告警）、并注释 `4` 馆 `dead_leech.lpc:16` 不可用的 `// set("eat_func", (: eat_tonic :));`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule chidi-cheng-qiankundai-dead-leech`（targeted 规则，校验上述阻断）。
