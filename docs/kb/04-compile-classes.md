@@ -2181,3 +2181,13 @@ Symptom: 扫描 `syxjl`（`7,457` 份可编译文件零活跃告警）发现三�
 
 Fix: 将 `duchang5.lpc:6-16` 合并为带初值的 `int room_status = 0; object cs_gui = 0; object qn_gui = 0; object bl_gui = 0;`、截断 `ll.lpc` 第 `136` 行起重复段、删除 `jia.lpc:166` 末尾 `>`（均保留原 CRLF 行尾）。
 Detection: `scripts/lint.py --rule syxjl-duchang5-ll-jia-blockers`（targeted 规则，校验上述三处阻断）。
+
+### 6.116 江湖风云/侠影系 `d/kaifeng/ground0.lpc` 残留 `} else {`、`d/mingjiao/banshanyao.lpc` 字面 `^ M` 与 `d/fyue/questguai.lpc` 未用局部（7 馆，15 份文件）
+
+Symptom: 扫描 `bxsj1`（`9,914` 份可编译文件零活跃告警）与 `jhfy2`（`8,256` 份可编译文件）并全库扫查，发现 `ffxymud`、`jhfy2`、`wmkj`、`xysylmhb`、`xyzx3`、`xyzxiiylzymh`、`yzxiiizylfy` 共 `7` 馆 `15` 份活跃编译阻断/告警：
+1. `/d/kaifeng/ground0.lpc:16`（`6` 馆：`ffxymud`、`jhfy2`、`xysylmhb`、`xyzx3`、`xyzxiiylzymh`、`yzxiiizylfy`）：`announcing()` 去掉外层 `if (DEBUG) {` 后残留 `} else {` 与末尾多余 `}`，且头部缺失 `#include "ground.h"`（导致 `STEP_PREPARE`/`STEP_FIGHT`/`STEP_FINISH` 未定义），触发 `syntax error, unexpected L_ELSE`，同时阻断继承它的 `ground1.lpc`。
+2. `/d/mingjiao/banshanyao.lpc:32,41`（`7` 馆，含 `wmkj`）：`do_jumpdown()` 与 `do_jumpup()` 中残留字面 `^ M`（DOS/vi 回车转义符），触发 `syntax error, unexpected '^'`，阻断明教半山腰房间加载。
+3. `/d/fyue/questguai.lpc:15`（`2` 馆可编译：`ffxymud`、`jhfy2`）：残留未用局部 `int level, chooseguai;`，为 `jhfy2` 仅余的可编译告警。
+
+Fix: 参照干净同源 `xyj2000`/`tianxiawuxue` 为 `ground0.lpc` 补回 `#include "ground.h"` 并去掉多余的 `}` 恢复 `if (...) ... else { ... }`、移除 `banshanyao.lpc` 两处字面 `^ M` 并将拼接的 `message_vision(...)` 换行、删除 `ffxymud`/`jhfy2` `d/fyue/questguai.lpc:15` 未用声明（均保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule jhfy2-ground0-banshanyao`（targeted 规则，校验上述两类语法阻断）。

@@ -986,3 +986,8 @@ pristine + build-debug（归档端口 40042，临时测试端口 49663）。`scr
 
 - 在 `/quest/game/npc/playboy.lpc` 为 `void init()` 补齐缺失闭合 `}`（解决 `Illegal to declare local variable of type void` 编译阻断）并移除未用局部 `int time;`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（规则 #172 `hy3-playboy-qlist3-jinshe`，共 `172` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆实机 `play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `ground0`/`banshanyao`/`questguai` 编译阻断修复（KB 04 §6.116）
+
+- 修复 `/d/kaifeng/ground0.lpc:16-20` 残留 `} else {`（解锁 `ground0`/`ground1`）及 `/d/mingjiao/banshanyao.lpc:32,41` 字面 `^ M`（保留原 LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`scripts/lint.py`（新增规则 #175 `jhfy2-ground0-banshanyao`，共 `175` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
