@@ -2198,3 +2198,15 @@ Symptom: 扫描 `jyqxc2`（`2,990` 份可编译文件零活跃告警）与 `ldtx
 
 Fix: 将上述 `11` 馆 `/d/gumu/duanchang.lpc` 末尾的 `#include "/d/gumu/tiao.h"` 改为 `#include "/d/gumu/tiao.lpc"`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule gumu-duanchang-tiao-h-include`（targeted 规则，检测 `duanchang.lpc` 包含含 `inherit ROOM;` 的 `tiao.h`）。
+
+### 6.118 `xkxc98sj`/`xkxz2`/`xjcq2000` 六类活跃编译阻断（3 馆，13 份文件）
+
+Symptom: 扫描 `xkxc98sj`（`6,855` 份可编译文件零活跃告警）并全库扫查，发现 `xkxc98sj`（`6` 份）、`xkxz2`（`6` 份）与 `xjcq2000`（`1` 份）共 `3` 馆 `13` 份活跃编译阻断：
+1. `/d/dali/dalijob/npc1.lpc:49`（`xkxc98sj`、`xkxz2`）：`#include "/d/daili/dalijob/killer1.lpc"` 将目录 `dali` 拼错为 `daili`，触发 `Cannot #include`。
+2. `/d/gumu/jqg/obj/wcloth.lpc:8`（`xkxc98sj`、`xkxz2`）：`set_name(WHT "白纱霓裳", NOR({ "white cloth" }));` 逗号错置在 `NOR` 之前，触发 `syntax error, unexpected '('`。
+3. `/d/tiezhang/npc/bangzhon.lpc:79`（`xjcq2000`、`xkxc98sj`、`xkxz2`）：`call_out("hiting_ob", 1, ob);` 对应的函数体前缺失 `int hiting_ob(object ob)` 函数头（直接裸 `{`），触发 `syntax error, unexpected '{'`。
+4. `/kungfu/skill/pixie-jian.lpc:1`（`xkxc98sj`、`xkxz2`）：首行注释 `pixie - jian.c 辟 邪 剑 法` 漏写前导 `//`，触发 `syntax error, unexpected '-'`。
+5. `/kungfu/skill/canhe-zhi.lpc` 与 `/kungfu/skill/zhusha-zhang.lpc`（`xkxc98sj`、`xkxz2`）：招式表中使用 `HIW`/`HIR`/`NOR` 却缺少 `#include <ansi.h>`，触发 `syntax error, unexpected L_IDENTIFIER`。
+
+Fix: 将 `npc1.lpc` 路径更正为 `"/d/dali/dalijob/killer1.lpc"`、`wcloth.lpc` 更正为 `set_name(WHT "白纱霓裳" NOR, ({ "white cloth" }));`、`bangzhon.lpc:79` 补回 `int hiting_ob(object ob)`（参照同源 `bixiecanyang`/`hy3`）、`pixie-jian.lpc:1` 补回 `// `、`canhe-zhi.lpc`/`zhusha-zhang.lpc` 顶部补回 `#include <ansi.h>`（均保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule xkxc98sj-six-compile-blockers`（targeted 规则，校验上述六类阻断）。

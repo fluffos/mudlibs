@@ -1220,3 +1220,8 @@ pristine + build-debug，port 40034。`scripts/play_login.py` 注册。
 
 - 移除 `/kungfu/skill/xixi-unarmed.lpc:1` 注释前的孤立 `c  `（消除 `unexpected L_INHERIT` 编译阻断，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `17/17` `xixi-unarmed.lpc` 零错零告警 `PASS`；`scripts/lint.py`（规则 #147 `lingshe-set-color-wmkj-blockers`，共 147 条）`--changed HEAD` 与 `--fast` 零错零告警。
+
+## 2026-11-26 `npc1`/`wcloth`/`bangzhon`/`pixie-jian`/`canhe-zhi`/`zhusha-zhang` 编译阻断修复（KB 04 §6.118）
+
+- 修复 `/d/tiezhang/npc/bangzhon.lpc:79` 缺失的 `int hiting_ob(object ob)` 函数头（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS`；`scripts/lint.py`（新增规则 #177 `xkxc98sj-six-compile-blockers`，共 `177` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
