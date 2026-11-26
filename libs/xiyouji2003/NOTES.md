@@ -1152,3 +1152,8 @@ pristine + build-debug，归档端口 40075。`scripts/play_login.py` 注册并�
 
 - 运行 `scripts/lpc_warnings.py xiyouji2003`（`2,561` 份可编译文件）并修复四份活跃编译阻断（均保留原 CRLF 行尾）：移除 `/d/city/npc/fly.lpc:36` 的非法整型调用 `set_leader(1);`（被 `menwc`/`manwc` 刷新）、将 `/daemon/skill/houquan.lpc:78` 三参 `random(i, 20, level / 5)` 改为 `NewRandom(i, 20, level / 5)`、将 `/obj/weapon/blade/doubleblade.lpc:5` 误写的 `inherit SWORD;` 改为 `inherit BLADE;` 以匹配 `init_blade(150);`、并取消 `/adm/npc/fjtx.lpc:43` 被误注释的 `int last_time = 0;`（对照同源 `nitan3`/`zhonghua2`/`zhyx`）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `4/4 PASS` 零告警；`lpcc_eval.py` 实测四份文件由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（新增规则 #185 `sanjieshenhua-xiyouji2003-blockers`，共 `185` 条）`--changed HEAD` 与 `--fast` 均零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 启动验证正常且 `ZERO_DRIVERS`。
+
+## 2026-11-26 清零全库剩余 `12` 处未用局部编译告警（KB 04 §6.10）
+
+- 移除本馆最后 `8` 份可编译告警文件中的全部 `12` 处纯未用局部声明（保留原 CRLF 行尾）：`/d/city/npc/yg/yaoguai.lpc:33,34,102`（`exp`/`lvl`/`long`/`msg`）、`/d/city/npc/yg/yg-{bibotan,huoyun,mingjiao,pansi,shushan,tianpeng}.lpc`（`object weapon;`）、`/obj/weapon/lingshe.lpc:145`（`my_exp`/`ob_exp`），全库 `2,565` 份可编译文件实现零活跃告警。
+- 验证：`lpc_audit_removed_locals.py HEAD` 审计 `15` 处 `0 to look at`；`lpc_format_changed.py` `8/8` `0` 重排；`lpcc --batch` `8/8 PASS` 零告警；`scripts/lint.py --changed HEAD` 与 `--fast`（`185` 条规则）均零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
