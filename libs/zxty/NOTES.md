@@ -695,3 +695,8 @@ pristine + build-debug，归档端口 40166。`scripts/play_login.py` 注册进�
 
 - 修复 `/d/pipip/qinyin.lpc:9` 与 `/d/shop/ansi/nan1.lpc:18-19` 两处吞引号编译阻断（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`scripts/lint.py`（新增规则 #181 `tybxjh-qinyin-nan1-quotes`，共 `181` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-26 `d/suoha/roome.lpc` 告警清零（KB 04 §6.125）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`12,535` 份可编译文件）并移除仅余的一处未用局部告警：`/d/suoha/roome.lpc:28` 的 `object me = this_player();`（保留原 CRLF 行尾），全库可编译文件实现零告警。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast` 零错零告警（`184` 条规则）；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。

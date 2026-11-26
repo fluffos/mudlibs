@@ -1305,3 +1305,8 @@ pristine + build-debug，port 40006。`scripts/play_login.py` 注册并执行 `l
 
 - 全库 `scripts/lpc_warnings.py` 复扫（`15,815` 份可编译文件仅余 `1` 条告警）并修复 `4` 份文件（保留原 CRLF/LF 行尾）：移除 `/d/chaoting/npc/cheng.lpc:119` 注释失配残留的 `}`；注释 `/d/city/obj/qiankundai.lpc` 两处悬空 `} else` 与 `do_get()` `return 1;` 并移除 `do_put()` 未用局部 `me`；为 `/quest/huang/huangjobhy.lpc:45` `accept_object()` 补齐 `varargs`（实现全库 `15,818` 份可编译文件零告警）；注释 `/d/goathill/npc/obj/dead_leech.lpc:16` 本馆 `F_FOOD` 未定义的 `// set("eat_func", (: eat_tonic :));`。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `4/4` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/3` 转为 `3/3 PASS`；`scripts/lint.py`（新增规则 #169 `chidi-cheng-qiankundai-dead-leech`，共 `169` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48121`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 补齐 `kungfu/skill/force_list.h` 解锁碧涛玄功（KB 04 §6.125）
+
+- 从同源 `bmxkx2001` 补齐 122 行 `/kungfu/skill/force_list.h`（匹配本馆行尾），解锁 `/kungfu/skill/bitao-xuangong.lpc` 的 `#include "/kungfu/skill/force_list.h"` 编译阻断。
+- 验证：`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/1` 转为 `1/1 PASS`；`scripts/lint.py`（新增规则 #184 `bitao-xuangong-missing-force-list`，共 `184` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。

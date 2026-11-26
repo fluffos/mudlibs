@@ -731,3 +731,8 @@ pristine + build-debug，归档端口 40148。`scripts/play_login.py` 注册进�
 
 - 修复 `/cmds/wiz/summon.lpc:19` 未闭合条件 `if (!ob || (!me->visible(ob))` -> `if (!ob || !me->visible(ob))` 并补回 `#include <ansi.h>`；修复 `/d/system_2/qinyin.lpc:9` 缺失闭合引号 `query_skill("yuxiao-jianfa", 1);`（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `2/2` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（扩展规则 #181 并新增规则 #183 `wlhd-summon-unbalanced-if`，共 `183` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 补齐 `kungfu/skill/force_list.h` 解锁碧涛玄功（KB 04 §6.125）
+
+- 从同源 `bmxkx2001` 补齐 122 行 `/kungfu/skill/force_list.h`（匹配本馆行尾），解锁 `/kungfu/skill/bitao-xuangong.lpc` 的 `#include "/kungfu/skill/force_list.h"` 编译阻断。
+- 验证：`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/1` 转为 `1/1 PASS`；`scripts/lint.py`（新增规则 #184 `bitao-xuangong-missing-force-list`，共 `184` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。

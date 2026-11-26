@@ -2268,3 +2268,10 @@ Symptom: 扫描 `wlhd`（`11,014` 份可编译文件零活跃告警）并全库�
 
 Fix: 将两馆 `cmds/wiz/summon.lpc` 顶部补回 `#include <ansi.h>` 并修正第 `19` 行为 `if (!ob || !me->visible(ob))`；将两馆 `d/system_2/qinyin.lpc:9` 补全为 `query_skill("yuxiao-jianfa", 1);`（均保留原 CRLF 行尾）。
 Detection: 扩展 `tybxjh-qinyin-nan1-quotes` 覆盖 `/d/system_2/qinyin.lpc`，并新增 `scripts/lint.py --rule wlhd-summon-unbalanced-if`。
+
+### 6.125 `chidi`/`yxcs`/`yxjh` `bitao-xuangong.lpc` 缺 `/kungfu/skill/force_list.h` 与 `zxty` `roome.lpc` 告警清零（4 馆，4 份文件）
+
+Symptom: 扫描 `yxjh`（`12,862` 份可编译文件零活跃告警）并全库扫查，发现 `chidi`、`yxcs`、`yxjh` 共 `3` 馆的桃花岛内功 `/kungfu/skill/bitao-xuangong.lpc:7` 写了 `#include "/kungfu/skill/force_list.h"`，但仓库缺失该头文件，触发 `Cannot #include` 阻断碧涛玄功加载；同时 `zxty`（`12,535` 份可编译文件）仅余 `/d/suoha/roome.lpc:28` 一处未用局部 `object me = this_player();` 告警。
+
+Fix: 从同源 `bmxkx2001` 补齐 122 行 `/kungfu/skill/force_list.h` 到 `chidi`/`yxcs`/`yxjh` 三馆（匹配各馆行尾），并移除 `zxty` `/d/suoha/roome.lpc:28` 未用声明（保留 CRLF 行尾），使 `zxty` 全库可编译文件实现零告警。
+Detection: `scripts/lint.py --rule bitao-xuangong-missing-force-list`（targeted 规则，检测 `bitao-xuangong.lpc` 缺失 `force_list.h`）。
