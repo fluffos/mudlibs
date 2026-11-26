@@ -586,3 +586,8 @@ pristine + build-debug，port 40176。`scripts/play_login.py` 注册并执行 `l
 
 - 将 `/d/mingjiao/npc/changjinpeng.lpc:71` `#include "/kungfu/class/mingjiao/tanzhu.h"` 改为同目录 `#include "/d/mingjiao/npc/tanzhu.h"`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py` `18/18` `0` 重排；`lpcc --batch` 全批 `14` 馆 `18/18 PASS` 零错零告警；`lpcc_eval.py`（`jyqxc`）由 `--head` `Cannot #include`+`Unused local` 转为零告警 `PASS`；`scripts/lint.py`（新增规则 #144 `changjinpeng-tanzhu-include`，共 144 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47861..47866`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `/quest/murong/qlist3.lpc` 映射数组缺失逗号修复（KB 04 §6.113）
+
+- 在 `/quest/murong/qlist3.lpc:35` `])` 后补齐缺失逗号 `,`（解决 `syntax error, unexpected '('` 编译阻断，保留原 CRLF/LF 行尾）。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（规则 #172 `hy3-playboy-qlist3-jinshe`，共 `172` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆实机 `play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。

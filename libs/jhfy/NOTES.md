@@ -1152,3 +1152,8 @@ pristine + build-debug，port 40053。`scripts/play_login.py` 注册并执行 `l
 - 修复 `/clone/misc/objmaker.lpc:141` 被 HTML 标签清洗吞掉的 `for (i = 0; i < sizeof(name1); i++) {`、移除第 `122` 行未用局部 `file`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `60` 项 `0` 待看；`lpc_format_changed.py` `20/20` 格式化零错；`lpcc --batch` 全批 `15` 馆 `20/20 PASS` 零错零告警；`lpcc_eval.py`（`yxcs`/`jhfy3`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #148 `objmaker-for-zhaoshi-dup`，共 148 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47901..47906`）均通过且 `ZERO_DRIVERS`。
 - 2026-11-25（KB 04 §6.94）：修复 `/d/quanzhen_old/npc/haodatong.lpc` 末尾重复粘贴段阻断编译；`lpcc --batch` 零告警通过，新增回归规则 `jhfy-chai-ring-haodatong`。
+
+## 2026-11-26 `/d/fyue/questguai.lpc` 未用局部变量清理与全库告警清零（KB 04 §6.113）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`8,039` 份可编译文件仅余此 `1` 份含告警）并移除 `/d/fyue/questguai.lpc:15` 未用局部 `int level, chooseguai;`（保留原 CRLF 行尾），使全库 `8,039` 份可编译文件实现零编译告警。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`172` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48153`）通过且 `ZERO_DRIVERS`。

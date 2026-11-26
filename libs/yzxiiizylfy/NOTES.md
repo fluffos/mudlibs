@@ -494,3 +494,8 @@ pristine + build-debug（归档端口 40178，临时测试端口 49665）。`scr
 
 - 移除 `/kungfu/skill/xixi-unarmed.lpc:1` 注释前的孤立 `c  `（消除 `unexpected L_INHERIT` 编译阻断，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `17/17` `xixi-unarmed.lpc` 零错零告警 `PASS`；`scripts/lint.py`（规则 #147 `lingshe-set-color-wmkj-blockers`，共 147 条）`--changed HEAD` 与 `--fast` 零错零告警。
+
+## 2026-11-26 `/quest/game/npc/playboy.lpc` 缺失闭合 `}` 与未用局部 `time` 修复（KB 04 §6.113）
+
+- 在 `/quest/game/npc/playboy.lpc` 为 `void init()` 补齐缺失闭合 `}`（解决 `Illegal to declare local variable of type void` 编译阻断）并移除未用局部 `int time;`（保留原 CRLF/LF 行尾）。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（规则 #172 `hy3-playboy-qlist3-jinshe`，共 `172` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆实机 `play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。

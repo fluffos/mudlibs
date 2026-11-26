@@ -2150,3 +2150,14 @@ Symptom: 扫描 `wuhanzhan`（`9,671` 份可编译非 `/u/` 文件仅余 `1` 份
 
 Fix: 删除 `souhunwhip.lpc:2` 前导 `: `、在 `riyue.lpc:9` 补齐 `)`、移除 `EXAMPLE.lpc:91` 未用局部 `damage` 与 `ratio`（全部保留纯 LF 行尾），使 `wuhanzhan` 全库 `9,673` 份可编译非 `/u/` 文件实现零编译告警。
 Detection: `scripts/lint.py --rule wuhanzhan-souhunwhip-riyue-blockers`（targeted 规则，校验上述两处阻断）。
+
+### 6.113 跨馆 `playboy.lpc` 缺 `}`、`qlist3.lpc` 缺逗号、`jinshe-jianfa.lpc` 孤立 `jkls` 与 `hy3`/`jhfy` 告警清零（10 馆，13 份文件）
+
+Symptom: 扫描 `hy3`（`9,865` 份可编译文件）与 `jhfy`（`8,039` 份可编译文件）并全库扫查，发现三类跨馆活跃编译阻断与两馆仅余可编译告警：
+1. `/quest/game/npc/playboy.lpc:32`（`ffxymud`、`hy3`、`jhfy2`、`xysylmhb`、`xyzx3`、`xyzxiiylzymh`、`yzxiiizylfy` 共 `7` 馆）：`void init()` 末尾缺失闭合 `}` 即直接定义 `void greeting(object who)`，触发 `Illegal to declare local variable of type void.` 阻断编译（且第 `16` 行残留未用局部 `int time;`）。
+2. `/quest/murong/qlist3.lpc:35`（`hy3`、`ldtx`、`ldtxii` 共 `3` 馆）：`([ "quest": "光明刀", ... ])` 后缺失逗号 `,` 即接下一映射，触发 `syntax error, unexpected '('` 阻断慕容任务表加载。
+3. `hy3` `/kungfu/skill/other/jinshe-jianfa.lpc:2`：注释前多出 `jkls  ` 触发 `syntax error, unexpected L_INHERIT`。
+4. `hy3` `/quest/quest/questguai.lpc:15` 与 `jhfy` `/d/fyue/questguai.lpc:15`：残留未用局部 `int level, chooseguai;`，为两馆唯一含告警的可编译文件。
+
+Fix: 为 `7` 馆 `playboy.lpc` 补回 `init()` 闭合 `}` 并删除未用 `int time;`、为 `3` 馆 `qlist3.lpc:35` 补齐 `,`、删除 `hy3` `jinshe-jianfa.lpc:2` 孤立 `jkls  `、并移除 `hy3`/`jhfy` `questguai.lpc` 未用声明（保留各文件原 CRLF/LF 行尾），使 `hy3`（`9,868` 份）与 `jhfy`（`8,039` 份）双双实现零编译告警。
+Detection: `scripts/lint.py --rule hy3-playboy-qlist3-jinshe`（targeted 规则，校验上述三类阻断）。

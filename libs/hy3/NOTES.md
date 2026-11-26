@@ -898,3 +898,8 @@ pristine + build-debug，port 40162。
 
 - 移除 `/kungfu/skill/xixi-unarmed.lpc:1` 注释前的孤立 `c  `（消除 `unexpected L_INHERIT` 编译阻断，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `17/17` `xixi-unarmed.lpc` 零错零告警 `PASS`；`scripts/lint.py`（规则 #147 `lingshe-set-color-wmkj-blockers`，共 147 条）`--changed HEAD` 与 `--fast` 零错零告警。
+
+## 2026-11-26 `playboy`/`qlist3`/`jinshe-jianfa` 编译阻断修复与 `questguai` 全库告警清零（KB 04 §6.113）
+
+- 全库 `scripts/lpc_warnings.py` 复扫（`9,865` 份可编译文件）并修复 `4` 份活跃文件（保留原 LF 行尾）：在 `/quest/game/npc/playboy.lpc:32` 为 `void init()` 补齐缺失闭合 `}` 并移除未用局部 `int time;`；在 `/quest/murong/qlist3.lpc:35` `])` 后补齐缺失逗号；移除 `/kungfu/skill/other/jinshe-jianfa.lpc:2` 首行孤立字符 `jkls  `；移除 `/quest/quest/questguai.lpc:15` 未用局部 `int level, chooseguai;`，使全库 `9,868` 份可编译文件实现零编译告警。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `4/4` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/3` 转为 `3/3 PASS`；`scripts/lint.py`（新增规则 #172 `hy3-playboy-qlist3-jinshe`，共 `172` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48152`）通过且 `ZERO_DRIVERS`。
