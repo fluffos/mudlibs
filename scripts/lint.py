@@ -225,6 +225,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("gumu-duanchang-tiao-h-include", "targeted", "KB 04 §6.117", "error", "`d/gumu/duanchang.lpc` includes `fang.c`-overwritten `tiao.h` (`inherit ROOM;`) instead of `tiao.lpc`"),
     RuleSpec("xkxc98sj-six-compile-blockers", "targeted", "KB 04 §6.118", "error", "`dalijob/npc1.lpc` `/d/daili/` typo, `wcloth.lpc` `NOR({`, `bangzhon.lpc` missing `hiting_ob` header, `pixie-jian.lpc` uncommented line 1, or `canhe-zhi`/`zhusha-zhang` missing `<ansi.h>`"),
     RuleSpec("wmkj-daboss-tangjue-blockers", "targeted", "KB 04 §6.119", "error", "`d/shushan/npc/daboss.lpc` stray `}\\n)\\n);` or `d/tangmen/tangmenzhen/npc/tangjue.lpc` `( : ... : );` / `swith(` typo"),
+    RuleSpec("tianxiawuxue-kan-xinxiu-blockers", "targeted", "KB 04 §6.120", "error", "`kuaidao-daofa/kan.lpc` stray `8 \"kuaidao-daofa\"` or `d/fengxue/xin-xiu.lpc` undefined `update(me);`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1827,7 +1828,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2056,6 +2057,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["xkxc_blk"].append(item)
         if rel in ("/d/shushan/npc/daboss.lpc", "/d/tangmen/tangmenzhen/npc/tangjue.lpc"):
             targeted_bins["wmkj_dt"].append(item)
+        if rel in ("/kungfu/skill/kuaidao-daofa/kan.lpc", "/d/fengxue/xin-xiu.lpc"):
+            targeted_bins["txwx_kx"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -3008,6 +3011,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 m = re.search(rb'void\s+announcing\s*\([^)]*\)\s*\{.*?\}\s*else\s*\{', b, re.S)
                 if m and b"if (DEBUG)" not in m.group(0) and b"if(DEBUG)" not in m.group(0):
                     col.add("jhfy2-ground0-banshanyao", p, "stray `}` before `else {` in `announcing()` after `if (DEBUG)` was stripped")
+                if b"STEP_PREPARE" in b and b"ground.h" not in b:
+                    col.add("jhfy2-ground0-banshanyao", p, 'uses `STEP_PREPARE` without `#include "ground.h"`')
             elif rel == "/d/mingjiao/banshanyao.lpc" and (b"^ M" in b or b"^M" in b):
                 col.add("jhfy2-ground0-banshanyao", p, "literal `^ M` (escaped Ctrl-M) in `do_jumpdown`/`do_jumpup`")
 
@@ -3040,6 +3045,14 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 col.add("wmkj-daboss-tangjue-blockers", p, "stray `}\\n)\\n);` left over from commented-out `vendor_goods`")
             elif rel == "/d/tangmen/tangmenzhen/npc/tangjue.lpc" and (b"swith(" in b or re.search(rb'\(\s+:\s*command', b)):
                 col.add("wmkj-daboss-tangjue-blockers", p, "malformed `( : ... : );` functional or `swith(0)` typo")
+
+    if col.wants("tianxiawuxue-kan-xinxiu-blockers"):
+        for _, p, rel in targeted_bins["txwx_kx"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if rel == "/kungfu/skill/kuaidao-daofa/kan.lpc" and b'improve_skill(8 "kuaidao-daofa"' in b:
+                col.add("tianxiawuxue-kan-xinxiu-blockers", p, 'stray `8 ` before `"kuaidao-daofa"` in `improve_skill()`')
+            elif rel == "/d/fengxue/xin-xiu.lpc" and b"update(me);" in b:
+                col.add("tianxiawuxue-kan-xinxiu-blockers", p, "undefined `update(me);` instead of `destruct(me);`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

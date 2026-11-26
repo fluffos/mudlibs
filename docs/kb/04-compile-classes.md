@@ -2220,3 +2220,13 @@ Symptom: 扫描 `wmkj`（`10,597` 份可编译文件）发现两份活跃 NPC �
 
 Fix: 注释掉 `daboss.lpc:22-24` 残留的 `}\n)\n);`、修正 `tangjue.lpc` 中的 `(: ... :)` 闭包语法/逗号与 `switch (0)`、移除 `wei.lpc:102` 未用局部 `object *inv;`（均保留原 CRLF 行尾），使 `wmkj`（`10,599` 份可编译文件）实现零编译告警。
 Detection: `scripts/lint.py --rule wmkj-daboss-tangjue-blockers`（targeted 规则，校验 `daboss.lpc` 与 `tangjue.lpc` 语法阻断）。
+
+### 6.120 `tianxiawuxue` `ground0.lpc` 缺 `ground.h`、`kuaidao-daofa/kan.lpc` 孤立数字 `8` 与 `xin-xiu.lpc` 未定义 `update(me)`（1 馆，3 份文件）
+
+Symptom: 复核 `tianxiawuxue`（`12,033` 份可编译文件）发现三处活跃编译阻断：
+1. `/d/kaifeng/ground0.lpc:122`：全库最后一处使用 `STEP_PREPARE` 却缺失 `#include "ground.h"` 的 `ground0.lpc`，同时阻断继承它的 `ground1.lpc`。
+2. `/kungfu/skill/kuaidao-daofa/kan.lpc:36`：`me->improve_skill(8 "kuaidao-daofa", ...)` 中多出孤立字符 `8 `，触发 `syntax error, unexpected L_STRING`。
+3. `/d/fengxue/xin-xiu.lpc:370`：重建新秀雕像后误调未定义函数 `update(me);`（本馆同源 `/d/taishan/npc/xin-xiu.lpc:373` 为 `destruct(me);`）。
+
+Fix: 为 `ground0.lpc` 补回 `#include "ground.h"`、删除 `kan.lpc:36` 多余的 `8 `、将 `xin-xiu.lpc:370` 改为 `destruct(me);`（均保留原 CRLF 行尾）。
+Detection: 扩展 `jhfy2-ground0-banshanyao` 校验 `STEP_PREPARE` 缺 `ground.h`，并新增 `scripts/lint.py --rule tianxiawuxue-kan-xinxiu-blockers`。
