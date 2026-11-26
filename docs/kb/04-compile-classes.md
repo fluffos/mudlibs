@@ -2241,3 +2241,12 @@ Symptom: 扫描 `xjcq2000`（`12,168` 份可编译文件）发现四份活跃武
 
 Fix: 合并 `houquan.lpc` 的 `string usage`、截断 `taiji-shengong.lpc` 第 `51` 行起粘贴尾段、去掉 `yirubian.lpc` 三处多余的 `, me` 参数、修正 `shenmen.lpc:34` 为 `me->query_skill("tiyunzong", 1)` 与第 `49` 行引号拼装（保留各文件原 LF/CRLF 行尾）。
 Detection: `scripts/lint.py --rule xjcq2000-skill-blockers`（targeted 规则，校验上述四类武功阻断）。
+
+### 6.122 天涯碧血/纵横系 `d/pipip/qinyin.lpc` 与 `d/shop/ansi/nan1.lpc` 吞引号阻断（5 馆，8 份文件）
+
+Symptom: 复核 `tybxjh`（`9,295` 份可编译文件零活跃告警）并全库扫查，发现 `tybxjh`、`wlhd`、`yxjh`、`zxty`、`zxty08nxgbb` 共 `5` 馆 `8` 份活跃编译阻断：
+1. `/d/pipip/qinyin.lpc:9`（`tybxjh`、`zxty`、`zxty08nxgbb`）：`skill = me->query_skill("yuxiao-jianfa,1);` 缺失字符串闭合引号，触发 `Illegal character 0xe3` 阻断清音绝技。
+2. `/d/shop/ansi/nan1.lpc:18-19`（上述全部 `5` 馆）：商业街南一街房间出口 `"west __DIR__" hangzhou_shop "` 与 `" east __DIR__ "foshan_shop"` 缺失 `":`，触发 `syntax error, unexpected L_IDENTIFIER` 阻断商业街房间加载。
+
+Fix: 将 `qinyin.lpc:9` 补全为 `skill = me->query_skill("yuxiao-jianfa", 1);`，将 `nan1.lpc:18-19` 补全为 `"west": __DIR__ "hangzhou_shop",` 与 `"east": __DIR__ "foshan_shop",`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule tybxjh-qinyin-nan1-quotes`（targeted 规则，校验上述两处吞引号阻断）。
