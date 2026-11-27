@@ -1662,3 +1662,4 @@ pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scrip
 - 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `8` 馆 `16` 文件零错零告警 `PASS`；`lpcc_eval.py`（`sjsh`/`sanjieshenhua` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #126 `sjsh-angle-include-headers`，共 126 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47761..47766`）均通过且 `ZERO_DRIVERS`。
 - 2026-11-24（KB 04 §6.88）：修复 `/d/pingan/pingan/npc/shopman2.lpc:25-27` 注释 `vendor_goods` 残留未注释 `});` 阻断编译；`lpcc --batch` 零告警通过，新增回归规则 `fqyy-robber-gaochang-shopman`。
 - 2026-11-24（KB 04 §6.89）：修复 `/{kungfu,daemon}/skill/bingxue-xinfa/qiankun-danuoyi.lpc:241-242` 提前闭合 `)` 及 `random(2) = 0` 赋值错写阻断编译；`lpcc` 2/2 零告警通过，新增回归规则 `hy-danuoyi-quest-unclosed-quote`。
+- 2026-11-26（KB 04 §6.129）：移除 `/d/quest/xue/tongchuan.h:49` 中间残留的字面 `^ M` 并折行 `return msg + "\n";`（保留 CRLF 行尾与 `KEEP` 状态，消除 `syntax error, unexpected '^'`；新增规则 #188 `sjsh-tongchuan-finaldoc-funei1`）。

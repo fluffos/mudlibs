@@ -46,5 +46,6 @@ string ask_tongchuan() {
   me = new(__DIR__ "ling");
   me->set("owner", ob);
   me->move(ob);
-  if (ob->query("id") == "kuku") ob->move(ob->query_temp("tongchuan/where")); ^ M return msg + "\n";
+  if (ob->query("id") == "kuku") ob->move(ob->query_temp("tongchuan/where"));
+  return msg + "\n";
 }

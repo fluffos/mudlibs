@@ -2304,3 +2304,13 @@ Symptom: 扫描 `xiyouji`（`4,983` 份可编译文件零告警）、`xiyouji450
 
 Fix: 在 `huapen.lpc` 与 `huaping.lpc` 顶部补齐 `inherit ITEM;`；将 `wandao.lpc:12` 改为 `n = random(3);`；将 `zombie.lpc:113` 补全为 `this_object()->command_function("kill " + obj->query("id"));`（全部保留纯 LF 行尾）。
 Detection: `scripts/lint.py --rule xyj42-huapen-wandao-zombie`（targeted 规则，校验上述四路径编译阻断）。
+
+### 6.129 三界神话系 `tongchuan.h` 裸 `^ M` 与 `sjshv150` `finaldoc`/`funei1` 阻断（4 馆，5 份文件）
+
+Symptom: 扫描 `sjshv150`（`10,067` 份可编译文件零活跃告警）、`sjshv2578bb`（`12,202` 份可编译文件零活跃告警）与 `xyj20032`（`12,202` 份可编译文件零活跃告警）并全库扫查，发现 `4` 馆 `5` 份活跃编译阻断：
+1. `/d/quest/xue/tongchuan.h:49`（`shenmo`、`sjshv2578bb`、`xyj20032` 共 `3` 馆，被 `/d/quest/xue/xue.lpc:7` 包含）：行末残留两字节字面量 `^ M`（`ob->move(...); ^ M return msg + "\n";`），触发 `syntax error, unexpected '^'` 阻断薛仁贵通传任务 NPC 加载（同源 `sanjieshenhua` 完好）。
+2. `sjshv150` `/cmds/adm/finaldoc.lpc:25,106`：批量替换误将 `resolve_path(...)` 改成 `resolve_paths(...)` 且将 `QueryRoomInfo(string path)` 改成 `string paths`（函数体内第 `113/117/119/123` 行仍读 `path`），触发 `Undefined function resolve_paths` 与 `Undefined variable 'path'`。
+3. `sjshv150` `/d/leox/tianpeng/funei1.lpc:20-22`：`set("exits", ([ ...` 缺少闭合 `]));` 即进入 `set("objects", ...)`，触发 `syntax error, unexpected ';'`。
+
+Fix: 移除 `3` 馆 `tongchuan.h:49` 的字面 `^ M` 并折行 `return msg + "\n";`（解锁 `sjshv2578bb`/`xyj20032` `xue.lpc`）；修正 `sjshv150` `finaldoc.lpc` 为 `resolve_path(...)` 与 `void QueryRoomInfo(string path)`，并为 `funei1.lpc` 补齐 `]));`（保留各文件原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule sjsh-tongchuan-finaldoc-funei1`（targeted 规则，校验上述三路径阻断）。

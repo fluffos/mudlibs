@@ -606,3 +606,8 @@ pristine + build-debug，归档端口 40119。`scripts/play_login.py` 注册/连
 
 - 移除 `/d/calvin/armor/rjl.lpc` 冗余 `inherit SHIELD;`（保留 `inherit NECK;`）并补回第 `80` 行丢失的 `object offensive_target(object me)` 函数头；清理 `/cmds/usr/hebing.lpc` 中未使用的 `ob_list`/`lev_ob`/`passport`（保留原 CRLF/LF 行尾，`xyj20032` 全库 `12,226` 份可编译文件现零告警）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `3` 馆 `5/5` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `xyj20032` `2/2` 由 `--head` 报错/告警转为干净 `PASS`；`scripts/lint.py`（规则 #140 `calvin-rjl-diamond-header`，共 140 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47913`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 复扫零活跃告警并修复 `d/quest/xue/tongchuan.h` 字面 `^ M` 阻断（KB 04 §6.129）
+
+- 复扫 `scripts/lpc_warnings.py xyj20032` 确认 `12,202` 份可编译文件零活跃告警；移除 `/d/quest/xue/tongchuan.h:49` 残留的字面 `^ M` 并折行 `return msg + "\n";`（保留 CRLF 行尾与 `KEEP` 状态），解锁 `/d/quest/xue/xue.lpc`。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `/d/quest/xue/xue.lpc` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/1` 转为 `1/1`；`scripts/lint.py`（新增规则 #188 `sjsh-tongchuan-finaldoc-funei1`，共 `188` 条）`--changed HEAD` 与 `--fast` 零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
