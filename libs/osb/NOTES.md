@@ -32,3 +32,12 @@
 ## 分桶目录补全（2026-11-15，KB 06 §7.384）
 
 `scripts/lpc_keep_letters.py --apply osb mail save/obj/brain save/obj/kerbholz save/players secure/save` 补齐 47 个缺失首字母目录，使所有字母玩家建档、邮箱、`brain`/`kerbholz` 与 `secure/save` 均可写入（修前 `lpcc_eval.py` 写 `/save/players/a/zztest` 抛 `*Wrong permissions ... No such file or directory`；修后 `ZZRES=1` PASS；`play_boot.sh` clean）。
+
+## `if (x = 常量)` 条件误写赋值修复（2026-11-27，KB 06 §7.290）
+
+- 经 `scripts/lpc_scan_cond_assign.py` 全语料复扫，修复本馆全部 `4` 份文件中的 `10` 处条件误写赋值（保留原 LF 行尾与 `KEEP`）：
+  1. `/d/archwiz_save/common/room/pirate/troom.lpc:208,215`：`if (large=1)` / `if (small=1)` → `==`。
+  2. `/obj/tool/editor/searching.lpc:22,48`：`if ( (find_string=="") && (arg="") )` → `arg==""`。
+  3. `/p/houses/common/obj/dartboard.lpc:475,500`：`&& (dblout1=1)` / `&& (dblout2=1)` → `==`。
+  4. `/p/money/obj/designer/file.lpc:34,79`：`str = "money" || str = "design"` → `==`。
+- 验证：`lpc_format_changed.py --apply` `0` 重排；`scripts/lpc_scan_cond_assign.py` 确认 `osb` `0` 命中；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`198` 条规则）均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
