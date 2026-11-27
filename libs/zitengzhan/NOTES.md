@@ -983,3 +983,12 @@ pristine + build-debug，port 40071。`scripts/play_login.py` 注册并执行 `l
   1. `/std/weapon/music.lpc:14`：从鞭基类拷贝改造时残留 `varargs void init_whip(int damage, int flag)`，改名为 `varargs void init_music(int damage, int flag)`，解锁继承 `MUSIC` 的 `/d/obj/weapon/music/guqin.lpc` 与 `/d/tianmo/obj/tianmoqin.lpc`。
   2. `/d/obj/weapon/qin.lpc:24`：已继承 `MUSIC` 却残留 `init_sword(30);`，改为 `init_music(30);`。
 - 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` 全部通过且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `guqin`/`qin`/`tianmoqin` 由 `0/3` 全部解锁为 `3/3`；`scripts/lint.py`（新增规则 #190 `weapon-music-init-whip`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 全库非 `/u/` 编译告警清零（2026-11-27，KB 04 §6.10）
+
+- 扫描 `zitengzhan`（`14,317` 份可编译文件），清理全部 `4` 份可编译非 `/u/` 文件中的 `14` 处未用局部变量告警（保留原 CRLF/LF 行尾）：
+  1. `/clone/gem/gem.lpc`：`create()` 中 `s` 与 `object me = this_player();`（与 `dtxyzjb` 同源）。
+  2. `/d/koker/qnbank1.lpc`：`do_deposit()` 中 `what`/`what_ob` 与 `do_withdraw()` 中 `what`（与 `dtxyzjb` 同源）。
+  3. `/d/obj/newitem/baoshi/newitems.lpc`：`setname_weapon()`/`setname_armor()` 中 `long`、`get_armor()` 中 `j`/`att`、`get_baoshi()` 中 `i`/`j`/`value`/`exp`。
+  4. `/daemon/lianhua.lpc`：`cast()` 中 `env`。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `4/4 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树 `4/4` 均正常加载 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`193` 条规则）均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
