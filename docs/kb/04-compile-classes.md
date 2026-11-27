@@ -2323,3 +2323,12 @@ Symptom: 扫描 `sjshwzb`（`11,769` 份可编译文件）、`sjshwzjqb` 与 `dt
 
 Fix: 取消 `3` 馆 `tianlong.lpc` 的 `inherit HALBERD;` 与 `init_halberd(90);` 注释（对照 `sjsh`），并移除 `3` 馆 `hugu@.lpc:16` 孤立 `);`（保留各文件原 LF/CRLF 行尾）。
 Detection: `scripts/lint.py --rule sjsh-tianlong-hugu-blockers`（targeted 规则，校验上述两路径阻断）。
+
+### 6.131 `dtxyzjb`/`zitengzhan` 乐器兵器基类 `std/weapon/music.lpc` 误写 `init_whip` 与 `qin.lpc` 误调 `init_sword`（2 馆，4 份文件）
+
+Symptom: 排查 `dtxyzjb` 与全语料 `/std/weapon/music.lpc`（仅 `dtxyzjb` 与 `zitengzhan` 存在），发现两馆的乐器兵器基类与其派生古琴均因拷贝自鞭/剑模板未改函数名而编译失败：
+1. `/std/weapon/music.lpc:14`：从 `/std/weapon/whip.lpc` 拷贝改造而来，却保留了 `varargs void init_whip(int damage, int flag)`（`skill_type` 已改为 `"music"`），导致继承 `MUSIC` 且调用 `init_music(...)` 的 `/d/obj/weapon/music/guqin.lpc` 与 `/d/tianmo/obj/tianmoqin.lpc` 全部报 `Undefined function init_music`。
+2. `/d/obj/weapon/qin.lpc:24`：已改为 `inherit MUSIC;`，但 `create()` 末尾仍残留 `init_sword(30);`，报 `Undefined function init_sword`。
+
+Fix: 将两馆 `/std/weapon/music.lpc:14` 重命名为 `varargs void init_music(int damage, int flag)`，并将两馆 `/d/obj/weapon/qin.lpc:24` 改为 `init_music(30);`（解锁两馆共 `6` 份乐器兵器；同时顺手清理 `dtxyzjb` `/clone/gem/gem.lpc` 与 `/d/koker/qnbank1.lpc` 剩余 `5` 处未用局部告警使 `dtxyzjb` 非 `/u/` 告警清零，保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule weapon-music-init-whip`（targeted 规则，校验上述两路径）。
