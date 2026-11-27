@@ -342,3 +342,8 @@ pristine + build-debug，port 40203。`scripts/play_login.py` 注册并执行 `l
 
 - 清理 `/d/obj/fabao/EXAMPLE.lpc` `ji()` 中未使用的局部变量 `damage` 与 `ratio`（保留 `mykar = me->query_kar(), dingtime, condition;` 及原 LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`186` 条规则）零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 复扫零活跃告警并修复 `huapen`/`huaping`/`wandao`/`zombie` 四份编译阻断（KB 04 §6.128）
+
+- 复扫 `scripts/lpc_warnings.py xyj42` 确认 `4,807` 份可编译文件零活跃告警；修复四份活跃编译阻断（保留纯 LF 行尾）：为 `/d/qujing/tianzhu/obj/{huapen,huaping}.lpc` 补齐 `inherit ITEM;`、将 `/d/qujing/tianzhu/obj/wandao.lpc:12` `radom(3)` 改为 `random(3)`、将 `/obj/npc/zombie.lpc:113` `this_object->command_function("kill " + obj->query("id");` 补全为 `this_object()->command_function("kill " + obj->query("id"));`。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `4/4 PASS` 零告警；`lpcc_eval.py` 差分实测由 `--head` `0/4` 转为 `4/4`；`scripts/lint.py`（新增规则 #187 `xyj42-huapen-wandao-zombie`，共 `187` 条）`--changed HEAD` 与 `--fast` 零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。

@@ -2294,3 +2294,13 @@ Symptom: 扫描 `yzxiiizylfy`（`8,236` 份可编译文件零活跃告警）并�
 
 Fix: 从各馆自身的 `/quest/upr/query.h` 复制补齐 `/quest/mmid/query.h`（75 字节纯 LF），一次性解锁全部 `6` 馆 `54` 份 `qlist*.lpc` 任务表且零告警。
 Detection: `scripts/lint.py --rule quest-mmid-missing-query-h`（targeted 规则，检测 `quest/mmid/qlist0.lpc` 包含 `"query.h"` 却缺少同目录 `query.h`）。
+
+### 6.128 `xyj42` `huapen`/`huaping`/`wandao`/`zombie` 四份活跃编译阻断（1 馆，4 份文件）
+
+Symptom: 扫描 `xiyouji`（`4,983` 份可编译文件零告警）、`xiyouji450`（`4,985` 份可编译文件零诊断）与 `xyj42`（`4,807` 份可编译文件零活跃告警）并全库扫查，发现 `xyj42` 存在四份活跃编译阻断：
+1. `/d/qujing/tianzhu/obj/huapen.lpc` 与 `/d/qujing/tianzhu/obj/huaping.lpc`：仅 `#include <weapon.h>` 却缺失 `inherit ITEM;`，触发 `Undefined function set_name`/`set_weight`/`set_max_encumbrance`/`set`。
+2. `/d/qujing/tianzhu/obj/wandao.lpc:12`：`n = radom(3);` 拼错 `random`，触发 `Undefined function radom`。
+3. `/obj/npc/zombie.lpc:113`：`this_object->command_function("kill " + obj->query("id");` 同时漏写 `this_object()` 括号与行末闭合 `)`，触发 `syntax error, unexpected ';'`。
+
+Fix: 在 `huapen.lpc` 与 `huaping.lpc` 顶部补齐 `inherit ITEM;`；将 `wandao.lpc:12` 改为 `n = random(3);`；将 `zombie.lpc:113` 补全为 `this_object()->command_function("kill " + obj->query("id"));`（全部保留纯 LF 行尾）。
+Detection: `scripts/lint.py --rule xyj42-huapen-wandao-zombie`（targeted 规则，校验上述四路径编译阻断）。
