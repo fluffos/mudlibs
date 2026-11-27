@@ -2332,3 +2332,13 @@ Symptom: 排查 `dtxyzjb` 与全语料 `/std/weapon/music.lpc`（仅 `dtxyzjb` �
 
 Fix: 将两馆 `/std/weapon/music.lpc:14` 重命名为 `varargs void init_music(int damage, int flag)`，并将两馆 `/d/obj/weapon/qin.lpc:24` 改为 `init_music(30);`（解锁两馆共 `6` 份乐器兵器；同时顺手清理 `dtxyzjb` `/clone/gem/gem.lpc` 与 `/d/koker/qnbank1.lpc` 剩余 `5` 处未用局部告警使 `dtxyzjb` 非 `/u/` 告警清零，保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule weapon-music-init-whip`（targeted 规则，校验上述两路径）。
+
+### 6.132 `xlqy_early`/`xlqy_new2007` `luanbing`/`qianmian` `SPELLS` 宏冲突、`quest_kl.lpc` 尾部残片与 `yaofa/fatigue.lpc` 重复声明 `level`（2 馆，7 份文件）
+
+Symptom: 扫描 `aoxiangtianji`（`9,440` 份可编译文件零诊断）与 `xlqy_early`（`9,116` 份可编译文件零活跃告警）并全库扫查，发现 `xlqy_early` 与 `xlqy_new2007` 共 `7` 份活跃编译阻断：
+1. `xlqy_early` `/d/obj/npc/{luanbing,qianmian}.lpc:10`：`int MAX_MANA = 4000, SPELLS = 200, DAOXING = 300000;` 与 `include/globals.h` 的 `#define SPELLS "/std/spells"` 宏冲突，展开成字符串字面量触发 `syntax error, unexpected L_STRING`（同时解锁后暴露 `init()` 未用 `me`/`tar` 与 `leave()` 未用 `owner`）。
+2. `xlqy_early` `/d/obj/quest/quest_kl.lpc`、`/quest/xunbao/obj/quest_kl.lpc` 与 `xlqy_new2007` `/d/obj/quest/quest_kl.lpc:88-90`：文件末尾闭合 `}` 后残留三行合并垃圾 `, "山猫怪", "yao guai", "", "1"\n}\n),`，触发 `syntax error, unexpected ','`。
+3. `xlqy_early` 与 `xlqy_new2007` `/daemon/conjure/yaofa/fatigue.lpc:8,12,42,51-59`：函数参数已是 `int level`（第 `42` 行用于 `ap * level / 10`），函数体第 `12` 行却又声明 `string level;` 承接 `me->query("skill_level/spells")`，触发 `Illegal to redeclare local name 'level'` 与 `Invalid types to '*' ( int vs string )`。
+
+Fix: 将 `luanbing`/`qianmian` 的 `SPELLS` 改名为 `MAX_SPELLS` 并清理其 `3` 处未用局部变量；删除 `3` 份 `quest_kl.lpc` 末尾残留三行；将 `2` 份 `fatigue.lpc` 的局部字符串变量 `level` 改名为 `slevel`（保留原 LF 行尾）。
+Detection: `scripts/lint.py --rule xlqy-luanbing-questkl-fatigue`（targeted 规则，校验上述五路径阻断）。

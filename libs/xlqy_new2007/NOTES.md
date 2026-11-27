@@ -886,3 +886,10 @@ pristine + build-debug，port 40022。`scripts/play_login.py` 注册。
 
 - 还原 `/d/qujing/start/24/12.lpc:41-43` 被归档截断损坏的 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();` 尾部与闭合 `}`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`xyj2000`/`xyj2000f`/`sjsh`/`sjshv2578bb`/`xyj20032`/`mhxy` 代表）全数由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #118 `xyj-eof-tail-corruption`，共 118 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47681..47686`）均通过且 `ZERO_DRIVERS`。
+
+## `quest_kl.lpc` 尾部残片与 `yaofa/fatigue.lpc` 重声明修复（2026-11-27，KB 04 §6.132）
+
+- 全语料排查 `xlqy_early` 同源编译阻断，修复本馆 `2` 份活跃编译阻断（保留原 LF 行尾）：
+  1. `/d/obj/quest/quest_kl.lpc`：移除闭合 `}` 后残留的三行 `, "山猫怪", "yao guai", "", "1"\n}\n),`。
+  2. `/daemon/conjure/yaofa/fatigue.lpc`：将与参数 `int level` 重名的局部 `string level;` 改名为 `string slevel;`（连同第 `51/53/56/59` 行），消除重声明与乘法类型冲突。
+- 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `2/2 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `2/2` 全部由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（新增规则 #191 `xlqy-luanbing-questkl-fatigue`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
