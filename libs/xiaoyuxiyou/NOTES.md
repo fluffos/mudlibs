@@ -1396,3 +1396,10 @@ pristine + build-debug，归档端口 40046。`scripts/play_login.py` 注册并�
 
 - 修复 `/d/death/npc/yanluowang.lpc`、`/d/jz/obj/yugan.lpc`、`/d/jz/obj/yugan2.lpc`、`/d/obj/fabao/huntian-ling.lpc`、`/d/obj/fabao/kunxian-suo.lpc` 等共 `7` 个文件 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## `d/npc/xianshi.lpc` 漏逗号修复与 `star.lpc` 告警清零（2026-11-27，KB 04 §6.136）
+
+- 扫描 `xiaoyuxiyou`（`11,105` 份可编译文件）并修复本馆 `2` 份文件（保留原 LF 行尾），本馆活跃编译告警清零：
+  1. `/d/npc/xianshi.lpc:79`：`message_vision(... "\n" target);` 补回 `, target`，解锁贤士 NPC 加载。
+  2. `/d/dntg/sky/stars/star.lpc:7,70`：将与父类 `NPC_SAVE` 冲突的全局变量 `title` 改名为 `star_titles`，消除全库唯一剩余的 `Redeclaration of global variable 'title'` 告警。
+- 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `2/2 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `xianshi` 由 `FAIL` 解锁为 `PASS`、`star` 保持 `PASS` 且 `title` 为 `"虚日星君"`；`scripts/lint.py`（新增规则 #195 `xyxy-xianshi-missing-comma`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

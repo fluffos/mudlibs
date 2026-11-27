@@ -2371,3 +2371,12 @@ Symptom: 扫描 `qhxajh`（`410` 份可编译文件零告警）、`xiaoyuxiyou`�
 
 Fix: 将 `4` 份 `chblk`/`unchblk` 改为 `return help(me);`；将 `2` 份 `main-06.lpc` 注释块改用 `//` 行注释；移除 `3` 份 `teamkill.lpc` 的未用 `*killer`（保留原 LF/CRLF 行尾）。
 Detection: `scripts/lint.py --rule xkyx-chblk-main06-blockers`（targeted 规则，校验上述三路径阻断）。
+
+### 6.136 `xiaoyuxiyou`/`xyxyutf8` `d/npc/xianshi.lpc` 漏逗号与 `star.lpc` 重复声明 `title`（2 馆，4 份文件）
+
+Symptom: 扫描 `xiaoyuxiyou`（`11,105` 份可编译文件）与 `xyxyutf8`（`8,747` 份可编译文件）并全库扫查，发现两馆存在两处同源问题：
+1. `/d/npc/xianshi.lpc:79`：`message_vision(... "！今日不是你死就是我活！」\n" target);` 在 `target` 前漏写逗号，触发 `syntax error, unexpected L_DEFINED_NAME` 阻断贤士 NPC 加载。
+2. `/d/dntg/sky/stars/star.lpc:7,70`：`string *title = ({ ... });` 与父类 `NPC_SAVE` 成员 `title` 重名，触发 `Redeclaration of global variable 'title'.`（两馆唯一剩余活跃编译告警）。
+
+Fix: 在两馆 `xianshi.lpc:79` 补回 `, target`；将两馆 `star.lpc` 的 `title` 改名为 `star_titles`（保留原 LF 行尾），两馆活跃编译告警清零。
+Detection: `scripts/lint.py --rule xyxy-xianshi-missing-comma`（targeted 规则，校验 `/d/npc/xianshi.lpc` 漏逗号）。
