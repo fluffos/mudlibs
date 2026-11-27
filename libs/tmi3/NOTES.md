@@ -43,3 +43,8 @@
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40392。`scripts/play_login.py` 注册/连线并验证入世界，驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## 全库活跃编译告警清零（2026-11-27，KB 04 §6.10）
+
+- 扫描 `tmi3`（`40` 份可编译文件），移除 `/cmds/file/more.lpc:64` `next_line()` 中未用局部变量 `k`（保留原 LF 行尾与 `KEEP`），本馆除临时求值文件 `/tmp/tmp_eval_file.lpc` 外活跃编译告警清零。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`scripts/lpc_warnings.py tmi3` 确认仅余 `/tmp/tmp_eval_file.lpc`；`lpcc_eval.py` `--head` 对照工作树正常加载 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`197` 条规则）均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

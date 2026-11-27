@@ -59,3 +59,12 @@ pristine + build-debug，归档端口 40394。`scripts/play_login.py` 建角进�
 
 - 扫描 `cistoms`（`112` 份可编译文件），修复 `/command/ed.lpc:1` 与 `/command/rm.lpc:1` 的 `#include <globals.h>` 为本馆头文件 `#include <global.h>`（保留原 LF 行尾与 `KEEP`）。
 - 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc_eval.py` `--head` 对照工作树确认 `/command/ed` 与 `/command/rm` 由 `0/2` 解锁为 `2/2`；`scripts/lint.py`（新增规则 #197 `worknpc-busy-msg-cistoms-global-h`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 全库活跃编译告警清零（2026-11-27，KB 04 §6.10）
+
+- 扫描 `cistoms`（`114` 份可编译文件），清理全部 `4` 份活跃文件中的 `11` 处编译告警（保留原 LF 行尾与 `KEEP`），本馆除临时求值文件 `/tmp_eval_file.lpc` 外活跃编译告警清零：
+  1. `/inherit/std/item/item.lpc`：移除与父类 `/inherit/base.lpc` 重复声明的全局变量 `string genericname;`（一次消除 `item.lpc` 及 `fish.lpc`/`purse.lpc` 等 `6` 处 `Redeclaration of global variable 'genericname'` 告警），并移除 `set_name()` 中未用局部 `daycode` 与 `randid`。
+  2. `/command/get.lpc`：移除未用局部 `str_junk`。
+  3. `/command/update.lpc`：移除未用局部 `updater`。
+  4. `/single/daemons/login_d.lpc`：移除未用局部 `*passkey`。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`scripts/lpc_warnings.py cistoms` 确认仅余 `/tmp_eval_file.lpc`；`lpcc_eval.py` `--head` 对照工作树 `4/4` 正常加载 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`197` 条规则）均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
