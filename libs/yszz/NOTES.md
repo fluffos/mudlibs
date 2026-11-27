@@ -471,3 +471,8 @@ pristine + build-debug，归档端口 40192。`scripts/play_login.py` 注册进�
 
 - 清理 `/d/obj/fabao/EXAMPLE.lpc` `ji()` 中未使用的局部变量 `damage` 与 `ratio`（保留 `mykar = me->query_kar(), dingtime, condition;` 及原 LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`186` 条规则）零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 复扫并清零全库剩余 `13` 处非 `/u/` 编译告警（KB 04 §6.10）
+
+- 运行 `scripts/lpc_warnings.py yszz`（`7,311` 份可编译文件），清零全部 `13` 处活跃非 `/u/` 编译告警（保留原 CRLF/LF 行尾）：将 `/d/obj/m_weapon/weapon/m_{blade,club,hammer,staff,sword,whip}.lpc`（`6` 文件）第 `13` 行与 `/std/equip.lpc` 返回类型冲突的 `string query_autoload()` 改为 `mixed query_autoload()` 并移除 `do_hui()` 中未用局部 `ob`；移除 `/daemon/skill/jue.lpc:307` 未用局部 `int i;`。
+- 验证：`lpc_audit_removed_locals.py HEAD` `13` 处 `0 to look at`；`lpc_format_changed.py` `7/7` `0` 重排；`lpcc --batch` `7/7 PASS` 零告警；`scripts/lint.py --changed HEAD` 与 `--fast`（`187` 条规则）零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
