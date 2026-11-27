@@ -2361,3 +2361,13 @@ Symptom: 扫描 `ylfyxa3`（`16,185` 份可编译文件零诊断）与 `yueyingq
 
 Fix: 将 `heal.lpc:18` 修正为 `if (mymana < 50)`；为 `suimeng.lpc:63` 补分号并将第 `73` 行拆为 `ob = ({ target });` + `for (...)`；为 `yao.lpc:27` 补分号（全部保留原 CRLF 行尾）。
 Detection: `scripts/lint.py --rule yueyingqiyuan-heal-suimeng-yao`（targeted 规则，校验上述三路径阻断）。
+
+### 6.135 侠客英雄系 `chblk`/`unchblk` `return help(object me)` 与嵩山 `main-06.lpc` 嵌套块注释（3 馆，9 份文件）
+
+Symptom: 扫描 `qhxajh`（`410` 份可编译文件零告警）、`xiaoyuxiyou`（`11,105` 份可编译文件）、`xkyx3b` 与 `xkyxciii` 并全库扫查，发现两处同源活跃编译阻断与一处同源未用局部告警：
+1. `xkyx3b` 与 `xkyxciii` `/cmds/wiz/chblk.lpc`、`/cmds/wiz/unchblk.lpc:14,18`（共 `4` 份）：调用处误把形参类型写进实参 `return help(object me);`，触发 `syntax error, unexpected L_DEFINED_NAME` 阻断两项巫师频道管控指令。
+2. `xkyx3b` 与 `xkyxciii` `/d/songshan/main-06.lpc:14-20`（共 `2` 份）：块注释 `/*` 套住 `/* sizeof() == 1 */` 导致提前闭合且尾部写成 `* /`，触发 `/* found in comment.` 告警与 `syntax error, unexpected ':'` 阻断嵩山芦崖瀑布房间。
+3. `xjcq2000`、`xkyx3b`、`xkyxciii` `/cmds/std/teamkill.lpc:11`（共 `3` 份）：声明未用局部变量 `*killer`（`string *killer, callname;`），清理后 `xkyx3b` 与 `xkyxciii` 活跃非 `/u/` 告警清零。
+
+Fix: 将 `4` 份 `chblk`/`unchblk` 改为 `return help(me);`；将 `2` 份 `main-06.lpc` 注释块改用 `//` 行注释；移除 `3` 份 `teamkill.lpc` 的未用 `*killer`（保留原 LF/CRLF 行尾）。
+Detection: `scripts/lint.py --rule xkyx-chblk-main06-blockers`（targeted 规则，校验上述三路径阻断）。
