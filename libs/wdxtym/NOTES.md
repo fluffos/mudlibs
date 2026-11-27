@@ -777,3 +777,7 @@ pristine + build-debug（归档端口 40188，临时测试端口 49513）。`scr
 - 在 `/quest/shenshu/npc/party.lpc:77` `"qingyun-shou": 100` 后补齐缺失逗号 `,`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hy5`/`haiyang2`/`hymud`/`niaoren`/`wdxtym`/`wxddym` 代表）全数由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #120 `dodgebook-party-syntax`，共 120 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47701..47706`）均通过且 `ZERO_DRIVERS`。
 - 2026-11-25（KB 04 §6.95）：修复 `/cmds/usr/checkskill.lpc` `mixed *value;` 声明在 `replace_string()` 触发类型错误阻断编译（改为 `mixed value;`）；`lpcc --batch` 零告警通过，扩展回归规则 `nitan-checkskill-mixed-array`。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `clone/misc/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

@@ -996,3 +996,7 @@ pristine + build-debug（归档端口 40025，临时测试端口 49651）。`scr
 ## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
 
 - 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

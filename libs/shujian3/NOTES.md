@@ -531,3 +531,7 @@ pristine + build-debug，port 40200。`scripts/play_login.py` 走完 8 步注册
 
 - 参照同源 `bxsj` 将 `/d/city/diemenglou1.lpc:123` 与 `/d/city/diemenglou2.lpc:135` 的 `NOR + CYNNOR "\n";` 修正为 `NOR + CYN "\n" NOR;`（保留原 CRLF 行尾）；并从 `shujian2008` 引入缺失的 `62` 行 `/kungfu/skill/beiming-shengong/liumai_msg.h`，解锁六脉神剑 `exert liumai`（`/kungfu/skill/beiming-shengong/liumai.lpc`）。
 - 验证：`lpc_format_changed.py` `2/2` `0` 重排；`lpcc --batch` 与 `lpcc_eval.py` `3/3` 均由 `--head` `FAIL` 转为零错零告警 `PASS`；`scripts/lint.py`（新增规则 #166 `shujian3-diemenglou-liumai`，共 `166` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh shujian3`（端口 `48091`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `clone/misc/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

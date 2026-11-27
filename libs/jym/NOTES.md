@@ -807,3 +807,7 @@ pristine + build-debug，归档端口 40184。`scripts/play_login.py` 注册并�
 
 - 全库扫描 `scripts/lpc_warnings.py`（`11,119` 份可编译文件零告警）发现并修复四份活跃代码编译阻断（均保留原 LF 行尾）：删除 `/d/final/pingyuan.lpc:17` 未闭合的空 `set("item_desc", ([`；将 `/cmds/arch/copyskills.lpc:38` 未定义的 `playerp(tob)` 改为 `userp(tob)`；将 `/cmds/adm/examine.lpc:17` 已废弃的 `efun::count(n1, "/", n2)` 改为带除零保护的 `sprintf("%d", to_int(n1) / d)`；修正 `/d/dali/npc/a.lpc:221` 缺失右括号并补全文件末尾闭合 `}`。
 - 验证：`lpc_format_changed.py` `4/4` `0` 错误；`lpcc --batch` 与 `lpcc_eval.py` `4/4` 均由 `--head` `FAIL` 转为零错零告警 `PASS`；`scripts/lint.py`（新增规则 #167 `jym-pingyuan-copyskills-examine-a`，共 `167` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh jym`（端口 `48101`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

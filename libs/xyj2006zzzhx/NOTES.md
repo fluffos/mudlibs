@@ -556,3 +556,7 @@ pristine + build-debug（归档端口 40159，临时测试端口 49661）。`scr
 ## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
 
 - 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `adm/daemons/msgd.lpc`、`daemons/msgd.lpc`、`lestat/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

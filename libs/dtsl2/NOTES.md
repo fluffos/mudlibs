@@ -1013,3 +1013,7 @@ pristine + build-debug，port 40043。`scripts/play_login.py` 注册并执行 `l
 
 - 从同源书剑系 `bxsj` 引入缺失的 `12` 行 `/include/wanted.h`（定义 `is_wanted(object me)`，保留 CRLF 行尾），消除 `/d/zhiye/npc/biaotou.lpc`（龙门镖局总镖头）与 `/d/zhiye/npc/biaotou2.lpc`（虎威镖局周虎威）的 `Cannot #include wanted.h` / `Undefined function is_wanted` 编译阻断。
 - 验证：`lpcc --batch` 全批 `3` 馆 `6/6` `biaotou{,2}.lpc` 零错零告警 `PASS`；`lpcc_eval.py`（`dtsl` `2/2`）由 `--head` `FAIL` 转为干净 `PASS`；`scripts/lint.py`（新增规则 #163 `dtsl-missing-wanted-h`，共 `163` 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `3` 馆 `play_boot.sh`+`play_stop.sh`（端口 `48041..48043`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

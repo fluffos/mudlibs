@@ -101,3 +101,7 @@
 
 - 将 `/cmds/usr/checkskill.lpc:76` 的 `mixed  *value;` 改为 `mixed  value;`（保留原 LF 行尾），消除 `replace_string(temp, "$N", value)` 编译阻断。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 与 `lpcc_eval.py` 由 `--head` `FAIL` 转为零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`165` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh wxlm`（端口 `48082`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `clone/misc/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

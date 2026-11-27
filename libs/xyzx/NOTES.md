@@ -593,3 +593,7 @@ pristine + build-debug，归档端口 40180。`scripts/play_login.py` 注册进�
 ## 2026-11-27 物件编辑器 `do_mkobj()` 裸 `mkobj` 崩溃修复（KB 06 §7.422）
 
 - 修复 `clone/misc/objmaker.lpc` 的 `do_mkobj()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s", file)`，导致巫师输入裸 `mkobj` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s", file) != 1)`（与同文件 `do_rset`/`do_rrset` 一致，`objmaker-do-mkobj-null-arg`）。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

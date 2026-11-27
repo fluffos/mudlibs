@@ -612,3 +612,7 @@ pristine + build-debug，port 40160。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/open/poison/obj/esword.lpc` 第 `28` 行 `HIW"□NOR+...` 等多处 `NOR` 前缺失闭合引号导致的编译失败（补齐引号后恢复为可加载的 `"□W□M□□□B"`）。
 - 验证：`lpc_format_changed.py --apply` 确认全批 `20` 份文件零重排且保留原行尾；`lpcc_eval.py` 实测 `20/20` 目标全数干净加载 `PASS`（`haiyang2`/`hy5`/`sje`/`shenzhou`/`tianxiawuxue`/`shenmo`/`kxkj` 等均由 `--head` 编译报错转为 `ok=1`）；`scripts/lint.py`（新增规则 #100 `unclosed-color-nor-quote`，`KB 04 §6.43`）通过 `8/8` `HEAD` 正例、`3/3` 反例、`--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`9` 馆代表（`haiyang2`/`hy5`/`hhsj`/`kxkj`/`shenmo`/`shenzhou`/`sje`/`tianxiawuxue`/`wxddym`，端口 `47512..47520`）通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

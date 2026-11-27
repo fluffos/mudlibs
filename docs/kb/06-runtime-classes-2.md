@@ -2782,3 +2782,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `55` active vendored mudlibs (`59` files, mostly `clone/misc/objmaker.lpc` and `obj/objmaker.lpc`), `do_mkobj(string arg)` immediately runs `if (sscanf(arg, "%s", file) != 1)` while the sibling handlers in the same file (`do_rset`, `do_rrset`) already guard `if (!arg || sscanf(...))`. Typing bare `mkobj` (`arg == 0`) throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
 **Fix:** Change `if (sscanf(arg, "%s", file) != 1)` to `if (!arg || sscanf(arg, "%s", file) != 1)`.
 **Detection:** `scripts/lint.py --rule objmaker-do-mkobj-null-arg`.
+
+### 7.423 `msgd.lpc` `do_delmsg()` calling `sscanf(arg, "%d", i)` without guarding `!arg` (`65` files, `46` libs) {#7423-msgd-do-delmsg-null-arg}
+
+**Symptom:** Across `46` active vendored mudlibs (`65` files across `adm/daemons/msgd.lpc`, `clone/msgd/msgd.lpc`, `daemons/msgd.lpc`, `lestat/msgd.lpc`), `do_delmsg(string arg)` immediately executes `if (sscanf(arg, "%d", i) != 1)`. Typing bare `delmsg` (`arg == 0`) throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of printing the usage `notify_fail()`.
+**Fix:** Change `if (sscanf(arg, "%d", i) != 1)` to `if (!arg || sscanf(arg, "%d", i) != 1)`.
+**Detection:** `scripts/lint.py --rule msgd-do-delmsg-null-arg`.

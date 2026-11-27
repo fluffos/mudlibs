@@ -1815,3 +1815,7 @@ pristine + build-debug，port 40057。`scripts/play_login.py` 注册。
 - 验证：`lpc_audit_removed_locals.py HEAD`（`234` 处零误删）；`lpc_format_changed.py` `0` 重排；`lpcc --batch` `5/5` 零错零告警；`scripts/lint.py`（新增规则 #121 `hy-migong-skill-warnings`，共 121 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47713`）通过且 `ZERO_DRIVERS`。
 - 2026-11-24（KB 04 §6.88）：修复 `/d/pingan/pingan/npc/shopman2.lpc:25-27` 注释 `vendor_goods` 残留未注释 `});` 阻断编译；`lpcc --batch` 零告警通过，新增回归规则 `fqyy-robber-gaochang-shopman`。
 - 2026-11-24（KB 04 §6.89）：修复 `/kungfu/skill/bingxue-xinfa/qiankun-danuoyi.lpc:241-242` 提前闭合 `)` 及 `random(2) = 0` 赋值错写阻断编译，并自同源完好 `hy5` 恢复 `/quest/{menpaijob/dali,menpaijob/tiezhang,songhuo}/quest.lpc`（第 `3265` 行缺 `"`）与 `/quest/newbie/qiandao/lagjobold.lpc`（第 `227` 行缺 `"`）被格式化连带插空的后半段；`lpcc` 5/5 零告警通过，新增回归规则 `hy-danuoyi-quest-unclosed-quote`。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `adm/daemons/msgd.lpc`、`clone/msgd/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。

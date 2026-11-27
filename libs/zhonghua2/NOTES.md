@@ -1297,3 +1297,7 @@ pristine + build-debug，归档端口 40028。`scripts/play_login.py` 注册进�
 - 验证：`lpc_format_changed.py` `19/19` `0` 重排；`lpcc --batch` 全批 `11` 馆 `19` 文件均由 `Undefined function set_max_items` 转为零错零告警 `PASS`；`lpcc_eval.py`（`mnhf`/`sjpl2`/`wqfy`/`zhonghua2` 代表）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #122 `undefined-set-max-items`，共 122 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47721..47726`）全通过且 `ZERO_DRIVERS`。
 - 2026-11-25（KB 04 §6.95）：修复 `/cmds/std/checkskill.lpc` `mixed *value;`（改为 `mixed value;`）及 `/adm/daemons/competed.lpc:15-27` `9` 处 `static` 误替换为 `string`（改为 `nosave`）阻断编译；`lpcc --batch` 2/2 零告警通过，新增回归规则 `competed-string-type-typo`。
 - 2026-11-25（KB 04 §6.96）：修复 `38` 份 `/questobj/*.lpc` 在 ES2 基类下误调风云 `::init_{item,cloth,head,boots,neck}()` 阻断编译（改为 `setup();`）；`lpcc --batch` 38/38 零告警通过，新增回归规则 `zhonghua2-questobj-init-item`。
+
+## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
+
+- 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。
