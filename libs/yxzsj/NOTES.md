@@ -323,3 +323,10 @@ pristine + build-debug，port 40170。`scripts/play_login.py` 注册并执行 `l
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## `d/school/npc/TASM.lpc` 与 `daemon/skill/godattack.lpc` 编译阻断修复（2026-11-27，KB 04 §6.137）
+
+- 扫描 `yxzsj`（零活跃非 `/u/` 编译告警）并修复仅存的 `2` 份活跃编译阻断（保留原 CRLF 行尾）：
+  1. `/d/school/npc/TASM.lpc:37`：`name(who)` 改为 `who->name()`（消除 `Bad type for argument 1 of name ( int vs object )`）。
+  2. `/daemon/skill/godattack.lpc:1`：顶部补齐 `#include <ansi.h>` 与 `inherit SSERVER;`（消除 `Undefined function offensive_target` 与 `CYN`/`NOR` 语法错）。
+- 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `2/2 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `2/2` 由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（新增规则 #196 `yxsj-tasm-godattack-blockers`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

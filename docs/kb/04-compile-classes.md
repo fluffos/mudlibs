@@ -2380,3 +2380,12 @@ Symptom: 扫描 `xiaoyuxiyou`（`11,105` 份可编译文件）与 `xyxyutf8`（`
 
 Fix: 在两馆 `xianshi.lpc:79` 补回 `, target`；将两馆 `star.lpc` 的 `title` 改名为 `star_titles`（保留原 LF 行尾），两馆活跃编译告警清零。
 Detection: `scripts/lint.py --rule xyxy-xianshi-missing-comma`（targeted 规则，校验 `/d/npc/xianshi.lpc` 漏逗号）。
+
+### 6.137 `yxsj`/`yxzsj` `TASM.lpc` `name(who)` 与 `godattack.lpc` 缺失 `ansi.h`/`SSERVER`（2 馆，4 份文件）
+
+Symptom: 扫描 `yxsj` 与 `yxzsj`（两馆均零活跃非 `/u/` 告警）并全库扫查，发现两馆仅存的两处活跃编译阻断：
+1. `/d/school/npc/TASM.lpc:37`：`"轟咻的一聲，" + name(who) + "發射了一枚戰斧巡弋飛彈！"` 把对象 `who` 误传给 `name(int raw)`，触发 `Bad type for argument 1 of name ( int vs object )`。
+2. `/daemon/skill/godattack.lpc:1,4,14`：同时缺失 `#include <ansi.h>`（使用 `CYN`/`NOR`）与 `inherit SSERVER;`（调用 `offensive_target(me)`），触发 `Undefined function offensive_target` 与 `syntax error, unexpected L_STRING`。
+
+Fix: 将两馆 `TASM.lpc:37` 改为 `who->name()`，在两馆 `godattack.lpc` 顶部补齐 `#include <ansi.h>` 与 `inherit SSERVER;`（保留原 CRLF 行尾），两馆活跃非 `/u/`/非网络编译错误清零。
+Detection: `scripts/lint.py --rule yxsj-tasm-godattack-blockers`（targeted 规则，校验上述两路径阻断）。
