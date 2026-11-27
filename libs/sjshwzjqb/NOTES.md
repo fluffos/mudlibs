@@ -796,3 +796,8 @@ pristine + build-debug，port 40173。`scripts/play_login.py` 注册并执行 `l
 
 - 将 `/std/weapon/_qin.lpc:2`（`F_QIN` 武器特质）遗漏的 `#include "qin.c"` 改为 `#include "qin.lpc"`，并移除 `/cmds/std/heall.lpc:6` 未用局部变量 `obj`（保留原 CRLF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py` `4/4` `0` 重排；`lpcc --batch` `4/4 PASS` 零错零告警；`lpcc_eval.py` 两馆均由 `--head` `Cannot #include qin.c`+`Unused local variable 'obj'` 转为零告警 `PASS`；`scripts/lint.py`（新增规则 #141 `weapon-feature-include-dotc`，共 141 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47831..47832`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 修复 `tianlong.lpc` 与 `hugu@.lpc` 编译阻断（KB 04 §6.130）
+
+- 复扫 `scripts/lpc_warnings.py sjshwzjqb`，取消 `/d/nanhai/obj/tianlong.lpc` 误注释的 `inherit HALBERD;` 与 `init_halberd(90);`（对照 `sjsh`），并移除 `/obj/jineng/obj2/hugu@.lpc:16` 孤立 `);`（保留原 CRLF 行尾）。
+- 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `2/2 PASS` 零告警；`lpcc_eval.py` 差分实测由 `--head` `0/2` 转为 `2/2`；`scripts/lint.py`（新增规则 #189 `sjsh-tianlong-hugu-blockers`，共 `189` 条）`--changed HEAD` 与 `--fast` 零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。

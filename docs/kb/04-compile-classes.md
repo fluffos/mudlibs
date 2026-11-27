@@ -2314,3 +2314,12 @@ Symptom: 扫描 `sjshv150`（`10,067` 份可编译文件零活跃告警）、`sj
 
 Fix: 移除 `3` 馆 `tongchuan.h:49` 的字面 `^ M` 并折行 `return msg + "\n";`（解锁 `sjshv2578bb`/`xyj20032` `xue.lpc`）；修正 `sjshv150` `finaldoc.lpc` 为 `resolve_path(...)` 与 `void QueryRoomInfo(string path)`，并为 `funei1.lpc` 补齐 `]));`（保留各文件原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule sjsh-tongchuan-finaldoc-funei1`（targeted 规则，校验上述三路径阻断）。
+
+### 6.130 `shenmo`/`sjshwzb`/`sjshwzjqb` `tianlong.lpc` 注释 `inherit HALBERD` 与 `hugu@.lpc` 孤立 `);`（3 馆，6 份文件）
+
+Symptom: 扫描 `sjshwzb`（`11,769` 份可编译文件）、`sjshwzjqb` 与 `dtxyzjb` 并全库扫查，发现 `shenmo`、`sjshwzb`、`sjshwzjqb` 共 `3` 馆存在两处同源活跃编译阻断（共 `6` 份文件）：
+1. `/d/nanhai/obj/tianlong.lpc:7,24`：`//inherit HALBERD;` 与 `// init_halberd(90);` 被注释，仅保留 `inherit F_UNIQUE;`，导致 `set_name`/`set_default_object`/`setup` 全部未定义（同源 `sjsh` 未注释且编译通过）。
+2. `/obj/jineng/obj2/hugu@.lpc:16`：`set("drug_type", "yaodan");` 后残留孤立 `  );`，触发 `syntax error, unexpected ')'` 阻断虎骨酒物品加载。
+
+Fix: 取消 `3` 馆 `tianlong.lpc` 的 `inherit HALBERD;` 与 `init_halberd(90);` 注释（对照 `sjsh`），并移除 `3` 馆 `hugu@.lpc:16` 孤立 `);`（保留各文件原 LF/CRLF 行尾）。
+Detection: `scripts/lint.py --rule sjsh-tianlong-hugu-blockers`（targeted 规则，校验上述两路径阻断）。

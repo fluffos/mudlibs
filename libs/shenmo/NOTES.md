@@ -1663,3 +1663,4 @@ pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scrip
 - 2026-11-24（KB 04 §6.88）：修复 `/d/pingan/pingan/npc/shopman2.lpc:25-27` 注释 `vendor_goods` 残留未注释 `});` 阻断编译；`lpcc --batch` 零告警通过，新增回归规则 `fqyy-robber-gaochang-shopman`。
 - 2026-11-24（KB 04 §6.89）：修复 `/{kungfu,daemon}/skill/bingxue-xinfa/qiankun-danuoyi.lpc:241-242` 提前闭合 `)` 及 `random(2) = 0` 赋值错写阻断编译；`lpcc` 2/2 零告警通过，新增回归规则 `hy-danuoyi-quest-unclosed-quote`。
 - 2026-11-26（KB 04 §6.129）：移除 `/d/quest/xue/tongchuan.h:49` 中间残留的字面 `^ M` 并折行 `return msg + "\n";`（保留 CRLF 行尾与 `KEEP` 状态，消除 `syntax error, unexpected '^'`；新增规则 #188 `sjsh-tongchuan-finaldoc-funei1`）。
+- 2026-11-27（KB 04 §6.130）：取消 `/d/nanhai/obj/tianlong.lpc` 的 `inherit HALBERD;` 与 `init_halberd(90);` 注释（对照 `sjsh`），并移除 `/obj/jineng/obj2/hugu@.lpc:16` 孤立 `);`；`lpcc --batch` `2/2 PASS` 零告警，新增规则 #189 `sjsh-tianlong-hugu-blockers`。
