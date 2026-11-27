@@ -2389,3 +2389,12 @@ Symptom: 扫描 `yxsj` 与 `yxzsj`（两馆均零活跃非 `/u/` 告警）并全
 
 Fix: 将两馆 `TASM.lpc:37` 改为 `who->name()`，在两馆 `godattack.lpc` 顶部补齐 `#include <ansi.h>` 与 `inherit SSERVER;`（保留原 CRLF 行尾），两馆活跃非 `/u/`/非网络编译错误清零。
 Detection: `scripts/lint.py --rule yxsj-tasm-godattack-blockers`（targeted 规则，校验上述两路径阻断）。
+
+### 6.138 `qhxajh`/`xajhxo`/`xo` `worknpc.lpc` 漏引号与 `cistoms` `ed`/`rm` 错含 `<globals.h>`（4 馆，5 份文件）
+
+Symptom: 扫描 `qhxajh` 及 9 个剩余活跃英文馆（`basis`、`cistoms`、`deadsouls_fluffos`、`fadingsummer`、`foundation2`、`lpmud245`、`nightmare3`、`swlpc`、`tmi3`）并全库扫查，发现两处清晰活跃编译阻断：
+1. `/system/std/char/worknpc.lpc:63`（`qhxajh`、`xajhxo`、`xo` 共 `3` 馆）：第 `62` 行写 `if (work["busy_msg"])`，第 `63` 行却漏引号写成 `work[busy_msg]`，触发 `Undefined variable 'busy_msg'` 阻断打工 NPC 基类。
+2. `cistoms` `/command/ed.lpc:1` 与 `/command/rm.lpc:1`：写成 `#include <globals.h>`，而本馆头文件名为 `include/global.h`（同目录其他指令均用 `#include <global.h>`），触发 `Cannot #include globals.h`。
+
+Fix: 将 `3` 馆 `worknpc.lpc:63` 改为 `work["busy_msg"]`；将 `cistoms` `ed.lpc`/`rm.lpc` 改为 `#include <global.h>`（保留原 CRLF/LF 行尾）。
+Detection: `scripts/lint.py --rule worknpc-busy-msg-cistoms-global-h`（targeted 规则，校验上述三路径阻断）。

@@ -54,3 +54,8 @@
 ## 深度功能测试（§10.7，2026-11-14）
 
 pristine + build-debug，归档端口 40394。`scripts/play_login.py` 建角进入 `The Void` 并执行 `look`（纯骨架库），驱动 stdout 与新增 `debug.log` 均 0 错误/警告。本轮无新编程缺陷。
+
+## `command/ed.lpc` 与 `command/rm.lpc` 错含 `<globals.h>` 修复（2026-11-27，KB 04 §6.138）
+
+- 扫描 `cistoms`（`112` 份可编译文件），修复 `/command/ed.lpc:1` 与 `/command/rm.lpc:1` 的 `#include <globals.h>` 为本馆头文件 `#include <global.h>`（保留原 LF 行尾与 `KEEP`）。
+- 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc_eval.py` `--head` 对照工作树确认 `/command/ed` 与 `/command/rm` 由 `0/2` 解锁为 `2/2`；`scripts/lint.py`（新增规则 #197 `worknpc-busy-msg-cistoms-global-h`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

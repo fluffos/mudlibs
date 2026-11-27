@@ -1093,3 +1093,8 @@ pristine + build-debug（归档端口 `40069`，测试端口 `49069`）。`scrip
 
 - 修复 `/cmds/wiz/localcmds.lpc:10` `foreach (class Action action in me->GetActions());` 末尾多余分号（消除第 `11` 行 `Undefined variable 'action'`）；修复 `/system/std/char/special_quest.lpc:162` 注释行误吞 `if (random(class_score) < 50)` 导致的 `unexpected L_ELSE`（×3）；将 `/cmds/admin/setreboot.lpc:13` 未定义的 `!adminp(me)` 替换为标准权限判定 `wiz_level(me) < wiz_level("(admin)")`（全批保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` 零错误、`file` 确认 `special_quest.lpc` 纯 LF / `localcmds.lpc` 与 `setreboot.lpc` 纯 CRLF；`lpcc_eval.py` 实测 3 份对象全部由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #114 `stray-foreach-semicolon` 与 #115 `xo-special-quest-setreboot`，共 115 条）与 `play_boot.sh`+`play_stop.sh`（端口 `47641`）均通过且 `ZERO_DRIVERS`。
+
+## `system/std/char/worknpc.lpc` 漏引号编译阻断修复（2026-11-27，KB 04 §6.138）
+
+- 全库排查同源编译阻断，修复 `/system/std/char/worknpc.lpc:63` 的 `work[busy_msg]` 漏引号为 `work["busy_msg"]`（保留原 CRLF 行尾），解锁打工 NPC 基类。
+- 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（新增规则 #197 `worknpc-busy-msg-cistoms-global-h`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

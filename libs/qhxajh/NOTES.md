@@ -356,3 +356,8 @@ pristine + build-debug，归档端口 40195。`scripts/play_login.py` 注册/连
 
 - 修复 `/system/daemon/logind.lpc` 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## `system/std/char/worknpc.lpc` 漏引号编译阻断修复（2026-11-27，KB 04 §6.138）
+
+- 扫描 `qhxajh`（`410` 份可编译文件零告警）并全库排查，修复 `/system/std/char/worknpc.lpc:63` 的 `work[busy_msg]` 漏引号为 `work["busy_msg"]`（保留原 CRLF 行尾），解锁打工 NPC 基类。
+- 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（新增规则 #197 `worknpc-busy-msg-cistoms-global-h`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
