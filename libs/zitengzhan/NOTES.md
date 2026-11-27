@@ -992,3 +992,7 @@ pristine + build-debug，port 40071。`scripts/play_login.py` 注册并执行 `l
   3. `/d/obj/newitem/baoshi/newitems.lpc`：`setname_weapon()`/`setname_armor()` 中 `long`、`get_armor()` 中 `j`/`att`、`get_baoshi()` 中 `i`/`j`/`value`/`exp`。
   4. `/daemon/lianhua.lpc`：`cast()` 中 `env`。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `4/4 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树 `4/4` 均正常加载 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`193` 条规则）均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

@@ -1157,3 +1157,7 @@ pristine + build-debug，归档端口 40075。`scripts/play_login.py` 注册并�
 
 - 移除本馆最后 `8` 份可编译告警文件中的全部 `12` 处纯未用局部声明（保留原 CRLF 行尾）：`/d/city/npc/yg/yaoguai.lpc:33,34,102`（`exp`/`lvl`/`long`/`msg`）、`/d/city/npc/yg/yg-{bibotan,huoyun,mingjiao,pansi,shushan,tianpeng}.lpc`（`object weapon;`）、`/obj/weapon/lingshe.lpc:145`（`my_exp`/`ob_exp`），全库 `2,565` 份可编译文件实现零活跃告警。
 - 验证：`lpc_audit_removed_locals.py HEAD` 审计 `15` 处 `0 to look at`；`lpc_format_changed.py` `8/8` `0` 重排；`lpcc --batch` `8/8 PASS` 零告警；`scripts/lint.py --changed HEAD` 与 `--fast`（`185` 条规则）均零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/item/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

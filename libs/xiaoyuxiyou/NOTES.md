@@ -1403,3 +1403,7 @@ pristine + build-debug，归档端口 40046。`scripts/play_login.py` 注册并�
   1. `/d/npc/xianshi.lpc:79`：`message_vision(... "\n" target);` 补回 `, target`，解锁贤士 NPC 加载。
   2. `/d/dntg/sky/stars/star.lpc:7,70`：将与父类 `NPC_SAVE` 冲突的全局变量 `title` 改名为 `star_titles`，消除全库唯一剩余的 `Redeclaration of global variable 'title'` 告警。
 - 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `2/2 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `xianshi` 由 `FAIL` 解锁为 `PASS`、`star` 保持 `PASS` 且 `title` 为 `"虚日星君"`；`scripts/lint.py`（新增规则 #195 `xyxy-xianshi-missing-comma`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

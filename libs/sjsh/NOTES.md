@@ -588,3 +588,7 @@ pristine + build-debug，port 40141。`scripts/play_login.py` 注册并执行 `l
 
 - 将 `/d/huanggong/dachen2.lpc:4` `#include <reporting.h>` 改为 `#include "/d/huanggong/npc/reporting.h"`，并将 `/d/calvin/tianpeng/npc/hufa.lpc:7` `#include <soldier_skill.h>` 改为 `#include "/obj/npc/soldier_skill.h"`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `16/16` `0` 重排；`lpcc --batch` 全批 `8` 馆 `16` 文件零错零告警 `PASS`；`lpcc_eval.py`（`sjsh`/`sanjieshenhua` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #126 `sjsh-angle-include-headers`，共 126 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47761..47766`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

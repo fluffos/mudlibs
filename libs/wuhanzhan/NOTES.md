@@ -1253,3 +1253,7 @@ pristine + build-debug，port 40052。`scripts/play_login.py` 注册并执行 `l
 
 - 全库 `scripts/lpc_warnings.py` 复扫（`9,671` 份可编译非 `/u/` 文件）并修复 `3` 份文件（全部保留纯 LF 行尾）：移除 `/d/obj/weapon/whip/souhunwhip.lpc:2` 前导 `: `（`: inherit WHIP;` -> `inherit WHIP;`）；补齐 `/daemon/class/xianren/yiqiforce/riyue.lpc:9` 缺失的右括号；移除 `/d/obj/fabao/EXAMPLE.lpc:91` 未用局部 `damage` 与 `ratio`，使全库 `9,673` 份可编译非 `/u/` 文件实现零编译告警。
 - 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`scripts/lint.py`（新增规则 #171 `wuhanzhan-souhunwhip-riyue-blockers`，共 `171` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48141`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

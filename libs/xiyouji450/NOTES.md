@@ -968,3 +968,7 @@ pristine + build-debug，归档端口 40078。`scripts/play_login.py`（port 490
 
 - 清理 `/d/obj/fabao/EXAMPLE.lpc` `ji()` 中未使用的局部变量 `damage` 与 `ratio`（保留 `mykar = me->query_kar(), dingtime, condition;` 及原 CRLF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`186` 条规则）零错误零告警；`check_ntfs_paths.py` 零问题；代表馆 `play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

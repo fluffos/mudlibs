@@ -900,3 +900,7 @@ pristine + build-debug，port 40022。`scripts/play_login.py` 注册。
   1. `/d/dntg/yunlou/npc/lj.lpc:2`：移除第 2 行行首残留 `i  `（使托塔天王李靖恢复编译与加载），并顺手移除解锁后暴露的 `work_me()` 未用局部 `ghost`。
   2. `/include/config.h:17-23`：将因空行断开续行符导致裸 `])` 报错的 `#define LISTNODES` 与 `#define BANDLIST` 收拢为单行 `([ ])`。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `lj.lpc` `PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `/d/dntg/yunlou/npc/lj` 由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（收紧 `xyj-yulan-lj-blockers` 并新增规则 #192 `xlqy-config-h-multiline-define`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

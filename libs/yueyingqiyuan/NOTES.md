@@ -1415,3 +1415,7 @@ pristine + build-debug，归档端口 40048。`scripts/play_login.py` 注册进�
   2. `/daemon/class/phoenix/jile-dao/suimeng.lpc:63,73`：`object *ob` 补分号，并将 `ob = target for (i = 0; ...)` 修正为 `ob = ({ target });` 后接 `for` 循环。
   3. `/d/fenghuang/obj/yao.lpc:27`：`me->add("potential", 10)` 行末补分号。
 - 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `3/3 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `3/3` 全部由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（新增规则 #193 `yueyingqiyuan-heal-suimeng-yao`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

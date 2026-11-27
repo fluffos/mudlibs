@@ -1176,3 +1176,7 @@ pristine + build-debug（归档端口 40077，临时测试端口 49526）。`scr
 
 - 将 `/d/kaifeng/npc/yulan.lpc:4,5` 的 `#include "quest_wr.h"` / `#include <reporting.h>` 改为同目录 `.lpc` 版本的 `#include "quest_wr.lpc"` 与 `#include "reporting.lpc"`（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py`（规则 #135 `xyj-yulan-lj-blockers`，共 135 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47863`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

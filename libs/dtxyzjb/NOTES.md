@@ -523,3 +523,7 @@ pristine + build-debug，port 40267。`scripts/play_login.py` 注册并执行 `l
   2. `/d/obj/weapon/qin.lpc:24`：已继承 `MUSIC` 却残留 `init_sword(30);`，改为 `init_music(30);`。
   3. `/clone/gem/gem.lpc`（删未用局部 `s`、`object me = this_player();`）与 `/d/koker/qnbank1.lpc`（删 `do_deposit` 未用 `what`/`what_ob` 与 `do_withdraw` 未用 `what`）：清理全库剩余 `5` 处非 `/u/` 编译告警，本馆活跃非 `/u/` 编译告警清零。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` 全部通过且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `guqin`/`qin`/`tianmoqin` 由 `0/3` 全部解锁为 `3/3`；`scripts/lint.py`（新增规则 #190 `weapon-music-init-whip`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

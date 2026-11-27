@@ -1241,3 +1241,7 @@ pristine + build-debug，port 40092。`scripts/play_login.py` 注册。
 
 - 删除 `/clone/misc/vcd3.lpc:264-265` 多余重复的 `users()\r\n);`（保留 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（放宽规则 #160 `xyj-xiwangmu-vcd3-blockers`，共 `168` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48113`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

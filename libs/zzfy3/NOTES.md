@@ -618,3 +618,7 @@ pristine + build-debug（归档端口 40120，临时测试端口 49652）。`scr
 
 - 注释掉 `/d/city/obj/{bag,shopbox}.lpc` 中调用 `set_max_items(...)` 的语句（本馆 `feature/move.lpc` 仅实现 `set_max_encumbrance()`、未定义 `set_max_items()`，对照 `bmxkx2001`/`chidi`/`hymud`/`yxcs`/`zhyx` 同源做法，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `19/19` `0` 重排；`lpcc --batch` 全批 `11` 馆 `19` 文件均由 `Undefined function set_max_items` 转为零错零告警 `PASS`；`lpcc_eval.py`（`mnhf`/`sjpl2`/`wqfy`/`zhonghua2` 代表）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #122 `undefined-set-max-items`，共 122 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47721..47726`）全通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。

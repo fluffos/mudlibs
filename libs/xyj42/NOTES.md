@@ -347,3 +347,7 @@ pristine + build-debug，port 40203。`scripts/play_login.py` 注册并执行 `l
 
 - 复扫 `scripts/lpc_warnings.py xyj42` 确认 `4,807` 份可编译文件零活跃告警；修复四份活跃编译阻断（保留纯 LF 行尾）：为 `/d/qujing/tianzhu/obj/{huapen,huaping}.lpc` 补齐 `inherit ITEM;`、将 `/d/qujing/tianzhu/obj/wandao.lpc:12` `radom(3)` 改为 `random(3)`、将 `/obj/npc/zombie.lpc:113` `this_object->command_function("kill " + obj->query("id");` 补全为 `this_object()->command_function("kill " + obj->query("id"));`。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `4/4 PASS` 零告警；`lpcc_eval.py` 差分实测由 `--head` `0/4` 转为 `4/4`；`scripts/lint.py`（新增规则 #187 `xyj42-huapen-wandao-zombie`，共 `187` 条）`--changed HEAD` 与 `--fast` 零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
+
+- 修复 `std/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。
