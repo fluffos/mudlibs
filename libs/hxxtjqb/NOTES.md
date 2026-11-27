@@ -652,3 +652,7 @@ pristine + build-debug，port 40177。`scripts/play_login.py` 注册并执行 `l
 
 - 清理 `/clone/misc/rabbit.lpc` 中 `do_closecommand()`/`do_opencommand()` 未使用的局部变量 `verb`，并移除第 12 行与 `/std/armor/cloth.lpc` 重复的 `inherit F_CLEAN_UP;`（保留原 CRLF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `75` 处 `0 to look at`；`lpc_format_changed.py` `21/21` `0` 重排；`lpcc --batch` 与 `lpcc_eval.py` 差分实测均由 `3` 条告警降为 `0` 告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`128` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47791`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
+
+- 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。

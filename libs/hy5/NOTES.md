@@ -864,3 +864,7 @@ pristine + build-debug，port 40183。`scripts/play_login.py` 注册。
 - 移除 `/p/migong/lin06.lpc:30` 向 `vrm_server::set_maze_boss(object ob)` 传入路径字符串引发的编译阻断，并将 `"/d/city/npc/liumangtou": 1,` 并入 `set_exit_npcs(([ ... ]))`（对照同馆 `EVRM_0000.lpc`）。
 - 清零 `/{kfedit,kungfu}/skill/meskill/{dan,hun,lian}.lpc`（`6` 份，移除空 `if (i > j - 2)` 块）、`/kungfu/skill/{diwangquan,qxxy-shou,shedao-qigong,wudu-goufa,zhuihun-biao}.lpc`（移除裸 `weapon;` 与未用局部）及 `/d/qujing/village/npc/test.lpc:177`（移除 `grow_g()` 未用 `i`）全部可编译告警（保留原 CRLF/LF/混合行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD`（`234` 处零误删）；`lpc_format_changed.py` `40/40` `0` 重排；`lpcc --batch` 全批 `40/40` 零错零告警；`lpcc_eval.py` `/p/migong/lin06` 由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #121 `hy-migong-skill-warnings`，共 121 条）`--changed HEAD` 与 `--fast` 零错零告警；`4` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47711..47714`）全通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
+
+- 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。

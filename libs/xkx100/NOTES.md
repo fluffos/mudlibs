@@ -574,3 +574,7 @@ pristine + build-debug，归档端口 40117。`scripts/play_login.py` 注册进�
 
 - 全库扫描 `scripts/lpc_warnings.py`（`14,245` 份可编译文件零告警）发现本馆唯一的活跃业务代码编译阻断 `/kungfu/skill/dragonfly-sword.lpc:16`：`mapping *action = ({` 后提前闭合 `});`，使 `// ZHAOSHI :0` 下的招式映射报 `syntax error, unexpected '('`；删去多余 `});`（保留原 LF 行尾），将全库 `14,246` 份活跃代码清零至零编译错误零告警。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 与 `lpcc_eval.py` 由 `--head` `FAIL` 转为干净 `PASS`（`0` 错 `0` 告警）；`scripts/lint.py`（新增规则 #161 `zhaoshi-premature-action-close`，共 `161` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh xkx100`（端口 `48021`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
+
+- 修复 `clone/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。

@@ -746,3 +746,7 @@ pristine + build-debug，port 40097。`scripts/play_login.py` 注册并执行 `l
 
 - 全库扫描 `scripts/lpc_warnings.py`（`10,787` 份可编译文件）发现并修复：`/clone/misc/vcd3.lpc:265` 删除紧跟 `message("channel:xjmy", ..., users());` 的孤立重复行 `users());`；`/adm/CL/ARMOR.lpc:486,503,610,628` 清理 `4` 个未用局部变量（`me`、`msg`、`verb`、`verb`），清零全库 `10,788` 份可编译文件告警（均保留原 CRLF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py` `0` 错误；`lpcc --batch` 与 `lpcc_eval.py` 均为 `0` 错 `0` 告警 `PASS`；`scripts/lint.py`（新增规则 #160 `xyj-xiwangmu-vcd3-blockers`，共 `160` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh sjcs`（端口 `48012`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
+
+- 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。

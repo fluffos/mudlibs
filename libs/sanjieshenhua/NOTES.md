@@ -805,3 +805,7 @@ pristine + build-debug，port 40098。`scripts/play_login.py` 注册。
 
 - 运行 `scripts/lpc_warnings.py sanjieshenhua` 确认全库 `12,529` 份可编译文件零活跃告警；修复两份活跃编译阻断文件（保留原 LF 行尾与 `KEEP` 状态）：移除 `/d/city/npc/fly.lpc:37` 向 `set_leader(object)` 传入整型的 `set_leader(1);`（`follow()` 已调用 `me->set_leader(who);`），并在 `/d/city/shangshu/keting.lpc`（由 `yuan.lpc:26` 东向连接）的 `#include <allcity.h>` 后补齐 `inherit ROOM;`。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` `2/2 PASS` 零告警；`lpcc_eval.py` 实测两份文件由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（新增规则 #185 `sanjieshenhua-xiyouji2003-blockers`，共 `185` 条）`--changed HEAD` 与 `--fast` 均零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 启动验证正常且 `ZERO_DRIVERS`。
+
+## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
+
+- 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。

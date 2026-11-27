@@ -1473,3 +1473,7 @@ pristine + build-debug，port 40016。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `4` 份活跃编译阻断文件（保留原 CRLF/LF 行尾）：删除 `/clone/misc/vcd3.lpc:264-265` 跨行多余的 `users()\r\n);`；补全 `/d/shushan/npc/yueru.lpc:44` `command("heng " + me->query("id"));` 缺失的右括号并将 `int attempt_apprentice()` 第 `46` 行裸 `return;` 改为 `return 0;`；将 `/daemon/skill_wiz/umbrella/lingfan-san.lpc:92` 未定义变量 `umbrella_parry_msg` 修正为 `unarmed_parry_msg`；在 `/d/qujing/wudidong/npc/obj/abc.lpc` 补齐 `int qn;` 并将 `str * 3 / 2` 修正为 `COMBAT_D->chinese_daoxing((int)query("reward") * 3 / 2)`。
 - 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `4/4` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/4` 转为 `4/4 PASS`；`scripts/lint.py`（放宽规则 #160 `xyj-xiwangmu-vcd3-blockers` 并新增规则 #168 `mhxy-yueru-lingfan-abc`，共 `168` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48111`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
+
+- 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。

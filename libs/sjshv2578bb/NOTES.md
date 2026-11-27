@@ -612,3 +612,7 @@ pristine + build-debug，归档端口 40125。`scripts/play_login.py` 注册/连
 
 - 复扫 `scripts/lpc_warnings.py sjshv2578bb` 确认 `12,202` 份可编译文件零活跃告警；移除 `/d/quest/xue/tongchuan.h:49` 残留的字面 `^ M` 并折行 `return msg + "\n";`（保留 CRLF 行尾），解锁 `/d/quest/xue/xue.lpc`。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `/d/quest/xue/xue.lpc` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/1` 转为 `1/1`；`scripts/lint.py`（新增规则 #188 `sjsh-tongchuan-finaldoc-funei1`，共 `188` 条）`--changed HEAD` 与 `--fast` 零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
+
+- 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。

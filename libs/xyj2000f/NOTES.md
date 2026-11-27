@@ -617,3 +617,7 @@ pristine + build-debug，port 40012。`scripts/play_login.py` 注册并执行 `l
 
 - 全库扫描 `scripts/lpc_warnings.py`（`5,611` 份可编译文件零告警）发现月宫主房 `wangmu_room.lpc` 直接刷新的祖师 NPC `/d/moon/npc/xiwangmu.lpc:95-98` 重复定义 `string ask_pantao()`，触发 `Redeclaration of function 'ask_pantao'` 阻断加载；删除第 `95` 行重复定义（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 与 `lpcc_eval.py` 由 `--head` `FAIL` 转为干净 `PASS`（`0` 错 `0` 告警）；`scripts/lint.py`（新增规则 #160 `xyj-xiwangmu-vcd3-blockers`，共 `160` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh xyj2000f`（端口 `48011`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
+
+- 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。
