@@ -2770,3 +2770,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `36` XKX/HY/JHFY-family mudlibs (`176` files: `dlxunbu.lpc`, `xunbu.lpc`, `baoyu.lpc`, `shandian.lpc`, `jinglei.lpc`, `kuangfeng.lpc`), patrolling city guards bind `add_action("do_kill", "kill")` and check `if (!environment()) return 0;` followed immediately by `if (ob = present(arg, environment()))`. When any player in the same room types bare `kill` (`arg == 0`), `present(0, environment())` throws `*Bad argument 1 to present() Expected: string or object Got: 0.` instead of falling through to `/cmds/std/kill.lpc`.
 **Fix:** Change `if (!environment()) return 0;` to `if (!arg || !environment()) return 0;` inside `do_kill(string arg)`.
 **Detection:** `scripts/lint.py --rule patrol-do-kill-null-arg`.
+
+### 7.421 Vendor NPCs (`xiao-fan`/`wenqianer`/`xbtian`/`dashao`) `do_buy()` calling `sscanf(arg, "%d %s %d from %s", ...)` without guarding `!arg` (`67` files, `30` libs) {#7421-vendor-do-buy-null-arg}
+
+**Symptom:** Across `30` XKX/HY/JHFY-family mudlibs (`67` files: `d/changan/npc/xiao-fan.lpc`, `d/shaolin/npc/xiao-fan.lpc`, `d/new/npc/wenqianer.lpc`, `d/city/npc/xbtian.lpc`, `d/npc/dashao.lpc`), vendor NPCs bind `add_action("do_buy", "buy")` and immediately execute `if (sscanf(arg, "%d %s %d from %s", amount, items, once, targ) != 4)`. When a player types bare `buy` (`arg == 0`), `sscanf(0, ...)` throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of falling through to `::do_buy(arg)`.
+**Fix:** Add `if (!arg) return ::do_buy(arg);` at the start of `do_buy(string arg)` before the `sscanf()` chain.
+**Detection:** `scripts/lint.py --rule vendor-do-buy-null-arg`.

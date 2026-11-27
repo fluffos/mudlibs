@@ -626,3 +626,7 @@ pristine + build-debug，port 40137。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-27 巡捕/四大捕快 `do_kill()` 裸 `kill` 崩溃修复（KB 06 §7.420）
 
 - 修复 `d/dali/npc/dlxunbu.lpc`、`d/npc/baoyu.lpc`、`d/npc/jinglei.lpc`、`d/npc/kuangfeng.lpc`、`d/npc/shandian.lpc`、`d/npc/xunbu.lpc` 的 `do_kill()` 在未判空 `arg` 前直接调用 `present(arg, environment())`，导致玩家在同房间输入裸 `kill` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !environment()) return 0;`（`patrol-do-kill-null-arg`）。
+
+## 2026-11-27 小贩/温倩儿 `do_buy()` 裸 `buy` 崩溃修复（KB 06 §7.421）
+
+- 修复 `d/changan/npc/xiao-fan.lpc`、`d/shaolin/npc/xiao-fan.lpc` 的 `do_buy()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d %s %d from %s", ...)`，导致玩家输入裸 `buy` 时抛出 `*Bad argument 1 to sscanf` 的问题：增加 `if (!arg) return ::do_buy(arg);` 前置保护（`vendor-do-buy-null-arg`）。
