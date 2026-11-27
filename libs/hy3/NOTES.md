@@ -903,3 +903,7 @@ pristine + build-debug，port 40162。
 
 - 全库 `scripts/lpc_warnings.py` 复扫（`9,865` 份可编译文件）并修复 `4` 份活跃文件（保留原 LF 行尾）：在 `/quest/game/npc/playboy.lpc:32` 为 `void init()` 补齐缺失闭合 `}` 并移除未用局部 `int time;`；在 `/quest/murong/qlist3.lpc:35` `])` 后补齐缺失逗号；移除 `/kungfu/skill/other/jinshe-jianfa.lpc:2` 首行孤立字符 `jkls  `；移除 `/quest/quest/questguai.lpc:15` 未用局部 `int level, chooseguai;`，使全库 `9,868` 份可编译文件实现零编译告警。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `4/4` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/3` 转为 `3/3 PASS`；`scripts/lint.py`（新增规则 #172 `hy3-playboy-qlist3-jinshe`，共 `172` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48152`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

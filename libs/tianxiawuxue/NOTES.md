@@ -1502,3 +1502,7 @@ pristine + build-debug，归档端口 40045。`scripts/play_login.py` 注册并�
 
 - 解锁 `ground0.lpc` 后连带暴露了继承链 `ground1.lpc`（5 处）、`ground2.lpc`（16 处）与 `ground3.lpc`（5 处）共 `26` 处未用局部变量告警；参照干净同源 `xyj2000` 清理全部 `26` 处声明并保留 `this_room()->query(...)` 副作用及原 LF/CRLF 行尾。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast` 零错零告警（`181` 条规则）；代表馆 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

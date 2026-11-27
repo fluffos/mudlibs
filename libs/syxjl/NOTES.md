@@ -1280,3 +1280,7 @@ pristine + build-debug，port 40088。`scripts/play_login.py` 注册。
 
 - 全库 `scripts/lpc_warnings.py` 复扫（`7,457` 份可编译文件零活跃告警）并修复 `3` 份活跃编译阻断（保留各文件原 CRLF/LF 行尾）：合并 `/d/city/npc/duchang5.lpc:6-16` 散落在顶层的全局赋值并修正 `object bl_gui0;` -> `object bl_gui = 0;`；截断 `/cmds/wiz/ll.lpc:136-260` 重复粘贴的第二份 `ls` 实现；移除 `/d/quanzhen/obj/jia.lpc:166` 末尾孤立 `>`。
 - 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/3` 转为 `3/3 PASS`；`scripts/lint.py`（新增规则 #174 `syxjl-duchang5-ll-jia-blockers`，共 `174` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48171`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

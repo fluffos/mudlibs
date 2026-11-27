@@ -2758,3 +2758,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `46` XYJ/XKX-family mudlibs (`d/obj/food/youhulu.lpc`, `d/city/obj/food/youhulu.lpc`, `clone/food/youhulu.lpc`), `do_drink(string arg)` immediately runs `if (me == present(arg, who) && me->query("liquid/name") == "菜油")`. When a player carrying an 油葫芦 types bare `drink` (`arg == 0`), `present(0, who)` throws `*Bad argument 1 to present() Expected: string or object Got: 0.` before falling through to `::do_drink(arg)`.
 **Fix:** Short-circuit with `if (arg && me == present(arg, who) && ...)` so bare `drink` skips `present(0, who)` and falls through cleanly to `F_LIQUID::do_drink(0)`.
 **Detection:** `scripts/lint.py --rule youhulu-do-drink-null-arg`.
+
+### 7.419 `wyy.lpc` / `wyyan.lpc` `lingwu()` calling `sscanf(arg, "%s about %s", ...)` without guarding `!arg` (`41` files, `38` libs) {#7419-wyy-lingwu-null-arg}
+
+**Symptom:** Across `38` XKX/HY/JHFY-family mudlibs (`d/mr/npc/wyy.lpc`, `d/wuguan/npc/wyy.lpc`, `d/murong/npc/{wyy,wyyan}.lpc`), 王语嫣 binds `add_action("lingwu", "ask")` and immediately runs `if (!sscanf(arg, "%s about %s", name, arg)) return 0;`. When a player in her room types bare `ask` (`arg == 0`), `sscanf(0, ...)` throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of falling through to `/cmds/std/ask.lpc`.
+**Fix:** Short-circuit with `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`.
+**Detection:** `scripts/lint.py --rule wyy-lingwu-null-arg`.

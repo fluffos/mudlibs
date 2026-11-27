@@ -1417,3 +1417,7 @@ pristine + build-debug（归档端口 40070，临时测试端口 49521）。`scr
 - 验证：`lpc_audit_removed_locals.py HEAD` `60` 项 `0` 待看；`lpc_format_changed.py` `20/20` 格式化零错；`lpcc --batch` 全批 `15` 馆 `20/20 PASS` 零错零告警；`lpcc_eval.py`（`yxcs`/`jhfy3`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #148 `objmaker-for-zhaoshi-dup`，共 148 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47901..47906`）均通过且 `ZERO_DRIVERS`。
 - 2026-11-25（KB 04 §6.94）：修复 `/clone/box/item/26.lpc:2` 误写 `inherit FINGER;`（改为 `inherit RING;`）及 `/d/quanzhen_old/npc/haodatong.lpc` 末尾重复粘贴段阻断编译；`lpcc --batch` 2/2 零告警通过，新增回归规则 `jhfy-chai-ring-haodatong`。
 - 2026-11-25（KB 04 §6.106）：清理 `/d/fyue/questguai.lpc:16` 未用局部变量 `int level,chooseguai;`（保留原 CRLF 行尾），清零本馆全部可编译文件告警；`lpc_audit_removed_locals.py HEAD` `0 to look at`，`lpcc --batch` 零错零告警 `PASS`，`play_boot.sh`+`play_stop.sh xajhzcjh`（端口 `48083`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

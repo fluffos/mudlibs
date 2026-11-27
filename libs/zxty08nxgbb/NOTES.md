@@ -605,3 +605,7 @@ pristine + build-debug，归档端口 40193。`scripts/play_login.py` 注册进�
 
 - 修复 `/d/pipip/qinyin.lpc:9` 与 `/d/shop/ansi/nan1.lpc:18-19` 两处吞引号编译阻断（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` 全部零错零告警 `PASS`；`scripts/lint.py`（新增规则 #181 `tybxjh-qinyin-nan1-quotes`，共 `181` 条）`--changed HEAD` 与 `--fast` 零错零告警；代表馆 `lpcc_eval.py` 由 `--head` `FAIL` 转为 `PASS` 且 `play_boot.sh`+`play_stop.sh` 通过（`ZERO_DRIVERS`）。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

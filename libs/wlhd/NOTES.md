@@ -812,3 +812,7 @@ pristine + build-debug，归档端口 40121。`scripts/play_login.py` 注册并�
 
 - 修复 `/cmds/wiz/summon.lpc:19` 未闭合条件 `if (!ob || (!me->visible(ob))` -> `if (!ob || !me->visible(ob))` 并补回 `#include <ansi.h>`；修复 `/d/system_2/qinyin.lpc:9` 缺失闭合引号 `query_skill("yuxiao-jianfa", 1);`（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `2/2` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（扩展规则 #181 并新增规则 #183 `wlhd-summon-unbalanced-if`，共 `183` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

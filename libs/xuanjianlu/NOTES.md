@@ -1773,3 +1773,7 @@ pristine + build-debug，归档端口 40064。`scripts/play_login.py` 注册进�
 
 - 全库 `scripts/lpc_warnings.py` 复扫（`10,443` 份可编译非 `/u/` 文件零告警）并修复 `/kungfu/skill/qiankun-danuoyi.lpc:215` 误传对象参数 `replace_string(result, "$W", me_weapon->name(), attacker, defender);` -> `replace_string(result, "$W", me_weapon->name());`（保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（规则 #170 `xkm-xuanjianlu-skill-fanyao-blockers`，共 `170` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48132`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/murong/npc/wyy.lpc`、`d/murong/npc/wyyan.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

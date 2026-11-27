@@ -1198,3 +1198,7 @@ pristine + build-debug，归档端口 40035。`scripts/play_login.py` 注册进�
 
 - 将 `/d/job/obj/smding.lpc:43` 改为 `F_SSERVER->offensive_target(me)`（避免与 `ITEM` 产生 `F_CLEAN_UP` 菱形继承告警），并从同源 `bmxkx2001` 补齐 61 行 `/kungfu/skill/poison_list.h` 解锁 `/kungfu/skill/xiantian-gong/bidu.lpc`（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 零错误；`lpcc --batch` `2/2`（`smding`/`bidu`）零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（新增规则 #182 `xkxc98sj-smding-poison-list`，共 `182` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

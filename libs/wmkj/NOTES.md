@@ -1359,3 +1359,7 @@ pristine + build-debug，归档端口 40049。`scripts/play_login.py` 注册并�
 
 - 全库 `scripts/lpc_warnings.py` 复扫（`10,597` 份可编译文件）并修复 `3` 份活跃文件（保留原 CRLF 行尾）：注释掉 `/d/shushan/npc/daboss.lpc:22-24` 残留的 `}\n)\n);`；修正 `/d/tangmen/tangmenzhen/npc/tangjue.lpc:53-60,89` 的 `( : ... : );` 闭包语法与 `swith(0)` -> `switch (0)`；移除 `/d/city/npc/wei.lpc:102` 未用局部 `object *inv;`，全库可编译文件实现零告警（`10,599` 份）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `3/3` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/2` 转为 `2/2 PASS`；`scripts/lint.py`（新增规则 #178 `wmkj-daboss-tangjue-blockers`，共 `178` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48211`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

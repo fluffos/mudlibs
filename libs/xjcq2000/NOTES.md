@@ -1235,3 +1235,7 @@ pristine + build-debug，port 40034。`scripts/play_login.py` 注册。
 
 - 跨馆排查 `cmds/std/teamkill.lpc:11`，移除未用局部变量 `*killer`（保留原 LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `PASS` 且 `0` 告警；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`194` 条规则）均零错误零告警。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

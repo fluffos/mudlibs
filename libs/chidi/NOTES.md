@@ -1310,3 +1310,7 @@ pristine + build-debug，port 40006。`scripts/play_login.py` 注册并执行 `l
 
 - 从同源 `bmxkx2001` 补齐 122 行 `/kungfu/skill/force_list.h`（匹配本馆行尾），解锁 `/kungfu/skill/bitao-xuangong.lpc` 的 `#include "/kungfu/skill/force_list.h"` 编译阻断。
 - 验证：`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` `0/1` 转为 `1/1 PASS`；`scripts/lint.py`（新增规则 #184 `bitao-xuangong-missing-force-list`，共 `184` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc`、`d/wuguan/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。

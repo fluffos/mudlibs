@@ -691,3 +691,7 @@ pristine + build-debug（归档端口 40169，临时测试端口 49662）。`scr
 
 - 本馆 `/quest/mmid/qlist{0,4000,8000,16000,32000,64000,128000,256000,512000}.lpc`（`9` 份任务表）末尾均 `#include "query.h"` 但缺少同目录 `query.h`；从本馆完好的 `/quest/upr/query.h` 复制补齐 `/quest/mmid/query.h`（75 字节纯 LF）。
 - 验证：`lpcc --batch` `9/9` 全部零错零告警 `PASS`；`scripts/lint.py`（新增规则 #186 `quest-mmid-missing-query-h`，共 `186` 条）`--changed HEAD` 与 `--fast` 均零错误零告警；`check_ntfs_paths.py` 零问题；代表馆 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-27 王语嫣 `lingwu()` 裸 `ask` 崩溃修复（KB 06 §7.419）
+
+- 修复 `d/mr/npc/wyy.lpc` 的 `lingwu()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s about %s", name, arg)`，导致玩家输入裸 `ask` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`（`wyy-lingwu-null-arg`）。
