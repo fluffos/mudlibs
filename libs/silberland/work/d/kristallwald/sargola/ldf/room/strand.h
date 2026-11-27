@@ -139,7 +139,7 @@ int fuehlen(string str)								\
 										\
   notify_fail("Was moechtest Du fuehlen?\n");					\
   if(!str) return 0;								\
-  if(str="hitze")								\
+  if(str=="hitze")								\
   {										\
     write("Wirklich ziemlich heiss hier ...\nDer Schweiss rinnt Dir den "	\
       "Ruecken runter.");							\

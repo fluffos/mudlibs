@@ -31,3 +31,8 @@
 
 - 修复 `/d/kristallwald/sargola/seher/rubin.lpc` 第 237 行 `zwerge()` 中 `if(TP->QueryProp(P_NAME) == "Vivienne)` 缺失的闭合引号（对齐第 216 行 `finger()` 中的 `== "Vivienne"`，保留 LF 行尾）。
 - 说明与验证：`silberland` 遗留 LDMud 目录中的 `/std/armour.lpc` -> `/std/thing/properties.lpc` 尚存在既有未移植错误（`query_wiz_level`/`extern_call`），`lpcc --batch` 在父类阶段即中止而未编译至第 237 行；`lpc_format_changed.py --apply` 确认零重排，`scripts/lint.py`（新增规则 #94 `unclosed-cmp-quote`）验证 `HEAD` 命中第 237 行、修复后全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警，以及 `play_boot.sh`+`play_stop.sh`（端口 `47633`）启停正常且 `ZERO_DRIVERS`。
+
+## `if (x = 常量)` 条件误写赋值修复（2026-11-27，KB 06 §7.290）
+
+- 经 `scripts/lpc_scan_cond_assign.py` 与 `scripts/lpc_fix_cond_assign.py --apply silberland` 全语料复扫修复本馆全部 `58` 份文件中的 `99` 处条件误写赋值（如 `if( id(str) || str="vom adler" )`、`if (sitz_status=1)`、`i=random(8); if(i=1)...`、`if (name = "Amazora" || ...)`、`if (queststats[playerstring, 1] = 1)` 等，全部改为 `==` 并保留原 CRLF/LF 行尾与 `KEEP`），并顺手将 `gilden/druidenzirkel/armour/d_amulett.lpc:718-719` 的 `[-n..]` 负切片改为 FluffOS `[<n..]`（KB 06 §7.209）。至此全语料 `lpc_scan_cond_assign.py` 清零（`0 hit(s)`）。
+- 验证：`lpc_format_changed.py --apply` `58` 文件零错误；`scripts/lpc_scan_cond_assign.py silberland` 确认 `0 hit(s)`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`198` 条规则）均零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
