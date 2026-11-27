@@ -466,3 +466,8 @@ pristine + build-debug，归档端口 40192。`scripts/play_login.py` 注册进�
 
 - 清理 `/clone/misc/rabbit.lpc` 中 `do_closecommand()`/`do_opencommand()` 未使用的局部变量 `verb`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `75` 处 `0 to look at`；`lpc_format_changed.py` `21/21` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`128` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh`（`47791..47797`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-26 `d/obj/fabao/EXAMPLE.lpc` 未用局部变量清理（KB 04 §6.10）
+
+- 清理 `/d/obj/fabao/EXAMPLE.lpc` `ji()` 中未使用的局部变量 `damage` 与 `ratio`（保留 `mykar = me->query_kar(), dingtime, condition;` 及原 LF 行尾与 `KEEP` 状态）。
+- 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`186` 条规则）零错误零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
