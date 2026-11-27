@@ -2351,3 +2351,13 @@ Symptom: 扫描 `xlqy_new2007`（`8,992` 份可编译文件零活跃告警）与
 
 Fix: 删除三馆 `lj.lpc:2` 开头 `i  ` 与 `work_me()` 未用 `ghost`，并将两馆 `include/config.h` 的 `LISTNODES`/`BANDLIST` 收拢为单行 `([ ])`（保留原 LF 行尾与 `KEEP`）。
 Detection: 扩展 `scripts/lint.py --rule xyj-yulan-lj-blockers` 匹配任意行首 `^i  //`，并新增 targeted 规则 `xlqy-config-h-multiline-define` 校验 `include/config.h` 断行宏。
+
+### 6.134 `yueyingqiyuan` `buddhism/heal`、`jile-dao/suimeng` 与 `fenghuang/obj/yao` 三份活跃语法阻断（1 馆，3 份文件）
+
+Symptom: 扫描 `ylfyxa3`（`16,185` 份可编译文件零诊断）与 `yueyingqiyuan`（`9,360` 份可编译文件）并全库扫查，发现 `yueyingqiyuan` 存在三份活跃语法阻断：
+1. `/daemon/class/bonze/buddhism/heal.lpc:18-19`：`if (mymana) < 50\n)` 括号错位，触发 `syntax error` 阻断佛法疗伤法术。
+2. `/daemon/class/phoenix/jile-dao/suimeng.lpc:63,73`：`object *ob` 缺分号，且 `ob = target for (i = 0; ...)` 同时缺分号与数组包装（`ob` 为 `object *` 而 `target` 为 `object`），阻断极乐刀「碎梦一刀」绝招。
+3. `/d/fenghuang/obj/yao.lpc:27`：`me->add("potential", 10)` 行末缺分号，触发 `syntax error, unexpected L_DEFINED_NAME`。
+
+Fix: 将 `heal.lpc:18` 修正为 `if (mymana < 50)`；为 `suimeng.lpc:63` 补分号并将第 `73` 行拆为 `ob = ({ target });` + `for (...)`；为 `yao.lpc:27` 补分号（全部保留原 CRLF 行尾）。
+Detection: `scripts/lint.py --rule yueyingqiyuan-heal-suimeng-yao`（targeted 规则，校验上述三路径阻断）。

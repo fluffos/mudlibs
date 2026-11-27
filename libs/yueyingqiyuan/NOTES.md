@@ -1407,3 +1407,11 @@ pristine + build-debug，归档端口 40048。`scripts/play_login.py` 注册进�
 
 - 清理 `/www/cgi-bin/{board_h,board_list,mudlist,top,who}.lpc` 中 `time1`/`time2`/`notes`/`i`/`nummuds`/`j`/`option`/`fname` 共 `8` 处未使用局部变量（保留原 CRLF/LF 行尾与格式状态）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `75` 处 `0 to look at`；`lpc_format_changed.py` `21/21` `0` 重排；`lpcc --batch` 全批 `5` 份文件零错零告警 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`128` 条规则）零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47797`）通过且 `ZERO_DRIVERS`。
+
+## `buddhism/heal`、`jile-dao/suimeng` 与 `fenghuang/obj/yao` 三份语法阻断修复（2026-11-27，KB 04 §6.134）
+
+- 扫描 `yueyingqiyuan`（`9,360` 份可编译文件）并全库排查，修复本馆 `3` 份活跃编译阻断（保留原 CRLF 行尾）：
+  1. `/daemon/class/bonze/buddhism/heal.lpc:18-19`：`if (mymana) < 50\n)` 括号错位改为 `if (mymana < 50)`。
+  2. `/daemon/class/phoenix/jile-dao/suimeng.lpc:63,73`：`object *ob` 补分号，并将 `ob = target for (i = 0; ...)` 修正为 `ob = ({ target });` 后接 `for` 循环。
+  3. `/d/fenghuang/obj/yao.lpc:27`：`me->add("potential", 10)` 行末补分号。
+- 验证：`lpc_format_changed.py --apply` `0` 错误；`lpcc --batch` `3/3 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `3/3` 全部由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（新增规则 #193 `yueyingqiyuan-heal-suimeng-yao`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
