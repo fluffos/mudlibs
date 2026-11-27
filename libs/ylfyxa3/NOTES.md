@@ -1209,3 +1209,7 @@ pristine + build-debug（归档端口 `40062`，测试端口 `49062`）。`scrip
 
 - 修复 `/kungfu/condition/in_baobiao.lpc`（共 `1` 个文件） 中因硬换行截断的键值/映射键字符串字面量（如 `present("li yua\nnji")`、`query_skill("\nforce")`、`query_skill("\nxuanfeng-leg")`、`query("family/fa\nmily_name")`、`set("\ngender")`/`"nicknam\ne"`、`"night\nlight"`/`"no\nbump"`/`"left\nclaw"`、`"\ntime"`/`"\nparry"` 等；英文多词属性恢复空格，其余去除误插换行，保留原有 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py --apply` 对全批 `168` 份已跟踪文件确认零盲区（保持未格式化文件 `KEEP`）；`lpcc_eval.py` 差分实测跨系代表加载与读取通过（`sje` `hong1` `nickname` 由 `0` 恢复为 `"九指神丐"`，`dtxywzxzb` `zuixing2`/`nitan3` `xuanfeng-leg` 干净加载 `PASS`）；`scripts/lint.py`（新增规则 #96 `newline-in-key-string`）通过 `10/10` `HEAD` 正例、全库 `--all --jobs 8` 与 `--fast` 均 `0` 错误 `0` 告警；`check_ntfs_paths.py` 零问题；`10` 馆代表（`sje`/`pd`/`dtxywzxzb`/`nitan3`/`kxkj`/`shadowgate`/`bmxkx2001`/`yszz`/`hy3`/`mortremains`，端口 `47651..47660`）全部通过 `play_boot.sh`+`play_stop.sh` 且 `ZERO_DRIVERS`。
+
+## 2026-11-27 巡捕/四大捕快 `do_kill()` 裸 `kill` 崩溃修复（KB 06 §7.420）
+
+- 修复 `clone/npc/xunbu.lpc`、`d/dali/npc/dlxunbu.lpc`、`d/npc/baoyu.lpc`、`d/npc/jinglei.lpc`、`d/npc/kuangfeng.lpc`、`d/npc/shandian.lpc`、`d/npc/xunbu.lpc` 的 `do_kill()` 在未判空 `arg` 前直接调用 `present(arg, environment())`，导致玩家在同房间输入裸 `kill` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !environment()) return 0;`（`patrol-do-kill-null-arg`）。

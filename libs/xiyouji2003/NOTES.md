@@ -1161,3 +1161,7 @@ pristine + build-debug，归档端口 40075。`scripts/play_login.py` 注册并�
 ## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
 
 - 修复 `std/item/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。
+
+## 2026-11-27 巡捕/四大捕快 `do_kill()` 裸 `kill` 崩溃修复（KB 06 §7.420）
+
+- 修复 `d/city/npc/xunbu.lpc` 的 `do_kill()` 在未判空 `arg` 前直接调用 `present(arg, environment())`，导致玩家在同房间输入裸 `kill` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !environment()) return 0;`（`patrol-do-kill-null-arg`）。

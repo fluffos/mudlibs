@@ -2764,3 +2764,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `38` XKX/HY/JHFY-family mudlibs (`d/mr/npc/wyy.lpc`, `d/wuguan/npc/wyy.lpc`, `d/murong/npc/{wyy,wyyan}.lpc`), 王语嫣 binds `add_action("lingwu", "ask")` and immediately runs `if (!sscanf(arg, "%s about %s", name, arg)) return 0;`. When a player in her room types bare `ask` (`arg == 0`), `sscanf(0, ...)` throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of falling through to `/cmds/std/ask.lpc`.
 **Fix:** Short-circuit with `if (!arg || !sscanf(arg, "%s about %s", name, arg)) return 0;`.
 **Detection:** `scripts/lint.py --rule wyy-lingwu-null-arg`.
+
+### 7.420 Patrol guard NPCs (`dlxunbu`/`xunbu`/`baoyu`/`shandian`/`jinglei`/`kuangfeng`) `do_kill()` calling `present(arg, environment())` without guarding `!arg` (`176` files, `36` libs) {#7420-patrol-do-kill-null-arg}
+
+**Symptom:** Across `36` XKX/HY/JHFY-family mudlibs (`176` files: `dlxunbu.lpc`, `xunbu.lpc`, `baoyu.lpc`, `shandian.lpc`, `jinglei.lpc`, `kuangfeng.lpc`), patrolling city guards bind `add_action("do_kill", "kill")` and check `if (!environment()) return 0;` followed immediately by `if (ob = present(arg, environment()))`. When any player in the same room types bare `kill` (`arg == 0`), `present(0, environment())` throws `*Bad argument 1 to present() Expected: string or object Got: 0.` instead of falling through to `/cmds/std/kill.lpc`.
+**Fix:** Change `if (!environment()) return 0;` to `if (!arg || !environment()) return 0;` inside `do_kill(string arg)`.
+**Detection:** `scripts/lint.py --rule patrol-do-kill-null-arg`.

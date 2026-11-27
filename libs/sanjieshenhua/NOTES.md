@@ -809,3 +809,7 @@ pristine + build-debug，port 40098。`scripts/play_login.py` 注册。
 ## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
 
 - 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。
+
+## 2026-11-27 巡捕/四大捕快 `do_kill()` 裸 `kill` 崩溃修复（KB 06 §7.420）
+
+- 修复 `d/city/npc/xunbu.lpc` 的 `do_kill()` 在未判空 `arg` 前直接调用 `present(arg, environment())`，导致玩家在同房间输入裸 `kill` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !environment()) return 0;`（`patrol-do-kill-null-arg`）。

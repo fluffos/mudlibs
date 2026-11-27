@@ -1127,3 +1127,7 @@ pristine + build-debug（归档端口 40189，临时测试端口 49519）。`scr
 );` 阻断编译；`lpcc --batch` 5/5 零告警通过，新增回归规则 `jianjun-count-wxddym-blockers`。
 - 2026-11-25（KB 04 §6.95）：修复 `/cmds/usr/checkskill.lpc` `mixed *value;` 声明在 `replace_string()` 触发类型错误阻断编译（改为 `mixed value;`）；`lpcc --batch` 零告警通过，扩展回归规则 `nitan-checkskill-mixed-array`。
 - 2026-11-25（KB 04 §6.104）：引入缺失的 `/include/wanted.h` 解锁 `/d/mingjiao/hdg/shanbi.lpc`（`Cannot #include wanted.h`）；`lpcc --batch` 与 `lpcc_eval.py` 由 `--head` `FAIL` 转为零错零告警 `PASS`，`play_boot.sh`+`play_stop.sh`（端口 `48064`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 巡捕/四大捕快 `do_kill()` 裸 `kill` 崩溃修复（KB 06 §7.420）
+
+- 修复 `d/city/npc/jinglei.lpc`、`d/npc/baoyu.lpc`、`d/npc/jinglei.lpc`、`d/npc/kuangfeng.lpc`、`d/npc/shandian.lpc` 的 `do_kill()` 在未判空 `arg` 前直接调用 `present(arg, environment())`，导致玩家在同房间输入裸 `kill` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !environment()) return 0;`（`patrol-do-kill-null-arg`）。
