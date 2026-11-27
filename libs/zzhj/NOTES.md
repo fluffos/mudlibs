@@ -615,3 +615,11 @@ pristine + build-debug，归档端口 40099。`scripts/play_login.py` 注册进�
 
 - `/adm/daemons/network/pingd.lpc`、`/adm/daemons/network/pingtcp.lpc` 中 `strip_callout(int num)` 原由 `static` 批量替换为 `nosave`，触发 FluffOS `Illegal to declare nosave function.` 编译告警并使内部函数公开暴露；核实全语料无跨对象调用后统一改回 `protected`。
 - 验证：`lpcc_eval.py` 编译加载与 `strip_callout(0)` 返回 `0` 且无 `Illegal to declare nosave` 告警；`scripts/lint.py --rule ping-strip-callout-nosave` 零告警。
+
+## `invis`/`battle_tactics`/`pilot_ss` 三份返回类型编译阻断修复（2026-11-27，KB 04 §6.139）
+
+- 扫描 `zzhj`（`634` 份可编译文件零活跃告警），修复仅存的 `3` 份活跃非 `/doc/`/非网络编译阻断（保留原 CRLF 行尾与 `KEEP`）：
+  1. `/cmds/wiz/invis.lpc:6`：`void main(...)` 改为 `int main(...)`。
+  2. `/daemon/skill/battle_tactics.lpc:6`：`string type()` 改为 `mixed type()`（对齐同目录 `pilot_ss.lpc`）。
+  3. `/daemon/skill/pilot_ss.lpc:23`：`string learn_failed()` 中 `return notify_fail("...");` 改为直接 `return "...";`（对齐调用方 `/cmds/std/study.lpc:42` 的 `write(...)`）。
+- 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `3/3 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `3/3` 由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（新增规则 #198 `zzhj-return-types-cistoms-iwin`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

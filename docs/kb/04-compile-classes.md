@@ -2398,3 +2398,14 @@ Symptom: 扫描 `qhxajh` 及 9 个剩余活跃英文馆（`basis`、`cistoms`、
 
 Fix: 将 `3` 馆 `worknpc.lpc:63` 改为 `work["busy_msg"]`；将 `cistoms` `ed.lpc`/`rm.lpc` 改为 `#include <global.h>`（保留原 CRLF/LF 行尾）。
 Detection: `scripts/lint.py --rule worknpc-busy-msg-cistoms-global-h`（targeted 规则，校验上述三路径阻断）。
+
+### 6.139 `zzhj` 三处返回类型错配与 `cistoms` `command/iwin.lpc` 裸 `include`（2 馆，4 份文件）
+
+Symptom: 扫描 `zzhj`（`634` 份可编译文件，零活跃告警）与 `cistoms`，发现四份活跃编译阻断：
+1. `zzhj` `/cmds/wiz/invis.lpc:6,23`：声明 `void main(object me, string arg)` 却 `return 0`/`return notify_fail(...)`/`return 1`，触发 `Type of returned value doesn't match function return type ( int vs void )`。
+2. `zzhj` `/daemon/skill/battle_tactics.lpc:6`：声明 `string type() { return ({ "int" }); }`，触发 `( mixed * vs string )`（对照同目录 `pilot_ss.lpc:6` 应为 `mixed type()`）。
+3. `zzhj` `/daemon/skill/pilot_ss.lpc:21-23`：声明 `string learn_failed()`（调用方 `/cmds/std/study.lpc:42` 直接 `write(SKILL_D(...)->learn_failed(me))`），却写成 `return notify_fail("...");`，触发 `( void vs string )`。
+4. `cistoms` `/command/iwin.lpc:8`：写成裸 `include <globals.h>`（缺 `#` 且本馆头文件为 `<global.h>`），触发 `syntax error, unexpected '<'`。
+
+Fix: 将 `zzhj` `invis.lpc` 改为 `int main(...)`、`battle_tactics.lpc` 改为 `mixed type()`、`pilot_ss.lpc` 改为直接 `return "...";`（`zzhj` 活跃非 `/doc/`/非网络编译错误清零）；将 `cistoms` `iwin.lpc:8` 改为 `#include <global.h>`（保留原 CRLF/LF 行尾与 `KEEP`）。
+Detection: `scripts/lint.py --rule zzhj-return-types-cistoms-iwin`（targeted 规则，校验上述四路径阻断）。

@@ -68,3 +68,8 @@ pristine + build-debug，归档端口 40394。`scripts/play_login.py` 建角进�
   3. `/command/update.lpc`：移除未用局部 `updater`。
   4. `/single/daemons/login_d.lpc`：移除未用局部 `*passkey`。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`scripts/lpc_warnings.py cistoms` 确认仅余 `/tmp_eval_file.lpc`；`lpcc_eval.py` `--head` 对照工作树 `4/4` 正常加载 `PASS`；`scripts/lint.py` `--changed HEAD` 与 `--fast`（`197` 条规则）均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## `command/iwin.lpc` 裸 `include <globals.h>` 编译阻断修复（2026-11-27，KB 04 §6.139）
+
+- 修复 `/command/iwin.lpc:8` 缺失 `#` 且写错头文件名的 `include <globals.h>` 为 `#include <global.h>`（保留原 LF 行尾与 `KEEP`）。
+- 验证：`lpc_format_changed.py --apply` `0` 重排；`lpcc_eval.py` `--head` 对照工作树确认 `/command/iwin` 由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（新增规则 #198 `zzhj-return-types-cistoms-iwin`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
