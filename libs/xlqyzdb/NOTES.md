@@ -917,3 +917,8 @@ pristine + build-debug，归档端口 40033。`scripts/play_login.py` 注册进�
 
 - 还原 `/d/qujing/start/24/12.lpc:41-43` 被归档截断损坏的 `carry_object("/d/qujing/tianzhu/obj/piyi")->wear();` 尾部与闭合 `}`（保留原 CRLF/LF 行尾与 `KEEP` 状态）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`xyj2000`/`xyj2000f`/`sjsh`/`sjshv2578bb`/`xyj20032`/`mhxy` 代表）全数由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #118 `xyj-eof-tail-corruption`，共 118 条）`--changed HEAD` 与 `--fast` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47681..47686`）均通过且 `ZERO_DRIVERS`。
+
+## 云楼 `lj.lpc` 第 2 行 `i  //` 编译阻断修复（2026-11-27，KB 04 §6.133）
+
+- 扫描 `xlqyzdb`（零活跃可编译告警）并修复 `/d/dntg/yunlou/npc/lj.lpc:2`（保留原 LF 行尾与 `KEEP`）：移除第 2 行行首残留 `i  `（使托塔天王李靖恢复编译与加载），并顺手移除解锁后暴露的 `work_me()` 未用局部 `ghost`。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `lj.lpc` `PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `/d/dntg/yunlou/npc/lj` 由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（收紧 `xyj-yulan-lj-blockers` 并新增规则 #192 `xlqy-config-h-multiline-define`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

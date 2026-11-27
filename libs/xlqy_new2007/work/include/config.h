@@ -14,13 +14,9 @@
 #define MUDLIST_DNS  ({  })
 // The Eastern Stories
 //#define MUDLIST_BAK  ({ "140.113.204.42", 8008 })
-#define LISTNODES ([ \
-     
-	     ])
+#define LISTNODES ([ ])
 
-#define BANDLIST ([\
-
-])
+#define BANDLIST ([ ])
 
 /* This is the default packet size of outgoing mail messages.  The ideal
  * number is 512, maximum would be about 900, since 1024 is the maximum

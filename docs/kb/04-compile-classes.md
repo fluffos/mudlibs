@@ -2342,3 +2342,12 @@ Symptom: 扫描 `aoxiangtianji`（`9,440` 份可编译文件零诊断）与 `xlq
 
 Fix: 将 `luanbing`/`qianmian` 的 `SPELLS` 改名为 `MAX_SPELLS` 并清理其 `3` 处未用局部变量；删除 `3` 份 `quest_kl.lpc` 末尾残留三行；将 `2` 份 `fatigue.lpc` 的局部字符串变量 `level` 改名为 `slevel`（保留原 LF 行尾）。
 Detection: `scripts/lint.py --rule xlqy-luanbing-questkl-fatigue`（targeted 规则，校验上述五路径阻断）。
+
+### 6.133 仙侣奇缘系 `lj.lpc` 第二行残留 `i  //` 与 `include/config.h` 断行宏（3 馆，5 份文件）
+
+Symptom: 扫描 `xlqy_new2007`（`8,992` 份可编译文件零活跃告警）与 `xlqyzdb`（零活跃可编译告警）并全库扫查，发现仙侣奇缘三馆（`xlqy_early`、`xlqy_new2007`、`xlqyzdb`）共 `5` 份活跃编译阻断：
+1. `/d/dntg/yunlou/npc/lj.lpc:2`（`xlqy_early`、`xlqy_new2007`、`xlqyzdb` 共 `3` 馆）：第 1 行为版权注释，第 2 行开头残留 vi 误敲 `i  //modified by vikee for xlqy-zq station`，导致 `inherit NPC;` 报 `syntax error, unexpected L_INHERIT` 阻断云楼灭妖核心 NPC 托塔天王李靖（此前规则 `xyj-yulan-lj-blockers` 仅检查文件首行 `startswith(b"i  //")`，因而漏检第 2 行命中）；解锁后顺带清理 `work_me()` 未用局部 `ghost`。
+2. `/include/config.h:17-23`（`xlqy_early`、`xlqy_new2007` 共 `2` 馆）：`#define LISTNODES ([ \` 与 `#define BANDLIST ([\` 后夹空行无续行符，使闭合 `])` 落到顶层触发 `syntax error, unexpected ']'`。
+
+Fix: 删除三馆 `lj.lpc:2` 开头 `i  ` 与 `work_me()` 未用 `ghost`，并将两馆 `include/config.h` 的 `LISTNODES`/`BANDLIST` 收拢为单行 `([ ])`（保留原 LF 行尾与 `KEEP`）。
+Detection: 扩展 `scripts/lint.py --rule xyj-yulan-lj-blockers` 匹配任意行首 `^i  //`，并新增 targeted 规则 `xlqy-config-h-multiline-define` 校验 `include/config.h` 断行宏。

@@ -1302,3 +1302,10 @@ pristine + build-debug，port 40076。`scripts/play_login.py` 注册。
   2. `/d/obj/quest/quest_kl.lpc` 与 `/quest/xunbao/obj/quest_kl.lpc`：移除闭合 `}` 后残留的三行 `, "山猫怪", "yao guai", "", "1"\n}\n),`。
   3. `/daemon/conjure/yaofa/fatigue.lpc`：将与参数 `int level` 重名的局部 `string level;` 改名为 `string slevel;`（连同第 `51/53/56/59` 行），消除重声明与乘法类型冲突。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `5/5 PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `5/5` 全部由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（新增规则 #191 `xlqy-luanbing-questkl-fatigue`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 云楼 `lj.lpc` 第 2 行 `i  //` 与 `include/config.h` 断行宏修复（2026-11-27，KB 04 §6.133）
+
+- 修复仙侣奇缘三馆同源的两处活跃编译阻断（本馆 `2` 份文件，保留原 LF 行尾与 `KEEP`）：
+  1. `/d/dntg/yunlou/npc/lj.lpc:2`：移除第 2 行行首残留 `i  `（使托塔天王李靖恢复编译与加载），并顺手移除解锁后暴露的 `work_me()` 未用局部 `ghost`。
+  2. `/include/config.h:17-23`：将因空行断开续行符导致裸 `])` 报错的 `#define LISTNODES` 与 `#define BANDLIST` 收拢为单行 `([ ])`。
+- 验证：`lpc_audit_removed_locals.py HEAD` `0 to look at`；`lpc_format_changed.py --apply` `0` 重排；`lpcc --batch` `lj.lpc` `PASS` 且 `0` 告警；`lpcc_eval.py` `--head` 对照工作树确认 `/d/dntg/yunlou/npc/lj` 由 `FAIL` 解锁为 `PASS`；`scripts/lint.py`（收紧 `xyj-yulan-lj-blockers` 并新增规则 #192 `xlqy-config-h-multiline-define`）`--changed HEAD` 与 `--fast` 均零错误零告警；`play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。

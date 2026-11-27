@@ -238,6 +238,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("sjsh-tianlong-hugu-blockers", "targeted", "KB 04 §6.130", "error", "`d/nanhai/obj/tianlong.lpc` commented `inherit HALBERD;` / `obj/jineng/obj2/hugu@.lpc` stray `);`"),
     RuleSpec("weapon-music-init-whip", "targeted", "KB 04 §6.131", "error", "`std/weapon/music.lpc` defining `init_whip` instead of `init_music`, or `d/obj/weapon/qin.lpc` inheriting `MUSIC` while calling `init_sword`"),
     RuleSpec("xlqy-luanbing-questkl-fatigue", "targeted", "KB 04 §6.132", "error", "`luanbing`/`qianmian` `int ... SPELLS = 200` colliding with `#define SPELLS`, `quest_kl.lpc` stray EOF tail, or `yaofa/fatigue.lpc` redeclared `string level;`"),
+    RuleSpec("xlqy-config-h-multiline-define", "targeted", "KB 04 §6.133", "error", "`include/config.h` broken multiline `#define LISTNODES`/`BANDLIST ([ \\` across blank line leaving bare `])`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1840,7 +1841,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl", "sjsh_xyj03", "mmid_qh", "xyj42_hwz", "sjsh_tff", "sjsh_th", "music_w", "xlqy_lqf")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl", "sjsh_xyj03", "mmid_qh", "xyj42_hwz", "sjsh_tff", "sjsh_th", "music_w", "xlqy_lqf", "xlqy_cfg")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2121,6 +2122,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             "/daemon/conjure/yaofa/fatigue.lpc",
         ):
             targeted_bins["xlqy_lqf"].append(item)
+        if rel in ("/include/config.h", "/include/net/config.h"):
+            targeted_bins["xlqy_cfg"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -2690,7 +2693,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 if b'#include <reporting.h>' in b and os.path.isfile(f"{REPO}/libs/{slug}/work/d/kaifeng/npc/reporting.lpc") and not os.path.isfile(f"{REPO}/libs/{slug}/work/include/reporting.h"):
                     col.add("xyj-yulan-lj-blockers", p, "stale `#include <reporting.h>` instead of `\"reporting.lpc\"`")
             elif rel == "/d/dntg/yunlou/npc/lj.lpc":
-                if b.startswith(b"i  //"):
+                if re.search(rb'(?m)^i  //', b):
                     col.add("xyj-yulan-lj-blockers", p, "stray leading `i  //` before `inherit NPC;`")
 
     if col.wants("vrm-server-undefined-schedule-d"):
@@ -3229,6 +3232,13 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             elif rel == "/daemon/conjure/yaofa/fatigue.lpc":
                 if b"int cast(object me, object target, int level)" in b and b"string level;" in b:
                     col.add("xlqy-luanbing-questkl-fatigue", p, "redeclared local `string level;` collides with `int level` parameter")
+
+    if col.wants("xlqy-config-h-multiline-define"):
+        cfg_pat = re.compile(rb'#define\s+(?:LISTNODES|BANDLIST)\s+\(\[\s*\\\r?\n[ \t]*\r?\n[ \t]*\]\)')
+        for _, p, _ in targeted_bins["xlqy_cfg"]:
+            b = open(f"{REPO}/{p}", "rb").read()
+            if cfg_pat.search(b):
+                col.add("xlqy-config-h-multiline-define", p, "broken multiline `#define LISTNODES`/`BANDLIST` across blank line leaves stray `])`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:
