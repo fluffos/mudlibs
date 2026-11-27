@@ -830,3 +830,7 @@ pristine + build-debug，port 40105。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-27 巡捕/四大捕快 `do_kill()` 裸 `kill` 崩溃修复（KB 06 §7.420）
 
 - 修复 `d/dali/npc/dlxunbu.lpc` 的 `do_kill()` 在未判空 `arg` 前直接调用 `present(arg, environment())`，导致玩家在同房间输入裸 `kill` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !environment()) return 0;`（`patrol-do-kill-null-arg`）。
+
+## 2026-11-27 物件编辑器 `do_mkobj()` 裸 `mkobj` 崩溃修复（KB 06 §7.422）
+
+- 修复 `clone/misc/objmaker.lpc` 的 `do_mkobj()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s", file)`，导致巫师输入裸 `mkobj` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s", file) != 1)`（与同文件 `do_rset`/`do_rrset` 一致，`objmaker-do-mkobj-null-arg`）。

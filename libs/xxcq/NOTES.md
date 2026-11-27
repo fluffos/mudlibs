@@ -497,3 +497,7 @@ pristine + build-debug，归档端口 40135。`scripts/play_login.py` 注册进�
 
 - 修复 `/cmds/std/hit.lpc`、`/cmds/usr/help.lpc`、`/d/feiyu/npc/killer.lpc`、`/d/quanli/npc/obj/qiandan.lpc`、`/d/xiangyang/npc/obj/qiandan.lpc`、`/d/yaowang/npc/huoji2.lpc` 中仅传单一属性名的 `set("k")`/`set_temp("k")`（ES2/Nitan7 `F_DBASE` 缺省第 2 参数为 `0` 致标记失效或写错键名）及 `set("k",)` 悬空逗号编译错误：按各自语义分别补 `", 1"` / `", 0"`、修正 `delete_temp("playing")`（`flute.h` `delete/playing` 笔误）、`delete_temp("apply/long")`（`silk3a.lpc`）、`set_temp("die_reason", ...)`（状态死亡原因）或还原被脚本倒置的双参 `set(prop, var)` / 拼写错误。
 - 验证：全批 `1348` 文件 / `182` 馆完成，代表实测涵盖 `21` 馆差分 `lpcc --batch`（零新增编译退化）、`lpcc_eval.py` 前后对照（`fengyun434` / `dtxyzjb` / `bxsj silk3a` / `hell xixing-fanshi` / `jym lu` / `wdxtym dymo+baihu` / `xbtxiii damo` / `xkm tu` / `xajhxo cloth` / `esI copperman` / `xixingzhanji logind` 均通过）、`lpc_format_changed.py --apply` 零重排、`scripts/lint.py`（新增 `one-arg-set` 规则，共 `85` 条）全库 `--all` 与 `--fast` 零错误零告警，以及 `10` 馆代表实机 `play_boot.sh`+`play_stop.sh` 启动正常且 `ZERO_DRIVERS`。
+
+## 2026-11-27 物件编辑器 `do_mkobj()` 裸 `mkobj` 崩溃修复（KB 06 §7.422）
+
+- 修复 `clone/misc/objmaker.lpc` 的 `do_mkobj()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s", file)`，导致巫师输入裸 `mkobj` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s", file) != 1)`（与同文件 `do_rset`/`do_rrset` 一致，`objmaker-do-mkobj-null-arg`）。

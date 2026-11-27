@@ -458,3 +458,7 @@ pristine + build-debug，port 40152。`scripts/play_login.py` 注册并执行 `l
 
 - 在 `/d/huashan/npc/doctor.lpc:41-42` `sprintf("%s 想自宫可惜办不到, 哈哈..\n",` 后补回丢失的 `me->query("name")));`（消除 `syntax error, unexpected L_RETURN` 编译阻断，保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `15/15` 格式化零错；`lpcc --batch` 全批 `15/15` 由 `HEAD` `FAIL` 转为零错零告警 `PASS`；`lpcc_eval.py`（`wmkj`/`hy2000`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #145 `huashan-doctor-unclosed-sprintf`，共 145 条）`--changed HEAD` 与 `--fast` 零错零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47871..47876`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 物件编辑器 `do_mkobj()` 裸 `mkobj` 崩溃修复（KB 06 §7.422）
+
+- 修复 `clone/misc/objmaker.lpc` 的 `do_mkobj()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s", file)`，导致巫师输入裸 `mkobj` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s", file) != 1)`（与同文件 `do_rset`/`do_rrset` 一致，`objmaker-do-mkobj-null-arg`）。

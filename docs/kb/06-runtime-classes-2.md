@@ -2776,3 +2776,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `30` XKX/HY/JHFY-family mudlibs (`67` files: `d/changan/npc/xiao-fan.lpc`, `d/shaolin/npc/xiao-fan.lpc`, `d/new/npc/wenqianer.lpc`, `d/city/npc/xbtian.lpc`, `d/npc/dashao.lpc`), vendor NPCs bind `add_action("do_buy", "buy")` and immediately execute `if (sscanf(arg, "%d %s %d from %s", amount, items, once, targ) != 4)`. When a player types bare `buy` (`arg == 0`), `sscanf(0, ...)` throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of falling through to `::do_buy(arg)`.
 **Fix:** Add `if (!arg) return ::do_buy(arg);` at the start of `do_buy(string arg)` before the `sscanf()` chain.
 **Detection:** `scripts/lint.py --rule vendor-do-buy-null-arg`.
+
+### 7.422 `objmaker.lpc` `do_mkobj()` calling `sscanf(arg, "%s", file)` without guarding `!arg` (`59` files, `55` libs) {#7422-objmaker-do-mkobj-null-arg}
+
+**Symptom:** Across `55` active vendored mudlibs (`59` files, mostly `clone/misc/objmaker.lpc` and `obj/objmaker.lpc`), `do_mkobj(string arg)` immediately runs `if (sscanf(arg, "%s", file) != 1)` while the sibling handlers in the same file (`do_rset`, `do_rrset`) already guard `if (!arg || sscanf(...))`. Typing bare `mkobj` (`arg == 0`) throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
+**Fix:** Change `if (sscanf(arg, "%s", file) != 1)` to `if (!arg || sscanf(arg, "%s", file) != 1)`.
+**Detection:** `scripts/lint.py --rule objmaker-do-mkobj-null-arg`.

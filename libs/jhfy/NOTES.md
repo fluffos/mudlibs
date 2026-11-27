@@ -1174,3 +1174,7 @@ pristine + build-debug，port 40053。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-27 小贩/温倩儿 `do_buy()` 裸 `buy` 崩溃修复（KB 06 §7.421）
 
 - 修复 `d/changan/npc/xiao-fan.lpc`、`d/shaolin/npc/xiao-fan.lpc` 的 `do_buy()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d %s %d from %s", ...)`，导致玩家输入裸 `buy` 时抛出 `*Bad argument 1 to sscanf` 的问题：增加 `if (!arg) return ::do_buy(arg);` 前置保护（`vendor-do-buy-null-arg`）。
+
+## 2026-11-27 物件编辑器 `do_mkobj()` 裸 `mkobj` 崩溃修复（KB 06 §7.422）
+
+- 修复 `clone/misc/objmaker.lpc` 的 `do_mkobj()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s", file)`，导致巫师输入裸 `mkobj` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s", file) != 1)`（与同文件 `do_rset`/`do_rrset` 一致，`objmaker-do-mkobj-null-arg`）。

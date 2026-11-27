@@ -619,3 +619,7 @@ pristine + build-debug，port 40161。`scripts/play_login.py` 注册并执行 `l
 
 - 修复 `/d/heimuya/mishi.lpc:48,59,84` 两处 `this_player());` 截断与末尾重复 `oid buqun_rob`、`/d/taohua/npc/shoumu1.lpc:49-50` 补齐 `}));`、`/d/shenlong/npc/haibing.lpc` 补齐 `inherit NPC;` 与 `/d/mj/obj/mjjs.lpc` 改为 `@LONG ... LONG`（保留原 CRLF/LF 行尾）。
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc --batch` 全批 `5` 馆 `8` 文件零错零告警 `PASS`；`lpcc_eval.py`（`cctx` `4/4`）由 `--head` 报错转为 `PASS`；`scripts/lint.py`（新增规则 #124 `heimuya-mishi-cctx-syntax`，共 124 条）`--changed HEAD` 与 `--fast` 零错零告警；全部 `5` 馆 `play_boot.sh`+`play_stop.sh`（端口 `47741..47745`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-27 物件编辑器 `do_mkobj()` 裸 `mkobj` 崩溃修复（KB 06 §7.422）
+
+- 修复 `clone/misc/objmaker.lpc` 的 `do_mkobj()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s", file)`，导致巫师输入裸 `mkobj` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s", file) != 1)`（与同文件 `do_rset`/`do_rrset` 一致，`objmaker-do-mkobj-null-arg`）。
