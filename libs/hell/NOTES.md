@@ -565,3 +565,7 @@ pristine + build-debug，归档端口 40114。`scripts/play_login.py` 注册/连
 - 验证：`lpc_format_changed.py` `0` 错误；`lpcc_eval.py`（`hell` 及 `6` 馆代表）`query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（规则 #117 `qujing-gunfa-weapon-name`，共 117 条）`--changed HEAD` 与 `--fast` 零错误零告警。
 - 2026-11-25（KB 04 §6.95）：修复 `/cmds/usr/checkskill.lpc` `mixed *value;` 声明在 `replace_string()` 触发类型错误阻断编译（改为 `mixed value;`）；`lpcc --batch` 零告警通过，扩展回归规则 `nitan-checkskill-mixed-array`。
 - 2026-11-25（KB 04 §6.105）：清零本馆全部剩余 `6` 份编译阻断（全库 `7,462` 份文件零编译诊断）：删除 `/clone/gift/yangrongwan.lpc:20` 在 `inherit ITEM;` 下无效的 `set_amount(1);`，将 `/d/baituo/npc/obj/bowl.lpc:7` 改为 `set_name("海口大碗", ({ "bowl" }));`，并删除 `/clone/special/bear.lpc:586`、`/d/city/npc/obj/lbook3.lpc:28`、`/d/xiaoyao/npc/obj/lbook4.lpc:27`、`/d/xiaoyao/obj/lbook4.lpc:26` 末尾重复的 `int query_autoload()`（保留原 CRLF 行尾）；`lpcc --batch` `6/6` 与 `lpcc_eval.py` 均由 `--head` `FAIL` 转为零错零告警 `PASS`，新增回归规则 `hell-zero-diag-blockers`，`play_boot.sh`+`play_stop.sh hell`（端口 `48071`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-28 牌桌 `clone/game/pai.lpc` `do_press()` 裸 `press` 崩溃修复（KB 06 §7.430）
+
+- 修复 `clone/game/pai.lpc` 的 `do_press()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %d", id, n)`，导致牌局中输入裸 `press` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %d", id, n) != 2)`（`game-pai-do-press-null-arg`）。

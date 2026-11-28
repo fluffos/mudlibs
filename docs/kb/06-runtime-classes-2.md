@@ -2824,3 +2824,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `44` XYJ/JHFY-family mudlibs, `/d/kaifeng/ground2.lpc`'s `do_debug(string arg)` (`add_action("do_debug", "@debug@")`) immediately runs `if (sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`. Typing bare `@debug@` (`arg == 0`) throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of printing the usage line.
 **Fix:** Change `if (sscanf(arg, "%s %s %s", s0, s1, s2) != 3)` to `if (!arg || sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`.
 **Detection:** `scripts/lint.py --rule kaifeng-ground2-do-debug-null-arg`.
+
+### 7.430 `clone/game/pai.lpc` `do_press()` calling `sscanf(arg, "%s %d", id, n)` without guarding `!arg` (`28` files, `28` libs) {#7430-game-pai-do-press-null-arg}
+
+**Symptom:** Across `28` active vendored mudlibs, `/clone/game/pai.lpc`'s `do_press(string arg)` (`add_action("do_press", "press")`) runs `if (sscanf(arg, "%s %d", id, n) != 2)` without checking `!arg`. Typing bare `press` (`arg == 0`) while seated at the card table throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of printing the usage `notify_fail()`.
+**Fix:** Change `if (sscanf(arg, "%s %d", id, n) != 2)` to `if (!arg || sscanf(arg, "%s %d", id, n) != 2)`.
+**Detection:** `scripts/lint.py --rule game-pai-do-press-null-arg`.

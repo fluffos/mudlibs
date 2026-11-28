@@ -195,3 +195,7 @@ pristine + build-debug，归档端口 40393。`scripts/play_login.py` 注册/连
 
 - 修复 `/kungfu/skill/qujing-gunfa.lpc` `query_action(object me, object weapon)` 中将兵器名 `wn` 错声明为 `int wn`、`nitan6`/`nt6`/`nt6nitan6win` 转换脚本倒置 `query_temp("weapon", wn = me)` 致编译失败（`Bad assignment ( int vs object )`），以及未判空直接解引用 `query_temp("weapon")->query("name")` 致空手调用报错（`*Bad argument 1 to EFUN call_other() Got: int(0)`）的缺陷：改为 `string wn;`，优先取形参 `weapon` 并补 `objectp(weapon)` 判空守卫（无兵器兜底 `"长棍"`，保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` 全批 `0` 错误；`lpcc_eval.py` 跨系代表实测（`nitan6`/`nt6`/`nt6nitan6win`/`hhsj`/`nitan_ceshi`/`zhonghua2`）由 `--head` 编译报错/空手崩溃转为 `query_action(me, 0)` 返回有效招式映射 `PASS`；`scripts/lint.py`（新增规则 #117 `qujing-gunfa-weapon-name`，共 117 条）全库 `--fast` 与 `--changed HEAD` 零错误零告警；`6` 馆代表 `play_boot.sh`+`play_stop.sh`（端口 `47671..47676`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-28 牌桌 `clone/game/pai.lpc` `do_press()` 裸 `press` 崩溃修复（KB 06 §7.430）
+
+- 修复 `clone/game/pai.lpc` 的 `do_press()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %d", id, n)`，导致牌局中输入裸 `press` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %d", id, n) != 2)`（`game-pai-do-press-null-arg`）。

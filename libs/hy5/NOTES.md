@@ -880,3 +880,7 @@ pristine + build-debug，port 40183。`scripts/play_login.py` 注册。
 ## 2026-11-28 西游取经容器 `do_put()`/`do_get()` 裸指令崩溃修复（KB 06 §7.425）
 
 - 修复 `d/qujing/biqiu/obj/elong.lpc`、`d/qujing/chechi/obj/chantai.lpc`、`d/qujing/chechi/obj/guizi.lpc`、`d/qujing/chechi/obj/youguo.lpc` 的 `do_put()`/`do_get()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s in/from %s", item, id)`，导致玩家输入裸 `put`/`get` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, ...))`（`qujing-container-put-get-null-arg`）。
+
+## 2026-11-28 牌桌 `clone/game/pai.lpc` `do_press()` 裸 `press` 崩溃修复（KB 06 §7.430）
+
+- 修复 `clone/game/pai.lpc` 的 `do_press()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %d", id, n)`，导致牌局中输入裸 `press` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %d", id, n) != 2)`（`game-pai-do-press-null-arg`）。

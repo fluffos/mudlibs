@@ -666,3 +666,7 @@ pristine + build-debug / release 驱动（归档端口 `40185`，测试端口 `4
 - 将 `/cmds/skill/checkskill.lpc`（共 `1` 份）第 `97` 行误声明为数组的 `mixed *value;` 改为 `mixed value;`，解决第 `134` 行 `replace_string(temp, "$N", value)` 触发的 `Bad argument 3 to efun replace_string()` 编译阻断（保留原 LF 行尾）。
 - 验证：`lpc_format_changed.py` `9/9` `0` 重排；`lpcc --batch` 全批 `6` 馆 `9/9` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `nitan3` `2/2` 由 `--head` 报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #133 `nitan-checkskill-mixed-array`，共 133 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47844`）通过且 `ZERO_DRIVERS`。
 - 2026-11-25（KB 04 §6.92）：修复 `/kungfu/skill/shenghuo-quan.lpc:48` GBK 乱码吞掉闭合引号阻断编译（恢复为 `return notify_fail("你的内力太弱，无法练圣火拳。\n");`）；`lpcc --batch` 零告警通过，新增回归规则 `shenghuo-quan-mojibake-quote`。
+
+## 2026-11-28 牌桌 `clone/game/pai.lpc` `do_press()` 裸 `press` 崩溃修复（KB 06 §7.430）
+
+- 修复 `clone/game/pai.lpc` 的 `do_press()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %d", id, n)`，导致牌局中输入裸 `press` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %d", id, n) != 2)`（`game-pai-do-press-null-arg`）。
