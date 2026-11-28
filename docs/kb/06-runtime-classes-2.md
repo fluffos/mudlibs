@@ -2836,3 +2836,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `20` XYJ-family mudlibs (`30` files: `d/npc/ts.lpc`, `d/quest/baoshi/ts.lpc`, `d/quest/npc/ts.lpc`, `d/quest/zxzz/npc/ts.lpc`, `d/npc/qujing/ts.lpc`), `do_qk(string arg)` (`add_action("do_qk", "cast")`) runs `if (sscanf(arg, "%s on %s", cast_id, cast_name) == 2)` without checking `arg`. Typing bare `cast` (`arg == 0`) in 唐僧's room throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
 **Fix:** Guard with `if (arg && sscanf(arg, "%s on %s", cast_id, cast_name) == 2)`.
 **Detection:** `scripts/lint.py --rule xyj-ts-do-qk-null-arg`.
+
+### 7.432 XYJ `d/dntg/` `wang.lpc` `do_kill()` and `liuer-mihou.lpc` `do_get()` calling `present(arg, environment(...))` without guarding `!arg` (`35` files, `26` libs) {#7432-xyj-dntg-wang-liuer-null-arg}
+
+**Symptom:** Across `26` XYJ-family mudlibs (`18` `d/dntg/hell/wang.lpc` / `u/forsky/dntg/hell/wang.lpc` + `17` `d/dntg/hgs/npc/liuer-mihou.lpc`, `35` files total), `wang.lpc`'s `do_kill(string arg)` (`add_action("do_kill", "kill")`) runs `if (me != present(arg, environment(me))) return 0;` and `liuer-mihou.lpc`'s `do_get(string arg)` (`add_action("do_get", "get")`) runs `if (!(obj = present(arg, environment(this_object())))) return 0;` without checking `!arg`. Typing bare `kill` or `get` (`arg == 0`) in those NPCs' rooms throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
+**Fix:** Short-circuit with `if (!arg || me != present(arg, environment(me))) return 0;` and `if (!arg || !(obj = present(arg, environment(this_object())))) return 0;`, letting bare `kill`/`get` fall through cleanly to standard commands.
+**Detection:** `scripts/lint.py --rule xyj-dntg-wang-liuer-null-arg`.

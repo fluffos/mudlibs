@@ -1267,3 +1267,5 @@ pristine + build-debug，port 40050。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-28 开封比武场 `ground2.lpc` `do_debug()` 裸指令崩溃修复（KB 06 §7.429）
 
 - 修复 `d/kaifeng/ground2.lpc` 的 `do_debug()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %s %s", s0, s1, s2)`，导致输入裸 `@debug@` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`（`kaifeng-ground2-do-debug-null-arg`）。
+
+- **2026-11-28（KB 06 §7.432）**：修复 `/d/dntg/hell/wang.lpc`、`/d/dntg/hgs/npc/liuer-mihou.lpc` 中地府阎王 `do_kill(string arg)` 与六耳猕猴 `do_get(string arg)` 均未判空 `arg` 即调用 `present(arg, environment(...))`，裸 `kill`/`get` 触发 `*Bad argument 1 to present()` 崩溃，补齐 `!arg ||` 判空保护，使裸指令回落标准指令。
