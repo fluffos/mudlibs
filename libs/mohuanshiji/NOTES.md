@@ -1275,3 +1275,5 @@ pristine + build-debug，port 40092。`scripts/play_login.py` 注册。
 - 修复 `d/kaifeng/ground2.lpc` 的 `do_debug()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %s %s", s0, s1, s2)`，导致输入裸 `@debug@` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`（`kaifeng-ground2-do-debug-null-arg`）。
 
 - **2026-11-28（KB 06 §7.432）**：修复 `/d/dntg/hell/wang.lpc` 中地府阎王 `do_kill(string arg)` 未判空 `arg` 即调用 `present(arg, environment(me))`，裸 `kill` 触发 `*Bad argument 1 to present()` 崩溃，补齐 `!arg ||` 判空保护，使裸指令回落标准指令。
+
+- **2026-11-28（KB 06 §7.438）**：修复 `/d/changan/bx.lpc` 蒙古大夫医馆 `do_bianxing(string arg)` 在 `if (arg)` 前误调 `present(arg, environment(me))` 且未判空 `ob` 导致的裸 `bianxing`/无效目标崩溃。

@@ -2872,3 +2872,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `14` Nitan/XKX/HY-family mudlibs (`16` files: `d/city/task2/renzhi.lpc`, `open/task2/renzhi.lpc`, `d/tudimiao/npc/renzhi.lpc`), `do_steal(string arg)` (`add_action("do_steal", "steal")`) immediately runs `sscanf(arg, "%*s %*s %s", who);` without checking `!arg`. Typing bare `steal` (`arg == 0`) in 人质's room throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
 **Fix:** Insert `if (!arg) return 0;` before `sscanf(arg, ...)`, letting bare `steal` fall through cleanly to standard `steal`.
 **Detection:** `scripts/lint.py --rule renzhi-do-steal-null-arg`.
+
+### 7.438 `d/changan/bx.lpc` `do_bianxing()` calling `present(arg, environment(me))` before `if (arg)` (`10` files, `10` libs) {#7438-changan-bx-do-bianxing-null-arg}
+
+**Symptom:** Across `10` XYJ-family mudlibs (`d/changan/bx.lpc`), `do_bianxing(string arg)` (`add_action("do_bianxing", "bianxing")`) runs `ob = present(arg, environment(me));` *before* `if (arg)` and never checks `objectp(ob)`. Typing bare `bianxing` (`arg == 0`) throws `*Bad argument 1 to present() Expected: string or object Got: 0.`, and passing an unknown target crashes on `ob->query("gender")`.
+**Fix:** Replace `ob = present(arg, environment(me));` with `if (!arg || !objectp(ob = present(arg, environment(me)))) return 0;`.
+**Detection:** `scripts/lint.py --rule changan-bx-do-bianxing-null-arg`.

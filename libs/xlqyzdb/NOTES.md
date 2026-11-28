@@ -950,3 +950,5 @@ pristine + build-debug，归档端口 40033。`scripts/play_login.py` 注册进�
 ## 2026-11-28 唐僧 `ts.lpc` `do_qk()` 裸 `cast` 崩溃修复（KB 06 §7.431）
 
 - 修复 `d/npc/ts.lpc` 的 `do_qk()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s on %s", cast_id, cast_name)`，导致玩家输入裸 `cast` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (arg && sscanf(arg, "%s on %s", cast_id, cast_name) == 2)`（`xyj-ts-do-qk-null-arg`）。
+
+- **2026-11-28（KB 06 §7.438）**：修复 `/d/changan/bx.lpc` 蒙古大夫医馆 `do_bianxing(string arg)` 在 `if (arg)` 前误调 `present(arg, environment(me))` 且未判空 `ob` 导致的裸 `bianxing`/无效目标崩溃。
