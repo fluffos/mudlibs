@@ -921,3 +921,5 @@ pristine + build-debug，port 40162。
 - 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。
 
 - **2026-11-28（KB 06 §7.434）**：修复 `/d/city4/piggy.lpc` 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。
+
+- **2026-11-28（KB 06 §7.437）**：修复 `/d/tudimiao/npc/renzhi.lpc` 人质 `do_steal(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `steal` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。

@@ -2866,3 +2866,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `12` HY/XKX-family mudlibs (`d/hangzhou/npc/hongniang.lpc`), `do_unmarry(string arg)` (`add_action("do_unmarry", "unmarry")`) runs `if (!objectp(couple_ob = present(arg, environment(me))) || !find_player(arg))` without checking `!arg`. A married player typing bare `unmarry` (`arg == 0`) at 红娘庄 throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
 **Fix:** Change `if (!objectp(couple_ob = present(arg, environment(me))) || ...)` to `if (!arg || !objectp(couple_ob = present(arg, environment(me))) || ...)`.
 **Detection:** `scripts/lint.py --rule hongniang-do-unmarry-null-arg`.
+
+### 7.437 `renzhi.lpc` `do_steal()` calling `sscanf(arg, "%*s %*s %s", who)` without guarding `!arg` (`16` files, `14` libs) {#7437-renzhi-do-steal-null-arg}
+
+**Symptom:** Across `14` Nitan/XKX/HY-family mudlibs (`16` files: `d/city/task2/renzhi.lpc`, `open/task2/renzhi.lpc`, `d/tudimiao/npc/renzhi.lpc`), `do_steal(string arg)` (`add_action("do_steal", "steal")`) immediately runs `sscanf(arg, "%*s %*s %s", who);` without checking `!arg`. Typing bare `steal` (`arg == 0`) in 人质's room throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
+**Fix:** Insert `if (!arg) return 0;` before `sscanf(arg, ...)`, letting bare `steal` fall through cleanly to standard `steal`.
+**Detection:** `scripts/lint.py --rule renzhi-do-steal-null-arg`.

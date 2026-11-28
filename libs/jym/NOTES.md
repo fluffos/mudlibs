@@ -819,3 +819,5 @@ pristine + build-debug，归档端口 40184。`scripts/play_login.py` 注册并�
 - **2026-11-28（KB 06 §7.433）**：修复试剑山庄（`sjsz*`）9 份文件（12 处，含 `gamble_room.lpc` `do_bet()`、`control.lpc` `do_assign()`、`walkie-talkie.lpc` `do_set()`/`do_turn()`）未判空 `arg` 即调用 `sscanf(arg, ...)`，补齐 `!arg ||` 判空保护，防止裸 `bet`/`assign`/`init`/`turn` 触发 `*Bad argument 1 to sscanf` 崩溃。
 
 - **2026-11-28（KB 06 §7.435）**：修复 `/clone/drug/pldan.lpc` 破立丹 `do_ebl(string argg)` 未判空 `argg` 即调用 `sscanf(argg, ...)` 的裸 `enter` 崩溃，在 `sscanf()` 前补齐 `if (!argg) return notify_fail(...);`。
+
+- **2026-11-28（KB 06 §7.437）**：修复 `/d/city/task2/renzhi.lpc` 人质 `do_steal(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `steal` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。
