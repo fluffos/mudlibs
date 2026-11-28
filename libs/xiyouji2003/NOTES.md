@@ -1165,3 +1165,7 @@ pristine + build-debug，归档端口 40075。`scripts/play_login.py` 注册并�
 ## 2026-11-27 巡捕/四大捕快 `do_kill()` 裸 `kill` 崩溃修复（KB 06 §7.420）
 
 - 修复 `d/city/npc/xunbu.lpc` 的 `do_kill()` 在未判空 `arg` 前直接调用 `present(arg, environment())`，导致玩家在同房间输入裸 `kill` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !environment()) return 0;`（`patrol-do-kill-null-arg`）。
+
+## 2026-11-28 将军府军械归还 `do_huan()` 裸 `huan` 崩溃修复（KB 06 §7.427）
+
+- 修复 `d/city/npc/sender.lpc` 的 `do_huan()` 在未判空 `arg` 前直接调用 `present(arg, me)`，导致玩家输入裸 `huan` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !objectp(ob = present(arg, me)))`（`sender-qinping-do-huan-null-arg`）。

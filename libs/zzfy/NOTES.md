@@ -1000,3 +1000,7 @@ pristine + build-debug（归档端口 40025，临时测试端口 49651）。`scr
 ## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
 
 - 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。
+
+## 2026-11-28 将军府军械归还 `do_huan()` 裸 `huan` 崩溃修复（KB 06 §7.427）
+
+- 修复 `d/city/npc/sender.lpc` 的 `do_huan()` 在未判空 `arg` 前直接调用 `present(arg, me)`，导致玩家输入裸 `huan` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !objectp(ob = present(arg, me)))`（`sender-qinping-do-huan-null-arg`）。

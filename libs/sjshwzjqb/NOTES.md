@@ -821,3 +821,7 @@ pristine + build-debug，port 40173。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
 
 - 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。
+
+## 2026-11-28 将军府军械归还 `do_huan()` 裸 `huan` 崩溃修复（KB 06 §7.427）
+
+- 修复 `d/city/npc/sender.lpc`、`d/jjf/npc/qinping.lpc` 的 `do_huan()` 在未判空 `arg` 前直接调用 `present(arg, me)`，导致玩家输入裸 `huan` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !objectp(ob = present(arg, me)))`（`sender-qinping-do-huan-null-arg`）。

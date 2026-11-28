@@ -2806,3 +2806,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `23` XKX/HY/Shujian-family mudlibs (`46` files: `clone/drug/dahuan-dan.lpc` and `clone/drug/xiaohuan-dan.lpc`), `do_put(string arg1, string arg2, string arg3)` immediately runs `if (present(arg1, this_player()) == this_object()) return 1;`. When a player carrying 大还丹 or 小还丹 types bare `put` (`arg1 == 0`), `present(0, this_player())` throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
 **Fix:** Short-circuit with `if (arg1 && present(arg1, this_player()) == this_object()) return 1;`.
 **Detection:** `scripts/lint.py --rule huan-dan-do-put-null-arg`.
+
+### 7.427 `sender.lpc` / `qinping.lpc` `do_huan()` calling `present(arg, me)` without guarding `!arg` (`60` files, `31` libs) {#7427-sender-qinping-do-huan-null-arg}
+
+**Symptom:** Across `31` XYJ-family mudlibs (`60` files: `d/city/npc/sender.lpc`, `d/city/npc/npc/sender.lpc`, `d/jjf/npc/qinping.lpc`, plus `shenmo` `sjsh/u/stey/u/cnd/{qinping,sender}.lpc`), `do_huan(string arg)` immediately runs `if (!objectp(ob = present(arg, me)))`. Typing bare `huan` (`arg == 0`) throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
+**Fix:** Change `if (!objectp(ob = present(arg, me)))` to `if (!arg || !objectp(ob = present(arg, me)))`.
+**Detection:** `scripts/lint.py --rule sender-qinping-do-huan-null-arg`.
