@@ -2818,3 +2818,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `22` XKX/HY/JHFY-family mudlibs (`43` files: `d/player/xth/obj/{xiangl,xianglu}.lpc`, `d/player/wzl/obj/xianglu.lpc`), `do_name(string target)` executes `ob = find_player(target);` and `all = livings();` two lines *before* `if (!target || target == " ") return notify_fail(...);`. Typing bare `kaichu` (`target == 0`) throws `*Bad argument 1 to find_player() Expected: string Got: 0.` before the `!target` guard is ever reached.
 **Fix:** Move `if (!target || target == " ") return notify_fail(...);` ahead of `ob = find_player(target);`.
 **Detection:** `scripts/lint.py --rule xianglu-do-name-find-player-before-guard`.
+
+### 7.429 `d/kaifeng/ground2.lpc` `do_debug()` calling `sscanf(arg, "%s %s %s", ...)` without guarding `!arg` (`44` files, `44` libs) {#7429-kaifeng-ground2-do-debug-null-arg}
+
+**Symptom:** Across `44` XYJ/JHFY-family mudlibs, `/d/kaifeng/ground2.lpc`'s `do_debug(string arg)` (`add_action("do_debug", "@debug@")`) immediately runs `if (sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`. Typing bare `@debug@` (`arg == 0`) throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of printing the usage line.
+**Fix:** Change `if (sscanf(arg, "%s %s %s", s0, s1, s2) != 3)` to `if (!arg || sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`.
+**Detection:** `scripts/lint.py --rule kaifeng-ground2-do-debug-null-arg`.

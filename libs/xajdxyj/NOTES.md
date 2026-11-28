@@ -530,3 +530,7 @@ pristine + build-debug，port 40179。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-28 西游取经容器 `do_put()`/`do_get()` 裸指令崩溃修复（KB 06 §7.425）
 
 - 修复 `d/qujing/biqiu/obj/elong.lpc`、`d/qujing/chechi/obj/chantai.lpc`、`d/qujing/chechi/obj/guizi.lpc`、`d/qujing/chechi/obj/youguo.lpc` 的 `do_put()`/`do_get()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s in/from %s", item, id)`，导致玩家输入裸 `put`/`get` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, ...))`（`qujing-container-put-get-null-arg`）。
+
+## 2026-11-28 开封比武场 `ground2.lpc` `do_debug()` 裸指令崩溃修复（KB 06 §7.429）
+
+- 修复 `d/kaifeng/ground2.lpc` 的 `do_debug()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %s %s", s0, s1, s2)`，导致输入裸 `@debug@` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`（`kaifeng-ground2-do-debug-null-arg`）。

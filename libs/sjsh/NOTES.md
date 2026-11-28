@@ -612,3 +612,7 @@ pristine + build-debug，port 40141。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-28 将军府军械归还 `do_huan()` 裸 `huan` 崩溃修复（KB 06 §7.427）
 
 - 修复 `d/city/npc/sender.lpc`、`d/jjf/npc/qinping.lpc` 的 `do_huan()` 在未判空 `arg` 前直接调用 `present(arg, me)`，导致玩家输入裸 `huan` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !objectp(ob = present(arg, me)))`（`sender-qinping-do-huan-null-arg`）。
+
+## 2026-11-28 开封比武场 `ground2.lpc` `do_debug()` 裸指令崩溃修复（KB 06 §7.429）
+
+- 修复 `d/kaifeng/ground2.lpc` 的 `do_debug()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %s %s", s0, s1, s2)`，导致输入裸 `@debug@` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`（`kaifeng-ground2-do-debug-null-arg`）。
