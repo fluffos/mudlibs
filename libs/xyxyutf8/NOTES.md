@@ -527,3 +527,7 @@ pristine + build-debug，归档端口 40168。`scripts/play_login.py` 注册进�
 ## 2026-11-27 油葫芦 `do_drink()` 裸指令崩溃修复（KB 06 §7.418）
 
 - 修复 `d/obj/food/youhulu.lpc` 的 `do_drink()` 在未判断 `arg` 前直接调用 `present(arg, who)`，导致携油葫芦输入裸 `drink` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg && me == present(arg, who) && ...)`，使无参调用安全回落至 `::do_drink(arg)`（`youhulu-do-drink-null-arg`）。
+
+## 2026-11-27 西游取经饮食道具 `do_eat()`/`do_drink()` 裸指令崩溃修复（KB 06 §7.424）
+
+- 修复 `d/qujing/pansi/obj/doufu.lpc`、`d/qujing/wuji/obj/jing.lpc` 在未判空 `arg` 前直接调用 `present(arg, ...)`，导致玩家输入裸 `eat`/`drink` 时抛出 `*Bad argument 1 to present()` 的问题：补齐 `arg ? present(arg, who) : 0` / `if (!arg || present(arg, me) != dan)` 判空保护（`qujing-food-drink-null-arg`）。

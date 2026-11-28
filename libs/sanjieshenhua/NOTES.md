@@ -813,3 +813,7 @@ pristine + build-debug，port 40098。`scripts/play_login.py` 注册。
 ## 2026-11-27 巡捕/四大捕快 `do_kill()` 裸 `kill` 崩溃修复（KB 06 §7.420）
 
 - 修复 `d/city/npc/xunbu.lpc` 的 `do_kill()` 在未判空 `arg` 前直接调用 `present(arg, environment())`，导致玩家在同房间输入裸 `kill` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !environment()) return 0;`（`patrol-do-kill-null-arg`）。
+
+## 2026-11-27 西游取经饮食道具 `do_eat()`/`do_drink()` 裸指令崩溃修复（KB 06 §7.424）
+
+- 修复 `d/qujing/baoxiang/obj/dan.lpc`、`d/qujing/pansi/obj/doufu.lpc`、`d/qujing/wuji2/obj/jing.lpc` 在未判空 `arg` 前直接调用 `present(arg, ...)`，导致玩家输入裸 `eat`/`drink` 时抛出 `*Bad argument 1 to present()` 的问题：补齐 `arg ? present(arg, who) : 0` / `if (!arg || present(arg, me) != dan)` 判空保护（`qujing-food-drink-null-arg`）。

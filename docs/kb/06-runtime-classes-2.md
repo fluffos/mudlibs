@@ -2788,3 +2788,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `46` active vendored mudlibs (`65` files across `adm/daemons/msgd.lpc`, `clone/msgd/msgd.lpc`, `daemons/msgd.lpc`, `lestat/msgd.lpc`), `do_delmsg(string arg)` immediately executes `if (sscanf(arg, "%d", i) != 1)`. Typing bare `delmsg` (`arg == 0`) throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of printing the usage `notify_fail()`.
 **Fix:** Change `if (sscanf(arg, "%d", i) != 1)` to `if (!arg || sscanf(arg, "%d", i) != 1)`.
 **Detection:** `scripts/lint.py --rule msgd-do-delmsg-null-arg`.
+
+### 7.424 XYJ `qujing` food/drink items (`doufu`/`dan`/`jing`) `do_eat()`/`do_drink()` calling `present(arg, ...)` without guarding `arg` (`133` files, `40` libs) {#7424-qujing-food-drink-null-arg}
+
+**Symptom:** Across `40` XYJ-family mudlibs (`133` files: `d/qujing/pansi/obj/doufu.lpc`, `d/xiyou/pansi/obj/doufu.lpc`, `d/qujing/baoxiang/obj/dan.lpc`, `d/qujing/wuji/obj/jing.lpc`, `d/qujing/wuji2/obj/jing.lpc`), `do_eat(string arg)` / `do_drink(string arg)` immediately runs `object ob = present(arg, who);` or `if (present(arg, me) != dan)`. Typing bare `eat` or `drink` (`arg == 0`) throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
+**Fix:** Guard with `object ob = arg ? present(arg, who) : 0;` (for `doufu.lpc`/`jing.lpc`) and `if (!arg || present(arg, me) != dan)` (for `dan.lpc`).
+**Detection:** `scripts/lint.py --rule qujing-food-drink-null-arg`.
