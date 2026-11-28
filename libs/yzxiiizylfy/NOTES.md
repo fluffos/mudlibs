@@ -535,3 +535,7 @@ pristine + build-debug（归档端口 40178，临时测试端口 49665）。`scr
 ## 2026-11-27 物件编辑器 `do_mkobj()` 裸 `mkobj` 崩溃修复（KB 06 §7.422）
 
 - 修复 `clone/misc/objmaker.lpc` 的 `do_mkobj()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s", file)`，导致巫师输入裸 `mkobj` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s", file) != 1)`（与同文件 `do_rset`/`do_rrset` 一致，`objmaker-do-mkobj-null-arg`）。
+
+## 2026-11-28 帮派香炉 `do_name()` 裸 `kaichu` 崩溃修复（KB 06 §7.428）
+
+- 修复 `d/player/xth/obj/xiangl.lpc`、`d/player/xth/obj/xianglu.lpc` 的 `do_name()` 在 `if (!target || target == " ")` 之前先执行 `ob = find_player(target);`，导致输入裸 `kaichu` 时抛出 `*Bad argument 1 to find_player()` 的问题：将 `if (!target ...)` 判空提前至 `find_player(target)` 之前（`xianglu-do-name-find-player-before-guard`）。

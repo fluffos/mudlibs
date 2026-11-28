@@ -2812,3 +2812,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `31` XYJ-family mudlibs (`60` files: `d/city/npc/sender.lpc`, `d/city/npc/npc/sender.lpc`, `d/jjf/npc/qinping.lpc`, plus `shenmo` `sjsh/u/stey/u/cnd/{qinping,sender}.lpc`), `do_huan(string arg)` immediately runs `if (!objectp(ob = present(arg, me)))`. Typing bare `huan` (`arg == 0`) throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
 **Fix:** Change `if (!objectp(ob = present(arg, me)))` to `if (!arg || !objectp(ob = present(arg, me)))`.
 **Detection:** `scripts/lint.py --rule sender-qinping-do-huan-null-arg`.
+
+### 7.428 `xiangl.lpc` / `xianglu.lpc` `do_name()` calling `find_player(target)` before `if (!target ...)` (`43` files, `22` libs) {#7428-xianglu-do-name-find-player-before-guard}
+
+**Symptom:** Across `22` XKX/HY/JHFY-family mudlibs (`43` files: `d/player/xth/obj/{xiangl,xianglu}.lpc`, `d/player/wzl/obj/xianglu.lpc`), `do_name(string target)` executes `ob = find_player(target);` and `all = livings();` two lines *before* `if (!target || target == " ") return notify_fail(...);`. Typing bare `kaichu` (`target == 0`) throws `*Bad argument 1 to find_player() Expected: string Got: 0.` before the `!target` guard is ever reached.
+**Fix:** Move `if (!target || target == " ") return notify_fail(...);` ahead of `ob = find_player(target);`.
+**Detection:** `scripts/lint.py --rule xianglu-do-name-find-player-before-guard`.

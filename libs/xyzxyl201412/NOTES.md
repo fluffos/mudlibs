@@ -582,3 +582,7 @@ pristine + build-debug，归档端口 40175。`scripts/play_login.py` 注册/连
 ## 2026-11-27 小贩/温倩儿 `do_buy()` 裸 `buy` 崩溃修复（KB 06 §7.421）
 
 - 修复 `d/changan/npc/xiao-fan.lpc`、`d/shaolin/npc/xiao-fan.lpc` 的 `do_buy()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d %s %d from %s", ...)`，导致玩家输入裸 `buy` 时抛出 `*Bad argument 1 to sscanf` 的问题：增加 `if (!arg) return ::do_buy(arg);` 前置保护（`vendor-do-buy-null-arg`）。
+
+## 2026-11-28 帮派香炉 `do_name()` 裸 `kaichu` 崩溃修复（KB 06 §7.428）
+
+- 修复 `d/player/xth/obj/xiangl.lpc`、`d/player/xth/obj/xianglu.lpc` 的 `do_name()` 在 `if (!target || target == " ")` 之前先执行 `ob = find_player(target);`，导致输入裸 `kaichu` 时抛出 `*Bad argument 1 to find_player()` 的问题：将 `if (!target ...)` 判空提前至 `find_player(target)` 之前（`xianglu-do-name-find-player-before-guard`）。
