@@ -1285,3 +1285,5 @@ pristine + build-debug，port 40052。`scripts/play_login.py` 注册并执行 `l
 - **2026-11-28（KB 06 §7.432）**：修复 `/u/forsky/dntg/hell/wang.lpc` 中地府阎王 `do_kill(string arg)` 未判空 `arg` 即调用 `present(arg, environment(me))`，裸 `kill` 触发 `*Bad argument 1 to present()` 崩溃，补齐 `!arg ||` 判空保护，使裸指令回落标准指令。
 
 - **2026-11-28（KB 06 §7.434）**：修复 `/d/city/piggy.lpc` 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。
+
+- **2026-11-28（KB 06 §7.440）**：修复 `/clone/npc/zombie.lpc` 僵尸 `do_drive(string str)` 未判空 `str` 即调用 `find_player(str)` 的裸 `drive` 崩溃，补齐 `if (!str) return notify_fail(...);`。

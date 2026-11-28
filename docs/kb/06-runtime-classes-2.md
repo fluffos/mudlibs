@@ -2884,3 +2884,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `13` XYJ-family mudlibs (`14` files: `d/penglai/npc/obj/huabak.lpc`, `hua.lpc`, `hua2.lpc`), `do_eat(string arg)` (`add_action("do_eat", "eat")`) runs `if (this_object() != present(arg, me)) return 0;` without checking `!arg`. Typing bare `eat` (`arg == 0`) while carrying the flower throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
 **Fix:** Change `if (this_object() != present(arg, me)) return 0;` to `if (!arg || this_object() != present(arg, me)) return 0;`.
 **Detection:** `scripts/lint.py --rule penglai-hua-do-eat-null-arg`.
+
+### 7.440 `clone/npc/zombie.lpc` `do_drive(string str)` calling `find_player(str)` without guarding `!str` (`28` files, `28` libs) {#7440-zombie-do-drive-null-arg}
+
+**Symptom:** Across `28` XKX/JHFY/XYZX-family mudlibs (`clone/npc/zombie.lpc`), `do_drive(string str)` (`add_action("do_drive", "drive")`) runs `ob = find_player(str);` without checking `!str`. Typing bare `drive` (`str == 0`) while controlling a zombie throws `*Bad argument 1 to find_player() Expected: string Got: 0.`.
+**Fix:** Insert `if (!str) return notify_fail("你要驱动" + name() + "去哪里？\n");` before `ob = find_player(str);`.
+**Detection:** `scripts/lint.py --rule zombie-do-drive-null-arg`.

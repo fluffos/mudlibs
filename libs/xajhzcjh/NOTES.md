@@ -1437,3 +1437,5 @@ pristine + build-debug（归档端口 40070，临时测试端口 49521）。`scr
 ## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
 
 - 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。
+
+- **2026-11-28（KB 06 §7.440）**：修复 `/clone/npc/zombie.lpc` 僵尸 `do_drive(string str)` 未判空 `str` 即调用 `find_player(str)` 的裸 `drive` 崩溃，补齐 `if (!str) return notify_fail(...);`。

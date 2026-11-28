@@ -1182,3 +1182,5 @@ pristine + build-debug，port 40053。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-28 帮派香炉 `do_name()` 裸 `kaichu` 崩溃修复（KB 06 §7.428）
 
 - 修复 `d/player/xth/obj/xiangl.lpc`、`d/player/xth/obj/xianglu.lpc` 的 `do_name()` 在 `if (!target || target == " ")` 之前先执行 `ob = find_player(target);`，导致输入裸 `kaichu` 时抛出 `*Bad argument 1 to find_player()` 的问题：将 `if (!target ...)` 判空提前至 `find_player(target)` 之前（`xianglu-do-name-find-player-before-guard`）。
+
+- **2026-11-28（KB 06 §7.440）**：修复 `/clone/npc/zombie.lpc` 僵尸 `do_drive(string str)` 未判空 `str` 即调用 `find_player(str)` 的裸 `drive` 崩溃，补齐 `if (!str) return notify_fail(...);`。

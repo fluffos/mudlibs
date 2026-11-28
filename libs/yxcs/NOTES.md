@@ -1542,3 +1542,5 @@ pristine + build-debug，归档端口 40056。`scripts/play_login.py` 注册进�
 - **2026-11-28（KB 06 §7.434）**：修复 `/d/taoyuan/duchang/piggy.lpc`、`/d/taoyuan/duchang/piggy2.lpc` 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。
 
 - **2026-11-28（KB 06 §7.437）**：修复 `/d/tudimiao/npc/renzhi.lpc` 人质 `do_steal(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `steal` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。
+
+- **2026-11-28（KB 06 §7.440）**：修复 `/clone/npc/zombie.lpc` 僵尸 `do_drive(string str)` 未判空 `str` 即调用 `find_player(str)` 的裸 `drive` 崩溃，补齐 `if (!str) return notify_fail(...);`。

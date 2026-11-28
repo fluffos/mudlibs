@@ -595,3 +595,5 @@ pristine + build-debug，归档端口 40154。`scripts/play_login.py` 注册/连
 ## 2026-11-27 小贩/温倩儿 `do_buy()` 裸 `buy` 崩溃修复（KB 06 §7.421）
 
 - 修复 `d/changan/npc/xiao-fan.lpc`、`d/shaolin/npc/xiao-fan.lpc` 的 `do_buy()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d %s %d from %s", ...)`，导致玩家输入裸 `buy` 时抛出 `*Bad argument 1 to sscanf` 的问题：增加 `if (!arg) return ::do_buy(arg);` 前置保护（`vendor-do-buy-null-arg`）。
+
+- **2026-11-28（KB 06 §7.440）**：修复 `/clone/npc/zombie.lpc` 僵尸 `do_drive(string str)` 未判空 `str` 即调用 `find_player(str)` 的裸 `drive` 崩溃，补齐 `if (!str) return notify_fail(...);`。
