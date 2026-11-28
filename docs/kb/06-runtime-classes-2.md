@@ -2830,3 +2830,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `28` active vendored mudlibs, `/clone/game/pai.lpc`'s `do_press(string arg)` (`add_action("do_press", "press")`) runs `if (sscanf(arg, "%s %d", id, n) != 2)` without checking `!arg`. Typing bare `press` (`arg == 0`) while seated at the card table throws `*Bad argument 1 to sscanf Expected: string Got: 0.` instead of printing the usage `notify_fail()`.
 **Fix:** Change `if (sscanf(arg, "%s %d", id, n) != 2)` to `if (!arg || sscanf(arg, "%s %d", id, n) != 2)`.
 **Detection:** `scripts/lint.py --rule game-pai-do-press-null-arg`.
+
+### 7.431 XYJ `ts.lpc` `do_qk()` calling `sscanf(arg, "%s on %s", cast_id, cast_name)` without guarding `arg` (`30` files, `20` libs) {#7431-xyj-ts-do-qk-null-arg}
+
+**Symptom:** Across `20` XYJ-family mudlibs (`30` files: `d/npc/ts.lpc`, `d/quest/baoshi/ts.lpc`, `d/quest/npc/ts.lpc`, `d/quest/zxzz/npc/ts.lpc`, `d/npc/qujing/ts.lpc`), `do_qk(string arg)` (`add_action("do_qk", "cast")`) runs `if (sscanf(arg, "%s on %s", cast_id, cast_name) == 2)` without checking `arg`. Typing bare `cast` (`arg == 0`) in 唐僧's room throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
+**Fix:** Guard with `if (arg && sscanf(arg, "%s on %s", cast_id, cast_name) == 2)`.
+**Detection:** `scripts/lint.py --rule xyj-ts-do-qk-null-arg`.
