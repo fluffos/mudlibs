@@ -817,3 +817,5 @@ pristine + build-debug，归档端口 40184。`scripts/play_login.py` 注册并�
 - 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。
 
 - **2026-11-28（KB 06 §7.433）**：修复试剑山庄（`sjsz*`）9 份文件（12 处，含 `gamble_room.lpc` `do_bet()`、`control.lpc` `do_assign()`、`walkie-talkie.lpc` `do_set()`/`do_turn()`）未判空 `arg` 即调用 `sscanf(arg, ...)`，补齐 `!arg ||` 判空保护，防止裸 `bet`/`assign`/`init`/`turn` 触发 `*Bad argument 1 to sscanf` 崩溃。
+
+- **2026-11-28（KB 06 §7.435）**：修复 `/clone/drug/pldan.lpc` 破立丹 `do_ebl(string argg)` 未判空 `argg` 即调用 `sscanf(argg, ...)` 的裸 `enter` 崩溃，在 `sscanf()` 前补齐 `if (!argg) return notify_fail(...);`。

@@ -2854,3 +2854,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `26` HY/XYJ/XKX-family mudlibs (`80` active `piggy*.lpc` card-room files such as `d/city4/piggy.lpc`, `d/pingan/duchang/piggy*.lpc`, `d/city/piggy*.lpc`), `do_get(string arg)` (`add_action("do_get", "get")`) immediately runs `sscanf(arg, "%s  from  %s", thing, person);` (and `present(person, this_object())`) without checking `!arg`. Typing bare `get` (`arg == 0`) in the room throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
 **Fix:** Insert `if (!arg) return 0;` before `sscanf(arg, ...)`, letting bare `get` fall through cleanly to standard `get`.
 **Detection:** `scripts/lint.py --rule piggy-do-get-null-arg`.
+
+### 7.435 `pldan.lpc` `do_ebl(string argg)` calling `sscanf(argg, ...)` without guarding `!argg` (`15` files, `14` libs) {#7435-pldan-do-ebl-null-arg}
+
+**Symptom:** Across `14` Nitan/XKX-family mudlibs (`15` `pldan.lpc` files), `do_ebl(string argg)` (`add_action("do_ebl", "enter")`) immediately runs `sscanf(argg, "%d %d %d %d", intbl, intwx, intgg, intsf);` without checking `!argg`. Typing bare `enter` (`argg == 0`) while using 破立丹 throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
+**Fix:** Insert `if (!argg) return notify_fail("格式：enter <臂力> <悟性> <根骨> <身法>\n");` before `sscanf(argg, ...)`.
+**Detection:** `scripts/lint.py --rule pldan-do-ebl-null-arg`.

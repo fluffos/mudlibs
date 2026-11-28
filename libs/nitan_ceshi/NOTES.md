@@ -1083,3 +1083,5 @@ pristine + build-debug（归档端口 `40054`，测试端口 `49054`）。`scrip
 ## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
 
 - 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。
+
+- **2026-11-28（KB 06 §7.435）**：修复 `/clone/drug/pldan.lpc` 破立丹 `do_ebl(string argg)` 未判空 `argg` 即调用 `sscanf(argg, ...)` 的裸 `enter` 崩溃，在 `sscanf()` 前补齐 `if (!argg) return notify_fail(...);`。

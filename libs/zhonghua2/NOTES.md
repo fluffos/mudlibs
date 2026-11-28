@@ -1309,3 +1309,5 @@ pristine + build-debug，归档端口 40028。`scripts/play_login.py` 注册进�
 ## 2026-11-28 牌桌 `clone/game/pai.lpc` `do_press()` 裸 `press` 崩溃修复（KB 06 §7.430）
 
 - 修复 `clone/game/pai.lpc` 的 `do_press()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %d", id, n)`，导致牌局中输入裸 `press` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %d", id, n) != 2)`（`game-pai-do-press-null-arg`）。
+
+- **2026-11-28（KB 06 §7.435）**：修复 `/clone/drug/pldan.lpc` 破立丹 `do_ebl(string argg)` 未判空 `argg` 即调用 `sscanf(argg, ...)` 的裸 `enter` 崩溃，在 `sscanf()` 前补齐 `if (!argg) return notify_fail(...);`。
