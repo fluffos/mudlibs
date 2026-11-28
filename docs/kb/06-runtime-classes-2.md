@@ -2842,3 +2842,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `26` XYJ-family mudlibs (`18` `d/dntg/hell/wang.lpc` / `u/forsky/dntg/hell/wang.lpc` + `17` `d/dntg/hgs/npc/liuer-mihou.lpc`, `35` files total), `wang.lpc`'s `do_kill(string arg)` (`add_action("do_kill", "kill")`) runs `if (me != present(arg, environment(me))) return 0;` and `liuer-mihou.lpc`'s `do_get(string arg)` (`add_action("do_get", "get")`) runs `if (!(obj = present(arg, environment(this_object())))) return 0;` without checking `!arg`. Typing bare `kill` or `get` (`arg == 0`) in those NPCs' rooms throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
 **Fix:** Short-circuit with `if (!arg || me != present(arg, environment(me))) return 0;` and `if (!arg || !(obj = present(arg, environment(this_object())))) return 0;`, letting bare `kill`/`get` fall through cleanly to standard commands.
 **Detection:** `scripts/lint.py --rule xyj-dntg-wang-liuer-null-arg`.
+
+### 7.433 `sjsz` arena `gamble_room.lpc` / `control.lpc` / `walkie-talkie.lpc` calling `sscanf(arg, ...)` without guarding `!arg` (`122` files / `169` sites, `19` libs) {#7433-sjsz-arena-bare-verb-null-arg}
+
+**Symptom:** Across `19` XKX/Nitan/HY-family mudlibs (`122` files / `169` sites across `d/bwdh/sjsz*/{gamble_room,obj/control,obj/walkie-talkie}.lpc` and standalone `walkie-talkie.lpc` copies), `gamble_room.lpc` `do_bet(string arg)`, `control.lpc` `do_assign(string arg)`, and `walkie-talkie.lpc` `do_set(string arg)`/`do_turn(string arg)` immediately pass `arg` to `sscanf(arg, ...)` without checking `!arg`. Typing bare `bet`, `assign`, `init`, or `turn` (`arg == 0`) throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
+**Fix:** Change `if (sscanf(arg, ...))` to `if (!arg || sscanf(arg, ...))`.
+**Detection:** `scripts/lint.py --rule sjsz-arena-bare-verb-null-arg`.

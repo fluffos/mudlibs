@@ -261,6 +261,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("game-pai-do-press-null-arg", "targeted", "KB 06 §7.430", "error", "`clone/game/pai.lpc` `do_press()` calling `sscanf(arg, \"%s %d\", id, n)` without guarding `!arg`"),
     RuleSpec("xyj-ts-do-qk-null-arg", "targeted", "KB 06 §7.431", "error", "XYJ `ts.lpc` `do_qk()` calling `sscanf(arg, \"%s on %s\", cast_id, cast_name)` without guarding `arg`"),
     RuleSpec("xyj-dntg-wang-liuer-null-arg", "targeted", "KB 06 §7.432", "error", "XYJ `wang.lpc` `do_kill()` / `liuer-mihou.lpc` `do_get()` calling `present(arg, environment(...))` without guarding `!arg`"),
+    RuleSpec("sjsz-arena-bare-verb-null-arg", "targeted", "KB 06 §7.433", "error", "`sjsz` arena `gamble_room.lpc` `do_bet()`, `control.lpc` `do_assign()`, and `walkie-talkie.lpc` `do_set()`/`do_turn()` calling `sscanf(arg, ...)` without guarding `!arg`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1863,7 +1864,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl", "sjsh_xyj03", "mmid_qh", "xyj42_hwz", "sjsh_tff", "sjsh_th", "music_w", "xlqy_lqf", "xlqy_cfg", "yyqy_hsy", "xkyx_cm", "xyxy_xs", "yxsj_tg", "wnpc_cg", "zzhj_ci", "bboard_doc", "youhulu_drink", "wyy_lingwu", "patrol_kill", "vendor_buy", "objmaker_mk", "msgd_del", "qujing_fd", "qujing_pg", "huan_dan", "sender_huan", "xianglu_name", "kf_ground2", "game_pai", "xyj_ts", "xyj_dntg_wl")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl", "sjsh_xyj03", "mmid_qh", "xyj42_hwz", "sjsh_tff", "sjsh_th", "music_w", "xlqy_lqf", "xlqy_cfg", "yyqy_hsy", "xkyx_cm", "xyxy_xs", "yxsj_tg", "wnpc_cg", "zzhj_ci", "bboard_doc", "youhulu_drink", "wyy_lingwu", "patrol_kill", "vendor_buy", "objmaker_mk", "msgd_del", "qujing_fd", "qujing_pg", "huan_dan", "sender_huan", "xianglu_name", "kf_ground2", "game_pai", "xyj_ts", "xyj_dntg_wl", "sjsz_arena")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2198,6 +2199,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["xyj_ts"].append(item)
         if bn in ("wang.lpc", "liuer-mihou.lpc"):
             targeted_bins["xyj_dntg_wl"].append(item)
+        if bn in ("gamble_room.lpc", "control.lpc", "walkie-talkie.lpc"):
+            targeted_bins["sjsz_arena"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -3527,6 +3530,30 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                 m = liuer_re.search(b)
                 if m and b"!arg" not in m.group(0) and b"stringp(arg)" not in m.group(0):
                     col.add("xyj-dntg-wang-liuer-null-arg", p, "`liuer-mihou.lpc` `do_get()` calls `present(arg, environment(this_object()))` without guarding `!arg`")
+
+    if col.wants("sjsz-arena-bare-verb-null-arg"):
+        sjsz_pats = {
+            "/gamble_room.lpc": [
+                ("do_bet", re.compile(rb'int\s+do_bet\s*\(\s*string\s+arg\s*\)\s*\{[\s\S]{0,260}?if\s*\(\s*sscanf\s*\(\s*arg\s*,')),
+            ],
+            "/control.lpc": [
+                ("do_assign", re.compile(rb'int\s+do_assign\s*\(\s*string\s+arg\s*\)\s*\{[\s\S]{0,220}?if\s*\(\s*sscanf\s*\(\s*arg\s*,')),
+            ],
+            "/walkie-talkie.lpc": [
+                ("do_set", re.compile(rb'int\s+do_set\s*\(\s*string\s+arg\s*\)\s*\{[\s\S]{0,220}?if\s*\(\s*sscanf\s*\(\s*arg\s*,')),
+                ("do_turn", re.compile(rb'int\s+do_turn\s*\(\s*string\s+arg\s*\)\s*\{[\s\S]{0,220}?if\s*\(\s*sscanf\s*\(\s*arg\s*,')),
+            ],
+        }
+        for slug, p, _ in targeted_bins["sjsz_arena"]:
+            if metas.get(slug, {}).get("hosting") == "submodule-patch":
+                continue
+            b = open(f"{REPO}/{p}", "rb").read()
+            for suffix, checks in sjsz_pats.items():
+                if p.endswith(suffix):
+                    for fn, rx in checks:
+                        m = rx.search(b)
+                        if m and b"!arg" not in m.group(0) and b"stringp(arg)" not in m.group(0):
+                            col.add("sjsz-arena-bare-verb-null-arg", p, f"`{fn}()` calls `sscanf(arg, ...)` without guarding `!arg`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

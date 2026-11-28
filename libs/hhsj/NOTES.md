@@ -1313,3 +1313,5 @@ pristine + build-debug（归档端口 `40106`，测试端口 `49106`）。`scrip
 ## 2026-11-28 牌桌 `clone/game/pai.lpc` `do_press()` 裸 `press` 崩溃修复（KB 06 §7.430）
 
 - 修复 `clone/game/pai.lpc` 的 `do_press()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %d", id, n)`，导致牌局中输入裸 `press` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %d", id, n) != 2)`（`game-pai-do-press-null-arg`）。
+
+- **2026-11-28（KB 06 §7.433）**：修复试剑山庄对讲机 `walkie-talkie.lpc`（1 份，2 处）中 `do_set()`/`do_turn()` 未判空 `arg` 即调用 `sscanf(arg, ...)`，补齐 `!arg ||` 判空保护，防止裸 `bet`/`assign`/`init`/`turn` 触发 `*Bad argument 1 to sscanf` 崩溃。
