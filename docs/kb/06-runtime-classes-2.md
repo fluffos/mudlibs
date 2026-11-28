@@ -2890,3 +2890,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `28` XKX/JHFY/XYZX-family mudlibs (`clone/npc/zombie.lpc`), `do_drive(string str)` (`add_action("do_drive", "drive")`) runs `ob = find_player(str);` without checking `!str`. Typing bare `drive` (`str == 0`) while controlling a zombie throws `*Bad argument 1 to find_player() Expected: string Got: 0.`.
 **Fix:** Insert `if (!str) return notify_fail("你要驱动" + name() + "去哪里？\n");` before `ob = find_player(str);`.
 **Detection:** `scripts/lint.py --rule zombie-do-drive-null-arg`.
+
+### 7.441 XYJ `baowu*.lpc` `do_ji(string arg)` calling `sscanf(arg, ...)` without guarding `!arg` (`87` files, `16` libs) {#7441-xyj-baowu-do-ji-null-arg}
+
+**Symptom:** Across `16` XYJ/SJSH-family mudlibs (`87` `baowu*.lpc` fabao files such as `d/obj/newitem/baoshi/baowu{1,3,4,5,6}.lpc`), `do_ji(string arg)` (`add_action("do_ji", "ji")`) runs `if (sscanf(arg, "%s on %s", item, ji_ob) != 2)` without checking `!arg`. Typing bare `ji` (`arg == 0`) while carrying the treasure throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
+**Fix:** Change `if (sscanf(arg, ...))` to `if (!arg || sscanf(arg, ...))`.
+**Detection:** `scripts/lint.py --rule xyj-baowu-do-ji-null-arg`.

@@ -1339,3 +1339,5 @@ pristine + build-debug，port 40076。`scripts/play_login.py` 注册。
 - 修复 `d/npc/ts.lpc`、`d/quest/zxzz/npc/ts.lpc` 的 `do_qk()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s on %s", cast_id, cast_name)`，导致玩家输入裸 `cast` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (arg && sscanf(arg, "%s on %s", cast_id, cast_name) == 2)`（`xyj-ts-do-qk-null-arg`）。
 
 - **2026-11-28（KB 06 §7.438）**：修复 `/d/changan/bx.lpc` 蒙古大夫医馆 `do_bianxing(string arg)` 在 `if (arg)` 前误调 `present(arg, environment(me))` 且未判空 `ob` 导致的裸 `bianxing`/无效目标崩溃。
+
+- **2026-11-28（KB 06 §7.441）**：修复 5 份宝物法宝 `baowu*.lpc`（含 `/d/quest/obj/baowu1.lpc` 等）`do_ji(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `ji` 崩溃，补齐 `!arg ||` 判空保护。

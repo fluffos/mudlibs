@@ -1501,3 +1501,5 @@ pristine + build-debug，port 40016。`scripts/play_login.py` 注册并执行 `l
 - **2026-11-28（KB 06 §7.432）**：修复 `/d/dntg/hell/wang.lpc`、`/d/dntg/hgs/npc/liuer-mihou.lpc` 中地府阎王 `do_kill(string arg)` 与六耳猕猴 `do_get(string arg)` 均未判空 `arg` 即调用 `present(arg, environment(...))`，裸 `kill`/`get` 触发 `*Bad argument 1 to present()` 崩溃，补齐 `!arg ||` 判空保护，使裸指令回落标准指令。
 
 - **2026-11-28（KB 06 §7.438）**：修复 `/d/changan/bx.lpc` 蒙古大夫医馆 `do_bianxing(string arg)` 在 `if (arg)` 前误调 `present(arg, environment(me))` 且未判空 `ob` 导致的裸 `bianxing`/无效目标崩溃。
+
+- **2026-11-28（KB 06 §7.441）**：修复 5 份宝物法宝 `baowu*.lpc`（含 `/d/newjob/baoshi/obj/baowu1.lpc` 等）`do_ji(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `ji` 崩溃，补齐 `!arg ||` 判空保护。

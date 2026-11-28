@@ -1169,3 +1169,5 @@ pristine + build-debug，归档端口 40075。`scripts/play_login.py` 注册并�
 ## 2026-11-28 将军府军械归还 `do_huan()` 裸 `huan` 崩溃修复（KB 06 §7.427）
 
 - 修复 `d/city/npc/sender.lpc` 的 `do_huan()` 在未判空 `arg` 前直接调用 `present(arg, me)`，导致玩家输入裸 `huan` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (!arg || !objectp(ob = present(arg, me)))`（`sender-qinping-do-huan-null-arg`）。
+
+- **2026-11-28（KB 06 §7.441）**：修复 5 份宝物法宝 `baowu*.lpc`（含 `/obj/combine/obj/baowu1.lpc` 等）`do_ji(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `ji` 崩溃，补齐 `!arg ||` 判空保护。

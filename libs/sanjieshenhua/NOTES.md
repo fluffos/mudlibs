@@ -833,3 +833,5 @@ pristine + build-debug，port 40098。`scripts/play_login.py` 注册。
 ## 2026-11-28 唐僧 `ts.lpc` `do_qk()` 裸 `cast` 崩溃修复（KB 06 §7.431）
 
 - 修复 `d/npc/ts.lpc`、`d/quest/baoshi/ts.lpc`、`d/quest/npc/ts.lpc` 的 `do_qk()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s on %s", cast_id, cast_name)`，导致玩家输入裸 `cast` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (arg && sscanf(arg, "%s on %s", cast_id, cast_name) == 2)`（`xyj-ts-do-qk-null-arg`）。
+
+- **2026-11-28（KB 06 §7.441）**：修复 4 份宝物法宝 `baowu*.lpc`（含 `/d/9ct/zb/baowu.lpc` 等）`do_ji(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `ji` 崩溃，补齐 `!arg ||` 判空保护。

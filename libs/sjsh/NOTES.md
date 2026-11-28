@@ -622,3 +622,5 @@ pristine + build-debug，port 40141。`scripts/play_login.py` 注册并执行 `l
 - 修复 `d/npc/ts.lpc` 的 `do_qk()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s on %s", cast_id, cast_name)`，导致玩家输入裸 `cast` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (arg && sscanf(arg, "%s on %s", cast_id, cast_name) == 2)`（`xyj-ts-do-qk-null-arg`）。
 
 - **2026-11-28（KB 06 §7.432）**：修复 `/d/dntg/hell/wang.lpc` 中地府阎王 `do_kill(string arg)` 未判空 `arg` 即调用 `present(arg, environment(me))`，裸 `kill` 触发 `*Bad argument 1 to present()` 崩溃，补齐 `!arg ||` 判空保护，使裸指令回落标准指令。
+
+- **2026-11-28（KB 06 §7.441）**：修复 5 份宝物法宝 `baowu*.lpc`（含 `/quest/obj/baowu1.lpc` 等）`do_ji(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `ji` 崩溃，补齐 `!arg ||` 判空保护。

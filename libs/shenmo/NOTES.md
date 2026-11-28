@@ -1702,3 +1702,5 @@ pristine + build-debug（归档端口 `40067`，测试端口 `49067`）。`scrip
 - **2026-11-28（KB 06 §7.434）**：修复 6 份 `piggy*.lpc` 拱猪房（含 `/d/pingan/duchang/;xcp/u/hxsd/pingan/feizi/_/d/pingan/feizi/piggy.lpc` 等） 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。
 
 - **2026-11-28（KB 06 §7.439）**：修复蓬莱鲜花 `/d/penglai/npc/obj/hua.lpc`、`/d/penglai/npc/obj/hua2.lpc` `do_eat(string arg)` 未判空 `arg` 即调用 `present(arg, me)` 的裸 `eat` 崩溃，补齐 `!arg ||` 判空保护。
+
+- **2026-11-28（KB 06 §7.441）**：修复 16 份宝物法宝 `baowu*.lpc`（含 `/d/9ct/zb/baowu.lpc` 等）`do_ji(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `ji` 崩溃，补齐 `!arg ||` 判空保护。
