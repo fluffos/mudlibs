@@ -1641,3 +1641,7 @@ pristine + build-debug，port 40019。`scripts/play_login.py` 注册并执行 `l
 
 - 从同源 `hhsj` 引入缺失的 `11` 行 `/include/wanted.h`（定义 `is_wanted(object me)`），消除 `/quest11/lcj/damen.lpc`、`/quest11/tlbb/guangchang.lpc`、`/quest11/tlbb/silk3.lpc` 的 `Cannot #include wanted.h` 编译阻断；同步将解锁后暴露的 `/quest11/tlbb/guangchang.lpc:62` `int close_gate()` 改为 `void close_gate()`（匹配 `/inherit/room/room.lpc`，保留原 CRLF 行尾）。
 - 验证：`lpc_format_changed.py` `3/3` `0` 重排；`lpcc --batch` `guangchang`/`silk3` 零错零告警 `PASS`；`lpcc_eval.py`（`nitan6` `2/2`）由 `--head` `FAIL` 转为干净 `PASS`；`scripts/lint.py`（扩展规则 #163 `dtsl-missing-wanted-h`，共 `164` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh` 通过且 `ZERO_DRIVERS`。
+
+## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
+
+- 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。

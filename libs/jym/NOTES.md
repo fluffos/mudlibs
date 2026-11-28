@@ -811,3 +811,7 @@ pristine + build-debug，归档端口 40184。`scripts/play_login.py` 注册并�
 ## 2026-11-27 定时广播 `msgd.lpc` `do_delmsg()` 裸 `delmsg` 崩溃修复（KB 06 §7.423）
 
 - 修复 `adm/daemons/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。
+
+## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
+
+- 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。

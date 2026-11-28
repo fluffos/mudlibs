@@ -824,3 +824,7 @@ pristine + build-debug，port 40113。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-28 西游取经容器 `do_put()`/`do_get()` 裸指令崩溃修复（KB 06 §7.425）
 
 - 修复 `d/qujing/biqiu/obj/elong.lpc`、`d/qujing/chechi/obj/chantai.lpc`、`d/qujing/chechi/obj/guizi.lpc`、`d/qujing/chechi/obj/youguo.lpc` 的 `do_put()`/`do_get()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s in/from %s", item, id)`，导致玩家输入裸 `put`/`get` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, ...))`（`qujing-container-put-get-null-arg`）。
+
+## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
+
+- 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。

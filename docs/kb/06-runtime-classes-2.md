@@ -2800,3 +2800,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `38` XYJ-family mudlibs (`150` files / `293` sites: `d/qujing/biqiu/obj/elong.lpc`, `d/qujing/chechi/obj/{chantai,guizi,youguo}.lpc`), both `do_put(string arg)` and `do_get(string arg)` immediately execute `if (sscanf(arg, "%s in/from %s", item, id) != 2)`. Typing bare `put` or `get` (`arg == 0`) in those rooms throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
 **Fix:** Change `if (sscanf(arg, ...))` to `if (!arg || sscanf(arg, ...))`.
 **Detection:** `scripts/lint.py --rule qujing-container-put-get-null-arg`.
+
+### 7.426 `dahuan-dan.lpc` / `xiaohuan-dan.lpc` `do_put()` calling `present(arg1, this_player())` without guarding `arg1` (`46` files, `23` libs) {#7426-huan-dan-do-put-null-arg}
+
+**Symptom:** Across `23` XKX/HY/Shujian-family mudlibs (`46` files: `clone/drug/dahuan-dan.lpc` and `clone/drug/xiaohuan-dan.lpc`), `do_put(string arg1, string arg2, string arg3)` immediately runs `if (present(arg1, this_player()) == this_object()) return 1;`. When a player carrying 大还丹 or 小还丹 types bare `put` (`arg1 == 0`), `present(0, this_player())` throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
+**Fix:** Short-circuit with `if (arg1 && present(arg1, this_player()) == this_object()) return 1;`.
+**Detection:** `scripts/lint.py --rule huan-dan-do-put-null-arg`.

@@ -1134,3 +1134,7 @@ pristine + build-debug（归档端口 `40055`，测试端口 `49055`）。`scrip
 - 从同源孪生馆 `nitan_ceshi` 还原 `/d/city/npc/paimaishi.lpc`，修复第 `208` 行 `finish_paimai()` 中错贴的 `pay_back()` 尾部（未定义 `who`/`amount`/`id` 与多余 `}`）及后续 `report_paimai()` 缺失的分号与括号（保留 LF 与格式状态）。
 - 验证：`lpc_format_changed.py` `2/2` `0` 重排；`lpcc --batch` 与 `lpcc_eval.py` 差分实测均由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #134 `nitan-paimaishi-corrupt-payback`，共 134 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47852`）通过且 `ZERO_DRIVERS`。
 - 2026-11-24（KB 04 §6.90）：修复 `/d/city2/npc/jianjun.lpc` `give_quest()` 缺失局部声明 `int count;` 与同名函数冲突阻断编译；`lpcc --batch` 零告警通过，新增回归规则 `jianjun-count-wxddym-blockers`。
+
+## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
+
+- 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。

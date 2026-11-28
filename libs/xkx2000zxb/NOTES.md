@@ -588,3 +588,7 @@ pristine + build-debug，归档端口 40140。`scripts/play_login.py` 注册进�
 
 - 修复 `/d/dali/npc/a.lpc:221` 缺失右括号（`if (random(a + b + c + d) > 40 && (random(a + b + c + d) < 70)` -> `if (random(a + b + c + d) > 40 && random(a + b + c + d) < 70)`）及第 `242` 行末尾缺失函数闭合 `}`（保留纯 LF 行尾，并用 `lpc_format_changed.py --apply` 规范缩进）。
 - 验证：`lpcc --batch` 零错零告警 `PASS`；`lpcc_eval.py` 由 `--head` 编译失败转为 `PASS`；`scripts/lint.py`（规则 #167 `jym-pingyuan-copyskills-examine-a`，共 `167` 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `48102`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
+
+- 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。

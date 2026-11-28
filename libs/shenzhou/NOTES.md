@@ -1617,3 +1617,7 @@ pristine + build-debug，归档端口 40066。`scripts/play_login.py` 注册并�
 
 - 修复 `/clone/gift/pantao.lpc:38` 缺失分号、`d/huanghe/bangjob/bangjob200000.lpc:96` 重复 `]),`、`/kungfu/class/kunlun/hetaichong.lpc:99` 未闭合引号（并从初始提交 `b32bcb881b4` 恢复被误插空格的第 `103..186` 行、还原 `ask_me`/`ask_su`/`ask_ding` 三条 `inquiry` 函数指针并清理 `ask_su()` 未用局部 `ob`），以及 `/d/shaolin/{,shaolin/}haishui3.lpc:5` 缺前导 `/` 与黏连 `inherit ROOM;`、`/d/shaolin/npc/yaoshui.h` 黏连 `#include <ansi.h>int do_yao();`、缺右括号与 `3` 处未用局部（保留各文件原 CRLF/LF 行尾）。
 - 验证：`lpc_audit_removed_locals.py HEAD` `0` 待看；`lpc_format_changed.py` `0` 错误；`lpcc --batch` `5/5 PASS` 零错零告警；`lpcc_eval.py` `5/5` 由 `--head` 编译报错转为 `PASS`；`scripts/lint.py`（新增规则 #142 `shenzhou-syntax-include-blockers`，共 142 条）`--changed HEAD` 与 `--fast` 零错零告警；`play_boot.sh`+`play_stop.sh`（端口 `47841`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
+
+- 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。

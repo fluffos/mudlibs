@@ -790,3 +790,7 @@ pristine + build-debug，归档端口 40039。`scripts/play_login.py` 注册并�
 
 - 拆回 `/cmds/wiz/rstbkup.lpc:9` 挤在同一行的 `#define`/`#endif`/`inherit` 换行；将 `/cmds/std/xunbu.lpc:19` 相对 `#include "npc_skills_attrib_setup.h"` 改为 `#include "/d/city/npc/npc_skills_attrib_setup.h"`；从同源姊妹馆 `jym` 移植缺失的 `/d/shaolin/npc/job.h` 使少林方丈 `/d/shaolin/npc/xuanci.lpc` 恢复编译（保留原 LF 行尾与格式状态）。
 - 验证：`lpc_format_changed.py` `0` 重排；`lpcc --batch` 全批 `7` 馆 `16/16` 零错零告警 `PASS`；`lpcc_eval.py` 差分实测 `rstbkup`/`xunbu`/`xuanci` 由 `--head` 编译报错转为干净加载 `PASS`；`scripts/lint.py`（新增规则 #129 `xkx-rstbkup-xunbu-xuanci`，共 129 条）`--changed HEAD` 与 `--fast` 零错零告警；`check_ntfs_paths.py` 零问题；`play_boot.sh`+`play_stop.sh`（端口 `47801`）通过且 `ZERO_DRIVERS`。
+
+## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
+
+- 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。

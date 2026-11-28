@@ -1305,3 +1305,7 @@ pristine + build-debug（归档端口 `40106`，测试端口 `49106`）。`scrip
 
 - 将连城诀任务目录下 `dizi7.lpc`、`qi.lpc`、`taohong.lpc`、`wan.lpc`（`4` 份）中已失效的书剑旧路径 `#include "/d/suzhou/npc/lchj.h"` 改为同目录 `#include "lchj.h"`（保留原 CRLF / `wan.lpc` 混合行尾），立即解锁 `qi.lpc`、`taohong.lpc`、`wan.lpc` 编译加载（`dizi7.lpc` 另缺 `question.h`）。
 - 验证：`lpc_format_changed.py` `24/24` `0` 重排；`lpcc --batch` 全批 `6` 馆 `18/18` `qi`/`taohong`/`wan` 零错零告警 `PASS`；`lpcc_eval.py`（`nitan6`/`hhsj` `3/3`）由 `--head` `FAIL` 转为干净 `PASS`；`scripts/lint.py`（新增规则 #164 `nitan-lcj-stale-lchj-include`，共 `164` 条）`--changed HEAD` 与 `--fast` 零错零告警；`6/6` 馆 `play_boot.sh`+`play_stop.sh`（端口 `48051..48056`）均通过且 `ZERO_DRIVERS`。
+
+## 2026-11-28 大小还丹 `do_put()` 裸 `put` 崩溃修复（KB 06 §7.426）
+
+- 修复 `clone/drug/dahuan-dan.lpc`、`clone/drug/xiaohuan-dan.lpc` 的 `do_put()` 在未判空 `arg1` 前直接调用 `present(arg1, this_player())`，导致携带丹药输入裸 `put` 时抛出 `*Bad argument 1 to present()` 的问题：改为 `if (arg1 && present(arg1, this_player()) == this_object())`（`huan-dan-do-put-null-arg`）。
