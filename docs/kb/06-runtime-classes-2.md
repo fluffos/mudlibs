@@ -2878,3 +2878,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `10` XYJ-family mudlibs (`d/changan/bx.lpc`), `do_bianxing(string arg)` (`add_action("do_bianxing", "bianxing")`) runs `ob = present(arg, environment(me));` *before* `if (arg)` and never checks `objectp(ob)`. Typing bare `bianxing` (`arg == 0`) throws `*Bad argument 1 to present() Expected: string or object Got: 0.`, and passing an unknown target crashes on `ob->query("gender")`.
 **Fix:** Replace `ob = present(arg, environment(me));` with `if (!arg || !objectp(ob = present(arg, environment(me)))) return 0;`.
 **Detection:** `scripts/lint.py --rule changan-bx-do-bianxing-null-arg`.
+
+### 7.439 `d/penglai/npc/obj/{hua,hua2,huabak}.lpc` `do_eat()` calling `present(arg, me)` without guarding `!arg` (`14` files, `13` libs) {#7439-penglai-hua-do-eat-null-arg}
+
+**Symptom:** Across `13` XYJ-family mudlibs (`14` files: `d/penglai/npc/obj/huabak.lpc`, `hua.lpc`, `hua2.lpc`), `do_eat(string arg)` (`add_action("do_eat", "eat")`) runs `if (this_object() != present(arg, me)) return 0;` without checking `!arg`. Typing bare `eat` (`arg == 0`) while carrying the flower throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
+**Fix:** Change `if (this_object() != present(arg, me)) return 0;` to `if (!arg || this_object() != present(arg, me)) return 0;`.
+**Detection:** `scripts/lint.py --rule penglai-hua-do-eat-null-arg`.

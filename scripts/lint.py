@@ -267,6 +267,7 @@ RULES: list[RuleSpec] = [
     RuleSpec("hongniang-do-unmarry-null-arg", "targeted", "KB 06 §7.436", "error", "`hongniang.lpc` `do_unmarry()` calling `present(arg, environment(me))` without guarding `!arg`"),
     RuleSpec("renzhi-do-steal-null-arg", "targeted", "KB 06 §7.437", "error", "`renzhi.lpc` `do_steal()` calling `sscanf(arg, ...)` without guarding `!arg`"),
     RuleSpec("changan-bx-do-bianxing-null-arg", "targeted", "KB 06 §7.438", "error", "`d/changan/bx.lpc` `do_bianxing()` calling `present(arg, environment(me))` before `if (arg)` without guarding `!arg`/`!ob`"),
+    RuleSpec("penglai-hua-do-eat-null-arg", "targeted", "KB 06 §7.439", "error", "`d/penglai/npc/obj/{hua,hua2,huabak}.lpc` `do_eat()` calling `present(arg, me)` without guarding `!arg`"),
     RuleSpec("whole-file-duplicate", "file", "KB 04 §6.32", "warn", "Whole .lpc/.h file pasted twice (identical halves modulo whitespace)"),
     RuleSpec("throwing-combined-diamond", "file", "KB 04 §6.31", "error", "inherit THROWING + COMBINED_ITEM when THROWING already inherits COMBINED_ITEM"),
     RuleSpec("default-switch-only", "file", "KB 04 §6.30", "warn", "switch (...) { default: ... } with zero case labels"),
@@ -1869,7 +1870,7 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
                         col.add("sefun-read-file-arity", rp, "sefun::read_file() drops start_line/number_of_lines or lacks varargs")
 
     targeted_bins: dict[str, list[tuple[str, str, str]]] = {
-        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl", "sjsh_xyj03", "mmid_qh", "xyj42_hwz", "sjsh_tff", "sjsh_th", "music_w", "xlqy_lqf", "xlqy_cfg", "yyqy_hsy", "xkyx_cm", "xyxy_xs", "yxsj_tg", "wnpc_cg", "zzhj_ci", "bboard_doc", "youhulu_drink", "wyy_lingwu", "patrol_kill", "vendor_buy", "objmaker_mk", "msgd_del", "qujing_fd", "qujing_pg", "huan_dan", "sender_huan", "xianglu_name", "kf_ground2", "game_pai", "xyj_ts", "xyj_dntg_wl", "sjsz_arena", "piggy_get", "pldan_ebl", "hongniang_unmarry", "renzhi_steal", "changan_bx")
+        k: [] for k in ("more", "toptend", "logind", "wabaod", "post", "menu", "books", "blockade", "command", "rankd", "ping", "warcraft", "mrdizi", "say", "cmdco", "sanshen", "skill_co", "rtcfg", "ver_cfg", "band", "embed_cand", "team", "animal2", "btsnake", "miscdir_cand", "semote", "rpadm", "fingerd", "guomai", "pharmacy", "xo_qboot", "qujing", "xyj_eof", "demogorgon", "dodge_party", "hy_migong_skill", "set_max_items", "xkx_blockers", "mishi_cctx", "qhlist_chidi", "sjsh_inc", "dtsl_blk", "mhxy_bagua", "xkx_rx", "sjsh_fhl", "sj_chan", "nt_baixing", "nt_chkskill", "nt_paimai", "xyj_yulan", "vrm_sched", "sje_blk", "pku_sw", "task1_hit", "rjl_blk", "weapon_feat", "sz_blk", "buliao_h", "cjp_tanzhu", "hs_doc", "m_bian", "ls_wmkj", "objmaker_zh", "fqyy_blk", "hy_dq", "jj_wx", "spekilled", "shquan", "fy_nt", "jhfy_crh", "competed", "qobj_ii", "fy2_ebc", "tx_bh", "xyj_xv", "zhao_cls", "tang_iac", "biaotou_w", "lcj_inc", "hell_zd", "sj3_dl", "jym_blk", "mhxy_yla", "chidi_cqd", "xkm_xj", "whz_sr", "hy3_pqj", "ldtx_tjm", "syxjl_dlj", "jhfy2_gb", "gumu_dc", "xkxc_blk", "wmkj_dt", "txwx_kx", "xjcq_sk", "tybx_qn", "xkxc_sp", "wlhd_sm", "bitao_fl", "sjsh_xyj03", "mmid_qh", "xyj42_hwz", "sjsh_tff", "sjsh_th", "music_w", "xlqy_lqf", "xlqy_cfg", "yyqy_hsy", "xkyx_cm", "xyxy_xs", "yxsj_tg", "wnpc_cg", "zzhj_ci", "bboard_doc", "youhulu_drink", "wyy_lingwu", "patrol_kill", "vendor_buy", "objmaker_mk", "msgd_del", "qujing_fd", "qujing_pg", "huan_dan", "sender_huan", "xianglu_name", "kf_ground2", "game_pai", "xyj_ts", "xyj_dntg_wl", "sjsz_arena", "piggy_get", "pldan_ebl", "hongniang_unmarry", "renzhi_steal", "changan_bx", "penglai_hua")
     }
     slug_set = set(slugs)
     has_embed = {s: os.path.isfile(f"{REPO}/libs/{s}/work/inherit/item/embed.h") for s in slugs}
@@ -2216,6 +2217,8 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             targeted_bins["renzhi_steal"].append(item)
         if rel == "/d/changan/bx.lpc":
             targeted_bins["changan_bx"].append(item)
+        if rel in ("/d/penglai/npc/obj/hua.lpc", "/d/penglai/npc/obj/hua2.lpc", "/d/penglai/npc/obj/huabak.lpc"):
+            targeted_bins["penglai_hua"].append(item)
         if rel == "/d/city/npc/paimaishi.lpc":
             targeted_bins["nt_paimai"].append(item)
         if rel in ("/d/kaifeng/npc/yulan.lpc", "/d/dntg/yunlou/npc/lj.lpc"):
@@ -3619,6 +3622,16 @@ def run_targeted_checks(col: LintCollector, metas: dict[str, dict], gitlinks: se
             m = bx_re.search(b)
             if m and b"!arg" not in m.group(0) and b"stringp(arg)" not in m.group(0):
                 col.add("changan-bx-do-bianxing-null-arg", p, "`d/changan/bx.lpc` `do_bianxing()` calls `present(arg, environment(me))` before guarding `!arg`")
+
+    if col.wants("penglai-hua-do-eat-null-arg"):
+        ph_re = re.compile(rb'int\s+do_eat\s*\(\s*string\s+arg\s*\)\s*\{[\s\S]{0,260}?if\s*\(\s*this_object\s*\(\s*\)\s*!=\s*present\s*\(\s*arg\s*,\s*me\s*\)\s*\)')
+        for slug, p, _ in targeted_bins["penglai_hua"]:
+            if metas.get(slug, {}).get("hosting") == "submodule-patch":
+                continue
+            b = open(f"{REPO}/{p}", "rb").read()
+            m = ph_re.search(b)
+            if m and b"!arg" not in m.group(0) and b"stringp(arg)" not in m.group(0):
+                col.add("penglai-hua-do-eat-null-arg", p, "`do_eat()` calls `present(arg, me)` without guarding `!arg`")
 
     if col.wants("say-delete-busy"):
         for _, p, _ in targeted_bins["say"]:

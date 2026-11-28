@@ -537,3 +537,5 @@ pristine + build-debug，归档端口 40168。`scripts/play_login.py` 注册进�
 - 修复 `d/kaifeng/ground2.lpc` 的 `do_debug()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %s %s", s0, s1, s2)`，导致输入裸 `@debug@` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`（`kaifeng-ground2-do-debug-null-arg`）。
 
 - **2026-11-28（KB 06 §7.432）**：修复 `/d/dntg/hgs/npc/liuer-mihou.lpc` 中六耳猕猴 `do_get(string arg)` 未判空 `arg` 即调用 `present(arg, environment(this_object()))`，裸 `get` 触发 `*Bad argument 1 to present()` 崩溃，补齐 `!arg ||` 判空保护，使裸指令回落标准指令。
+
+- **2026-11-28（KB 06 §7.439）**：修复蓬莱鲜花 `/d/penglai/npc/obj/huabak.lpc` `do_eat(string arg)` 未判空 `arg` 即调用 `present(arg, me)` 的裸 `eat` 崩溃，补齐 `!arg ||` 判空保护。
