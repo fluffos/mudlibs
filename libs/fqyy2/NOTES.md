@@ -643,3 +643,5 @@ pristine + build-debug，port 40197（补 `log/mud` 后）。`scripts/play_login
 ## 2026-11-28 牌桌 `clone/game/pai.lpc` `do_press()` 裸 `press` 崩溃修复（KB 06 §7.430）
 
 - 修复 `clone/game/pai.lpc` 的 `do_press()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %d", id, n)`，导致牌局中输入裸 `press` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %d", id, n) != 2)`（`game-pai-do-press-null-arg`）。
+
+- **2026-11-28（KB 06 §7.434）**：修复 5 份 `piggy*.lpc` 拱猪房（含 `/d/city4/piggy.lpc` 等） 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。

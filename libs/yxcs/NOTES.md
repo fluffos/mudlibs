@@ -1538,3 +1538,5 @@ pristine + build-debug，归档端口 40056。`scripts/play_login.py` 注册进�
 - 修复 `adm/daemons/msgd.lpc`、`clone/msgd/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。
 
 - **2026-11-28（KB 06 §7.433）**：修复试剑山庄（`sjsz*`）9 份文件（12 处，含 `gamble_room.lpc` `do_bet()`、`control.lpc` `do_assign()`、`walkie-talkie.lpc` `do_set()`/`do_turn()`）未判空 `arg` 即调用 `sscanf(arg, ...)`，补齐 `!arg ||` 判空保护，防止裸 `bet`/`assign`/`init`/`turn` 触发 `*Bad argument 1 to sscanf` 崩溃。
+
+- **2026-11-28（KB 06 §7.434）**：修复 `/d/taoyuan/duchang/piggy.lpc`、`/d/taoyuan/duchang/piggy2.lpc` 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。

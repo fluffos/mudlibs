@@ -2848,3 +2848,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `19` XKX/Nitan/HY-family mudlibs (`122` files / `169` sites across `d/bwdh/sjsz*/{gamble_room,obj/control,obj/walkie-talkie}.lpc` and standalone `walkie-talkie.lpc` copies), `gamble_room.lpc` `do_bet(string arg)`, `control.lpc` `do_assign(string arg)`, and `walkie-talkie.lpc` `do_set(string arg)`/`do_turn(string arg)` immediately pass `arg` to `sscanf(arg, ...)` without checking `!arg`. Typing bare `bet`, `assign`, `init`, or `turn` (`arg == 0`) throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
 **Fix:** Change `if (sscanf(arg, ...))` to `if (!arg || sscanf(arg, ...))`.
 **Detection:** `scripts/lint.py --rule sjsz-arena-bare-verb-null-arg`.
+
+### 7.434 `piggy*.lpc` `do_get()` calling `sscanf(arg, ...)` without guarding `!arg` (`80` files, `26` libs) {#7434-piggy-do-get-null-arg}
+
+**Symptom:** Across `26` HY/XYJ/XKX-family mudlibs (`80` active `piggy*.lpc` card-room files such as `d/city4/piggy.lpc`, `d/pingan/duchang/piggy*.lpc`, `d/city/piggy*.lpc`), `do_get(string arg)` (`add_action("do_get", "get")`) immediately runs `sscanf(arg, "%s  from  %s", thing, person);` (and `present(person, this_object())`) without checking `!arg`. Typing bare `get` (`arg == 0`) in the room throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
+**Fix:** Insert `if (!arg) return 0;` before `sscanf(arg, ...)`, letting bare `get` fall through cleanly to standard `get`.
+**Detection:** `scripts/lint.py --rule piggy-do-get-null-arg`.

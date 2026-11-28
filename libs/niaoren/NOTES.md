@@ -940,3 +940,5 @@ pristine + build-debug，port 40100。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-27 物件编辑器 `do_mkobj()` 裸 `mkobj` 崩溃修复（KB 06 §7.422）
 
 - 修复 `clone/misc/objmaker.lpc` 的 `do_mkobj()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s", file)`，导致巫师输入裸 `mkobj` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s", file) != 1)`（与同文件 `do_rset`/`do_rrset` 一致，`objmaker-do-mkobj-null-arg`）。
+
+- **2026-11-28（KB 06 §7.434）**：修复 `/d/city4/piggy.lpc` 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。

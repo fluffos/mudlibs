@@ -988,3 +988,5 @@ pristine + build-debug，归档端口 40078。`scripts/play_login.py`（port 490
 ## 2026-11-28 开封比武场 `ground2.lpc` `do_debug()` 裸指令崩溃修复（KB 06 §7.429）
 
 - 修复 `d/kaifeng/ground2.lpc` 的 `do_debug()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s %s %s", s0, s1, s2)`，导致输入裸 `@debug@` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%s %s %s", s0, s1, s2) != 3)`（`kaifeng-ground2-do-debug-null-arg`）。
+
+- **2026-11-28（KB 06 §7.434）**：修复 `/d/city/piggy.lpc` 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。
