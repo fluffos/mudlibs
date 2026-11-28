@@ -2860,3 +2860,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `14` Nitan/XKX-family mudlibs (`15` `pldan.lpc` files), `do_ebl(string argg)` (`add_action("do_ebl", "enter")`) immediately runs `sscanf(argg, "%d %d %d %d", intbl, intwx, intgg, intsf);` without checking `!argg`. Typing bare `enter` (`argg == 0`) while using 破立丹 throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
 **Fix:** Insert `if (!argg) return notify_fail("格式：enter <臂力> <悟性> <根骨> <身法>\n");` before `sscanf(argg, ...)`.
 **Detection:** `scripts/lint.py --rule pldan-do-ebl-null-arg`.
+
+### 7.436 `hongniang.lpc` `do_unmarry()` calling `present(arg, environment(me))` without guarding `!arg` (`12` files, `12` libs) {#7436-hongniang-do-unmarry-null-arg}
+
+**Symptom:** Across `12` HY/XKX-family mudlibs (`d/hangzhou/npc/hongniang.lpc`), `do_unmarry(string arg)` (`add_action("do_unmarry", "unmarry")`) runs `if (!objectp(couple_ob = present(arg, environment(me))) || !find_player(arg))` without checking `!arg`. A married player typing bare `unmarry` (`arg == 0`) at 红娘庄 throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
+**Fix:** Change `if (!objectp(couple_ob = present(arg, environment(me))) || ...)` to `if (!arg || !objectp(couple_ob = present(arg, environment(me))) || ...)`.
+**Detection:** `scripts/lint.py --rule hongniang-do-unmarry-null-arg`.

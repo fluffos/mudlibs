@@ -838,3 +838,5 @@ pristine + build-debug，port 40107。`scripts/play_login.py` 注册并执行 `l
 - 修复 `d/player/wzl/obj/xianglu.lpc` 的 `do_name()` 在 `if (!target || target == " ")` 之前先执行 `ob = find_player(target);`，导致输入裸 `kaichu` 时抛出 `*Bad argument 1 to find_player()` 的问题：将 `if (!target ...)` 判空提前至 `find_player(target)` 之前（`xianglu-do-name-find-player-before-guard`）。
 
 - **2026-11-28（KB 06 §7.434）**：修复 `/d/changan/piggy.lpc` 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。
+
+- **2026-11-28（KB 06 §7.436）**：修复 `/d/hangzhou/npc/hongniang.lpc` 红娘 `do_unmarry(string arg)` 未判空 `arg` 即调用 `present(arg, environment(me))` 的裸 `unmarry` 崩溃，补齐 `!arg ||` 判空保护。

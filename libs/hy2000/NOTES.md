@@ -553,3 +553,5 @@ pristine + build-debug，port 40174。`scripts/play_login.py` 注册。
 - 修复 `adm/daemons/msgd.lpc`、`clone/msgd/msgd.lpc` 的 `do_delmsg()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%d", i)`，导致输入裸 `delmsg` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, "%d", i) != 1)`（`msgd-do-delmsg-null-arg`）。
 
 - **2026-11-28（KB 06 §7.434）**：修复 7 份 `piggy*.lpc` 拱猪房（含 `/d/city4/piggy.lpc` 等） 中 `do_get(string arg)` 未判空 `arg` 即调用 `sscanf(arg, ...)` 的裸 `get` 崩溃，在 `sscanf()` 前补齐 `if (!arg) return 0;`。
+
+- **2026-11-28（KB 06 §7.436）**：修复 `/d/hangzhou/npc/hongniang.lpc` 红娘 `do_unmarry(string arg)` 未判空 `arg` 即调用 `present(arg, environment(me))` 的裸 `unmarry` 崩溃，补齐 `!arg ||` 判空保护。
