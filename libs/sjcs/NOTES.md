@@ -762,3 +762,7 @@ pristine + build-debug，port 40097。`scripts/play_login.py` 注册并执行 `l
 ## 2026-11-27 西游取经饮食道具 `do_eat()`/`do_drink()` 裸指令崩溃修复（KB 06 §7.424）
 
 - 修复 `d/qujing/baoxiang/obj/dan.lpc`、`d/qujing/pansi/obj/doufu.lpc`、`d/qujing/wuji/obj/jing.lpc`、`d/qujing/wuji2/obj/jing.lpc` 在未判空 `arg` 前直接调用 `present(arg, ...)`，导致玩家输入裸 `eat`/`drink` 时抛出 `*Bad argument 1 to present()` 的问题：补齐 `arg ? present(arg, who) : 0` / `if (!arg || present(arg, me) != dan)` 判空保护（`qujing-food-drink-null-arg`）。
+
+## 2026-11-28 西游取经容器 `do_put()`/`do_get()` 裸指令崩溃修复（KB 06 §7.425）
+
+- 修复 `d/qujing/biqiu/obj/elong.lpc`、`d/qujing/chechi/obj/chantai.lpc`、`d/qujing/chechi/obj/guizi.lpc`、`d/qujing/chechi/obj/youguo.lpc` 的 `do_put()`/`do_get()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s in/from %s", item, id)`，导致玩家输入裸 `put`/`get` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, ...))`（`qujing-container-put-get-null-arg`）。

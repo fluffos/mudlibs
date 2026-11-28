@@ -852,3 +852,7 @@ pristine + build-debug，归档端口 40101。`scripts/play_login.py`（port 491
 ## 2026-11-27 留言板 `do_document()` 裸指令崩溃修复（KB 06 §7.417）
 
 - 修复 `std/item/bboard.lpc` 的 `do_document()` 在 `if (!arg || argn > 3)` 之前先执行 `argn = sscanf(arg, ...)`，导致巫师输入裸 `document` 时抛出 `*Bad argument 1 to sscanf()` 的问题：将 `if (!arg) return notify_fail(...);` 提前到 `sscanf()` 之前，与同源 `sjshv150`/`xyj2000` 一致（`bboard-document-sscanf-before-guard`）。
+
+## 2026-11-28 西游取经容器 `do_put()`/`do_get()` 裸指令崩溃修复（KB 06 §7.425）
+
+- 修复 `d/qujing/biqiu/obj/elong.lpc`、`d/qujing/chechi/obj/chantai.lpc`、`d/qujing/chechi/obj/guizi.lpc`、`d/qujing/chechi/obj/youguo.lpc` 的 `do_put()`/`do_get()` 在未判空 `arg` 前直接执行 `sscanf(arg, "%s in/from %s", item, id)`，导致玩家输入裸 `put`/`get` 时抛出 `*Bad argument 1 to sscanf` 的问题：改为 `if (!arg || sscanf(arg, ...))`（`qujing-container-put-get-null-arg`）。

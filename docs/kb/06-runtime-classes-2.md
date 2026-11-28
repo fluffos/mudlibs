@@ -2794,3 +2794,9 @@ delete_temp("quest/jinshe2/step2", 1, who);
 **Symptom:** Across `40` XYJ-family mudlibs (`133` files: `d/qujing/pansi/obj/doufu.lpc`, `d/xiyou/pansi/obj/doufu.lpc`, `d/qujing/baoxiang/obj/dan.lpc`, `d/qujing/wuji/obj/jing.lpc`, `d/qujing/wuji2/obj/jing.lpc`), `do_eat(string arg)` / `do_drink(string arg)` immediately runs `object ob = present(arg, who);` or `if (present(arg, me) != dan)`. Typing bare `eat` or `drink` (`arg == 0`) throws `*Bad argument 1 to present() Expected: string or object Got: 0.`.
 **Fix:** Guard with `object ob = arg ? present(arg, who) : 0;` (for `doufu.lpc`/`jing.lpc`) and `if (!arg || present(arg, me) != dan)` (for `dan.lpc`).
 **Detection:** `scripts/lint.py --rule qujing-food-drink-null-arg`.
+
+### 7.425 XYJ `qujing` containers (`elong`/`chantai`/`guizi`/`youguo`) `do_put()`/`do_get()` calling `sscanf(arg, ...)` without guarding `!arg` (`150` files, `293` sites, `38` libs) {#7425-qujing-container-put-get-null-arg}
+
+**Symptom:** Across `38` XYJ-family mudlibs (`150` files / `293` sites: `d/qujing/biqiu/obj/elong.lpc`, `d/qujing/chechi/obj/{chantai,guizi,youguo}.lpc`), both `do_put(string arg)` and `do_get(string arg)` immediately execute `if (sscanf(arg, "%s in/from %s", item, id) != 2)`. Typing bare `put` or `get` (`arg == 0`) in those rooms throws `*Bad argument 1 to sscanf Expected: string Got: 0.`.
+**Fix:** Change `if (sscanf(arg, ...))` to `if (!arg || sscanf(arg, ...))`.
+**Detection:** `scripts/lint.py --rule qujing-container-put-get-null-arg`.
